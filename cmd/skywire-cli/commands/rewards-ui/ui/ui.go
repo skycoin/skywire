@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
+	"time"
 
 	"cogentcore.org/core/base/mergefs"
-	"cogentcore.org/core/content"
 	"cogentcore.org/core/core"
 	"cogentcore.org/core/events"
 	"cogentcore.org/core/htmlcore"
@@ -36,6 +36,21 @@ type reward struct {
 
 var rewards []reward
 
+type node struct {
+	PK        string `json:"pk"`
+	Time      string `json:"time"`
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	Date      string `json:"date"`
+	StartedAt string `json:"started_at"`
+}
+
+type nodesResponse struct {
+	Nodes []node `json:"nodes"`
+}
+
+var nodes nodesResponse
+
 func main() {
 	core.TheApp.SetSceneInit(func(sc *core.Scene) {
 		sc.SetWidgetInit(func(w core.Widget) {
@@ -55,35 +70,28 @@ func main() {
 	first, tb := ts.NewTab("Rules")
 	tb.SetIcon(icons.Home)
 	core.NewText(first).SetText(calvin.AsciiFont("skywire rewards"))
-	err := htmlcore.ReadMDString(htmlcore.NewContext(), first, skywire.MainnetRules)
+	ctx := htmlcore.NewContext()
+	err := htmlcore.ReadMDString(ctx, first, skywire.MainnetRules)
 	if err != nil {
 		log.Fatalf("Error reading embedded mainnet rules with htmlcore.ReadMDString: %v", err)
 	}
 
 	second, tb := ts.NewTab("Rewards")
 	tb.SetIcon(icons.History)
-	/*
-		l := fmt.Sprintf("There are %d days in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day(), time.Now().Month())
-		l += fmt.Sprintf("Today is %s %d.\n", time.Now().Month(), time.Now().Day())
-		l += fmt.Sprintf("There are %d days left in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()-time.Now().Day(), time.Now().Month())
-		l += fmt.Sprintf("%d days in the year %d.\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay(), time.Now().Year())
-		l += fmt.Sprintf("Today is day %d.\n", time.Now().YearDay())
-		l += fmt.Sprintf("There are %d days remaining in %d<br>", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()-time.Now().YearDay(), time.Now().Year())
-		l += "\n" + string(ansihtml.ConvertToHTML([]byte(cal())))
-		htmlcore.ReadHTMLString(htmlcore.NewContext(), second, l)
-	*/
+
 	if runtime.GOOS == "js" {
+		core.NewTable(second).SetSlice(func() *[]reward {
+			resp, err := http.Get("/skycoin-rewards.json")
+			if err != nil {
+				log.Fatalf("Error fetching data: %v", err)
+			}
+			defer resp.Body.Close() //nolint
 
-		resp, err := http.Get("/skycoin-rewards")
-		if err != nil {
-			log.Fatalf("Error fetching data: %v", err)
-		}
-		defer resp.Body.Close() //nolint
-
-		if err := json.NewDecoder(resp.Body).Decode(&rewards); err != nil {
-			log.Fatalf("Error decoding JSON: %v", err)
-		}
-		core.NewTable(second).SetSlice(&rewards).SetReadOnly(true)
+			if err := json.NewDecoder(resp.Body).Decode(&rewards); err != nil {
+				log.Fatalf("Error decoding JSON: %v", err)
+			}
+			return &rewards
+		}()).SetReadOnly(true)
 	}
 	third, tb := ts.NewTab("Reward data")
 	tb.SetIcon(icons.History)
@@ -173,16 +181,31 @@ func main() {
 		})
 	}
 
-	ct := content.NewContent(b)
-	ctx := ct.Context
+	//	ct := content.NewContent(b)
+	//	ctx = ct.Context
 
-	_, _ = ts.NewTab("Log Collection")
+	fourth, tb := ts.NewTab("Log Collection")
+	tb.SetIcon(icons.History)
+	htmlcore.ReadHTMLString(ctx, fourth, "<a href='/log-collection'>Log Collection</a>") //nolint
+	fifth, tb := ts.NewTab("Survey Index")
+	tb.SetIcon(icons.History)
+	if runtime.GOOS == "js" {
 
-	_, _ = ts.NewTab("Survey Index")
+		resp, err := http.Get("/log-collection/json")
+		if err != nil {
+			log.Fatalf("Error fetching data: %v", err)
+		}
+		defer resp.Body.Close() //nolint
 
+		if err := json.NewDecoder(resp.Body).Decode(&nodes); err != nil {
+			log.Fatalf("Error decoding JSON: %v", err)
+		}
+		core.NewTable(fifth).SetSlice(&nodes.Nodes).SetReadOnly(true)
+
+	}
 	b.AddTopBar(func(bar *core.Frame) {
 		tb := core.NewToolbar(bar)
-		tb.Maker(ct.MakeToolbar)
+		//		tb.Maker(ct.MakeToolbar)
 		tb.Maker(func(p *tree.Plan) {
 			tree.Add(p, func(w *core.Button) {
 				ctx.LinkButton(w, https(skywire.Prod.UptimeTracker)+"/uptimes?v=v2")
@@ -219,9 +242,25 @@ func main() {
 		})
 	})
 
+	go func() {
+		for range time.NewTicker(1200 * time.Second).C {
+			b.Update()
+		}
+	}()
 	b.RunMainWindow()
 }
 
 func https(a string) string {
 	return strings.ReplaceAll(a, "http://", "https://")
 }
+
+/*
+	l := fmt.Sprintf("There are %d days in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day(), time.Now().Month())
+	l += fmt.Sprintf("Today is %s %d.\n", time.Now().Month(), time.Now().Day())
+	l += fmt.Sprintf("There are %d days left in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()-time.Now().Day(), time.Now().Month())
+	l += fmt.Sprintf("%d days in the year %d.\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay(), time.Now().Year())
+	l += fmt.Sprintf("Today is day %d.\n", time.Now().YearDay())
+	l += fmt.Sprintf("There are %d days remaining in %d<br>", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()-time.Now().YearDay(), time.Now().Year())
+	l += "\n" + string(ansihtml.ConvertToHTML([]byte(cal())))
+	htmlcore.ReadHTMLString(htmlcore.NewContext(), second, l)
+*/

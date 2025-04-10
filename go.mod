@@ -64,7 +64,7 @@ require (
 )
 
 require (
-	cogentcore.org/core v0.3.9-0.20250226161054-6ec962b2d812
+	cogentcore.org/core v0.3.9-0.20250328111149-bac89be1bc16
 	github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8
 	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937
 	github.com/go-chi/cors v1.2.1
@@ -81,7 +81,6 @@ require (
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
-	github.com/adrg/strutil v0.3.1 // indirect
 	github.com/alecthomas/chroma v0.10.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.13.0 // indirect
 	github.com/anthonynsimon/bild v0.13.0 // indirect

@@ -9,7 +9,7 @@ atomicgo.dev/keyboard/keys
 # atomicgo.dev/schedule v0.1.0
 ## explicit; go 1.18
 atomicgo.dev/schedule
-# cogentcore.org/core v0.3.9-0.20250226161054-6ec962b2d812
+# cogentcore.org/core v0.3.9-0.20250328111149-bac89be1bc16
 ## explicit; go 1.22
 cogentcore.org/core/base/bools
 cogentcore.org/core/base/datasize
@@ -47,8 +47,6 @@ cogentcore.org/core/colors/cam/hsl
 cogentcore.org/core/colors/colormap
 cogentcore.org/core/colors/gradient
 cogentcore.org/core/colors/matcolor
-cogentcore.org/core/content
-cogentcore.org/core/content/bcontent
 cogentcore.org/core/core
 cogentcore.org/core/cursors
 cogentcore.org/core/cursors/cursorimg
@@ -140,12 +138,6 @@ github.com/StackExchange/wmi
 # github.com/VictoriaMetrics/metrics v1.35.1
 ## explicit; go 1.17
 github.com/VictoriaMetrics/metrics
-# github.com/adrg/strutil v0.3.1
-## explicit; go 1.14
-github.com/adrg/strutil/internal/mathutil
-github.com/adrg/strutil/internal/ngram
-github.com/adrg/strutil/internal/stringutil
-github.com/adrg/strutil/metrics
 # github.com/alecthomas/chroma v0.10.0
 ## explicit; go 1.13
 github.com/alecthomas/chroma

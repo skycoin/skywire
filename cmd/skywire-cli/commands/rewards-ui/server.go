@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -172,6 +173,7 @@ var htmlRewardPageTemplate = `
 {{.Page.Content}}
 `
 var tmpl *htmpl.Template
+var htmlPageTemplateData htmlTemplateData
 
 // TODO: fix gocyclo error.
 //
@@ -240,25 +242,437 @@ func server() {
 	// Disable Gin's default logger middleware
 	r1.Use(gin.Recovery())
 	r1.Use(loggingMiddleware())
-
-	r1.GET("/health", func(c *gin.Context) {
-		runTime = time.Since(startTime)
-		nextrun, _ := script.Exec(`systemctl status skywire-reward.timer --lines=0`).First(5).Last(1).Replace("    Trigger: ", "").String() //nolint
-		prevDuration, _ := script.Exec(`systemctl status skywire-reward.service --lines=0`).Match("Duration").First(1).String()             //nolint
-		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()                                                     //nolint
-		c.JSON(http.StatusOK, gin.H{
-			"frontend_start_time":             startTime,
-			"frontend_run_time":               runTime.String(),
-			"dmsg_discovery":                  dmsgDisc,
-			"dmsg_address":                    fmt.Sprintf("%s:%d", pk.String(), dmsgPort),
-			"reward_system_active":            strings.TrimRight(active, "\n"),
-			"reward_system_next_run":          strings.TrimRight(nextrun, "\n"),
-			"reward_system_prev_run_duration": strings.TrimRight(prevDuration, "\n"),
-			"whitelisted_keys":                wlkeys,
-		})
+	r1.GET("/index.html", mainPage)
+	// endpoint for testing minimum response time of curl via socks5 proxy / stand-in for latency test
+	// https://dev.to/tigt/making-the-worlds-fastest-website-and-other-mistakes-56na
+	// This is the fastest web page. You may not like it, but this is what peak performance looks like.
+	r1.GET("/204", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Status(http.StatusNoContent)
 	})
 
-	//authroute uses the whitelist to control what dmsg clients may connect to authRoute endpoints
+	r1.GET("/transports", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Flush()
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Flush()
+		tpstats, _ := script.Exec("skywire cli tp tree -s").Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(tpstats))             //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Flush()
+	})
+
+	/* //consumes excessive server resources when network is heavily transported*/
+	r1.GET("/transports-map", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Flush()
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Map</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Flush()
+		tpstats, _ := script.Exec("skywire cli tp tree -s").Match("Count of transports:").Replace("Count of transports: ", "").Replace("\n", "").String() //nolint
+		tpcount, _ := strconv.Atoi(tpstats)                                                                                                               //nolint
+		if tpcount < 400 {
+			tpTree, _ := script.Exec("skywire cli tp tree").Bytes() //nolint
+			c.Writer.Write(ansihtml.ConvertToHTML(tpTree))          //nolint
+			c.Writer.Flush()
+		} else {
+			c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map", tpcount))) //nolint
+			c.Writer.Flush()
+		}
+		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Flush()
+	})
+
+	r1.GET("/log-collection", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Flush()
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Survey and Transport Log Collection</title></head>")) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Flush()
+		tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh")
+		if err != nil {
+			return
+		}
+		if err := tmpFile.Close(); err != nil {
+			return
+		}
+		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()                                         //nolint
+		_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())                                          //nolint
+		res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String() //nolint
+		os.Remove(tmpFile.Name())                                                                         //nolint
+		c.Writer.Write([]byte(fmt.Sprintf("%s\n", res)))                                                  //nolint
+		c.Writer.Flush()
+
+		// Initial line count
+		initialLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines() //nolint
+		// Read and print the initial lines
+		initialContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").First(initialLineCount).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(initialContent))                                             //nolint
+		c.Writer.Flush()
+		for {
+			select {
+			case <-c.Writer.CloseNotify():
+				return
+			default:
+			}
+			// Sleep for a short duration
+			time.Sleep(100 * time.Millisecond)
+			// Get the current line count
+			currentLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines() //nolint
+			// Check if there are new lines
+			if currentLineCount > initialLineCount {
+				newContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(currentLineCount - initialLineCount).Bytes() //nolint
+				initialLineCount = currentLineCount
+				c.Writer.Write(ansihtml.ConvertToHTML(newContent)) //nolint
+				c.Writer.Flush()
+			}
+			finished, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(1).MatchRegexp(regexp.MustCompile(".*finished.*")).String() //nolint
+			if finished != "" {
+				break
+			}
+		}
+
+		c.Writer.Write([]byte(htmltoplink)) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Flush()
+	})
+
+	r1.GET("/log-collection/tree", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Flush()
+		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines() //nolint
+		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                            //nolint
+		c.Writer.Flush()
+		st, err := script.Exec(`skywire cli log st -d rewards/log_backups -r`).Bytes() //nolint
+		if err != nil {
+			log.WithError(err).Error()
+			c.Writer.Write([]byte(err.Error())) //nolint
+		}
+		c.Writer.Write(ansihtml.ConvertToHTML(st)) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(htmltoplink)) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Flush()
+	})
+
+	r1.GET("/log-collection/tree/:pk", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		if c.Param("pk") == "" {
+			c.Writer.WriteHeader(http.StatusBadRequest)
+			c.Writer.Write([]byte("must specify public key")) //nolint
+			c.Writer.Flush()
+			return
+		}
+		pks := strings.Split(c.Param("pk"), ",")
+		for _, pk := range pks {
+			var pK cipher.PubKey
+			err := pK.Set(pk)
+			if err != nil {
+				c.Writer.WriteHeader(http.StatusBadRequest)
+				c.Writer.Write([]byte("invalid public key: " + pk + " " + err.Error())) //nolint
+				c.Writer.Flush()
+				return
+			}
+		}
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Header().Set("Server", "")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Flush()
+		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines() //nolint
+		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                            //nolint
+		c.Writer.Flush()
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -rup ` + c.Param("pk")).Bytes() //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                      //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(htmltoplink)) //nolint
+		c.Writer.Flush()
+		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Flush()
+	})
+
+	r1.GET("/log-collection/tplogs", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Write([]byte(func() (l string) { //nolint
+			l = "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
+			l += navlinks
+			l += "<p style='color:blue'>Blue = Verified Bandwidth</p>"
+			l += "<p style='color:yellow'>Yellow = Transport bandwidth inconsistent</p>"
+			l += "<p style='color:red'>Red = Error: sent or received is zero</p>"
+			tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint
+			l += fmt.Sprintf("%s\n", ansihtml.ConvertToHTML([]byte(tp)))
+			l += htmltoplink
+			l += htmlend
+			return l
+		}())) //nolint
+	})
+
+	r1.GET("/skycoin-rewards", func(c *gin.Context) {
+		c.Writer.Header().Set("Server", "")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Flush()
+		l := fmt.Sprintf("<div style='float: right;'>%s</div>", func() string {
+			yearlyTotal := 408000.0
+			result := fmt.Sprintf("<u>Annual reward distribution per pool:</u>\n%g Skycoin\n<u>Monthly rewards per pool:</u>\n", yearlyTotal)
+			currentMonth := time.Now().Month()
+			currentYear := time.Now().Year()
+			for month := time.January; month <= time.December; month++ {
+				daysInMonth := time.Date(currentYear, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
+				monthlyRewards := (yearlyTotal / 365) * float64(daysInMonth)
+				format := "%g %d %s\n"
+				if currentMonth >= month {
+					format = "<strike>" + format + "</strike>"
+				}
+				result += fmt.Sprintf(format, monthlyRewards, currentYear, month)
+			}
+			firstDayOfNextYear := time.Date(currentYear+1, time.January, 1, 0, 0, 0, 0, time.UTC)
+			lastDayOfYear := firstDayOfNextYear.Add(-time.Second)
+			totalDaysInYear := int(lastDayOfYear.YearDay())
+			skycoinPerDay := yearlyTotal / float64(totalDaysInYear)
+			result += fmt.Sprintf("%g Skycoin per day\n<br>", skycoinPerDay)
+			utstats, err := script.Exec(`skywire cli ut -t`).String()
+			if err == nil {
+				result += fmt.Sprintf("<u>Uptime tracker version statistics:</u>\n%s\n<br>", utstats)
+			}
+			nis, err := script.FindFiles(wd + `/` + "log_backups").Match("node-info.json").Slice() //nolint
+			if err == nil {
+				var surveyarches string
+				for _, ni := range nis {
+					surveyarch, err := script.File(ni).JQ(".go_arch").Replace(`"`, "").String()
+					if err == nil {
+						surveyarches += surveyarch
+					}
+				}
+				archstats, err := script.Echo(surveyarches).Freq().String() //nolint
+				if err == nil {
+					result += fmt.Sprintf("<u>Survey architecture statistics:</u>\n%s\n<br>", archstats)
+				}
+				var surveyOSNames string
+				for _, ni := range nis {
+					surveyOSName, err := script.File(ni).JQ(".zcalusic_sysinfo.os.name").Replace(`"`, "").String()
+					if err == nil {
+						surveyOSNames += surveyOSName
+					}
+				}
+				namestats, err := script.Echo(surveyOSNames).Freq().String() //nolint
+				if err == nil {
+					result += fmt.Sprintf("<u>Survey OS name statistics:</u>\n%s\n<br>", namestats)
+				}
+				var surveycpus string
+				for _, ni := range nis {
+					surveycpu, err := script.File(ni).JQ(".zcalusic_sysinfo.cpu.model").Replace(`"`, "").String()
+					if err == nil {
+						surveycpus += surveycpu
+					}
+				}
+				cpustats, err := script.Echo(surveycpus).Freq().String() //nolint
+				if err == nil {
+					result += fmt.Sprintf("<u>Survey CPU statistics:</u>\n%s\n<br>", cpustats)
+				}
+
+				var totalBytes int64
+				for _, ni := range nis {
+					surveytbs, err := script.File(ni).JQ(".ghw_blockinfo.total_size_bytes").Reject("null").Replace(`"`, "").String()
+					if err == nil {
+						if surveytbs != "\n" && surveytbs != "" {
+							byteValue, err := strconv.ParseInt(strings.TrimRight(surveytbs, "\n"), 10, 64)
+							if err != nil {
+								result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
+							}
+							totalBytes += byteValue
+						}
+					}
+				}
+
+				// Get stats for terabytes and gigabytes
+				bsstatsTB, _ := script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
+				bsstatsGB, _ := script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("T").Slice() //nolint
+				formattedTotal, err := script.Echo(fmt.Sprintf("%d", totalBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
+				if err != nil {
+					result += fmt.Sprintf("%v\n", err)
+				}
+				result += fmt.Sprintf("<u>Survey total byte size (cumulative):</u> %s\n", formattedTotal)
+				result += "<u>Survey total byte size statistics:</u>\n"
+				result += `<table style="width:100%; text-align:center;">` + "\n"
+				result += "<tr><th>GB</th><th>TB</th></tr>\n"
+
+				maxLen := len(bsstatsGB)
+				if len(bsstatsTB) > maxLen {
+					maxLen = len(bsstatsTB)
+				}
+				for i := 0; i < maxLen; i++ {
+					result += "<tr>\n"
+					if i < len(bsstatsGB) {
+						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsGB[i])
+					} else {
+						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+					}
+					if i < len(bsstatsTB) {
+						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsTB[i])
+					} else {
+						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+					}
+					result += "</tr>\n"
+				}
+				result += "</table>\n<br>"
+
+				var totalramBytes int64
+				for _, ni := range nis {
+					surveymem, err := script.File(ni).JQ(".ghw_memoryinfo.total_usable_bytes").Reject("null").Replace(`"`, "").String()
+					if err == nil {
+						if surveymem != "\n" && surveymem != "" {
+							byteValue, err := strconv.ParseInt(strings.TrimRight(surveymem, "\n"), 10, 64)
+							if err != nil {
+								result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
+							}
+							totalramBytes += byteValue
+						}
+					}
+				}
+
+				statsMB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
+				statsGB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("M").Slice() //nolint
+				ramTotal, err := script.Echo(fmt.Sprintf("%d", totalramBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
+				if err != nil {
+					result += fmt.Sprintf("%v\n", err)
+				}
+				result += fmt.Sprintf("<u>Survey total RAM byte size (cumulative):</u> %s\n", ramTotal)
+				result += "<u>Survey total usable ram byte size statistics:</u>\n"
+				result += `<table style="width:100%; text-align:center;">` + "\n"
+				result += "<tr><th>GB</th><th>MB</th></tr>\n"
+
+				maxLen = len(statsGB)
+				if len(statsMB) > maxLen {
+					maxLen = len(statsMB)
+				}
+				for i := 0; i < maxLen; i++ {
+					result += "<tr>\n"
+					if i < len(statsGB) {
+						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsGB[i])
+					} else {
+						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+					}
+					if i < len(statsMB) {
+						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsMB[i])
+					} else {
+						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+					}
+					result += "</tr>\n"
+				}
+				result += "</table>\n<br>"
+
+			}
+			return result + "<br>" + htmltoplink
+
+		}())
+		l += fmt.Sprintf("There are %d days in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day(), time.Now().Month())
+		l += fmt.Sprintf("Today is %s %d.\n", time.Now().Month(), time.Now().Day())
+		l += fmt.Sprintf("There are %d days left in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()-time.Now().Day(), time.Now().Month())
+		l += fmt.Sprintf("%d days in the year %d.\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay(), time.Now().Year())
+		l += fmt.Sprintf("Today is day %d.\n", time.Now().YearDay())
+		l += fmt.Sprintf("There are %d days remaining in %d<br>", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()-time.Now().YearDay(), time.Now().Year())
+		//		calendar, err := script.Exec(`bash -c 'set -o pipefail ; unbuffer cal --color | lolcat -f -F 0.5'`).String()
+		//		if err != nil {
+		calendar := cal()
+		//		}
+		l += "\n" + string(ansihtml.ConvertToHTML([]byte(calendar)))
+		l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
+		l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
+		l += "<thead>\n"
+		l += "<tr>\n"
+		l += "<th style='text-align: center;'> <br> <u>RewardDate</u> </th><th style='text-align: center;'> Pool 1 <br> <u>SKY/VISOR</u> </th><th style='text-align: center;'> Pool 2 <br> <u>SKY/VISOR</u> </th><th style='text-align: center;'> Distributed <br> <u>[<span style='color: red;'>&#10060;</span>/<span style='color: green;'>&#10004;</span>]</u> </th>\n"
+		l += "</tr>\n"
+		l += "</thead>\n"
+		l += "<tbody>\n"
+		rewardtxncsvs, _ := script.FindFiles(`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+`/`+"hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint
+		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
+			skycoinpershare, _ := script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
+			skycoinpershare1 := ""
+			skycoinpershare2 := ""
+			if strings.TrimSpace(skycoinpershare) == "" {
+				skycoinpershare1, _ = script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint
+				skycoinpershare2, _ = script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String() //nolint
+				skycoinpershare1 = strings.TrimSpace(skycoinpershare1)
+				skycoinpershare2 = strings.TrimSpace(skycoinpershare2)
+			} else {
+				skycoinpershare1 = strings.TrimSpace(skycoinpershare)
+				skycoinpershare2 = ""
+			}
+
+			var distributedIcon string
+			if _, err := os.Stat(wd + `/` + "hist/" + rewardtxncsvs[i] + ".txt"); err == nil {
+				distributedIcon = "<span style='color: green;'>&#10004;</span>"
+			} else {
+				distributedIcon = "<span style='color: red;'>&#10060;</span>"
+			}
+			l += "<tr>\n"
+			l += "<td style='text-align: center;'><a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a></td>\n"
+			l += "<td style='text-align: center;'>" + skycoinpershare1 + "</td>\n"
+			if skycoinpershare2 != "" {
+				l += "<td style='text-align: center;'>" + skycoinpershare2 + "</td>\n"
+			} else {
+				l += "<td style='text-align: center;'></td>\n"
+			}
+			l += "<td style='text-align: center;'>" + distributedIcon + "</td>\n"
+			l += "</tr>\n"
+		}
+		l += "</tbody>\n</table>\n"
+		l += "<br>" + htmltoplink
+
+		tmpl0, err1 := tmpl.Clone()
+		if err1 != nil {
+			fmt.Println("Error cloning template:", err1)
+		}
+		_, err1 = tmpl0.New("this").Parse(htmlRewardPageTemplate)
+		if err1 != nil {
+			fmt.Println("Error parsing Front Page template:", err1)
+		}
+		tmpl := tmpl0
+		htmlPageTemplateData1 := htmlTemplateData{
+			Title:   "Skycoin Reward Calculation and Distribution",
+			Content: htmpl.HTML(l), //nolint
+		}
+		tmplData := map[string]interface{}{
+			"Page": htmlPageTemplateData1,
+		}
+		var result bytes.Buffer
+		err = tmpl.Execute(&result, tmplData)
+		if err != nil {
+			fmt.Println("error: ", err)
+		}
+
+		c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)) //nolint
+		c.Writer.Flush()
+	})
+
 	authRoute := r1.Group("/")
 	if len(wlkeys) > 0 {
 		authRoute.Use(whitelistAuth(wlkeys))
@@ -287,10 +701,10 @@ func server() {
 			return
 		}
 		//find all transacion csvs
-		f, err := script.FindFiles("rewards/hist").MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice()
+		f, err := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice()
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte(`script.FindFiles("rewards/hist").MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice():\n\n` + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error())) //nolint
+			c.Writer.Write([]byte(`script.FindFiles(wd + /hist/).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice():\n\n` + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error())) //nolint
 			return
 		}
 		//and range through the results
@@ -322,10 +736,10 @@ func server() {
 					return
 				}
 				//record the transaction ID for the reward notification system - append the file!
-				_, err = script.Echo(txid).AppendFile("rewards/transactions0.txt")
+				_, err = script.Echo(txid).AppendFile(wd + `/` + "transactions0.txt")
 				if err != nil {
 					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte(`script.Echo(txid).AppendFile("rewards/transactions0.txt")\n\n` + txid + "\n\nerror:\n\n" + err.Error())) //nolint
+					c.Writer.Write([]byte(`script.Echo(txid).AppendFile(wd + / + "transactions0.txt")\n\n` + txid + "\n\nerror:\n\n" + err.Error())) //nolint
 					return
 				}
 				c.Writer.WriteHeader(http.StatusOK)
@@ -334,300 +748,72 @@ func server() {
 			}
 		}
 		c.Writer.WriteHeader(http.StatusNotFound)
-		h, _ := script.FindFiles("rewards/hist").String()                     //nolint
+		h, _ := script.FindFiles(wd + `/hist/`).String()                      //nolint
 		c.Writer.Write([]byte("No undistributed rewards csv found.\n\n" + h)) //nolint
 	})
 
-	authRoute.GET("/skycoinrewards/hist/:date", func(c *gin.Context) {
-		c.Writer.Header().Set("Server", "")
-		//override the behavior of `public fallback` for this endpoint
-		if len(wlkeys) == 0 {
-			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("len(wlkeys) == 0")) //nolint
+	r1.GET("/skycoin-rewards/csv", func(c *gin.Context) {
+		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint
+		if strings.TrimRight(active, "\n") == "active" {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.WriteHeader(http.StatusNotFound)
 			return
 		}
-		c.Writer.Header().Set("Transfer-Encoding", "chunked")
-		_, err := time.Parse("2006-01-02", c.Param("date"))
-		if err != nil {
-			if strings.Contains(c.Param("date"), "_rewardtxn0.csv") {
-				filetoserve, err := script.File("rewards/hist/" + c.Param("date")).Bytes()
-				if err == nil {
-					c.Writer.Header().Set("Content-Type", "text/plain")
-					c.Writer.WriteHeader(http.StatusOK)
-					c.Writer.Flush()
-					c.Writer.Write(filetoserve) //nolint
-					c.Writer.Flush()
-					return
-				}
-				fmt.Println("non nil script.File error")
-				c.Writer.WriteHeader(http.StatusNotFound)
-				c.Writer.Flush()
+		c.Writer.Header().Set("Server", "")
+		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice() //nolint
+		for _, f1 := range f {
+			g, err := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
+			if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
+				c.Writer.Header().Set("Content-Type", "text/plain")
+				c.Writer.WriteHeader(http.StatusOK)
+				c.Writer.Write([]byte("skycoin-" + f1)) //nolint
 				return
 			}
-		}
-		rewardfiles, _ := script.FindFiles(`rewards/hist`).Match(c.Param("date")).Slice() //nolint
-		if len(rewardfiles) == 0 {
-			c.Writer.WriteHeader(http.StatusNotFound)
-			c.Writer.Flush()
-			return
-		}
-		l := ""
-		l1, _ := script.File("rewards/hist/" + c.Param("date") + "_stats.txt").String() //nolint
-		l += c.Param("date") + "_stats.txt\n" + l1 + "\n"
-		l1, err = script.File("rewards/hist/" + c.Param("date") + ".txt").String()
-		if err != nil {
-			l += "Rewards not distributed yet\n\n"
-		} else {
-			if l1 == "" {
-				l += "Reward txid not recorded\n\n"
-			} else {
-				l += "Reward TXID:\n" + l1 + "\n\n"
-				l += "Explorer link:\n<a href='https://explorer.skycoin.com/app/transaction/" + l1 + "''>" + l1 + "</a>\n\n"
-			}
-		}
-		l1, err = script.File("rewards/hist/"+c.Param("date")+"_shares.csv").Replace("[", "&lsqb;").Replace("]", "&rsqb;").Replace("{", "&lcub;").Replace("}", "&rcub;").Replace(":", "&colon;").String()
-		if err != nil {
-			l += "<div style='float: right;'>PK,Share,SKY Amount\nReward shares file not found\nerror: " + err.Error() + "\n\n"
-			l += "</div>"
-		} else {
-			l += l1
-		}
-		l1, err = script.File("rewards/hist/" + c.Param("date") + "_ineligible.csv").String()
-		if err == nil {
-			l += "\n\nIneligible:\n" + l1
-		}
 
-		l2, _ := script.File("rewards/hist/"+c.Param("date")+"_rewardtxn0.csv").Replace(",", " ").Slice() //nolint
-		l += c.Param("date") + "_transaction0.csv\n\nSKY Address, Amount\n"
-		for _, line := range l2 {
-			skyaddr, _ := script.Echo(line).Column(1).String() //nolint
-			skyamt, _ := script.Echo(line).Column(2).String()  //nolint
-			l += "<a id='" + strings.TrimRight(skyaddr, "\n") + "'>" + strings.TrimRight(skyaddr, "\n") + "</a>," + strings.TrimRight(skyamt, "\n") + "\n"
 		}
-
-		l += "<br>" + htmltoplink
-		tmpl0, err1 := tmpl.Clone()
-		if err1 != nil {
-			fmt.Println("Error cloning template:", err1)
-		}
-		_, err1 = tmpl0.New("this").Parse(htmlRewardPageTemplate)
-		if err1 != nil {
-			fmt.Println("Error parsing Front Page template:", err1)
-		}
-		tmpl := tmpl0
-		htmlPageTemplateData1 := htmlTemplateData{
-			Title:   "Skycoin Reward Calculation and Distribution",
-			Content: htmpl.HTML(l), //nolint
-		}
-
-		tmplData := map[string]interface{}{
-			"Page": htmlPageTemplateData1,
-		}
-		var result bytes.Buffer
-		err = tmpl.Execute(&result, tmplData)
-		if err != nil {
-			fmt.Println("error: ", err)
-		}
-
-		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Flush()
-		c.Writer.Write(result.Bytes()) //nolint
-		c.Writer.Flush()
+		c.Writer.WriteHeader(http.StatusNotFound)
 	})
-
-	authRoute.GET("/node-info/:pk", func(c *gin.Context) {
-		c.Writer.Header().Set("Server", "")
-		//override the behavior of `public fallback` for this endpoint
-		if len(wlkeys) == 0 {
-			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("len(wlkeys) == 0")) //nolint
-			return
-		}
-		c.Writer.Header().Set("Transfer-Encoding", "chunked")
-		ni, err := script.File("rewards/log_backups/" + c.Param("pk") + "/node-info.json").Bytes()
-		if err != nil {
-			c.Writer.WriteHeader(http.StatusNotFound)
-			c.Writer.Flush()
-			return
-		}
-		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Flush()
-		c.Writer.Write(ni) //nolint
-		c.Writer.Flush()
-	})
-
-	type reward struct {
-		Date string  `json:"date"`
-		One  float64 `json:"1"`
-		Two  float64 `json:"2"`
-		Sent string  `json:"sent"`
-	}
-
-	type rewards []reward
-
 	//status of reward system hourly run.
 	r1.GET("/skycoin-rewards/s", func(c *gin.Context) {
 		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint
 		c.JSON(http.StatusOK, gin.H{"active": strings.TrimRight(active, "\n")})
 	})
+	r1.GET("/health", func(c *gin.Context) {
+		runTime = time.Since(startTime)
+		nextrun, _ := script.Exec(`systemctl status skywire-reward.timer --lines=0`).First(5).Last(1).Replace("    Trigger: ", "").String() //nolint
+		prevDuration, _ := script.Exec(`systemctl status skywire-reward.service --lines=0`).Match("Duration").First(1).String()             //nolint
+		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()                                                     //nolint
+		c.JSON(http.StatusOK, gin.H{
+			"frontend_start_time":             startTime,
+			"frontend_run_time":               runTime.String(),
+			"dmsg_discovery":                  dmsgDisc,
+			"dmsg_address":                    fmt.Sprintf("%s:%d", pk.String(), dmsgPort),
+			"reward_system_active":            strings.TrimRight(active, "\n"),
+			"reward_system_next_run":          strings.TrimRight(nextrun, "\n"),
+			"reward_system_prev_run_duration": strings.TrimRight(prevDuration, "\n"),
+			"whitelisted_keys":                wlkeys,
+		})
+	})
 
-	r1.GET("/skycoin-rewards", func(c *gin.Context) {
-		data := rewards{}
-		rewardtxncsvs, err := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+`/hist/`, "").Replace("_rewardtxn0.csv", "").Slice() //nolint
-		if err != nil {
-			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("500 Internal Server Error #1 " + err.Error())) //nolint
-			c.AbortWithStatus(http.StatusInternalServerError)
+	r1.GET("/skycoin-rewards/csv/plain", func(c *gin.Context) {
+		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint
+		if strings.TrimRight(active, "\n") == "active" {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.WriteHeader(http.StatusNotFound)
 			return
 		}
-		counter := 0
-		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
-			if counter >= 90 {
-				break
-			}
-			counter++
-			var rdata reward
-			rdata.Date = rewardtxncsvs[i]
-			skycoinpershare, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
-			if err != nil {
-				c.Writer.WriteHeader(http.StatusInternalServerError)
-				c.Writer.Write([]byte("500 Internal Server Error #2 " + err.Error())) //nolint
-				c.AbortWithStatus(http.StatusInternalServerError)
+		c.Writer.Header().Set("Server", "")
+		c.Writer.Header().Set("Content-Type", "text/plain")
+		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice() //nolint
+		for _, f1 := range f {
+			g, _ := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint
+			if g != "" && g != "\n" {
+				c.Redirect(http.StatusFound, "/skycoin-"+f1)
 				return
 			}
-			if strings.TrimSpace(skycoinpershare) == "" {
-				pool1, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint
-				if err != nil {
-					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte("500 Internal Server Error #3 " + err.Error())) //nolint
-					c.AbortWithStatus(http.StatusInternalServerError)
-					return
-				}
-				rdata.One, err = strconv.ParseFloat(strings.TrimRight(pool1, "\n"), 64)
-				if err != nil {
-					rdata.One = 0.0
-				}
-				pool2, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String() //nolint
-				if err != nil {
-					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte("500 Internal Server Error #5 " + err.Error())) //nolint
-					c.AbortWithStatus(http.StatusInternalServerError)
-					return
-				}
-				rdata.Two, err = strconv.ParseFloat(strings.TrimRight(pool2, "\n"), 64)
-				if err != nil {
-					rdata.Two = 0.0
-				}
-			} else {
-				rdata.One, err = strconv.ParseFloat(skycoinpershare, 64)
-				if err != nil {
-					rdata.One = 0.0
-				}
-			}
-			//			rdata.Sent = "❌"
-			rdata.Sent = "false"
-			if _, err := os.Stat(wd + `/hist/` + rewardtxncsvs[i] + ".txt"); err == nil {
-				//				rdata.Sent = "✔"
-				rdata.Sent = "true"
-			}
-			data = append(data, rdata)
+
 		}
-		c.Header("Content-Type", "application/json")
-		c.JSON(http.StatusOK, data)
-	})
-
-	r1.GET("/skycoin-rewards/txids", func(c *gin.Context) {
-		txids, err := script.File(wd + "/transactions0.txt").Slice()
-		if err != nil {
-			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("500 Internal Server Error" + err.Error())) //nolint
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-		c.Header("Content-Type", "application/json")
-		c.JSON(http.StatusOK, txids)
-	})
-
-	// BuildInfo represents build metadata.
-	type buildInfo struct {
-		Version string `json:"version"`
-		Commit  string `json:"commit"`
-		Date    string `json:"date"`
-	}
-
-	// Health represents the health.json data.
-	type health struct {
-		Time      string    `json:"time"`
-		BuildInfo buildInfo `json:"build_info"`
-		StartedAt string    `json:"started_at"`
-	}
-
-	// Node represents a single node's information.
-	type node struct {
-		PK       string `json:"pk"`
-		Health   health `json:"health,omitempty"`
-		NodeInfo string `json:"node_info,omitempty"`
-	}
-
-	type nodesResponse struct {
-		Nodes []node `json:"nodes"`
-	}
-
-	r1.GET("/log-collection/json", func(c *gin.Context) {
-		pks, err := script.ListFiles(wd + "/log_backups").Basename().Slice()
-		if err != nil {
-			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("500 Internal Server Error" + err.Error())) //nolint
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-		var nodes []node
-
-		for i := range pks {
-			fileInfo, err := os.Stat(wd + "/log_backups/" + pks[i] + "/health.json")
-			if err != nil {
-				continue
-			}
-			_, err = os.Stat(wd + "/log_backups/" + pks[i] + "/node-info.json")
-			if err != nil {
-				continue
-			}
-			// Get modification time
-			modTime := fileInfo.ModTime().Format(time.RFC3339)
-			healthData, err := script.File(wd + "/log_backups/" + pks[i] + "/health.json").Bytes()
-			if err != nil {
-				continue
-			}
-			var healthJSON health
-			err = json.Unmarshal(healthData, &healthJSON)
-			if err != nil {
-				continue
-			}
-			healthJSON.Time = modTime
-
-			var nodeInfo string
-
-			nodeInfoSlc, err := script.File(wd+"/log_backups/"+pks[i]+"/node-info.json").JQ(".skywire_version").Replace(`"`, "").Replace("\n", "").Slice()
-			if err != nil {
-				continue
-			}
-			if len(nodeInfoSlc) == 0 {
-				continue
-			}
-			nodeInfo = nodeInfoSlc[0]
-
-			nodes = append(nodes, node{
-				PK:       pks[i],
-				Health:   healthJSON,
-				NodeInfo: nodeInfo,
-			})
-		}
-
-		response := nodesResponse{Nodes: nodes}
-
-		// Set header and return JSON response
-		c.Header("Content-Type", "application/json")
-		c.JSON(http.StatusOK, response)
+		c.Writer.WriteHeader(http.StatusNotFound)
 	})
 
 	r1.GET("/skycoin-rewards/hist/:date", func(c *gin.Context) {
@@ -715,10 +901,10 @@ func server() {
 			return
 		}
 		l := ""
-		l3, _ := os.Stat("rewards/hist/" + c.Param("date") + "_rewardtxn0.csv") //nolint
+		l3, _ := os.Stat(wd + `/hist/` + c.Param("date") + "_rewardtxn0.csv") //nolint
 		l += "Reward data generated: " + l3.ModTime().Format("2006-01-02 15:04:05") + "\n\n"
 
-		l1, err := script.File("rewards/hist/" + c.Param("date") + ".txt").String()
+		l1, err := script.File(wd + `/hist/` + c.Param("date") + ".txt").String()
 		if err != nil {
 			l += "Rewards not distributed yet\n\n"
 		} else {
@@ -730,7 +916,7 @@ func server() {
 			}
 		}
 
-		l2, err := script.File("rewards/hist/" + c.Param("date") + "_shares.csv").Slice()
+		l2, err := script.File(wd + `/hist/` + c.Param("date") + "_shares.csv").Slice()
 		if err != nil {
 			l += "<div style='float: right;'>PK,Share,SKY Amount\nReward shares file not found\nerror: " + err.Error() + "\n\n"
 		} else {
@@ -745,7 +931,7 @@ func server() {
 				l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + strings.TrimRight(share, "\n") + strings.Replace(sky, ",\n", "\n", -1)
 			}
 		}
-		l2, err = script.File("rewards/hist/" + c.Param("date") + "_ineligible.csv").Slice()
+		l2, err = script.File(wd + `/hist/` + c.Param("date") + "_ineligible.csv").Slice()
 		if err == nil {
 			l += "\n\nIneligible:\n"
 			for _, line := range l2 {
@@ -753,7 +939,7 @@ func server() {
 				reason, _ := script.Echo(line).Column(3).String()         //nolint
 				invalid, _ := script.Echo(line).Match(", , , ,").String() //nolint
 				if invalid != "" {
-					_, err = script.IfExists("rewards/log_backups/" + thispk + "/node-info.json").Echo("").String()
+					_, err = script.IfExists(wd + `/` + "log_backups/" + thispk + "/node-info.json").Echo("").String()
 					if err != nil {
 						l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Survey not found\n"
 					} else {
@@ -766,10 +952,10 @@ func server() {
 		}
 		l += "</div>"
 
-		l1, _ = script.File("rewards/hist/" + c.Param("date") + "_stats.txt").String() //nolint
+		l1, _ = script.File(wd + `/hist/` + c.Param("date") + "_stats.txt").String() //nolint
 		l += c.Param("date") + "_stats.txt\n" + l1 + "\n"
 
-		l2, _ = script.File("rewards/hist/"+c.Param("date")+"_rewardtxn0.csv").Replace(",", " ").Slice() //nolint
+		l2, _ = script.File(wd+`/`+"hist/"+c.Param("date")+"_rewardtxn0.csv").Replace(",", " ").Slice() //nolint
 		l += c.Param("date") + "_transaction0.csv\n\nSKY Address, Amount\n"
 		for _, line := range l2 {
 			skyaddr, _ := script.Echo(line).Column(1).String() //nolint
@@ -807,65 +993,195 @@ func server() {
 		c.Writer.Flush()
 	})
 
-	r1.GET("/log-collection", func(c *gin.Context) {
+	authRoute.GET("/node-info/:pk", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
-		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
+		//override the behavior of `public fallback` for this endpoint
+		if len(wlkeys) == 0 {
+			c.Writer.WriteHeader(http.StatusUnauthorized)
+			c.Writer.Write([]byte("len(wlkeys) == 0")) //nolint
+			return
+		}
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		ni, err := script.File(wd + `/` + "log_backups/" + c.Param("pk") + "/node-info.json").Bytes()
+		if err != nil {
+			c.Writer.WriteHeader(http.StatusNotFound)
+			c.Writer.Flush()
+			return
+		}
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Survey and Transport Log Collection</title></head>")) //nolint
+		c.Writer.Write(ni) //nolint
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>")) //nolint
-		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks)) //nolint
-		c.Writer.Flush()
-		tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh")
-		if err != nil {
-			return
-		}
-		if err := tmpFile.Close(); err != nil {
-			return
-		}
-		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()                                         //nolint
-		_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())                                          //nolint
-		res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String() //nolint
-		os.Remove(tmpFile.Name())                                                                         //nolint
-		c.Writer.Write([]byte(fmt.Sprintf("%s\n", res)))                                                  //nolint
-		c.Writer.Flush()
+	})
 
-		// Initial line count
-		initialLineCount, _ := script.File("rewards/skywire-cli-log.txt").CountLines() //nolint
-		// Read and print the initial lines
-		initialContent, _ := script.File("rewards/skywire-cli-log.txt").First(initialLineCount).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(initialContent))                                          //nolint
-		c.Writer.Flush()
-		for {
-			select {
-			case <-c.Writer.CloseNotify():
-				return
-			default:
-			}
-			// Sleep for a short duration
-			time.Sleep(100 * time.Millisecond)
-			// Get the current line count
-			currentLineCount, _ := script.File("rewards/skywire-cli-log.txt").CountLines() //nolint
-			// Check if there are new lines
-			if currentLineCount > initialLineCount {
-				newContent, _ := script.File("rewards/skywire-cli-log.txt").Last(currentLineCount - initialLineCount).Bytes() //nolint
-				initialLineCount = currentLineCount
-				c.Writer.Write(ansihtml.ConvertToHTML(newContent)) //nolint
-				c.Writer.Flush()
-			}
-			finished, _ := script.File("rewards/skywire-cli-log.txt").Last(1).MatchRegexp(regexp.MustCompile(".*finished.*")).String() //nolint
-			if finished != "" {
+	type reward struct {
+		Date string  `json:"date"`
+		One  float64 `json:"1"`
+		Two  float64 `json:"2"`
+		Sent string  `json:"sent"`
+	}
+
+	type rewards []reward
+
+	r1.GET("/skycoin-rewards.json", func(c *gin.Context) {
+		data := rewards{}
+		rewardtxncsvs, err := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+`/hist/`, "").Replace("_rewardtxn0.csv", "").Slice() //nolint
+		if err != nil {
+			c.Writer.WriteHeader(http.StatusInternalServerError)
+			c.Writer.Write([]byte("500 Internal Server Error #1 " + err.Error())) //nolint
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		counter := 0
+		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
+			if counter >= 90 {
 				break
 			}
+			counter++
+			var rdata reward
+			rdata.Date = rewardtxncsvs[i]
+			skycoinpershare, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
+			if err != nil {
+				c.Writer.WriteHeader(http.StatusInternalServerError)
+				c.Writer.Write([]byte("500 Internal Server Error #2 " + err.Error())) //nolint
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			if strings.TrimSpace(skycoinpershare) == "" {
+				pool1, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint
+				if err != nil {
+					c.Writer.WriteHeader(http.StatusInternalServerError)
+					c.Writer.Write([]byte("500 Internal Server Error #3 " + err.Error())) //nolint
+					c.AbortWithStatus(http.StatusInternalServerError)
+					return
+				}
+				rdata.One, err = strconv.ParseFloat(strings.TrimRight(pool1, "\n"), 64)
+				if err != nil {
+					rdata.One = 0.0
+				}
+				pool2, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String() //nolint
+				if err != nil {
+					c.Writer.WriteHeader(http.StatusInternalServerError)
+					c.Writer.Write([]byte("500 Internal Server Error #5 " + err.Error())) //nolint
+					c.AbortWithStatus(http.StatusInternalServerError)
+					return
+				}
+				rdata.Two, err = strconv.ParseFloat(strings.TrimRight(pool2, "\n"), 64)
+				if err != nil {
+					rdata.Two = 0.0
+				}
+			} else {
+				rdata.One, err = strconv.ParseFloat(skycoinpershare, 64)
+				if err != nil {
+					rdata.One = 0.0
+				}
+			}
+			//			rdata.Sent = "❌"
+			rdata.Sent = "false"
+			if _, err := os.Stat(wd + `/hist/` + rewardtxncsvs[i] + ".txt"); err == nil {
+				//				rdata.Sent = "✔"
+				rdata.Sent = "true"
+			}
+			data = append(data, rdata)
 		}
+		c.Header("Content-Type", "application/json")
+		c.JSON(http.StatusOK, data)
+	})
 
-		c.Writer.Write([]byte(htmltoplink)) //nolint
-		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend)) //nolint
-		c.Writer.Flush()
+	r1.GET("/skycoin-rewards/txids", func(c *gin.Context) {
+		txids, err := script.File(wd + "/transactions0.txt").Slice()
+		if err != nil {
+			c.Writer.WriteHeader(http.StatusInternalServerError)
+			c.Writer.Write([]byte("500 Internal Server Error" + err.Error())) //nolint
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		c.Header("Content-Type", "application/json")
+		c.JSON(http.StatusOK, txids)
+	})
+
+	r1.StaticFile("/log-collection/json", filepath.Join(os.TempDir(), "log-collection.json"))
+
+	faviconBase64 := `AAABAAEAICAAAAEAIACoEAAAFgAAACgAAAAgAAAAQAAAAAEAIAAAAAAAABAAACIuAAAiLgAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAC4BIwAAAAoBnVRgGb5mdEjQcH9d2HeCXdl5gV7Mcnhoy3J3a9B2emjc
+	gnxg34d7XsJ1bUGiZGAq0YVyXOGQdV7ikXVd5JJ3XtSKcVy6fWtKmGdmNIBYXhP///8AAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACZVWEAUDg1Ardhc1bRboLA13KF69x1iPXeeIfv3XmF
+	6d99hN/gf4Pb4oGD2+WIgd3jiH/p1oN2yK1tZFbIgGyE24h1yeCPdODVim6ty4RtfcOAbmK1dmlq
+	xoNpcN6VbXP0pnZy5ptyaceFYh7//+AAAAAAAAAAAAAAAAAAAAAAAJVQXgBRMDMDtl9zXMRne6K8
+	ZHWKtmJwgLZjcHS2YHBuumVycMVvdmzJdHRqx3dxZrtvam63cWtoomtkHo5aSQOnYWAcsG1gIalx
+	YkrQhnGc65h52PqigOz8pID2/Kh/+v6tfvr8r3n676Zyvd+YbS//140AwoVkAFtKNQBJQysCXU40
+	A3c7TwWtV29YxmV+otVribfcb43J4HON2eN2juXedon54HqI/eF+hf3fgYH21358ybBraXKaY1wT
+	mFpbAKBiXhPKgG9bwHdtcsl/bWnYi3CA5ZV0rfOfe+L7p374/qt+//+xe//+sXr/8qhzvsuNXyTk
+	n2sA/8PzAK9ZdFC7XHx4pVNsOc5kh9LibJT/6HCY/+tzl//td5X/73qV//F+lP/xgJT/5n6K9NJ3
+	fK2+bW9qzXl0kcp9cH6ybWUyrm1jS9uJdLrzlIT07pOA3d+Ld7TYiW+ByoJoaM+IZ4Hqm3S39aZ4
+	7P6ve//9sHr+6qNuk6pyWgqMQF4ex1mIwNRfkP61VXh7y2GGx+Zqmf/pbJv/6m+Z/+t0l//teJX/
+	63qR/tp1hdm4Zm+AwWp1f+J+h9DqhIn+z3l3ndN8eaHbhHq0yX1tcfOUhPP9mYn//puI//qcg/7x
+	mXzj55V3scyEa3zPiWlo55pwm/eodeLrom+wtn9fHLJSeknTWJPp312c/8NZhLa1V3eJ3WeU/Ohq
+	nP/obJr/6nKX/+R0kf3LbH65rFtrdcxsf7jofI/18YSR/+qDivi1aGmM4IN/w+2LhfnLeXJ33Yd6
+	uvmXh//9m4j//56H//+ghv/+oYT/+aF/9+ybd9PXjW6JxoRqU7l8YSi+jmECtEx9bdZXl/3hWqD/
+	01uS7aNMbXzNYYjY5WqZ/+Zsmf/ebZD7vmJ3sK1bbHvXb4fU63uS//B+lP/zgZX/5H6I6bNlaXXp
+	hIfh946N/9qAfMjFdW568pKE9PyXif/+mon//52H//6ghP/6oIH68Z1649qPcKq9fmZAq3FdCrF5
+	XwCvR3x91lOZ/+BWof/bWpr/ulN/rLFUdZrbZZL83GaS+bhaeaWmU2yS1myJ5uZzk//kdY//43iM
+	/+Z7jP/UdoDByHN1cumDiPv0io7/64iG87pta33hh33I+ZOK//mVif/xln/t7JV7utSHcIHKgmll
+	2YxvgeeWdbvfkXGoxoNiRqxIeG3QUZX831Oh/99WoP/OWI7mpU1uXK9QdYK2WHd4jUpeQKhYbaG+
+	X3mdxWR9hMlofnfDaXd4w2x1erdpbUm3bWtByXN2nNZ6fLbhgoHPyXV2g816dEXdhH2b24V6msN3
+	a3PEeGt95Y18qvKZfd76oID+/6SE//ykgP/ckXGkp01yQctQkuLbUZ//1lOZ/cBShcWcSGcuAAAA
+	AXY4TRG3W3dfvlt+lcZfga3IY4HE0GmFyNZuhsvNbX7ItmZuUMVueIjNb32pyG55j8J1cGCiXmAe
+	/6GWAIxeTAi3dWVd3IV81PSUhvj8mof//5+F//+hhP//o4X/+aR7/dySbHeDPFkVu0yGqb5Lic2t
+	R3uKnEZraZNLXxwAAAAAl0lkRNFgjPDhZJn/5Wia/+hrmv/pbpn/7HOZ/+Bxj+e2YXBx3naI6Ox+
+	kP/gfIfovXBuhJ9iWhx0Rz4Cr29hF7NvY1vNfm+H4453zPWYgvf9m4b//6GD//+ig//xnHnbzodo
+	OP+CuACGP1slnkRwcrlJhsi8ToXbm0dpY6tOdH6dSWlqxlqGxeBhmv/mZpz/52ic/+lsnP/pb5n/
+	2myMwbVfcYLkdY/23HWGz7lmbnPIb3eR1Hh9xrtrb1nEdG+L4oWA6Nd+erDEeGtwyXxuf+aPfMn3
+	moL9+ZyB/N+QdIN+UUQDjENfAFk4NgWqSXeGx0+P+7BHfK6rR3ig01SX/cdUis+jS2x1y12I0+Jl
+	mv/lZpv/52qa/+Vsl//KZoGnwWZ4m9Btgc6yYGxqzG5+uOh9jfzwg5D/0nV+sMdydZLxiov/9Y6L
+	/+yLhe/bhHmswnZrataGcpLZiHSnv3dnHtKDcQBZITcArk6AAIo7YRalSXVnl0JpeMZRjOfcU6D/
+	2lWc/8FUhsebR2iDy1yJ0+Jkmv/mZp3/4WmW+LJccYutXW2XrFtsc85sf8bqeZH+8H2V//GBk//Z
+	eYHPynN2ceuEiv33i4//946N//SQiP/ih3/bt3BqR5hfUwySX04BmWFTAAAAAAAAAAAAOE8UAKBE
+	cACZRGsvtkqBscpOkufSUpfy0laU/7tSgc6eS2h6yFyHxd5imP/YZpDroFJpUpFPX0TIZn+85XSR
+	/+13l//vepb/8H2U/996hua1ZWt35oGI7u+Hi/bpiITn3oR8utB8dme0a2kUx3dyAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAJgAgAA4AEAGFOVsNnD1wKaFDcVC9S4fJ2FSa/8NTh9iiSW2Bull6mrtdenyN
+	SVwNwWF+feBrk/vrcZn/7HWY/+13lv/vepb/5nqN6rdlbXPUd33Vw210Z8RxcSiybGUQb0ZAA3ZK
+	RAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACNOWIAAAAAArtJh4DZU53/3Fad
+	/81WkN+fS2pTAAAAAQAAAAHKZISe5GqY/+htmf/qcZf/7HSX/+54l//oeZDtuGdveMNvc7/Fb3Qa
+	yHF2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFsbQgDi
+	YqIArUZ8VNBRlfXeVaD/2leb/7lTf5d6PFIHFxkDA7hedWPUZI3f42uW/+lvmf/rcpj/7XWY/+Z2
+	kfOyYm6BrGVoeqtkZxCtZmkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAJZDZgCRQmIdwk2LwtpPn//cU5//yFOMyJ9PZ0rDW4KavFl8lKVSa3e6XHig
+	0GaH4eFskvrocZb/23GK8aZeaGaJVlgdhFFUAohUVwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAEHAP+B4wCqSXZWzE6T7tdTmv+7T4KutU58odpa
+	mP/cXpn8zl2L5bZVebGiTmmJsFhxkcxpga+2YHGKg0dRFJxTYAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAo0hvAIA/Uwa1TH5+
+	xVGL6KVIcYzGU4rJ3lme/+Jdn//jYJ3/4GKZ/9Zij+/OY4e8sVpyi4tNWCWNTloAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAizxeAIo7XQyaSWpRoUhwWctTkODcVp3/3lid/+Fenf/iYJz/4GSZ/9djkPC8XHuckVFc
+	HJVSXwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKRKcgCjSnEVrkp5c71OhLvCUojcyFWL3cZahsTB
+	XX+QuVl5S49GXA6rVG8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAG4zSAAvFh0Dj0Jg
+	D5NAZBuYQWccnlBmEYBMSwaSUVsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA////
+	//////////////////AAAH/gAAAH4AAAA4AAQAGAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAQA
+	AgAAAIAAAACAAAABwAAAAfAAAAfwAAAP/gAAf/8AAH//AAB//4AB//+AA///wAP///AH///4H///
+	//////////////8=`
+	faviconBuffer, _ := base64.StdEncoding.DecodeString(faviconBase64) //nolint
+
+	r1.GET("/favicon.ico", func(c *gin.Context) {
+		_, _ = c.Writer.WriteString(string(faviconBuffer)) //nolint
 	})
 
 	//manually create routes to the compiled cogentcore web app source files
@@ -931,7 +1247,103 @@ func server() {
 		}()
 	}
 
+	go func() {
+		err := generateAndCacheJSON()
+		if err != nil {
+			fmt.Println("Error updating log-collection cache:", err)
+		}
+		for range time.NewTicker(cacheInterval).C {
+			err := generateAndCacheJSON()
+			if err != nil {
+				fmt.Println("Error updating log-collection cache:", err)
+			}
+		}
+	}()
+
 	wg.Wait()
+}
+
+var (
+	tempJSONPath  = filepath.Join(os.TempDir(), "log-collection.json")
+	cacheInterval = 300 * time.Second // refresh cache every 5 minutes seconds
+)
+
+// Node represents a single node's flattened information.
+type node struct {
+	PK        string `json:"pk"`
+	Time      string `json:"time"`
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	Date      string `json:"date"`
+	StartedAt string `json:"started_at"`
+}
+
+type nodesResponse struct {
+	Nodes []node `json:"nodes"`
+}
+
+func generateAndCacheJSON() error {
+	pks, err := script.ListFiles(wd + "/log_backups").Basename().Slice()
+	if err != nil {
+		return err
+	}
+
+	var nodes []node
+	for i := range pks {
+		healthPath := wd + "/log_backups/" + pks[i] + "/health.json"
+		nodeInfoPath := wd + "/log_backups/" + pks[i] + "/node-info.json"
+
+		fileInfo, err := os.Stat(healthPath)
+		if err != nil {
+			continue
+		}
+		_, err = os.Stat(nodeInfoPath)
+		if err != nil {
+			continue
+		}
+
+		modTime := fileInfo.ModTime().Format(time.RFC3339)
+
+		healthData, err := script.File(healthPath).Bytes()
+		if err != nil {
+			continue
+		}
+
+		var temp struct {
+			BuildInfo struct {
+				Version string `json:"version"`
+				Commit  string `json:"commit"`
+				Date    string `json:"date"`
+			} `json:"build_info"`
+			StartedAt string `json:"started_at"`
+		}
+
+		if err := json.Unmarshal(healthData, &temp); err != nil {
+			continue
+		}
+
+		nodeInfoSlc, err := script.File(nodeInfoPath).JQ(".skywire_version").Replace(`"`, "").Replace("\n", "").Slice()
+		if err != nil || len(nodeInfoSlc) == 0 {
+			continue
+		}
+
+		nodes = append(nodes, node{
+			PK:        pks[i],
+			Time:      modTime,
+			Version:   nodeInfoSlc[0],
+			Commit:    temp.BuildInfo.Commit,
+			Date:      temp.BuildInfo.Date,
+			StartedAt: temp.StartedAt,
+		})
+	}
+
+	data := nodesResponse{Nodes: nodes}
+	buf := new(bytes.Buffer)
+	if err := json.NewEncoder(buf).Encode(data); err != nil {
+		return err
+	}
+
+	return os.WriteFile(tempJSONPath, buf.Bytes(), 0644) //nolint
 }
 
 type ginHandler struct {
@@ -1251,6 +1663,73 @@ type htmlTemplateData struct {
 	Content htmpl.HTML
 }
 
+const htmlFrontPageTemplate = `
+┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬─┐┌─┐┬ ┬┌─┐┬─┐┌┬┐┌─┐
+└─┐├┴┐└┬┘││││├┬┘├┤   ├┬┘├┤ │││├─┤├┬┘ ││└─┐
+└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘  ┴└─└─┘└┴┘┴ ┴┴└──┴┘└─┘<br>
+{{.Page.Content}}
+`
+
+func mainPage(c *gin.Context) {
+	c.Writer.Header().Set("Server", "")
+	tmpl0, err1 := tmpl.Clone()
+	if err1 != nil {
+		fmt.Println("Error cloning template:", err1)
+	}
+	_, err1 = tmpl0.New("this").Parse(htmlFrontPageTemplate)
+	if err1 != nil {
+		fmt.Println("Error parsing Front Page template:", err1)
+	}
+	tmpl := tmpl0
+
+	mainnetRulesHtml, _ := script.Exec(`skywire cli reward rules -l`).String()              //nolint
+	skywireVersion, _ := script.Exec(`skywire -v`).Replace("skywire version ", "").String() //nolint
+	htmlPageTemplateData1 := htmlPageTemplateData
+	htmlPageTemplateData1.Content = htmpl.HTML(skywireVersion + "<br>" + skycoinlogohtml + "<br>" + mainnetRulesHtml) //nolint
+	tmplData := map[string]interface{}{
+		"Page": htmlPageTemplateData1,
+	}
+	var result bytes.Buffer
+	err = tmpl.Execute(&result, tmplData)
+	if err != nil {
+		fmt.Println("error: ", err)
+		c.Writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	c.Writer.WriteHeader(http.StatusOK)
+	c.Writer.Write((bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1))) //nolint
+}
+
+func cal() (ret string) {
+	today := time.Now()
+	year, month, _ := today.Date()
+	firstOfMonth := time.Date(year, month, 1, 0, 0, 0, 0, time.Local)
+	startDayOfWeek := firstOfMonth.Weekday()
+	numDays := time.Date(year, month+1, 0, 0, 0, 0, 0, time.Local).Day()
+	header := fmt.Sprintf("%s %d", month.String(), year)
+	headerWidth := 20
+	padding := (headerWidth - len(header)) / 2
+	ret += fmt.Sprintf("%*s%s%*s\n", padding, "", header, headerWidth-len(header)-padding, "")
+	ret += "Su Mo Tu We Th Fr Sa\n"
+	for i := 0; i < int(startDayOfWeek); i++ {
+		ret += "   "
+	}
+	day := 1
+	for day <= numDays {
+		for i := int(startDayOfWeek); i < 7 && day <= numDays; i++ {
+			if day == today.Day() {
+				ret += fmt.Sprintf("\x1b[30;47m%2d\x1b[0m ", day)
+			} else {
+				ret += fmt.Sprintf("%2d ", day)
+			}
+			day++
+		}
+		ret += "\n"
+		startDayOfWeek = 0
+	}
+	return ret
+}
+
 const nextlogrun = `#!/bin/bash
 _nextskywireclilogrun() {
 	if systemctl is-active --quiet skywire-reward >/dev/null; then
@@ -1261,3 +1740,52 @@ _nextskywireclilogrun() {
 	fi
 }
 `
+
+const skycoinlogohtml = `<table border="0" cellpadding="0" cellspacing="0" summary="[libcaca canvas export]">
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">8</font></tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">:</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#aaaaaa" colspan="2"><tt><font color="#555555">St</font></tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">t</font></tt></td><td bgcolor="#000000"><tt><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa" colspan="2"><tt><font color="#555555">;</font><font color="#ffffff">.</font></tt></td><td bgcolor="#aaaaaa" colspan="3"><tt><font color="#555555">&#160;%8</font></tt></td><td bgcolor="#555555" colspan="2"><tt><font color="#00aaaa">&#160;;</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">;</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">@</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">%.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#000000"><tt><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;8</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">@</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;;</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">@</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">@</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;@</font></tt></td><td bgcolor="#000000"><tt><font color="#00aa00">;</font></tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">t</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;t</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">:</font></tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">.</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">8</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">@</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aa5500">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#0000aa">%</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.X</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">;</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#aa0000">:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">S</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#00aa00">;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">@</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;S</font></tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">;</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">;</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">:</font><font color="#aa0000">:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">@</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">:</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;S</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#555555">S</font><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;;</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;%</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">X</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa5500">;</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">t</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">.</font><font color="#aa0000">.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#555555">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa5500">:</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">:</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;t</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">.</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">.</font><font color="#0000aa">.</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">@</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">:</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">.</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#00aa00">:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;8</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#00aa00">:</font><font color="#0000aa">.</font><font color="#aa0000">;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">t</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">S</font></tt></td><td bgcolor="#000000"><tt><font color="#00aa00">.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.@</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">;</font><font color="#0000aa">:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.;</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#555555">8</font><font color="#aa0000">.</font><font color="#0000aa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">X</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">%</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;X</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">S</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;;</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">.</font><font color="#0000aa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">S</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">t</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;..</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">S</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">t</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">S.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">@</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">X</font></tt></td><td bgcolor="#000000"><tt><font color="#00aa00">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa5500">t</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#000000"><tt><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">@</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">%</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">.</font><font color="#aa0000">:</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">S</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#aa0000">.</font><font color="#0000aa">.;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">;</font><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">X</font></tt></td><td bgcolor="#555555" colspan="2"><tt><font color="#000000">X</font><font color="#00aaaa">.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">X</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">.</font><font color="#aa0000">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;S</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">@</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">@</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#000000" colspan="4"><tt><font color="#00aa00">t</font><font color="#aa0000">:</font><font color="#0000aa">.</font><font color="#00aa00">;</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">:</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">X</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#aaaaaa" colspan="2"><tt><font color="#555555">:</font><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">;</font></tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">.</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;t</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#555555">@</font><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">%</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#aa0000">.</font><font color="#0000aa">.</font><font color="#aa0000">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">%</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;S</font></tt></td><td bgcolor="#aaaaaa" colspan="2"><tt><font color="#ffffff">;</font><font color="#555555">8</font></tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">;</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">:</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">S</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;t</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">8</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="4"><tt><font color="#aaaaaa">&#160;..:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">%</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#aaaaaa"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#00aa00">;</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">X</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;</font><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">.</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">:</font><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;X</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">X</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">S</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">S</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">8</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">X</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">.</font><font color="#0000aa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">@</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#00aa00">:</font><font color="#0000aa">.</font><font color="#aa0000">:</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">8.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;t</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#555555">8</font><font color="#00aa00">.</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;</font><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aa0000">%</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">S</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">:t</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">@</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">:</font><font color="#00aa00">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">%</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;%</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">S</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">@</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;</font><font color="#0000aa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;:</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">@</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;X</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#00aa00">:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">:</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.%</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">X</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;;</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">:</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">.</font><font color="#aa0000">.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">S</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa5500">:</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">:</font><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">:</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">:</font><font color="#00aa00">.</font></tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">t</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">t</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.@</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">;</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.t</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#aa0000">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">%</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">t</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">.</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">.</font><font color="#aa0000">:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">X</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#0000aa">:</font><font color="#00aa00">.</font><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.@</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#0000aa">;</font><font color="#00aa00">:</font><font color="#aa0000">.</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">t</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa5500">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">@</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">:</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">:</font><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;%</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#555555">8</font><font color="#00aa00">.</font><font color="#aa0000">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;..</font></tt></td><td bgcolor="#555555"><tt><font color="#aa5500">%</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">.</font><font color="#aa0000">.</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">@</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">%</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;S</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">S</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.:</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aa5500">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">:</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">.</font><font color="#00aa00">.</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">@</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">:</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;</font><font color="#0000aa">:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">;</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">%</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;;</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#00aa00">.</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">%</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">t</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#00aa00">;</font><font color="#0000aa">:</font><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;%</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#555555">8</font><font color="#00aa00">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">:</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">S</font></tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">%</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">%</font></tt></td><td bgcolor="#000000"><tt><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">S</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">;</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">.</font><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">t</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;</font><font color="#555555">@</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">;</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;%</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#555555">8</font><font color="#aa0000">..</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">.</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aa5500">;</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">t</font></tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;&#160;</font><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">:</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">X</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">.</font><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;@</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#00aa00">;</font><font color="#aa0000">:</font><font color="#0000aa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">@</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">@</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#00aa00">..</font><font color="#555555">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">:</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;t</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#555555">8</font><font color="#0000aa">.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">%</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">%</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#0000aa">..</font><font color="#aa0000">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">@</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa0000">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;t</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">8</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">@</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;..</font></tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">;</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#00aa00">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">;</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#00aa00">.</font><font color="#aa0000">.</font><font color="#00aa00">.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;@</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">S</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;&#160;t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">:</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">@</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;t</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">:</font></tt></td><td bgcolor="#000000"><tt><font color="#00aa00">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">@</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#aa0000">:</font><font color="#0000aa">.</font><font color="#00aa00">.</font></tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">%</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;X</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">S</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#00aa00">.:</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">@</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">t</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">.</font><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">S</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.8</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#00aa00">:</font><font color="#aa0000">.</font><font color="#555555">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;%</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#555555">8</font><font color="#00aa00">.</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;..</font></tt></td><td bgcolor="#555555"><tt><font color="#aa5500">;</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa5500">;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">X</font></tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">%</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">@</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">;</font><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;;</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">;</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">t</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;</font><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">%</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">@</font></tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;</font><font color="#00aa00">;</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">:.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;%</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">@</font></tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">t</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">@</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">@</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;</font><font color="#0000aa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000" colspan="3"><tt><font color="#0000aa">&#160;</font><font color="#aa0000">&#160;.</font><font color="#0000aa">.</font></tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">t</font></tt></td><td bgcolor="#000000"><tt><font color="#00aa00">;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">@</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#00aa00">:</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">%</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">;</font><font color="#0000aa">:</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.t</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#555555">8</font><font color="#00aa00">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">:</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;%</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">X</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#000000"><tt><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">%</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">.</font><font color="#aa0000">t</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">X.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">X</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#00aa00">.</font><font color="#aa0000">.</font><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;@</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">;</font><font color="#aa0000">:</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.t</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;;</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">:</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">;</font><font color="#0000aa">:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;S</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#555555">S</font><font color="#0000aa">.</font><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">%</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">t</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;;</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">S.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;</font><font color="#555555">@</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">t.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">S</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;;</font></tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">;</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.8</font></tt></td><td bgcolor="#000000"><tt><font color="#00aa00">;</font></tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;;</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">@</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">;</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">@</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">t</font></tt></td><td bgcolor="#000000"><tt><font color="#00aa00">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">S</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">.</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;</font><font color="#555555">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;8</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">X</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;;</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;..</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">t</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa5500">.</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">S</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">.</font><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">t</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;.S</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#555555">X</font><font color="#00aa00">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">:</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">:</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">%</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#0000aa">:</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">X</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#00aa00">;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">X</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;</font><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">;</font><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">;</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;%</font></tt></td><td bgcolor="#000000"><tt><font color="#555555">@</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;:</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">S</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">X</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">%</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;</font><font color="#0000aa">.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">S</font></tt></td><td bgcolor="#000000"><tt><font color="#aa0000">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">X</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">:</font><font color="#0000aa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;X</font></tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#00aa00">;</font><font color="#aa0000">:</font><font color="#0000aa">;</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">8.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;t</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000"><tt><font color="#0000aa">.</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;t</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">%</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">t</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">:</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">:</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">.</font></tt></td><td bgcolor="#555555"><tt><font color="#00aaaa">;</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555" colspan="2"><tt><font color="#000000">8</font><font color="#aaaaaa">8</font></tt></td><td bgcolor="#aaaaaa"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#00aa00">:</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;@</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#555555">S</font><font color="#00aa00">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="3"><tt><font color="#aaaaaa">&#160;..</font></tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">%</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;</font><font color="#0000aa">.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">%</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">%</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;</font><font color="#555555">X</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">8</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">;</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#000000"><tt><font color="#555555">S</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;.</font></tt></td><td bgcolor="#555555"><tt>&#160;</tt></td><td bgcolor="#aaaaaa" colspan="2"><tt><font color="#555555">8</font><font color="#ffffff">:</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">8;</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#000000">%</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aa00aa">:</font></tt></td><td bgcolor="#ffffff"><tt><font color="#aaaaaa">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#555555"><tt><font color="#aaaaaa">S</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">S</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#555555">8</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">t</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#aaaaaa"><tt><font color="#ffffff">.</font></tt></td><td bgcolor="#ffffff"><tt>&#160;</tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;.</font></tt></td><td bgcolor="#ffffff" colspan="2"><tt><font color="#aaaaaa">&#160;8</font></tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">.</font><font color="#00aa00">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="5"><tt><font color="#aa0000">&#160;t</font><font color="#0000aa">:</font><font color="#00aa00">.</font><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#aa0000">&#160;.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="6"><tt><font color="#aa0000">&#160;;</font><font color="#555555">8888</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#00aa00">&#160;t</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000" colspan="7"><tt><font color="#555555">8888888</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">@</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="4"><tt><font color="#00aa00">&#160;</font><font color="#555555">888</font></tt></td><td bgcolor="#555555"><tt><font color="#000000">8</font></tt></td><td bgcolor="#000000" colspan="6"><tt><font color="#555555">88888</font><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="11"><tt><font color="#aa0000">&#160;</font><font color="#555555">88888888</font><font color="#00aa00">:</font><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="12"><tt><font color="#0000aa">&#160;.</font><font color="#555555">8888888</font><font color="#00aa00">;</font><font color="#aa0000">:</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="6"><tt><font color="#aa0000">&#160;</font><font color="#0000aa">.</font><font color="#00aa00">:.</font><font color="#aa0000">.</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+<tr><td bgcolor="#000000"><tt>&#160;&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="5"><tt><font color="#aa0000">&#160;</font><font color="#00aa00">.</font><font color="#0000aa">.</font><font color="#00aa00">.</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="3"><tt><font color="#00aa00">&#160;</font><font color="#0000aa">.</font><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="4"><tt><font color="#0000aa">&#160;.</font><font color="#00aa00">.</font><font color="#aa0000">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="6"><tt><font color="#aa0000">&#160;.</font><font color="#00aa00">.</font><font color="#aa0000">.</font><font color="#0000aa">.</font><font color="#00aa00">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="9"><tt><font color="#00aa00">&#160;.</font><font color="#0000aa">.</font><font color="#aa0000">.</font><font color="#00aa00">.</font><font color="#aa0000">.</font><font color="#0000aa">.</font><font color="#aa0000">.</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="8"><tt><font color="#00aa00">&#160;.</font><font color="#0000aa">.</font><font color="#aa0000">.</font><font color="#00aa00">.</font><font color="#0000aa">.</font><font color="#aa0000">.</font><font color="#0000aa">.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000" colspan="2"><tt><font color="#0000aa">&#160;.</font></tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;</tt></td><td bgcolor="#000000"><tt>&#160;&#160;</tt></td></tr>
+</table>`

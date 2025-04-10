@@ -1,3 +1,5 @@
+//go:build exclude
+
 // Package clirewards cmd/skywire-cli/commands/rewards/ui.go
 package clirewards
 
@@ -795,8 +797,16 @@ func server() {
 		if err != nil {
 			_, err1 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_rewardtxn0.csv", "", -1))
 			_, err2 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_stats.txt", "", -1))
-			if err1 != nil || err2 != nil {
-				filetoserve, err := script.File("rewards/hist/" + c.Param("date")).Bytes()
+			_, err3 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_ineligible.csv", "", -1))
+			_, err4 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_shares.csv", "", -1))
+			if err1 != nil && err2 != nil && err3 != nil && err4 != nil {
+				fmt.Println("cant parse date or match filename")
+				c.Writer.WriteHeader(http.StatusNotFound)
+				c.Writer.Flush()
+				return
+			}
+			if err1 == nil || err2 == nil {
+				filetoserve, err := script.File("rewards/hist" + c.Param("date")).Bytes()
 				if err == nil {
 					c.Writer.Header().Set("Content-Type", "text/plain")
 					c.Writer.WriteHeader(http.StatusOK)
@@ -810,6 +820,53 @@ func server() {
 				c.Writer.Flush()
 				return
 			}
+			if err3 == nil {
+				l2, err := script.File("rewards/hist" + c.Param("date")).Slice()
+				if err != nil {
+					fmt.Println("non nil script.File error")
+					c.Writer.WriteHeader(http.StatusNotFound)
+					c.Writer.Flush()
+					return
+				}
+				var toserve string
+				for _, line := range l2 {
+					thispk, _ := script.Echo(line).Column(2).String() //nolint
+					reason, _ := script.Echo(line).Column(3).String() //nolint
+					toserve += fmt.Sprintf("%s%s\n", strings.TrimRight(strings.TrimRight(thispk, "\n"), "\r"), strings.TrimRight(strings.TrimRight(strings.TrimRight(reason, "\n"), "\r"), ","))
+				}
+				c.Writer.Header().Set("Content-Type", "text/plain")
+				c.Writer.WriteHeader(http.StatusOK)
+				c.Writer.Flush()
+				c.Writer.Write([]byte(toserve)) //nolint
+				c.Writer.Flush()
+				return
+			}
+			if err4 == nil {
+				l2, err := script.File("rewards/hist" + c.Param("date")).Slice()
+				if err != nil {
+					fmt.Println("non nil script.File error")
+					c.Writer.WriteHeader(http.StatusNotFound)
+					c.Writer.Flush()
+					return
+				}
+				var toserve string
+				for i, line := range l2 {
+					if i == 0 {
+						continue
+					}
+					thispk, _ := script.Echo(line).Column(2).String() //nolint
+					share, _ := script.Echo(line).Column(3).String()  //nolint
+					sky, _ := script.Echo(line).Column(4).String()    //nolint
+					toserve += fmt.Sprintf("%s%s%s\n", strings.TrimRight(strings.TrimRight(thispk, "\n"), "\r"), strings.TrimRight(strings.TrimRight(share, "\n"), "\r"), strings.TrimRight(strings.TrimRight(strings.TrimRight(sky, "\n"), "\r"), ","))
+				}
+				c.Writer.Header().Set("Content-Type", "text/plain")
+				c.Writer.WriteHeader(http.StatusOK)
+				c.Writer.Flush()
+				c.Writer.Write([]byte(toserve)) //nolint
+				c.Writer.Flush()
+				return
+			}
+
 		}
 		rewardfiles, _ := script.FindFiles(`rewards/hist`).Match(c.Param("date")).Slice() //nolint
 		if len(rewardfiles) == 0 {
@@ -818,10 +875,10 @@ func server() {
 			return
 		}
 		l := ""
-		l3, _ := os.Stat("rewards/hist/" + c.Param("date") + "_rewardtxn0.csv") //nolint
+		l3, _ := os.Stat("rewards/hist" + c.Param("date") + "_rewardtxn0.csv") //nolint
 		l += "Reward data generated: " + l3.ModTime().Format("2006-01-02 15:04:05") + "\n\n"
 
-		l1, err := script.File("rewards/hist/" + c.Param("date") + ".txt").String()
+		l1, err := script.File("rewards/hist" + c.Param("date") + ".txt").String()
 		if err != nil {
 			l += "Rewards not distributed yet\n\n"
 		} else {
@@ -833,7 +890,7 @@ func server() {
 			}
 		}
 
-		l2, err := script.File("rewards/hist/" + c.Param("date") + "_shares.csv").Slice()
+		l2, err := script.File("rewards/hist" + c.Param("date") + "_shares.csv").Slice()
 		if err != nil {
 			l += "<div style='float: right;'>PK,Share,SKY Amount\nReward shares file not found\nerror: " + err.Error() + "\n\n"
 		} else {
@@ -848,7 +905,7 @@ func server() {
 				l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + strings.TrimRight(share, "\n") + strings.Replace(sky, ",\n", "\n", -1)
 			}
 		}
-		l2, err = script.File("rewards/hist/" + c.Param("date") + "_ineligible.csv").Slice()
+		l2, err = script.File("rewards/hist" + c.Param("date") + "_ineligible.csv").Slice()
 		if err == nil {
 			l += "\n\nIneligible:\n"
 			for _, line := range l2 {
@@ -869,7 +926,7 @@ func server() {
 		}
 		l += "</div>"
 
-		l1, _ = script.File("rewards/hist/" + c.Param("date") + "_stats.txt").String() //nolint
+		l1, _ = script.File("rewards/hist" + c.Param("date") + "_stats.txt").String() //nolint
 		l += c.Param("date") + "_stats.txt\n" + l1 + "\n"
 
 		l2, _ = script.File("rewards/hist/"+c.Param("date")+"_rewardtxn0.csv").Replace(",", " ").Slice() //nolint
@@ -895,103 +952,6 @@ func server() {
 			Content: htmpl.HTML(l), //nolint
 		}
 		//	htmlPageTemplateData1.Content =
-		tmplData := map[string]interface{}{
-			"Page": htmlPageTemplateData1,
-		}
-		var result bytes.Buffer
-		err = tmpl.Execute(&result, tmplData)
-		if err != nil {
-			fmt.Println("error: ", err)
-		}
-
-		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Flush()
-		c.Writer.Write(result.Bytes()) //nolint
-		c.Writer.Flush()
-	})
-
-	authRoute.GET("/skycoinrewards/hist/:date", func(c *gin.Context) {
-		c.Writer.Header().Set("Server", "")
-		//override the behavior of `public fallback` for this endpoint
-		if len(wlkeys) == 0 {
-			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("len(wlkeys) == 0")) //nolint
-			return
-		}
-		c.Writer.Header().Set("Transfer-Encoding", "chunked")
-		_, err := time.Parse("2006-01-02", c.Param("date"))
-		if err != nil {
-			if strings.Contains(c.Param("date"), "_rewardtxn0.csv") {
-				filetoserve, err := script.File("rewards/hist/" + c.Param("date")).Bytes()
-				if err == nil {
-					c.Writer.Header().Set("Content-Type", "text/plain")
-					c.Writer.WriteHeader(http.StatusOK)
-					c.Writer.Flush()
-					c.Writer.Write(filetoserve) //nolint
-					c.Writer.Flush()
-					return
-				}
-				fmt.Println("non nil script.File error")
-				c.Writer.WriteHeader(http.StatusNotFound)
-				c.Writer.Flush()
-				return
-			}
-		}
-		rewardfiles, _ := script.FindFiles(`rewards/hist`).Match(c.Param("date")).Slice() //nolint
-		if len(rewardfiles) == 0 {
-			c.Writer.WriteHeader(http.StatusNotFound)
-			c.Writer.Flush()
-			return
-		}
-		l := ""
-		l1, _ := script.File("rewards/hist/" + c.Param("date") + "_stats.txt").String() //nolint
-		l += c.Param("date") + "_stats.txt\n" + l1 + "\n"
-		l1, err = script.File("rewards/hist/" + c.Param("date") + ".txt").String()
-		if err != nil {
-			l += "Rewards not distributed yet\n\n"
-		} else {
-			if l1 == "" {
-				l += "Reward txid not recorded\n\n"
-			} else {
-				l += "Reward TXID:\n" + l1 + "\n\n"
-				l += "Explorer link:\n<a href='https://explorer.skycoin.com/app/transaction/" + l1 + "''>" + l1 + "</a>\n\n"
-			}
-		}
-		l1, err = script.File("rewards/hist/"+c.Param("date")+"_shares.csv").Replace("[", "&lsqb;").Replace("]", "&rsqb;").Replace("{", "&lcub;").Replace("}", "&rcub;").Replace(":", "&colon;").String()
-		if err != nil {
-			l += "<div style='float: right;'>PK,Share,SKY Amount\nReward shares file not found\nerror: " + err.Error() + "\n\n"
-			l += "</div>"
-		} else {
-			l += l1
-		}
-		l1, err = script.File("rewards/hist/" + c.Param("date") + "_ineligible.csv").String()
-		if err == nil {
-			l += "\n\nIneligible:\n" + l1
-		}
-
-		l2, _ := script.File("rewards/hist/"+c.Param("date")+"_rewardtxn0.csv").Replace(",", " ").Slice() //nolint
-		l += c.Param("date") + "_transaction0.csv\n\nSKY Address, Amount\n"
-		for _, line := range l2 {
-			skyaddr, _ := script.Echo(line).Column(1).String() //nolint
-			skyamt, _ := script.Echo(line).Column(2).String()  //nolint
-			l += "<a id='" + strings.TrimRight(skyaddr, "\n") + "'>" + strings.TrimRight(skyaddr, "\n") + "</a>," + strings.TrimRight(skyamt, "\n") + "\n"
-		}
-
-		l += "<br>" + htmltoplink
-		tmpl0, err1 := tmpl.Clone()
-		if err1 != nil {
-			fmt.Println("Error cloning template:", err1)
-		}
-		_, err1 = tmpl0.New("this").Parse(htmlRewardPageTemplate)
-		if err1 != nil {
-			fmt.Println("Error parsing Front Page template:", err1)
-		}
-		tmpl := tmpl0
-		htmlPageTemplateData1 := htmlTemplateData{
-			Title:   "Skycoin Reward Calculation and Distribution",
-			Content: htmpl.HTML(l), //nolint
-		}
-
 		tmplData := map[string]interface{}{
 			"Page": htmlPageTemplateData1,
 		}
