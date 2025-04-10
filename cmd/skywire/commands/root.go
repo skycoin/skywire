@@ -29,7 +29,11 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
-var bi bool
+var (
+
+	bv bool
+ di bool
+)
 
 func init() {
 	appsCmd.AddCommand(
@@ -73,7 +77,12 @@ func init() {
 	conf.ServicesConfCmd.Use = "conf"
 
 	modifySubcommands(RootCmd)
-	RootCmd.Flags().BoolVarP(&bi, "buildinfo", "b", false, "print runtime/debug.BuildInfo")
+	if fmt.Sprintf("%v", buildinfo.DebugBuildInfo()) != "" {
+		RootCmd.Flags().BoolVarP(&di, "info", "d", false, "print runtime/debug.BuildInfo")
+	}
+	if fmt.Sprintf("%v", buildinfo.DBIVersion()) != "" {
+		RootCmd.Flags().BoolVarP(&bv, "bv", "b", false, "print runtime/debug.BuildInfo.Main.Version")
+	}
 }
 
 func modifySubcommands(cmd *cobra.Command) {
@@ -94,8 +103,12 @@ var RootCmd = &cobra.Command{
 	}(),
 	Long: func() (ret string) {
 		ret = calvin.AsciiFont("skywire")
-		ret += "\nskywire version " + buildinfo.Version()
-		if buildinfo.Go() != "unknown" {
+		if buildinfo.DBIVersion() != "" {
+			ret += fmt.Sprintf("\n%v", buildinfo.DBIVersion())
+		} else {
+			ret += fmt.Sprintf("\nskywire version %v", buildinfo.Version())
+		}
+		if buildinfo.Go() != "unknown" && buildinfo.Go() != "" {
 			ret += "\nbuilt with " + buildinfo.Go()
 		}
 		return ret
@@ -106,8 +119,12 @@ var RootCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 	Run: func(cmd *cobra.Command, _ []string) {
-		if bi {
+		if di {
 			fmt.Printf("%v\n", buildinfo.DebugBuildInfo())
+			return
+		}
+		if bv {
+			fmt.Printf("%v\n", buildinfo.DBIVersion())
 			return
 		}
 		cmd.Help() //nolint

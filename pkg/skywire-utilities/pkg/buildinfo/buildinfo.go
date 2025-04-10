@@ -19,8 +19,10 @@ var (
 	commit    = unknown
 	date      = unknown
 	goversion = ""
-	bi        *debug.BuildInfo
 )
+
+// format hint: bi.Main.Version = v1.3.29-rc7.0.20250410212328-dc5d22b7ab2a
+var bi        *debug.BuildInfo
 
 // TODO: deprecate?
 // $ go build -ldflags="-X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.golist=$(go list -m -json -mod=mod github.com/skycoin/<repo>@<branch>)' -X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")'" .
@@ -79,7 +81,8 @@ func parseVersionInfo(ver string) {
 	if match := dateRegex.FindString(ver); match != "" {
 		date = formatBuildDate(match)
 		ver = strings.Replace(ver, match, "", 1)
-		ver = strings.TrimSuffix(ver, "-") // Clean up any trailing dash
+		ver = strings.TrimSuffix(ver, "-") // remove trailing dash
+		ver = strings.TrimSuffix(ver, ".") // remove trailing dot
 	}
 
 	// What's left is version
@@ -100,6 +103,11 @@ func formatBuildDate(dateStr string) string {
 // Version returns the extracted version string.
 func Version() string {
 	return version
+}
+
+// DBIVersion returns bi.Main.Version.
+func DBIVersion() string {
+	return bi.Main.Version
 }
 
 // Go returns the Go compiler version used for the build.
