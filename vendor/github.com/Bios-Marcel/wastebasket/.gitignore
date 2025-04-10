@@ -1,0 +1,10 @@
+# Pattern used for text files that contain temporary results
+*.out
+# Default names of binaries
+trash
+trash.exe
+empty
+empty.exe
+wastebasket
+wastebasket.exe
+ 
