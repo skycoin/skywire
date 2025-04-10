@@ -32,7 +32,6 @@ import (
 
 var bi bool
 
-
 func init() {
 
 	appsCmd.AddCommand(

@@ -37,7 +37,7 @@ type ModuleInfo struct {
 
 // Regular expressions for commit hash and timestamp
 var commitRegex = regexp.MustCompile(`[a-f0-9]{12,}$`) // <-- match commit from end of string
-var dateRegex = regexp.MustCompile(`\d{14}`) // <-- match date anywhere
+var dateRegex = regexp.MustCompile(`\d{14}`)           // <-- match date anywhere
 
 func init() {
 	// Use ldflags-provided `golist` info if available
@@ -67,9 +67,6 @@ func init() {
 		}
 	}
 }
-
-var commitRegex = regexp.MustCompile(`[a-f0-9]{12,}$`)
-var dateRegex = regexp.MustCompile(`\d{14}`) // <-- match date anywhere
 
 func parseVersionInfo(ver string) {
 	// Extract commit
