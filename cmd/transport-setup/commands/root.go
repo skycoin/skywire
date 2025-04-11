@@ -66,7 +66,7 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "Transport setup server for skywire",
-	Long: calvin.AsciiFont("transport-setup")_`
+	Long: calvin.AsciiFont("transport-setup")+`
 
 Transport setup server for skywire
 Takes config in the following format:

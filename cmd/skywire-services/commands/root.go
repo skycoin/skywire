@@ -56,7 +56,7 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "Skywire services",
-	Long: 	Long: calvin.AsciiFont("skywire-cli")+`
+	Long: calvin.AsciiFont("skywire-cli")+`
 	Skywire services`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
