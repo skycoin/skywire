@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/0magnet/calvin"
+
 
 	"github.com/skycoin/skywire/pkg/network-monitor/api"
 	"github.com/skycoin/skywire/pkg/network-monitor/store"
@@ -55,10 +57,7 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "Network monitor for skywire VPN and Visor.",
-	Long: `
-	┌┐┌┌─┐┌┬┐┬ ┬┌─┐┬─┐┬┌─   ┌┬┐┌─┐┌┐┌┬┌┬┐┌─┐┬─┐
-	│││├┤  │ ││││ │├┬┘├┴┐───││││ │││││ │ │ │├┬┘
-	┘└┘└─┘ ┴ └┴┘└─┘┴└─┴ ┴   ┴ ┴└─┘┘└┘┴ ┴ └─┘┴└─`,
+	Long: calvin.AsciiFont("network-monitor"),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

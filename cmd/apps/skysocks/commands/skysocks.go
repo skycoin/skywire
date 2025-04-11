@@ -10,6 +10,8 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
+	"github.com/0magnet/calvin"
+
 
 	"github.com/skycoin/skywire/internal/skysocks"
 	"github.com/skycoin/skywire/pkg/app"
@@ -35,10 +37,7 @@ func init() {
 var RootCmd = &cobra.Command{
 	Use:   "skysocks",
 	Short: "skywire socks5 proxy server application",
-	Long: `
-	┌─┐┬┌─┬ ┬┌─┐┌─┐┌─┐┬┌─┌─┐
-	└─┐├┴┐└┬┘└─┐│ ││  ├┴┐└─┐
-	└─┘┴ ┴ ┴ └─┘└─┘└─┘┴ ┴└─┘`,
+	Long: calvin.AsciiFont("skysocks"),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

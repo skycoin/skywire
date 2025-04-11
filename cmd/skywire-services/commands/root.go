@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/0magnet/calvin"
+
 
 	ar "github.com/skycoin/skywire/cmd/address-resolver/commands"
 	confbs "github.com/skycoin/skywire/cmd/config-bootstrapper/commands"
@@ -54,10 +56,7 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "Skywire services",
-	Long: `
-	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┌─┐┌─┐┬─┐┬  ┬┬┌─┐┌─┐┌─┐
-	└─┐├┴┐└┬┘││││├┬┘├┤───└─┐├┤ ├┬┘└┐┌┘││  ├┤ └─┐
-	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘  └─┘└─┘┴└─ └┘ ┴└─┘└─┘└─┘
+	Long: 	Long: calvin.AsciiFont("skywire-cli")+`
 	Skywire services`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,

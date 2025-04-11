@@ -22,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"github.com/0magnet/calvin"
+
 
 	"github.com/bitfield/script"
 	"github.com/gin-gonic/gin"
@@ -90,11 +92,7 @@ func init() {
 var serverCmd = &cobra.Command{
 	Use:   "ui",
 	Short: "reward system UI server",
-	Long: "skycoin reward system user interface server and skywire network metrics:\n https://fiber.skywire.dev\n" + `
-	┌─┐┬┌┐ ┌─┐┬─┐
-	├┤ │├┴┐├┤ ├┬┘
-	└  ┴└─┘└─┘┴└─
-	` + func() string {
+	Long: "skycoin reward system user interface server and skywire network metrics:\n https://fiber.skywire.dev\n" + calvin.AsciiFont("fiber") + func() string {
 		if _, err := os.Stat(skyenvfile); err == nil { //nolint
 			return `run the web application
 

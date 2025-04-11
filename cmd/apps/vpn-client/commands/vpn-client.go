@@ -13,6 +13,8 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
+	"github.com/0magnet/calvin"
+
 
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
@@ -46,10 +48,7 @@ func init() {
 var RootCmd = &cobra.Command{
 	Use:   "vpn-client",
 	Short: "skywire vpn client application",
-	Long: `
-	┬  ┬┌─┐┌┐┌   ┌─┐┬  ┬┌─┐┌┐┌┌┬┐
-	└┐┌┘├─┘│││───│  │  │├┤ │││ │
- 	 └┘ ┴  ┘└┘   └─┘┴─┘┴└─┘┘└┘ ┴ `,
+	Long: calvin.AsciiFont("vpn-client"),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

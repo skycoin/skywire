@@ -14,6 +14,8 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
+	"github.com/0magnet/calvin"
+
 	"gorm.io/gorm"
 
 	"github.com/skycoin/skywire/internal/pg"
@@ -64,11 +66,8 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "Route Finder Server for skywire",
-	Long: `
-	┬─┐┌─┐┬ ┬┌┬┐┌─┐  ┌─┐┬┌┐┌┌┬┐┌─┐┬─┐
-	├┬┘│ ││ │ │ ├┤───├┤ ││││ ││├┤ ├┬┘
-	┴└─└─┘└─┘ ┴ └─┘  └  ┴┘└┘─┴┘└─┘┴└─
------ depends: postgres and initial db setup -----
+	Long: calvin.AsciiFont("route-finder")+`
+----- depends: postgres and initial db setup - shares DB with TPD! -----
 sudo -iu postgres createdb rf
 skywire cli config gen-keys | tee rf-config.json
 PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" --sk $(tail -n1 rf-config.json)`,
