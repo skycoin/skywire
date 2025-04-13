@@ -3,6 +3,7 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"encoding/json"
 	"io"
 	"log"
@@ -28,7 +29,7 @@ import (
 var mononoki embed.FS
 
 type reward struct {
-	Date  string  `json:"date"`
+	Date  Date    `json:"date"`
 	Pool1 float64 `json:"1"`
 	Pool2 float64 `json:"2"`
 	Sent  string  `json:"sent"`
@@ -51,6 +52,46 @@ type nodesResponse struct {
 
 var nodes nodesResponse
 
+type nodeMod struct {
+	PK        string `json:"pk"`
+	Age       string `json:"age"`
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	Date      string `json:"date"`
+	StartedAt string `json:"started_at"`
+}
+
+type nodesModResponse struct {
+	Nodes []nodeMod `json:"nodes"`
+}
+
+var nodesMod nodesModResponse
+
+var pg *core.Pages
+var currentEntry int
+
+func init() {
+	core.AddValueType[Date, DateButton]()
+}
+
+type Date string
+
+type DateButton struct {
+	core.Button
+}
+
+func (db *DateButton) WidgetValue() any { return &db.Text }
+
+func (db *DateButton) Init() {
+	db.Button.Init()
+	db.SetType(core.ButtonTonal)
+	db.SetTooltip("Click to view details")
+	db.OnClick(func(e events.Event) {
+		currentEntry = db.Property(core.ListRowProperty).(int)
+		pg.Open("details")
+	})
+}
+
 func main() {
 	core.TheApp.SetSceneInit(func(sc *core.Scene) {
 		sc.SetWidgetInit(func(w core.Widget) {
@@ -67,117 +108,157 @@ func main() {
 	paint.FontLibrary.UpdateFontsAvail()
 
 	ts := core.NewTabs(b).SetType(core.NavigationAuto)
-	first, tb := ts.NewTab("Rules")
+	zeroeth, tb := ts.NewTab("Rules")
 	tb.SetIcon(icons.Home)
-	core.NewText(first).SetText(calvin.AsciiFont("skywire rewards"))
+	core.NewText(zeroeth).SetText(calvin.AsciiFont("skywire rewards"))
 	ctx := htmlcore.NewContext()
-	err := htmlcore.ReadMDString(ctx, first, skywire.MainnetRules)
+	err := htmlcore.ReadMDString(ctx, zeroeth, skywire.MainnetRules)
 	if err != nil {
 		log.Fatalf("Error reading embedded mainnet rules with htmlcore.ReadMDString: %v", err)
+	}
+	first, tb := ts.NewTab("Stats")
+	tb.SetIcon(icons.Home)
+	if runtime.GOOS == "js" {
+		ts := core.NewTabs(first).SetType(core.NavigationAuto)
+		versiontab, _ := ts.NewTab("Version")
+		resp, err := http.Get("/stats/ut")
+		if err != nil {
+			log.Fatalf("Error fetching data: %v", err)
+		}
+		defer resp.Body.Close() //nolint
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		core.NewText(versiontab).SetText(string(bodyBytes))
+		archtab, _ := ts.NewTab("Architectures")
+		resp, err = http.Get("/stats/arch")
+		if err != nil {
+			log.Fatalf("Error fetching data: %v", err)
+		}
+		defer resp.Body.Close() //nolint
+		bodyBytes, err = io.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		core.NewText(archtab).SetText(string(bodyBytes))
 	}
 
 	second, tb := ts.NewTab("Rewards")
 	tb.SetIcon(icons.History)
 
 	if runtime.GOOS == "js" {
-		core.NewTable(second).SetSlice(func() *[]reward {
-			resp, err := http.Get("/skycoin-rewards.json")
-			if err != nil {
-				log.Fatalf("Error fetching data: %v", err)
-			}
-			defer resp.Body.Close() //nolint
+		pg = core.NewPages(second)
+		pg.AddPage("Rewards", func(pg *core.Pages) {
+			tb := core.NewTable(pg).SetSlice(func() *[]reward {
+				resp, err := http.Get("/skycoin-rewards.json")
+				if err != nil {
+					log.Fatalf("Error fetching data: %v", err)
+				}
+				defer resp.Body.Close() //nolint
 
-			if err := json.NewDecoder(resp.Body).Decode(&rewards); err != nil {
-				log.Fatalf("Error decoding JSON: %v", err)
-			}
-			return &rewards
-		}()).SetReadOnly(true)
-	}
-	third, tb := ts.NewTab("Reward data")
-	tb.SetIcon(icons.History)
-	pg := core.NewPages(third)
-	pg.AddPage("home", func(pg *core.Pages) {
-		for i := range rewards {
-			core.NewButton(pg).SetText(rewards[i].Date).OnClick(func(_ events.Event) {
-				pg.Open(rewards[i].Date + "-home")
-			})
-		}
-	})
-	for i := range rewards {
-		pg.AddPage(rewards[i].Date+"-home", func(pg *core.Pages) {
+				if err := json.NewDecoder(resp.Body).Decode(&rewards); err != nil {
+					log.Fatalf("Error decoding JSON: %v", err)
+				}
+				return &rewards
+			}())
+			tb.SetReadOnly(true)
+		})
+		pg.AddPage("details", func(pg *core.Pages) {
 			core.NewButton(pg).SetText("back").OnClick(func(_ events.Event) {
-				pg.Open("home")
+				pg.Open("Rewards")
 			})
+			r := rewards[currentEntry]
+			core.NewText(pg).SetType(core.TextHeadlineSmall).SetText("Reward Distribution Details for " + string(r.Date))
+
+			resp, err := http.Get("/skycoin-rewards/hist/" + string(r.Date) + ".txt")
+			if err != nil {
+				core.NewText(pg).SetText(`Rewards not yet distributed`)
+			}
+			if err == nil {
+				defer resp.Body.Close() //nolint
+				bodybytes, err := io.ReadAll(resp.Body)
+				if err != nil {
+					log.Fatal(err)
+				}
+				txid := strings.Replace(string(bodybytes), "\n", "", -1)
+				if txid != "" {
+					core.NewText(pg).SetText(`TXID: ` + txid)
+					htmlcore.ReadHTMLString(ctx, pg, `<a href="https://explorer.skycoin.com/app/transaction/`+txid+`">`+txid+`</a>`) //nolint
+				} else {
+					core.NewText(pg).SetText(`Rewards not yet distributed`)
+				}
+			}
+
 			ts := core.NewTabs(pg).SetType(core.NavigationAuto)
 			first, tb := ts.NewTab("Stats")
 			tb.SetIcon(icons.Home)
 			core.NewText(first).SetText("<br>Statistics<br>")
 
-			if runtime.GOOS == "js" {
-				resp, err := http.Get("/skycoin-rewards/hist/" + rewards[i].Date + "_stats.txt")
-				if err != nil {
-					log.Fatalf("Error fetching data: %v", err)
-				}
-				defer resp.Body.Close() //nolint
-				bodybytes, err := io.ReadAll(resp.Body)
-				if err != nil {
-					log.Fatal(err)
-				}
-				core.NewText(first).SetText(string(bodybytes))
+			resp, err = http.Get("/skycoin-rewards/hist/" + string(r.Date) + "_stats.txt")
+			if err != nil {
+				log.Fatalf("Error fetching data: %v", err)
 			}
+			defer resp.Body.Close() //nolint
+			bodybytes, err := io.ReadAll(resp.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+			core.NewText(first).SetText(string(bodybytes))
 
 			second, tb := ts.NewTab("Distribution")
 			tb.SetIcon(icons.Home)
 			core.NewText(second).SetText("<br>Distribution Data<br>")
 
-			if runtime.GOOS == "js" {
-				resp, err := http.Get("/skycoin-rewards/hist/" + rewards[i].Date + "_rewardtxn0.csv")
-				if err != nil {
-					log.Fatalf("Error fetching data: %v", err)
-				}
-				defer resp.Body.Close() //nolint
-				bodybytes, err := io.ReadAll(resp.Body)
-				if err != nil {
-					log.Fatal(err)
-				}
-				core.NewText(second).SetText(string(bodybytes))
+			resp, err = http.Get("/skycoin-rewards/hist/" + string(r.Date) + "_rewardtxn0.csv")
+			if err != nil {
+				log.Fatalf("Error fetching data: %v", err)
 			}
+			defer resp.Body.Close() //nolint
+			bodybytes, err = io.ReadAll(resp.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+			core.NewText(second).SetText(string(bodybytes))
 
 			third, tb := ts.NewTab("Reward Shares")
 			tb.SetIcon(icons.Home)
 			core.NewText(third).SetText("<br>Reward Shares<br>")
 
-			if runtime.GOOS == "js" {
-				resp, err := http.Get("/skycoin-rewards/hist/" + rewards[i].Date + "_shares.csv")
-				if err != nil {
-					log.Fatalf("Error fetching data: %v", err)
-				}
-				defer resp.Body.Close() //nolint
-				bodybytes, err := io.ReadAll(resp.Body)
-				if err != nil {
-					log.Fatal(err)
-				}
-				core.NewText(third).SetText(string(bodybytes))
+			resp, err = http.Get("/skycoin-rewards/hist/" + string(r.Date) + "_shares.csv")
+			if err != nil {
+				log.Fatalf("Error fetching data: %v", err)
 			}
+			defer resp.Body.Close() //nolint
+			bodybytes, err = io.ReadAll(resp.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+			core.NewText(third).SetText(string(bodybytes))
+
 			fourth, tb := ts.NewTab("Ineligible")
 			tb.SetIcon(icons.Home)
 			core.NewText(fourth).SetText("<br>Ineligible<br>")
 
-			if runtime.GOOS == "js" {
-				resp, err := http.Get("/skycoin-rewards/hist/" + rewards[i].Date + "_ineligible.csv")
-				if err != nil {
-					log.Fatalf("Error fetching data: %v", err)
-				}
-				defer resp.Body.Close() //nolint
-				bodybytes, err := io.ReadAll(resp.Body)
-				if err != nil {
-					log.Fatal(err)
-				}
-				core.NewText(fourth).SetText(string(bodybytes))
+			resp, err = http.Get("/skycoin-rewards/hist/" + string(r.Date) + "_ineligible.csv")
+			if err != nil {
+				log.Fatalf("Error fetching data: %v", err)
 			}
+			defer resp.Body.Close() //nolint
+			bodybytes, err = io.ReadAll(resp.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+			core.NewText(fourth).SetText(string(bodybytes))
+
 			core.NewButton(pg).SetText("back").OnClick(func(_ events.Event) {
-				pg.Open("home")
+				pg.Open("Rewards")
 			})
+		})
+
+		back := core.NewButton(pg).SetType(core.ButtonTonal).SetText("Back").SetIcon(icons.ArrowBack)
+		back.OnClick(func(e events.Event) {
+			pg.Open("Rewards")
 		})
 	}
 
@@ -200,7 +281,30 @@ func main() {
 		if err := json.NewDecoder(resp.Body).Decode(&nodes); err != nil {
 			log.Fatalf("Error decoding JSON: %v", err)
 		}
-		core.NewTable(fifth).SetSlice(&nodes.Nodes).SetReadOnly(true)
+
+		nodesMod.Nodes = make([]nodeMod, 0, len(nodes.Nodes))
+
+		for _, n := range nodes.Nodes {
+			parsedTime, err := time.Parse(time.RFC3339, n.Time)
+			if err != nil {
+				log.Printf("Error parsing time for node %s: %v", n.PK, err)
+				continue // or set Age to "unknown"
+			}
+			duration := time.Since(parsedTime)
+
+			// Format duration to something human readable, like "1h2m"
+			age := fmtDuration(duration)
+
+			nodesMod.Nodes = append(nodesMod.Nodes, nodeMod{
+				PK:        n.PK,
+				Age:       age,
+				Version:   n.Version,
+				Commit:    n.Commit,
+				Date:      n.Date,
+				StartedAt: n.StartedAt,
+			})
+		}
+		core.NewTable(fifth).SetSlice(&nodesMod.Nodes).SetReadOnly(true)
 
 	}
 	b.AddTopBar(func(bar *core.Frame) {
@@ -252,6 +356,20 @@ func main() {
 
 func https(a string) string {
 	return strings.ReplaceAll(a, "http://", "https://")
+}
+
+func fmtDuration(d time.Duration) string {
+	if d < time.Minute {
+		return d.Truncate(time.Second).String()
+	}
+	if d < time.Hour {
+		minutes := int(d.Minutes())
+		seconds := int(d.Seconds()) % 60
+		return fmt.Sprintf("%dm%ds", minutes, seconds)
+	}
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	return fmt.Sprintf("%dh%dm", hours, minutes)
 }
 
 /*
