@@ -3,8 +3,8 @@ package main
 
 import (
 	"embed"
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -74,19 +74,23 @@ func init() {
 	core.AddValueType[Date, DateButton]()
 }
 
+// Date is used to wrap the date in a table with a button
 type Date string
 
+// DateButton is used to wrap the date in a table with a button
 type DateButton struct {
 	core.Button
 }
 
+// WidgetValue is used to wrap the date in a table with a button
 func (db *DateButton) WidgetValue() any { return &db.Text }
 
+// Init is used to wrap the date in a table with a button
 func (db *DateButton) Init() {
 	db.Button.Init()
 	db.SetType(core.ButtonTonal)
 	db.SetTooltip("Click to view details")
-	db.OnClick(func(e events.Event) {
+	db.OnClick(func(_ events.Event) {
 		currentEntry = db.Property(core.ListRowProperty).(int)
 		pg.Open("details")
 	})
@@ -257,7 +261,7 @@ func main() {
 		})
 
 		back := core.NewButton(pg).SetType(core.ButtonTonal).SetText("Back").SetIcon(icons.ArrowBack)
-		back.OnClick(func(e events.Event) {
+		back.OnClick(func(_ events.Event) {
 			pg.Open("Rewards")
 		})
 	}
