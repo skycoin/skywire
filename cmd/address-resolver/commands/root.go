@@ -10,13 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/calvin"
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
 	"github.com/xtaci/kcp-go"
-	"github.com/0magnet/calvin"
-
 
 	"github.com/skycoin/skywire/internal/armetrics"
 	"github.com/skycoin/skywire/pkg/address-resolver/api"
@@ -74,7 +73,7 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "Address Resolver Server for skywire",
-	Long: calvin.AsciiFont("address-resolver")+`
+	Long: calvin.AsciiFont("address-resolver") + `
 
 depends: redis
 

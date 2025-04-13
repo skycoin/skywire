@@ -16,10 +16,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/calvin"
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
-	"github.com/0magnet/calvin"
-
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -58,9 +57,9 @@ func init() {
 
 // RootCmd is the root command for skywire-cli
 var RootCmd = &cobra.Command{
-	Use:   "skychat",
-	Short: "skywire chat application",
-	Long: calvin.AsciiFont("skychat"),
+	Use:                   "skychat",
+	Short:                 "skywire chat application",
+	Long:                  calvin.AsciiFont("skychat"),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

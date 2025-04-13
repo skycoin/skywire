@@ -11,12 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/0magnet/calvin"
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
-	"github.com/0magnet/calvin"
-
 
 	"github.com/skycoin/skywire/pkg/config-bootstrapper/api"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
@@ -53,8 +52,8 @@ var RootCmd = &cobra.Command{
 	Use: func() string {
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
-	Short: "Config Bootstrap Server for skywire",
-	Long: calvin.AsciiFont("config-bootstrapper"),
+	Short:                 "Config Bootstrap Server for skywire",
+	Long:                  calvin.AsciiFont("config-bootstrapper"),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

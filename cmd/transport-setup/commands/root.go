@@ -11,11 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/calvin"
 	"github.com/bitfield/script"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
-	"github.com/0magnet/calvin"
-
 	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
@@ -66,7 +65,7 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "Transport setup server for skywire",
-	Long: calvin.AsciiFont("transport-setup")+`
+	Long: calvin.AsciiFont("transport-setup") + `
 
 Transport setup server for skywire
 Takes config in the following format:

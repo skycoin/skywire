@@ -11,10 +11,9 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/0magnet/calvin"
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
-	"github.com/0magnet/calvin"
-
 
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
@@ -46,9 +45,9 @@ func init() {
 
 // RootCmd is the root command for skywire-cli
 var RootCmd = &cobra.Command{
-	Use:   "vpn-client",
-	Short: "skywire vpn client application",
-	Long: calvin.AsciiFont("vpn-client"),
+	Use:                   "vpn-client",
+	Short:                 "skywire vpn client application",
+	Long:                  calvin.AsciiFont("vpn-client"),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

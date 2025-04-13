@@ -6,10 +6,10 @@ package main
 
 import (
 	cc "github.com/ivanpirog/coloredcobra"
+	skycoin "github.com/skycoin/skycoin/cmd/skycoin-wallet/commands"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire/commands"
-	skycoin "github.com/skycoin/skycoin/cmd/skycoin-wallet/commands"
 )
 
 func init() {

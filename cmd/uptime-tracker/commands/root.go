@@ -10,12 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/calvin"
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
-	"github.com/0magnet/calvin"
-
 	"gorm.io/gorm"
 
 	"github.com/skycoin/skywire/internal/pg"
@@ -87,7 +86,7 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "Uptime Tracker Server for skywire",
-	Long: calvin.AsciiFont("uptime-tracker")+`
+	Long: calvin.AsciiFont("uptime-tracker") + `
 	Uptime Tracker Server for skywire`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {

@@ -9,12 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/calvin"
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
-	"github.com/0magnet/calvin"
-
 	"gorm.io/gorm"
 
 	"github.com/skycoin/skywire/internal/pg"
@@ -73,7 +72,7 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "Service discovery server",
-	Long: calvin.AsciiFont("service-discovery")+`
+	Long: calvin.AsciiFont("service-discovery") + `
 ----- depends: redis, postgresql and initial DB setup -----
 sudo -iu postgres createdb sd
 keys-gen | tee sd-config.json

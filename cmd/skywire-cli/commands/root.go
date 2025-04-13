@@ -8,12 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/0magnet/calvin"
 	"github.com/bitfield/script"
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
 	"github.com/spf13/cobra"
-	"github.com/0magnet/calvin"
-
 
 	clicompletion "github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
@@ -66,8 +65,8 @@ var RootCmd = &cobra.Command{
 	Use: func() string {
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
-	Short: "Command Line Interface for skywire",
-	Long: calvin.AsciiFont("skywire-cli"),
+	Short:                 "Command Line Interface for skywire",
+	Long:                  calvin.AsciiFont("skywire-cli"),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

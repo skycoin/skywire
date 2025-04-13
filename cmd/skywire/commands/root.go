@@ -30,9 +30,8 @@ import (
 )
 
 var (
-
 	bv bool
- di bool
+	di bool
 )
 
 func init() {
