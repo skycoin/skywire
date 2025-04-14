@@ -5,6 +5,8 @@ go 1.24
 toolchain go1.24.0
 
 require (
+	cogentcore.org/core v0.3.9-0.20250328111149-bac89be1bc16
+	github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/MichaelMure/go-term-markdown v0.1.4
 	github.com/VictoriaMetrics/metrics v1.35.1
@@ -12,12 +14,14 @@ require (
 	github.com/bitfield/script v0.23.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
+	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937
 	github.com/docker/docker v1.13.1
 	github.com/elazarl/goproxy v0.0.0-20240909085733-6741dbfc16a1
 	github.com/fatih/color v1.18.0
 	github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-chi/chi/v5 v5.2.0
+	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/httprate v0.14.1
 	github.com/go-echarts/go-echarts/v2 v2.4.3
 	github.com/go-playground/validator/v10 v10.22.1
@@ -61,13 +65,6 @@ require (
 	gopkg.in/telebot.v3 v3.3.8
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12
-)
-
-require (
-	cogentcore.org/core v0.3.9-0.20250328111149-bac89be1bc16
-	github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8
-	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937
-	github.com/go-chi/cors v1.2.1
 )
 
 require (
