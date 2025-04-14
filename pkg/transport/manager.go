@@ -283,7 +283,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 
 	tpID := tm.tpIDFromPK(transport.RemotePK(), transport.Network())
 
-	client, ok := tm.netClients[network.Type(transport.Network())]
+	client, ok := tm.netClients[transport.Network()]
 	if !ok {
 		return fmt.Errorf("client not found for the type %s", transport.Network())
 	}

@@ -31,7 +31,7 @@ import (
 func init() {
 	var envServices skywire.EnvServices
 	var services skywire.Services
-	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
+	if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
 		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
 			dmsgDiscURL = services.DmsgDiscovery
 			utURL = services.UptimeTracker
