@@ -305,7 +305,7 @@ func testRPCIngressGatewayAcceptOK(t *testing.T, l *logging.Logger) {
 func testRPCIngressGatewayAcceptNoSuchListener(t *testing.T, l *logging.Logger) {
 	rpc := NewRPCGateway(l, nil)
 
-	lisID := uint16(1) // nolint: gomnd
+	lisID := uint16(1)
 
 	var resp AcceptResp
 	err := rpc.Accept(&lisID, &resp)
@@ -470,7 +470,7 @@ func testRPCIngressGatewayWriteError(t *testing.T, l *logging.Logger, writeBuff 
 	writeErr := errors.New("write error")
 
 	conn := &appcommon.MockConn{}
-	conn.On("Write", writeBuff).Return(len(writeBuff)/2, writeErr) // nolint: gomnd
+	conn.On("Write", writeBuff).Return(len(writeBuff)/2, writeErr)
 
 	connID := addConn(t, rpc, conn)
 
@@ -480,7 +480,7 @@ func testRPCIngressGatewayWriteError(t *testing.T, l *logging.Logger, writeBuff 
 	}
 
 	wantResp := WriteResp{
-		N: len(writeBuff) / 2, // nolint: gomnd
+		N: len(writeBuff) / 2,
 		Err: &RPCIOErr{
 			Text:           writeErr.Error(),
 			IsNetErr:       false,
@@ -937,7 +937,7 @@ func testRPCIngressGatewayCloseConnOK(l *logging.Logger, t *testing.T) {
 func testRPCIngressGatewayCloseNoSuchConn(t *testing.T, l *logging.Logger) {
 	rpc := NewRPCGateway(l, nil)
 
-	connID := uint16(1) // nolint: gomnd
+	connID := uint16(1)
 
 	err := rpc.CloseConn(&connID, nil)
 	require.Error(t, err)
@@ -1008,7 +1008,7 @@ func testRPCIngressGatewayCloseListenerOK(t *testing.T, l *logging.Logger) {
 func testRPCIngressGatewayCloseListenerNoSuchListener(t *testing.T, l *logging.Logger) {
 	rpc := NewRPCGateway(l, nil)
 
-	lisID := uint16(1) // nolint: gomnd
+	lisID := uint16(1)
 
 	err := rpc.CloseListener(&lisID, nil)
 	require.Error(t, err)

@@ -278,7 +278,7 @@ func (s *postgresStore) GetNumberOfUptimesInCurrentMonth() (int, error) {
 
 func (s *postgresStore) GetNumberOfUptimesByYearAndMonth(year int, month time.Month) (int, error) {
 	var counter int64
-	timeValue := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Now().Location())
+	timeValue := time.Date(year, month, 1, 0, 0, 0, 0, time.Now().Location())
 	err := s.client.Model(&DailyUptimeHistory{}).Where("created_at BETWEEN ? AND ?", timeValue, timeValue.AddDate(0, 1, 0).Add(-1*time.Second)).Group("pub_key").Count(&counter).Error
 	return int(counter), err
 }

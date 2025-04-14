@@ -55,8 +55,8 @@ var RootCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), err)
 
 			for _, forwardConn := range forwardConns {
-				_, err = fmt.Fprintf(w, "%s\t%s\t%s\n", forwardConn.ID, strconv.Itoa(int(forwardConn.LocalPort)),
-					strconv.Itoa(int(forwardConn.RemotePort)))
+				_, err = fmt.Fprintf(w, "%s\t%s\t%s\n", forwardConn.ID, strconv.Itoa(forwardConn.LocalPort),
+					strconv.Itoa(forwardConn.RemotePort))
 				internal.Catch(cmd.Flags(), err)
 			}
 			internal.Catch(cmd.Flags(), w.Flush())

@@ -57,7 +57,7 @@ func newCSRFToken() (string, error) {
 	}
 
 	h := hmac.New(sha256.New, csrfSecretKey)
-	_, err = h.Write([]byte(tokenJSON))
+	_, err = h.Write(tokenJSON)
 	if err != nil {
 		return "", err
 	}
@@ -82,7 +82,7 @@ func verifyCSRFToken(headerToken string) error {
 	}
 
 	h := hmac.New(sha256.New, csrfSecretKey)
-	_, err = h.Write([]byte(signingString))
+	_, err = h.Write(signingString)
 	if err != nil {
 		return err
 	}
