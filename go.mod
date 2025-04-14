@@ -5,6 +5,8 @@ go 1.24
 toolchain go1.24.0
 
 require (
+	cogentcore.org/core v0.3.10
+	github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/MichaelMure/go-term-markdown v0.1.4
 	github.com/VictoriaMetrics/metrics v1.35.1
@@ -12,12 +14,14 @@ require (
 	github.com/bitfield/script v0.23.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
+	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937
 	github.com/docker/docker v1.13.1
 	github.com/elazarl/goproxy v0.0.0-20240909085733-6741dbfc16a1
 	github.com/fatih/color v1.18.0
 	github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-chi/chi/v5 v5.2.0
+	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/httprate v0.14.1
 	github.com/go-echarts/go-echarts/v2 v2.4.3
 	github.com/go-playground/validator/v10 v10.22.1
@@ -53,21 +57,14 @@ require (
 	github.com/yuin/goldmark v1.4.13
 	github.com/zcalusic/sysinfo v1.1.2
 	go.etcd.io/bbolt v1.3.11
-	golang.org/x/net v0.33.0
-	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.29.0
-	golang.org/x/term v0.28.0
+	golang.org/x/net v0.36.0
+	golang.org/x/sync v0.11.0
+	golang.org/x/sys v0.30.0
+	golang.org/x/term v0.29.0
 	golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675 //DO NOT MODIFY OR UPDATE v0.0.0-20230223181233-21636207a675
 	gopkg.in/telebot.v3 v3.3.8
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12
-)
-
-require (
-	cogentcore.org/core v0.3.9-0.20250328111149-bac89be1bc16
-	github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8
-	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937
-	github.com/go-chi/cors v1.2.1
 )
 
 require (
@@ -76,7 +73,7 @@ require (
 	atomicgo.dev/schedule v0.1.0 // indirect
 	github.com/ActiveState/termtest/conpty v0.5.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
-	github.com/Bios-Marcel/wastebasket v0.0.4-0.20240213135800-f26f1ae0a7c4 // indirect
+	github.com/Bios-Marcel/wastebasket/v2 v2.0.3 // indirect
 	github.com/Masterminds/vcs v1.13.3 // indirect
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
@@ -116,6 +113,7 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
+	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/goki/freetype v1.0.5 // indirect
@@ -185,11 +183,11 @@ require (
 	go.uber.org/mock v0.5.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.11.0 // indirect
-	golang.org/x/crypto v0.32.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67 // indirect
 	golang.org/x/image v0.21.0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 	golang.org/x/tools v0.28.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect

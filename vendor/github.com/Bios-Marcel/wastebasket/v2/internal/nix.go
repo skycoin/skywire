@@ -1,10 +1,11 @@
-//go:build !windows && !darwin
+//go:build freebsd || openbsd || netbsd || linux
 
 package internal
 
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"math"
 	"net/url"
 	"os"
@@ -23,7 +24,7 @@ var lastMountCount int32
 func Mounts() ([]string, error) {
 	handle, err := os.Open("/proc/mounts")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error opening /proc/mounts: %w", err)
 	}
 
 	defer handle.Close()
@@ -95,6 +96,9 @@ RETRY:
 				// A non-error basically which tells you to try again.
 				// Use goto in order to prevent growing stack.
 				goto RETRY
+			case unix.EACCES:
+				// Missing permissions, so we shouldn't clear it.
+				return nil
 			case unix.ENOENT:
 				// Does not exist.
 				return nil
@@ -109,7 +113,7 @@ RETRY:
 				return nil
 			}
 		}
-		return err
+		return fmt.Errorf("error removing file: %w", err)
 	}
 
 	return nil
