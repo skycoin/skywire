@@ -378,7 +378,7 @@ func server() {
 		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines() //nolint
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                            //nolint
 		c.Writer.Flush()
-		st, err := script.Exec(`skywire cli log st -d rewards/log_backups -r`).Bytes() //nolint
+		st, err := script.Exec(`skywire cli log st -d ` + wd + `/log_backups -r`).Bytes() //nolint
 		if err != nil {
 			log.WithError(err).Error()
 			c.Writer.Write([]byte(err.Error())) //nolint
@@ -476,7 +476,7 @@ func server() {
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		l, err := func() (string, error) {
+		l := fmt.Sprintf("<div style='float: right;'>%s</div>", func() string {
 			yearlyTotal := 408000.0
 			result := fmt.Sprintf("<u>Annual reward distribution per pool:</u>\n%g Skycoin\n<u>Monthly rewards per pool:</u>\n", yearlyTotal)
 			currentMonth := time.Now().Month()
@@ -495,145 +495,8 @@ func server() {
 			totalDaysInYear := int(lastDayOfYear.YearDay())
 			skycoinPerDay := yearlyTotal / float64(totalDaysInYear)
 			result += fmt.Sprintf("%g Skycoin per day\n<br>", skycoinPerDay)
-			utstats, err := script.Exec(`skywire cli ut -t`).String()
-			if err == nil {
-				result += fmt.Sprintf("<u>Uptime tracker version statistics:</u>\n%s\n<br>", utstats)
-			}
-			nis, err := script.FindFiles(wd + `/` + "log_backups").Match("node-info.json").Slice() //nolint
-			if err == nil {
-				var surveyarches string
-				for _, ni := range nis {
-					surveyarch, err := script.File(ni).JQ(".go_arch").Replace(`"`, "").String()
-					if err == nil {
-						surveyarches += surveyarch
-					}
-				}
-				archstats, err := script.Echo(surveyarches).Freq().String() //nolint
-				if err == nil {
-					result += fmt.Sprintf("<u>Survey architecture statistics:</u>\n%s\n<br>", archstats)
-				}
-				var surveyOSNames string
-				for _, ni := range nis {
-					surveyOSName, err := script.File(ni).JQ(".zcalusic_sysinfo.os.name").Replace(`"`, "").String()
-					if err == nil {
-						surveyOSNames += surveyOSName
-					}
-				}
-				namestats, err := script.Echo(surveyOSNames).Freq().String() //nolint
-				if err == nil {
-					result += fmt.Sprintf("<u>Survey OS name statistics:</u>\n%s\n<br>", namestats)
-				}
-				var surveycpus string
-				for _, ni := range nis {
-					surveycpu, err := script.File(ni).JQ(".zcalusic_sysinfo.cpu.model").Replace(`"`, "").String()
-					if err == nil {
-						surveycpus += surveycpu
-					}
-				}
-				cpustats, err := script.Echo(surveycpus).Freq().String() //nolint
-				if err == nil {
-					result += fmt.Sprintf("<u>Survey CPU statistics:</u>\n%s\n<br>", cpustats)
-				}
-
-				var totalBytes int64
-				for _, ni := range nis {
-					surveytbs, err := script.File(ni).JQ(".ghw_blockinfo.total_size_bytes").Reject("null").Replace(`"`, "").String()
-					if err == nil {
-						if surveytbs != "\n" && surveytbs != "" {
-							byteValue, err := strconv.ParseInt(strings.TrimRight(surveytbs, "\n"), 10, 64)
-							if err != nil {
-								result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
-							}
-							totalBytes += byteValue
-						}
-					}
-				}
-
-				// Get stats for terabytes and gigabytes
-				bsstatsTB, err := script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
-				if err != nil {
-					fmt.Println("non nil script.Exec error line 530")
-					return "", err
-				}
-				bsstatsGB, err := script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("T").Slice() //nolint
-				if err != nil {
-					fmt.Println("non nil script.Exec error line 537")
-					return "", err
-				}
-				formattedTotal, err := script.Echo(fmt.Sprintf("%d", totalBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
-				if err != nil {
-					result += fmt.Sprintf("%v\n", err)
-				}
-				result += fmt.Sprintf("<u>Survey total byte size (cumulative):</u> %s\n", formattedTotal)
-				result += "<u>Survey total byte size statistics:</u>\n"
-				result += `<table style="width:100%; text-align:center;">` + "\n"
-				result += "<tr><th>GB</th><th>TB</th></tr>\n"
-
-	// 				var totalBytes int64
-	// 				for _, ni := range nis {
-	// 					surveytbs, err := script.File(ni).JQ(".ghw_blockinfo.total_size_bytes").Reject("null").Replace(`"`, "").String()
-	// 					if err == nil {
-	// 						if surveytbs != "\n" && surveytbs != "" {
-	// 							byteValue, err := strconv.ParseInt(strings.TrimRight(surveytbs, "\n"), 10, 64)
-	// 							if err != nil {
-	// 								result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
-	// 							}
-	// 							totalBytes += byteValue
-	// 						}
-	// 					}
-	// 				}
-
-				var totalramBytes int64
-				for _, ni := range nis {
-					surveymem, err := script.File(ni).JQ(".ghw_memoryinfo.total_usable_bytes").Reject("null").Replace(`"`, "").String()
-					if err == nil {
-						if surveymem != "\n" && surveymem != "" {
-							byteValue, err := strconv.ParseInt(strings.TrimRight(surveymem, "\n"), 10, 64)
-							if err != nil {
-								result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
-							}
-							totalramBytes += byteValue
-						}
-					}
-				}
-
-				statsMB, err := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice()
-				if err != nil {
-					fmt.Println("non nil script.Exec error line 589")
-					return "", err
-				}
-				statsGB, err := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("M").Slice() //nolint
-				if err != nil {
-					fmt.Println("non nil script.Exec error line 594")
-					return "", err
-				}
-				ramTotal, err := script.Echo(fmt.Sprintf("%d", totalramBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
-				if err != nil {
-					result += fmt.Sprintf("%v\n", err)
-				}
-				result += fmt.Sprintf("<u>Survey total RAM byte size (cumulative):</u> %s\n", ramTotal)
-				result += "<u>Survey total usable ram byte size statistics:</u>\n"
-				result += `<table style="width:100%; text-align:center;">` + "\n"
-				result += "<tr><th>GB</th><th>MB</th></tr>\n"
-
-	// 				formattedTotal, err := script.Echo(fmt.Sprintf("%d", totalBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
-	// 				if err != nil {
-	// 					result += fmt.Sprintf("%v\n", err)
-	// 				}
-	// 				result += fmt.Sprintf("<u>Survey total byte size (cumulative):</u> %s\n", formattedTotal)
-	// 				result += "<u>Survey total byte size statistics:</u>\n"
-	// 				result += `<table style="width:100%; text-align:center;">` + "\n"
-	// 				result += "<tr><th>GB</th><th>TB</th></tr>\n"
-
-			}
-			return fmt.Sprintf("<div style='float: right;'>%s</div>", result+"<br>"+htmltoplink), nil
-
-		}()
-		if err != nil {
-			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Flush()
-			return
-		}
+			return result
+		}())
 		l += fmt.Sprintf("There are %d days in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day(), time.Now().Month())
 		l += fmt.Sprintf("Today is %s %d.\n", time.Now().Month(), time.Now().Day())
 		l += fmt.Sprintf("There are %d days left in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()-time.Now().Day(), time.Now().Month())
@@ -653,14 +516,14 @@ func server() {
 		l += "</tr>\n"
 		l += "</thead>\n"
 		l += "<tbody>\n"
-		rewardtxncsvs, _ := script.FindFiles(wd+`/`+`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Basename().Replace("_rewardtxn0.csv", "").Slice() //nolint
+		rewardtxncsvs, _ := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+"/hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint
 		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
-			skycoinpershare, _ := script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
+			skycoinpershare, _ := script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
 			skycoinpershare1 := ""
 			skycoinpershare2 := ""
 			if strings.TrimSpace(skycoinpershare) == "" {
-				skycoinpershare1, _ = script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint
-				skycoinpershare2, _ = script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String() //nolint
+				skycoinpershare1, _ = script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint
+				skycoinpershare2, _ = script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String() //nolint
 				skycoinpershare1 = strings.TrimSpace(skycoinpershare1)
 				skycoinpershare2 = strings.TrimSpace(skycoinpershare2)
 			} else {
@@ -668,17 +531,47 @@ func server() {
 				skycoinpershare2 = ""
 			}
 
-	// //				statsMB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
-	// //				statsGB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("M").Slice() //nolint
+			var distributedIcon string
+			if _, err := os.Stat(wd + "/hist/" + rewardtxncsvs[i] + ".txt"); err == nil {
+				distributedIcon = "<span style='color: green;'>&#10004;</span>"
+			} else {
+				distributedIcon = "<span style='color: red;'>&#10060;</span>"
+			}
+			l += "<tr>\n"
+			l += "<td style='text-align: center;'><a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a></td>\n"
+			l += "<td style='text-align: center;'>" + skycoinpershare1 + "</td>\n"
+			if skycoinpershare2 != "" {
+				l += "<td style='text-align: center;'>" + skycoinpershare2 + "</td>\n"
+			} else {
+				l += "<td style='text-align: center;'></td>\n"
+			}
+			l += "<td style='text-align: center;'>" + distributedIcon + "</td>\n"
+			l += "</tr>\n"
+		}
+		l += "</tbody>\n</table>\n"
+		l += "<br>" + htmltoplink
 
-	// 				ramTotal, err := script.Echo(fmt.Sprintf("%d", totalramBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
-	// 				if err != nil {
-	// 					result += fmt.Sprintf("%v\n", err)
-	// 				}
-	// 				result += fmt.Sprintf("<u>Survey total RAM byte size (cumulative):</u> %s\n", ramTotal)
-	// 				result += "<u>Survey total usable ram byte size statistics:</u>\n"
-	// 				result += `<table style="width:100%; text-align:center;">` + "\n"
-	// 				result += "<tr><th>GB</th><th>MB</th></tr>\n"
+		tmpl0, err1 := tmpl.Clone()
+		if err1 != nil {
+			fmt.Println("Error cloning template:", err1)
+		}
+		_, err1 = tmpl0.New("this").Parse(htmlRewardPageTemplate)
+		if err1 != nil {
+			fmt.Println("Error parsing Front Page template:", err1)
+		}
+		tmpl := tmpl0
+		htmlPageTemplateData1 := htmlTemplateData{
+			Title:   "Skycoin Reward Calculation and Distribution",
+			Content: htmpl.HTML(l), //nolint
+		}
+		tmplData := map[string]interface{}{
+			"Page": htmlPageTemplateData1,
+		}
+		var result bytes.Buffer
+		err = tmpl.Execute(&result, tmplData)
+		if err != nil {
+			fmt.Println("error: ", err)
+		}
 
 		c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)) //nolint
 		c.Writer.Flush()
@@ -1452,6 +1345,8 @@ func generateAndCacheStats() (err error) {
 	var surveyarches string
 	var surveycpus string
 	var surveyOSNames string
+	var totalBytes int64
+	var totalramBytes int64
 	for i := range pks {
 		ni := wd + "/log_backups/" + pks[i] + "/node-info.json"
 		surveycpu, err := script.File(ni).JQ(".zcalusic_sysinfo.cpu.model").Replace(`"`, "").String()
@@ -1472,7 +1367,31 @@ func generateAndCacheStats() (err error) {
 		}
 		surveyOSNames += surveyOSName
 
+		surveytbs, err := script.File(ni).JQ(".ghw_blockinfo.total_size_bytes").Reject("null").Replace(`"`, "").String()
+		if err != nil {
+			continue
+		}
+		if surveytbs != "\n" && surveytbs != "" {
+			byteValue, err := strconv.ParseInt(strings.TrimRight(surveytbs, "\n"), 10, 64)
+			if err != nil {
+				continue
+			}
+			totalBytes += byteValue
+		}
+
+		surveymem, err := script.File(ni).JQ(".ghw_memoryinfo.total_usable_bytes").Reject("null").Replace(`"`, "").String()
+		if err != nil {
+			continue
+		}
+		if surveymem != "\n" && surveymem != "" {
+			byteValue, err := strconv.ParseInt(strings.TrimRight(surveymem, "\n"), 10, 64)
+			if err != nil {
+				continue
+			}
+			totalramBytes += byteValue
+		}
 	}
+
 	cpustats, err := script.Echo(surveycpus).Freq().String()
 	if err != nil {
 		return err
@@ -1499,6 +1418,46 @@ func generateAndCacheStats() (err error) {
 	if err != nil {
 		return err
 	}
+
+	formattedTotal, err := script.Echo(fmt.Sprintf("%d", totalBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
+	if err != nil {
+		return err
+	}
+
+	_, err = script.Echo(fmt.Sprintf("Survey total byte size (cumulative): %s\n", formattedTotal)).WriteFile(tempStatsPath + "/mem.txt")
+	if err != nil {
+		return err
+	}
+
+	_, err = script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("T").AppendFile(tempStatsPath + "/mem.txt") //nolint
+	if err != nil {
+		return err
+	}
+
+	_, err = script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").AppendFile(tempStatsPath + "/mem.txt") //nolint
+	if err != nil {
+		return err
+	}
+
+	ramTotal, err := script.Echo(fmt.Sprintf("%d", totalramBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
+	if err != nil {
+		return err
+	}
+	_, err = script.Echo(fmt.Sprintf("<u>Survey total RAM byte size (cumulative):</u> %s\n", ramTotal)).WriteFile(tempStatsPath + "/ram.txt")
+	if err != nil {
+		return err
+	}
+
+	_, err = script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").AppendFile(tempStatsPath + "/ram.txt") //nolint
+	if err != nil {
+		return err
+	}
+
+	_, err = script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).AppendFile(tempStatsPath + "/ram.txt") //nolint
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 

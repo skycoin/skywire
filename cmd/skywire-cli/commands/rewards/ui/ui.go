@@ -164,13 +164,13 @@ func main() {
 			})
 			r := rewards[currentEntry]
 			core.NewText(pg).SetType(core.TextHeadlineSmall).SetText("Reward Distribution Details for " + string(r.Date))
-				txid := strings.Replace(httpGetString("/skycoin-rewards/hist/" + string(r.Date) + ".txt"), "\n", "", -1)
-				if txid != "" {
-					core.NewText(pg).SetText(`TXID: ` + txid)
-					htmlcore.ReadHTMLString(ctx, pg, `<a href="https://explorer.skycoin.com/app/transaction/`+txid+`">`+txid+`</a>`) //nolint
-				} else {
-					core.NewText(pg).SetText(`Rewards not yet distributed`)
-				}
+			txid := strings.Replace(httpGetString("/skycoin-rewards/hist/"+string(r.Date)+".txt"), "\n", "", -1)
+			if txid != "" {
+				core.NewText(pg).SetText(`TXID: ` + txid)
+				htmlcore.ReadHTMLString(ctx, pg, `<a href="https://explorer.skycoin.com/app/transaction/`+txid+`">`+txid+`</a>`) //nolint
+			} else {
+				core.NewText(pg).SetText(`Rewards not yet distributed`)
+			}
 
 			ts := core.NewTabs(pg).SetType(core.NavigationAuto)
 			first, tb := ts.NewTab("Stats")
