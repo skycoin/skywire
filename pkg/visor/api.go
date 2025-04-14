@@ -1609,7 +1609,7 @@ func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid
 	if err != nil {
 		return uuid.UUID{}, err
 	}
-	_, err = remoteConn.Write([]byte(clientMsg))
+	_, err = remoteConn.Write(clientMsg)
 	if err != nil {
 		return uuid.UUID{}, err
 	}

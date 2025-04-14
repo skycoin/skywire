@@ -70,7 +70,7 @@ func (s *networkStats) AddBandwidthReceived(amount uint64) {
 
 func (s *networkStats) RemoteThroughput() int64 {
 	s.bandwidthReceivedRecStartMu.Lock()
-	timePassed := time.Now().UTC().Sub(s.bandwidthReceivedRecStart) //nolint:gosimple
+	timePassed := time.Now().UTC().Sub(s.bandwidthReceivedRecStart)
 	s.bandwidthReceivedRecStart = time.Now().UTC()
 	s.bandwidthReceivedRecStartMu.Unlock()
 

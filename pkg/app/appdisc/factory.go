@@ -35,7 +35,7 @@ func (f *Factory) setDefaults() {
 		var envServices skywire.EnvServices
 		var services skywire.Services
 		var sdURL string
-		if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
+		if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
 			if err := json.Unmarshal(envServices.Prod, &services); err == nil {
 				sdURL = services.ServiceDiscovery
 			}

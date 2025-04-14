@@ -14,7 +14,7 @@ func (eb *Broadcaster) SendTCPDial(ctx context.Context, remoteNet, remoteAddr st
 
 // SendTPClose sends transport close event
 func (eb *Broadcaster) SendTPClose(ctx context.Context, netType, addr string) { //nolint:all
-	data := TCPCloseData{RemoteNet: string(netType), RemoteAddr: addr}
+	data := TCPCloseData{RemoteNet: netType, RemoteAddr: addr}
 	event := NewEvent(TCPClose, data)
 	if err := eb.Broadcast(context.Background(), event); err != nil {
 		eb.log.WithError(err).Errorln("Failed to broadcast TCPClose event")
