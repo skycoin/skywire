@@ -187,10 +187,10 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 
 lint: ## Run linters. Use make install-linters first
 	golangci-lint --version
-	${OPTS} golangci-lint run -c .golangci.yml skywire.go --timeout 0
-	${OPTS} golangci-lint run -c .golangci.yml ./cmd/... --timeout 0
-	${OPTS} golangci-lint run -c .golangci.yml ./pkg/... --timeout 0
-	${OPTS} golangci-lint run -c .golangci.yml	 ./... --timeout 0
+	${OPTS} golangci-lint run -c .golangci.yml skywire.go
+	${OPTS} golangci-lint run -c .golangci.yml ./cmd/...
+	${OPTS} golangci-lint run -c .golangci.yml ./pkg/...
+	${OPTS} golangci-lint run -c .golangci.yml	 ./...
 	${OPTS} go vet -all -mod=vendor ./...
 
 lint-extra: ## Run linters with extra checks.

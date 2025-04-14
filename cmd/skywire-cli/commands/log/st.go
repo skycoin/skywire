@@ -120,7 +120,7 @@ func makeTree() {
 					coloredFile = pterm.Red(filepath.Base(kid))
 				}
 				if filepath.Base(kid) == "health.json" {
-					nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s     Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()).Truncate(time.Second).String(), strings.TrimSuffix(string(fileContents), "\n"))})
+					nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s     Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()).Truncate(time.Second).String(), strings.TrimSuffix(fileContents, "\n"))})
 				}
 				continue
 			}
@@ -128,11 +128,11 @@ func makeTree() {
 				coloredFile = pterm.Blue(filepath.Base(kid))
 				ver, err := script.File(kid).JQ(".skywire_version").String()
 				if err != nil {
-					ver = pterm.Red(strings.TrimSuffix(string(ver), "\n"))
+					ver = pterm.Red(strings.TrimSuffix(ver, "\n"))
 					coloredFile = pterm.Red(filepath.Base(kid))
-					nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s          %s", coloredFile, strings.TrimSuffix(string(ver), "\n"))})
+					nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s          %s", coloredFile, strings.TrimSuffix(ver, "\n"))})
 				} else {
-					nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s          %s", coloredFile, strings.TrimSuffix(string(ver), "\n"))})
+					nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s          %s", coloredFile, strings.TrimSuffix(ver, "\n"))})
 				}
 				continue
 			}
