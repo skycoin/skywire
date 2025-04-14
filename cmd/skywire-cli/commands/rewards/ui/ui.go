@@ -125,27 +125,17 @@ func main() {
 	if runtime.GOOS == "js" {
 		ts := core.NewTabs(first).SetType(core.NavigationAuto)
 		versiontab, _ := ts.NewTab("Version")
-		resp, err := http.Get("/stats/ut")
-		if err != nil {
-			log.Fatalf("Error fetching data: %v", err)
-		}
-		defer resp.Body.Close() //nolint
-		bodyBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
-		core.NewText(versiontab).SetText(string(bodyBytes))
+		core.NewText(versiontab).SetText(httpGetString("/stats/ut"))
 		archtab, _ := ts.NewTab("Architectures")
-		resp, err = http.Get("/stats/arch")
-		if err != nil {
-			log.Fatalf("Error fetching data: %v", err)
-		}
-		defer resp.Body.Close() //nolint
-		bodyBytes, err = io.ReadAll(resp.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
-		core.NewText(archtab).SetText(string(bodyBytes))
+		core.NewText(archtab).SetText(httpGetString("/stats/arch"))
+		ostab, _ := ts.NewTab("OS")
+		core.NewText(ostab).SetText(httpGetString("/stats/os"))
+		cputab, _ := ts.NewTab("CPU")
+		core.NewText(cputab).SetText(httpGetString("/stats/cpu"))
+		memtab, _ := ts.NewTab("Memory")
+		core.NewText(memtab).SetText(httpGetString("/stats/mem"))
+		ramtab, _ := ts.NewTab("RAM")
+		core.NewText(ramtab).SetText(httpGetString("/stats/ram"))
 	}
 
 	second, tb := ts.NewTab("Rewards")
@@ -174,87 +164,31 @@ func main() {
 			})
 			r := rewards[currentEntry]
 			core.NewText(pg).SetType(core.TextHeadlineSmall).SetText("Reward Distribution Details for " + string(r.Date))
-
-			resp, err := http.Get("/skycoin-rewards/hist/" + string(r.Date) + ".txt")
-			if err != nil {
-				core.NewText(pg).SetText(`Rewards not yet distributed`)
-			}
-			if err == nil {
-				defer resp.Body.Close() //nolint
-				bodybytes, err := io.ReadAll(resp.Body)
-				if err != nil {
-					log.Fatal(err)
-				}
-				txid := strings.Replace(string(bodybytes), "\n", "", -1)
+				txid := strings.Replace(httpGetString("/skycoin-rewards/hist/" + string(r.Date) + ".txt"), "\n", "", -1)
 				if txid != "" {
 					core.NewText(pg).SetText(`TXID: ` + txid)
 					htmlcore.ReadHTMLString(ctx, pg, `<a href="https://explorer.skycoin.com/app/transaction/`+txid+`">`+txid+`</a>`) //nolint
 				} else {
 					core.NewText(pg).SetText(`Rewards not yet distributed`)
 				}
-			}
 
 			ts := core.NewTabs(pg).SetType(core.NavigationAuto)
 			first, tb := ts.NewTab("Stats")
 			tb.SetIcon(icons.Home)
 			core.NewText(first).SetText("<br>Statistics<br>")
-
-			resp, err = http.Get("/skycoin-rewards/hist/" + string(r.Date) + "_stats.txt")
-			if err != nil {
-				log.Fatalf("Error fetching data: %v", err)
-			}
-			defer resp.Body.Close() //nolint
-			bodybytes, err := io.ReadAll(resp.Body)
-			if err != nil {
-				log.Fatal(err)
-			}
-			core.NewText(first).SetText(string(bodybytes))
-
+			core.NewText(first).SetText(httpGetString("/skycoin-rewards/hist/" + string(r.Date) + "_stats.txt"))
 			second, tb := ts.NewTab("Distribution")
 			tb.SetIcon(icons.Home)
 			core.NewText(second).SetText("<br>Distribution Data<br>")
-
-			resp, err = http.Get("/skycoin-rewards/hist/" + string(r.Date) + "_rewardtxn0.csv")
-			if err != nil {
-				log.Fatalf("Error fetching data: %v", err)
-			}
-			defer resp.Body.Close() //nolint
-			bodybytes, err = io.ReadAll(resp.Body)
-			if err != nil {
-				log.Fatal(err)
-			}
-			core.NewText(second).SetText(string(bodybytes))
-
+			core.NewText(second).SetText(httpGetString("/skycoin-rewards/hist/" + string(r.Date) + "_rewardtxn0.csv"))
 			third, tb := ts.NewTab("Reward Shares")
 			tb.SetIcon(icons.Home)
 			core.NewText(third).SetText("<br>Reward Shares<br>")
-
-			resp, err = http.Get("/skycoin-rewards/hist/" + string(r.Date) + "_shares.csv")
-			if err != nil {
-				log.Fatalf("Error fetching data: %v", err)
-			}
-			defer resp.Body.Close() //nolint
-			bodybytes, err = io.ReadAll(resp.Body)
-			if err != nil {
-				log.Fatal(err)
-			}
-			core.NewText(third).SetText(string(bodybytes))
-
+			core.NewText(third).SetText(httpGetString("/skycoin-rewards/hist/" + string(r.Date) + "_shares.csv"))
 			fourth, tb := ts.NewTab("Ineligible")
 			tb.SetIcon(icons.Home)
 			core.NewText(fourth).SetText("<br>Ineligible<br>")
-
-			resp, err = http.Get("/skycoin-rewards/hist/" + string(r.Date) + "_ineligible.csv")
-			if err != nil {
-				log.Fatalf("Error fetching data: %v", err)
-			}
-			defer resp.Body.Close() //nolint
-			bodybytes, err = io.ReadAll(resp.Body)
-			if err != nil {
-				log.Fatal(err)
-			}
-			core.NewText(fourth).SetText(string(bodybytes))
-
+			core.NewText(fourth).SetText(httpGetString("/skycoin-rewards/hist/" + string(r.Date) + "_ineligible.csv"))
 			core.NewButton(pg).SetText("back").OnClick(func(_ events.Event) {
 				pg.Open("Rewards")
 			})
@@ -265,9 +199,6 @@ func main() {
 			pg.Open("Rewards")
 		})
 	}
-
-	//	ct := content.NewContent(b)
-	//	ctx = ct.Context
 
 	fourth, tb := ts.NewTab("Log Collection")
 	tb.SetIcon(icons.History)
@@ -374,6 +305,19 @@ func fmtDuration(d time.Duration) string {
 	hours := int(d.Hours())
 	minutes := int(d.Minutes()) % 60
 	return fmt.Sprintf("%dh%dm", hours, minutes)
+}
+
+func httpGetString(url string) string {
+	resp, err := http.Get(url)
+	if err == nil {
+		defer resp.Body.Close() //nolint
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return string(bodyBytes)
+	}
+	return ""
 }
 
 /*

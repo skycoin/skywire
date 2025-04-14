@@ -465,11 +465,11 @@ func server() {
 		c.Writer.Flush()
 	})
 
-	r1.StaticFile("/stats/mem", tempStatsPath+"/mem.txt")
-	r1.StaticFile("/stats/ram", tempStatsPath+"/ram.txt")
 	r1.StaticFile("/stats/arch", tempStatsPath+"/arch.txt")
 	r1.StaticFile("/stats/os", tempStatsPath+"/os.txt")
 	r1.StaticFile("/stats/cpu", tempStatsPath+"/cpu.txt")
+	r1.StaticFile("/stats/mem", tempStatsPath+"/mem.txt")
+	r1.StaticFile("/stats/ram", tempStatsPath+"/ram.txt")
 
 	r1.GET("/skycoin-rewards", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
