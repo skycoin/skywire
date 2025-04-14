@@ -436,250 +436,248 @@ func server() {
 		}())) //nolint
 	})
 
-/*
-	r1.GET("/skycoin-rewards", func(c *gin.Context) {
-		c.Writer.Header().Set("Server", "")
-		c.Writer.Header().Set("Transfer-Encoding", "chunked")
-		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Flush()
-		l := "test"
-		/*
-		l := fmt.Sprintf("<div style='float: right;'>%s</div>", func() string {
-			yearlyTotal := 408000.0
-			result := fmt.Sprintf("<u>Annual reward distribution per pool:</u>\n%g Skycoin\n<u>Monthly rewards per pool:</u>\n", yearlyTotal)
-			currentMonth := time.Now().Month()
-			currentYear := time.Now().Year()
-			for month := time.January; month <= time.December; month++ {
-				daysInMonth := time.Date(currentYear, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
-				monthlyRewards := (yearlyTotal / 365) * float64(daysInMonth)
-				format := "%g %d %s\n"
-				if currentMonth >= month {
-					format = "<strike>" + format + "</strike>"
-				}
-				result += fmt.Sprintf(format, monthlyRewards, currentYear, month)
-			}
-			firstDayOfNextYear := time.Date(currentYear+1, time.January, 1, 0, 0, 0, 0, time.UTC)
-			lastDayOfYear := firstDayOfNextYear.Add(-time.Second)
-			totalDaysInYear := int(lastDayOfYear.YearDay())
-			skycoinPerDay := yearlyTotal / float64(totalDaysInYear)
-			result += fmt.Sprintf("%g Skycoin per day\n<br>", skycoinPerDay)
-			utstats, err := script.Exec(`skywire cli ut -t`).String()
-			if err == nil {
-				result += fmt.Sprintf("<u>Uptime tracker version statistics:</u>\n%s\n<br>", utstats)
-			}
-			nis, err := script.FindFiles(wd + `/` + "log_backups").Match("node-info.json").Slice() //nolint
-			if err == nil {
-				var surveyarches string
-				for _, ni := range nis {
-					surveyarch, err := script.File(ni).JQ(".go_arch").Replace(`"`, "").String()
-					if err == nil {
-						surveyarches += surveyarch
-					}
-				}
-				archstats, err := script.Echo(surveyarches).Freq().String() //nolint
-				if err == nil {
-					result += fmt.Sprintf("<u>Survey architecture statistics:</u>\n%s\n<br>", archstats)
-				}
-				var surveyOSNames string
-				for _, ni := range nis {
-					surveyOSName, err := script.File(ni).JQ(".zcalusic_sysinfo.os.name").Replace(`"`, "").String()
-					if err == nil {
-						surveyOSNames += surveyOSName
-					}
-				}
-				namestats, err := script.Echo(surveyOSNames).Freq().String() //nolint
-				if err == nil {
-					result += fmt.Sprintf("<u>Survey OS name statistics:</u>\n%s\n<br>", namestats)
-				}
-				var surveycpus string
-				for _, ni := range nis {
-					surveycpu, err := script.File(ni).JQ(".zcalusic_sysinfo.cpu.model").Replace(`"`, "").String()
-					if err == nil {
-						surveycpus += surveycpu
-					}
-				}
-				cpustats, err := script.Echo(surveycpus).Freq().String() //nolint
-				if err == nil {
-					result += fmt.Sprintf("<u>Survey CPU statistics:</u>\n%s\n<br>", cpustats)
-				}
+	// 	r1.GET("/skycoin-rewards", func(c *gin.Context) {
+	// 		c.Writer.Header().Set("Server", "")
+	// 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+	// 		c.Writer.WriteHeader(http.StatusOK)
+	// 		c.Writer.Flush()
+	// 		l := "test"
 
-				var totalBytes int64
-				for _, ni := range nis {
-					surveytbs, err := script.File(ni).JQ(".ghw_blockinfo.total_size_bytes").Reject("null").Replace(`"`, "").String()
-					if err == nil {
-						if surveytbs != "\n" && surveytbs != "" {
-							byteValue, err := strconv.ParseInt(strings.TrimRight(surveytbs, "\n"), 10, 64)
-							if err != nil {
-								result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
-							}
-							totalBytes += byteValue
-						}
-					}
-				}
-*/
-				// Get stats for terabytes and gigabytes
-//				bsstatsTB, _ := script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' `+wd + `/`+`/rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
-//				bsstatsGB, _ := script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("T").Slice() //nolint
-/*
-				formattedTotal, err := script.Echo(fmt.Sprintf("%d", totalBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
-				if err != nil {
-					result += fmt.Sprintf("%v\n", err)
-				}
-				result += fmt.Sprintf("<u>Survey total byte size (cumulative):</u> %s\n", formattedTotal)
-				result += "<u>Survey total byte size statistics:</u>\n"
-				result += `<table style="width:100%; text-align:center;">` + "\n"
-				result += "<tr><th>GB</th><th>TB</th></tr>\n"
+	// 		l := fmt.Sprintf("<div style='float: right;'>%s</div>", func() string {
+	// 			yearlyTotal := 408000.0
+	// 			result := fmt.Sprintf("<u>Annual reward distribution per pool:</u>\n%g Skycoin\n<u>Monthly rewards per pool:</u>\n", yearlyTotal)
+	// 			currentMonth := time.Now().Month()
+	// 			currentYear := time.Now().Year()
+	// 			for month := time.January; month <= time.December; month++ {
+	// 				daysInMonth := time.Date(currentYear, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
+	// 				monthlyRewards := (yearlyTotal / 365) * float64(daysInMonth)
+	// 				format := "%g %d %s\n"
+	// 				if currentMonth >= month {
+	// 					format = "<strike>" + format + "</strike>"
+	// 				}
+	// 				result += fmt.Sprintf(format, monthlyRewards, currentYear, month)
+	// 			}
+	// 			firstDayOfNextYear := time.Date(currentYear+1, time.January, 1, 0, 0, 0, 0, time.UTC)
+	// 			lastDayOfYear := firstDayOfNextYear.Add(-time.Second)
+	// 			totalDaysInYear := int(lastDayOfYear.YearDay())
+	// 			skycoinPerDay := yearlyTotal / float64(totalDaysInYear)
+	// 			result += fmt.Sprintf("%g Skycoin per day\n<br>", skycoinPerDay)
+	// 			utstats, err := script.Exec(`skywire cli ut -t`).String()
+	// 			if err == nil {
+	// 				result += fmt.Sprintf("<u>Uptime tracker version statistics:</u>\n%s\n<br>", utstats)
+	// 			}
+	// 			nis, err := script.FindFiles(wd + `/` + "log_backups").Match("node-info.json").Slice() //nolint
+	// 			if err == nil {
+	// 				var surveyarches string
+	// 				for _, ni := range nis {
+	// 					surveyarch, err := script.File(ni).JQ(".go_arch").Replace(`"`, "").String()
+	// 					if err == nil {
+	// 						surveyarches += surveyarch
+	// 					}
+	// 				}
+	// 				archstats, err := script.Echo(surveyarches).Freq().String() //nolint
+	// 				if err == nil {
+	// 					result += fmt.Sprintf("<u>Survey architecture statistics:</u>\n%s\n<br>", archstats)
+	// 				}
+	// 				var surveyOSNames string
+	// 				for _, ni := range nis {
+	// 					surveyOSName, err := script.File(ni).JQ(".zcalusic_sysinfo.os.name").Replace(`"`, "").String()
+	// 					if err == nil {
+	// 						surveyOSNames += surveyOSName
+	// 					}
+	// 				}
+	// 				namestats, err := script.Echo(surveyOSNames).Freq().String() //nolint
+	// 				if err == nil {
+	// 					result += fmt.Sprintf("<u>Survey OS name statistics:</u>\n%s\n<br>", namestats)
+	// 				}
+	// 				var surveycpus string
+	// 				for _, ni := range nis {
+	// 					surveycpu, err := script.File(ni).JQ(".zcalusic_sysinfo.cpu.model").Replace(`"`, "").String()
+	// 					if err == nil {
+	// 						surveycpus += surveycpu
+	// 					}
+	// 				}
+	// 				cpustats, err := script.Echo(surveycpus).Freq().String() //nolint
+	// 				if err == nil {
+	// 					result += fmt.Sprintf("<u>Survey CPU statistics:</u>\n%s\n<br>", cpustats)
+	// 				}
 
-				maxLen := len(bsstatsGB)
-				if len(bsstatsTB) > maxLen {
-					maxLen = len(bsstatsTB)
-				}
-				for i := 0; i < maxLen; i++ {
-					result += "<tr>\n"
-					if i < len(bsstatsGB) {
-						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsGB[i])
-					} else {
-						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
-					}
-					if i < len(bsstatsTB) {
-						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsTB[i])
-					} else {
-						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
-					}
-					result += "</tr>\n"
-				}
-				result += "</table>\n<br>"
+	// 				var totalBytes int64
+	// 				for _, ni := range nis {
+	// 					surveytbs, err := script.File(ni).JQ(".ghw_blockinfo.total_size_bytes").Reject("null").Replace(`"`, "").String()
+	// 					if err == nil {
+	// 						if surveytbs != "\n" && surveytbs != "" {
+	// 							byteValue, err := strconv.ParseInt(strings.TrimRight(surveytbs, "\n"), 10, 64)
+	// 							if err != nil {
+	// 								result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
+	// 							}
+	// 							totalBytes += byteValue
+	// 						}
+	// 					}
+	// 				}
 
-				var totalramBytes int64
-				for _, ni := range nis {
-					surveymem, err := script.File(ni).JQ(".ghw_memoryinfo.total_usable_bytes").Reject("null").Replace(`"`, "").String()
-					if err == nil {
-						if surveymem != "\n" && surveymem != "" {
-							byteValue, err := strconv.ParseInt(strings.TrimRight(surveymem, "\n"), 10, 64)
-							if err != nil {
-								result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
-							}
-							totalramBytes += byteValue
-						}
-					}
-				}
-*/
-//				statsMB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
-//				statsGB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("M").Slice() //nolint
-/*
-				ramTotal, err := script.Echo(fmt.Sprintf("%d", totalramBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
-				if err != nil {
-					result += fmt.Sprintf("%v\n", err)
-				}
-				result += fmt.Sprintf("<u>Survey total RAM byte size (cumulative):</u> %s\n", ramTotal)
-				result += "<u>Survey total usable ram byte size statistics:</u>\n"
-				result += `<table style="width:100%; text-align:center;">` + "\n"
-				result += "<tr><th>GB</th><th>MB</th></tr>\n"
+	// 				// Get stats for terabytes and gigabytes
+	// //				bsstatsTB, _ := script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' `+wd + `/`+`/rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
+	// //				bsstatsGB, _ := script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("T").Slice() //nolint
 
-				maxLen = len(statsGB)
-				if len(statsMB) > maxLen {
-					maxLen = len(statsMB)
-				}
-				for i := 0; i < maxLen; i++ {
-					result += "<tr>\n"
-					if i < len(statsGB) {
-						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsGB[i])
-					} else {
-						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
-					}
-					if i < len(statsMB) {
-						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsMB[i])
-					} else {
-						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
-					}
-					result += "</tr>\n"
-				}
-				result += "</table>\n<br>"
+	// 				formattedTotal, err := script.Echo(fmt.Sprintf("%d", totalBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
+	// 				if err != nil {
+	// 					result += fmt.Sprintf("%v\n", err)
+	// 				}
+	// 				result += fmt.Sprintf("<u>Survey total byte size (cumulative):</u> %s\n", formattedTotal)
+	// 				result += "<u>Survey total byte size statistics:</u>\n"
+	// 				result += `<table style="width:100%; text-align:center;">` + "\n"
+	// 				result += "<tr><th>GB</th><th>TB</th></tr>\n"
 
-			}
-			return result + "<br>" + htmltoplink
+	// 				maxLen := len(bsstatsGB)
+	// 				if len(bsstatsTB) > maxLen {
+	// 					maxLen = len(bsstatsTB)
+	// 				}
+	// 				for i := 0; i < maxLen; i++ {
+	// 					result += "<tr>\n"
+	// 					if i < len(bsstatsGB) {
+	// 						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsGB[i])
+	// 					} else {
+	// 						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+	// 					}
+	// 					if i < len(bsstatsTB) {
+	// 						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsTB[i])
+	// 					} else {
+	// 						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+	// 					}
+	// 					result += "</tr>\n"
+	// 				}
+	// 				result += "</table>\n<br>"
 
-		}())
-		l += fmt.Sprintf("There are %d days in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day(), time.Now().Month())
-		l += fmt.Sprintf("Today is %s %d.\n", time.Now().Month(), time.Now().Day())
-		l += fmt.Sprintf("There are %d days left in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()-time.Now().Day(), time.Now().Month())
-		l += fmt.Sprintf("%d days in the year %d.\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay(), time.Now().Year())
-		l += fmt.Sprintf("Today is day %d.\n", time.Now().YearDay())
-		l += fmt.Sprintf("There are %d days remaining in %d<br>", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()-time.Now().YearDay(), time.Now().Year())
-		//		calendar, err := script.Exec(`bash -c 'set -o pipefail ; unbuffer cal --color | lolcat -f -F 0.5'`).String()
-		//		if err != nil {
-		calendar := cal()
-		//		}
-		l += "\n" + string(ansihtml.ConvertToHTML([]byte(calendar)))
-		l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
-		l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
-		l += "<thead>\n"
-		l += "<tr>\n"
-		l += "<th style='text-align: center;'> <br> <u>RewardDate</u> </th><th style='text-align: center;'> Pool 1 <br> <u>SKY/VISOR</u> </th><th style='text-align: center;'> Pool 2 <br> <u>SKY/VISOR</u> </th><th style='text-align: center;'> Distributed <br> <u>[<span style='color: red;'>&#10060;</span>/<span style='color: green;'>&#10004;</span>]</u> </th>\n"
-		l += "</tr>\n"
-		l += "</thead>\n"
-		l += "<tbody>\n"
-		rewardtxncsvs, _ := script.FindFiles(wd + `/`+`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Basename().Replace("_rewardtxn0.csv", "").Slice() //nolint
-		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
-			skycoinpershare, _ := script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
-			skycoinpershare1 := ""
-			skycoinpershare2 := ""
-			if strings.TrimSpace(skycoinpershare) == "" {
-				skycoinpershare1, _ = script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint
-				skycoinpershare2, _ = script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String() //nolint
-				skycoinpershare1 = strings.TrimSpace(skycoinpershare1)
-				skycoinpershare2 = strings.TrimSpace(skycoinpershare2)
-			} else {
-				skycoinpershare1 = strings.TrimSpace(skycoinpershare)
-				skycoinpershare2 = ""
-			}
+	// 				var totalramBytes int64
+	// 				for _, ni := range nis {
+	// 					surveymem, err := script.File(ni).JQ(".ghw_memoryinfo.total_usable_bytes").Reject("null").Replace(`"`, "").String()
+	// 					if err == nil {
+	// 						if surveymem != "\n" && surveymem != "" {
+	// 							byteValue, err := strconv.ParseInt(strings.TrimRight(surveymem, "\n"), 10, 64)
+	// 							if err != nil {
+	// 								result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
+	// 							}
+	// 							totalramBytes += byteValue
+	// 						}
+	// 					}
+	// 				}
 
-			var distributedIcon string
-			if _, err := os.Stat(wd + `/` + "hist/" + rewardtxncsvs[i] + ".txt"); err == nil {
-				distributedIcon = "<span style='color: green;'>&#10004;</span>"
-			} else {
-				distributedIcon = "<span style='color: red;'>&#10060;</span>"
-			}
-			l += "<tr>\n"
-			l += "<td style='text-align: center;'><a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a></td>\n"
-			l += "<td style='text-align: center;'>" + skycoinpershare1 + "</td>\n"
-			if skycoinpershare2 != "" {
-				l += "<td style='text-align: center;'>" + skycoinpershare2 + "</td>\n"
-			} else {
-				l += "<td style='text-align: center;'></td>\n"
-			}
-			l += "<td style='text-align: center;'>" + distributedIcon + "</td>\n"
-			l += "</tr>\n"
-		}
-		l += "</tbody>\n</table>\n"
-		l += "<br>" + htmltoplink
+	// //				statsMB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
+	// //				statsGB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("M").Slice() //nolint
 
-		tmpl0, err1 := tmpl.Clone()
-		if err1 != nil {
-			fmt.Println("Error cloning template:", err1)
-		}
-		_, err1 = tmpl0.New("this").Parse(htmlRewardPageTemplate)
-		if err1 != nil {
-			fmt.Println("Error parsing Front Page template:", err1)
-		}
-		tmpl := tmpl0
-		htmlPageTemplateData1 := htmlTemplateData{
-			Title:   "Skycoin Reward Calculation and Distribution",
-			Content: htmpl.HTML(l), //nolint
-		}
-		tmplData := map[string]interface{}{
-			"Page": htmlPageTemplateData1,
-		}
-		var result bytes.Buffer
-		err = tmpl.Execute(&result, tmplData)
-		if err != nil {
-			fmt.Println("error: ", err)
-		}
+	// 				ramTotal, err := script.Echo(fmt.Sprintf("%d", totalramBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
+	// 				if err != nil {
+	// 					result += fmt.Sprintf("%v\n", err)
+	// 				}
+	// 				result += fmt.Sprintf("<u>Survey total RAM byte size (cumulative):</u> %s\n", ramTotal)
+	// 				result += "<u>Survey total usable ram byte size statistics:</u>\n"
+	// 				result += `<table style="width:100%; text-align:center;">` + "\n"
+	// 				result += "<tr><th>GB</th><th>MB</th></tr>\n"
 
-		c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)) //nolint
-		c.Writer.Flush()
-	})
-	*/
+	// 				maxLen = len(statsGB)
+	// 				if len(statsMB) > maxLen {
+	// 					maxLen = len(statsMB)
+	// 				}
+	// 				for i := 0; i < maxLen; i++ {
+	// 					result += "<tr>\n"
+	// 					if i < len(statsGB) {
+	// 						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsGB[i])
+	// 					} else {
+	// 						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+	// 					}
+	// 					if i < len(statsMB) {
+	// 						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsMB[i])
+	// 					} else {
+	// 						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
+	// 					}
+	// 					result += "</tr>\n"
+	// 				}
+	// 				result += "</table>\n<br>"
+
+	// 			}
+	// 			return result + "<br>" + htmltoplink
+
+	// 		}())
+	// 		l += fmt.Sprintf("There are %d days in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day(), time.Now().Month())
+	// 		l += fmt.Sprintf("Today is %s %d.\n", time.Now().Month(), time.Now().Day())
+	// 		l += fmt.Sprintf("There are %d days left in the month of %s.\n", time.Date(time.Now().Year(), time.Now().Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()-time.Now().Day(), time.Now().Month())
+	// 		l += fmt.Sprintf("%d days in the year %d.\n", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay(), time.Now().Year())
+	// 		l += fmt.Sprintf("Today is day %d.\n", time.Now().YearDay())
+	// 		l += fmt.Sprintf("There are %d days remaining in %d<br>", time.Date(time.Now().Year(), time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()-time.Now().YearDay(), time.Now().Year())
+	// 		//		calendar, err := script.Exec(`bash -c 'set -o pipefail ; unbuffer cal --color | lolcat -f -F 0.5'`).String()
+	// 		//		if err != nil {
+	// 		calendar := cal()
+	// 		//		}
+	// 		l += "\n" + string(ansihtml.ConvertToHTML([]byte(calendar)))
+	// 		l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
+	// 		l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
+	// 		l += "<thead>\n"
+	// 		l += "<tr>\n"
+	// 		l += "<th style='text-align: center;'> <br> <u>RewardDate</u> </th><th style='text-align: center;'> Pool 1 <br> <u>SKY/VISOR</u> </th><th style='text-align: center;'> Pool 2 <br> <u>SKY/VISOR</u> </th><th style='text-align: center;'> Distributed <br> <u>[<span style='color: red;'>&#10060;</span>/<span style='color: green;'>&#10004;</span>]</u> </th>\n"
+	// 		l += "</tr>\n"
+	// 		l += "</thead>\n"
+	// 		l += "<tbody>\n"
+	// 		rewardtxncsvs, _ := script.FindFiles(wd + `/`+`rewards/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Basename().Replace("_rewardtxn0.csv", "").Slice() //nolint
+	// 		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
+	// 			skycoinpershare, _ := script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
+	// 			skycoinpershare1 := ""
+	// 			skycoinpershare2 := ""
+	// 			if strings.TrimSpace(skycoinpershare) == "" {
+	// 				skycoinpershare1, _ = script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint
+	// 				skycoinpershare2, _ = script.File(wd+`/`+"hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String() //nolint
+	// 				skycoinpershare1 = strings.TrimSpace(skycoinpershare1)
+	// 				skycoinpershare2 = strings.TrimSpace(skycoinpershare2)
+	// 			} else {
+	// 				skycoinpershare1 = strings.TrimSpace(skycoinpershare)
+	// 				skycoinpershare2 = ""
+	// 			}
+
+	// 			var distributedIcon string
+	// 			if _, err := os.Stat(wd + `/` + "hist/" + rewardtxncsvs[i] + ".txt"); err == nil {
+	// 				distributedIcon = "<span style='color: green;'>&#10004;</span>"
+	// 			} else {
+	// 				distributedIcon = "<span style='color: red;'>&#10060;</span>"
+	// 			}
+	// 			l += "<tr>\n"
+	// 			l += "<td style='text-align: center;'><a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a></td>\n"
+	// 			l += "<td style='text-align: center;'>" + skycoinpershare1 + "</td>\n"
+	// 			if skycoinpershare2 != "" {
+	// 				l += "<td style='text-align: center;'>" + skycoinpershare2 + "</td>\n"
+	// 			} else {
+	// 				l += "<td style='text-align: center;'></td>\n"
+	// 			}
+	// 			l += "<td style='text-align: center;'>" + distributedIcon + "</td>\n"
+	// 			l += "</tr>\n"
+	// 		}
+	// 		l += "</tbody>\n</table>\n"
+	// 		l += "<br>" + htmltoplink
+
+	// 		tmpl0, err1 := tmpl.Clone()
+	// 		if err1 != nil {
+	// 			fmt.Println("Error cloning template:", err1)
+	// 		}
+	// 		_, err1 = tmpl0.New("this").Parse(htmlRewardPageTemplate)
+	// 		if err1 != nil {
+	// 			fmt.Println("Error parsing Front Page template:", err1)
+	// 		}
+	// 		tmpl := tmpl0
+	// 		htmlPageTemplateData1 := htmlTemplateData{
+	// 			Title:   "Skycoin Reward Calculation and Distribution",
+	// 			Content: htmpl.HTML(l), //nolint
+	// 		}
+	// 		tmplData := map[string]interface{}{
+	// 			"Page": htmlPageTemplateData1,
+	// 		}
+	// 		var result bytes.Buffer
+	// 		err = tmpl.Execute(&result, tmplData)
+	// 		if err != nil {
+	// 			fmt.Println("error: ", err)
+	// 		}
+
+	// 		c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)) //nolint
+	// 		c.Writer.Flush()
+	// 	})
 
 	authRoute := r1.Group("/")
 	if len(wlkeys) > 0 {
@@ -770,7 +768,7 @@ func server() {
 		c.Writer.Header().Set("Server", "")
 		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice() //nolint
 		for _, f1 := range f {
-			g, err := script.File(wd + `/hist/`+ strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
+			g, err := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 			if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
 				c.Writer.Header().Set("Content-Type", "text/plain")
 				c.Writer.WriteHeader(http.StatusOK)
@@ -1707,36 +1705,37 @@ func mainPage(c *gin.Context) {
 	c.Writer.WriteHeader(http.StatusOK)
 	c.Writer.Write((bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1))) //nolint
 }
+
 /*
-func cal() (ret string) {
-	today := time.Now()
-	year, month, _ := today.Date()
-	firstOfMonth := time.Date(year, month, 1, 0, 0, 0, 0, time.Local)
-	startDayOfWeek := firstOfMonth.Weekday()
-	numDays := time.Date(year, month+1, 0, 0, 0, 0, 0, time.Local).Day()
-	header := fmt.Sprintf("%s %d", month.String(), year)
-	headerWidth := 20
-	padding := (headerWidth - len(header)) / 2
-	ret += fmt.Sprintf("%*s%s%*s\n", padding, "", header, headerWidth-len(header)-padding, "")
-	ret += "Su Mo Tu We Th Fr Sa\n"
-	for i := 0; i < int(startDayOfWeek); i++ {
-		ret += "   "
-	}
-	day := 1
-	for day <= numDays {
-		for i := int(startDayOfWeek); i < 7 && day <= numDays; i++ {
-			if day == today.Day() {
-				ret += fmt.Sprintf("\x1b[30;47m%2d\x1b[0m ", day)
-			} else {
-				ret += fmt.Sprintf("%2d ", day)
-			}
-			day++
+	func cal() (ret string) {
+		today := time.Now()
+		year, month, _ := today.Date()
+		firstOfMonth := time.Date(year, month, 1, 0, 0, 0, 0, time.Local)
+		startDayOfWeek := firstOfMonth.Weekday()
+		numDays := time.Date(year, month+1, 0, 0, 0, 0, 0, time.Local).Day()
+		header := fmt.Sprintf("%s %d", month.String(), year)
+		headerWidth := 20
+		padding := (headerWidth - len(header)) / 2
+		ret += fmt.Sprintf("%*s%s%*s\n", padding, "", header, headerWidth-len(header)-padding, "")
+		ret += "Su Mo Tu We Th Fr Sa\n"
+		for i := 0; i < int(startDayOfWeek); i++ {
+			ret += "   "
 		}
-		ret += "\n"
-		startDayOfWeek = 0
+		day := 1
+		for day <= numDays {
+			for i := int(startDayOfWeek); i < 7 && day <= numDays; i++ {
+				if day == today.Day() {
+					ret += fmt.Sprintf("\x1b[30;47m%2d\x1b[0m ", day)
+				} else {
+					ret += fmt.Sprintf("%2d ", day)
+				}
+				day++
+			}
+			ret += "\n"
+			startDayOfWeek = 0
+		}
+		return ret
 	}
-	return ret
-}
 */
 const nextlogrun = `#!/bin/bash
 _nextskywireclilogrun() {
