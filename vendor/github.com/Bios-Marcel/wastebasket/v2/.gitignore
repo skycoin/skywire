@@ -2,9 +2,9 @@
 *.out
 # Default names of binaries
 trash
-trash.exe
 empty
-empty.exe
+query
+restore
 wastebasket
-wastebasket.exe
- 
+wastebasket.test
+*.exe
