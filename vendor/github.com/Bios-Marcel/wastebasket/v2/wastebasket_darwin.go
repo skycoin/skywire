@@ -1,5 +1,3 @@
-//go:build darwin && !ios
-
 package wastebasket
 
 import (
@@ -42,4 +40,9 @@ func Trash(paths ...string) error {
 // Empty clears the platforms trashbin. It uses the `Finder` app to empty the trashbin.
 func Empty() error {
 	return exec.Command("osascript", "-e", `tell app "Finder" to empty`).Run()
+}
+
+// Query is not supported.
+func Query(options QueryOptions) (*QueryResult, error) {
+	return nil, ErrPlatformNotSupported
 }
