@@ -114,7 +114,7 @@ func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 	if c.DmsgDiscovery == "" {
 		var envServices EnvServices
 		var services Services
-		if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
+		if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
 			if testEnv {
 				if err := json.Unmarshal(envServices.Test, &services); err != nil {
 					return

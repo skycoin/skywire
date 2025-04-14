@@ -229,7 +229,7 @@ func server() {
 	case <-dmsgclient.Ready():
 	}
 
-	lis, err := dmsgclient.Listen(uint16(dmsgPort)) //nolint: gosec
+	lis, err := dmsgclient.Listen(dmsgPort) //nolint: gosec
 	if err != nil {
 		log.WithError(err).Fatal()
 	}
