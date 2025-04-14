@@ -87,11 +87,11 @@ func init() {
 		log.Panic("arches.json ", err)
 	}
 	var js interface{}
-	err = json.Unmarshal([]byte(ServicesJSON), &js)
+	err = json.Unmarshal(ServicesJSON, &js)
 	if err != nil {
 		log.Panic("services-config.json ", err)
 	}
-	err = json.Unmarshal([]byte(DmsghttpJSON), &js)
+	err = json.Unmarshal(DmsghttpJSON, &js)
 	if err != nil {
 		log.Panic("dmsghttp-config.json ", err)
 	}

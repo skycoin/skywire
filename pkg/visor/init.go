@@ -762,7 +762,7 @@ func sendError(log *logging.Logger, remoteConn net.Conn, sendErr error) {
 		log.WithError(err).Error("Failed to unmarshal json")
 	}
 
-	_, err = remoteConn.Write([]byte(srvReply))
+	_, err = remoteConn.Write(srvReply)
 	if err != nil {
 		log.WithError(err).Error("Failed write server msg")
 	}
@@ -1528,7 +1528,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	if serviceDisc == "" { //it might be intentionally blank ; consider revising.
 		var envServices skywire.EnvServices
 		var services skywire.Services
-		if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err == nil {
+		if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
 			if err := json.Unmarshal(envServices.Prod, &services); err == nil {
 				serviceDisc = services.ServiceDiscovery
 			}
