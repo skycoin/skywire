@@ -29,7 +29,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	//check if any services were passed
 	if services == nil {
 		var envServices skywire.EnvServices
-		if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err != nil {
+		if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err != nil {
 			return nil
 		}
 		if !testEnv {
@@ -142,7 +142,7 @@ func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool
 	var dmsgHTTPServersList *DmsgHTTPServers
 	var envServices skywire.EnvServices
 	var svcs skywire.Services
-	if err := json.Unmarshal([]byte(skywire.ServicesJSON), &envServices); err != nil {
+	if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err != nil {
 		return nil, nil
 	}
 	if !testEnv {

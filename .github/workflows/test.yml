@@ -10,8 +10,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Requirements
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.64.5
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.1
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+          sudo apt install libglfw3-dev libgl1-mesa-dev xorg-dev libglu1-mesa-dev
           make dep
           chmod +x ./ci_scripts/create-ip-aliases.sh
           ./ci_scripts/create-ip-aliases.sh
@@ -46,9 +47,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Requirements
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.64.5
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.1
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
           make dep
+          brew install glfw
         shell: bash
       - name: Checking Format and Testing
         run: make check
@@ -66,7 +68,7 @@ jobs:
         run: |
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.1.1
           make dep
       - name: Testing
         run:  |

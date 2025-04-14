@@ -63,7 +63,6 @@ func TestNewNode(t *testing.T) {
 }
 
 func makeStartNode(t *testing.T, config visorconfig.HypervisorConfig) (string, *http.Client, func()) {
-	// nolint: gomnd
 	defaultMockConfig := MockConfig{
 		Visors:            5,
 		MaxTpsPerVisor:    10,

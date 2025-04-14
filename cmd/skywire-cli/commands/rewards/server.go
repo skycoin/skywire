@@ -226,7 +226,7 @@ func server() {
 	case <-dmsgclient.Ready():
 	}
 
-	lis, err := dmsgclient.Listen(uint16(dmsgPort)) //nolint: gosec
+	lis, err := dmsgclient.Listen(dmsgPort) //nolint: gosec
 	if err != nil {
 		log.WithError(err).Fatal()
 	}
@@ -569,25 +569,19 @@ func server() {
 				result += `<table style="width:100%; text-align:center;">` + "\n"
 				result += "<tr><th>GB</th><th>TB</th></tr>\n"
 
-				maxLen := len(bsstatsGB)
-				if len(bsstatsTB) > maxLen {
-					maxLen = len(bsstatsTB)
-				}
-				for i := 0; i < maxLen; i++ {
-					result += "<tr>\n"
-					if i < len(bsstatsGB) {
-						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsGB[i])
-					} else {
-						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
-					}
-					if i < len(bsstatsTB) {
-						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", bsstatsTB[i])
-					} else {
-						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
-					}
-					result += "</tr>\n"
-				}
-				result += "</table>\n<br>"
+	// 				var totalBytes int64
+	// 				for _, ni := range nis {
+	// 					surveytbs, err := script.File(ni).JQ(".ghw_blockinfo.total_size_bytes").Reject("null").Replace(`"`, "").String()
+	// 					if err == nil {
+	// 						if surveytbs != "\n" && surveytbs != "" {
+	// 							byteValue, err := strconv.ParseInt(strings.TrimRight(surveytbs, "\n"), 10, 64)
+	// 							if err != nil {
+	// 								result += fmt.Sprintf("Non nil error from strconv.ParseInt: %v\n", err)
+	// 							}
+	// 							totalBytes += byteValue
+	// 						}
+	// 					}
+	// 				}
 
 				var totalramBytes int64
 				for _, ni := range nis {
@@ -622,25 +616,14 @@ func server() {
 				result += `<table style="width:100%; text-align:center;">` + "\n"
 				result += "<tr><th>GB</th><th>MB</th></tr>\n"
 
-				maxLen = len(statsGB)
-				if len(statsMB) > maxLen {
-					maxLen = len(statsMB)
-				}
-				for i := 0; i < maxLen; i++ {
-					result += "<tr>\n"
-					if i < len(statsGB) {
-						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsGB[i])
-					} else {
-						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
-					}
-					if i < len(statsMB) {
-						result += fmt.Sprintf(`<td style="text-align:center;">%s</td>`+"\n", statsMB[i])
-					} else {
-						result += `<td style="text-align:center;"></td>` + "\n" // Empty centered cell
-					}
-					result += "</tr>\n"
-				}
-				result += "</table>\n<br>"
+	// 				formattedTotal, err := script.Echo(fmt.Sprintf("%d", totalBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
+	// 				if err != nil {
+	// 					result += fmt.Sprintf("%v\n", err)
+	// 				}
+	// 				result += fmt.Sprintf("<u>Survey total byte size (cumulative):</u> %s\n", formattedTotal)
+	// 				result += "<u>Survey total byte size statistics:</u>\n"
+	// 				result += `<table style="width:100%; text-align:center;">` + "\n"
+	// 				result += "<tr><th>GB</th><th>TB</th></tr>\n"
 
 			}
 			return fmt.Sprintf("<div style='float: right;'>%s</div>", result+"<br>"+htmltoplink), nil
@@ -685,47 +668,17 @@ func server() {
 				skycoinpershare2 = ""
 			}
 
-			var distributedIcon string
-			if _, err := os.Stat(wd + `/` + "hist/" + rewardtxncsvs[i] + ".txt"); err == nil {
-				distributedIcon = "<span style='color: green;'>&#10004;</span>"
-			} else {
-				distributedIcon = "<span style='color: red;'>&#10060;</span>"
-			}
-			l += "<tr>\n"
-			l += "<td style='text-align: center;'><a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a></td>\n"
-			l += "<td style='text-align: center;'>" + skycoinpershare1 + "</td>\n"
-			if skycoinpershare2 != "" {
-				l += "<td style='text-align: center;'>" + skycoinpershare2 + "</td>\n"
-			} else {
-				l += "<td style='text-align: center;'></td>\n"
-			}
-			l += "<td style='text-align: center;'>" + distributedIcon + "</td>\n"
-			l += "</tr>\n"
-		}
-		l += "</tbody>\n</table>\n"
-		l += "<br>" + htmltoplink
+	// //				statsMB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").Slice() //nolint
+	// //				statsGB, _ := script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' `+wd + `/`+`rewards/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("M").Slice() //nolint
 
-		tmpl0, err1 := tmpl.Clone()
-		if err1 != nil {
-			fmt.Println("Error cloning template:", err1)
-		}
-		_, err1 = tmpl0.New("this").Parse(htmlRewardPageTemplate)
-		if err1 != nil {
-			fmt.Println("Error parsing Front Page template:", err1)
-		}
-		tmpl := tmpl0
-		htmlPageTemplateData1 := htmlTemplateData{
-			Title:   "Skycoin Reward Calculation and Distribution",
-			Content: htmpl.HTML(l), //nolint
-		}
-		tmplData := map[string]interface{}{
-			"Page": htmlPageTemplateData1,
-		}
-		var result bytes.Buffer
-		err = tmpl.Execute(&result, tmplData)
-		if err != nil {
-			fmt.Println("error: ", err)
-		}
+	// 				ramTotal, err := script.Echo(fmt.Sprintf("%d", totalramBytes)).ExecForEach("numfmt --to=iec {{.}}").String()
+	// 				if err != nil {
+	// 					result += fmt.Sprintf("%v\n", err)
+	// 				}
+	// 				result += fmt.Sprintf("<u>Survey total RAM byte size (cumulative):</u> %s\n", ramTotal)
+	// 				result += "<u>Survey total usable ram byte size statistics:</u>\n"
+	// 				result += `<table style="width:100%; text-align:center;">` + "\n"
+	// 				result += "<tr><th>GB</th><th>MB</th></tr>\n"
 
 		c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)) //nolint
 		c.Writer.Flush()
