@@ -1,17 +1,23 @@
-// cmd/skywire/skywire.go
+// cmd/skycoin-skywire/skywire.go
 /*
-skywire
+skywire + skycoin
 */
 package main
 
 import (
 	cc "github.com/ivanpirog/coloredcobra"
+	skycoin "github.com/skycoin/skycoin/cmd/skycoin-wallet/commands"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/cmd/skycoin-skywire/commands"
+	"github.com/skycoin/skywire/cmd/skywire/commands"
 )
 
 func init() {
+	commands.RootCmd.AddCommand(
+		skycoin.RootCmd,
+	)
+	skycoin.RootCmd.Use = "skycoin"
+	skycoin.RootCmd.Short = "skycoin daemon & cli"
 	var helpflag bool
 	commands.RootCmd.SetUsageTemplate(help)
 	commands.RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help menu")

@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/0magnet/calvin"
 	"github.com/elazarl/goproxy"
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
@@ -53,12 +54,9 @@ func init() {
 
 // RootCmd is the root command for skysocks
 var RootCmd = &cobra.Command{
-	Use:   "skysocks-client",
-	Short: "skywire socks5 proxy client application",
-	Long: `
-	┌─┐┬┌─┬ ┬┌─┐┌─┐┌─┐┬┌─┌─┐   ┌─┐┬  ┬┌─┐┌┐┌┌┬┐
-	└─┐├┴┐└┬┘└─┐│ ││  ├┴┐└─┐───│  │  │├┤ │││ │
-	└─┘┴ ┴ ┴ └─┘└─┘└─┘┴ ┴└─┘   └─┘┴─┘┴└─┘┘└┘ ┴ `,
+	Use:                   "skysocks-client",
+	Short:                 "skywire socks5 proxy client application",
+	Long:                  calvin.AsciiFont("skysocks-client"),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/skycoin/skywire/internal/config"
@@ -19,11 +20,8 @@ var RootCmd = &cobra.Command{
 	Use: func() string {
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
-	Short: "skywire environment generator",
-	Long: `
-	┌─┐┬ ┬   ┌─┐┌┐┌┬  ┬
-	└─┐│││───├┤ │││└┐┌┘
-	└─┘└┴┘   └─┘┘└┘ └┘ `,
+	Short:                 "skywire environment generator",
+	Long:                  calvin.AsciiFont("sw-env"),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
