@@ -308,7 +308,7 @@ func fmtDuration(d time.Duration) string {
 }
 
 func httpGetString(url string) string {
-	resp, err := http.Get(url)
+	resp, err := http.Get(url) //nolint
 	if err == nil {
 		defer resp.Body.Close() //nolint
 		bodyBytes, err := io.ReadAll(resp.Body)

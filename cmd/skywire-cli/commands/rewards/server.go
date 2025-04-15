@@ -492,7 +492,7 @@ func server() {
 			}
 			firstDayOfNextYear := time.Date(currentYear+1, time.January, 1, 0, 0, 0, 0, time.UTC)
 			lastDayOfYear := firstDayOfNextYear.Add(-time.Second)
-			totalDaysInYear := int(lastDayOfYear.YearDay())
+			totalDaysInYear := lastDayOfYear.YearDay()
 			skycoinPerDay := yearlyTotal / float64(totalDaysInYear)
 			result += fmt.Sprintf("%g Skycoin per day\n<br>", skycoinPerDay)
 			return result
