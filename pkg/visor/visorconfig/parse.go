@@ -24,16 +24,19 @@ func Parse(log *logging.Logger, r io.Reader, confPath string, visorBuildInfo *bu
 
 	conf, err = Reader(r, confPath)
 	if err != nil {
+		log.Debug(`error on Reader(r, confPath)`)
 		return nil, compat, err
 	}
 	// we check if the version of the visor and config are the same
 	if (conf.Version != "unknown") && (visorBuildInfo.Version != "unknown") {
 		cVer, err := semver.Make(strings.TrimPrefix(conf.Version, "v"))
 		if err != nil {
+			log.Debug(`error on semver.Make(strings.TrimPrefix(conf.Version, "v"))`)
 			return conf, compat, err
 		}
 		vVer, err := semver.Make(strings.TrimPrefix(visorBuildInfo.Version, "v"))
 		if err != nil {
+			log.Debug(`error on semver.Make(strings.TrimPrefix(visorBuildInfo.Version, "v"))`)
 			return conf, compat, err
 		}
 		if cVer.Major == vVer.Major {
