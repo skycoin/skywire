@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/0magnet/calvin"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -41,11 +42,7 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", ""))+" [config.json]", " ")[0]
 	}(),
 	Short: "Route Setup Node for skywire",
-	Long: `
-	┌─┐┌─┐┌┬┐┬ ┬┌─┐   ┌┐┌┌─┐┌┬┐┌─┐
-	└─┐├┤  │ │ │├─┘───││││ │ ││├┤
-	└─┘└─┘ ┴ └─┘┴     ┘└┘└─┘─┴┘└─┘`,
-
+	Long:  calvin.AsciiFont("route-setup-node"),
 	Run: func(_ *cobra.Command, args []string) {
 		mLog := logging.NewMasterLogger()
 		log := logging.MustGetLogger(tag)

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/0magnet/calvin"
 	"github.com/bitfield/script"
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
@@ -64,11 +65,8 @@ var RootCmd = &cobra.Command{
 	Use: func() string {
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
-	Short: "Command Line Interface for skywire",
-	Long: `
-	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┌─┐┬  ┬
-	└─┐├┴┐└┬┘││││├┬┘├┤───│  │  │
-	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘  └─┘┴─┘┴`,
+	Short:                 "Command Line Interface for skywire",
+	Long:                  calvin.AsciiFont("skywire-cli"),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -85,7 +83,6 @@ var treeCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Run: func(_ *cobra.Command, _ []string) {
-		// You can use a LeveledList here, for easy generation.
 		leveledList := pterm.LeveledList{}
 		leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: RootCmd.Use})
 		for _, j := range RootCmd.Commands() {

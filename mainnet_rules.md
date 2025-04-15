@@ -103,7 +103,7 @@ skywire cli -v
 skywire visor -v
 ```
 
-NOTE: the uptie tracker and other services consider the visor's config version - not the actual binary version. It is expected that the visor's config is re-generated on every update in order to include any config changes which may have been introduced
+NOTE: the uptime tracker and other services consider the visor's config version - not the actual binary version. It is expected that the visor's config is re-generated on every update in order to include any config changes which may have been introduced
 
 The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
 
@@ -181,7 +181,7 @@ $ curl -sL https://ut.skywire.skycoin.com/uptimes?v=v2 | jq '[.[] | select(.pk =
 
 ```
 
-* Using `skywire cli ut` is the recoended approach, as it avoids rate-liiting of requests by caching the data which is fetched from the uptie tracker
+* Using `skywire cli ut` is the recommended approach, as it avoids rate-limiting of requests by caching the data which is fetched from the uptime tracker
 
 ```
 $ skywire cli ut --help
@@ -191,7 +191,7 @@ Check local visor daily uptime percent with:
  skywire-cli ut -k $(skywire cli visor pk)
 Set cache file location to "" to avoid using cache files
 
- 
+
 
 Flags:
   -m, --cfa int      update cache files if older than n minutes (default 5)
@@ -225,11 +225,11 @@ The same data in a different format should be displayed in the [dmsg-discovery a
 
 The data from the dmsg discovery should be considered authoritative or current.
 
-### Per Machine Limit 
+### Per Machine Limit
 
 Virtual machines are not eligible for rewards, as there is no way to limit the number of instances of skywire running on the same machine if they are running in virtual machines.
 
-The visor is determined to be running on a virtual machine if a `hypervisor` is listed in it's survey uch as `kvm`, `xenhvm`, or `hyperv` - (not to be confused with a skywire hypervisor)
+The visor is determined to be running on a virtual machine if a `hypervisor` is listed in it's survey such as `kvm`, `xenhvm`, or `hyperv` - (not to be confused with a skywire hypervisor)
 
 Multiple instances of skywire which are otherwise determined to be running on the same machine (via their mac address) will have one reward share divided between all the skycoin reward addresses which are set for those visors.
 
@@ -439,7 +439,7 @@ If there is no good way to rectify historical or undistributed rewards backlog, 
 
 ## Deployment Outages
 
-While we do our best to maintain the skywire production deployment, there have been instances of issues or outages in the past. We attempt to correct these outages as soon as possible and avoid recurrant disruptions.
+While we do our best to maintain the skywire production deployment, there have been instances of issues or outages in the past. We attempt to correct these outages as soon as possible and avoid recurrent disruptions.
 
 The policy for handling rewards in the instance of a deployment outage is to repeat the distribution for the last day where uptime was unaffected by the outage; for the duration of the outage.
 
