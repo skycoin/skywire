@@ -3,13 +3,13 @@ package cliconfig
 
 import (
 	"bytes"
-
 	"os"
 	"path/filepath"
-	"github.com/spf13/cobra"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 
+	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var parseCmd = &cobra.Command{
