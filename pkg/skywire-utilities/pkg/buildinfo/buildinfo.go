@@ -107,7 +107,10 @@ func Version() string {
 
 // DBIVersion returns bi.Main.Version.
 func DBIVersion() string {
-	return bi.Main.Version
+	if bi != nil {
+		return bi.Main.Version
+	}
+	return ""
 }
 
 // Go returns the Go compiler version used for the build.
