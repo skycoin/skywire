@@ -4,11 +4,13 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 
+	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 )
@@ -20,11 +22,11 @@ func StartDmsg(ctx context.Context, dmsgLogger *logging.Logger, pk cipher.PubKey
 
 	stop = func() {
 		err := dmsgC.Close()
-		dmsgLogger.WithError(err).Debug("Disconnected from dmsg network.")
-		fmt.Printf("\n")
+		dmsgLogger.WithError(err).Debug("Disconnected from dmsg network.\n")
+		log.Println()
 	}
-	dmsgLogger.WithField("public_key", pk.String()).WithField("dmsg_disc", dmsgDisc).
-		Debug("Connecting to dmsg network...")
+	dmsgLogger.WithField("dmsg_disc", dmsgDisc).Debug("Connecting to dmsg network...\n")
+	dmsgLogger.WithField("public_key", pk.String()).Debug("\n")
 	select {
 	case <-ctx.Done():
 		stop()
@@ -36,39 +38,42 @@ func StartDmsg(ctx context.Context, dmsgLogger *logging.Logger, pk cipher.PubKey
 	}
 }
 
-//TODO
-/*
-func startDmsgDirect(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
-	var keys cipher.PubKeys
-	servers := v.conf.Dmsg.Servers
-
+func StartDmsgDirect(ctx context.Context, dmsgLogger *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, httpClient *http.Client, _ string, dmsgSessions int, destination string) (dmsgC *dmsg.Client, stop func(), err error) { //nolint:all
+	var servers []*disc.Entry
+	for i := range dmsg.Prod.DmsgServers {
+		servers = append(servers, &dmsg.Prod.DmsgServers[i])
+	}
 	if len(servers) == 0 {
-		return nil
+		return nil, nil, fmt.Errorf("no dmsg servers configured")
 	}
 
-	keys = append(keys, v.conf.PK)
+	var keys cipher.PubKeys
+
+	keys = append(keys, pk)
 	entries := direct.GetAllEntries(keys, servers)
-	dClient := direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
+	dClient := direct.NewClient(entries, dmsgLogger)
 
-	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
-		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+	// Fix `dmsg error 102 - entry is not of client in discovery` error
+	destinationPk := cipher.PubKey{}
+	if err = destinationPk.UnmarshalText([]byte(destination)); err != nil {
+		return nil, nil, fmt.Errorf("destination address (pk) is wrong")
+	}
+	var delegatedServers []cipher.PubKey
+	for _, server := range servers {
+		delegatedServers = append(delegatedServers, server.Static)
+	}
+	clientEntry := &disc.Entry{
+		Client: &disc.Client{
+			DelegatedServers: delegatedServers,
+		},
+		Static: destinationPk,
+	}
+	err = dClient.PostEntry(ctx, clientEntry)
 	if err != nil {
-		return fmt.Errorf("failed to start dmsg: %w", err)
+		return nil, nil, fmt.Errorf("an error occurred during setup dClient for httpClient of destination")
 	}
 
-	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
-
-	v.pushCloseStack("dmsg_http", func() error {
-		closeDmsgDC()
-		return nil
-	})
-
-	v.initLock.Lock()
-	v.dClient = dClient
-	v.dmsgHTTP = &dmsgHTTP
-	v.dmsgDC = dmsgDC
-	v.initLock.Unlock()
-	time.Sleep(time.Duration(len(entries)) * time.Second)
-	return nil
+	dmsgConfig := dmsg.DefaultConfig()
+	dmsgConfig.MinSessions = dmsgSessions
+	return direct.StartDmsg(ctx, dmsgLogger, pk, sk, dClient, dmsgConfig)
 }
-*/
