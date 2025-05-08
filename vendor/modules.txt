@@ -756,8 +756,8 @@ github.com/shopspring/decimal
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20250130234351-770537afb4cb
-## explicit; go 1.23
+# github.com/skycoin/dmsg v1.3.29-0.20250508005049-d5e314dd6cb1
+## explicit; go 1.24
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands/config

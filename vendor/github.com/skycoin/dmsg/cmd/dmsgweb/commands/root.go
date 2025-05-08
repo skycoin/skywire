@@ -24,19 +24,18 @@ import (
 )
 
 var (
-	dLog               *logging.Logger
+	dlog               *logging.Logger
 	httpC              http.Client
 	dmsgC              *dmsg.Client
-	closeDmsg          func()
 	dmsgDisc           = dmsg.DiscAddr(false)
 	proxyAddr          string
 	dmsgSessions       int
-	dmsgAddr           []string
+	dmsgAddr           []string //nolint unused
 	dialPK             []cipher.PubKey
 	filterDomainSuffix string
 	sk                 cipher.SecKey
 	pk                 cipher.PubKey
-	dmsgWebLog         *logging.Logger
+	dmsgWebLog         *logging.Logger //nolint unused
 	logLvl             string
 	webPort            []uint
 	proxyPort          uint
@@ -52,8 +51,10 @@ var (
 	localPort          []uint
 	err                error
 	rawTCP             []bool
-	httpClient         *http.Client
+	httpClient         *http.Client //nolint unused
 	dialer             proxy.Dialer = proxy.Direct
+	useHTTP            bool
+	dmsgHTTPPath       string
 )
 
 // Execute executes root CLI command.
@@ -350,11 +351,11 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 	}
 }
 
-type ginHandler struct {
+type ginHandler struct { //nolint unused
 	Router *gin.Engine
 }
 
-func (h *ginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *ginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint unused
 	h.Router.ServeHTTP(w, r)
 }
 
