@@ -28,11 +28,10 @@ func StartDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk ci
 
 	stop = func() {
 		err := dmsgDC.Close()
-		log.WithError(err).Debug("Disconnected from dmsg network.")
+		log.WithError(err).Debug("Disconnected from dmsg network.\n")
 	}
 
-	log.WithField("public_key", pk.String()).
-		Debug("Connecting to dmsg network...")
+	log.WithField("public_key", pk.String()).Debug("Connecting to dmsg network...\n")
 
 	select {
 	case <-ctx.Done():

@@ -43,15 +43,27 @@ func init() {
 	pk, _ = sk.PubKey() //nolint
 
 	RootCmd.AddCommand(srvCmd)
+	srvCmd.Flags().BoolVarP(&useHTTP, "http", "z", false, "use regular http to connect to dmsg discovery")
 	srvCmd.Flags().UintSliceVarP(&localPort, "lport", "p", localPort, "local application interface port(s)\033[0m\n\r")
 	srvCmd.Flags().UintSliceVarP(&dmsgPort, "dport", "d", dmsgPort, "DMSG port(s) to serve\033[0m\n\r")
-	srvCmd.Flags().StringSliceVarP(&wl, "wl", "w", wl, "whitelisted keys for DMSG authenticated routes\033[0m\n\r")
+	srvCmd.Flags().StringSliceVarP(&wl, "wl", "w", wl, "whitelisted keys for DMSG authenticated routes"+func() string {
+		if len(wl) > 0 {
+			return "\033[0m\n\r"
+		}
+		return ""
+	}())
 	srvCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDisc, "DMSG discovery URL\033[0m\n\r")
-	srvCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", proxyAddr, "connect to DMSG via proxy (e.g., '127.0.0.1:1080')\033[0m\n\r")
+	srvCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "F", "", "dmsghttp-config path")
+	srvCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", proxyAddr, "connect to DMSG via proxy (e.g., '127.0.0.1:1080')")
 	srvCmd.Flags().IntVarP(&dmsgSess, "dsess", "e", dmsgSess, "DMSG sessions\033[0m\n\r")
-	srvCmd.Flags().BoolSliceVarP(&rawTCP, "rt", "c", rawTCP, "proxy local port as raw TCP, comma separated\033[0m\n\r")
+	srvCmd.Flags().BoolSliceVarP(&rawTCP, "rt", "c", rawTCP, "proxy local port as raw TCP, comma separated"+func() string {
+		if len(rawTCP) > 0 {
+			return "\033[0m\n\r"
+		}
+		return ""
+	}())
 	srvCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
-	srvCmd.Flags().BoolVarP(&isEnvs, "envs", "z", false, "show example .conf file\033[0m\n\r")
+	srvCmd.Flags().BoolVarP(&isEnvs, "envs", "Z", false, "show example .conf file")
 	srvCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
 	srvCmd.CompletionOptions.DisableDefaultCmd = true
 }
@@ -74,15 +86,27 @@ var srvCmd = &cobra.Command{
 				logging.SetLevel(lvl)
 			}
 		}
-		dLog = logging.MustGetLogger("dmsgwebsrv")
+		dlog = logging.MustGetLogger("dmsgwebsrv")
+
+		if dmsgHTTPPath != "" {
+			dmsg.DmsghttpJSON, err = os.ReadFile(dmsgHTTPPath) //nolint
+			if err != nil {
+				dlog.WithError(err).Fatal("Failed to read specified dmsghttp-config")
+			}
+			err = dmsg.InitConfig()
+			if err != nil {
+				dlog.WithError(err).Fatal("Failed to unmarshal dmsghttp-config")
+			}
+		}
+
 		if len(localPort) != len(dmsgPort) || len(localPort) != len(rawTCP) {
-			dLog.Fatal("The number of local ports, DMSG ports, and raw TCP flags must be the same")
+			dlog.Fatal("The number of local ports, DMSG ports, and raw TCP flags must be the same")
 		}
 		pk, err = sk.PubKey()
 		if err != nil {
 			pk, sk = cipher.GenerateKeyPair()
 		}
-		dLog.Debugf("DMSG client public key: %v", pk.String())
+		dlog.Debugf("DMSG client public key: %v", pk.String())
 
 		if len(wl) > 0 {
 			for _, key := range wl {
@@ -91,14 +115,14 @@ var srvCmd = &cobra.Command{
 					wlkeys = append(wlkeys, pk)
 				}
 			}
-			dLog.Infof("%d keys whitelisted", len(wlkeys))
+			dlog.Infof("%d keys whitelisted", len(wlkeys))
 		}
 
 		if proxyAddr != "" {
 			var err error
 			dialer, err = proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
 			if err != nil {
-				dLog.Fatalf("Error creating SOCKS5 dialer: %v", err)
+				dlog.Fatalf("Error creating SOCKS5 dialer: %v", err)
 			}
 			httpClient = &http.Client{Transport: &http.Transport{Dial: dialer.Dial}}
 		}
@@ -110,20 +134,20 @@ var srvCmd = &cobra.Command{
 
 func server() {
 
-	ctx, cancel := cmdutil.SignalContext(context.Background(), dLog)
+	ctx, cancel := cmdutil.SignalContext(context.Background(), dlog)
 	defer cancel()
 
-	dmsgClient := dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, dLog), dmsg.DefaultConfig())
+	dmsgClient := dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, dlog), dmsg.DefaultConfig())
 	defer func() {
 		if err := dmsgClient.Close(); err != nil {
-			dLog.WithError(err).Error()
+			dlog.WithError(err).Error()
 		}
 	}()
 	go dmsgClient.Serve(ctx)
 
 	select {
 	case <-ctx.Done():
-		dLog.WithError(ctx.Err()).Warn()
+		dlog.WithError(ctx.Err()).Warn()
 		return
 	case <-dmsgClient.Ready():
 	}
@@ -132,7 +156,7 @@ func server() {
 	for i := range localPort {
 		lis, err := dmsgClient.Listen(uint16(dmsgPort[i])) //nolint
 		if err != nil {
-			dLog.Fatalf("Error listening on DMSG port %d: %v", dmsgPort[i], err)
+			dlog.Fatalf("Error listening on DMSG port %d: %v", dmsgPort[i], err)
 		}
 		wg.Add(1)
 		go func(ctx context.Context, localPort uint, rawTCP bool, listener net.Listener) {
@@ -180,12 +204,12 @@ func proxyHTTPConnections(ctx context.Context, localPort uint, listener net.List
 	go func() {
 		<-ctx.Done()
 		if err := server.Shutdown(context.Background()); err != nil {
-			dLog.Errorf("HTTP server shutdown error: %v", err)
+			dlog.Errorf("HTTP server shutdown error: %v", err)
 		}
 	}()
 
 	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
-		dLog.Fatalf("HTTP server error: %v", err)
+		dlog.Fatalf("HTTP server error: %v", err)
 	}
 }
 
@@ -207,7 +231,7 @@ func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Liste
 					// Listener closed due to context cancellation
 					return
 				default:
-					dLog.Errorf("Error accepting connection: %v", err)
+					dlog.Errorf("Error accepting connection: %v", err)
 					return
 				}
 			}
@@ -218,7 +242,7 @@ func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Liste
 	for {
 		select {
 		case <-ctx.Done():
-			dLog.Info("Shutting down TCP proxy connections...")
+			dlog.Info("Shutting down TCP proxy connections...")
 			listener.Close() //nolint
 
 			connMutex.Lock()
@@ -246,7 +270,7 @@ func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Liste
 
 				localConn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", localPort))
 				if err != nil {
-					dLog.Errorf("Error connecting to local port %d: %v", localPort, err)
+					dlog.Errorf("Error connecting to local port %d: %v", localPort, err)
 
 					connMutex.Lock()
 					delete(activeConns, dmsgConn)
@@ -259,12 +283,12 @@ func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Liste
 				go func() {
 					_, err1 := io.Copy(dmsgConn, localConn)
 					if err1 != nil {
-						dLog.WithError(err1).Warn("Error on io.Copy(dmsgConn, localConn)")
+						dlog.WithError(err1).Warn("Error on io.Copy(dmsgConn, localConn)")
 					}
 				}()
 				_, err2 := io.Copy(localConn, dmsgConn)
 				if err2 != nil {
-					dLog.WithError(err2).Warn("Error on io.Copy(localConn, dmsgConn)")
+					dlog.WithError(err2).Warn("Error on io.Copy(localConn, dmsgConn)")
 				}
 
 				connMutex.Lock()
