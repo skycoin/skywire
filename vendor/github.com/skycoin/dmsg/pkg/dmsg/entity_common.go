@@ -121,7 +121,7 @@ func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) bool
 			c.log.
 				WithField("func", "EntityCommon.setSession").
 				WithError(err).
-				Warn("Callback returned non-nil error.")
+				Warn("Callback returned non-nil error.\n")
 		}
 	}
 	return true
@@ -135,7 +135,7 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 			c.log.
 				WithField("func", "EntityCommon.delSession").
 				WithError(err).
-				Warn("Callback returned non-nil error.")
+				Warn("Callback returned non-nil error.\n")
 		}
 	}
 	c.sessionsMx.Unlock()
@@ -191,7 +191,7 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSe
 		entry.Server.Address = addr
 		log = log.WithField("addr", entry.Server.Address)
 	}
-	log.Debug("Updating entry.")
+	log.Debug("Updating entry.\n")
 
 	return c.dc.PutEntry(ctx, c.sk, entry)
 }
@@ -216,7 +216,7 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, m
 			c.sessionsMx.Unlock()
 
 			if err != nil {
-				c.log.WithError(err).Warn("Failed to update discovery entry.")
+				c.log.WithError(err).Warn("Failed to update discovery entry.\n")
 			}
 
 			// Ensure we trigger another update within given 'updateInterval'.
@@ -262,7 +262,7 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 
 	entry.ClientType = clientType
 	entry.Client.DelegatedServers = srvPKs
-	c.log.WithField("entry", entry).Debug("Updating entry.")
+	c.log.WithField("entry", entry).Debug("Updating entry.\n")
 	return c.dc.PutEntry(ctx, c.sk, entry)
 }
 
@@ -286,7 +286,7 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 			c.sessionsMx.Unlock()
 
 			if err != nil {
-				c.log.WithError(err).Warn("Failed to update discovery entry.")
+				c.log.WithError(err).Warn("Failed to update discovery entry.\n")
 			}
 
 			// Ensure we trigger another update within given 'updateInterval'.
@@ -308,7 +308,7 @@ func (c *EntityCommon) delEntry(ctx context.Context) (err error) {
 		}
 	}()
 
-	c.log.WithField("entry", entry).Debug("Deleting entry.")
+	c.log.WithField("entry", entry).Debug("Deleting entry.\n")
 	return c.dc.DelEntry(ctx, entry)
 }
 

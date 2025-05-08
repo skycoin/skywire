@@ -26,8 +26,7 @@ func NewClient(entries []*disc.Entry, log *logging.Logger) disc.APIClient {
 	for _, entry := range entries {
 		entriesMap[entry.Static] = entry
 	}
-	log.WithField("func", "direct.NewClient").
-		Debug("Created Direct client.")
+	log.WithField("func", "direct.NewClient").Debug("Created Direct client.")
 	return &directClient{
 		entries: entriesMap,
 	}
