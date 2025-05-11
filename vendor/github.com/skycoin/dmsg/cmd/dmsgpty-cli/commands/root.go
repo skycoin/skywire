@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/spf13/cobra"
 
@@ -46,11 +47,8 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "DMSG pseudoterminal command line interface",
-	Long: `
-	┌┬┐┌┬┐┌─┐┌─┐┌─┐┌┬┐┬ ┬   ┌─┐┬  ┬
-	 │││││└─┐│ ┬├─┘ │ └┬┘───│  │  │
-	─┴┘┴ ┴└─┘└─┘┴   ┴  ┴    └─┘┴─┘┴
-DMSG pseudoterminal command line interface`,
+	Long: calvin.AsciiFont("dmsgpty-cli") + `
+	DMSG pseudoterminal command line interface`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
