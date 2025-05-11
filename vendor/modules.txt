@@ -98,9 +98,6 @@ cogentcore.org/core/texteditor/highlighting
 cogentcore.org/core/texteditor/text
 cogentcore.org/core/tree
 cogentcore.org/core/types
-# github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8
-## explicit; go 1.23.3
-github.com/0magnet/calvin
 # github.com/ActiveState/termtest/conpty v0.5.0
 ## explicit; go 1.12
 github.com/ActiveState/termtest/conpty
@@ -742,7 +739,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20250508005049-d5e314dd6cb1
+# github.com/skycoin/dmsg v1.3.29-0.20250511180625-78c688389aa4
 ## explicit; go 1.24
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands

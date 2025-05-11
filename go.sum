@@ -64,8 +64,6 @@ cloud.google.com/go/storage v1.14.0/go.mod h1:GrKmX003DSIwi9o29oFT7YDnHYwZoctc3f
 cogentcore.org/core v0.3.10 h1:eGTeH6dIBN5+SeADNeJ4AONtiNLPSXRcATNwhWZLjCI=
 cogentcore.org/core v0.3.10/go.mod h1:I7SDnfCnJhCbfAHRJpyhKCATCr3xE8eHHAvITfpC54M=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
-github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8 h1:F5mPw+nCDMC4Vw2ApncQNEgyWnHAeU4O3AFkfIBkWBg=
-github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8/go.mod h1:nLyIguLxcNn+I8Znp9tfjDrKOtsXL+RPhheG9mzf24w=
 github.com/ActiveState/termtest/conpty v0.5.0 h1:JLUe6YDs4Jw4xNPCU+8VwTpniYOGeKzQg4SM2YHQNA8=
 github.com/ActiveState/termtest/conpty v0.5.0/go.mod h1:LO4208FLsxw6DcNZ1UtuGUMW+ga9PFtX4ntv8Ymg9og=
 github.com/AudriusButkevicius/pfilter v0.0.11 h1:6emuvqNeH1gGlqkML35pEizyPcaxdAN4JO9sdgwcx78=
@@ -674,8 +672,8 @@ github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrf
 github.com/sirupsen/logrus v1.9.0/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
-github.com/skycoin/dmsg v1.3.29-0.20250508005049-d5e314dd6cb1 h1:duFjlYPUUlxp4r+golLYkuYZ3UKYBJVPGa2Fcf5R0Ys=
-github.com/skycoin/dmsg v1.3.29-0.20250508005049-d5e314dd6cb1/go.mod h1:M3ngXsfjfU9pPmzmltVjLmk+/9lQGMoDkv+Qm/HKeaI=
+github.com/skycoin/dmsg v1.3.29-0.20250511180625-78c688389aa4 h1:XyJVIn6x+A4qYUe5eVLDXolngPk1+FhXWrrgGkSO79c=
+github.com/skycoin/dmsg v1.3.29-0.20250511180625-78c688389aa4/go.mod h1:rPbt6ztortZ+96jHOqeV1Q3ebnMnJBcECkShHtzyt0o=
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9 h1:DElGw1Fhj4amuW1KM5q8Xowosb3RiOQce0lDJw0Qv0Y=
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9/go.mod h1:OQz8NXVJUWEw7PWYASZ/1BIw5GXgVMTGvrCGDlZa9+k=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0duwyG+7WliWz5u9kgk1h5MnLuA=

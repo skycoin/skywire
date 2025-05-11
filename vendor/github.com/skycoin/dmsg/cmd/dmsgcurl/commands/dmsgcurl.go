@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,8 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/0magnet/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -37,6 +38,7 @@ var (
 	dmsgcurlData   string
 	sk             cipher.SecKey
 	pk             cipher.PubKey
+	destPK         cipher.PubKey
 	dlog           = logging.MustGetLogger("dmsgcurl")
 	dmsgcurlAgent  string
 	logLvl         string
@@ -118,6 +120,15 @@ var RootCmd = &cobra.Command{
 			dlog.WithError(fmt.Errorf("failed to parse provided URL")).Error(errorDesc["URL_MALFORMAT"] + "\n")
 			os.Exit(errorCode["URL_MALFORMAT"])
 		}
+		destSlc := strings.Split(parsedURL.Host, ":")
+		if len(destSlc) == 1 {
+			destSlc = append(destSlc, "80")
+		}
+		err = destPK.Set(destSlc[0])
+		if err != nil {
+			dlog.WithError(err).Fatal("bad PK for host\n")
+		}
+
 		var cErr curlError
 		if useHTTP {
 			if len(dmsgDiscs) == 0 || dmsgDiscs[0] == "" {
@@ -205,14 +216,14 @@ func handleRequest(ctx context.Context, dmsgLogger *logging.Logger, pk cipher.Pu
 	if !dmsgHTTP {
 		dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dmsgLogger, pk, sk, httpClient, dmsgDisc, dmsgSessions)
 	} else {
-		destination := strings.Split(parsedURL.Host, ":")[0]
-		dmsgC, closeDmsg, err = cli.StartDmsgDirect(ctx, dmsgLogger, pk, sk, httpClient, dmsgDisc, dmsgSessions, destination)
+		dmsgC, closeDmsg, err = cli.StartDmsgDirect(ctx, dmsgLogger, pk, sk, httpClient, dmsgDisc, dmsgSessions, destPK.String())
 	}
 	if err != nil {
-		return curlError{
-			Error: fmt.Errorf("%s", errorDesc["DMSG_INIT"]),
-			Code:  errorCode["DMSG_INIT"],
-		}
+		dlog.WithError(err).Debug("Error connecting to dmsg network")
+		//		return curlError{
+		//			Error: fmt.Errorf("%s", errorDesc["DMSG_INIT"]),
+		//			Code:  errorCode["DMSG_INIT"],
+		//		}
 	}
 	defer closeDmsg()
 
@@ -256,16 +267,43 @@ func handleRequest(ctx context.Context, dmsgLogger *logging.Logger, pk cipher.Pu
 			req.Header.Set("Content-Type", "text/plain")
 		}
 		resp, err := httpC.Do(req)
+		for attempts := 1; attempts <= 10; attempts++ {
+			if err != nil {
+				var netErr net.Error
+
+				if errors.As(err, &netErr) && netErr.Timeout() {
+					dlog.WithError(err).Error("Failed to perform HTTP request\n")
+					return curlError{
+						Error: fmt.Errorf("%s", errorDesc["RECV_ERROR"]),
+						Code:  errorCode["RECV_ERROR"],
+					}
+				} else if errors.Is(err, context.DeadlineExceeded) {
+					dlog.WithError(err).Error("Failed to perform HTTP request\n")
+					return curlError{
+						Error: fmt.Errorf("%s", errorDesc["RECV_ERROR"]),
+						Code:  errorCode["RECV_ERROR"],
+					}
+				}
+
+				dlog.WithError(err).Debugf("Attempt %d failed, retrying...\n", attempts)
+				time.Sleep(time.Duration(attempts) * time.Second) // Exponential backoff
+				resp, err = httpC.Do(req)
+				continue
+			}
+
+			defer resp.Body.Close() //nolint
+			dlog.Debugf("Request succeeded with status code: %d\n", resp.StatusCode)
+			break
+		}
+
 		if err != nil {
-			dlog.WithError(err).Error("Failed to preform HTTP request\n")
+			dlog.WithError(err).Debug("Failed to perform HTTP request after maximum retries\n")
 			return curlError{
 				Error: fmt.Errorf("%s", errorDesc["RECV_ERROR"]),
 				Code:  errorCode["RECV_ERROR"],
 			}
 		}
-		//		if maxSize > 0 && resp.ContentLength > maxSize*1024 {
-		//			return fmt.Errorf("requested file size is more than allowed size: %d KB > %d KB", (resp.ContentLength / 1024), maxSize)
-		//		}
+
 		n, err := cancellableCopy(ctx, file, resp.Body, resp.ContentLength)
 		if err != nil {
 			dlog.WithError(err).Error(fmt.Sprintf("download failed at %d/%dB\n", n, resp.ContentLength))
@@ -324,7 +362,7 @@ func closeAndCleanFile(file *os.File, err error) {
 
 func closeResponseBody(resp *http.Response) {
 	if err := resp.Body.Close(); err != nil {
-		dlog.WithError(err).Fatal("Failed to close response body\n")
+		dlog.WithError(err).Debug("Failed to close response body\n")
 	}
 }
 
