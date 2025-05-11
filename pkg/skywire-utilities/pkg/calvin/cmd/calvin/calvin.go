@@ -6,10 +6,9 @@ convert text to ascii art
 package main
 
 import (
+	"github.com/0magnet/calvin/cmd/calvin/commands"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
-
-	"github.com/0magnet/calvin/cmd/calvin/commands"
 )
 
 func init() {

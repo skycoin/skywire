@@ -20,9 +20,9 @@ import (
 	"cogentcore.org/core/paint"
 	"cogentcore.org/core/styles"
 	"cogentcore.org/core/tree"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 
 	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 )
 
 //go:embed mononoki/*.ttf

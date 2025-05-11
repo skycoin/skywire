@@ -3,19 +3,19 @@ package commands
 
 import (
 	"bufio"
-	"strings"
 	"fmt"
 	"os"
-	"github.com/spf13/cobra"
-	"github.com/0magnet/calvin"
+	"strings"
 
+	"github.com/0magnet/calvin"
+	"github.com/spf13/cobra"
 )
 
 // rootCmd represents the base command for the application
 var RootCmd = &cobra.Command{
 	Use:   "calvin",
 	Short: "generate calvin ascii font from text",
-	Long: ``,
+	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var input string
 

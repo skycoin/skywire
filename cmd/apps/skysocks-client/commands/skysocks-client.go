@@ -14,7 +14,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/elazarl/goproxy"
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
@@ -25,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"

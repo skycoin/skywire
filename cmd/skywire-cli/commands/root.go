@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/bitfield/script"
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
@@ -32,6 +31,7 @@ import (
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 )
 
 func init() {
