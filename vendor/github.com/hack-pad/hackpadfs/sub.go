@@ -10,8 +10,8 @@ var _ interface {
 } = &subFS{}
 
 type subFS struct {
-	basePath string
 	rootFS   FS
+	basePath string
 }
 
 func newSubFS(fs FS, dir string) (FS, error) {

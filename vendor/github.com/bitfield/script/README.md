@@ -48,7 +48,7 @@ If you're already familiar with shell scripting and the Unix toolset, here is a 
 | `jq`     | [`JQ`](https://pkg.go.dev/github.com/bitfield/script#Pipe.JQ) |
 | `ls`               | [`ListFiles`](https://pkg.go.dev/github.com/bitfield/script#ListFiles) |
 | `sed`              | [`Replace`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Replace) / [`ReplaceRegexp`](https://pkg.go.dev/github.com/bitfield/script#Pipe.ReplaceRegexp) |
-| `sha256sum`        | [`SHA256Sum`](https://pkg.go.dev/github.com/bitfield/script#Pipe.SHA256Sum) / [`SHA256Sums`](https://pkg.go.dev/github.com/bitfield/script#Pipe.SHA256Sums) |
+| `sha256sum`        | [`Hash`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Hash) / [`HashSums`](https://pkg.go.dev/github.com/bitfield/script#Pipe.HashSums) |
 | `tail`             | [`Last`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Last) |
 | `tee`              | [`Tee`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Tee) |
 | `uniq -c`          | [`Freq`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Freq) |
@@ -259,9 +259,39 @@ Let's try it out with some [sample data](testdata/access.log):
  1 90.53.111.17
 ```
 
+# A `script` “interpreter”
+
+One of the nice things about shell scripts is that there's no build process: the script file itself is the “executable” (in fact, it's interpreted by the shell). Simon Willison (and GPT-4) contributed this elegant `script` interpreter, written in `bash`:
+
+* [`go-script`](https://til.simonwillison.net/bash/go-script)
+
+With `go-script`, you can run `script` one-liners directly:
+
+```sh
+cat file.txt | ./goscript.sh -c 'script.Stdin().Column(1).Freq().First(10).Stdout()'
+```
+
+or create `.goscript` files that you can run using a “shebang” line:
+
+```sh
+#!/tmp/goscript.sh
+script.Stdin().Column(1).Freq().First(10).Stdout()
+```
+
 # Documentation
 
 See [pkg.go.dev](https://pkg.go.dev/github.com/bitfield/script) for the full documentation, or read on for a summary.
+
+[![The Power of Go: Tools cover image](img/tools.png)](https://bitfieldconsulting.com/books/tools)
+
+The `script` package originated as an exercise in my book [The Power of Go: Tools](https://bitfieldconsulting.com/books/tools):
+
+> *Not all software engineering is about writing applications. Developers also need tooling: programs and services to automate everyday tasks like configuring servers and containers, running builds and tests, deploying their applications, and so on. Why shouldn't we be able to use Go for that purpose, too?*
+>
+> *`script` is designed to make it easy to write Go programs that chain together operations into a pipeline, in the same way that shell scripts do, but with the robust type checking and error handling of a real programming language. You can use `script` to construct the sort of simple one‐off pipelines that would otherwise require the shell, or special‐purpose tools.*
+>
+> *So, when plain Go doesn’t provide a convenient way to solve a problem, you yourself can use it to implement a domain-specific “language” that does. In this case, we used Go to provide the language of Unix‐style pipelines. But we could have chosen any architecture we wanted to suit the problem. If Go doesn’t already provide the tool you need, use Go to build that tool, then use it.*\
+> —From the book
 
 ## Sources
 
@@ -317,6 +347,7 @@ Filters are methods on an existing pipe that also return a pipe, allowing you to
 | [`First`](https://pkg.go.dev/github.com/bitfield/script#Pipe.First) | first N lines of input |
 | [`Freq`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Freq) | frequency count of unique input lines, most frequent first |
 | [`Get`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Get) | response to HTTP GET on supplied URL |
+| [`HashSums`](https://pkg.go.dev/github.com/bitfield/script#Pipe.HashSums) | hashes of each listed file |
 | [`Join`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Join) | replace all newlines with spaces |
 | [`JQ`](https://pkg.go.dev/github.com/bitfield/script#Pipe.JQ) | result of `jq` query |
 | [`Last`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Last) | last N lines of input|
@@ -327,7 +358,6 @@ Filters are methods on an existing pipe that also return a pipe, allowing you to
 | [`RejectRegexp`](https://pkg.go.dev/github.com/bitfield/script#Pipe.RejectRegexp) | lines not matching given regexp |
 | [`Replace`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Replace) | matching text replaced with given string |
 | [`ReplaceRegexp`](https://pkg.go.dev/github.com/bitfield/script#Pipe.ReplaceRegexp) | matching text replaced with given string |
-| [`SHA256Sums`](https://pkg.go.dev/github.com/bitfield/script#Pipe.SHA256Sums) | SHA-256 hashes of each listed file |
 | [`Tee`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Tee) | input copied to supplied writers |
 
 Note that filters run concurrently, rather than producing nothing until each stage has fully read its input. This is convenient for executing long-running commands, for example. If you do need to wait for the pipeline to complete, call [`Wait`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Wait).
@@ -340,9 +370,9 @@ Sinks are methods that return some data from a pipe, ending the pipeline and ext
 | ---- | ----------- | ------- |
 | [`AppendFile`](https://pkg.go.dev/github.com/bitfield/script#Pipe.AppendFile) | appended to file, creating if it doesn't exist | bytes written, error |
 | [`Bytes`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Bytes) | | data as `[]byte`, error
+| [`Hash`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Hash) | | hash, error  |
 | [`CountLines`](https://pkg.go.dev/github.com/bitfield/script#Pipe.CountLines) | |number of lines, error  |
 | [`Read`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Read) | given `[]byte` | bytes read, error  |
-| [`SHA256Sum`](https://pkg.go.dev/github.com/bitfield/script#Pipe.SHA256Sum) | | SHA-256 hash, error  |
 | [`Slice`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Slice) | | data as `[]string`, error  |
 | [`Stdout`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Stdout) | standard output | bytes written, error  |
 | [`String`](https://pkg.go.dev/github.com/bitfield/script#Pipe.String) | | data as `string`, error  |
@@ -353,6 +383,9 @@ Sinks are methods that return some data from a pipe, ending the pipeline and ext
 
 | Version | New |
 | ----------- | ------- |
+| 0.24.1  | [`JQ`](https://pkg.go.dev/github.com/bitfield/script#Pipe.JQ) accepts JSONLines data |
+| 0.24.0  | [`Hash`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Hash) |
+|         | [`HashSums`](https://pkg.go.dev/github.com/bitfield/script#Pipe.HashSums) |
 | 0.23.0  | [`WithEnv`](https://pkg.go.dev/github.com/bitfield/script#Pipe.WithEnv) |
 |         | [`DecodeBase64`](https://pkg.go.dev/github.com/bitfield/script#Pipe.DecodeBase64) / [`EncodeBase64`](https://pkg.go.dev/github.com/bitfield/script#Pipe.EncodeBase64) |
 |         | [`Wait`](https://pkg.go.dev/github.com/bitfield/script#Pipe.Wait) returns error |

@@ -39,7 +39,7 @@ func NewFS(ctx context.Context, name string, options Options) (*FS, error) {
 	if options.Factory == nil {
 		options.Factory = idb.Global()
 	}
-	openRequest, err := options.Factory.Open(ctx, name, fsVersion, func(db *idb.Database, oldVersion, newVersion uint) error {
+	openRequest, err := options.Factory.Open(ctx, name, fsVersion, func(db *idb.Database, _, _ uint) error {
 		_, err := db.CreateObjectStore(contentsStore, idb.ObjectStoreOptions{})
 		if err != nil {
 			return err
@@ -94,7 +94,7 @@ func (fs *FS) Clear(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return fs.Mkdir(".", 0666)
+	return fs.Mkdir(".", 0o666)
 }
 
 // Open implements hackpadfs.FS

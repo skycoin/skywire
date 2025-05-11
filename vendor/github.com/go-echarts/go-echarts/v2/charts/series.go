@@ -96,6 +96,11 @@ type SingleSeries struct {
 	Top               string      `json:"top,omitempty"`
 	Bottom            string      `json:"bottom,omitempty"`
 
+	// Sankey
+	NodeWidth types.Int `json:"nodeWidth,omitempty"`
+	NodeGap   types.Int `json:"nodeGap,omitempty"`
+	NodeAlign string    `json:"nodeAlign,omitempty"`
+
 	// Radar
 	RadarIndex int `json:"radarIndex,omitempty"`
 
@@ -121,12 +126,18 @@ type SingleSeries struct {
 	DatasetIndex int         `json:"datasetIndex,omitempty"`
 
 	// Gauge
-	Progress *opts.Progress `json:"progress,omitempty"`
-	AxisTick *opts.AxisTick `json:"axisTick,omitempty"`
-	Detail   *opts.Detail   `json:"detail,omitempty"`
-	Title    *opts.Title    `json:"title,omitempty"`
-	Min      int            `json:"min,omitempty"`
-	Max      int            `json:"max,omitempty"`
+	Progress   *opts.Progress  `json:"progress,omitempty"`
+	AxisTick   *opts.AxisTick  `json:"axisTick,omitempty"`
+	AxisLabel  *opts.AxisLabel `json:"axisLabel,omitempty"`
+	AxisLine   *opts.AxisLine  `json:"axisLine,omitempty"`
+	Pointer    *opts.Pointer   `json:"pointer,omitempty"`
+	SplitLine  *opts.SplitLine `json:"splitLine,omitempty"`
+	Detail     *opts.Detail    `json:"detail,omitempty"`
+	Title      *opts.Title     `json:"title,omitempty"`
+	Min        int             `json:"min,omitempty"`
+	Max        int             `json:"max,omitempty"`
+	StartAngle float64         `json:"startAngle,omitempty"`
+	EndAngle   float64         `json:"endAngle,omitempty"`
 
 	Large               types.Bool `json:"large,omitempty"`
 	LargeThreshold      int        `json:"largeThreshold,omitempty"`
@@ -276,6 +287,7 @@ func WithBarChartOpts(opt opts.BarChart) SeriesOpts {
 		s.Stack = opt.Stack
 		s.BarGap = opt.BarGap
 		s.BarCategoryGap = opt.BarCategoryGap
+		s.BarWidth = opt.BarWidth
 	}
 }
 

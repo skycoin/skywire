@@ -3,6 +3,7 @@ package appcommon
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -12,6 +13,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"go.etcd.io/bbolt"
+	bboltErrors "go.etcd.io/bbolt/errors"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
@@ -86,7 +88,7 @@ func NewBBoltLogStore(path, appName string) (_ LogStore, err error) {
 		return nil
 	})
 
-	if err != nil && !strings.Contains(err.Error(), bbolt.ErrBucketExists.Error()) {
+	if err != nil && !errors.Is(err, bboltErrors.ErrBucketExists) {
 		return nil, err
 	}
 
