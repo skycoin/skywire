@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0magnet/calvin"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"

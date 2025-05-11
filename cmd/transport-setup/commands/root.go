@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0magnet/calvin"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/bitfield/script"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"

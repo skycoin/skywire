@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/0magnet/calvin"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
 
