@@ -70,17 +70,24 @@ retry:
 	if p.bsp < uint(len(p.bs)) {
 		if b := p.bs[p.bsp]; b < utf8.RuneSelf {
 			p.bsp++
-			if b == '\x00' {
+			switch b {
+			case '\x00':
 				// Ignore null bytes while parsing, like bash.
+				p.col++
 				goto retry
-			}
-			if b == '\\' {
+			case '\r':
+				if p.peekByte('\n') { // \r\n turns into \n
+					p.col++
+					goto retry
+				}
+			case '\\':
 				if p.r == '\\' {
 				} else if p.peekByte('\n') {
 					p.bsp++
 					p.w, p.r = 1, escNewl
 					return escNewl
-				} else if p.peekBytes("\r\n") {
+				} else if p.peekBytes("\r\n") { // \\\r\n turns into \\\n
+					p.col++
 					p.bsp += 2
 					p.w, p.r = 2, escNewl
 					return escNewl
@@ -89,8 +96,8 @@ retry:
 					p.bsp < uint(len(p.bs)) && bquoteEscaped(p.bs[p.bsp]) {
 					// We turn backquote command substitutions into $(),
 					// so we remove the extra backslashes needed by the backquotes.
-					// For good position information, we still include them in p.w.
 					bquotes++
+					p.col++
 					goto retry
 				}
 			}
@@ -100,7 +107,7 @@ retry:
 			if p.litBs != nil {
 				p.litBs = append(p.litBs, b)
 			}
-			p.w, p.r = 1+bquotes, rune(b)
+			p.w, p.r = 1, rune(b)
 			return p.r
 		}
 		if !utf8.FullRune(p.bs[p.bsp:]) {
@@ -390,7 +397,7 @@ func (p *Parser) extendedGlob() bool {
 func (p *Parser) peekBytes(s string) bool {
 	peekEnd := int(p.bsp) + len(s)
 	// TODO: This should loop for slow readers, e.g. those providing one byte at
-	// a time. Use a loop and test it with testing/iotest.OneByteReader.
+	// a time. Use a loop and test it with [testing/iotest.OneByteReader].
 	if peekEnd > len(p.bs) {
 		p.fill()
 	}
@@ -811,7 +818,7 @@ func (p *Parser) newLit(r rune) {
 		w := utf8.RuneLen(r)
 		p.litBs = append(p.litBuf[:0], p.bs[p.bsp-uint(w):p.bsp]...)
 	default:
-		// don't let r == utf8.RuneSelf go to the second case as RuneLen
+		// don't let r == utf8.RuneSelf go to the second case as [utf8.RuneLen]
 		// would return -1
 		p.litBs = p.litBuf[:0]
 	}
@@ -820,9 +827,6 @@ func (p *Parser) newLit(r rune) {
 func (p *Parser) endLit() (s string) {
 	if p.r == utf8.RuneSelf || p.r == escNewl {
 		s = string(p.litBs)
-	} else if p.r == '`' && p.w > 1 {
-		// If we ended at a nested and escaped backquote, litBs does not include the backslash.
-		s = string(p.litBs[:len(p.litBs)-1])
 	} else {
 		s = string(p.litBs[:len(p.litBs)-p.w])
 	}

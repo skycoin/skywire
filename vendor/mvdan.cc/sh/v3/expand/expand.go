@@ -4,19 +4,21 @@
 package expand
 
 import (
-	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"iter"
+	"maps"
 	"os"
 	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"mvdan.cc/sh/v3/pattern"
 	"mvdan.cc/sh/v3/syntax"
@@ -40,7 +42,7 @@ type Config struct {
 	Env Environ
 
 	// CmdSubst expands a command substitution node, writing its standard
-	// output to the provided io.Writer.
+	// output to the provided [io.Writer].
 	//
 	// If nil, encountering a command substitution will result in an
 	// UnexpectedCommandError.
@@ -59,9 +61,9 @@ type Config struct {
 	// Deprecated: use ReadDir2 instead.
 	ReadDir func(string) ([]fs.FileInfo, error)
 
-	// ReadDir is used for file path globbing.
-	// If nil, and ReadDir is nil as well, globbing is disabled.
-	// Use os.ReadDir to use the filesystem directly.
+	// ReadDir2 is used for file path globbing.
+	// If nil, and [ReadDir] is nil as well, globbing is disabled.
+	// Use [os.ReadDir] to use the filesystem directly.
 	ReadDir2 func(string) ([]fs.DirEntry, error)
 
 	// GlobStar corresponds to the shell option that allows globbing with
@@ -80,7 +82,7 @@ type Config struct {
 	// as errors.
 	NoUnset bool
 
-	bufferAlloc bytes.Buffer // TODO: use strings.Builder
+	bufferAlloc strings.Builder
 	fieldAlloc  [4]fieldPart
 	fieldsAlloc [4][]fieldPart
 
@@ -106,12 +108,8 @@ var zeroConfig = &Config{}
 // which doesn't feel right - we should make a copy.
 
 func prepareConfig(cfg *Config) *Config {
-	if cfg == nil {
-		cfg = zeroConfig
-	}
-	if cfg.Env == nil {
-		cfg.Env = FuncEnviron(func(string) string { return "" })
-	}
+	cfg = cmp.Or(cfg, zeroConfig)
+	cfg.Env = cmp.Or(cfg.Env, FuncEnviron(func(string) string { return "" }))
 
 	cfg.ifs = " \t\n"
 	if vr := cfg.Env.Get("IFS"); vr.IsSet() {
@@ -151,7 +149,7 @@ func (cfg *Config) ifsJoin(strs []string) string {
 	return strings.Join(strs, sep)
 }
 
-func (cfg *Config) strBuilder() *bytes.Buffer {
+func (cfg *Config) strBuilder() *strings.Builder {
 	b := &cfg.bufferAlloc
 	b.Reset()
 	return b
@@ -166,10 +164,10 @@ func (cfg *Config) envSet(name, value string) error {
 	if !ok {
 		return fmt.Errorf("environment is read-only")
 	}
-	return wenv.Set(name, Variable{Kind: String, Str: value})
+	return wenv.Set(name, Variable{Set: true, Kind: String, Str: value})
 }
 
-// Literal expands a single shell word. It is similar to Fields, but the result
+// Literal expands a single shell word. It is similar to [Fields], but the result
 // is a single string. This is the behavior when a word is used as the value in
 // a shell variable assignment, for example.
 //
@@ -187,8 +185,8 @@ func Literal(cfg *Config, word *syntax.Word) (string, error) {
 	return cfg.fieldJoin(field), nil
 }
 
-// Document expands a single shell word as if it were within double quotes. It
-// is similar to Literal, but without brace expansion, tilde expansion, and
+// Document expands a single shell word as if it were a here-document body.
+// It is similar to [Literal], but without brace expansion, tilde expansion, and
 // globbing.
 //
 // The config specifies shell expansion options; nil behaves the same as an
@@ -198,7 +196,7 @@ func Document(cfg *Config, word *syntax.Word) (string, error) {
 		return "", nil
 	}
 	cfg = prepareConfig(cfg)
-	field, err := cfg.wordField(word.Parts, quoteDouble)
+	field, err := cfg.wordField(word.Parts, quoteSingle)
 	if err != nil {
 		return "", err
 	}
@@ -207,9 +205,9 @@ func Document(cfg *Config, word *syntax.Word) (string, error) {
 
 const patMode = pattern.Filenames | pattern.Braces
 
-// Pattern expands a single shell word as a pattern, using [syntax.QuotePattern]
+// Pattern expands a single shell word as a pattern, using [pattern.QuoteMeta]
 // on any non-quoted parts of the input word. The result can be used on
-// [syntax.TranslatePattern] directly.
+// [pattern.Regexp] directly.
 //
 // The config specifies shell expansion options; nil behaves the same as an
 // empty config.
@@ -222,15 +220,15 @@ func Pattern(cfg *Config, word *syntax.Word) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	buf := cfg.strBuilder()
+	sb := cfg.strBuilder()
 	for _, part := range field {
 		if part.quote > quoteNone {
-			buf.WriteString(pattern.QuoteMeta(part.val, patMode))
+			sb.WriteString(pattern.QuoteMeta(part.val, patMode))
 		} else {
-			buf.WriteString(part.val)
+			sb.WriteString(part.val)
 		}
 	}
-	return buf.String(), nil
+	return sb.String(), nil
 }
 
 // Format expands a format string with a number of arguments, following the
@@ -242,25 +240,17 @@ func Pattern(cfg *Config, word *syntax.Word) (string, error) {
 // empty config.
 func Format(cfg *Config, format string, args []string) (string, int, error) {
 	cfg = prepareConfig(cfg)
-	buf := cfg.strBuilder()
+	sb := cfg.strBuilder()
 
-	consumed, err := formatIntoBuffer(buf, format, args)
+	consumed, err := formatInto(sb, format, args)
 	if err != nil {
 		return "", 0, err
 	}
 
-	return buf.String(), consumed, err
+	return sb.String(), consumed, err
 }
 
-// Format expands a format string with a number of arguments, following the
-// shell's format specifications. These include printf(1), among others.
-//
-// The resulting string is written to the provided buffer, and the number
-// of arguments used is returned.
-//
-// The config specifies shell expansion options; nil behaves the same as an
-// empty config.
-func formatIntoBuffer(buf *bytes.Buffer, format string, args []string) (int, error) {
+func formatInto(sb *strings.Builder, format string, args []string) (int, error) {
 	var fmts []byte
 	initialArgs := len(args)
 
@@ -290,28 +280,28 @@ formatLoop:
 			i++
 			switch c = format[i]; c {
 			case 'a': // bell
-				buf.WriteByte('\a')
+				sb.WriteByte('\a')
 			case 'b': // backspace
-				buf.WriteByte('\b')
+				sb.WriteByte('\b')
 			case 'e', 'E': // escape
-				buf.WriteByte('\x1b')
+				sb.WriteByte('\x1b')
 			case 'f': // form feed
-				buf.WriteByte('\f')
+				sb.WriteByte('\f')
 			case 'n': // new line
-				buf.WriteByte('\n')
+				sb.WriteByte('\n')
 			case 'r': // carriage return
-				buf.WriteByte('\r')
+				sb.WriteByte('\r')
 			case 't': // horizontal tab
-				buf.WriteByte('\t')
+				sb.WriteByte('\t')
 			case 'v': // vertical tab
-				buf.WriteByte('\v')
+				sb.WriteByte('\v')
 			case '\\', '\'', '"', '?': // just the character
-				buf.WriteByte(c)
+				sb.WriteByte(c)
 			case '0', '1', '2', '3', '4', '5', '6', '7':
 				digits := readDigits(3, false)
 				// if digits don't fit in 8 bits, 0xff via strconv
 				n, _ := strconv.ParseUint(digits, 8, 8)
-				buf.WriteByte(byte(n))
+				sb.WriteByte(byte(n))
 			case 'x', 'u', 'U':
 				i++
 				max := 2
@@ -332,21 +322,21 @@ formatLoop:
 					}
 					if c == 'x' {
 						// always as a single byte
-						buf.WriteByte(byte(n))
+						sb.WriteByte(byte(n))
 					} else {
-						buf.WriteRune(rune(n))
+						sb.WriteRune(rune(n))
 					}
 					break
 				}
 				fallthrough
 			default: // no escape sequence
-				buf.WriteByte('\\')
-				buf.WriteByte(c)
+				sb.WriteByte('\\')
+				sb.WriteByte(c)
 			}
 		case len(fmts) > 0:
 			switch c {
 			case '%':
-				buf.WriteByte('%')
+				sb.WriteByte('%')
 				fmts = nil
 			case 'c':
 				var b byte
@@ -357,7 +347,7 @@ formatLoop:
 						b = arg[0]
 					}
 				}
-				buf.WriteByte(b)
+				sb.WriteByte(b)
 				fmts = nil
 			case '+', '-', ' ':
 				if len(fmts) > 1 {
@@ -376,7 +366,7 @@ formatLoop:
 					// Passing in nil for args ensures that % format
 					// strings aren't processed; only escape sequences
 					// will be handled.
-					_, err := formatIntoBuffer(buf, arg, nil)
+					_, err := formatInto(sb, arg, nil)
 					if err != nil {
 						return 0, err
 					}
@@ -395,7 +385,7 @@ formatLoop:
 				}
 				if farg != nil {
 					fmts = append(fmts, c)
-					fmt.Fprintf(buf, string(fmts), farg)
+					fmt.Fprintf(sb, string(fmts), farg)
 				}
 				fmts = nil
 			default:
@@ -406,7 +396,7 @@ formatLoop:
 			// arguments
 			fmts = []byte{c}
 		default:
-			buf.WriteByte(c)
+			sb.WriteByte(c)
 		}
 	}
 	if len(fmts) > 0 {
@@ -422,70 +412,87 @@ func (cfg *Config) fieldJoin(parts []fieldPart) string {
 	case 1: // short-cut without a string copy
 		return parts[0].val
 	}
-	buf := cfg.strBuilder()
+	sb := cfg.strBuilder()
 	for _, part := range parts {
-		buf.WriteString(part.val)
+		sb.WriteString(part.val)
 	}
-	return buf.String()
+	return sb.String()
 }
 
 func (cfg *Config) escapedGlobField(parts []fieldPart) (escaped string, glob bool) {
-	buf := cfg.strBuilder()
+	sb := cfg.strBuilder()
 	for _, part := range parts {
 		if part.quote > quoteNone {
-			buf.WriteString(pattern.QuoteMeta(part.val, patMode))
+			sb.WriteString(pattern.QuoteMeta(part.val, patMode))
 			continue
 		}
-		buf.WriteString(part.val)
+		sb.WriteString(part.val)
 		if pattern.HasMeta(part.val, patMode) {
 			glob = true
 		}
 	}
 	if glob { // only copy the string if it will be used
-		escaped = buf.String()
+		escaped = sb.String()
 	}
 	return escaped, glob
+}
+
+// Fields is a pre-iterators API which now wraps [FieldsSeq].
+func Fields(cfg *Config, words ...*syntax.Word) ([]string, error) {
+	var fields []string
+	for s, err := range FieldsSeq(cfg, words...) {
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, s)
+	}
+	return fields, nil
 }
 
 // Fields expands a number of words as if they were arguments in a shell
 // command. This includes brace expansion, tilde expansion, parameter expansion,
 // command substitution, arithmetic expansion, and quote removal.
-func Fields(cfg *Config, words ...*syntax.Word) ([]string, error) {
+func FieldsSeq(cfg *Config, words ...*syntax.Word) iter.Seq2[string, error] {
 	cfg = prepareConfig(cfg)
-	fields := make([]string, 0, len(words))
 	dir := cfg.envGet("PWD")
-	for _, word := range words {
-		word := *word // make a copy, since SplitBraces replaces the Parts slice
-		afterBraces := []*syntax.Word{&word}
-		if syntax.SplitBraces(&word) {
-			afterBraces = Braces(&word)
-		}
-		for _, word2 := range afterBraces {
-			wfields, err := cfg.wordFields(word2.Parts)
-			if err != nil {
-				return nil, err
+	return func(yield func(string, error) bool) {
+		for _, word := range words {
+			word := *word // make a copy, since SplitBraces replaces the Parts slice
+			afterBraces := []*syntax.Word{&word}
+			if syntax.SplitBraces(&word) {
+				afterBraces = Braces(&word)
 			}
-			for _, field := range wfields {
-				path, doGlob := cfg.escapedGlobField(field)
-				var matches []string
-				if doGlob && cfg.ReadDir2 != nil {
-					matches, err = cfg.glob(dir, path)
-					if err != nil {
-						// We avoid [errors.As] as it allocates,
-						// and we know that [Config.glob] returns [pattern.Regexp] errors without wrapping.
-						if _, ok := err.(*pattern.SyntaxError); !ok {
-							return nil, err
-						}
-					} else if len(matches) > 0 || cfg.NullGlob {
-						fields = append(fields, matches...)
-						continue
-					}
+			for _, word2 := range afterBraces {
+				wfields, err := cfg.wordFields(word2.Parts)
+				if err != nil {
+					yield("", err)
+					return
 				}
-				fields = append(fields, cfg.fieldJoin(field))
+				for _, field := range wfields {
+					path, doGlob := cfg.escapedGlobField(field)
+					if doGlob && cfg.ReadDir2 != nil {
+						// Note that globbing requires keeping a slice state, so it doesn't
+						// really benefit from using an iterator.
+						matches, err := cfg.glob(dir, path)
+						if err != nil {
+							// We avoid [errors.As] as it allocates,
+							// and we know that [Config.glob] returns [pattern.Regexp] errors without wrapping.
+							if _, ok := err.(*pattern.SyntaxError); !ok {
+								yield("", err)
+								return
+							}
+						} else if len(matches) > 0 || cfg.NullGlob {
+							for _, m := range matches {
+								yield(m, nil)
+							}
+							continue
+						}
+					}
+					yield(cfg.fieldJoin(field), nil)
+				}
 			}
 		}
 	}
-	return fields, nil
 }
 
 type fieldPart struct {
@@ -515,18 +522,19 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 				}
 			}
 			if ql == quoteDouble && strings.Contains(s, "\\") {
-				buf := cfg.strBuilder()
+				sb := cfg.strBuilder()
 				for i := 0; i < len(s); i++ {
 					b := s[i]
 					if b == '\\' && i+1 < len(s) {
 						switch s[i+1] {
 						case '"', '\\', '$', '`': // special chars
-							continue
+							i++
+							b = s[i] // write the special char, skipping the backslash
 						}
 					}
-					buf.WriteByte(b)
+					sb.WriteByte(b)
 				}
-				s = buf.String()
+				s = sb.String()
 			}
 			if i := strings.IndexByte(s, '\x00'); i >= 0 {
 				s = s[:i]
@@ -582,11 +590,11 @@ func (cfg *Config) cmdSubst(cs *syntax.CmdSubst) (string, error) {
 	if cfg.CmdSubst == nil {
 		return "", UnexpectedCommandError{Node: cs}
 	}
-	buf := cfg.strBuilder()
-	if err := cfg.CmdSubst(buf, cs); err != nil {
+	sb := cfg.strBuilder()
+	if err := cfg.CmdSubst(sb, cs); err != nil {
 		return "", err
 	}
-	out := buf.String()
+	out := sb.String()
 	if strings.IndexByte(out, '\x00') >= 0 {
 		out = strings.ReplaceAll(out, "\x00", "")
 	}
@@ -636,7 +644,7 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 				s = rest
 			}
 			if strings.Contains(s, "\\") {
-				buf := cfg.strBuilder()
+				sb := cfg.strBuilder()
 				for i := 0; i < len(s); i++ {
 					b := s[i]
 					if b == '\\' {
@@ -645,9 +653,9 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 						}
 						b = s[i]
 					}
-					buf.WriteByte(b)
+					sb.WriteByte(b)
 				}
-				s = buf.String()
+				s = sb.String()
 			}
 			curField = append(curField, fieldPart{val: s})
 		case *syntax.SglQuoted:
@@ -737,19 +745,15 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) []string {
 		case "@": // "${!name[@]}"
 			switch vr := cfg.Env.Get(name); vr.Kind {
 			case Indexed:
-				keys := make([]string, 0, len(vr.Map))
-				// TODO: maps.Keys if it makes it into Go 1.23
+				// TODO: if an indexed array only has elements 0 and 10,
+				// we should not return all indices in between those.
+				keys := make([]string, 0, len(vr.List))
 				for key := range vr.List {
 					keys = append(keys, strconv.Itoa(key))
 				}
 				return keys
 			case Associative:
-				keys := make([]string, 0, len(vr.Map))
-				// TODO: maps.Keys if it makes it into Go 1.23
-				for key := range vr.Map {
-					keys = append(keys, key)
-				}
-				return keys
+				return slices.Collect(maps.Keys(vr.Map))
 			}
 		}
 		return nil
@@ -766,12 +770,7 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) []string {
 		case Indexed:
 			return vr.List
 		case Associative:
-			// TODO: maps.Values if it makes it into Go 1.23
-			elems := make([]string, 0, len(vr.Map))
-			for _, elem := range vr.Map {
-				elems = append(elems, elem)
-			}
-			return elems
+			return slices.Collect(maps.Values(vr.Map))
 		}
 	case "*": // "${name[*]}"
 		if vr := cfg.Env.Get(name); vr.Kind == Indexed {
@@ -793,7 +792,7 @@ func (cfg *Config) expandUser(field string) (prefix, rest string) {
 	if name == "" {
 		// Current user; try via "HOME", otherwise fall back to the
 		// system's appropriate home dir env var. Don't use os/user, as
-		// that's overkill. We can't use os.UserHomeDir, because we want
+		// that's overkill. We can't use [os.UserHomeDir], because we want
 		// to use cfg.Env, and we always want to check "HOME" first.
 
 		if vr := cfg.Env.Get("HOME"); vr.IsSet() {
@@ -895,17 +894,15 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 					match = filepath.Join(base, match)
 				}
 				match = pathJoin2(match, part)
-				// We can't use ReadDir2 on the parent and match the directory
+				// We can't use [Config.ReadDir2] on the parent and match the directory
 				// entry by name, because short paths on Windows break that.
-				// Our only option is to ReadDir2 on the directory entry itself,
+				// Our only option is to [Config.ReadDir2] on the directory entry itself,
 				// which can be wasteful if we only want to see if it exists,
 				// but at least it's correct in all scenarios.
 				if _, err := cfg.ReadDir2(match); err != nil {
-					const errPathNotFound = syscall.Errno(3) // from syscall/types_windows.go, to avoid a build tag
-					var pathErr *os.PathError
-					if runtime.GOOS == "windows" && errors.As(err, &pathErr) && pathErr.Err == errPathNotFound {
-						// Unfortunately, os.File.Readdir on a regular file on
-						// Windows returns an error that satisfies ErrNotExist.
+					if isWindowsErrPathNotFound(err) {
+						// Unfortunately, [os.File.Readdir] on a regular file on
+						// Windows returns an error that satisfies [fs.ErrNotExist].
 						// Luckily, it returns a special "path not found" rather
 						// than the normal "file not found" for missing files,
 						// so we can use that knowledge to work around the bug.
@@ -928,10 +925,10 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 			// and to avoid recursion, we use a slice as a stack.
 			// Since we pop from the back, we populate the stack backwards.
 			stack := make([]string, 0, len(matches))
-			for i := len(matches) - 1; i >= 0; i-- {
+			for _, match := range slices.Backward(matches) {
 				// "a/**" should match "a/ a/b a/b/cfg ...";
 				// note how the zero-match case has a trailing separator.
-				stack = append(stack, pathJoin2(matches[i], ""))
+				stack = append(stack, pathJoin2(match, ""))
 			}
 			matches = matches[:0]
 			var newMatches []string // to reuse its capacity
@@ -947,8 +944,8 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 				// If dir is not a directory, we keep the stack as-is and continue.
 				newMatches = newMatches[:0]
 				newMatches, _ = cfg.globDir(base, dir, rxGlobStar, false, wantDir, newMatches)
-				for i := len(newMatches) - 1; i >= 0; i-- {
-					stack = append(stack, newMatches[i])
+				for _, match := range slices.Backward(newMatches) {
+					stack = append(stack, match)
 				}
 			}
 			continue
@@ -991,10 +988,10 @@ func (cfg *Config) globDir(base, dir string, rx *regexp.Regexp, matchHidden bool
 			// No filtering.
 		} else if mode := info.Type(); mode&os.ModeSymlink != 0 {
 			// We need to know if the symlink points to a directory.
-			// This requires an extra syscall, as ReadDir on the parent directory
+			// This requires an extra syscall, as [Config.ReadDir] on the parent directory
 			// does not follow symlinks for each of the directory entries.
 			// ReadDir is somewhat wasteful here, as we only want its error result,
-			// but we could try to reuse its result as per the TODO in Config.glob.
+			// but we could try to reuse its result as per the TODO in [Config.glob].
 			if _, err := cfg.ReadDir2(filepath.Join(fullDir, info.Name())); err != nil {
 				continue
 			}

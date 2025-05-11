@@ -271,7 +271,7 @@ func maybeInlineFootnoteOrSuper(p *Parser, data []byte, offset int) (int, ast.No
 // '[': parse a link or an image or a footnote or a citation
 func link(p *Parser, data []byte, offset int) (int, ast.Node) {
 	// no links allowed inside regular links, footnote, and deferred footnotes
-	if p.insideLink && (offset > 0 && data[offset-1] == '[' || len(data)-1 > offset && data[offset+1] == '^') {
+	if p.InsideLink && (offset > 0 && data[offset-1] == '[' || len(data)-1 > offset && data[offset+1] == '^') {
 		return 0, nil
 	}
 
@@ -362,25 +362,27 @@ func link(p *Parser, data []byte, offset int) (int, ast.Node) {
 		linkB := i
 		brace := 0
 
+		var c byte
 		// look for link end: ' " )
 	findlinkend:
 		for i < len(data) {
+			c = data[i]
 			switch {
-			case data[i] == '\\':
+			case c == '\\':
 				i += 2
 
-			case data[i] == '(':
+			case c == '(':
 				brace++
 				i++
 
-			case data[i] == ')':
+			case c == ')':
 				if brace <= 0 {
 					break findlinkend
 				}
 				brace--
 				i++
 
-			case data[i] == '\'' || data[i] == '"':
+			case c == '\'' || c == '"':
 				break findlinkend
 
 			default:
@@ -402,14 +404,15 @@ func link(p *Parser, data []byte, offset int) (int, ast.Node) {
 
 		findtitleend:
 			for i < len(data) {
+				c = data[i]
 				switch {
-				case data[i] == '\\':
+				case c == '\\':
 					i++
 
-				case data[i] == data[titleB-1]: // matching title delimiter
+				case c == data[titleB-1]: // matching title delimiter
 					titleEndCharFound = true
 
-				case titleEndCharFound && data[i] == ')':
+				case titleEndCharFound && c == ')':
 					break findtitleend
 				}
 				i++
@@ -619,10 +622,10 @@ func link(p *Parser, data []byte, offset int) (int, ast.Node) {
 		} else {
 			// links cannot contain other links, so turn off link parsing
 			// temporarily and recurse
-			insideLink := p.insideLink
-			p.insideLink = true
+			InsideLink := p.InsideLink
+			p.InsideLink = true
 			p.Inline(link, data[1:txtE])
-			p.insideLink = insideLink
+			p.InsideLink = InsideLink
 		}
 		return i, link
 
@@ -857,7 +860,7 @@ const shortestPrefix = 6 // len("ftp://"), the shortest of the above
 
 func maybeAutoLink(p *Parser, data []byte, offset int) (int, ast.Node) {
 	// quick check to rule out most false hits
-	if p.insideLink || len(data) < offset+shortestPrefix {
+	if p.InsideLink || len(data) < offset+shortestPrefix {
 		return 0, nil
 	}
 	for _, prefix := range protocolPrefixes {

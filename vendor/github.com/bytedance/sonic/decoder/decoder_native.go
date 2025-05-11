@@ -1,5 +1,5 @@
-//go:build (amd64 && go1.17 && !go1.24) || (arm64 && go1.20 && !go1.24)
-// +build amd64,go1.17,!go1.24 arm64,go1.20,!go1.24
+//go:build (amd64 && go1.17 && !go1.25) || (arm64 && go1.20 && !go1.25)
+// +build amd64,go1.17,!go1.25 arm64,go1.20,!go1.25
 
 
 /*
@@ -30,7 +30,7 @@ type Decoder = api.Decoder
 // SyntaxError represents json syntax error
 type SyntaxError = api.SyntaxError
 
-// MismatchTypeError represents dismatching between json and object
+// MismatchTypeError represents mismatching between json and object
 type MismatchTypeError = api.MismatchTypeError
 
 // Options for decode.
@@ -44,6 +44,7 @@ const (
     OptionCopyString       Options = api.OptionCopyString
     OptionValidateString   Options = api.OptionValidateString
     OptionNoValidateJSON   Options = api.OptionNoValidateJSON
+    OptionCaseSensitive    Options = api.OptionCaseSensitive
 )
 
 // StreamDecoder is the decoder context object for streaming input.

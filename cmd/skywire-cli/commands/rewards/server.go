@@ -23,7 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0magnet/calvin"
 	"github.com/bitfield/script"
 	"github.com/gin-gonic/gin"
 	"github.com/robert-nix/ansihtml"
@@ -32,6 +31,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"

@@ -55,6 +55,11 @@ func SpaceRedirects(enabled bool) PrinterOption {
 // Note that this feature is best-effort and will only keep the
 // alignment stable, so it may need some human help the first time it is
 // run.
+//
+// Deprecated: this formatting option is flawed and buggy, and often does
+// not result in what the user wants when the code gets complex enough.
+// The next major version, v4, will remove this feature entirely.
+// See: https://github.com/mvdan/sh/issues/658
 func KeepPadding(enabled bool) PrinterOption {
 	return func(p *Printer) {
 		if enabled && !p.keepPadding {
@@ -84,7 +89,7 @@ func Minify(enabled bool) PrinterOption {
 // newlines must still appear, such as those following comments or around
 // here-documents.
 //
-// Print's trailing newline when given a *File is not affected by this option.
+// Print's trailing newline when given a [*File] is not affected by this option.
 func SingleLine(enabled bool) PrinterOption {
 	return func(p *Printer) { p.singleLine = enabled }
 }
@@ -109,9 +114,9 @@ func NewPrinter(opts ...PrinterOption) *Printer {
 // Print "pretty-prints" the given syntax tree node to the given writer. Writes
 // to w are buffered.
 //
-// The node types supported at the moment are *File, *Stmt, *Word, *Assign, any
-// Command node, and any WordPart node. A trailing newline will only be printed
-// when a *File is used.
+// The node types supported at the moment are [*File], [*Stmt], [*Word], [*Assign], any
+// [Command] node, and any WordPart node. A trailing newline will only be printed
+// when a [*File] is used.
 func (p *Printer) Print(w io.Writer, node Node) error {
 	p.reset()
 
@@ -1507,7 +1512,7 @@ func (e *extraIndenter) WriteByte(b byte) error {
 		lineIndent += e.firstChange
 	}
 	e.bufWriter.WriteByte(tabwriter.Escape)
-	for i := 0; i < lineIndent; i++ {
+	for range lineIndent {
 		e.bufWriter.WriteByte('\t')
 	}
 	e.bufWriter.WriteByte(tabwriter.Escape)
@@ -1517,7 +1522,7 @@ func (e *extraIndenter) WriteByte(b byte) error {
 }
 
 func (e *extraIndenter) WriteString(s string) (int, error) {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		e.WriteByte(s[i])
 	}
 	return len(s), nil
