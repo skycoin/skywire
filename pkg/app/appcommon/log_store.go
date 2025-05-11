@@ -13,6 +13,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"go.etcd.io/bbolt"
+	bboltErrors "go.etcd.io/bbolt/errors"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
