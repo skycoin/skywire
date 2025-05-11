@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/0magnet/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -100,10 +100,9 @@ var RootCmd = &cobra.Command{
 		defer cancel()
 
 		httpClient = &http.Client{}
-		var dialer proxy.Dialer = proxy.Direct // Default dialer is direct connection
+		var dialer proxy.Dialer = proxy.Direct
 
 		if proxyAddr != "" {
-			// Use SOCKS5 proxy dialer if specified
 			dialer, err = proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
 			if err != nil {
 				dlog.Fatalf("Error creating SOCKS5 dialer: %v", err)
@@ -128,11 +127,9 @@ var RootCmd = &cobra.Command{
 			dmsgC, closeDmsg, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, dmsgDisc, dmsgSessions, pk.String())
 		}
 		if err != nil {
-			dlog.WithError(err).Fatal("Error connecting to dmsg network")
-			return err
+			dlog.WithError(err).Debug("Error connecting to dmsg network")
 		}
 		defer closeDmsg()
-		// Perform IP lookup using the context with the proxy dialer
 		ip, err := dmsgC.LookupIP(ctx, srvs)
 		if err != nil {
 			dlog.WithError(err).Error("failed to lookup IP")

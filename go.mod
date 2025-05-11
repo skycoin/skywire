@@ -6,7 +6,6 @@ toolchain go1.24.0
 
 require (
 	cogentcore.org/core v0.3.10
-	github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8 // indirect
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/MichaelMure/go-term-markdown v0.1.4
 	github.com/VictoriaMetrics/metrics v1.36.0
@@ -43,7 +42,7 @@ require (
 	github.com/pterm/pterm v0.12.80
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.29-0.20250508005049-d5e314dd6cb1
+	github.com/skycoin/dmsg v1.3.29-0.20250511180625-78c688389aa4
 	github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f //DO NOT MODIFY OR UPDATE v0.28.1-0.20241105130348-39b49a2d0a7f
 	github.com/skycoin/systray v1.10.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -218,4 +217,4 @@ require (
 
 // Below should reflect the current versions of the following deps
 // replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
-// replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20250130234351-770537afb4cb
+// replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20250511180625-78c688389aa4
