@@ -7,15 +7,16 @@ import (
 	"os"
 	"strings"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 )
 
 // RootCmd is the root command
 var RootCmd = &cobra.Command{
 	Use:   "calvin",
 	Short: "generate calvin ascii font from text",
-	Long: calvin.AsciiFont("calvin")+`
+	Long: calvin.AsciiFont("calvin") + `
 	generate calvin ascii font from text`,
 	RunE: func(_ *cobra.Command, args []string) error {
 		var input string

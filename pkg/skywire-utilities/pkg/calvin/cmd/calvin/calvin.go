@@ -2,9 +2,10 @@
 package main
 
 import (
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin/cmd/calvin/commands"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin/cmd/calvin/commands"
 )
 
 func init() {
