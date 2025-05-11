@@ -2,7 +2,11 @@
 
 package wgpu
 
-import "syscall/js"
+import (
+	"syscall/js"
+
+	"github.com/cogentcore/webgpu/jsx"
+)
 
 // Buffer as described:
 // https://gpuweb.github.io/gpuweb/#gpubuffer
@@ -32,7 +36,7 @@ func (g Buffer) GetMappedRange(offset, size uint) []byte {
 }
 
 func (g Buffer) MapAsync(mode MapMode, offset uint64, size uint64, callback BufferMapCallback) (err error) {
-	await(g.jsValue.Call("mapAsync", uint32(mode), offset, size))
+	jsx.Await(g.jsValue.Call("mapAsync", uint32(mode), offset, size))
 	callback(BufferMapAsyncStatusSuccess) // TODO(kai): is this the right thing to do?
 	return
 }

@@ -2,7 +2,9 @@
 
 package wgpu
 
-import "syscall/js"
+import (
+	"syscall/js"
+)
 
 // TODO(kai): this only needs to be separate for js because
 // [Buffer.GetMappedRange] does not work correctly without GopherJS.

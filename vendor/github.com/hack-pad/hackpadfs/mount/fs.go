@@ -24,8 +24,8 @@ var (
 // For ease of use, call the standard operations via hackpadfs.OpenFile(fs, ...), hackpadfs.Mkdir(fs, ...), etc.
 type FS struct {
 	rootFS  hackpadfs.FS
-	mountMu sync.Mutex
 	mounts  sync.Map // map[string]hackpadfs.FS
+	mountMu sync.Mutex
 }
 
 // NewFS returns a new FS.
@@ -135,7 +135,7 @@ type Point struct {
 // MountPoints returns a slice of mount points every mounted file system.
 func (fs *FS) MountPoints() []Point {
 	var points []Point
-	fs.mounts.Range(func(key, value interface{}) bool {
+	fs.mounts.Range(func(key, _ interface{}) bool {
 		path := key.(string)
 		points = append(points, Point{path})
 		return true

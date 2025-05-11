@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"syscall/js"
+
+	"github.com/cogentcore/webgpu/jsx"
 )
 
 // Instance as described:
@@ -25,8 +27,8 @@ func CreateInstance(descriptor *InstanceDescriptor) *Instance {
 }
 
 func (g Instance) RequestAdapter(options *RequestAdapterOptions) (*Adapter, error) {
-	adapter := await(g.jsValue.Call("requestAdapter", pointerToJS(options)))
-	if !adapter.Truthy() {
+	adapter, ok := jsx.Await(g.jsValue.Call("requestAdapter", pointerToJS(options)))
+	if !ok || !adapter.Truthy() {
 		return nil, fmt.Errorf("no WebGPU adapter avaliable")
 	}
 	return &Adapter{jsValue: adapter}, nil
@@ -41,12 +43,19 @@ func (g Instance) EnumerateAdapters(options *InstanceEnumerateAdapterOptons) []*
 	return []*Adapter{a}
 }
 
+// SurfaceDescriptor must contain a valid HTML canvas element on web.
 type SurfaceDescriptor struct {
+	// Canvas must be specified.
+	Canvas js.Value
+
 	Label string
 }
 
 func (g Instance) CreateSurface(descriptor *SurfaceDescriptor) *Surface {
-	jsContext := js.Global().Get("document").Call("querySelector", "canvas").Call("getContext", "webgpu")
+	if descriptor.Canvas.IsUndefined() {
+		panic("wgpu.Instance.CreateSurface: descriptor.Canvas must be specified")
+	}
+	jsContext := descriptor.Canvas.Call("getContext", "webgpu")
 	return &Surface{jsContext}
 }
 

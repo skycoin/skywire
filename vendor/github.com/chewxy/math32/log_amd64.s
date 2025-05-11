@@ -1,3 +1,4 @@
+//go:build !tinygo && !noasm
 // Copyright 2010 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSS-style
 // license that can be found in the LICENSE file.
@@ -18,8 +19,8 @@
 #define PosInf 0x7F800000
 #define NegInf 0xFF800000
 
-// func Log(x float64) float64
-TEXT ·Log(SB),NOSPLIT,$0
+// func archLog(x float64) float64
+TEXT ·archLog(SB),NOSPLIT,$0
 	// test bits for special cases
 	MOVL    x+0(FP), BX
 	MOVQ    $~(1<<31), AX // sign bit mask

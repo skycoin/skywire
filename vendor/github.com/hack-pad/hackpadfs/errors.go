@@ -28,10 +28,10 @@ type PathError = fs.PathError
 //
 // NOTE: Is not identical to os.LinkError to avoid importing "os". Still resolves errors.Is() calls correctly.
 type LinkError struct {
+	Err error
 	Op  string
 	Old string
 	New string
-	Err error
 }
 
 func (e *LinkError) Error() string {

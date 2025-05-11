@@ -1,4 +1,4 @@
-// +build go1.17,!go1.24
+// +build go1.17,!go1.25
 
 /*
  * Copyright 2021 ByteDance Inc.
@@ -30,7 +30,7 @@ var (
 
 
 func init() {
-    // whe in aarch64. we enable all optimize
+    // when in aarch64, we enable all optimization
 	envs.EnableOptDec()
 	envs.EnableFastMap()
 }
