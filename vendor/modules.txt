@@ -101,6 +101,7 @@ cogentcore.org/core/types
 # github.com/0magnet/calvin v0.0.0-20241204203002-126d3bcd81d8
 ## explicit; go 1.23.3
 github.com/0magnet/calvin
+github.com/0magnet/calvin/cmd/calvin/commands
 # github.com/ActiveState/termtest/conpty v0.5.0
 ## explicit; go 1.12
 github.com/ActiveState/termtest/conpty
