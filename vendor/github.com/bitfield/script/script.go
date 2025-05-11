@@ -8,7 +8,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"io"
+	"io/fs"
 	"math"
 	"net/http"
 	"os"
@@ -75,8 +77,9 @@ func File(path string) *Pipe {
 }
 
 // FindFiles creates a pipe listing all the files in the directory dir and its
-// subdirectories recursively, one per line, like Unix find(1). If dir doesn't
-// exist or can't be read, the pipe's error status will be set.
+// subdirectories recursively, one per line, like Unix find(1).
+// Errors are ignored unless no files are found (in which case the pipe's error
+// status will be set to the last error encountered).
 //
 // Each line of the output consists of a slash-separated path, starting with
 // the initial directory. For example, if the directory looks like this:
@@ -91,17 +94,19 @@ func File(path string) *Pipe {
 //	test/2.txt
 func FindFiles(dir string) *Pipe {
 	var paths []string
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	var innerErr error
+	fs.WalkDir(os.DirFS(dir), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			innerErr = err
+			return fs.SkipDir
 		}
-		if !info.IsDir() {
-			paths = append(paths, path)
+		if !d.IsDir() {
+			paths = append(paths, filepath.Join(dir, path))
 		}
 		return nil
 	})
-	if err != nil {
-		return NewPipe().WithError(err)
+	if innerErr != nil && len(paths) == 0 {
+		return NewPipe().WithError(innerErr)
 	}
 	return Slice(paths)
 }
@@ -179,8 +184,12 @@ func Post(url string) *Pipe {
 	return NewPipe().Post(url)
 }
 
-// Slice creates a pipe containing each element of s, one per line.
+// Slice creates a pipe containing each element of s, one per line. If s is
+// empty or nil, then the pipe is empty.
 func Slice(s []string) *Pipe {
+	if len(s) == 0 {
+		return NewPipe()
+	}
 	return Echo(strings.Join(s, "\n") + "\n")
 }
 
@@ -650,6 +659,40 @@ func (p *Pipe) Get(url string) *Pipe {
 	return p.Do(req)
 }
 
+// Hash returns the hex-encoded hash of the entire contents of the
+// pipe based on the provided hasher, or an error.
+// To perform hashing on files, see [Pipe.HashSums].
+func (p *Pipe) Hash(hasher hash.Hash) (string, error) {
+	if p.Error() != nil {
+		return "", p.Error()
+	}
+	_, err := io.Copy(hasher, p)
+	if err != nil {
+		p.SetError(err)
+		return "", err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+// HashSums reads paths from the pipe, one per line, and produces the
+// hex-encoded hash of each corresponding file based on the provided hasher,
+// one per line. Any files that cannot be opened or read will be ignored.
+// To perform hashing on the contents of the pipe, see [Pipe.Hash].
+func (p *Pipe) HashSums(hasher hash.Hash) *Pipe {
+	return p.FilterScan(func(line string, w io.Writer) {
+		f, err := os.Open(line)
+		if err != nil {
+			return // skip unopenable files
+		}
+		defer f.Close()
+		_, err = io.Copy(hasher, f)
+		if err != nil {
+			return // skip unreadable files
+		}
+		fmt.Fprintln(w, hex.EncodeToString(hasher.Sum(nil)))
+	})
+}
+
 // Join joins all the lines in the pipe's contents into a single
 // space-separated string, which will always end with a newline.
 func (p *Pipe) Join() *Pipe {
@@ -669,38 +712,50 @@ func (p *Pipe) Join() *Pipe {
 	})
 }
 
-// JQ executes query on the pipe's contents (presumed to be JSON), producing
-// the result. An invalid query will set the appropriate error on the pipe.
+// JQ executes query on the pipe's contents (presumed to be valid JSON or
+// [JSONLines] data), applying the query to each newline-delimited input value
+// and producing results until the first error is encountered. An invalid query
+// or value will set the appropriate error on the pipe.
 //
 // The exact dialect of JQ supported is that provided by
 // [github.com/itchyny/gojq], whose documentation explains the differences
 // between it and standard JQ.
+// 
+// [JSONLines]: https://jsonlines.org/
 func (p *Pipe) JQ(query string) *Pipe {
+	parsedQuery, err := gojq.Parse(query)
+	if err != nil {
+		return p.WithError(err)
+	}
+	code, err := gojq.Compile(parsedQuery)
+	if err != nil {
+		return p.WithError(err)
+	}
 	return p.Filter(func(r io.Reader, w io.Writer) error {
-		q, err := gojq.Parse(query)
-		if err != nil {
-			return err
-		}
-		var input interface{}
-		err = json.NewDecoder(r).Decode(&input)
-		if err != nil {
-			return err
-		}
-		iter := q.Run(input)
-		for {
-			v, ok := iter.Next()
-			if !ok {
-				return nil
-			}
-			if err, ok := v.(error); ok {
-				return err
-			}
-			result, err := gojq.Marshal(v)
+		dec := json.NewDecoder(r)
+		for dec.More() {
+			var input any
+			err := dec.Decode(&input)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(w, string(result))
+			iter := code.Run(input)
+			for {
+				v, ok := iter.Next()
+				if !ok {
+					break
+				}
+				if err, ok := v.(error); ok {
+					return err
+				}
+				result, err := gojq.Marshal(v)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintln(w, string(result))
+			}
 		}
+		return nil
 	})
 }
 
@@ -816,36 +871,19 @@ func (p *Pipe) SetError(err error) {
 
 // SHA256Sum returns the hex-encoded SHA-256 hash of the entire contents of the
 // pipe, or an error.
+// Deprecated: SHA256Sum has been deprecated by [Pipe.Hash]. To get the SHA-256
+// hash for the contents of the pipe, call `Hash(sha256.new())`
 func (p *Pipe) SHA256Sum() (string, error) {
-	if p.Error() != nil {
-		return "", p.Error()
-	}
-	hasher := sha256.New()
-	_, err := io.Copy(hasher, p)
-	if err != nil {
-		p.SetError(err)
-		return "", err
-	}
-	return hex.EncodeToString(hasher.Sum(nil)), p.Error()
+	return p.Hash(sha256.New())
 }
 
 // SHA256Sums reads paths from the pipe, one per line, and produces the
 // hex-encoded SHA-256 hash of each corresponding file, one per line. Any files
 // that cannot be opened or read will be ignored.
+// Deprecated: SHA256Sums has been deprecated by [Pipe.HashSums]. To get the SHA-256
+// hash for each file path in the pipe, call `HashSums(sha256.new())`
 func (p *Pipe) SHA256Sums() *Pipe {
-	return p.FilterScan(func(line string, w io.Writer) {
-		f, err := os.Open(line)
-		if err != nil {
-			return // skip unopenable files
-		}
-		defer f.Close()
-		h := sha256.New()
-		_, err = io.Copy(h, f)
-		if err != nil {
-			return // skip unreadable files
-		}
-		fmt.Fprintln(w, hex.EncodeToString(h.Sum(nil)))
-	})
+	return p.HashSums(sha256.New())
 }
 
 // Slice returns the pipe's contents as a slice of strings, one element per

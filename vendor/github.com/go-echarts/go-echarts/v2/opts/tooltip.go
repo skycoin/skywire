@@ -89,6 +89,18 @@ type Tooltip struct {
 
 	ValueFormatter string `json:"valueFormatter,omitempty"`
 
+	// The content formatter of tooltip's floating layer which supports string template and callback function.
+	// See https://echarts.apache.org/en/option.html#grid.tooltip.position
+	// May be a string ("inside", "top", "bottom", "left", "right") or a function of form:
+	//   (point: Array, params: Object|Array.<Object>, dom: HTMLDomElement, rect: Object, size: Object) => Array
+	Position types.FuncStr `json:"position,omitempty"`
+
+	// The border color of tooltip's floating layer.
+	BorderColor string `json:"borderColor,omitempty"`
+
+	// The background color of tooltip's floating layer. e.g. 'rgba(50,50,50,0.7)'
+	BackgroundColor string `json:"backgroundColor,omitempty"`
+
 	// Configuration item for axisPointer
 	AxisPointer *AxisPointer `json:"axisPointer,omitempty"`
 }

@@ -1,4 +1,4 @@
-// package commands cmd/calvin/commands/root.go
+// Package commands pkg/skywire-utilities/pkg/calvin/cmd/calvin/commands/root.go
 package commands
 
 import (
@@ -7,22 +7,21 @@ import (
 	"os"
 	"strings"
 
-	"github.com/0magnet/calvin"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/spf13/cobra"
 )
 
-// rootCmd represents the base command for the application
+// RootCmd is the root command
 var RootCmd = &cobra.Command{
 	Use:   "calvin",
 	Short: "generate calvin ascii font from text",
-	Long:  ``,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Long: calvin.AsciiFont("calvin")+`
+	generate calvin ascii font from text`,
+	RunE: func(_ *cobra.Command, args []string) error {
 		var input string
 
-		// Check if stdin has input
-		stat, _ := os.Stdin.Stat()
+		stat, _ := os.Stdin.Stat() //nolint
 		if (stat.Mode() & os.ModeCharDevice) == 0 {
-			// Reading from stdin
 			scanner := bufio.NewScanner(os.Stdin)
 			var sb strings.Builder
 			for scanner.Scan() {
@@ -34,14 +33,11 @@ var RootCmd = &cobra.Command{
 			}
 			input = sb.String()
 		} else if len(args) > 0 {
-			// Reading from command-line arguments
 			input = strings.Join(args, " ")
 		} else {
-			// No input provided
 			return fmt.Errorf("no input provided; pipe text or pass as arguments")
 		}
 
-		// Generate and print the ASCII font
 		output := calvin.AsciiFont(input)
 		fmt.Println(output)
 		return nil

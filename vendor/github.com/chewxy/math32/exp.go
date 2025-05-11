@@ -1,6 +1,11 @@
 package math32
 
-func Exp(x float32) float32
+func Exp(x float32) float32 {
+	if haveArchExp {
+		return archExp(x)
+	}
+	return exp(x)
+}
 
 func exp(x float32) float32 {
 	const (
@@ -27,7 +32,6 @@ func exp(x float32) float32 {
 	case x > Overflow:
 		return Inf(1)
 	case x < Underflow:
-		return 0
 		// case hx > LogMax:
 		// 	return Inf(1)
 		// case x < 0 && hx > LogMin:
@@ -54,7 +58,12 @@ func exp(x float32) float32 {
 // Exp2 returns 2**x, the base-2 exponential of x.
 //
 // Special cases are the same as Exp.
-func Exp2(x float32) float32
+func Exp2(x float32) float32 {
+	if haveArchExp2 {
+		return archExp2(x)
+	}
+	return exp2(x)
+}
 
 func exp2(x float32) float32 {
 	const (

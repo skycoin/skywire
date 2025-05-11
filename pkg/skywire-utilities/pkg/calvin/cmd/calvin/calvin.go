@@ -1,12 +1,8 @@
-// package main cmd/calvin/calvin.go
-/*
-convert text to ascii art
-*/
-
+// package main pkg/skywire-utilities/pkg/calvin/cmd/calvin/calvin.go
 package main
 
 import (
-	"github.com/0magnet/calvin/cmd/calvin/commands"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin/cmd/calvin/commands"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 )
@@ -32,7 +28,7 @@ func main() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	commands.RootCmd.Execute()
+	commands.RootCmd.Execute() //nolint
 }
 
 const help = "{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +

@@ -1,4 +1,4 @@
-// Package calvin pkg/skywire-utilities/calvin/calvin.go
+// Package calvin pkg/skywire-utilities/pkg/calvin/calvin.go
 /*
 convert text to ascii art font i.e.:
 go run pkg/skywire-utilities/calvin/cmd/calvin@develop convert text to ascii art font
@@ -83,8 +83,8 @@ var boxFont = map[rune][]string{
 	' ': {`  `, `  `, `  `},
 }
 
-// ConvertToBoxFont converts a lowercase string to box drawing characters.
-func AsciiFont(input string) string {
+// AsciiFont converts a string to box drawing characters.
+func AsciiFont(input string) string { //nolint
 	var output [3]string
 
 	for _, char := range input {
@@ -113,7 +113,7 @@ var charMap = map[rune]string{
 	'5': "𝟝", '6': "𝟞", '7': "𝟟", '8': "𝟠", '9': "𝟡",
 }
 
-// BlackboardBold converts a string to the blackboard bold charachter set shown above
+// BlackboardBold converts a string to the blackboard bold character set shown above
 func BlackboardBold(input string) string {
 	var result strings.Builder
 	for _, ch := range input {

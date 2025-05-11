@@ -33,9 +33,9 @@ type OpID int64
 
 // OpResult is returned from Transaction.Commit(), representing an operation's result with any data or error it produced.
 type OpResult struct {
-	Op     OpID
 	Record FileRecord
 	Err    error
+	Op     OpID
 }
 
 // OpHandler processes 'result' during the commit process of 'txn'.
@@ -67,10 +67,10 @@ type Transaction interface {
 type unsafeSerialTransaction struct {
 	ctx       context.Context
 	abort     context.CancelFunc
-	nextOp    OpID
 	store     Store
-	resultsMu sync.Mutex
 	results   map[OpID]OpResult
+	resultsMu sync.Mutex
+	nextOp    OpID
 }
 
 // TransactionOrSerial attempts to produce a Transaction from 'store'.
@@ -117,7 +117,7 @@ func abortErr(ctx, extraCtx context.Context) error {
 }
 
 func (u *unsafeSerialTransaction) Get(path string) OpID {
-	return u.GetHandler(path, OpHandlerFunc(func(txn Transaction, result OpResult) error {
+	return u.GetHandler(path, OpHandlerFunc(func(_ Transaction, _ OpResult) error {
 		return nil
 	}))
 }
@@ -140,12 +140,12 @@ func (u *unsafeSerialTransaction) GetHandler(path string, handler OpHandler) OpI
 }
 
 func (u *unsafeSerialTransaction) Set(path string, src FileRecord, contents blob.Blob) OpID {
-	return u.SetHandler(path, src, contents, OpHandlerFunc(func(txn Transaction, result OpResult) error {
+	return u.SetHandler(path, src, contents, OpHandlerFunc(func(_ Transaction, _ OpResult) error {
 		return nil
 	}))
 }
 
-func (u *unsafeSerialTransaction) SetHandler(path string, src FileRecord, contents blob.Blob, handler OpHandler) OpID {
+func (u *unsafeSerialTransaction) SetHandler(path string, src FileRecord, _ blob.Blob, handler OpHandler) OpID {
 	op := u.newOp()
 	if err := abortErr(u.ctx, nil); err != nil {
 		u.setResult(op, OpResult{Op: op, Err: err})
