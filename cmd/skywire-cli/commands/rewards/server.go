@@ -1163,28 +1163,28 @@ func server(e error) {
 		r1.GET("/", mainPage)
 		r1.GET("/index.html", mainPage)
 	} else {
-	//manually create routes to the compiled cogentcore web app source files
-	filepath.Walk(outputDir+"/bin/web", func(path string, info os.FileInfo, err error) error { //nolint
-		if !info.IsDir() {
-			relPath, err := filepath.Rel(outputDir+"/bin/web", path)
-			if err != nil {
-				return err
-			}
+		//manually create routes to the compiled cogentcore web app source files
+		filepath.Walk(outputDir+"/bin/web", func(path string, info os.FileInfo, err error) error { //nolint
+			if !info.IsDir() {
+				relPath, err := filepath.Rel(outputDir+"/bin/web", path)
+				if err != nil {
+					return err
+				}
 
-			if strings.HasSuffix(relPath, "index.html") {
-				r1.GET("/", func(c *gin.Context) {
-					c.File(path)
-				})
-			} else {
-				r1.GET("/"+relPath, func(c *gin.Context) {
-					c.File(path)
-				})
+				if strings.HasSuffix(relPath, "index.html") {
+					r1.GET("/", func(c *gin.Context) {
+						c.File(path)
+					})
+				} else {
+					r1.GET("/"+relPath, func(c *gin.Context) {
+						c.File(path)
+					})
+				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
 
-}
+	}
 	// Start the server using the custom Gin handler
 	serve := &http.Server{
 		Handler:           &ginHandler{Router: r1},
