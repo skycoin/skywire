@@ -112,10 +112,9 @@ SKYENV=/path/to/fiber.conf fiber run`
 		_, err = script.Exec(`bash -c 'cd ` + outputDir + ` || exit 0 ; go mod init fiber.skywire.dev/ui ; go get github.com/skycoin/skywire@develop && go mod tidy && go mod vendor && go run cogentcore.org/core/cmd/core@main build web'`).Stdout()
 		if err != nil {
 			fmt.Println("Error:", err)
-			return
 		}
 
-		server()
+		server(err)
 	},
 }
 
@@ -177,7 +176,7 @@ var htmlPageTemplateData htmlTemplateData
 // TODO: fix gocyclo error.
 //
 //gocyclo:ignore
-func server() {
+func server(e error) {
 
 	log := logging.MustGetLogger("dmsghttp")
 	if dmsgDisc == "" {
@@ -255,7 +254,6 @@ func server() {
 	// Disable Gin's default logger middleware
 	r1.Use(gin.Recovery())
 	r1.Use(loggingMiddleware())
-	r1.GET("/index.html", mainPage)
 	// endpoint for testing minimum response time of curl via socks5 proxy / stand-in for latency test
 	// https://dev.to/tigt/making-the-worlds-fastest-website-and-other-mistakes-56na
 	// This is the fastest web page. You may not like it, but this is what peak performance looks like.
@@ -1161,27 +1159,32 @@ func server() {
 		_, _ = c.Writer.WriteString(string(faviconBuffer)) //nolint
 	})
 
-	//manually create routes to the compiled cogentcore web app source files
-	filepath.Walk(outputDir+"/bin/web", func(path string, info os.FileInfo, err error) error { //nolint
-		if !info.IsDir() {
-			relPath, err := filepath.Rel(outputDir+"/bin/web", path)
-			if err != nil {
-				return err
-			}
+	if e != nil {
+		r1.GET("/", mainPage)
+		r1.GET("/index.html", mainPage)
+	} else {
+		//manually create routes to the compiled cogentcore web app source files
+		filepath.Walk(outputDir+"/bin/web", func(path string, info os.FileInfo, err error) error { //nolint
+			if !info.IsDir() {
+				relPath, err := filepath.Rel(outputDir+"/bin/web", path)
+				if err != nil {
+					return err
+				}
 
-			if strings.HasSuffix(relPath, "index.html") {
-				r1.GET("/", func(c *gin.Context) {
-					c.File(path)
-				})
-			} else {
-				r1.GET("/"+relPath, func(c *gin.Context) {
-					c.File(path)
-				})
+				if strings.HasSuffix(relPath, "index.html") {
+					r1.GET("/", func(c *gin.Context) {
+						c.File(path)
+					})
+				} else {
+					r1.GET("/"+relPath, func(c *gin.Context) {
+						c.File(path)
+					})
+				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
 
+	}
 	// Start the server using the custom Gin handler
 	serve := &http.Server{
 		Handler:           &ginHandler{Router: r1},
