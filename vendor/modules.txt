@@ -9,7 +9,7 @@ atomicgo.dev/keyboard/keys
 # atomicgo.dev/schedule v0.1.0
 ## explicit; go 1.18
 atomicgo.dev/schedule
-# cogentcore.org/core v0.3.10
+# cogentcore.org/core v0.3.11
 ## explicit; go 1.23.4
 cogentcore.org/core/base/bools
 cogentcore.org/core/base/datasize
@@ -26,6 +26,7 @@ cogentcore.org/core/base/iox/tomlx
 cogentcore.org/core/base/keylist
 cogentcore.org/core/base/labels
 cogentcore.org/core/base/mergefs
+cogentcore.org/core/base/metadata
 cogentcore.org/core/base/nptime
 cogentcore.org/core/base/num
 cogentcore.org/core/base/option
@@ -33,8 +34,8 @@ cogentcore.org/core/base/ordmap
 cogentcore.org/core/base/plan
 cogentcore.org/core/base/profile
 cogentcore.org/core/base/reflectx
-cogentcore.org/core/base/runes
 cogentcore.org/core/base/slicesx
+cogentcore.org/core/base/stack
 cogentcore.org/core/base/strcase
 cogentcore.org/core/base/stringsx
 cogentcore.org/core/base/tiered
@@ -61,27 +62,23 @@ cogentcore.org/core/icons
 cogentcore.org/core/keymap
 cogentcore.org/core/math32
 cogentcore.org/core/paint
-cogentcore.org/core/paint/raster
-cogentcore.org/core/paint/scan
-cogentcore.org/core/parse
-cogentcore.org/core/parse/complete
-cogentcore.org/core/parse/languages
-cogentcore.org/core/parse/languages/bibtex
-cogentcore.org/core/parse/languages/golang
-cogentcore.org/core/parse/languages/markdown
-cogentcore.org/core/parse/languages/tex
-cogentcore.org/core/parse/lexer
-cogentcore.org/core/parse/parser
-cogentcore.org/core/parse/supportedlanguages
-cogentcore.org/core/parse/syms
-cogentcore.org/core/parse/token
-cogentcore.org/core/spell
+cogentcore.org/core/paint/pimage
+cogentcore.org/core/paint/ppath
+cogentcore.org/core/paint/render
+cogentcore.org/core/paint/renderers
+cogentcore.org/core/paint/renderers/htmlcanvas
+cogentcore.org/core/paint/renderers/rasterx
+cogentcore.org/core/paint/renderers/rasterx/scan
+cogentcore.org/core/paint/renderers/svgrender
 cogentcore.org/core/styles
 cogentcore.org/core/styles/abilities
+cogentcore.org/core/styles/sides
 cogentcore.org/core/styles/states
+cogentcore.org/core/styles/styleprops
 cogentcore.org/core/styles/units
 cogentcore.org/core/svg
 cogentcore.org/core/system
+cogentcore.org/core/system/composer
 cogentcore.org/core/system/driver
 cogentcore.org/core/system/driver/android
 cogentcore.org/core/system/driver/base
@@ -92,10 +89,35 @@ cogentcore.org/core/system/driver/mobile/mobileinit
 cogentcore.org/core/system/driver/offscreen
 cogentcore.org/core/system/driver/web
 cogentcore.org/core/system/driver/web/jsfs
-cogentcore.org/core/texteditor
-cogentcore.org/core/texteditor/difflib
-cogentcore.org/core/texteditor/highlighting
-cogentcore.org/core/texteditor/text
+cogentcore.org/core/text/csl
+cogentcore.org/core/text/difflib
+cogentcore.org/core/text/fonts
+cogentcore.org/core/text/highlighting
+cogentcore.org/core/text/htmltext
+cogentcore.org/core/text/lines
+cogentcore.org/core/text/parse
+cogentcore.org/core/text/parse/complete
+cogentcore.org/core/text/parse/languages
+cogentcore.org/core/text/parse/languages/bibtex
+cogentcore.org/core/text/parse/languages/golang
+cogentcore.org/core/text/parse/languages/markdown
+cogentcore.org/core/text/parse/languages/tex
+cogentcore.org/core/text/parse/lexer
+cogentcore.org/core/text/parse/parser
+cogentcore.org/core/text/parse/supportedlanguages
+cogentcore.org/core/text/parse/syms
+cogentcore.org/core/text/rich
+cogentcore.org/core/text/runes
+cogentcore.org/core/text/search
+cogentcore.org/core/text/shaped
+cogentcore.org/core/text/shaped/shapers
+cogentcore.org/core/text/shaped/shapers/shapedgt
+cogentcore.org/core/text/shaped/shapers/shapedjs
+cogentcore.org/core/text/spell
+cogentcore.org/core/text/text
+cogentcore.org/core/text/textcore
+cogentcore.org/core/text/textpos
+cogentcore.org/core/text/token
 cogentcore.org/core/tree
 cogentcore.org/core/types
 # github.com/ActiveState/termtest/conpty v0.5.0
@@ -172,7 +194,7 @@ github.com/alecthomas/chroma/lexers/x
 github.com/alecthomas/chroma/lexers/y
 github.com/alecthomas/chroma/lexers/z
 github.com/alecthomas/chroma/styles
-# github.com/alecthomas/chroma/v2 v2.17.2
+# github.com/alecthomas/chroma/v2 v2.18.0
 ## explicit; go 1.22
 github.com/alecthomas/chroma/v2
 github.com/alecthomas/chroma/v2/formatters/html
@@ -273,7 +295,7 @@ github.com/coder/websocket/internal/bpool
 github.com/coder/websocket/internal/errd
 github.com/coder/websocket/internal/util
 github.com/coder/websocket/internal/wsjs
-# github.com/cogentcore/webgpu v0.0.0-20250506132018-9faea5a0f598
+# github.com/cogentcore/webgpu v0.23.0
 ## explicit; go 1.22
 github.com/cogentcore/webgpu/jsx
 github.com/cogentcore/webgpu/wgpu
@@ -292,7 +314,7 @@ github.com/cogentcore/webgpu/wgpuglfw
 # github.com/confiant-inc/go-socks5 v0.0.0-20210816151940-c1124825b1d6
 ## explicit
 github.com/confiant-inc/go-socks5
-# github.com/containerd/console v1.0.4
+# github.com/containerd/console v1.0.5
 ## explicit; go 1.13
 github.com/containerd/console
 # github.com/creack/pty v1.1.24
@@ -444,6 +466,20 @@ github.com/go-redis/redis/v8/internal/util
 # github.com/go-task/slim-sprig/v3 v3.0.0
 ## explicit; go 1.20
 github.com/go-task/slim-sprig/v3
+# github.com/go-text/typesetting v0.3.1-0.20250402122313-7a0f05577ff5
+## explicit; go 1.19
+github.com/go-text/typesetting/di
+github.com/go-text/typesetting/font
+github.com/go-text/typesetting/font/cff
+github.com/go-text/typesetting/font/cff/interpreter
+github.com/go-text/typesetting/font/opentype
+github.com/go-text/typesetting/font/opentype/tables
+github.com/go-text/typesetting/fontscan
+github.com/go-text/typesetting/harfbuzz
+github.com/go-text/typesetting/language
+github.com/go-text/typesetting/segmenter
+github.com/go-text/typesetting/shaping
+github.com/go-text/typesetting/unicodedata
 # github.com/go-viper/mapstructure/v2 v2.2.1
 ## explicit; go 1.18
 github.com/go-viper/mapstructure/v2
@@ -477,10 +513,6 @@ github.com/goccy/go-json/internal/runtime
 github.com/godbus/dbus/v5
 github.com/godbus/dbus/v5/introspect
 github.com/godbus/dbus/v5/prop
-# github.com/goki/freetype v1.0.5
-## explicit; go 1.18
-github.com/goki/freetype/raster
-github.com/goki/freetype/truetype
 # github.com/gomarkdown/markdown v0.0.0-20250311123330-531bef5e742b
 ## explicit; go 1.12
 github.com/gomarkdown/markdown
@@ -554,8 +586,8 @@ github.com/jackc/pgpassfile
 # github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
 ## explicit; go 1.14
 github.com/jackc/pgservicefile
-# github.com/jackc/pgx/v5 v5.7.4
-## explicit; go 1.21
+# github.com/jackc/pgx/v5 v5.7.5
+## explicit; go 1.23.0
 github.com/jackc/pgx/v5
 github.com/jackc/pgx/v5/internal/iobufpool
 github.com/jackc/pgx/v5/internal/pgio
@@ -704,7 +736,7 @@ github.com/pmezard/go-difflib/difflib
 github.com/pterm/pterm
 github.com/pterm/pterm/internal
 github.com/pterm/pterm/putils
-# github.com/quic-go/quic-go v0.51.0
+# github.com/quic-go/quic-go v0.52.0
 ## explicit; go 1.23
 github.com/quic-go/quic-go
 github.com/quic-go/quic-go/internal/ackhandler
@@ -739,7 +771,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20250511180625-78c688389aa4 => github.com/skycoin/dmsg v1.3.29-0.20250520155319-2f91abefe99c
+# github.com/skycoin/dmsg v1.3.29-0.20250520155319-2f91abefe99c
 ## explicit; go 1.24
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands
@@ -887,6 +919,9 @@ github.com/subosito/gotenv
 # github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 ## explicit
 github.com/syndtr/gocapability/capability
+# github.com/tdewolff/parse/v2 v2.8.1
+## explicit; go 1.11
+github.com/tdewolff/parse/v2/strconv
 # github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161
 ## explicit
 github.com/templexxx/cpufeat
@@ -938,7 +973,7 @@ github.com/xo/terminfo
 github.com/xtaci/kcp-go
 # github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
 ## explicit; go 1.13
-# github.com/yuin/goldmark v1.7.11
+# github.com/yuin/goldmark v1.7.12
 ## explicit; go 1.22
 github.com/yuin/goldmark
 github.com/yuin/goldmark/ast
@@ -1006,15 +1041,11 @@ golang.org/x/exp/maps
 golang.org/x/image/bmp
 golang.org/x/image/ccitt
 golang.org/x/image/draw
-golang.org/x/image/font
-golang.org/x/image/font/opentype
-golang.org/x/image/font/sfnt
 golang.org/x/image/math/f64
 golang.org/x/image/math/fixed
 golang.org/x/image/riff
 golang.org/x/image/tiff
 golang.org/x/image/tiff/lzw
-golang.org/x/image/vector
 golang.org/x/image/vp8
 golang.org/x/image/vp8l
 golang.org/x/image/webp
@@ -1115,8 +1146,10 @@ golang.org/x/tools/internal/versions
 # golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
 ## explicit; go 1.17
 golang.zx2c4.com/wintun
-# golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
-## explicit; go 1.19
+# golang.zx2c4.com/wireguard v0.0.0-20250515145403-1571e0fbae8e
+## explicit; go 1.23.1
+golang.zx2c4.com/wireguard/conn
+golang.zx2c4.com/wireguard/conn/winrio
 golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
 # google.golang.org/protobuf v1.36.6
@@ -1167,4 +1200,3 @@ mvdan.cc/sh/v3/fileutil
 mvdan.cc/sh/v3/pattern
 mvdan.cc/sh/v3/shell
 mvdan.cc/sh/v3/syntax
-# github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20250520155319-2f91abefe99c
