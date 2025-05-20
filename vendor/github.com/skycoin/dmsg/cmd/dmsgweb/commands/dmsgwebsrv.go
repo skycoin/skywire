@@ -117,7 +117,6 @@ var srvCmd = &cobra.Command{
 }
 
 func server() {
-
 	ctx, cancel := cmdutil.SignalContext(context.Background(), dlog)
 	defer cancel()
 
