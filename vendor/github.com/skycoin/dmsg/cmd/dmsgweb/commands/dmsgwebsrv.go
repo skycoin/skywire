@@ -20,8 +20,10 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
-	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/internal/cli"
+	"github.com/skycoin/dmsg/internal/flags"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsghttp"
 )
 
 const dwsenv = "DMSGWEBSRV"
@@ -30,7 +32,6 @@ var dwscfg = os.Getenv(dwsenv)
 
 func init() {
 	dmsgPort = scriptExecUintSlice("${DMSGPORT[@]:-80}", dwscfg)
-	dmsgSess = scriptExecInt("${DMSGSESSIONS:-1}", dwscfg)
 	wl = scriptExecStringSlice("${WHITELISTPKS[@]}", dwscfg)
 	localPort = scriptExecUintSlice("${LOCALPORT[@]:-8086}", dwscfg)
 	rawTCP = scriptExecBoolSlice("${RAWTCP[@]:-false}", dwscfg)
@@ -43,7 +44,7 @@ func init() {
 	pk, _ = sk.PubKey() //nolint
 
 	RootCmd.AddCommand(srvCmd)
-	srvCmd.Flags().BoolVarP(&useHTTP, "http", "z", false, "use regular http to connect to dmsg discovery")
+	flags.InitFlags(srvCmd)
 	srvCmd.Flags().UintSliceVarP(&localPort, "lport", "p", localPort, "local application interface port(s)\033[0m\n\r")
 	srvCmd.Flags().UintSliceVarP(&dmsgPort, "dport", "d", dmsgPort, "DMSG port(s) to serve\033[0m\n\r")
 	srvCmd.Flags().StringSliceVarP(&wl, "wl", "w", wl, "whitelisted keys for DMSG authenticated routes"+func() string {
@@ -52,10 +53,7 @@ func init() {
 		}
 		return ""
 	}())
-	srvCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDisc, "DMSG discovery URL\033[0m\n\r")
-	srvCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "F", "", "dmsghttp-config path")
 	srvCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", proxyAddr, "connect to DMSG via proxy (e.g., '127.0.0.1:1080')")
-	srvCmd.Flags().IntVarP(&dmsgSess, "dsess", "e", dmsgSess, "DMSG sessions\033[0m\n\r")
 	srvCmd.Flags().BoolSliceVarP(&rawTCP, "rt", "c", rawTCP, "proxy local port as raw TCP, comma separated"+func() string {
 		if len(rawTCP) > 0 {
 			return "\033[0m\n\r"
@@ -63,7 +61,7 @@ func init() {
 		return ""
 	}())
 	srvCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
-	srvCmd.Flags().BoolVarP(&isEnvs, "envs", "Z", false, "show example .conf file")
+	srvCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file")
 	srvCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
 	srvCmd.CompletionOptions.DisableDefaultCmd = true
 }
@@ -88,19 +86,13 @@ var srvCmd = &cobra.Command{
 		}
 		dlog = logging.MustGetLogger("dmsgwebsrv")
 
-		if dmsgHTTPPath != "" {
-			dmsg.DmsghttpJSON, err = os.ReadFile(dmsgHTTPPath) //nolint
-			if err != nil {
-				dlog.WithError(err).Fatal("Failed to read specified dmsghttp-config")
-			}
-			err = dmsg.InitConfig()
-			if err != nil {
-				dlog.WithError(err).Fatal("Failed to unmarshal dmsghttp-config")
-			}
+		err = flags.InitConfig()
+		if err != nil {
+			dlog.WithError(err).Fatal("Failed to read specified dmsghttp-config")
 		}
 
 		if len(localPort) != len(dmsgPort) || len(localPort) != len(rawTCP) {
-			dlog.Fatal("The number of local ports, DMSG ports, and raw TCP flags must be the same")
+			dlog.Fatal("The number of local ports, DMSG ports, and raw TCP bools must be the same")
 		}
 		pk, err = sk.PubKey()
 		if err != nil {
@@ -118,14 +110,6 @@ var srvCmd = &cobra.Command{
 			dlog.Infof("%d keys whitelisted", len(wlkeys))
 		}
 
-		if proxyAddr != "" {
-			var err error
-			dialer, err = proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
-			if err != nil {
-				dlog.Fatalf("Error creating SOCKS5 dialer: %v", err)
-			}
-			httpClient = &http.Client{Transport: &http.Transport{Dial: dialer.Dial}}
-		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
 		server()
@@ -137,24 +121,48 @@ func server() {
 	ctx, cancel := cmdutil.SignalContext(context.Background(), dlog)
 	defer cancel()
 
-	dmsgClient := dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, dlog), dmsg.DefaultConfig())
-	defer func() {
-		if err := dmsgClient.Close(); err != nil {
-			dlog.WithError(err).Error()
+	if proxyAddr != "" {
+		// Use SOCKS5 proxy dialer if specified
+		dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
+		if err != nil {
+			dlog.WithError(err).Fatal("Error creating SOCKS5 dialer")
 		}
-	}()
-	go dmsgClient.Serve(ctx)
-
-	select {
-	case <-ctx.Done():
-		dlog.WithError(ctx.Err()).Warn()
-		return
-	case <-dmsgClient.Ready():
+		transport := &http.Transport{
+			Dial: dialer.Dial,
+		}
+		httpClient = &http.Client{
+			Transport: transport,
+		}
+		ctx = context.WithValue(context.Background(), "socks5_proxy", proxyAddr) //nolint
 	}
+
+	if flags.UseDC {
+		dmsgC, closeDmsg, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, "", flags.DmsgSessions, pk.String())
+	} else {
+		if flags.UseHTTP {
+			dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dlog, pk, sk, httpClient, flags.DmsgDiscURL, flags.DmsgSessions)
+		} else {
+			var dmsgDC *dmsg.Client
+			var closeDmsgDC func()
+			dmsgDC, closeDmsgDC, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, "", flags.DmsgSessions, dmsg.ExtractPKFromDmsgAddr(flags.DmsgDiscAddr))
+			if err != nil {
+				dlog.WithError(err).Error("Error connecting to dmsg network")
+				return
+			}
+			defer closeDmsgDC()
+			dmsgHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
+			dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dlog, pk, sk, dmsgHTTP, flags.DmsgDiscAddr, flags.DmsgSessions)
+		}
+	}
+	if err != nil {
+		dlog.WithError(err).Error("Error connecting to dmsg network")
+		return
+	}
+	defer closeDmsg()
 
 	wg := sync.WaitGroup{}
 	for i := range localPort {
-		lis, err := dmsgClient.Listen(uint16(dmsgPort[i])) //nolint
+		lis, err := dmsgC.Listen(uint16(dmsgPort[i])) //nolint
 		if err != nil {
 			dlog.Fatalf("Error listening on DMSG port %d: %v", dmsgPort[i], err)
 		}
@@ -301,10 +309,10 @@ func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Liste
 
 const srvenvfileLinux = `
 #########################################################################
-#--	DMSGWEB SRV CONFIG TEMPLATE
+#--	DMSG WEB SRV CONFIG TEMPLATE
 #--		Defaults shown
 #--		Uncomment to change default value
-#--		LOCALPORT and DMSGPORT must contain the same number of elements
+#--		LOCALPORT, DMSGPORT, and RAWTCP must contain the same number of elements
 #########################################################################
 
 #--	DMSG port to serve
