@@ -59,7 +59,7 @@ require (
 	golang.org/x/sync v0.14.0
 	golang.org/x/sys v0.33.0
 	golang.org/x/term v0.32.0
-	golang.zx2c4.com/wireguard v0.0.0-20250515145403-1571e0fbae8e //DO NOT MODIFY OR UPDATE v0.0.0-20230223181233-21636207a675
+	golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675 //DO NOT MODIFY OR UPDATE v0.0.0-20230223181233-21636207a675
 	gopkg.in/telebot.v3 v3.3.8
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.26.1

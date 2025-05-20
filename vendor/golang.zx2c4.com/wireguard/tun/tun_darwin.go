@@ -1,19 +1,21 @@
 /* SPDX-License-Identifier: MIT
  *
- * Copyright (C) 2017-2025 WireGuard LLC. All Rights Reserved.
+ * Copyright (C) 2017-2023 WireGuard LLC. All Rights Reserved.
  */
 
 package tun
 
 import (
+	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
+	"golang.org/x/net/ipv6"
 	"golang.org/x/sys/unix"
 )
 
@@ -26,6 +28,18 @@ type NativeTun struct {
 	errors      chan error
 	routeSocket int
 	closeOnce   sync.Once
+}
+
+func retryInterfaceByIndex(index int) (iface *net.Interface, err error) {
+	for i := 0; i < 20; i++ {
+		iface, err = net.InterfaceByIndex(index)
+		if err != nil && errors.Is(err, syscall.ENOMEM) {
+			time.Sleep(time.Duration(i) * time.Second / 3)
+			continue
+		}
+		return iface, err
+	}
+	return nil, err
 }
 
 func (tun *NativeTun) routineRouteListener(tunIfindex int) {
@@ -41,29 +55,33 @@ func (tun *NativeTun) routineRouteListener(tunIfindex int) {
 	retry:
 		n, err := unix.Read(tun.routeSocket, data)
 		if err != nil {
-			if errno, ok := err.(unix.Errno); ok && errno == unix.EINTR {
+			if errno, ok := err.(syscall.Errno); ok && errno == syscall.EINTR {
 				goto retry
 			}
 			tun.errors <- err
 			return
 		}
 
-		if n < 28 {
+		if n < 14 {
 			continue
 		}
 
-		if data[3 /* ifm_type */] != unix.RTM_IFINFO {
+		if data[3 /* type */] != unix.RTM_IFINFO {
 			continue
 		}
-		ifindex := int(*(*uint16)(unsafe.Pointer(&data[12 /* ifm_index */])))
+		ifindex := int(*(*uint16)(unsafe.Pointer(&data[12 /* ifindex */])))
 		if ifindex != tunIfindex {
 			continue
 		}
 
-		flags := int(*(*uint32)(unsafe.Pointer(&data[8 /* ifm_flags */])))
+		iface, err := retryInterfaceByIndex(ifindex)
+		if err != nil {
+			tun.errors <- err
+			return
+		}
 
 		// Up / Down event
-		up := (flags & syscall.IFF_UP) != 0
+		up := (iface.Flags & net.FlagUp) != 0
 		if up != statusUp && up {
 			tun.events <- EventUp
 		}
@@ -72,13 +90,11 @@ func (tun *NativeTun) routineRouteListener(tunIfindex int) {
 		}
 		statusUp = up
 
-		mtu := int(*(*uint32)(unsafe.Pointer(&data[24 /* ifm_data.ifi_mtu */])))
-
 		// MTU changes
-		if mtu != statusMTU {
+		if iface.MTU != statusMTU {
 			tun.events <- EventMTUUpdate
 		}
-		statusMTU = mtu
+		statusMTU = iface.MTU
 	}
 }
 
@@ -201,46 +217,45 @@ func (tun *NativeTun) Events() <-chan Event {
 	return tun.events
 }
 
-func (tun *NativeTun) Read(bufs [][]byte, sizes []int, offset int) (int, error) {
-	// TODO: the BSDs look very similar in Read() and Write(). They should be
-	// collapsed, with platform-specific files containing the varying parts of
-	// their implementations.
+func (tun *NativeTun) Read(buff []byte, offset int) (int, error) {
 	select {
 	case err := <-tun.errors:
 		return 0, err
 	default:
-		buf := bufs[0][offset-4:]
-		n, err := tun.tunFile.Read(buf[:])
+		buff := buff[offset-4:]
+		n, err := tun.tunFile.Read(buff[:])
 		if n < 4 {
 			return 0, err
 		}
-		sizes[0] = n - 4
-		return 1, err
+		return n - 4, err
 	}
 }
 
-func (tun *NativeTun) Write(bufs [][]byte, offset int) (int, error) {
-	if offset < 4 {
-		return 0, io.ErrShortBuffer
+func (tun *NativeTun) Write(buff []byte, offset int) (int, error) {
+	// reserve space for header
+
+	buff = buff[offset-4:]
+
+	// add packet information header
+
+	buff[0] = 0x00
+	buff[1] = 0x00
+	buff[2] = 0x00
+
+	if buff[4]>>4 == ipv6.Version {
+		buff[3] = unix.AF_INET6
+	} else {
+		buff[3] = unix.AF_INET
 	}
-	for i, buf := range bufs {
-		buf = buf[offset-4:]
-		buf[0] = 0x00
-		buf[1] = 0x00
-		buf[2] = 0x00
-		switch buf[4] >> 4 {
-		case 4:
-			buf[3] = unix.AF_INET
-		case 6:
-			buf[3] = unix.AF_INET6
-		default:
-			return i, unix.EAFNOSUPPORT
-		}
-		if _, err := tun.tunFile.Write(buf); err != nil {
-			return i, err
-		}
-	}
-	return len(bufs), nil
+
+	// write
+
+	return tun.tunFile.Write(buff)
+}
+
+func (tun *NativeTun) Flush() error {
+	// TODO: can flushing be implemented by buffering and using sendmmsg?
+	return nil
 }
 
 func (tun *NativeTun) Close() error {
@@ -301,10 +316,6 @@ func (tun *NativeTun) MTU() (int, error) {
 	}
 
 	return int(ifr.MTU), nil
-}
-
-func (tun *NativeTun) BatchSize() int {
-	return 1
 }
 
 func socketCloexec(family, sotype, proto int) (fd int, err error) {
