@@ -157,13 +157,6 @@ dmsgweb conf file detected: ` + dwcfg
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		//		c := make(chan os.Signal, 1)
-		//		signal.Notify(c, os.Interrupt, syscall.SIGTERM) //nolint
-		//		go func() {
-		//			<-c
-		//			os.Exit(0)
-		//		}()
-
 		ctx, cancel := cmdutil.SignalContext(context.Background(), dlog)
 		defer cancel()
 
