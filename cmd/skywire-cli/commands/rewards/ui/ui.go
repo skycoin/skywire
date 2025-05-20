@@ -1,5 +1,3 @@
-//go:build ignore
-
 // Package main cmd/skywire-cli/commands/rewards-ui/ui/ui.go
 package main
 
@@ -19,6 +17,7 @@ import (
 	"cogentcore.org/core/htmlcore"
 	"cogentcore.org/core/icons"
 	"cogentcore.org/core/styles"
+	"cogentcore.org/core/text/text"
 	"cogentcore.org/core/text/fonts"
 	"cogentcore.org/core/text/rich"
 	"cogentcore.org/core/tree"
@@ -103,10 +102,10 @@ func main() {
 	core.TheApp.SetSceneInit(func(sc *core.Scene) {
 		sc.SetWidgetInit(func(w core.Widget) {
 			w.AsWidget().Styler(func(s *styles.Style) {
-				s.Font.Family = rich.Custom
+				s.Font.Family = rich.Monospace
 				s.Font.CustomFont = "mononoki"
-				//s.Text.LineHeight.Em(1)
-				//s.Text.WhiteSpace = styles.WhiteSpacePreWrap
+				s.Text.LineHeight = 1
+				s.Text.WhiteSpace = text.WhiteSpacePreWrap
 			})
 		})
 	})
