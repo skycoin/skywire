@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"time"
@@ -101,13 +100,6 @@ var serveCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Run: func(_ *cobra.Command, _ []string) {
 		dlog = logging.MustGetLogger("dmsg-proxy")
-		interrupt := make(chan os.Signal, 1)
-		signal.Notify(interrupt, os.Interrupt)
-		go func() {
-			<-interrupt
-			dlog.Info("Interrupt received. Shutting down...")
-			os.Exit(0)
-		}()
 
 		if dmsgHTTPPath != "" {
 			dmsg.DmsghttpJSON, err = os.ReadFile(dmsgHTTPPath) //nolint
