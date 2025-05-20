@@ -9,95 +9,6 @@ atomicgo.dev/keyboard/keys
 # atomicgo.dev/schedule v0.1.0
 ## explicit; go 1.18
 atomicgo.dev/schedule
-# cogentcore.org/core v0.3.10
-## explicit; go 1.23.4
-cogentcore.org/core/base/bools
-cogentcore.org/core/base/datasize
-cogentcore.org/core/base/elide
-cogentcore.org/core/base/errors
-cogentcore.org/core/base/fileinfo
-cogentcore.org/core/base/fileinfo/mimedata
-cogentcore.org/core/base/fsx
-cogentcore.org/core/base/indent
-cogentcore.org/core/base/iox
-cogentcore.org/core/base/iox/imagex
-cogentcore.org/core/base/iox/jsonx
-cogentcore.org/core/base/iox/tomlx
-cogentcore.org/core/base/keylist
-cogentcore.org/core/base/labels
-cogentcore.org/core/base/mergefs
-cogentcore.org/core/base/nptime
-cogentcore.org/core/base/num
-cogentcore.org/core/base/option
-cogentcore.org/core/base/ordmap
-cogentcore.org/core/base/plan
-cogentcore.org/core/base/profile
-cogentcore.org/core/base/reflectx
-cogentcore.org/core/base/runes
-cogentcore.org/core/base/slicesx
-cogentcore.org/core/base/strcase
-cogentcore.org/core/base/stringsx
-cogentcore.org/core/base/tiered
-cogentcore.org/core/base/vcs
-cogentcore.org/core/colors
-cogentcore.org/core/colors/cam/cam16
-cogentcore.org/core/colors/cam/cie
-cogentcore.org/core/colors/cam/hct
-cogentcore.org/core/colors/cam/hsl
-cogentcore.org/core/colors/colormap
-cogentcore.org/core/colors/gradient
-cogentcore.org/core/colors/matcolor
-cogentcore.org/core/core
-cogentcore.org/core/cursors
-cogentcore.org/core/cursors/cursorimg
-cogentcore.org/core/enums
-cogentcore.org/core/events
-cogentcore.org/core/events/key
-cogentcore.org/core/gpu
-cogentcore.org/core/gpu/drawmatrix
-cogentcore.org/core/gpu/gpudraw
-cogentcore.org/core/htmlcore
-cogentcore.org/core/icons
-cogentcore.org/core/keymap
-cogentcore.org/core/math32
-cogentcore.org/core/paint
-cogentcore.org/core/paint/raster
-cogentcore.org/core/paint/scan
-cogentcore.org/core/parse
-cogentcore.org/core/parse/complete
-cogentcore.org/core/parse/languages
-cogentcore.org/core/parse/languages/bibtex
-cogentcore.org/core/parse/languages/golang
-cogentcore.org/core/parse/languages/markdown
-cogentcore.org/core/parse/languages/tex
-cogentcore.org/core/parse/lexer
-cogentcore.org/core/parse/parser
-cogentcore.org/core/parse/supportedlanguages
-cogentcore.org/core/parse/syms
-cogentcore.org/core/parse/token
-cogentcore.org/core/spell
-cogentcore.org/core/styles
-cogentcore.org/core/styles/abilities
-cogentcore.org/core/styles/states
-cogentcore.org/core/styles/units
-cogentcore.org/core/svg
-cogentcore.org/core/system
-cogentcore.org/core/system/driver
-cogentcore.org/core/system/driver/android
-cogentcore.org/core/system/driver/base
-cogentcore.org/core/system/driver/desktop
-cogentcore.org/core/system/driver/ios
-cogentcore.org/core/system/driver/mobile/callfn
-cogentcore.org/core/system/driver/mobile/mobileinit
-cogentcore.org/core/system/driver/offscreen
-cogentcore.org/core/system/driver/web
-cogentcore.org/core/system/driver/web/jsfs
-cogentcore.org/core/texteditor
-cogentcore.org/core/texteditor/difflib
-cogentcore.org/core/texteditor/highlighting
-cogentcore.org/core/texteditor/text
-cogentcore.org/core/tree
-cogentcore.org/core/types
 # github.com/ActiveState/termtest/conpty v0.5.0
 ## explicit; go 1.12
 github.com/ActiveState/termtest/conpty
@@ -108,15 +19,6 @@ github.com/AudriusButkevicius/pfilter
 ## explicit; go 1.16
 github.com/Azure/go-ansiterm
 github.com/Azure/go-ansiterm/winterm
-# github.com/Bios-Marcel/wastebasket/v2 v2.0.3
-## explicit; go 1.23.4
-github.com/Bios-Marcel/wastebasket/v2
-github.com/Bios-Marcel/wastebasket/v2/internal
-github.com/Bios-Marcel/wastebasket/v2/wastebasket_nix
-github.com/Bios-Marcel/wastebasket/v2/wastebasket_windows
-# github.com/Masterminds/vcs v1.13.3
-## explicit; go 1.17
-github.com/Masterminds/vcs
 # github.com/MichaelMure/go-term-markdown v0.1.4
 ## explicit; go 1.12
 github.com/MichaelMure/go-term-markdown
@@ -134,7 +36,7 @@ github.com/Microsoft/go-winio/pkg/guid
 # github.com/StackExchange/wmi v1.2.1
 ## explicit; go 1.13
 github.com/StackExchange/wmi
-# github.com/VictoriaMetrics/metrics v1.36.0
+# github.com/VictoriaMetrics/metrics v1.37.0
 ## explicit; go 1.17
 github.com/VictoriaMetrics/metrics
 # github.com/alecthomas/chroma v0.10.0
@@ -172,25 +74,9 @@ github.com/alecthomas/chroma/lexers/x
 github.com/alecthomas/chroma/lexers/y
 github.com/alecthomas/chroma/lexers/z
 github.com/alecthomas/chroma/styles
-# github.com/alecthomas/chroma/v2 v2.17.2
-## explicit; go 1.22
-github.com/alecthomas/chroma/v2
-github.com/alecthomas/chroma/v2/formatters/html
-github.com/alecthomas/chroma/v2/lexers
-# github.com/anthonynsimon/bild v0.14.0
-## explicit; go 1.21
-github.com/anthonynsimon/bild/clone
-github.com/anthonynsimon/bild/convolution
-github.com/anthonynsimon/bild/math/f64
-github.com/anthonynsimon/bild/parallel
-github.com/anthonynsimon/bild/transform
 # github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 ## explicit
 github.com/armon/go-socks5
-# github.com/aymerick/douceur v0.2.0
-## explicit
-github.com/aymerick/douceur/css
-github.com/aymerick/douceur/parser
 # github.com/bitfield/script v0.24.1
 ## explicit; go 1.18
 github.com/bitfield/script
@@ -256,9 +142,6 @@ github.com/cespare/xxhash/v2
 # github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937
 ## explicit; go 1.18
 github.com/chen3feng/safecast
-# github.com/chewxy/math32 v1.11.1
-## explicit; go 1.13
-github.com/chewxy/math32
 # github.com/cloudwego/base64x v0.1.5
 ## explicit; go 1.16
 github.com/cloudwego/base64x
@@ -273,26 +156,10 @@ github.com/coder/websocket/internal/bpool
 github.com/coder/websocket/internal/errd
 github.com/coder/websocket/internal/util
 github.com/coder/websocket/internal/wsjs
-# github.com/cogentcore/webgpu v0.0.0-20250506132018-9faea5a0f598
-## explicit; go 1.22
-github.com/cogentcore/webgpu/jsx
-github.com/cogentcore/webgpu/wgpu
-github.com/cogentcore/webgpu/wgpu/lib
-github.com/cogentcore/webgpu/wgpu/lib/android/386
-github.com/cogentcore/webgpu/wgpu/lib/android/amd64
-github.com/cogentcore/webgpu/wgpu/lib/android/arm
-github.com/cogentcore/webgpu/wgpu/lib/android/arm64
-github.com/cogentcore/webgpu/wgpu/lib/darwin/amd64
-github.com/cogentcore/webgpu/wgpu/lib/darwin/arm64
-github.com/cogentcore/webgpu/wgpu/lib/ios/amd64
-github.com/cogentcore/webgpu/wgpu/lib/ios/arm64
-github.com/cogentcore/webgpu/wgpu/lib/linux/amd64
-github.com/cogentcore/webgpu/wgpu/lib/windows/amd64
-github.com/cogentcore/webgpu/wgpuglfw
 # github.com/confiant-inc/go-socks5 v0.0.0-20210816151940-c1124825b1d6
 ## explicit
 github.com/confiant-inc/go-socks5
-# github.com/containerd/console v1.0.4
+# github.com/containerd/console v1.0.5
 ## explicit; go 1.13
 github.com/containerd/console
 # github.com/creack/pty v1.1.24
@@ -350,9 +217,6 @@ github.com/elazarl/goproxy/internal/signer
 # github.com/eliukblau/pixterm/pkg/ansimage v0.0.0-20191210081756-9fb6cf8c2f75
 ## explicit; go 1.13
 github.com/eliukblau/pixterm/pkg/ansimage
-# github.com/ericchiang/css v1.4.0
-## explicit; go 1.15
-github.com/ericchiang/css
 # github.com/fatih/color v1.18.0
 ## explicit; go 1.17
 github.com/fatih/color
@@ -372,7 +236,7 @@ github.com/gen2brain/dlgs
 # github.com/gin-contrib/sse v1.1.0
 ## explicit; go 1.23
 github.com/gin-contrib/sse
-# github.com/gin-gonic/gin v1.10.0
+# github.com/gin-gonic/gin v1.10.1
 ## explicit; go 1.20
 github.com/gin-gonic/gin
 github.com/gin-gonic/gin/binding
@@ -399,15 +263,6 @@ github.com/go-echarts/go-echarts/v2/render
 github.com/go-echarts/go-echarts/v2/templates
 github.com/go-echarts/go-echarts/v2/types
 github.com/go-echarts/go-echarts/v2/util
-# github.com/go-gl/glfw/v3.3/glfw v0.0.0-20250301202403-da16c1255728
-## explicit; go 1.19
-github.com/go-gl/glfw/v3.3/glfw
-github.com/go-gl/glfw/v3.3/glfw/glfw/deps
-github.com/go-gl/glfw/v3.3/glfw/glfw/deps/glad
-github.com/go-gl/glfw/v3.3/glfw/glfw/deps/mingw
-github.com/go-gl/glfw/v3.3/glfw/glfw/deps/vs2008
-github.com/go-gl/glfw/v3.3/glfw/glfw/include/GLFW
-github.com/go-gl/glfw/v3.3/glfw/glfw/src
 # github.com/go-ole/go-ole v1.3.0
 ## explicit; go 1.12
 github.com/go-ole/go-ole
@@ -448,16 +303,6 @@ github.com/go-task/slim-sprig/v3
 ## explicit; go 1.18
 github.com/go-viper/mapstructure/v2
 github.com/go-viper/mapstructure/v2/internal/errors
-# github.com/gobwas/glob v0.2.3
-## explicit
-github.com/gobwas/glob
-github.com/gobwas/glob/compiler
-github.com/gobwas/glob/match
-github.com/gobwas/glob/syntax
-github.com/gobwas/glob/syntax/ast
-github.com/gobwas/glob/syntax/lexer
-github.com/gobwas/glob/util/runes
-github.com/gobwas/glob/util/strings
 # github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1
 ## explicit; go 1.13
 github.com/gocarina/gocsv
@@ -477,10 +322,6 @@ github.com/goccy/go-json/internal/runtime
 github.com/godbus/dbus/v5
 github.com/godbus/dbus/v5/introspect
 github.com/godbus/dbus/v5/prop
-# github.com/goki/freetype v1.0.5
-## explicit; go 1.18
-github.com/goki/freetype/raster
-github.com/goki/freetype/truetype
 # github.com/gomarkdown/markdown v0.0.0-20250311123330-531bef5e742b
 ## explicit; go 1.12
 github.com/gomarkdown/markdown
@@ -499,37 +340,9 @@ github.com/gookit/color
 # github.com/gopherjs/gopherjs v1.17.2
 ## explicit; go 1.17
 github.com/gopherjs/gopherjs/js
-# github.com/gorilla/css v1.0.1
-## explicit; go 1.20
-github.com/gorilla/css/scanner
 # github.com/gorilla/securecookie v1.1.2
 ## explicit; go 1.20
 github.com/gorilla/securecookie
-# github.com/h2non/filetype v1.1.3
-## explicit; go 1.13
-github.com/h2non/filetype
-github.com/h2non/filetype/matchers
-github.com/h2non/filetype/matchers/isobmff
-github.com/h2non/filetype/types
-# github.com/hack-pad/go-indexeddb v0.3.2
-## explicit; go 1.18
-github.com/hack-pad/go-indexeddb/idb
-github.com/hack-pad/go-indexeddb/idb/internal/jscache
-# github.com/hack-pad/hackpadfs v0.2.4
-## explicit; go 1.19
-github.com/hack-pad/hackpadfs
-github.com/hack-pad/hackpadfs/indexeddb
-github.com/hack-pad/hackpadfs/indexeddb/idbblob
-github.com/hack-pad/hackpadfs/internal/jswrapper
-github.com/hack-pad/hackpadfs/keyvalue
-github.com/hack-pad/hackpadfs/keyvalue/blob
-github.com/hack-pad/hackpadfs/mem
-github.com/hack-pad/hackpadfs/mount
-# github.com/hack-pad/safejs v0.1.1
-## explicit; go 1.18
-github.com/hack-pad/safejs
-github.com/hack-pad/safejs/internal/catch
-github.com/hack-pad/safejs/internal/stackerr
 # github.com/hashicorp/go-version v1.7.0
 ## explicit
 github.com/hashicorp/go-version
@@ -554,8 +367,8 @@ github.com/jackc/pgpassfile
 # github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
 ## explicit; go 1.14
 github.com/jackc/pgservicefile
-# github.com/jackc/pgx/v5 v5.7.4
-## explicit; go 1.21
+# github.com/jackc/pgx/v5 v5.7.5
+## explicit; go 1.23.0
 github.com/jackc/pgx/v5
 github.com/jackc/pgx/v5/internal/iobufpool
 github.com/jackc/pgx/v5/internal/pgio
@@ -602,9 +415,6 @@ github.com/jaypipes/ghw/pkg/util
 # github.com/jaypipes/pcidb v1.0.1
 ## explicit; go 1.21
 github.com/jaypipes/pcidb
-# github.com/jinzhu/copier v0.4.0
-## explicit; go 1.13
-github.com/jinzhu/copier
 # github.com/jinzhu/inflection v1.0.0
 ## explicit
 github.com/jinzhu/inflection
@@ -704,7 +514,7 @@ github.com/pmezard/go-difflib/difflib
 github.com/pterm/pterm
 github.com/pterm/pterm/internal
 github.com/pterm/pterm/putils
-# github.com/quic-go/quic-go v0.51.0
+# github.com/quic-go/quic-go v0.52.0
 ## explicit; go 1.23
 github.com/quic-go/quic-go
 github.com/quic-go/quic-go/internal/ackhandler
@@ -739,7 +549,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20250511180625-78c688389aa4
+# github.com/skycoin/dmsg v1.3.29-0.20250520155319-2f91abefe99c
 ## explicit; go 1.24
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
 github.com/skycoin/dmsg/cmd/dmsg-server/commands
@@ -759,6 +569,7 @@ github.com/skycoin/dmsg/internal/discmetrics
 github.com/skycoin/dmsg/internal/dmsg-discovery/api
 github.com/skycoin/dmsg/internal/dmsg-discovery/store
 github.com/skycoin/dmsg/internal/dmsg-server/api
+github.com/skycoin/dmsg/internal/flags
 github.com/skycoin/dmsg/internal/fsutil
 github.com/skycoin/dmsg/internal/servermetrics
 github.com/skycoin/dmsg/pkg/direct
@@ -937,7 +748,7 @@ github.com/xo/terminfo
 github.com/xtaci/kcp-go
 # github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
 ## explicit; go 1.13
-# github.com/yuin/goldmark v1.7.11
+# github.com/yuin/goldmark v1.7.12
 ## explicit; go 1.22
 github.com/yuin/goldmark
 github.com/yuin/goldmark/ast
@@ -999,21 +810,13 @@ golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
 # golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
 ## explicit; go 1.23.0
-golang.org/x/exp/maps
 # golang.org/x/image v0.27.0
 ## explicit; go 1.23.0
 golang.org/x/image/bmp
 golang.org/x/image/ccitt
-golang.org/x/image/draw
-golang.org/x/image/font
-golang.org/x/image/font/opentype
-golang.org/x/image/font/sfnt
-golang.org/x/image/math/f64
-golang.org/x/image/math/fixed
 golang.org/x/image/riff
 golang.org/x/image/tiff
 golang.org/x/image/tiff/lzw
-golang.org/x/image/vector
 golang.org/x/image/vp8
 golang.org/x/image/vp8l
 golang.org/x/image/webp
@@ -1030,7 +833,6 @@ golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/html
 golang.org/x/net/html/atom
-golang.org/x/net/html/charset
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/h2c
@@ -1062,14 +864,8 @@ golang.org/x/term
 ## explicit; go 1.23.0
 golang.org/x/text/cases
 golang.org/x/text/encoding
-golang.org/x/text/encoding/charmap
-golang.org/x/text/encoding/htmlindex
 golang.org/x/text/encoding/internal
 golang.org/x/text/encoding/internal/identifier
-golang.org/x/text/encoding/japanese
-golang.org/x/text/encoding/korean
-golang.org/x/text/encoding/simplifiedchinese
-golang.org/x/text/encoding/traditionalchinese
 golang.org/x/text/encoding/unicode
 golang.org/x/text/internal
 golang.org/x/text/internal/language

@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package main cmd/skywire-cli/commands/rewards-ui/ui/ui.go
 package main
 
@@ -12,13 +14,13 @@ import (
 	"strings"
 	"time"
 
-	"cogentcore.org/core/base/mergefs"
 	"cogentcore.org/core/core"
 	"cogentcore.org/core/events"
 	"cogentcore.org/core/htmlcore"
 	"cogentcore.org/core/icons"
-	"cogentcore.org/core/paint"
 	"cogentcore.org/core/styles"
+	"cogentcore.org/core/text/fonts"
+	"cogentcore.org/core/text/rich"
 	"cogentcore.org/core/tree"
 
 	"github.com/skycoin/skywire"
@@ -97,19 +99,19 @@ func (db *DateButton) Init() {
 }
 
 func main() {
+	fonts.AddEmbedded(mononoki)
 	core.TheApp.SetSceneInit(func(sc *core.Scene) {
 		sc.SetWidgetInit(func(w core.Widget) {
 			w.AsWidget().Styler(func(s *styles.Style) {
-				s.Font.Family = "mononoki"
-				s.Text.LineHeight.Em(1)
-				s.Text.WhiteSpace = styles.WhiteSpacePreWrap
+				s.Font.Family = rich.Custom
+				s.Font.CustomFont = "mononoki"
+				//s.Text.LineHeight.Em(1)
+				//s.Text.WhiteSpace = styles.WhiteSpacePreWrap
 			})
 		})
 	})
 
 	b := core.NewBody("Skywire Rewards")
-	paint.FontLibrary.FontsFS = mergefs.Merge(paint.FontLibrary.FontsFS, mononoki)
-	paint.FontLibrary.UpdateFontsAvail()
 
 	ts := core.NewTabs(b).SetType(core.NavigationAuto)
 	zeroeth, tb := ts.NewTab("Rules")

@@ -8,19 +8,16 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/chen3feng/safecast"
 	"github.com/confiant-inc/go-socks5"
 	"github.com/gin-gonic/gin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -28,6 +25,7 @@ import (
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/dmsg/internal/cli"
+	"github.com/skycoin/dmsg/internal/flags"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 )
@@ -53,12 +51,10 @@ const dwenv = "DMSGWEB"
 var dwcfg = os.Getenv(dwenv)
 
 func init() {
-	dmsgDisc = dmsg.DiscAddr(false)
 	webPort = scriptExecUintSlice("${WEBPORT[@]:-8080}", dwcfg)
 	proxyPort = scriptExecUint("${PROXYPORT:-4445}", dwcfg)
 	addProxy = scriptExecString("${ADDPROXY}", dwcfg)
 	resolveDmsgAddr = scriptExecStringSlice("${RESOLVEPK[@]}", dwcfg)
-	dmsgSess = scriptExecInt("${DMSGSESSIONS:-1}", dwcfg)
 	rawTCP = scriptExecBoolSlice("${RAWTCP[@]:-false}", dwcfg)
 	if os.Getenv("DMSGWEBSK") != "" {
 		sk.Set(os.Getenv("DMSGWEBSK")) //nolint
@@ -68,25 +64,17 @@ func init() {
 	}
 	pk, _ = sk.PubKey() //nolint
 
-	RootCmd.Flags().BoolVarP(&useHTTP, "http", "z", false, "use regular http to connect to dmsg discovery")
+	flags.InitFlags(RootCmd)
 	RootCmd.Flags().StringVarP(&filterDomainSuffix, "filter", "f", ".dmsg", "domain suffix to filter\033[0m\n\r")
 	RootCmd.Flags().UintVarP(&proxyPort, "socks", "q", proxyPort, "port to serve the socks5 proxy\033[0m\n\r")
-	RootCmd.Flags().StringVarP(&addProxy, "addproxy", "r", addProxy, "configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)")
+	RootCmd.Flags().StringVarP(&addProxy, "addproxy", "r", addProxy, "configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)\033[0m\n\r")
 	RootCmd.Flags().UintSliceVarP(&webPort, "port", "p", webPort, "port(s) to serve the web application\033[0m\n\r")
-	RootCmd.Flags().StringSliceVarP(&resolveDmsgAddr, "resolve", "t", resolveDmsgAddr, "resolve the specified dmsg address:port on the local port & disable proxy")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDisc, "dmsg discovery url\033[0m\n\r")
-	RootCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "F", "", "dmsghttp-config path")
-	RootCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "connect to dmsg via proxy (i.e. '127.0.0.1:1080')")
-	RootCmd.Flags().IntVarP(&dmsgSessions, "sess", "e", dmsgSess, "number of dmsg servers to connect to\033[0m\n\r")
-	RootCmd.Flags().BoolSliceVarP(&rawTCP, "rt", "c", rawTCP, "proxy local port as raw TCP, comma separated"+func() string {
-		if len(rawTCP) > 0 {
-			return "\033[0m\n\r"
-		}
-		return ""
-	}())
+	RootCmd.Flags().StringSliceVarP(&resolveDmsgAddr, "resolve", "t", resolveDmsgAddr, "resolve the specified dmsg address:port on the local port & disable proxy\033[0m\n\r")
+	RootCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "connect to DMSG via proxy (i.e. '127.0.0.1:1080')\033[0m\n\r")
+	RootCmd.Flags().BoolSliceVarP(&rawTCP, "rt", "c", rawTCP, "proxy to local port as raw TCP, comma separated\033[0m\n\r")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
-	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
-	RootCmd.Flags().BoolVarP(&isEnvs, "envs", "Z", false, "show example .conf file")
+	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
+	RootCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file\033[0m\n\r")
 
 }
 
@@ -96,8 +84,11 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "DMSG resolving proxy & browser client",
-	Long: calvin.AsciiFont("dmsgweb") + `
-DMSG resolving proxy & browser client - access websites and http interfaces over dmsg` + func() string {
+	Long: `
+	┌┬┐┌┬┐┌─┐┌─┐┬ ┬┌─┐┌┐
+	 │││││└─┐│ ┬│││├┤ ├┴┐
+	─┴┘┴ ┴└─┘└─┘└┴┘└─┘└─┘
+DMSG resolving proxy & browser client - access websites, HTTP & TCP interfaces over DMSG` + func() string {
 		if _, err := os.Stat(dwcfg); err == nil {
 			return `
 dmsgweb conf file detected: ` + dwcfg
@@ -121,32 +112,24 @@ dmsgweb conf file detected: ` + dwcfg
 			}
 		}
 		dlog = logging.MustGetLogger("dmsgweb")
-		if dmsgDisc == "" {
-			dlog.Fatal("Dmsg Discovery URL not specified")
+		if flags.DmsgDiscURL == "" {
+			dlog.Fatal("Dmsg Discovery Server URL not specified")
 		}
-
-		if dmsgHTTPPath != "" {
-			dmsg.DmsghttpJSON, err = os.ReadFile(dmsgHTTPPath) //nolint
-			if err != nil {
-				dlog.WithError(err).Fatal("Failed to read specified dmsghttp-config")
-			}
-			err = dmsg.InitConfig()
-			if err != nil {
-				dlog.WithError(err).Fatal("Failed to unmarshal dmsghttp-config")
-			}
+		if flags.DmsgDiscURL == "" {
+			dlog.Fatal("Dmsg Discovery Server dmsg address not specified")
 		}
 
 		if len(resolveDmsgAddr) > 0 && len(webPort) != len(resolveDmsgAddr) {
-			dlog.Fatal("-resolve --t flag cannot contain a different number of elements than -port -p flag")
+			dlog.Fatal("--resolve -t flag cannot contain a different number of elements than -port -p flag")
 		}
 		if len(resolveDmsgAddr) == 0 && len(webPort) > 1 {
-			dlog.Fatal("-port --p flag cannot specify multiple ports without specifying multiple dmsg address:port(s) to -resolve --t flag")
+			dlog.Fatal("--port -p flag cannot specify multiple ports without specifying multiple dmsg address:port(s) to -resolve --t flag")
 		}
 
 		seenResolveDmsgAddr := make(map[string]bool)
 		for _, item := range resolveDmsgAddr {
 			if seenResolveDmsgAddr[item] {
-				dlog.Fatal("-resolve --t flag cannot contain duplicates")
+				dlog.Fatal("--resolve -t flag cannot contain duplicates")
 			}
 			seenResolveDmsgAddr[item] = true
 		}
@@ -154,7 +137,7 @@ dmsgweb conf file detected: ` + dwcfg
 		seenWebPort := make(map[uint]bool)
 		for _, item := range webPort {
 			if seenWebPort[item] {
-				dlog.Fatal("-port --p flag cannot contain duplicates")
+				dlog.Fatal("--port -p flag cannot contain duplicates")
 			}
 			seenWebPort[item] = true
 		}
@@ -174,12 +157,12 @@ dmsgweb conf file detected: ` + dwcfg
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM) //nolint
-		go func() {
-			<-c
-			os.Exit(0)
-		}()
+		//		c := make(chan os.Signal, 1)
+		//		signal.Notify(c, os.Interrupt, syscall.SIGTERM) //nolint
+		//		go func() {
+		//			<-c
+		//			os.Exit(0)
+		//		}()
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), dlog)
 		defer cancel()
@@ -224,6 +207,8 @@ dmsgweb conf file detected: ` + dwcfg
 			}
 		}
 
+		httpClient = &http.Client{}
+
 		if proxyAddr != "" {
 			dialer, err = proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
 			if err != nil {
@@ -238,26 +223,38 @@ dmsgweb conf file detected: ` + dwcfg
 			ctx = context.WithValue(context.Background(), "socks5_proxy", proxyAddr) //nolint
 		}
 
-		var dmsgC *dmsg.Client
-		var closeDmsg func()
-
-		if useHTTP {
-			dlog.WithField("public_key", pk.String()).WithField("dmsg_disc", dmsgDisc).Debug("Connecting to dmsg network...")
-			dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dlog, pk, sk, httpClient, dmsgDisc, dmsgSessions)
+		if flags.UseDC {
+			dmsgC, closeDmsg, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, "", flags.DmsgSessions, pk.String())
 		} else {
-			dlog.WithField("public_key", pk.String()).Debug("Connecting to dmsg network...")
-			dmsgC, closeDmsg, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, dmsgDisc, dmsgSessions, pk.String())
+			if flags.UseHTTP {
+				dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dlog, pk, sk, httpClient, flags.DmsgDiscURL, flags.DmsgSessions)
+			} else {
+				var dmsgDC *dmsg.Client
+				var closeDmsgDC func()
+				dmsgDC, closeDmsgDC, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, "", flags.DmsgSessions, dmsg.ExtractPKFromDmsgAddr(flags.DmsgDiscAddr))
+				if err != nil {
+					dlog.WithError(err).Error("Error connecting to dmsg network")
+					return
+				}
+				defer closeDmsgDC()
+				dmsgHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
+				dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dlog, pk, sk, dmsgHTTP, flags.DmsgDiscAddr, flags.DmsgSessions)
+			}
 		}
-
+		if err != nil {
+			dlog.WithError(err).Error("Error connecting to dmsg network")
+			return
+		}
 		defer closeDmsg()
 
-		go func() {
-			<-ctx.Done()
-			cancel()
-			closeDmsg()
-			os.Exit(0)
-		}()
-
+		/*
+			go func() {
+				<-ctx.Done()
+				cancel()
+				closeDmsg()
+				os.Exit(0)
+			}()
+		*/
 		httpC = http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 
 		if len(resolveDmsgAddr) == 0 {
@@ -497,9 +494,6 @@ const envfileLinux = //nolint unused
 
 #--	Use raw tcp mode instead of http (also disables proxy)
 #RAWTCP=('false')
-
-#--	Number of dmsg servers to connect to (0 unlimits)
-#DMSGSESSIONS=2
 
 #--	Dmsg port to use
 #DMSGPORT=('80')

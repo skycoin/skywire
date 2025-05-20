@@ -27,9 +27,8 @@ var (
 	dlog               *logging.Logger
 	httpC              http.Client
 	dmsgC              *dmsg.Client
-	dmsgDisc           = dmsg.DiscAddr(false)
+	closeDmsg          func()
 	proxyAddr          string
-	dmsgSessions       int
 	dmsgAddr           []string //nolint unused
 	dialPK             []cipher.PubKey
 	filterDomainSuffix string
@@ -45,7 +44,6 @@ var (
 	isEnvs             bool
 	dmsgPort           []uint
 	dmsgPorts          []uint
-	dmsgSess           int
 	wl                 []string
 	wlkeys             []cipher.PubKey
 	localPort          []uint
@@ -53,8 +51,6 @@ var (
 	rawTCP             []bool
 	httpClient         *http.Client //nolint unused
 	dialer             proxy.Dialer = proxy.Direct
-	useHTTP            bool
-	dmsgHTTPPath       string
 )
 
 // Execute executes root CLI command.
@@ -63,32 +59,6 @@ func Execute() {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }
-
-/*
-func startDmsg(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, dmsgDisc string) (dmsgC *dmsg.Client, stop func(), err error) {
-	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, httpClient, dmsgWebLog), &dmsg.Config{MinSessions: dmsgSessions})
-	go dmsgC.Serve(ctx)
-
-	stop = func() {
-		err := dmsgC.Close()
-		dmsgWebLog.WithError(err).Debug("Disconnected from dmsg network.")
-		fmt.Printf("\n")
-	}
-	dmsgWebLog.WithField("public_key", pk.String()).WithField("dmsg_disc", dmsgDisc).
-		Debug("Connecting to dmsg network...")
-
-	select {
-	case <-ctx.Done():
-		stop()
-		os.Exit(0)
-		return nil, nil, ctx.Err()
-
-	case <-dmsgC.Ready():
-		dmsgWebLog.Debug("Dmsg network ready.")
-		return dmsgC, stop, nil
-	}
-}
-*/
 
 func printEnvs(envfile string) {
 	if runtime.GOOS == "windows" {
@@ -243,6 +213,7 @@ func scriptExecUintSlice(s, envfile string) []uint {
 	return res
 }
 
+/*
 func scriptExecInt(s, envfile string) int {
 	if runtime.GOOS == "windows" {
 		var variable string
@@ -277,6 +248,8 @@ func scriptExecInt(s, envfile string) int {
 	}
 	return 0
 }
+*/
+
 func scriptExecUint(s, envfile string) uint {
 	if runtime.GOOS == "windows" {
 		var variable string

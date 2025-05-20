@@ -17,8 +17,15 @@ import (
 
 // StartDmsg starts dmsg returns a dmsg client for the given dmsg discovery
 func StartDmsg(ctx context.Context, dmsgLogger *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, httpClient *http.Client, dmsgDisc string, dmsgSessions int) (dmsgC *dmsg.Client, stop func(), err error) {
+	if dmsgLogger == nil {
+		return nil, nil, fmt.Errorf("nil logger")
+	}
+
 	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, httpClient, dmsgLogger), &dmsg.Config{MinSessions: dmsgSessions})
+	dmsgLogger.Debug("Created dmsg client.")
+
 	go dmsgC.Serve(context.Background())
+	dmsgLogger.Debug("dmsgclient.Serve(context.Background())")
 
 	stop = func() {
 		err := dmsgC.Close()
@@ -26,7 +33,7 @@ func StartDmsg(ctx context.Context, dmsgLogger *logging.Logger, pk cipher.PubKey
 		log.Println()
 	}
 	dmsgLogger.WithField("dmsg_disc", dmsgDisc).Debug("Connecting to dmsg network...\n")
-	dmsgLogger.WithField("public_key", pk.String()).Debug("\n")
+	dmsgLogger.WithField("client public_key", pk.String()).Debug("\n")
 	select {
 	case <-ctx.Done():
 		stop()
@@ -38,6 +45,7 @@ func StartDmsg(ctx context.Context, dmsgLogger *logging.Logger, pk cipher.PubKey
 	}
 }
 
+// StartDmsgDirect starts dmsg returns a dmsg direct client
 func StartDmsgDirect(ctx context.Context, dmsgLogger *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, httpClient *http.Client, _ string, dmsgSessions int, destination string) (dmsgC *dmsg.Client, stop func(), err error) { //nolint:all
 	var servers []*disc.Entry
 	for i := range dmsg.Prod.DmsgServers {

@@ -4,6 +4,7 @@ package dmsg
 import (
 	"encoding/json"
 	"log"
+	"regexp"
 	"time"
 
 	"github.com/skycoin/skywire"
@@ -35,12 +36,30 @@ var Prod DmsghttpConfig
 // Test is the test deployment dmsghttp-config.json services
 var Test DmsghttpConfig
 
-// DiscAddr returns the address of the dmsg discovery
-func DiscAddr(testenv bool) string {
+// DiscURL returns the URL of the dmsg discovery service
+func DiscURL(testenv bool) string {
 	if testenv {
 		return skywire.Test.DmsgDiscovery
 	}
 	return skywire.Prod.DmsgDiscovery
+}
+
+// DiscAddr returns the dmsg address of the dmsg discovery service in the format "dmsg://<pk>:<port>"
+func DiscAddr(testenv bool) string {
+	if testenv {
+		return Test.DmsgDiscovery
+	}
+	return Prod.DmsgDiscovery
+}
+
+// ExtractPKFromDmsgAddr returns the public key of the dmsg address input in this format in the format "dmsg://<pk>:<port>"
+func ExtractPKFromDmsgAddr(input string) string {
+	re := regexp.MustCompile(`dmsg://([^:/]+):`)
+	match := re.FindStringSubmatch(input)
+	if len(match) > 1 {
+		return match[1]
+	}
+	return ""
 }
 
 // DmsghttpConfig is the struct that corresponds to the json data of the dmsghttp-config.json
