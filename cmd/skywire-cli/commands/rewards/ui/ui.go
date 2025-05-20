@@ -17,9 +17,9 @@ import (
 	"cogentcore.org/core/htmlcore"
 	"cogentcore.org/core/icons"
 	"cogentcore.org/core/styles"
-	"cogentcore.org/core/text/text"
 	"cogentcore.org/core/text/fonts"
 	"cogentcore.org/core/text/rich"
+	"cogentcore.org/core/text/text"
 	"cogentcore.org/core/tree"
 
 	"github.com/skycoin/skywire"
