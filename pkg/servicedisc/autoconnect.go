@@ -3,9 +3,10 @@ package servicedisc
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"io"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -22,7 +23,7 @@ const (
 	// PublicServiceDelay defines the interval for checking service discovery and adding transports to public visors.
 	PublicServiceDelay = 300 * time.Second
 
-	fetchServicesDelay           = 10 * time.Second
+	fetchServicesDelay = 10 * time.Second
 )
 
 // ConnectFn provides a way to connect to remote service
@@ -54,13 +55,19 @@ func MakeConnector(conf Config, maxConns int, tm *transport.Manager, httpC *http
 
 // Run implements Autoconnector interface
 func (a *autoconnector) Run(ctx context.Context) (err error) {
-
 	// Wait for a random interval between 0 and 5 minutes before starting public autoconnect.
 	// Prevents a cluster of nodes which was switched on at the same time
 	// from producing concurrent, synchronous requests to SD and subsequent connection attempts to public visors
-	rand.Seed(time.Now().UnixNano())
-	randomDelay := time.Duration(rand.Intn(5*60)) * time.Second
-	a.log.Debugln("Waiting for a random interval before starting public autoconnect: ", randomDelay)
+	const maxDelaySeconds = 5 * 60 // 5 minutes
+
+	randomDelaySeconds, err := randInt(0, maxDelaySeconds)
+	if err != nil {
+		a.log.WithError(err).Warn("Failed to generate secure random delay; falling back to 0")
+		randomDelaySeconds = 0
+	}
+	randomDelay := time.Duration(randomDelaySeconds) * time.Second
+	a.log.Debugln("Waiting for a random interval before starting public autoconnect:", randomDelay)
+
 	select {
 	case <-ctx.Done():
 		return context.Canceled
@@ -74,12 +81,10 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 		case <-ctx.Done():
 			return context.Canceled
 		case <-publicServiceTicket.C:
-			// successfully established transports
 			tps := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
 
-			// don't fetch public addresses if there are more or equal to the number of maximum transport defined.
 			if len(tps) >= a.maxConns {
-				a.log.Debugln("autoconnect: maximum number of established transports reached: ", a.maxConns)
+				a.log.Debugln("autoconnect: maximum number of established transports reached:", a.maxConns)
 				return err
 			}
 
@@ -87,9 +92,9 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 			addrs, err := a.fetchPubAddresses(ctx)
 			if err != nil {
 				a.log.Errorf("Cannot fetch public services: %s", err)
+				continue
 			}
 
-			// filter out any established transports
 			absent := a.filterDuplicates(addrs, tps)
 
 			for _, pk := range absent {
@@ -153,4 +158,16 @@ func (a *autoconnector) filterDuplicates(pks []cipher.PubKey, trs []*transport.M
 		}
 	}
 	return absent
+}
+
+// randInt returns a secure random integer in [min, max).
+func randInt(n, x int) (int, error) {
+	if n >= x {
+		return n, nil
+	}
+	nBig, err := rand.Int(rand.Reader, big.NewInt(int64(x-n)))
+	if err != nil {
+		return 0, err
+	}
+	return int(nBig.Int64()) + n, nil
 }
