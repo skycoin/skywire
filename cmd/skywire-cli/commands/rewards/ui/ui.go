@@ -279,6 +279,14 @@ func main() {
 				ctx.LinkButton(w, "https://t.me/skywire_reward")
 				w.SetText("@skywire_reward").SetIcon(icons.NotificationImportant)
 			})
+			tree.Add(p, func(w *core.Button) {
+				ctx.LinkButton(w, "https://t.me/skycoin")
+				w.SetText("@skycoin").SetIcon(icons.NotificationImportant)
+			})
+			tree.Add(p, func(w *core.Button) {
+				ctx.LinkButton(w, "https://skycoin.com")
+				w.SetText("Skycoin").SetIcon(icons.Traffic)
+			})
 		})
 	})
 
