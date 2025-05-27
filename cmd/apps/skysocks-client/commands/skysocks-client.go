@@ -133,7 +133,7 @@ var RootCmd = &cobra.Command{
 			go httpProxy(httpCtx, httpAddr, addr)
 		}
 		defer httpCancel()
-		if err := client.ListenAndServe(addr); err != nil {
+		if err := client.ListenAndServe(addr); err != nil { //nolint
 			print(fmt.Sprintf("Error serving proxy client: %v\n", err))
 		}
 		setAppStatus(appCl, appserver.AppDetailedStatusStopped)
