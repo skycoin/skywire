@@ -23,7 +23,6 @@ const (
 	PublicServiceDelay = 300 * time.Second
 
 	fetchServicesDelay           = 10 * time.Second
-	maxFailedAddressRetryAttempt = 2
 )
 
 // ConnectFn provides a way to connect to remote service
