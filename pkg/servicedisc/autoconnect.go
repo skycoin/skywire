@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -18,8 +19,8 @@ import (
 )
 
 const (
-	// PublicServiceDelay defines a delay before adding transports to public services.
-	PublicServiceDelay = 10 * time.Second
+	// PublicServiceDelay defines the interval for checking service discovery and adding transports to public visors.
+	PublicServiceDelay = 300 * time.Second
 
 	fetchServicesDelay           = 10 * time.Second
 	maxFailedAddressRetryAttempt = 2
@@ -54,8 +55,19 @@ func MakeConnector(conf Config, maxConns int, tm *transport.Manager, httpC *http
 
 // Run implements Autoconnector interface
 func (a *autoconnector) Run(ctx context.Context) (err error) {
-	// failed addresses will be populated everytime any failed attempt at establishing transport occurs.
-	failedAddresses := map[cipher.PubKey]int{}
+
+	// Wait for a random interval between 0 and 5 minutes before starting public autoconnect.
+	// Prevents a cluster of nodes which was switched on at the same time
+	// from producing concurrent, synchronous requests to SD and subsequent connection attempts to public visors
+	rand.Seed(time.Now().UnixNano())
+	randomDelay := time.Duration(rand.Intn(5*60)) * time.Second
+	a.log.Debugln("Waiting for a random interval before starting public autoconnect: ", randomDelay)
+	select {
+	case <-ctx.Done():
+		return context.Canceled
+	case <-time.After(randomDelay):
+	}
+
 	publicServiceTicket := time.NewTicker(PublicServiceDelay)
 
 	for {
@@ -82,17 +94,13 @@ func (a *autoconnector) Run(ctx context.Context) (err error) {
 			absent := a.filterDuplicates(addrs, tps)
 
 			for _, pk := range absent {
-				val, ok := failedAddresses[pk]
-				if !ok || val < maxFailedAddressRetryAttempt {
-					a.log.WithField("pk", pk).WithField("attempt", val).Debugln("Trying to add transport to public visor")
-					logger := a.log.WithField("pk", pk).WithField("type", string(network.STCPR))
-					if err = a.tryEstablishTransport(ctx, pk, logger); err != nil {
-						if !errors.Is(err, io.ErrClosedPipe) {
-							logger.WithError(err).Warnln("Failed to add transport to public visor")
-						}
-						failedAddresses[pk]++
-						continue
+				a.log.WithField("pk", pk).Debugln("Trying to add transport to public visor")
+				logger := a.log.WithField("pk", pk).WithField("type", string(network.STCPR))
+				if err = a.tryEstablishTransport(ctx, pk, logger); err != nil {
+					if !errors.Is(err, io.ErrClosedPipe) {
+						logger.WithError(err).Warnln("Failed to add transport to public visor")
 					}
+					continue
 				}
 			}
 		}
