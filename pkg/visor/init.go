@@ -1526,7 +1526,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	serviceDisc := v.conf.Launcher.ServiceDisc
 	if serviceDisc == "" { //it might be intentionally blank ; consider revising.
-				serviceDisc = skywire.Prod.ServiceDiscovery
+		serviceDisc = skywire.Prod.ServiceDiscovery
 	}
 
 	// todo: refactor updatedisc: split connecting to services in updatedisc and
@@ -1546,7 +1546,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	if err != nil {
 		return err
 	}
-	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
+	connector := MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
 
 	cctx, cancel := context.WithCancel(ctx)
 	v.pushCloseStack("public_autoconnect", func() error {
@@ -1554,7 +1554,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		return err
 	})
 
-	go connector.Run(cctx) //nolint:errcheck
+	go connector.Run(cctx, v) //nolint:errcheck
 
 	return nil
 }
