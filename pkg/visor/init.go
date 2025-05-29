@@ -1526,13 +1526,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	serviceDisc := v.conf.Launcher.ServiceDisc
 	if serviceDisc == "" { //it might be intentionally blank ; consider revising.
-		var envServices skywire.EnvServices
-		var services skywire.Services
-		if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
-			if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-				serviceDisc = services.ServiceDiscovery
-			}
-		}
+				serviceDisc = skywire.Prod.ServiceDiscovery
 	}
 
 	// todo: refactor updatedisc: split connecting to services in updatedisc and
