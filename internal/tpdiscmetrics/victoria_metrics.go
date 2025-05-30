@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // VictoriaMetrics implements `Metrics` using `VictoriaMetrics`.
@@ -27,19 +27,19 @@ func NewVictoriaMetrics() *VictoriaMetrics {
 }
 
 // SetTPCounts implements `Metrics`.
-func (m *VictoriaMetrics) SetTPCounts(tpCounts map[network.Type]int) {
+func (m *VictoriaMetrics) SetTPCounts(tpCounts map[types.Type]int) {
 	m.tpCountsMx.Lock()
 	defer m.tpCountsMx.Unlock()
 
 	for tpType, count := range tpCounts {
 		switch tpType {
-		case network.STCP:
+		case types.STCP:
 			m.stcpCounts.Set(int64(count))
-		case network.STCPR:
+		case types.STCPR:
 			m.stcprCounts.Set(int64(count))
-		case network.SUDPH:
+		case types.SUDPH:
 			m.sudphCounts.Set(int64(count))
-		case network.DMSG:
+		case types.DMSG:
 			m.dmsgCounts.Set(int64(count))
 		}
 	}

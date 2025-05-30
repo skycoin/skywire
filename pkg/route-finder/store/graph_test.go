@@ -10,7 +10,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 var ErrNoNodeInMockStore = errors.New("no node with that pk in mock store")
@@ -44,7 +44,7 @@ func (m *mockStore) GetTransportsByEdge(_ context.Context, edgePK cipher.PubKey)
 
 	return trs, nil
 }
-func (m *mockStore) GetNumberOfTransports(context.Context) (map[network.Type]int, error) {
+func (m *mockStore) GetNumberOfTransports(context.Context) (map[tptypes.Type]int, error) {
 	return nil, nil
 }
 func (m *mockStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {

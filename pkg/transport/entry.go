@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 var (
@@ -40,13 +40,13 @@ type Entry struct {
 	Edges [2]cipher.PubKey `json:"edges"`
 
 	// Type represents the transport type.
-	Type network.Type `json:"type"`
+	Type types.Type `json:"type"`
 
 	Label Label `json:"label"`
 }
 
 // MakeEntry creates a new transport entry
-func MakeEntry(aPK, bPK cipher.PubKey, netType network.Type, label Label) Entry {
+func MakeEntry(aPK, bPK cipher.PubKey, netType types.Type, label Label) Entry {
 	entry := Entry{
 		ID:    MakeTransportID(aPK, bPK, netType),
 		Type:  netType,

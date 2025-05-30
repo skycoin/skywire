@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 type AddressSuite struct {
@@ -35,11 +35,11 @@ func (s *AddressSuite) TestRegister() {
 	}
 
 	t.Run(".BindSTCPR", func(t *testing.T) {
-		require.NoError(t, s.Bind(ctx, network.STCPR, pk, visorData))
+		require.NoError(t, s.Bind(ctx, types.STCPR, pk, visorData))
 	})
 
 	t.Run(".ResolveSTCPR", func(t *testing.T) {
-		got, err := s.Resolve(ctx, network.STCPR, pk)
+		got, err := s.Resolve(ctx, types.STCPR, pk)
 		require.NoError(t, err)
 		require.Equal(t, visorData, got)
 	})

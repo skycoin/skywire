@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 //go:generate mockery --name Router --case underscore --inpackage
@@ -1357,16 +1358,16 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 
 func (r *router) isTpdExist(rPK cipher.PubKey) bool {
 	// check stcpr transport if exist
-	_, err := r.tm.GetTransport(rPK, network.STCPR)
+	_, err := r.tm.GetTransport(rPK, types.STCPR)
 	if err == nil {
 		return true
 	}
 	// check sudph transport if exist
-	_, err = r.tm.GetTransport(rPK, network.SUDPH)
+	_, err = r.tm.GetTransport(rPK, types.SUDPH)
 	if err == nil {
 		return true
 	}
 	// check dmsg transport if exist
-	_, err = r.tm.GetTransport(rPK, network.DMSG)
+	_, err = r.tm.GetTransport(rPK, types.DMSG)
 	return err == nil
 }

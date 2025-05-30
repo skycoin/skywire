@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/transport/network"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 const (
@@ -30,7 +30,7 @@ type IntegrationTestCase struct {
 type Transport struct {
 	FromVisorHostName string
 	ToVisorHostName   string
-	Type              network.Type
+	Type              tptypes.Type
 }
 
 // AppToRun describes app to run.

@@ -19,7 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 func TestMakeMap(t *testing.T) {
@@ -161,5 +161,5 @@ func (d *testDialer) Dial(_ context.Context, remote cipher.PubKey, _ uint16) (ne
 }
 
 func (testDialer) Type() string {
-	return string(network.DMSG)
+	return string(types.DMSG)
 }

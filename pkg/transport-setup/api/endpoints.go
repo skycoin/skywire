@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/setup"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // TransportRequest specifies a transport between two nodes and its type
@@ -58,7 +58,7 @@ func (api *API) addTransport(w http.ResponseWriter, r *http.Request) {
 		api.badRequest(w, r, fmt.Errorf("source and destination keys are the same"))
 	}
 	result := &setup.TransportResponse{}
-	rpcReq := setup.TransportRequest{RemotePK: req.To, Type: network.Type(req.Type)}
+	rpcReq := setup.TransportRequest{RemotePK: req.To, Type: types.Type(req.Type)}
 	api.visorResponse(w, r, req.From, "TransportGateway.AddTransport", rpcReq, result)
 }
 

@@ -10,7 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // TransportGateway that exposes methods to be used via RPC
@@ -22,7 +22,7 @@ type TransportGateway struct {
 // TransportRequest to perform an action over RPC
 type TransportRequest struct {
 	RemotePK cipher.PubKey
-	Type     network.Type
+	Type     types.Type
 }
 
 // UUIDRequest contains id in UUID format
@@ -35,7 +35,7 @@ type TransportResponse struct {
 	ID     uuid.UUID
 	Local  cipher.PubKey
 	Remote cipher.PubKey
-	Type   network.Type
+	Type   types.Type
 }
 
 // BoolResponse is a simple boolean wrapped in structure for RPC responses

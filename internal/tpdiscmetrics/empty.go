@@ -2,7 +2,7 @@
 package tpdiscmetrics
 
 import (
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // NewEmpty constructs new empty metrics.
@@ -14,4 +14,4 @@ func NewEmpty() Empty {
 type Empty struct{}
 
 // SetTPCounts implements `Metrics`.
-func (Empty) SetTPCounts(_ map[network.Type]int) {}
+func (Empty) SetTPCounts(_ map[types.Type]int) {}

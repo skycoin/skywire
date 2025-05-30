@@ -7,8 +7,8 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
-	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // Store is an alias for AddressStore.
@@ -18,10 +18,10 @@ type Store interface {
 
 // AddressStore stores PK to address mapping.
 type AddressStore interface {
-	Bind(ctx context.Context, netType network.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error
-	DelBind(ctx context.Context, netType network.Type, pk cipher.PubKey) error
-	Resolve(_ context.Context, netType network.Type, pk cipher.PubKey) (addrresolver.VisorData, error)
-	GetAll(ctx context.Context, netType network.Type) ([]string, error)
+	Bind(ctx context.Context, netType types.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error
+	DelBind(ctx context.Context, netType types.Type, pk cipher.PubKey) error
+	Resolve(_ context.Context, netType types.Type, pk cipher.PubKey) (addrresolver.VisorData, error)
+	GetAll(ctx context.Context, netType types.Type) ([]string, error)
 }
 
 var (

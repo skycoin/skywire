@@ -10,7 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 var (
@@ -35,7 +35,7 @@ type TransportStore interface {
 	DeregisterTransport(context.Context, uuid.UUID) error
 	GetTransportByID(context.Context, uuid.UUID) (*transport.Entry, error)
 	GetTransportsByEdge(context.Context, cipher.PubKey) ([]*transport.Entry, error)
-	GetNumberOfTransports(context.Context) (map[network.Type]int, error)
+	GetNumberOfTransports(context.Context) (map[types.Type]int, error)
 	GetAllTransports(context.Context, bool) ([]*transport.Entry, error)
 	Close()
 }
