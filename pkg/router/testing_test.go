@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // creates a mock dialer
@@ -51,7 +52,7 @@ func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) network
 
 type mockDialer map[cipher.PubKey]net.Conn
 
-func (d mockDialer) Type() string { return string(network.DMSG) }
+func (d mockDialer) Type() string { return string(types.DMSG) }
 
 func (d mockDialer) Dial(_ context.Context, remote cipher.PubKey, _ uint16) (net.Conn, error) {
 	conn, ok := d[remote]

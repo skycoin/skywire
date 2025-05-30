@@ -26,7 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -625,7 +625,7 @@ func (rc *rpcClient) TestVisor(conf PingConfig) ([]TestResult, error) {
 type mockRPCClient struct {
 	startedAt time.Time
 	o         *Overview
-	tpTypes   []network.Type
+	tpTypes   []types.Type
 	rt        routing.Table
 	logS      appcommon.LogStore
 	sync.RWMutex
@@ -635,7 +635,7 @@ type mockRPCClient struct {
 func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, API, error) {
 	log := logging.MustGetLogger("mock-rpc-client")
 
-	types := []network.Type{"messaging", "native"}
+	types := []types.Type{"messaging", "native"}
 	localPK, _ := cipher.GenerateKeyPair()
 
 	log.Infof("generating mock client with: localPK(%s) maxTps(%d) maxRules(%d)", localPK, maxTps, maxRules)
@@ -1148,10 +1148,10 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 // AddTransport implements API.
 func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ time.Duration) (*TransportSummary, error) {
 	summary := &TransportSummary{
-		ID:     transport.MakeTransportID(mc.o.PubKey, remote, network.Type(tpType)),
+		ID:     transport.MakeTransportID(mc.o.PubKey, remote, types.Type(tpType)),
 		Local:  mc.o.PubKey,
 		Remote: remote,
-		Type:   network.Type(tpType),
+		Type:   types.Type(tpType),
 		Log:    transport.NewLogEntry(),
 	}
 	return summary, mc.do(true, func() error {

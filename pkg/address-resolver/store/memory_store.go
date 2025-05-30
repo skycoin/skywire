@@ -5,22 +5,22 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 type memStore struct {
 	mu        sync.Mutex
-	visorData map[network.Type]map[string]addrresolver.VisorData
+	visorData map[types.Type]map[string]addrresolver.VisorData
 }
 
 func newMemoryStore() *memStore {
 	return &memStore{
-		visorData: make(map[network.Type]map[string]addrresolver.VisorData),
+		visorData: make(map[types.Type]map[string]addrresolver.VisorData),
 	}
 }
 
-func (s *memStore) Bind(_ context.Context, netType network.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
+func (s *memStore) Bind(_ context.Context, netType types.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -33,14 +33,14 @@ func (s *memStore) Bind(_ context.Context, netType network.Type, pk cipher.PubKe
 	return nil
 }
 
-func (s *memStore) DelBind(_ context.Context, netType network.Type, pk cipher.PubKey) error {
+func (s *memStore) DelBind(_ context.Context, netType types.Type, pk cipher.PubKey) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.visorData[netType], pk.String())
 	return nil
 }
 
-func (s *memStore) Resolve(_ context.Context, netType network.Type, pk cipher.PubKey) (addrresolver.VisorData, error) {
+func (s *memStore) Resolve(_ context.Context, netType types.Type, pk cipher.PubKey) (addrresolver.VisorData, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -57,7 +57,7 @@ func (s *memStore) Resolve(_ context.Context, netType network.Type, pk cipher.Pu
 	return data, nil
 }
 
-func (s *memStore) GetAll(_ context.Context, netType network.Type) (pks []string, err error) {
+func (s *memStore) GetAll(_ context.Context, netType types.Type) (pks []string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

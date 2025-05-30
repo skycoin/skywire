@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 const (
@@ -59,6 +60,7 @@ type APIClient interface {
 	BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
 	Transports(ctx context.Context) (map[cipher.PubKey][]string, error)
+	TransportsType(ctx context.Context, tpType types.Type) (map[cipher.PubKey][]string, error)
 	Addresses(ctx context.Context) string
 	Close() error
 }
@@ -92,8 +94,7 @@ type httpClient struct {
 // * SW-Public: The specified public key.
 // * SW-Nonce:  The nonce for that public key.
 // * SW-Sig:    The signature of the payload + the nonce.
-func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, clientPublicIP string, log *logging.Logger,
-	mLog *logging.MasterLogger) (APIClient, error) {
+func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, clientPublicIP string, log *logging.Logger, mLog *logging.MasterLogger) (APIClient, error) {
 	remoteURL, err := url.Parse(remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("parse URL: %w", err)
@@ -426,7 +427,7 @@ func (c *httpClient) Transports(ctx context.Context) (map[cipher.PubKey][]string
 		for _, pk := range pks {
 			rPK := cipher.PubKey{}
 			if err := rPK.Set(pk); err != nil {
-				c.log.WithError(err).Warn("unable to transform PK")
+				c.log.WithError(err).Warn("Invalid public key")
 				continue
 			}
 
@@ -442,6 +443,60 @@ func (c *httpClient) Transports(ctx context.Context) (map[cipher.PubKey][]string
 			}
 		}
 	}
+	return results, nil
+}
+
+func (c *httpClient) TransportsType(ctx context.Context, tpType types.Type) (map[cipher.PubKey][]string, error) {
+	resp, err := c.Get(ctx, "/transports")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err = resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		c.log.Warn(ErrNoTransportsFound.Error())
+		return nil, ErrNoTransportsFound
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var data struct {
+		SUDPH []string `json:"sudph"`
+		STCPR []string `json:"stcpr"`
+	}
+
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, err
+	}
+
+	// Select the appropriate key slice
+	var keyList []string
+	switch tpType {
+	case types.SUDPH:
+		keyList = data.SUDPH
+	case types.STCPR:
+		keyList = data.STCPR
+	default:
+		return nil, fmt.Errorf("unsupported network type: %s", tpType)
+	}
+
+	results := make(map[cipher.PubKey][]string)
+	for _, pkStr := range keyList {
+		var pk cipher.PubKey
+		if err := pk.Set(pkStr); err != nil {
+			c.log.WithError(err).WithField("pk", pkStr).Warn("Invalid public key")
+			continue
+		}
+		results[pk] = nil
+	}
+
 	return results, nil
 }
 

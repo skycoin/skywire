@@ -10,7 +10,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // ErrBadEntry is returned is entry is malformed.
@@ -107,10 +107,10 @@ func (s *memStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) ([]*
 	return res, nil
 }
 
-func (s *memStore) GetNumberOfTransports(context.Context) (map[network.Type]int, error) {
+func (s *memStore) GetNumberOfTransports(context.Context) (map[types.Type]int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	response := make(map[network.Type]int)
+	response := make(map[types.Type]int)
 	for _, entry := range s.transports {
 		response[entry.Type]++
 	}

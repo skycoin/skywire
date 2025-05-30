@@ -9,6 +9,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // STCPConfig defines config for Skywire-TCP network.
@@ -24,7 +25,7 @@ type stcpClient struct {
 
 func newStcp(generic *genericClient, table stcp.PKTable) Client {
 	client := &stcpClient{genericClient: generic, table: table}
-	client.netType = STCP
+	client.netType = types.STCP
 	return client
 }
 
@@ -45,7 +46,7 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 	if !ok {
 		return nil, ErrStcpEntryNotFound
 	}
-	c.eb.SendTCPDial(context.Background(), string(STCP), addr)
+	c.eb.SendTCPDial(context.Background(), string(types.STCP), addr)
 	dialer := net.Dialer{}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
