@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 const (
@@ -35,7 +36,7 @@ type sudphClient struct {
 
 func newSudph(resolved *resolvedClient, port int) Client {
 	client := &sudphClient{resolvedClient: resolved, port: port}
-	client.netType = SUDPH
+	client.netType = types.SUDPH
 	return client
 }
 
@@ -101,7 +102,7 @@ func (c *sudphClient) makeBindHandshake() func(in net.Conn) (net.Conn, error) {
 	emptyAddr := dmsg.Addr{PK: cipher.PubKey{}, Port: 0}
 	hs := handshake.InitiatorHandshake(c.SK(), dmsg.Addr{PK: c.PK(), Port: 0}, emptyAddr)
 	return func(in net.Conn) (net.Conn, error) {
-		return doHandshake(in, hs, SUDPH, c.log)
+		return doHandshake(in, hs, types.SUDPH, c.log)
 	}
 }
 

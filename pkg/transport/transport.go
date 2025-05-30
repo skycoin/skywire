@@ -9,14 +9,14 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // MakeTransportID generates uuid.UUID from pair of keys + type + public
 // Generated uuid is:
 // - always the same for a given pair
 // - GenTransportUUID(keyA,keyB) == GenTransportUUID(keyB, keyA)
-func MakeTransportID(keyA, keyB cipher.PubKey, netType network.Type) uuid.UUID {
+func MakeTransportID(keyA, keyB cipher.PubKey, netType types.Type) uuid.UUID {
 	tpType := string(netType)
 	keys := SortEdges(keyA, keyB)
 	b := make([]byte, 33*2+len(tpType))

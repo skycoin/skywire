@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // ErrNotConnected is returned when requested peer is not connected.
@@ -220,7 +221,7 @@ func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 		LocalAddresses: localAddresses,
 	}
 
-	if err := a.store.Bind(ctx, network.STCPR, pk, visorData); err != nil {
+	if err := a.store.Bind(ctx, types.STCPR, pk, visorData); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		a.logger(r).Errorf("Failed to bind PK (STCPR): %v", err)
 
@@ -244,7 +245,7 @@ func (a *API) delBind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.store.DelBind(ctx, network.STCPR, pk); err != nil {
+	if err := a.store.DelBind(ctx, types.STCPR, pk); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		a.logger(r).Errorf("Failed to delete bind PK (STCPR): %v", err)
 
@@ -291,7 +292,7 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	receiverVisorData, err := a.store.Resolve(ctx, network.Type(tpType), receiverPK)
+	receiverVisorData, err := a.store.Resolve(ctx, types.Type(tpType), receiverPK)
 	if errors.Is(err, store.ErrNoEntry) {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -314,9 +315,9 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, r, http.StatusOK, receiverVisorData)
 	a.logger(r).Infof("Resolved %v to %v (%v)", receiverPK, receiverVisorData, tpType)
 
-	if network.Type(tpType) == network.SUDPH {
+	if types.Type(tpType) == types.SUDPH {
 
-		senderVisorData, err := a.store.Resolve(ctx, network.Type(tpType), senderPK)
+		senderVisorData, err := a.store.Resolve(ctx, types.Type(tpType), senderPK)
 		if errors.Is(err, store.ErrNoEntry) {
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -345,8 +346,8 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 func (a *API) transports(w http.ResponseWriter, r *http.Request) {
 
 	info := &ArData{
-		Sudph: a.getTransports(r, network.SUDPH),
-		Stcpr: a.getTransports(r, network.STCPR),
+		Sudph: a.getTransports(r, types.SUDPH),
+		Stcpr: a.getTransports(r, types.STCPR),
 	}
 
 	a.writeJSON(w, r, http.StatusOK, info)
@@ -383,12 +384,12 @@ func (a *API) deregister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var netType network.Type
+	var netType types.Type
 	switch chi.URLParam(r, "network") {
 	case "sudph":
-		netType = network.SUDPH
+		netType = types.SUDPH
 	case "stcpr":
-		netType = network.STCPR
+		netType = types.STCPR
 	default:
 		a.log.WithError(ErrMissingNetworkType).WithField("Step", "Checking Network Type").Error("Deregistration process interrupt.")
 		w.WriteHeader(http.StatusBadRequest)
@@ -432,7 +433,7 @@ func (a *API) deregister(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, r, http.StatusOK, nil)
 }
 
-func (a *API) getTransports(r *http.Request, netType network.Type) []string {
+func (a *API) getTransports(r *http.Request, netType types.Type) []string {
 	ctx := r.Context()
 	pks, err := a.store.GetAll(ctx, netType)
 	if err != nil {
@@ -523,7 +524,7 @@ func (a *API) sudphConnHandshake(conn net.Conn) {
 	//	hs := handshake.ResponderHandshake(func(f2 handshake.Frame2) error { return nil })
 	hs := handshake.ResponderHandshake(func(_ handshake.Frame2) error { return nil })
 
-	wrapped, err := network.DoHandshake(conn, hs, network.SUDPH, a.log)
+	wrapped, err := network.DoHandshake(conn, hs, types.SUDPH, a.log)
 	if err != nil {
 		return
 	}
@@ -574,7 +575,7 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 		LocalAddresses: localAddresses,
 	}
 
-	if err := a.store.Bind(context.TODO(), network.SUDPH, pk, visorData); err != nil {
+	if err := a.store.Bind(context.TODO(), types.SUDPH, pk, visorData); err != nil {
 		a.log.WithError(err).Errorf("Failed to bind (SUDPH) pk %q to addr %q", strPK, remoteAddr)
 		return
 	}
@@ -594,7 +595,7 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 			data := buf[:n]
 			a.log.Debugf("(SUDPH) New packet from %v@%v: %v", pk, fromAddr, string(data))
 			if string(data) == addrresolver.UDPDelBindMessage {
-				err = a.store.DelBind(context.Background(), network.SUDPH, pk)
+				err = a.store.DelBind(context.Background(), types.SUDPH, pk)
 				if err != nil {
 					a.log.Warnf("Failed to delete bind (SUDPH) in redis %v: %v", pk, err)
 					return

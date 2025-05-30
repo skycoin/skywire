@@ -9,6 +9,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // Listener represents a skywire network listener. It wraps net.Listener
@@ -18,7 +19,7 @@ type Listener interface {
 	net.Listener
 	PK() cipher.PubKey
 	Port() uint16
-	Network() Type
+	Network() types.Type
 	AcceptTransport() (Transport, error)
 }
 
@@ -29,15 +30,15 @@ type listener struct {
 	freePort func()
 	accept   chan *transport
 	done     chan struct{}
-	network  Type
+	network  types.Type
 }
 
 // NewListener returns a new Listener.
-func NewListener(lAddr dmsg.Addr, freePort func(), network Type) Listener {
+func NewListener(lAddr dmsg.Addr, freePort func(), network types.Type) Listener {
 	return newListener(lAddr, freePort, network)
 }
 
-func newListener(lAddr dmsg.Addr, freePort func(), network Type) *listener {
+func newListener(lAddr dmsg.Addr, freePort func(), network types.Type) *listener {
 	return &listener{
 		lAddr:    lAddr,
 		freePort: freePort,
@@ -94,7 +95,7 @@ func (l *listener) Port() uint16 {
 }
 
 // Network returns network type
-func (l *listener) Network() Type {
+func (l *listener) Network() types.Type {
 	return l.network
 }
 

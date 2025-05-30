@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 const (
@@ -133,7 +133,7 @@ func TestVPN(t *testing.T) {
 				{
 					FromVisorHostName: visorVPNClient,
 					ToVisorHostName:   visorVPNServer,
-					Type:              network.DMSG,
+					Type:              types.DMSG,
 				},
 			},
 			Case: testVPNKillServer,
@@ -158,7 +158,7 @@ func TestVPN(t *testing.T) {
 				{
 					FromVisorHostName: visorVPNClient,
 					ToVisorHostName:   visorVPNServer,
-					Type:              network.DMSG,
+					Type:              types.DMSG,
 				},
 			},
 			Case: testVPNRemoveTransport,
@@ -209,7 +209,7 @@ func testVPNRemoveTransport(t *testing.T, env *TestEnv) {
 	err = env.VisorRemoveTransport(Transport{
 		FromVisorHostName: visorVPNClient,
 		ToVisorHostName:   visorVPNServer,
-		Type:              network.DMSG,
+		Type:              types.DMSG,
 	})
 
 	require.NoError(t, err)

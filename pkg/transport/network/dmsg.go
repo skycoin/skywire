@@ -9,6 +9,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // dmsgClientAdapter is a wrapper around dmsg.Client to conform to Client
@@ -71,8 +72,8 @@ func (c *dmsgClientAdapter) Close() error {
 }
 
 // Type implements Client interface
-func (c *dmsgClientAdapter) Type() Type {
-	return DMSG
+func (c *dmsgClientAdapter) Type() types.Type {
+	return types.DMSG
 }
 
 // wrapper around listener returned by dmsg.Client
@@ -91,8 +92,8 @@ func (lis *dmsgListenerAdapter) AcceptTransport() (Transport, error) {
 }
 
 // Network implements Listener interface
-func (lis *dmsgListenerAdapter) Network() Type {
-	return DMSG
+func (lis *dmsgListenerAdapter) Network() types.Type {
+	return types.DMSG
 }
 
 // PK implements Listener interface
@@ -142,6 +143,6 @@ func (c *dmsgTransportAdapter) RemoteRawAddr() net.Addr {
 }
 
 // Network implements Transport interface
-func (c *dmsgTransportAdapter) Network() Type {
-	return DMSG
+func (c *dmsgTransportAdapter) Network() types.Type {
+	return types.DMSG
 }

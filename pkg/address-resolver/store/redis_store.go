@@ -12,8 +12,8 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 const (
@@ -48,9 +48,9 @@ func newRedisStore(ctx context.Context, addr, password string, poolSize int, log
 	return &redisStore{redisCl}, nil
 }
 
-func (s *redisStore) Bind(ctx context.Context, netType network.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
+func (s *redisStore) Bind(ctx context.Context, netType types.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
 	switch netType {
-	case network.STCPR, network.SUDPH:
+	case types.STCPR, types.SUDPH:
 		key := getKey(string(netType), pk)
 		return s.bind(ctx, key, visorData)
 	default:
@@ -58,9 +58,9 @@ func (s *redisStore) Bind(ctx context.Context, netType network.Type, pk cipher.P
 	}
 }
 
-func (s *redisStore) DelBind(ctx context.Context, netType network.Type, pk cipher.PubKey) error {
+func (s *redisStore) DelBind(ctx context.Context, netType types.Type, pk cipher.PubKey) error {
 	switch netType {
-	case network.STCPR, network.SUDPH:
+	case types.STCPR, types.SUDPH:
 		key := getKey(string(netType), pk)
 		return s.delBind(ctx, key)
 	default:
@@ -68,9 +68,9 @@ func (s *redisStore) DelBind(ctx context.Context, netType network.Type, pk ciphe
 	}
 }
 
-func (s *redisStore) Resolve(ctx context.Context, netType network.Type, pk cipher.PubKey) (addrresolver.VisorData, error) {
+func (s *redisStore) Resolve(ctx context.Context, netType types.Type, pk cipher.PubKey) (addrresolver.VisorData, error) {
 	switch netType {
-	case network.STCPR, network.SUDPH:
+	case types.STCPR, types.SUDPH:
 		key := getKey(string(netType), pk)
 		return s.resolve(ctx, key)
 	default:
@@ -78,9 +78,9 @@ func (s *redisStore) Resolve(ctx context.Context, netType network.Type, pk ciphe
 	}
 }
 
-func (s *redisStore) GetAll(ctx context.Context, netType network.Type) ([]string, error) {
+func (s *redisStore) GetAll(ctx context.Context, netType types.Type) ([]string, error) {
 	switch netType {
-	case network.STCPR, network.SUDPH:
+	case types.STCPR, types.SUDPH:
 		key := getScanKey(string(netType))
 		return s.getAll(ctx, key)
 	default:

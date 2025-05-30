@@ -12,6 +12,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 const encryptHSTimout = 5 * time.Second
@@ -42,25 +43,25 @@ type Transport interface {
 	RemoteRawAddr() net.Addr
 
 	// Network returns network of transport
-	Network() Type
+	Network() types.Type
 }
 
 type transport struct {
 	net.Conn
 	lAddr, rAddr  dmsg.Addr
 	freePort      func()
-	transportType Type
+	transportType types.Type
 }
 
 // DoHandshake performs given handshake over given raw connection and wraps
 // connection in network.Transport
-func DoHandshake(rawConn net.Conn, hs handshake.Handshake, netType Type, log *logging.Logger) (Transport, error) {
+func DoHandshake(rawConn net.Conn, hs handshake.Handshake, netType types.Type, log *logging.Logger) (Transport, error) {
 	return doHandshake(rawConn, hs, netType, log)
 }
 
 // handshake performs given handshake over given raw connection and wraps
 // connection in network.transport
-func doHandshake(rawConn net.Conn, hs handshake.Handshake, netType Type, log *logging.Logger) (*transport, error) {
+func doHandshake(rawConn net.Conn, hs handshake.Handshake, netType types.Type, log *logging.Logger) (*transport, error) {
 	lAddr, rAddr, err := hs(rawConn, time.Now().Add(handshake.Timeout))
 	if err != nil {
 		if err := rawConn.Close(); err != nil {
@@ -148,4 +149,4 @@ func (c *transport) LocalPort() uint16 { return c.lAddr.Port }
 func (c *transport) RemotePort() uint16 { return c.rAddr.Port }
 
 // Network returns network of transport
-func (c *transport) Network() Type { return c.transportType }
+func (c *transport) Network() types.Type { return c.transportType }

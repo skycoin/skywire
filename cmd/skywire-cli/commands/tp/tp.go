@@ -26,7 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -247,22 +247,22 @@ var addTpCmd = &cobra.Command{
 				logger.Infof("Established %v transport to %v", transportType, pk)
 			}
 		} else {
-			var transportTypes []network.Type
+			var transportTypes []types.Type
 			if forceAttempt {
-				transportTypes = []network.Type{
-					network.STCPR,
-					network.SUDPH,
-					network.DMSG,
+				transportTypes = []types.Type{
+					types.STCPR,
+					types.SUDPH,
+					types.DMSG,
 				}
 			} else {
 				if availableSTCPR {
-					transportTypes = append(transportTypes, network.STCPR)
+					transportTypes = append(transportTypes, types.STCPR)
 				}
 				if availableSUDPH {
-					transportTypes = append(transportTypes, network.SUDPH)
+					transportTypes = append(transportTypes, types.SUDPH)
 				}
 				if availableDMSG {
-					transportTypes = append(transportTypes, network.DMSG)
+					transportTypes = append(transportTypes, types.DMSG)
 				}
 			}
 
@@ -321,7 +321,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 	internal.Catch(cmdFlags, err)
 
 	type outputTP struct {
-		Type   network.Type    `json:"type"`
+		Type   types.Type      `json:"type"`
 		ID     uuid.UUID       `json:"id"`
 		Remote cipher.PubKey   `json:"remote_pk"`
 		TpMode string          `json:"mode"`
@@ -419,7 +419,7 @@ func PrintTransportEntries(cmdFlags *pflag.FlagSet, entries ...*transport.Entry)
 
 	type outputEntry struct {
 		ID    uuid.UUID     `json:"id"`
-		Type  network.Type  `json:"type"`
+		Type  types.Type    `json:"type"`
 		Edge1 cipher.PubKey `json:"edge1"`
 		Edge2 cipher.PubKey `json:"edge2"`
 	}
