@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
 	"github.com/skycoin/skywire/pkg/transport/network/porter"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // Client provides access to skywire network
@@ -45,7 +46,7 @@ type Client interface {
 	// client should be closed manually
 	Close() error
 	// Type returns skywire network type in which this client operates
-	Type() Type
+	Type() types.Type
 }
 
 // ClientFactory is used to create Client instances
@@ -62,7 +63,7 @@ type ClientFactory struct {
 }
 
 // MakeClient creates a new client of specified type
-func (f *ClientFactory) MakeClient(netType Type, port int) (Client, error) {
+func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error) {
 	log := logging.MustGetLogger(string(netType))
 	if f.MLogger != nil {
 		log = f.MLogger.PackageLogger(string(netType))
@@ -85,13 +86,13 @@ func (f *ClientFactory) MakeClient(netType Type, port int) (Client, error) {
 	resolved := &resolvedClient{genericClient: generic, ar: f.ARClient}
 
 	switch netType {
-	case STCP:
+	case types.STCP:
 		return newStcp(generic, f.PKTable), nil
-	case STCPR:
+	case types.STCPR:
 		return newStcpr(resolved, port), nil
-	case SUDPH:
+	case types.SUDPH:
 		return newSudph(resolved, port), nil
-	case DMSG:
+	case types.DMSG:
 		return newDmsgClient(f.DmsgC), nil
 	}
 	return nil, fmt.Errorf("cannot initiate client, type %s not supported", netType)
@@ -108,7 +109,7 @@ type genericClient struct {
 	lPK        cipher.PubKey
 	lSK        cipher.SecKey
 	listenAddr string
-	netType    Type
+	netType    types.Type
 
 	log    *logging.Logger
 	mLog   *logging.MasterLogger
@@ -305,7 +306,7 @@ func (c *genericClient) Close() error {
 }
 
 // Type implements interface
-func (c *genericClient) Type() Type {
+func (c *genericClient) Type() types.Type {
 	return c.netType
 }
 

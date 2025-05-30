@@ -27,7 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	skyvisor "github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -306,18 +306,18 @@ func (env *TestEnv) VisorStart(visor string) (string, error) {
 	return env.ExecJSONReturnString(cmd)
 }
 
-func (env *TestEnv) VisorTpType(visor string) ([]network.Type, error) {
+func (env *TestEnv) VisorTpType(visor string) ([]tptypes.Type, error) {
 	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp type --json", visor)
 	cliOutput := struct {
-		Output []network.Type `json:"output,omitempty"`
+		Output []tptypes.Type `json:"output,omitempty"`
 		Err    *string        `json:"error,omitempty"`
 	}{}
 	err := env.ExecJSON(cmd, &cliOutput)
 	if err != nil {
-		return []network.Type{}, err
+		return []tptypes.Type{}, err
 	}
 	if cliOutput.Err != nil {
-		return []network.Type{}, errors.New(*cliOutput.Err)
+		return []tptypes.Type{}, errors.New(*cliOutput.Err)
 	}
 	return cliOutput.Output, nil
 }
@@ -345,7 +345,7 @@ func (env *TestEnv) VisorTpAddDefault(visor string, pk string) (*skyvisor.Transp
 	return output[0], nil
 }
 
-func (env *TestEnv) VisorTpAdd(visor, pk string, tpType network.Type) (*skyvisor.TransportSummary, error) {
+func (env *TestEnv) VisorTpAdd(visor, pk string, tpType tptypes.Type) (*skyvisor.TransportSummary, error) {
 	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp add %s --type %s --force --json", visor, pk, tpType)
 	output, err := env.visorTpExec(cmd)
 	if err != nil {
@@ -620,7 +620,7 @@ func (env *TestEnv) AddDefaultTransports(routerVisor string, skychatNodes []stri
 	return env
 }
 
-func (env *TestEnv) AddTransports(routerVisor string, visors []string, tpType network.Type) *TestEnv {
+func (env *TestEnv) AddTransports(routerVisor string, visors []string, tpType tptypes.Type) *TestEnv {
 	for _, v := range visors {
 		if _, err := env.VisorTpAdd(v, env.visorPKs[routerVisor], tpType); err != nil {
 			panic(err)

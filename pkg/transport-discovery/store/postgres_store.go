@@ -10,7 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 type postgresStore struct {
@@ -86,19 +86,19 @@ func (s *postgresStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey)
 	return entries, nil
 }
 
-func (s *postgresStore) GetNumberOfTransports(context.Context) (map[network.Type]int, error) {
+func (s *postgresStore) GetNumberOfTransports(context.Context) (map[types.Type]int, error) {
 	var tpRecords []Transport
-	response := map[network.Type]int{
-		network.STCP:  0,
-		network.STCPR: 0,
-		network.SUDPH: 0,
-		network.DMSG:  0,
+	response := map[types.Type]int{
+		types.STCP:  0,
+		types.STCPR: 0,
+		types.SUDPH: 0,
+		types.DMSG:  0,
 	}
 	if err := s.client.Find(&tpRecords).Error; err != nil {
 		return response, err
 	}
 	for _, record := range tpRecords {
-		response[network.Type(record.Type)]++
+		response[types.Type(record.Type)]++
 	}
 	return response, nil
 }
@@ -144,7 +144,7 @@ func makeEntry(record Transport) (transport.Entry, error) {
 
 	entry := transport.Entry{}
 	entry.Label = transport.Label(record.Label)
-	entry.Type = network.Type(record.Type)
+	entry.Type = types.Type(record.Type)
 	entry.ID = uuid.MustParse(record.TransportID)
 	entry.Edges = [2]cipher.PubKey{cipher1, cipher2}
 

@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 const (
@@ -470,4 +471,4 @@ func (mt *ManagedTransport) recordLog() {
 func (mt *ManagedTransport) Remote() cipher.PubKey { return mt.rPK }
 
 // Type returns the transport type.
-func (mt *ManagedTransport) Type() network.Type { return mt.client.Type() }
+func (mt *ManagedTransport) Type() types.Type { return mt.client.Type() }

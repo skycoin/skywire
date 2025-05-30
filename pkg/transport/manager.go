@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 const reconnectPhaseDelay = 10 * time.Second
@@ -27,7 +28,7 @@ const reconnectRemoteTimeout = 3 * time.Second
 // PersistentTransports is a persistent transports description
 type PersistentTransports struct {
 	PK      cipher.PubKey `json:"pk"`
-	NetType network.Type  `json:"type"`
+	NetType types.Type    `json:"type"`
 }
 
 // ManagerConfig configures a Manager.
@@ -57,7 +58,7 @@ type Manager struct {
 	ready     chan struct{}
 
 	factory    network.ClientFactory
-	netClients map[network.Type]network.Client
+	netClients map[types.Type]network.Client
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -73,7 +74,7 @@ func NewManager(log *logging.Logger, arClient addrresolver.APIClient, ebc *appev
 		readCh:     make(chan routing.Packet, 20),
 		done:       make(chan struct{}),
 		ready:      make(chan struct{}),
-		netClients: make(map[network.Type]network.Client),
+		netClients: make(map[types.Type]network.Client),
 		arClient:   arClient,
 		factory:    factory,
 		ebc:        ebc,
@@ -84,7 +85,7 @@ func NewManager(log *logging.Logger, arClient addrresolver.APIClient, ebc *appev
 // InitDmsgClient initilizes the dmsg client and also adds dmsgC to the factory
 func (tm *Manager) InitDmsgClient(ctx context.Context, dmsgC *dmsg.Client) {
 	tm.factory.DmsgC = dmsgC
-	tm.InitClient(ctx, network.DMSG, 0)
+	tm.InitClient(ctx, types.DMSG, 0)
 }
 
 // Serve starts all network clients and starts accepting connections
@@ -146,7 +147,7 @@ func (tm *Manager) SetPTpsCache(pTps []PersistentTransports) {
 }
 
 // InitClient initilizes a network client
-func (tm *Manager) InitClient(ctx context.Context, netType network.Type, port int) {
+func (tm *Manager) InitClient(ctx context.Context, netType types.Type, port int) {
 	client, err := tm.factory.MakeClient(netType, port)
 	if err != nil {
 		tm.Logger.Warnf("Cannot initialize %s transport client", netType)
@@ -166,7 +167,7 @@ func (tm *Manager) Ready() <-chan struct{} {
 	return tm.ready
 }
 
-func (tm *Manager) runClient(ctx context.Context, netType network.Type) {
+func (tm *Manager) runClient(ctx context.Context, netType types.Type) {
 	if tm.isClosing() {
 		return
 	}
@@ -185,15 +186,15 @@ func (tm *Manager) runClient(ctx context.Context, netType network.Type) {
 		return
 	}
 	tm.Logger.Debugf("listening on network: %s", client.Type())
-	if client.Type() != network.DMSG {
+	if client.Type() != types.DMSG {
 		tm.wg.Add(1)
 	}
 	go tm.acceptTransports(ctx, lis, netType)
 }
 
-func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener, t network.Type) {
+func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener, t types.Type) {
 	// we do not close dmsg client explicitly, so we don't have to wait for it to finish
-	if t != network.DMSG {
+	if t != types.DMSG {
 		defer tm.wg.Done()
 	}
 	for {
@@ -246,10 +247,10 @@ func (tm *Manager) cleanupTransports(ctx context.Context) {
 }
 
 // Networks returns all the network types contained within the TransportManager.
-func (tm *Manager) Networks() []network.Type {
+func (tm *Manager) Networks() []types.Type {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
-	var nets []network.Type
+	var nets []types.Type
 	for netType := range tm.netClients {
 		nets = append(nets, netType)
 	}
@@ -260,7 +261,7 @@ func (tm *Manager) Networks() []network.Type {
 func (tm *Manager) Stcpr() (network.Client, bool) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
-	c, ok := tm.netClients[network.STCPR]
+	c, ok := tm.netClients[types.STCPR]
 	return c, ok
 }
 
@@ -331,7 +332,7 @@ var ErrUnknownNetwork = errors.New("unknown network type")
 
 // IsKnownNetwork returns true when netName is a known
 // network type that we are able to operate in
-func (tm *Manager) IsKnownNetwork(netName network.Type) bool {
+func (tm *Manager) IsKnownNetwork(netName types.Type) bool {
 	tm.mx.RLock()
 	defer tm.mx.RUnlock()
 	_, ok := tm.netClients[netName]
@@ -339,7 +340,7 @@ func (tm *Manager) IsKnownNetwork(netName network.Type) bool {
 }
 
 // GetTransport gets transport entity to the given remote
-func (tm *Manager) GetTransport(remote cipher.PubKey, netType network.Type) (*ManagedTransport, error) {
+func (tm *Manager) GetTransport(remote cipher.PubKey, netType types.Type) (*ManagedTransport, error) {
 	tm.mx.RLock()
 	defer tm.mx.RUnlock()
 	if !tm.IsKnownNetwork(netType) {
@@ -379,7 +380,7 @@ func (tm *Manager) GetTransportsByLabel(label Label) []*ManagedTransport {
 }
 
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
-func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netType network.Type, label Label) (*ManagedTransport, error) {
+func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label) (*ManagedTransport, error) {
 	if tm.isClosing() {
 		return nil, io.ErrClosedPipe
 	}
@@ -396,7 +397,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netT
 	}
 }
 
-func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netType network.Type, label Label) (*ManagedTransport, error) {
+func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label) (*ManagedTransport, error) {
 	if !tm.IsKnownNetwork(netType) {
 		return nil, ErrUnknownNetwork
 	}
@@ -456,7 +457,7 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	for _, tp := range tm.tps {
 		if tp.transport != nil {
 			remoteRaw := tp.transport.RemoteRawAddr().String()
-			if tp.Entry.Type == network.STCPR && remoteRaw != "" {
+			if tp.Entry.Type == types.STCPR && remoteRaw != "" {
 				addrs = append(addrs, remoteRaw)
 			}
 		}
@@ -573,6 +574,6 @@ func (tm *Manager) isClosing() bool {
 	}
 }
 
-func (tm *Manager) tpIDFromPK(pk cipher.PubKey, netType network.Type) uuid.UUID {
+func (tm *Manager) tpIDFromPK(pk cipher.PubKey, netType types.Type) uuid.UUID {
 	return MakeTransportID(tm.Conf.PubKey, pk, netType)
 }

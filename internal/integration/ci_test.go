@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // TODO: implement TestEnv.startup in code (without need for docker-compose up)
@@ -306,7 +306,7 @@ func TestEnv_Tp(t *testing.T) {
 		tpTypes, err := env.VisorTpType(visorB)
 		require.NoError(t, err)
 		for _, tpType := range tpTypes {
-			if tpType != network.STCP {
+			if tpType != types.STCP {
 				addTpSum, err := env.VisorTpAdd(visorB, pk, tpType)
 				require.NoError(t, err)
 				require.Contains(t, addTpSum.Remote.Hex(), pk)

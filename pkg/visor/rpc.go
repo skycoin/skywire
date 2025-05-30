@@ -17,7 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
 
@@ -147,7 +147,7 @@ type TransportSummary struct {
 	ID      uuid.UUID           `json:"id"`
 	Local   cipher.PubKey       `json:"local_pk"`
 	Remote  cipher.PubKey       `json:"remote_pk"`
-	Type    network.Type        `json:"type"`
+	Type    types.Type          `json:"type"`
 	Log     *transport.LogEntry `json:"log,omitempty"`
 	IsSetup bool                `json:"is_setup"`
 	Label   transport.Label     `json:"label"`

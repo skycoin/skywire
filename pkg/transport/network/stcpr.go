@@ -10,6 +10,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/transport/types"
 )
 
 type stcprClient struct {
@@ -19,7 +20,7 @@ type stcprClient struct {
 
 func newStcpr(resolved *resolvedClient, port int) Client {
 	client := &stcprClient{resolvedClient: resolved, port: port}
-	client.netType = STCPR
+	client.netType = types.STCPR
 	return client
 }
 
@@ -38,7 +39,7 @@ func (c *stcprClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 }
 
 func (c *stcprClient) dial(ctx context.Context, addr string) (net.Conn, error) {
-	c.eb.SendTCPDial(context.Background(), string(STCPR), addr)
+	c.eb.SendTCPDial(context.Background(), string(types.STCPR), addr)
 	dialer := net.Dialer{}
 	return dialer.DialContext(ctx, "tcp", addr)
 }

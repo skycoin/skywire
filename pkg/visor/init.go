@@ -52,6 +52,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
+	"github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
@@ -489,20 +490,20 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
 			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
 		default:
-			v.tpM.InitClient(ctx, network.SUDPH, v.conf.Transport.SudphPort)
+			v.tpM.InitClient(ctx, types.SUDPH, v.conf.Transport.SudphPort)
 		}
 	}
 	return nil
 }
 
 func initStcprClient(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
-	v.tpM.InitClient(ctx, network.STCPR, v.conf.Transport.StcprPort)
+	v.tpM.InitClient(ctx, types.STCPR, v.conf.Transport.StcprPort)
 	return nil
 }
 
 func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	if v.conf.STCP != nil {
-		v.tpM.InitClient(ctx, network.STCP, 0)
+		v.tpM.InitClient(ctx, types.STCP, 0)
 	}
 	return nil
 }
@@ -894,7 +895,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
 		func(rPK cipher.PubKey, tm *transport.Manager) error {
-			establishedTransports, _ := v.Transports([]string{string(network.STCPR), string(network.SUDPH), string(network.DMSG)}, []cipher.PubKey{v.conf.PK}, false) //nolint
+			establishedTransports, _ := v.Transports([]string{string(types.STCPR), string(types.SUDPH), string(types.DMSG)}, []cipher.PubKey{v.conf.PK}, false) //nolint
 			for _, transportSum := range establishedTransports {
 				if transportSum.Remote.Hex() == rPK.Hex() {
 					log.Debugf("Established transport exist. Type: %s", transportSum.Type)
@@ -909,7 +910,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 
 			dmsgFallback := func() error {
 				return retrier.Do(ctx, func() error {
-					_, err := tm.SaveTransport(ctx, rPK, network.DMSG, transport.LabelAutomatic)
+					_, err := tm.SaveTransport(ctx, rPK, types.DMSG, transport.LabelAutomatic)
 					if err != nil {
 						log.Debugf("Establishing automatic DMSG transport failed.")
 					}
@@ -934,8 +935,8 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			trySUDPH := false
 
 			for _, trans := range transports {
-				nType := network.Type(trans)
-				if nType == network.STCPR {
+				nType := types.Type(trans)
+				if nType == types.STCPR {
 					trySTCPR = true
 					continue
 				}
@@ -944,7 +945,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				<-v.stunReady
 
 				// skip if SUDPH is under symmetric NAT / under UDP firewall.
-				if nType == network.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
+				if nType == types.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
 					v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
 					continue
 				}
@@ -954,7 +955,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			// trying to establish direct connection to rPK using STCPR
 			if trySTCPR {
 				err := retrier.Do(ctx, func() error {
-					_, err := tm.SaveTransport(ctx, rPK, network.STCPR, transport.LabelAutomatic)
+					_, err := tm.SaveTransport(ctx, rPK, types.STCPR, transport.LabelAutomatic)
 					return err
 				})
 				if err == nil {
@@ -965,7 +966,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			// trying to establish direct connection to rPK using SUDPH
 			if trySUDPH {
 				err := retrier.Do(ctx, func() error {
-					_, err := tm.SaveTransport(ctx, rPK, network.SUDPH, transport.LabelAutomatic)
+					_, err := tm.SaveTransport(ctx, rPK, types.SUDPH, transport.LabelAutomatic)
 					return err
 				})
 				if err == nil {
@@ -1317,6 +1318,7 @@ func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger
 				//reduce tick duration on non nil error
 				ticker.Reset(time.Minute)
 			} else {
+				v.isServicesHealthy.set()
 				var dtpids []uuid.UUID
 				var rmtpids []uuid.UUID
 				var tpids []uuid.UUID
@@ -1526,13 +1528,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	serviceDisc := v.conf.Launcher.ServiceDisc
 	if serviceDisc == "" { //it might be intentionally blank ; consider revising.
-		var envServices skywire.EnvServices
-		var services skywire.Services
-		if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
-			if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-				serviceDisc = services.ServiceDiscovery
-			}
-		}
+		serviceDisc = skywire.Prod.ServiceDiscovery
 	}
 
 	// todo: refactor updatedisc: split connecting to services in updatedisc and
@@ -1552,7 +1548,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	if err != nil {
 		return err
 	}
-	connector := servicedisc.MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
+	connector := MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
 
 	cctx, cancel := context.WithCancel(ctx)
 	v.pushCloseStack("public_autoconnect", func() error {
@@ -1560,7 +1556,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		return err
 	})
 
-	go connector.Run(cctx) //nolint:errcheck
+	go connector.Run(cctx, v) //nolint:errcheck
 
 	return nil
 }

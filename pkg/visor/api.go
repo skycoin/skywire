@@ -32,7 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -1131,12 +1131,12 @@ func (v *Visor) TransportTypes() ([]string, error) {
 }
 
 // Transports implements API.
-func (v *Visor) Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error) {
+func (v *Visor) Transports(typeFilters []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error) {
 	var result []*TransportSummary
 
-	typeIncluded := func(tType network.Type) bool {
-		if types != nil {
-			for _, ft := range types {
+	typeIncluded := func(tType types.Type) bool {
+		if typeFilters != nil {
+			for _, ft := range typeFilters {
 				if string(tType) == ft {
 					return true
 				}
@@ -1190,7 +1190,7 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.D
 
 	v.log.Debugf("Saving transport to %v via %v", remote, tpType)
 
-	tp, err := v.tpM.SaveTransport(ctx, remote, network.Type(tpType), transport.LabelUser)
+	tp, err := v.tpM.SaveTransport(ctx, remote, types.Type(tpType), transport.LabelUser)
 	if err != nil {
 		return nil, err
 	}
