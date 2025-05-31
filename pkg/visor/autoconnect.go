@@ -227,6 +227,9 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					a.log.Debugln("Refreshing list of keys for public autoconnect")
 					break
 				}
+				if pk == v.conf.PK {
+					continue
+				}
 				vUptimeData, err := v.uptimeTracker.FetchUptimes(ctx, pk.String())
 				if err != nil {
 					a.log.WithField("pk", pk).WithError(err).Debugln("Failed to check remote visor online status")
