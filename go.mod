@@ -32,7 +32,7 @@ require (
 	github.com/hashicorp/yamux v0.1.2
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/james-barrow/golang-ipc v1.2.4
-	github.com/jaypipes/ghw v0.16.0
+	github.com/jaypipes/ghw v0.17.0
 	github.com/json-iterator/go v1.1.12
 	github.com/lib/pq v1.10.9
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
@@ -61,8 +61,8 @@ require (
 	golang.org/x/term v0.32.0
 	golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675 //DO NOT MODIFY OR UPDATE v0.0.0-20230223181233-21636207a675
 	gopkg.in/telebot.v3 v3.3.8
-	gorm.io/driver/postgres v1.5.11
-	gorm.io/gorm v1.26.1
+	gorm.io/driver/postgres v1.6.0
+	gorm.io/gorm v1.30.0
 )
 
 require cogentcore.org/core v0.3.11
@@ -79,8 +79,8 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/alecthomas/chroma v0.10.0 // indirect
-	github.com/alecthomas/chroma/v2 v2.13.0 // indirect
-	github.com/anthonynsimon/bild v0.13.0 // indirect
+	github.com/alecthomas/chroma/v2 v2.18.0 // indirect
+	github.com/anthonynsimon/bild v0.14.0 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
@@ -88,7 +88,7 @@ require (
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chewxy/math32 v1.10.1 // indirect
+	github.com/chewxy/math32 v1.11.1 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect
 	github.com/coder/websocket v1.8.13 // indirect
 	github.com/cogentcore/webgpu v0.23.0 // indirect
@@ -103,11 +103,11 @@ require (
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/eliukblau/pixterm/pkg/ansimage v0.0.0-20191210081756-9fb6cf8c2f75 // indirect
-	github.com/ericchiang/css v1.3.0 // indirect
+	github.com/ericchiang/css v1.4.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.9 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
-	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20240506104042-037f3cc74f2a // indirect
+	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20250301202403-da16c1255728 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
@@ -124,7 +124,7 @@ require (
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/h2non/filetype v1.1.3 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
-	github.com/hack-pad/hackpadfs v0.2.1 // indirect
+	github.com/hack-pad/hackpadfs v0.2.4 // indirect
 	github.com/hack-pad/safejs v0.1.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/itchyny/gojq v0.12.17 // indirect
@@ -166,13 +166,13 @@ require (
 	github.com/spf13/viper v1.20.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/tdewolff/parse/v2 v2.7.19 // indirect
+	github.com/tdewolff/parse/v2 v2.8.1 // indirect
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b // indirect
 	github.com/tevino/abool v1.2.0 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
-	github.com/ugorji/go/codec v1.2.12 // indirect
+	github.com/ugorji/go/codec v1.2.14 // indirect
 	github.com/valyala/fastrand v1.1.0 // indirect
 	github.com/valyala/histogram v1.2.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
@@ -183,7 +183,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.17.0 // indirect
 	golang.org/x/crypto v0.38.0 // indirect
-	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6 // indirect
+	golang.org/x/exp v0.0.0-20250531010427-b6e5de432a8b // indirect
 	golang.org/x/image v0.27.0 // indirect
 	golang.org/x/mod v0.24.0 // indirect
 	golang.org/x/text v0.25.0 // indirect

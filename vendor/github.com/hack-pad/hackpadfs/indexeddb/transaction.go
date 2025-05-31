@@ -20,9 +20,9 @@ type transaction struct {
 	abort          context.CancelFunc
 	store          *store
 	txn            *idb.Transaction
-	nextOp         keyvalue.OpID
 	results        map[keyvalue.OpID]keyvalue.OpResult
 	pendingResults []func()
+	nextOp         keyvalue.OpID
 	resultsMu      sync.Mutex
 }
 
