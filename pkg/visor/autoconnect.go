@@ -77,6 +77,26 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 	case <-time.After(randomDelay):
 	}
 
+	visorIsPublic := false
+	// This logic modified from from func initPublicVisor
+	// Check if the visor is indeed running as a public visor
+	// To run a public visor requires public ip or port forwarding
+	if !v.conf.IsPublic {
+		hasPublic, err := netutil.HasPublicIP()
+		if err == nil && hasPublic {
+			stcpr, ok := v.tpM.Stcpr()
+			if ok {
+				addr, err := stcpr.LocalAddr()
+				if err == nil {
+					_, err = netutil.ExtractPort(addr)
+					if err == nil {
+						visorIsPublic = true
+					}
+				}
+			}
+		}
+	}
+
 	publicServiceTicket := time.NewTicker(PublicServiceDelay)
 
 	for {
@@ -85,9 +105,11 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			return context.Canceled
 		case <-publicServiceTicket.C:
 
+			// limit maximum number of autoconnect transports
+			// Note: this doesn't account for user established transports
 			if len(a.tm.GetTransportsByLabel(transport.LabelAutomatic)) >= a.maxConns {
 				a.log.Debugln("autoconnect: maximum number of established transports reached:", a.maxConns)
-				return err
+				continue
 			}
 
 			a.log.Infoln("Fetching public visors")
@@ -97,52 +119,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				continue
 			}
 
-			// find keys that have transports to public visors
-			absentSet := make(map[cipher.PubKey]struct{}, len(addrs))
-			for _, pk := range addrs {
-				absentSet[pk] = struct{}{}
-			}
-
-			absent2Set := make(map[cipher.PubKey]struct{})
-			var absent2 []cipher.PubKey
-
-			for _, pk := range addrs {
-				entries, err := v.DiscoverTransportsByPK(pk)
-				if err != nil {
-					v.isServicesHealthy.unset()
-					a.log.WithError(err).Warn("cannot connect to transport discovery service")
-					continue
-				}
-				v.isServicesHealthy.set()
-
-				var entryKeys []cipher.PubKey
-				seen := make(map[cipher.PubKey]struct{})
-				for _, entry := range entries {
-					for _, edge := range entry.Edges {
-						if edge != v.conf.PK {
-							if _, ok := seen[edge]; !ok {
-								entryKeys = append(entryKeys, edge)
-								seen[edge] = struct{}{}
-							}
-						}
-					}
-				}
-
-				// exclude keys for which the visor already has transports
-				filtered := a.filterDuplicates(entryKeys, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
-				for _, newPK := range filtered {
-					if _, seen := absent2Set[newPK]; seen {
-						continue // already in absent2
-					}
-					if _, isAbsent := absentSet[newPK]; isAbsent {
-						continue // appears in original absent list
-					}
-					absent2Set[newPK] = struct{}{}
-					absent2 = append(absent2, newPK)
-				}
-			}
-
-			absent2 = a.filterDuplicates(absent2, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
+			absent := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
 
 			// Get keys available for SUDPH transport
 			sudphKeys, err := v.arClient.TransportsType(ctx, types.SUDPH)
@@ -158,46 +135,100 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				stcprKeys = map[cipher.PubKey][]string{}
 			}
 
-			// remove keys that are not available for sudph transports from absent2 slice
-			filtered := absent2[:0]
-			for _, pk := range absent2 {
-				if _, ok := sudphKeys[pk]; ok {
-					filtered = append(filtered, pk)
-				}
-			}
-			absent2 = filtered
-
-			absent := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
-
-			// Ensure no duplicates in absent and absent2 and ensure no key appears in both lists
-			absentSet = make(map[cipher.PubKey]struct{}, len(absent))
-			uniqueAbsent := absent[:0]
-			for _, pk := range absent {
-				if _, seen := absentSet[pk]; !seen {
+			// auto-transport logic for public visors should only attempt to connect stcpr transports to other public visors
+			var absent2 []cipher.PubKey
+			if !visorIsPublic {
+				// find keys that have transports to public visors
+				absentSet := make(map[cipher.PubKey]struct{}, len(addrs))
+				for _, pk := range addrs {
 					absentSet[pk] = struct{}{}
-					uniqueAbsent = append(uniqueAbsent, pk)
 				}
-			}
-			absent = uniqueAbsent
 
-			absent2Set = make(map[cipher.PubKey]struct{}, len(absent2))
-			uniqueAbsent2 := absent2[:0]
-			for _, pk := range absent2 {
-				if _, seen := absent2Set[pk]; !seen {
-					if _, inAbsent := absentSet[pk]; !inAbsent {
-						absent2Set[pk] = struct{}{}
-						uniqueAbsent2 = append(uniqueAbsent2, pk)
+				absent2Set := make(map[cipher.PubKey]struct{})
+
+				for _, pk := range addrs {
+					entries, err := v.DiscoverTransportsByPK(pk)
+					if err != nil {
+						v.isServicesHealthy.unset()
+						a.log.WithError(err).Warn("cannot connect to transport discovery service")
+						continue
+					}
+					v.isServicesHealthy.set()
+
+					var entryKeys []cipher.PubKey
+					seen := make(map[cipher.PubKey]struct{})
+					for _, entry := range entries {
+						for _, edge := range entry.Edges {
+							if edge != v.conf.PK {
+								if _, ok := seen[edge]; !ok {
+									entryKeys = append(entryKeys, edge)
+									seen[edge] = struct{}{}
+								}
+							}
+						}
+					}
+
+					// exclude keys for which the visor already has transports
+					filtered := a.filterDuplicates(entryKeys, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
+					for _, newPK := range filtered {
+						if _, seen := absent2Set[newPK]; seen {
+							continue // already in absent2
+						}
+						if _, isAbsent := absentSet[newPK]; isAbsent {
+							continue // appears in original absent list
+						}
+						absent2Set[newPK] = struct{}{}
+						absent2 = append(absent2, newPK)
 					}
 				}
+
+				absent2 = a.filterDuplicates(absent2, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
+
+				// remove keys that are not available for sudph transports from absent2 slice
+				filtered := absent2[:0]
+				for _, pk := range absent2 {
+					if _, ok := sudphKeys[pk]; ok {
+						filtered = append(filtered, pk)
+					}
+				}
+				absent2 = filtered
+
+				// Ensure no duplicates in absent and absent2 and ensure no key appears in both lists
+				absentSet = make(map[cipher.PubKey]struct{}, len(absent))
+				uniqueAbsent := absent[:0]
+				for _, pk := range absent {
+					if _, seen := absentSet[pk]; !seen {
+						absentSet[pk] = struct{}{}
+						uniqueAbsent = append(uniqueAbsent, pk)
+					}
+				}
+				absent = uniqueAbsent
+
+				absent2Set = make(map[cipher.PubKey]struct{}, len(absent2))
+				uniqueAbsent2 := absent2[:0]
+				for _, pk := range absent2 {
+					if _, seen := absent2Set[pk]; !seen {
+						if _, inAbsent := absentSet[pk]; !inAbsent {
+							absent2Set[pk] = struct{}{}
+							uniqueAbsent2 = append(uniqueAbsent2, pk)
+						}
+					}
+				}
+				absent2 = uniqueAbsent2
+
 			}
-			absent2 = uniqueAbsent2
+
+			absent = append(absent, absent2...)
 
 			//attempt to establish transports to the keys in random order for 5 minutes
 			attemptDeadline := time.Now().Add(5 * time.Minute)
-			for _, pk := range shufflePubKeys(append(absent, absent2...)) {
+			for _, pk := range shufflePubKeys(absent) {
 				if time.Now().After(attemptDeadline) {
 					a.log.Debugln("Refreshing list of keys for public autoconnect")
 					break
+				}
+				if pk == v.conf.PK {
+					continue
 				}
 				vUptimeData, err := v.uptimeTracker.FetchUptimes(ctx, pk.String())
 				if err != nil {
