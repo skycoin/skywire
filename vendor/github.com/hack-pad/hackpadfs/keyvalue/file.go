@@ -33,12 +33,11 @@ type file struct {
 }
 
 type fileData struct {
-	runOnceFileRecord
+	fs              *FS
+	path            string // path is stored as the "key", keeping it here is for generating hackpadfs.FileInfo's
 	modeOverride    *hackpadfs.FileMode
 	modTimeOverride time.Time
-
-	path string // path is stored as the "key", keeping it here is for generating hackpadfs.FileInfo's
-	fs   *FS
+	runOnceFileRecord
 }
 
 func (f *fileData) Mode() hackpadfs.FileMode {
@@ -357,8 +356,8 @@ func (f *file) ReadDir(n int) ([]hackpadfs.DirEntry, error) {
 }
 
 type dirEntry struct {
-	baseName string
 	info     hackpadfs.FileInfo
+	baseName string
 }
 
 func newDirEntry(fs hackpadfs.FS, basePath, name string) (*dirEntry, error) {

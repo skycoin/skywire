@@ -1,3 +1,4 @@
+//go:build !tinygo && !noasm
 // Copyright 2014 Xuanyi Chew. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
@@ -34,8 +35,8 @@
 #define PosInf 0x7F800000
 #define NegInf 0xFF800000
 
-// func Exp(x float32) float32
-TEXT ·Exp(SB),NOSPLIT,$0
+// func archExp(x float32) float32
+TEXT ·archExp(SB),NOSPLIT,$0
 // test bits for not-finite
 	MOVL    x+0(FP), BX
 	MOVQ    $~(1<<31), AX // sign bit mask
@@ -109,5 +110,5 @@ notNegInf: // NaN or +Inf, return x
 	MOVL    BX, ret+8(FP)
 	RET
 
-TEXT ·Exp2(SB),NOSPLIT,$0
+TEXT ·archExp2(SB),NOSPLIT,$0
 	JMP  ·exp2(SB)
