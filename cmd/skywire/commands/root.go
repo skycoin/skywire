@@ -42,13 +42,13 @@ func init() {
 		ss.RootCmd,
 		sc.RootCmd,
 	)
+	conf.ServicesConfCmd.AddCommand(
+		conf.DmsghttpConfCmd,
+	)
 	services.RootCmd.AddCommand(
 		sd.RootCmd,
 		sn.RootCmd,
 		conf.ServicesConfCmd,
-	)
-	dmsg.RootCmd.AddCommand(
-		conf.DmsghttpConfCmd,
 	)
 	RootCmd.AddCommand(
 		visor.RootCmd,
@@ -72,7 +72,7 @@ func init() {
 	ssc.RootCmd.Use = "skysocks-client"
 	ss.RootCmd.Use = "skysocks"
 	sc.RootCmd.Use = "skychat"
-	conf.DmsghttpConfCmd.Use = "conf"
+	conf.DmsghttpConfCmd.Use = "dmsghttp"
 	conf.ServicesConfCmd.Use = "conf"
 
 	modifySubcommands(RootCmd)
