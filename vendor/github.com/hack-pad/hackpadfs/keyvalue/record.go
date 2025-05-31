@@ -35,12 +35,12 @@ var (
 
 // BaseFileRecord is a FileRecord with a convenient constructor for easier Store implementations.
 type BaseFileRecord struct {
+	modTime     time.Time
+	sys         interface{}
 	getData     func() (blob.Blob, error)
 	getDirNames func() ([]string, error)
 	initialSize int64
-	modTime     time.Time
 	mode        hackpadfs.FileMode
-	sys         interface{}
 }
 
 // NewBaseFileRecord returns a new BaseFileRecord for the given file's metadata and getters.
@@ -112,34 +112,28 @@ func (b *BaseFileRecord) Sys() interface{} {
 }
 
 type runOnceFileRecord struct {
-	record FileRecord
-
-	data     blob.Blob
-	dataErr  error
-	dataDone int64
-	dataOnce sync.Once
-
-	dirNames     []string
+	modTime      time.Time
+	record       FileRecord
+	data         blob.Blob
+	sys          interface{}
+	dataErr      error
 	dirNamesErr  error
+	dirNames     []string
+	size         int64
+	dataDone     atomic.Bool
+	dataOnce     sync.Once
 	dirNamesOnce sync.Once
-
-	size     int64
-	sizeOnce sync.Once
-
-	mode     hackpadfs.FileMode
-	modeOnce sync.Once
-
-	modTime     time.Time
-	modTimeOnce sync.Once
-
-	sys     interface{}
-	sysOnce sync.Once
+	modeOnce     sync.Once
+	modTimeOnce  sync.Once
+	sizeOnce     sync.Once
+	sysOnce      sync.Once
+	mode         hackpadfs.FileMode
 }
 
 func (r *runOnceFileRecord) Data() (blob.Blob, error) {
 	r.dataOnce.Do(func() {
 		r.data, r.dataErr = r.record.Data()
-		atomic.StoreInt64(&r.dataDone, 1)
+		r.dataDone.Store(true)
 	})
 	return r.data, r.dataErr
 }
@@ -155,7 +149,7 @@ func (r *runOnceFileRecord) Size() int64 {
 	r.sizeOnce.Do(func() {
 		r.size = r.record.Size()
 	})
-	if atomic.LoadInt64(&r.dataDone) > 0 {
+	if r.dataDone.Load() {
 		return int64(r.data.Len())
 	}
 	return r.size

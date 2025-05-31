@@ -1,6 +1,18 @@
 package math32
 
-func Sqrt(x float32) float32
+// Sqrt returns the square root of x.
+
+// Special cases are:
+// 	Sqrt(+Inf) = +Inf
+// 	Sqrt(±0) = ±0
+// 	Sqrt(x < 0) = NaN
+// 	Sqrt(NaN) = NaN
+func Sqrt(x float32) float32 {
+	if haveArchSqrt {
+		return archSqrt(x)
+	}
+	return sqrt(x)
+}
 
 // TODO: add assembly for !build noasm
 func sqrt(x float32) float32 {
