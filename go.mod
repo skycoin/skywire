@@ -41,7 +41,7 @@ require (
 	github.com/pterm/pterm v0.12.80
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.29-0.20250520205134-e7e38a3ecd94
+	github.com/skycoin/dmsg v1.3.29-0.20250601155254-d2e0a7c7a629
 	github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f //DO NOT MODIFY OR UPDATE v0.28.1-0.20241105130348-39b49a2d0a7f
 	github.com/skycoin/systray v1.10.1-0.20250528152903-04f8bdd7c110
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -162,7 +162,7 @@ require (
 	github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.14.0 // indirect
-	github.com/spf13/cast v1.8.0 // indirect
+	github.com/spf13/cast v1.9.1 // indirect
 	github.com/spf13/viper v1.20.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
