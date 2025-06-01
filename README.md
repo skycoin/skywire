@@ -14,11 +14,11 @@ Compiling Skywire requires a Golang version of at least `1.16`.
 
 # Skywire
 
-[Skywire](https://skycoin.com/skywire) uses [dmsg](https://github.com/skycoin/dmsg) to enable all skywire visors to connect to each other via the deployment services provided by the public [Skywire Network](https://conf.skywire.skycoin.com) - or to a user-hosted deployment. While dmsg may be considered a simple relay system and transport implementation enabling anonymous p2p connections between dmsg clients - mediated by the dmsg server - Skywire expands upon this to enable direct, secure, encrypted p2p transports between visors, which may then be used (by anyone) for routes.
+[Skywire](https://skycoin.com/skywire) uses [dmsg](https://github.com/skycoin/dmsg) to enable all skywire visors to connect to each other via the deployment services provided by the public [Skywire Network](https://conf.skywire.skycoin.com) - or a user-hosted deployment. While dmsg may be considered a simple relay system and transport implementation enabling anonymous p2p connections between dmsg clients - mediated by the dmsg server - Skywire expands upon this to enable direct, secure, encrypted p2p transports between visors, which may then be used (by anyone) for routes.
 
 ## Skywire Network
 
-Skywire transports are encrypted via the public keys of the visors on each side of the transport. A visor is identified by it's public key. Skywire uses a whitelist system to enable trusted nodes (route setup nodes) to set up routes through established transports. An automatic transport creation mechanism is used to establish transports to [public visors](https://sd.skycoin.com/api/services?type=visor) via stcpr (TCP-type) transports, and to visors which are connected to public visors via sudph (UDP-type) transports. This auto-transport mechanism is designed to create adequate transports for multi-hop routing.
+Skywire transports are encrypted via the public keys of the visors on each side of the transport. A visor is identified by it's public key. Skywire uses a whitelist system to enable trusted nodes (route setup nodes) to set up routes as calculated by the route finder service through established [transports registered in the transport discovery](https://tpd.skywire.skycoin.com/all-transports). An [automatic transport creation mechanism](pkg/visor/autoconnect.go), enabled by default, is used to establish transports to [public visors](https://sd.skycoin.com/api/services?type=visor) via stcpr (TCP-type) transports, and to visors which are connected to public visors via sudph (UDP-type) transports. This auto-transport mechanism is designed to create adequate transports for multi-hop routing.
 
 ## Skywire Routing
 
@@ -34,11 +34,11 @@ Skywire visors include native vpn and socks5 proxy server and client application
 
 ## DmsgWeb - Anonymous port forwarding over dmsg
 
-With the advanced routing of skywire, the already anonymous dmsg client utilities can be configured to be even more anonymous, by connecting to the dmsg network via a skywire socks5 proxy connection. The `skywire dmsg web` and `skywire dmsg web srv` subcommands allow port forwarding over dmsg. As well, dmsgweeb provides a resolving socks5 proxy, similar to / inspired by i2p, which permits convenient configuration of a web browser to access dmsg websites.
+With the advanced routing of skywire, the already anonymous dmsg client utilities can be configured to be even more anonymous, by connecting to the dmsg network via a skywire socks5 proxy connection. The `skywire dmsg web` and `skywire dmsg web srv` subcommands allow port forwarding over dmsg. As well, dmsgweb provides a resolving socks5 proxy similar to / inspired by i2p which permits convenient configuration of a web browser to access dmsg websites with additional proxy configuration so that all browser traffic will go via a skywire socks5 proxy connection.
 
 ## SkyNet - P2P port forwarding over skywire
 
-Skynet is the (planned) skywire counterpoint to DmsgWeb - which facilitates port forwarding over skywire p2p transport types.
+SkyNet is the (planned) skywire counterpoint to DmsgWeb - which facilitates port forwarding over skywire p2p transport types and advanced routing.
 
 ## Skywire Deployment Services
 
