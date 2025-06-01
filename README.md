@@ -14,6 +14,42 @@ Compiling Skywire requires a Golang version of at least `1.16`.
 
 # Skywire
 
+[Skywire](https://skycoin.com/skywire) uses [dmsg](https://github.com/skycoin/dmsg) to enable all skywire visors to connect to each other via the deployment services provided by the public [Skywire Network](https://conf.skywire.skycoin.com) - or a user-hosted deployment. While dmsg may be considered a simple relay system and transport implementation enabling anonymous p2p connections between dmsg clients - mediated by the dmsg server - Skywire expands upon this to enable direct, secure, encrypted p2p transports between visors, which may then be used (by anyone) for routes.
+
+## Skywire Network
+
+Skywire transports are encrypted via the public keys of the visors on each side of the transport. A visor is identified by it's public key. Skywire uses a whitelist system to enable trusted nodes (route setup nodes) to set up routes as calculated by the route finder service through established [transports registered in the transport discovery](https://tpd.skywire.skycoin.com/all-transports). An [automatic transport creation mechanism](pkg/visor/autoconnect.go), enabled by default, is used to establish transports to [public visors](https://sd.skycoin.com/api/services?type=visor) via stcpr (TCP-type) transports, and to visors which are connected to public visors via sudph (UDP-type) transports. This auto-transport mechanism is designed to create adequate transports for multi-hop routing.
+
+## Skywire Routing
+
+Skywire routes consist of one or more transports. The skywire routing system is designed to defeat data snooping efforts. Packets are all the same size, stripped of their headers, and fuzzed to appear as noise. A node handling a connection where data flows is only aware of the public key of the previous hop and the next hop, not the ultimate source or destination of the packet. When a transport is trafficking data from multiple sources and destinations, it becomes impossible to do traffic correlation. Another planned feature is route multiplexing, which will multiplex multi-hop routes and permit more bandwidth between the source and destination - similar to bit torrent.
+
+## Skywire Visor
+
+The name 'visor' was chosen as a less ambiguous term than 'node' to refer to the running skywire process. The term 'node' is typically reserved as a reference to the hardware on which skywire is running. A skywire visor participates in transports and provides an interface to applications which can be accessed over or consume routes.
+
+## Skywire Proxy & VPN
+
+Skywire visors include native vpn and socks5 proxy server and client applications which are started and managed by the visor. When a server application is started, it registers itself in the service discovery as a [proxy server](https://sd.skycoin.com/api/services?type=proxy) or [vpn server](https://sd.skycoin.com/api/services?type=proxy). These services may then be consumed by the client application via either direct or multi-hop route. Refer to the documentation for `skywire cli proxy` and `skywire cli vpn` for more details.
+
+## DmsgWeb - Anonymous port forwarding over dmsg
+
+With the advanced routing of skywire, the already anonymous dmsg client utilities can be configured to be even more anonymous, by connecting to the dmsg network via a skywire socks5 proxy connection. The `skywire dmsg web` and `skywire dmsg web srv` subcommands allow port forwarding over dmsg. As well, dmsgweb provides a resolving socks5 proxy similar to / inspired by i2p which permits convenient configuration of a web browser to access dmsg websites with additional proxy configuration so that all browser traffic will go via a skywire socks5 proxy connection.
+
+## SkyNet - P2P port forwarding over skywire
+
+SkyNet is the (planned) skywire counterpoint to DmsgWeb - which facilitates port forwarding over skywire p2p transport types and advanced routing.
+
+## Skywire Deployment Services
+
+Skywire enables users to make their own network if desired. The implementation is fully open source. [Documentation for making a custom skywire deployment is here.](https://github.com/skycoin/skywire-deployment)
+
+## Skywire Rewards
+
+The [skywire reward system](https:/fiber.skywire.dev) is the distribution mechanism for [skycoin](skycoin.com). Skycoin is not 'mined' as other cryptocurrency. Rewards in skycoin $SKY are distributed, daily, to those eligible skywire visors who meet the [requirements for obtaining rewards](mainnet_rules.md)
+
+
+
 * [Commands and Subcommands](#commands-and-subcommands)
 * [App documentation](#app-documentation)
 * [Installing Skywire](#installing-skywire)
@@ -63,19 +99,10 @@ Visor apps are not executed directly by the user, but hosted by the visor proces
 
 Further documentation can be found in the [skywire wiki](https://github.com/skycoin/skywire/wiki).
 
-## `go install` or `go run` Skywire
-
-If you have golang set up - including setting GOPATH, GOBIN, and appending GOBIN to your PATH reenvironmental variable, skywire may be installed to your GOBIN as follows:
+## `go install` or `go run` Skywire (go1.24.3)
 
 ```
-_skywire="github.com/skycoin/skywire" go install -ldflags=" -X ${_skywire}/pkg/skywire-utilities/pkg/buildinfo.golist=$(go list -mod=mod -m -json ${_skywire}@develop)" ${_skywire}/cmd/skywire@develop
-```
-
-`-ldflags` compiles the version into the binary, so that the visor will be eligible for rewards.
-
-It's also possible to `go run` skywire from outside the source code, but this is generally not recommended:
-```
-_skywire="github.com/skycoin/skywire" go run -ldflags=" -X ${_skywire}/pkg/skywire-utilities/pkg/buildinfo.golist=$(go list -mod=mod -m -json ${_skywire}@develop)" ${_skywire}/cmd/skywire@develop
+go run github.com/skycoin/skywire@develop
 ```
 
 ## Installing Skywire from Release
@@ -102,7 +129,7 @@ Basic setup of the `go` environment is further described [here](https://github.c
 
 For more information on static compilation, see [docs/static-builds.md](docs/static-builds.md).
 
-### Runtime Deps
+### Visor Runtime Deps
 
 * ` glibc` or `libc6` _unless statically compiled_
 
@@ -122,46 +149,19 @@ make format check
 
 `make check` will run `make test` as well. To explicitly run tests, use `make test`.
 
-## Compiling
-
-To compile skywire directly from cloned git sources:
-
-```
-git clone https://github.com/skycoin/skywire
-cd skywire
-#for the latest commits, check out the develop branch
-git checkout develop
-make build
-```
-
-To compile skywire directly from source archive, first download the latest source archive from the release section with your browser or another utility. Extract it with an archiving utility, enter the directory where the sources were extracted, and run `make build-merged` or `make build-merged-windows`.
-
-
-`make build-merged` and `make build-merged-windows` builds a single binary containing all utilities and apps with `go build`
-
-the `skywire` binary will populate in the current directory.
-
-Build output:
-
-```
-└──skywire
-```
-
-For more options, run `make help`.
-
 ## Config Gen
 
-To run skywire from this point, first generate a config.
+To run skywire, first generate a config.
 
 ```
-./skywire cli config gen -birx
+skywire cli config gen -birx
 ```
 `-b --bestproto` use the best protocol (dmsg | direct) to connect to the skywire production deployment
 `-i --ishv` create a  local hypervisor configuration
 `-r --regen` regenerate a config which may already exist, retaining the keys
 `-x --retainhv` retain any remote hypervisors which are set in the config
 
-More options for configuration are displayed with `./skywire cli config gen -all`.
+More options for configuration are displayed with `skywire cli config gen -all`.
 
 
 ## Build docker image
@@ -276,57 +276,6 @@ docker run --rm -p 8000:8000 --name=skywire skycoin/skywire:test skywire visor
 `skywire visor` can be run on Windows. The setup requires additional setup steps that are specified
 in [the docs](docs/windows-setup.md) if not using the windows .msi.
 
-## Run from source
-
-Running from source as outlined in this section does not write the config to disk or explicitly compile any binaries. The config is piped from skywire cli stdout to the visor stdin, and all are executed via `go run`.
-
-```
-git clone https://github.com/skycoin/skywire.git
-cd skywire
-#for the latest commits, check out the develop branch
-git checkout develop
-make run-source-merged
-```
-
-### Port forwarding over skywire
-
-`skywire cli fwd` is used to register and connect to http servers over the skywire connection
-
-- [skywire forwarding](docs/skywire_forwarding.md)
-
-For example, if the local application you wish to forward is running on port `8080`:
-```
-skywire cli fwd -p 8080
-```
-
-List forwarded ports:
-```
-skywire cli fwd -l
-```
-
-Deregister a port / turn off forwarding:
-```
-skywire cli fwd -d 8080
-```
-
-To consume the skyfwd connection (i.e. reverse proxy back to localhost) use `skywire cli rev`
-A different port can be specified to proxy the remote port to:
-```
-skywire cli rev -p 8080 -r 8080 -k <public-key>
-```
-
-List existing connections:
-```
-skywire cli rev -l
-```
-
-Remove a configured connection:
-```
-skywire cli rev -d <id>
-```
-
-_Note: skyfwd is a new feature and could work more robustly. Issues are welcome._
-
 ### Transport setup
 
 _Note: transports should be set up automatically in most cases. The user should not need to do this manually._
@@ -399,8 +348,6 @@ Global Flags:
 <local-port> <remote-port> and <route-id> are all just integers. It's suggested to create the first route with id 1, unless another route exists with that id.
 
 The port numbers are similarly inconsequential.
-
-__Note: the skywire router is pending refactorization!__
 
 ### Using the Skywire VPN
 

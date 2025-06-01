@@ -2,8 +2,10 @@
 package dmsg
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"log"
+	"math/big"
 	"regexp"
 	"time"
 
@@ -91,9 +93,23 @@ func InitConfig() error {
 	if err != nil {
 		return err
 	}
+	Prod.DmsgServers = shuffleServers(Prod.DmsgServers)
 	err = json.Unmarshal(envServices.Test, &Test)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func shuffleServers(in []disc.Entry) []disc.Entry {
+	n := len(in)
+	for i := n - 1; i > 0; i-- {
+		jBig, err := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
+		if err != nil {
+			panic(err)
+		}
+		j := int(jBig.Int64())
+		in[i], in[j] = in[j], in[i]
+	}
+	return in
 }
