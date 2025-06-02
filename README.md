@@ -9,45 +9,58 @@
 [![go.mod](https://img.shields.io/github/go-mod/go-version/skycoin/skywire.svg)](https://github.com/skycoin/skywire)
 [![Telegram](https://img.shields.io/badge/Join-Telegram-blue?&logo=data:image/svg%2bxml;base64,PHN2ZyBlbmFibGUtYmFja2dyb3VuZD0ibmV3IDAgMCAyNCAyNCIgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCAyNCAyNCIgd2lkdGg9IjUxMiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJtOS40MTcgMTUuMTgxLS4zOTcgNS41ODRjLjU2OCAwIC44MTQtLjI0NCAxLjEwOS0uNTM3bDIuNjYzLTIuNTQ1IDUuNTE4IDQuMDQxYzEuMDEyLjU2NCAxLjcyNS4yNjcgMS45OTgtLjkzMWwzLjYyMi0xNi45NzIuMDAxLS4wMDFjLjMyMS0xLjQ5Ni0uNTQxLTIuMDgxLTEuNTI3LTEuNzE0bC0yMS4yOSA4LjE1MWMtMS40NTMuNTY0LTEuNDMxIDEuMzc0LS4yNDcgMS43NDFsNS40NDMgMS42OTMgMTIuNjQzLTcuOTExYy41OTUtLjM5NCAxLjEzNi0uMTc2LjY5MS4yMTh6IiBmaWxsPSIjMDM5YmU1Ii8+PC9zdmc+)](https://t.me/skywire)
 
-
-Compiling Skywire requires a Golang version of at least `1.16`.
+**PLEASE ALWAYS USE THE [DEVELOP BRANCH](https://github.com/skycoin/skywire/tree/develop)**
 
 # Skywire
 
-[Skywire](https://skycoin.com/skywire) uses [dmsg](https://github.com/skycoin/dmsg) to enable all skywire visors to connect to each other via the deployment services provided by the public [Skywire Network](https://conf.skywire.skycoin.com) - or a user-hosted deployment. While dmsg may be considered a simple relay system and transport implementation enabling anonymous p2p connections between dmsg clients - mediated by the dmsg server - Skywire expands upon this to enable direct, secure, encrypted p2p transports between visors, which may then be used (by anyone) for routes.
+Skywire is a fully open-source, privacy-focused suite of networking tools developed by Skycoin. The public Skywire Network enables this software to be developed and tested in real-world conditions. The Skywire Network provides service discovery for decentralized VPN and SOCKS5 proxy servers, supports multi-hop public key–based routing, and enables access to hidden websites. As well, daily rewards in Skycoin ($SKY) are tendered to those eligible participants in the Skywire Network.
 
-## Skywire Network
+This overview explains Skywire’s key features and network architecture.
 
-Skywire transports are encrypted via the public keys of the visors on each side of the transport. A visor is identified by it's public key. Skywire uses a whitelist system to enable trusted nodes (route setup nodes) to set up routes as calculated by the route finder service through established [transports registered in the transport discovery](https://tpd.skywire.skycoin.com/all-transports). An [automatic transport creation mechanism](pkg/visor/autoconnect.go), enabled by default, is used to establish transports to [public visors](https://sd.skycoin.com/api/services?type=visor) via stcpr (TCP-type) transports, and to visors which are connected to public visors via sudph (UDP-type) transports. This auto-transport mechanism is designed to create adequate transports for multi-hop routing.
+## Skywire Control and Data Planes
+
+[Skywire](https://skycoin.com/skywire) uses [dmsg](https://github.com/skycoin/dmsg) as a control plane to enable all Skywire visors to connect to each other and to deployment services provided by the public [Skywire Network](https://conf.skywire.skycoin.com) (or a user-hosted deployment). DMSG (Read as: `D-message`) functions as a simple relay system and **encrypted** transport implementation, facilitating anonymous connections between dmsg clients (i.e., encrypted pubkey-based automatic routing), mediated by the dmsg server. Skywire expands upon this by creating a data plane of direct, secure, encrypted peer-to-peer transports between visors, which may then be used for routes.
+
+## Skywire Network and Transports
+
+A Skywire visor is identified by its public key. Skywire transports are encrypted via the public keys of the visors on each side of the transport. Skywire uses a whitelist system to enable trusted nodes (route setup nodes) to set up routes as calculated by the route finder service through established [transports registered in the transport discovery](https://tpd.skywire.skycoin.com/all-transports). An [automatic transport creation mechanism](pkg/visor/autoconnect.go), enabled by default, is used to establish transports to [public visors](https://sd.skycoin.com/api/services?type=visor) via STCPR (Skywire TCP Relay) transports, and to visors connected to public visors via SUDPH (Skywire UDP Hole-punching) transports. This auto-transport mechanism is designed to create adequate transports for multi-hop routing.
 
 ## Skywire Routing
 
-Skywire routes consist of one or more transports. The skywire routing system is designed to defeat data snooping efforts. Packets are all the same size, stripped of their headers, and fuzzed to appear as noise. A node handling a connection where data flows is only aware of the public key of the previous hop and the next hop, not the ultimate source or destination of the packet. When a transport is trafficking data from multiple sources and destinations, it becomes impossible to do traffic correlation. Another planned feature is route multiplexing, which will multiplex multi-hop routes and permit more bandwidth between the source and destination - similar to bit torrent.
+Skywire routes consist of one or more transports. A Skywire route may not transit the same public key twice, in order to prevent data loops. The Skywire routing system is designed with privacy in mind to defeat data snooping efforts. Packets are uniform in size, stripped of identifying headers, and fuzzed to appear as noise. A visor handling transports where data flows is only aware of the public key of the previous hop and the next hop — not the ultimate source or destination of the packet. These measures significantly mitigate the risk of metadata leakage or traffic analysis. When a transport is trafficking data from multiple sources and destinations, it becomes impossible to perform traffic correlation attacks or related exploits. Another planned feature is route multiplexing, which will multiplex multi-hop routes and permit more bandwidth between the source and destination — similar in concept to BitTorrent.
 
 ## Skywire Visor
 
-The name 'visor' was chosen as a less ambiguous term than 'node' to refer to the running skywire process. The term 'node' is typically reserved as a reference to the hardware on which skywire is running. A skywire visor participates in transports and provides an interface to applications which can be accessed over or consume routes.
+The name 'visor' was chosen as a less ambiguous term than 'node' to refer to the running Skywire process. The term 'node' is typically reserved as a reference to the hardware on which Skywire is running, in this ecosystem. A Skywire visor participates in transports and provides an interface to applications which can be accessed over or consume routes. The Skywire visor can also be configured to provide a hypervisor web UI for remotely managing a cluster of Skywire visors / nodes, typically referred to as a [skyminer](https://www.skycoin.com/skyminer/).
+
+## Skywire Cli (command line interface)
+
+`skywire cli` is the primary interface to a running Skywire visor. Skywire cli provides an interface to generate a JSON config file for the Skywire visor, to control visor native applications, and to access data from different Skywire services.
 
 ## Skywire Proxy & VPN
 
-Skywire visors include native vpn and socks5 proxy server and client applications which are started and managed by the visor. When a server application is started, it registers itself in the service discovery as a [proxy server](https://sd.skycoin.com/api/services?type=proxy) or [vpn server](https://sd.skycoin.com/api/services?type=proxy). These services may then be consumed by the client application via either direct or multi-hop route. Refer to the documentation for `skywire cli proxy` and `skywire cli vpn` for more details.
+Skywire visors include native VPN and SOCKS5 proxy server and client applications, as well as a messenger application, which are started and managed by the visor. When a server application is started, it registers itself in the service discovery as a [proxy server](https://sd.skycoin.com/api/services?type=proxy) or [VPN server](https://sd.skycoin.com/api/services?type=proxy). These services may then be consumed by respective client applications via either a direct or multi-hop route. Refer to the documentation for `skywire cli proxy` and `skywire cli vpn` for more details.
 
-## DmsgWeb - Anonymous port forwarding over dmsg
+## DmsgWeb – Anonymous port forwarding over DMSG
 
-With the advanced routing of skywire, the already anonymous dmsg client utilities can be configured to be even more anonymous, by connecting to the dmsg network via a skywire socks5 proxy connection. The `skywire dmsg web` and `skywire dmsg web srv` subcommands allow port forwarding over dmsg. As well, dmsgweb provides a resolving socks5 proxy similar to / inspired by i2p which permits convenient configuration of a web browser to access dmsg websites with additional proxy configuration so that all browser traffic will go via a skywire socks5 proxy connection.
+The `skywire dmsg web` and `skywire dmsg web srv` subcommands allow port forwarding over DMSG. Additionally, DmsgWeb provides a resolving SOCKS5 proxy, similar to and inspired by I2P, which permits convenient configuration of a web browser to access DMSG websites. With additional proxy configuration, all browser traffic can be routed through a Skywire SOCKS5 proxy connection. With Skywire’s advanced routing, the already anonymous DMSG utilities can be made even more private by routing them through a Skywire SOCKS5 proxy connection.
 
-## SkyNet - P2P port forwarding over skywire
+## SkyNet – P2P port forwarding over Skywire
 
-SkyNet is the (planned) skywire counterpoint to DmsgWeb - which facilitates port forwarding over skywire p2p transport types and advanced routing.
+SkyNet is the (planned) Skywire counterpoint to DmsgWeb — facilitating port forwarding over Skywire’s peer-to-peer transport types and advanced routing, without transiting a DMSG server or servers.
 
 ## Skywire Deployment Services
 
-Skywire enables users to make their own network if desired. The implementation is fully open source. [Documentation for making a custom skywire deployment is here.](https://github.com/skycoin/skywire-deployment)
+Skywire enables users to create their own network if desired. The implementation is fully open source. [Documentation for making a custom Skywire deployment is here.](https://github.com/skycoin/skywire-deployment)
 
 ## Skywire Rewards
 
-The [skywire reward system](https:/fiber.skywire.dev) is the distribution mechanism for [skycoin](skycoin.com). Skycoin is not 'mined' as other cryptocurrency. Rewards in skycoin $SKY are distributed, daily, to those eligible skywire visors who meet the [requirements for obtaining rewards](mainnet_rules.md)
+The [Skywire reward system](https://fiber.skywire.dev) is the distribution mechanism for [Skycoin](https://skycoin.com). Skycoin is not 'mined' as with other cryptocurrencies; rewards in Skycoin ($SKY) are distributed daily to eligible Skywire visors who meet the [requirements for obtaining rewards](https://github.com/skycoin/skywire/blob/develop/mainnet_rules.md).
 
+Despite the terminology, Skywire visors do not process Skycoin transactions. Skywire visors do not sync the Skycoin blockchain and have no involvement in transaction processing. The only relationship between skywire and the skycoin cryptocurrency is via the reward system acting as the distribution mechanism for Skycoin.
+
+
+## TOC
 
 
 * [Commands and Subcommands](#commands-and-subcommands)
@@ -75,6 +88,8 @@ The [skywire reward system](https:/fiber.skywire.dev) is the distribution mechan
 * [Skycoin Rewards](#skycoin-rewards)
 * [Linux Packages](#linux-packages)
 * [How to create a GitHub release](#how-to-create-a-github-release)
+
+Compiling Skywire requires a Golang version of at least `1.16`.
 
 ## Commands and Subcommands
 
