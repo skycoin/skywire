@@ -4,8 +4,6 @@ package visor
 import (
 	"context"
 	"crypto/rand"
-	"errors"
-	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -108,16 +106,25 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// limit maximum number of autoconnect transports
 			// Note: this doesn't account for user established transports
 			if len(a.tm.GetTransportsByLabel(transport.LabelAutomatic)) >= a.maxConns {
-				a.log.Debugln("autoconnect: maximum number of established transports reached:", a.maxConns)
+				a.log.Debugln("transport limit reached:", a.maxConns)
 				continue
 			}
 
 			a.log.Infoln("Fetching public visors")
 			addrs, err := a.fetchPubAddresses(ctx)
 			if err != nil {
-				a.log.Errorf("Cannot fetch public services: %s", err)
+				a.log.Errorf("Cannot fetch public visors from service discovery: %s", err)
+				v.isServicesHealthy.unset()
 				continue
 			}
+			v.isServicesHealthy.set()
+
+			if len(addrs) == 0 {
+				a.log.Debugln("no public visors found")
+				continue
+			}
+
+			a.log.WithField("public visors", len(addrs)).Debugln("Found public visors")
 
 			absent := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
 
@@ -135,7 +142,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				stcprKeys = map[cipher.PubKey][]string{}
 			}
 
-			// auto-transport logic for public visors should only attempt to connect stcpr transports to other public visors
+			// auto-transport logic - for visors running as public visors - should only attempt to connect stcpr transports to other public visors
 			var absent2 []cipher.PubKey
 			if !visorIsPublic {
 				// find keys that have transports to public visors
@@ -147,6 +154,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				absent2Set := make(map[cipher.PubKey]struct{})
 
 				for _, pk := range addrs {
+					//check transport discovery for transport entries containing this edge key
 					entries, err := v.DiscoverTransportsByPK(pk)
 					if err != nil {
 						v.isServicesHealthy.unset()
@@ -219,22 +227,32 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			}
 
 			absent = append(absent, absent2...)
+			a.log.WithField("total", len(absent)).Debugln("Found visors to connect to")
 
 			//attempt to establish transports to the keys in random order for 5 minutes
 			attemptDeadline := time.Now().Add(5 * time.Minute)
 			for _, pk := range shufflePubKeys(absent) {
+				// limit maximum number of autoconnect transports
+				if len(a.tm.GetTransportsByLabel(transport.LabelAutomatic)) >= a.maxConns {
+					a.log.Debugln("transport limit reached:", a.maxConns)
+					break
+				}
 				if time.Now().After(attemptDeadline) {
 					a.log.Debugln("Refreshing list of keys for public autoconnect")
 					break
 				}
+				//don't make self-transports
 				if pk == v.conf.PK {
 					continue
 				}
+				//don't attempt to make transports to offline visors
 				vUptimeData, err := v.uptimeTracker.FetchUptimes(ctx, pk.String())
 				if err != nil {
 					a.log.WithField("pk", pk).WithError(err).Debugln("Failed to check remote visor online status")
+					v.isServicesHealthy.unset()
 					continue
 				}
+				v.isServicesHealthy.set()
 				vOnline, err := script.Echo(string(vUptimeData)).JQ(`.[].on`).String()
 				if err != nil {
 					a.log.WithField("pk", pk).WithError(err).Debugln("Failed to decode remote visor online status")
@@ -242,6 +260,21 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				}
 				if strings.TrimSuffix(vOnline, "\n") != "true" {
 					a.log.WithField("pk", pk).Debugln("Aborting connection attempt to offline visor")
+					continue
+				}
+
+				// limit transports if the remote visor already has maxconns total transports
+				// Check the transport discovery, and skip if number of entries is >= a.maxConns
+				entries, err := v.DiscoverTransportsByPK(pk)
+				if err != nil {
+					v.isServicesHealthy.unset()
+					a.log.WithField("pk", pk).WithError(err).Warn("Failed to discover transports for remote visor")
+					continue
+				}
+				v.isServicesHealthy.set()
+
+				if len(entries) >= a.maxConns {
+					a.log.WithField("pk", pk).WithField("count", len(entries)).Debugln("Remote visor has reached or exceeded max connections, skipping")
 					continue
 				}
 
@@ -260,12 +293,9 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 				logger := a.log.WithField("pk", pk).WithField("type", string(netType))
 				if err = a.tryEstablishTransport(ctx, pk, netType, logger); err != nil {
-					if !errors.Is(err, io.ErrClosedPipe) {
-						logger.WithError(err).Warnln("Failed to add transport to visor")
-					}
+					logger.WithError(err).Warnln("Failed to add transport to visor")
 					continue
 				}
-
 			}
 		}
 	}
