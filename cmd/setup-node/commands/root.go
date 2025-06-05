@@ -129,9 +129,8 @@ var checkHealthCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		setupNodePKStr := args[0]
-		var setupNodePK cipher.PubKey
-		if err := setupNodePK.Set(setupNodePKStr); err != nil {
+		var snpk cipher.PubKey
+		if err := snpk.Set(args[0]); err != nil {
 			log.Fatalf("Invalid setup node public key: %v", err)
 		}
 
@@ -150,16 +149,17 @@ var checkHealthCmd = &cobra.Command{
 		log.Info("Connecting to DMSG network...")
 		<-dmsgC.Ready()
 		log.Info("Connected to DMSG network")
+		log.Infoln("dialing route setup-node: ", snpk.String())
 
 		// Dial setup node
-		addr := dmsg.Addr{PK: setupNodePK, Port: skyenv.DmsgSetupPort}
+		addr := dmsg.Addr{PK: snpk, Port: skyenv.DmsgSetupPort}
 		conn, err := dmsgC.Dial(ctx, addr)
 		if err != nil {
 			log.Fatalf("Failed to dial setup node: %v", err)
 		}
 		defer conn.Close()
 
-		log.Infof("Connected to setup node: %s", setupNodePK)
+		log.Infoln("Connected to setup node: ", snpk.String())
 
 		// RPC client
 		client := rpc.NewClient(conn)
