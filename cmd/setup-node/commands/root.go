@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"net/rpc"
 	"os"
 	"path/filepath"
@@ -19,8 +20,10 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -135,15 +138,15 @@ var checkHealthCmd = &cobra.Command{
 		}
 
 		// generate keys to useae for dmsg client
-		pk, sk = cipher.GenerateKeyPair()
+		pk, sk := cipher.GenerateKeyPair()
 
 		// Create logger
 		log := logging.MustGetLogger("health-check")
 
 		// Start DMSG client
 		ctx := context.Background()
-		dmsgDisc := disc.NewHTTP(skyenv.DmsgDiscovery, nil, log)
-		dmsgC := dmsg.NewClient(localPK, localSK, dmsgDisc, &dmsg.Config{MinSessions: 1})
+		dmsgDisc := disc.NewHTTP(skywire.Prod.DmsgDiscovery, &http.Client{}, log)
+		dmsgC := dmsg.NewClient(pk, sk, dmsgDisc, &dmsg.Config{MinSessions: 1})
 
 		go dmsgC.Serve(ctx)
 		log.Info("Connecting to DMSG network...")
