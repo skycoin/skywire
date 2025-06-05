@@ -1,4 +1,4 @@
-// Package router pkg/router/rpc_gateway.go
+// Package router pkg/router/setup_rpc_gateway.go
 package router
 
 import (
@@ -45,5 +45,19 @@ func (g *SetupRPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules
 
 	// Confirm routes with initiating visor.
 	*rules = initRules
+	return nil
+}
+
+// HealthCheckArgs is an empty struct for the health check call.
+type HealthCheckArgs struct{}
+
+// HealthCheckReply is returned by the HealthCheck RPC method.
+type HealthCheckReply struct {
+	Status string
+}
+
+// HealthCheck returns a simple "OK" status indicating the node is responsive.
+func (g *SetupRPCGateway) HealthCheck(_ *HealthCheckArgs, reply *HealthCheckReply) error {
+	reply.Status = "OK"
 	return nil
 }
