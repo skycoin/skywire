@@ -53,7 +53,6 @@ func (t *tunDevice) Write(buf []byte) (int, error) {
 	return n, nil
 }
 
-
 func (t *tunDevice) Close() error {
 	return t.tun.Close()
 }
