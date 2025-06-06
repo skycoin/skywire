@@ -8,17 +8,25 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
+	"net/rpc"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
@@ -31,6 +39,7 @@ var (
 )
 
 func init() {
+	RootCmd.AddCommand(checkHealthCmd)
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
 	RootCmd.Flags().StringVar(&tag, "tag", "setup_node", "logging tag")
 	RootCmd.Flags().BoolVarP(&cfgFromStdin, "stdin", "i", false, "read config from STDIN")
@@ -110,6 +119,74 @@ func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
 	//reg.MustRegister(prometheus.NewGoCollector())
 
 	return m
+}
+
+// checkHealthCmd does health check on running route setup node
+var checkHealthCmd = &cobra.Command{
+	Use:   "health <pk>",
+	Short: "Health check of route setup node",
+	Long:  "Health check of route setup node",
+	Run: func(_ *cobra.Command, args []string) {
+		if len(args) != 1 {
+			fmt.Println("supply setup node public key as argument")
+			os.Exit(1)
+		}
+
+		var snpk cipher.PubKey
+		if err := snpk.Set(args[0]); err != nil {
+			log.Fatalf("Invalid setup node public key: %v", err)
+		}
+
+		// generate keys to useae for dmsg client
+		pk, sk := cipher.GenerateKeyPair()
+
+		// Create logger
+		log := logging.MustGetLogger("health-check")
+
+		// Start DMSG client
+		ctx := context.Background()
+		dmsgDisc := disc.NewHTTP(skywire.Prod.DmsgDiscovery, &http.Client{}, log)
+		dmsgC := dmsg.NewClient(pk, sk, dmsgDisc, &dmsg.Config{MinSessions: 1})
+
+		go dmsgC.Serve(ctx)
+		log.Info("Connecting to DMSG network...")
+		<-dmsgC.Ready()
+		log.Info("Connected to DMSG network")
+		log.Infoln("dialing route setup-node: ", snpk.String())
+
+		// Dial setup node
+		addr := dmsg.Addr{PK: snpk, Port: skyenv.DmsgSetupPort}
+		conn, err := dmsgC.Dial(ctx, addr)
+		if err != nil {
+			log.Fatalf("Failed to dial setup node: %v", err)
+		}
+		defer conn.Close() //nolint
+
+		log.Infoln("Connected to setup node: ", snpk.String())
+
+		// RPC client
+		client := rpc.NewClient(conn)
+		defer client.Close() //nolint
+
+		// Call HealthCheck
+		var argsRPC router.HealthCheckArgs
+		var reply router.HealthCheckReply
+		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		call := client.Go("SetupRPCGateway.HealthCheck", &argsRPC, &reply, nil)
+
+		select {
+		case <-callCtx.Done():
+			log.Fatal("HealthCheck timed out")
+		case <-call.Done:
+			if call.Error != nil {
+				log.Fatalf("RPC error: %v", call.Error)
+			}
+		}
+
+		fmt.Println("Health check OK:", reply.Status)
+	},
 }
 
 // Execute executes root CLI command.
