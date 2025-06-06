@@ -34,11 +34,18 @@ func newTUNDevice() (TUNDevice, error) {
 }
 
 func (t *tunDevice) Read(buf []byte) (int, error) {
-	return t.tun.Read(buf, 0)
+	packets := [][]byte{buf}
+	sizes := make([]int, 1)
+	_, err := t.tun.Read(packets, sizes, 0)
+	if err != nil {
+		return 0, err
+	}
+	return sizes[0], nil
 }
 
 func (t *tunDevice) Write(buf []byte) (int, error) {
-	return t.tun.Write(buf, 0)
+	packets := [][]byte{buf}
+	return t.tun.Write(packets, 0) // omit sizes
 }
 
 func (t *tunDevice) Close() error {
