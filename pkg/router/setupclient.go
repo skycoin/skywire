@@ -83,6 +83,16 @@ func (c *SetupClient) DialRouteGroup(ctx context.Context, req routing.Bidirectio
 	return resp, err
 }
 
+// HealthCheck checks setup node to verify it's responsive.
+func (c *SetupClient) HealthCheck(ctx context.Context) (string, error) {
+	var reply HealthCheckReply
+	err := c.call(ctx, rpcName+".HealthCheck", &HealthCheckArgs{}, &reply)
+	if err != nil {
+		return "", err
+	}
+	return reply.Status, nil
+}
+
 func (c *SetupClient) call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error {
 	call := c.rpc.Go(serviceMethod, args, reply, nil)
 
