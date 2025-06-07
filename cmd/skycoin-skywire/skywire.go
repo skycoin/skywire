@@ -12,12 +12,12 @@ import (
 )
 
 func init() {
+	flags.InitFlags(commands.RootCmd, true)
 	commands.RootCmd.AddCommand(
 		skycoin.RootCmd,
 	)
 	skycoin.RootCmd.Use = "skycoin"
 	skycoin.RootCmd.Short = "skycoin daemon & cli"
-	flags.InitFlags(commands.RootCmd, true)
 }
 
 func main() {
