@@ -2,8 +2,8 @@
 package main
 
 import (
-	commands "github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/flags"
+	commands "github.com/skycoin/skywire/pkg/visor"
 )
 
 func init() {

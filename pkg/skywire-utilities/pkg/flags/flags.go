@@ -2,8 +2,8 @@
 package flags
 
 import (
-	"github.com/spf13/cobra"
 	cc "github.com/ivanpirog/coloredcobra"
+	"github.com/spf13/cobra"
 )
 
 // InitFlags is used to set command flags for help menu and styling with coloredcobra
@@ -31,7 +31,6 @@ func InitFlags(cmd *cobra.Command, usage bool) {
 		NoBottomNewline: true,
 	})
 }
-
 
 const help = "{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
 	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}" +

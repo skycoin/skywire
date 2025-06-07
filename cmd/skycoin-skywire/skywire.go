@@ -6,10 +6,10 @@ package main
 
 import (
 	skycoin "github.com/skycoin/skycoin/cmd/skycoin-wallet/commands"
+
 	"github.com/skycoin/skywire/cmd/skywire/commands"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/flags"
 )
-
 
 func init() {
 	commands.RootCmd.AddCommand(
