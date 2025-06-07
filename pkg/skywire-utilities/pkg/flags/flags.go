@@ -42,7 +42,6 @@ Global Flags:
 {{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}
 `
 
-
 const helpUsage = `Usage:
   {{.UseLine}}
 
