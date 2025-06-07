@@ -45,4 +45,5 @@ Global Flags:
 
 const helpUsage = `Usage:
   {{.UseLine}}
+
 ` + help
