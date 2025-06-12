@@ -4,11 +4,9 @@ package dmsghttp
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 )
@@ -54,34 +52,31 @@ func (t HTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	defer func() {
-		go closeStream(t.ctx, resp, stream)
-	}()
+	// Wrap resp.Body to ensure the stream is closed when the body is closed
+	resp.Body = &wrappedBody{
+		ReadCloser: resp.Body,
+		stream:     stream,
+	}
 
 	return resp, nil
 }
 
-func closeStream(ctx context.Context, resp *http.Response, stream *dmsg.Stream) {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+// wrappedBody ensures that the DMSG stream is closed when the HTTP response body is closed.
+type wrappedBody struct {
+	io.ReadCloser
+	stream *dmsg.Stream
+}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			_, err := resp.Body.Read(nil)
-			log := stream.Logger()
-			// If error is not nil and is equal to ErrBodyReadAfterClose or EOF
-			// then it means that the body has been closed so we close the stream
-			if err != nil && (errors.Is(err, http.ErrBodyReadAfterClose) || errors.Is(err, io.EOF)) {
-				err := stream.Close()
-				if err != nil {
-					log.Warnf("Error closing stream: %v", err)
-				}
-				return
-			}
-		}
+func (wb *wrappedBody) Close() error {
+	// Drain the response body up to a limit (e.g., 512KB).
+	const maxDrainBytes = 512 * 1024
+	_, _ = io.CopyN(io.Discard, wb.ReadCloser, maxDrainBytes) //nolint
+
+	err1 := wb.ReadCloser.Close()
+	err2 := wb.stream.Close()
+
+	if err1 != nil {
+		return err1
 	}
-
+	return err2
 }
