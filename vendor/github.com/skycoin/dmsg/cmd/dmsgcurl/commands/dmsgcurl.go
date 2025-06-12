@@ -27,6 +27,7 @@ import (
 
 	"github.com/skycoin/dmsg/internal/cli"
 	"github.com/skycoin/dmsg/internal/flags"
+	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 )
@@ -34,7 +35,6 @@ import (
 var (
 	dmsgcurlData   string
 	sk             cipher.SecKey
-	pk             cipher.PubKey
 	destPK         cipher.PubKey
 	dlog           = logging.MustGetLogger("dmsgcurl")
 	dmsgcurlAgent  string
@@ -94,9 +94,13 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
-		pk, err = sk.PubKey()
+		pk, err := sk.PubKey()
 		if err != nil {
-			pk, sk = cipher.GenerateKeyPair()
+			_, sk = cipher.GenerateKeyPair()
+			pk, err = sk.PubKey()
+			if err != nil {
+				dlog.WithError(err).Fatal("Failed to derive public key from secret key")
+			}
 		}
 		if len(args) == 0 {
 			dlog.WithError(fmt.Errorf("no URL(s) provided")).Error(errorDesc["FAILED_INIT"] + "\n")
@@ -163,56 +167,55 @@ func handleRequest(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, http
 		}
 	}
 	defer closeAndCleanFile(file, err)
-	var dmsgC *dmsg.Client
-	var closeDmsg func()
+	var httpC http.Client
 
 	if flags.UseDC {
-		dmsgC, closeDmsg, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, "", flags.DmsgSessions, pk.String())
-	} else {
-		if flags.UseHTTP {
-			dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dlog, pk, sk, httpClient, flags.DmsgDiscURL, flags.DmsgSessions)
-		} else {
-			var dmsgDC *dmsg.Client
-			var closeDmsgDC func()
-			dmsgDC, closeDmsgDC, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, "", flags.DmsgSessions, dmsg.ExtractPKFromDmsgAddr(flags.DmsgDiscAddr))
-			if err != nil {
-				dlog.WithError(err).Error("Error connecting to dmsg network")
-				return curlError{
-					Error: fmt.Errorf("%s", errorDesc["DMSG_INIT"]),
-					Code:  errorCode["DMSG_INIT"],
-				}
+		var dmsgClients []*dmsg.Client
+
+		dlog.Debug("Starting DMSG direct clients.")
+		for _, server := range dmsg.Prod.DmsgServers {
+			if len(dmsgClients) >= flags.DmsgSessions {
+				break
 			}
-			defer closeDmsgDC()
-			dmsgHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
-			dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dlog, pk, sk, dmsgHTTP, flags.DmsgDiscAddr, flags.DmsgSessions)
+
+			dmsgDC, closeFn, err := cli.StartDmsgDirectWithServers(ctx, dlog, pk, sk, "", []*disc.Entry{&server}, flags.DmsgSessions, dmsg.ExtractPKFromDmsgAddr(parsedURL.String()))
+			if err != nil {
+				dlog.WithError(err).Error("Failed to start DMSG direct client. Skipping server...")
+				continue
+			}
+
+			dmsgClients = append(dmsgClients, dmsgDC)
+			defer closeFn()
 		}
+
+		if len(dmsgClients) == 0 {
+			dlog.Fatal("Failed to start any DMSG direct clients.")
+		}
+
+		// Build HTTP client with fallback round tripper
+		httpC = http.Client{
+			Transport: cli.NewFallbackRoundTripper(ctx, dmsgClients),
+		}
+	} else {
+		dmsgC, closeDmsg, err := cli.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, parsedURL.String())
+		if err != nil || dmsgC == nil {
+			dlog.WithError(err).Debug("Error initializing DMSG client")
+			return curlError{
+				Error: fmt.Errorf("%s", errorDesc["DMSG_INIT"]),
+				Code:  errorCode["DMSG_INIT"],
+			}
+		}
+		defer closeDmsg()
+
+		httpC = http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
+
 	}
 
-	if err != nil {
-		dlog.WithError(err).Debug("Error connecting to dmsg network")
-		return curlError{
-			Error: fmt.Errorf("%s", errorDesc["DMSG_INIT"]),
-			Code:  errorCode["DMSG_INIT"],
-		}
-	}
-	defer closeDmsg()
-
-	if dmsgC == nil {
-		dlog.Error("nil dmsg client pointer")
-		return curlError{
-			Error: fmt.Errorf("%s", errorDesc["DMSG_INIT"]),
-			Code:  errorCode["DMSG_INIT"],
-		}
-	}
-
-	httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
-	firstTry := true
 	for i := 0; i < dmsgcurlTries; i++ {
 		if dmsgcurlOutput != "" {
-			if !firstTry {
-				dlog.Debugf("Download attempt %d/%d ...", i, dmsgcurlTries)
+			if i > 0 {
+				dlog.Debugf("Download attempt %d/%d ...", i+1, dmsgcurlTries)
 			}
-			firstTry = false
 			if _, err := file.Seek(0, 0); err != nil {
 				return curlError{
 					Error: fmt.Errorf("%s", errorDesc["WRITE_ERROR"]),
@@ -220,71 +223,44 @@ func handleRequest(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, http
 				}
 			}
 		}
-		var req *http.Request
-		if dmsgcurlData != "" {
-			req, err = http.NewRequest(http.MethodPost, parsedURL.String(), strings.NewReader(dmsgcurlData))
-		} else {
-			req, err = http.NewRequest(http.MethodGet, parsedURL.String(), nil)
-		}
+
+		req, err := buildHTTPRequest(parsedURL.String(), dmsgcurlData)
 		if err != nil {
-			dlog.WithError(err).Error("Failed to formulate HTTP request\n")
+			dlog.WithError(err).Error("Failed to formulate HTTP request")
 			return curlError{
 				Error: fmt.Errorf("%s", errorDesc["FAILED_INIT"]),
 				Code:  errorCode["FAILED_INIT"],
 			}
 		}
-		if dmsgcurlData != "" {
-			req.Header.Set("Content-Type", "text/plain")
-		}
-		resp, err := httpC.Do(req)
-		for attempts := 1; attempts <= 10; attempts++ {
-			if err != nil {
-				var netErr net.Error
 
-				if errors.As(err, &netErr) && netErr.Timeout() {
-					dlog.WithError(err).Error("Failed to perform HTTP request\n")
-					return curlError{
-						Error: fmt.Errorf("%s", errorDesc["RECV_ERROR"]),
-						Code:  errorCode["RECV_ERROR"],
-					}
-				} else if errors.Is(err, context.DeadlineExceeded) {
-					dlog.WithError(err).Error("Failed to perform HTTP request\n")
-					return curlError{
-						Error: fmt.Errorf("%s", errorDesc["RECV_ERROR"]),
-						Code:  errorCode["RECV_ERROR"],
-					}
-				}
-
-				dlog.WithError(err).Debugf("Attempt %d failed, retrying...\n", attempts)
-				time.Sleep(time.Duration(attempts) * time.Second) // Exponential backoff
-				resp, err = httpC.Do(req)
-				continue
+		var resp *http.Response
+		for attempt := 1; attempt <= 10; attempt++ {
+			resp, err = httpC.Do(req)
+			if err == nil {
+				break
 			}
 
-			defer resp.Body.Close() //nolint
-			dlog.Debugf("Request succeeded with status code: %d\n", resp.StatusCode)
-			break
+			if isFatalHTTPErr(err) {
+				dlog.WithError(err).Error("Unrecoverable HTTP error")
+				return curlError{
+					Error: fmt.Errorf("%s", errorDesc["RECV_ERROR"]),
+					Code:  errorCode["RECV_ERROR"],
+				}
+			}
+
+			dlog.WithError(err).Debugf("HTTP request attempt %d failed, retrying...", attempt)
+			time.Sleep(time.Duration(attempt) * time.Second)
 		}
 
 		if err != nil {
-			dlog.WithError(err).Debug("Failed to perform HTTP request after maximum retries\n")
-			return curlError{
-				Error: fmt.Errorf("%s", errorDesc["RECV_ERROR"]),
-				Code:  errorCode["RECV_ERROR"],
-			}
+			dlog.WithError(err).Debug("Failed to perform HTTP request after maximum retries")
+			continue // Retry outer attempt
 		}
+		defer closeResponseBody(resp)
 
 		n, err := cancellableCopy(ctx, file, resp.Body, resp.ContentLength)
 		if err != nil {
-			dlog.WithError(err).Error(fmt.Sprintf("download failed at %d/%dB\n", n, resp.ContentLength))
-			return curlError{
-				Error: fmt.Errorf("%s", errorDesc["DOWNLOAD_ERROR"]),
-				Code:  errorCode["DOWNLOAD_ERROR"],
-			}
-		}
-		defer closeResponseBody(resp)
-		if err != nil {
-			dlog.WithError(err).Error()
+			dlog.WithError(err).Errorf("Download failed at %d/%dB", n, resp.ContentLength)
 			select {
 			case <-ctx.Done():
 				return curlError{
@@ -292,24 +268,39 @@ func handleRequest(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, http
 					Code:  errorCode["CONTEXT_CANCELED"],
 				}
 			case <-time.After(time.Duration(dmsgcurlWait) * time.Second):
-				continue
+				continue // Retry outer attempt
 			}
 		}
+
+		dlog.Debugf("Download succeeded, bytes written: %d", n)
 		return curlError{
 			Error: fmt.Errorf("%s", errorDesc["SUCCESS"]),
 			Code:  errorCode["SUCCESS"],
 		}
 	}
-	if err != nil {
-		return curlError{
-			Error: fmt.Errorf("%s", errorDesc["FAILURE"]),
-			Code:  errorCode["FAILURE"],
-		}
-	}
+
+	// All retries exhausted
 	return curlError{
-		Error: fmt.Errorf("%s", errorDesc["SUCCESS"]),
-		Code:  errorCode["SUCCESS"],
+		Error: fmt.Errorf("%s", errorDesc["FAILURE"]),
+		Code:  errorCode["FAILURE"],
 	}
+}
+
+func buildHTTPRequest(url, data string) (*http.Request, error) {
+	if data != "" {
+		req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "text/plain")
+		return req, nil
+	}
+	return http.NewRequest(http.MethodGet, url, nil)
+}
+
+func isFatalHTTPErr(err error) bool {
+	var netErr net.Error
+	return errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())
 }
 
 func prepareOutputFile() (*os.File, error) {

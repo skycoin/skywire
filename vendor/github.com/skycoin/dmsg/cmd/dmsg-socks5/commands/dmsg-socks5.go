@@ -33,7 +33,6 @@ var (
 	dmsgDisc     = dmsg.DiscAddr(false)
 	useHTTP      bool
 	httpClient   *http.Client
-	dmsgSessions int
 	dlog         *logging.Logger
 	dmsgHTTPPath string
 	err          error
@@ -137,16 +136,8 @@ var serveCmd = &cobra.Command{
 		ctx, cancel := cmdutil.SignalContext(context.Background(), dlog)
 		defer cancel()
 		//TODO: implement whitelist logic
-		var dmsgC *dmsg.Client
-		var closeDmsg func()
 
-		if useHTTP {
-			dlog.WithField("public_key", pk.String()).WithField("dmsg_disc", dmsgDisc).Debug("Connecting to dmsg network...")
-			dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dlog, pk, sk, httpClient, dmsgDisc, dmsgSessions)
-		} else {
-			dlog.WithField("public_key", pk.String()).Debug("Connecting to dmsg network...")
-			dmsgC, closeDmsg, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, dmsgDisc, dmsgSessions, pk.String())
-		}
+		dmsgC, closeDmsg, err := cli.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, pk.String())
 
 		if err != nil {
 			dlog.WithError(err).Fatal("Error connecting to dmsg network")
@@ -230,16 +221,8 @@ var proxyCmd = &cobra.Command{
 		ctx, cancel := cmdutil.SignalContext(context.Background(), dlog)
 		defer cancel()
 
-		var dmsgC *dmsg.Client
-		var closeDmsg func()
+		dmsgC, closeDmsg, err := cli.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, pk.String())
 
-		if useHTTP {
-			dlog.WithField("public_key", pk.String()).WithField("dmsg_disc", dmsgDisc).Debug("Connecting to dmsg network...")
-			dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dlog, pk, sk, httpClient, dmsgDisc, dmsgSessions)
-		} else {
-			dlog.WithField("public_key", pk.String()).Debug("Connecting to dmsg network...")
-			dmsgC, closeDmsg, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, dmsgDisc, dmsgSessions, pk.String())
-		}
 		if err != nil {
 			dlog.WithError(err).Fatal("Error connecting to dmsg network")
 			return

@@ -25,7 +25,6 @@ import (
 	"github.com/skycoin/dmsg/internal/cli"
 	"github.com/skycoin/dmsg/internal/flags"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
 )
 
 var (
@@ -128,43 +127,7 @@ func server() {
 	var dmsgC *dmsg.Client
 	var closeDmsg func()
 
-	if flags.UseDC {
-		//TODO: implement direct client which gets the servers from dmsg-disc via http client that can be configured to use a proxy
-		/*
-					if flags.UseHTTP {
-						//TODO: support proxy configuration here & in all direct client functions that interact with dmsg-disc
-						// Need to be able to specify http client as input to dmsghttp.GetServers
-						servers := dmsghttp.GetServers(ctx, flags.DmsgDiscURL, "", dlog)
-						config := &dmsg.Config{
-							MinSessions:          flags.DmsgSessions,
-							UpdateInterval:       dmsg.DefaultUpdateInterval,
-			//				ConnectedServersType: dmsgServerType,
-						}
-						var keys cipher.PubKeys
-						keys = append(keys, pk)
-						dClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
-
-						dmsgC, closeDmsg, err := direct.StartDmsg(ctx, log, pk, sk, dClient, config)
-					} else {
-		*/
-		dmsgC, closeDmsg, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, "", flags.DmsgSessions, pk.String())
-		//		}
-	} else {
-		if flags.UseHTTP {
-			dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dlog, pk, sk, httpClient, flags.DmsgDiscURL, flags.DmsgSessions)
-		} else {
-			var dmsgDC *dmsg.Client
-			var closeDmsgDC func()
-			dmsgDC, closeDmsgDC, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, "", flags.DmsgSessions, dmsg.ExtractPKFromDmsgAddr(flags.DmsgDiscAddr))
-			if err != nil {
-				dlog.WithError(err).Error("Error connecting to dmsg network")
-				return
-			}
-			defer closeDmsgDC()
-			dmsgHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
-			dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dlog, pk, sk, dmsgHTTP, flags.DmsgDiscAddr, flags.DmsgSessions)
-		}
-	}
+	dmsgC, closeDmsg, err = cli.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, "")
 	if err != nil {
 		dlog.WithError(err).Error("Error connecting to dmsg network")
 		return
