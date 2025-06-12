@@ -116,16 +116,8 @@ var RootCmd = &cobra.Command{
 			ctx = context.WithValue(context.Background(), "socks5_proxy", proxyAddr) //nolint
 		}
 
-		var dmsgC *dmsg.Client
-		var closeDmsg func()
+		dmsgC, closeDmsg, err := cli.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, pk.String())
 
-		if useHTTP {
-			dlog.WithField("public_key", pk.String()).WithField("dmsg_disc", dmsgDisc).Debug("Connecting to dmsg network...")
-			dmsgC, closeDmsg, err = cli.StartDmsg(ctx, dlog, pk, sk, httpClient, dmsgDisc, dmsgSessions)
-		} else {
-			dlog.WithField("public_key", pk.String()).Debug("Connecting to dmsg network...")
-			dmsgC, closeDmsg, err = cli.StartDmsgDirect(ctx, dlog, pk, sk, httpClient, dmsgDisc, dmsgSessions, pk.String())
-		}
 		if err != nil {
 			dlog.WithError(err).Debug("Error connecting to dmsg network")
 		}

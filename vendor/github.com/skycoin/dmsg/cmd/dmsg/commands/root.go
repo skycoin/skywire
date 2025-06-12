@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	df "github.com/skycoin/dmsg/cmd/conf/commands"
+	dl "github.com/skycoin/dmsg/cmd/dial/commands"
 	dd "github.com/skycoin/dmsg/cmd/dmsg-discovery/commands"
 	ds "github.com/skycoin/dmsg/cmd/dmsg-server/commands"
 	ds5 "github.com/skycoin/dmsg/cmd/dmsg-socks5/commands"
@@ -29,6 +30,10 @@ func init() {
 		dph.RootCmd,
 		dpu.RootCmd,
 	)
+
+	ds.RootCmd.AddCommand(
+		dl.RootCmd,
+	)
 	RootCmd.AddCommand(
 		dmsgptyCmd,
 		dd.RootCmd,
@@ -42,6 +47,7 @@ func init() {
 	)
 	dd.RootCmd.Use = "disc"
 	ds.RootCmd.Use = "server"
+	dl.RootCmd.Use = "dial"
 	df.RootCmd.Use = "conf"
 	dh.RootCmd.Use = "http"
 	dc.RootCmd.Use = "curl"
