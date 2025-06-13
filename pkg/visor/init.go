@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	crand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -189,19 +190,6 @@ func registerModules(logger *logging.MasterLogger) {
 
 type initFn func(context.Context, *Visor, *logging.Logger) error
 
-/*
-func initVisorConfig(ctx context.Context, v *Visor, log *logging.Logger) error {
-	const ebcTimeout = time.Second
-	ebc := appevent.NewBroadcaster(log, ebcTimeout)
-	v.pushCloseStack("event_broadcaster", ebc.Close)
-
-	v.initLock.Lock()
-	v.ebc = ebc
-	v.initLock.Unlock()
-	return nil
-}
-*/
-
 func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	servers := shuffleServers(v.conf.Dmsg.Servers)
 	if len(servers) == 0 {
@@ -209,10 +197,13 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error { //
 	}
 
 	keys := cipher.PubKeys{v.conf.PK}
-	var dmsgDC *dmsg.Client
-	var dClient dmsgdisc.APIClient
-	var dmsgHTTP http.Client
-	var closeDmsgDC func()
+	var (
+		dmsgDC      *dmsg.Client
+		dClient     dmsgdisc.APIClient
+		dmsgHTTP    http.Client
+		closeDmsgDC func()
+		err         error
+	)
 
 	for i := 0; i < len(servers); i++ {
 		rotateServers(servers)
@@ -245,7 +236,6 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error { //
 			log.WithError(err).Error("Failed to read /health response body from dmsg-discovery server via dmsgHTTP client")
 			continue
 		}
-		// Success
 		log.Debugf("dmsg-discovery server %s/health:\n%s", v.conf.Dmsg.Discovery, string(body))
 		break
 	}
@@ -269,10 +259,10 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error { //
 	return nil
 }
 
-func shuffleServers(in []disc.Entry) []disc.Entry {
+func shuffleServers(in []*dmsgdisc.Entry) []*dmsgdisc.Entry {
 	n := len(in)
 	for i := n - 1; i > 0; i-- {
-		jBig, err := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
+		jBig, err := crand.Int(crand.Reader, big.NewInt(int64(i+1)))
 		if err != nil {
 			panic(err)
 		}
@@ -282,7 +272,7 @@ func shuffleServers(in []disc.Entry) []disc.Entry {
 	return in
 }
 
-func rotateServers(servers []disc.Entry) {
+func rotateServers(servers []*dmsgdisc.Entry) {
 	if len(servers) == 0 {
 		return
 	}
