@@ -255,7 +255,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				v.isServicesHealthy.set()
 				vOnline, err := script.Echo(string(vUptimeData)).JQ(`.[].on`).String()
 				if err != nil {
-					a.log.WithField("pk", pk).WithError(err).Debugln("Failed to decode remote visor online status")
+					a.log.WithField("pk", pk).WithError(err).Debugln("No uptime tracker data for remote visor")
 					continue
 				}
 				if strings.TrimSuffix(vOnline, "\n") != "true" {
