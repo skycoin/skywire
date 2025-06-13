@@ -209,6 +209,25 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error { //
 		rotateServers(servers)
 		entries := direct.GetAllEntries(keys, servers)
 		dClient = direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
+		// Post client entry with all delegated servers
+		var delegatedServers []cipher.PubKey
+		for _, srv := range servers {
+			delegatedServers = append(delegatedServers, srv.Static)
+		}
+		var pk cipher.PubKey
+		err = pk.Set(dmsg.ExtractPKFromDmsgAddr(v.conf.Dmsg.Discovery))
+		if err == nil {
+			clientEntry := &dmsgdisc.Entry{
+				Client: &dmsgdisc.Client{
+					DelegatedServers: delegatedServers,
+				},
+				Static: pk,
+			}
+			if err := dClient.PostEntry(ctx, clientEntry); err != nil {
+				log.WithError(err).Error("failed to post client entry")
+				continue
+			}
+		}
 
 		dmsgDC, closeDmsgDC, err = direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"), v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
 		if err != nil {
