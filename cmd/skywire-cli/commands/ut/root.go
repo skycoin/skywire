@@ -2,7 +2,6 @@
 package cliut
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -21,7 +20,7 @@ var (
 	online        bool
 	isStats       bool
 	isMoreStats   bool
-	utURL         string
+	utURL         = skywire.Prod.UptimeTracker
 	cacheFileUT   string
 	cacheFilesAge int
 )
@@ -29,27 +28,20 @@ var (
 var minUT int
 
 func init() {
-	var envServices skywire.EnvServices
-	var services skywire.Services
-	if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
-		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-			utURL = services.UptimeTracker
-		}
-	}
 	utCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
 	utCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
 	utCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
 	utCmd.Flags().BoolVarP(&isMoreStats, "stats2", "t", false, "count of versions")
-	utCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime")
-	utCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
-	utCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
-	utCmd.Flags().StringVarP(&utURL, "url", "u", utURL, "specify alternative uptime tracker url")
+	utCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime percentage\033[0m\n\r")
+	utCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location\033[0m\n\r")
+	utCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes\033[0m\n\r")
+	utCmd.Flags().StringVarP(&utURL, "url", "u", utURL, "specify alternative uptime tracker url\033[0m\n\r")
 }
 
 var utCmd = &cobra.Command{
 	Use:   "ut",
 	Short: "query uptime tracker",
-	Long:  fmt.Sprintf("query uptime tracker\n\n%v/uptimes?v=v2\n\nCheck local visor daily uptime percent with:\n skywire-cli ut -k $(skywire-cli visor pk)n\nSet cache file location to \"\" to avoid using cache files", utURL),
+	Long:  fmt.Sprintf("query uptime tracker\n\n%v/uptimes?v=v2\n\nCheck local visor daily uptime percent with:\n\n$ skywire-cli ut -n0 -k $(skywire-cli visor pk)\n\nSet cache file location to \"\" to avoid using cache files", utURL),
 	Run: func(cmd *cobra.Command, _ []string) {
 		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
 		if online {

@@ -5,10 +5,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	crand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"math/rand"
 	"mime"
 	"net"
@@ -188,38 +190,59 @@ func registerModules(logger *logging.MasterLogger) {
 
 type initFn func(context.Context, *Visor, *logging.Logger) error
 
-/*
-func initVisorConfig(ctx context.Context, v *Visor, log *logging.Logger) error {
-	const ebcTimeout = time.Second
-	ebc := appevent.NewBroadcaster(log, ebcTimeout)
-	v.pushCloseStack("event_broadcaster", ebc.Close)
-
-	v.initLock.Lock()
-	v.ebc = ebc
-	v.initLock.Unlock()
-	return nil
-}
-*/
-
 func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
-	var keys cipher.PubKeys
-	servers := v.conf.Dmsg.Servers
-
+	servers := shuffleServers(v.conf.Dmsg.Servers)
 	if len(servers) == 0 {
 		return nil
 	}
 
-	keys = append(keys, v.conf.PK)
-	entries := direct.GetAllEntries(keys, servers)
-	dClient := direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
+	keys := cipher.PubKeys{v.conf.PK}
+	var (
+		dmsgDC      *dmsg.Client
+		dClient     dmsgdisc.APIClient
+		dmsgHTTP    http.Client
+		closeDmsgDC func()
+		err         error
+	)
 
-	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
-		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
-	if err != nil {
-		return fmt.Errorf("failed to start dmsg: %w", err)
+	for i := 0; i < len(servers); i++ {
+		rotateServers(servers)
+		entries := direct.GetAllEntries(keys, servers)
+		dClient = direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
+
+		dmsgDC, closeDmsgDC, err = direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"), v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+		if err != nil {
+			log.WithError(err).Error("Failed to start dmsg direct client")
+			continue
+		}
+
+		dmsgHTTP = http.Client{
+			Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC),
+		}
+
+		if v.conf.Dmsg.Discovery == "" {
+			break
+		}
+		resp, err := dmsgHTTP.Get(v.conf.Dmsg.Discovery + "/health")
+		if err != nil {
+			closeDmsgDC()
+			log.WithError(err).Error("dmsgHTTP client could not access dmsg-discovery server; reconfiguring...")
+			continue
+		}
+		defer resp.Body.Close() //nolint
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			closeDmsgDC()
+			log.WithError(err).Error("Failed to read /health response body from dmsg-discovery server via dmsgHTTP client")
+			continue
+		}
+		log.Debugf("dmsg-discovery server %s/health:\n%s", v.conf.Dmsg.Discovery, string(body))
+		break
 	}
 
-	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
+	if dmsgDC == nil {
+		return fmt.Errorf("dmsgHTTP client cannot reach dmsg-discovery; reconfiguration attempts exhausted")
+	}
 
 	v.pushCloseStack("dmsg_http", func() error {
 		closeDmsgDC()
@@ -228,11 +251,34 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error { //
 
 	v.initLock.Lock()
 	v.dClient = dClient
-	v.dmsgHTTP = &dmsgHTTP
 	v.dmsgDC = dmsgDC
+	v.dmsgHTTP = &dmsgHTTP
 	v.initLock.Unlock()
-	time.Sleep(time.Duration(len(entries)) * time.Second)
+
+	time.Sleep(time.Second * time.Duration(len(servers)))
 	return nil
+}
+
+func shuffleServers(in []*dmsgdisc.Entry) []*dmsgdisc.Entry {
+	n := len(in)
+	for i := n - 1; i > 0; i-- {
+		jBig, err := crand.Int(crand.Reader, big.NewInt(int64(i+1)))
+		if err != nil {
+			panic(err)
+		}
+		j := int(jBig.Int64())
+		in[i], in[j] = in[j], in[i]
+	}
+	return in
+}
+
+func rotateServers(servers []*dmsgdisc.Entry) {
+	if len(servers) == 0 {
+		return
+	}
+	first := servers[0]
+	copy(servers, servers[1:])
+	servers[len(servers)-1] = first
 }
 
 func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
