@@ -191,77 +191,24 @@ func registerModules(logger *logging.MasterLogger) {
 type initFn func(context.Context, *Visor, *logging.Logger) error
 
 func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+	var keys cipher.PubKeys
 	servers := shuffleServers(v.conf.Dmsg.Servers)
+
 	if len(servers) == 0 {
 		return nil
 	}
 
-	keys := cipher.PubKeys{v.conf.PK}
-	var (
-		dmsgDC      *dmsg.Client
-		dClient     dmsgdisc.APIClient
-		dmsgHTTP    http.Client
-		closeDmsgDC func()
-		err         error
-	)
+	keys = append(keys, v.conf.PK)
+	entries := direct.GetAllEntries(keys, servers)
+	dClient := direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
-	for i := 0; i < len(servers); i++ {
-		rotateServers(servers)
-		entries := direct.GetAllEntries(keys, servers)
-		dClient = direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
-		// Post client entry with all delegated servers
-		var delegatedServers []cipher.PubKey
-		for _, srv := range servers {
-			delegatedServers = append(delegatedServers, srv.Static)
-		}
-		var pk cipher.PubKey
-		err = pk.Set(dmsg.ExtractPKFromDmsgAddr(v.conf.Dmsg.Discovery))
-		if err == nil {
-			clientEntry := &dmsgdisc.Entry{
-				Client: &dmsgdisc.Client{
-					DelegatedServers: delegatedServers,
-				},
-				Static: pk,
-			}
-			if err := dClient.PostEntry(ctx, clientEntry); err != nil {
-				log.WithError(err).Error("failed to post client entry")
-				continue
-			}
-		}
-
-		dmsgDC, closeDmsgDC, err = direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"), v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
-		if err != nil {
-			log.WithError(err).Error("Failed to start dmsg direct client")
-			continue
-		}
-
-		dmsgHTTP = http.Client{
-			Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC),
-		}
-
-		if v.conf.Dmsg.Discovery == "" {
-			break
-		}
-		resp, err := dmsgHTTP.Get(v.conf.Dmsg.Discovery + "/health")
-		if err != nil {
-			closeDmsgDC()
-			log.WithError(err).Error("dmsgHTTP client could not access dmsg-discovery server; reconfiguring...")
-			continue
-		}
-		defer resp.Body.Close() //nolint
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			closeDmsgDC()
-			log.WithError(err).Error("Failed to read /health response body from dmsg-discovery server via dmsgHTTP client")
-			continue
-		}
-		log.Debugf("dmsg-discovery server %s/health:\n%s", v.conf.Dmsg.Discovery, string(body))
-		break
+	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
+		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+	if err != nil {
+		return fmt.Errorf("failed to start dmsg: %w", err)
 	}
 
-	if dmsgDC == nil {
-		return fmt.Errorf("dmsgHTTP client cannot reach dmsg-discovery; reconfiguration attempts exhausted")
-	}
+	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
 
 	v.pushCloseStack("dmsg_http", func() error {
 		closeDmsgDC()
@@ -270,11 +217,10 @@ func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error { //
 
 	v.initLock.Lock()
 	v.dClient = dClient
-	v.dmsgDC = dmsgDC
 	v.dmsgHTTP = &dmsgHTTP
+	v.dmsgDC = dmsgDC
 	v.initLock.Unlock()
-
-	time.Sleep(time.Second * time.Duration(len(servers)))
+	time.Sleep(time.Duration(len(entries)) * time.Second)
 	return nil
 }
 
@@ -291,6 +237,7 @@ func shuffleServers(in []*dmsgdisc.Entry) []*dmsgdisc.Entry {
 	return in
 }
 
+/*
 func rotateServers(servers []*dmsgdisc.Entry) {
 	if len(servers) == 0 {
 		return
@@ -299,6 +246,7 @@ func rotateServers(servers []*dmsgdisc.Entry) {
 	copy(servers, servers[1:])
 	servers[len(servers)-1] = first
 }
+*/
 
 func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
 	const ebcTimeout = time.Second
