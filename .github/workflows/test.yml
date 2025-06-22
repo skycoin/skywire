@@ -29,6 +29,8 @@ jobs:
           make dep
           ./ci_scripts/create-ip-aliases.sh
 
+          make install-shellcheck
+
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.1.1
