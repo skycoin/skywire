@@ -1,5 +1,6 @@
 on: [pull_request]
 name: Test
+
 jobs:
   linux:
     runs-on: ubuntu-latest
@@ -7,36 +8,57 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: 1.24.x
+
       - uses: actions/checkout@v4
-      - name: Install Requirements
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.1
-          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          sudo apt install libglfw3-dev libgl1-mesa-dev xorg-dev libglu1-mesa-dev
-          make dep
-          chmod +x ./ci_scripts/create-ip-aliases.sh
-          ./ci_scripts/create-ip-aliases.sh
-          make install-shellcheck
+
+      - name: Install Dependencies
         shell: bash
-      - name: Checking Format and Testing
         run: |
-          make check
-          make lint-shell
+          set -euo pipefail
+
+          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+
+          sudo apt-get update
+          sudo apt-get install -y \
+            libglfw3-dev \
+            libgl1-mesa-dev \
+            xorg-dev \
+            libglu1-mesa-dev \
+            shellcheck
+
+          make dep
+          ./ci_scripts/create-ip-aliases.sh
+
+          make install-shellcheck
+
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.1.1
+
+      - name: Lint Shell Scripts
+        run: make lint-shell
+
+      - name: Check Format and Run Tests
+        run: make check
+
       - name: Build
         run: make build
-      - name: Setup SSH Key Build and run e2e
-        run : |
+
+      - name: Setup SSH Key, Build and Run E2E
+        shell: bash
+        run: |
+          set -e
           make e2e-build
           make e2e-run
-        shell: bash
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Test e2e
+
+      - name: Test E2E
         run: make e2e-test
-      - name: Clean e2e
-        run: |
-          make e2e-stop
+
+      - name: Clean E2E
+        run: make e2e-stop
 
   darwin:
     runs-on: macos-latest
@@ -44,7 +66,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: 1.24.x
+
       - uses: actions/checkout@v4
+
       - name: Install Requirements
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.1
@@ -52,8 +76,10 @@ jobs:
           make dep
           brew install glfw
         shell: bash
+
       - name: Checking Format and Testing
         run: make check
+
       - name: Build
         run: make build
 
@@ -63,16 +89,20 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: 1.24.x
+
       - uses: actions/checkout@v4
+
       - name: Install Requirements
         run: |
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.1.1
           make dep
+
       - name: Testing
-        run:  |
+        run: |
           set GO111MODULE=on
           make test-windows
+
       - name: Build
         run: make build-windows
