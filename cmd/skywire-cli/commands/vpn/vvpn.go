@@ -192,7 +192,7 @@ var listCmd = &cobra.Command{
 			return
 		}
 		if pk != "" {
-			jsonOut, err := script.Echo(sds).JQ(`map(select(.address == "` + pk + `:3"))`).Bytes()
+			jsonOut, err := script.Echo(sds).JQ(`map(select(.address == "` + pk + `:44"))`).Bytes()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
