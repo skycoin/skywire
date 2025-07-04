@@ -12,7 +12,6 @@ import (
 var (
 	stateName       = "vpn-client"
 	serviceType     = servicedisc.ServiceTypeVPN
-	isUnFiltered    bool
 	rawData         bool
 	sdURL           = skywire.Prod.ServiceDiscovery
 	cacheFileSD     string
@@ -20,8 +19,6 @@ var (
 	noFilterOnline  bool
 	path            string
 	isPkg           bool
-	ver             string
-	country         string
 	isStats         bool
 	pubkey          cipher.PubKey
 	pk              string

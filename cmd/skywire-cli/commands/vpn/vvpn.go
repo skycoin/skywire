@@ -4,7 +4,6 @@ package clivpn
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -15,10 +14,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -166,100 +165,73 @@ var statusCmd = &cobra.Command{
 	},
 }
 
-var isLabel bool
-var jsonOutput bool
+var utURL string
+var cacheFileUT string
 
 func init() {
-	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", sdURL, "service discovery url")
+	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", skywire.Prod.ServiceDiscovery, "service discovery url")
+	listCmd.Flags().StringVarP(&utURL, "uturl", "w", skywire.Prod.UptimeTracker, "uptime tracker url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw data")
 	listCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	listCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/vpnsd.json", "SD cache file location")
+	listCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
 	listCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
-	listCmd.Flags().BoolVarP(&isUnFiltered, "unfilter", "u", false, "provide unfiltered results")
-	listCmd.Flags().StringVarP(&ver, "ver", "v", "", "filter results by version")
-	listCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
 	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
-	listCmd.Flags().BoolVarP(&isLabel, "label", "l", false, "label keys by country \033[91m(SLOW)\033[0m")
-
-	listCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
 	listCmd.Flags().MarkHidden(internal.JSONString) //nolint
 }
 
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
-	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files", serviceType, sdURL, serviceType, sdURL, serviceType),
+	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files", serviceType, skywire.Prod.ServiceDiscovery, serviceType, skywire.Prod.ServiceDiscovery, serviceType),
 	Run: func(cmd *cobra.Command, _ []string) {
 		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint
 			return
 		}
-
-		if jsonOutput {
-			var list []services.Service
-			json.Unmarshal([]byte(sds), &list) //nolint
-			var b bytes.Buffer
-			internal.PrintOutput(cmd.Flags(), list, b.String())
-			return
-		}
-
 		if pk != "" {
-			if isStats {
-				count, _ := script.Echo(sds).JQ(`map(select(.address == "`+pk+`:3"))`).Replace("\"", "").Replace(":", " ").Column(1).CountLines() //nolint
-				script.Echo(fmt.Sprintf("%v\n", count)).Stdout()                                                                                  //nolint
-				return
+			jsonOut, err := script.Echo(sds).JQ(`map(select(.address == "` + pk + `:3"))`).Bytes()
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
-			jsonOut, _ := script.Echo(sds).JQ(`map(select(.address == "` + pk + `:3"))`).Bytes() //nolint
-			script.Echo(string(pretty.Color(pretty.Pretty(jsonOut), nil))).Stdout()              //nolint
+			script.Echo(string(pretty.Color(pretty.Pretty(jsonOut), nil))).Stdout() //nolint
 			return
 		}
-		var sdJQ string
-		if !isUnFiltered {
-			if ver != "" && country == "" {
-				sdJQ = `select(.version == "` + ver + `")`
-			}
-			if country != "" && ver == "" {
-				sdJQ = `select(.geo.country == "` + country + `")`
-			}
-			if country != "" && ver != "" {
-				sdJQ = `select(.geo.country == "` + country + `" and .version == "` + ver + `")`
-			}
-		}
-		if sdJQ != "" {
-			sdJQ = `.[] | ` + sdJQ + ` | .address`
-		} else {
-			sdJQ = `.[] .address`
-		}
+		sdJQ := `.[] .address`
+		//DEBUG: script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Replace(":", " ").Column(1).Stdout()
 		var sdkeys string
-		sdkeys, _ = script.Echo(sds).JQ(sdJQ).Replace("\"", "").Replace(":", " ").Column(1).String() //nolint
+		sdkeys, err := script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Replace(":", " ").Column(1).String()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
+		}
 		if noFilterOnline {
 			if isStats {
-				count, _ := script.Echo(sdkeys).CountLines()     //nolint
+				count, err := script.Echo(sdkeys).CountLines()
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
+				}
 				script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint
 				return
 			}
 			script.Echo(sdkeys).Stdout() //nolint
 			return
 		}
+
+		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+		utkeys, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").String() //nolint
+
 		if isStats {
-			count, _ := script.Echo(sdkeys).Freq().Match("2 ").Column(2).CountLines() //nolint
-			script.Echo(fmt.Sprintf("%v\n", count)).Stdout()                          //nolint
+			count, err := script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).CountLines()
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
+			}
+			script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint
 			return
 		}
-		if !isLabel {
-			script.Echo(sdkeys).Freq().Match("2 ").Column(2).Stdout() //nolint
-		} else {
-			filteredKeys, _ := script.Echo(sdkeys).Freq().Match("2 ").Column(2).Slice()                                    //nolint
-			formattedoutput, _ := script.Echo(sds).JQ(".[] | \"\\(.address) \\(.geo.country)\"").Replace("\"", "").Slice() //nolint
-			// Very slow!
-			for _, fo := range formattedoutput {
-				for _, fk := range filteredKeys {
-					script.Echo(fo).Match(fk).Stdout() //nolint
-				}
-			}
-		}
+
+		script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).Stdout() //nolint
 
 	},
 }
