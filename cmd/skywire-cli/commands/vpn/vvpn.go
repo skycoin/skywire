@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
-	"github.com/skycoin/skywire"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -172,17 +170,6 @@ var isLabel bool
 var jsonOutput bool
 
 func init() {
-	var envServices skywire.EnvServices
-	var services skywire.Services
-	if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
-		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-			sdURL = services.ServiceDiscovery
-		}
-	}
-	if version == "unknown" {
-		version = ""
-	}
-	version = strings.Split(version, "-")[0]
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", sdURL, "service discovery url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw data")
 	listCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
@@ -190,7 +177,7 @@ func init() {
 	listCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
 	listCmd.Flags().BoolVarP(&isUnFiltered, "unfilter", "u", false, "provide unfiltered results")
-	listCmd.Flags().StringVarP(&ver, "ver", "v", version, "filter results by version")
+	listCmd.Flags().StringVarP(&ver, "ver", "v", "", "filter results by version")
 	listCmd.Flags().StringVarP(&country, "country", "c", "", "filter results by country")
 	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
 	listCmd.Flags().BoolVarP(&isLabel, "label", "l", false, "label keys by country \033[91m(SLOW)\033[0m")

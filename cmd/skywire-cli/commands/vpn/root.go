@@ -4,18 +4,17 @@ package clivpn
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 var (
-	version         = buildinfo.Version()
 	stateName       = "vpn-client"
 	serviceType     = servicedisc.ServiceTypeVPN
 	isUnFiltered    bool
 	rawData         bool
-	sdURL           string
+	sdURL           = skywire.Prod.ServiceDiscovery
 	cacheFileSD     string
 	cacheFilesAge   int
 	noFilterOnline  bool
