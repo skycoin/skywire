@@ -172,6 +172,7 @@ func init() {
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", skywire.Prod.ServiceDiscovery, "service discovery url")
 	listCmd.Flags().StringVarP(&utURL, "uturl", "w", skywire.Prod.UptimeTracker, "uptime tracker url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw data")
+	listCmd.Flags().BoolVarP(&rawData, "json", "j", false, "json data as json")
 	listCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	listCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/vpnsd.json", "SD cache file location")
 	listCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
