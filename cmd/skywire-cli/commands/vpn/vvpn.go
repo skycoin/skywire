@@ -19,6 +19,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -168,6 +169,7 @@ var statusCmd = &cobra.Command{
 
 var utURL string
 var cacheFileUT string
+var jsonOutput bool
 
 func init() {
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", skywire.Prod.ServiceDiscovery, "service discovery url")
