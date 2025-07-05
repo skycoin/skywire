@@ -4,6 +4,7 @@ package clivpn
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -172,13 +173,13 @@ func init() {
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", skywire.Prod.ServiceDiscovery, "service discovery url")
 	listCmd.Flags().StringVarP(&utURL, "uturl", "w", skywire.Prod.UptimeTracker, "uptime tracker url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw data")
-	listCmd.Flags().BoolVarP(&rawData, "json", "j", false, "json data as json")
 	listCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	listCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/vpnsd.json", "SD cache file location")
 	listCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
 	listCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
 	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
+	listCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
 	listCmd.Flags().MarkHidden(internal.JSONString) //nolint
 }
 
@@ -190,6 +191,13 @@ var listCmd = &cobra.Command{
 		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint
+			return
+		}
+		if jsonOutput {
+			var list []services.Service
+			json.Unmarshal([]byte(sds), &list) //nolint
+			var b bytes.Buffer
+			internal.PrintOutput(cmd.Flags(), list, b.String())
 			return
 		}
 		if pk != "" {
