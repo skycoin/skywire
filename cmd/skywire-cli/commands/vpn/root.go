@@ -4,7 +4,6 @@ package clivpn
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
@@ -13,8 +12,10 @@ var (
 	stateName       = "vpn-client"
 	serviceType     = servicedisc.ServiceTypeVPN
 	rawData         bool
-	sdURL           = skywire.Prod.ServiceDiscovery
+	sdURL           string
+	utURL           string
 	cacheFileSD     string
+	cacheFileUT     string
 	cacheFilesAge   int
 	noFilterOnline  bool
 	path            string
@@ -23,6 +24,7 @@ var (
 	pubkey          cipher.PubKey
 	pk              string
 	startingTimeout int
+	jsonOutput      bool
 )
 
 // RootCmd contains commands that interact with the skywire-visor

@@ -14,7 +14,9 @@ var (
 	serviceType     = servicedisc.ServiceTypeProxy
 	rawData         bool
 	sdURL           string
+	utURL           string
 	cacheFileSD     string
+	cacheFileUT     string
 	cacheFilesAge   int
 	isStats         bool
 	pubkey          cipher.PubKey
@@ -25,6 +27,7 @@ var (
 	addr            string
 	startingTimeout int
 	httpAddr        string
+	jsonOutput      bool
 )
 
 // RootCmd contains commands that interact with the skywire-visor

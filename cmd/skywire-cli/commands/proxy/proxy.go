@@ -4,6 +4,7 @@ package skysocksc
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -19,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
+	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -256,8 +258,7 @@ var statusCmd = &cobra.Command{
 	},
 }
 
-var utURL string
-var cacheFileUT string
+var serverPort = visorconfig.SkysocksPort
 
 func init() {
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", skywire.Prod.ServiceDiscovery, "service discovery url")
@@ -269,21 +270,28 @@ func init() {
 	listCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
 	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
-	listCmd.Flags().MarkHidden(internal.JSONString) //nolint
+	listCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
 }
 
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
-	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files", serviceType, skywire.Prod.ServiceDiscovery, serviceType, skywire.Prod.ServiceDiscovery, serviceType),
+	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files\ndefault virtual port of servers: %v", serviceType, skywire.Prod.ServiceDiscovery, serviceType, skywire.Prod.ServiceDiscovery, serviceType, serverPort),
 	Run: func(cmd *cobra.Command, _ []string) {
 		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint
 			return
 		}
+		if jsonOutput {
+			var list []services.Service
+			json.Unmarshal([]byte(sds), &list) //nolint
+			var b bytes.Buffer
+			internal.PrintOutput(cmd.Flags(), list, b.String())
+			return
+		}
 		if pk != "" {
-			jsonOut, err := script.Echo(sds).JQ(`map(select(.address == "` + pk + `:3"))`).Bytes()
+			jsonOut, err := script.Echo(sds).JQ(`map(select(.address == "` + pk + `:` + fmt.Sprintf("%v", serverPort) + `"))`).Bytes()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}

@@ -22,6 +22,7 @@ import (
 	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func init() {
@@ -167,14 +168,12 @@ var statusCmd = &cobra.Command{
 	},
 }
 
-var utURL string
-var cacheFileUT string
-var jsonOutput bool
+var serverPort = visorconfig.VPNServerPort
 
 func init() {
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", skywire.Prod.ServiceDiscovery, "service discovery url")
 	listCmd.Flags().StringVarP(&utURL, "uturl", "w", skywire.Prod.UptimeTracker, "uptime tracker url")
-	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw data")
+	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "pretty print json data")
 	listCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	listCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/vpnsd.json", "SD cache file location")
 	listCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
@@ -182,13 +181,12 @@ func init() {
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
 	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
 	listCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
-	listCmd.Flags().MarkHidden(internal.JSONString) //nolint
 }
 
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
-	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files", serviceType, skywire.Prod.ServiceDiscovery, serviceType, skywire.Prod.ServiceDiscovery, serviceType),
+	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files\ndefault virtual port of servers: %v", serviceType, skywire.Prod.ServiceDiscovery, serviceType, skywire.Prod.ServiceDiscovery, serviceType, serverPort),
 	Run: func(cmd *cobra.Command, _ []string) {
 		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
@@ -203,7 +201,7 @@ var listCmd = &cobra.Command{
 			return
 		}
 		if pk != "" {
-			jsonOut, err := script.Echo(sds).JQ(`map(select(.address == "` + pk + `:44"))`).Bytes()
+			jsonOut, err := script.Echo(sds).JQ(`map(select(.address == "` + pk + `:` + fmt.Sprintf("%v", serverPort) + `"))`).Bytes()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
