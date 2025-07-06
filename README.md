@@ -116,9 +116,48 @@ Further documentation can be found in the [skywire wiki](https://github.com/skyc
 
 ## `go install` or `go run` Skywire (go1.24.3)
 
+Most skywire commands can be executed via `go run` - except the skywire visor.
+
 ```
-go run github.com/skycoin/skywire@develop
+$ go run github.com/skycoin/skywire/cmd/skywire@develop
+┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
+└─┐├┴┐└┬┘││││├┬┘├┤
+└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
+v1.3.29-rc7.0.20250706003615-ed3fbd3aa76d
+built with go1.24.3
+
+Available Commands:
+  visor     Skywire Visor
+  cli       Command Line Interface for skywire
+  svc       Skywire services
+  dmsg      DMSG services & utilities
+  app       skywire native applications
+
+Flags:
+  -b, --bv        print runtime/debug.BuildInfo.Main.Version
+  -d, --info      print runtime/debug.BuildInfo
+  -v, --version   version for skywire
 ```
+
+Due to the nature of the current app launcher, the skywire visor requires a compiled binary in order to invoke apps such as the vpn client / server, proxy client / server & skychat.
+
+To run the visor, It's recommended to `go install` skywire as follows. Ensuring that you have your go envs such as GOPATH and GOBIN set correctly:
+
+```
+[user@linux skywire]$ go install github.com/skycoin/skywire/cmd/skywire@develop
+[user@linux skywire]$ ls $GOBIN/skywire
+/home/user/go/bin/skywire
+```
+
+It's recommended at this point to copy or move the skywire binary into the directory where you wish to execute it. In this example, the cloned source code directory is used, but any directory will suffice:
+
+```
+[user@linux skywire]$ mv $GOBIN/skywire .
+[user@linux skywire]$ ls skywire
+skywire
+```
+
+After completing the above steps, the apps will be able to launch normally when the visor is started. We hope to eliminate these extra steps in the future.
 
 ## Installing Skywire from Release
 
@@ -171,13 +210,14 @@ To run skywire, first generate a config.
 ```
 skywire cli config gen -birx
 ```
-`-b --bestproto` use the best protocol (dmsg | direct) to connect to the skywire production deployment
-`-i --ishv` create a  local hypervisor configuration
+`-b --bestproto` use the best protocol (dmsg | direct) to connect to the skywire production deployment - recommended
+`-i --ishv` create a  local hypervisor configuration (optional)
 `-r --regen` regenerate a config which may already exist, retaining the keys
-`-x --retainhv` retain any remote hypervisors which are set in the config
+`-x --retainhv` retain any remote hypervisors which are set in the config (optional)
 
-More options for configuration are displayed with `skywire cli config gen -all`.
+More options for configuration are displayed with `skywire cli config gen --all`.
 
+NOTE: If you have installed skywire as a package or via the windows .msi or mac installer, one should additionally include the `-p` flag - and `skywire cli config gen` must be run as root.
 
 ## Build docker image
 ```
@@ -269,7 +309,7 @@ Some of these files are served via the [dmsghttp logserver](https://github.com/s
 
 `skywire visor` requires a valid configuration to be provided.
 
-__Note: root permissions are currently required for vpn client and server applications!__
+__Note: root permissions are currently required only for the vpn client app!__
 
 Run the visor:
 ```
@@ -381,11 +421,11 @@ This will query the service discovery for a list of vpn server public keys.
 
 Sample output:
 ```
-02836f9a39e38120f338dbc98c96ee2b1ffd73420259d1fb134a2d0a15c8b66ceb | NL
-0289a464f485ce9036f6267db10e5b6eaabd3972a25a7c2387f92b187d313aaf5e | GB
-03cad59c029fc2394e564d0d328e35db17f79feee50c33980f3ab31869dc05217b | ID
-02cf90f3b3001971cfb2b2df597200da525d359f4cf9828dca667ffe07f59f8225 | IT
-03e540ddb3ac61385d6be64b38eeef806d8de9273d29d7eabb8daccaf4cee945ab | US
+02836f9a39e38120f338dbc98c96ee2b1ffd73420259d1fb134a2d0a15c8b66ceb
+0289a464f485ce9036f6267db10e5b6eaabd3972a25a7c2387f92b187d313aaf5e
+03cad59c029fc2394e564d0d328e35db17f79feee50c33980f3ab31869dc05217b
+02cf90f3b3001971cfb2b2df597200da525d359f4cf9828dca667ffe07f59f8225
+03e540ddb3ac61385d6be64b38eeef806d8de9273d29d7eabb8daccaf4cee945ab
 ...
 ```
 
@@ -407,6 +447,9 @@ Stop the vpn:
 skywire cli vpn stop
 ```
 
+__Note: killswitch may be configured for the vpn - see skywire cli config gen help menu / documentation.__
+
+
 ### Using the Skywire SOCKS5 proxy client
 
 
@@ -427,16 +470,16 @@ This will query the service discovery for a list of visor public keys which are 
 
 Sample output:
 ```
-031a924f5fb38d26fd8d795a498ae53f14782bc9f036f8ff283c479ac41af95ebd:3 | ID
-024fdf44c126e122f09d591c8071a7355d4be9c561f85ea584e8ffe4e1ae8717f7:3 | ID
-03ae05142dcf5aad70d1b58ea142476bac49874bfaa67a1369f601e0eb2f5842df:3 | US
-0313a76e2c331669a0cb1a3b749930881f9881cca89b59ee52365d1c15141d9d83:3 | AU
-03022fa8a0c38d20fae9335ef6aa780f5d762e1e161e607882923dc0d5a890f094:3 | SG
-03e4b6326f9df0cff1372f52906a6d1ee03cf972338d532e17470e759362e45c87:3 | ID
-0230689d26e5450e8c44faaba91813b7c2b00c1add3ad251e2d62ecca8041a849d:3 | MY
-036ae558d5e6c5fc73cb6a329cb0006b4f659ecf9ae69c9e38996dfb65b1fb1c45:3 | ID
-03a35c742ed17506834235b2256bb2b0a687de992e5ded52ca4d54fba3b00b8dbe:3 | SG
-0259721a9e79e91ce8bc94bad52a6a381d50fcb05aaadc2c99201fd137fb71dfde:3 | CN
+031a924f5fb38d26fd8d795a498ae53f14782bc9f036f8ff283c479ac41af95ebd
+024fdf44c126e122f09d591c8071a7355d4be9c561f85ea584e8ffe4e1ae8717f7
+03ae05142dcf5aad70d1b58ea142476bac49874bfaa67a1369f601e0eb2f5842df
+0313a76e2c331669a0cb1a3b749930881f9881cca89b59ee52365d1c15141d9d83
+03022fa8a0c38d20fae9335ef6aa780f5d762e1e161e607882923dc0d5a890f094
+03e4b6326f9df0cff1372f52906a6d1ee03cf972338d532e17470e759362e45c87
+0230689d26e5450e8c44faaba91813b7c2b00c1add3ad251e2d62ecca8041a849d
+036ae558d5e6c5fc73cb6a329cb0006b4f659ecf9ae69c9e38996dfb65b1fb1c45
+03a35c742ed17506834235b2256bb2b0a687de992e5ded52ca4d54fba3b00b8dbe
+0259721a9e79e91ce8bc94bad52a6a381d50fcb05aaadc2c99201fd137fb71dfde
 ...
 ```
 
@@ -489,16 +532,26 @@ Visors meeting uptime and eligability requirements will recieve daily skycoin re
 
 ## Linux Packages
 
-Built Debian packages are maintained for skywire, as well as several build variants for archlinux. All packages provide a virtually identical installation, regardless of the distro.
+All Linux packages provide a virtually identical installation, helper scripts, and systemd services regardless of the linux distro.
 
-Consider the [PKGBUILD](https://github.com/skycoin/AUR/blob/main/skywire/PKGBUILD) as a reference for building and installing skywire on any linux distribution.
+Consider the [skywire PKGBUILD](https://github.com/skycoin/AUR/blob/main/skywire/PKGBUILD) as a reference for building and installing skywire on any linux distribution.
+
+### Debian packages
+
+Debian packages are maintained for skywire, as well as several build variants for archlinux.
+
+It's recommended to install the debian packages from the apt repo - see the instructions here:
+
+https://deb.skywire.skycoin.com/
+
+### Arch Linux AUR packages
 
 Installing [skywire-bin](https://aur.archlinux.org/packages/skywire-bin) from the AUR will install the release binaries provided by the release section of this repository:
 ```
 yay -S skywire-bin
 ```
 
-To build the debian packages using the release binaries:
+**To build the debian packages using the release binaries:**
 ```
 yay --mflags " -p cc.deb.PKGBUILD " -S skywire-bin
 ```
@@ -508,7 +561,7 @@ Installing [skywire](https://aur.archlinux.org/packages/skywire) from the AUR wi
 yay -S skywire
 ```
 
-Build from git sources to the develop branch:
+Build the skywire Arch Linux package from git sources to the latest commits on the develop branch:
 ```
 yay --mflags " -p git.PKGBUILD " -S skywire
 ```
