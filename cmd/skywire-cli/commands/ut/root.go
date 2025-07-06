@@ -61,8 +61,8 @@ var utCmd = &cobra.Command{
 			return
 		}
 		if isStats {
-			stats, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").CountLines() //nolint
-			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", stats), fmt.Sprintf("%d visors online\n", stats))
+			stats, _ := script.Echo(uts).JQ(".[] | .pk").CountLines() //nolint
+			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors\n", stats), fmt.Sprintf("%d visors\n", stats))
 			return
 		}
 		if isMoreStats {
