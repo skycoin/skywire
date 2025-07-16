@@ -328,11 +328,11 @@ dep-github-release:
 	go run github.com/melbahja/got/cmd/got@latest https://github.com/skycoin/skywire/releases/download/v1.3.29/arm-linux-musleabihf-cross.tgz #https://more.musl.cc/10/x86_64-linux-musl/arm-linux-musleabihf-cross.tgz
 	tar -xzf arm-linux-musleabihf-cross.tgz -C ./musl-data #&& rm arm-linux-musleabihf-cross.tgz
 	go run github.com/melbahja/got/cmd/got@latest https://github.com/skycoin/skywire/releases/download/v1.3.29/i686-linux-musl-cross.tgz #https://more.musl.cc/10/x86_64-linux-musl/x86_64-linux-musl-cross.tgz
-	tar -xzf x86_64-linux-musl-cross.tgz -C ./musl-data #&& rm x86_64-linux-musl-cross.tgz
+	tar -xzf i686-linux-musl-cross.tgz -C ./musl-data #&& rm i686-linux-musl-cross.tgz
 	go run github.com/melbahja/got/cmd/got@latest https://github.com/skycoin/skywire/releases/download/v1.3.29/riscv64-linux-musl-cross.tgz #https://more.musl.cc/10/x86_64-linux-musl/riscv64-linux-musl-cross.tgz
 	tar -xzf riscv64-linux-musl-cross.tgz -C ./musl-data #&& rm riscv64-linux-musl-cross.tgz
 	go run github.com/melbahja/got/cmd/got@latest https://github.com/skycoin/skywire/releases/download/v1.3.29/x86_64-linux-musl-cross.tgz #https://more.musl.cc/10/x86_64-linux-musl/i686-linux-musl-cross.tgz
-	tar -xzf i686-linux-musl-cross.tgz -C ./musl-data #&& rm i686-linux-musl-cross.tgz
+	tar -xzf x86_64-linux-musl-cross.tgz -C ./musl-data #&& rm x86_64-linux-musl-cross.tgz
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
