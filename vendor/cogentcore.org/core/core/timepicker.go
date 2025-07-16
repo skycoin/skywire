@@ -39,16 +39,8 @@ func (tp *TimePicker) Init() {
 		w.Styler(func(s *styles.Style) {
 			s.Font.Size.Dp(57)
 			s.Min.X.Ch(7)
+			s.IconSize.Set(units.Dp(32))
 		})
-		buttonInit := func(w *Button) {
-			tree.AddChildInit(w, "icon", func(w *Icon) {
-				w.Styler(func(s *styles.Style) {
-					s.Font.Size.Dp(32)
-				})
-			})
-		}
-		tree.AddChildInit(w, "lead-icon", buttonInit)
-		tree.AddChildInit(w, "trail-icon", buttonInit)
 	}
 	tree.AddChild(tp, func(w *Spinner) {
 		spinnerInit(w)
@@ -92,7 +84,7 @@ func (tp *TimePicker) Init() {
 	tree.AddChild(tp, func(w *Spinner) {
 		spinnerInit(w)
 		w.SetStep(1).SetEnforceStep(true).
-			SetMin(0).SetMax(60).SetFormat("%02d")
+			SetMin(0).SetMax(59).SetFormat("%02d")
 		w.Updater(func() {
 			w.SetValue(float32(tp.Time.Minute()))
 		})

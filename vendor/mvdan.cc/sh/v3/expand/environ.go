@@ -79,12 +79,16 @@ const (
 
 	// Deprecated: use [Unknown], as tracking whether or not a variable is set
 	// is now done via [Variable.Set].
+	// Otherwise it was impossible to describe an unset variable with a known kind
+	// such as `declare -A foo`.
 	Unset = Unknown
 )
 
 // Variable describes a shell variable, which can have a number of attributes
 // and a value.
 type Variable struct {
+	// Set is true when the variable has been set to a value,
+	// which may be empty.
 	Set bool
 
 	Local    bool
@@ -186,8 +190,8 @@ func listEnvironWithUpper(upper bool, pairs ...string) Environ {
 		// Uppercase before sorting, so that we can remove duplicates
 		// without the need for linear search nor a map.
 		for i, s := range list {
-			if sep := strings.IndexByte(s, '='); sep > 0 {
-				list[i] = strings.ToUpper(s[:sep]) + s[sep:]
+			if name, val, ok := strings.Cut(s, "="); ok {
+				list[i] = strings.ToUpper(name) + "=" + val
 			}
 		}
 	}
@@ -210,14 +214,12 @@ func listEnvironWithUpper(upper bool, pairs ...string) Environ {
 
 	last := ""
 	for i := 0; i < len(list); {
-		s := list[i]
-		sep := strings.IndexByte(s, '=')
-		if sep <= 0 {
+		name, _, ok := strings.Cut(list[i], "=")
+		if name == "" || !ok {
 			// invalid element; remove it
 			list = slices.Delete(list, i, i+1)
 			continue
 		}
-		name := s[:sep]
 		if last == name {
 			// duplicate; the last one wins
 			list = slices.Delete(list, i-1, i)
@@ -256,12 +258,11 @@ func (l listEnviron) Get(name string) Variable {
 
 func (l listEnviron) Each(fn func(name string, vr Variable) bool) {
 	for _, pair := range l {
-		i := strings.IndexByte(pair, '=')
-		if i < 0 {
+		name, value, ok := strings.Cut(pair, "=")
+		if !ok {
 			// should never happen; see listEnvironWithUpper
 			panic("expand.listEnviron: did not expect malformed name-value pair: " + pair)
 		}
-		name, value := pair[:i], pair[i+1:]
 		if !fn(name, Variable{Set: true, Exported: true, Kind: String, Str: value}) {
 			return
 		}

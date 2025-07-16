@@ -196,14 +196,12 @@ func Document(cfg *Config, word *syntax.Word) (string, error) {
 		return "", nil
 	}
 	cfg = prepareConfig(cfg)
-	field, err := cfg.wordField(word.Parts, quoteSingle)
+	field, err := cfg.wordField(word.Parts, quoteHeredoc)
 	if err != nil {
 		return "", err
 	}
 	return cfg.fieldJoin(field), nil
 }
-
-const patMode = pattern.Filenames | pattern.Braces
 
 // Pattern expands a single shell word as a pattern, using [pattern.QuoteMeta]
 // on any non-quoted parts of the input word. The result can be used on
@@ -223,7 +221,7 @@ func Pattern(cfg *Config, word *syntax.Word) (string, error) {
 	sb := cfg.strBuilder()
 	for _, part := range field {
 		if part.quote > quoteNone {
-			sb.WriteString(pattern.QuoteMeta(part.val, patMode))
+			sb.WriteString(pattern.QuoteMeta(part.val, 0))
 		} else {
 			sb.WriteString(part.val)
 		}
@@ -423,11 +421,11 @@ func (cfg *Config) escapedGlobField(parts []fieldPart) (escaped string, glob boo
 	sb := cfg.strBuilder()
 	for _, part := range parts {
 		if part.quote > quoteNone {
-			sb.WriteString(pattern.QuoteMeta(part.val, patMode))
+			sb.WriteString(pattern.QuoteMeta(part.val, 0))
 			continue
 		}
 		sb.WriteString(part.val)
-		if pattern.HasMeta(part.val, patMode) {
+		if pattern.HasMeta(part.val, 0) {
 			glob = true
 		}
 	}
@@ -449,7 +447,7 @@ func Fields(cfg *Config, words ...*syntax.Word) ([]string, error) {
 	return fields, nil
 }
 
-// Fields expands a number of words as if they were arguments in a shell
+// FieldsSeq expands a number of words as if they were arguments in a shell
 // command. This includes brace expansion, tilde expansion, parameter expansion,
 // command substitution, arithmetic expansion, and quote removal.
 func FieldsSeq(cfg *Config, words ...*syntax.Word) iter.Seq2[string, error] {
@@ -483,12 +481,16 @@ func FieldsSeq(cfg *Config, words ...*syntax.Word) iter.Seq2[string, error] {
 							}
 						} else if len(matches) > 0 || cfg.NullGlob {
 							for _, m := range matches {
-								yield(m, nil)
+								if !yield(m, nil) {
+									return
+								}
 							}
 							continue
 						}
 					}
-					yield(cfg.fieldJoin(field), nil)
+					if !yield(cfg.fieldJoin(field), nil) {
+						return
+					}
 				}
 			}
 		}
@@ -505,6 +507,7 @@ type quoteLevel uint
 const (
 	quoteNone quoteLevel = iota
 	quoteDouble
+	quoteHeredoc
 	quoteSingle
 )
 
@@ -515,19 +518,24 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 		case *syntax.Lit:
 			s := wp.Value
 			if i == 0 && ql == quoteNone {
-				if prefix, rest := cfg.expandUser(s); prefix != "" {
+				if prefix, rest := cfg.expandUser(s, len(wps) > 1); prefix != "" {
 					// TODO: return two separate fieldParts,
 					// like in wordFields?
 					s = prefix + rest
 				}
 			}
-			if ql == quoteDouble && strings.Contains(s, "\\") {
+			if (ql == quoteDouble || ql == quoteHeredoc) && strings.Contains(s, "\\") {
 				sb := cfg.strBuilder()
 				for i := 0; i < len(s); i++ {
 					b := s[i]
 					if b == '\\' && i+1 < len(s) {
 						switch s[i+1] {
-						case '"', '\\', '$', '`': // special chars
+						case '"':
+							if ql != quoteDouble {
+								break
+							}
+							fallthrough
+						case '\\', '$', '`': // special chars
 							i++
 							b = s[i] // write the special char, skipping the backslash
 						}
@@ -536,9 +544,7 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 				}
 				s = sb.String()
 			}
-			if i := strings.IndexByte(s, '\x00'); i >= 0 {
-				s = s[:i]
-			}
+			s, _, _ = strings.Cut(s, "\x00")
 			field = append(field, fieldPart{val: s})
 		case *syntax.SglQuoted:
 			fp := fieldPart{quote: quoteSingle, val: wp.Value}
@@ -579,6 +585,8 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 				return nil, err
 			}
 			field = append(field, fieldPart{val: path})
+		case *syntax.ExtGlob:
+			return nil, fmt.Errorf("extended globbing is not supported")
 		default:
 			panic(fmt.Sprintf("unhandled word part: %T", wp))
 		}
@@ -595,9 +603,7 @@ func (cfg *Config) cmdSubst(cs *syntax.CmdSubst) (string, error) {
 		return "", err
 	}
 	out := sb.String()
-	if strings.IndexByte(out, '\x00') >= 0 {
-		out = strings.ReplaceAll(out, "\x00", "")
-	}
+	out = strings.ReplaceAll(out, "\x00", "")
 	return strings.TrimRight(out, "\n"), nil
 }
 
@@ -636,7 +642,7 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 		case *syntax.Lit:
 			s := wp.Value
 			if i == 0 {
-				prefix, rest := cfg.expandUser(s)
+				prefix, rest := cfg.expandUser(s, len(wps) > 1)
 				curField = append(curField, fieldPart{
 					quote: quoteSingle,
 					val:   prefix,
@@ -780,12 +786,19 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) []string {
 	return nil
 }
 
-func (cfg *Config) expandUser(field string) (prefix, rest string) {
-	if len(field) == 0 || field[0] != '~' {
+func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest string) {
+	name, ok := strings.CutPrefix(field, "~")
+	if !ok {
+		// No tilde prefix to expand, e.g. "foo".
 		return "", field
 	}
-	name := field[1:]
-	if i := strings.Index(name, "/"); i >= 0 {
+	i := strings.IndexByte(name, '/')
+	if i < 0 && moreFields {
+		// There is a tilde prefix, but followed by more fields, e.g. "~'foo'".
+		// We only proceed if an unquoted slash was found in this field, e.g. "~/'foo'".
+		return "", field
+	}
+	if i >= 0 {
 		rest = name[i:]
 		name = name[:i]
 	}
@@ -886,7 +899,7 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 				matches[i] = pathJoin2(dir, part)
 			}
 			continue
-		case !pattern.HasMeta(part, patMode):
+		case !pattern.HasMeta(part, 0):
 			var newMatches []string
 			for _, dir := range matches {
 				match := dir
@@ -943,14 +956,14 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 
 				// If dir is not a directory, we keep the stack as-is and continue.
 				newMatches = newMatches[:0]
-				newMatches, _ = cfg.globDir(base, dir, rxGlobStar, false, wantDir, newMatches)
+				newMatches, _ = cfg.globDir(base, dir, rxGlobStar, wantDir, newMatches)
 				for _, match := range slices.Backward(newMatches) {
 					stack = append(stack, match)
 				}
 			}
 			continue
 		}
-		mode := pattern.Filenames | pattern.EntireString
+		mode := pattern.Filenames | pattern.EntireString | pattern.NoGlobStar
 		if cfg.NoCaseGlob {
 			mode |= pattern.NoGlobCase
 		}
@@ -959,10 +972,9 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 			return nil, err
 		}
 		rx := regexp.MustCompile(expr)
-		matchHidden := part[0] == byte('.')
 		var newMatches []string
 		for _, dir := range matches {
-			newMatches, err = cfg.globDir(base, dir, rx, matchHidden, wantDir, newMatches)
+			newMatches, err = cfg.globDir(base, dir, rx, wantDir, newMatches)
 			if err != nil {
 				return nil, err
 			}
@@ -972,7 +984,7 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 	return matches, nil
 }
 
-func (cfg *Config) globDir(base, dir string, rx *regexp.Regexp, matchHidden bool, wantDir bool, matches []string) ([]string, error) {
+func (cfg *Config) globDir(base, dir string, rx *regexp.Regexp, wantDir bool, matches []string) ([]string, error) {
 	fullDir := dir
 	if !filepath.IsAbs(dir) {
 		fullDir = filepath.Join(base, dir)
@@ -997,9 +1009,6 @@ func (cfg *Config) globDir(base, dir string, rx *regexp.Regexp, matchHidden bool
 			}
 		} else if !mode.IsDir() {
 			// Not a symlink nor a directory.
-			continue
-		}
-		if !matchHidden && name[0] == '.' {
 			continue
 		}
 		if rx.MatchString(name) {

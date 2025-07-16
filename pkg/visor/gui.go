@@ -22,7 +22,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgcurl"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
-	"github.com/skycoin/systray"
+	"fyne.io/systray"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/servicedisc"

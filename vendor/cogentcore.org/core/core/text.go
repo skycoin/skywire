@@ -150,7 +150,7 @@ func (tx *Text) Init() {
 			s.Font.Weight = rich.Medium
 		case TextBodyLarge:
 			s.Text.LineHeight = 24.0 / 16
-			s.Font.Size.Dp(16)
+			// s.Font.Size.Dp(16) // already the default so don't specify (to allow for inheritance) (important)
 			s.Font.Weight = rich.Normal
 		case TextSupporting:
 			s.Color = colors.Scheme.OnSurfaceVariant
@@ -476,6 +476,13 @@ func (tx *Text) SizeDown(iter int) bool {
 	}
 	return chg
 }
+
+// todo: could enable this if we see any stragglers
+// func (tx *Text) SizeFinal() {
+// 	tx.WidgetBase.SizeFinal()
+// 	asz := tx.Geom.Size.Actual.Content
+// 	tx.configTextAlloc(asz)
+// }
 
 func (tx *Text) Render() {
 	tx.WidgetBase.Render()
