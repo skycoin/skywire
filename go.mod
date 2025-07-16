@@ -43,7 +43,7 @@ require (
 	github.com/pterm/pterm v0.12.81
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.29-0.20250612005427-ec261530fb31
+	github.com/skycoin/dmsg v1.3.29-0.20250623171035-1ef82c41580e
 	github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f //DO NOT MODIFY OR UPDATE v0.28.1-0.20241105130348-39b49a2d0a7f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.9.1
@@ -215,5 +215,5 @@ require (
 
 // Below should reflect the current versions of the following deps
 // replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
-//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20250520155319-2f91abefe99c
-//replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
+// replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20250623171035-1ef82c41580e
+// replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
