@@ -13,7 +13,12 @@
 
 # Skywire
 
-Skywire is a fully open-source, privacy-focused suite of networking tools developed by Skycoin. The public Skywire Network enables this software to be developed and tested in real-world conditions. The Skywire Network provides service discovery for decentralized VPN and SOCKS5 proxy servers, supports multi-hop public key–based routing, and enables access to hidden websites. As well, daily rewards in Skycoin ($SKY) are tendered to those eligible participants in the Skywire Network.
+Skywire is a fully open-source, privacy-focused suite of networking tools developed by Skycoin. The public Skywire Network enables this software to be developed and tested in real-world conditions. A few features the Skywire Network provides:
+
+* service discovery for decentralized [VPN](https://sd.skycoin.com/api/services?type=proxy) and [SOCKS5 proxy](https://sd.skycoin.com/api/services?type=proxy) servers
+* multi-hop public key–based routing
+* a means of accessing and hosting hidden websites
+* [daily rewards in Skycoin](/mainnet_rules.md) ($SKY) to eligible participants in the Skywire Network
 
 This overview explains Skywire’s key features and network architecture.
 
@@ -55,7 +60,7 @@ Skywire enables users to create their own network if desired. The implementation
 
 ## Skywire Rewards
 
-The [Skywire reward system](https://fiber.skywire.dev) is the distribution mechanism for [Skycoin](https://skycoin.com). Skycoin is not 'mined' as with other cryptocurrencies; rewards in Skycoin ($SKY) are distributed daily to eligible Skywire visors who meet the [requirements for obtaining rewards](https://github.com/skycoin/skywire/blob/develop/mainnet_rules.md).
+The [Skywire reward system](https://fiber.skywire.dev) is the distribution mechanism for [Skycoin](https://skycoin.com). Skycoin is not 'mined' as with other cryptocurrencies; rewards in Skycoin ($SKY) are distributed daily to eligible Skywire visors who meet the [requirements for obtaining rewards](/mainnet_rules.md).
 
 Despite the terminology, Skywire visors do not process Skycoin transactions. Skywire visors do not sync the Skycoin blockchain and have no involvement in transaction processing. The only relationship between skywire and the skycoin cryptocurrency is via the reward system acting as the distribution mechanism for Skycoin.
 
@@ -73,7 +78,6 @@ Despite the terminology, Skywire visors do not process Skycoin transactions. Sky
 * [Testing](#testing)
 * [Compiling](#compiling)
 * [Config Gen](#config-gen)
-* [Build docker image](#build-docker-image)
 * [Skywire Configuration in\-depth](#skywire-configuration-in-depth)
   * [Expose hypervisorUI](#expose-hypervisorui)
   * [Add remote hypervisor](#add-remote-hypervisor)
@@ -167,6 +171,16 @@ Install as a package on debian or arch linux: [Package Installation Guide](https
 
 [Binary Releases](https://github.com/skycoin/skywire/releases) for many platforms and architectures are provided if none of the other installation methods are preferred.
 
+## Permissions
+
+The only aspects of this software which actually require root / elevated / special permissions are:
+
+* the VPN client app
+* writing to the `local` folder path & to the default config path generated on installation of the linux / macOS packages or windows .msi
+* some aspects of the system survey
+
+The system survey is only generated _if a reward address is set_ - see [mainnet_rules.md](mainnet-rules.md) for more details about the system survey and how eligibility requirements are enforced for rewards.
+
 ## Dependencies
 
 ### Build Deps
@@ -210,42 +224,31 @@ To run skywire, first generate a config.
 ```
 skywire cli config gen -birx
 ```
-`-b --bestproto` use the best protocol (dmsg | direct) to connect to the skywire production deployment - recommended
-`-i --ishv` create a  local hypervisor configuration (optional)
-`-r --regen` regenerate a config which may already exist, retaining the keys
-`-x --retainhv` retain any remote hypervisors which are set in the config (optional)
+* `-b --bestproto` use the best protocol (dmsg | direct) to connect to the skywire production deployment - recommended
+* `-i --ishv` create a  local hypervisor configuration (optional)
+* `-r --regen` regenerate a config which may already exist, retaining the keys
+* `-x --retainhv` retain any remote hypervisors which are set in the config (optional)
 
 More options for configuration are displayed with `skywire cli config gen --all`.
 
 NOTE: If you have installed skywire as a package or via the windows .msi or mac installer, one should additionally include the `-p` flag - and `skywire cli config gen` must be run as root.
 
-## Build docker image
-```
-$ ./ci_scripts/docker-push.sh -t $(git rev-parse --abbrev-ref HEAD) -b
-```
 ## Skywire Configuration in-depth
 
 The skywire visor requires a config file to run. This config is a json-formatted file produced by `skywire cli config gen`.
 
-The `skywire-autoconfig` script included with the skywire package handles config generation and updates for the user who installed the package.
+The `skywire-autoconfig` script included with the skywire package handles config generation and config updating for the user who installed the package, as well as restarting the skywire systemd service
 
 Examples of config generation and command / flag documentation can be found in the [cmd/skywire-cli/README.md](cmd/skywire-cli/README.md) and [cmd/skywire-visor/README.md](cmd/skywire-visor/README.md).
 
 The most important flags are noted below.
 
-### Expose hypervisorUI
+### Hypervisor web UI
 
 In order to expose the hypervisor UI, generate a config file with `--is-hypervisor` or `-i` flag:
 
 ```
  skywire cli config gen -i
-```
-
-Docker container will create config automatically for you. To run it manually:
-
-```
- docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
-  skycoin/skywire:test skywire cli config gen -i
 ```
 
 After starting up the visor, the UI will be exposed by default on `localhost:8000`.
@@ -262,21 +265,6 @@ OR:
 ```
 skywire cli config gen --hvpk <public-key>
 ```
-
-Or from docker image:
-
-```
-docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
-  skycoin/skywire:test skywire cli config update hypervisor-pks <public-key>
-```
-
-Or from docker image:/* #nosec */
-
-```
-docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
-  skycoin/skywire:latest skywire cli update-config hypervisor-pks <public-key>
-```
-
 
 ## Files and folders created by skywire at runtime
 _Note: not all of these files will be created by default._
@@ -309,7 +297,7 @@ Some of these files are served via the [dmsghttp logserver](https://github.com/s
 
 `skywire visor` requires a valid configuration to be provided.
 
-__Note: root permissions are currently required only for the vpn client app!__
+_Note: root permissions are currently required only for the vpn client app!_
 
 Run the visor:
 ```
@@ -320,16 +308,64 @@ If the default `skywire-config.json` exists in the current dir, this can be shor
  sudo skywire visor
 ```
 
-Or from docker image:
-```
-# with custom config mounted on docker volume
-docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/skywire --name=skywire skycoin/skywire:test skywire visor -c /opt/skywire/<YOUR_CONFIG_NAME>.json
-# without custom config (config is automatically generated)
-docker run --rm -p 8000:8000 --name=skywire skycoin/skywire:test skywire visor
-```
-
 `skywire visor` can be run on Windows. The setup requires additional setup steps that are specified
 in [the docs](docs/windows-setup.md) if not using the windows .msi.
+
+### Process control
+
+In the instance that the visor shuts down or stops, it is desirable to restart it automatically. This may be accomplished in a few different ways.
+
+The visor may be run as a systemd service - on linux. The `skywire.service` does just that, and is provided by the linux packages. `skywire.service` is configured to run as root.
+
+The visor may be run directly in a (bash / zsh / git-bash) terminal using a `while` loop with a short timeout between restarts. If one is using the default config path for package-based installation (i.e. starting the visor with the `-p` flag) it will be required to run the visor as root. If not, omit the `-p` flag and skip becoming root.
+
+On windows it may be required to start the git-bash terminal as admin or superuser to obtain elevated privileges.
+
+To become root on linux:
+
+```
+su - root
+```
+
+Start the Visor in a `while` loop
+
+```
+while true ; do skywire visor -pl debug ; sleep 5 ; done
+```
+or
+```
+while true ; do go run github.com/skycoin/skywire/cmd/skywire@develop visor -pl debug ; sleep 5 ; done
+```
+
+A few observations when running the visor in the latter way:
+
+* the config is not updated when the binary is updated
+* the binary executed by the visor to start the apps is not the same one as is being `go run`
+
+To address these two things, it's recommended to first create the human-editable skywire.conf file. This may be done with any path, but for this example, the default path referenced by the autoconfig script included with the linux packages is used.
+
+```
+go run github.com/skycoin/skywire/cmd/skywire@develop cli config gen -q | sudo tee /etc/skywire.conf
+```
+
+Now, edit `/etc/skywire.conf` as desired.
+Remember to uncomment:
+* `PKGENV=true`
+* `BESTPROTO=true`
+
+Save the file. Now `config gen` can be added to the while loop
+
+```
+while true ; do SKYENV=/etc/skywire.conf go run github.com/skycoin/skywire/cmd/skywire@develop cli config gen -r && go run github.com/skycoin/skywire/cmd/skywire@develop visor -pl debug ; sleep 5 ; done
+```
+
+To update the binary included with the linux packages so that the visor apps will also be running on the latest commits, it's recommended to `go install github.com/skycoin/skywire/cmd/skywire@develop` and then replace the binary provided by the package with that one. The complete command becomes:
+
+```
+while true ; do go install github.com/skycoin/skywire/cmd/skywire@develop && mv $GOPATH/bin/skywire /opt/skywire/bin/skywire && SKYENV=/etc/skywire.conf skywire cli config gen -r && skywire visor -pl debug ; sleep 5 ; done
+```
+
+Note that the binary at: `/opt/skywire/bin/skywire` is already symlinked to `/usr/bin/skywire` by installing the package.
 
 ### Transport setup
 
@@ -440,14 +476,15 @@ skywire cli vpn status
 ```
 
 Check your ip address with ip.skywire.dev.
-__Note: ip.skycoin.com will only show your real ip address, not the ip address of the vpn connection.__
+
+_Note: ip.skycoin.com will only show your real ip address, not the ip address of the vpn connection._
 
 Stop the vpn:
 ```
 skywire cli vpn stop
 ```
 
-__Note: killswitch may be configured for the vpn - see skywire cli config gen help menu / documentation.__
+_Note: killswitch may be configured for the vpn - see `skywire cli config gen --all` help menu or documentation._
 
 
 ### Using the Skywire SOCKS5 proxy client
@@ -566,6 +603,10 @@ Build the skywire Arch Linux package from git sources to the latest commits on t
 yay --mflags " -p git.PKGBUILD " -S skywire
 ```
 
+## Docker
+
+For docker-specific documentation, see: [DOCKER.md](/DOCKER.md)
+
 ## How to create a GitHub release
 
 1. Make sure that `git` and [goreleaser](https://goreleaser.com/install) are installed.
@@ -586,7 +627,7 @@ yay --mflags " -p git.PKGBUILD " -S skywire
 made with [goda](https://github.com/loov/goda)
 
 ```
-goda graph github.com/skycoin/skywire/... | dot -Tsvg -o docs/skywire-goda-graph.svg
+go run github.com/loov/goda@latest graph github.com/skycoin/skywire/... | dot -Tsvg -o docs/skywire-goda-graph.svg
 ```
 
 ![Dependency Graph](docs/skywire-goda-graph.svg "github.com/skycoin/skywire Dependency Graph")
