@@ -7,7 +7,7 @@ package visor
 import (
 	"context"
 
-	"github.com/skycoin/systray"
+	"fyne.io/systray"
 )
 
 func runAppSystray() {
