@@ -1274,7 +1274,31 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	return nil
 }
 
+// This logic modified from from func initPublicVisor
+// Check if the visor is indeed running as a public visor
+// To run a public visor requires public ip or port forwarding
+// --> more than just config setting alone <--
+func checkVisorIsPublic(v *Visor) bool {
+	if v.conf.IsPublic {
+		hasPublic, err := netutil.HasPublicIP()
+		if err == nil && hasPublic {
+			stcpr, ok := v.tpM.Stcpr()
+			if ok {
+				addr, err := stcpr.LocalAddr()
+				if err == nil {
+					_, err = netutil.ExtractPort(addr)
+					if err == nil {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
 func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+	visorIsPublic := checkVisorIsPublic(v)
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
 	go func() {
@@ -1285,7 +1309,7 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 			if err != nil {
 				tries++
 				v.isServicesHealthy.unset()
-				log.WithError(err).Warn(fmt.Sprintf("Visor is not transportable! Attempt %v of 3", tries))
+				log.WithError(err).Warn(fmt.Sprintf("Visor is not transportable via dmsg! Attempt %v of 3", tries))
 				//reduce tick duration on non nil error
 				ticker.Reset(time.Minute)
 			} else {
@@ -1293,9 +1317,26 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 				v.isServicesHealthy.set()
 				err = v.RemoveTransport(tpsummary.ID)
 				if err != nil {
-					log.WithError(err).Warn("Failed to remove self-transport")
+					log.WithError(err).Warn("Failed to remove dmsg self-transport")
 				}
 				ticker.Reset(tickDuration)
+				if visorIsPublic {
+					tpsummary, err = v.AddTransport(v.conf.PK, "stcpr", 0)
+					if err != nil {
+						tries++
+						v.isServicesHealthy.unset()
+						log.WithError(err).Warn(fmt.Sprintf("Public visor is not transportable via stcpr! Attempt %v of 3", tries))
+						ticker.Reset(time.Minute)
+					} else {
+						tries = 0
+						v.isServicesHealthy.set()
+						err = v.RemoveTransport(tpsummary.ID)
+						if err != nil {
+							log.WithError(err).Warn("Failed to remove stcpr self-transport")
+						}
+						ticker.Reset(tickDuration)
+					}
+				}
 			}
 			if tries == 3 {
 				log.WithError(err).Error("Visor is not transportable! 3 failed attempts ; exiting now")
