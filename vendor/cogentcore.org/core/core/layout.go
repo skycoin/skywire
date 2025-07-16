@@ -16,68 +16,6 @@ import (
 	"cogentcore.org/core/tree"
 )
 
-// Layout uses 3 Size passes, 2 Position passes:
-//
-// SizeUp: (bottom-up) gathers Actual sizes from our Children & Parts,
-// based on Styles.Min / Max sizes and actual content sizing
-// (e.g., text size).  Flexible elements (e.g., [Text], Flex Wrap,
-// [Toolbar]) should reserve the _minimum_ size possible at this stage,
-// and then Grow based on SizeDown allocation.
-
-// SizeDown: (top-down, multiple iterations possible) provides top-down
-// size allocations based initially on Scene available size and
-// the SizeUp Actual sizes.  If there is extra space available, it is
-// allocated according to the Grow factors.
-// Flexible elements (e.g., Flex Wrap layouts and Text with word wrap)
-// update their Actual size based on available Alloc size (re-wrap),
-// to fit the allocated shape vs. the initial bottom-up guess.
-// However, do NOT grow the Actual size to match Alloc at this stage,
-// as Actual sizes must always represent the minimums (see Position).
-// Returns true if any change in Actual size occurred.
-
-// SizeFinal: (bottom-up) similar to SizeUp but done at the end of the
-// Sizing phase: first grows widget Actual sizes based on their Grow
-// factors, up to their Alloc sizes.  Then gathers this updated final
-// actual Size information for layouts to register their actual sizes
-// prior to positioning, which requires accurate Actual vs. Alloc
-// sizes to perform correct alignment calculations.
-
-// Position: uses the final sizes to set relative positions within layouts
-// according to alignment settings, and Grow elements to their actual
-// Alloc size per Styles settings and widget-specific behavior.
-
-// ScenePos: computes scene-based absolute positions and final BBox
-// bounding boxes for rendering, based on relative positions from
-// Position step and parents accumulated position and scroll offset.
-// This is the only step needed when scrolling (very fast).
-
-// (Text) Wrapping key principles:
-// * Using a heuristic initial box based on expected text area from length
-//   of Text and aspect ratio based on styled size to get initial layout size.
-//   This avoids extremes of all horizontal or all vertical initial layouts.
-// * Use full Alloc for SizeDown to allocate for what has been reserved.
-// * Set Actual to what you actually use (key: start with only styled
-//   so you don't get hysterisis)
-// * Layout always re-gets the actuals for accurate Actual sizing
-
-// Scroll areas are similar: don't request anything more than Min reservation
-// and then expand to Alloc in Final.
-
-// Note that it is critical to not actually change any bottom-up Actual
-// sizing based on the Alloc, during the SizeDown process, as this will
-// introduce false constraints on the process: only work with minimum
-// Actual "hard" constraints to make sure those are satisfied.  Text
-// and Wrap elements resize only enough to fit within the Alloc space
-// to the extent possible, but do not Grow.
-//
-// The separate SizeFinal step then finally allows elements to grow
-// into their final Alloc space, once all the constraints are satisfied.
-//
-// This overall top-down / bottom-up logic is used in Flutter:
-// https://docs.flutter.dev/resources/architectural-overview#rendering-and-layout
-// Here's more links to other layout algorithms:
-// https://stackoverflow.com/questions/53911631/gui-layout-algorithms-overview
-
 // LayoutPasses is used for the SizeFromChildren method,
 // which can potentially compute different sizes for different passes.
 type LayoutPasses int32 //enums:enum
@@ -712,17 +650,18 @@ func (wb *WidgetBase) updateParentRelSizes() bool {
 		return false
 	}
 	sz := &wb.Geom.Size
+	effmin := sz.Min
 	s := &wb.Styles
 	psz := pwb.Geom.Size.Alloc.Content.Sub(pwb.Geom.Size.InnerSpace)
 	got := false
 	for d := math32.X; d <= math32.Y; d++ {
 		if s.Min.Dim(d).Unit == units.UnitPw {
 			got = true
-			sz.Min.SetDim(d, psz.X*0.01*s.Min.Dim(d).Value)
+			effmin.SetDim(d, psz.X*0.01*s.Min.Dim(d).Value)
 		}
 		if s.Min.Dim(d).Unit == units.UnitPh {
 			got = true
-			sz.Min.SetDim(d, psz.Y*0.01*s.Min.Dim(d).Value)
+			effmin.SetDim(d, psz.Y*0.01*s.Min.Dim(d).Value)
 		}
 		if s.Max.Dim(d).Unit == units.UnitPw {
 			got = true
@@ -734,8 +673,8 @@ func (wb *WidgetBase) updateParentRelSizes() bool {
 		}
 	}
 	if got {
-		sz.FitSizeMax(&sz.Actual.Total, sz.Min)
-		sz.FitSizeMax(&sz.Alloc.Total, sz.Min)
+		sz.FitSizeMax(&sz.Actual.Total, effmin)
+		sz.FitSizeMax(&sz.Alloc.Total, effmin)
 		sz.setContentFromTotal(&sz.Actual)
 		sz.setContentFromTotal(&sz.Alloc)
 	}
@@ -1066,9 +1005,9 @@ func (fr *Frame) sizeFromChildrenStacked() math32.Vector2 {
 // as Actual sizes must always represent the minimums (see Position).
 // Returns true if any change in Actual size occurred.
 func (wb *WidgetBase) SizeDown(iter int) bool {
-	prel := wb.updateParentRelSizes()
+	wb.updateParentRelSizes()
 	redo := wb.sizeDownParts(iter)
-	return prel || redo
+	return redo
 }
 
 func (wb *WidgetBase) sizeDownParts(iter int) bool {
@@ -1165,7 +1104,7 @@ func (fr *Frame) sizeDownFrame(iter int) bool {
 	if !fr.HasChildren() || !fr.layout.shapeCheck(fr, "SizeDown") {
 		return fr.WidgetBase.SizeDown(iter) // behave like a widget
 	}
-	prel := fr.updateParentRelSizes()
+	fr.updateParentRelSizes()
 	sz := &fr.Geom.Size
 	styles.SetClampMaxVector(&sz.Alloc.Content, sz.Max) // can't be more than max..
 	sz.setTotalFromContent(&sz.Alloc)
@@ -1182,11 +1121,11 @@ func (fr *Frame) sizeDownFrame(iter int) bool {
 	}
 	fr.This.(Layouter).SizeDownSetAllocs(iter)
 	redo := fr.sizeDownChildren(iter)
-	if prel || redo || wrapped {
+	if redo || wrapped {
 		fr.sizeFromChildrenFit(iter, SizeDownPass)
 	}
 	fr.sizeDownParts(iter) // no std role, just get sizes
-	return chg || wrapped || redo || prel
+	return chg || wrapped || redo
 }
 
 // SizeDownSetAllocs is the key SizeDown step that sets the allocations
@@ -1289,58 +1228,78 @@ func (fr *Frame) sizeDownGrowCells(iter int, extra math32.Vector2) bool {
 		slog.Error("unexpected error: layout has not been initialized", "layout", fr.String())
 		return false
 	}
-	fr.forVisibleChildren(func(i int, cw Widget, cwb *WidgetBase) bool {
-		cidx := cwb.Geom.Cell
-		ksz := &cwb.Geom.Size
-		grw := cwb.Styles.Grow
-		if iter == 0 && cwb.Styles.GrowWrap {
-			grw.Set(1, 0)
-		}
-		// if DebugSettings.LayoutTrace {
-		// 	fmt.Println("szdn i:", i, kwb, "cidx:", cidx, "sz:", sz, "grw:", grw)
-		// }
-		for ma := math32.X; ma <= math32.Y; ma++ { // main axis = X then Y
-			gr := grw.Dim(ma)
-			ca := ma.Other()     // cross axis = Y then X
-			exd := extra.Dim(ma) // row.X = extra width for cols; col.Y = extra height for rows in this col
-			if exd < 0 {
-				exd = 0
+	var maxExtra, exn math32.Vector2
+	for exitr := range 2 {
+		fr.forVisibleChildren(func(i int, cw Widget, cwb *WidgetBase) bool {
+			cidx := cwb.Geom.Cell
+			ksz := &cwb.Geom.Size
+			grw := cwb.Styles.Grow
+			if iter == 0 && cwb.Styles.GrowWrap {
+				grw.Set(1, 0)
 			}
-			mi := math32.PointDim(cidx, ma) // X, Y
-			ci := math32.PointDim(cidx, ca) // Y, X
-			md := li.cell(ma, mi, ci)       // X, Y
-			cd := li.cell(ca, ci, mi)       // Y, X
-			if md == nil || cd == nil {
-				break
-			}
-			mx := md.Size.Dim(ma)
-			asz := mx
-			gsum := cd.Grow.Dim(ma)
-			if gsum > 0 && exd > 0 {
-				if gr > gsum {
-					fmt.Println(fr, "SizeDownGrowCells error: grow > grow sum:", gr, gsum)
-					gr = gsum
+			// if DebugSettings.LayoutTrace {
+			// 	fmt.Println("szdn i:", i, kwb, "cidx:", cidx, "sz:", sz, "grw:", grw)
+			// }
+			for ma := math32.X; ma <= math32.Y; ma++ { // main axis = X then Y
+				gr := grw.Dim(ma)
+				ca := ma.Other()     // cross axis = Y then X
+				exd := extra.Dim(ma) // row.X = extra width for cols; col.Y = extra height for rows in this col
+				if exd < 0 {
+					exd = 0
 				}
-				redo = true
-				asz = math32.Round(mx + exd*(gr/gsum))
-				styles.SetClampMax(&asz, ksz.Max.Dim(ma))
-				if asz > math32.Ceil(alloc.Dim(ma))+1 { // bug!
-					if DebugSettings.LayoutTrace {
+				mi := math32.PointDim(cidx, ma) // X, Y
+				ci := math32.PointDim(cidx, ca) // Y, X
+				md := li.cell(ma, mi, ci)       // X, Y
+				cd := li.cell(ca, ci, mi)       // Y, X
+				if md == nil || cd == nil {
+					break
+				}
+				mx := md.Size.Dim(ma)
+				asz := mx
+				gsum := cd.Grow.Dim(ma)
+				if gsum > 0 && exd > 0 {
+					if gr > gsum {
+						fmt.Println(fr, "SizeDownGrowCells error: grow > grow sum:", gr, gsum)
+						gr = gsum
+					}
+					redo = true
+					asz = math32.Round(mx + exd*(gr/gsum))
+					oasz := asz
+					styles.SetClampMax(&asz, ksz.Max.Dim(ma))
+					if asz < oasz { // didn't consume its full amount
+						if exitr == 0 {
+							maxExtra.SetDim(ma, maxExtra.Dim(ma)+(oasz-asz))
+							exn.SetDim(ma, exn.Dim(ma)+gr)
+						}
+					} else {
+						if exitr == 1 { // get more!
+							nsum := gsum - exn.Dim(ma)
+							if nsum > 0 {
+								asz += math32.Round(maxExtra.Dim(ma) * (gr / nsum))
+							}
+						}
+					}
+					if asz > math32.Ceil(alloc.Dim(ma))+1 { // bug!
+						// if DebugSettings.LayoutTrace {
 						fmt.Println(fr, "SizeDownGrowCells error: sub alloc > total to alloc:", asz, alloc.Dim(ma))
 						fmt.Println("ma:", ma, "mi:", mi, "ci:", ci, "mx:", mx, "gsum:", gsum, "gr:", gr, "ex:", exd, "par act:", sz.Actual.Content.Dim(ma))
 						fmt.Println(fr.layout.String())
 						fmt.Println(fr.layout.cellsSize())
+						// }
 					}
 				}
+				if DebugSettings.LayoutTraceDetail {
+					fmt.Println(cwb, ma, "alloc:", asz, "was act:", sz.Actual.Total.Dim(ma), "mx:", mx, "gsum:", gsum, "gr:", gr, "ex:", exd)
+				}
+				ksz.Alloc.Total.SetDim(ma, asz)
 			}
-			if DebugSettings.LayoutTraceDetail {
-				fmt.Println(cwb, ma, "alloc:", asz, "was act:", sz.Actual.Total.Dim(ma), "mx:", mx, "gsum:", gsum, "gr:", gr, "ex:", exd)
-			}
-			ksz.Alloc.Total.SetDim(ma, asz)
+			ksz.setContentFromTotal(&ksz.Alloc)
+			return tree.Continue
+		})
+		if exn.X == 0 && exn.Y == 0 {
+			break
 		}
-		ksz.setContentFromTotal(&ksz.Alloc)
-		return tree.Continue
-	})
+	}
 	return redo
 }
 
@@ -1493,7 +1452,7 @@ func (fr *Frame) sizeDownAllocActualStacked(iter int) {
 }
 
 func (fr *Frame) sizeDownCustom(iter int) bool {
-	prel := fr.updateParentRelSizes()
+	fr.updateParentRelSizes()
 	fr.growToAlloc()
 	sz := &fr.Geom.Size
 	if DebugSettings.LayoutTrace {
@@ -1510,7 +1469,7 @@ func (fr *Frame) sizeDownCustom(iter int) bool {
 	})
 	redo := fr.sizeDownChildren(iter)
 	fr.sizeDownParts(iter) // no std role, just get sizes
-	return prel || redo
+	return redo
 }
 
 // sizeFinalUpdateChildrenSizes can optionally be called for layouts
@@ -1610,15 +1569,13 @@ func (fr *Frame) sizeFinalChildren() {
 }
 
 // styleSizeUpdate updates styling size values for widget and its parent,
-// which should be called after these are updated.  Returns true if any changed.
+// which should be called after these are updated. Returns true if any changed.
 func (wb *WidgetBase) styleSizeUpdate() bool {
 	pwb := wb.parentWidget()
 	if pwb == nil {
 		return false
 	}
-	if !wb.updateParentRelSizes() {
-		return false
-	}
+	wb.updateParentRelSizes()
 	scsz := wb.Scene.SceneGeom.Size
 	sz := wb.Geom.Size.Alloc.Content
 	psz := pwb.Geom.Size.Alloc.Content
