@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"fyne.io/systray"
 	"github.com/gen2brain/dlgs"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/direct"
@@ -22,7 +23,6 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgcurl"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
-	"fyne.io/systray"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/servicedisc"
