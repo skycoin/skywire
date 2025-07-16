@@ -75,25 +75,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 	case <-time.After(randomDelay):
 	}
 
-	visorIsPublic := false
-	// This logic modified from from func initPublicVisor
-	// Check if the visor is indeed running as a public visor
-	// To run a public visor requires public ip or port forwarding
-	if !v.conf.IsPublic {
-		hasPublic, err := netutil.HasPublicIP()
-		if err == nil && hasPublic {
-			stcpr, ok := v.tpM.Stcpr()
-			if ok {
-				addr, err := stcpr.LocalAddr()
-				if err == nil {
-					_, err = netutil.ExtractPort(addr)
-					if err == nil {
-						visorIsPublic = true
-					}
-				}
-			}
-		}
-	}
+	visorIsPublic := checkVisorIsPublic(v)
 
 	publicServiceTicket := time.NewTicker(PublicServiceDelay)
 
