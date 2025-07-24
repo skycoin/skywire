@@ -1,4 +1,4 @@
-// Package skywire github.com/skycoin/skywire/rewards/rewards.go
+// Package rewards github.com/skycoin/skywire/rewards/rewards.go
 //
 //go:generate go run ../cmd/gen/gen.go -jo arches.json
 package rewards
