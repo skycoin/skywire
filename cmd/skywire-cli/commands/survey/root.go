@@ -12,7 +12,6 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
@@ -37,13 +36,6 @@ var (
 )
 
 func init() {
-	var envServices skywire.EnvServices
-	var services skywire.Services
-	if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
-		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-			dmsgDiscURL = services.DmsgDiscovery
-		}
-	}
 	surveyCmd.Flags().SortFlags = false
 	surveyCmd.Flags().StringVarP(&confPath, "config", "c", "", "optionl config file to use (i.e.: "+visorconfig.ConfigName+")")
 	surveyCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDiscURL, "value of dmsg discovery")

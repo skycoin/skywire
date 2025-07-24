@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
@@ -114,7 +114,7 @@ func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 	if c.DmsgDiscovery == "" {
 		var envServices EnvServices
 		var services Services
-		if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
+		if err := json.Unmarshal(deployment.ServicesJSON, &envServices); err == nil {
 			if testEnv {
 				if err := json.Unmarshal(envServices.Test, &services); err != nil {
 					return

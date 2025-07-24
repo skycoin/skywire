@@ -20,9 +20,9 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/tidwall/pretty"
 
-	"github.com/skycoin/skywire"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -140,8 +140,8 @@ func init() {
 	addTpCmd.Flags().StringVarP(&rpk, "rpk", "r", "", "remote public key.")
 	addTpCmd.Flags().StringVarP(&transportType, "type", "t", "", "type of transport to add.")
 	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "o", 0, "if specified, sets an operation timeout")
-	addTpCmd.Flags().StringVarP(&arURL, "ar", "a", skywire.Prod.AddressResolver, "address resolver URL")
-	addTpCmd.Flags().StringVarP(&dmsgdURL, "dmsg", "d", skywire.Prod.DmsgDiscovery, "dmsg discovery URL")
+	addTpCmd.Flags().StringVarP(&arURL, "ar", "a", deployment.Prod.AddressResolver, "address resolver URL")
+	addTpCmd.Flags().StringVarP(&dmsgdURL, "dmsg", "d", deployment.Prod.DmsgDiscovery, "dmsg discovery URL")
 	//TODO
 	//	listCmd.Flags().BoolVarP(&queryHealth, "health", "q", false, "check /health of remote visor over dmsg before creating transport")
 	addTpCmd.Flags().BoolVarP(&forceAttempt, "force", "f", false, "attempt transport creation without check of SD") // or visor /health over dmsg
@@ -466,8 +466,8 @@ func init() {
 
 	treeCmd.Flags().StringVarP(&rootNode, "source", "k", "", "root node ; defaults to visor with most transports")
 	treeCmd.Flags().StringVarP(&lastNode, "dest", "d", "", "map route between source and dest")
-	treeCmd.Flags().StringVarP(&tpdURL, "tpdurl", "a", skywire.Prod.TransportDiscovery, "transport discovery url")
-	treeCmd.Flags().StringVarP(&utURL, "uturl", "w", skywire.Prod.UptimeTracker, "uptime tracker url")
+	treeCmd.Flags().StringVarP(&tpdURL, "tpdurl", "a", deployment.Prod.TransportDiscovery, "transport discovery url")
+	treeCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
 	treeCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw json data")
 	treeCmd.Flags().BoolVarP(&refinedData, "pretty", "p", false, "print pretty json data")
 	treeCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
@@ -483,7 +483,7 @@ func init() {
 var treeCmd = &cobra.Command{
 	Use:   "tree",
 	Short: "tree map of transports on the skywire network",
-	Long:  fmt.Sprintf("display a tree representation of transports from TPD\n\n%v/all-transports\n\nSet cache file location to \"\" to avoid using cache files", skywire.Prod.TransportDiscovery),
+	Long:  fmt.Sprintf("display a tree representation of transports from TPD\n\n%v/all-transports\n\nSet cache file location to \"\" to avoid using cache files", deployment.Prod.TransportDiscovery),
 	Run: func(cmd *cobra.Command, _ []string) {
 		if rootNode != "" {
 			err := rootnode.Set(rootNode)
