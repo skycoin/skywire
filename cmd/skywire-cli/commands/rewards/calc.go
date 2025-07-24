@@ -17,7 +17,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/rewards"
 	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -93,7 +94,7 @@ func init() {
 			}
 		}
 		return res
-	}(skywire.Architectures, []string{"wasm", "amd64", "386"}), "pool 1 allowed arch, comma separated")
+	}(rewards.Architectures, []string{"wasm", "amd64", "386"}), "pool 1 allowed arch, comma separated")
 
 	RootCmd.Flags().StringSliceVarP(&allowArchitectures2, "a2", "x", func(all []string, dis []string) (res []string) {
 		for _, v := range all {
@@ -109,7 +110,7 @@ func init() {
 			}
 		}
 		return res
-	}(skywire.Architectures, []string{"wasm", "arm64", "arm", "ppc64", "riscv64", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc64le", "s390x"}), "pool 2 allowed arch, comma separated")
+	}(rewards.Architectures, []string{"wasm", "arm64", "arm", "ppc64", "riscv64", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc64le", "s390x"}), "pool 2 allowed arch, comma separated")
 	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewardsPerPool, "yearly total rewards per pool")
 	RootCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
 	RootCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
@@ -128,7 +129,7 @@ Collect surveys:  skywire-cli log
 Fetch uptimes:    skywire-cli ut > ut.txt
 
 Architectures:
-` + fmt.Sprintf("%v", append(skywire.Architectures, "null", "all")) + `
+` + fmt.Sprintf("%v", append(rewards.Architectures, "null", "all")) + `
 
 `,
 	Run: func(_ *cobra.Command, _ []string) {
@@ -142,11 +143,11 @@ Architectures:
 			}
 		}
 
-		sConf, err := script.Echo(string(skywire.ServicesJSON)).JQ(`.prod  | del(.stun_servers)`).Bytes()
+		sConf, err := script.Echo(string(deployment.ServicesJSON)).JQ(`.prod  | del(.stun_servers)`).Bytes()
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}
-		dConf, err := script.Echo(string(skywire.DmsghttpJSON)).JQ(`.prod`).Bytes()
+		dConf, err := script.Echo(string(deployment.DmsghttpJSON)).JQ(`.prod`).Bytes()
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}
@@ -178,7 +179,7 @@ Architectures:
 
 		// Create a map for quick lookup of skywire architectures
 		supportedArchitecturesMap := make(map[string]struct{})
-		for _, arch := range skywire.Architectures {
+		for _, arch := range rewards.Architectures {
 			supportedArchitecturesMap[arch] = struct{}{}
 		}
 
@@ -604,11 +605,11 @@ var testCmd = &cobra.Command{
 			log.Fatal("error parsing json with jq:\n", err)
 		}
 
-		sConf, err := script.Echo(string(skywire.ServicesJSON)).JQ(`.prod  | del(.stun_servers)`).Bytes()
+		sConf, err := script.Echo(string(deployment.ServicesJSON)).JQ(`.prod  | del(.stun_servers)`).Bytes()
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}
-		dConf, err := script.Echo(string(skywire.DmsghttpJSON)).JQ(`.prod`).Bytes()
+		dConf, err := script.Echo(string(deployment.DmsghttpJSON)).JQ(`.prod`).Bytes()
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}

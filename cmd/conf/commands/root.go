@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
 )
 
 func init() {
@@ -38,7 +38,7 @@ var ServicesConfCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Run: func(_ *cobra.Command, _ []string) {
-		fmt.Printf("%s\n", string(skywire.ServicesJSON))
+		fmt.Printf("%s\n", string(deployment.ServicesJSON))
 	},
 }
 
@@ -52,7 +52,7 @@ var DmsghttpConfCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Run: func(_ *cobra.Command, _ []string) {
-		fmt.Printf("%s\n", string(skywire.DmsghttpJSON))
+		fmt.Printf("%s\n", string(deployment.DmsghttpJSON))
 	},
 }
 

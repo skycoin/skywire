@@ -22,7 +22,7 @@ import (
 	"cogentcore.org/core/text/text"
 	"cogentcore.org/core/tree"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 )
 

@@ -32,7 +32,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -1582,7 +1582,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	serviceDisc := v.conf.Launcher.ServiceDisc
 	if serviceDisc == "" { //it might be intentionally blank ; consider revising.
-		serviceDisc = skywire.Prod.ServiceDiscovery
+		serviceDisc = deployment.Prod.ServiceDiscovery
 	}
 
 	// todo: refactor updatedisc: split connecting to services in updatedisc and

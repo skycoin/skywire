@@ -2,12 +2,11 @@
 package appdisc
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -32,15 +31,7 @@ func (f *Factory) setDefaults() {
 		f.Log = logging.MustGetLogger("appdisc")
 	}
 	if f.ServiceDisc == "" {
-		var envServices skywire.EnvServices
-		var services skywire.Services
-		var sdURL string
-		if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
-			if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-				sdURL = services.ServiceDiscovery
-			}
-		}
-		f.ServiceDisc = sdURL
+		f.ServiceDisc = deployment.Prod.ServiceDiscovery
 	}
 }
 

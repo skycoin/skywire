@@ -30,7 +30,7 @@ import (
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
@@ -76,7 +76,7 @@ func init() {
 		log.Fatal("Error getting current directory:", err)
 	}
 	serverCmd.Flags().StringVarP(&wd, "wd", "W", wd, "location of dir containing 'log_collection' & reward 'hist' dirs")
-	serverCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", skywire.Prod.DmsgDiscovery, "dmsg discovery url")
+	serverCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", deployment.Prod.DmsgDiscovery, "dmsg discovery url")
 	serverCmd.Flags().StringVarP(&ensureOnlineURL, "ensure-online", "O", scriptExecString("${ENSUREONLINE}"), "Exit when the specified URL cannot be fetched;\ni.e. https://fiber.skywire.dev")
 	if os.Getenv("DMSGHTTP_SK") != "" {
 		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint
@@ -1601,12 +1601,12 @@ func init() {
 	nl = append(nl, "  <a href='/log-collection'>log collection</a>")
 	nl = append(nl, "  <a href='/log-collection/tree'>survey index</a>")
 	nl = append(nl, "  <a href='/log-collection/tplogs'>transport logging</a>")
-	nl = append(nl, "  <a href='"+strings.ReplaceAll(skywire.Prod.UptimeTracker, "http://", "https://")+"/uptimes?v=v2'>uptime tracker</a>")
-	nl = append(nl, "  <a href='"+strings.ReplaceAll(skywire.Prod.AddressResolver, "http://", "https://")+"'>address resolver</a>")
-	nl = append(nl, "  <a href='"+strings.ReplaceAll(skywire.Prod.TransportDiscovery, "http://", "https://")+"/all-transports'>transport discovery</a>")
-	nl = append(nl, "  <a href='"+strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/entries'>dmsgd entries</a>")
-	nl = append(nl, "  <a href='"+strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/all_servers'>all dmsg servers</a>")
-	nl = append(nl, "  <a href='"+strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/available_servers'>available dmsg servers</a>")
+	nl = append(nl, "  <a href='"+strings.ReplaceAll(deployment.Prod.UptimeTracker, "http://", "https://")+"/uptimes?v=v2'>uptime tracker</a>")
+	nl = append(nl, "  <a href='"+strings.ReplaceAll(deployment.Prod.AddressResolver, "http://", "https://")+"'>address resolver</a>")
+	nl = append(nl, "  <a href='"+strings.ReplaceAll(deployment.Prod.TransportDiscovery, "http://", "https://")+"/all-transports'>transport discovery</a>")
+	nl = append(nl, "  <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/entries'>dmsgd entries</a>")
+	nl = append(nl, "  <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/all_servers'>all dmsg servers</a>")
+	nl = append(nl, "  <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/available_servers'>available dmsg servers</a>")
 	nl = append(nl, "\n<br>\n")
 	navlinks = strings.Join(nl, "")
 
@@ -1859,12 +1859,12 @@ var htmlMainPageTemplate = `
   <a href='/log-collection'>log collection</a>
   <a href='/log-collection/tree'>survey index</a>
   <a href='/log-collection/tplogs'>transport logging</a>
-  <a href='` + strings.ReplaceAll(skywire.Prod.UptimeTracker, "http://", "https://") + `/uptimes?v=v2'>uptime tracker</a>
-  <a href='` + strings.ReplaceAll(skywire.Prod.AddressResolver, "http://", "https://") + `'>address resolver</a>
-  <a href='` + strings.ReplaceAll(skywire.Prod.TransportDiscovery, "http://", "https://") + `/all-transports'>transport discovery</a>
-  <a href='` + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/entries'>dmsgd entries</a>
-  <a href='` + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/all_servers'>all dmsg servers</a>
-  <a href='` + strings.ReplaceAll(skywire.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available dmsg servers</a>
+  <a href='` + strings.ReplaceAll(deployment.Prod.UptimeTracker, "http://", "https://") + `/uptimes?v=v2'>uptime tracker</a>
+  <a href='` + strings.ReplaceAll(deployment.Prod.AddressResolver, "http://", "https://") + `'>address resolver</a>
+  <a href='` + strings.ReplaceAll(deployment.Prod.TransportDiscovery, "http://", "https://") + `/all-transports'>transport discovery</a>
+  <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/entries'>dmsgd entries</a>
+  <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/all_servers'>all dmsg servers</a>
+  <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available dmsg servers</a>
 	<a title='@skywire telegram' href='https://t.me/skywire'>skywire telegram</a>
 	<a title='@skywire_reward telegram' href='https://t.me/skywire_reward'>reward notifications</a>
   </nav>

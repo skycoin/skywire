@@ -2,12 +2,13 @@
 package clilog
 
 import (
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 var (
-	dmsgDiscURL    string
-	utURL          string
+	dmsgDiscURL = deployment.Prod.DmsgDiscovery
+	utURL = deployment.Prod.UptimeTracker
 	pubKey         string
 	duration       int
 	minv           string

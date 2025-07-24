@@ -19,7 +19,7 @@ import (
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -399,7 +399,7 @@ var genConfigCmd = &cobra.Command{
 					log.WithError(err).Error("Failed to fetch servers")
 					log.Warn("Falling back on services-config.json")
 				}
-				body := skywire.ServicesJSON
+				body := deployment.ServicesJSON
 				if configServicePath != "" {
 					body, err = os.ReadFile(configServicePath)
 					if err != nil {
@@ -439,7 +439,7 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 		} else {
-			body := skywire.ServicesJSON
+			body := deployment.ServicesJSON
 			if configServicePath != "" {
 				body, err = os.ReadFile(configServicePath)
 				if err != nil {
@@ -531,7 +531,7 @@ var genConfigCmd = &cobra.Command{
 			//if isUsrEnv {
 			//	dmsgHTTPPath = homepath + "/" + visorconfig.DMSGHTTPName
 			//}
-			dmsghttpConfigData := skywire.DmsghttpJSON
+			dmsghttpConfigData := deployment.DmsghttpJSON
 			if dmsgHTTPPath != "" {
 				// Read the JSON configuration file
 				dmsghttpConfigData, err = os.ReadFile(dmsgHTTPPath) //nolint
