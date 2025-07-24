@@ -205,11 +205,17 @@ func retrievePkFromURL(url *url.URL) (cipher.PubKey, error) {
 // from the header instead
 func GetRemoteAddr(r *http.Request) string {
 	var pk cipher.PubKey
-
+	var err error
 	// remove the port incase of an IP or a PK
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
+	// check x-forwarded-for as real ip if LB use
+	host := r.Header.Get("X-Forwarded-For")
+	if host == "" {
+		host, _, err = net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			host = r.RemoteAddr
+		}
+	} else {
+		host = strings.Split(host, ",")[0]
 	}
 
 	err = pk.Set(host)
