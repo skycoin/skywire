@@ -18,7 +18,7 @@ Skywire is a fully open-source, privacy-focused suite of networking tools develo
 * service discovery for decentralized [VPN](https://sd.skycoin.com/api/services?type=proxy) and [SOCKS5 proxy](https://sd.skycoin.com/api/services?type=proxy) servers
 * multi-hop public key–based routing
 * a means of accessing and hosting hidden websites
-* [daily rewards in Skycoin](/mainnet_rules.md) ($SKY) to eligible participants in the Skywire Network
+* [daily rewards in Skycoin](/rewards/mainnet_rules.md) ($SKY) to eligible participants in the Skywire Network
 
 This overview explains Skywire’s key features and network architecture.
 
@@ -60,7 +60,7 @@ Skywire enables users to create their own network if desired. The implementation
 
 ## Skywire Rewards
 
-The [Skywire reward system](https://fiber.skywire.dev) is the distribution mechanism for [Skycoin](https://skycoin.com). Skycoin is not 'mined' as with other cryptocurrencies; rewards in Skycoin ($SKY) are distributed daily to eligible Skywire visors who meet the [requirements for obtaining rewards](/mainnet_rules.md).
+The [Skywire reward system](https://fiber.skywire.dev) is the distribution mechanism for [Skycoin](https://skycoin.com). Skycoin is not 'mined' as with other cryptocurrencies; rewards in Skycoin ($SKY) are distributed daily to eligible Skywire visors who meet the [requirements for obtaining rewards](/rewards/mainnet_rules.md).
 
 Despite the terminology, Skywire visors do not process Skycoin transactions. Skywire visors do not sync the Skycoin blockchain and have no involvement in transaction processing. The only relationship between skywire and the skycoin cryptocurrency is via the reward system acting as the distribution mechanism for Skycoin.
 
@@ -185,7 +185,7 @@ The only aspects of this software which actually require root / elevated / speci
 * writing to the `local` folder path & to the default config path generated on installation of the linux / macOS packages or windows .msi
 * some aspects of the system survey
 
-The system survey is only generated _if a reward address is set_ - see [mainnet_rules.md](mainnet-rules.md) for more details about the system survey and how eligibility requirements are enforced for rewards.
+The system survey is only generated _if a reward address is set_ - see [mainnet_rules.md](/rewards/mainnet_rules.md) for more details about the system survey and how eligibility requirements are enforced for rewards.
 
 ## Dependencies
 
@@ -565,7 +565,7 @@ skywire cli proxy stop
 ## Skycoin Rewards
 
 Running skywire on eligible hardware can earn rewards in skycoin. Currently, only package-based linux installations are supported for rewards.
-Review the [mainnet rules](/mainnet_rules.md) article for the details.
+Review the [mainnet rules](/rewards/mainnet_rules.md) article for the details.
 
 Set a reward address:
 ```
