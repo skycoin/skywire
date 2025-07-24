@@ -119,6 +119,6 @@
 	"dmsghttp_server_path": "./local/custom",
 	"stun_servers": null,
 	"shutdown_timeout": "30s",
-	"is_public": false,
+	"is_public": true,
 	"persistent_transports": null
 }
