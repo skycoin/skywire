@@ -18,7 +18,7 @@ Skywire is a fully open-source, privacy-focused suite of networking tools develo
 * service discovery for decentralized [VPN](https://sd.skycoin.com/api/services?type=proxy) and [SOCKS5 proxy](https://sd.skycoin.com/api/services?type=proxy) servers
 * multi-hop public key–based routing
 * a means of accessing and hosting hidden websites
-* [daily rewards in Skycoin](/mainnet_rules.md) ($SKY) to eligible participants in the Skywire Network
+* [daily rewards in Skycoin](/rewards/mainnet_rules.md) ($SKY) to eligible participants in the Skywire Network
 
 This overview explains Skywire’s key features and network architecture.
 
@@ -60,7 +60,7 @@ Skywire enables users to create their own network if desired. The implementation
 
 ## Skywire Rewards
 
-The [Skywire reward system](https://fiber.skywire.dev) is the distribution mechanism for [Skycoin](https://skycoin.com). Skycoin is not 'mined' as with other cryptocurrencies; rewards in Skycoin ($SKY) are distributed daily to eligible Skywire visors who meet the [requirements for obtaining rewards](/mainnet_rules.md).
+The [Skywire reward system](https://fiber.skywire.dev) is the distribution mechanism for [Skycoin](https://skycoin.com). Skycoin is not 'mined' as with other cryptocurrencies; rewards in Skycoin ($SKY) are distributed daily to eligible Skywire visors who meet the [requirements for obtaining rewards](/rewards/mainnet_rules.md).
 
 Despite the terminology, Skywire visors do not process Skycoin transactions. Skywire visors do not sync the Skycoin blockchain and have no involvement in transaction processing. The only relationship between skywire and the skycoin cryptocurrency is via the reward system acting as the distribution mechanism for Skycoin.
 
@@ -129,7 +129,7 @@ Further documentation can be found in the [skywire wiki](https://github.com/skyc
 Most skywire commands can be executed via `go run` - except the skywire visor.
 
 ```
-$ go run github.com/skycoin/skywire/cmd/skywire@develop
+$ go run github.com/skycoin/skywire@develop
 ┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 └─┐├┴┐└┬┘││││├┬┘├┤
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
@@ -154,7 +154,7 @@ Due to the nature of the current app launcher, the skywire visor requires a comp
 To run the visor, It's recommended to `go install` skywire as follows. Ensuring that you have your go envs such as GOPATH and GOBIN set correctly:
 
 ```
-[user@linux skywire]$ go install github.com/skycoin/skywire/cmd/skywire@develop
+[user@linux skywire]$ go install github.com/skycoin/skywire@develop
 [user@linux skywire]$ ls $GOBIN/skywire
 /home/user/go/bin/skywire
 ```
@@ -185,7 +185,7 @@ The only aspects of this software which actually require root / elevated / speci
 * writing to the `local` folder path & to the default config path generated on installation of the linux / macOS packages or windows .msi
 * some aspects of the system survey
 
-The system survey is only generated _if a reward address is set_ - see [mainnet_rules.md](mainnet-rules.md) for more details about the system survey and how eligibility requirements are enforced for rewards.
+The system survey is only generated _if a reward address is set_ - see [mainnet_rules.md](/rewards/mainnet_rules.md) for more details about the system survey and how eligibility requirements are enforced for rewards.
 
 ## Dependencies
 
@@ -340,7 +340,7 @@ while true ; do skywire visor -pl debug ; sleep 5 ; done
 ```
 or
 ```
-while true ; do go run github.com/skycoin/skywire/cmd/skywire@develop visor -pl debug ; sleep 5 ; done
+while true ; do go run github.com/skycoin/skywire@develop visor -pl debug ; sleep 5 ; done
 ```
 
 A few observations when running the visor in the latter way:
@@ -351,7 +351,7 @@ A few observations when running the visor in the latter way:
 To address these two things, it's recommended to first create the human-editable skywire.conf file. This may be done with any path, but for this example, the default path referenced by the autoconfig script included with the linux packages is used.
 
 ```
-go run github.com/skycoin/skywire/cmd/skywire@develop cli config gen -q | sudo tee /etc/skywire.conf
+go run github.com/skycoin/skywire@develop cli config gen -q | sudo tee /etc/skywire.conf
 ```
 
 Now, edit `/etc/skywire.conf` as desired.
@@ -362,13 +362,13 @@ Remember to uncomment:
 Save the file. Now `config gen` can be added to the while loop
 
 ```
-while true ; do SKYENV=/etc/skywire.conf go run github.com/skycoin/skywire/cmd/skywire@develop cli config gen -r && go run github.com/skycoin/skywire/cmd/skywire@develop visor -pl debug ; sleep 5 ; done
+while true ; do SKYENV=/etc/skywire.conf go run github.com/skycoin/skywire@develop cli config gen -r && go run github.com/skycoin/skywire@develop visor -pl debug ; sleep 5 ; done
 ```
 
-To update the binary included with the linux packages so that the visor apps will also be running on the latest commits, it's recommended to `go install github.com/skycoin/skywire/cmd/skywire@develop` and then replace the binary provided by the package with that one. The complete command becomes:
+To update the binary included with the linux packages so that the visor apps will also be running on the latest commits, it's recommended to `go install github.com/skycoin/skywire@develop` and then replace the binary provided by the package with that one. The complete command becomes:
 
 ```
-while true ; do go install github.com/skycoin/skywire/cmd/skywire@develop && mv $GOPATH/bin/skywire /opt/skywire/bin/skywire && SKYENV=/etc/skywire.conf skywire cli config gen -r && skywire visor -pl debug ; sleep 5 ; done
+while true ; do go install github.com/skycoin/skywire@develop && mv $GOPATH/bin/skywire /opt/skywire/bin/skywire && SKYENV=/etc/skywire.conf skywire cli config gen -r && skywire visor -pl debug ; sleep 5 ; done
 ```
 
 Note that the binary at: `/opt/skywire/bin/skywire` is already symlinked to `/usr/bin/skywire` by installing the package.
@@ -565,7 +565,7 @@ skywire cli proxy stop
 ## Skycoin Rewards
 
 Running skywire on eligible hardware can earn rewards in skycoin. Currently, only package-based linux installations are supported for rewards.
-Review the [mainnet rules](/mainnet_rules.md) article for the details.
+Review the [mainnet rules](/rewards/mainnet_rules.md) article for the details.
 
 Set a reward address:
 ```
