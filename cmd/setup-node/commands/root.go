@@ -20,7 +20,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -145,7 +145,7 @@ var checkHealthCmd = &cobra.Command{
 
 		// Start DMSG client
 		ctx := context.Background()
-		dmsgDisc := disc.NewHTTP(skywire.Prod.DmsgDiscovery, &http.Client{}, log)
+		dmsgDisc := disc.NewHTTP(deployment.Prod.DmsgDiscovery, &http.Client{}, log)
 		dmsgC := dmsg.NewClient(pk, sk, dmsgDisc, &dmsg.Config{MinSessions: 1})
 
 		go dmsgC.Serve(ctx)

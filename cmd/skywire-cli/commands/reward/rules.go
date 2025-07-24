@@ -14,7 +14,7 @@ import (
 	"github.com/yuin/goldmark/renderer/html"
 	"golang.org/x/term"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/rewards"
 )
 
 var asHTML bool
@@ -32,13 +32,13 @@ var rulesCmd = &cobra.Command{
 	Long:  "display the mainnet rules",
 	Run: func(_ *cobra.Command, _ []string) {
 		if rawFile {
-			fmt.Println(skywire.MainnetRules)
+			fmt.Println(rewards.MainnetRules)
 			os.Exit(0)
 		}
 		if asHTML {
 			// Preprocess to replace ~text~ with ~~text~~ for strikethrough
 			re := regexp.MustCompile(`~(.*?)~`)
-			rules := re.ReplaceAllString(skywire.MainnetRules, "~~$1~~")
+			rules := re.ReplaceAllString(rewards.MainnetRules, "~~$1~~")
 			var buf bytes.Buffer
 			md := goldmark.New(
 				goldmark.WithExtensions(extension.Strikethrough),
@@ -56,6 +56,6 @@ var rulesCmd = &cobra.Command{
 			terminalWidth = 80
 		}
 		leftPad := 6
-		fmt.Printf("%s\n", markdown.Render(skywire.MainnetRules, terminalWidth, leftPad))
+		fmt.Printf("%s\n", markdown.Render(rewards.MainnetRules, terminalWidth, leftPad))
 	},
 }

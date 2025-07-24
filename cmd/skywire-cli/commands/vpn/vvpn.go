@@ -15,9 +15,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
-	"github.com/skycoin/skywire"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
@@ -171,8 +171,8 @@ var statusCmd = &cobra.Command{
 var serverPort = visorconfig.VPNServerPort
 
 func init() {
-	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", skywire.Prod.ServiceDiscovery, "service discovery url")
-	listCmd.Flags().StringVarP(&utURL, "uturl", "w", skywire.Prod.UptimeTracker, "uptime tracker url")
+	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
+	listCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "pretty print json data")
 	listCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	listCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/vpnsd.json", "SD cache file location")
@@ -186,7 +186,7 @@ func init() {
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
-	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files\ndefault virtual port of servers: %v", serviceType, skywire.Prod.ServiceDiscovery, serviceType, skywire.Prod.ServiceDiscovery, serviceType, serverPort),
+	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files\ndefault virtual port of servers: %v", serviceType, deployment.Prod.ServiceDiscovery, serviceType, deployment.Prod.ServiceDiscovery, serviceType, serverPort),
 	Run: func(cmd *cobra.Command, _ []string) {
 		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {

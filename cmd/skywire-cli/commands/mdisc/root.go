@@ -4,7 +4,6 @@ package climdisc
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -17,8 +16,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
@@ -28,21 +27,13 @@ var (
 	cacheFilesAge  int
 	mdURL          string
 	isStats        bool
-	dmsgDiscURL    string
+	// allEntries bool
+	masterLogger  = logging.NewMasterLogger()
+	packageLogger = masterLogger.PackageLogger("mdisc:disc")
+	dmsgDiscURL   = deployment.Prod.DmsgDiscovery
 )
 
-// var allEntries bool
-var masterLogger = logging.NewMasterLogger()
-var packageLogger = masterLogger.PackageLogger("mdisc:disc")
-
 func init() {
-	var envServices skywire.EnvServices
-	var services skywire.Services
-	if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
-		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-			dmsgDiscURL = services.DmsgDiscovery
-		}
-	}
 	RootCmd.AddCommand(
 		entryCmd,
 		availableServersCmd,
