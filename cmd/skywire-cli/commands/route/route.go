@@ -17,9 +17,9 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/net/context"
 
-	"github.com/skycoin/skywire/deployment"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -33,7 +33,7 @@ var (
 	frMinHops, frMaxHops uint16
 	timeout              time.Duration
 	skywireconfig        string
-	rfURL = deployment.Prod.RouteFinder
+	rfURL                = deployment.Prod.RouteFinder
 )
 
 func init() {

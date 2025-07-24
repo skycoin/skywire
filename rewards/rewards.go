@@ -25,7 +25,6 @@ var Architectures []string
 //go:embed mainnet_rules.md
 var MainnetRules string
 
-
 func init() {
 	err := json.Unmarshal(ArchesJSON, &Architectures)
 	if err != nil {

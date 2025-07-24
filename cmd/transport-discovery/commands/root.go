@@ -53,7 +53,7 @@ var (
 	dmsgPort        uint16
 	dmsgServerType  string
 	pgMaxOpenConn   int
-	dmsgDisc = deployment.Prod.DmsgDiscovery
+	dmsgDisc        = deployment.Prod.DmsgDiscovery
 )
 
 func init() {

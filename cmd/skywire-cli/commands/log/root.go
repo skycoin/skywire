@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	dmsgDiscURL = deployment.Prod.DmsgDiscovery
-	utURL = deployment.Prod.UptimeTracker
+	dmsgDiscURL    = deployment.Prod.DmsgDiscovery
+	utURL          = deployment.Prod.UptimeTracker
 	pubKey         string
 	duration       int
 	minv           string

@@ -16,8 +16,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
@@ -27,10 +27,10 @@ var (
 	cacheFilesAge  int
 	mdURL          string
 	isStats        bool
-// allEntries bool
- masterLogger = logging.NewMasterLogger()
- packageLogger = masterLogger.PackageLogger("mdisc:disc")
- dmsgDiscURL = deployment.Prod.DmsgDiscovery
+	// allEntries bool
+	masterLogger  = logging.NewMasterLogger()
+	packageLogger = masterLogger.PackageLogger("mdisc:disc")
+	dmsgDiscURL   = deployment.Prod.DmsgDiscovery
 )
 
 func init() {
