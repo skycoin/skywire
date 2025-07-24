@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
 
 	"github.com/skycoin/dmsg/pkg/disc"
 )
@@ -29,8 +29,8 @@ const (
 	DefaultCommunityDmsgServerType = "community"
 )
 
-// DmsghttpJSON is dmsghttp-config.json embedded in skywire.DmsghttpJSON
-var DmsghttpJSON = skywire.DmsghttpJSON
+// DmsghttpJSON is dmsghttp-config.json embedded in deployment.DmsghttpJSON
+var DmsghttpJSON = deployment.DmsghttpJSON
 
 // Prod is the production deployment dmsghttp-config.json services
 var Prod DmsghttpConfig
@@ -41,9 +41,9 @@ var Test DmsghttpConfig
 // DiscURL returns the URL of the dmsg discovery service
 func DiscURL(testenv bool) string {
 	if testenv {
-		return skywire.Test.DmsgDiscovery
+		return deployment.Test.DmsgDiscovery
 	}
-	return skywire.Prod.DmsgDiscovery
+	return deployment.Prod.DmsgDiscovery
 }
 
 // DiscAddr returns the dmsg address of the dmsg discovery service in the format "dmsg://<pk>:<port>"
@@ -84,7 +84,7 @@ func init() {
 
 // InitConfig initialized the config
 func InitConfig() error {
-	var envServices skywire.EnvServices
+	var envServices deployment.EnvServices
 	err := json.Unmarshal(DmsghttpJSON, &envServices)
 	if err != nil {
 		return err

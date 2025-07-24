@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 )
 
@@ -40,9 +40,9 @@ type dmsgFlags struct {
 func (f *dmsgFlags) Name() string { return "Dmsg" }
 
 func (f *dmsgFlags) Init(fs *flag.FlagSet) {
-	var envServices skywire.EnvServices
-	var services skywire.Services
-	if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
+	var envServices deployment.EnvServices
+	var services deployment.Services
+	if err := json.Unmarshal(deployment.ServicesJSON, &envServices); err == nil {
 		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
 			f.Disc = services.DmsgDiscovery
 		}
