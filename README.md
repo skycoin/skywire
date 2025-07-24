@@ -129,7 +129,7 @@ Further documentation can be found in the [skywire wiki](https://github.com/skyc
 Most skywire commands can be executed via `go run` - except the skywire visor.
 
 ```
-$ go run github.com/skycoin/skywire/cmd/skywire@develop
+$ go run github.com/skycoin/skywire@develop
 ┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 └─┐├┴┐└┬┘││││├┬┘├┤
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
@@ -154,7 +154,7 @@ Due to the nature of the current app launcher, the skywire visor requires a comp
 To run the visor, It's recommended to `go install` skywire as follows. Ensuring that you have your go envs such as GOPATH and GOBIN set correctly:
 
 ```
-[user@linux skywire]$ go install github.com/skycoin/skywire/cmd/skywire@develop
+[user@linux skywire]$ go install github.com/skycoin/skywire@develop
 [user@linux skywire]$ ls $GOBIN/skywire
 /home/user/go/bin/skywire
 ```
@@ -340,7 +340,7 @@ while true ; do skywire visor -pl debug ; sleep 5 ; done
 ```
 or
 ```
-while true ; do go run github.com/skycoin/skywire/cmd/skywire@develop visor -pl debug ; sleep 5 ; done
+while true ; do go run github.com/skycoin/skywire@develop visor -pl debug ; sleep 5 ; done
 ```
 
 A few observations when running the visor in the latter way:
@@ -351,7 +351,7 @@ A few observations when running the visor in the latter way:
 To address these two things, it's recommended to first create the human-editable skywire.conf file. This may be done with any path, but for this example, the default path referenced by the autoconfig script included with the linux packages is used.
 
 ```
-go run github.com/skycoin/skywire/cmd/skywire@develop cli config gen -q | sudo tee /etc/skywire.conf
+go run github.com/skycoin/skywire@develop cli config gen -q | sudo tee /etc/skywire.conf
 ```
 
 Now, edit `/etc/skywire.conf` as desired.
@@ -362,13 +362,13 @@ Remember to uncomment:
 Save the file. Now `config gen` can be added to the while loop
 
 ```
-while true ; do SKYENV=/etc/skywire.conf go run github.com/skycoin/skywire/cmd/skywire@develop cli config gen -r && go run github.com/skycoin/skywire/cmd/skywire@develop visor -pl debug ; sleep 5 ; done
+while true ; do SKYENV=/etc/skywire.conf go run github.com/skycoin/skywire@develop cli config gen -r && go run github.com/skycoin/skywire@develop visor -pl debug ; sleep 5 ; done
 ```
 
-To update the binary included with the linux packages so that the visor apps will also be running on the latest commits, it's recommended to `go install github.com/skycoin/skywire/cmd/skywire@develop` and then replace the binary provided by the package with that one. The complete command becomes:
+To update the binary included with the linux packages so that the visor apps will also be running on the latest commits, it's recommended to `go install github.com/skycoin/skywire@develop` and then replace the binary provided by the package with that one. The complete command becomes:
 
 ```
-while true ; do go install github.com/skycoin/skywire/cmd/skywire@develop && mv $GOPATH/bin/skywire /opt/skywire/bin/skywire && SKYENV=/etc/skywire.conf skywire cli config gen -r && skywire visor -pl debug ; sleep 5 ; done
+while true ; do go install github.com/skycoin/skywire@develop && mv $GOPATH/bin/skywire /opt/skywire/bin/skywire && SKYENV=/etc/skywire.conf skywire cli config gen -r && skywire visor -pl debug ; sleep 5 ; done
 ```
 
 Note that the binary at: `/opt/skywire/bin/skywire` is already symlinked to `/usr/bin/skywire` by installing the package.
