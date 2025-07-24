@@ -22,8 +22,9 @@ import (
 	"cogentcore.org/core/text/text"
 	"cogentcore.org/core/tree"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
+	skyrewards "github.com/skycoin/skywire/rewards"
 )
 
 //go:embed mononoki/*.ttf
@@ -117,7 +118,7 @@ func main() {
 	tb.SetIcon(icons.Home)
 	core.NewText(zeroeth).SetText(calvin.AsciiFont("skywire rewards"))
 	ctx := htmlcore.NewContext()
-	err := htmlcore.ReadMDString(ctx, zeroeth, skywire.MainnetRules)
+	err := htmlcore.ReadMDString(ctx, zeroeth, skyrewards.MainnetRules)
 	if err != nil {
 		log.Fatalf("Error reading embedded mainnet rules with htmlcore.ReadMDString: %v", err)
 	}
@@ -248,27 +249,27 @@ func main() {
 		//		tb.Maker(ct.MakeToolbar)
 		tb.Maker(func(p *tree.Plan) {
 			tree.Add(p, func(w *core.Button) {
-				ctx.LinkButton(w, https(skywire.Prod.UptimeTracker)+"/uptimes?v=v2")
+				ctx.LinkButton(w, https(deployment.Prod.UptimeTracker)+"/uptimes?v=v2")
 				w.SetText("Uptime").SetIcon(icons.OnlinePrediction)
 			})
 			tree.Add(p, func(w *core.Button) {
-				ctx.LinkButton(w, https(skywire.Prod.AddressResolver)+"/transports")
+				ctx.LinkButton(w, https(deployment.Prod.AddressResolver)+"/transports")
 				w.SetText("Address Resolver").SetIcon(icons.SatelliteAltFill)
 			})
 			tree.Add(p, func(w *core.Button) {
-				ctx.LinkButton(w, https(skywire.Prod.TransportDiscovery)+"/all-transports")
+				ctx.LinkButton(w, https(deployment.Prod.TransportDiscovery)+"/all-transports")
 				w.SetText("Transport-Discovery").SetIcon(icons.Search)
 			})
 			tree.Add(p, func(w *core.Button) {
-				ctx.LinkButton(w, https(skywire.Prod.DmsgDiscovery)+"/dmsg-discovery/entries")
+				ctx.LinkButton(w, https(deployment.Prod.DmsgDiscovery)+"/dmsg-discovery/entries")
 				w.SetText("Dmsg-Discovery").SetIcon(icons.Search)
 			})
 			tree.Add(p, func(w *core.Button) {
-				ctx.LinkButton(w, https(skywire.Prod.DmsgDiscovery)+"/dmsg-discovery/all_servers")
+				ctx.LinkButton(w, https(deployment.Prod.DmsgDiscovery)+"/dmsg-discovery/all_servers")
 				w.SetText("Dmsg Servers").SetIcon(icons.TrafficFill)
 			})
 			tree.Add(p, func(w *core.Button) {
-				ctx.LinkButton(w, https(skywire.Prod.DmsgDiscovery)+"/dmsg-discovery/available_servers")
+				ctx.LinkButton(w, https(deployment.Prod.DmsgDiscovery)+"/dmsg-discovery/available_servers")
 				w.SetText("Dmsg Servers").SetIcon(icons.Traffic)
 			})
 			tree.Add(p, func(w *core.Button) {
