@@ -5,7 +5,7 @@ go 1.24
 toolchain go1.24.0
 
 require (
-	cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
+	cogentcore.org/core v0.3.12
 	fyne.io/systray v1.11.0
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/MichaelMure/go-term-markdown v0.1.4
@@ -43,17 +43,17 @@ require (
 	github.com/pterm/pterm v0.12.81
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.29-0.20250716144510-e51852c21e98
+	github.com/skycoin/dmsg v1.3.29-0.20250724155945-242a19a75d86
 	github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f //DO NOT MODIFY OR UPDATE v0.28.1-0.20241105130348-39b49a2d0a7f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.9.1
-	github.com/spf13/pflag v1.0.6
+	github.com/spf13/pflag v1.0.7
 	github.com/stretchr/testify v1.10.0
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 	github.com/tidwall/pretty v1.2.1
-	github.com/toqueteos/webbrowser v1.2.0
+	github.com/toqueteos/webbrowser v1.2.1
 	github.com/xtaci/kcp-go v5.4.20+incompatible
-	github.com/yuin/goldmark v1.7.12
+	github.com/yuin/goldmark v1.7.13
 	github.com/zcalusic/sysinfo v1.1.3
 	go.etcd.io/bbolt v1.4.2
 	golang.org/x/net v0.42.0
@@ -63,7 +63,7 @@ require (
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	gopkg.in/telebot.v3 v3.3.8
 	gorm.io/driver/postgres v1.6.0
-	gorm.io/gorm v1.30.0
+	gorm.io/gorm v1.30.1
 )
 
 require (
@@ -83,7 +83,7 @@ require (
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
-	github.com/bytedance/sonic v1.13.3 // indirect
+	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -151,7 +151,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/quic-go/quic-go v0.53.0 // indirect
+	github.com/quic-go/quic-go v0.54.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.9.0 // indirect
@@ -178,7 +178,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.19.0 // indirect
 	golang.org/x/crypto v0.40.0 // indirect
-	golang.org/x/exp v0.0.0-20250711185948-6ae5c78190dc // indirect
+	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
 	golang.org/x/image v0.29.0 // indirect
 	golang.org/x/mod v0.26.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
@@ -215,5 +215,5 @@ require (
 
 // Below should reflect the current versions of the following deps
 // replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
-// replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20250716144510-e51852c21e98
+//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20250724155945-242a19a75d86
 // replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
