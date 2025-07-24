@@ -14,7 +14,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
@@ -63,10 +63,7 @@ type Config struct {
 
 // New creates a new api.
 func New(log *logging.Logger, conf Config, domain, dmsgAddr string) *API {
-	var envServices skywire.EnvServices
-	var svcs skywire.Services
-	json.Unmarshal([]byte(skywire.ServicesJSON), &envServices) //nolint
-	json.Unmarshal(envServices.Prod, &svcs)                    //nolint
+	svcs := deployment.Prod
 
 	sd := strings.Replace(svcs.ServiceDiscovery, "skycoin.com", domain, -1)
 	if domain == "skywire.skycoin.com" {

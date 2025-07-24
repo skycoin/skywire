@@ -8,8 +8,8 @@ import (
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/deployment"
 )
 
 // RootCmd is utCmd
@@ -20,7 +20,7 @@ var (
 	online        bool
 	isStats       bool
 	isMoreStats   bool
-	utURL         = skywire.Prod.UptimeTracker
+	utURL         = deployment.Prod.UptimeTracker
 	cacheFileUT   string
 	cacheFilesAge int
 )

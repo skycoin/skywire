@@ -3,7 +3,6 @@ package cliroute
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,9 +17,9 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/net/context"
 
-	"github.com/skycoin/skywire"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -34,17 +33,10 @@ var (
 	frMinHops, frMaxHops uint16
 	timeout              time.Duration
 	skywireconfig        string
-	rfURL                string
+	rfURL                = deployment.Prod.RouteFinder
 )
 
 func init() {
-	var envServices skywire.EnvServices
-	var services skywire.Services
-	if err := json.Unmarshal(skywire.ServicesJSON, &envServices); err == nil {
-		if err := json.Unmarshal(envServices.Prod, &services); err == nil {
-			rfURL = services.RouteFinder
-		}
-	}
 	findCmd.Flags().SortFlags = false
 	findCmd.Flags().Uint16VarP(&frMinHops, "min", "n", 1, "minimum hops")
 	findCmd.Flags().Uint16VarP(&frMaxHops, "max", "x", 1000, "maximum hops")
