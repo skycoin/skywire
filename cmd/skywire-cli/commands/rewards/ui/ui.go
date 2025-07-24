@@ -24,6 +24,7 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
+	skyrewards "github.com/skycoin/skywire/rewards"
 )
 
 //go:embed mononoki/*.ttf
@@ -117,7 +118,7 @@ func main() {
 	tb.SetIcon(icons.Home)
 	core.NewText(zeroeth).SetText(calvin.AsciiFont("skywire rewards"))
 	ctx := htmlcore.NewContext()
-	err := htmlcore.ReadMDString(ctx, zeroeth, rewards.MainnetRules)
+	err := htmlcore.ReadMDString(ctx, zeroeth, skyrewards.MainnetRules)
 	if err != nil {
 		log.Fatalf("Error reading embedded mainnet rules with htmlcore.ReadMDString: %v", err)
 	}
