@@ -1305,55 +1305,52 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 		time.Sleep(time.Minute)
 		tries := 0
 		for range ticker.C {
-			tpsummary, err := v.AddTransport(v.conf.PK, "dmsg", 0)
-			if err != nil {
-				tries++
-				v.isServicesHealthy.unset()
-				log.WithError(err).Warn(fmt.Sprintf("Visor is not transportable via dmsg! Attempt %v of 3", tries))
-				//reduce tick duration on non nil error
-				ticker.Reset(time.Minute)
-			} else {
-				tries = 0
-				v.isServicesHealthy.set()
-				err = v.RemoveTransport(tpsummary.ID)
-				if err != nil {
-					log.WithError(err).Warn("Failed to remove dmsg self-transport")
-				}
-				ticker.Reset(tickDuration)
-				if visorIsPublic {
-					tpsummary, err = v.AddTransport(v.conf.PK, "stcpr", 0)
-					if err != nil {
-						tries++
-						v.isServicesHealthy.unset()
-						log.WithError(err).Warn(fmt.Sprintf("Public visor is not transportable via stcpr! Attempt %v of 3", tries))
-						ticker.Reset(time.Minute)
-					} else {
-						tries = 0
-						v.isServicesHealthy.set()
-						err = v.RemoveTransport(tpsummary.ID)
-						if err != nil {
-							log.WithError(err).Warn("Failed to remove stcpr self-transport")
-						}
-						ticker.Reset(tickDuration)
-					}
-				}
+			dmsgOK := tryTransport(v, "dmsg", log)
+			stcprOK := true // default to true for non-public visors
+
+			if visorIsPublic {
+				stcprOK = tryTransport(v, "stcpr", log)
 			}
-			if tries == 3 {
-				log.WithError(err).Error("Visor is not transportable! 3 failed attempts ; exiting now")
-				err = v.Shutdown()
-				if err != nil {
+
+			if dmsgOK && stcprOK {
+				v.isServicesHealthy.set()
+				tries = 0
+				ticker.Reset(tickDuration)
+			} else {
+				v.isServicesHealthy.unset()
+				tries++
+				ticker.Reset(time.Minute)
+			}
+
+			if tries >= 3 {
+				log.Error("Visor is not transportable after 3 failed attempts. Shutting down...")
+				if err := v.Shutdown(); err != nil {
 					log.WithError(err).Fatal("Failed to shut down gracefully")
 				}
+				return
 			}
 		}
 	}()
-
 	v.pushCloseStack("transportable", func() error {
 		ticker.Stop()
 		return nil
 	})
 
 	return nil
+}
+
+func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
+	tp, err := v.AddTransport(v.conf.PK, tpType, 0)
+	if err != nil {
+		log.WithError(err).WithField("type", tpType).Warn("Failed to create self-transport")
+		return false
+	}
+
+	err = v.RemoveTransport(tp.ID)
+	if err != nil {
+		log.WithError(err).WithField("type", tpType).Warn("Failed to remove self-transport")
+	}
+	return true
 }
 
 // TODO: fix gocyclo error.
