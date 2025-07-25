@@ -1313,7 +1313,6 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 				//reduce tick duration on non nil error
 				ticker.Reset(time.Minute)
 			} else {
-				tries = 0
 				v.isServicesHealthy.set()
 				err = v.RemoveTransport(tpsummary.ID)
 				if err != nil {
@@ -1328,14 +1327,16 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 						log.WithError(err).Warn(fmt.Sprintf("Public visor is not transportable via stcpr! Attempt %v of 3", tries))
 						ticker.Reset(time.Minute)
 					} else {
-						tries = 0
 						v.isServicesHealthy.set()
 						err = v.RemoveTransport(tpsummary.ID)
 						if err != nil {
 							log.WithError(err).Warn("Failed to remove stcpr self-transport")
 						}
 						ticker.Reset(tickDuration)
+						tries = 0
 					}
+				} else {
+					tries = 0
 				}
 			}
 			if tries == 3 {
