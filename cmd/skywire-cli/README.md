@@ -375,8 +375,7 @@ $ skywire-cli config gen -bpirxn --version 1.3.0
 	"routing": {
 		"route_setup_nodes": [
 			"0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557",
-			"024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438",
-			"03b87c282f6e9f70d97aeea90b07cf09864a235ef718725632d067873431dd1015"
+			"024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438"
 		],
 		"route_finder": "http://rf.skywire.skycoin.com",
 		"route_finder_timeout": "10s",
@@ -1617,8 +1616,6 @@ Usage:
   cli ut [flags]
 
 Flags:
-      --dmsgAddr string     specific dmsg server address for dmsghttp query (default "030c83534af1041aee60c2f124b682a9d60c6421876db7c67fc83a73c5effdbd96")
-      --dmsgIP string       specific dmsg server ip for dmsghttp query (default "188.121.99.59:8081")
   -n, --min int             list visors meeting minimum uptime (default 75)
   -o, --on                  list currently online visors
   -k, --pk string           check uptime for the specified key
