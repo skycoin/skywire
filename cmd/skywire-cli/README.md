@@ -1617,8 +1617,8 @@ Usage:
   cli ut [flags]
 
 Flags:
-      --dmsgAddr string     specific dmsg server address for dmsghttp query (default "030c83534af1041aee60c2f124b682a9d60c6421876db7c67fc83a73c5effdbd96")
-      --dmsgIP string       specific dmsg server ip for dmsghttp query (default "188.121.99.59:8081")
+      --dmsgAddr string     specific dmsg server address for dmsghttp query (default "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13")
+      --dmsgIP string       specific dmsg server ip for dmsghttp query (default "139.162.160.227:30087")
   -n, --min int             list visors meeting minimum uptime (default 75)
   -o, --on                  list currently online visors
   -k, --pk string           check uptime for the specified key
