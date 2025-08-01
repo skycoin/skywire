@@ -109,7 +109,7 @@ SKYENV=/path/to/fiber.conf fiber run`
 			return
 		}
 		fmt.Printf("All files successfully extracted to '%s'.\n", outputDir)
-		_, err = script.Exec(`bash -c 'cd ` + outputDir + ` || exit 0 ; go mod init fiber.skywire.dev/ui ; go get github.com/skycoin/skywire@develop && go mod tidy && go mod vendor && go run cogentcore.org/core/cmd/core@main build web'`).Stdout()
+		_, err = script.Exec(`bash -c 'cd ` + outputDir + ` || exit 0 ; go mod init fiber.skywire.dev/ui ; go get github.com/skycoin/skywire@develop && go mod tidy && go mod vendor && go run cogentcore.org/core@main build web'`).Stdout()
 		if err != nil {
 			fmt.Println("Error:", err)
 		}
