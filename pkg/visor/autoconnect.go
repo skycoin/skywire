@@ -6,10 +6,8 @@ import (
 	"crypto/rand"
 	"math/big"
 	"net/http"
-	"strings"
 	"time"
 
-	"github.com/bitfield/script"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -17,7 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/types"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 const (
@@ -56,9 +54,9 @@ func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager,
 
 // Run implements Autoconnector interface
 func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
-	// Wait for a random interval between 0 and 5 minutes before starting public autoconnect.
-	// Prevents a cluster of nodes which was switched on at the same time
-	// from producing concurrent, synchronous requests to SD and subsequent connection attempts to public visors
+	// Wait for a random interval between 0 and 5 minutes before starting public autoconnect.											//
+	// Prevents a cluster of nodes which was switched on at the same time																					//
+	// from producing concurrent, synchronous requests to SD and subsequent connection attempts to public visors	//
 	const maxDelaySeconds = 5 * 60 // 5 minutes
 
 	randomDelaySeconds, err := randInt(0, maxDelaySeconds)
@@ -85,13 +83,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			return context.Canceled
 		case <-publicServiceTicket.C:
 
-			// limit maximum number of autoconnect transports
-			// Note: this doesn't account for user established transports
-			if len(a.tm.GetTransportsByLabel(transport.LabelAutomatic)) >= a.maxConns {
-				a.log.Debugln("transport limit reached:", a.maxConns)
-				continue
-			}
-
 			a.log.Infoln("Fetching public visors")
 			addrs, err := a.fetchPubAddresses(ctx)
 			if err != nil {
@@ -106,21 +97,21 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				continue
 			}
 
-			a.log.WithField("public visors", len(addrs)).Debugln("Found public visors")
+			a.log.WithField("public visors", len(addrs)).Debugln("Found")
 
 			absent := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
 
 			// Get keys available for SUDPH transport
-			sudphKeys, err := v.arClient.TransportsType(ctx, types.SUDPH)
+			sudphKeys, err := v.arClient.TransportsType(ctx, tptypes.SUDPH)
 			if err != nil {
-				a.log.WithError(err).Warn("could not fetch SUDPH transport keys")
+				a.log.WithError(err).Warn("could not fetch keys from address resolver available for SUDPH transport")
 				sudphKeys = map[cipher.PubKey][]string{}
 			}
 
 			// Get keys available for STCPR transport
-			stcprKeys, err := v.arClient.TransportsType(ctx, types.STCPR)
+			stcprKeys, err := v.arClient.TransportsType(ctx, tptypes.STCPR)
 			if err != nil {
-				a.log.WithError(err).Warn("could not fetch STCPR transport keys")
+				a.log.WithError(err).Warn("could not fetch keys from address resolver available for STCPR transport")
 				stcprKeys = map[cipher.PubKey][]string{}
 			}
 
@@ -135,8 +126,9 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 				absent2Set := make(map[cipher.PubKey]struct{})
 
+				//check transport discovery for transport entries containing public visor edge key
+				//in order to obtain a list of keys to connect to via SUDPH
 				for _, pk := range addrs {
-					//check transport discovery for transport entries containing this edge key
 					entries, err := v.DiscoverTransportsByPK(pk)
 					if err != nil {
 						v.isServicesHealthy.unset()
@@ -213,12 +205,11 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 			//attempt to establish transports to the keys in random order for 5 minutes
 			attemptDeadline := time.Now().Add(5 * time.Minute)
+			// Max STCPR Transports == a.maxConns == 3
+			maxSTCPR := a.maxConns
+			// Max SUDPH Transports == a.maxConns * 5 == 15
+			maxSUDPH := a.maxConns * 5
 			for _, pk := range shufflePubKeys(absent) {
-				// limit maximum number of autoconnect transports
-				if len(a.tm.GetTransportsByLabel(transport.LabelAutomatic)) >= a.maxConns {
-					a.log.Debugln("transport limit reached:", a.maxConns)
-					break
-				}
 				if time.Now().After(attemptDeadline) {
 					a.log.Debugln("Refreshing list of keys for public autoconnect")
 					break
@@ -227,25 +218,23 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				if pk == v.conf.PK {
 					continue
 				}
-				//don't attempt to make transports to offline visors
-				vUptimeData, err := v.uptimeTracker.FetchUptimes(ctx, pk.String())
-				if err != nil {
-					a.log.WithField("pk", pk).WithError(err).Debugln("Failed to check remote visor online status")
-					v.isServicesHealthy.unset()
-					continue
-				}
-				v.isServicesHealthy.set()
-				vOnline, err := script.Echo(string(vUptimeData)).JQ(`.[].on`).String()
-				if err != nil {
-					a.log.WithField("pk", pk).WithError(err).Debugln("No uptime tracker data for remote visor")
-					continue
-				}
-				if strings.TrimSuffix(vOnline, "\n") != "true" {
-					a.log.WithField("pk", pk).Debugln("Aborting connection attempt to offline visor")
-					continue
+
+				// Limit maximum number of autoconnect transports per transport type
+				countSTCPR := 0
+				countSUDPH := 0
+
+				for _, autoconnTP := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
+					switch autoconnTP.Type() {
+					case tptypes.STCPR:
+						countSTCPR++
+					case tptypes.SUDPH:
+						// filter SUDPH counting here to only count sudph transports
+						// to visors which are currently connected to a public visor
+						countSUDPH++
+					}
 				}
 
-				// limit transports if the remote visor already has maxconns total transports
+				// limit transports if the remote visor already has maxconns * 100 total transports
 				// Check the transport discovery, and skip if number of entries is >= a.maxConns
 				entries, err := v.DiscoverTransportsByPK(pk)
 				if err != nil {
@@ -255,22 +244,30 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				}
 				v.isServicesHealthy.set()
 
-				if len(entries) >= a.maxConns {
+				if len(entries) >= a.maxConns * 100 {
 					a.log.WithField("pk", pk).WithField("count", len(entries)).Debugln("Remote visor has reached or exceeded max connections, skipping")
 					continue
 				}
 
 				// Determine network type and attempt to establish transport using that type
-				var netType types.Type
+				var netType tptypes.Type
 				if _, ok := sudphKeys[pk]; ok {
-					netType = types.SUDPH
+					netType = tptypes.SUDPH
 				} else if _, ok := stcprKeys[pk]; ok {
-					netType = types.STCPR
+					netType = tptypes.STCPR
 				} else {
 					a.log.WithField("pk", pk).Debugln("No supported network type found for visor")
 					continue
 				}
 
+				if netType == tptypes.STCPR && countSTCPR >= maxSTCPR {
+					a.log.WithField("pk", pk).WithField("type", netType).Debugln("Not transporting; STCPR max reached")
+					continue
+				}
+				if netType == tptypes.SUDPH && countSUDPH >= maxSUDPH {
+					a.log.WithField("pk", pk).WithField("type", netType).Debugln("Not transporting; SUDPH max reached")
+					continue
+				}
 				a.log.WithField("pk", pk).WithField("type", netType).Debugln("Trying to add transport to public visor")
 
 				logger := a.log.WithField("pk", pk).WithField("type", string(netType))
@@ -297,7 +294,7 @@ func shufflePubKeys(keys []cipher.PubKey) []cipher.PubKey {
 }
 
 // tryEstablishTransport attempts to establish a transport of the specified type to the given public key, and return error.
-func (a *autoconnector) tryEstablishTransport(ctx context.Context, pk cipher.PubKey, netType types.Type, logger *logrus.Entry) error {
+func (a *autoconnector) tryEstablishTransport(ctx context.Context, pk cipher.PubKey, netType tptypes.Type, logger *logrus.Entry) error {
 	if _, err := a.tm.SaveTransport(ctx, pk, netType, transport.LabelAutomatic); err != nil {
 		return err
 	}
