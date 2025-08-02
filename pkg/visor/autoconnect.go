@@ -244,7 +244,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				}
 				v.isServicesHealthy.set()
 
-				if len(entries) >= a.maxConns * 100 {
+				if len(entries) >= a.maxConns*100 {
 					a.log.WithField("pk", pk).WithField("count", len(entries)).Debugln("Remote visor has reached or exceeded max connections, skipping")
 					continue
 				}
