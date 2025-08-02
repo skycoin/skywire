@@ -4,7 +4,6 @@ package visor
 import (
 	"context"
 	"crypto/rand"
-	"io"
 	"math/big"
 	"net/http"
 	"time"
@@ -97,36 +96,36 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				a.log.Debugln("no public visors found")
 				continue
 			}
-/*
-			///health check to determine online status of public visor
-			var addrs1 []cipher.PubKey
-			for _, addr := range addrs {
-				req, err := http.NewRequest(http.MethodGet, "dmsg://"+addr.String()+":80/health", nil)
-				if err != nil {
-					a.log.Debugln("failed to formulate http request")
-					continue
+			/*
+				///health check to determine online status of public visor
+				var addrs1 []cipher.PubKey
+				for _, addr := range addrs {
+					req, err := http.NewRequest(http.MethodGet, "dmsg://"+addr.String()+":80/health", nil)
+					if err != nil {
+						a.log.Debugln("failed to formulate http request")
+						continue
+					}
+					resp, err := v.dmsgHTTP.Do(req)
+					if err == nil {
+						defer resp.Body.Close()          //nolint
+						body, _ := io.ReadAll(resp.Body) //nolint
+						addrs1 = append(addrs1, addr)
+						a.log.WithField("pk", addr.String()).WithField("response.Body", string(body)).Debugln("Public visor dmsghttp '/health' check")
+						continue
+					}
+					a.log.WithField("pk", addr.String()).Debugln("Public visor dmsghttp '/health' check failed")
+					//				if addr == v.conf.PK {
+					//					a.log.Debugln("Can't fetch '/health' from local visor over dmsg")
+					//					v.Close()
+					//				}
 				}
-				resp, err := v.dmsgHTTP.Do(req)
-				if err == nil {
-					defer resp.Body.Close()          //nolint
-					body, _ := io.ReadAll(resp.Body) //nolint
-					addrs1 = append(addrs1, addr)
-					a.log.WithField("pk", addr.String()).WithField("response.Body", string(body)).Debugln("Public visor dmsghttp '/health' check")
-					continue
-				}
-				a.log.WithField("pk", addr.String()).Debugln("Public visor dmsghttp '/health' check failed")
-				//				if addr == v.conf.PK {
-				//					a.log.Debugln("Can't fetch '/health' from local visor over dmsg")
-				//					v.Close()
-				//				}
-			}
-			addrs = addrs1
+				addrs = addrs1
 
-			if len(addrs) == 0 {
-				a.log.Debugln("no public visors found")
-				continue
-			}
-*/
+				if len(addrs) == 0 {
+					a.log.Debugln("no public visors found")
+					continue
+				}
+			*/
 			a.log.WithField("public visors", len(addrs)).Debugln("Found")
 
 			absent := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
