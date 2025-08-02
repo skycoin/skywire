@@ -108,13 +108,17 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				}
 				resp, err := v.dmsgHTTP.Do(req)
 				if err == nil {
-					defer resp.Body.Close()
+					defer resp.Body.Close()          //nolint
 					body, _ := io.ReadAll(resp.Body) //nolint
 					addrs1 = append(addrs1, addr)
 					a.log.WithField("pk", addr.String()).WithField("response.Body", string(body)).Debugln("Public visor dmsghttp '/health' check")
 					continue
 				}
 				a.log.WithField("pk", addr.String()).Debugln("Public visor dmsghttp '/health' check failed")
+				//				if addr == v.conf.PK {
+				//					a.log.Debugln("Can't fetch '/health' from local visor over dmsg")
+				//					v.Close()
+				//				}
 			}
 			addrs = addrs1
 
