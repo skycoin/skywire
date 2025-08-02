@@ -101,7 +101,12 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			///health check to determine online status of public visor
 			var addrs1 []cipher.PubKey
 			for _, addr := range addrs {
-				v.dmsgHTTP.Do(http.NewRequest(http.MethodGet, "dmsg://"+addr+":80/health", nil))
+				req, err := http.NewRequest(http.MethodGet, "dmsg://"+addr.String()+":80/health", nil)
+				if err != nil {
+					a.log.Debugln("failed to formulate http request")
+					continue
+				}
+				resp, err := v.dmsgHTTP.Do(req)
 				if err == nil {
 					defer resp.Body.Close()
 					body, _ := io.ReadAll(resp.Body) //nolint
