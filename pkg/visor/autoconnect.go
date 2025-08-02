@@ -97,7 +97,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				a.log.Debugln("no public visors found")
 				continue
 			}
-
+/*
 			///health check to determine online status of public visor
 			var addrs1 []cipher.PubKey
 			for _, addr := range addrs {
@@ -126,7 +126,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				a.log.Debugln("no public visors found")
 				continue
 			}
-
+*/
 			a.log.WithField("public visors", len(addrs)).Debugln("Found")
 
 			absent := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
