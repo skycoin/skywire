@@ -113,6 +113,11 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			}
 			addrs = addrs1
 
+			if len(addrs) == 0 {
+				a.log.Debugln("no public visors found")
+				continue
+			}
+
 			a.log.WithField("public visors", len(addrs)).Debugln("Found")
 
 			absent := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
