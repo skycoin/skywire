@@ -4,6 +4,7 @@ package visor
 import (
 	"context"
 	"crypto/rand"
+	"io"
 	"math/big"
 	"net/http"
 	"time"
@@ -96,6 +97,21 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				a.log.Debugln("no public visors found")
 				continue
 			}
+
+			///health check to determine online status of public visor
+			var addrs1 []cipher.PubKey
+			for _, addr := range addrs {
+				v.dmsgHTTP.Do(http.NewRequest(http.MethodGet, "dmsg://"+addr+":80/health", nil))
+				if err == nil {
+					defer resp.Body.Close()
+					body, _ := io.ReadAll(resp.Body) //nolint
+					addrs1 = append(addrs1, addr)
+					a.log.WithField("pk", addr.String()).WithField("response.Body", string(body)).Debugln("Public visor dmsghttp '/health' check")
+					continue
+				}
+				a.log.WithField("pk", addr.String()).Debugln("Public visor dmsghttp '/health' check failed")
+			}
+			addrs = addrs1
 
 			a.log.WithField("public visors", len(addrs)).Debugln("Found")
 
