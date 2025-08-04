@@ -166,7 +166,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					}
 					v.isServicesHealthy.set()
 
-
 					var entryKeys []cipher.PubKey
 					seen := make(map[cipher.PubKey]struct{})
 					for _, entry := range entries {
