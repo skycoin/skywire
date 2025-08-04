@@ -54,12 +54,11 @@ func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager,
 
 // Run implements Autoconnector interface
 func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
-	// Wait for a random interval between 0 and 5 minutes before starting public autoconnect.											//
-	// Prevents a cluster of nodes which was switched on at the same time																					//
-	// from producing concurrent, synchronous requests to SD and subsequent connection attempts to public visors	//
+	// Wait for a random interval between 0 and 5 minutes before starting public autoconnect
 	const maxDelaySeconds = 5 * 60 // 5 minutes
 
-	randomDelaySeconds, err := randInt(0, maxDelaySeconds)
+	var randomDelaySeconds int
+	randomDelaySeconds, err = randInt(0, maxDelaySeconds)
 	if err != nil {
 		a.log.WithError(err).Warn("Failed to generate secure random delay; falling back to 0")
 		randomDelaySeconds = 0
@@ -74,17 +73,19 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 	}
 
 	visorIsPublic := checkVisorIsPublic(v)
-
-	publicServiceTicket := time.NewTicker(PublicServiceDelay)
+	publicServiceTicker := time.NewTicker(PublicServiceDelay)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return context.Canceled
-		case <-publicServiceTicket.C:
+		case <-publicServiceTicker.C:
 
 			a.log.Infoln("Fetching public visors")
-			addrs, err := a.fetchPubAddresses(ctx)
+
+			// fetch public visors
+			var addrs []cipher.PubKey
+			addrs, err = a.fetchPubAddresses(ctx)
 			if err != nil {
 				a.log.Errorf("Cannot fetch public visors from service discovery: %s", err)
 				v.isServicesHealthy.unset()
@@ -96,69 +97,42 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				a.log.Debugln("no public visors found")
 				continue
 			}
-			/*
-				///health check to determine online status of public visor
-				var addrs1 []cipher.PubKey
-				for _, addr := range addrs {
-					req, err := http.NewRequest(http.MethodGet, "dmsg://"+addr.String()+":80/health", nil)
-					if err != nil {
-						a.log.Debugln("failed to formulate http request")
-						continue
-					}
-					resp, err := v.dmsgHTTP.Do(req)
-					if err == nil {
-						defer resp.Body.Close()          //nolint
-						body, _ := io.ReadAll(resp.Body) //nolint
-						addrs1 = append(addrs1, addr)
-						a.log.WithField("pk", addr.String()).WithField("response.Body", string(body)).Debugln("Public visor dmsghttp '/health' check")
-						continue
-					}
-					a.log.WithField("pk", addr.String()).Debugln("Public visor dmsghttp '/health' check failed")
-					//				if addr == v.conf.PK {
-					//					a.log.Debugln("Can't fetch '/health' from local visor over dmsg")
-					//					v.Close()
-					//				}
-				}
-				addrs = addrs1
 
-				if len(addrs) == 0 {
-					a.log.Debugln("no public visors found")
-					continue
-				}
-			*/
 			a.log.WithField("public visors", len(addrs)).Debugln("Found")
 
-			absent := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
+			absent1 := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
 
 			// Get keys available for SUDPH transport
-			sudphKeys, err := v.arClient.TransportsType(ctx, tptypes.SUDPH)
+			var sudphKeys map[cipher.PubKey][]string
+			sudphKeys, err = v.arClient.TransportsType(ctx, tptypes.SUDPH)
 			if err != nil {
-				a.log.WithError(err).Warn("could not fetch keys from address resolver available for SUDPH transport")
+				a.log.WithError(err).Warn("could not fetch keys from address resolver for SUDPH")
 				sudphKeys = map[cipher.PubKey][]string{}
 			}
 
 			// Get keys available for STCPR transport
-			stcprKeys, err := v.arClient.TransportsType(ctx, tptypes.STCPR)
+			var stcprKeys map[cipher.PubKey][]string
+			stcprKeys, err = v.arClient.TransportsType(ctx, tptypes.STCPR)
 			if err != nil {
-				a.log.WithError(err).Warn("could not fetch keys from address resolver available for STCPR transport")
+				a.log.WithError(err).Warn("could not fetch keys from address resolver for STCPR")
 				stcprKeys = map[cipher.PubKey][]string{}
 			}
 
-			// auto-transport logic - for visors running as public visors - should only attempt to connect stcpr transports to other public visors
+			// auto-transport logic - for non-public visors connecting to public visors
 			var absent2 []cipher.PubKey
 			if !visorIsPublic {
-				// find keys that have transports to public visors
 				absentSet := make(map[cipher.PubKey]struct{}, len(addrs))
 				for _, pk := range addrs {
 					absentSet[pk] = struct{}{}
 				}
 
+				autoTransports := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
 				absent2Set := make(map[cipher.PubKey]struct{})
 
-				//check transport discovery for transport entries containing public visor edge key
-				//in order to obtain a list of keys to connect to via SUDPH
+				// ✅ Fixed: slice of pointers
+				var entries []*transport.Entry
 				for _, pk := range addrs {
-					entries, err := v.DiscoverTransportsByPK(pk)
+					entries, err = v.DiscoverTransportsByPK(pk)
 					if err != nil {
 						v.isServicesHealthy.unset()
 						a.log.WithError(err).Warn("cannot connect to transport discovery service")
@@ -166,143 +140,124 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					}
 					v.isServicesHealthy.set()
 
-					var entryKeys []cipher.PubKey
 					seen := make(map[cipher.PubKey]struct{})
 					for _, entry := range entries {
 						for _, edge := range entry.Edges {
 							if edge != v.conf.PK {
-								if _, ok := seen[edge]; !ok {
-									entryKeys = append(entryKeys, edge)
-									seen[edge] = struct{}{}
-								}
+								seen[edge] = struct{}{}
 							}
 						}
 					}
 
-					// exclude keys for which the visor already has transports
-					filtered := a.filterDuplicates(entryKeys, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
+					entryKeys := make([]cipher.PubKey, 0, len(seen))
+					for edge := range seen {
+						entryKeys = append(entryKeys, edge)
+					}
+
+					filtered := a.filterDuplicates(entryKeys, autoTransports)
 					for _, newPK := range filtered {
+						if _, inAbsent := absentSet[newPK]; inAbsent {
+							continue
+						}
 						if _, seen := absent2Set[newPK]; seen {
-							continue // already in absent2
+							continue
 						}
-						if _, isAbsent := absentSet[newPK]; isAbsent {
-							continue // appears in original absent list
+						if _, ok := sudphKeys[newPK]; !ok {
+							continue
 						}
+
 						absent2Set[newPK] = struct{}{}
 						absent2 = append(absent2, newPK)
 					}
 				}
-
-				absent2 = a.filterDuplicates(absent2, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
-
-				// remove keys that are not available for sudph transports from absent2 slice
-				filtered := absent2[:0]
-				for _, pk := range absent2 {
-					if _, ok := sudphKeys[pk]; ok {
-						filtered = append(filtered, pk)
-					}
-				}
-				absent2 = filtered
-
-				// Ensure no duplicates in absent and absent2 and ensure no key appears in both lists
-				absentSet = make(map[cipher.PubKey]struct{}, len(absent))
-				uniqueAbsent := absent[:0]
-				for _, pk := range absent {
-					if _, seen := absentSet[pk]; !seen {
-						absentSet[pk] = struct{}{}
-						uniqueAbsent = append(uniqueAbsent, pk)
-					}
-				}
-				absent = uniqueAbsent
-
-				absent2Set = make(map[cipher.PubKey]struct{}, len(absent2))
-				uniqueAbsent2 := absent2[:0]
-				for _, pk := range absent2 {
-					if _, seen := absent2Set[pk]; !seen {
-						if _, inAbsent := absentSet[pk]; !inAbsent {
-							absent2Set[pk] = struct{}{}
-							uniqueAbsent2 = append(uniqueAbsent2, pk)
-						}
-					}
-				}
-				absent2 = uniqueAbsent2
-
 			}
 
-			absent = append(absent, absent2...)
-			a.log.WithField("total", len(absent)).Debugln("Found visors to connect to")
+			a.log.WithField("total", len(append(absent1, absent2...))).
+				Debugln("Found visors to connect to")
 
-			//attempt to establish transports to the keys in random order for 5 minutes
+			// Attempt to establish transports to the keys in random order for 5 minutes
 			attemptDeadline := time.Now().Add(5 * time.Minute)
-			// Max STCPR Transports == a.maxConns == 3
+
 			maxSTCPR := a.maxConns
-			// Max SUDPH Transports == a.maxConns * 5 == 15
 			maxSUDPH := a.maxConns * 5
-			for _, pk := range shufflePubKeys(absent) {
+
+			countSTCPR := 0
+			countSUDPH := 0
+			for _, autoconnTP := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
+				switch autoconnTP.Type() {
+				case tptypes.STCPR:
+					countSTCPR++
+				case tptypes.SUDPH:
+					countSUDPH++
+				}
+			}
+
+			if countSTCPR >= maxSTCPR && countSUDPH >= maxSUDPH {
+				a.log.Debugln("Skipping public autoconnect; max STCPR and SUDPH transports reached")
+				continue
+			}
+
+			// ✅ Fixed: slice of pointers
+			var entries []*transport.Entry
+			for _, pk := range append(shufflePubKeys(absent1), shufflePubKeys(absent2)...) {
 				if time.Now().After(attemptDeadline) {
 					a.log.Debugln("Refreshing list of keys for public autoconnect")
 					break
 				}
-				//don't make self-transports
+
 				if pk == v.conf.PK {
 					continue
 				}
 
-				// Limit maximum number of autoconnect transports per transport type
-				countSTCPR := 0
-				countSUDPH := 0
-
-				for _, autoconnTP := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
-					switch autoconnTP.Type() {
-					case tptypes.STCPR:
-						countSTCPR++
-					case tptypes.SUDPH:
-						// filter SUDPH counting here to only count sudph transports
-						// to visors which are currently connected to a public visor
-						countSUDPH++
-					}
-				}
-
-				// limit transports if the remote visor already has maxconns * 100 total transports
-				// Check the transport discovery, and skip if number of entries is >= a.maxConns
-				entries, err := v.DiscoverTransportsByPK(pk)
-				if err != nil {
-					v.isServicesHealthy.unset()
-					a.log.WithField("pk", pk).WithError(err).Warn("Failed to discover transports for remote visor")
-					continue
-				}
-				v.isServicesHealthy.set()
-
-				if len(entries) >= a.maxConns*100 {
-					a.log.WithField("pk", pk).WithField("count", len(entries)).Debugln("Remote visor has reached or exceeded max connections, skipping")
-					continue
-				}
-
-				// Determine network type and attempt to establish transport using that type
 				var netType tptypes.Type
-				if _, ok := sudphKeys[pk]; ok {
-					netType = tptypes.SUDPH
-				} else if _, ok := stcprKeys[pk]; ok {
+				if _, ok := stcprKeys[pk]; ok {
 					netType = tptypes.STCPR
+				} else if _, ok := sudphKeys[pk]; ok {
+					netType = tptypes.SUDPH
 				} else {
 					a.log.WithField("pk", pk).Debugln("No supported network type found for visor")
 					continue
 				}
 
 				if netType == tptypes.STCPR && countSTCPR >= maxSTCPR {
-					a.log.WithField("pk", pk).WithField("type", netType).Debugln("Not transporting; STCPR max reached")
-					continue
+					continue // silently skip
 				}
 				if netType == tptypes.SUDPH && countSUDPH >= maxSUDPH {
-					a.log.WithField("pk", pk).WithField("type", netType).Debugln("Not transporting; SUDPH max reached")
+					continue // silently skip
+				}
+
+				entries, err = v.DiscoverTransportsByPK(pk)
+				if err != nil {
+					v.isServicesHealthy.unset()
+					a.log.WithField("pk", pk).WithError(err).
+						Warn("Failed to discover transports for remote visor")
 					continue
 				}
-				a.log.WithField("pk", pk).WithField("type", netType).Debugln("Trying to add transport to public visor")
+				v.isServicesHealthy.set()
 
+				if len(entries) >= a.maxConns*100 {
+					a.log.WithField("pk", pk).WithField("count", len(entries)).
+						Debugln("Remote visor has reached or exceeded max connections, skipping")
+					continue
+				}
+
+				a.log.WithField("pk", pk).WithField("type", netType).
+					Debugln("Trying to add transport to public visor")
 				logger := a.log.WithField("pk", pk).WithField("type", string(netType))
 				if err = a.tryEstablishTransport(ctx, pk, netType, logger); err != nil {
 					logger.WithError(err).Warnln("Failed to add transport to visor")
 					continue
+				}
+
+				if netType == tptypes.STCPR {
+					countSTCPR++
+				} else {
+					countSUDPH++
+				}
+
+				if countSTCPR >= maxSTCPR && countSUDPH >= maxSUDPH {
+					a.log.Debugln("Max STCPR and SUDPH transports reached, stopping loop")
+					break
 				}
 			}
 		}
