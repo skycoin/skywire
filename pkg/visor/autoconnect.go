@@ -128,7 +128,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			*/
 			a.log.WithField("public visors", len(addrs)).Debugln("Found")
 
-			absent := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
+			absent1 := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
 
 			// Get keys available for SUDPH transport
 			sudphKeys, err := v.arClient.TransportsType(ctx, tptypes.SUDPH)
@@ -204,17 +204,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				}
 				absent2 = filtered
 
-				// Ensure no duplicates in absent and absent2 and ensure no key appears in both lists
-				absentSet = make(map[cipher.PubKey]struct{}, len(absent))
-				uniqueAbsent := absent[:0]
-				for _, pk := range absent {
-					if _, seen := absentSet[pk]; !seen {
-						absentSet[pk] = struct{}{}
-						uniqueAbsent = append(uniqueAbsent, pk)
-					}
-				}
-				absent = uniqueAbsent
-
 				absent2Set = make(map[cipher.PubKey]struct{}, len(absent2))
 				uniqueAbsent2 := absent2[:0]
 				for _, pk := range absent2 {
@@ -229,8 +218,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 			}
 
-			//absent = append(absent, absent2...)
-			a.log.WithField("total", len(append(absent, absent2...))).Debugln("Found visors to connect to")
+			a.log.WithField("total", len(append(absent1, absent2...))).Debugln("Found visors to connect to")
 
 			//attempt to establish transports to the keys in random order for 5 minutes
 			attemptDeadline := time.Now().Add(5 * time.Minute)
@@ -238,7 +226,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			maxSTCPR := a.maxConns
 			// Max SUDPH Transports == a.maxConns * 5 == 15
 			maxSUDPH := a.maxConns * 5
-			for _, pk := range append(shufflePubKeys(absent), shufflePubKeys(absent2)...) {
+			for _, pk := range append(shufflePubKeys(absent1), shufflePubKeys(absent2)...) {
 				if time.Now().After(attemptDeadline) {
 					a.log.Debugln("Refreshing list of keys for public autoconnect")
 					break
