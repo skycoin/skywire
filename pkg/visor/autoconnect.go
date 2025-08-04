@@ -268,10 +268,10 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 				// Determine network type and attempt to establish transport using that type
 				var netType tptypes.Type
-				if _, ok := sudphKeys[pk]; ok {
-					netType = tptypes.SUDPH
-				} else if _, ok := stcprKeys[pk]; ok {
+				if _, ok := stcprKeys[pk]; ok {
 					netType = tptypes.STCPR
+				} else if _, ok := sudphKeys[pk]; ok {
+					netType = tptypes.SUDPH
 				} else {
 					a.log.WithField("pk", pk).Debugln("No supported network type found for visor")
 					continue
