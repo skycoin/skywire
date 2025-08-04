@@ -230,8 +230,8 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 			}
 
-			absent = append(absent, absent2...)
-			a.log.WithField("total", len(absent)).Debugln("Found visors to connect to")
+			//absent = append(absent, absent2...)
+			a.log.WithField("total", len(append(absent, absent2...))).Debugln("Found visors to connect to")
 
 			//attempt to establish transports to the keys in random order for 5 minutes
 			attemptDeadline := time.Now().Add(5 * time.Minute)
@@ -239,7 +239,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			maxSTCPR := a.maxConns
 			// Max SUDPH Transports == a.maxConns * 5 == 15
 			maxSUDPH := a.maxConns * 5
-			for _, pk := range shufflePubKeys(absent) {
+			for _, pk := range append(shufflePubKeys(absent), shufflePubKeys(absent2)...) {
 				if time.Now().After(attemptDeadline) {
 					a.log.Debugln("Refreshing list of keys for public autoconnect")
 					break
