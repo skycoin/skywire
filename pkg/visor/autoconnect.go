@@ -96,36 +96,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				a.log.Debugln("no public visors found")
 				continue
 			}
-			/*
-				///health check to determine online status of public visor
-				var addrs1 []cipher.PubKey
-				for _, addr := range addrs {
-					req, err := http.NewRequest(http.MethodGet, "dmsg://"+addr.String()+":80/health", nil)
-					if err != nil {
-						a.log.Debugln("failed to formulate http request")
-						continue
-					}
-					resp, err := v.dmsgHTTP.Do(req)
-					if err == nil {
-						defer resp.Body.Close()          //nolint
-						body, _ := io.ReadAll(resp.Body) //nolint
-						addrs1 = append(addrs1, addr)
-						a.log.WithField("pk", addr.String()).WithField("response.Body", string(body)).Debugln("Public visor dmsghttp '/health' check")
-						continue
-					}
-					a.log.WithField("pk", addr.String()).Debugln("Public visor dmsghttp '/health' check failed")
-					//				if addr == v.conf.PK {
-					//					a.log.Debugln("Can't fetch '/health' from local visor over dmsg")
-					//					v.Close()
-					//				}
-				}
-				addrs = addrs1
 
-				if len(addrs) == 0 {
-					a.log.Debugln("no public visors found")
-					continue
-				}
-			*/
 			a.log.WithField("public visors", len(addrs)).Debugln("Found")
 
 			absent1 := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
@@ -144,19 +115,22 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				stcprKeys = map[cipher.PubKey][]string{}
 			}
 
-			// auto-transport logic - for visors running as public visors - should only attempt to connect stcpr transports to other public visors
+			// auto-transport logic - for visors running as public visors
+			// should only attempt to connect stcpr transports to other public visors
 			var absent2 []cipher.PubKey
 			if !visorIsPublic {
-				// find keys that have transports to public visors
+				// track keys we already have
 				absentSet := make(map[cipher.PubKey]struct{}, len(addrs))
 				for _, pk := range addrs {
 					absentSet[pk] = struct{}{}
 				}
 
+				// existing auto transports to filter against
+				autoTransports := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
+
+				// track which keys we already plan to connect to
 				absent2Set := make(map[cipher.PubKey]struct{})
 
-				//check transport discovery for transport entries containing public visor edge key
-				//in order to obtain a list of keys to connect to via SUDPH
 				for _, pk := range addrs {
 					entries, err := v.DiscoverTransportsByPK(pk)
 					if err != nil {
@@ -166,56 +140,43 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					}
 					v.isServicesHealthy.set()
 
-					var entryKeys []cipher.PubKey
 					seen := make(map[cipher.PubKey]struct{})
 					for _, entry := range entries {
 						for _, edge := range entry.Edges {
-							if edge != v.conf.PK {
-								if _, ok := seen[edge]; !ok {
-									entryKeys = append(entryKeys, edge)
-									seen[edge] = struct{}{}
-								}
+							if edge == v.conf.PK {
+								continue
 							}
+							seen[edge] = struct{}{}
 						}
 					}
 
-					// exclude keys for which the visor already has transports
-					filtered := a.filterDuplicates(entryKeys, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
+					// collect new candidate keys
+					entryKeys := make([]cipher.PubKey, 0, len(seen))
+					for edge := range seen {
+						entryKeys = append(entryKeys, edge)
+					}
+
+					// filter out ones that already have transports
+					filtered := a.filterDuplicates(entryKeys, autoTransports)
+
 					for _, newPK := range filtered {
+						// skip if in original absent list
+						if _, inAbsent := absentSet[newPK]; inAbsent {
+							continue
+						}
+						// skip if already added
 						if _, seen := absent2Set[newPK]; seen {
-							continue // already in absent2
+							continue
 						}
-						if _, isAbsent := absentSet[newPK]; isAbsent {
-							continue // appears in original absent list
+						// skip if not a valid SUDPH key
+						if _, ok := sudphKeys[newPK]; !ok {
+							continue
 						}
+
 						absent2Set[newPK] = struct{}{}
 						absent2 = append(absent2, newPK)
 					}
 				}
-
-				absent2 = a.filterDuplicates(absent2, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
-
-				// remove keys that are not available for sudph transports from absent2 slice
-				filtered := absent2[:0]
-				for _, pk := range absent2 {
-					if _, ok := sudphKeys[pk]; ok {
-						filtered = append(filtered, pk)
-					}
-				}
-				absent2 = filtered
-
-				absent2Set = make(map[cipher.PubKey]struct{}, len(absent2))
-				uniqueAbsent2 := absent2[:0]
-				for _, pk := range absent2 {
-					if _, seen := absent2Set[pk]; !seen {
-						if _, inAbsent := absentSet[pk]; !inAbsent {
-							absent2Set[pk] = struct{}{}
-							uniqueAbsent2 = append(uniqueAbsent2, pk)
-						}
-					}
-				}
-				absent2 = uniqueAbsent2
-
 			}
 
 			a.log.WithField("total", len(append(absent1, absent2...))).Debugln("Found visors to connect to")
