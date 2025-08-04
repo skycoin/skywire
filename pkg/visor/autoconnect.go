@@ -181,53 +181,45 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 			a.log.WithField("total", len(append(absent1, absent2...))).Debugln("Found visors to connect to")
 
-			//attempt to establish transports to the keys in random order for 5 minutes
+			// attempt to establish transports to the keys in random order for 5 minutes
 			attemptDeadline := time.Now().Add(5 * time.Minute)
+
 			// Max STCPR Transports == a.maxConns == 3
 			maxSTCPR := a.maxConns
 			// Max SUDPH Transports == a.maxConns * 5 == 15
 			maxSUDPH := a.maxConns * 5
+
+			// Calculate current transport counts once
+			countSTCPR := 0
+			countSUDPH := 0
+			for _, autoconnTP := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
+				switch autoconnTP.Type() {
+				case tptypes.STCPR:
+					countSTCPR++
+				case tptypes.SUDPH:
+					countSUDPH++
+				}
+			}
+
+			// Skip loop entirely if we're already at the max for both
+			if countSTCPR >= maxSTCPR && countSUDPH >= maxSUDPH {
+				a.log.Debugln("Skipping public autoconnect; max STCPR and SUDPH transports reached")
+				return
+			}
+
+			// Attempt to connect to shuffled keys
 			for _, pk := range append(shufflePubKeys(absent1), shufflePubKeys(absent2)...) {
 				if time.Now().After(attemptDeadline) {
 					a.log.Debugln("Refreshing list of keys for public autoconnect")
 					break
 				}
-				//don't make self-transports
+
+				// don't make self-transports
 				if pk == v.conf.PK {
 					continue
 				}
 
-				// Limit maximum number of autoconnect transports per transport type
-				countSTCPR := 0
-				countSUDPH := 0
-
-				for _, autoconnTP := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
-					switch autoconnTP.Type() {
-					case tptypes.STCPR:
-						countSTCPR++
-					case tptypes.SUDPH:
-						// filter SUDPH counting here to only count sudph transports
-						// to visors which are currently connected to a public visor
-						countSUDPH++
-					}
-				}
-
-				// limit transports if the remote visor already has maxconns * 100 total transports
-				// Check the transport discovery, and skip if number of entries is >= a.maxConns
-				entries, err := v.DiscoverTransportsByPK(pk)
-				if err != nil {
-					v.isServicesHealthy.unset()
-					a.log.WithField("pk", pk).WithError(err).Warn("Failed to discover transports for remote visor")
-					continue
-				}
-				v.isServicesHealthy.set()
-
-				if len(entries) >= a.maxConns*100 {
-					a.log.WithField("pk", pk).WithField("count", len(entries)).Debugln("Remote visor has reached or exceeded max connections, skipping")
-					continue
-				}
-
-				// Determine network type and attempt to establish transport using that type
+				// Determine network type first
 				var netType tptypes.Type
 				if _, ok := stcprKeys[pk]; ok {
 					netType = tptypes.STCPR
@@ -238,20 +230,50 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					continue
 				}
 
+				// Check limits before any network calls
 				if netType == tptypes.STCPR && countSTCPR >= maxSTCPR {
-					a.log.WithField("pk", pk).WithField("type", netType).Debugln("Not transporting; STCPR max reached")
+					// silently skip
 					continue
 				}
 				if netType == tptypes.SUDPH && countSUDPH >= maxSUDPH {
-					a.log.WithField("pk", pk).WithField("type", netType).Debugln("Not transporting; SUDPH max reached")
+					// silently skip
 					continue
 				}
-				a.log.WithField("pk", pk).WithField("type", netType).Debugln("Trying to add transport to public visor")
 
+				// Check the transport discovery for overload
+				entries, err := v.DiscoverTransportsByPK(pk)
+				if err != nil {
+					v.isServicesHealthy.unset()
+					a.log.WithField("pk", pk).WithError(err).Warn("Failed to discover transports for remote visor")
+					continue
+				}
+				v.isServicesHealthy.set()
+
+				if len(entries) >= a.maxConns*100 {
+					a.log.WithField("pk", pk).WithField("count", len(entries)).
+						Debugln("Remote visor has reached or exceeded max connections, skipping")
+					continue
+				}
+
+				// Try to establish transport
+				a.log.WithField("pk", pk).WithField("type", netType).Debugln("Trying to add transport to public visor")
 				logger := a.log.WithField("pk", pk).WithField("type", string(netType))
 				if err = a.tryEstablishTransport(ctx, pk, netType, logger); err != nil {
 					logger.WithError(err).Warnln("Failed to add transport to visor")
 					continue
+				}
+
+				// Transport successfully added, increment the counters
+				if netType == tptypes.STCPR {
+					countSTCPR++
+				} else {
+					countSUDPH++
+				}
+
+				// Exit early if we reach the limit after adding
+				if countSTCPR >= maxSTCPR && countSUDPH >= maxSUDPH {
+					a.log.Debugln("Max STCPR and SUDPH transports reached, stopping loop")
+					break
 				}
 			}
 		}
