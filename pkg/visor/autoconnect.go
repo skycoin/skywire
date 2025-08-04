@@ -264,7 +264,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 	}
 }
 
-
 func shufflePubKeys(keys []cipher.PubKey) []cipher.PubKey {
 	n := len(keys)
 	for i := n - 1; i > 0; i-- {
