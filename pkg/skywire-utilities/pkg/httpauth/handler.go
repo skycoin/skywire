@@ -231,6 +231,10 @@ func GetRemoteAddrLB(r *http.Request) string {
 		realIP = r.RemoteAddr
 	}
 
+	// Use first IP
+	realIP = strings.Split(realIP, ",")[0]
+	realIP = strings.TrimSpace(realIP)
+
 	// remove the port incase of an IP or a PK
 	host, _, err := net.SplitHostPort(realIP)
 	if err != nil {
