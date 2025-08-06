@@ -220,31 +220,21 @@ func GetRemoteAddr(r *http.Request) string {
 	return host
 }
 
-// List of trusted proxy IPs or CIDR blocks (e.g., Docker bridge network, Nginx container IP)
-var trustedProxies = []string{
-	"172.18.0.0/16", // Default Docker network subnet
-}
-
 // GetRemoteAddrLB gets the remote address from the request behind LB
 // in case of dmsghttp the RemoteAddress is a pk so it gets the RemoteAddr
 // from the header instead
 func GetRemoteAddrLB(r *http.Request) string {
 	var pk cipher.PubKey
 
-	// remove the port incase of an IP or a PK
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr // fallback
+	realIP := r.Header.Get("X-Forwarded-For")
+	if realIP == "" {
+		realIP = r.RemoteAddr
 	}
 
-	if isTrustedProxy(host) {
-		// Get first IP from X-Forwarded-For
-		xff := r.Header.Get("X-Forwarded-For")
-		if xff != "" {
-			// X-Forwarded-For can be a comma-separated list: client, proxy1, proxy2
-			parts := strings.Split(xff, ",")
-			host = strings.TrimSpace(parts[0])
-		}
+	// remove the port incase of an IP or a PK
+	host, _, err := net.SplitHostPort(realIP)
+	if err != nil {
+		host = realIP
 	}
 
 	err = pk.Set(host)
@@ -253,18 +243,4 @@ func GetRemoteAddrLB(r *http.Request) string {
 	}
 
 	return host
-}
-
-func isTrustedProxy(ip string) bool {
-	parsedIP := net.ParseIP(ip)
-	if parsedIP == nil {
-		return false
-	}
-	for _, cidr := range trustedProxies {
-		_, network, err := net.ParseCIDR(cidr)
-		if err == nil && network.Contains(parsedIP) {
-			return true
-		}
-	}
-	return false
 }
