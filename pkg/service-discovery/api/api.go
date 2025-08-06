@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 	"net"
@@ -273,7 +274,7 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	host := httpauth.GetRemoteAddrLB(r)
-
+	fmt.Printf("host: %s \n", host)
 	if se.Geo == nil {
 		se.Geo, err = a.geoFromIP(net.ParseIP(host))
 		if err == geo.ErrIPIsNotPublic && se.Type != servicedisc.ServiceTypeVisor {
