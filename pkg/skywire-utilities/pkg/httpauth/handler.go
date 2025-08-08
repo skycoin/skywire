@@ -219,3 +219,32 @@ func GetRemoteAddr(r *http.Request) string {
 
 	return host
 }
+
+// GetRemoteAddrLB gets the remote address from the request behind LB
+// in case of dmsghttp the RemoteAddress is a pk so it gets the RemoteAddr
+// from the header instead
+func GetRemoteAddrLB(r *http.Request) string {
+	var pk cipher.PubKey
+
+	realIP := r.Header.Get("X-Forwarded-For")
+	if realIP == "" {
+		realIP = r.RemoteAddr
+	}
+
+	// Use first IP
+	realIP = strings.Split(realIP, ",")[0]
+	realIP = strings.TrimSpace(realIP)
+
+	// remove the port incase of an IP or a PK
+	host, _, err := net.SplitHostPort(realIP)
+	if err != nil {
+		host = realIP
+	}
+
+	err = pk.Set(host)
+	if err == nil {
+		return r.Header.Get("SW-PublicIP")
+	}
+
+	return host
+}
