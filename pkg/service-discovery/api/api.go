@@ -272,7 +272,7 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	host := httpauth.GetRemoteAddr(r)
+	host := httpauth.GetRemoteAddrLB(r)
 
 	if se.Geo == nil {
 		se.Geo, err = a.geoFromIP(net.ParseIP(host))
