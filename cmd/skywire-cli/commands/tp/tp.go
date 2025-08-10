@@ -34,6 +34,7 @@ var (
 	filterTypes   []string
 	filterPubKeys []string
 	showLogs      bool
+	showMore      bool
 	logger        = logging.MustGetLogger("skywire-cli")
 	removeAll     bool
 	tpTypes       bool
@@ -55,6 +56,7 @@ func init() {
 	tpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated")
 	tpCmd.Flags().StringSliceVarP(&filterPubKeys, "pks", "p", filterPubKeys, "show transport(s) for public key(s) comma-separated")
 	tpCmd.Flags().BoolVarP(&showLogs, "logs", "l", true, "show transport logs")
+	tpCmd.Flags().BoolVarP(&showMore, "more", "m", false, "show more info")
 	tpCmd.Flags().StringVarP(&tpID, "id", "i", "", "display transport matching ID")
 	tpCmd.Flags().BoolVarP(&tpTypes, "tptypes", "u", false, "display transport types used by the local visor")
 	tpCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
@@ -106,6 +108,56 @@ var tpCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), err)
 		PrintTransports(cmd.Flags(), transports...)
 	},
+}
+
+// PrintTransports prints transports used by the visor
+func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
+	sortTransports(tps...)
+
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
+	_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel")
+	internal.Catch(cmdFlags, err)
+
+	type outputTP struct {
+		Type   types.Type      `json:"type"`
+		ID     uuid.UUID       `json:"id"`
+		Remote cipher.PubKey   `json:"remote_pk"`
+		TpMode string          `json:"mode"`
+		Label  transport.Label `json:"label"`
+	}
+
+	var outputTPS []outputTP
+	for _, tp := range tps {
+		if tp == nil {
+			continue
+		}
+		tpMode := "regular"
+		if tp.IsSetup {
+			tpMode = "setup"
+		}
+		tp.Log = nil
+		oTP := outputTP{
+			Type:   tp.Type,
+			ID:     tp.ID,
+			Remote: tp.Remote,
+			TpMode: tpMode,
+			Label:  tp.Label,
+		}
+		outputTPS = append(outputTPS, oTP)
+
+		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
+		internal.Catch(cmdFlags, err)
+
+	}
+	internal.Catch(cmdFlags, w.Flush())
+	internal.PrintOutput(cmdFlags, outputTPS, b.String())
+}
+
+func sortTransports(tps ...*visor.TransportSummary) {
+	sort.Slice(tps, func(i, j int) bool {
+		return tps[i].ID.String() < tps[j].ID.String()
+	})
 }
 
 var (
@@ -309,56 +361,6 @@ var rmTpCmd = &cobra.Command{
 			internal.PrintOutput(cmd.Flags(), "", cmd.Help())
 		}
 	},
-}
-
-// PrintTransports prints transports used by the visor
-func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
-	sortTransports(tps...)
-
-	var b bytes.Buffer
-	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
-	_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel")
-	internal.Catch(cmdFlags, err)
-
-	type outputTP struct {
-		Type   types.Type      `json:"type"`
-		ID     uuid.UUID       `json:"id"`
-		Remote cipher.PubKey   `json:"remote_pk"`
-		TpMode string          `json:"mode"`
-		Label  transport.Label `json:"label"`
-	}
-
-	var outputTPS []outputTP
-	for _, tp := range tps {
-		if tp == nil {
-			continue
-		}
-		tpMode := "regular"
-		if tp.IsSetup {
-			tpMode = "setup"
-		}
-		tp.Log = nil
-		oTP := outputTP{
-			Type:   tp.Type,
-			ID:     tp.ID,
-			Remote: tp.Remote,
-			TpMode: tpMode,
-			Label:  tp.Label,
-		}
-		outputTPS = append(outputTPS, oTP)
-
-		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
-		internal.Catch(cmdFlags, err)
-
-	}
-	internal.Catch(cmdFlags, w.Flush())
-	internal.PrintOutput(cmdFlags, outputTPS, b.String())
-}
-
-func sortTransports(tps ...*visor.TransportSummary) {
-	sort.Slice(tps, func(i, j int) bool {
-		return tps[i].ID.String() < tps[j].ID.String()
-	})
 }
 
 var (
