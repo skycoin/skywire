@@ -25,6 +25,8 @@ var (
 	pk              string
 	startingTimeout int
 	jsonOutput      bool
+	country         string
+	version         string
 )
 
 // RootCmd contains commands that interact with the skywire-visor
