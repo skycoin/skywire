@@ -6,5 +6,5 @@
   "local_address": ":8080",
   "health_endpoint_address": ":8082",
   "max_sessions": 100,
-  "log_level": "info"
+  "log_level": "debug"
 }
