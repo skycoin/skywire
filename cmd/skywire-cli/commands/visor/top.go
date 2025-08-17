@@ -1,7 +1,6 @@
-//go:build ignore
-// +build ignore
+//go:build !darwin && !riscv64
 
-// Package clivisor cmd/skywire-cli/commands/visor/info.go
+// Package clivisor cmd/skywire-cli/commands/visor/top.go
 package clivisor
 
 import (

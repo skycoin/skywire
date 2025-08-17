@@ -140,6 +140,10 @@ github.com/Bios-Marcel/wastebasket/v2
 github.com/Bios-Marcel/wastebasket/v2/internal
 github.com/Bios-Marcel/wastebasket/v2/wastebasket_nix
 github.com/Bios-Marcel/wastebasket/v2/wastebasket_windows
+# github.com/BurntSushi/toml v1.1.0
+## explicit; go 1.16
+github.com/BurntSushi/toml
+github.com/BurntSushi/toml/internal
 # github.com/Masterminds/vcs v1.13.3
 ## explicit; go 1.17
 github.com/Masterminds/vcs
@@ -163,6 +167,9 @@ github.com/StackExchange/wmi
 # github.com/VictoriaMetrics/metrics v1.38.0
 ## explicit; go 1.17
 github.com/VictoriaMetrics/metrics
+# github.com/VividCortex/ewma v1.2.0
+## explicit; go 1.12
+github.com/VividCortex/ewma
 # github.com/alecthomas/chroma v0.10.0
 ## explicit; go 1.13
 github.com/alecthomas/chroma
@@ -203,6 +210,9 @@ github.com/alecthomas/chroma/styles
 github.com/alecthomas/chroma/v2
 github.com/alecthomas/chroma/v2/formatters/html
 github.com/alecthomas/chroma/v2/lexers
+# github.com/anatol/smart.go v0.0.0-20220917195147-c0b00d90f8cc
+## explicit; go 1.17
+github.com/anatol/smart.go
 # github.com/anthonynsimon/bild v0.14.0
 ## explicit; go 1.21
 github.com/anthonynsimon/bild/clone
@@ -285,6 +295,9 @@ github.com/chen3feng/safecast
 # github.com/chewxy/math32 v1.11.1
 ## explicit; go 1.13
 github.com/chewxy/math32
+# github.com/cloudfoundry-attic/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21
+## explicit
+github.com/cloudfoundry-attic/jibber_jabber
 # github.com/cloudwego/base64x v0.1.5
 ## explicit; go 1.16
 github.com/cloudwego/base64x
@@ -333,6 +346,9 @@ github.com/dgryski/go-rendezvous
 # github.com/disintegration/imaging v1.6.2
 ## explicit
 github.com/disintegration/imaging
+# github.com/distatus/battery v0.10.0
+## explicit; go 1.13
+github.com/distatus/battery
 # github.com/dlclark/regexp2 v1.11.5
 ## explicit; go 1.13
 github.com/dlclark/regexp2
@@ -368,6 +384,9 @@ github.com/docker/go-connections/tlsconfig
 # github.com/docker/go-units v0.4.0
 ## explicit
 github.com/docker/go-units
+# github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1
+## explicit
+github.com/droundy/goopt
 # github.com/elazarl/goproxy v1.7.2
 ## explicit; go 1.20
 github.com/elazarl/goproxy
@@ -405,6 +424,11 @@ github.com/gin-gonic/gin/binding
 github.com/gin-gonic/gin/internal/bytesconv
 github.com/gin-gonic/gin/internal/json
 github.com/gin-gonic/gin/render
+# github.com/gizak/termui/v3 v3.1.0
+## explicit
+github.com/gizak/termui/v3
+github.com/gizak/termui/v3/drawille
+github.com/gizak/termui/v3/widgets
 # github.com/go-chi/chi/v5 v5.2.2
 ## explicit; go 1.20
 github.com/go-chi/chi/v5
@@ -683,12 +707,18 @@ github.com/mgutz/ansi
 # github.com/mitchellh/go-homedir v1.1.0
 ## explicit
 github.com/mitchellh/go-homedir
+# github.com/mitchellh/go-wordwrap v1.0.1
+## explicit; go 1.14
+github.com/mitchellh/go-wordwrap
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
 ## explicit
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.2
 ## explicit; go 1.12
 github.com/modern-go/reflect2
+# github.com/nsf/termbox-go v1.1.1
+## explicit; go 1.15
+github.com/nsf/termbox-go
 # github.com/onsi/gomega v1.36.3
 ## explicit; go 1.23.0
 # github.com/opencontainers/go-digest v1.0.0
@@ -746,6 +776,18 @@ github.com/rs/cors/internal
 # github.com/sagikazarmark/locafero v0.10.0
 ## explicit; go 1.23.0
 github.com/sagikazarmark/locafero
+# github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0
+## explicit
+github.com/shibukawa/configdir
+# github.com/shirou/gopsutil v3.20.12+incompatible
+## explicit
+github.com/shirou/gopsutil/cpu
+github.com/shirou/gopsutil/disk
+github.com/shirou/gopsutil/host
+github.com/shirou/gopsutil/internal/common
+github.com/shirou/gopsutil/mem
+github.com/shirou/gopsutil/net
+github.com/shirou/gopsutil/process
 # github.com/shopspring/decimal v1.4.0
 ## explicit; go 1.10
 github.com/shopspring/decimal
@@ -952,6 +994,20 @@ github.com/xo/terminfo
 github.com/xtaci/kcp-go
 # github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
 ## explicit; go 1.13
+# github.com/xxxserxxx/gotop/v4 v4.2.0
+## explicit; go 1.16
+github.com/xxxserxxx/gotop/v4
+github.com/xxxserxxx/gotop/v4/colorschemes
+github.com/xxxserxxx/gotop/v4/devices
+github.com/xxxserxxx/gotop/v4/layout
+github.com/xxxserxxx/gotop/v4/logging
+github.com/xxxserxxx/gotop/v4/termui
+github.com/xxxserxxx/gotop/v4/termui/drawille-go
+github.com/xxxserxxx/gotop/v4/utils
+github.com/xxxserxxx/gotop/v4/widgets
+# github.com/xxxserxxx/lingo/v2 v2.0.1
+## explicit; go 1.16
+github.com/xxxserxxx/lingo/v2
 # github.com/yuin/goldmark v1.7.13
 ## explicit; go 1.22
 github.com/yuin/goldmark
