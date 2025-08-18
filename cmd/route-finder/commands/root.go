@@ -30,18 +30,19 @@ import (
 )
 
 var (
-	addr           string
-	metricsAddr    string
-	pgHost         string
-	pgPort         string
-	logLvl         string
-	tag            string
-	testing        bool
-	dmsgDisc       string
-	sk             cipher.SecKey
-	dmsgPort       uint16
-	dmsgServerType string
-	pgMaxOpenConn  int
+	addr            string
+	metricsAddr     string
+	pgHost          string
+	pgPort          string
+	logLvl          string
+	tag             string
+	testing         bool
+	dmsgDisc        string
+	sk              cipher.SecKey
+	dmsgPort        uint16
+	dmsgServerType  string
+	pgMaxOpenConn   int
+	multiplexingLib string
 )
 
 func init() {
@@ -57,6 +58,7 @@ func init() {
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\033[0m\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
+	RootCmd.Flags().StringVar(&multiplexingLib, "multiplexing-lib", "yamux", "type of multiplexing lib on dmsg network")
 }
 
 // RootCmd contains the root command
@@ -153,6 +155,7 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 				MinSessions:          0, // listen on all available servers
 				UpdateInterval:       dmsg.DefaultUpdateInterval,
 				ConnectedServersType: dmsgServerType,
+				Protocol:             multiplexingLib,
 			}
 
 			dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, logger, pk, sk, dClient, config)
