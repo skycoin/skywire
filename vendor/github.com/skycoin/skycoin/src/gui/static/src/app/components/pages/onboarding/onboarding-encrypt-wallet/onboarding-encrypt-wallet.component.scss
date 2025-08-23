@@ -1,0 +1,11 @@
+@import '../../../../../theme/variables';
+
+.-check-container {
+  margin: 10px auto;
+}
+
+.-check ::ng-deep {
+  .mat-checkbox-checkmark-path {
+    stroke: $white !important;
+  }
+}
