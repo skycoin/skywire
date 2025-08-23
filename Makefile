@@ -119,11 +119,11 @@ check: lint check-cg check-help test ## Run linters and tests
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
 	@echo "checking dmsghttp offline config gen"
 	@echo
-	go run cmd/skywire/skywire.go cli config gen --nofetch -dnw
+	go run . cli config gen --nofetch -dnw
 	@echo
 	@echo "checking offline config gen"
 	@echo
-	go run cmd/skywire/skywire.go cli config gen --nofetch -nw
+	go run . cli config gen --nofetch -nw
 	@echo
 	@echo "config gen succeeded without error"
 	@echo
@@ -131,11 +131,11 @@ check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen an
 check-help: ## Cursory check of the help menus
 	@echo "checking help menu for compilation without errors"
 	@echo
-	go run cmd/skywire/skywire.go --help
+	go run . --help
 	@echo
 	@echo "checking cmd/skycoin-skywire help menu for compilation without errors"
 	@echo
-	go run cmd/skycoin-skywire/skywire.go --help
+	go run . --help
 	@echo
 	@echo "compilation successful"
 	@echo
@@ -148,13 +148,13 @@ print-build: ## Print the command used to build the binary
 	@echo "${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skywire"
 
 print-run-source: ## Print the command used to go run from source
-	@echo "${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -n | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n || true"
+	@echo "${OPTS} go run ${BUILD_OPTS} . cli config gen -n | sudo ${OPTS} go run ${BUILD_OPTS} . visor -n || true"
 
 build-merged: ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
-	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire ./cmd/skycoin-skywire
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire .
 
 build-merged-windows: clean-windows
-	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire.exe ./cmd/skywire'
+	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire.exe .'
 
 install-system-linux: build ## Install apps and binaries over those provided by the linux package - linux package must be installed first!
 	sudo echo "sudo cache"
@@ -177,13 +177,13 @@ clean-windows: ## Clean project: remove created binaries and apps
 	powershell -Command "If (Test-Path ./build) { Remove-Item -Path ./build -Force -Recurse }"
 
 install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
-	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire
+	${OPTS} go install ${BUILD_OPTS} .
 
 install-windows: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	powershell 'Get-ChildItem .\cmd | % { ${OPTS} go install ${BUILD_OPTS} ./ $$_.FullName }'
 
 install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
-	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' ./cmd/skywire
+	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' .
 
 lint: ## Run linters. Use make install-linters first
 	golangci-lint --version
@@ -218,9 +218,9 @@ test: ## Run tests
 	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
 	${OPTS} go test ${TEST_OPTS}
-	go run cmd/skywire/skywire.go --help
-	go run cmd/skywire/skywire.go cli config gen -dnw
-	go run cmd/skywire/skywire.go cli config gen --nofetch -nw
+	go run . --help
+	go run . cli config gen -dnw
+	go run . cli config gen --nofetch -nw
 
 test-windows: ## Run tests on windows
 	@go clean -testcache
@@ -263,7 +263,7 @@ example-apps: ## Build example apps
 bin: fix-systray-vendor bin-fix unfix-systray-vendor
 
 bin-fix: ## Build `skywire`
-	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire
+	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) .
 
 fix-systray-vendor:
 	@if [ $(UNAME_S) = "Linux" ]; then\
@@ -280,17 +280,17 @@ build-windows: ## Build `skywire-visor`
 
 # Static Bin
 build-static: ## Build `skywire-visor`, `skywire-cli`
-	${STATIC_OPTS} go build 8 -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH) ./cmd/skywire
+	${STATIC_OPTS} go build 8 -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH) .
 
 # Static Bin without Systray
 build-static-wos: ## Build `skywire-visor`, `skywire-cli`
-	${STATIC_OPTS} go build -tags withoutsystray -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)skywire-visor ./cmd/skywire
+	${STATIC_OPTS} go build -tags withoutsystray -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH)skywire-visor .
 
 build-deploy: ## Build for deployment Docker images
-	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire ./cmd/skywire
+	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire .
 
 build-race: ## Build for testing Docker images
-	CGO_ENABLED=1 ${OPTS} go build -tags netgo ${BUILD_OPTS} -race -o /release/skywire ./cmd/skywire
+	CGO_ENABLED=1 ${OPTS} go build -tags netgo ${BUILD_OPTS} -race -o /release/skywire .
 
 github-prepare-release:
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | sed 's/-.*//'))
@@ -358,19 +358,19 @@ prepare:
 
 
 run-source: prepare ## Run skywire from source, without compiling binaries
-	${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -n | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n || true
+	${OPTS} go run ${BUILD_OPTS} . cli config gen -n | sudo ${OPTS} go run ${BUILD_OPTS} . visor -n || true
 
 run-systray: prepare ## Run skywire from source, with vpn server enabled
-	${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -n | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n --systray || true
+	${OPTS} go run ${BUILD_OPTS} . cli config gen -n | sudo ${OPTS} go run ${BUILD_OPTS} . visor -n --systray || true
 
 run-vpnsrv: prepare ## Run skywire from source, without compiling binaries
-	${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -n --servevpn | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n || true
+	${OPTS} go run ${BUILD_OPTS} . cli config gen -n --servevpn | sudo ${OPTS} go run ${BUILD_OPTS} . visor -n || true
 
 run-source-dmsghttp: prepare ## Run skywire from source with dmsghttp config
-	${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -dn | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n || true
+	${OPTS} go run ${BUILD_OPTS} . cli config gen -dn | sudo ${OPTS} go run ${BUILD_OPTS} . visor -n || true
 
 run-vpnsrv-dmsghttp: prepare ## Run skywire from source with dmsghttp config and vpn server
-	${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go cli config gen -dn --servevpn | sudo ${OPTS} go run ${BUILD_OPTS} ./cmd/skywire/skywire.go visor -n || true
+	${OPTS} go run ${BUILD_OPTS} . cli config gen -dn --servevpn | sudo ${OPTS} go run ${BUILD_OPTS} . visor -n || true
 
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
