@@ -1,0 +1,32 @@
+<app-header [headline]="'send.title-and-button' | translate"></app-header>
+<div class="container">
+  <div class="paper">
+    <!-- Forms. -->
+    <app-send-coins-form
+      *ngIf="showForm && activeForm === activeForms.LeftButton"
+      [formData]="formData"
+      [showSimpleForm]="true"
+      (onFormSubmitted)="onFormSubmitted($event)"
+    ></app-send-coins-form>
+    <app-send-coins-form
+      *ngIf="showForm && activeForm === activeForms.RightButton"
+      [formData]="formData"
+      [showSimpleForm]="false"
+      (onFormSubmitted)="onFormSubmitted($event)"
+    ></app-send-coins-form>
+    <!-- Transaction preview. -->
+    <app-send-preview
+      *ngIf="!showForm"
+      [transaction]="formData.transaction"
+      (onBack)="onBack($event)"
+    ></app-send-preview>
+  </div>
+  <!-- Links at the bottom. -->
+  <div class="-links">
+    <span class="link" (click)="signTransaction()">{{ 'offline-transactions.sign-tx.title' | translate }}</span>
+    <span class="separator"> / </span>
+    <span class="link" (click)="broadcastTransaction()">{{ 'offline-transactions.broadcast-tx.title' | translate }}</span>
+  </div>
+  <!-- Needed to force Chrome respect any previous bottom margin. -->
+  <div class="final-element"></div>
+</div>
