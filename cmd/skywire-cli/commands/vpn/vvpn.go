@@ -168,7 +168,10 @@ var statusCmd = &cobra.Command{
 	},
 }
 
-var serverPort = visorconfig.VPNServerPort
+var (
+	serverPort       = visorconfig.VPNServerPort
+	serverPortString = fmt.Sprintf("%v", serverPort)
+)
 
 func init() {
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
@@ -179,6 +182,8 @@ func init() {
 	listCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
 	listCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
+	listCmd.Flags().StringVarP(&country, "country", "c", "", "filter by country code")
+	listCmd.Flags().StringVarP(&version, "version", "v", "", "filter by version")
 	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
 	listCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
 }
@@ -188,11 +193,14 @@ var listCmd = &cobra.Command{
 	Short: "List servers",
 	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files\ndefault virtual port of servers: %v", serviceType, deployment.Prod.ServiceDiscovery, serviceType, deployment.Prod.ServiceDiscovery, serviceType, serverPort),
 	Run: func(cmd *cobra.Command, _ []string) {
+		// --- Fetch SD ---
 		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint
 			return
 		}
+
+		// --- If JSON output requested ---
 		if jsonOutput {
 			var list []services.Service
 			json.Unmarshal([]byte(sds), &list) //nolint
@@ -200,39 +208,64 @@ var listCmd = &cobra.Command{
 			internal.PrintOutput(cmd.Flags(), list, b.String())
 			return
 		}
+
+		// --- Lookup by PK ---
 		if pk != "" {
-			jsonOut, err := script.Echo(sds).JQ(`map(select(.address == "` + pk + `:` + fmt.Sprintf("%v", serverPort) + `"))`).Bytes()
+			jsonOut, err := script.Echo(sds).
+				JQ(`map(select(.address == "` + pk + `:` + serverPortString + `"))`).Bytes()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
 			script.Echo(string(pretty.Color(pretty.Pretty(jsonOut), nil))).Stdout() //nolint
 			return
 		}
-		sdJQ := `.[] .address`
-		//DEBUG: script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Replace(":", " ").Column(1).Stdout()
-		var sdkeys string
-		sdkeys, err := script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Replace(":", " ").Column(1).String()
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
-		}
+
+		// --- No filtering case ---
 		if noFilterOnline {
+			sdJQ := `.[]`
+			if country != "" {
+				sdJQ += ` | select(.geo.country == "` + country + `")`
+			}
+			if version != "" {
+				sdJQ += ` | select(.version == "` + version + `")`
+			}
+			sdJQ += ` | "\(.address | split(":")[0]) \(.geo.country) \(.version)"`
+
 			if isStats {
-				count, err := script.Echo(sdkeys).CountLines()
+				count, err := script.Echo(sds).JQ(sdJQ).Replace(`"`, "").CountLines()
 				if err != nil {
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 				}
 				script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint
 				return
 			}
-			script.Echo(sdkeys).Stdout() //nolint
+			script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout() //nolint
 			return
 		}
 
+		// --- Filtering by online status via jq join ---
 		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
-		utkeys, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").String() //nolint
+		joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, uts)
+
+		// Build jq filter with optional country and version conditions
+		countryCond := ""
+		if country != "" {
+			countryCond = ` | select(.geo.country == "` + country + `")`
+		}
+		versionCond := ""
+		if version != "" {
+			versionCond = ` | select(.version == "` + version + `")`
+		}
+
+		jqFilter := `
+		[ .ut[] | select(.on) | .pk ] as $online
+		| .sd[]
+		| select((.address | split(":")[0]) as $pk | $pk | IN($online[]))` + countryCond + versionCond + `
+		| "\((.address | split(":")[0])) \(.geo.country) \(.version)"
+		`
 
 		if isStats {
-			count, err := script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).CountLines()
+			count, err := script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").CountLines()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
@@ -240,7 +273,6 @@ var listCmd = &cobra.Command{
 			return
 		}
 
-		script.Echo(sdkeys + utkeys).Freq().Match("2 ").Column(2).Stdout() //nolint
-
+		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint
 	},
 }
