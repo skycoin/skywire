@@ -51,6 +51,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		SessionsCount:        1,
 		Servers:              []*disc.Entry{},
 		ConnectedServersType: "all",
+		Protocol:             "yamux",
 	}
 	conf.Transport = &Transport{
 		Discovery:         services.TransportDiscovery,
