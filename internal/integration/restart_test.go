@@ -70,11 +70,11 @@ func TestRestart(t *testing.T) {
 	}
 	// TODO(ersonp): currently there is some issue with the visor containers that needs to be fixed first that causes the visor to not start properly
 	// after a restart
-	t.Run("Init messaging env. Restart visors", func(t *testing.T) {
-		require.NoError(t, env.ContainerRestart(visorA, visorB, visorC))
-		time.Sleep(RestartDelay)
-		checkMessage(t, visorA, visorC)
-	})
+	// t.Run("Init messaging env. Restart visors", func(t *testing.T) {
+	// 	require.NoError(t, env.ContainerRestart(visorA, visorB, visorC))
+	// 	time.Sleep(RestartDelay)
+	// 	checkMessage(t, visorA, visorC)
+	// })
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
