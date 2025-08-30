@@ -123,6 +123,9 @@ type Entry struct {
 
 	// Signature for proving authenticity of an Entry.
 	Signature string `json:"signature,omitempty"`
+
+	// Protocol is the lib that use for multiplexing.
+	Protocol string `json:"protocol,omitempty"`
 }
 
 func (e *Entry) String() string {

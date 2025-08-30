@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/xtaci/smux"
 
 	"github.com/skycoin/dmsg/pkg/noise"
 )
@@ -17,7 +18,7 @@ import (
 type Stream struct {
 	ses  *ClientSession // back reference
 	yStr *yamux.Stream
-
+	sStr *smux.Stream
 	// The following fields are to be filled after handshake.
 	lAddr  Addr
 	rAddr  Addr
@@ -28,15 +29,30 @@ type Stream struct {
 }
 
 func newInitiatingStream(cSes *ClientSession) (*Stream, error) {
-	yStr, err := cSes.ys.OpenStream()
+	if cSes.sm.smux != nil {
+		sStr, err := cSes.sm.smux.OpenStream()
+		if err != nil {
+			return nil, err
+		}
+		return &Stream{ses: cSes, sStr: sStr}, nil
+	}
+	yStr, err := cSes.sm.yamux.OpenStream()
 	if err != nil {
 		return nil, err
 	}
 	return &Stream{ses: cSes, yStr: yStr}, nil
+
 }
 
 func newRespondingStream(cSes *ClientSession) (*Stream, error) {
-	yStr, err := cSes.ys.AcceptStream()
+	if cSes.sm.smux != nil {
+		sStr, err := cSes.sm.smux.AcceptStream()
+		if err != nil {
+			return nil, err
+		}
+		return &Stream{ses: cSes, sStr: sStr}, nil
+	}
+	yStr, err := cSes.sm.yamux.AcceptStream()
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +66,9 @@ func (s *Stream) Close() error {
 	}
 	if s.close != nil {
 		s.close()
+	}
+	if s.sStr != nil {
+		return s.sStr.Close()
 	}
 	return s.yStr.Close()
 }
@@ -83,6 +102,10 @@ func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 	obj := MakeSignedStreamRequest(&req, s.ses.localSK())
 
 	// Write request.
+	if s.sStr != nil {
+		err = s.ses.writeObject(s.sStr, obj)
+		return
+	}
 	err = s.ses.writeObject(s.yStr, obj)
 	return
 }
@@ -106,15 +129,26 @@ func (s *Stream) writeIPRequest(rAddr Addr) (req StreamRequest, err error) {
 	obj := MakeSignedStreamRequest(&req, s.ses.localSK())
 
 	// Write request.
+	if s.sStr != nil {
+		err = s.ses.writeObject(s.sStr, obj)
+		return
+	}
 	err = s.ses.writeObject(s.yStr, obj)
 	return
 }
 
 func (s *Stream) readRequest() (req StreamRequest, err error) {
 	var obj SignedObject
-	if obj, err = s.ses.readObject(s.yStr); err != nil {
-		return
+	if s.sStr != nil {
+		if obj, err = s.ses.readObject(s.sStr); err != nil {
+			return
+		}
+	} else {
+		if obj, err = s.ses.readObject(s.yStr); err != nil {
+			return
+		}
 	}
+
 	if req, err = obj.ObtainStreamRequest(); err != nil {
 		return
 	}
@@ -158,8 +192,14 @@ func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
 	}
 	obj := MakeSignedStreamResponse(&resp, s.ses.localSK())
 
-	if err := s.ses.writeObject(s.yStr, obj); err != nil {
-		return err
+	if s.sStr != nil {
+		if err := s.ses.writeObject(s.sStr, obj); err != nil {
+			return err
+		}
+	} else {
+		if err := s.ses.writeObject(s.yStr, obj); err != nil {
+			return err
+		}
 	}
 
 	// Push stream to listener.
@@ -167,9 +207,18 @@ func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
 }
 
 func (s *Stream) readResponse(req StreamRequest) error {
-	obj, err := s.ses.readObject(s.yStr)
-	if err != nil {
-		return err
+	var obj SignedObject
+	var err error
+	if s.sStr != nil {
+		obj, err = s.ses.readObject(s.sStr)
+		if err != nil {
+			return err
+		}
+	} else {
+		obj, err = s.ses.readObject(s.yStr)
+		if err != nil {
+			return err
+		}
 	}
 	resp, err := obj.ObtainStreamResponse()
 	if err != nil {
@@ -182,9 +231,18 @@ func (s *Stream) readResponse(req StreamRequest) error {
 }
 
 func (s *Stream) readIPResponse(req StreamRequest) (net.IP, error) {
-	obj, err := s.ses.readObject(s.yStr)
-	if err != nil {
-		return nil, err
+	var obj SignedObject
+	var err error
+	if s.sStr != nil {
+		obj, err = s.ses.readObject(s.sStr)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		obj, err = s.ses.readObject(s.yStr)
+		if err != nil {
+			return nil, err
+		}
 	}
 	resp, err := obj.ObtainStreamResponse()
 	if err != nil {
@@ -210,7 +268,11 @@ func (s *Stream) prepareFields(init bool, lAddr, rAddr Addr) {
 	s.lAddr = lAddr
 	s.rAddr = rAddr
 	s.ns = ns
-	s.nsConn = noise.NewReadWriter(s.yStr, s.ns)
+	if s.sStr != nil {
+		s.nsConn = noise.NewReadWriter(s.sStr, s.ns)
+	} else {
+		s.nsConn = noise.NewReadWriter(s.yStr, s.ns)
+	}
 	s.log = s.ses.log.WithField("stream", s.lAddr.ShortString()+"->"+s.rAddr.ShortString())
 }
 
@@ -241,6 +303,9 @@ func (s *Stream) ServerPK() cipher.PubKey {
 
 // StreamID returns the stream ID.
 func (s *Stream) StreamID() uint32 {
+	if s.sStr != nil {
+		return s.sStr.ID()
+	}
 	return s.yStr.StreamID()
 }
 
@@ -256,15 +321,24 @@ func (s *Stream) Write(b []byte) (int, error) {
 
 // SetDeadline implements net.Conn
 func (s *Stream) SetDeadline(t time.Time) error {
+	if s.sStr != nil {
+		return s.sStr.SetDeadline(t)
+	}
 	return s.yStr.SetDeadline(t)
 }
 
 // SetReadDeadline implements net.Conn
 func (s *Stream) SetReadDeadline(t time.Time) error {
+	if s.sStr != nil {
+		return s.sStr.SetReadDeadline(t)
+	}
 	return s.yStr.SetReadDeadline(t)
 }
 
 // SetWriteDeadline implements net.Conn
 func (s *Stream) SetWriteDeadline(t time.Time) error {
+	if s.sStr != nil {
+		return s.sStr.SetWriteDeadline(t)
+	}
 	return s.yStr.SetWriteDeadline(t)
 }

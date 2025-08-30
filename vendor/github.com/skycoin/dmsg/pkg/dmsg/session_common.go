@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/xtaci/smux"
 
 	"github.com/skycoin/dmsg/pkg/noise"
 )
@@ -24,13 +25,22 @@ type SessionCommon struct {
 	rPK    cipher.PubKey // remote pk
 
 	netConn net.Conn // underlying net.Conn (TCP connection to the dmsg server)
-	ys      *yamux.Session
-	ns      *noise.Noise
-	nMap    noise.NonceMap
-	rMx     sync.Mutex
-	wMx     sync.Mutex
+	// ys      *yamux.Session
+	// ss      *smux.Session
+	sm   SessionManager
+	ns   *noise.Noise
+	nMap noise.NonceMap
+	rMx  sync.Mutex
+	wMx  sync.Mutex
 
 	log logrus.FieldLogger
+}
+
+// SessionManager blablabla
+type SessionManager struct {
+	yamux *yamux.Session
+	smux  *smux.Session
+	addr  net.Addr
 }
 
 // GetConn returns underlying TCP `net.Conn`.
@@ -70,16 +80,9 @@ func (sc *SessionCommon) initClient(entity *EntityCommon, conn net.Conn, rPK cip
 	if rw.Buffered() > 0 {
 		return ErrSessionHandshakeExtraBytes
 	}
-
-	ySes, err := yamux.Client(conn, yamux.DefaultConfig())
-	if err != nil {
-		return err
-	}
-
 	sc.entity = entity
 	sc.rPK = rPK
 	sc.netConn = conn
-	sc.ys = ySes
 	sc.ns = ns
 	sc.nMap = make(noise.NonceMap)
 	sc.log = entity.log.WithField("session", ns.RemoteStatic())
@@ -104,15 +107,9 @@ func (sc *SessionCommon) initServer(entity *EntityCommon, conn net.Conn) error {
 		return ErrSessionHandshakeExtraBytes
 	}
 
-	ySes, err := yamux.Server(conn, yamux.DefaultConfig())
-	if err != nil {
-		return err
-	}
-
 	sc.entity = entity
 	sc.rPK = ns.RemoteStatic()
 	sc.netConn = conn
-	sc.ys = ySes
 	sc.ns = ns
 	sc.nMap = make(noise.NonceMap)
 	sc.log = entity.log.WithField("session", ns.RemoteStatic())
@@ -170,14 +167,25 @@ func (sc *SessionCommon) LocalTCPAddr() net.Addr { return sc.netConn.LocalAddr()
 func (sc *SessionCommon) RemoteTCPAddr() net.Addr { return sc.netConn.RemoteAddr() }
 
 // Ping obtains the round trip latency of the session.
-func (sc *SessionCommon) Ping() (time.Duration, error) { return sc.ys.Ping() }
+func (sc *SessionCommon) Ping() (time.Duration, error) {
+	if sc.sm.yamux != nil {
+		return sc.sm.yamux.Ping()
+	}
+	return 0, fmt.Errorf("Ping not available on SMUX protocol")
+}
 
 // Close closes the session.
 func (sc *SessionCommon) Close() error {
 	if sc == nil {
 		return nil
 	}
-	err := sc.ys.Close()
+	var err error
+	if sc.sm.smux != nil {
+		err = sc.sm.smux.Close()
+	}
+	if sc.sm.yamux != nil {
+		err = sc.sm.yamux.Close()
+	}
 	sc.rMx.Lock()
 	sc.nMap = nil
 	sc.rMx.Unlock()
