@@ -24,6 +24,8 @@ var (
 	allClients      bool
 	noFilterOnline  bool
 	clientName      string
+	country         string
+	version         string
 	addr            string
 	startingTimeout int
 	httpAddr        string
