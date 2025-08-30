@@ -225,6 +225,29 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, m
 	}
 }
 
+func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType string, protocol string) (err error) {
+	// Record last update on success.
+	defer func() {
+		if err == nil {
+			c.recordUpdate()
+		}
+	}()
+
+	srvPKs := make([]cipher.PubKey, 0, len(c.sessions))
+
+	_, err = c.dc.Entry(ctx, c.pk)
+	if err != nil {
+		entry := disc.NewClientEntry(c.pk, 0, srvPKs)
+		entry.ClientType = clientType
+		entry.Protocol = protocol
+		if err := entry.Sign(c.sk); err != nil {
+			return err
+		}
+		return c.dc.PostEntry(ctx, entry)
+	}
+	return nil
+}
+
 func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}, clientType string) (err error) {
 	if isClosed(done) {
 		return nil
@@ -293,6 +316,17 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 			t.Reset(c.updateInterval)
 		}
 	}
+}
+
+func (c *EntityCommon) entryProtocol(ctx context.Context, pk cipher.PubKey) string {
+	entry, err := c.dc.Entry(ctx, pk)
+	if err != nil {
+		c.log.WithField("entry", entry).WithError(err).Warn("Entry not found, so return empty as protocol.\n")
+		return ""
+	}
+
+	c.log.WithField("entry", entry).Debug("Entry's protocol fetch.\n")
+	return entry.Protocol
 }
 
 func (c *EntityCommon) delEntry(ctx context.Context) (err error) {

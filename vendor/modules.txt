@@ -755,7 +755,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20250823231529-5ea8f3037103
+# github.com/skycoin/dmsg v1.3.29-0.20250830133032-a0340da3246c
 ## explicit; go 1.24
 github.com/skycoin/dmsg/cmd/conf/commands
 github.com/skycoin/dmsg/cmd/dial/commands
@@ -954,6 +954,9 @@ github.com/xo/terminfo
 github.com/xtaci/kcp-go
 # github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
 ## explicit; go 1.13
+# github.com/xtaci/smux v1.5.34
+## explicit; go 1.13
+github.com/xtaci/smux
 # github.com/yuin/goldmark v1.7.13
 ## explicit; go 1.22
 github.com/yuin/goldmark
