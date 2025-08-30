@@ -10,9 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/yamux"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/xtaci/smux"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/dmsg/pkg/disc"
@@ -47,6 +49,7 @@ type Config struct {
 	Callbacks            *ClientCallbacks
 	ClientType           string
 	ConnectedServersType string
+	Protocol             string
 }
 
 // Ensure ensures all config values are set.
@@ -156,6 +159,8 @@ func (ce *Client) Serve(ctx context.Context) {
 
 	updateEntryLoopOnce := new(sync.Once)
 
+	needInitialPost := true
+
 	for {
 		if isClosed(ce.done) {
 			return
@@ -208,6 +213,18 @@ func (ce *Client) Serve(ctx context.Context) {
 		rand.Shuffle(len(entries), func(i, j int) {
 			entries[i], entries[j] = entries[j], entries[i]
 		})
+
+		if needInitialPost {
+			// use this for put protocol type of client to disc, for dicision part of dmsg-server
+			err = ce.initilizeClientEntry(cancellabelCtx, ce.conf.ClientType, ce.conf.Protocol)
+			if err != nil {
+				ce.log.WithError(err).Warn("Initial post entry failed")
+			} else {
+				ce.log.WithError(err).Info("Initial post entry successed")
+			}
+			needInitialPost = false
+		}
+
 		for n, entry := range entries {
 			if isClosed(ce.done) {
 				return
@@ -490,7 +507,7 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 		ce.log.WithField("remote_pk", entry.Static).Debug("Session already exists...")
 		return nil
 	}
-
+	entry.Protocol = ce.conf.Protocol
 	// Dial session.
 	_, err := ce.dialSession(ctx, entry)
 	return err
@@ -536,6 +553,19 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	dSes, err := makeClientSession(&ce.EntityCommon, ce.porter, conn, entry.Static)
 	if err != nil {
 		return ClientSession{}, err
+	}
+	if entry.Protocol == "smux" {
+		dSes.sm.smux, err = smux.Client(conn, smux.DefaultConfig())
+		if err != nil {
+			return ClientSession{}, err
+		}
+		ce.log.Infof("smux stream session initial for %s", dSes.RemotePK().String())
+	} else {
+		dSes.sm.yamux, err = yamux.Client(conn, yamux.DefaultConfig())
+		if err != nil {
+			return ClientSession{}, err
+		}
+		ce.log.Infof("yamux stream session initial for %s", dSes.RemotePK().String())
 	}
 
 	if !ce.setSession(ctx, dSes.SessionCommon) {
