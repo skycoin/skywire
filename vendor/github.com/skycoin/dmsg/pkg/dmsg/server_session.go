@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/xtaci/smux"
 
 	"github.com/skycoin/dmsg/internal/servermetrics"
 	"github.com/skycoin/dmsg/pkg/noise"
@@ -44,30 +45,54 @@ func (ss *ServerSession) Close() error {
 func (ss *ServerSession) Serve() {
 	ss.m.RecordSession(servermetrics.DeltaConnect)          // record successful connection
 	defer ss.m.RecordSession(servermetrics.DeltaDisconnect) // record disconnection
-
-	for {
-		yStr, err := ss.ys.AcceptStream()
-		if err != nil {
-			switch err {
-			case yamux.ErrSessionShutdown, io.EOF:
-				ss.log.WithError(err).Info("Stopping session...")
-			default:
-				ss.log.WithError(err).Warn("Failed to accept stream, stopping session...")
+	if ss.sm.smux != nil {
+		for {
+			sStr, err := ss.sm.smux.AcceptStream()
+			if err != nil {
+				switch err {
+				case io.EOF:
+					ss.log.WithError(err).Info("Stopping session...")
+				default:
+					ss.log.WithError(err).Warn("Failed to accept stream, stopping session...")
+				}
+				return
 			}
-			return
+
+			log := ss.log.WithField("smux_id", sStr.ID())
+			log.Info("Initiating stream.")
+
+			go func(sStr *smux.Stream) {
+				err := ss.serveStream(log, sStr, ss.sm.addr)
+				log.WithError(err).Info("Stopped stream.")
+			}(sStr)
 		}
+	} else {
+		for {
+			yStr, err := ss.sm.yamux.AcceptStream()
+			if err != nil {
+				switch err {
+				case yamux.ErrSessionShutdown, io.EOF:
+					ss.log.WithError(err).Info("Stopping session...")
+				default:
+					ss.log.WithError(err).Warn("Failed to accept stream, stopping session...")
+				}
+				return
+			}
 
-		log := ss.log.WithField("yamux_id", yStr.StreamID())
-		log.Info("Initiating stream.")
+			log := ss.log.WithField("yamux_id", yStr.StreamID())
+			log.Info("Initiating stream.")
 
-		go func(yStr *yamux.Stream) {
-			err := ss.serveStream(log, yStr)
-			log.WithError(err).Info("Stopped stream.")
-		}(yStr)
+			go func(yStr *yamux.Stream) {
+				err := ss.serveStream(log, yStr, ss.sm.addr)
+				log.WithError(err).Info("Stopped stream.")
+			}(yStr)
+		}
 	}
 }
 
-func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr *yamux.Stream) error {
+// struct
+
+func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCloser, addr net.Addr) error {
 	readRequest := func() (StreamRequest, error) {
 		obj, err := ss.readObject(yStr)
 		if err != nil {
@@ -102,7 +127,7 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr *yamux.Stream)
 	if req.IPinfo && req.DstAddr.PK == ss.entity.LocalPK() {
 		log.Debug("Received IP stream request.")
 
-		ip, err := addrToIP(yStr.RemoteAddr())
+		ip, err := addrToIP(addr)
 		if err != nil {
 			ss.m.RecordStream(servermetrics.DeltaFailed) // record failed stream
 			return err
@@ -164,22 +189,27 @@ func addrToIP(addr net.Addr) (net.IP, error) {
 	}
 }
 
-func (ss *ServerSession) forwardRequest(req StreamRequest) (yStr *yamux.Stream, respObj SignedObject, err error) {
+func (ss *ServerSession) forwardRequest(req StreamRequest) (mStr io.ReadWriteCloser, respObj SignedObject, err error) {
 	defer func() {
-		if err != nil && yStr != nil {
+		if err != nil && mStr != nil {
 			ss.log.
-				WithError(yStr.Close()).
+				WithError(mStr.Close()).
 				Debugf("After forwardRequest failed, the yamux stream is closed.")
 		}
 	}()
-
-	if yStr, err = ss.ys.OpenStream(); err != nil {
+	if ss.sm.smux != nil {
+		if mStr, err = ss.sm.smux.OpenStream(); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		if mStr, err = ss.sm.yamux.OpenStream(); err != nil {
+			return nil, nil, err
+		}
+	}
+	if err = ss.writeObject(mStr, req.raw); err != nil {
 		return nil, nil, err
 	}
-	if err = ss.writeObject(yStr, req.raw); err != nil {
-		return nil, nil, err
-	}
-	if respObj, err = ss.readObject(yStr); err != nil {
+	if respObj, err = ss.readObject(mStr); err != nil {
 		return nil, nil, err
 	}
 	var resp StreamResponse
@@ -189,5 +219,5 @@ func (ss *ServerSession) forwardRequest(req StreamRequest) (yStr *yamux.Stream, 
 	if err = resp.Verify(req); err != nil {
 		return nil, nil, err
 	}
-	return yStr, respObj, nil
+	return mStr, respObj, nil
 }
