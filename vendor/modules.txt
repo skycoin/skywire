@@ -160,8 +160,8 @@ github.com/Microsoft/go-winio/pkg/guid
 # github.com/StackExchange/wmi v1.2.1
 ## explicit; go 1.13
 github.com/StackExchange/wmi
-# github.com/VictoriaMetrics/metrics v1.38.0
-## explicit; go 1.17
+# github.com/VictoriaMetrics/metrics v1.39.1
+## explicit; go 1.18
 github.com/VictoriaMetrics/metrics
 # github.com/alecthomas/chroma v0.10.0
 ## explicit; go 1.13
@@ -285,8 +285,8 @@ github.com/chen3feng/safecast
 # github.com/chewxy/math32 v1.11.1
 ## explicit; go 1.13
 github.com/chewxy/math32
-# github.com/cloudwego/base64x v0.1.5
-## explicit; go 1.16
+# github.com/cloudwego/base64x v0.1.6
+## explicit; go 1.17
 github.com/cloudwego/base64x
 github.com/cloudwego/base64x/internal/native
 github.com/cloudwego/base64x/internal/native/avx2
@@ -753,7 +753,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20250724155945-242a19a75d86
+# github.com/skycoin/dmsg v1.3.29-0.20250830133032-a0340da3246c
 ## explicit; go 1.24
 github.com/skycoin/dmsg/cmd/conf/commands
 github.com/skycoin/dmsg/cmd/dial/commands
@@ -792,9 +792,8 @@ github.com/skycoin/dmsg/pkg/noise
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.1-0.20241105130348-39b49a2d0a7f
-## explicit; go 1.22.0
-github.com/skycoin/skycoin
+# github.com/skycoin/skycoin v0.28.1-0.20250823221707-c533551dfabd
+## explicit; go 1.23.0
 github.com/skycoin/skycoin/cmd/newcoin/commands
 github.com/skycoin/skycoin/cmd/skycoin-cli/commands
 github.com/skycoin/skycoin/cmd/skycoin-wallet/commands
@@ -824,6 +823,7 @@ github.com/skycoin/skycoin/src/daemon/gnet
 github.com/skycoin/skycoin/src/daemon/pex
 github.com/skycoin/skycoin/src/daemon/strand
 github.com/skycoin/skycoin/src/fiber
+github.com/skycoin/skycoin/src/gui
 github.com/skycoin/skycoin/src/kvstorage
 github.com/skycoin/skycoin/src/params
 github.com/skycoin/skycoin/src/readable
@@ -952,6 +952,9 @@ github.com/xo/terminfo
 github.com/xtaci/kcp-go
 # github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
 ## explicit; go 1.13
+# github.com/xtaci/smux v1.5.34
+## explicit; go 1.13
+github.com/xtaci/smux
 # github.com/yuin/goldmark v1.7.13
 ## explicit; go 1.22
 github.com/yuin/goldmark
@@ -980,10 +983,10 @@ go.etcd.io/bbolt/internal/freelist
 ## explicit; go 1.23
 go.uber.org/mock/mockgen
 go.uber.org/mock/mockgen/model
-# golang.org/x/arch v0.19.0
+# golang.org/x/arch v0.20.0
 ## explicit; go 1.23.0
 golang.org/x/arch/x86/x86asm
-# golang.org/x/crypto v0.40.0
+# golang.org/x/crypto v0.41.0
 ## explicit; go 1.23.0
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
@@ -1025,7 +1028,7 @@ golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/modfile
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.42.0
+# golang.org/x/net v0.43.0
 ## explicit; go 1.23.0
 golang.org/x/net/bpf
 golang.org/x/net/context
@@ -1050,17 +1053,17 @@ golang.org/x/net/proxy
 ## explicit; go 1.23.0
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.34.0
+# golang.org/x/sys v0.35.0
 ## explicit; go 1.23.0
 golang.org/x/sys/cpu
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/term v0.33.0
+# golang.org/x/term v0.34.0
 ## explicit; go 1.23.0
 golang.org/x/term
-# golang.org/x/text v0.27.0
+# golang.org/x/text v0.28.0
 ## explicit; go 1.23.0
 golang.org/x/text/cases
 golang.org/x/text/encoding
@@ -1119,8 +1122,8 @@ golang.zx2c4.com/wireguard/conn
 golang.zx2c4.com/wireguard/conn/winrio
 golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
-# google.golang.org/protobuf v1.36.6
-## explicit; go 1.22
+# google.golang.org/protobuf v1.36.8
+## explicit; go 1.23
 google.golang.org/protobuf/encoding/protowire
 google.golang.org/protobuf/internal/detrand
 google.golang.org/protobuf/internal/encoding/messageset

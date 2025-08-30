@@ -7,9 +7,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/yamux"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/xtaci/smux"
 
 	"github.com/skycoin/dmsg/internal/servermetrics"
 	"github.com/skycoin/dmsg/pkg/disc"
@@ -214,7 +216,6 @@ func (s *Server) handleSession(conn net.Conn) {
 		}
 		return
 	}
-
 	log = log.WithField("remote_pk", dSes.RemotePK())
 	log.Info("Started session.")
 
@@ -223,6 +224,27 @@ func (s *Server) handleSession(conn net.Conn) {
 		awaitDone(ctx, s.done)
 		log.WithError(dSes.Close()).Info("Stopped session.")
 	}()
+	// detect visor protocol for dmsg
+	protocol := s.entryProtocol(ctx, dSes.RemotePK())
+
+	// based on protocol, create smux or yamux stream session
+	if protocol == "smux" {
+		dSes.sm.smux, err = smux.Server(conn, smux.DefaultConfig())
+		if err != nil {
+			cancel()
+			return
+		}
+		dSes.sm.addr = dSes.sm.smux.RemoteAddr()
+		log.Infof("smux stream session initial for %s", dSes.RemotePK().String())
+	} else {
+		dSes.sm.yamux, err = yamux.Server(conn, yamux.DefaultConfig())
+		if err != nil {
+			cancel()
+			return
+		}
+		dSes.sm.addr = dSes.sm.yamux.RemoteAddr()
+		log.Infof("yamux stream session initial for %s", dSes.RemotePK().String())
+	}
 
 	if s.setSession(ctx, dSes.SessionCommon) {
 		dSes.Serve()

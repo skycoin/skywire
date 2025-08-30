@@ -1,0 +1,20 @@
+@import '../../../../../theme/variables';
+
+.-wrapper {
+  margin: $main-containers-margin;
+}
+
+.paper {
+  margin: 0;
+}
+
+.-item {
+  &:not(:last-child) {
+    margin-bottom: 20px;
+  }
+
+  .-key {
+    color: $grey;
+    margin-bottom: 5px;
+  }
+}

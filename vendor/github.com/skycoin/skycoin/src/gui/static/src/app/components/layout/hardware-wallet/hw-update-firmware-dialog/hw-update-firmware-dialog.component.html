@@ -1,0 +1,53 @@
+<app-modal [headline]="this.title | translate" [dialog]="dialogRef" [disableDismiss]="currentState === states.Processing">
+  <!-- Initial instructions and warnings. -->
+  <div *ngIf="currentState === states.Initial">
+    <app-hw-message
+      [text]="(text | translate)"
+      [icon]="deviceHasFirmware ? msgIcons.Warning : msgIcons.HardwareWallet"
+    ></app-hw-message>
+
+    <div class="-check-container" *ngIf="deviceHasFirmware">
+      <mat-checkbox type="checkbox"
+                    class="-check"
+                    [checked]="confirmed"
+                    (change)="setConfirmed($event)">{{ 'common.generic-confirmation-check' | translate }}
+      </mat-checkbox>
+    </div>
+
+    <div class="-buttons">
+      <app-button (action)="closeModal()">
+        {{ 'common.cancel-button' | translate }}
+      </app-button>
+      <app-button (action)="startUpdating()" class="primary-button" [disabled]="deviceHasFirmware && !confirmed">
+        {{ 'common.continue-button' | translate }}
+      </app-button>
+    </div>
+  </div>
+
+  <div *ngIf="currentState !== states.Initial">
+    <!-- Initial connection animation. -->
+    <app-hw-message *ngIf="currentState === states.Connecting"
+      [text]="'hardware-wallet.update-firmware.title-connecting' | translate"
+      [icon]="msgIcons.Spinner"
+    ></app-hw-message>
+
+    <!-- Install instructions. -->
+    <app-hw-message *ngIf="currentState === states.Processing"
+      [text]="'hardware-wallet.update-firmware.follow' | translate"
+      [icon]="msgIcons.Confirm"
+    ></app-hw-message>
+
+    <!-- Result. -->
+    <app-hw-message *ngIf="currentState === states.ShowingResult"
+      [text]="result.text | translate"
+      [icon]="result.icon"
+    ></app-hw-message>
+
+    <!-- Buttons area. -->
+    <div class="-buttons" *ngIf="currentState !== states.Processing">
+      <app-button (action)="closeModal()" class="primary-button" #closeButton>
+        {{ 'common.close-button' | translate }}
+      </app-button>
+    </div>
+  </div>
+</app-modal>
