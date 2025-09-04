@@ -72,8 +72,8 @@ function build_installer() {
 
   cp ${mac_script_dir}/icon.icns ${installer_package_dir}/Contents/Resources/icon.icns
   mv ./skywire ${installer_package_dir}/Contents/MacOS/skywire
-  cp ./dmsghttp-config.json ${installer_package_dir}/Contents/MacOS/dmsghttp-config.json
-  cp ./services-config.json ${installer_package_dir}/Contents/MacOS/services-config.json
+  cp ./deployment/dmsghttp-config.json ${installer_package_dir}/Contents/MacOS/dmsghttp-config.json
+  cp ./deployment/services-config.json ${installer_package_dir}/Contents/MacOS/services-config.json
 
   cat <<EOF >${installer_package_dir}/Contents/MacOS/SkywireLauncher
 #!/bin/bash
