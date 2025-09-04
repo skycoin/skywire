@@ -1,126 +1,40 @@
-package types
+package types // import "github.com/docker/docker/api/types"
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"net"
-	"os"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/go-units"
+	"github.com/docker/docker/api/types/registry"
 )
 
-// CheckpointCreateOptions holds parameters to create a checkpoint from a container
-type CheckpointCreateOptions struct {
-	CheckpointID  string
-	CheckpointDir string
-	Exit          bool
-}
-
-// CheckpointListOptions holds parameters to list checkpoints for a container
-type CheckpointListOptions struct {
-	CheckpointDir string
-}
-
-// CheckpointDeleteOptions holds parameters to delete a checkpoint from a container
-type CheckpointDeleteOptions struct {
-	CheckpointID  string
-	CheckpointDir string
-}
-
-// ContainerAttachOptions holds parameters to attach to a container.
-type ContainerAttachOptions struct {
-	Stream     bool
-	Stdin      bool
-	Stdout     bool
-	Stderr     bool
-	DetachKeys string
-	Logs       bool
-}
-
-// ContainerCommitOptions holds parameters to commit changes into a container.
-type ContainerCommitOptions struct {
-	Reference string
-	Comment   string
-	Author    string
-	Changes   []string
-	Pause     bool
-	Config    *container.Config
-}
-
-// ContainerExecInspect holds information returned by exec inspect.
-type ContainerExecInspect struct {
-	ExecID      string
-	ContainerID string
-	Running     bool
-	ExitCode    int
-	Pid         int
-}
-
-// ContainerListOptions holds parameters to list containers with.
-type ContainerListOptions struct {
-	Quiet   bool
-	Size    bool
-	All     bool
-	Latest  bool
-	Since   string
-	Before  string
-	Limit   int
-	Filters filters.Args
-}
-
-// ContainerLogsOptions holds parameters to filter logs with.
-type ContainerLogsOptions struct {
-	ShowStdout bool
-	ShowStderr bool
-	Since      string
-	Timestamps bool
-	Follow     bool
-	Tail       string
-	Details    bool
-}
-
-// ContainerRemoveOptions holds parameters to remove containers.
-type ContainerRemoveOptions struct {
-	RemoveVolumes bool
-	RemoveLinks   bool
-	Force         bool
-}
-
-// ContainerStartOptions holds parameters to start containers.
-type ContainerStartOptions struct {
-	CheckpointID  string
-	CheckpointDir string
-}
-
-// CopyToContainerOptions holds information
-// about files to copy into a container
-type CopyToContainerOptions struct {
-	AllowOverwriteDirWithFile bool
-}
-
-// EventsOptions holds parameters to filter events with.
-type EventsOptions struct {
-	Since   string
-	Until   string
-	Filters filters.Args
-}
-
-// NetworkListOptions holds parameters to filter the list of networks with.
-type NetworkListOptions struct {
-	Filters filters.Args
+// NewHijackedResponse initializes a [HijackedResponse] type.
+func NewHijackedResponse(conn net.Conn, mediaType string) HijackedResponse {
+	return HijackedResponse{Conn: conn, Reader: bufio.NewReader(conn), mediaType: mediaType}
 }
 
 // HijackedResponse holds connection information for a hijacked request.
 type HijackedResponse struct {
-	Conn   net.Conn
-	Reader *bufio.Reader
+	mediaType string
+	Conn      net.Conn
+	Reader    *bufio.Reader
 }
 
 // Close closes the hijacked connection and reader.
 func (h *HijackedResponse) Close() {
 	h.Conn.Close()
+}
+
+// MediaType let client know if HijackedResponse hold a raw or multiplexed stream.
+// returns false if HTTP Content-Type is not relevant, and container must be inspected
+func (h *HijackedResponse) MediaType() (string, bool) {
+	if h.mediaType == "" {
+		return "", false
+	}
+	return h.mediaType, true
 }
 
 // CloseWriter is an interface that implements structs
@@ -159,12 +73,13 @@ type ImageBuildOptions struct {
 	NetworkMode    string
 	ShmSize        int64
 	Dockerfile     string
-	Ulimits        []*units.Ulimit
-	// See the parsing of buildArgs in api/server/router/build/build_routes.go
-	// for an explaination of why BuildArgs needs to use *string instead of
-	// just a string
+	Ulimits        []*container.Ulimit
+	// BuildArgs needs to be a *string instead of just a string so that
+	// we can tell the difference between "" (empty string) and no value
+	// at all (nil). See the parsing of buildArgs in
+	// api/server/router/build/build_routes.go for even more info.
 	BuildArgs   map[string]*string
-	AuthConfigs map[string]AuthConfig
+	AuthConfigs map[string]registry.AuthConfig
 	Context     io.Reader
 	Labels      map[string]string
 	// squash the resulting image's layers to the parent
@@ -175,7 +90,36 @@ type ImageBuildOptions struct {
 	// specified here do not need to have a valid parent chain to match cache.
 	CacheFrom   []string
 	SecurityOpt []string
+	ExtraHosts  []string // List of extra hosts
+	Target      string
+	SessionID   string
+	Platform    string
+	// Version specifies the version of the underlying builder to use
+	Version BuilderVersion
+	// BuildID is an optional identifier that can be passed together with the
+	// build request. The same identifier can be used to gracefully cancel the
+	// build with the cancel request.
+	BuildID string
+	// Outputs defines configurations for exporting build results. Only supported
+	// in BuildKit mode
+	Outputs []ImageBuildOutput
 }
+
+// ImageBuildOutput defines configuration for exporting a build result
+type ImageBuildOutput struct {
+	Type  string
+	Attrs map[string]string
+}
+
+// BuilderVersion sets the version of underlying builder to use
+type BuilderVersion string
+
+const (
+	// BuilderV1 is the first generation builder in docker daemon
+	BuilderV1 BuilderVersion = "1"
+	// BuilderBuildKit is builder based on moby/buildkit project
+	BuilderBuildKit BuilderVersion = "2"
+)
 
 // ImageBuildResponse holds information
 // returned by a server after building
@@ -183,89 +127,6 @@ type ImageBuildOptions struct {
 type ImageBuildResponse struct {
 	Body   io.ReadCloser
 	OSType string
-}
-
-// ImageCreateOptions holds information to create images.
-type ImageCreateOptions struct {
-	RegistryAuth string // RegistryAuth is the base64 encoded credentials for the registry
-}
-
-// ImageImportSource holds source information for ImageImport
-type ImageImportSource struct {
-	Source     io.Reader // Source is the data to send to the server to create this image from (mutually exclusive with SourceName)
-	SourceName string    // SourceName is the name of the image to pull (mutually exclusive with Source)
-}
-
-// ImageImportOptions holds information to import images from the client host.
-type ImageImportOptions struct {
-	Tag     string   // Tag is the name to tag this image with. This attribute is deprecated.
-	Message string   // Message is the message to tag the image with
-	Changes []string // Changes are the raw changes to apply to this image
-}
-
-// ImageListOptions holds parameters to filter the list of images with.
-type ImageListOptions struct {
-	All     bool
-	Filters filters.Args
-}
-
-// ImageLoadResponse returns information to the client about a load process.
-type ImageLoadResponse struct {
-	// Body must be closed to avoid a resource leak
-	Body io.ReadCloser
-	JSON bool
-}
-
-// ImagePullOptions holds information to pull images.
-type ImagePullOptions struct {
-	All           bool
-	RegistryAuth  string // RegistryAuth is the base64 encoded credentials for the registry
-	PrivilegeFunc RequestPrivilegeFunc
-}
-
-// RequestPrivilegeFunc is a function interface that
-// clients can supply to retry operations after
-// getting an authorization error.
-// This function returns the registry authentication
-// header value in base 64 format, or an error
-// if the privilege request fails.
-type RequestPrivilegeFunc func() (string, error)
-
-//ImagePushOptions holds information to push images.
-type ImagePushOptions ImagePullOptions
-
-// ImageRemoveOptions holds parameters to remove images.
-type ImageRemoveOptions struct {
-	Force         bool
-	PruneChildren bool
-}
-
-// ImageSearchOptions holds parameters to search images with.
-type ImageSearchOptions struct {
-	RegistryAuth  string
-	PrivilegeFunc RequestPrivilegeFunc
-	Filters       filters.Args
-	Limit         int
-}
-
-// ResizeOptions holds parameters to resize a tty.
-// It can be used to resize container ttys and
-// exec process ttys too.
-type ResizeOptions struct {
-	Height uint
-	Width  uint
-}
-
-// VersionResponse holds version information for the client and the server
-type VersionResponse struct {
-	Client *Version
-	Server *Version
-}
-
-// ServerOK returns true when the client could connect to the docker server
-// and parse the information received. It returns false otherwise.
-func (v VersionResponse) ServerOK() bool {
-	return v.Server != nil
 }
 
 // NodeListOptions holds parameters to list nodes with.
@@ -285,15 +146,12 @@ type ServiceCreateOptions struct {
 	//
 	// This field follows the format of the X-Registry-Auth header.
 	EncodedRegistryAuth string
-}
 
-// ServiceCreateResponse contains the information returned to a client
-// on the creation of a new service.
-type ServiceCreateResponse struct {
-	// ID is the ID of the created service.
-	ID string
-	// Warnings is a set of non-fatal warning messages to pass on to the user.
-	Warnings []string `json:",omitempty"`
+	// QueryRegistry indicates whether the service update requires
+	// contacting a registry. A registry may be contacted to retrieve
+	// the image digest and manifest, which in turn can be used to update
+	// platform or other information about the service.
+	QueryRegistry bool
 }
 
 // Values for RegistryAuthFrom in ServiceUpdateOptions
@@ -318,14 +176,36 @@ type ServiceUpdateOptions struct {
 	// credentials if they are not given in EncodedRegistryAuth. Valid
 	// values are "spec" and "previous-spec".
 	RegistryAuthFrom string
+
+	// Rollback indicates whether a server-side rollback should be
+	// performed. When this is set, the provided spec will be ignored.
+	// The valid values are "previous" and "none". An empty value is the
+	// same as "none".
+	Rollback string
+
+	// QueryRegistry indicates whether the service update requires
+	// contacting a registry. A registry may be contacted to retrieve
+	// the image digest and manifest, which in turn can be used to update
+	// platform or other information about the service.
+	QueryRegistry bool
 }
 
-// ServiceListOptions holds parameters to list  services with.
+// ServiceListOptions holds parameters to list services with.
 type ServiceListOptions struct {
 	Filters filters.Args
+
+	// Status indicates whether the server should include the service task
+	// count of running and desired tasks.
+	Status bool
 }
 
-// TaskListOptions holds parameters to list  tasks with.
+// ServiceInspectOptions holds parameters related to the "service inspect"
+// operation.
+type ServiceInspectOptions struct {
+	InsertDefaults bool
+}
+
+// TaskListOptions holds parameters to list tasks with.
 type TaskListOptions struct {
 	Filters filters.Args
 }
@@ -347,22 +227,20 @@ type PluginDisableOptions struct {
 
 // PluginInstallOptions holds parameters to install a plugin.
 type PluginInstallOptions struct {
-	Disabled              bool
-	AcceptAllPermissions  bool
-	RegistryAuth          string // RegistryAuth is the base64 encoded credentials for the registry
-	RemoteRef             string // RemoteRef is the plugin name on the registry
-	PrivilegeFunc         RequestPrivilegeFunc
-	AcceptPermissionsFunc func(PluginPrivileges) (bool, error)
-	Args                  []string
-}
+	Disabled             bool
+	AcceptAllPermissions bool
+	RegistryAuth         string // RegistryAuth is the base64 encoded credentials for the registry
+	RemoteRef            string // RemoteRef is the plugin name on the registry
 
-// SecretRequestOption is a type for requesting secrets
-type SecretRequestOption struct {
-	Source string
-	Target string
-	UID    string
-	GID    string
-	Mode   os.FileMode
+	// PrivilegeFunc is a function that clients can supply to retry operations
+	// after getting an authorization error. This function returns the registry
+	// authentication header value in base64 encoded format, or an error if the
+	// privilege request fails.
+	//
+	// For details, refer to [github.com/docker/docker/api/types/registry.RequestAuthConfig].
+	PrivilegeFunc         func(context.Context) (string, error)
+	AcceptPermissionsFunc func(context.Context, PluginPrivileges) (bool, error)
+	Args                  []string
 }
 
 // SwarmUnlockKeyResponse contains the response for Engine API:

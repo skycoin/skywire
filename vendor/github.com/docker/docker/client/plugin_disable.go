@@ -1,14 +1,18 @@
-package client
+package client // import "github.com/docker/docker/client"
 
 import (
+	"context"
 	"net/url"
 
 	"github.com/docker/docker/api/types"
-	"golang.org/x/net/context"
 )
 
 // PluginDisable disables a plugin
 func (cli *Client) PluginDisable(ctx context.Context, name string, options types.PluginDisableOptions) error {
+	name, err := trimID("plugin", name)
+	if err != nil {
+		return err
+	}
 	query := url.Values{}
 	if options.Force {
 		query.Set("force", "1")

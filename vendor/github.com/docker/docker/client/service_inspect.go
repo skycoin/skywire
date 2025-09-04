@@ -1,27 +1,33 @@
-package client
+package client // import "github.com/docker/docker/client"
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"io/ioutil"
-	"net/http"
+	"fmt"
+	"io"
+	"net/url"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/swarm"
-	"golang.org/x/net/context"
 )
 
 // ServiceInspectWithRaw returns the service information and the raw data.
-func (cli *Client) ServiceInspectWithRaw(ctx context.Context, serviceID string) (swarm.Service, []byte, error) {
-	serverResp, err := cli.get(ctx, "/services/"+serviceID, nil, nil)
+func (cli *Client) ServiceInspectWithRaw(ctx context.Context, serviceID string, opts types.ServiceInspectOptions) (swarm.Service, []byte, error) {
+	serviceID, err := trimID("service", serviceID)
 	if err != nil {
-		if serverResp.statusCode == http.StatusNotFound {
-			return swarm.Service{}, nil, serviceNotFoundError{serviceID}
-		}
 		return swarm.Service{}, nil, err
 	}
-	defer ensureReaderClosed(serverResp)
 
-	body, err := ioutil.ReadAll(serverResp.body)
+	query := url.Values{}
+	query.Set("insertDefaults", fmt.Sprintf("%v", opts.InsertDefaults))
+	resp, err := cli.get(ctx, "/services/"+serviceID, query, nil)
+	defer ensureReaderClosed(resp)
+	if err != nil {
+		return swarm.Service{}, nil, err
+	}
+
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return swarm.Service{}, nil, err
 	}
