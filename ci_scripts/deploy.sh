@@ -30,8 +30,6 @@ while getopts ":t:pb" o; do
       tag="test"
     elif [[ $tag == "master" ]]; then
       tag="prod"
-    else
-      tag=$tag
     fi
     ;;
   p)
