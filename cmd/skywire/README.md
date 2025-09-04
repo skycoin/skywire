@@ -381,8 +381,7 @@ $ skywire cli config gen -bpirxn
 	"routing": {
 		"route_setup_nodes": [
 			"0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557",
-			"024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438",
-			"03b87c282f6e9f70d97aeea90b07cf09864a235ef718725632d067873431dd1015"
+			"024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438"
 		],
 		"route_finder": "http://rf.skywire.skycoin.com",
 		"route_finder_timeout": "10s",
