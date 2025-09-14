@@ -44,7 +44,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skycoin/dmsg v1.3.29-0.20250830133032-a0340da3246c
-	github.com/skycoin/skycoin v0.28.1-0.20250823221707-c533551dfabd //DO NOT MODIFY OR UPDATE v0.28.1-0.20241105130348-39b49a2d0a7f
+	github.com/skycoin/skycoin v0.28.1-0.20250914161012-28a0dc172f9e //DO NOT MODIFY v0.28.1-0.20250914161012-28a0dc172f9e
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.7
@@ -76,6 +76,7 @@ require (
 	github.com/Masterminds/vcs v1.13.3 // indirect
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/NYTimes/gziphandler v1.1.1 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/alecthomas/chroma v0.10.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.20.0 // indirect
@@ -214,6 +215,6 @@ require (
 // replace github.com/skycoin/dmsg => github.com/skycoin/dmsg <commit-hash>
 
 // Below should reflect the current versions of the following deps
-// replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20250823221707-c533551dfabd
+//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20250914161012-28a0dc172f9e
 //replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20250823231529-5ea8f3037103
 // replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
