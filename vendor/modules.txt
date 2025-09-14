@@ -157,6 +157,9 @@ github.com/Microsoft/go-winio/internal/fs
 github.com/Microsoft/go-winio/internal/socket
 github.com/Microsoft/go-winio/internal/stringbuffer
 github.com/Microsoft/go-winio/pkg/guid
+# github.com/NYTimes/gziphandler v1.1.1
+## explicit; go 1.11
+github.com/NYTimes/gziphandler
 # github.com/StackExchange/wmi v1.2.1
 ## explicit; go 1.13
 github.com/StackExchange/wmi
@@ -794,12 +797,14 @@ github.com/skycoin/dmsg/pkg/noise
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.1-0.20250823221707-c533551dfabd
-## explicit; go 1.23.0
+# github.com/skycoin/skycoin v0.28.1-0.20250914161012-28a0dc172f9e
+## explicit; go 1.24
+github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
 github.com/skycoin/skycoin/cmd/skycoin-cli/commands
 github.com/skycoin/skycoin/cmd/skycoin-wallet/commands
 github.com/skycoin/skycoin/cmd/skycoin/commands
+github.com/skycoin/skycoin/explorer
 github.com/skycoin/skycoin/src/api
 github.com/skycoin/skycoin/src/cipher
 github.com/skycoin/skycoin/src/cipher/base58
