@@ -1,5 +1,4 @@
 //go:build !js
-// +build !js
 
 package websocket
 
@@ -272,14 +271,10 @@ func (c *Conn) writeFrame(ctx context.Context, fin bool, flate bool, opcode opco
 	select {
 	case <-c.closed:
 		return 0, net.ErrClosed
-	case c.writeTimeout <- ctx:
+	default:
 	}
-	defer func() {
-		select {
-		case <-c.closed:
-		case c.writeTimeout <- context.Background():
-		}
-	}()
+	c.setupWriteTimeout(ctx)
+	defer c.clearWriteTimeout()
 
 	c.writeHeader.fin = fin
 	c.writeHeader.opcode = opcode
@@ -351,10 +346,7 @@ func (c *Conn) writeFramePayload(p []byte) (n int, err error) {
 		// Start of next write in the buffer.
 		i := c.bw.Buffered()
 
-		j := len(p)
-		if j > c.bw.Available() {
-			j = c.bw.Available()
-		}
+		j := min(len(p), c.bw.Available())
 
 		_, err := c.bw.Write(p[:j])
 		if err != nil {

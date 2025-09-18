@@ -7,7 +7,6 @@
 package types
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -25,7 +24,11 @@ var (
 func getCachePath() string {
 	hdir, err := os.UserHomeDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed getting os.UserHomeDir(): %v", err)
+		// os.UserHomeDir() returns an error when $HOME isn't set on Linux.
+		// This is the only error os.UserHomeDir() returns, and we don't care
+		// about it, so just ignore the error.
+		//
+		// https://github.com/jaypipes/pcidb/issues/38
 		return ""
 	}
 	return filepath.Join(hdir, ".cache", "pci.ids")
