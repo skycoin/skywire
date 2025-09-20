@@ -1,7 +1,7 @@
 package tpdiscmetrics
 
 import (
-	"github.com/skycoin/skywire/pkg/transport/types"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // Metrics collects metrics for metrics tracking system.

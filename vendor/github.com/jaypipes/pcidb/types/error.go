@@ -9,7 +9,12 @@ package types
 import "errors"
 
 var (
-	ErrNoDB = errors.New("No pci-ids DB files found (and network fetch disabled)")
-	// Backwards-compat, deprecated, pleas reference ErrNoDB
+	ErrNoDB = errors.New(
+		"pcidb: No pci-ids DB files found (and network fetch disabled)",
+	)
+	ErrNoPaths = errors.New(
+		"pcidb: no search paths and cache path is empty.",
+	)
+	// Backwards-compat, deprecated, please reference ErrNoDB
 	ERR_NO_DB = ErrNoDB
 )
