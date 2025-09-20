@@ -19,7 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
 	"github.com/skycoin/skywire/pkg/transport/network/porter"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
-	"github.com/skycoin/skywire/pkg/transport/types"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // Client provides access to skywire network

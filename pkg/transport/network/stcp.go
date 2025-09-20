@@ -9,7 +9,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
-	"github.com/skycoin/skywire/pkg/transport/types"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // STCPConfig defines config for Skywire-TCP network.
