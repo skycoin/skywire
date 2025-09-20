@@ -1,5 +1,4 @@
 //go:build !js
-// +build !js
 
 package websocket
 
@@ -91,7 +90,8 @@ func (c *Conn) CloseRead(ctx context.Context) context.Context {
 //
 // By default, the connection has a message read limit of 32768 bytes.
 //
-// When the limit is hit, the connection will be closed with StatusMessageTooBig.
+// When the limit is hit, reads return an error wrapping ErrMessageTooBig and
+// the connection is closed with StatusMessageTooBig.
 //
 // Set to -1 to disable.
 func (c *Conn) SetReadLimit(n int64) {
@@ -221,22 +221,24 @@ func (c *Conn) readLoop(ctx context.Context) (header, error) {
 // to be called after the read is done. It also returns an error if the
 // connection is closed. The reference to the error is used to assign
 // an error depending on if the connection closed or the context timed
-// out during use. Typically the referenced error is a named return
+// out during use. Typically, the referenced error is a named return
 // variable of the function calling this method.
 func (c *Conn) prepareRead(ctx context.Context, err *error) (func(), error) {
 	select {
 	case <-c.closed:
 		return nil, net.ErrClosed
-	case c.readTimeout <- ctx:
+	default:
 	}
+	c.setupReadTimeout(ctx)
 
 	done := func() {
+		c.clearReadTimeout()
 		select {
 		case <-c.closed:
 			if *err != nil {
 				*err = net.ErrClosed
 			}
-		case c.readTimeout <- context.Background():
+		default:
 		}
 		if *err != nil && ctx.Err() != nil {
 			*err = ctx.Err()
@@ -281,7 +283,7 @@ func (c *Conn) readFramePayload(ctx context.Context, p []byte) (_ int, err error
 		return n, fmt.Errorf("failed to read frame payload: %w", err)
 	}
 
-	return n, err
+	return n, nil
 }
 
 func (c *Conn) handleControl(ctx context.Context, h header) (err error) {
@@ -521,9 +523,9 @@ func (lr *limitReader) Read(p []byte) (int, error) {
 	}
 
 	if lr.n == 0 {
-		err := fmt.Errorf("read limited at %v bytes", lr.limit.Load())
-		lr.c.writeError(StatusMessageTooBig, err)
-		return 0, err
+		reason := fmt.Errorf("read limited at %d bytes", lr.limit.Load())
+		lr.c.writeError(StatusMessageTooBig, reason)
+		return 0, fmt.Errorf("%w: %v", ErrMessageTooBig, reason)
 	}
 
 	if int64(len(p)) > lr.n {

@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.24.x
+          go-version: 1.25.*
       - uses: actions/checkout@v4
       - name: Install Requirements
         run: |
@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.24.x
+          go-version: 1.25.*
       - uses: actions/checkout@v4
       - name: Install Requirements
         run: |
@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.24.x
+          go-version: 1.25.*
       - uses: actions/checkout@v4
       - name: Install Requirements
         shell: pwsh
@@ -154,4 +154,3 @@ jobs:
             Automated update from workflow build-windows (tag ${{ env.TAG }}).
             x64 SHA256: ${{ env.SHA_X64 }}
             x86 SHA256: ${{ env.SHA_X86 }}
-

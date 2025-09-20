@@ -47,6 +47,9 @@ func Discover(opts *types.WithOption) (io.ReadCloser, error) {
 		if opts.CachePath != nil && *opts.CachePath != "" {
 			cachePath = *opts.CachePath
 		}
+		if cachePath == "" {
+			return nil, types.ErrNoPaths
+		}
 		// OK, so we didn't find any host-local copy of the pci-ids DB file. Let's
 		// try fetching it from the network and storing it
 		if err := cacheDBFile(cachePath); err != nil {
