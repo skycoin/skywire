@@ -405,12 +405,13 @@ github.com/gen2brain/dlgs
 # github.com/gin-contrib/sse v1.1.0
 ## explicit; go 1.23
 github.com/gin-contrib/sse
-# github.com/gin-gonic/gin v1.10.1
-## explicit; go 1.20
+# github.com/gin-gonic/gin v1.11.0
+## explicit; go 1.23.0
 github.com/gin-gonic/gin
 github.com/gin-gonic/gin/binding
+github.com/gin-gonic/gin/codec/json
 github.com/gin-gonic/gin/internal/bytesconv
-github.com/gin-gonic/gin/internal/json
+github.com/gin-gonic/gin/internal/fs
 github.com/gin-gonic/gin/render
 # github.com/go-chi/chi/v5 v5.2.3
 ## explicit; go 1.20
@@ -516,6 +517,17 @@ github.com/goccy/go-json/internal/encoder/vm_color_indent
 github.com/goccy/go-json/internal/encoder/vm_indent
 github.com/goccy/go-json/internal/errors
 github.com/goccy/go-json/internal/runtime
+# github.com/goccy/go-yaml v1.18.0
+## explicit; go 1.21.0
+github.com/goccy/go-yaml
+github.com/goccy/go-yaml/ast
+github.com/goccy/go-yaml/internal/errors
+github.com/goccy/go-yaml/internal/format
+github.com/goccy/go-yaml/lexer
+github.com/goccy/go-yaml/parser
+github.com/goccy/go-yaml/printer
+github.com/goccy/go-yaml/scanner
+github.com/goccy/go-yaml/token
 # github.com/godbus/dbus/v5 v5.1.0
 ## explicit; go 1.12
 github.com/godbus/dbus/v5
@@ -727,9 +739,13 @@ github.com/pmezard/go-difflib/difflib
 github.com/pterm/pterm
 github.com/pterm/pterm/internal
 github.com/pterm/pterm/putils
+# github.com/quic-go/qpack v0.5.1
+## explicit; go 1.22
+github.com/quic-go/qpack
 # github.com/quic-go/quic-go v0.54.0
 ## explicit; go 1.23
 github.com/quic-go/quic-go
+github.com/quic-go/quic-go/http3
 github.com/quic-go/quic-go/internal/ackhandler
 github.com/quic-go/quic-go/internal/congestion
 github.com/quic-go/quic-go/internal/flowcontrol
@@ -752,9 +768,10 @@ github.com/robert-nix/ansihtml
 ## explicit; go 1.13
 github.com/rs/cors
 github.com/rs/cors/internal
-# github.com/sagikazarmark/locafero v0.11.0
+# github.com/sagikazarmark/locafero v0.12.0
 ## explicit; go 1.23.0
 github.com/sagikazarmark/locafero
+github.com/sagikazarmark/locafero/internal/queue
 # github.com/shopspring/decimal v1.4.0
 ## explicit; go 1.10
 github.com/shopspring/decimal
@@ -865,11 +882,6 @@ github.com/skycoin/skycoin/src/wallet/xpubwallet
 # github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 ## explicit
 github.com/songgao/water
-# github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8
-## explicit; go 1.20
-github.com/sourcegraph/conc
-github.com/sourcegraph/conc/panics
-github.com/sourcegraph/conc/pool
 # github.com/spf13/afero v1.15.0
 ## explicit; go 1.23.0
 github.com/spf13/afero
