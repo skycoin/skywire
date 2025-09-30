@@ -5,7 +5,8 @@
 	"dmsg": {
 		"discovery": "http://dmsg-discovery:9090",
 		"sessions_count": 1,
-		"servers": []
+		"servers": [],
+		"protocol": "smux"
 	},
 	"dmsgpty": {
 		"dmsg_port": 22,

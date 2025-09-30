@@ -33,57 +33,57 @@ fi
 
 echo "Building using tag: $image_tag"
 
-if [[ "$image_tag" == "e2e" ]]; then
+# if [[ "$image_tag" == "e2e" ]]; then
 
-  if [ "$DOCKER_USERNAME" != "" ] && [ "$DOCKER_PASSWORD" != "" ]; then
-    echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-  fi
+#   if [ "$DOCKER_USERNAME" != "" ] && [ "$DOCKER_PASSWORD" != "" ]; then
+#     echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+#   fi
 
-  echo ============ Base images ready ======================
+#   echo ============ Base images ready ======================
 
-  if [[ "$git_branch" == "master" ]]; then
-    dockerhub_image_tag="prod"
-  else
-    dockerhub_image_tag="test"
-  fi
+#   if [[ "$git_branch" == "master" ]]; then
+#     dockerhub_image_tag="prod"
+#   else
+#     dockerhub_image_tag="test"
+#   fi
 
-  echo "build dmsg discovery image"
-  DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-discovery/Dockerfile \
-    --build-arg build_opts="$go_buildopts" \
-    --build-arg image_tag="$image_tag" \
-    --build-arg base_image="skycoin/dmsg-discovery:$dockerhub_image_tag" \
-    $platform \
-    -t "$registry"/dmsg-discovery:"$image_tag" .
+#   echo "build dmsg discovery image"
+#   DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-discovery/Dockerfile \
+#     --build-arg build_opts="$go_buildopts" \
+#     --build-arg image_tag="$image_tag" \
+#     --build-arg base_image="skycoin/dmsg-discovery:$dockerhub_image_tag" \
+#     $platform \
+#     -t "$registry"/dmsg-discovery:"$image_tag" .
 
-  echo "build dmsg server image"
-  DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-server/Dockerfile \
-    --build-arg base_image="skycoin/dmsg-server:$dockerhub_image_tag" \
-    --build-arg build_opts="$go_buildopts" \
-    --build-arg image_tag="$image_tag" \
-    $platform \
-    -t "$registry"/dmsg-server:"$image_tag" .
+#   echo "build dmsg server image"
+#   DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-server/Dockerfile \
+#     --build-arg base_image="skycoin/dmsg-server:$dockerhub_image_tag" \
+#     --build-arg build_opts="$go_buildopts" \
+#     --build-arg image_tag="$image_tag" \
+#     $platform \
+#     -t "$registry"/dmsg-server:"$image_tag" .
 
-fi
+# fi
 
-if [[ "$image_tag" == "integration" ]]; then
-  # TODO(ersonp) : the binaries build in the images need to be built with the -race flag
-  rm -rf ./tmp/dmsg
-  cp -r ../dmsg ./tmp
+# if [[ "$image_tag" == "integration" ]]; then
+#   # TODO(ersonp) : the binaries build in the images need to be built with the -race flag
+#   rm -rf ./tmp/dmsg
+#   cp -r ../dmsg ./tmp
 
-  echo ============ Base images ready ======================
+#   echo ============ Base images ready ======================
 
-  echo "build dmsg discovery image"
-  DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-discovery/DockerfileInt \
-    $platform \
-    -t "$registry"/dmsg-discovery:"$image_tag" .
+#   echo "build dmsg discovery image"
+#   DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-discovery/DockerfileInt \
+#     $platform \
+#     -t "$registry"/dmsg-discovery:"$image_tag" .
 
-  echo "build dmsg server image"
-  DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-server/DockerfileInt \
-    $platform \
-    -t "$registry"/dmsg-server:"$image_tag" .
+#   echo "build dmsg server image"
+#   DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-server/DockerfileInt \
+#     $platform \
+#     -t "$registry"/dmsg-server:"$image_tag" .
 
-  rm -rf ./tmp/*
-fi
+#   rm -rf ./tmp/*
+# fi
 
 echo "Build Skywire Image"
 DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire/Dockerfile \

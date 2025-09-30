@@ -179,7 +179,7 @@ services:
     tty: true        # docker run -t
 
   dmsg-discovery:
-    image: "${REGISTRY}/dmsg-discovery:${DOCKER_TAG}"
+    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
     hostname: dmsg-discovery
     container_name: "dmsg-discovery"
     networks:
@@ -193,12 +193,12 @@ services:
     depends_on:
       - dmsgd-redis
       - transport-discovery
-    entrypoint: "/usr/local/bin/dmsg-discovery --redis redis://dmsgd-redis:6379 --sk b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714 -t"
+    entrypoint: "/release/skywire dmsg disc --redis redis://dmsgd-redis:6379 --sk b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714 -t"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
   dmsg-server:
-    image: "${REGISTRY}/dmsg-server:${DOCKER_TAG}"
+    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
     hostname: dmsg-server
     container_name: "dmsg-server"
     ports:
@@ -211,7 +211,7 @@ services:
     depends_on:
       - dmsg-discovery
     restart: always
-    entrypoint: "/usr/local/bin/dmsg-server start /release/dmsg-server.json"
+    entrypoint: "/release/skywire dmsg server start /release/dmsg-server.json"
     volumes:
       - type: bind
         source: ../docker/integration/dmsg-server.json
