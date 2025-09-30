@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -92,8 +94,8 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Use(httputil.SetLoggerMiddleware(log))
 
 	r.Group(func(r chi.Router) {
+		r.Use(ProxyHeadersMiddleware)
 		r.Use(httpauth.MakeMiddleware(nonceStore))
-
 		r.Get("/transports/id:{id}", api.getTransportByID)
 		r.Get("/transports/edge:{edge}", api.getTransportByEdge)
 		r.Post("/transports/", api.registerTransport)
@@ -189,4 +191,30 @@ func (api *API) updateTransportsNumber(ctx context.Context, logger logrus.FieldL
 		return
 	}
 	api.metrics.SetTPCounts(transports)
+}
+
+func ProxyHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Override scheme
+		if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+			r.URL.Scheme = proto
+		}
+
+		// Preserve Host header
+		if host := r.Host; host != "" {
+			r.URL.Host = host
+		}
+
+		// Extract real client IP
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			r.RemoteAddr = strings.Split(xff, ",")[0]
+		} else if xrip := r.Header.Get("X-Real-IP"); xrip != "" {
+			r.RemoteAddr = xrip
+		} else {
+			host, _, _ := net.SplitHostPort(r.RemoteAddr)
+			r.RemoteAddr = host
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
