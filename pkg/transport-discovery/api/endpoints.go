@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -19,29 +20,32 @@ import (
 )
 
 func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("register transport 1")
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		api.writeError(w, r, err)
 		return
 	}
-
+	fmt.Println("register transport 2")
 	var entries []*transport.SignedEntry
 	if err := json.Unmarshal(body, &entries); err != nil {
 		api.writeError(w, r, err)
 		return
 	}
-
+	fmt.Println("register transport 3")
 	for _, entry := range entries {
 		if err := api.store.RegisterTransport(r.Context(), entry); err != nil {
 			api.writeError(w, r, err)
+			fmt.Printf("register transport 3 - %s - err: %s\n", entry, err.Error())
 			return
 		}
 	}
-
+	fmt.Println("register transport 4")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(entries); err != nil {
 		api.writeError(w, r, err)
 	}
+	fmt.Println("register transport 5")
 }
 
 func (api *API) getTransportByID(w http.ResponseWriter, r *http.Request) {
