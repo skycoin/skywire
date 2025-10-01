@@ -200,11 +200,6 @@ func ProxyHeadersMiddleware(next http.Handler) http.Handler {
 			r.URL.Scheme = proto
 		}
 
-		// Preserve Host header
-		if host := r.Host; host != "" {
-			r.URL.Host = host
-		}
-
 		// Extract real client IP
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			r.RemoteAddr = strings.Split(xff, ",")[0]
