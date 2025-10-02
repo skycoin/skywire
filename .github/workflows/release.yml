@@ -70,14 +70,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install wingetcreate
-        run: winget install wingetcreate
+        run: |
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.zip
+          Expand-Archive wingetcreate.zip -DestinationPath .
+          echo "$PWD" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Publish to winget
         run: |
           wingetcreate update Skycoin.Skywire `
-            --urls `
-              "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-amd64.msi" `
-              "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-386.msi" `
-            --submit
+            --urls "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-amd64.msi" `
+                   "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-386.msi" `
+            --submit --token $env:WINGETCREATE_TOKEN
         env:
-          GITHUB_TOKEN: ${{ secrets.WINGET_PAT }} # TODO: it used mohammed's PAT, should change it later to skycoin itself
+          WINGETCREATE_TOKEN: ${{ secrets.WINGET_PAT }}
