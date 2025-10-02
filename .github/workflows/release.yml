@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.*
+          go-version: 1.24.x
       - uses: actions/checkout@v4
       - name: Install Requirements
         run: |
@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.*
+          go-version: 1.24.x
       - uses: actions/checkout@v4
       - name: Install Requirements
         run: |
@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.*
+          go-version: 1.24.x
       - uses: actions/checkout@v4
       - name: Install Requirements
         shell: pwsh
@@ -64,93 +64,22 @@ jobs:
           make windows-installer-release
   publish-winget:
     needs: windows
-    runs-on: ubuntu-latest
-    if: needs.windows.result == 'success'
-    env:
-      OWNER: skycoin
-      REPO: skywire
-      PACKAGE_ID: Skycoin.Skywire
-      PACKAGE_NAME: Skywire
-      PUBLISHER: Skycoin
-      WINGET_FORK: mrpalide/winget-pkgs # TODO: we should change it later to skycoin repo
+    runs-on: windows-latest
     steps:
-      - name: Install utilities
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install wingetcreate
         run: |
-          sudo apt update -y
-          sudo apt install -y jq curl git unzip
-          sudo snap install yq --classic
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.zip
+          Expand-Archive wingetcreate.zip -DestinationPath .
+          echo "$PWD" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Download artifacts from build-windows job
-        uses: actions/download-artifact@v4
-        with:
-          name: msi-artifacts
-          path: ./artifacts
-
-      - name: Set tag and asset names
+      - name: Publish to winget
         run: |
-          TAG=${{ github.ref_name || github.event.release.tag_name || github.event.inputs.tag }}
-          echo "TAG=$TAG" >> $GITHUB_ENV
-          echo "ASSET_X86=skywire-installer-${TAG}-windows-386.msi" >> $GITHUB_ENV
-          echo "ASSET_X64=skywire-installer-${TAG}-windows-amd64.msi" >> $GITHUB_ENV
-
-      - name: Compute SHA256 checksums
-        run: |
-          sha256sum "./artifacts/$ASSET_X86" | awk '{print $1}' > sha_x86.txt
-          sha256sum "./artifacts/$ASSET_X64" | awk '{print $1}' > sha_x64.txt
-          echo "SHA_X86=$(cat sha_x86.txt)" >> $GITHUB_ENV
-          echo "SHA_X64=$(cat sha_x64.txt)" >> $GITHUB_ENV
-
-      - name: Clone winget-pkgs fork
+          wingetcreate update Skycoin.Skywire `
+            --urls "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-amd64.msi" `
+                   "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-386.msi" `
+            --submit --token $env:WINGETCREATE_TOKEN
         env:
-          TOKEN: ${{ secrets.WINGET_PKGS_PAT }}
-        run: |
-          git clone https://x-access-token:${TOKEN}@github.com/${WINGET_FORK} winget-pkgs
-          cd winget-pkgs
-          git config user.email "actions@github.com"
-          git config user.name "winget-bot"
-          git checkout -b update/${PACKAGE_ID}-${TAG}
-
-      - name: Prepare manifests (create/update)
-        working-directory: winget-pkgs
-        run: |
-          set -e
-          first=$(echo "$PACKAGE_ID" | cut -c1 | tr '[:upper:]' '[:lower:]')
-          pkgdir="manifests/$first/$PACKAGE_ID/$TAG"
-          mkdir -p "$pkgdir"
-          URL_X86="https://github.com/$OWNER/$REPO/releases/download/$TAG/$ASSET_X86"
-          URL_X64="https://github.com/$OWNER/$REPO/releases/download/$TAG/$ASSET_X64"
-
-          # installer-x64.yaml
-          echo -e "PackageIdentifier: $PACKAGE_ID\nPackageVersion: $TAG\nManifestType: Installer\nInstallers:\n  - Architecture: x64\n    InstallerType: msi\n    InstallerUrl: $URL_X64\n    InstallerSha256: $SHA_X64\n    Scope: machine" > "$pkgdir/installer-x64.yaml"
-
-          # installer-x86.yaml
-          echo -e "PackageIdentifier: $PACKAGE_ID\nPackageVersion: $TAG\nManifestType: Installer\nInstallers:\n  - Architecture: x86\n    InstallerType: msi\n    InstallerUrl: $URL_X86\n    InstallerSha256: $SHA_X86\n    Scope: machine" > "$pkgdir/installer-x86.yaml"
-
-          # version.yaml
-          echo -e "PackageIdentifier: $PACKAGE_ID\nPackageVersion: $TAG\nManifestType: Version\nMinOSVersion: 10.0.17763.0" > "$pkgdir/version.yaml"
-
-          # defaultLocale.en-US.yaml
-          mkdir -p "manifests/$first/$PACKAGE_ID"
-          echo -e "PackageIdentifier: $PACKAGE_ID\nPackageVersion: $TAG\nManifestType: DefaultLocale\nManifestVersion: 1.6.0\nPackageName: $PACKAGE_NAME\nPublisher: $PUBLISHER\nShortDescription: Skywire decentralized VPN/mesh\nTags:\n  - mesh\n  - vpn\n  - p2p" > "manifests/$first/$PACKAGE_ID/defaultLocale.en-US.yaml"
-
-          git add -A
-          if git diff-index --quiet HEAD --; then
-            echo "No changes to commit"
-          else
-            git commit -m "$PACKAGE_ID: update to $TAG"
-            git push origin HEAD
-          fi
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.WINGET_PKGS_PAT }}
-          repository: ${{ env.WINGET_FORK }}
-          base: main
-          head: update/${{ env.PACKAGE_ID }}-${{ env.TAG }}
-          commit-message: "${{ env.PACKAGE_ID }}: update to ${{ env.TAG }}"
-          title: "${{ env.PACKAGE_ID }}: update to ${{ env.TAG }}"
-          body: |
-            Automated update from workflow build-windows (tag ${{ env.TAG }}).
-            x64 SHA256: ${{ env.SHA_X64 }}
-            x86 SHA256: ${{ env.SHA_X86 }}
+          WINGETCREATE_TOKEN: ${{ secrets.WINGET_PAT }}
