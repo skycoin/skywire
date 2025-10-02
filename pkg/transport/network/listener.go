@@ -9,7 +9,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/transport/types"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // Listener represents a skywire network listener. It wraps net.Listener

@@ -6,7 +6,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
-	"github.com/skycoin/skywire/pkg/transport/types"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 type memStore struct {

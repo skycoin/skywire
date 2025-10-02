@@ -9,7 +9,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport/network"
-	"github.com/skycoin/skywire/pkg/transport/types"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // WrapDmsgClient wraps a dmsg client to implement snet.Dialer

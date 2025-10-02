@@ -1,5 +1,5 @@
-// Package types pkg/transport/types/types.go
-package types
+// Package tptypes pkg/transport/types/types.go
+package tptypes
 
 // Type is a type of network. Type affects the way connection is established
 // and the way data is sent
