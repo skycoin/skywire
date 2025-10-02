@@ -596,6 +596,7 @@ var genConfigCmd = &cobra.Command{
 			SessionsCount:        minDmsgSess,
 			Servers:              []*disc.Entry{},
 			ConnectedServersType: "all",
+			Protocol:             "yamux",
 		}
 		conf.Transport = &visorconfig.Transport{
 			Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
@@ -620,6 +621,11 @@ var genConfigCmd = &cobra.Command{
 		if oldConf.Routing != nil {
 			if oldConf.Routing.MinHops != 0 {
 				conf.Routing.MinHops = oldConf.Routing.MinHops
+			}
+		}
+		if oldConf.Dmsg != nil {
+			if oldConf.Dmsg.Protocol != "" {
+				conf.Dmsg.Protocol = oldConf.Dmsg.Protocol
 			}
 		}
 
