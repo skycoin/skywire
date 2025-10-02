@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yusufpapurcu/wmi"
+	"github.com/StackExchange/wmi"
 
 	"github.com/jaypipes/ghw/pkg/util"
 )

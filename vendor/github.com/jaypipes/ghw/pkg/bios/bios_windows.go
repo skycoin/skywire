@@ -6,7 +6,7 @@
 package bios
 
 import (
-	"github.com/yusufpapurcu/wmi"
+	"github.com/StackExchange/wmi"
 )
 
 const wqlBIOS = "SELECT InstallDate, Manufacturer, Version FROM CIM_BIOSElement"
