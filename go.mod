@@ -203,6 +203,9 @@ require (
 // issues with gotop on riscv64
 //replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
 
+// issue with ghw on windows on latest version
+// replace github.com/jaypipes/ghw latest => github.com/jaypipes/ghw v0.17.0
+
 // Wiregusrd version must match below version ; do not update
 //replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
 
