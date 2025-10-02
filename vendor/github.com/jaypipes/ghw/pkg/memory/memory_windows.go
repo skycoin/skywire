@@ -7,7 +7,7 @@
 package memory
 
 import (
-	"github.com/yusufpapurcu/wmi"
+	"github.com/StackExchange/wmi"
 
 	"github.com/jaypipes/ghw/pkg/unitutil"
 )
