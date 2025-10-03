@@ -70,10 +70,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Komac
-        run: |
-          Invoke-WebRequest https://github.com/russellbanks/Komac/releases/latest/download/komac-windows.zip -OutFile komac.zip
-          Expand-Archive komac.zip -DestinationPath $env:USERPROFILE\komac
-          echo "$env:USERPROFILE\komac" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          run: |
+            $version = "2.13.0"
+            $url = "https://github.com/russellbanks/Komac/releases/download/v$version/komac-$version-x86_64-pc-windows-msvc.exe"
+            Invoke-WebRequest $url -OutFile komac.exe
+            mkdir $env:USERPROFILE\bin -Force
+            Move-Item komac.exe $env:USERPROFILE\bin\komac.exe
+            echo "$env:USERPROFILE\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Configure Komac authentication
         run: komac token add
