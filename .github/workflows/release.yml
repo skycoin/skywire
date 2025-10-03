@@ -81,9 +81,10 @@ jobs:
       - name: Publish to WinGet
         run: |
           komac update Skycoin.Skywire `
-            --version ${{ github.ref_name }} `
-            --urls "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-amd64.msi" `
-                   "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-386.msi" `
-            --submit
+          --version ${{ github.ref_name }} `
+          --urls "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-amd64.msi" `
+                 "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-386.msi" `
+          --submit `
+          --token $env:KOMAC_TOKEN
         env:
           KOMAC_TOKEN: ${{ secrets.WINGET_PAT }}
