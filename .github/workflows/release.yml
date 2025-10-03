@@ -78,12 +78,22 @@ jobs:
           Move-Item komac.exe $env:USERPROFILE\bin\komac.exe
           echo "$env:USERPROFILE\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Extract ProductCode
+        id: productcode
+        run: |
+          msiexec /i skywire-installer-${{ github.ref_name }}-windows-amd64.msi /qn /l* log.txt || exit 0
+          $code = Select-String "ProductCode" log.txt | ForEach-Object {
+          ($_ -split '=')[1].Trim()
+          }
+          echo "code=$code" >> $env:GITHUB_OUTPUT
+
       - name: Publish to WinGet
         run: |
           komac update Skycoin.Skywire `
           --version ${{ github.ref_name }} `
           --urls "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-amd64.msi" `
                  "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-386.msi" `
+          --product-code "${{ steps.productcode.outputs.code }}" `
           --submit `
           --token $env:KOMAC_TOKEN
         env:
