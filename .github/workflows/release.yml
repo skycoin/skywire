@@ -80,6 +80,7 @@ jobs:
           wingetcreate update Skycoin.Skywire `
             --urls "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-amd64.msi" `
                    "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-386.msi" `
+            --version "${{ github.ref_name }}" `
             --submit --token $env:WINGETCREATE_TOKEN
         env:
           WINGETCREATE_TOKEN: ${{ secrets.WINGET_PAT }}
