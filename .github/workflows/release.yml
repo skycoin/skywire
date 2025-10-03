@@ -71,7 +71,9 @@ jobs:
 
       - name: Install Komac
         run: |
-          winget install --id RussellBanks.Komac -e --silent
+          Invoke-WebRequest https://github.com/russellbanks/Komac/releases/latest/download/komac-windows.zip -OutFile komac.zip
+          Expand-Archive komac.zip -DestinationPath $env:USERPROFILE\komac
+          echo "$env:USERPROFILE\komac" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Configure Komac authentication
         run: komac token add
