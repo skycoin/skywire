@@ -63,6 +63,7 @@ jobs:
           make github-release-windows
           make windows-installer-release
   publish-winget:
+    needs: windows
     runs-on: windows-latest
     steps:
       - name: Checkout repository
