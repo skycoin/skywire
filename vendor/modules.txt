@@ -992,8 +992,6 @@ github.com/yuin/goldmark/renderer
 github.com/yuin/goldmark/renderer/html
 github.com/yuin/goldmark/text
 github.com/yuin/goldmark/util
-# github.com/yusufpapurcu/wmi v1.2.4
-## explicit; go 1.16
 # github.com/zcalusic/sysinfo v1.1.3
 ## explicit; go 1.22
 github.com/zcalusic/sysinfo
