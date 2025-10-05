@@ -32,7 +32,6 @@ import (
 
 const (
 	netType = appnet.TypeSkynet
-	port    = routing.Port(1)
 )
 
 // var addr = flag.String("addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
@@ -80,7 +79,7 @@ var RootCmd = &cobra.Command{
 		defer close(clientCh)
 
 		conns = make(map[cipher.PubKey]net.Conn)
-		go listenLoop()
+		go listenLoop(appCl.Config().RoutingPort)
 
 		if runtime.GOOS == "windows" {
 			ipcClient, err := ipc.StartClient(visorconfig.SkychatName, nil)
@@ -146,15 +145,13 @@ func Execute() {
 	}
 }
 
-func listenLoop() {
-	l, err := appCl.Listen(netType, port)
+func listenLoop(appPort routing.Port) {
+	l, err := appCl.Listen(netType, appPort)
 	if err != nil {
-		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
+		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, appPort, err))
 		setAppError(appCl, err)
 		return
 	}
-
-	setAppPort(appCl, port)
 
 	for {
 		fmt.Println("Accepting skychat conn...")
@@ -327,11 +324,5 @@ func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 func setAppError(appCl *app.Client, appErr error) {
 	if err := appCl.SetError(appErr.Error()); err != nil {
 		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
-	}
-}
-
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }
