@@ -1,3 +1,0 @@
-{{- template "base_element" .}}
-
-    
