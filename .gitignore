@@ -45,8 +45,7 @@ rewards
 !/arches.json
 ./*.sh
 ./*.log
-./vendor/*
-!./vendor/modules.txt
+/vendor/
 
 # Ignore backup go.mod after running '/ci_scripts/go_mod_replace.sh'.
 go.mod-e
