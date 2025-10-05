@@ -202,6 +202,7 @@ func (v1 *V1) UpdateAppArgBatch(launch *launcher.AppLauncher, appName string, ar
 	return v1.flush(v1)
 }
 
+// UpdateAppPort update app port for communicat with visor
 func (v1 *V1) UpdateAppPort(launch *launcher.AppLauncher, appName string, port uint16) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
