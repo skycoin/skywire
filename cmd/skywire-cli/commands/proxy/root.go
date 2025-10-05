@@ -30,6 +30,7 @@ var (
 	startingTimeout int
 	httpAddr        string
 	jsonOutput      bool
+	appPort         uint16
 )
 
 // RootCmd contains commands that interact with the skywire-visor
