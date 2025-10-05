@@ -104,20 +104,24 @@ var startCmd = &cobra.Command{
 				clientName = "skysocks-client"
 			}
 
+			if appPort != 0 {
+				arguments["appPort"] = appPort
+			}
+
 			_, err = rpcClient.App(clientName)
 			if err == nil {
-				err = rpcClient.DoCustomSetting(clientName, arguments, appPort)
+				err = rpcClient.DoCustomSetting(clientName, arguments)
 				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client. error: %s", err))
 				}
 			} else {
 				err = rpcClient.AddApp(clientName, "skywire")
 				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error during add new app"))
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error during add new app. error: %s", err))
 				}
-				err = rpcClient.DoCustomSetting(clientName, arguments, appPort)
+				err = rpcClient.DoCustomSetting(clientName, arguments)
 				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client. error: %s", err))
 				}
 			}
 			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))

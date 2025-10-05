@@ -205,12 +205,11 @@ func (v1 *V1) UpdateAppArgBatch(launch *launcher.AppLauncher, appName string, ar
 func (v1 *V1) UpdateAppPort(launch *launcher.AppLauncher, appName string, port uint16) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
-
 	requestPort := routing.Port(port)
 	conf := v1.Launcher
 	busyPorts := map[routing.Port]bool{}
 	appExist := false
-	for _, app := range conf.Apps {
+	for ind, app := range conf.Apps {
 		busyPorts[app.Port] = true
 		if app.Name == appName {
 			appExist = true
@@ -220,6 +219,7 @@ func (v1 *V1) UpdateAppPort(launch *launcher.AppLauncher, appName string, port u
 			if _, ok := busyPorts[requestPort]; ok && requestPort != app.Port {
 				return fmt.Errorf("requested port is busy")
 			}
+			conf.Apps[ind].Port = requestPort
 		}
 	}
 	if !appExist {

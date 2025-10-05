@@ -78,7 +78,7 @@ type API interface {
 	SetAppKillswitch(appName string, killswitch bool) error
 	SetAppNetworkInterface(appName string, netifc string) error
 	SetAppDNS(appName string, dnsaddr string) error
-	DoCustomSetting(appName string, customSetting map[string]any, port uint16) error
+	DoCustomSetting(appName string, customSetting map[string]any) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
@@ -921,9 +921,9 @@ func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
 }
 
 // DoCustomSetting implents API.
-func (v *Visor) DoCustomSetting(appName string, customSetting map[string]any, port uint16) error {
-
-	v.log.Infof("Changing %s Settings to %q", appName, customSetting)
+func (v *Visor) DoCustomSetting(appName string, customSetting map[string]any) error {
+	fmt.Println(customSetting)
+	v.log.Infof("Changing %s Settings to %v", appName, customSetting)
 	if v.appL == nil {
 		return ErrAppLauncherNotAvailable
 	}
@@ -932,13 +932,15 @@ func (v *Visor) DoCustomSetting(appName string, customSetting map[string]any, po
 		return err
 	}
 
-	if err := v.conf.UpdateAppArgBatch(v.appL, appName, customSetting); err != nil {
-		return err
-	}
-	if port != 0 {
-		if err := v.conf.UpdateAppPort(v.appL, appName, port); err != nil {
+	if value, ok := customSetting["appPort"]; ok && value != 0 {
+		if err := v.conf.UpdateAppPort(v.appL, appName, customSetting["appPort"].(uint16)); err != nil {
 			return err
 		}
+		delete(customSetting, "appPort")
+	}
+
+	if err := v.conf.UpdateAppArgBatch(v.appL, appName, customSetting); err != nil {
+		return err
 	}
 
 	v.log.Info("Updated Settings.")
