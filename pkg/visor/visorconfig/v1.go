@@ -202,6 +202,39 @@ func (v1 *V1) UpdateAppArgBatch(launch *launcher.AppLauncher, appName string, ar
 	return v1.flush(v1)
 }
 
+func (v1 *V1) UpdateAppPort(launch *launcher.AppLauncher, appName string, port uint16) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	requestPort := routing.Port(port)
+	conf := v1.Launcher
+	busyPorts := map[routing.Port]bool{}
+	appExist := false
+	for _, app := range conf.Apps {
+		busyPorts[app.Port] = true
+		if app.Name == appName {
+			appExist = true
+			if requestPort == app.Port {
+				break
+			}
+			if _, ok := busyPorts[requestPort]; ok && requestPort != app.Port {
+				return fmt.Errorf("requested port is busy")
+			}
+		}
+	}
+	if !appExist {
+		return fmt.Errorf("app not available")
+	}
+
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
+	return v1.flush(v1)
+}
+
 // DeleteAppArg Delete entire of args of a custom app
 func (v1 *V1) DeleteAppArg(launch *launcher.AppLauncher, appName string) error {
 	v1.mu.Lock()

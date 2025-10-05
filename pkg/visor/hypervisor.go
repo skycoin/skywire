@@ -714,7 +714,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 		}
 
 		if reqBody.CustomSetting != nil {
-			if err := ctx.API.DoCustomSetting(ctx.App.Name, reqBody.CustomSetting); err != nil {
+			if err := ctx.API.DoCustomSetting(ctx.App.Name, reqBody.CustomSetting, 0); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}

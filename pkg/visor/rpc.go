@@ -264,7 +264,7 @@ func (r *RPC) AddApp(in *SetAppAddIn, _ *struct{}) (err error) {
 // DoCustomSetting set custom setting to apps arguments
 func (r *RPC) DoCustomSetting(in *SetAppMapIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DoCustomSetting", in)(nil, &err)
-	return r.visor.DoCustomSetting(in.AppName, in.Val)
+	return r.visor.DoCustomSetting(in.AppName, in.Val, 0)
 }
 
 // RegisterApp registers a App with provided proc config.
