@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -31,6 +32,7 @@ var (
 	passcode   string
 	networkIfc string
 	secure     bool
+	appPort    uint16
 )
 
 func init() {
@@ -39,6 +41,7 @@ func init() {
 	RootCmd.Flags().StringVar(&passcode, "passcode", "", "passcode to authenticate connecting users")
 	RootCmd.Flags().StringVar(&networkIfc, "netifc", "", "Default network interface for multiple available interfaces")
 	RootCmd.Flags().BoolVar(&secure, "secure", true, "Forbid connections from clients to server local network")
+	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
 
 // RootCmd is the root command for skywire-cli
@@ -54,6 +57,12 @@ var RootCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		appCl := app.NewClient(nil)
 		defer appCl.Close()
+
+		port := appCl.Config().RoutingPort
+		if appPort != 0 {
+			port = routing.Port(appPort)
+			setAppPort(appCl, port)
+		}
 
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			print(fmt.Sprintf("Failed to output build info: %v\n", err))
@@ -91,9 +100,9 @@ var RootCmd = &cobra.Command{
 			signal.Notify(osSigs, sig)
 		}
 
-		l, err := appCl.Listen(netType, appCl.Config().RoutingPort)
+		l, err := appCl.Listen(netType, port)
 		if err != nil {
-			print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, appCl.Config().RoutingPort, err))
+			print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
 			setAppErr(appCl, err)
 			os.Exit(1)
 		}
@@ -150,5 +159,11 @@ func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
+	}
+}
+
+func setAppPort(appCl *app.Client, port routing.Port) {
+	if err := appCl.SetAppPort(port); err != nil {
+		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }

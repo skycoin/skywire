@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -24,10 +25,14 @@ const (
 	netType = appnet.TypeSkynet
 )
 
-var passcode string
+var (
+	passcode string
+	appPort  uint16
+)
 
 func init() {
 	RootCmd.Flags().StringVar(&passcode, "passcode", "", "passcode to authenticate connecting users")
+	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
 
 // RootCmd is the root command for skysocks
@@ -55,10 +60,16 @@ var RootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		l, err := appCl.Listen(netType, appCl.Config().RoutingPort)
+		port := appCl.Config().RoutingPort
+		if appPort != 0 {
+			port = routing.Port(appPort)
+			setAppPort(appCl, port)
+		}
+
+		l, err := appCl.Listen(netType, port)
 		if err != nil {
 			setAppError(appCl, err)
-			print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, appCl.Config().RoutingPort, err))
+			print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
 			os.Exit(1)
 		}
 
@@ -110,5 +121,11 @@ func setAppError(appCl *app.Client, appErr error) {
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
+	}
+}
+
+func setAppPort(appCl *app.Client, port routing.Port) {
+	if err := appCl.SetAppPort(port); err != nil {
+		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }

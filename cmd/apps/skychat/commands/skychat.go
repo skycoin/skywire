@@ -43,6 +43,7 @@ var (
 	clientCh chan string
 	conns    map[cipher.PubKey]net.Conn // Chat connections
 	connsMu  sync.Mutex
+	appPort  uint16
 )
 
 // the go embed static points to skywire/cmd/apps/skychat/static
@@ -52,6 +53,7 @@ var embededFiles embed.FS
 
 func init() {
 	RootCmd.Flags().StringVar(&addr, "addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
+	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
 
 // RootCmd is the root command for skywire-cli
@@ -78,8 +80,14 @@ var RootCmd = &cobra.Command{
 		clientCh = make(chan string)
 		defer close(clientCh)
 
+		port := appCl.Config().RoutingPort
+		if appPort != 0 {
+			port = routing.Port(appPort)
+			setAppPort(appCl, port)
+		}
+
 		conns = make(map[cipher.PubKey]net.Conn)
-		go listenLoop(appCl.Config().RoutingPort)
+		go listenLoop(port)
 
 		if runtime.GOOS == "windows" {
 			ipcClient, err := ipc.StartClient(visorconfig.SkychatName, nil)
@@ -324,5 +332,11 @@ func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 func setAppError(appCl *app.Client, appErr error) {
 	if err := appCl.SetError(appErr.Error()); err != nil {
 		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
+	}
+}
+
+func setAppPort(appCl *app.Client, port routing.Port) {
+	if err := appCl.SetAppPort(port); err != nil {
+		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }
