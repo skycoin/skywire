@@ -18,7 +18,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -139,8 +138,6 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
-		setAppPort(appCl, appCl.Config().RoutingPort)
-
 		fmt.Printf("Connecting to VPN server %s\n", serverPK.String())
 
 		vpnClientCfg := vpn.ClientConfig{
@@ -225,12 +222,6 @@ func setAppErr(appCl *app.Client, err error) {
 func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
-	}
-}
-
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }
 

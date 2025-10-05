@@ -22,7 +22,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -31,8 +30,7 @@ import (
 )
 
 const (
-	netType   = appnet.TypeSkynet
-	socksPort = routing.Port(3)
+	netType = appnet.TypeSkynet
 )
 
 var (
@@ -90,7 +88,6 @@ var RootCmd = &cobra.Command{
 		}
 
 		defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-		setAppPort(appCl, appCl.Config().RoutingPort)
 
 		conn, err := dialServer(ctx, appCl, pk)
 		if err != nil {
@@ -148,7 +145,7 @@ func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey) (net.C
 		conn, err = appCl.Dial(appnet.Addr{
 			Net:    netType,
 			PubKey: pk,
-			Port:   socksPort,
+			Port:   appCl.Config().RoutingPort,
 		})
 		return err
 	})
@@ -168,12 +165,6 @@ func setAppErr(appCl *app.Client, err error) {
 func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
-	}
-}
-
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }
 
