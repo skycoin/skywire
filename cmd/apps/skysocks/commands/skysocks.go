@@ -23,13 +23,16 @@ import (
 
 const (
 	netType = appnet.TypeSkynet
-	port    = routing.Port(3)
 )
 
-var passcode string
+var (
+	passcode string
+	appPort  uint16
+)
 
 func init() {
 	RootCmd.Flags().StringVar(&passcode, "passcode", "", "passcode to authenticate connecting users")
+	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
 
 // RootCmd is the root command for skysocks
@@ -57,14 +60,18 @@ var RootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		port := appCl.Config().RoutingPort
+		if appPort != 0 {
+			port = routing.Port(appPort)
+			setAppPort(appCl, port)
+		}
+
 		l, err := appCl.Listen(netType, port)
 		if err != nil {
 			setAppError(appCl, err)
 			print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
 			os.Exit(1)
 		}
-
-		setAppPort(appCl, port)
 
 		fmt.Println("Starting serving proxy server")
 
@@ -110,15 +117,15 @@ func setAppError(appCl *app.Client, appErr error) {
 	}
 }
 
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
-	}
-}
-
 // Execute executes root CLI command.
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
+	}
+}
+
+func setAppPort(appCl *app.Client, port routing.Port) {
+	if err := appCl.SetAppPort(port); err != nil {
+		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }
