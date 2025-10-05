@@ -32,6 +32,7 @@ var (
 	passcode    string
 	killswitch  bool
 	dnsAddr     string
+	appPort     uint16
 )
 
 func init() {
@@ -41,6 +42,7 @@ func init() {
 	RootCmd.Flags().StringVar(&passcode, "passcode", "", "passcode to authenticate connection")
 	RootCmd.Flags().BoolVar(&killswitch, "killswitch", false, "If set, the Internet won't be restored during reconnection attempts")
 	RootCmd.Flags().StringVar(&dnsAddr, "dns", "", "address of DNS want set to tun")
+	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
 
 // RootCmd is the root command for skywire-cli
@@ -90,6 +92,12 @@ var RootCmd = &cobra.Command{
 		appCl := app.NewClient(eventSub)
 		defer appCl.Close()
 
+		port := appCl.Config().RoutingPort
+		if appPort != 0 {
+			port = routing.Port(appPort)
+		}
+		setAppPort(appCl, port)
+
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			print(fmt.Sprintf("Failed to output build info: %v\n", err))
 		}
@@ -138,8 +146,6 @@ var RootCmd = &cobra.Command{
 				dnsAddress = dnsIP.String()
 			}
 		}
-
-		setAppPort(appCl, appCl.Config().RoutingPort)
 
 		fmt.Printf("Connecting to VPN server %s\n", serverPK.String())
 
@@ -228,15 +234,15 @@ func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 	}
 }
 
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
-	}
-}
-
 // Execute executes root CLI command.
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
+	}
+}
+
+func setAppPort(appCl *app.Client, port routing.Port) {
+	if err := appCl.SetAppPort(port); err != nil {
+		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }
