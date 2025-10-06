@@ -1,6 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.25
+go 1.25.1
 
 require (
 	cogentcore.org/core v0.3.12
@@ -32,11 +32,12 @@ require (
 	github.com/hashicorp/yamux v0.1.2
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/james-barrow/golang-ipc v1.2.4
-	github.com/jaypipes/ghw v0.0.18
+	github.com/jaypipes/ghw v0.17.0
 	github.com/json-iterator/go v1.1.12
 	github.com/lib/pq v1.10.9
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/orandin/lumberjackrus v1.0.1
+	github.com/oschwald/geoip2-golang/v2 v2.0.0-beta.4
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/pterm/pterm v0.12.81
 	github.com/robert-nix/ansihtml v1.0.1
@@ -63,8 +64,6 @@ require (
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.0
 )
-
-require github.com/oschwald/geoip2-golang/v2 v2.0.0-beta.4
 
 require (
 	atomicgo.dev/cursor v0.2.0 // indirect
