@@ -1,8 +1,9 @@
 package quic
 
 import (
+	"time"
+
 	"github.com/quic-go/quic-go/internal/ackhandler"
-	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -12,11 +13,11 @@ import (
 type mtuDiscoverer interface {
 	// Start starts the MTU discovery process.
 	// It's unnecessary to call ShouldSendProbe before that.
-	Start(now monotime.Time)
-	ShouldSendProbe(now monotime.Time) bool
+	Start(now time.Time)
+	ShouldSendProbe(now time.Time) bool
 	CurrentSize() protocol.ByteCount
-	GetPing(now monotime.Time) (ping ackhandler.Frame, datagramSize protocol.ByteCount)
-	Reset(now monotime.Time, start, max protocol.ByteCount)
+	GetPing(now time.Time) (ping ackhandler.Frame, datagramSize protocol.ByteCount)
+	Reset(now time.Time, start, max protocol.ByteCount)
 }
 
 const (
@@ -87,7 +88,7 @@ const (
 // MTU discovery concludes once the interval min and max has been narrowed down to maxMTUDiff.
 
 type mtuFinder struct {
-	lastProbeTime monotime.Time
+	lastProbeTime time.Time
 
 	rttStats *utils.RTTStats
 
@@ -146,11 +147,11 @@ func (f *mtuFinder) max() protocol.ByteCount {
 	return f.lost[len(f.lost)-1]
 }
 
-func (f *mtuFinder) Start(now monotime.Time) {
+func (f *mtuFinder) Start(now time.Time) {
 	f.lastProbeTime = now // makes sure the first probe packet is not sent immediately
 }
 
-func (f *mtuFinder) ShouldSendProbe(now monotime.Time) bool {
+func (f *mtuFinder) ShouldSendProbe(now time.Time) bool {
 	if f.lastProbeTime.IsZero() {
 		return false
 	}
@@ -160,7 +161,7 @@ func (f *mtuFinder) ShouldSendProbe(now monotime.Time) bool {
 	return !now.Before(f.lastProbeTime.Add(mtuProbeDelay * f.rttStats.SmoothedRTT()))
 }
 
-func (f *mtuFinder) GetPing(now monotime.Time) (ackhandler.Frame, protocol.ByteCount) {
+func (f *mtuFinder) GetPing(now time.Time) (ackhandler.Frame, protocol.ByteCount) {
 	var size protocol.ByteCount
 	if f.lastProbeWasLost {
 		size = (f.min + f.lost[0]) / 2
@@ -179,7 +180,7 @@ func (f *mtuFinder) CurrentSize() protocol.ByteCount {
 	return f.min
 }
 
-func (f *mtuFinder) Reset(now monotime.Time, start, max protocol.ByteCount) {
+func (f *mtuFinder) Reset(now time.Time, start, max protocol.ByteCount) {
 	f.generation++
 	f.lastProbeTime = now
 	f.lastProbeWasLost = false
