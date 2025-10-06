@@ -11,11 +11,15 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
+var geoipURL string
+
 func init() {
+	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service\033[0m")
 	RootCmd.AddCommand(ipCmd)
 }
 
@@ -28,7 +32,7 @@ var ipCmd = &cobra.Command{
 		mLog.SetLevel(logrus.PanicLevel)
 		logger := mLog.PackageLogger("visor_ip_information")
 
-		ip, err := getIPAddress()
+		ip, err := getIPAddress(geoipURL)
 		if err != nil {
 			internal.Catch(cmd.Flags(), err)
 		}
@@ -37,17 +41,14 @@ var ipCmd = &cobra.Command{
 	},
 }
 
-func getIPAddress() (string, error) {
+func getIPAddress(geoipURL string) (string, error) {
 	var info ipInfo
 	var resp *http.Response
 	var err error
 
-	resp, err = http.Get("https://ip.skycoin.com/")
+	resp, err = http.Get(geoipURL)
 	if err != nil {
-		resp, err = http.Get("https://ip.plaintext.ir/")
-		if err != nil {
-			return info.IP, err
-		}
+		return info.IP, err
 	}
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
