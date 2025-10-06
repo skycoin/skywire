@@ -922,14 +922,21 @@ func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
 
 // DoCustomSetting implents API.
 func (v *Visor) DoCustomSetting(appName string, customSetting map[string]any) error {
-
-	v.log.Infof("Changing %s Settings to %q", appName, customSetting)
+	fmt.Println(customSetting)
+	v.log.Infof("Changing %s Settings to %v", appName, customSetting)
 	if v.appL == nil {
 		return ErrAppLauncherNotAvailable
 	}
 	if err := v.conf.DeleteAppArg(v.appL, appName); err != nil {
 		v.log.Warn("An error occurs deleting old arguments.")
 		return err
+	}
+
+	if value, ok := customSetting["appPort"]; ok && value != 0 {
+		if err := v.conf.UpdateAppPort(v.appL, appName, customSetting["appPort"].(uint16)); err != nil {
+			return err
+		}
+		delete(customSetting, "appPort")
 	}
 
 	if err := v.conf.UpdateAppArgBatch(v.appL, appName, customSetting); err != nil {
