@@ -1818,7 +1818,7 @@ func getPublicIP(v *Visor, service string) (string, error) {
 		return pIP, fmt.Errorf("provided URL is invalid: %w", err)
 	}
 
-	pIP, err = GetIP()
+	pIP, err = GetIP(v.conf.GeoIP)
 	if err != nil {
 		<-v.stunReady
 		if v.stunClient.PublicIP != nil {
@@ -1839,11 +1839,11 @@ type ipAPI struct {
 }
 
 // GetIP used for getting current IP of visor
-func GetIP() (string, error) {
+func GetIP(geoipURL string) (string, error) {
 	var resp *http.Response
 	var err error
 
-	resp, err = http.Get("https://ip.skycoin.com/")
+	resp, err = http.Get(geoipURL)
 	if err != nil {
 		return "", err
 	}
