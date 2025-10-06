@@ -129,6 +129,7 @@ func lookupIP(db *geoip2.Reader, ipStr string) (*lookupResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid IP: %s", ipStr)
 	}
+
 	record, err := db.City(parsed)
 	if err != nil {
 		return nil, err
@@ -145,12 +146,10 @@ func lookupIP(db *geoip2.Reader, ipStr string) (*lookupResult, error) {
 		region = record.Subdivisions[0]
 	}
 
-	countryISO := record.Country.ISOCode
-
 	res := &lookupResult{
 		IP:            ipStr,
 		CountryName:   record.Country.Names.English,
-		CountryCode:   countryISO,
+		CountryCode:   record.Country.ISOCode,
 		RegionName:    region.Names.English,
 		RegionCode:    region.ISOCode,
 		CityName:      record.City.Names.English,
@@ -175,6 +174,7 @@ func startAPIServer(db *geoip2.Reader, addr string, logger *logging.Logger) {
 		if queryIP == "" {
 			queryIP = ipFromRequest(r)
 		}
+
 		if queryIP == "" {
 			http.Error(w, "could not determine client IP", http.StatusBadRequest)
 			return
