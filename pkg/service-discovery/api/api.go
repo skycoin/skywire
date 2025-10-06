@@ -76,8 +76,8 @@ type API struct {
 }
 
 // New creates an API.
-func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore, apiKey string,
-	enableMetrics bool, m sdmetrics.Metrics, dmsgAddr string) *API {
+func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore,
+	enableMetrics bool, m sdmetrics.Metrics, dmsgAddr, geoipURL string) *API {
 	api := &API{
 		log:                         log,
 		db:                          db,
@@ -85,7 +85,7 @@ func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore, ap
 		enableMetrics:               enableMetrics,
 		reqsInFlightCountMiddleware: metricsutil.NewRequestsInFlightCountMiddleware(),
 		nonceDB:                     nonceDB,
-		geoFromIP:                   geo.MakeIPDetails(log, apiKey),
+		geoFromIP:                   geo.MakeIPDetails(log, geoipURL),
 		startedAt:                   time.Now(),
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},

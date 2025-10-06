@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/internal/sdmetrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/api"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -42,12 +43,12 @@ var (
 	pgPort         string
 	pgMaxOpenConn  int
 	testMode       bool
-	apiKey         string
 	dmsgDisc       string
 	whitelistKeys  string
 	sk             cipher.SecKey
 	dmsgPort       uint16
 	dmsgServerType string
+	geoipURL       string
 )
 
 func init() {
@@ -59,8 +60,8 @@ func init() {
 	RootCmd.Flags().IntVar(&pgMaxOpenConn, "pg-max-open-conn", 60, "maximum open connection of db\033[0m")
 	RootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration\033[0m")
 	RootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth\033[0m")
-	RootCmd.Flags().StringVarP(&apiKey, "api-key", "g", "", "geo API key\033[0m")
 	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", dmsg.DiscAddr(false), "url of dmsg-discovery\033[0m")
+	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service\033[0m")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\033[0m\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
@@ -143,7 +144,7 @@ PG_USER="postgres" PG_DATABASE="sd" PG_PASSWORD="" service-discovery --sk $(tail
 
 		// we enable metrics middleware if address is passed
 		enableMetrics := metricsAddr != ""
-		sdAPI := api.New(log, db, nonceDB, apiKey, enableMetrics, m, dmsgAddr)
+		sdAPI := api.New(log, db, nonceDB, enableMetrics, m, dmsgAddr, geoipURL)
 
 		var whitelistPKs []string
 		if whitelistKeys != "" {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/skycoin/skywire/internal/pg"
 	"github.com/skycoin/skywire/internal/utmetrics"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -49,7 +50,7 @@ var (
 	pgMaxOpenConn     int
 	logEnabled        bool
 	tag               string
-	ipAPIKey          string
+	geoipURL          string
 	enableLoadTesting bool
 	testing           bool
 	dmsgDisc          string
@@ -72,7 +73,7 @@ func init() {
 	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire-services/daily-data", "path of db daily data store\033[0m")
 	RootCmd.Flags().BoolVarP(&logEnabled, "log", "l", true, "enable request logging\033[0m")
 	RootCmd.Flags().StringVar(&tag, "tag", "uptime_tracker", "logging tag\033[0m")
-	RootCmd.Flags().StringVar(&ipAPIKey, "ip-api-key", "", "geo API key\033[0m")
+	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service\033[0m")
 	RootCmd.Flags().BoolVar(&enableLoadTesting, "enable-load-testing", false, "enable load testing\033[0m")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
 	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscAddr(false), "url of dmsg discovery\033[0m")
@@ -145,7 +146,7 @@ var RootCmd = &cobra.Command{
 			logger.Fatal("Failed to initialize redis nonce store: ", err)
 		}
 
-		locDetails := geo.MakeIPDetails(logging.MustGetLogger("uptime.geo"), ipAPIKey)
+		locDetails := geo.MakeIPDetails(logging.MustGetLogger("uptime.geo"), geoipURL)
 
 		metricsutil.ServeHTTPMetrics(logger, metricsAddr)
 

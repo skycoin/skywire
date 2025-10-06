@@ -22,7 +22,7 @@ var (
 )
 
 const (
-	reqURL = "http://ip.skycoin.com/?ip=%s"
+	reqStructure = "%s/?ip=%s"
 )
 
 // LocationData represents a geolocation point.
@@ -37,7 +37,7 @@ type LocationData struct {
 type LocationDetails func(ip net.IP) (*LocationData, error)
 
 // MakeIPDetails returns a GeoFunc.
-func MakeIPDetails(log logrus.FieldLogger, _ string) LocationDetails {
+func MakeIPDetails(log logrus.FieldLogger, geoip string) LocationDetails {
 	// Just in case.
 	if log == nil {
 		log = logging.MustGetLogger("geo")
@@ -55,7 +55,7 @@ func MakeIPDetails(log logrus.FieldLogger, _ string) LocationDetails {
 			err  error
 		)
 
-		resp, err = http.Get(fmt.Sprintf(reqURL, ip.String()))
+		resp, err = http.Get(fmt.Sprintf(reqStructure, geoip, ip.String()))
 		if err != nil {
 			return nil, err
 		}
@@ -72,7 +72,7 @@ func MakeIPDetails(log logrus.FieldLogger, _ string) LocationDetails {
 			return nil, err
 		}
 		if j.CountryCode == "" && j.Region == "" && j.Lat == 0 && j.Lon == 0 {
-			return nil, fmt.Errorf("call to ip.skycoin.com returned empty: %s", ErrCannotObtainLocFromIP)
+			return nil, fmt.Errorf("call to %s returned empty: %s", geoip, ErrCannotObtainLocFromIP)
 		}
 
 		// Prepare output.
