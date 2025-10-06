@@ -25,13 +25,18 @@ import (
 )
 
 type lookupResult struct {
-	IP         string   `json:"ip"`
-	Country    string   `json:"country"`
-	CountryISO string   `json:"country_iso"`
-	Region     string   `json:"region"`
-	City       string   `json:"city"`
-	Latitude   *float64 `json:"latitude"`
-	Longitude  *float64 `json:"longitude"`
+	IP            string   `json:"ip_address"`
+	Latitude      *float64 `json:"latitude"`
+	Longitude     *float64 `json:"longitude"`
+	PostalCode    string   `json:"postal_code"`
+	ContinentCode string   `json:"continent_code"`
+	ContinentName string   `json:"continent_name"`
+	CountryCode   string   `json:"country_code"`
+	CountryName   string   `json:"country_name"`
+	RegionCode    string   `json:"region_code"`
+	RegionName    string   `json:"region_name"`
+	CityName      string   `json:"city_name"`
+	Timezone      string   `json:"timezone"`
 }
 
 var (
@@ -135,21 +140,26 @@ func lookupIP(db *geoip2.Reader, ipStr string) (*lookupResult, error) {
 		lon = record.Location.Longitude
 	}
 
-	var region string
+	var region geoip2.CitySubdivision
 	if len(record.Subdivisions) > 0 {
-		region = record.Subdivisions[0].Names.English
+		region = record.Subdivisions[0]
 	}
 
 	countryISO := record.Country.ISOCode
 
 	res := &lookupResult{
-		IP:         ipStr,
-		Country:    record.Country.Names.English,
-		CountryISO: countryISO,
-		Region:     region,
-		City:       record.City.Names.English,
-		Latitude:   lat,
-		Longitude:  lon,
+		IP:            ipStr,
+		CountryName:   record.Country.Names.English,
+		CountryCode:   countryISO,
+		RegionName:    region.Names.English,
+		RegionCode:    region.ISOCode,
+		CityName:      record.City.Names.English,
+		Latitude:      lat,
+		Longitude:     lon,
+		ContinentName: record.Continent.Names.English,
+		ContinentCode: record.Continent.Code,
+		Timezone:      record.Location.TimeZone,
+		PostalCode:    record.Postal.Code,
 	}
 	return res, nil
 }
