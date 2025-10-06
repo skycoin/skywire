@@ -32,7 +32,7 @@ require (
 	github.com/hashicorp/yamux v0.1.2
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/james-barrow/golang-ipc v1.2.4
-	github.com/jaypipes/ghw v0.17.0
+	github.com/jaypipes/ghw v0.0.18
 	github.com/json-iterator/go v1.1.12
 	github.com/lib/pq v1.10.9
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
