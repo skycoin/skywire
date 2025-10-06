@@ -78,7 +78,7 @@ func serveAPI(t *testing.T) *httptest.Server {
 	require.NoError(t, err)
 
 	m := sdmetrics.NewEmpty()
-	api := New(logging.MustGetLogger("server"), discDB, nonceDB, "", false, m, "", skyenv.GeoIP)
+	api := New(logging.MustGetLogger("server"), discDB, nonceDB, false, m, "", skyenv.GeoIP)
 	return httptest.NewServer(api)
 }
 

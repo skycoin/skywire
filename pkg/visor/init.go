@@ -1843,7 +1843,7 @@ func GetIP(geoipURL string) (string, error) {
 	var resp *http.Response
 	var err error
 
-	resp, err = http.Get(geoipURL)
+	resp, err = http.Get(geoipURL) //nolint gosec
 	if err != nil {
 		return "", err
 	}
