@@ -20,7 +20,7 @@ The GeoIP service uses the GeoLite2-City database to provide IP geolocation info
 Query a specific IP address and get its geolocation information:
 
 ```bash
-skywire svc geoip x.x.x.x --db path/to/GeoLite2-City.mmdb
+skywire svc geoip <ip> --db path/to/GeoLite2-City.mmdb
 ```
 
 **Example:**
@@ -67,15 +67,15 @@ The service requires the **GeoLite2-City.mmdb** database file.
 
 **Database URL:** `https://deb.skywire.dev/GeoLite2-City.mmdb`
 
-The database file is approximately 62MB and is automatically downloaded when using docker-compose.
-
 ## Requirements
 
 The service requires the **GeoLite2-City.mmdb** database file to be present at the specified path.
 
 ## License
 
-Please refer to MaxMind's GeoLite2 license agreement for database usage terms.
+This service uses MaxMind's GeoLite2 database. By using this service, you agree to MaxMind's GeoLite2 End User License Agreement (EULA). 
+
+For more information, visit: https://www.maxmind.com/en/geolite2/eula
 
 ## Support
 
