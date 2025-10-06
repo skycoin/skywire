@@ -1,0 +1,17 @@
+<div class="internal-container">
+  <button
+    mat-button
+    mat-raised-button
+    color="primary"
+    [disabled]="disabled && !forceEmitEvents"
+    (click)="this.state !== buttonStates.Loading ? onClick() : null"
+    [ngClass]="{ enabled: !disabled }"
+    #button
+  >
+    <div class="content-container">
+      <span class="content"><ng-content></ng-content></span>
+      <mat-icon *ngIf="state === buttonStates.Success">done</mat-icon>
+      <mat-spinner *ngIf="state === buttonStates.Loading"></mat-spinner>
+    </div>
+  </button>
+</div>
