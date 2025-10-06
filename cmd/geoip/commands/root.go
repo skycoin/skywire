@@ -1,6 +1,4 @@
-// geoip.go
-// Combined CLI and API server for GeoIP lookup using geoip2-golang/v2 and cobra
-
+// Package commands cmd/route-finder/commands/geoip.go
 package commands
 
 import (
@@ -20,12 +18,13 @@ import (
 
 	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/spf13/cobra"
+
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
-	"github.com/spf13/cobra"
 )
 
-type LookupResult struct {
+type lookupResult struct {
 	IP         string   `json:"ip"`
 	Country    string   `json:"country"`
 	CountryISO string   `json:"country_iso"`
@@ -85,7 +84,11 @@ skywire svc geoip --api --addr ":9093" --db ./GeoLite2-City.mmdb
 		if err != nil {
 			logger.Fatalf("failed to open GeoIP database: %v", err)
 		}
-		defer db.Close()
+		defer func() {
+			if err := db.Close(); err != nil {
+				logger.Warnf("failed to close GeoIP database: %v", err)
+			}
+		}()
 
 		if apiMode {
 			startAPIServer(db, addr, logger)
@@ -103,7 +106,9 @@ skywire svc geoip --api --addr ":9093" --db ./GeoLite2-City.mmdb
 
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		_ = enc.Encode(res)
+		if err = enc.Encode(res); err != nil {
+			logger.Warn("failed to encode response: %v", err)
+		}
 	},
 }
 
@@ -114,7 +119,7 @@ func Execute() {
 	}
 }
 
-func lookupIP(db *geoip2.Reader, ipStr string) (*LookupResult, error) {
+func lookupIP(db *geoip2.Reader, ipStr string) (*lookupResult, error) {
 	parsed, err := netip.ParseAddr(ipStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid IP: %s", ipStr)
@@ -137,7 +142,7 @@ func lookupIP(db *geoip2.Reader, ipStr string) (*LookupResult, error) {
 
 	countryISO := record.Country.ISOCode
 
-	res := &LookupResult{
+	res := &lookupResult{
 		IP:         ipStr,
 		Country:    record.Country.Names.English,
 		CountryISO: countryISO,
@@ -151,7 +156,8 @@ func lookupIP(db *geoip2.Reader, ipStr string) (*LookupResult, error) {
 
 func startAPIServer(db *geoip2.Reader, addr string, logger *logging.Logger) {
 	srv := &http.Server{
-		Addr: addr,
+		Addr:              addr,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -173,7 +179,10 @@ func startAPIServer(db *geoip2.Reader, addr string, logger *logging.Logger) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
-		_ = enc.Encode(res)
+		if err = enc.Encode(res); err != nil {
+			http.Error(w, fmt.Sprintf("failed to encode response: %v", err), http.StatusInternalServerError)
+			return
+		}
 	})
 
 	stop := make(chan os.Signal, 1)
@@ -200,9 +209,9 @@ func startAPIServer(db *geoip2.Reader, addr string, logger *logging.Logger) {
 }
 
 func ipFromRequest(r *http.Request) string {
-	real := strings.TrimSpace(r.Header.Get("X-Real-Ip"))
-	if real != "" {
-		return real
+	realIP := strings.TrimSpace(r.Header.Get("X-Real-Ip"))
+	if realIP != "" {
+		return realIP
 	}
 	xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
 	if xff != "" {
