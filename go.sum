@@ -280,7 +280,6 @@ github.com/go-logfmt/logfmt v0.3.0/go.mod h1:Qt1PoO58o5twSAckw1HlFXLmHsOX5/0LbT9
 github.com/go-logfmt/logfmt v0.4.0/go.mod h1:3RMwSq7FuexP4Kalkev3ejPJsZTpXXBr9+V4qmtdjCk=
 github.com/go-logfmt/logfmt v0.5.0/go.mod h1:wCYkCAKZfumFQihp8CzCvQ3paCTfi41vtzG1KdI/P7A=
 github.com/go-ole/go-ole v1.2.5/go.mod h1:pprOEPIfldk/42T2oK7lQ4v4JSDwmV0As9GaiUsvbm0=
-github.com/go-ole/go-ole v1.2.6/go.mod h1:pprOEPIfldk/42T2oK7lQ4v4JSDwmV0As9GaiUsvbm0=
 github.com/go-ole/go-ole v1.3.0 h1:Dt6ye7+vXGIKZ7Xtk4s6/xVdGDQynvom7xCFEdWr6uE=
 github.com/go-ole/go-ole v1.3.0/go.mod h1:5LS6F96DhAwUc7C+1HLexzMXY1xGRSryjyPPKW6zv78=
 github.com/go-playground/assert/v2 v2.0.1/go.mod h1:VDjEfimB/XKnb+ZQfWdccd7VUvScMdVu0Titje2rxJ4=
@@ -490,8 +489,6 @@ github.com/james-barrow/golang-ipc v1.2.4 h1:d4NXRQxq6OWviWU8uAaob8R0YZGy/PhAkXG
 github.com/james-barrow/golang-ipc v1.2.4/go.mod h1:+egiWSbOWmiPucFGSl4GNB1YSzrVGehyl7/7pW4N8F0=
 github.com/jaypipes/ghw v0.17.0 h1:EVLJeNcy5z6GK/Lqby0EhBpynZo+ayl8iJWY0kbEUJA=
 github.com/jaypipes/ghw v0.17.0/go.mod h1:In8SsaDqlb1oTyrbmTC14uy+fbBMvp+xdqX51MidlD8=
-github.com/jaypipes/ghw v0.19.1 h1:Lhybk6aadgEJqIxeS0h07UOL/EgMGIdxbAy6V8J7RgY=
-github.com/jaypipes/ghw v0.19.1/go.mod h1:GPrvwbtPoxYUenr74+nAnWbardIZq600vJDD5HnPsPE=
 github.com/jaypipes/pcidb v1.1.1 h1:QmPhpsbmmnCwZmHeYAATxEaoRuiMAJusKYkUncMC0ro=
 github.com/jaypipes/pcidb v1.1.1/go.mod h1:x27LT2krrUgjf875KxQXKB0Ha/YXLdZRVmw6hH0G7g8=
 github.com/jessevdk/go-flags v1.4.0/go.mod h1:4FA24M0QyGHXBuZZK/XkWh8h0e1EYbRYJSGM75WSRxI=
@@ -601,6 +598,10 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/orandin/lumberjackrus v1.0.1 h1:7ysDQ0MHD79zIFN9/EiDHjUcgopNi5ehtxFDy8rUkWo=
 github.com/orandin/lumberjackrus v1.0.1/go.mod h1:xYLt6H8W93pKnQgUQaxsApS0Eb4BwHLOkxk5DVzf5H0=
+github.com/oschwald/geoip2-golang/v2 v2.0.0-beta.4 h1:O5fVXaiCQ1t1284iEGPHaMSqOfjBqWig7NOD6WIQkxA=
+github.com/oschwald/geoip2-golang/v2 v2.0.0-beta.4/go.mod h1:fHGWi8nhf3ZNFPE09LPwp7p2ABZoc5XXx6VY5mIBNNw=
+github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.9 h1:Fc8OfrOEHSDsxEe2MOsNz/7Wq4MNBJczl1/B/+/5k2I=
+github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.9/go.mod h1:EkyB0XWibbE1/+tXyR+ZehlGg66bRtMzxQSPotYH2EA=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pascaldekloe/goe v0.1.0/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pelletier/go-toml v1.9.5/go.mod h1:u1nR/EPcESfeI/szUZKdtJ0xRNbUoANCkoOuaOx1Y+c=
@@ -771,8 +772,6 @@ github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 github.com/yuin/goldmark v1.7.13 h1:GPddIs617DnBLFFVJFgpo1aBfe/4xcvMc3SB5t/D0pA=
 github.com/yuin/goldmark v1.7.13/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Brc7iBKg=
-github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo0=
-github.com/yusufpapurcu/wmi v1.2.4/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
 github.com/zcalusic/sysinfo v1.1.3 h1:u/AVENkuoikKuIZ4sUEJ6iibpmQP6YpGD8SSMCrqAF0=
 github.com/zcalusic/sysinfo v1.1.3/go.mod h1:NX+qYnWGtJVPV0yWldff9uppNKU4h40hJIRPf/pGLv4=
 github.com/zeebo/assert v1.3.0 h1:g7C04CbJuIDKNPFHmsk4hwZDO5O+kntRxzaUoNXj+IQ=
