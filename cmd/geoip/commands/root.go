@@ -4,6 +4,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,10 +12,14 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/oschwald/geoip2-golang/v2"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/spf13/cobra"
@@ -64,28 +69,36 @@ skywire svc geoip --api --addr ":9093" --db ./GeoLite2-City.mmdb
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 	Run: func(_ *cobra.Command, args []string) {
+		logger := logging.MustGetLogger(tag)
+		lvl, err := logging.LevelFromString(logLvl)
+		if err != nil {
+			logger.Fatal("Invalid loglvl detected")
+		}
+
+		logging.SetLevel(lvl)
+
 		if dbPath == "" {
 			dbPath = "./GeoLite2-City.mmdb"
 		}
 
 		db, err := geoip2.Open(dbPath)
 		if err != nil {
-			log.Fatalf("failed to open GeoIP database: %v", err)
+			logger.Fatalf("failed to open GeoIP database: %v", err)
 		}
 		defer db.Close()
 
 		if apiMode {
-			startAPIServer(db, addr)
+			startAPIServer(db, addr, logger)
 			return
 		}
 
 		if len(args) != 1 {
-			log.Fatalf("IP argument is required in CLI mode")
+			logger.Fatalf("IP argument is required in CLI mode")
 		}
 
 		res, err := lookupIP(db, args[0])
 		if err != nil {
-			log.Fatalf("lookup failed: %v", err)
+			logger.Fatalf("lookup failed: %v", err)
 		}
 
 		enc := json.NewEncoder(os.Stdout)
@@ -136,7 +149,11 @@ func lookupIP(db *geoip2.Reader, ipStr string) (*LookupResult, error) {
 	return res, nil
 }
 
-func startAPIServer(db *geoip2.Reader, addr string) {
+func startAPIServer(db *geoip2.Reader, addr string, logger *logging.Logger) {
+	srv := &http.Server{
+		Addr: addr,
+	}
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		queryIP := strings.TrimSpace(r.URL.Query().Get("ip"))
 		if queryIP == "" {
@@ -159,8 +176,27 @@ func startAPIServer(db *geoip2.Reader, addr string) {
 		_ = enc.Encode(res)
 	})
 
-	log.Printf("API server listening %s", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		logger.Printf("API server listening %s", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	<-stop
+	logger.Println("Shutting down server gracefully...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	logger.Println("Server stopped")
 }
 
 func ipFromRequest(r *http.Request) string {
