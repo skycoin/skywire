@@ -31,8 +31,7 @@ import (
 )
 
 const (
-	netType   = appnet.TypeSkynet
-	socksPort = routing.Port(3)
+	netType = appnet.TypeSkynet
 )
 
 var (
@@ -42,6 +41,7 @@ var (
 	httpAddr   string
 	retryDelay int64
 	tries      int64
+	appPort    uint16
 )
 
 func init() {
@@ -50,6 +50,7 @@ func init() {
 	RootCmd.Flags().StringVar(&httpAddr, "http", "", "http proxy mode")
 	RootCmd.Flags().Int64Var(&tries, "tries", 3, "number of tries")
 	RootCmd.Flags().Int64Var(&retryDelay, "retry-time", 5, "delay between each try")
+	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
 
 // RootCmd is the root command for skysocks
@@ -89,10 +90,15 @@ var RootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-		setAppPort(appCl, appCl.Config().RoutingPort)
+		port := appCl.Config().RoutingPort
+		if appPort != 0 {
+			port = routing.Port(appPort)
+			setAppPort(appCl, port)
+		}
 
-		conn, err := dialServer(ctx, appCl, pk)
+		defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+
+		conn, err := dialServer(ctx, appCl, pk, port)
 		if err != nil {
 			print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
 			setAppErr(appCl, err)
@@ -140,7 +146,7 @@ var RootCmd = &cobra.Command{
 	},
 }
 
-func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
+func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey, port routing.Port) (net.Conn, error) {
 	appCl.SetDetailedStatus(appserver.AppDetailedStatusStarting) //nolint
 	var conn net.Conn
 	err := r.Do(ctx, func() error {
@@ -148,7 +154,7 @@ func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey) (net.C
 		conn, err = appCl.Dial(appnet.Addr{
 			Net:    netType,
 			PubKey: pk,
-			Port:   socksPort,
+			Port:   port,
 		})
 		return err
 	})
@@ -168,12 +174,6 @@ func setAppErr(appCl *app.Client, err error) {
 func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
-	}
-}
-
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }
 
@@ -206,5 +206,11 @@ func httpProxy(ctx context.Context, httpAddr, sockscAddr string) {
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
+	}
+}
+
+func setAppPort(appCl *app.Client, port routing.Port) {
+	if err := appCl.SetAppPort(port); err != nil {
+		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
 	}
 }

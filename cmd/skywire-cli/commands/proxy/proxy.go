@@ -38,6 +38,7 @@ func init() {
 	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of skysocks client")
 	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 0, "timeout for starting proxy")
 	startCmd.Flags().StringVar(&httpAddr, "http", "", "address for http proxy")
+	startCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between proxy (skysocks) and visor")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
 	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 }
@@ -103,20 +104,24 @@ var startCmd = &cobra.Command{
 				clientName = "skysocks-client"
 			}
 
+			if appPort != 0 {
+				arguments["appPort"] = appPort
+			}
+
 			_, err = rpcClient.App(clientName)
 			if err == nil {
 				err = rpcClient.DoCustomSetting(clientName, arguments)
 				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client. error: %s", err))
 				}
 			} else {
 				err = rpcClient.AddApp(clientName, "skywire")
 				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error during add new app"))
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error during add new app. error: %s", err))
 				}
 				err = rpcClient.DoCustomSetting(clientName, arguments)
 				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client"))
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client. error: %s", err))
 				}
 			}
 			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
