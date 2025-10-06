@@ -1845,10 +1845,7 @@ func GetIP() (string, error) {
 
 	resp, err = http.Get("https://ip.skycoin.com/")
 	if err != nil {
-		resp, err = http.Get("https://ip.plaintext.ir/")
-		if err != nil {
-			return "", err
-		}
+		return "", err
 	}
 	defer resp.Body.Close() // nolint
 
