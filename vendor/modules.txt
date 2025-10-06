@@ -627,7 +627,7 @@ github.com/jackc/puddle/v2/internal/genstack
 # github.com/james-barrow/golang-ipc v1.2.4
 ## explicit; go 1.15
 github.com/james-barrow/golang-ipc
-# github.com/jaypipes/ghw v0.17.0
+# github.com/jaypipes/ghw v0.0.18
 ## explicit; go 1.21
 github.com/jaypipes/ghw
 github.com/jaypipes/ghw/pkg/accelerator
