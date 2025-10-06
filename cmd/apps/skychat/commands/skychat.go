@@ -32,7 +32,6 @@ import (
 
 const (
 	netType = appnet.TypeSkynet
-	port    = routing.Port(1)
 )
 
 // var addr = flag.String("addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
@@ -44,6 +43,7 @@ var (
 	clientCh chan string
 	conns    map[cipher.PubKey]net.Conn // Chat connections
 	connsMu  sync.Mutex
+	appPort  uint16
 )
 
 // the go embed static points to skywire/cmd/apps/skychat/static
@@ -53,6 +53,7 @@ var embededFiles embed.FS
 
 func init() {
 	RootCmd.Flags().StringVar(&addr, "addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
+	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
 
 // RootCmd is the root command for skywire-cli
@@ -79,8 +80,14 @@ var RootCmd = &cobra.Command{
 		clientCh = make(chan string)
 		defer close(clientCh)
 
+		port := appCl.Config().RoutingPort
+		if appPort != 0 {
+			port = routing.Port(appPort)
+			setAppPort(appCl, port)
+		}
+
 		conns = make(map[cipher.PubKey]net.Conn)
-		go listenLoop()
+		go listenLoop(port)
 
 		if runtime.GOOS == "windows" {
 			ipcClient, err := ipc.StartClient(visorconfig.SkychatName, nil)
@@ -146,15 +153,13 @@ func Execute() {
 	}
 }
 
-func listenLoop() {
-	l, err := appCl.Listen(netType, port)
+func listenLoop(appPort routing.Port) {
+	l, err := appCl.Listen(netType, appPort)
 	if err != nil {
-		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
+		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, appPort, err))
 		setAppError(appCl, err)
 		return
 	}
-
-	setAppPort(appCl, port)
 
 	for {
 		fmt.Println("Accepting skychat conn...")
