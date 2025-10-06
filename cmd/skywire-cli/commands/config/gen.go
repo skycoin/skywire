@@ -645,6 +645,7 @@ var genConfigCmd = &cobra.Command{
 		conf.DmsgHTTPServerPath = visorconfig.LocalPath + "/" + visorconfig.Custom
 		conf.StunServers = services.StunServers //utilenv.GetStunServers()
 		conf.ShutdownTimeout = visorconfig.DefaultTimeout
+		conf.GeoIP = visorconfig.GeoIP
 
 		conf.Dmsgpty = &visorconfig.Dmsgpty{
 			DmsgPort: visorconfig.DmsgPtyPort,
