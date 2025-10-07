@@ -7,7 +7,6 @@ import (
 
 const (
 	alphaRegexString                 = "^[a-zA-Z]+$"
-	alphaSpaceRegexString            = "^[a-zA-Z ]+$"
 	alphaNumericRegexString          = "^[a-zA-Z0-9]+$"
 	alphaUnicodeRegexString          = "^[\\p{L}]+$"
 	alphaUnicodeNumericRegexString   = "^[\\p{L}\\p{N}]+$"
@@ -94,7 +93,6 @@ func lazyRegexCompile(str string) func() *regexp.Regexp {
 
 var (
 	alphaRegex                 = lazyRegexCompile(alphaRegexString)
-	alphaSpaceRegex            = lazyRegexCompile(alphaSpaceRegexString)
 	alphaNumericRegex          = lazyRegexCompile(alphaNumericRegexString)
 	alphaUnicodeRegex          = lazyRegexCompile(alphaUnicodeRegexString)
 	alphaUnicodeNumericRegex   = lazyRegexCompile(alphaUnicodeNumericRegexString)
