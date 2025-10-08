@@ -61,7 +61,7 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "GeoIP service for skywire",
-	Long: calvin.AsciiFont("GeoIP") + `
+	Long: calvin.AsciiFont("geoip") + `
 
 Note: GeoIP database should downloaded before start. You can get it from https://deb.skywire.dev/GeoLite2-City.mmdb
 skywire svc geoip x.x.x.x --db ./GeoLite2-City.mmdb
