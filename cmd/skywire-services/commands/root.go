@@ -11,7 +11,9 @@ import (
 	"github.com/spf13/cobra"
 
 	ar "github.com/skycoin/skywire/cmd/address-resolver/commands"
+	conf "github.com/skycoin/skywire/cmd/conf/commands"
 	confbs "github.com/skycoin/skywire/cmd/config-bootstrapper/commands"
+	geoip "github.com/skycoin/skywire/cmd/geoip/commands"
 	nm "github.com/skycoin/skywire/cmd/network-monitor/commands"
 	rf "github.com/skycoin/skywire/cmd/route-finder/commands"
 	sd "github.com/skycoin/skywire/cmd/service-discovery/commands"
@@ -25,28 +27,37 @@ import (
 )
 
 func init() {
+	conf.ServicesConfCmd.AddCommand(
+		conf.DmsghttpConfCmd,
+	)
 	RootCmd.AddCommand(
 		tpd.RootCmd,
 		tps.RootCmd,
 		ar.RootCmd,
 		rf.RootCmd,
 		confbs.RootCmd,
+		conf.ServicesConfCmd,
 		se.RootCmd,
 		ut.RootCmd,
 		sd.RootCmd,
 		sn.RootCmd,
 		nm.RootCmd,
+		geoip.RootCmd,
 	)
 	tpd.RootCmd.Use = "tpd"
 	tps.RootCmd.Use = "tps"
 	ar.RootCmd.Use = "ar"
 	rf.RootCmd.Use = "rf"
 	confbs.RootCmd.Use = "confbs"
+	conf.RootCmd.Use = "conf"
 	se.RootCmd.Use = "se"
 	ut.RootCmd.Use = "ut"
 	sd.RootCmd.Use = "sd"
 	sn.RootCmd.Use = "sn"
 	nm.RootCmd.Use = "nm"
+	conf.DmsghttpConfCmd.Use = "dmsghttp"
+	conf.ServicesConfCmd.Use = "conf"
+	geoip.RootCmd.Use = "ip"
 }
 
 // RootCmd contains all subcommands

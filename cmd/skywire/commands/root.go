@@ -19,10 +19,6 @@ import (
 	ss "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
 	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
-	conf "github.com/skycoin/skywire/cmd/conf/commands"
-	geoip "github.com/skycoin/skywire/cmd/geoip/commands"
-	sd "github.com/skycoin/skywire/cmd/service-discovery/commands"
-	sn "github.com/skycoin/skywire/cmd/setup-node/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	services "github.com/skycoin/skywire/cmd/skywire-services/commands"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
@@ -43,15 +39,6 @@ func init() {
 		ss.RootCmd,
 		sc.RootCmd,
 	)
-	conf.ServicesConfCmd.AddCommand(
-		conf.DmsghttpConfCmd,
-	)
-	services.RootCmd.AddCommand(
-		sd.RootCmd,
-		sn.RootCmd,
-		geoip.RootCmd,
-		conf.ServicesConfCmd,
-	)
 	RootCmd.AddCommand(
 		visor.RootCmd,
 		scli.RootCmd,
@@ -65,8 +52,7 @@ func init() {
 	visor.RootCmd.Long = calvin.AsciiFont("skywire-visor")
 	dmsg.RootCmd.Use = "dmsg"
 	services.RootCmd.Use = "svc"
-	sd.RootCmd.Use = "sd"
-	sn.RootCmd.Use = "sn"
+
 	scli.RootCmd.Use = "cli"
 	visor.RootCmd.Use = "visor"
 	vpns.RootCmd.Use = "vpn-server"
@@ -74,9 +60,6 @@ func init() {
 	ssc.RootCmd.Use = "skysocks-client"
 	ss.RootCmd.Use = "skysocks"
 	sc.RootCmd.Use = "skychat"
-	conf.DmsghttpConfCmd.Use = "dmsghttp"
-	conf.ServicesConfCmd.Use = "conf"
-	geoip.RootCmd.Use = "geoip"
 
 	modifySubcommands(RootCmd)
 	if fmt.Sprintf("%v", buildinfo.DebugBuildInfo()) != "" {
