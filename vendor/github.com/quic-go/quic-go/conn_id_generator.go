@@ -5,7 +5,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -39,7 +38,7 @@ func (cr connRunners) ReplaceWithClosed(ids []protocol.ConnectionID, b []byte, e
 }
 
 type connIDToRetire struct {
-	t      monotime.Time
+	t      time.Time
 	connID protocol.ConnectionID
 }
 
@@ -96,7 +95,7 @@ func (m *connIDGenerator) SetMaxActiveConnIDs(limit uint64) error {
 	return nil
 }
 
-func (m *connIDGenerator) Retire(seq uint64, sentWithDestConnID protocol.ConnectionID, expiry monotime.Time) error {
+func (m *connIDGenerator) Retire(seq uint64, sentWithDestConnID protocol.ConnectionID, expiry time.Time) error {
 	if seq > m.highestSeq {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
@@ -124,7 +123,7 @@ func (m *connIDGenerator) Retire(seq uint64, sentWithDestConnID protocol.Connect
 	return m.issueNewConnID()
 }
 
-func (m *connIDGenerator) queueConnIDForRetiring(connID protocol.ConnectionID, expiry monotime.Time) {
+func (m *connIDGenerator) queueConnIDForRetiring(connID protocol.ConnectionID, expiry time.Time) {
 	idx := slices.IndexFunc(m.connIDsToRetire, func(c connIDToRetire) bool {
 		return c.t.After(expiry)
 	})
@@ -150,21 +149,21 @@ func (m *connIDGenerator) issueNewConnID() error {
 	return nil
 }
 
-func (m *connIDGenerator) SetHandshakeComplete(connIDExpiry monotime.Time) {
+func (m *connIDGenerator) SetHandshakeComplete(connIDExpiry time.Time) {
 	if m.initialClientDestConnID != nil {
 		m.queueConnIDForRetiring(*m.initialClientDestConnID, connIDExpiry)
 		m.initialClientDestConnID = nil
 	}
 }
 
-func (m *connIDGenerator) NextRetireTime() monotime.Time {
+func (m *connIDGenerator) NextRetireTime() time.Time {
 	if len(m.connIDsToRetire) == 0 {
-		return 0
+		return time.Time{}
 	}
 	return m.connIDsToRetire[0].t
 }
 
-func (m *connIDGenerator) RemoveRetiredConnIDs(now monotime.Time) {
+func (m *connIDGenerator) RemoveRetiredConnIDs(now time.Time) {
 	if len(m.connIDsToRetire) == 0 {
 		return
 	}

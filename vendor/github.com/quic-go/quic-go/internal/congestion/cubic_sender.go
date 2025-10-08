@@ -2,8 +2,8 @@ package congestion
 
 import (
 	"fmt"
+	"time"
 
-	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/logging"
@@ -22,7 +22,6 @@ const (
 type cubicSender struct {
 	hybridSlowStart HybridSlowStart
 	rttStats        *utils.RTTStats
-	connStats       *utils.ConnectionStats
 	cubic           *Cubic
 	pacer           *pacer
 	clock           Clock
@@ -69,7 +68,6 @@ var (
 func NewCubicSender(
 	clock Clock,
 	rttStats *utils.RTTStats,
-	connStats *utils.ConnectionStats,
 	initialMaxDatagramSize protocol.ByteCount,
 	reno bool,
 	tracer *logging.ConnectionTracer,
@@ -77,7 +75,6 @@ func NewCubicSender(
 	return newCubicSender(
 		clock,
 		rttStats,
-		connStats,
 		reno,
 		initialMaxDatagramSize,
 		initialCongestionWindow*initialMaxDatagramSize,
@@ -89,7 +86,6 @@ func NewCubicSender(
 func newCubicSender(
 	clock Clock,
 	rttStats *utils.RTTStats,
-	connStats *utils.ConnectionStats,
 	reno bool,
 	initialMaxDatagramSize,
 	initialCongestionWindow,
@@ -98,7 +94,6 @@ func newCubicSender(
 ) *cubicSender {
 	c := &cubicSender{
 		rttStats:                   rttStats,
-		connStats:                  connStats,
 		largestSentPacketNumber:    protocol.InvalidPacketNumber,
 		largestAckedPacketNumber:   protocol.InvalidPacketNumber,
 		largestSentAtLastCutback:   protocol.InvalidPacketNumber,
@@ -121,11 +116,11 @@ func newCubicSender(
 }
 
 // TimeUntilSend returns when the next packet should be sent.
-func (c *cubicSender) TimeUntilSend(_ protocol.ByteCount) monotime.Time {
+func (c *cubicSender) TimeUntilSend(_ protocol.ByteCount) time.Time {
 	return c.pacer.TimeUntilSend()
 }
 
-func (c *cubicSender) HasPacingBudget(now monotime.Time) bool {
+func (c *cubicSender) HasPacingBudget(now time.Time) bool {
 	return c.pacer.Budget(now) >= c.maxDatagramSize
 }
 
@@ -138,7 +133,7 @@ func (c *cubicSender) minCongestionWindow() protocol.ByteCount {
 }
 
 func (c *cubicSender) OnPacketSent(
-	sentTime monotime.Time,
+	sentTime time.Time,
 	_ protocol.ByteCount,
 	packetNumber protocol.PacketNumber,
 	bytes protocol.ByteCount,
@@ -181,7 +176,7 @@ func (c *cubicSender) OnPacketAcked(
 	ackedPacketNumber protocol.PacketNumber,
 	ackedBytes protocol.ByteCount,
 	priorInFlight protocol.ByteCount,
-	eventTime monotime.Time,
+	eventTime time.Time,
 ) {
 	c.largestAckedPacketNumber = max(ackedPacketNumber, c.largestAckedPacketNumber)
 	if c.InRecovery() {
@@ -194,9 +189,6 @@ func (c *cubicSender) OnPacketAcked(
 }
 
 func (c *cubicSender) OnCongestionEvent(packetNumber protocol.PacketNumber, lostBytes, priorInFlight protocol.ByteCount) {
-	c.connStats.PacketsLost.Add(1)
-	c.connStats.BytesLost.Add(uint64(lostBytes))
-
 	// TCP NewReno (RFC6582) says that once a loss occurs, any losses in packets
 	// already sent should be treated as a single loss event, since it's expected.
 	if packetNumber <= c.largestSentAtLastCutback {
@@ -226,7 +218,7 @@ func (c *cubicSender) maybeIncreaseCwnd(
 	_ protocol.PacketNumber,
 	ackedBytes protocol.ByteCount,
 	priorInFlight protocol.ByteCount,
-	eventTime monotime.Time,
+	eventTime time.Time,
 ) {
 	// Do not increase the congestion window unless the sender is close to using
 	// the current window.
@@ -254,10 +246,7 @@ func (c *cubicSender) maybeIncreaseCwnd(
 			c.numAckedPackets = 0
 		}
 	} else {
-		c.congestionWindow = min(
-			c.maxCongestionWindow(),
-			c.cubic.CongestionWindowAfterAck(ackedBytes, c.congestionWindow, c.rttStats.MinRTT(), eventTime),
-		)
+		c.congestionWindow = min(c.maxCongestionWindow(), c.cubic.CongestionWindowAfterAck(ackedBytes, c.congestionWindow, c.rttStats.MinRTT(), eventTime))
 	}
 }
 

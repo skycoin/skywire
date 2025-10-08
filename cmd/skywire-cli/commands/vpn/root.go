@@ -27,6 +27,7 @@ var (
 	jsonOutput      bool
 	country         string
 	version         string
+	geoipURL        string
 )
 
 // RootCmd contains commands that interact with the skywire-visor
