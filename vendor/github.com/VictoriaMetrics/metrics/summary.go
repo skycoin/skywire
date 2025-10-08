@@ -120,13 +120,7 @@ func (sm *Summary) marshalTo(prefix string, w io.Writer) {
 }
 
 func (sm *Summary) metricType() string {
-	// this metric type should not be printed, because summary (sum and count)
-	// of the same metric family will be printed after quantile(s).
-	// If metadata is needed, the metadata from quantile(s) should be used.
-	// quantile will be printed first, so its metrics type won't be printed as metadata.
-	// Printing quantiles before sum and count aligns this code with Prometheus behavior.
-	// See: https://github.com/VictoriaMetrics/metrics/pull/99
-	return "unsupported"
+	return "summary"
 }
 
 func splitMetricName(name string) (string, string) {
@@ -207,7 +201,11 @@ func (qv *quantileValue) marshalTo(prefix string, w io.Writer) {
 }
 
 func (qv *quantileValue) metricType() string {
-	return "summary"
+	// this metricsType should not be printed, because summary (sum and count) of the same metric family will be printed first,
+	// and if metadata is needed, the metadata from summary should be used.
+	// quantile will be printed later, so its metrics type won't be printed as metadata.
+	// See: https://github.com/VictoriaMetrics/metrics/pull/99
+	return "unsupported"
 }
 
 func addTag(name, tag string) string {

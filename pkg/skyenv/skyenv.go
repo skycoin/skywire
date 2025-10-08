@@ -194,6 +194,9 @@ const (
 
 	// NodeInfo is the name of the survey file
 	NodeInfo string = "node-info.json"
+
+	// GeoIP is the URL of default geoip service to work with IP
+	GeoIP string = "http://ip.skycoin.com"
 )
 
 // SkywireConfig returns the full path to the package config

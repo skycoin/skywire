@@ -160,7 +160,10 @@ github.com/Microsoft/go-winio/pkg/guid
 # github.com/NYTimes/gziphandler v1.1.1
 ## explicit; go 1.11
 github.com/NYTimes/gziphandler
-# github.com/VictoriaMetrics/metrics v1.40.2
+# github.com/StackExchange/wmi v1.2.1
+## explicit; go 1.13
+github.com/StackExchange/wmi
+# github.com/VictoriaMetrics/metrics v1.40.1
 ## explicit; go 1.18
 github.com/VictoriaMetrics/metrics
 # github.com/alecthomas/chroma v0.10.0
@@ -289,10 +292,6 @@ github.com/chen3feng/safecast
 # github.com/chewxy/math32 v1.11.1
 ## explicit; go 1.13
 github.com/chewxy/math32
-# github.com/clipperhouse/uax29/v2 v2.2.0
-## explicit; go 1.18
-github.com/clipperhouse/uax29/v2/graphemes
-github.com/clipperhouse/uax29/v2/internal/iterators
 # github.com/cloudwego/base64x v0.1.6
 ## explicit; go 1.17
 github.com/cloudwego/base64x
@@ -427,7 +426,7 @@ github.com/go-chi/cors
 # github.com/go-chi/httprate v0.15.0
 ## explicit; go 1.23.0
 github.com/go-chi/httprate
-# github.com/go-echarts/go-echarts/v2 v2.6.3
+# github.com/go-echarts/go-echarts/v2 v2.6.2
 ## explicit; go 1.18
 github.com/go-echarts/go-echarts/v2/charts
 github.com/go-echarts/go-echarts/v2/datasets
@@ -457,8 +456,8 @@ github.com/go-playground/locales/currency
 # github.com/go-playground/universal-translator v0.18.1
 ## explicit; go 1.18
 github.com/go-playground/universal-translator
-# github.com/go-playground/validator/v10 v10.28.0
-## explicit; go 1.24.0
+# github.com/go-playground/validator/v10 v10.27.0
+## explicit; go 1.20
 github.com/go-playground/validator/v10
 # github.com/go-redis/redis v6.15.9+incompatible
 ## explicit
@@ -595,8 +594,8 @@ github.com/inconshreveable/mousetrap
 # github.com/itchyny/gojq v0.12.17
 ## explicit; go 1.21
 github.com/itchyny/gojq
-# github.com/itchyny/timefmt-go v0.1.7
-## explicit; go 1.24
+# github.com/itchyny/timefmt-go v0.1.6
+## explicit; go 1.20
 github.com/itchyny/timefmt-go
 # github.com/ivanpirog/coloredcobra v1.0.1
 ## explicit; go 1.15
@@ -628,7 +627,7 @@ github.com/jackc/puddle/v2/internal/genstack
 # github.com/james-barrow/golang-ipc v1.2.4
 ## explicit; go 1.15
 github.com/james-barrow/golang-ipc
-# github.com/jaypipes/ghw v0.19.1
+# github.com/jaypipes/ghw v0.17.0
 ## explicit; go 1.21
 github.com/jaypipes/ghw
 github.com/jaypipes/ghw/pkg/accelerator
@@ -699,8 +698,8 @@ github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.20
 ## explicit; go 1.15
 github.com/mattn/go-isatty
-# github.com/mattn/go-runewidth v0.0.19
-## explicit; go 1.20
+# github.com/mattn/go-runewidth v0.0.16
+## explicit; go 1.9
 github.com/mattn/go-runewidth
 # github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 ## explicit
@@ -722,6 +721,14 @@ github.com/opencontainers/go-digest
 # github.com/orandin/lumberjackrus v1.0.1
 ## explicit
 github.com/orandin/lumberjackrus
+# github.com/oschwald/geoip2-golang/v2 v2.0.0-beta.4
+## explicit; go 1.24
+github.com/oschwald/geoip2-golang/v2
+# github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.9
+## explicit; go 1.24
+github.com/oschwald/maxminddb-golang/v2
+github.com/oschwald/maxminddb-golang/v2/internal/decoder
+github.com/oschwald/maxminddb-golang/v2/internal/mmdberrors
 # github.com/pelletier/go-toml/v2 v2.2.4
 ## explicit; go 1.21.0
 github.com/pelletier/go-toml/v2
@@ -746,15 +753,14 @@ github.com/pterm/pterm/putils
 # github.com/quic-go/qpack v0.5.1
 ## explicit; go 1.22
 github.com/quic-go/qpack
-# github.com/quic-go/quic-go v0.55.0
-## explicit; go 1.24
+# github.com/quic-go/quic-go v0.54.0
+## explicit; go 1.23
 github.com/quic-go/quic-go
 github.com/quic-go/quic-go/http3
 github.com/quic-go/quic-go/internal/ackhandler
 github.com/quic-go/quic-go/internal/congestion
 github.com/quic-go/quic-go/internal/flowcontrol
 github.com/quic-go/quic-go/internal/handshake
-github.com/quic-go/quic-go/internal/monotime
 github.com/quic-go/quic-go/internal/protocol
 github.com/quic-go/quic-go/internal/qerr
 github.com/quic-go/quic-go/internal/utils
@@ -763,6 +769,9 @@ github.com/quic-go/quic-go/internal/utils/ringbuffer
 github.com/quic-go/quic-go/internal/wire
 github.com/quic-go/quic-go/logging
 github.com/quic-go/quic-go/quicvarint
+# github.com/rivo/uniseg v0.4.7
+## explicit; go 1.18
+github.com/rivo/uniseg
 # github.com/robert-nix/ansihtml v1.0.1
 ## explicit; go 1.15
 github.com/robert-nix/ansihtml
@@ -991,9 +1000,6 @@ github.com/yuin/goldmark/renderer
 github.com/yuin/goldmark/renderer/html
 github.com/yuin/goldmark/text
 github.com/yuin/goldmark/util
-# github.com/yusufpapurcu/wmi v1.2.4
-## explicit; go 1.16
-github.com/yusufpapurcu/wmi
 # github.com/zcalusic/sysinfo v1.1.3
 ## explicit; go 1.22
 github.com/zcalusic/sysinfo
@@ -1009,6 +1015,8 @@ go.etcd.io/bbolt/internal/common
 go.etcd.io/bbolt/internal/freelist
 # go.uber.org/mock v0.6.0
 ## explicit; go 1.23.0
+go.uber.org/mock/mockgen
+go.uber.org/mock/mockgen/model
 # go.yaml.in/yaml/v3 v3.0.4
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
@@ -1035,7 +1043,7 @@ golang.org/x/crypto/ssh/terminal
 golang.org/x/crypto/tea
 golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
-# golang.org/x/exp v0.0.0-20251002181428-27f1f14c8bb9
+# golang.org/x/exp v0.0.0-20250911091902-df9299821621
 ## explicit; go 1.24.0
 golang.org/x/exp/maps
 # golang.org/x/image v0.31.0
@@ -1054,6 +1062,7 @@ golang.org/x/image/webp
 # golang.org/x/mod v0.28.0
 ## explicit; go 1.24.0
 golang.org/x/mod/internal/lazyregexp
+golang.org/x/mod/modfile
 golang.org/x/mod/module
 golang.org/x/mod/semver
 # golang.org/x/net v0.44.0
@@ -1150,7 +1159,7 @@ golang.zx2c4.com/wireguard/conn
 golang.zx2c4.com/wireguard/conn/winrio
 golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
-# google.golang.org/protobuf v1.36.10
+# google.golang.org/protobuf v1.36.9
 ## explicit; go 1.23
 google.golang.org/protobuf/encoding/protowire
 google.golang.org/protobuf/internal/detrand

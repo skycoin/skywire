@@ -20,6 +20,7 @@ import (
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
 	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
 	conf "github.com/skycoin/skywire/cmd/conf/commands"
+	geoip "github.com/skycoin/skywire/cmd/geoip/commands"
 	sd "github.com/skycoin/skywire/cmd/service-discovery/commands"
 	sn "github.com/skycoin/skywire/cmd/setup-node/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
@@ -48,6 +49,7 @@ func init() {
 	services.RootCmd.AddCommand(
 		sd.RootCmd,
 		sn.RootCmd,
+		geoip.RootCmd,
 		conf.ServicesConfCmd,
 	)
 	RootCmd.AddCommand(
@@ -74,6 +76,7 @@ func init() {
 	sc.RootCmd.Use = "skychat"
 	conf.DmsghttpConfCmd.Use = "dmsghttp"
 	conf.ServicesConfCmd.Use = "conf"
+	geoip.RootCmd.Use = "geoip"
 
 	modifySubcommands(RootCmd)
 	if fmt.Sprintf("%v", buildinfo.DebugBuildInfo()) != "" {
