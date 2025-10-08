@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -23,6 +24,9 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 )
+
+//go:embed GeoLite2-City.mmdb
+var embeddedGeoIP []byte
 
 type lookupResult struct {
 	IP            string   `json:"ip_address"`
@@ -63,8 +67,9 @@ var RootCmd = &cobra.Command{
 	Short: "GeoIP service for skywire",
 	Long: calvin.AsciiFont("geoip") + `
 
-Note: GeoIP database should downloaded before start. You can get it from https://deb.skywire.dev/GeoLite2-City.mmdb
-skywire svc geoip x.x.x.x --db ./GeoLite2-City.mmdb
+Note: Embeddeed GeoIP database is used by default
+Path to local GeoIP database can also be specified via the '--db' flag
+skywire svc geoip --db ./GeoLite2-City.mmdb 8.8.8.8
 skywire svc geoip --api --addr ":9093" --db ./GeoLite2-City.mmdb
 `,
 	SilenceErrors:         true,
@@ -81,13 +86,22 @@ skywire svc geoip --api --addr ":9093" --db ./GeoLite2-City.mmdb
 
 		logging.SetLevel(lvl)
 
-		if dbPath == "" {
-			dbPath = "./GeoLite2-City.mmdb"
-		}
+		var db *geoip2.Reader
 
-		db, err := geoip2.Open(dbPath)
-		if err != nil {
-			logger.Fatalf("failed to open GeoIP database: %v", err)
+		if dbPath != "" {
+			// External DB path provided
+			logger.Infof("Using external GeoIP database: %s", dbPath)
+			db, err = geoip2.Open(dbPath)
+			if err != nil {
+				logger.Fatalf("failed to open GeoIP database from path '%s': %v", dbPath, err)
+			}
+		} else {
+			// Use embedded database
+			logger.Info("Using embedded GeoIP database")
+			db, err = geoip2.OpenBytes(embeddedGeoIP)
+			if err != nil {
+				logger.Fatalf("failed to load embedded GeoIP database: %v", err)
+			}
 		}
 		defer func() {
 			if err := db.Close(); err != nil {
