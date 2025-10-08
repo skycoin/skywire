@@ -39,6 +39,7 @@ type V1 struct {
 	StunServers          []string                         `json:"stun_servers"`
 	ShutdownTimeout      Duration                         `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic             bool                             `json:"is_public"`
+	GeoIP                string                           `json:"geoip"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
 	Hypervisor *HypervisorConfig `json:"hypervisor,omitempty"`

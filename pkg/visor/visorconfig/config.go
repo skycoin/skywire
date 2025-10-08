@@ -121,6 +121,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		}
 	}
 	conf.IsPublic = IsPublic
+	conf.GeoIP = GeoIP
 	return conf
 }
 

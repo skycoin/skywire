@@ -1,6 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.25
+go 1.25.1
 
 require (
 	cogentcore.org/core v0.3.12
@@ -37,6 +37,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/orandin/lumberjackrus v1.0.1
+	github.com/oschwald/geoip2-golang/v2 v2.0.0-beta.4
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/pterm/pterm v0.12.81
 	github.com/robert-nix/ansihtml v1.0.1
@@ -149,6 +150,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/onsi/gomega v1.36.3 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.9 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
