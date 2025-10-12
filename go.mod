@@ -21,7 +21,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-chi/cors v1.2.2
 	github.com/go-chi/httprate v0.15.0
-	github.com/go-echarts/go-echarts/v2 v2.6.3
+	github.com/go-echarts/go-echarts/v2 v2.6.4
 	github.com/go-playground/validator/v10 v10.28.0
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.11.5
@@ -37,13 +37,12 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/orandin/lumberjackrus v1.0.1
-	github.com/oschwald/geoip2-golang/v2 v2.0.0-beta.4
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/pterm/pterm v0.12.81
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.29-0.20250830133032-a0340da3246c
-	github.com/skycoin/skycoin v0.28.1-0.20250914161012-28a0dc172f9e //DO NOT MODIFY v0.28.1-0.20250914161012-28a0dc172f9e
+	github.com/skycoin/dmsg v1.3.29-0.20251002174108-cd8f0a6f38e3
+	github.com/skycoin/skycoin v0.28.1-0.20251012182647-a1a88ea0df8f //DO NOT MODIFY OR UPDATE v0.28.1-0.20251012182647-a1a88ea0df8f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
@@ -55,7 +54,7 @@ require (
 	github.com/yuin/goldmark v1.7.13
 	github.com/zcalusic/sysinfo v1.1.3
 	go.etcd.io/bbolt v1.4.3
-	golang.org/x/net v0.45.0
+	golang.org/x/net v0.46.0
 	golang.org/x/sync v0.17.0
 	golang.org/x/sys v0.37.0
 	golang.org/x/term v0.36.0
@@ -64,6 +63,8 @@ require (
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.0
 )
+
+require github.com/oschwald/geoip2-golang/v2 v2.0.0-beta.4
 
 require (
 	atomicgo.dev/cursor v0.2.0 // indirect
@@ -181,12 +182,12 @@ require (
 	go.uber.org/mock v0.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.22.0 // indirect
-	golang.org/x/crypto v0.42.0 // indirect
-	golang.org/x/exp v0.0.0-20251002181428-27f1f14c8bb9 // indirect
+	golang.org/x/crypto v0.43.0 // indirect
+	golang.org/x/exp v0.0.0-20251009144603-d2f985daa21b // indirect
 	golang.org/x/image v0.32.0 // indirect
 	golang.org/x/mod v0.29.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
-	golang.org/x/tools v0.37.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
@@ -204,23 +205,18 @@ require (
 // issues with gotop on riscv64
 //replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
 
-// issue with ghw on windows on latest version
-// replace github.com/jaypipes/ghw latest => github.com/jaypipes/ghw v0.17.0
-
-// Wiregusrd version must match below version ; do not update
-//replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
-
 // Uncomment for tests with local sources
 //replace github.com/skycoin/dmsg => ../dmsg
+//replace github.com/skycoin/skycoin => ../skycoin
 
-// To update other skywire deps to specific commit hash:
-// run `go mod tidy ; go mod vendor`
-// copy the changed line to the correct place in the above
-// then, re-comment the line before saving.
-// replace github.com/skycoin/skycoin => github.com/skycoin/skycoin <commit-hash>
-// replace github.com/skycoin/dmsg => github.com/skycoin/dmsg <commit-hash>
-
-// Below should reflect the current versions of the following deps
-//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20250914161012-28a0dc172f9e
-//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20250823231529-5ea8f3037103
-// replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
+// Below should reflect current versions of the following deps
+// To update deps to specific commit hash:
+// 1) Uncomment one of the following lines and substituite version with desired commit hash:
+//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20251012182647-a1a88ea0df8f
+//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251002174108-cd8f0a6f38e3
+//replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
+// 2) Run `go mod tidy && go mod vendor`
+// 3) Copy the populated version string to the correct place in require(...) above - replacing the specified version string
+// 4) Re-comment the uncommented replace directive above
+// 5) Save this file.
+// 6) Run `go mod tidy && go mod vendor`
