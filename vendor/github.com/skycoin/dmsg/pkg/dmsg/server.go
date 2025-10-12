@@ -228,9 +228,11 @@ func (s *Server) handleSession(conn net.Conn) {
 	protocol := s.entryProtocol(ctx, dSes.RemotePK())
 
 	// based on protocol, create smux or yamux stream session
+	dSes.sm.mutx.Lock()
 	if protocol == "smux" {
 		dSes.sm.smux, err = smux.Server(conn, smux.DefaultConfig())
 		if err != nil {
+			dSes.sm.mutx.Unlock()
 			cancel()
 			return
 		}
@@ -239,12 +241,14 @@ func (s *Server) handleSession(conn net.Conn) {
 	} else {
 		dSes.sm.yamux, err = yamux.Server(conn, yamux.DefaultConfig())
 		if err != nil {
+			dSes.sm.mutx.Unlock()
 			cancel()
 			return
 		}
 		dSes.sm.addr = dSes.sm.yamux.RemoteAddr()
 		log.Infof("yamux stream session initial for %s", dSes.RemotePK().String())
 	}
+	dSes.sm.mutx.Unlock()
 
 	if s.setSession(ctx, dSes.SessionCommon) {
 		dSes.Serve()

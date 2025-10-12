@@ -38,6 +38,7 @@ type SessionCommon struct {
 
 // SessionManager blablabla
 type SessionManager struct {
+	mutx  sync.RWMutex
 	yamux *yamux.Session
 	smux  *smux.Session
 	addr  net.Addr
