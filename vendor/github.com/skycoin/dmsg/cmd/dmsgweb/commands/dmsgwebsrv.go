@@ -305,7 +305,7 @@ const srvenvfileLinux = `
 #DMSGSESSIONS=1
 
 #--	Set secret key
-#DMSGWEBSRVSK=''
+#DMSGWEBSK=''
 
 #--	Whitelisted keys to access the web interface
 #WHITELISTPKS=('')
