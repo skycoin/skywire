@@ -179,7 +179,9 @@ func scriptExecBoolSlice(s, envfile string) []bool {
 			return result
 		}
 	}
-
+	if len(result) == 0 {
+		result = append(result, false)
+	}
 	return result
 }
 
