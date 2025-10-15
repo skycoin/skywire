@@ -38,11 +38,11 @@ require (
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pires/go-proxyproto v0.8.1
-	github.com/pterm/pterm v0.12.81
+	github.com/pterm/pterm v0.12.82
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skycoin/dmsg v1.3.29-0.20251002174108-cd8f0a6f38e3
-	github.com/skycoin/skycoin v0.28.1-0.20251012182647-a1a88ea0df8f //DO NOT MODIFY OR UPDATE v0.28.1-0.20251012182647-a1a88ea0df8f
+	github.com/skycoin/skycoin v0.28.1-0.20251013175539-5f840bbfe2aa //DO NOT MODIFY OR UPDATE v0.28.1-0.20251013175539-5f840bbfe2aa
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
@@ -212,7 +212,7 @@ require (
 // Below should reflect current versions of the following deps
 // To update deps to specific commit hash:
 // 1) Uncomment one of the following lines and substituite version with desired commit hash:
-//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20251012182647-a1a88ea0df8f
+//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20251013175539-5f840bbfe2aa
 //replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251002174108-cd8f0a6f38e3
 //replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
 // 2) Run `go mod tidy && go mod vendor`

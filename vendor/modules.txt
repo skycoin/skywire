@@ -746,7 +746,7 @@ github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 ## explicit
 github.com/pmezard/go-difflib/difflib
-# github.com/pterm/pterm v0.12.81
+# github.com/pterm/pterm v0.12.82
 ## explicit; go 1.23.0
 github.com/pterm/pterm
 github.com/pterm/pterm/internal
@@ -828,7 +828,7 @@ github.com/skycoin/dmsg/pkg/noise
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.1-0.20251012182647-a1a88ea0df8f
+# github.com/skycoin/skycoin v0.28.1-0.20251013175539-5f840bbfe2aa
 ## explicit; go 1.25.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
