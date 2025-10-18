@@ -427,7 +427,7 @@ github.com/go-chi/cors
 # github.com/go-chi/httprate v0.15.0
 ## explicit; go 1.23.0
 github.com/go-chi/httprate
-# github.com/go-echarts/go-echarts/v2 v2.6.4
+# github.com/go-echarts/go-echarts/v2 v2.6.5
 ## explicit; go 1.18
 github.com/go-echarts/go-echarts/v2/charts
 github.com/go-echarts/go-echarts/v2/datasets
@@ -931,7 +931,7 @@ github.com/subosito/gotenv
 # github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 ## explicit
 github.com/syndtr/gocapability/capability
-# github.com/tdewolff/parse/v2 v2.8.3
+# github.com/tdewolff/parse/v2 v2.8.4
 ## explicit; go 1.11
 github.com/tdewolff/parse/v2/strconv
 # github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161
@@ -1043,7 +1043,7 @@ golang.org/x/crypto/ssh/terminal
 golang.org/x/crypto/tea
 golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
-# golang.org/x/exp v0.0.0-20251009144603-d2f985daa21b
+# golang.org/x/exp v0.0.0-20251017212417-90e834f514db
 ## explicit; go 1.24.0
 golang.org/x/exp/maps
 # golang.org/x/image v0.32.0
