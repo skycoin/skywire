@@ -107,11 +107,6 @@ NOTE: the uptime tracker and other services consider the visor's config version 
 
 The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
 
-**Reward eligibility after 02-01-2025 requires Skywire v1.3.28**
-
-Requirement established 01-09-2025
-
-Rewards Cutoff date for updating 02-01-2025
 
 **Reward eligibility after 08-01-2025 requires Skywire v1.3.30**
 
@@ -119,6 +114,11 @@ Requirement established 07-15-2025
 
 Rewards Cutoff date for updating 08-01-2025
 
+**Reward eligibility after 10-03-2025 requires Skywire v1.3.31**
+
+Requirement established 10-03-2025
+
+Rewards Cutoff date for updating 10-18-2025
 
 ### Uptime
 
