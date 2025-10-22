@@ -598,10 +598,10 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/orandin/lumberjackrus v1.0.1 h1:7ysDQ0MHD79zIFN9/EiDHjUcgopNi5ehtxFDy8rUkWo=
 github.com/orandin/lumberjackrus v1.0.1/go.mod h1:xYLt6H8W93pKnQgUQaxsApS0Eb4BwHLOkxk5DVzf5H0=
-github.com/oschwald/geoip2-golang/v2 v2.0.0-beta.4 h1:O5fVXaiCQ1t1284iEGPHaMSqOfjBqWig7NOD6WIQkxA=
-github.com/oschwald/geoip2-golang/v2 v2.0.0-beta.4/go.mod h1:fHGWi8nhf3ZNFPE09LPwp7p2ABZoc5XXx6VY5mIBNNw=
-github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.10 h1:d9tiCD1ueYjGStkagZmLYMbItMnJPpmn27jBctlyRg8=
-github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.10/go.mod h1:EkyB0XWibbE1/+tXyR+ZehlGg66bRtMzxQSPotYH2EA=
+github.com/oschwald/geoip2-golang/v2 v2.0.0 h1:1GZ7MsQsbIKeOXMDV2MqBVfV8NuCIqWatomkS67LwQo=
+github.com/oschwald/geoip2-golang/v2 v2.0.0/go.mod h1:MR3+NmQTkjxyJ/u6iZJSfpfy5al/QqsaJL1Gg6uI7sU=
+github.com/oschwald/maxminddb-golang/v2 v2.0.0 h1:Gyljxck1kHbBxDgLM++NfDWBqvu1pWWfT8XbosSo0bo=
+github.com/oschwald/maxminddb-golang/v2 v2.0.0/go.mod h1:gG4V88LsawPEqtbL1Veh1WRh+nVSYwXzJ1P5Fcn77g0=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pascaldekloe/goe v0.1.0/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pelletier/go-toml v1.9.5/go.mod h1:u1nR/EPcESfeI/szUZKdtJ0xRNbUoANCkoOuaOx1Y+c=
@@ -685,8 +685,8 @@ github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9 h1:DElGw1Fhj4a
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9/go.mod h1:OQz8NXVJUWEw7PWYASZ/1BIw5GXgVMTGvrCGDlZa9+k=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0duwyG+7WliWz5u9kgk1h5MnLuA=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6/go.mod h1:UXghlricA7J3aRD/k7p/zBObQfmBawwCxIVPVjz2Q3o=
-github.com/skycoin/skycoin v0.28.1-0.20251013175539-5f840bbfe2aa h1:+Prb8uXwb8iMTMTTvtUrWVQNmtR6yrA5LZyiBD4/yAU=
-github.com/skycoin/skycoin v0.28.1-0.20251013175539-5f840bbfe2aa/go.mod h1:vdXDK+BkF6Ey360Ps/meV5GmracNTvnI/E3oHtkyims=
+github.com/skycoin/skycoin v0.28.1-0.20251022232932-b3a844043898 h1:1HhCH9VNAz2spQkgmZrKVwlhwrNMPCWYIbzuPxGdLlM=
+github.com/skycoin/skycoin v0.28.1-0.20251022232932-b3a844043898/go.mod h1:UV52f79oGvWNYIC9JU+PjFu1cQwAN6Vb+SgZenBly/8=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8/go.mod h1:P5HUIBuIWKbyjl083/loAegFkfbFNx5i2qEP4CNbm7E=
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
