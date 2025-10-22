@@ -366,14 +366,6 @@ func OpenBytes(buffer []byte, options ...ReaderOption) (*Reader, error) {
 	return reader, nil
 }
 
-// FromBytes takes a byte slice corresponding to a MaxMind DB file and any
-// options. It returns a Reader structure or an error.
-//
-// Deprecated: Use OpenBytes instead. FromBytes will be removed in a future version.
-func FromBytes(buffer []byte, options ...ReaderOption) (*Reader, error) {
-	return OpenBytes(buffer, options...)
-}
-
 // Lookup retrieves the database record for ip and returns a Result, which can
 // be used to decode the data.
 func (r *Reader) Lookup(ip netip.Addr) Result {
@@ -512,6 +504,67 @@ func readNodeBySize(buffer []byte, offset, bit, recordSize uint) (uint, error) {
 			uint(buffer[offset+3]), nil
 	default:
 		return 0, mmdberrors.NewInvalidDatabaseError("unsupported record size")
+	}
+}
+
+// readNodePairBySize reads both left (bit=0) and right (bit=1) child pointers
+// for a node at the given base offset according to the record size. This reduces
+// duplicate bound checks and byte fetches when both children are needed.
+func readNodePairBySize(buffer []byte, baseOffset, recordSize uint) (left, right uint, err error) {
+	bufferLen := uint(len(buffer))
+	switch recordSize {
+	case 24:
+		// Each child is 3 bytes; total 6 bytes starting at baseOffset
+		if baseOffset > bufferLen-6 {
+			return 0, 0, mmdberrors.NewInvalidDatabaseError(
+				"bounds check failed: insufficient buffer for 24-bit node pair read",
+			)
+		}
+		o := baseOffset
+		left = (uint(buffer[o]) << 16) | (uint(buffer[o+1]) << 8) | uint(buffer[o+2])
+		o += 3
+		right = (uint(buffer[o]) << 16) | (uint(buffer[o+1]) << 8) | uint(buffer[o+2])
+		return left, right, nil
+	case 28:
+		// Left uses high nibble of shared byte, right uses low nibble.
+		// Layout: [A B C S][D E F] where S provides 4 shared bits for each child
+		if baseOffset > bufferLen-7 {
+			return 0, 0, mmdberrors.NewInvalidDatabaseError(
+				"bounds check failed: insufficient buffer for 28-bit node pair read",
+			)
+		}
+		// Left child (bit=0): uses high nibble of shared byte
+		shared := uint(buffer[baseOffset+3])
+		left = ((shared & 0xF0) << 20) |
+			(uint(buffer[baseOffset]) << 16) |
+			(uint(buffer[baseOffset+1]) << 8) |
+			uint(buffer[baseOffset+2])
+		// Right child (bit=1): uses low nibble of shared byte, next 3 bytes
+		right = ((shared & 0x0F) << 24) |
+			(uint(buffer[baseOffset+4]) << 16) |
+			(uint(buffer[baseOffset+5]) << 8) |
+			uint(buffer[baseOffset+6])
+		return left, right, nil
+	case 32:
+		// Each child is 4 bytes; total 8 bytes
+		if baseOffset > bufferLen-8 {
+			return 0, 0, mmdberrors.NewInvalidDatabaseError(
+				"bounds check failed: insufficient buffer for 32-bit node pair read",
+			)
+		}
+		o := baseOffset
+		left = (uint(buffer[o]) << 24) |
+			(uint(buffer[o+1]) << 16) |
+			(uint(buffer[o+2]) << 8) |
+			uint(buffer[o+3])
+		o += 4
+		right = (uint(buffer[o]) << 24) |
+			(uint(buffer[o+1]) << 16) |
+			(uint(buffer[o+2]) << 8) |
+			uint(buffer[o+3])
+		return left, right, nil
+	default:
+		return 0, 0, mmdberrors.NewInvalidDatabaseError("unsupported record size")
 	}
 }
 

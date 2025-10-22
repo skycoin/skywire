@@ -42,7 +42,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skycoin/dmsg v1.3.29-0.20251002174108-cd8f0a6f38e3
-	github.com/skycoin/skycoin v0.28.1-0.20251013175539-5f840bbfe2aa //DO NOT MODIFY OR UPDATE v0.28.1-0.20251013175539-5f840bbfe2aa
+	github.com/skycoin/skycoin v0.28.1-0.20251022232932-b3a844043898 //DO NOT MODIFY OR UPDATE v0.28.1-0.20251022232932-b3a844043898
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
@@ -64,7 +64,7 @@ require (
 	gorm.io/gorm v1.31.0
 )
 
-require github.com/oschwald/geoip2-golang/v2 v2.0.0-beta.4
+require github.com/oschwald/geoip2-golang/v2 v2.0.0
 
 require (
 	atomicgo.dev/cursor v0.2.0 // indirect
@@ -151,7 +151,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/onsi/gomega v1.36.3 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.10 // indirect
+	github.com/oschwald/maxminddb-golang/v2 v2.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -212,7 +212,7 @@ require (
 // Below should reflect current versions of the following deps
 // To update deps to specific commit hash:
 // 1) Uncomment one of the following lines and substituite version with desired commit hash:
-//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20251013175539-5f840bbfe2aa
+//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20251022232932-b3a844043898
 //replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251002174108-cd8f0a6f38e3
 //replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
 // 2) Run `go mod tidy && go mod vendor`
