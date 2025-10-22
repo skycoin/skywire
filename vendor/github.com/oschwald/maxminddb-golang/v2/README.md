@@ -26,9 +26,13 @@ Version 2.0 includes significant improvements:
 - **Network Iteration**: Iterate over all networks in a database with
   `Networks()` and `NetworksWithin()`
 - **Enhanced Performance**: Optimized data structures and decoding paths
-- **Go 1.23+ Support**: Takes advantage of modern Go features including
+- **Go 1.24+ Support**: Takes advantage of modern Go features including
   iterators
 - **Better Error Handling**: More detailed error types and improved debugging
+- **Integrity Checks**: Validate databases with `Reader.Verify()` and access
+  metadata helpers such as `Metadata.BuildTime()`
+
+See [MIGRATION.md](MIGRATION.md) for guidance on updating existing v1 code.
 
 ## Quick Start
 
@@ -243,7 +247,7 @@ Download from
 
 ## Requirements
 
-- Go 1.23 or later
+- Go 1.24 or later
 - MaxMind DB file in .mmdb format
 
 ## Contributing
