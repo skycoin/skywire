@@ -1,4 +1,3 @@
-// Package decoder decodes values in the data section.
 package decoder
 
 import (
@@ -238,14 +237,12 @@ func (d *DataDecoder) decodePointer(
 
 	var pointerValueOffset uint
 	switch pointerSize {
-	case 1:
+	case 1, 4:
 		pointerValueOffset = 0
 	case 2:
 		pointerValueOffset = 2048
 	case 3:
 		pointerValueOffset = 526336
-	case 4:
-		pointerValueOffset = 0
 	default:
 		return 0, 0, mmdberrors.NewInvalidDatabaseError("invalid pointer size: %d", pointerSize)
 	}
@@ -424,28 +421,36 @@ func (d *DataDecoder) decodeKey(offset uint) ([]byte, uint, error) {
 // the one at the offset passed in. The size bits have different meanings for
 // different data types.
 func (d *DataDecoder) nextValueOffset(offset, numberToSkip uint) (uint, error) {
-	if numberToSkip == 0 {
-		return offset, nil
-	}
-	kindNum, size, offset, err := d.decodeCtrlData(offset)
-	if err != nil {
-		return 0, err
-	}
-	switch kindNum {
-	case KindPointer:
-		_, offset, err = d.decodePointer(size, offset)
+	for numberToSkip > 0 {
+		kindNum, size, newOffset, err := d.decodeCtrlData(offset)
 		if err != nil {
 			return 0, err
 		}
-	case KindMap:
-		numberToSkip += 2 * size
-	case KindSlice:
-		numberToSkip += size
-	case KindBool:
-	default:
-		offset += size
+
+		switch kindNum {
+		case KindPointer:
+			// A pointer value is represented by its pointer token only.
+			// To skip it, just move past the pointer bytes; do NOT follow
+			// the pointer target here.
+			_, ptrEndOffset, err2 := d.decodePointer(size, newOffset)
+			if err2 != nil {
+				return 0, err2
+			}
+			newOffset = ptrEndOffset
+		case KindMap:
+			numberToSkip += 2 * size
+		case KindSlice:
+			numberToSkip += size
+		case KindBool:
+			// size encodes the boolean; nothing else to skip
+		default:
+			newOffset += size
+		}
+
+		offset = newOffset
+		numberToSkip--
 	}
-	return d.nextValueOffset(offset, numberToSkip-1)
+	return offset, nil
 }
 
 func (d *DataDecoder) sizeFromCtrlByte(

@@ -722,11 +722,11 @@ github.com/opencontainers/go-digest
 # github.com/orandin/lumberjackrus v1.0.1
 ## explicit
 github.com/orandin/lumberjackrus
-# github.com/oschwald/geoip2-golang/v2 v2.0.0-beta.4
-## explicit; go 1.24
+# github.com/oschwald/geoip2-golang/v2 v2.0.0
+## explicit; go 1.24.0
 github.com/oschwald/geoip2-golang/v2
-# github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.10
-## explicit; go 1.24
+# github.com/oschwald/maxminddb-golang/v2 v2.0.0
+## explicit; go 1.24.0
 github.com/oschwald/maxminddb-golang/v2
 github.com/oschwald/maxminddb-golang/v2/internal/decoder
 github.com/oschwald/maxminddb-golang/v2/internal/mmdberrors
@@ -828,12 +828,13 @@ github.com/skycoin/dmsg/pkg/noise
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.1-0.20251013175539-5f840bbfe2aa
+# github.com/skycoin/skycoin v0.28.1-0.20251022232932-b3a844043898
 ## explicit; go 1.25.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
 github.com/skycoin/skycoin/cmd/skycoin-cli/commands
 github.com/skycoin/skycoin/cmd/skycoin-wallet/commands
+github.com/skycoin/skycoin/cmd/skycoin-web/commands
 github.com/skycoin/skycoin/cmd/skycoin/commands
 github.com/skycoin/skycoin/explorer
 github.com/skycoin/skycoin/src/api
@@ -866,6 +867,8 @@ github.com/skycoin/skycoin/src/kvstorage
 github.com/skycoin/skycoin/src/params
 github.com/skycoin/skycoin/src/readable
 github.com/skycoin/skycoin/src/skycoin
+github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo
+github.com/skycoin/skycoin/src/skycoin-web/src/gui
 github.com/skycoin/skycoin/src/transaction
 github.com/skycoin/skycoin/src/util/apputil
 github.com/skycoin/skycoin/src/util/certutil
