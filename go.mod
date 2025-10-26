@@ -1,13 +1,13 @@
 module github.com/skycoin/skywire
 
-go 1.25
+go 1.25.1
 
 require (
 	cogentcore.org/core v0.3.12
 	fyne.io/systray v1.11.0
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/MichaelMure/go-term-markdown v0.1.4
-	github.com/VictoriaMetrics/metrics v1.40.1
+	github.com/VictoriaMetrics/metrics v1.40.2
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/bitfield/script v0.24.1
 	github.com/blang/semver/v4 v4.0.0
@@ -21,8 +21,8 @@ require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-chi/cors v1.2.2
 	github.com/go-chi/httprate v0.15.0
-	github.com/go-echarts/go-echarts/v2 v2.6.2
-	github.com/go-playground/validator/v10 v10.27.0
+	github.com/go-echarts/go-echarts/v2 v2.6.5
+	github.com/go-playground/validator/v10 v10.28.0
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1
@@ -32,17 +32,17 @@ require (
 	github.com/hashicorp/yamux v0.1.2
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/james-barrow/golang-ipc v1.2.4
-	github.com/jaypipes/ghw v0.17.0
+	github.com/jaypipes/ghw v0.19.1
 	github.com/json-iterator/go v1.1.12
 	github.com/lib/pq v1.10.9
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/pires/go-proxyproto v0.8.1
-	github.com/pterm/pterm v0.12.81
+	github.com/pterm/pterm v0.12.82
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.29-0.20250830133032-a0340da3246c
-	github.com/skycoin/skycoin v0.28.1-0.20250914161012-28a0dc172f9e //DO NOT MODIFY v0.28.1-0.20250914161012-28a0dc172f9e
+	github.com/skycoin/dmsg v1.3.29-0.20251002174108-cd8f0a6f38e3
+	github.com/skycoin/skycoin v0.28.1-0.20251022232932-b3a844043898 //DO NOT MODIFY OR UPDATE v0.28.1-0.20251022232932-b3a844043898
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
@@ -54,15 +54,17 @@ require (
 	github.com/yuin/goldmark v1.7.13
 	github.com/zcalusic/sysinfo v1.1.3
 	go.etcd.io/bbolt v1.4.3
-	golang.org/x/net v0.44.0
+	golang.org/x/net v0.46.0
 	golang.org/x/sync v0.17.0
-	golang.org/x/sys v0.36.0
-	golang.org/x/term v0.35.0
+	golang.org/x/sys v0.37.0
+	golang.org/x/term v0.36.0
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	gopkg.in/telebot.v3 v3.3.8
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.0
 )
+
+require github.com/oschwald/geoip2-golang/v2 v2.0.0
 
 require (
 	atomicgo.dev/cursor v0.2.0 // indirect
@@ -75,7 +77,6 @@ require (
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/NYTimes/gziphandler v1.1.1 // indirect
-	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/alecthomas/chroma v0.10.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.20.0 // indirect
 	github.com/anthonynsimon/bild v0.14.0 // indirect
@@ -88,6 +89,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chewxy/math32 v1.11.1 // indirect
+	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/cogentcore/webgpu v0.23.0 // indirect
@@ -126,7 +128,7 @@ require (
 	github.com/hack-pad/safejs v0.1.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/itchyny/gojq v0.12.17 // indirect
-	github.com/itchyny/timefmt-go v0.1.6 // indirect
+	github.com/itchyny/timefmt-go v0.1.7 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.7.6 // indirect
@@ -143,18 +145,18 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.16 // indirect
+	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/onsi/gomega v1.36.3 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/oschwald/maxminddb-golang/v2 v2.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
-	github.com/quic-go/quic-go v0.54.0 // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/quic-go/quic-go v0.55.0 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
@@ -162,9 +164,9 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/viper v1.21.0 // indirect
-	github.com/stretchr/objx v0.5.2 // indirect
+	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/tdewolff/parse/v2 v2.8.3 // indirect
+	github.com/tdewolff/parse/v2 v2.8.4 // indirect
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
@@ -175,18 +177,19 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	github.com/xtaci/smux v1.5.35 // indirect
+	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/arch v0.21.0 // indirect
-	golang.org/x/crypto v0.42.0 // indirect
-	golang.org/x/exp v0.0.0-20250911091902-df9299821621 // indirect
-	golang.org/x/image v0.31.0 // indirect
-	golang.org/x/mod v0.28.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
-	golang.org/x/tools v0.37.0 // indirect
+	golang.org/x/arch v0.22.0 // indirect
+	golang.org/x/crypto v0.43.0 // indirect
+	golang.org/x/exp v0.0.0-20251017212417-90e834f514db // indirect
+	golang.org/x/image v0.32.0 // indirect
+	golang.org/x/mod v0.29.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
-	google.golang.org/protobuf v1.36.9 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
@@ -202,23 +205,18 @@ require (
 // issues with gotop on riscv64
 //replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
 
-// issue with ghw on windows on latest version
-// replace github.com/jaypipes/ghw latest => github.com/jaypipes/ghw v0.17.0
-
-// Wiregusrd version must match below version ; do not update
-//replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20230223181233-21636207a675
-
 // Uncomment for tests with local sources
 //replace github.com/skycoin/dmsg => ../dmsg
+//replace github.com/skycoin/skycoin => ../skycoin
 
-// To update other skywire deps to specific commit hash:
-// run `go mod tidy ; go mod vendor`
-// copy the changed line to the correct place in the above
-// then, re-comment the line before saving.
-// replace github.com/skycoin/skycoin => github.com/skycoin/skycoin <commit-hash>
-// replace github.com/skycoin/dmsg => github.com/skycoin/dmsg <commit-hash>
-
-// Below should reflect the current versions of the following deps
-//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20250914161012-28a0dc172f9e
-//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20250823231529-5ea8f3037103
-// replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
+// Below should reflect current versions of the following deps
+// To update deps to specific commit hash:
+// 1) Uncomment one of the following lines and substituite version with desired commit hash:
+//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20251022232932-b3a844043898
+//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251002174108-cd8f0a6f38e3
+//replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
+// 2) Run `go mod tidy && go mod vendor`
+// 3) Copy the populated version string to the correct place in require(...) above - replacing the specified version string
+// 4) Re-comment the uncommented replace directive above
+// 5) Save this file.
+// 6) Run `go mod tidy && go mod vendor`

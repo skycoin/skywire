@@ -217,6 +217,9 @@ var (
 
 	// RewardFile is the name of the file containing skycoin reward address
 	RewardFile = skyenv.RewardFile
+
+	// GeoIP is the URL of default geoip service
+	GeoIP = skyenv.GeoIP
 )
 
 // SkywireConfig returns the full path to the package config

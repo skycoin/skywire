@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	services "github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -34,6 +35,7 @@ func init() {
 		listCmd,
 	)
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
+	startCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "server public key")
 	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 0, "starting timeout value in second")
 }
 
@@ -94,7 +96,7 @@ var startCmd = &cobra.Command{
 					if state.Status == appserver.AppStatusRunning {
 						startProcess = false
 						internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintln("\nRunning!"))
-						ip, err := visor.GetIP()
+						ip, err := visor.GetIP(geoipURL)
 						out := output{
 							CurrentIP: ip,
 						}
