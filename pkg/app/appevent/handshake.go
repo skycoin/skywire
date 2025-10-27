@@ -43,10 +43,18 @@ func DoReqHandshake(conf appcommon.ProcConfig, subs *Subscriber) (net.Conn, []io
 
 	// dial to app server and send hello JSON object
 	// sending hello will also advertise event subscriptions endpoint (if needed)
-	conn, err := net.Dial("tcp", conf.AppSrvAddr)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to dial to app server: %w", err)
+	var conn net.Conn
+	var err error
+	
+	if inProcessConn := appcommon.GetInProcessConn(conf.ProcKey); inProcessConn != nil {
+		conn = inProcessConn
+	} else {
+		conn, err = net.Dial("tcp", conf.AppSrvAddr)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to dial to app server: %w", err)
+		}
 	}
+	
 	if err := appcommon.WriteHello(conn, hello); err != nil {
 		return nil, nil, fmt.Errorf("failed to send hello to app server: %w", err)
 	}
