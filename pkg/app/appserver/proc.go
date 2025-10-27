@@ -2,6 +2,7 @@
 package appserver
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -34,7 +35,6 @@ var (
 
 // Proc is an instance of a skywire app. It encapsulates the running process itself and the RPC server for app/visor
 // communication.
-// TODO(evanlinjin): In the future, we will implement the ability to run multiple instances (procs) of a single app.
 type Proc struct {
 	ipcServer   *ipc.Server
 	ipcServerWg sync.WaitGroup
@@ -49,11 +49,14 @@ type Proc struct {
 	waitMx    sync.Mutex
 	waitErr   error
 
+	appCtx       context.Context
+	appCancelCtx context.CancelFunc
+
 	rpcGWMu  sync.Mutex
-	rpcGW    *RPCIngressGateway // gateway shared over 'conn' - introduced AFTER proc is started
-	conn     net.Conn           // connection to proc - introduced AFTER proc is started
-	connCh   chan struct{}      // push here when conn is received - protected by 'connOnce'
-	connOnce sync.Once          // ensures we only push to 'connCh' once
+	rpcGW    *RPCIngressGateway
+	conn     net.Conn
+	connCh   chan struct{}
+	connOnce sync.Once
 
 	m       ProcManager
 	appName string
@@ -63,7 +66,7 @@ type Proc struct {
 
 	statusMx sync.RWMutex
 	status   string
-	// connection duration (i.e. when vpn client is connected, the app will set the connection duration)
+
 	connDuration   int64
 	connDurationMu sync.RWMutex
 
@@ -75,8 +78,8 @@ type Proc struct {
 
 	cmdStderr io.ReadCloser
 
-	readyCh   chan struct{} // push here when ready to start app disc - protected by 'readyOnce'
-	readyOnce sync.Once     // ensures we only push to 'readyCh' once
+	readyCh   chan struct{}
+	readyOnce sync.Once
 }
 
 // NewProc constructs `Proc`.
@@ -88,15 +91,17 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	moduleName := fmt.Sprintf("proc:%s:%s", conf.AppName, conf.ProcKey)
 
 	var cmd *exec.Cmd
-	envs := conf.Envs()
+	var stderr io.ReadCloser
 
-	cmd = exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
-	cmd.Env = append(os.Environ(), envs...)
-	cmd.Dir = conf.ProcWorkDir
+	if conf.RunFunc == nil {
+		envs := conf.Envs()
+		cmd = exec.Command(conf.BinaryLoc, conf.ProcArgs...)
+		cmd.Env = append(os.Environ(), envs...)
+		cmd.Dir = conf.ProcWorkDir
+	}
 
 	var appLogDB appcommon.LogStore
 	var appLog *logging.MasterLogger
-	var stderr io.ReadCloser
 	procLogger := mLog
 	if conf.LogDBLoc != "" {
 		appLog, appLogDB = appcommon.NewProcLogger(conf, mLog)
@@ -105,12 +110,13 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 			storeLog(appLog, logStorePath)
 		}
 
-		cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
+		if cmd != nil {
+			cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
 
-		// we read the Stderr pipe in order to filter some false positive app errors
-		errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
-		stderr, _ = cmd.StderrPipe() //nolint:errcheck
-		printStdErr(stderr, errorLog)
+			errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
+			stderr, _ = cmd.StderrPipe()
+			printStdErr(stderr, errorLog)
+		}
 	}
 
 	p := &Proc{
@@ -195,17 +201,117 @@ func (p *Proc) Start() error {
 		return errProcAlreadyRunning
 	}
 
-	// Acquire lock immediately.
 	p.waitMx.Lock()
-
-	if err := p.cmd.Start(); err != nil {
-		p.waitMx.Unlock()
-		return err
-	}
 
 	p.startTimeMx.Lock()
 	p.startTime = time.Now().UTC()
 	p.startTimeMx.Unlock()
+
+	if p.conf.RunFunc != nil {
+		return p.startInProcess()
+	}
+
+	return p.startExternal()
+}
+
+func (p *Proc) startInProcess() error {
+	p.appCtx, p.appCancelCtx = context.WithCancel(context.Background())
+
+	runFunc, ok := p.conf.RunFunc.(appcommon.AppFunc)
+	if !ok {
+		p.waitMx.Unlock()
+		return fmt.Errorf("invalid RunFunc signature for app %s", p.conf.AppName)
+	}
+
+	envs := p.conf.Envs()
+	for _, env := range envs {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			os.Setenv(parts[0], parts[1])
+		}
+	}
+
+	go func() {
+		defer func() {
+			for _, env := range envs {
+				parts := strings.SplitN(env, "=", 2)
+				if len(parts) == 2 {
+					os.Unsetenv(parts[0])
+				}
+			}
+		}()
+
+		err := runFunc(p.appCtx, p.conf.ProcArgs)
+		if err != nil {
+			p.errMx.Lock()
+			p.err = err.Error()
+			p.errMx.Unlock()
+		}
+	}()
+
+	go func() {
+		defer func() {
+			_ = p.m.SetError(p.appName, p.err)
+			_ = p.m.Stop(p.appName)
+		}()
+
+		select {
+		case _, ok := <-p.connCh:
+			if !ok {
+				p.appCancelCtx()
+				p.waitMx.Unlock()
+				return
+			}
+		case <-time.After(ProcStartTimeout):
+			p.waitErr = fmt.Errorf("app failed to connect within %s", ProcStartTimeout)
+			p.waitMx.Unlock()
+			p.connOnce.Do(func() { close(p.connCh) })
+			return
+		}
+
+		if ok := p.AwaitConn(); !ok {
+			p.appCancelCtx()
+			p.waitMx.Unlock()
+			return
+		}
+
+		go func() {
+			<-p.readyCh
+			p.disc.Start()
+		}()
+		defer p.disc.Stop()
+
+		if runtime.GOOS == "windows" {
+			ipcServer, err := ipc.StartServer(p.appName, nil)
+			if err != nil {
+				p.appCancelCtx()
+				p.waitMx.Unlock()
+				p.ipcServerWg.Done()
+				return
+			}
+			p.ipcServer = ipcServer
+			p.ipcServerWg.Done()
+		}
+
+		<-p.appCtx.Done()
+
+		if err := p.conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			p.log.WithError(err).Warn("Closing proc conn returned unexpected error.")
+		}
+		p.rpcGW.cm.CloseAll()
+		p.rpcGW.lm.CloseAll()
+
+		p.waitMx.Unlock()
+	}()
+
+	return nil
+}
+
+func (p *Proc) startExternal() error {
+	if err := p.cmd.Start(); err != nil {
+		p.waitMx.Unlock()
+		return err
+	}
 
 	go func() {
 		waitErrCh := make(chan error)
@@ -215,46 +321,34 @@ func (p *Proc) Start() error {
 		}()
 
 		defer func() {
-			// here will definitely be an error notifying that the process
-			// is already stopped. We do this to remove proc from the manager,
-			// therefore giving the correct app status to hypervisor.
-			_ = p.m.SetError(p.appName, p.err) //nolint:errcheck
-			_ = p.m.Stop(p.appName)            //nolint:errcheck
+			_ = p.m.SetError(p.appName, p.err)
+			_ = p.m.Stop(p.appName)
 		}()
 
 		select {
 		case _, ok := <-p.connCh:
 			if !ok {
-				// in this case app got stopped from the outer code before initializing the connection,
-				// just kill the process and exit.
-				_ = p.cmd.Process.Kill() //nolint:errcheck
+				_ = p.cmd.Process.Kill()
 				p.waitMx.Unlock()
 
 				return
 			}
 		case waitErr := <-waitErrCh:
-			// in this case app process finished before initializing the connection. Happens if an
-			// error occurred during app startup.
 			p.waitErr = waitErr
 			p.waitMx.Unlock()
 
-			// channel won't get closed outside, close it now.
 			p.connOnce.Do(func() { close(p.connCh) })
 
 			return
 		}
 
-		// here, the connection is established, so we're not blocked by awaiting it anymore,
-		// execution may be continued as usual.
-
 		if ok := p.AwaitConn(); !ok {
-			_ = p.cmd.Process.Kill() //nolint:errcheck
+			_ = p.cmd.Process.Kill()
 			p.waitMx.Unlock()
 			return
 		}
 
 		go func() {
-			// App discovery start/stop.
 			<-p.readyCh
 			p.disc.Start()
 		}()
@@ -263,7 +357,7 @@ func (p *Proc) Start() error {
 		if runtime.GOOS == "windows" {
 			ipcServer, err := ipc.StartServer(p.appName, nil)
 			if err != nil {
-				_ = p.cmd.Process.Kill() //nolint:errcheck
+				_ = p.cmd.Process.Kill()
 				p.waitMx.Unlock()
 				p.ipcServerWg.Done()
 				return
@@ -272,17 +366,14 @@ func (p *Proc) Start() error {
 			p.ipcServerWg.Done()
 		}
 
-		// Wait for proc to exit.
 		p.waitErr = <-waitErrCh
 
-		// Close proc conn and associated listeners and connections.
 		if err := p.conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 			p.log.WithError(err).Warn("Closing proc conn returned unexpected error.")
 		}
 		p.rpcGW.cm.CloseAll()
 		p.rpcGW.lm.CloseAll()
 
-		// Unlock.
 		p.waitMx.Unlock()
 	}()
 
@@ -295,7 +386,11 @@ func (p *Proc) Stop() error {
 		return errProcNotStarted
 	}
 
-	if p.cmd.Process != nil {
+	if p.appCancelCtx != nil {
+		p.appCancelCtx()
+	}
+
+	if p.cmd != nil && p.cmd.Process != nil {
 		if runtime.GOOS != "windows" {
 			err := p.cmd.Process.Signal(os.Interrupt)
 			if err != nil {
@@ -311,17 +406,15 @@ func (p *Proc) Stop() error {
 		}
 	}
 
-	// deregister discovery service
 	p.disc.Stop()
 
-	// the lock will be acquired as soon as the cmd finishes its work
 	p.waitMx.Lock()
 	defer func() {
 		if p.ipcServer != nil {
 			p.ipcServer.Close()
 		}
 		if p.cmdStderr != nil {
-			_ = p.cmdStderr.Close() //nolint:errcheck
+			_ = p.cmdStderr.Close()
 		}
 		p.waitMx.Unlock()
 		p.connOnce.Do(func() { close(p.connCh) })
