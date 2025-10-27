@@ -173,18 +173,21 @@ var (
 	inProcessConns   = make(map[ProcKey]net.Conn)
 )
 
+// RegisterInProcessConn registers a net.Conn for an in-process app by its ProcKey.
 func RegisterInProcessConn(key ProcKey, conn net.Conn) {
 	inProcessConnsMu.Lock()
 	defer inProcessConnsMu.Unlock()
 	inProcessConns[key] = conn
 }
 
+// GetInProcessConn retrieves the net.Conn for an in-process app by its ProcKey.
 func GetInProcessConn(key ProcKey) net.Conn {
 	inProcessConnsMu.RLock()
 	defer inProcessConnsMu.RUnlock()
 	return inProcessConns[key]
 }
 
+// UnregisterInProcessConn removes the net.Conn for an in-process app by its ProcKey.
 func UnregisterInProcessConn(key ProcKey) {
 	inProcessConnsMu.Lock()
 	defer inProcessConnsMu.Unlock()

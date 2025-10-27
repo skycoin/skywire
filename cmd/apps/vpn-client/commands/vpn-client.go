@@ -67,7 +67,7 @@ var RootCmd = &cobra.Command{
 }
 
 // RunVPNClient runs the VPN client app logic.
-func RunVPNClient(ctx context.Context, args []string) error {
+func RunVPNClient(ctx context.Context, _ []string) error {
 	var directIPsCh, nonDirectIPsCh = make(chan net.IP, 100), make(chan net.IP, 100)
 	defer close(directIPsCh)
 	defer close(nonDirectIPsCh)
