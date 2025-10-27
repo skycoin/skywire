@@ -2,6 +2,7 @@
 package appcommon
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,11 @@ var (
 	// ErrProcConfigEnvNotDefined occurs when an expected env is not defined.
 	ErrProcConfigEnvNotDefined = fmt.Errorf("env '%s' is not defined", EnvProcConfig)
 )
+
+// AppFunc is a function that runs an app in-process.
+// It receives a context for cancellation and command-line args.
+// The app is responsible for creating its own app.Client via app.NewClient().
+type AppFunc func(ctx context.Context, args []string) error
 
 // ProcKey is a unique key to authenticate a proc within the app server.
 type ProcKey [16]byte
@@ -81,6 +87,7 @@ type ProcConfig struct {
 	BinaryLoc    string        `json:"binary_loc"`
 	LogDBLoc     string        `json:"log_db_loc"`
 	LogStorePath string        `json:"log_store_path"`
+	RunFunc      interface{}   `json:"-"`
 }
 
 // ProcConfigFromEnv obtains a ProcConfig from the associated env variable, returning an error if any.

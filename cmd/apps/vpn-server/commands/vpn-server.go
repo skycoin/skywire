@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -16,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -36,6 +38,7 @@ var (
 )
 
 func init() {
+	launcher.RegisterApp("vpn-server", RunVPNServer)
 	RootCmd.Flags().StringVar(&localPKStr, "pk", "", "local pubkey")
 	RootCmd.Flags().StringVar(&localSKStr, "sk", "", "local seckey")
 	RootCmd.Flags().StringVar(&passcode, "passcode", "", "passcode to authenticate connecting users")
@@ -54,8 +57,17 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	Run: func(_ *cobra.Command, _ []string) {
-		appCl := app.NewClient(nil)
+	Run: func(_ *cobra.Command, args []string) {
+		ctx := context.Background()
+		if err := RunVPNServer(ctx, args); err != nil {
+			log.Fatal(err)
+		}
+	},
+}
+
+// RunVPNServer runs the VPN server app logic.
+func RunVPNServer(ctx context.Context, args []string) error {
+	appCl := app.NewClient(nil)
 		defer appCl.Close()
 
 		port := appCl.Config().RoutingPort
@@ -133,14 +145,21 @@ var RootCmd = &cobra.Command{
 			close(errCh)
 		}()
 
-		defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 
-		select {
-		case <-osSigs:
-		case err := <-errCh:
+	select {
+	case <-osSigs:
+		return nil
+	case <-ctx.Done():
+		return nil
+	case err := <-errCh:
+		if err != nil {
 			print(fmt.Sprintf("Error serving: %v\n", err))
+			return err
 		}
-	},
+	}
+
+	return nil
 }
 
 func setAppErr(appCl *app.Client, err error) {
