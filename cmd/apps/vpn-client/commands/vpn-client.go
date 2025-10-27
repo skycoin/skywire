@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -18,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -36,6 +38,7 @@ var (
 )
 
 func init() {
+	launcher.RegisterApp("vpn-client", RunVPNClient)
 	RootCmd.Flags().StringVar(&serverPKStr, "srv", "", "PubKey of the server to connect to")
 	RootCmd.Flags().StringVar(&localPKStr, "pk", "", "local pubkey")
 	RootCmd.Flags().StringVar(&localSKStr, "sk", "", "local seckey")
@@ -55,9 +58,17 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(_ *cobra.Command, args []string) {
+		ctx := context.Background()
+		if err := RunVPNClient(ctx, args); err != nil {
+			log.Fatal(err)
+		}
+	},
+}
 
-		var directIPsCh, nonDirectIPsCh = make(chan net.IP, 100), make(chan net.IP, 100)
+// RunVPNClient runs the VPN client app logic.
+func RunVPNClient(ctx context.Context, args []string) error {
+	var directIPsCh, nonDirectIPsCh = make(chan net.IP, 100), make(chan net.IP, 100)
 		defer close(directIPsCh)
 		defer close(nonDirectIPsCh)
 
@@ -214,12 +225,25 @@ var RootCmd = &cobra.Command{
 			go vpnClient.ListenIPC(ipcClient)
 		}
 
-		defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 
-		if err := vpnClient.Serve(); err != nil {
+	serveCh := make(chan error, 1)
+	go func() {
+		serveCh <- vpnClient.Serve()
+	}()
+
+	select {
+	case err := <-serveCh:
+		if err != nil {
 			print(fmt.Sprintf("Failed to serve VPN: %v\n", err))
+			return err
 		}
-	},
+	case <-ctx.Done():
+		vpnClient.Close()
+		return nil
+	}
+
+	return nil
 }
 
 func setAppErr(appCl *app.Client, err error) {

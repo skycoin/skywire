@@ -23,7 +23,7 @@ const (
 // AppConfig defines app startup parameters.
 type AppConfig struct {
 	Name      string       `json:"name"`
-	Binary    string       `json:"binary"`
+	Binary    string       `json:"binary,omitempty"`
 	Args      []string     `json:"args,omitempty"`
 	AutoStart bool         `json:"auto_start"`
 	Port      routing.Port `json:"port"`

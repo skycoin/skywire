@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -31,6 +33,7 @@ var (
 )
 
 func init() {
+	launcher.RegisterApp("skysocks", RunSkysocks)
 	RootCmd.Flags().StringVar(&passcode, "passcode", "", "passcode to authenticate connecting users")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
@@ -45,8 +48,17 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	Run: func(_ *cobra.Command, _ []string) {
-		appCl := app.NewClient(nil)
+	Run: func(_ *cobra.Command, args []string) {
+		ctx := context.Background()
+		if err := RunSkysocks(ctx, args); err != nil {
+			log.Fatal(err)
+		}
+	},
+}
+
+// RunSkysocks runs the skysocks server app logic.
+func RunSkysocks(ctx context.Context, args []string) error {
+	appCl := app.NewClient(nil)
 		defer appCl.Close()
 
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
@@ -96,13 +108,26 @@ var RootCmd = &cobra.Command{
 				}
 			}()
 		}
-		defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 
-		if err := srv.Serve(l); err != nil {
+	serveCh := make(chan error, 1)
+	go func() {
+		serveCh <- srv.Serve(l)
+	}()
+
+	select {
+	case err := <-serveCh:
+		if err != nil {
 			print(fmt.Sprintf("%v\n", err))
-			os.Exit(1)
+			return err
 		}
-	},
+	case <-ctx.Done():
+		if err := srv.Close(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {

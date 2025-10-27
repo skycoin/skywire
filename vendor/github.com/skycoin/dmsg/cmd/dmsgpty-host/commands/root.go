@@ -104,7 +104,13 @@ var RootCmd = &cobra.Command{
 		dmsgC := dmsg.NewClient(pk, sk, disc.NewHTTP(conf.DmsgDisc, &http.Client{}, log), &dmsg.Config{
 			MinSessions: conf.DmsgSessions,
 		})
-		go dmsgC.Serve(context.Background())
+		defer func() {
+			if err := dmsgC.Close(); err != nil {
+				log.WithError(err).Warn("Failed to close dmsg client")
+			}
+		}()
+
+		go dmsgC.Serve(ctx)
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("failed to wait dmsg client to be ready: %w", ctx.Err())
