@@ -74,13 +74,13 @@ var RootCmd = &cobra.Command{
 }
 
 // RunSkysocksClient runs the skysocks client app logic.
-func RunSkysocksClient(ctx context.Context, args []string) error {
+func RunSkysocksClient(ctx context.Context, _ []string) error {
 	r = netutil.NewRetrier(nil, time.Duration(retryDelay)*time.Second, netutil.DefaultMaxBackoff, tries, 1)
 
 	appCl := app.NewClient(nil)
 	defer appCl.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {

@@ -57,7 +57,7 @@ var RootCmd = &cobra.Command{
 }
 
 // RunSkysocks runs the skysocks server app logic.
-func RunSkysocks(ctx context.Context, args []string) error {
+func RunSkysocks(ctx context.Context, _ []string) error {
 	appCl := app.NewClient(nil)
 	defer appCl.Close()
 

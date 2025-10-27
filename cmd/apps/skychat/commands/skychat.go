@@ -85,7 +85,7 @@ func Execute() {
 }
 
 // RunSkychat runs the skychat app logic. This can be called from the visor or from the CLI.
-func RunSkychat(ctx context.Context, args []string) error {
+func RunSkychat(ctx context.Context, _ []string) error {
 	appCl = app.NewClient(nil)
 	defer appCl.Close()
 

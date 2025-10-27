@@ -45,7 +45,7 @@ func DoReqHandshake(conf appcommon.ProcConfig, subs *Subscriber) (net.Conn, []io
 	// sending hello will also advertise event subscriptions endpoint (if needed)
 	var conn net.Conn
 	var err error
-	
+
 	if inProcessConn := appcommon.GetInProcessConn(conf.ProcKey); inProcessConn != nil {
 		conn = inProcessConn
 	} else {
@@ -54,7 +54,7 @@ func DoReqHandshake(conf appcommon.ProcConfig, subs *Subscriber) (net.Conn, []io
 			return nil, nil, fmt.Errorf("failed to dial to app server: %w", err)
 		}
 	}
-	
+
 	if err := appcommon.WriteHello(conn, hello); err != nil {
 		return nil, nil, fmt.Errorf("failed to send hello to app server: %w", err)
 	}
