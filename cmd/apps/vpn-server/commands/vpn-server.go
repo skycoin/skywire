@@ -66,7 +66,7 @@ var RootCmd = &cobra.Command{
 }
 
 // RunVPNServer runs the VPN server app logic.
-func RunVPNServer(ctx context.Context, args []string) error {
+func RunVPNServer(ctx context.Context, _ []string) error {
 	appCl := app.NewClient(nil)
 	defer appCl.Close()
 
