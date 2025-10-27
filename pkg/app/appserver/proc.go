@@ -22,6 +22,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
+	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -223,6 +224,9 @@ func (p *Proc) startInProcess() error {
 		return fmt.Errorf("invalid RunFunc signature for app %s", p.conf.AppName)
 	}
 
+	appConn, serverConn := net.Pipe()
+	appcommon.RegisterInProcessConn(p.conf.ProcKey, appConn)
+
 	envs := p.conf.Envs()
 	for _, env := range envs {
 		parts := strings.SplitN(env, "=", 2)
@@ -251,9 +255,47 @@ func (p *Proc) startInProcess() error {
 
 	go func() {
 		defer func() {
+			appcommon.UnregisterInProcessConn(p.conf.ProcKey)
 			_ = p.m.SetError(p.appName, p.err)
 			_ = p.m.Stop(p.appName)
 		}()
+
+		pm, ok := p.m.(*procManager)
+		if !ok {
+			serverConn.Close()
+			appConn.Close()
+			p.appCancelCtx()
+			p.waitMx.Unlock()
+			p.log.Error("Failed to cast ProcManager to procManager.")
+			return
+		}
+
+		hello, err := appevent.DoRespHandshake(pm.eb, serverConn)
+		if err != nil {
+			serverConn.Close()
+			appConn.Close()
+			p.appCancelCtx()
+			p.waitMx.Unlock()
+			p.log.WithError(err).Error("Failed to do handshake with in-process app.")
+			return
+		}
+
+		if hello.ProcKey != p.conf.ProcKey {
+			serverConn.Close()
+			appConn.Close()
+			p.appCancelCtx()
+			p.waitMx.Unlock()
+			p.log.Error("In-process app hello ProcKey mismatch.")
+			return
+		}
+
+		if !p.InjectConn(serverConn) {
+			serverConn.Close()
+			appConn.Close()
+			p.appCancelCtx()
+			p.waitMx.Unlock()
+			return
+		}
 
 		select {
 		case _, ok := <-p.connCh:

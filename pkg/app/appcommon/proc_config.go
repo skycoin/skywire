@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -164,4 +166,27 @@ func (c *ProcConfig) encodeJSON() []byte {
 		panic(err)
 	}
 	return b
+}
+
+var (
+	inProcessConnsMu sync.RWMutex
+	inProcessConns   = make(map[ProcKey]net.Conn)
+)
+
+func RegisterInProcessConn(key ProcKey, conn net.Conn) {
+	inProcessConnsMu.Lock()
+	defer inProcessConnsMu.Unlock()
+	inProcessConns[key] = conn
+}
+
+func GetInProcessConn(key ProcKey) net.Conn {
+	inProcessConnsMu.RLock()
+	defer inProcessConnsMu.RUnlock()
+	return inProcessConns[key]
+}
+
+func UnregisterInProcessConn(key ProcKey) {
+	inProcessConnsMu.Lock()
+	defer inProcessConnsMu.Unlock()
+	delete(inProcessConns, key)
 }

@@ -77,35 +77,35 @@ var RootCmd = &cobra.Command{
 func RunSkysocksClient(ctx context.Context, args []string) error {
 	r = netutil.NewRetrier(nil, time.Duration(retryDelay)*time.Second, netutil.DefaultMaxBackoff, tries, 1)
 
-		appCl := app.NewClient(nil)
-		defer appCl.Close()
+	appCl := app.NewClient(nil)
+	defer appCl.Close()
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-			print(fmt.Sprintf("Failed to output build info: %v\n", err))
-		}
+	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+		print(fmt.Sprintf("Failed to output build info: %v\n", err))
+	}
 
-		if serverPK == "" {
-			err := errors.New("Empty server PubKey. Exiting")
-			print(fmt.Sprintf("%v\n", err))
-			setAppErr(appCl, err)
-			os.Exit(1)
-		}
+	if serverPK == "" {
+		err := errors.New("Empty server PubKey. Exiting")
+		print(fmt.Sprintf("%v\n", err))
+		setAppErr(appCl, err)
+		os.Exit(1)
+	}
 
-		pk := cipher.PubKey{}
-		if err := pk.UnmarshalText([]byte(serverPK)); err != nil {
-			print(fmt.Sprintf("Invalid server PubKey: %v\n", err))
-			setAppErr(appCl, err)
-			os.Exit(1)
-		}
+	pk := cipher.PubKey{}
+	if err := pk.UnmarshalText([]byte(serverPK)); err != nil {
+		print(fmt.Sprintf("Invalid server PubKey: %v\n", err))
+		setAppErr(appCl, err)
+		os.Exit(1)
+	}
 
-		port := appCl.Config().RoutingPort
-		if appPort != 0 {
-			port = routing.Port(appPort)
-			setAppPort(appCl, port)
-		}
+	port := appCl.Config().RoutingPort
+	if appPort != 0 {
+		port = routing.Port(appPort)
+		setAppPort(appCl, port)
+	}
 
 	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 
