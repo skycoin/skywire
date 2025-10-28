@@ -1313,7 +1313,7 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 				dmsgTries++
 				if dmsgTries >= 3 {
 					log.Error("Dmsg transport failed after 3 attempts. Reinitiating dmsg...")
-					reinitiateDmsg(ctx, v)
+					reinitiateDmsg(ctx, v) //nolint
 
 					dmsgTries = 0
 					dmsgOK = tryTransport(v, "dmsg", log)
@@ -1374,9 +1374,8 @@ func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
 	return true
 }
 
-func reinitiateStpcr(ctx context.Context, v *Visor) error {
+func reinitiateStpcr(ctx context.Context, v *Visor) {
 	v.tpM.InitClient(ctx, types.STCPR, 0)
-	return nil
 }
 
 func reinitiateDmsg(ctx context.Context, v *Visor) error {
