@@ -157,11 +157,25 @@ var serveCmd = &cobra.Command{
 				dlog.Printf("Error closing listener: %v", err)
 			}
 		}()
+
+		go func() {
+			<-ctx.Done()
+			if err := dmsgL.Close(); err != nil {
+				dlog.WithError(err).Debug("Error closing listener on context cancellation")
+			}
+		}()
+
 		for {
 			respConn, err := dmsgL.Accept()
 			if err != nil {
-				dlog.Errorf("Error accepting initiator: %v", err)
-				continue
+				select {
+				case <-ctx.Done():
+					dlog.Info("Shutting down SOCKS5 server...")
+					return
+				default:
+					dlog.Errorf("Error accepting initiator: %v", err)
+					continue
+				}
 			}
 			dlog.Infof("Accepted connection from: %s", respConn.RemoteAddr())
 

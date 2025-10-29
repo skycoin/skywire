@@ -169,6 +169,8 @@ func (sc *SessionCommon) RemoteTCPAddr() net.Addr { return sc.netConn.RemoteAddr
 
 // Ping obtains the round trip latency of the session.
 func (sc *SessionCommon) Ping() (time.Duration, error) {
+	sc.sm.mutx.RLock()
+	defer sc.sm.mutx.RUnlock()
 	if sc.sm.yamux != nil {
 		return sc.sm.yamux.Ping()
 	}
@@ -181,12 +183,14 @@ func (sc *SessionCommon) Close() error {
 		return nil
 	}
 	var err error
+	sc.sm.mutx.Lock()
 	if sc.sm.smux != nil {
 		err = sc.sm.smux.Close()
 	}
 	if sc.sm.yamux != nil {
 		err = sc.sm.yamux.Close()
 	}
+	sc.sm.mutx.Unlock()
 	sc.rMx.Lock()
 	sc.nMap = nil
 	sc.rMx.Unlock()

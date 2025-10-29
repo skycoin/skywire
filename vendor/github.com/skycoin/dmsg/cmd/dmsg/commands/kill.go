@@ -1,4 +1,4 @@
-// Package commands cmd/.../commands/kill.go
+// Package commands cmd/dmsg/commands/kill.go
 package commands
 
 import (
@@ -8,7 +8,11 @@ import (
 )
 
 func init() {
-	//the application must stop on ctrl+c
+	// TEMPORARY WORKAROUND: Force exit on Ctrl+C after 3 attempts
+	// This can be removed once the proper signal handling fixes are verified:
+	// - dmsgC.Serve() now uses signal-aware context (not context.Background())
+	// - Accept loops now check for context cancellation
+	// - HTTP servers now shutdown gracefully
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
