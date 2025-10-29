@@ -67,6 +67,9 @@ fi
 
 if [[ "$image_tag" == "integration" ]]; then
   # TODO(ersonp) : the binaries build in the images need to be built with the -race flag
+  if [ ! -d tmp ]; then
+    mkdir -p tmp
+  fi
   rm -rf ./tmp/dmsg
   cp -r ../dmsg ./tmp
 

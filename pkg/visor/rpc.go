@@ -807,3 +807,10 @@ func (r *RPC) TestVisor(conf PingConfig, out *[]TestResult) (err error) {
 	*out, err = r.visor.TestVisor(conf)
 	return err
 }
+
+// ReinitiateModule reinitiate/restart modules
+func (r *RPC) ReinitiateModule(module string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "ReinitiateModule", module)(nil, &err)
+
+	return r.visor.ReinitiateModule(module)
+}
