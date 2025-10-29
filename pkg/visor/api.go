@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -127,6 +128,8 @@ type API interface {
 	StopPing(pk cipher.PubKey) error
 
 	TestVisor(config PingConfig) ([]TestResult, error)
+
+	ReinitiateModule(module string) error
 
 	//uptime-tracker tools
 	FetchUptimeTrackerData(pk string) ([]byte, error)
@@ -1680,4 +1683,104 @@ func isPortRegistered(port int, v *Visor) bool {
 		}
 	}
 	return false
+}
+
+// ReinitiateModule implements API.
+func (v *Visor) ReinitiateModule(module string) error {
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
+	switch module {
+	case "dmsg":
+		return reinitiateDmsg(ctx, v)
+	case "stcpr":
+		reinitiateStpcr(ctx, v)
+		return nil
+	default:
+		return fmt.Errorf("this module no allowed to reinitiate")
+	}
+}
+
+func reinitiateStpcr(ctx context.Context, v *Visor) {
+	v.tpM.InitClient(ctx, types.STCPR, 0)
+}
+
+func reinitiateDmsg(ctx context.Context, v *Visor) error {
+	v.log.Info("Starting dmsg reinitialization with new client...")
+
+	if err := shutdownDmsgDependentComponents(v, v.log); err != nil {
+		v.log.WithError(err).Warn("Error during dependent components shutdown, continuing...")
+	}
+
+	if err := initDmsg(ctx, v, v.log); err != nil {
+		return fmt.Errorf("failed to initialize new dmsg client: %w", err)
+	}
+
+	if err := initDmsgCtrl(ctx, v, v.log); err != nil {
+		return fmt.Errorf("failed to reinitialize dmsg ctrl: %w", err)
+	}
+
+	if err := initDmsgTrackers(ctx, v, v.log); err != nil {
+		return fmt.Errorf("failed to reinitialize dmsg trackers: %w", err)
+	}
+
+	if err := initDmsgHTTPLogServer(ctx, v, v.log); err != nil {
+		return fmt.Errorf("failed to reinitialize dmsg http log server: %w", err)
+	}
+
+	if err := initDmsgpty(ctx, v, v.log); err != nil {
+		return fmt.Errorf("failed to reinitialize dmsgpty: %w", err)
+	}
+
+	v.log.Info("Dmsg reinitialization completed successfully with new client")
+	return nil
+}
+
+func shutdownDmsgDependentComponents(v *Visor, log *logging.Logger) error {
+	components := []string{
+		"router.serve", // a.k.a. dmsgpty
+		"dmsghttp.logserver",
+		"dmsg_tracker_manager",
+		"dmsgctrl",
+	}
+
+	v.closeMu.Lock()
+	defer v.closeMu.Unlock()
+
+	var errs []error
+	newCloseStack := make([]closer, 0, len(v.closeStack))
+
+	for _, c := range v.closeStack {
+		shouldClose := false
+		for _, component := range components {
+			if c.src == component {
+				shouldClose = true
+				break
+			}
+		}
+
+		if shouldClose {
+			if err := c.fn(); err != nil {
+				log.WithError(err).WithField("component", c.src).Warn("Failed to close component")
+				errs = append(errs, err)
+			} else {
+				log.WithField("component", c.src).Debug("Successfully closed component")
+			}
+		} else {
+			newCloseStack = append(newCloseStack, c)
+		}
+	}
+
+	v.closeStack = newCloseStack
+
+	v.closeMu.Unlock()
+	v.initLock.Lock()
+	v.dtmReady = make(chan struct{})
+	v.dtmReadyOnce = sync.Once{}
+	v.initLock.Unlock()
+	v.closeMu.Lock()
+
+	if len(errs) > 0 {
+		return fmt.Errorf("encountered %d errors during shutdown", len(errs))
+	}
+	return nil
 }

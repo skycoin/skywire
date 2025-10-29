@@ -6,7 +6,8 @@
 		"discovery": "http://dmsg-discovery:9090",
 		"sessions_count": 1,
 		"servers": [],
-		"servers_type": "all"
+		"servers_type": "all",
+		"protocol": "smux"
 	},
 	"dmsgpty": {
 		"dmsg_port": 22,
@@ -120,5 +121,6 @@
 	"stun_servers": null,
 	"shutdown_timeout": "30s",
 	"is_public": false,
+	"geoip": "http://ip.skycoin.com",
 	"persistent_transports": null
 }

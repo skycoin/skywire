@@ -609,7 +609,7 @@ var genConfigCmd = &cobra.Command{
 				RotationInterval: visorconfig.DefaultLogRotationInterval,
 			},
 			SudphPort: sudphPort,
-			StcprPort: sudphPort,
+			StcprPort: stcprPort,
 		}
 		conf.Routing = &visorconfig.Routing{
 			RouteFinder:        services.RouteFinder,     //utilenv.RouteFinderAddr,
