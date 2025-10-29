@@ -1688,6 +1688,7 @@ func isPortRegistered(port int, v *Visor) bool {
 // ReinitiateModule implements API.
 func (v *Visor) ReinitiateModule(module string) error {
 	ctx := context.Background()
+	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
 	switch module {
 	case "dmsg":
 		return reinitiateDmsg(ctx, v)
@@ -1726,9 +1727,9 @@ func reinitiateDmsg(ctx context.Context, v *Visor) error {
 		return fmt.Errorf("failed to reinitialize dmsg http log server: %w", err)
 	}
 
-	// if err := initDmsgpty(ctx, v, v.log); err != nil {
-	// 	return fmt.Errorf("failed to reinitialize dmsgpty: %w", err)
-	// }
+	if err := initDmsgpty(ctx, v, v.log); err != nil {
+		return fmt.Errorf("failed to reinitialize dmsgpty: %w", err)
+	}
 
 	v.log.Info("Dmsg reinitialization completed successfully with new client")
 	return nil
@@ -1736,7 +1737,7 @@ func reinitiateDmsg(ctx context.Context, v *Visor) error {
 
 func shutdownDmsgDependentComponents(v *Visor, log *logging.Logger) error {
 	components := []string{
-		"dmsgpty",
+		"router.serve", // a.k.a. dmsgpty
 		"dmsghttp.logserver",
 		"dmsg_tracker_manager",
 		"dmsgctrl",
