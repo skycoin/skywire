@@ -23,12 +23,13 @@ func StartDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk ci
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		dmsgDC.Serve(context.Background())
+		dmsgDC.Serve(ctx)
 	}()
 
 	stop = func() {
 		err := dmsgDC.Close()
 		log.WithError(err).Debug("Disconnected from dmsg network.\n")
+		wg.Wait()
 	}
 
 	log.WithField("public_key", pk.String()).Debug("Connecting to dmsg network...\n")
