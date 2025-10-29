@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/spf13/cobra"
 
 	df "github.com/skycoin/dmsg/cmd/conf/commands"
@@ -22,6 +24,11 @@ import (
 	dph "github.com/skycoin/dmsg/cmd/dmsgpty-host/commands"
 	dpu "github.com/skycoin/dmsg/cmd/dmsgpty-ui/commands"
 	dw "github.com/skycoin/dmsg/cmd/dmsgweb/commands"
+)
+
+var (
+	bv  bool
+	dbi bool
 )
 
 func init() {
@@ -57,6 +64,25 @@ func init() {
 	dph.RootCmd.Use = "host"
 	dpu.RootCmd.Use = "ui"
 	di.RootCmd.Use = "ip"
+
+	modifySubcommands(RootCmd)
+	if fmt.Sprintf("%v", buildinfo.DebugBuildInfo()) != "" {
+		RootCmd.Flags().BoolVarP(&dbi, "info", "d", false, "print runtime/debug.BuildInfo")
+	}
+	if fmt.Sprintf("%v", buildinfo.DBIVersion()) != "" {
+		RootCmd.Flags().BoolVarP(&bv, "bv", "b", false, "print runtime/debug.BuildInfo.Main.Version")
+	}
+}
+
+func modifySubcommands(cmd *cobra.Command) {
+	for i := range cmd.Commands() {
+		cmd.Commands()[i].Version = ""
+		cmd.Commands()[i].SilenceErrors = true
+		cmd.Commands()[i].SilenceUsage = true
+		cmd.Commands()[i].DisableSuggestions = true
+		cmd.Commands()[i].DisableFlagsInUseLine = true
+		modifySubcommands(cmd.Commands()[i]) // recursion
+	}
 }
 
 // RootCmd contains all binaries which may be separately compiled as subcommands
@@ -65,11 +91,18 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Short: "DMSG services & utilities",
-	Long: `
-	┌┬┐┌┬┐┌─┐┌─┐
-	 │││││└─┐│ ┬
-	─┴┘┴ ┴└─┘└─┘
-DMSG services & utilities`,
+	Long: func() (ret string) {
+		ret = calvin.AsciiFont("dmsg")
+		if buildinfo.DBIVersion() != "" {
+			ret += fmt.Sprintf("\n%v", buildinfo.DBIVersion())
+		} else {
+			ret += fmt.Sprintf("\nversion %v", buildinfo.Version())
+		}
+		if buildinfo.Go() != "unknown" && buildinfo.Go() != "" {
+			ret += "\nbuilt with " + buildinfo.Go()
+		}
+		return ret
+	}(),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
