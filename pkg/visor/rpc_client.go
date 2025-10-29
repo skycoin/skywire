@@ -621,6 +621,11 @@ func (rc *rpcClient) TestVisor(conf PingConfig) ([]TestResult, error) {
 	return results, err
 }
 
+// ReinitiateModule calls ReinitiateModule.
+func (rc *rpcClient) ReinitiateModule(module string) error {
+	return rc.Call("ReinitiateModule", &module, &struct{}{})
+}
+
 // MockRPCClient mocks API.
 type mockRPCClient struct {
 	startedAt time.Time
@@ -1358,4 +1363,9 @@ func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
 // TestVisor implements API.
 func (mc *mockRPCClient) TestVisor(_ PingConfig) ([]TestResult, error) {
 	return []TestResult{}, nil
+}
+
+// ReinitiateModule implements API.
+func (mc *mockRPCClient) ReinitiateModule(_ string) error {
+	return nil
 }

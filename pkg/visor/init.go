@@ -490,7 +490,6 @@ func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error { 
 }
 
 func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-
 	var serviceURL dmsgcurl.URL
 	_ = serviceURL.Fill(v.conf.Transport.AddressResolver) //nolint:errcheck
 	// don't start sudph if we are connection to AR via dmsghttp
@@ -1303,31 +1302,53 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 	ticker := time.NewTicker(tickDuration)
 	go func() {
 		time.Sleep(time.Minute)
-		tries := 0
+		dmsgTries := 0
+		stcprTries := 0
+
 		for range ticker.C {
 			dmsgOK := tryTransport(v, "dmsg", log)
-			stcprOK := true // default to true for non-public visors
+			if dmsgOK {
+				dmsgTries = 0
+			} else {
+				dmsgTries++
+				if dmsgTries >= 3 {
+					log.Error("Dmsg transport failed after 3 attempts. Reinitiating dmsg...")
+					reinitiateDmsg(ctx, v) //nolint
 
+					dmsgTries = 0
+					dmsgOK = tryTransport(v, "dmsg", log)
+					if !dmsgOK {
+						dmsgTries = 1
+					}
+				}
+			}
+
+			stcprOK := true // default for non-public visors
 			if visorIsPublic {
 				stcprOK = tryTransport(v, "stcpr", log)
+				if stcprOK {
+					stcprTries = 0
+				} else {
+					stcprTries++
+					if stcprTries >= 3 {
+						log.Error("Stcpr transport failed after 3 attempts. Reinitiating stcpr...")
+						reinitiateStpcr(ctx, v)
+
+						stcprTries = 0
+						stcprOK = tryTransport(v, "stcpr", log)
+						if !stcprOK {
+							stcprTries = 1
+						}
+					}
+				}
 			}
 
 			if dmsgOK && stcprOK {
 				v.isServicesHealthy.set()
-				tries = 0
 				ticker.Reset(tickDuration)
 			} else {
 				v.isServicesHealthy.unset()
-				tries++
 				ticker.Reset(time.Minute)
-			}
-
-			if tries >= 3 {
-				log.Error("Visor is not transportable after 3 failed attempts. Shutting down...")
-				if err := v.Shutdown(); err != nil {
-					log.WithError(err).Fatal("Failed to shut down gracefully")
-				}
-				return
 			}
 		}
 	}()

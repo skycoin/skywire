@@ -98,6 +98,7 @@ type Visor struct {
 	appL        *launcher.AppLauncher // app launcher
 	serviceDisc appdisc.Factory
 	initLock    *sync.RWMutex
+	closeMu     *sync.RWMutex
 	// when module is failed it pushes its error to this channel
 	// used by init and shutdown to show/check for any residual errors
 	// produced by concurrent parts of modules
@@ -244,6 +245,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		log:                  conf.MasterLogger().PackageLogger("visor"),
 		conf:                 conf,
 		initLock:             new(sync.RWMutex),
+		closeMu:              new(sync.RWMutex),
 		allowedMX:            new(sync.RWMutex),
 		isServicesHealthy:    newInternalHealthInfo(),
 		dtmReady:             make(chan struct{}),
