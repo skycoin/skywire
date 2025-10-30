@@ -1,6 +1,12 @@
 @Echo Off
 :: Opening Powershell with Administrator privilege
-%1 mshta vbscript:CreateObject("Shell.Application").ShellExecute("powershell.exe","/c %~s0 ::","","runas",1)(window.close)&&exit
+net session >nul 2>&1
+if %errorlevel% NEQ 0 (
+    echo Requesting administrator privileges...
+    powershell -Command "Start-Process cmd -Argument '/c \"%~f0\"' -Verb RunAs"
+    exit
+)
+
 cd /d "%~dp0"
 
 :: Setting start time
