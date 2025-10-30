@@ -74,15 +74,15 @@ func NewMemoryStore(logger *logging.Logger, cl *gorm.DB) (TransportStore, error)
 
 // reloadFromDB loads all data from PostgreSQL into memory
 func (ms *MemoryStore) reloadFromDB() error {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
 	var tpRecords []Transport
 	if err := ms.pgStore.client.Find(&tpRecords).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return fmt.Errorf("failed to load transports: %v", err)
 		}
 	}
-
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
 
 	ms.transports = make(map[uuid.UUID]*transport.Entry)
 	ms.edgeIndex = make(map[string][]uuid.UUID)
@@ -137,14 +137,14 @@ func (ms *MemoryStore) removeFromEdgeIndexLocked(edgeHex string, id uuid.UUID) {
 
 // RegisterTransport registers a new transport (write-through)
 func (ms *MemoryStore) RegisterTransport(ctx context.Context, sEntry *transport.SignedEntry) error {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
 	if err := ms.pgStore.RegisterTransport(ctx, sEntry); err != nil {
 		return err
 	}
 
 	entry := sEntry.Entry
-
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
 
 	oldEntry, exists := ms.transports[entry.ID]
 	if exists {
@@ -176,12 +176,12 @@ func (ms *MemoryStore) RegisterTransport(ctx context.Context, sEntry *transport.
 
 // DeregisterTransport removes a transport (write-through)
 func (ms *MemoryStore) DeregisterTransport(ctx context.Context, id uuid.UUID) error {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
 	if err := ms.pgStore.DeregisterTransport(ctx, id); err != nil {
 		return err
 	}
-
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
 
 	entry, exists := ms.transports[id]
 	if !exists {
@@ -205,9 +205,6 @@ func (ms *MemoryStore) DeregisterTransport(ctx context.Context, id uuid.UUID) er
 
 // GetTransportByID retrieves a transport by ID (memory-only read)
 func (ms *MemoryStore) GetTransportByID(_ context.Context, id uuid.UUID) (*transport.Entry, error) {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-
 	atomic.AddInt64(&ms.stats.totalReads, 1)
 
 	entry, exists := ms.transports[id]
@@ -223,9 +220,6 @@ func (ms *MemoryStore) GetTransportByID(_ context.Context, id uuid.UUID) (*trans
 
 // GetTransportsByEdge retrieves all transports for a given edge (memory-only read)
 func (ms *MemoryStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-
 	atomic.AddInt64(&ms.stats.totalReads, 1)
 
 	edgeHex := pk.Hex()
@@ -250,9 +244,6 @@ func (ms *MemoryStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) 
 
 // GetAllTransports retrieves all transports (memory-only read)
 func (ms *MemoryStore) GetAllTransports(_ context.Context, selfTransports bool) ([]*transport.Entry, error) {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-
 	atomic.AddInt64(&ms.stats.totalReads, 1)
 	atomic.AddInt64(&ms.stats.cacheHits, 1)
 
@@ -276,9 +267,6 @@ func (ms *MemoryStore) GetAllTransports(_ context.Context, selfTransports bool) 
 
 // GetNumberOfTransports returns count by type (memory-only read)
 func (ms *MemoryStore) GetNumberOfTransports(_ context.Context) (map[types.Type]int, error) {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-
 	atomic.AddInt64(&ms.stats.totalReads, 1)
 	atomic.AddInt64(&ms.stats.cacheHits, 1)
 
@@ -292,9 +280,6 @@ func (ms *MemoryStore) GetNumberOfTransports(_ context.Context) (map[types.Type]
 
 // GetStats returns performance statistics
 func (ms *MemoryStore) GetStats() map[string]interface{} {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-
 	totalReads := atomic.LoadInt64(&ms.stats.totalReads)
 	cacheHits := atomic.LoadInt64(&ms.stats.cacheHits)
 
@@ -338,12 +323,6 @@ func (ms *MemoryStore) backgroundReloader() {
 			return
 		}
 	}
-}
-
-// ForceReload forces an immediate reload from database
-func (ms *MemoryStore) ForceReload() error {
-	ms.log.Info("Forcing reload from database")
-	return ms.reloadFromDB()
 }
 
 // Close closes the store
