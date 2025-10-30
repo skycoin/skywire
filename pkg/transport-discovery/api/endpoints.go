@@ -238,3 +238,11 @@ func (api *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, obje
 func (api *API) logger(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
 }
+
+// stats endpoint for monitoring
+func (api *API) stats(w http.ResponseWriter, r *http.Request) {
+	if ms, ok := api.store.(*store.MemoryStore); ok {
+		stats := ms.GetStats()
+		api.writeJSON(w, r, http.StatusOK, stats)
+	}
+}

@@ -25,9 +25,7 @@ var (
 )
 
 // Store stores Transport metadata and generated nonce values.
-type Store interface {
-	TransportStore
-}
+type Store = TransportStore
 
 // TransportStore stores Transport metadata.
 type TransportStore interface {
@@ -41,9 +39,9 @@ type TransportStore interface {
 }
 
 // New constructs a new Store of requested type.
-func New(logger *logging.Logger, gormDB *gorm.DB, memoryStore bool) (TransportStore, error) {
-	if memoryStore {
-		return newMemoryStore(), nil
+func New(logger *logging.Logger, gormDB *gorm.DB, mockstore bool) (TransportStore, error) {
+	if mockstore {
+		return newMockStore(), nil
 	}
-	return NewPostgresStore(logger, gormDB)
+	return NewMemoryStore(logger, gormDB)
 }
