@@ -146,16 +146,7 @@ func (ms *MemoryStore) RegisterTransport(ctx context.Context, sEntry *transport.
 
 	entry := sEntry.Entry
 
-	oldEntry, exists := ms.transports[entry.ID]
-	if exists {
-		if oldEntry.Edges[0] != entry.Edges[0] || oldEntry.Edges[1] != entry.Edges[1] {
-			ms.removeFromEdgeIndexLocked(oldEntry.Edges[0].Hex(), entry.ID)
-			ms.removeFromEdgeIndexLocked(oldEntry.Edges[1].Hex(), entry.ID)
-			ms.typeCount[oldEntry.Type]--
-		} else {
-			return nil
-		}
-	}
+	_, exists := ms.transports[entry.ID]
 
 	ms.transports[entry.ID] = entry
 
