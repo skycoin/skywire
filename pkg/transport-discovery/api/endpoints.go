@@ -209,6 +209,8 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
+	api.HealthMU.Lock()
+	defer api.HealthMU.Unlock()
 	api.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
 		BuildInfo:   info,
 		StartedAt:   api.startedAt,

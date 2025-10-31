@@ -171,7 +171,7 @@ func (ms *MemoryStore) DeregisterTransport(ctx context.Context, id uuid.UUID) er
 	defer ms.mu.Unlock()
 
 	if err := ms.pgStore.DeregisterTransport(ctx, id); err != nil {
-		return err
+		ms.log.WithError(err).Warn("error during delete/deregister transport")
 	}
 
 	entry, exists := ms.transports[id]

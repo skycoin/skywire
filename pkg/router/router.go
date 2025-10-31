@@ -155,7 +155,7 @@ type Router interface {
 // communicating with setup nodes, forward packets according to local
 // rules and manages route groups for apps.
 type router struct {
-	mx               *sync.Mutex
+	mx               *sync.RWMutex
 	conf             *Config
 	logger           *logging.Logger
 	mLogger          *logging.MasterLogger
@@ -194,7 +194,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 
 	r := &router{
 		conf:            config,
-		mx:              new(sync.Mutex),
+		mx:              new(sync.RWMutex),
 		logger:          config.Logger,
 		mLogger:         config.MasterLogger,
 		tm:              config.TransportManager,

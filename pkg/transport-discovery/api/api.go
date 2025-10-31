@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -53,6 +54,7 @@ type API struct {
 	startedAt                   time.Time
 	dmsgAddr                    string
 	DmsgServers                 []string
+	HealthMU                    *sync.Mutex
 }
 
 // HealthCheckResponse is struct of /health endpoint
@@ -77,6 +79,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		startedAt:                   time.Now(),
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
+		HealthMU:                    new(sync.Mutex),
 	}
 
 	r := chi.NewRouter()
