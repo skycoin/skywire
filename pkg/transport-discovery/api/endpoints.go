@@ -131,7 +131,7 @@ func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if entry.EdgeIndex(pk) < 0 {
-		api.writeError(w, r, transport.ErrEdgeIndexNotFound)
+		api.writeError(w, r, ErrInvalidTransportID)
 		return
 	}
 
