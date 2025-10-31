@@ -142,8 +142,8 @@ PG_USER="postgres" PG_DATABASE="tpd" PG_PASSWORD="" transport-discovery --sk $(t
 
 			nonceStoreConfig.Type = storeconfig.Redis
 		}
-
-		s, err := store.New(logger, gormDB, testing)
+		onlyPGStore := false
+		s, err := store.New(logger, gormDB, testing, onlyPGStore)
 		if err != nil {
 			logger.Fatalf("Failed to create store instance: %v", err)
 		}

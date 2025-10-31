@@ -110,8 +110,8 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 			logger.Printf("Database connected.")
 			memoryStore = false
 		}
-
-		transportStore, err := store.New(logger, gormDB, memoryStore)
+		onlyPGStore := true
+		transportStore, err := store.New(logger, gormDB, memoryStore, onlyPGStore)
 		if err != nil {
 			log.Fatal("Failed to initialize redis store: ", err)
 		}
