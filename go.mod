@@ -41,7 +41,7 @@ require (
 	github.com/pterm/pterm v0.12.82
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.29-0.20251027000819-5286345113ed
+	github.com/skycoin/dmsg v1.3.29-0.20251002174108-cd8f0a6f38e3
 	github.com/skycoin/skycoin v0.28.1-0.20251022232932-b3a844043898 //DO NOT MODIFY OR UPDATE v0.28.1-0.20251022232932-b3a844043898
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.1
@@ -89,8 +89,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chewxy/math32 v1.11.1 // indirect
-	github.com/clipperhouse/stringish v0.1.1 // indirect
-	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
+	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/cogentcore/webgpu v0.23.0 // indirect
@@ -184,7 +183,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.22.0 // indirect
 	golang.org/x/crypto v0.43.0 // indirect
-	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
+	golang.org/x/exp v0.0.0-20251017212417-90e834f514db // indirect
 	golang.org/x/image v0.32.0 // indirect
 	golang.org/x/mod v0.29.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
@@ -214,7 +213,7 @@ require (
 // To update deps to specific commit hash:
 // 1) Uncomment one of the following lines and substituite version with desired commit hash:
 //replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20251022232932-b3a844043898
-//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251027000819-5286345113ed
+//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251002174108-cd8f0a6f38e3
 //replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
 // 2) Run `go mod tidy && go mod vendor`
 // 3) Copy the populated version string to the correct place in require(...) above - replacing the specified version string
