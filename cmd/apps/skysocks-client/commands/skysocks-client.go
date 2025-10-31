@@ -69,7 +69,7 @@ var RootCmd = &cobra.Command{
 		appCl := app.NewClient(nil)
 		defer appCl.Close()
 
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		port := appCl.Config().RoutingPort
