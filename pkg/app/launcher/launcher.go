@@ -318,13 +318,6 @@ func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string)
 		BinaryLoc:   filepath.Join(lc.BinPath, ac.Binary),
 		LogDBLoc:    filepath.Join(lc.LocalPath, ac.Name+"_log.db"),
 	}
-
-	if ac.Binary == "" {
-		if runFunc, found := GetApp(ac.Name); found {
-			procConf.RunFunc = runFunc
-		}
-	}
-
 	err := ensureDir(&procConf.ProcWorkDir)
 	return procConf, err
 }

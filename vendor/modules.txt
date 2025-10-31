@@ -289,10 +289,7 @@ github.com/chen3feng/safecast
 # github.com/chewxy/math32 v1.11.1
 ## explicit; go 1.13
 github.com/chewxy/math32
-# github.com/clipperhouse/stringish v0.1.1
-## explicit; go 1.18
-github.com/clipperhouse/stringish
-# github.com/clipperhouse/uax29/v2 v2.3.0
+# github.com/clipperhouse/uax29/v2 v2.2.0
 ## explicit; go 1.18
 github.com/clipperhouse/uax29/v2/graphemes
 github.com/clipperhouse/uax29/v2/internal/iterators
@@ -792,8 +789,8 @@ github.com/shopspring/decimal
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20251027000819-5286345113ed
-## explicit; go 1.25.1
+# github.com/skycoin/dmsg v1.3.29-0.20251002174108-cd8f0a6f38e3
+## explicit; go 1.25
 github.com/skycoin/dmsg/cmd/conf/commands
 github.com/skycoin/dmsg/cmd/dial/commands
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
@@ -1049,7 +1046,7 @@ golang.org/x/crypto/ssh/terminal
 golang.org/x/crypto/tea
 golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
-# golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546
+# golang.org/x/exp v0.0.0-20251017212417-90e834f514db
 ## explicit; go 1.24.0
 golang.org/x/exp/maps
 # golang.org/x/image v0.32.0
