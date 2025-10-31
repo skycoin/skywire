@@ -1,4 +1,4 @@
-// Package store pkg/transport-discovery/store/memory_store.go
+// Package store pkg/transport-discovery/store/mock_store.go
 package store
 
 import (
@@ -16,24 +16,26 @@ import (
 // ErrBadEntry is returned is entry is malformed.
 var ErrBadEntry = errors.New("bad entry format")
 
-type memStore struct {
+// mockStore is an in-memory store used for testing purposes only.
+// It allows setting errors for testing error conditions.
+type mockStore struct {
 	transports map[uuid.UUID]*transport.Entry
 
 	err error
 	mu  sync.Mutex
 }
 
-func newMemoryStore() *memStore {
-	return &memStore{
+func newMockStore() *mockStore {
+	return &mockStore{
 		transports: map[uuid.UUID]*transport.Entry{},
 	}
 }
 
-func (s *memStore) SetError(err error) {
+func (s *mockStore) SetError(err error) {
 	s.err = err
 }
 
-func (s *memStore) RegisterTransport(_ context.Context, entry *transport.SignedEntry) error {
+func (s *mockStore) RegisterTransport(_ context.Context, entry *transport.SignedEntry) error {
 	if s.err != nil {
 		return s.err
 	}
@@ -50,7 +52,7 @@ func (s *memStore) RegisterTransport(_ context.Context, entry *transport.SignedE
 	return nil
 }
 
-func (s *memStore) DeregisterTransport(_ context.Context, id uuid.UUID) error {
+func (s *mockStore) DeregisterTransport(_ context.Context, id uuid.UUID) error {
 	if s.err != nil {
 		return s.err
 	}
@@ -68,7 +70,7 @@ func (s *memStore) DeregisterTransport(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (s *memStore) GetTransportByID(_ context.Context, id uuid.UUID) (*transport.Entry, error) {
+func (s *mockStore) GetTransportByID(_ context.Context, id uuid.UUID) (*transport.Entry, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -84,7 +86,7 @@ func (s *memStore) GetTransportByID(_ context.Context, id uuid.UUID) (*transport
 	return v, nil
 }
 
-func (s *memStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+func (s *mockStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -107,7 +109,30 @@ func (s *memStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) ([]*
 	return res, nil
 }
 
-func (s *memStore) GetNumberOfTransports(context.Context) (map[types.Type]int, error) {
+func (s *mockStore) GetTransportsByEdgeNoCache(_ context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	res := make([]*transport.Entry, 0)
+
+	for _, entry := range s.transports {
+		if entry != nil && entry.HasEdge(pk) {
+			res = append(res, entry)
+		}
+	}
+
+	if len(res) == 0 {
+		return nil, ErrTransportNotFound
+	}
+
+	return res, nil
+}
+
+func (s *mockStore) GetNumberOfTransports(context.Context) (map[types.Type]int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	response := make(map[types.Type]int)
@@ -117,7 +142,7 @@ func (s *memStore) GetNumberOfTransports(context.Context) (map[types.Type]int, e
 	return response, nil
 }
 
-func (s *memStore) GetAllTransports(_ context.Context, selfTransports bool) ([]*transport.Entry, error) {
+func (s *mockStore) GetAllTransports(_ context.Context, selfTransports bool) ([]*transport.Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var response []*transport.Entry
@@ -132,6 +157,6 @@ func (s *memStore) GetAllTransports(_ context.Context, selfTransports bool) ([]*
 	return response, nil
 }
 
-func (s *memStore) Close() {
+func (s *mockStore) Close() {
 
 }
