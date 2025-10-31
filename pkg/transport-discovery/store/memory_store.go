@@ -140,7 +140,7 @@ func (ms *MemoryStore) RegisterTransport(ctx context.Context, sEntry *transport.
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	if err := ms.pgStore.RegisterTransport(ctx, sEntry); err != nil {
+	if err := ms.pgStore.RegisterTransport(ctx, sEntry); err != nil && err != gorm.ErrDuplicatedKey {
 		return err
 	}
 
@@ -196,6 +196,9 @@ func (ms *MemoryStore) DeregisterTransport(ctx context.Context, id uuid.UUID) er
 
 // GetTransportByID retrieves a transport by ID (memory-only read)
 func (ms *MemoryStore) GetTransportByID(_ context.Context, id uuid.UUID) (*transport.Entry, error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
 	atomic.AddInt64(&ms.stats.totalReads, 1)
 
 	entry, exists := ms.transports[id]
@@ -211,6 +214,9 @@ func (ms *MemoryStore) GetTransportByID(_ context.Context, id uuid.UUID) (*trans
 
 // GetTransportsByEdge retrieves all transports for a given edge (memory-only read)
 func (ms *MemoryStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
 	atomic.AddInt64(&ms.stats.totalReads, 1)
 
 	edgeHex := pk.Hex()
@@ -235,6 +241,9 @@ func (ms *MemoryStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) 
 
 // GetAllTransports retrieves all transports (memory-only read)
 func (ms *MemoryStore) GetAllTransports(_ context.Context, selfTransports bool) ([]*transport.Entry, error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
 	atomic.AddInt64(&ms.stats.totalReads, 1)
 	atomic.AddInt64(&ms.stats.cacheHits, 1)
 
@@ -258,6 +267,9 @@ func (ms *MemoryStore) GetAllTransports(_ context.Context, selfTransports bool) 
 
 // GetNumberOfTransports returns count by type (memory-only read)
 func (ms *MemoryStore) GetNumberOfTransports(_ context.Context) (map[types.Type]int, error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
 	atomic.AddInt64(&ms.stats.totalReads, 1)
 	atomic.AddInt64(&ms.stats.cacheHits, 1)
 
