@@ -1,5 +1,5 @@
 {
-	"version": "v1.3.31",
+	"version": "unknown",
 	"sk": "0e17cd505d81f998950e22864ae4692249124441bd9148b801f76f1595ac688f",
 	"pk": "031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055",
 	"dmsg": {
@@ -48,7 +48,12 @@
 		"apps": [
 			{
 				"name": "vpn-client",
+				"binary": "skywire",
 				"args": [
+					"app",
+					"vpn-client",
+					"--srv",
+					"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 					"-killswitch=false"
 				],
 				"auto_start": false,
@@ -56,33 +61,47 @@
 			},
 			{
 				"name": "skychat",
+				"binary": "skywire",
 				"args": [
+					"app",
+					"skychat",
 					"--addr",
-					":8001"
+					"*:8001"
 				],
 				"auto_start": true,
 				"port": 1
 			},
 			{
 				"name": "skysocks-client",
+				"binary": "skywire",
 				"args": [
+					"app",
+					"skysocks-client",
 					"--srv",
 					"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 					"--addr",
 					":1080"
 				],
-				"auto_start": false,
+				"auto_start": true,
 				"port": 13
 			},
 			{
 				"name": "skysocks",
-				"args": [],
+				"binary": "skywire",
+				"args": [
+					"app",
+					"skysocks"
+				],
 				"auto_start": true,
 				"port": 3
 			},
 			{
 				"name": "vpn-server",
-				"args": [],
+				"binary": "skywire",
+				"args": [
+					"app",
+					"vpn-server"
+				],
 				"auto_start": false,
 				"port": 44
 			}
