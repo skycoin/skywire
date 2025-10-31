@@ -40,21 +40,13 @@
 		"apps": [
 			{
 				"name": "vpn-client",
-				"binary": "skywire",
-				"args": [
-					"app",
-					"vpn-client"
-				],
+				"args": [],
 				"auto_start": false,
 				"port": 43
 			},
 			{
 				"name": "vpn-server",
-				"binary": "skywire",
-				"args": [
-					"app",
-					"vpn-server"
-				],
+				"args": [],
 				"auto_start": false,
 				"port": 44
 			}
