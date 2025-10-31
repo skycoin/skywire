@@ -83,6 +83,12 @@ func RunSkysocksClient(ctx context.Context, _ []string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	port := appCl.Config().RoutingPort
+	if appPort != 0 {
+		port = routing.Port(appPort)
+		setAppPort(appCl, port)
+	}
+
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 		print(fmt.Sprintf("Failed to output build info: %v\n", err))
 	}
@@ -99,12 +105,6 @@ func RunSkysocksClient(ctx context.Context, _ []string) error {
 		print(fmt.Sprintf("Invalid server PubKey: %v\n", err))
 		setAppErr(appCl, err)
 		os.Exit(1)
-	}
-
-	port := appCl.Config().RoutingPort
-	if appPort != 0 {
-		port = routing.Port(appPort)
-		setAppPort(appCl, port)
 	}
 
 	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
