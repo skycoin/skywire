@@ -221,10 +221,6 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 		return 0, err
 	}
 	delete(m.errors, conf.AppName)
-
-	if proc.cmd == nil {
-		return 0, nil
-	}
 	return appcommon.ProcID(proc.cmd.Process.Pid), nil //nolint: gosec
 }
 
