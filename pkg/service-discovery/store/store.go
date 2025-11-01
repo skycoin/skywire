@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"io"
-	"time"
 
 	"gorm.io/gorm"
 
@@ -24,12 +23,12 @@ type Store interface {
 	CountServices(ctx context.Context, serviceType string) (uint64, error)
 }
 
-// NewStore creates a new postgres store implementation.
+// NewStore creates a new cached store (recommended for production).
+// The cached store:
+// - Loads entire database into memory at startup
+// - Serves all reads from memory (instant, zero DB queries)
+// - Writes update both database and memory immediately
+// - Memory is always up-to-date (no periodic reload needed)
 func NewStore(db *gorm.DB, logger *logging.Logger) (Store, error) {
-	return newPostgresStore(db, logger)
-}
-
-// NewMemoryBackedStore creates a new memory-backed store
-func NewMemoryBackedStore(db *gorm.DB, logger *logging.Logger, reloadPeriod time.Duration) (Store, error) {
-	return NewMemoryStore(db, logger, reloadPeriod)
+	return NewCachedStore(db, logger)
 }

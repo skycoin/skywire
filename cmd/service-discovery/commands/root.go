@@ -49,7 +49,6 @@ var (
 	dmsgPort       uint16
 	dmsgServerType string
 	geoipURL       string
-	memoryReload   time.Duration // ADD THIS LINE
 )
 
 func init() {
@@ -66,7 +65,6 @@ func init() {
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\033[0m\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
-	RootCmd.Flags().DurationVar(&memoryReload, "memory-reload", 5*time.Minute, "period for reloading entire database into memory (0 to disable memory store)\033[0m")
 }
 
 // RootCmd contains the root service-discovery command
@@ -112,22 +110,9 @@ PG_USER="postgres" PG_DATABASE="sd" PG_PASSWORD="" service-discovery --sk $(tail
 		}
 		log.Printf("Database connected.")
 
-		var db store.Store
-
-		if memoryReload > 0 {
-			// Use memory-backed store with periodic reload
-			db, err = store.NewMemoryBackedStore(gormDB, log, memoryReload)
-			if err != nil {
-				log.Fatal("Failed to initialize memory-backed store: ", err)
-			}
-			log.Printf("Memory-backed store initialized, reload period: %v", memoryReload)
-		} else {
-			// Use regular postgres store (no memory layer)
-			db, err = store.NewStore(gormDB, log)
-			if err != nil {
-				log.Fatal("Failed to initialize postgres store: ", err)
-			}
-			log.Printf("Postgres store initialized (no memory layer)")
+		db, err := store.NewStore(gormDB, log)
+		if err != nil {
+			log.Fatal("Failed to initialize redis store: ", err)
 		}
 
 		var nonceDB httpauth.NonceStore
