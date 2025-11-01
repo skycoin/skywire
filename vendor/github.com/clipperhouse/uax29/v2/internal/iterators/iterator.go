@@ -1,12 +1,14 @@
 package iterators
 
-import "github.com/clipperhouse/stringish"
+type Stringish interface {
+	[]byte | string
+}
 
-type SplitFunc[T stringish.Interface] func(T, bool) (int, T, error)
+type SplitFunc[T Stringish] func(T, bool) (int, T, error)
 
 // Iterator is a generic iterator for words that are either []byte or string.
 // Iterate while Next() is true, and access the word via Value().
-type Iterator[T stringish.Interface] struct {
+type Iterator[T Stringish] struct {
 	split SplitFunc[T]
 	data  T
 	start int
@@ -14,7 +16,7 @@ type Iterator[T stringish.Interface] struct {
 }
 
 // New creates a new Iterator for the given data and SplitFunc.
-func New[T stringish.Interface](split SplitFunc[T], data T) *Iterator[T] {
+func New[T Stringish](split SplitFunc[T], data T) *Iterator[T] {
 	return &Iterator[T]{
 		split: split,
 		data:  data,
@@ -80,21 +82,4 @@ func (iter *Iterator[T]) End() int {
 func (iter *Iterator[T]) Reset() {
 	iter.start = 0
 	iter.pos = 0
-}
-
-func (iter *Iterator[T]) First() T {
-	if len(iter.data) == 0 {
-		return iter.data
-	}
-	advance, _, err := iter.split(iter.data, true)
-	if err != nil {
-		panic(err)
-	}
-	if advance <= 0 {
-		panic("SplitFunc returned a zero or negative advance")
-	}
-	if advance > len(iter.data) {
-		panic("SplitFunc advanced beyond the end of the data")
-	}
-	return iter.data[:advance]
 }

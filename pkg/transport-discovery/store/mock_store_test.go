@@ -17,7 +17,8 @@ func TestMemory(t *testing.T) {
 	logger := &logging.Logger{}
 	gormDB := &gorm.DB{}
 	memoryStore := true
-	s, err := New(logger, gormDB, memoryStore)
+	onlyPGStore := false
+	s, err := New(logger, gormDB, memoryStore, onlyPGStore)
 	require.NoError(t, err)
 
 	suite.Run(t, &TransportSuite{TransportStore: s})
