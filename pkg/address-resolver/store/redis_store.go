@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 
@@ -35,6 +36,16 @@ func newRedisStore(ctx context.Context, addr, password string, poolSize int, log
 	if poolSize != 0 {
 		opt.PoolSize = poolSize
 	}
+
+	opt.MinIdleConns = poolSize / 2          // Keep half the pool warm
+	opt.MaxConnAge = 30 * time.Minute        // Max connection lifetime
+	opt.PoolTimeout = 10 * time.Second       // Wait up to 10s for connection from pool
+	opt.IdleTimeout = 5 * time.Minute        // Close idle connections after 5min
+	opt.IdleCheckFrequency = 1 * time.Minute // How often to check for idle connections
+	opt.DialTimeout = 5 * time.Second
+	opt.ReadTimeout = 5 * time.Second
+	opt.WriteTimeout = 5 * time.Second
+
 	redisCl := redis.NewClient(opt)
 
 	err = netutil.NewRetrier(logger, netutil.DefaultInitBackoff, netutil.DefaultMaxBackoff, 10, netutil.DefaultFactor).Do(ctx, func() error {
