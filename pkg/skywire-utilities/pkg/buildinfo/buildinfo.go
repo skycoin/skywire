@@ -102,9 +102,6 @@ func formatBuildDate(dateStr string) string {
 
 // Version returns the extracted version string.
 func Version() string {
-	if version == "(devel)" || version == "" {
-		return unknown
-	}
 	return version
 }
 
