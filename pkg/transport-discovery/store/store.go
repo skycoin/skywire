@@ -41,9 +41,25 @@ type TransportStore interface {
 }
 
 // New constructs a new Store of requested type.
-func New(logger *logging.Logger, gormDB *gorm.DB, memoryStore bool) (TransportStore, error) {
+// When memoryStore is false, it creates a PostgreSQL store with an in-memory cache layer.
+// When memoryStore is true, it creates a mock store for testing (no PostgreSQL, no persistence).
+func New(logger *logging.Logger, gormDB *gorm.DB, memoryStore bool, onlyPGStore bool) (TransportStore, error) {
 	if memoryStore {
-		return newMemoryStore(), nil
+		// For testing: use mock store (no persistence)
+		return newMockStore(), nil
 	}
-	return NewPostgresStore(logger, gormDB)
+
+	// For production: use PostgreSQL with in-memory cache
+	pgStore, err := NewPostgresStore(logger, gormDB)
+	if err != nil {
+		return nil, err
+	}
+
+	// For route-finder we use pg only
+	if onlyPGStore {
+		return pgStore, nil
+	}
+
+	// Wrap PostgreSQL store with caching layer
+	return NewCachedStore(pgStore)
 }
