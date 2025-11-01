@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"net/http/pprof"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,11 +51,13 @@ var (
 	sk              cipher.SecKey
 	dmsgPort        uint16
 	dmsgServerType  string
+	pprofAddr       string
 )
 
 func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9093", "address to bind to\033[0m")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m") // ADD THIS
 	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\033[0m")
 	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\033[0m")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\033[0m")
@@ -110,8 +114,32 @@ skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 a
 		if err != nil {
 			logger.Fatal("Invalid loglvl detected")
 		}
-
 		logging.SetLevel(lvl)
+
+		if pprofAddr != "" {
+			pprofMux := http.NewServeMux()
+
+			pprofMux.HandleFunc("/debug/pprof/", pprof.Index)
+			pprofMux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+			pprofMux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+			pprofMux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+			pprofMux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+			go func() {
+				logger.Infof("Starting pprof server on %s", pprofAddr)
+				server := &http.Server{
+					Addr:              pprofAddr,
+					Handler:           pprofMux,
+					ReadHeaderTimeout: 10 * time.Second,
+					ReadTimeout:       30 * time.Second,
+					WriteTimeout:      30 * time.Second,
+					IdleTimeout:       60 * time.Second,
+				}
+				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					logger.Errorf("pprof server failed: %v", err)
+				}
+			}()
+		}
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
 		defer cancel()
