@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"io"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -26,4 +27,9 @@ type Store interface {
 // NewStore creates a new postgres store implementation.
 func NewStore(db *gorm.DB, logger *logging.Logger) (Store, error) {
 	return newPostgresStore(db, logger)
+}
+
+// NewMemoryBackedStore creates a new memory-backed store
+func NewMemoryBackedStore(db *gorm.DB, logger *logging.Logger, reloadPeriod time.Duration) (Store, error) {
+	return NewMemoryStore(db, logger, reloadPeriod)
 }
