@@ -164,7 +164,7 @@ func ExampleDefaultDockerRunners() {
 	env := dockerEnv.
 		AddDmsgDiscovery("MSGD", "dmsg-discovery:9090").
 		AddDmsgServer("MSG", "dmsg-server:8080", "dmsg-server:8080").
-		AddTransportDiscovery("TRD", "transport-discovery:9091").
+		AddTransportDiscovery("TRD", "transport-discovery:9094").
 		AddRouteFinder("RF", "route-finder:9092").
 		AddSetupNode("SN").
 		AddAddressResolver("AR", "address-resolver:9093")
