@@ -60,8 +60,8 @@ func DefaultDockerizedEnv(network string) *EnvConfig {
 		Runners:     DefaultDockerRunners(network),
 	}).AddDmsgDiscovery("MSGD", "dmsg-discovery:9090").
 		AddDmsgServer("MSG", "dmsg-server:9091", "dmsg-server:9091").
-		AddTransportDiscovery("TRD", "http://transport-discovery:9092").
-		AddRouteFinder("RF", "route-finder:9093").
+		AddTransportDiscovery("TRD", "http://transport-discovery:9094").
+		AddRouteFinder("RF", "route-finder:9092").
 		AddSetupNode("SN").
 		AddAddressResolver("AR", "http://address-resolver:9093")
 
