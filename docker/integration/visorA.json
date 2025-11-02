@@ -20,7 +20,7 @@
 		"listening_address": ":7777"
 	},
 	"transport": {
-		"discovery": "http://transport-discovery:9091",
+		"discovery": "http://transport-discovery:9094",
 		"address_resolver": "http://address-resolver:9093",
 		"public_autoconnect": false,
 		"transport_setup_nodes": [
@@ -43,7 +43,7 @@
 		"min_hops": 1
 	},
 	"uptime_tracker": {
-		"addr": "http://uptime-tracker:9096"
+		"addr": "http://uptime-tracker:9095"
 	},
 	"launcher": {
 		"service_discovery": "http://service-discovery:9098",
