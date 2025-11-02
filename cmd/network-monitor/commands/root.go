@@ -5,9 +5,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"net/http/pprof"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -34,10 +37,12 @@ var (
 	addr          string
 	tag           string
 	logLvl        string
+	pprofAddr     string
 )
 
 func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9080", "address to bind to.\033[0m")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m")
 	RootCmd.Flags().StringVar(&sdURL, "sd-url", "http://sd.skycoin.com", "url to service discovery\033[0m")
 	RootCmd.Flags().StringVar(&arURL, "ar-url", "http://ar.skywire.skycoin.com", "url to address resolver\033[0m")
 	RootCmd.Flags().StringVar(&utURL, "ut-url", "http://ut.skywire.skycoin.com", "url to uptime tracker visor data.\033[0m")
@@ -83,6 +88,39 @@ var RootCmd = &cobra.Command{
 		}
 
 		logging.SetLevel(lvl)
+
+		if pprofAddr != "" {
+			pprofMux := http.NewServeMux()
+
+			// Register the index (which links to everything else)
+			pprofMux.HandleFunc("/debug/pprof/", pprof.Index)
+			pprofMux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+			pprofMux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+			pprofMux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+			pprofMux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+			// Register profile handlers using pprof.Handler
+			for _, profile := range []string{"heap", "goroutine", "threadcreate", "block", "mutex", "allocs"} {
+				pprofMux.Handle("/debug/pprof/"+profile, pprof.Handler(profile))
+			}
+
+			go func() {
+				mLogger.Infof("Starting pprof server on %s", pprofAddr)
+				server := &http.Server{
+					Addr:              pprofAddr,
+					Handler:           pprofMux,
+					ReadHeaderTimeout: 10 * time.Second,
+					ReadTimeout:       30 * time.Second,
+					WriteTimeout:      30 * time.Second,
+					IdleTimeout:       60 * time.Second,
+				}
+				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					mLogger.Errorf("pprof server failed: %v", err)
+				}
+			}()
+
+			time.Sleep(100 * time.Millisecond)
+		}
 
 		var srvURLs api.ServicesURLs
 		srvURLs.SD = sdURL
