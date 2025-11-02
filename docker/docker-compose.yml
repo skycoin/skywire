@@ -152,7 +152,7 @@ services:
     depends_on:
       - tpd-redis
       - postgres-db
-    entrypoint: "/release/skywire svc tpd --addr :9094 --prof :6094 --pg-host postgres-db --pg-port 5432 --redis redis://tpd-redis:6379 --sk 85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8 --dmsg-disc http://dmsg-discovery:9090"
+    entrypoint: "/release/skywire svc tpd --addr :9094 --pprof :6094 --pg-host postgres-db --pg-port 5432 --redis redis://tpd-redis:6379 --sk 85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8 --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
