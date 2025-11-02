@@ -5,5 +5,5 @@
         "discovery": "http://dmsg-discovery:9090",
         "sessions_count": 1
     },
-    "transport_discovery": "http://transport-discovery:9091"
+    "transport_discovery": "http://transport-discovery:9094"
 }
