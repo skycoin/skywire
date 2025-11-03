@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,12 +49,14 @@ var (
 	authPassphrase    string
 	officialServers   string
 	dmsgServerType    string
+	pprofAddr         string
 )
 
 func init() {
 	sf.Init(RootCmd, "dmsg_disc", "")
 
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9090", "address to bind to")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m")
 	RootCmd.Flags().StringVar(&authPassphrase, "auth", "", "auth passphrase as simple auth for official dmsg servers registration")
 	RootCmd.Flags().StringVar(&officialServers, "official-servers", "", "list of official dmsg servers keys separated by comma")
 	RootCmd.Flags().StringVar(&redisURL, "redis", store.DefaultURL, "connections string for a redis store")
@@ -96,6 +99,39 @@ skywire dmsg disc --sk $(tail -n1 dmsgd-config.json)`,
 		var err error
 		if pk, err = sk.PubKey(); err != nil {
 			log.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
+		}
+
+		if pprofAddr != "" {
+			pprofMux := http.NewServeMux()
+
+			// Register the index (which links to everything else)
+			pprofMux.HandleFunc("/debug/pprof/", pprof.Index)
+			pprofMux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+			pprofMux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+			pprofMux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+			pprofMux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+			// Register profile handlers using pprof.Handler
+			for _, profile := range []string{"heap", "goroutine", "threadcreate", "block", "mutex", "allocs"} {
+				pprofMux.Handle("/debug/pprof/"+profile, pprof.Handler(profile))
+			}
+
+			go func() {
+				log.Infof("Starting pprof server on %s", pprofAddr)
+				server := &http.Server{
+					Addr:              pprofAddr,
+					Handler:           pprofMux,
+					ReadHeaderTimeout: 10 * time.Second,
+					ReadTimeout:       30 * time.Second,
+					WriteTimeout:      30 * time.Second,
+					IdleTimeout:       60 * time.Second,
+				}
+				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					log.Errorf("pprof server failed: %v", err)
+				}
+			}()
+
+			time.Sleep(100 * time.Millisecond)
 		}
 
 		metricsutil.ServeHTTPMetrics(log, sf.MetricsAddr)
