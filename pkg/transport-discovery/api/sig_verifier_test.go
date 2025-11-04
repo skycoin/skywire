@@ -19,20 +19,16 @@ func TestSigVerifier(t *testing.T) {
 		sv := NewSigVerifier(5 * time.Minute)
 		defer sv.ClearCache()
 
-		// Generate test keypair and payload
 		pubkey, seckey := cipher.GenerateKeyPair()
 		payload := []byte("test payload")
 
-		// Sign the payload using httpauth
 		nonce := httpauth.Nonce(0)
 		sig, err := httpauth.Sign(payload, nonce, seckey)
 		require.NoError(t, err)
 
-		// First verification - should hit crypto
 		err = sv.VerifyPubKeySignedPayload(pubkey, sig, payload)
 		require.NoError(t, err)
 
-		// Second verification - should hit cache
 		err = sv.VerifyPubKeySignedPayload(pubkey, sig, payload)
 		require.NoError(t, err)
 	})
@@ -45,22 +41,19 @@ func TestSigVerifier(t *testing.T) {
 		_, wrongSeckey := cipher.GenerateKeyPair()
 		payload := []byte("test payload")
 
-		// Sign with wrong key
 		nonce := httpauth.Nonce(0)
 		sig, err := httpauth.Sign(payload, nonce, wrongSeckey)
 		require.NoError(t, err)
 
-		// Should fail verification
 		err = sv.VerifyPubKeySignedPayload(pubkey, sig, payload)
 		assert.Error(t, err)
 
-		// Should still fail on second attempt (errors not cached)
 		err = sv.VerifyPubKeySignedPayload(pubkey, sig, payload)
 		assert.Error(t, err)
 	})
 
 	t.Run("CacheExpiration", func(t *testing.T) {
-		sv := NewSigVerifier(100 * time.Millisecond) // Very short TTL
+		sv := NewSigVerifier(100 * time.Millisecond)
 		defer sv.ClearCache()
 
 		pubkey, seckey := cipher.GenerateKeyPair()
@@ -70,14 +63,11 @@ func TestSigVerifier(t *testing.T) {
 		sig, err := httpauth.Sign(payload, nonce, seckey)
 		require.NoError(t, err)
 
-		// First verification
 		err = sv.VerifyPubKeySignedPayload(pubkey, sig, payload)
 		require.NoError(t, err)
 
-		// Wait for expiration
 		time.Sleep(150 * time.Millisecond)
 
-		// Should still work but might not be cached
 		err = sv.VerifyPubKeySignedPayload(pubkey, sig, payload)
 		require.NoError(t, err)
 	})
@@ -97,14 +87,12 @@ func TestSigVerifier(t *testing.T) {
 		sig2, err := httpauth.Sign(payload2, nonce, seckey)
 		require.NoError(t, err)
 
-		// Verify both
 		err = sv.VerifyPubKeySignedPayload(pubkey, sig1, payload1)
 		require.NoError(t, err)
 
 		err = sv.VerifyPubKeySignedPayload(pubkey, sig2, payload2)
 		require.NoError(t, err)
 
-		// Wrong sig for payload should fail
 		err = sv.VerifyPubKeySignedPayload(pubkey, sig1, payload2)
 		assert.Error(t, err)
 	})
@@ -119,14 +107,11 @@ func TestSigVerifier(t *testing.T) {
 		sig, err := httpauth.Sign(payload, nonce, seckey)
 		require.NoError(t, err)
 
-		// Verify and cache
 		err = sv.VerifyPubKeySignedPayload(pubkey, sig, payload)
 		require.NoError(t, err)
 
-		// Clear cache
 		sv.ClearCache()
 
-		// Should still verify successfully (will use crypto again)
 		err = sv.VerifyPubKeySignedPayload(pubkey, sig, payload)
 		require.NoError(t, err)
 	})

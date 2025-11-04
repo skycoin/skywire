@@ -149,7 +149,6 @@ func (api *API) renderError(w http.ResponseWriter, r *http.Request, code int, er
 	}
 }
 
-// ServeHTTP implements http.Handler.
 func (api *API) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var status int
 
