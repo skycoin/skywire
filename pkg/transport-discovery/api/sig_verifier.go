@@ -90,7 +90,7 @@ func (sv *SigVerifier) cleanupLoop() {
 
 // ClearCache removes all cached entries (useful for testing)
 func (sv *SigVerifier) ClearCache() {
-	sv.cache.Range(func(key, value interface{}) bool {
+	sv.cache.Range(func(key, _ interface{}) bool {
 		sv.cache.Delete(key)
 		return true
 	})
