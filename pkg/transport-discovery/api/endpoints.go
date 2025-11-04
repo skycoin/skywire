@@ -171,7 +171,7 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := api.sigVerifier.VerifyPubKeySignedPayload(nmPk, nmSign, []byte(nmPk.Hex())); err != nil {
+	if err := cipher.VerifyPubKeySignedPayload(nmPk, nmSign, []byte(nmPk.Hex())); err != nil {
 		api.log(r).WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Verifying request").Error("Deregistration process interrupt.")
 		w.WriteHeader(http.StatusForbidden)
 		return
