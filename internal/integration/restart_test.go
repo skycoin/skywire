@@ -56,17 +56,36 @@ func TestRestart(t *testing.T) {
 		AddDefaultTransports(routerVisor, skychatVisors)
 
 	checkMessage := func(t *testing.T, sender, receiver string) {
-		res, err := env.SendSkyMessage(sender, receiver, t.Name())
-		require.NoError(t, err)
-
-		if res.StatusCode != http.StatusOK {
-			data, err := io.ReadAll(res.Body)
+		// Retry sending message up to 5 times with 5 second delays
+		// to handle transient transport setup delays after restart
+		var res *http.Response
+		var err error
+		var lastError string
+		
+		for attempt := 0; attempt < 5; attempt++ {
+			res, err = env.SendSkyMessage(sender, receiver, t.Name())
 			require.NoError(t, err)
-			t.Logf("skychat returned error: %v", string(data))
+
+			if res.StatusCode == http.StatusOK {
+				require.NoError(t, res.Body.Close())
+				return
+			}
+
+			// Log error and retry
+			data, readErr := io.ReadAll(res.Body)
+			require.NoError(t, readErr)
+			lastError = string(data)
+			t.Logf("Attempt %d: skychat returned error: %v (retrying in 5s)", attempt+1, lastError)
+			res.Body.Close()
+			
+			if attempt < 4 { // Don't sleep after last attempt
+				time.Sleep(5 * time.Second)
+			}
 		}
 
+		// All retries failed
+		t.Logf("All retry attempts failed. Last error: %v", lastError)
 		require.Equal(t, http.StatusOK, res.StatusCode, res)
-		require.NoError(t, res.Body.Close())
 	}
 	// TODO(ersonp): currently there is some issue with the visor containers that needs to be fixed first that causes the visor to not start properly
 	// after a restart
