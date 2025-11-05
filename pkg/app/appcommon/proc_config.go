@@ -2,12 +2,15 @@
 package appcommon
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -24,6 +27,11 @@ var (
 	// ErrProcConfigEnvNotDefined occurs when an expected env is not defined.
 	ErrProcConfigEnvNotDefined = fmt.Errorf("env '%s' is not defined", EnvProcConfig)
 )
+
+// AppFunc is a function that runs an app in-process.
+// It receives a context for cancellation and command-line args.
+// The app is responsible for creating its own app.Client via app.NewClient().
+type AppFunc func(ctx context.Context, args []string) error
 
 // ProcKey is a unique key to authenticate a proc within the app server.
 type ProcKey [16]byte
@@ -81,6 +89,7 @@ type ProcConfig struct {
 	BinaryLoc    string        `json:"binary_loc"`
 	LogDBLoc     string        `json:"log_db_loc"`
 	LogStorePath string        `json:"log_store_path"`
+	RunFunc      interface{}   `json:"-"`
 }
 
 // ProcConfigFromEnv obtains a ProcConfig from the associated env variable, returning an error if any.
@@ -157,4 +166,30 @@ func (c *ProcConfig) encodeJSON() []byte {
 		panic(err)
 	}
 	return b
+}
+
+var (
+	inProcessConnsMu sync.RWMutex
+	inProcessConns   = make(map[ProcKey]net.Conn)
+)
+
+// RegisterInProcessConn registers a net.Conn for an in-process app by its ProcKey.
+func RegisterInProcessConn(key ProcKey, conn net.Conn) {
+	inProcessConnsMu.Lock()
+	defer inProcessConnsMu.Unlock()
+	inProcessConns[key] = conn
+}
+
+// GetInProcessConn retrieves the net.Conn for an in-process app by its ProcKey.
+func GetInProcessConn(key ProcKey) net.Conn {
+	inProcessConnsMu.RLock()
+	defer inProcessConnsMu.RUnlock()
+	return inProcessConns[key]
+}
+
+// UnregisterInProcessConn removes the net.Conn for an in-process app by its ProcKey.
+func UnregisterInProcessConn(key ProcKey) {
+	inProcessConnsMu.Lock()
+	defer inProcessConnsMu.Unlock()
+	delete(inProcessConns, key)
 }
