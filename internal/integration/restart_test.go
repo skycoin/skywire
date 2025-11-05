@@ -101,6 +101,9 @@ func TestRestart(t *testing.T) {
 			require.NoError(t, env.ContainerRestart(tc.restartList...))
 			time.Sleep(RestartDelay)
 
+			// Re-establish transports after restart
+			env.AddDefaultTransports(routerVisor, skychatVisors)
+
 			checkMessage(t, tc.sender, tc.receiver)
 		})
 	}
