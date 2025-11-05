@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	netType = appnet.TypeDmsg
+	netType = appnet.TypeSkynet
 )
 
 // var addr = flag.String("addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
