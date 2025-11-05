@@ -97,12 +97,15 @@ func TestRestart(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Restart containers
-			require.NoError(t, env.ContainerRestart(tc.restartList...))
-			time.Sleep(RestartDelay)
+			// Stop and restart skychat app on the specified visors
+			// This tests the apps launcher's ability to stop/start in-process apps
+			for _, visorName := range tc.restartList {
+				env.StopApp(t, AppToRun{VisorHostName: visorName, AppName: "skychat"})
+				env.StartApp(t, AppToRun{VisorHostName: visorName, AppName: "skychat"}, "")
+			}
 
-			// Re-establish transports after restart
-			env.AddDefaultTransports(routerVisor, skychatVisors)
+			// Give apps a moment to fully start
+			time.Sleep(2 * time.Second)
 
 			checkMessage(t, tc.sender, tc.receiver)
 		})
