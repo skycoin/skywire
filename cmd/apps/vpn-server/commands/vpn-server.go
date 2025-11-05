@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
@@ -66,7 +67,21 @@ var RootCmd = &cobra.Command{
 }
 
 // RunVPNServer runs the VPN server app logic.
-func RunVPNServer(ctx context.Context, _ []string) error {
+func RunVPNServer(ctx context.Context, args []string) error {
+	// Parse flags when called via internal launcher
+	if len(args) > 0 {
+		fs := pflag.NewFlagSet("vpn-server", pflag.ContinueOnError)
+		fs.StringVar(&localPKStr, "pk", "", "local pubkey")
+		fs.StringVar(&localSKStr, "sk", "", "local seckey")
+		fs.StringVar(&passcode, "passcode", "", "passcode")
+		fs.StringVar(&networkIfc, "netifc", "", "network interface")
+		fs.BoolVar(&secure, "secure", true, "secure mode")
+		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		if err := fs.Parse(args); err != nil {
+			return fmt.Errorf("failed to parse flags: %w", err)
+		}
+	}
+
 	appCl := app.NewClient(nil)
 	defer appCl.Close()
 

@@ -17,6 +17,7 @@ import (
 	"github.com/elazarl/goproxy"
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/internal/skysocks"
 	"github.com/skycoin/skywire/pkg/app"
@@ -74,7 +75,21 @@ var RootCmd = &cobra.Command{
 }
 
 // RunSkysocksClient runs the skysocks client app logic.
-func RunSkysocksClient(ctx context.Context, _ []string) error {
+func RunSkysocksClient(ctx context.Context, args []string) error {
+	// Parse flags when called via internal launcher
+	if len(args) > 0 {
+		fs := pflag.NewFlagSet("skysocks-client", pflag.ContinueOnError)
+		fs.StringVar(&addr, "addr", visorconfig.SkysocksClientAddr, "Client address")
+		fs.StringVar(&serverPK, "srv", "", "PubKey of server")
+		fs.StringVar(&httpAddr, "http", "", "http proxy mode")
+		fs.Int64Var(&tries, "tries", 3, "number of tries")
+		fs.Int64Var(&retryDelay, "retry-time", 5, "delay between tries")
+		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		if err := fs.Parse(args); err != nil {
+			return fmt.Errorf("failed to parse flags: %w", err)
+		}
+	}
+
 	r = netutil.NewRetrier(nil, time.Duration(retryDelay)*time.Second, netutil.DefaultMaxBackoff, tries, 1)
 
 	appCl := app.NewClient(nil)

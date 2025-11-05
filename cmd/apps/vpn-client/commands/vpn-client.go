@@ -14,6 +14,7 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
@@ -67,7 +68,22 @@ var RootCmd = &cobra.Command{
 }
 
 // RunVPNClient runs the VPN client app logic.
-func RunVPNClient(ctx context.Context, _ []string) error {
+func RunVPNClient(ctx context.Context, args []string) error {
+	// Parse flags when called via internal launcher
+	if len(args) > 0 {
+		fs := pflag.NewFlagSet("vpn-client", pflag.ContinueOnError)
+		fs.StringVar(&serverPKStr, "srv", "", "PubKey of server")
+		fs.StringVar(&localPKStr, "pk", "", "local pubkey")
+		fs.StringVar(&localSKStr, "sk", "", "local seckey")
+		fs.StringVar(&passcode, "passcode", "", "passcode")
+		fs.BoolVar(&killswitch, "killswitch", false, "killswitch")
+		fs.StringVar(&dnsAddr, "dns", "", "DNS address")
+		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		if err := fs.Parse(args); err != nil {
+			return fmt.Errorf("failed to parse flags: %w", err)
+		}
+	}
+
 	var directIPsCh, nonDirectIPsCh = make(chan net.IP, 100), make(chan net.IP, 100)
 	defer close(directIPsCh)
 	defer close(nonDirectIPsCh)

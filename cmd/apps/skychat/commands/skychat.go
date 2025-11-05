@@ -18,6 +18,7 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -85,7 +86,18 @@ func Execute() {
 }
 
 // RunSkychat runs the skychat app logic. This can be called from the visor or from the CLI.
-func RunSkychat(ctx context.Context, _ []string) error {
+func RunSkychat(ctx context.Context, args []string) error {
+	// Parse flags when called via internal launcher
+	if len(args) > 0 {
+		// Create independent FlagSet for parsing without initialization cycle
+		fs := pflag.NewFlagSet("skychat", pflag.ContinueOnError)
+		fs.StringVar(&addr, "addr", ":8001", "address to bind")
+		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		if err := fs.Parse(args); err != nil {
+			return fmt.Errorf("failed to parse flags: %w", err)
+		}
+	}
+
 	appCl = app.NewClient(nil)
 	defer appCl.Close()
 

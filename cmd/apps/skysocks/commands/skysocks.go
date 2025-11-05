@@ -11,6 +11,7 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/internal/skysocks"
 	"github.com/skycoin/skywire/pkg/app"
@@ -57,7 +58,17 @@ var RootCmd = &cobra.Command{
 }
 
 // RunSkysocks runs the skysocks server app logic.
-func RunSkysocks(ctx context.Context, _ []string) error {
+func RunSkysocks(ctx context.Context, args []string) error {
+	// Parse flags when called via internal launcher
+	if len(args) > 0 {
+		fs := pflag.NewFlagSet("skysocks", pflag.ContinueOnError)
+		fs.StringVar(&passcode, "passcode", "", "passcode to authenticate")
+		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		if err := fs.Parse(args); err != nil {
+			return fmt.Errorf("failed to parse flags: %w", err)
+		}
+	}
+
 	appCl := app.NewClient(nil)
 	defer appCl.Close()
 
