@@ -61,7 +61,7 @@ func TestRestart(t *testing.T) {
 		var res *http.Response
 		var err error
 		var lastError string
-		
+
 		for attempt := 0; attempt < 5; attempt++ {
 			res, err = env.SendSkyMessage(sender, receiver, t.Name())
 			require.NoError(t, err)
@@ -76,8 +76,8 @@ func TestRestart(t *testing.T) {
 			require.NoError(t, readErr)
 			lastError = string(data)
 			t.Logf("Attempt %d: skychat returned error: %v (retrying in 5s)", attempt+1, lastError)
-			res.Body.Close()
-			
+			require.NoError(t, res.Body.Close())
+
 			if attempt < 4 { // Don't sleep after last attempt
 				time.Sleep(5 * time.Second)
 			}
