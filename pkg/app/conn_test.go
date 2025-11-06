@@ -284,9 +284,9 @@ func TestConn_TestConn(t *testing.T) {
 		}
 
 		stop := func() {
-			_ = c1.Close()   //nolint:errcheck
-			_ = c2.Close()   //nolint:errcheck
-			_ = rpcL.Close() //nolint:errcheck
+			_ = c1.Close()  
+			_ = c2.Close()  
+			_ = rpcL.Close()
 		}
 
 		return c1, c2, stop, nil

@@ -20,14 +20,14 @@ func TestProcManager_ProcByName(t *testing.T) {
 
 	appName := "app"
 
-	_, ok = m.ProcByName(appName) //nolint:errcheck
+	_, ok = m.ProcByName(appName)
 	require.False(t, ok)
 
 	m.mx.Lock()
 	m.procs[appName] = nil
 	m.mx.Unlock()
 
-	_, ok = m.ProcByName(appName) //nolint:errcheck
+	_, ok = m.ProcByName(appName)
 	require.True(t, ok)
 }
 

@@ -700,7 +700,7 @@ func (v *Visor) RestartApp(appName string) error {
 		v.log.Warn("app launcher not ready yet")
 		return ErrAppLauncherNotAvailable
 	}
-	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck
+	if _, ok := v.procM.ProcByName(appName); ok {
 		v.log.Infof("Updated %v password, restarting it", appName)
 		return v.appL.RestartApp(appName, appName)
 	}

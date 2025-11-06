@@ -1630,7 +1630,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		return err
 	})
 
-	go connector.Run(cctx, v) //nolint:errcheck
+	go connector.Run(cctx, v)
 
 	return nil
 }

@@ -52,7 +52,7 @@ func TestMakeHandshakePacket(t *testing.T) {
 }
 
 func TestMakePingPacket(t *testing.T) {
-	staticTime, _ := time.Parse(time.RFC3339, "2012-11-01T22:08:41+00:00") //nolint:errcheck
+	staticTime, _ := time.Parse(time.RFC3339, "2012-11-01T22:08:41+00:00")
 	timestamp := staticTime.UTC().UnixNano() / int64(time.Millisecond)
 	packet := MakePingPacket(4, timestamp, int64(1))
 	expected := []byte{0x4, 0x0, 0x0, 0x0, 0x4, 0x0, 0x10, 0x0, 0x0, 0x1, 0x3a, 0xbe, 0x4, 0xde, 0x28, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1}
@@ -64,7 +64,7 @@ func TestMakePingPacket(t *testing.T) {
 }
 
 func TestMakePongPacket(t *testing.T) {
-	staticTime, _ := time.Parse(time.RFC3339, "2012-11-01T22:08:41+00:00") //nolint:errcheck
+	staticTime, _ := time.Parse(time.RFC3339, "2012-11-01T22:08:41+00:00")
 	timestamp := staticTime.UTC().UnixNano() / int64(time.Millisecond)
 	packet := MakePongPacket(4, timestamp)
 	expected := []byte{0x5, 0x0, 0x0, 0x0, 0x4, 0x0, 0x10, 0x0, 0x0, 0x1, 0x3a, 0xbe, 0x4, 0xde, 0x28, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}

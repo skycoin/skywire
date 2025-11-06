@@ -22,7 +22,7 @@ func (eb *Broadcaster) SendTPClose(ctx context.Context, netType, addr string) { 
 }
 
 func (eb *Broadcaster) sendEvent(ctx context.Context, event *Event) { //nolint:all
-	err := eb.Broadcast(context.Background(), event) //nolint:errcheck
+	err := eb.Broadcast(context.Background(), event)
 	if err != nil {
 		eb.log.Warn("Failed to broadcast event: %v", event)
 	}
