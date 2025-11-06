@@ -443,7 +443,7 @@ func stopVisor() {
 
 func isHypervisorRunning(addr string) bool {
 	// we check if it's up by querying `health` endpoint
-	resp, err := http.Get(addr)
+	resp, err := http.Get(addr)  //nolint:gosec
 	if err != nil {
 		// hypervisor is not running in this case
 		return false

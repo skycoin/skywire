@@ -55,9 +55,9 @@ var startCmd = &cobra.Command{
 
 		// stop possible running proxy before start it again
 		if clientName != "" {
-			rpcClient.StopApp(clientName) //nolint:errcheck
+			rpcClient.StopApp(clientName) //nolint:errcheck,gosec
 		} else {
-			rpcClient.StopApp("skysocks-client") //nolint:errcheck
+			rpcClient.StopApp("skysocks-client") //nolint:errcheck,gosec
 		}
 
 		var tCtxCancelFunc context.CancelFunc
@@ -72,7 +72,7 @@ var startCmd = &cobra.Command{
 			if tCtxCancelFunc != nil {
 				tCtxCancelFunc()
 			}
-			rpcClient.KillApp(clientName) //nolint:errcheck
+			rpcClient.KillApp(clientName) //nolint:errcheck,gosec
 			fmt.Print("\nStopped!")
 			os.Exit(1)
 		}()
@@ -298,7 +298,7 @@ var listCmd = &cobra.Command{
 		// --- If JSON output requested ---
 		if jsonOutput {
 			var list []services.Service
-			json.Unmarshal([]byte(sds), &list) //nolint:errcheck
+			json.Unmarshal([]byte(sds), &list) //nolint:errcheck,gosec
 			var b bytes.Buffer
 			internal.PrintOutput(cmd.Flags(), list, b.String())
 			return
@@ -334,7 +334,7 @@ var listCmd = &cobra.Command{
 				script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
 				return
 			}
-			script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout()
+			script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
 			return
 		}
 
@@ -364,10 +364,10 @@ var listCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
-			script.Echo(fmt.Sprintf("%v\n", count)).Stdout()
+			script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
 			return
 		}
 
-		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout()
+		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
 	},
 }

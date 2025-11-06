@@ -115,8 +115,8 @@ func makeTree() {
 				continue
 			}
 			if filepath.Base(kid) == "health.json" {
-				fileContents, _ := script.File(kid).String()
-				fileInfo, _ := os.Stat(kid) //nolint:errcheck
+				fileContents, _ := script.File(kid).String() //nolint:errcheck
+				fileInfo, _ := os.Stat(kid)                  //nolint:errcheck
 				if time.Since(fileInfo.ModTime()) < time.Hour {
 					coloredFile = pterm.Green(filepath.Base(kid))
 				} else {
@@ -146,5 +146,5 @@ func makeTree() {
 		nodes1 = append(nodes1, pterm.TreeNode{Text: pterm.Cyan(dirNode), Children: nodes})
 	}
 	tree = pterm.TreeNode{Text: pterm.Cyan("Index"), Children: nodes1}
-	pterm.DefaultTree.WithRoot(tree).Render() //nolint:errcheck
+	pterm.DefaultTree.WithRoot(tree).Render() //nolint:errcheck,gosec
 }

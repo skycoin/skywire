@@ -619,11 +619,11 @@ var treeCmd = &cobra.Command{
 		}
 		tps := internal.GetData(cacheFileTPD, tpdURL+"/all-transports", cacheFilesAge)
 		if rawData {
-			script.Echo(tps).Stdout() //nolint:errcheck
+			script.Echo(tps).Stdout() //nolint:errcheck,gosec
 			return
 		}
 		if refinedData {
-			script.Echo(string(pretty.Color(pretty.Pretty([]byte(tps)), nil))).Stdout()
+			script.Echo(string(pretty.Color(pretty.Pretty([]byte(tps)), nil))).Stdout() //nolint:errcheck,gosec
 			return
 		}
 		var uts string
@@ -745,7 +745,7 @@ var treeCmd = &cobra.Command{
 			}
 		}
 		lvl(1, edgeKey)
-		pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint:errcheck
+		pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint:errcheck,gosec
 
 		for _, edgeKey := range sortedEdgeKeys {
 			found := false
@@ -765,7 +765,7 @@ var treeCmd = &cobra.Command{
 				usedkeys = append(usedkeys, edgeKey)
 				lvl(1, edgeKey)
 				if len(leveledList) > 1 {
-					pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint:errcheck
+					pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint:errcheck,gosec
 				}
 				if lastNode != "" {
 					pterm.Println(pterm.Red("No route from source to dest"))
@@ -812,7 +812,7 @@ var treeCmd = &cobra.Command{
 			if len(l) > 0 && fmt.Sprintf("%v", l) != "[[]]" {
 				pterm.Println(pterm.Red("Direct route:"))
 				for _, m := range l {
-					script.Echo(string(pretty.Color(pretty.Pretty([]byte(m)), nil))).Stdout()
+					script.Echo(string(pretty.Color(pretty.Pretty([]byte(m)), nil))).Stdout() //nolint:errcheck,gosec
 				}
 				return
 			}

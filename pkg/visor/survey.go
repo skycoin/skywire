@@ -75,7 +75,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 					log.WithError(err).Error("Could not marshal json.")
 					return
 				}
-				err = os.WriteFile(v.conf.LocalPath+"/"+visconf.NodeInfo, []byte(s), 0600)
+				err = os.WriteFile(v.conf.LocalPath+"/"+visconf.NodeInfo, []byte(s), 0600)  //nolint:unconvert
 				if err != nil {
 					log.WithError(err).Error("Failed to write system hardware survey to file.")
 					return

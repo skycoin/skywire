@@ -57,7 +57,7 @@ func init() {
 	)
 	var jsonOutput bool
 	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
-	RootCmd.PersistentFlags().MarkHidden(internal.JSONString) //nolint:errcheck
+	RootCmd.PersistentFlags().MarkHidden(internal.JSONString) //nolint:errcheck,gosec
 }
 
 // RootCmd is the root command for skywire-cli
@@ -143,7 +143,7 @@ var docCmd = &cobra.Command{
 
 		fmt.Printf("\n## %s\n", RootCmd.Use)
 		fmt.Printf("\n```\n")
-		RootCmd.Help() //nolint:errcheck
+		RootCmd.Help() //nolint:errcheck,gosec
 		fmt.Printf("\n```\n")
 		fmt.Printf("\n## %s\n", "global flags")
 		fmt.Printf("\n%s\n", "The skywire-cli interacts with the running visor via rpc calls. By default the rpc server is available on localhost:3435. The rpc address and port the visor is using may be changed in the config file, once generated.")
@@ -166,7 +166,7 @@ var docCmd = &cobra.Command{
 			use = strings.Split(j.Use, " ")[0]
 			fmt.Printf("\n### %s\n", use)
 			fmt.Printf("\n```\n")
-			j.Help() //nolint:errcheck
+			j.Help() //nolint:errcheck,gosec
 			fmt.Printf("\n```\n")
 			if j.Name() == "survey" {
 				fmt.Printf("\n```\n")
@@ -177,7 +177,7 @@ var docCmd = &cobra.Command{
 				use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0]
 				fmt.Printf("\n#### %s\n", use)
 				fmt.Printf("\n```\n")
-				k.Help() //nolint:errcheck
+				k.Help() //nolint:errcheck,gosec
 				fmt.Printf("\n```\n")
 				if k.Name() == "gen" {
 					fmt.Printf("\n##### Example for package / msi\n")
@@ -190,13 +190,13 @@ var docCmd = &cobra.Command{
 					use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0] + " " + strings.Split(l.Use, " ")[0]
 					fmt.Printf("\n##### %s\n", use)
 					fmt.Printf("\n```\n")
-					l.Help() //nolint:errcheck
+					l.Help() //nolint:errcheck,gosec
 					fmt.Printf("\n```\n")
 					for _, m := range l.Commands() {
 						use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0] + " " + strings.Split(l.Use, " ")[0] + " " + strings.Split(m.Use, " ")[0]
 						fmt.Printf("\n###### %s\n", use)
 						fmt.Printf("\n```\n")
-						m.Help() //nolint:errcheck
+						m.Help() //nolint:errcheck,gosec
 						fmt.Printf("\n```\n")
 					}
 				}

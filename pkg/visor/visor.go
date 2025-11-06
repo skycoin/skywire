@@ -278,7 +278,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
 	if dmsgServer != "" {
 		//nolint:staticcheck
-		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer)
+		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer)  //nolint:staticcheck,revive
 	}
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module

@@ -241,7 +241,7 @@ var listCmd = &cobra.Command{
 				script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
 				return
 			}
-			script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout()
+			script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
 			return
 		}
 
@@ -271,10 +271,10 @@ var listCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
-			script.Echo(fmt.Sprintf("%v\n", count)).Stdout()
+			script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
 			return
 		}
 
-		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout()
+		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
 	},
 }

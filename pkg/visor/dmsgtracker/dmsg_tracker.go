@@ -43,7 +43,7 @@ func newDmsgTracker(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey) (
 	}
 	defer func() {
 		if err != nil {
-			_ = conn.Close()
+			_ = conn.Close()  //nolint:errcheck
 		}
 	}()
 

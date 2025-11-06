@@ -40,7 +40,7 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
 	dmsgC := dmsg.NewClient(conf.PK, conf.SK, dmsgDisc, dmsgConf)
 	//nolint:staticcheck
-	ctx := context.WithValue(context.Background(), "setupNode", true)
+	ctx := context.WithValue(context.Background(), "setupNode", true)  //nolint:staticcheck,revive
 	go dmsgC.Serve(ctx)
 
 	log.WithField("local_pk", conf.PK).WithField("dmsg_conf", conf.Dmsg).

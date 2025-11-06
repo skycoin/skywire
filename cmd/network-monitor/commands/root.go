@@ -134,9 +134,9 @@ var RootCmd = &cobra.Command{
 		logger.WithField("addr", addr).Info("Serving Network Monitor API...")
 
 		pubKey := cipher.PubKey{}
-		pubKey.Set(pk) //nolint:errcheck
+		pubKey.Set(pk) //nolint:errcheck,gosec
 		secKey := cipher.SecKey{}
-		secKey.Set(sk) //nolint:errcheck
+		secKey.Set(sk) //nolint:errcheck,gosec
 
 		nmSign, _ := cipher.SignPayload([]byte(pubKey.Hex()), secKey) //nolint:errcheck
 

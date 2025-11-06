@@ -44,7 +44,7 @@ func init() {
 	logCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDiscURL, "dmsg discovery url\n")
 	logCmd.Flags().StringVarP(&utAddr, "ut", "u", utURL, "uptime tracker url\n")
 	if os.Getenv("DMSGCURL_SK") != "" {
-		sk.Set(os.Getenv("DMSGCURL_SK")) //nolint:errcheck
+		sk.Set(os.Getenv("DMSGCURL_SK")) //nolint:errcheck,gosec
 	}
 	logCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 }
@@ -121,7 +121,7 @@ var logCmd = &cobra.Command{
 		// Connect dmsgC to all servers
 		allServer := getAllDMSGServers()
 		for _, server := range allServer {
-			dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint:errcheck
+			dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint:errcheck,gosec
 		}
 
 		minimumVersion, _ := version.NewVersion(minv) //nolint:errcheck
@@ -176,15 +176,15 @@ var logCmd = &cobra.Command{
 						}
 						if !logOnly {
 							if visorVersion.LessThan(fver) {
-								download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint:errcheck
+								download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
 							} else {
-								download(ctx, log, httpC, "node-info", "node-info.json", key, maxFileSize) //nolint:errcheck
+								download(ctx, log, httpC, "node-info", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
 							}
 						}
 						if !surveyOnly {
 							for i := 0; i <= duration; i++ {
 								date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
-								download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize) //nolint:errcheck
+								download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize) //nolint:errcheck,gosec
 							}
 						}
 					}(v.PubKey, &wg)

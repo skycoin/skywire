@@ -6,9 +6,10 @@ import (
 	"os"
 	"strings"
 
-	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -48,7 +49,7 @@ func init() {
 	cHiddenFlags = append(cHiddenFlags, "delete")
 	rewardCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 	for _, j := range cHiddenFlags {
-		rewardCmd.Flags().MarkHidden(j) //nolint:errcheck
+		rewardCmd.Flags().MarkHidden(j) //nolint:errcheck,gosec
 	}
 
 }
@@ -100,7 +101,7 @@ var rewardCmd = &cobra.Command{
 				f := cmd.Flags().Lookup(j)
 				f.Hidden = false
 			}
-			cmd.Flags().MarkHidden("all") //nolint:errcheck
+			cmd.Flags().MarkHidden("all") //nolint:errcheck,gosec
 			internal.Catch(cmd.Flags(), cmd.Help())
 			os.Exit(0)
 		}

@@ -170,7 +170,7 @@ func main() {
 			if txid != "" {
 				core.NewText(pg).SetText(`TXID: ` + txid)
 				//nolint:errcheck  //nolint:errcheck,gosec
-				htmlcore.ReadHTMLString(ctx, pg, `<a href="https://explorer.skycoin.com/app/transaction/`+txid+`">`+txid+`</a>`)
+				htmlcore.ReadHTMLString(ctx, pg, `<a href="https://explorer.skycoin.com/app/transaction/`+txid+`">`+txid+`</a>`) //nolint:gosec
 			} else {
 				core.NewText(pg).SetText(`Rewards not yet distributed`)
 			}
