@@ -11,7 +11,6 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -20,10 +19,6 @@ func init() {
 		vpnUICmd,
 		vpnURLCmd,
 	)
-	version := buildinfo.Version()
-	if version == "unknown" {
-		version = ""
-	}
 	vpnUICmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path: "+visorconfig.SkywirePath)
 	vpnUICmd.Flags().StringVarP(&path, "config", "c", "", "config path")
 	vpnURLCmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path: "+visorconfig.SkywirePath)

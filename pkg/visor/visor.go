@@ -205,7 +205,7 @@ func run(conf *visorconfig.V1) error {
 		case <-ctx.Done():
 			mLog.Info("Visor closed early.")
 		default:
-			return fmt.Errorf("Failed to start visor.")
+			return fmt.Errorf("failed to start visor")
 		}
 		return nil
 	}
@@ -277,6 +277,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
 	if dmsgServer != "" {
+		//nolint:revive
 		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer)
 	}
 	registerModules(v.MasterLogger())

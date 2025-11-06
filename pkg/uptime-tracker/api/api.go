@@ -223,7 +223,7 @@ func (api *API) storeDailyData(data []store.DailyUptimeHistory, timeValue time.T
 	// save to file
 	file, _ := json.MarshalIndent(data, "", " ")
 	fileName := fmt.Sprintf("%s/%s-uptime-data.json", api.storeUptimesPath, timeValue.Format("2006-01-02"))
-	return os.WriteFile(fileName, file, 0644)
+	return os.WriteFile(fileName, file, 0600)
 }
 
 func (api *API) updateVisorsCache() error {

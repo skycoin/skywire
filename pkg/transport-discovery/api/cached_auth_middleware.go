@@ -71,6 +71,7 @@ func (cam *CachedAuthMiddleware) Handle(next http.Handler) http.Handler {
 			cached := entry.(*authCacheEntry)
 			if time.Now().Before(cached.expiresAt) {
 				// Cache hit - inject pubkey into context using the same key httpauth uses
+				//nolint:staticcheck
 				ctx := context.WithValue(r.Context(), httpauth.ContextAuthKey, cached.pubkey)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return

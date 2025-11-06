@@ -190,7 +190,7 @@ func registerModules(logger *logging.MasterLogger) {
 
 type initFn func(context.Context, *Visor, *logging.Logger) error
 
-func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	var keys cipher.PubKeys
 	servers := shuffleServers(v.conf.Dmsg.Servers)
 
@@ -292,7 +292,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	return nil
 }
 
-func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	// Prepare app discovery factory.
 	factory := appdisc.Factory{
 		Log:  v.MasterLogger().PackageLogger("app_discovery"),
@@ -336,7 +336,7 @@ func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
+func initDmsg(ctx context.Context, v *Visor, _ *logging.Logger) (err error) {
 	if v.conf.Dmsg == nil {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}

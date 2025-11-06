@@ -84,6 +84,8 @@ var boxFont = map[rune][]string{
 }
 
 // AsciiFont converts a string to box drawing characters.
+//
+//nolint:revive
 func AsciiFont(input string) string {
 	var output [3]string
 

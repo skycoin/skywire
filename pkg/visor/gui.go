@@ -229,6 +229,7 @@ func serversBtn(servers []*systray.MenuItem, rpcClient API) {
 	btnChannel := make(chan int)
 	for index, server := range servers {
 		go func(chn chan int, server *systray.MenuItem, index int) {
+			//nolint:staticcheck
 			for {
 				select {
 				case <-server.ClickedCh:

@@ -34,6 +34,7 @@ var (
 // RootCmd is logCmd
 var RootCmd = logCmd
 
+// VisorUptimeResponse represents visor uptime data.
 type VisorUptimeResponse struct {
 	PubKey     string  `json:"pk"`
 	Uptime     float64 `json:"up"`

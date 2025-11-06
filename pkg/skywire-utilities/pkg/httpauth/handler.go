@@ -95,6 +95,7 @@ func WithAuth(store NonceStore, original http.Handler, shouldVerifyAuth bool) ht
 
 		sw := statusWriter{ResponseWriter: w}
 		httputil.LogEntrySetField(r, LogAuthKey, auth.Key)
+		//nolint:staticcheck
 		original.ServeHTTP(&sw, r.WithContext(context.WithValue(
 			r.Context(), ContextAuthKey, auth.Key)))
 

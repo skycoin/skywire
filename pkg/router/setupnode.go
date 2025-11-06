@@ -39,6 +39,7 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	dmsgDisc := disc.NewHTTP(conf.Dmsg.Discovery, &http.Client{}, packageLogger)
 	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
 	dmsgC := dmsg.NewClient(conf.PK, conf.SK, dmsgDisc, dmsgConf)
+	//nolint:revive
 	ctx := context.WithValue(context.Background(), "setupNode", true)
 	go dmsgC.Serve(ctx)
 

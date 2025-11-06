@@ -20,6 +20,7 @@ func Reader(r io.Reader, confPath string) (*V1, error) {
 
 // ReadFile reads the config file without opening or writing to it
 func ReadFile(confPath string) (*V1, error) {
+	//nolint:gosec
 	f, err := os.ReadFile(confPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)

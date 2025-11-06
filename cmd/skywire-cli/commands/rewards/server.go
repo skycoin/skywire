@@ -1566,15 +1566,6 @@ func resetColor() string {
 	return reset
 }
 
-type consoleColorModeValue int
-
-var consoleColorMode = autoColor
-
-const (
-	autoColor consoleColorModeValue = iota
-	disableColor
-	forceColor
-)
 
 const (
 	green   = "\033[97;42m"

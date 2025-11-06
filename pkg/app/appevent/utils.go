@@ -13,7 +13,7 @@ func (eb *Broadcaster) SendTCPDial(ctx context.Context, remoteNet, remoteAddr st
 }
 
 // SendTPClose sends transport close event
-func (eb *Broadcaster) SendTPClose(ctx context.Context, netType, addr string) {
+func (eb *Broadcaster) SendTPClose(_ context.Context, netType, addr string) {
 	data := TCPCloseData{RemoteNet: netType, RemoteAddr: addr}
 	event := NewEvent(TCPClose, data)
 	if err := eb.Broadcast(context.Background(), event); err != nil {
@@ -21,7 +21,7 @@ func (eb *Broadcaster) SendTPClose(ctx context.Context, netType, addr string) {
 	}
 }
 
-func (eb *Broadcaster) sendEvent(ctx context.Context, event *Event) {
+func (eb *Broadcaster) sendEvent(_ context.Context, event *Event) {
 	err := eb.Broadcast(context.Background(), event)
 	if err != nil {
 		eb.log.Warn("Failed to broadcast event: %v", event)
