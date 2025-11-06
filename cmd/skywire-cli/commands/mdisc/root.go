@@ -68,7 +68,7 @@ var entryCmd = &cobra.Command{
 	Short: "Fetch an entry",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
-			cmd.Help() //nolint
+			internal.Catch(cmd.Flags(), cmd.Help())
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)

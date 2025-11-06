@@ -112,7 +112,9 @@ var RootCmd = &cobra.Command{
 			fmt.Printf("%v\n", buildinfo.DBIVersion())
 			return
 		}
-		cmd.Help() //nolint
+		if err := cmd.Help(); err != nil {
+			log.Printf("Failed to print help: %v", err)
+		}
 	},
 }
 

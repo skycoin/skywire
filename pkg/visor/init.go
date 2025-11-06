@@ -491,7 +491,7 @@ func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error { 
 
 func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var serviceURL dmsgcurl.URL
-	_ = serviceURL.Fill(v.conf.Transport.AddressResolver) //nolint:errcheck
+	_ = serviceURL.Fill(v.conf.Transport.AddressResolver)
 	// don't start sudph if we are connection to AR via dmsghttp
 	if serviceURL.Scheme == "dmsg" {
 		log.Info("SUDPH transport wont be available under dmsghttp")
@@ -907,7 +907,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
 		func(rPK cipher.PubKey, tm *transport.Manager) error {
-			establishedTransports, _ := v.Transports([]string{string(types.STCPR), string(types.SUDPH), string(types.DMSG)}, []cipher.PubKey{v.conf.PK}, false) //nolint
+			establishedTransports, _ := v.Transports([]string{string(types.STCPR), string(types.SUDPH), string(types.DMSG)}, []cipher.PubKey{v.conf.PK}, false)
 			for _, transportSum := range establishedTransports {
 				if transportSum.Remote.Hex() == rPK.Hex() {
 					log.Debugf("Established transport exist. Type: %s", transportSum.Type)
@@ -1313,7 +1313,9 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 				dmsgTries++
 				if dmsgTries >= 3 {
 					log.Error("Dmsg transport failed after 3 attempts. Reinitiating dmsg...")
-					reinitiateDmsg(ctx, v) //nolint
+					if err := reinitiateDmsg(ctx, v); err != nil {
+						log.WithError(err).Error("Failed to reinitiate dmsg")
+					}
 
 					dmsgTries = 0
 					dmsgOK = tryTransport(v, "dmsg", log)

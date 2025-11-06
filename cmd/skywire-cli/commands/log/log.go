@@ -207,7 +207,7 @@ var logCmd = &cobra.Command{
 								return
 							}
 						}
-						_ = download(ctx, log, httpC, fetchFile, fetchFile, key, maxFileSize) //nolint
+						_ = download(ctx, log, httpC, fetchFile, fetchFile, key, maxFileSize)
 					}(v.PubKey, &wg)
 				}
 			}

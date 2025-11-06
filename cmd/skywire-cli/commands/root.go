@@ -57,7 +57,7 @@ func init() {
 	)
 	var jsonOutput bool
 	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
-	RootCmd.PersistentFlags().MarkHidden(internal.JSONString) //nolint
+	RootCmd.PersistentFlags().MarkHidden(internal.JSONString)
 }
 
 // RootCmd is the root command for skywire-cli

@@ -120,7 +120,7 @@ SKYENV=/path/to/fiber.conf fiber run`
 
 func extractFiles() (string, error) {
 	tempDir := os.TempDir() + "/ui"
-	err := os.Mkdir(tempDir, 0755) //nolint
+	err := os.Mkdir(tempDir, 0750)
 	if err != nil {
 		toRemove, err := script.FindFiles(tempDir).Reject(tempDir + "/vendor").Slice()
 		if err != nil {
@@ -138,7 +138,7 @@ func extractFiles() (string, error) {
 		}
 		log.Println("Omitted vendor dir when cleaning directory:", tempDir)
 		log.Println("Directory contents:")
-		_, _ = script.FindFiles(tempDir).Stdout() //nolint
+		_, _ = script.FindFiles(tempDir).Stdout()
 	}
 
 	if err := fs.WalkDir(embeddedFiles, "ui", func(path string, d fs.DirEntry, err error) error {
@@ -151,7 +151,7 @@ func extractFiles() (string, error) {
 		}
 		outputPath := filepath.Join(tempDir, relPath)
 		if d.IsDir() {
-			return os.MkdirAll(outputPath, 0755) //nolint
+			return os.MkdirAll(outputPath, 0750)
 		}
 		content, err := embeddedFiles.ReadFile(path)
 		if err != nil {
@@ -272,8 +272,8 @@ func server(e error) {
 		c.Writer.Flush()
 		c.Writer.Write([]byte(navlinks)) //nolint
 		c.Writer.Flush()
-		tpstats, _ := script.Exec("skywire cli tp tree -s").Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(tpstats))             //nolint
+		tpstats, _ := script.Exec("skywire cli tp tree -s").Bytes()
+		c.Writer.Write(ansihtml.ConvertToHTML(tpstats)) //nolint
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmlend)) //nolint
 		c.Writer.Flush()
@@ -291,10 +291,10 @@ func server(e error) {
 		c.Writer.Write([]byte(navlinks)) //nolint
 		c.Writer.Flush()
 		tpstats, _ := script.Exec("skywire cli tp tree -s").Match("Count of transports:").Replace("Count of transports: ", "").Replace("\n", "").String() //nolint
-		tpcount, _ := strconv.Atoi(tpstats)                                                                                                               //nolint
+		tpcount, _ := strconv.Atoi(tpstats)
 		if tpcount < 400 {
-			tpTree, _ := script.Exec("skywire cli tp tree").Bytes() //nolint
-			c.Writer.Write(ansihtml.ConvertToHTML(tpTree))          //nolint
+			tpTree, _ := script.Exec("skywire cli tp tree").Bytes()
+			c.Writer.Write(ansihtml.ConvertToHTML(tpTree)) //nolint
 			c.Writer.Flush()
 		} else {
 			c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map", tpcount))) //nolint
@@ -323,11 +323,11 @@ func server(e error) {
 		if err := tmpFile.Close(); err != nil {
 			return
 		}
-		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()                                         //nolint
-		_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())                                          //nolint
-		res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String() //nolint
-		os.Remove(tmpFile.Name())                                                                         //nolint
-		c.Writer.Write([]byte(fmt.Sprintf("%s\n", res)))                                                  //nolint
+		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()
+		_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())
+		res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String()
+		os.Remove(tmpFile.Name())                        //nolint
+		c.Writer.Write([]byte(fmt.Sprintf("%s\n", res))) //nolint
 		c.Writer.Flush()
 
 		// Initial line count
@@ -655,7 +655,7 @@ func server(e error) {
 	})
 
 	r1.GET("/skycoin-rewards/csv", func(c *gin.Context) {
-		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint
+		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()
 		if strings.TrimRight(active, "\n") == "active" {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.WriteHeader(http.StatusNotFound)
@@ -677,14 +677,14 @@ func server(e error) {
 	})
 	//status of reward system hourly run.
 	r1.GET("/skycoin-rewards/s", func(c *gin.Context) {
-		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint
+		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()
 		c.JSON(http.StatusOK, gin.H{"active": strings.TrimRight(active, "\n")})
 	})
 	r1.GET("/health", func(c *gin.Context) {
 		runTime = time.Since(startTime)
-		nextrun, _ := script.Exec(`systemctl status skywire-reward.timer --lines=0`).First(5).Last(1).Replace("    Trigger: ", "").String() //nolint
-		prevDuration, _ := script.Exec(`systemctl status skywire-reward.service --lines=0`).Match("Duration").First(1).String()             //nolint
-		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()                                                     //nolint
+		nextrun, _ := script.Exec(`systemctl status skywire-reward.timer --lines=0`).First(5).Last(1).Replace("    Trigger: ", "").String()
+		prevDuration, _ := script.Exec(`systemctl status skywire-reward.service --lines=0`).Match("Duration").First(1).String()
+		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()
 		c.JSON(http.StatusOK, gin.H{
 			"frontend_start_time":             startTime,
 			"frontend_run_time":               runTime.String(),
@@ -698,7 +698,7 @@ func server(e error) {
 	})
 
 	r1.GET("/skycoin-rewards/csv/plain", func(c *gin.Context) {
-		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint
+		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()
 		if strings.TrimRight(active, "\n") == "active" {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.WriteHeader(http.StatusNotFound)
@@ -740,7 +740,7 @@ func server(e error) {
 					c.Writer.Header().Set("Content-Type", "text/plain")
 					c.Writer.WriteHeader(http.StatusOK)
 					c.Writer.Flush()
-					c.Writer.Write(filetoserve) //nolint
+					_, _ = c.Writer.Write(filetoserve)
 					c.Writer.Flush()
 					return
 				}
@@ -759,8 +759,8 @@ func server(e error) {
 				}
 				var toserve string
 				for _, line := range l2 {
-					thispk, _ := script.Echo(line).Column(2).String() //nolint
-					reason, _ := script.Echo(line).Column(3).String() //nolint
+					thispk, _ := script.Echo(line).Column(2).String()
+					reason, _ := script.Echo(line).Column(3).String()
 					toserve += fmt.Sprintf("%s%s\n", strings.TrimRight(strings.TrimRight(thispk, "\n"), "\r"), strings.TrimRight(strings.TrimRight(strings.TrimRight(reason, "\n"), "\r"), ","))
 				}
 				c.Writer.Header().Set("Content-Type", "text/plain")
@@ -886,9 +886,9 @@ func server(e error) {
 		if err == nil {
 			l += "\n\nIneligible:\n"
 			for _, line := range l2 {
-				thispk, _ := script.Echo(line).Column(2).String()         //nolint
-				reason, _ := script.Echo(line).Column(3).String()         //nolint
-				invalid, _ := script.Echo(line).Match(", , , ,").String() //nolint
+				thispk, _ := script.Echo(line).Column(2).String()
+				reason, _ := script.Echo(line).Column(3).String()
+				invalid, _ := script.Echo(line).Match(", , , ,").String()
 				if invalid != "" {
 					_, err = script.IfExists(wd + `/` + "log_backups/" + thispk + "/node-info.json").Echo("").String()
 					if err != nil {
@@ -985,7 +985,7 @@ func server(e error) {
 		}
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write(ni) //nolint
+		_, _ = c.Writer.Write(ni)
 		c.Writer.Flush()
 	})
 
@@ -1156,7 +1156,7 @@ func server(e error) {
 	faviconBuffer, _ := base64.StdEncoding.DecodeString(faviconBase64) //nolint
 
 	r1.GET("/favicon.ico", func(c *gin.Context) {
-		_, _ = c.Writer.WriteString(string(faviconBuffer)) //nolint
+		_, _ = c.Writer.WriteString(string(faviconBuffer))
 	})
 
 	if e != nil {
@@ -1332,7 +1332,7 @@ func generateAndCacheJSON() error {
 		return err
 	}
 
-	return os.WriteFile(tempJSONPath, buf.Bytes(), 0644) //nolint
+	return os.WriteFile(tempJSONPath, buf.Bytes(), 0600)
 }
 
 func generateAndCacheStats() (err error) {
@@ -1830,8 +1830,8 @@ func mainPage(c *gin.Context) {
 	}
 	tmpl := tmpl0
 
-	mainnetRulesHtml, _ := script.Exec(`skywire cli reward rules -l`).String()              //nolint
-	skywireVersion, _ := script.Exec(`skywire -v`).Replace("skywire version ", "").String() //nolint
+	mainnetRulesHtml, _ := script.Exec(`skywire cli reward rules -l`).String()
+	skywireVersion, _ := script.Exec(`skywire -v`).Replace("skywire version ", "").String()
 	htmlPageTemplateData1 := htmlPageTemplateData
 	htmlPageTemplateData1.Content = htmpl.HTML(skywireVersion + "<br>" + skycoinlogohtml + "<br>" + mainnetRulesHtml) //nolint
 	tmplData := map[string]interface{}{

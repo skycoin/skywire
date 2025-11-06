@@ -19,6 +19,7 @@ import (
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
@@ -217,7 +218,7 @@ func init() {
 	//show all flags on help
 	if os.Getenv("UNHIDEFLAGS") != "1" {
 		for _, j := range gHiddenFlags {
-			genConfigCmd.Flags().MarkHidden(j) //nolint
+			genConfigCmd.Flags().MarkHidden(j)
 		}
 	}
 }
@@ -268,8 +269,8 @@ var genConfigCmd = &cobra.Command{
 				f := cmd.Flags().Lookup(j) //nolint
 				f.Hidden = false
 			}
-			cmd.Flags().MarkHidden("all") //nolint
-			cmd.Help()                    //nolint
+			cmd.Flags().MarkHidden("all")
+			internal.Catch(cmd.Flags(), cmd.Help())
 			os.Exit(0)
 		}
 		//set default output filename

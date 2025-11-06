@@ -31,7 +31,7 @@ func Catch(cmdFlags *pflag.FlagSet, err error) {
 
 // PrintFatalError prints errors for skywire-cli commands packages
 func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
-	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
+	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON {
 		errJSON := CLIOutput{
 			Err: err.Error(),
@@ -58,7 +58,7 @@ func PrintRPCError(cmdFlags *pflag.FlagSet, err error) {
 
 // PrintError prints errors for skywire-cli commands packages
 func PrintError(cmdFlags *pflag.FlagSet, err error) {
-	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
+	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON {
 		errJSON := CLIOutput{
 			Err: err.Error(),
@@ -99,7 +99,7 @@ type CLIOutput struct {
 
 // PrintOutput prints either the normal output or the json output as per the global `--json` flag
 func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
-	isJSON, _ := cmdFlags.GetBool(JSONString) //nolint:errcheck
+	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON {
 		if outputJSON != nil {
 			outputJSON := CLIOutput{
@@ -124,7 +124,7 @@ func GetData(cachefile, thisurl string, cacheFilesAge int) (thisdata string) {
 	buf1 := new(bytes.Buffer)
 	cTime := time.Now()
 	if cachefile == "" {
-		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
+		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String()
 		return thisdata
 	}
 	if cachefile != "" {
@@ -136,13 +136,13 @@ func GetData(cachefile, thisurl string, cacheFilesAge int) (thisdata string) {
 			}
 		}
 		if shouldfetch {
-			_, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).Tee(buf1).WriteFile(cachefile) //nolint
+			_, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).Tee(buf1).WriteFile(cachefile)
 			thisdata = buf1.String()
 		} else {
-			thisdata, _ = script.File(cachefile).String() //nolint
+			thisdata, _ = script.File(cachefile).String()
 		}
 	} else {
-		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String() //nolint
+		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String()
 	}
 	return thisdata
 }

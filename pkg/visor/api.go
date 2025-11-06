@@ -367,7 +367,7 @@ func (v *Visor) Uptime() (float64, error) {
 // SetRewardAddress implements API.
 func (v *Visor) SetRewardAddress(p string) (string, error) {
 	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
-	err := os.WriteFile(path, []byte(p), 0644) //nolint
+	err := os.WriteFile(path, []byte(p), 0600)
 	if err != nil {
 		return p, fmt.Errorf("failed to write config to file. err=%v", err)
 	}
@@ -508,7 +508,7 @@ func (v *Visor) StopApp(appName string) error {
 		return ErrAppLauncherNotAvailable
 	}
 	if v.procM != nil {
-		_, err := v.appL.StopApp(appName) //nolint:errcheck
+		_, err := v.appL.StopApp(appName)
 		return err
 	}
 	return ErrProcNotAvailable
@@ -521,7 +521,7 @@ func (v *Visor) KillApp(appName string) error {
 		return ErrAppLauncherNotAvailable
 	}
 	if v.procM != nil {
-		return v.appL.KillApp(appName) //nolint:errcheck
+		return v.appL.KillApp(appName)
 	}
 	return ErrProcNotAvailable
 }
@@ -574,7 +574,7 @@ func (v *Visor) StopVPNClient(appName string) error {
 		return ErrAppLauncherNotAvailable
 	}
 	if v.procM != nil {
-		_, err := v.appL.StopApp(appName) //nolint:errcheck
+		_, err := v.appL.StopApp(appName)
 		return err
 	}
 	return ErrProcNotAvailable
@@ -622,7 +622,9 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 				if err := pk.Set(serverKey); err != nil {
 					return err
 				}
-				v.SetAppPK(visorconfig.SkysocksClientName, pk) //nolint
+				if err := v.SetAppPK(visorconfig.SkysocksClientName, pk); err != nil {
+					return err
+				}
 				// we set the args in memory and pass it in `v.appL.StartApp`
 				// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 				// but the args are set in the config
@@ -655,7 +657,9 @@ func (v *Visor) StopSkysocksClients() error {
 		for _, app := range v.conf.Launcher.Apps {
 			for _, args := range app.Args {
 				if args == visorconfig.SkysocksClientName {
-					v.appL.StopApp(app.Name) //nolint
+					if _, err := v.appL.StopApp(app.Name); err != nil {
+						v.log.WithError(err).Warnf("Failed to stop app %s", app.Name)
+					}
 				}
 			}
 		}

@@ -48,7 +48,7 @@ func init() {
 	cHiddenFlags = append(cHiddenFlags, "delete")
 	rewardCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 	for _, j := range cHiddenFlags {
-		rewardCmd.Flags().MarkHidden(j) //nolint
+		rewardCmd.Flags().MarkHidden(j)
 	}
 
 }
@@ -99,8 +99,8 @@ var rewardCmd = &cobra.Command{
 				f := cmd.Flags().Lookup(j) //nolint
 				f.Hidden = false
 			}
-			cmd.Flags().MarkHidden("all") //nolint
-			cmd.Help()                    //nolint
+			cmd.Flags().MarkHidden("all")
+			internal.Catch(cmd.Flags(), cmd.Help())
 			os.Exit(0)
 		}
 	},

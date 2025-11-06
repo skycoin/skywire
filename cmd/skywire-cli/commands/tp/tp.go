@@ -354,7 +354,7 @@ var addTpCmd = &cobra.Command{
 		//check before connecting stcpr transport that the visor public key is available to be transported via the given transport type unless forceAttempt == true
 		if !forceAttempt {
 			transports = internal.GetData(cacheFileAR, arURL+"/transports", cacheFilesAge)
-			stcprkeys, _ = script.Echo(transports).JQ(".stcpr[]").Replace(`"`, "").Slice() //nolint
+			stcprkeys, _ = script.Echo(transports).JQ(".stcpr[]").Replace(`"`, "").Slice()
 			if transportType == "stcpr" {
 				found := false
 				for i := range stcprkeys {
@@ -369,7 +369,7 @@ var addTpCmd = &cobra.Command{
 					availableSTCPR = true
 				}
 			}
-			sudphkeys, _ = script.Echo(transports).JQ(".sudph[]").Replace(`"`, "").Slice() //nolint
+			sudphkeys, _ = script.Echo(transports).JQ(".sudph[]").Replace(`"`, "").Slice()
 			if transportType == "sudph" {
 				found := false
 				for i := range sudphkeys {
@@ -385,7 +385,7 @@ var addTpCmd = &cobra.Command{
 				}
 			}
 			dmsgEntries = internal.GetData(cacheFileDmsgD, dmsgdURL+"/dmsg-discovery/entries", cacheFilesAge)
-			dmsgkeys, _ = script.Echo(dmsgEntries).JQ(".[]").Replace(`"`, "").Slice() //nolint
+			dmsgkeys, _ = script.Echo(dmsgEntries).JQ(".[]").Replace(`"`, "").Slice()
 			if transportType == "dmsg" {
 				found := false
 				for i := range dmsgkeys {
@@ -635,7 +635,7 @@ var treeCmd = &cobra.Command{
 			offlinekeys, _ = script.Echo(uts).JQ(".[] | select(.on  | not) | .pk").Replace("\"", "").Slice() //nolint
 		}
 
-		sortedEdgeKeys, _ = script.Echo(tps).JQ(".[].edges[]").Freq().Column(2).Slice() //nolint
+		sortedEdgeKeys, _ = script.Echo(tps).JQ(".[].edges[]").Freq().Column(2).Slice()
 
 		if isStats {
 			fmt.Printf("Unique keys in Transport Discovery: %d\n", len(sortedEdgeKeys))

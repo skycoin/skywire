@@ -71,7 +71,7 @@ func init() {
 	rootCmd.SetUsageTemplate(help)
 	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help menu")
 	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	rootCmd.PersistentFlags().MarkHidden("help") //nolint
+	rootCmd.PersistentFlags().MarkHidden("help")
 }
 
 func main() {

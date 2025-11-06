@@ -27,9 +27,9 @@ var tpCmd = &cobra.Command{
 		if err := tmpFile.Close(); err != nil {
 			return
 		}
-		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()                                      //nolint
-		_, _ = script.Echo(tplogscript).WriteFile(tmpFile.Name())                                      //nolint
-		_, _ = script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _tplogs ` + lcDir + `'`).Stdout() //nolint
+		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()
+		_, _ = script.Echo(tplogscript).WriteFile(tmpFile.Name())
+		_, _ = script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _tplogs ` + lcDir + `'`).Stdout()
 
 	},
 }

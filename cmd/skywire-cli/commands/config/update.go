@@ -52,7 +52,7 @@ func init() {
 	}
 
 	for _, j := range uHiddenFlags {
-		updateCmd.Flags().MarkHidden(j) //nolint
+		updateCmd.Flags().MarkHidden(j)
 	}
 
 	updateCmd.AddCommand(hyperVisorUpdateCmd)
