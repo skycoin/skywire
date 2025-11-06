@@ -218,7 +218,7 @@ var listCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
-			script.Echo(string(pretty.Color(pretty.Pretty(jsonOut), nil))).Stdout()  //nolint:errcheck,gosec
+			script.Echo(string(pretty.Color(pretty.Pretty(jsonOut), nil))).Stdout() //nolint:errcheck,gosec
 			return
 		}
 
@@ -238,7 +238,7 @@ var listCmd = &cobra.Command{
 				if err != nil {
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 				}
-				script.Echo(fmt.Sprintf("%v\n", count)).Stdout()  //nolint:errcheck,gosec
+				script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
 				return
 			}
 			script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout()
