@@ -932,7 +932,7 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 			// Write the JSON data back to the file
-			err = os.WriteFile(confPath, jsonData, 0644)
+			err = os.WriteFile(confPath, jsonData, 0600)
 			if err != nil {
 				log.Fatalf("Failed to write config file: %v", err)
 			}

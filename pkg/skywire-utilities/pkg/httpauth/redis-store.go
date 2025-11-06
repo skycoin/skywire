@@ -62,6 +62,7 @@ func (s *redisStore) Nonce(ctx context.Context, remotePK cipher.PubKey) (Nonce, 
 	if err != nil {
 		return 0, fmt.Errorf("malformed nonce: %s", nonce)
 	}
+	//nolint:gosec
 	return Nonce(n), nil
 }
 
@@ -76,6 +77,7 @@ func (s *redisStore) IncrementNonce(ctx context.Context, remotePK cipher.PubKey)
 		return 0, fmt.Errorf("redis: %w", err)
 	}
 
+	//nolint:gosec
 	return Nonce(nonce), nil
 }
 
