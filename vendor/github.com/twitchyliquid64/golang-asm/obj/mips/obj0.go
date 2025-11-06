@@ -30,12 +30,13 @@
 package mips
 
 import (
-	"github.com/twitchyliquid64/golang-asm/obj"
-	"github.com/twitchyliquid64/golang-asm/objabi"
-	"github.com/twitchyliquid64/golang-asm/sys"
 	"encoding/binary"
 	"fmt"
 	"math"
+
+	"github.com/twitchyliquid64/golang-asm/obj"
+	"github.com/twitchyliquid64/golang-asm/objabi"
+	"github.com/twitchyliquid64/golang-asm/sys"
 )
 
 func progedit(ctxt *obj.Link, p *obj.Prog, newprog obj.ProgAlloc) {

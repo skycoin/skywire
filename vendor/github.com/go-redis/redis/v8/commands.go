@@ -13,7 +13,7 @@ import (
 // otherwise you will receive an error: (error) ERR syntax error.
 // For example:
 //
-//    rdb.Set(ctx, key, value, redis.KeepTTL)
+//	rdb.Set(ctx, key, value, redis.KeepTTL)
 const KeepTTL = -1
 
 func usePrecise(dur time.Duration) bool {
@@ -2049,8 +2049,10 @@ func xClaimArgs(a *XClaimArgs) []interface{} {
 
 // xTrim If approx is true, add the "~" parameter, otherwise it is the default "=" (redis default).
 // example:
-//		XTRIM key MAXLEN/MINID threshold LIMIT limit.
-//		XTRIM key MAXLEN/MINID ~ threshold LIMIT limit.
+//
+//	XTRIM key MAXLEN/MINID threshold LIMIT limit.
+//	XTRIM key MAXLEN/MINID ~ threshold LIMIT limit.
+//
 // The redis-server version is lower than 6.2, please set limit to 0.
 func (c cmdable) xTrim(
 	ctx context.Context, key, strategy string,
@@ -2298,6 +2300,7 @@ func (c cmdable) ZAddXX(ctx context.Context, key string, members ...*Z) *IntCmd 
 
 // ZAddCh Redis `ZADD key CH score member [score member ...]` command.
 // Deprecated: Use
+//
 //		client.ZAddArgs(ctx, ZAddArgs{
 //			Ch: true,
 //			Members: []Z,
@@ -2311,6 +2314,7 @@ func (c cmdable) ZAddCh(ctx context.Context, key string, members ...*Z) *IntCmd 
 
 // ZAddNXCh Redis `ZADD key NX CH score member [score member ...]` command.
 // Deprecated: Use
+//
 //		client.ZAddArgs(ctx, ZAddArgs{
 //			NX: true,
 //			Ch: true,
@@ -2326,6 +2330,7 @@ func (c cmdable) ZAddNXCh(ctx context.Context, key string, members ...*Z) *IntCm
 
 // ZAddXXCh Redis `ZADD key XX CH score member [score member ...]` command.
 // Deprecated: Use
+//
 //		client.ZAddArgs(ctx, ZAddArgs{
 //			XX: true,
 //			Ch: true,
@@ -2341,6 +2346,7 @@ func (c cmdable) ZAddXXCh(ctx context.Context, key string, members ...*Z) *IntCm
 
 // ZIncr Redis `ZADD key INCR score member` command.
 // Deprecated: Use
+//
 //		client.ZAddArgsIncr(ctx, ZAddArgs{
 //			Members: []Z,
 //		})
@@ -2353,6 +2359,7 @@ func (c cmdable) ZIncr(ctx context.Context, key string, member *Z) *FloatCmd {
 
 // ZIncrNX Redis `ZADD key NX INCR score member` command.
 // Deprecated: Use
+//
 //		client.ZAddArgsIncr(ctx, ZAddArgs{
 //			NX: true,
 //			Members: []Z,
@@ -2367,6 +2374,7 @@ func (c cmdable) ZIncrNX(ctx context.Context, key string, member *Z) *FloatCmd {
 
 // ZIncrXX Redis `ZADD key XX INCR score member` command.
 // Deprecated: Use
+//
 //		client.ZAddArgsIncr(ctx, ZAddArgs{
 //			XX: true,
 //			Members: []Z,
@@ -2488,11 +2496,13 @@ func (c cmdable) ZPopMin(ctx context.Context, key string, count ...int64) *ZSlic
 
 // ZRangeArgs is all the options of the ZRange command.
 // In version> 6.2.0, you can replace the(cmd):
-//		ZREVRANGE,
-//		ZRANGEBYSCORE,
-//		ZREVRANGEBYSCORE,
-//		ZRANGEBYLEX,
-//		ZREVRANGEBYLEX.
+//
+//	ZREVRANGE,
+//	ZRANGEBYSCORE,
+//	ZREVRANGEBYSCORE,
+//	ZRANGEBYLEX,
+//	ZREVRANGEBYLEX.
+//
 // Please pay attention to your redis-server version.
 //
 // Rev, ByScore, ByLex and Offset+Count options require redis-server 6.2.0 and higher.
@@ -2897,7 +2907,7 @@ func (c cmdable) ClientKill(ctx context.Context, ipPort string) *StatusCmd {
 
 // ClientKillByFilter is new style syntax, while the ClientKill is old
 //
-//   CLIENT KILL <option> [value] ... <option> [value]
+//	CLIENT KILL <option> [value] ... <option> [value]
 func (c cmdable) ClientKillByFilter(ctx context.Context, keys ...string) *IntCmd {
 	args := make([]interface{}, 2+len(keys))
 	args[0] = "client"

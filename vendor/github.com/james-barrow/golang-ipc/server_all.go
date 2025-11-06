@@ -251,13 +251,11 @@ func (s *Server) write() {
 	}
 }
 
-
 // getStatus - get the current status of the connection
 func (s *Server) getStatus() Status {
 
 	return s.status
 }
-
 
 // StatusCode - returns the current connection status
 func (s *Server) StatusCode() Status {

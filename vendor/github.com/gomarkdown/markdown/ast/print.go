@@ -158,7 +158,7 @@ func printRecur(w io.Writer, node Node, prefix string, depth int) {
 		}
 		printDefault(w, indent, typeName, content)
 	case *CodeBlock:
-		printDefault(w, indent, typeName + ":" + string(v.Info), content)
+		printDefault(w, indent, typeName+":"+string(v.Info), content)
 	default:
 		printDefault(w, indent, typeName, content)
 	}

@@ -663,26 +663,26 @@ func (c *Client) pubSub() *PubSub {
 // subscription may not be active immediately. To force the connection to wait,
 // you may call the Receive() method on the returned *PubSub like so:
 //
-//    sub := client.Subscribe(queryResp)
-//    iface, err := sub.Receive()
-//    if err != nil {
-//        // handle error
-//    }
+//	sub := client.Subscribe(queryResp)
+//	iface, err := sub.Receive()
+//	if err != nil {
+//	    // handle error
+//	}
 //
-//    // Should be *Subscription, but others are possible if other actions have been
-//    // taken on sub since it was created.
-//    switch iface.(type) {
-//    case *Subscription:
-//        // subscribe succeeded
-//    case *Message:
-//        // received first message
-//    case *Pong:
-//        // pong received
-//    default:
-//        // handle error
-//    }
+//	// Should be *Subscription, but others are possible if other actions have been
+//	// taken on sub since it was created.
+//	switch iface.(type) {
+//	case *Subscription:
+//	    // subscribe succeeded
+//	case *Message:
+//	    // received first message
+//	case *Pong:
+//	    // pong received
+//	default:
+//	    // handle error
+//	}
 //
-//    ch := sub.Channel()
+//	ch := sub.Channel()
 func (c *Client) Subscribe(ctx context.Context, channels ...string) *PubSub {
 	pubsub := c.pubSub()
 	if len(channels) > 0 {

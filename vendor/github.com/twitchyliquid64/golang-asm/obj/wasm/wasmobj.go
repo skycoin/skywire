@@ -6,13 +6,14 @@ package wasm
 
 import (
 	"bytes"
-	"github.com/twitchyliquid64/golang-asm/obj"
-	"github.com/twitchyliquid64/golang-asm/objabi"
-	"github.com/twitchyliquid64/golang-asm/sys"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
+
+	"github.com/twitchyliquid64/golang-asm/obj"
+	"github.com/twitchyliquid64/golang-asm/objabi"
+	"github.com/twitchyliquid64/golang-asm/sys"
 )
 
 var Register = map[string]int16{

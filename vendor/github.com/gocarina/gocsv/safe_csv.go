@@ -23,14 +23,14 @@ func NewSafeCSVWriter(original *csv.Writer) *SafeCSVWriter {
 	}
 }
 
-//Override write
+// Override write
 func (w *SafeCSVWriter) Write(row []string) error {
 	w.m.Lock()
 	defer w.m.Unlock()
 	return w.Writer.Write(row)
 }
 
-//Override flush
+// Override flush
 func (w *SafeCSVWriter) Flush() {
 	w.m.Lock()
 	w.Writer.Flush()

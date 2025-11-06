@@ -9,8 +9,9 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 
 	wasmtinygo "github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo"
 	"github.com/skycoin/skycoin/src/skycoin-web/src/gui"

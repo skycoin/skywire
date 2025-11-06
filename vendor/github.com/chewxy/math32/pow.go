@@ -13,6 +13,7 @@ func isOddInt(x float32) bool {
 // Pow returns x**y, the base-x exponential of y.
 //
 // Special cases are (in order):
+//
 //	Pow(x, ±0) = 1 for any x
 //	Pow(1, y) = 1 for any y
 //	Pow(x, 1) = x for any x

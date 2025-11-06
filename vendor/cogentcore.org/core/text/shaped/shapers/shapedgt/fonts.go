@@ -29,5 +29,3 @@ func (sh *Shaper) FontList() []fonts.Info {
 	}
 	return fi
 }
-
-

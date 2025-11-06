@@ -1,7 +1,7 @@
 /*
 Package html implements HTML renderer of parsed markdown document.
 
-Configuring and customizing a renderer
+# Configuring and customizing a renderer
 
 A renderer can be configured with multiple options:
 

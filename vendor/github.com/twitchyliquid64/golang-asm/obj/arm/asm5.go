@@ -31,12 +31,13 @@
 package arm
 
 import (
-	"github.com/twitchyliquid64/golang-asm/obj"
-	"github.com/twitchyliquid64/golang-asm/objabi"
 	"fmt"
 	"log"
 	"math"
 	"sort"
+
+	"github.com/twitchyliquid64/golang-asm/obj"
+	"github.com/twitchyliquid64/golang-asm/objabi"
 )
 
 // ctxt5 holds state while assembling a single function.

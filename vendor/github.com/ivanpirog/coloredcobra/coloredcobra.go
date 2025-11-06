@@ -6,27 +6,23 @@
 //
 // 1. Insert in cmd/root.go file of your project :
 //
-//    import cc "github.com/ivanpirog/coloredcobra"
-//
+//	import cc "github.com/ivanpirog/coloredcobra"
 //
 // 2. Put the following code to the beginning of the Execute() function:
 //
-//    cc.Init(&cc.Config{
-//        RootCmd:    rootCmd,
-//        Headings:   cc.Bold + cc.Underline,
-//        Commands:   cc.Yellow + cc.Bold,
-//        ExecName:   cc.Bold,
-//        Flags:      cc.Bold,
-//    })
-//
+//	cc.Init(&cc.Config{
+//	    RootCmd:    rootCmd,
+//	    Headings:   cc.Bold + cc.Underline,
+//	    Commands:   cc.Yellow + cc.Bold,
+//	    ExecName:   cc.Bold,
+//	    Flags:      cc.Bold,
+//	})
 //
 // 3. Build & execute your code.
-//
 //
 // Copyright © 2022 Ivan Pirog <ivan.pirog@gmail.com>.
 // Released under the MIT license.
 // Project home: https://github.com/ivanpirog/coloredcobra
-//
 package coloredcobra
 
 import (
@@ -43,16 +39,16 @@ import (
 //
 // Example:
 //
-//     c := &cc.Config{
-//        RootCmd:       rootCmd,
-//        Headings:      cc.HiWhite + cc.Bold + cc.Underline,
-//        Commands:      cc.Yellow + cc.Bold,
-//        CmdShortDescr: cc.Cyan,
-//        ExecName:      cc.Bold,
-//        Flags:         cc.Bold,
-//        Aliases:       cc.Bold,
-//        Example:       cc.Italic,
-//     }
+//	c := &cc.Config{
+//	   RootCmd:       rootCmd,
+//	   Headings:      cc.HiWhite + cc.Bold + cc.Underline,
+//	   Commands:      cc.Yellow + cc.Bold,
+//	   CmdShortDescr: cc.Cyan,
+//	   ExecName:      cc.Bold,
+//	   Flags:         cc.Bold,
+//	   Aliases:       cc.Bold,
+//	   Example:       cc.Italic,
+//	}
 type Config struct {
 	RootCmd         *cobra.Command
 	Headings        uint8

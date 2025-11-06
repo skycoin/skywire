@@ -72,7 +72,7 @@ var shellCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cli := dmsgpty.DefaultCLI()
 		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
-		port, _ := strconv.ParseUint(ptyPort, 10, 16)  //nolint:errcheck
+		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint:errcheck
 		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
 		defer cancel()
 		return cli.StartRemotePty(ctx, addr, uint16(port), dmsgpty.DefaultCmd)

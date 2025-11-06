@@ -9,13 +9,14 @@ package dwarf
 
 import (
 	"bytes"
-	"github.com/twitchyliquid64/golang-asm/objabi"
 	"errors"
 	"fmt"
 	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/twitchyliquid64/golang-asm/objabi"
 )
 
 // InfoPrefix is the prefix for all the symbols containing DWARF info entries.

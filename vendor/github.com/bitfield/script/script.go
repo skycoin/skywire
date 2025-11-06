@@ -720,7 +720,7 @@ func (p *Pipe) Join() *Pipe {
 // The exact dialect of JQ supported is that provided by
 // [github.com/itchyny/gojq], whose documentation explains the differences
 // between it and standard JQ.
-// 
+//
 // [JSONLines]: https://jsonlines.org/
 func (p *Pipe) JQ(query string) *Pipe {
 	parsedQuery, err := gojq.Parse(query)

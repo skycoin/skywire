@@ -31,11 +31,12 @@
 package arm64
 
 import (
+	"math"
+
 	"github.com/twitchyliquid64/golang-asm/obj"
 	"github.com/twitchyliquid64/golang-asm/objabi"
 	"github.com/twitchyliquid64/golang-asm/src"
 	"github.com/twitchyliquid64/golang-asm/sys"
-	"math"
 )
 
 var complements = []obj.As{

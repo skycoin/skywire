@@ -548,7 +548,7 @@ var DefaultBigText = BigTextPrinter{
        
       `,
 
-	  "@": ` ██████  
+		"@": ` ██████  
 ██    ██ 
 ██ ██ ██ 
 ██ ██ ██ 

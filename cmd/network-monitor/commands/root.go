@@ -134,11 +134,11 @@ var RootCmd = &cobra.Command{
 		logger.WithField("addr", addr).Info("Serving Network Monitor API...")
 
 		pubKey := cipher.PubKey{}
-		pubKey.Set(pk)  //nolint:errcheck
+		pubKey.Set(pk) //nolint:errcheck
 		secKey := cipher.SecKey{}
-		secKey.Set(sk)  //nolint:errcheck
+		secKey.Set(sk) //nolint:errcheck
 
-		nmSign, _ := cipher.SignPayload([]byte(pubKey.Hex()), secKey)  //nolint:errcheck
+		nmSign, _ := cipher.SignPayload([]byte(pubKey.Hex()), secKey) //nolint:errcheck
 
 		var nmConfig api.NetworkMonitorConfig
 		nmConfig.CleaningDelay = cleaningDelay

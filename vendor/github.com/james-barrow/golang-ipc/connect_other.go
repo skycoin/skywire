@@ -56,7 +56,7 @@ func (c *Client) dial() error {
 	startTime := time.Now()
 
 	for {
-		
+
 		if c.timeout != 0 {
 
 			if time.Since(startTime).Seconds() > c.timeout {
