@@ -371,15 +371,15 @@ func server(e error) {
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))  //nolint:errcheck
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks))
+		c.Writer.Write([]byte(navlinks))  //nolint:errcheck
 		c.Writer.Flush()
 		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines()  //nolint:errcheck
-		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))
+		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))  //nolint:errcheck
 		c.Writer.Flush()
 		st, err := script.Exec(`skywire cli log st -d ` + wd + `/log_backups -r`).Bytes()
 		if err != nil {
 			log.WithError(err).Error()
-			c.Writer.Write([]byte(err.Error()))
+			c.Writer.Write([]byte(err.Error()))  //nolint:errcheck
 		}
 		c.Writer.Write(ansihtml.ConvertToHTML(st))
 		c.Writer.Flush()

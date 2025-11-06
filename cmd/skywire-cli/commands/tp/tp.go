@@ -385,7 +385,7 @@ var addTpCmd = &cobra.Command{
 				}
 			}
 			dmsgEntries = internal.GetData(cacheFileDmsgD, dmsgdURL+"/dmsg-discovery/entries", cacheFilesAge)
-			dmsgkeys, _ = script.Echo(dmsgEntries).JQ(".[]").Replace(`"`, "").Slice()
+			dmsgkeys, _ = script.Echo(dmsgEntries).JQ(".[]").Replace(`"`, "").Slice()  //nolint:errcheck
 			if transportType == "dmsg" {
 				found := false
 				for i := range dmsgkeys {
@@ -631,19 +631,19 @@ var treeCmd = &cobra.Command{
 		var offlinekeys []string
 		if !noFilterOnline {
 			uts = internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
-			utkeys, _ = script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").Slice()
-			offlinekeys, _ = script.Echo(uts).JQ(".[] | select(.on  | not) | .pk").Replace("\"", "").Slice()
+			utkeys, _ = script.Echo(uts).JQ(".[] | select(.on) | .pk").Replace("\"", "").Slice()  //nolint:errcheck
+			offlinekeys, _ = script.Echo(uts).JQ(".[] | select(.on  | not) | .pk").Replace("\"", "").Slice()  //nolint:errcheck
 		}
 
 		sortedEdgeKeys, _ = script.Echo(tps).JQ(".[].edges[]").Freq().Column(2).Slice()
 
 		if isStats {
 			fmt.Printf("Unique keys in Transport Discovery: %d\n", len(sortedEdgeKeys))
-			tpcount, _ := script.Echo(tps).JQ(".[].type").CountLines()
+			tpcount, _ := script.Echo(tps).JQ(".[].type").CountLines()  //nolint:errcheck
 			fmt.Printf("Count of transports: %v\n", tpcount)
-			tptypes, _ := script.Echo(tps).JQ(".[].type").Freq().String()
+			tptypes, _ := script.Echo(tps).JQ(".[].type").Freq().String()  //nolint:errcheck
 			fmt.Printf("types of transports: \n%v\n", tptypes)
-			vcount, _ := script.Echo(tps).JQ(".[].edges[]").Freq().String()
+			vcount, _ := script.Echo(tps).JQ(".[].edges[]").Freq().String()  //nolint:errcheck
 			fmt.Printf("Visors by transport count:\n%v\n", vcount)
 			return
 		}
@@ -732,7 +732,7 @@ var treeCmd = &cobra.Command{
 				if n == 0 {
 					tpid = ""
 				} else {
-					tpid, _ = script.Echo(tps).JQ(".[] | select(.edges | index(" + k + ") and index(" + m + ")) | .t_id + \" \" + .type").First(1).String()
+					tpid, _ = script.Echo(tps).JQ(".[] | select(.edges | index(" + k + ") and index(" + m + ")) | .t_id + \" \" + .type").First(1).String()  //nolint:errcheck
 				}
 				leveledList = append(leveledList, pterm.LeveledListItem{Level: n, Text: strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%s %s", filterOnlineStatus(utkeys, offlinekeys, m), strings.Repeat(" ", func() int {
 					indent := padSpaces - 4 - n*2
@@ -745,7 +745,7 @@ var treeCmd = &cobra.Command{
 			}
 		}
 		lvl(1, edgeKey)
-		pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render()
+		pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render()  //nolint:errcheck
 
 		for _, edgeKey := range sortedEdgeKeys {
 			found := false
@@ -765,7 +765,7 @@ var treeCmd = &cobra.Command{
 				usedkeys = append(usedkeys, edgeKey)
 				lvl(1, edgeKey)
 				if len(leveledList) > 1 {
-					pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render()
+					pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render()  //nolint:errcheck
 				}
 				if lastNode != "" {
 					pterm.Println(pterm.Red("No route from source to dest"))

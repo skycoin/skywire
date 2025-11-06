@@ -198,14 +198,14 @@ var listCmd = &cobra.Command{
 		// --- Fetch SD ---
 		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
-			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout()
+			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout()  //nolint:errcheck
 			return
 		}
 
 		// --- If JSON output requested ---
 		if jsonOutput {
 			var list []services.Service
-			json.Unmarshal([]byte(sds), &list)
+			json.Unmarshal([]byte(sds), &list)  //nolint:errcheck
 			var b bytes.Buffer
 			internal.PrintOutput(cmd.Flags(), list, b.String())
 			return

@@ -219,7 +219,7 @@ func init() {
 	//show all flags on help
 	if os.Getenv("UNHIDEFLAGS") != "1" {
 		for _, j := range gHiddenFlags {
-			genConfigCmd.Flags().MarkHidden(j)
+			genConfigCmd.Flags().MarkHidden(j)  //nolint:errcheck
 		}
 	}
 }
@@ -270,7 +270,7 @@ var genConfigCmd = &cobra.Command{
 				f := cmd.Flags().Lookup(j)
 				f.Hidden = false
 			}
-			cmd.Flags().MarkHidden("all")
+			cmd.Flags().MarkHidden("all")  //nolint:errcheck
 			internal.Catch(cmd.Flags(), cmd.Help())
 			os.Exit(0)
 		}
@@ -960,10 +960,10 @@ var genConfigCmd = &cobra.Command{
 		//print config to stdout, omit logging messages, exit
 		if isStdout {
 			if isSquash {
-				script.Echo(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(j), " ", ""), "\n", ""), "\t", "")).Stdout()
+				script.Echo(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(j), " ", ""), "\n", ""), "\t", "")).Stdout()  //nolint:errcheck
 				return
 			}
-			script.Echo(string(j)).Stdout()
+			script.Echo(string(j)).Stdout()  //nolint:errcheck
 			return
 		}
 		//hide the printing of the config to the terminal
