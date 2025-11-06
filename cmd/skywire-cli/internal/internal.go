@@ -30,6 +30,7 @@ func Catch(cmdFlags *pflag.FlagSet, err error) {
 }
 
 // PrintFatalError prints errors for skywire-cli commands packages
+//
 //nolint:errcheck
 func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
 	isJSON, _ := cmdFlags.GetBool(JSONString)
@@ -58,6 +59,7 @@ func PrintRPCError(cmdFlags *pflag.FlagSet, err error) {
 }
 
 // PrintError prints errors for skywire-cli commands packages
+//
 //nolint:errcheck
 func PrintError(cmdFlags *pflag.FlagSet, err error) {
 	isJSON, _ := cmdFlags.GetBool(JSONString)
@@ -99,8 +101,9 @@ type CLIOutput struct {
 	Err    string      `json:"error,omitempty"`
 }
 
-//nolint:errcheck
 // PrintOutput prints either the normal output or the json output as per the global `--json` flag
+//
+//nolint:errcheck
 func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON {
@@ -122,6 +125,7 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 }
 
 // GetData fetches data from the specified URL via http or from cached file
+//
 //nolint:errcheck
 func GetData(cachefile, thisurl string, cacheFilesAge int) (thisdata string) {
 	var shouldfetch bool
