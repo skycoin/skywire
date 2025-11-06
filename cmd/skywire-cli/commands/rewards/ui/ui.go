@@ -151,7 +151,7 @@ func main() {
 				if err != nil {
 					log.Fatalf("Error fetching data: %v", err)
 				}
-				defer resp.Body.Close()  //nolint:errcheck
+				defer resp.Body.Close() //nolint:errcheck,gosec
 
 				if err := json.NewDecoder(resp.Body).Decode(&rewards); err != nil {
 					log.Fatalf("Error decoding JSON: %v", err)
@@ -169,7 +169,7 @@ func main() {
 			txid := strings.Replace(httpGetString("/skycoin-rewards/hist/"+string(r.Date)+".txt"), "\n", "", -1)
 			if txid != "" {
 				core.NewText(pg).SetText(`TXID: ` + txid)
-				//nolint:errcheck  //nolint:errcheck
+				//nolint:errcheck  //nolint:errcheck,gosec
 				htmlcore.ReadHTMLString(ctx, pg, `<a href="https://explorer.skycoin.com/app/transaction/`+txid+`">`+txid+`</a>`)
 			} else {
 				core.NewText(pg).SetText(`Rewards not yet distributed`)
@@ -204,8 +204,8 @@ func main() {
 	}
 
 	fourth, tb := ts.NewTab("Log Collection")
-	tb.SetIcon(icons.History)  //nolint:errcheck
-	htmlcore.ReadHTMLString(ctx, fourth, "<a href='/log-collection'>Log Collection</a>")  //nolint:errcheck
+	tb.SetIcon(icons.History)                                                            //nolint:errcheck,gosec
+	htmlcore.ReadHTMLString(ctx, fourth, "<a href='/log-collection'>Log Collection</a>") //nolint:errcheck,gosec
 	fifth, tb := ts.NewTab("Survey Index")
 	tb.SetIcon(icons.History)
 	if runtime.GOOS == "js" {
@@ -213,8 +213,8 @@ func main() {
 		resp, err := http.Get("/log-collection/json")
 		if err != nil {
 			log.Fatalf("Error fetching data: %v", err)
-		}  //nolint:errcheck
-		defer resp.Body.Close()  //nolint:errcheck
+		} //nolint:errcheck,gosec
+		defer resp.Body.Close() //nolint:errcheck,gosec
 
 		if err := json.NewDecoder(resp.Body).Decode(&nodes); err != nil {
 			log.Fatalf("Error decoding JSON: %v", err)
@@ -322,7 +322,7 @@ func httpGetString(url string) string {
 	//nolint:gosec
 	resp, err := http.Get(url)
 	if err == nil {
-		//nolint:errcheck
+		//nolint:errcheck,gosec
 		defer resp.Body.Close()
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {

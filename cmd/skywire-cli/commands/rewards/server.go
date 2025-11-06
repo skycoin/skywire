@@ -325,7 +325,7 @@ func server(e error) {
 		}
 		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()  //nolint:errcheck
 		_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())  //nolint:errcheck
-		res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String()
+		res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String()  //nolint:errcheck
 		os.Remove(tmpFile.Name())  //nolint:errcheck
 		c.Writer.Write([]byte(fmt.Sprintf("%s\n", res)))  //nolint:errcheck
 		c.Writer.Flush()
@@ -353,7 +353,7 @@ func server(e error) {
 				c.Writer.Write(ansihtml.ConvertToHTML(newContent))  //nolint:errcheck
 				c.Writer.Flush()
 			}
-			finished, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(1).MatchRegexp(regexp.MustCompile(".*finished.*")).String()
+			finished, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(1).MatchRegexp(regexp.MustCompile(".*finished.*")).String()  //nolint:errcheck
 			if finished != "" {
 				break
 			}
@@ -414,13 +414,13 @@ func server(e error) {
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))  //nolint:errcheck
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks))
+		c.Writer.Write([]byte(navlinks))  //nolint:errcheck
 		c.Writer.Flush()
 		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines()  //nolint:errcheck
-		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))
+		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))  //nolint:errcheck
 		c.Writer.Flush()
 		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -rup ` + c.Param("pk")).Bytes()  //nolint:errcheck
-		c.Writer.Write(ansihtml.ConvertToHTML(st))
+		c.Writer.Write(ansihtml.ConvertToHTML(st))  //nolint:errcheck
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink))
 		c.Writer.Flush()
@@ -437,7 +437,7 @@ func server(e error) {
 			l += "<p style='color:blue'>Blue = Verified Bandwidth</p>"
 			l += "<p style='color:yellow'>Yellow = Transport bandwidth inconsistent</p>"
 			l += "<p style='color:red'>Red = Error: sent or received is zero</p>"
-			tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String()
+			tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String()  //nolint:errcheck
 			l += fmt.Sprintf("%s\n", ansihtml.ConvertToHTML([]byte(tp)))
 			l += htmltoplink
 			l += htmlend

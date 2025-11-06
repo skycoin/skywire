@@ -23,12 +23,13 @@ func init() {
 	stCmd.Flags().BoolVarP(&hideErr, "noerr", "r", false, "hide error logging from output")
 	stCmd.Flags().BoolVarP(&showUT, "ut", "u", false, "show uptime percentage for the past two days and current online status")
 }
-  //nolint:errcheck
+
+//nolint:errcheck
 var stCmd = &cobra.Command{
 	Use:   "st",
 	Short: "survey tree",
 	Run: func(_ *cobra.Command, _ []string) {
-		if pubKey != "" {  //nolint:errcheck
+		if pubKey != "" { //nolint:errcheck
 			pks := strings.Split(pubKey, ",")
 			for _, pk := range pks {
 				var pK cipher.PubKey
@@ -44,7 +45,9 @@ var stCmd = &cobra.Command{
 }
 
 // TODO: fix gocyclo error.
-//  //nolint:errcheck
+//
+//	//nolint:errcheck
+//
 //gocyclo:ignore
 func makeTree() {
 	utFileInfo, utFileInfoErr := os.Stat("/tmp/ut.json")
@@ -113,7 +116,7 @@ func makeTree() {
 			}
 			if filepath.Base(kid) == "health.json" {
 				fileContents, _ := script.File(kid).String()
-				fileInfo, _ := os.Stat(kid)  //nolint:errcheck
+				fileInfo, _ := os.Stat(kid) //nolint:errcheck
 				if time.Since(fileInfo.ModTime()) < time.Hour {
 					coloredFile = pterm.Green(filepath.Base(kid))
 				} else {
@@ -121,10 +124,10 @@ func makeTree() {
 				}
 				if filepath.Base(kid) == "health.json" {
 					nodes = append(nodes, pterm.TreeNode{Text: fmt.Sprintf("%s     Age: %s %s", coloredFile, time.Since(fileInfo.ModTime()).Truncate(time.Second).String(), strings.TrimSuffix(fileContents, "\n"))})
-				}  //nolint:errcheck
+				} //nolint:errcheck
 				continue
 			}
-			if filepath.Base(kid) == "node-info.json" {  //nolint:errcheck
+			if filepath.Base(kid) == "node-info.json" { //nolint:errcheck
 				coloredFile = pterm.Blue(filepath.Base(kid))
 				ver, err := script.File(kid).JQ(".skywire_version").String()
 				if err != nil {
@@ -143,5 +146,5 @@ func makeTree() {
 		nodes1 = append(nodes1, pterm.TreeNode{Text: pterm.Cyan(dirNode), Children: nodes})
 	}
 	tree = pterm.TreeNode{Text: pterm.Cyan("Index"), Children: nodes1}
-	pterm.DefaultTree.WithRoot(tree).Render()  //nolint:errcheck
+	pterm.DefaultTree.WithRoot(tree).Render() //nolint:errcheck
 }

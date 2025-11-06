@@ -23,13 +23,13 @@ var tpCmd = &cobra.Command{
 		if err != nil {
 			return
 		}
-		defer os.Remove(tmpFile.Name())  //nolint:errcheck  //nolint:errcheck
+		defer os.Remove(tmpFile.Name()) //nolint:errcheck  //nolint:errcheck
 		if err := tmpFile.Close(); err != nil {
 			return
 		}
-		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()  //nolint:errcheck
-		_, _ = script.Echo(tplogscript).WriteFile(tmpFile.Name())  //nolint:errcheck
-		_, _ = script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _tplogs ` + lcDir + `'`).Stdout()  //nolint:errcheck
+		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()                                      //nolint:errcheck
+		_, _ = script.Echo(tplogscript).WriteFile(tmpFile.Name())                                      //nolint:errcheck
+		_, _ = script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _tplogs ` + lcDir + `'`).Stdout() //nolint:errcheck
 
 	},
 }

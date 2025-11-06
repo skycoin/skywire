@@ -55,11 +55,11 @@ var RootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		dmsgclientkeys := internal.GetData(cacheFileDMSGD, mdURL+"/dmsg-discovery/entries", cacheFilesAge)
 		if isStats {
-			stats, _ := script.Echo(dmsgclientkeys).JQ(".[]").CountLines()  //nolint:errcheck
+			stats, _ := script.Echo(dmsgclientkeys).JQ(".[]").CountLines() //nolint:errcheck
 			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d dmsg clients\n", stats), fmt.Sprintf("%d dmsg clients\n", stats))
 			return
 		}
-		script.Echo(dmsgclientkeys).JQ(".[]").Replace("\"", "").Freq().Column(2).Stdout()
+		script.Echo(dmsgclientkeys).JQ(".[]").Replace("\"", "").Freq().Column(2).Stdout() //nolint:errcheck
 	},
 }
 

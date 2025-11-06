@@ -156,7 +156,7 @@ func init() {
 	}
 	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys\033[0m")
 	if scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}") != "0000000000000000000000000000000000000000000000000000000000000000" {
-		//nolint:errcheck
+		//nolint:errcheck,gosec
 		sk.Set(scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}"))
 	}
 	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
@@ -219,7 +219,7 @@ func init() {
 	//show all flags on help
 	if os.Getenv("UNHIDEFLAGS") != "1" {
 		for _, j := range gHiddenFlags {
-			genConfigCmd.Flags().MarkHidden(j)  //nolint:errcheck
+			genConfigCmd.Flags().MarkHidden(j) //nolint:errcheck,gosec
 		}
 	}
 }
@@ -270,7 +270,7 @@ var genConfigCmd = &cobra.Command{
 				f := cmd.Flags().Lookup(j)
 				f.Hidden = false
 			}
-			cmd.Flags().MarkHidden("all")  //nolint:errcheck
+			cmd.Flags().MarkHidden("all") //nolint:errcheck,gosec
 			internal.Catch(cmd.Flags(), cmd.Help())
 			os.Exit(0)
 		}
@@ -424,7 +424,7 @@ var genConfigCmd = &cobra.Command{
 					services = servicesConfig.Test
 				}
 			} else {
-				defer res.Body.Close()  //nolint:errcheck
+				defer res.Body.Close() //nolint:errcheck,gosec
 				body, err := io.ReadAll(res.Body)
 				if err != nil {
 					log.WithError(err).Error("Failed to read HTTP response")
@@ -960,10 +960,10 @@ var genConfigCmd = &cobra.Command{
 		//print config to stdout, omit logging messages, exit
 		if isStdout {
 			if isSquash {
-				script.Echo(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(j), " ", ""), "\n", ""), "\t", "")).Stdout()  //nolint:errcheck
+				script.Echo(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(j), " ", ""), "\n", ""), "\t", "")).Stdout() //nolint:errcheck,gosec
 				return
 			}
-			script.Echo(string(j)).Stdout()  //nolint:errcheck
+			script.Echo(string(j)).Stdout() //nolint:errcheck,gosec
 			return
 		}
 		//hide the printing of the config to the terminal
