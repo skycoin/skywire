@@ -284,8 +284,8 @@ func TestConn_TestConn(t *testing.T) {
 		}
 
 		stop := func() {
-			_ = c1.Close()  
-			_ = c2.Close()  
+			_ = c1.Close()
+			_ = c2.Close()
 			_ = rpcL.Close()
 		}
 

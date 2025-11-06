@@ -810,7 +810,7 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 }
 
 // SetRewardAddress implements API
-func (mc *mockRPCClient) SetRewardAddress(p string) (string, error) { //nolint:all
+func (mc *mockRPCClient) SetRewardAddress(p string) (string, error) {
 	return "", nil
 }
 
@@ -999,7 +999,7 @@ func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 }
 
 // SetAppKillswitch implements API.
-func (mc *mockRPCClient) SetAppKillswitch(appName string, killswitch bool) error { //nolint:all
+func (mc *mockRPCClient) SetAppKillswitch(appName string, killswitch bool) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
@@ -1014,7 +1014,7 @@ func (mc *mockRPCClient) SetAppKillswitch(appName string, killswitch bool) error
 }
 
 // SetAppSecure implements API.
-func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error { //nolint:all
+func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
@@ -1029,7 +1029,7 @@ func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error { //n
 }
 
 // SetAppAddress implements API.
-func (mc *mockRPCClient) SetAppAddress(appName string, address string) error { //nolint:all
+func (mc *mockRPCClient) SetAppAddress(appName string, address string) error {
 	return mc.do(true, func() error {
 		const chatName = "skychat"
 
@@ -1059,7 +1059,7 @@ func (mc *mockRPCClient) SetAppDNS(string, string) error {
 }
 
 // DoCustomSetting implents API.
-func (mc *mockRPCClient) DoCustomSetting(appName string, customSetting map[string]any) error { //nolint:all
+func (mc *mockRPCClient) DoCustomSetting(appName string, customSetting map[string]any) error {
 	return mc.do(true, func() error {
 		for i := range mc.o.Apps {
 			if mc.o.Apps[i].Name == appName {
@@ -1316,12 +1316,12 @@ func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect implements API.
-func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) { //nolint:all
+func (mc *mockRPCClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
 	return uuid.UUID{}, nil
 }
 
 // Disconnect implements API.
-func (mc *mockRPCClient) Disconnect(id uuid.UUID) error { //nolint:all
+func (mc *mockRPCClient) Disconnect(id uuid.UUID) error {
 	return nil
 }
 
@@ -1331,12 +1331,12 @@ func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
 }
 
 // RegisterHTTPPort implements API.
-func (mc *mockRPCClient) RegisterHTTPPort(localPort int) error { //nolint:all
+func (mc *mockRPCClient) RegisterHTTPPort(localPort int) error {
 	return nil
 }
 
 // DeregisterHTTPPort implements API.
-func (mc *mockRPCClient) DeregisterHTTPPort(localPort int) error { //nolint:all
+func (mc *mockRPCClient) DeregisterHTTPPort(localPort int) error {
 	return nil
 }
 
