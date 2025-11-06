@@ -71,6 +71,7 @@ func init() {
 	rootCmd.SetUsageTemplate(help)
 	rootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help menu")
 	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	//nolint:errcheck
 	rootCmd.PersistentFlags().MarkHidden("help")
 }
 
@@ -87,6 +88,7 @@ func main() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
+	//nolint:errcheck
 	rootCmd.Execute()
 }
 
