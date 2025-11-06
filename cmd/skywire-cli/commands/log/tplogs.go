@@ -23,12 +23,12 @@ var tpCmd = &cobra.Command{
 		if err != nil {
 			return
 		}
-		defer os.Remove(tmpFile.Name())
+		defer os.Remove(tmpFile.Name())  //nolint:errcheck  //nolint:errcheck
 		if err := tmpFile.Close(); err != nil {
 			return
 		}
 		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()
-		_, _ = script.Echo(tplogscript).WriteFile(tmpFile.Name())
+		_, _ = script.Echo(tplogscript).WriteFile(tmpFile.Name())  //nolint:errcheck
 		_, _ = script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _tplogs ` + lcDir + `'`).Stdout()
 
 	},
@@ -44,7 +44,7 @@ _tplogs() {
         while read -r _j; do
             echo "$_date $_j"
         done < "$_i"
-    done | sort | uniq | tac | grep -v "tp_id,recv,sent,time_stamp" | grep -v " .$" | grep -E '^[^,]*,[^,]*,[^,]*,[^,]*$' | awk -F'[ ,]' '
+    done | sort | uniq | tac | grep -v "tp_id,recv,sent,time_stamp" | grep -v " .$" | grep -E '^[^,]*,[^,]*,[^,]*,[^,]*$' | awk -F'[ ,]' '  //nolint:errcheck
         BEGIN { prev_tp_id = ""; print_next = 0 }
         {
             if (prev_tp_id != "" && $2 == prev_tp_id) {
