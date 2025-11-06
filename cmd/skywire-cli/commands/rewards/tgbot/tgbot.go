@@ -90,7 +90,8 @@ var RootCmd = &cobra.Command{
 							log.Printf("Error getting statistics: %v", err)
 							continue
 						}
-						os.Remove(tmpFile.Name())  //nolint:errcheck
+						//nolint:errcheck,gosec
+						os.Remove(tmpFile.Name())
 
 						dateforlink, err := script.Echo(stats).First(1).Replace("date: ", "").String()
 						if err != nil {

@@ -323,7 +323,7 @@ func server(e error) {
 		if err := tmpFile.Close(); err != nil {
 			return
 		}
-		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()
+		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()  //nolint:errcheck
 		_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())  //nolint:errcheck
 		res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String()
 		os.Remove(tmpFile.Name())  //nolint:errcheck
@@ -393,7 +393,7 @@ func server(e error) {
 		c.Writer.Header().Set("Server", "")
 		if c.Param("pk") == "" {
 			c.Writer.WriteHeader(http.StatusBadRequest)
-			c.Writer.Write([]byte("must specify public key"))
+			c.Writer.Write([]byte("must specify public key"))  //nolint:errcheck
 			c.Writer.Flush()
 			return
 		}
@@ -403,7 +403,7 @@ func server(e error) {
 			err := pK.Set(pk)
 			if err != nil {
 				c.Writer.WriteHeader(http.StatusBadRequest)
-				c.Writer.Write([]byte("invalid public key: " + pk + " " + err.Error()))
+				c.Writer.Write([]byte("invalid public key: " + pk + " " + err.Error()))  //nolint:errcheck
 				c.Writer.Flush()
 				return
 			}
@@ -412,7 +412,7 @@ func server(e error) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))  //nolint:errcheck
 		c.Writer.Flush()
 		c.Writer.Write([]byte(navlinks))
 		c.Writer.Flush()
@@ -662,7 +662,7 @@ func server(e error) {
 			return
 		}
 		c.Writer.Header().Set("Server", "")
-		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice()
+		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice()  //nolint:errcheck
 		for _, f1 := range f {
 			g, err := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 			if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
@@ -706,7 +706,7 @@ func server(e error) {
 		}
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Content-Type", "text/plain")
-		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice()
+		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice()  //nolint:errcheck
 		for _, f1 := range f {
 			g, _ := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 			if g != "" && g != "\n" {

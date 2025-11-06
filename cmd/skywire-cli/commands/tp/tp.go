@@ -828,7 +828,7 @@ var treeCmd = &cobra.Command{
 				}
 				if len(routeSlice) > 0 && leveledList[i].Level == (listLevel-1) {
 					rStepTpid, _ := script.Echo(fmt.Sprintf("%v", leveledList[i].Text)).ReplaceRegexp(re, " ").Column(2).Replace("\n", "").String()  //nolint:errcheck
-					rStepTp, _ := script.Echo(tps).JQ(".[] | select(.t_id == "+`"`+strings.TrimRight(rStepTpid, "\n")+`"`+")").Replace("\n", "").String()
+					rStepTp, _ := script.Echo(tps).JQ(".[] | select(.t_id == "+`"`+strings.TrimRight(rStepTpid, "\n")+`"`+")").Replace("\n", "").String()  //nolint:errcheck
 					routeSlice = append(routeSlice, rStepTp)
 					listLevel = leveledList[i].Level
 				}
@@ -863,7 +863,7 @@ var treeCmd = &cobra.Command{
 			*/
 		}
 		if rootNode == "" && !onlyOnline {
-			l, _ := script.Echo(tps).JQ(".[] | select(.edges[0] == .edges[1]) | .edges[0] + \""+strings.Repeat(" ", padSpaces)+"\" + .t_id + \" \" + .type").Replace("\"", "").Slice()
+			l, _ := script.Echo(tps).JQ(".[] | select(.edges[0] == .edges[1]) | .edges[0] + \""+strings.Repeat(" ", padSpaces)+"\" + .t_id + \" \" + .type").Replace("\"", "").Slice()  //nolint:errcheck
 			if len(l) > 0 {
 				pterm.Println(pterm.Red("Self-transports"))
 				for _, m := range l {

@@ -52,7 +52,7 @@ var utCmd = &cobra.Command{
 				return
 			}
 			if isMoreStats {
-				script.Echo(uts).JQ(".[] | select(.on) | .version").Freq().Replace("\"", "").Stdout()
+				script.Echo(uts).JQ(".[] | select(.on) | .version").Freq().Replace("\"", "").Stdout()  //nolint:errcheck
 				return
 			}
 			for _, i := range utKeysOnline {
@@ -66,7 +66,7 @@ var utCmd = &cobra.Command{
 			return
 		}
 		if isMoreStats {
-			script.Echo(uts).JQ(".[] | .version").Freq().Replace("\"", "").Stdout()
+			script.Echo(uts).JQ(".[] | .version").Freq().Replace("\"", "").Stdout()  //nolint:errcheck
 			return
 		}
 

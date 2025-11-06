@@ -225,8 +225,10 @@ var logCmd = &cobra.Command{
 
 func download(ctx context.Context, log *logging.Logger, httpC http.Client, targetPath, fileName, pubkey string, maxSize int64) error {
 	target := fmt.Sprintf("dmsg://%s:80/%s", pubkey, targetPath)
-	file, _ := os.Create(pubkey + "/" + fileName)  //nolint:errcheck
-	defer file.Close()  //nolint:errcheck
+	//nolint:errcheck,gosec
+	file, _ := os.Create(pubkey + "/" + fileName)
+	//nolint:errcheck
+	defer file.Close()
 
 	if err := downloadDmsg(ctx, log, &httpC, file, target, maxSize); err != nil {
 		log.WithError(err).Errorf("The %s for visor %s not available", fileName, pubkey)
