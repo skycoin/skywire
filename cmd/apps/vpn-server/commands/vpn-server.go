@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -11,11 +12,13 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -36,6 +39,7 @@ var (
 )
 
 func init() {
+	launcher.RegisterApp("vpn-server", RunVPNServer)
 	RootCmd.Flags().StringVar(&localPKStr, "pk", "", "local pubkey")
 	RootCmd.Flags().StringVar(&localSKStr, "sk", "", "local seckey")
 	RootCmd.Flags().StringVar(&passcode, "passcode", "", "passcode to authenticate connecting users")
@@ -54,93 +58,123 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	Run: func(_ *cobra.Command, _ []string) {
-		appCl := app.NewClient(nil)
-		defer appCl.Close()
-
-		port := appCl.Config().RoutingPort
-		if appPort != 0 {
-			port = routing.Port(appPort)
-			setAppPort(appCl, port)
-		}
-
-		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-			print(fmt.Sprintf("Failed to output build info: %v\n", err))
-		}
-
-		if runtime.GOOS != "linux" {
-			err := errors.New("OS is not supported")
-			print(err)
-			setAppErr(appCl, err)
-			os.Exit(1)
-		}
-
-		localPK := cipher.PubKey{}
-		if localPKStr != "" {
-			if err := localPK.UnmarshalText([]byte(localPKStr)); err != nil {
-				print(fmt.Sprintf("Invalid local PK: %v\n", err))
-				setAppErr(appCl, err)
-				os.Exit(1)
-			}
-		}
-
-		localSK := cipher.SecKey{}
-		if localSKStr != "" {
-			if err := localSK.UnmarshalText([]byte(localSKStr)); err != nil {
-				print(fmt.Sprintf("Invalid local SK: %v\n", err))
-				setAppErr(appCl, err)
-				os.Exit(1)
-			}
-		}
-
-		osSigs := make(chan os.Signal, 2)
-
-		sigs := []os.Signal{syscall.SIGTERM, syscall.SIGINT}
-		for _, sig := range sigs {
-			signal.Notify(osSigs, sig)
-		}
-
-		l, err := appCl.Listen(netType, port)
-		if err != nil {
-			print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
-			setAppErr(appCl, err)
-			os.Exit(1)
-		}
-
-		srvCfg := vpn.ServerConfig{
-			Passcode:         passcode,
-			Secure:           secure,
-			NetworkInterface: networkIfc,
-		}
-		srv, err := vpn.NewServer(srvCfg, appCl)
-		if err != nil {
-			print(fmt.Sprintf("Error creating VPN server: %v\n", err))
-			setAppErr(appCl, err)
-			os.Exit(1)
-		}
-		defer func() {
-			if err := srv.Close(); err != nil {
-				print(fmt.Sprintf("Error closing server: %v\n", err))
-			}
-		}()
-
-		errCh := make(chan error)
-		go func() {
-			if err := srv.Serve(l); err != nil {
-				errCh <- err
-			}
-
-			close(errCh)
-		}()
-
-		defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-
-		select {
-		case <-osSigs:
-		case err := <-errCh:
-			print(fmt.Sprintf("Error serving: %v\n", err))
+	Run: func(_ *cobra.Command, args []string) {
+		ctx := context.Background()
+		if err := RunVPNServer(ctx, args); err != nil {
+			log.Fatal(err)
 		}
 	},
+}
+
+// RunVPNServer runs the VPN server app logic.
+func RunVPNServer(ctx context.Context, args []string) error {
+	// Parse flags when called via internal launcher
+	if len(args) > 0 {
+		fs := pflag.NewFlagSet("vpn-server", pflag.ContinueOnError)
+		fs.StringVar(&localPKStr, "pk", "", "local pubkey")
+		fs.StringVar(&localSKStr, "sk", "", "local seckey")
+		fs.StringVar(&passcode, "passcode", "", "passcode")
+		fs.StringVar(&networkIfc, "netifc", "", "network interface")
+		fs.BoolVar(&secure, "secure", true, "secure mode")
+		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		if err := fs.Parse(args); err != nil {
+			return fmt.Errorf("failed to parse flags: %w", err)
+		}
+	}
+
+	appCl := app.NewClient(nil)
+	defer appCl.Close()
+
+	port := appCl.Config().RoutingPort
+	if appPort != 0 {
+		port = routing.Port(appPort)
+		setAppPort(appCl, port)
+	}
+
+	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+		print(fmt.Sprintf("Failed to output build info: %v\n", err))
+	}
+
+	if runtime.GOOS != "linux" {
+		err := errors.New("OS is not supported")
+		print(err)
+		setAppErr(appCl, err)
+		os.Exit(1)
+	}
+
+	localPK := cipher.PubKey{}
+	if localPKStr != "" {
+		if err := localPK.UnmarshalText([]byte(localPKStr)); err != nil {
+			print(fmt.Sprintf("Invalid local PK: %v\n", err))
+			setAppErr(appCl, err)
+			os.Exit(1)
+		}
+	}
+
+	localSK := cipher.SecKey{}
+	if localSKStr != "" {
+		if err := localSK.UnmarshalText([]byte(localSKStr)); err != nil {
+			print(fmt.Sprintf("Invalid local SK: %v\n", err))
+			setAppErr(appCl, err)
+			os.Exit(1)
+		}
+	}
+
+	osSigs := make(chan os.Signal, 2)
+
+	sigs := []os.Signal{syscall.SIGTERM, syscall.SIGINT}
+	for _, sig := range sigs {
+		signal.Notify(osSigs, sig)
+	}
+
+	l, err := appCl.Listen(netType, port)
+	if err != nil {
+		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
+		setAppErr(appCl, err)
+		os.Exit(1)
+	}
+
+	srvCfg := vpn.ServerConfig{
+		Passcode:         passcode,
+		Secure:           secure,
+		NetworkInterface: networkIfc,
+	}
+	srv, err := vpn.NewServer(srvCfg, appCl)
+	if err != nil {
+		print(fmt.Sprintf("Error creating VPN server: %v\n", err))
+		setAppErr(appCl, err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := srv.Close(); err != nil {
+			print(fmt.Sprintf("Error closing server: %v\n", err))
+		}
+	}()
+
+	errCh := make(chan error)
+	go func() {
+		if err := srv.Serve(l); err != nil {
+			errCh <- err
+		}
+
+		close(errCh)
+	}()
+
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+
+	select {
+	case <-osSigs:
+		return nil
+	case <-ctx.Done():
+		return nil
+	case err := <-errCh:
+		if err != nil {
+			print(fmt.Sprintf("Error serving: %v\n", err))
+			return err
+		}
+	}
+
+	return nil
 }
 
 func setAppErr(appCl *app.Client, err error) {
