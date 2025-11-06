@@ -330,7 +330,7 @@ var addTpCmd = &cobra.Command{
 		if transportType != "dmsg" && transportType != "stcpr" && transportType != "sudph" && transportType != "" {
 			logger.Fatal("Invalid transport type specified:", transportType)
 		}
-		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		isJSON, _ := cmd.Flags().GetBool(internal.JSONString)
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -619,11 +619,11 @@ var treeCmd = &cobra.Command{
 		}
 		tps := internal.GetData(cacheFileTPD, tpdURL+"/all-transports", cacheFilesAge)
 		if rawData {
-			script.Echo(tps).Stdout() //nolint
+			script.Echo(tps).Stdout() 
 			return
 		}
 		if refinedData {
-			script.Echo(string(pretty.Color(pretty.Pretty([]byte(tps)), nil))).Stdout() //nolint
+			script.Echo(string(pretty.Color(pretty.Pretty([]byte(tps)), nil))).Stdout() 
 			return
 		}
 		var uts string
@@ -639,11 +639,11 @@ var treeCmd = &cobra.Command{
 
 		if isStats {
 			fmt.Printf("Unique keys in Transport Discovery: %d\n", len(sortedEdgeKeys))
-			tpcount, _ := script.Echo(tps).JQ(".[].type").CountLines() //nolint
+			tpcount, _ := script.Echo(tps).JQ(".[].type").CountLines() 
 			fmt.Printf("Count of transports: %v\n", tpcount)
-			tptypes, _ := script.Echo(tps).JQ(".[].type").Freq().String() //nolint
+			tptypes, _ := script.Echo(tps).JQ(".[].type").Freq().String() 
 			fmt.Printf("types of transports: \n%v\n", tptypes)
-			vcount, _ := script.Echo(tps).JQ(".[].edges[]").Freq().String() //nolint
+			vcount, _ := script.Echo(tps).JQ(".[].edges[]").Freq().String() 
 			fmt.Printf("Visors by transport count:\n%v\n", vcount)
 			return
 		}
@@ -712,7 +712,7 @@ var treeCmd = &cobra.Command{
 		usedkeys = append(usedkeys, edgeKey)
 		var lvl func(n int, k string)
 		lvl = func(n int, k string) {
-			l, _ := script.Echo(tps).JQ(".[] | select(.edges[] == " + k + ") | .edges[] | select(. != " + k + ")").Slice() //nolint
+			l, _ := script.Echo(tps).JQ(".[] | select(.edges[] == " + k + ") | .edges[] | select(. != " + k + ")").Slice() 
 			for _, m := range l {
 				if m == k {
 					continue
@@ -745,7 +745,7 @@ var treeCmd = &cobra.Command{
 			}
 		}
 		lvl(1, edgeKey)
-		pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint
+		pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() 
 
 		for _, edgeKey := range sortedEdgeKeys {
 			found := false
@@ -765,7 +765,7 @@ var treeCmd = &cobra.Command{
 				usedkeys = append(usedkeys, edgeKey)
 				lvl(1, edgeKey)
 				if len(leveledList) > 1 {
-					pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint
+					pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() 
 				}
 				if lastNode != "" {
 					pterm.Println(pterm.Red("No route from source to dest"))
@@ -808,11 +808,11 @@ var treeCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), errors.New("specified dest or last node public key does not have any transports"))
 				}
 			}
-			l, _ := script.Echo(tps).JQ("[.[] | select(.edges | contains([" + sortedEdgeKeys[0] + "," + sortedEdgeKeys[1] + "]))]").Slice() //nolint
+			l, _ := script.Echo(tps).JQ("[.[] | select(.edges | contains([" + sortedEdgeKeys[0] + "," + sortedEdgeKeys[1] + "]))]").Slice() 
 			if len(l) > 0 && fmt.Sprintf("%v", l) != "[[]]" {
 				pterm.Println(pterm.Red("Direct route:"))
 				for _, m := range l {
-					script.Echo(string(pretty.Color(pretty.Pretty([]byte(m)), nil))).Stdout() //nolint
+					script.Echo(string(pretty.Color(pretty.Pretty([]byte(m)), nil))).Stdout() 
 				}
 				return
 			}
@@ -847,7 +847,7 @@ var treeCmd = &cobra.Command{
 							tM[i].PK = v
 						}
 						for i, v := range tM {
-							l, _ := script.Echo(tps).JQ(".[] | select(.edges[] == " + v + ") | .edges[] | select(. != " + v + ")").Slice() //nolint
+							l, _ := script.Echo(tps).JQ(".[] | select(.edges[] == " + v + ") | .edges[] | select(. != " + v + ")").Slice() 
 							for _, m := range l {
 								if m == v {
 									continue

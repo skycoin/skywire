@@ -291,7 +291,7 @@ var listCmd = &cobra.Command{
 		// --- Fetch SD ---
 		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
-			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint
+			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout()
 			return
 		}
 
@@ -311,7 +311,7 @@ var listCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
-			script.Echo(string(pretty.Color(pretty.Pretty(jsonOut), nil))).Stdout() //nolint
+			script.Echo(string(pretty.Color(pretty.Pretty(jsonOut), nil))).Stdout()
 			return
 		}
 
@@ -331,10 +331,10 @@ var listCmd = &cobra.Command{
 				if err != nil {
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 				}
-				script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint
+				script.Echo(fmt.Sprintf("%v\n", count)).Stdout()
 				return
 			}
-			script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout() //nolint
+			script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout()
 			return
 		}
 
@@ -364,10 +364,10 @@ var listCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
-			script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint
+			script.Echo(fmt.Sprintf("%v\n", count)).Stdout()
 			return
 		}
 
-		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint
+		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout()
 	},
 }

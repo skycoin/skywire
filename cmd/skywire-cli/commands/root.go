@@ -158,7 +158,7 @@ var docCmd = &cobra.Command{
 		fmt.Printf("\n## %s\n", "subcommand tree")
 		fmt.Printf("\n%s\n", "A tree representation of the skywire-cli subcommands")
 		fmt.Printf("\n```\n")
-		_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go tree`).Stdout() //nolint
+		_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go tree`).Stdout()
 		fmt.Printf("\n```\n")
 
 		var use string
@@ -170,7 +170,7 @@ var docCmd = &cobra.Command{
 			fmt.Printf("\n```\n")
 			if j.Name() == "survey" {
 				fmt.Printf("\n```\n")
-				_, _ = script.Exec(`sudo go run cmd/skywire-cli/skywire-cli.go survey`).Stdout() //nolint
+				_, _ = script.Exec(`sudo go run cmd/skywire-cli/skywire-cli.go survey`).Stdout()
 				fmt.Printf("\n```\n")
 			}
 			for _, k := range j.Commands() {
@@ -183,7 +183,7 @@ var docCmd = &cobra.Command{
 					fmt.Printf("\n##### Example for package / msi\n")
 					fmt.Printf("\n```\n")
 					fmt.Printf("$ skywire-cli config gen -bpirxn --version 1.3.0\n")
-					_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go config gen -n`).Stdout() //nolint
+					_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go config gen -n`).Stdout()
 					fmt.Printf("\n```\n")
 				}
 				for _, l := range k.Commands() {

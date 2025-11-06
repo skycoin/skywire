@@ -143,5 +143,5 @@ func makeTree() {
 		nodes1 = append(nodes1, pterm.TreeNode{Text: pterm.Cyan(dirNode), Children: nodes})
 	}
 	tree = pterm.TreeNode{Text: pterm.Cyan("Index"), Children: nodes1}
-	pterm.DefaultTree.WithRoot(tree).Render() //nolint
+	pterm.DefaultTree.WithRoot(tree).Render()
 }

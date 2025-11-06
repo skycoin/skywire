@@ -191,7 +191,7 @@ var docCmd = &cobra.Command{
 		fmt.Printf("\n## %s\n", "subcommand tree")
 		fmt.Printf("\n%s\n", "A tree representation of the skywire subcommands")
 		fmt.Printf("\n```\n")
-		_, err := script.Exec(os.Args[0] + " tree").Stdout() //nolint
+		_, err := script.Exec(os.Args[0] + " tree").Stdout()
 		if err != nil {
 			fmt.Println(err.Error())
 		}
@@ -228,7 +228,7 @@ var docCmd = &cobra.Command{
 				fmt.Printf("\n```\n")
 				if k.Name() == "survey" {
 					fmt.Printf("\n```\n")
-					_, err = script.Exec("sudo " + os.Args[0] + ` survey`).Stdout() //nolint
+					_, err = script.Exec("sudo " + os.Args[0] + ` survey`).Stdout()
 					if err != nil {
 						fmt.Println(err.Error())
 					}
@@ -244,7 +244,7 @@ var docCmd = &cobra.Command{
 						fmt.Printf("\n##### Example for package / msi\n")
 						fmt.Printf("\n```\n")
 						fmt.Printf("$ skywire cli config gen -bpirxn\n")
-						_, err = script.Exec(os.Args[0] + ` cli config gen -bpirxn`).Stdout() //nolint
+						_, err = script.Exec(os.Args[0] + ` cli config gen -bpirxn`).Stdout()
 						if err != nil {
 							fmt.Println(err.Error())
 						}

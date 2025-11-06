@@ -959,10 +959,10 @@ var genConfigCmd = &cobra.Command{
 		//print config to stdout, omit logging messages, exit
 		if isStdout {
 			if isSquash {
-				script.Echo(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(j), " ", ""), "\n", ""), "\t", "")).Stdout() //nolint
+				script.Echo(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(j), " ", ""), "\n", ""), "\t", "")).Stdout()
 				return
 			}
-			script.Echo(string(j)).Stdout() //nolint
+			script.Echo(string(j)).Stdout()
 			return
 		}
 		//hide the printing of the config to the terminal
