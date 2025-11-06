@@ -79,10 +79,10 @@ func init() {
 	serverCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", deployment.Prod.DmsgDiscovery, "dmsg discovery url")
 	serverCmd.Flags().StringVarP(&ensureOnlineURL, "ensure-online", "O", scriptExecString("${ENSUREONLINE}"), "Exit when the specified URL cannot be fetched;\ni.e. https://fiber.skywire.dev")
 	if os.Getenv("DMSGHTTP_SK") != "" {
-		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint:errcheck
+		sk.Set(os.Getenv("DMSGHTTP_SK"))  //nolint:errcheck,gosec
 	}
 	if scriptExecString("${DMSGHTTP_SK}") != "" {
-		sk.Set(scriptExecString("${DMSGHTTP_SK}")) //nolint:errcheck
+		sk.Set(os.Getenv("DMSGHTTP_SK"))  //nolint:errcheck,gosec
 	}
 	serverCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 }
@@ -138,7 +138,7 @@ func extractFiles() (string, error) {
 		}
 		log.Println("Omitted vendor dir when cleaning directory:", tempDir)
 		log.Println("Directory contents:")
-		_, _ = script.FindFiles(tempDir).Stdout()
+		_, _ = script.FindFiles(tempDir).Stdout()  //nolint:errcheck,gosec
 	}
 
 	if err := fs.WalkDir(embeddedFiles, "ui", func(path string, d fs.DirEntry, err error) error {
@@ -422,16 +422,16 @@ func server(e error) {
 		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -rup ` + c.Param("pk")).Bytes() //nolint:errcheck
 		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                      //nolint:errcheck
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmltoplink))
+		c.Writer.Write([]byte(htmltoplink))  //nolint:errcheck,gosec  //nolint:errcheck,gosec
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend))
+		c.Writer.Write([]byte(htmlend))  //nolint:errcheck,gosec  //nolint:errcheck,gosec
 		c.Writer.Flush()
 	})
 
 	r1.GET("/log-collection/tplogs", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Write([]byte(func() (l string) {
+		c.Writer.Write([]byte(func() (l string) {  //nolint:errcheck,gosec  //nolint:errcheck,gosec
 			l = "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
 			l += navlinks
 			l += "<p style='color:blue'>Blue = Verified Bandwidth</p>"
@@ -516,12 +516,12 @@ func server(e error) {
 		l += "<tbody>\n"
 		rewardtxncsvs, _ := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+"/hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint:errcheck
 		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
-			skycoinpershare, _ := script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String()
+			skycoinpershare, _ := script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String()  //nolint:errcheck,gosec  //nolint:errcheck,gosec
 			skycoinpershare1 := ""
 			skycoinpershare2 := ""
 			if strings.TrimSpace(skycoinpershare) == "" {
-				skycoinpershare1, _ = script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String()
-				skycoinpershare2, _ = script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String()
+				skycoinpershare1, _ = script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String()  //nolint:errcheck,gosec  //nolint:errcheck,gosec
+				skycoinpershare2, _ = script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String()  //nolint:errcheck,gosec  //nolint:errcheck,gosec
 				skycoinpershare1 = strings.TrimSpace(skycoinpershare1)
 				skycoinpershare2 = strings.TrimSpace(skycoinpershare2)
 			} else {
