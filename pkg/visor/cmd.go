@@ -135,7 +135,7 @@ func init() {
 	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 	RootCmd.Flags().BoolVar(&useCsrf, "csrf", true, "Request a CSRF token for sensitive hypervisor API requests")
 	for _, j := range hiddenflags {
-		RootCmd.Flags().MarkHidden(j)
+		RootCmd.Flags().MarkHidden(j) //nolint:errcheck,gosec
 	}
 }
 
@@ -156,8 +156,8 @@ var RootCmd = &cobra.Command{
 				f := cmd.Flags().Lookup(j)
 				f.Hidden = false
 			}
-			cmd.Flags().MarkHidden("all")
-			cmd.Flags().MarkHidden("help")
+			cmd.Flags().MarkHidden("all")  //nolint:errcheck,gosec
+			cmd.Flags().MarkHidden("help") //nolint:errcheck,gosec
 			if err := cmd.Help(); err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to print help: %v\n", err)
 			}

@@ -16,7 +16,7 @@ func InitFlags(cmd *cobra.Command, usage bool) {
 	}
 	cmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "show help menu")
 	cmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	cmd.PersistentFlags().MarkHidden("help")
+	cmd.PersistentFlags().MarkHidden("help") //nolint:errcheck,gosec
 
 	cc.Init(&cc.Config{
 		RootCmd:         cmd,

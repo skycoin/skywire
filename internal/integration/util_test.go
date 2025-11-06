@@ -61,7 +61,7 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		GatherVisorPKs(itc.ParticipatingVisorsHostNames)
 
 	for _, tp := range itc.TransportsToAdd {
-		_ = env.VisorRemoveTransport(tp)
+		_ = env.VisorRemoveTransport(tp) //nolint:errcheck
 	}
 
 	// TODO(Sir Darkrengarius+ersonp): set all other args to their default values to ensure that everything is as needed

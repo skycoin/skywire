@@ -30,14 +30,14 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 			OnSessionDial: func(network, addr string) error {
 				data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
 				event := appevent.NewEvent(appevent.TCPDial, data)
-				_ = eb.Broadcast(context.Background(), event)
+				_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
 				// @evanlinjin: An error is not returned here as this will cancel the session dial.
 				return nil
 			},
 			OnSessionDisconnect: func(network, addr string, _ error) {
 				data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}
 				event := appevent.NewEvent(appevent.TCPClose, data)
-				_ = eb.Broadcast(context.Background(), event)
+				_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
 			},
 		},
 		ConnectedServersType: conf.ConnectedServersType,

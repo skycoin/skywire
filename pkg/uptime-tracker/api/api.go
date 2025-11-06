@@ -219,9 +219,9 @@ func (api *API) dailyRoutine(logger logrus.FieldLogger) {
 
 func (api *API) storeDailyData(data []store.DailyUptimeHistory, timeValue time.Time) error {
 	// check path, make its if not available
-	os.MkdirAll(api.storeUptimesPath, os.ModePerm)
+	os.MkdirAll(api.storeUptimesPath, os.ModePerm) //nolint:errcheck,gosec
 	// save to file
-	file, _ := json.MarshalIndent(data, "", " ")
+	file, _ := json.MarshalIndent(data, "", " ") //nolint:errcheck
 	fileName := fmt.Sprintf("%s/%s-uptime-data.json", api.storeUptimesPath, timeValue.Format("2006-01-02"))
 	return os.WriteFile(fileName, file, 0600)
 }

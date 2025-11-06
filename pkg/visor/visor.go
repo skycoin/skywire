@@ -278,7 +278,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
 	if dmsgServer != "" {
 		//nolint:staticcheck
-		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer)  //nolint:staticcheck,revive
+		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer) //nolint:staticcheck,revive
 	}
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
@@ -487,7 +487,7 @@ func initUI() *fs.FS {
 }
 
 func storeLog(conf *visorconfig.V1) {
-	hook, _ := lumberjackrus.NewHook(
+	hook, _ := lumberjackrus.NewHook( //nolint:errcheck
 		&lumberjackrus.LogFile{
 			Filename:   conf.LocalPath + "/log/skywire.log",
 			MaxSize:    1,

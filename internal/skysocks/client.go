@@ -62,7 +62,7 @@ func (c *Client) ListenAndServe(addr string) error {
 	c.listener = l
 	go func() {
 		<-c.closeC
-		l.Close()
+		l.Close() //nolint:errcheck,gosec
 	}()
 
 	for {

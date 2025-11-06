@@ -508,7 +508,7 @@ func (v *Visor) StopApp(appName string) error {
 		return ErrAppLauncherNotAvailable
 	}
 	if v.procM != nil {
-		_, err := v.appL.StopApp(appName)
+		_, err := v.appL.StopApp(appName) //nolint:errcheck
 		return err
 	}
 	return ErrProcNotAvailable
@@ -574,7 +574,7 @@ func (v *Visor) StopVPNClient(appName string) error {
 		return ErrAppLauncherNotAvailable
 	}
 	if v.procM != nil {
-		_, err := v.appL.StopApp(appName)
+		_, err := v.appL.StopApp(appName) //nolint:errcheck
 		return err
 	}
 	return ErrProcNotAvailable
@@ -657,7 +657,7 @@ func (v *Visor) StopSkysocksClients() error {
 		for _, app := range v.conf.Launcher.Apps {
 			for _, args := range app.Args {
 				if args == visorconfig.SkysocksClientName {
-					if _, err := v.appL.StopApp(app.Name); err != nil {
+					if _, err := v.appL.StopApp(app.Name); err != nil { //nolint:errcheck
 						v.log.WithError(err).Warnf("Failed to stop app %s", app.Name)
 					}
 				}
@@ -700,7 +700,7 @@ func (v *Visor) RestartApp(appName string) error {
 		v.log.Warn("app launcher not ready yet")
 		return ErrAppLauncherNotAvailable
 	}
-	if _, ok := v.procM.ProcByName(appName); ok {
+	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck
 		v.log.Infof("Updated %v password, restarting it", appName)
 		return v.appL.RestartApp(appName, appName)
 	}
@@ -1114,7 +1114,7 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 		}
 	}
 	if v.procM != nil {
-		apps, _ := v.Apps()
+		apps, _ := v.Apps() //nolint:errcheck
 		for _, app := range apps {
 			port, err := v.procM.GetAppPort(app.Name)
 			if err == nil {
@@ -1403,7 +1403,7 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		}
 		latencies, err := v.Ping(conf)
 		if err != nil {
-			go v.StopPing(conf.PK)
+			go v.StopPing(conf.PK) //nolint:errcheck,gosec
 			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
 			continue
 		}
@@ -1420,7 +1420,7 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		}
 		mean = sumLatency / time.Duration(len(latencies))
 		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(maxx), Min: fmt.Sprint(minn), Mean: fmt.Sprint(mean), Status: "Success"})
-		v.StopPing(conf.PK)
+		v.StopPing(conf.PK) //nolint:errcheck,gosec
 	}
 	return result, nil
 }

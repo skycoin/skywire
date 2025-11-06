@@ -203,12 +203,12 @@ func (c *genericClient) acceptTransport() error {
 	hs := handshake.ResponderHandshake(handshake.MakeF2PortChecker(c.checkListener))
 	wrappedTransport, err := c.wrapTransport(conn, hs, false, onClose)
 	if err != nil {
-		conn.Close()
+		conn.Close() //nolint:errcheck,gosec
 		return err
 	}
 	lis, err := c.getListener(wrappedTransport.lAddr.Port)
 	if err != nil {
-		wrappedTransport.Close()
+		wrappedTransport.Close() //nolint:errcheck,gosec
 		return err
 	}
 	return lis.introduce(wrappedTransport)

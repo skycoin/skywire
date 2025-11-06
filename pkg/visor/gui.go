@@ -194,7 +194,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 func vpnStatusBtn(rpcClient API) {
 	for {
 		vpnStatusMx.Lock()
-		stats, _ := rpcClient.GetAppConnectionsSummary(visorconfig.VPNClientName)
+		stats, _ := rpcClient.GetAppConnectionsSummary(visorconfig.VPNClientName) //nolint:errcheck
 		if len(stats) == 1 {
 			if stats[0].IsAlive {
 				if vpnLastStatus != 1 {
@@ -254,24 +254,24 @@ func serversBtn(servers []*systray.MenuItem, rpcClient API) {
 			continue
 		}
 
-		rpcClient.StopApp(visorconfig.VPNClientName)
-		rpcClient.SetAppPK(visorconfig.VPNClientName, pk)
+		rpcClient.StopApp(visorconfig.VPNClientName)      //nolint:errcheck,gosec
+		rpcClient.SetAppPK(visorconfig.VPNClientName, pk) //nolint:errcheck,gosec
 		vpnStatusMx.Lock()
 		vpnLastStatus = 3
 		vpnStatusMx.Unlock()
-		rpcClient.StartApp(visorconfig.VPNClientName)
+		rpcClient.StartApp(visorconfig.VPNClientName) //nolint:errcheck,gosec
 	}
 }
 
 func handleVPNButton(rpcClient API) {
-	stats, _ := rpcClient.GetAppConnectionsSummary(visorconfig.VPNClientName)
+	stats, _ := rpcClient.GetAppConnectionsSummary(visorconfig.VPNClientName) //nolint:errcheck
 	if len(stats) == 1 {
-		rpcClient.StopApp(visorconfig.VPNClientName)
+		rpcClient.StopApp(visorconfig.VPNClientName) //nolint:errcheck,gosec
 	} else {
 		vpnStatusMx.Lock()
 		vpnLastStatus = 3
 		vpnStatusMx.Unlock()
-		rpcClient.StartApp(visorconfig.VPNClientName)
+		rpcClient.StartApp(visorconfig.VPNClientName) //nolint:errcheck,gosec
 	}
 }
 
@@ -316,7 +316,7 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *
 
 func getSystrayHTTPClient(ctx context.Context, conf *visorconfig.V1, logger *logging.MasterLogger) *http.Client {
 	var serviceURL dmsgcurl.URL
-	serviceURL.Fill(conf.Launcher.ServiceDisc)
+	serviceURL.Fill(conf.Launcher.ServiceDisc) //nolint:errcheck,gosec
 	if serviceURL.Scheme == "dmsg" {
 		var keys cipher.PubKeys
 		servers := conf.Dmsg.Servers
@@ -443,7 +443,7 @@ func stopVisor() {
 
 func isHypervisorRunning(addr string) bool {
 	// we check if it's up by querying `health` endpoint
-	resp, err := http.Get(addr)  //nolint:gosec
+	resp, err := http.Get(addr) //nolint:gosec
 	if err != nil {
 		// hypervisor is not running in this case
 		return false

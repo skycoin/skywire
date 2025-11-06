@@ -115,7 +115,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 			cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
 
 			errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
-			stderr, _ = cmd.StderrPipe()  //nolint:errcheck
+			stderr, _ = cmd.StderrPipe() //nolint:errcheck
 			printStdErr(stderr, errorLog)
 		}
 	}
@@ -231,7 +231,7 @@ func (p *Proc) startInProcess() error {
 	for _, env := range envs {
 		parts := strings.SplitN(env, "=", 2)
 		if len(parts) == 2 {
-			_ = os.Setenv(parts[0], parts[1])  //nolint:errcheck
+			_ = os.Setenv(parts[0], parts[1]) //nolint:errcheck
 		}
 	}
 
@@ -240,7 +240,7 @@ func (p *Proc) startInProcess() error {
 			for _, env := range envs {
 				parts := strings.SplitN(env, "=", 2)
 				if len(parts) == 2 {
-					_ = os.Unsetenv(parts[0])  //nolint:errcheck
+					_ = os.Unsetenv(parts[0]) //nolint:errcheck
 				}
 			}
 		}()
@@ -256,14 +256,14 @@ func (p *Proc) startInProcess() error {
 	go func() {
 		defer func() {
 			appcommon.UnregisterInProcessConn(p.conf.ProcKey)
-			_ = p.m.SetError(p.appName, p.err)  //nolint:errcheck
-			_ = p.m.Stop(p.appName)  //nolint:errcheck
+			_ = p.m.SetError(p.appName, p.err) //nolint:errcheck
+			_ = p.m.Stop(p.appName)            //nolint:errcheck
 		}()
 
 		pm, ok := p.m.(*procManager)
 		if !ok {
-			_ = serverConn.Close()  //nolint:errcheck
-			_ = appConn.Close()  //nolint:errcheck
+			_ = serverConn.Close() //nolint:errcheck
+			_ = appConn.Close()    //nolint:errcheck
 			p.appCancelCtx()
 			p.waitMx.Unlock()
 			p.log.Error("Failed to cast ProcManager to procManager.")
@@ -272,8 +272,8 @@ func (p *Proc) startInProcess() error {
 
 		hello, err := appevent.DoRespHandshake(pm.eb, serverConn)
 		if err != nil {
-			_ = serverConn.Close()  //nolint:errcheck
-			_ = appConn.Close()  //nolint:errcheck
+			_ = serverConn.Close() //nolint:errcheck
+			_ = appConn.Close()    //nolint:errcheck
 			p.appCancelCtx()
 			p.waitMx.Unlock()
 			p.log.WithError(err).Error("Failed to do handshake with in-process app.")
@@ -281,8 +281,8 @@ func (p *Proc) startInProcess() error {
 		}
 
 		if hello.ProcKey != p.conf.ProcKey {
-			_ = serverConn.Close()  //nolint:errcheck
-			_ = appConn.Close()  //nolint:errcheck
+			_ = serverConn.Close() //nolint:errcheck
+			_ = appConn.Close()    //nolint:errcheck
 			p.appCancelCtx()
 			p.waitMx.Unlock()
 			p.log.Error("In-process app hello ProcKey mismatch.")
@@ -290,8 +290,8 @@ func (p *Proc) startInProcess() error {
 		}
 
 		if !p.InjectConn(serverConn) {
-			_ = serverConn.Close()  //nolint:errcheck
-			_ = appConn.Close()  //nolint:errcheck
+			_ = serverConn.Close() //nolint:errcheck
+			_ = appConn.Close()    //nolint:errcheck
 			p.appCancelCtx()
 			p.waitMx.Unlock()
 			return
@@ -363,8 +363,8 @@ func (p *Proc) startExternal() error {
 		}()
 
 		defer func() {
-			_ = p.m.SetError(p.appName, p.err)  //nolint:errcheck
-			_ = p.m.Stop(p.appName)  //nolint:errcheck
+			_ = p.m.SetError(p.appName, p.err) //nolint:errcheck
+			_ = p.m.Stop(p.appName)            //nolint:errcheck
 		}()
 
 		select {
@@ -385,7 +385,7 @@ func (p *Proc) startExternal() error {
 		}
 
 		if ok := p.AwaitConn(); !ok {
-			_ = p.cmd.Process.Kill()
+			_ = p.cmd.Process.Kill() //nolint:errcheck
 			p.waitMx.Unlock()
 			return
 		}

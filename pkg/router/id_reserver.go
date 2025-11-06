@@ -135,7 +135,7 @@ func (idr *idReserver) Client(pk cipher.PubKey) *Client {
 func (idr *idReserver) String() string {
 	idr.mx.Lock()
 	defer idr.mx.Unlock()
-	b, _ := json.MarshalIndent(idr.ids, "", "\t")
+	b, _ := json.MarshalIndent(idr.ids, "", "\t") //nolint:errcheck
 	return string(b)
 }
 

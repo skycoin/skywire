@@ -326,7 +326,7 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	return nil
 }
 
-func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initStunClient(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	sc := network.GetStunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
@@ -470,12 +470,12 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	return nil
 }
 
-func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initSystemSurvey(_ context.Context, v *Visor, log *logging.Logger) error {
 	go GenerateSurvey(v, log, true)
 	return nil
 }
 
-func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error {
+func initDmsgTrackers(_ context.Context, v *Visor, _ *logging.Logger) error {
 	dmsgC := v.dmsgC
 
 	dtm := dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), dmsgC, 0, 0)
@@ -491,7 +491,7 @@ func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error {
 
 func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var serviceURL dmsgcurl.URL
-	_ = serviceURL.Fill(v.conf.Transport.AddressResolver)
+	_ = serviceURL.Fill(v.conf.Transport.AddressResolver) //nolint:errcheck
 	// don't start sudph if we are connection to AR via dmsghttp
 	if serviceURL.Scheme == "dmsg" {
 		log.Info("SUDPH transport wont be available under dmsghttp")
@@ -907,7 +907,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
 		func(rPK cipher.PubKey, tm *transport.Manager) error {
-			establishedTransports, _ := v.Transports([]string{string(types.STCPR), string(types.SUDPH), string(types.DMSG)}, []cipher.PubKey{v.conf.PK}, false)
+			establishedTransports, _ := v.Transports([]string{string(types.STCPR), string(types.SUDPH), string(types.DMSG)}, []cipher.PubKey{v.conf.PK}, false) //nolint:errcheck
 			for _, transportSum := range establishedTransports {
 				if transportSum.Remote.Hex() == rPK.Hex() {
 					log.Debugf("Established transport exist. Type: %s", transportSum.Type)
@@ -1042,7 +1042,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	conf := v.conf.Launcher
 
 	// Prepare proc manager.
@@ -1152,7 +1152,7 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 	}
 }
 
-func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initCLI(_ context.Context, v *Visor, _ *logging.Logger) error {
 	if v.conf.CLIAddr == "" {
 		v.log.Debug("'cli_addr' is not configured, skipping.")
 		return nil
@@ -1175,7 +1175,7 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 
 	hvErrs := make(map[cipher.PubKey]chan error, len(v.conf.Hypervisors))
 	for _, hv := range v.conf.Hypervisors {
@@ -1630,7 +1630,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 		return err
 	})
 
-	go connector.Run(cctx, v)
+	go connector.Run(cctx, v) //nolint:errcheck
 
 	return nil
 }
@@ -1872,7 +1872,7 @@ func GetIP(geoipURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
