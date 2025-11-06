@@ -60,6 +60,9 @@ linters:
       - examples$
     rules:
       - linters:
+          - misspell
+        path: src/cipher/bip39/wordlists/
+      - linters:
           - staticcheck
         text: "QF1003:" # could use tagged switch on errCode (staticcheck)
       - linters:
@@ -93,7 +96,7 @@ formatters:
       simplify: true
     goimports:
       local-prefixes:
-        - github.com/skycoin/skywire
+        - github.com/skycoin/skycoin
   exclusions:
     generated: lax
     paths:

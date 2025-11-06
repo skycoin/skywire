@@ -221,7 +221,11 @@ func httpProxy(ctx context.Context, httpAddr, sockscAddr string) {
 	proxy.Tr.Proxy = http.ProxyURL(proxyURL)
 
 	fmt.Printf("Serving http proxy %v\n", httpAddr)
-	httpProxySrv := &http.Server{Addr: httpAddr, Handler: proxy}
+	httpProxySrv := &http.Server{
+		Addr:              httpAddr,
+		Handler:           proxy,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 
 	go func() {
 		<-ctx.Done()

@@ -31,6 +31,7 @@ func Catch(cmdFlags *pflag.FlagSet, err error) {
 
 // PrintFatalError prints errors for skywire-cli commands packages
 func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
+t//nolint:errcheck
 	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON {
 		errJSON := CLIOutput{
@@ -57,6 +58,7 @@ func PrintRPCError(cmdFlags *pflag.FlagSet, err error) {
 }
 
 // PrintError prints errors for skywire-cli commands packages
+t//nolint:errcheck
 func PrintError(cmdFlags *pflag.FlagSet, err error) {
 	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON {
@@ -97,6 +99,7 @@ type CLIOutput struct {
 	Err    string      `json:"error,omitempty"`
 }
 
+t//nolint:errcheck
 // PrintOutput prints either the normal output or the json output as per the global `--json` flag
 func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 	isJSON, _ := cmdFlags.GetBool(JSONString)
@@ -121,6 +124,7 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 // GetData fetches data from the specified URL via http or from cached file
 func GetData(cachefile, thisurl string, cacheFilesAge int) (thisdata string) {
 	var shouldfetch bool
+t	//nolint:errcheck
 	buf1 := new(bytes.Buffer)
 	cTime := time.Now()
 	if cachefile == "" {
@@ -132,10 +136,13 @@ func GetData(cachefile, thisurl string, cacheFilesAge int) (thisdata string) {
 			shouldfetch = true
 		} else {
 			if cTime.Sub(u.ModTime()).Minutes() > float64(cacheFilesAge) {
+t		//nolint:errcheck
 				shouldfetch = true
 			}
+t		//nolint:errcheck
 		}
 		if shouldfetch {
+t	//nolint:errcheck
 			_, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).Tee(buf1).WriteFile(cachefile)
 			thisdata = buf1.String()
 		} else {
