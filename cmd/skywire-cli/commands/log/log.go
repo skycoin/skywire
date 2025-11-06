@@ -226,7 +226,7 @@ var logCmd = &cobra.Command{
 func download(ctx context.Context, log *logging.Logger, httpC http.Client, targetPath, fileName, pubkey string, maxSize int64) error {
 	target := fmt.Sprintf("dmsg://%s:80/%s", pubkey, targetPath)
 	file, _ := os.Create(pubkey + "/" + fileName) //nolint
-	defer file.Close()                            //nolint
+	defer file.Close()
 
 	if err := downloadDmsg(ctx, log, &httpC, file, target, maxSize); err != nil {
 		log.WithError(err).Errorf("The %s for visor %s not available", fileName, pubkey)
@@ -325,7 +325,7 @@ func getUptimes(endpoint string, log *logging.Logger) ([]VisorUptimeResponse, er
 		log.Error("Error while fetching data from uptime service. Error: ", err)
 		return results, errors.New("Cannot get Uptime data")
 	}
-	defer response.Body.Close() //nolint
+	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		log.Error("Error while reading data from uptime service. Error: ", err)
@@ -348,7 +348,7 @@ func getAllDMSGServers() []dmsgServer {
 		return results
 	}
 
-	defer response.Body.Close() //nolint
+	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return results

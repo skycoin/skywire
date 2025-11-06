@@ -423,7 +423,7 @@ var genConfigCmd = &cobra.Command{
 					services = servicesConfig.Test
 				}
 			} else {
-				defer res.Body.Close() //nolint
+				defer res.Body.Close()
 				body, err := io.ReadAll(res.Body)
 				if err != nil {
 					log.WithError(err).Error("Failed to read HTTP response")
@@ -535,7 +535,7 @@ var genConfigCmd = &cobra.Command{
 			dmsghttpConfigData := deployment.DmsghttpJSON
 			if dmsgHTTPPath != "" {
 				// Read the JSON configuration file
-				dmsghttpConfigData, err = os.ReadFile(dmsgHTTPPath) //nolint
+				dmsghttpConfigData, err = os.ReadFile(dmsgHTTPPath) 
 				if err != nil {
 					log.Fatalf("Failed to read config file: %v", err)
 				}

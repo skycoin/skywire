@@ -151,7 +151,7 @@ func main() {
 				if err != nil {
 					log.Fatalf("Error fetching data: %v", err)
 				}
-				defer resp.Body.Close() //nolint
+				defer resp.Body.Close()
 
 				if err := json.NewDecoder(resp.Body).Decode(&rewards); err != nil {
 					log.Fatalf("Error decoding JSON: %v", err)
@@ -213,7 +213,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error fetching data: %v", err)
 		}
-		defer resp.Body.Close() //nolint
+		defer resp.Body.Close()
 
 		if err := json.NewDecoder(resp.Body).Decode(&nodes); err != nil {
 			log.Fatalf("Error decoding JSON: %v", err)
@@ -320,7 +320,7 @@ func fmtDuration(d time.Duration) string {
 func httpGetString(url string) string {
 	resp, err := http.Get(url) //nolint
 	if err == nil {
-		defer resp.Body.Close() //nolint
+		defer resp.Body.Close()
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			log.Fatal(err)

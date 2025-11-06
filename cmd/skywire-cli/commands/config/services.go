@@ -60,7 +60,7 @@ func fetchServicesConf() (servicesConf, error) {
 	if err != nil {
 		return newConf, err
 	}
-	defer prodResp.Body.Close() //nolint
+	defer prodResp.Body.Close()
 	body, err := io.ReadAll(prodResp.Body)
 	if err != nil {
 		return newConf, err
@@ -76,7 +76,7 @@ func fetchServicesConf() (servicesConf, error) {
 	if err != nil {
 		return newConf, err
 	}
-	defer testResp.Body.Close() //nolint
+	defer testResp.Body.Close()
 	body, err = io.ReadAll(testResp.Body)
 	if err != nil {
 		return newConf, err
