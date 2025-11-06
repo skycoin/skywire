@@ -214,7 +214,7 @@ func (mt *ManagedTransport) close() {
 		mt.transport = nil
 	}
 	mt.transportMx.Unlock()
-	_ = mt.deleteFromDiscovery  //nolint:errcheck()
+	_ = mt.deleteFromDiscovery //nolint:errcheck
 }
 
 // Accept accepts a new underlying transport.

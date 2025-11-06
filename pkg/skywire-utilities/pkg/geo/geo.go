@@ -59,7 +59,7 @@ func MakeIPDetails(log logrus.FieldLogger, geoip string) LocationDetails {
 		if err != nil {
 			return nil, err
 		}
-		defer func() { _ = resp.Body.Close()  //nolint:errcheck }()
+		defer func() { _ = resp.Body.Close() }() //nolint:errcheck
 
 		// Get body.
 		j := struct {

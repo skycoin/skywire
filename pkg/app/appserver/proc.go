@@ -370,7 +370,7 @@ func (p *Proc) startExternal() error {
 		select {
 		case _, ok := <-p.connCh:
 			if !ok {
-				_ = p.cmd.Process.Kill()
+				_ = p.cmd.Process.Kill() //nolint:errcheck
 				p.waitMx.Unlock()
 
 				return
@@ -399,7 +399,7 @@ func (p *Proc) startExternal() error {
 		if runtime.GOOS == "windows" {
 			ipcServer, err := ipc.StartServer(p.appName, nil)
 			if err != nil {
-				_ = p.cmd.Process.Kill()
+				_ = p.cmd.Process.Kill() //nolint:errcheck
 				p.waitMx.Unlock()
 				p.ipcServerWg.Done()
 				return
@@ -456,7 +456,7 @@ func (p *Proc) Stop() error {
 			p.ipcServer.Close()
 		}
 		if p.cmdStderr != nil {
-			_ = p.cmdStderr.Close()
+			_ = p.cmdStderr.Close() //nolint:errcheck
 		}
 		p.waitMx.Unlock()
 		p.connOnce.Do(func() { close(p.connCh) })
@@ -612,7 +612,7 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 }
 
 func storeLog(log *logging.MasterLogger, localPath string) {
-	hook, _ := lumberjackrus.NewHook(
+	hook, _ := lumberjackrus.NewHook( //nolint:errcheck
 		&lumberjackrus.LogFile{
 			Filename:   localPath + "/log/skywire.log",
 			MaxSize:    1,

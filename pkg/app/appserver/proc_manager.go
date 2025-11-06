@@ -120,7 +120,7 @@ func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appe
 func (m *procManager) serve() {
 	defer func() {
 		for _, conn := range m.conns {
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 		}
 	}()
 
@@ -279,7 +279,7 @@ func (m *procManager) Deregister(key appcommon.ProcKey) error {
 	proc := m.procsByKey[key]
 	m.mx.Unlock()
 
-	_, err := m.pop(proc.appName)
+	_, err := m.pop(proc.appName) //nolint:errcheck
 
 	return err
 }
@@ -324,14 +324,14 @@ func (m *procManager) Wait(name string) error {
 			err = fmt.Errorf("failed to run app executable %s: %w", name, err)
 		}
 
-		if _, err := m.pop(name); err != nil {
+		if _, err := m.pop(name); err != nil { //nolint:errcheck
 			m.log.Debugf("Remove app <%v>: %v", name, err)
 		}
 
 		return err
 	}
 
-	_, err = m.pop(name)
+	_, err = m.pop(name) //nolint:errcheck
 
 	return err
 }

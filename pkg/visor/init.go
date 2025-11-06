@@ -248,7 +248,7 @@ func rotateServers(servers []*dmsgdisc.Entry) {
 }
 */
 
-func initEventBroadcaster(ctx context.Context  //nolint:revive, v *Visor, log *logging.Logger) error {
+func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:revive
 	const ebcTimeout = time.Second
 	ebc := appevent.NewBroadcaster(log, ebcTimeout)
 	v.pushCloseStack("event_broadcaster", ebc.Close)
@@ -1446,7 +1446,7 @@ func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger
 
 // advertise this visor as public in service discovery
 // this service is not considered critical and always returns true
-func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger  //nolint:revive) error {
+func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { //nolint:revive
 	if !v.conf.IsPublic {
 		// call Stop() method to clean service discovery for the situation that
 		// visor was public, then stop (not normal shutdown), then start as non-public
