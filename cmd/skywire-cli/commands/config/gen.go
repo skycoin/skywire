@@ -754,37 +754,32 @@ var genConfigCmd = &cobra.Command{
 		conf.Launcher.Apps = []appserver.AppConfig{
 			{
 				Name:      visorconfig.VPNClientName,
-				Binary:    "skywire",
 				AutoStart: false,
 				Port:      routing.Port(skyenv.VPNClientPort),
-				Args:      []string{"app", "vpn-client", "--dns", dnsServer},
+				Args:      []string{"--dns", dnsServer},
 			},
 			{
 				Name:      visorconfig.SkychatName,
-				Binary:    "skywire",
 				AutoStart: true,
 				Port:      routing.Port(skyenv.SkychatPort),
-				Args:      []string{"app", "skychat", "--addr", visorconfig.SkychatAddr},
+				Args:      []string{"--addr", visorconfig.SkychatAddr},
 			},
 			{
 				Name:      visorconfig.SkysocksName,
-				Binary:    "skywire",
 				AutoStart: true,
 				Port:      routing.Port(visorconfig.SkysocksPort),
-				Args:      []string{"app", "skysocks"},
+				Args:      []string{},
 			},
 			{
 				Name:      visorconfig.SkysocksClientName,
-				Binary:    "skywire",
 				AutoStart: false,
 				Port:      routing.Port(visorconfig.SkysocksClientPort),
-				Args:      []string{"app", "skysocks-client", "--addr", visorconfig.SkysocksClientAddr},
+				Args:      []string{"--addr", visorconfig.SkysocksClientAddr},
 			},
 			{
 				Name:      visorconfig.VPNServerName,
-				Binary:    "skywire",
 				AutoStart: isVpnServerEnable,
-				Args:      []string{"app", "vpn-server"},
+				Args:      []string{},
 				Port:      routing.Port(visorconfig.VPNServerPort),
 			},
 		}

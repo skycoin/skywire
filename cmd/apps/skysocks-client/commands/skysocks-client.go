@@ -17,11 +17,13 @@ import (
 	"github.com/elazarl/goproxy"
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/internal/skysocks"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -45,6 +47,7 @@ var (
 )
 
 func init() {
+	launcher.RegisterApp("skysocks-client", RunSkysocksClient)
 	RootCmd.Flags().StringVar(&addr, "addr", visorconfig.SkysocksClientAddr, "Client address to listen on")
 	RootCmd.Flags().StringVar(&serverPK, "srv", "", "PubKey of the server to connect to")
 	RootCmd.Flags().StringVar(&httpAddr, "http", "", "http proxy mode")
@@ -63,87 +66,116 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	Run: func(_ *cobra.Command, _ []string) {
-		r = netutil.NewRetrier(nil, time.Duration(retryDelay)*time.Second, netutil.DefaultMaxBackoff, tries, 1)
-
-		appCl := app.NewClient(nil)
-		defer appCl.Close()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		port := appCl.Config().RoutingPort
-		if appPort != 0 {
-			port = routing.Port(appPort)
-			setAppPort(appCl, port)
+	Run: func(_ *cobra.Command, args []string) {
+		ctx := context.Background()
+		if err := RunSkysocksClient(ctx, args); err != nil {
+			log.Fatal(err)
 		}
+	},
+}
 
-		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-			print(fmt.Sprintf("Failed to output build info: %v\n", err))
+// RunSkysocksClient runs the skysocks client app logic.
+func RunSkysocksClient(ctx context.Context, args []string) error {
+	// Parse flags when called via internal launcher
+	if len(args) > 0 {
+		fs := pflag.NewFlagSet("skysocks-client", pflag.ContinueOnError)
+		fs.StringVar(&addr, "addr", visorconfig.SkysocksClientAddr, "Client address")
+		fs.StringVar(&serverPK, "srv", "", "PubKey of server")
+		fs.StringVar(&httpAddr, "http", "", "http proxy mode")
+		fs.Int64Var(&tries, "tries", 3, "number of tries")
+		fs.Int64Var(&retryDelay, "retry-time", 5, "delay between tries")
+		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		if err := fs.Parse(args); err != nil {
+			return fmt.Errorf("failed to parse flags: %w", err)
 		}
+	}
 
-		if serverPK == "" {
-			err := errors.New("Empty server PubKey. Exiting")
-			print(fmt.Sprintf("%v\n", err))
-			setAppErr(appCl, err)
-			os.Exit(1)
-		}
+	r = netutil.NewRetrier(nil, time.Duration(retryDelay)*time.Second, netutil.DefaultMaxBackoff, tries, 1)
 
-		pk := cipher.PubKey{}
-		if err := pk.UnmarshalText([]byte(serverPK)); err != nil {
-			print(fmt.Sprintf("Invalid server PubKey: %v\n", err))
-			setAppErr(appCl, err)
-			os.Exit(1)
-		}
+	appCl := app.NewClient(nil)
+	defer appCl.Close()
 
-		defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-		conn, err := dialServer(ctx, appCl, pk, port)
+	port := appCl.Config().RoutingPort
+	if appPort != 0 {
+		port = routing.Port(appPort)
+		setAppPort(appCl, port)
+	}
+
+	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+		print(fmt.Sprintf("Failed to output build info: %v\n", err))
+	}
+
+	if serverPK == "" {
+		err := errors.New("Empty server PubKey. Exiting")
+		print(fmt.Sprintf("%v\n", err))
+		setAppErr(appCl, err)
+		os.Exit(1)
+	}
+
+	pk := cipher.PubKey{}
+	if err := pk.UnmarshalText([]byte(serverPK)); err != nil {
+		print(fmt.Sprintf("Invalid server PubKey: %v\n", err))
+		setAppErr(appCl, err)
+		os.Exit(1)
+	}
+
+	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+
+	conn, err := dialServer(ctx, appCl, pk, port)
+	if err != nil {
+		print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
+		setAppErr(appCl, err)
+		return err
+	}
+
+	fmt.Printf("Connected to %v\n", pk)
+	client, err := skysocks.NewClient(conn, appCl)
+	if err != nil {
+		print(fmt.Sprintf("Failed to create a new client: %v\n", err))
+		setAppErr(appCl, err)
+		return err
+	}
+	if runtime.GOOS == "windows" {
+		ipcClient, err := ipc.StartClient(visorconfig.SkysocksClientName, nil)
 		if err != nil {
-			print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
 			setAppErr(appCl, err)
-			os.Exit(1)
+			print(fmt.Sprintf("Error creating ipc server for skysocks: %v\n", err))
+			return err
 		}
-
-		fmt.Printf("Connected to %v\n", pk)
-		client, err := skysocks.NewClient(conn, appCl)
-		if err != nil {
-			print(fmt.Sprintf("Failed to create a new client: %v\n", err))
-			setAppErr(appCl, err)
-			os.Exit(1)
-		}
-		if runtime.GOOS == "windows" {
-			ipcClient, err := ipc.StartClient(visorconfig.SkysocksClientName, nil)
-			if err != nil {
-				setAppErr(appCl, err)
-				print(fmt.Sprintf("Error creating ipc server for skysocks: %v\n", err))
-				os.Exit(1)
-			}
-			go client.ListenIPC(ipcClient)
-		} else {
-			termCh := make(chan os.Signal, 1)
-			signal.Notify(termCh, os.Interrupt)
-			go func() {
-				<-termCh
+		go client.ListenIPC(ipcClient)
+	} else {
+		termCh := make(chan os.Signal, 1)
+		signal.Notify(termCh, os.Interrupt)
+		go func() {
+			select {
+			case <-termCh:
 				if err := client.Close(); err != nil {
 					print(fmt.Sprintf("%v\n", err))
-					os.Exit(1)
 				}
-			}()
-		}
+			case <-ctx.Done():
+				if err := client.Close(); err != nil {
+					print(fmt.Sprintf("%v\n", err))
+				}
+			}
+		}()
+	}
 
-		fmt.Printf("Serving proxy client %v\n", addr)
-		setAppStatus(appCl, appserver.AppDetailedStatusRunning)
-		httpCtx, httpCancel := context.WithCancel(ctx)
-		if httpAddr != "" {
-			go httpProxy(httpCtx, httpAddr, addr)
-		}
-		defer httpCancel()
-		if err := client.ListenAndServe(addr); err != nil { //nolint
-			print(fmt.Sprintf("Error serving proxy client: %v\n", err))
-		}
-		setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-	},
+	fmt.Printf("Serving proxy client %v\n", addr)
+	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
+	httpCtx, httpCancel := context.WithCancel(ctx)
+	defer httpCancel()
+	if httpAddr != "" {
+		go httpProxy(httpCtx, httpAddr, addr)
+	}
+	if err := client.ListenAndServe(addr); err != nil {
+		print(fmt.Sprintf("Error serving proxy client: %v\n", err))
+		return err
+	}
+	setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+	return nil
 }
 
 func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey, port routing.Port) (net.Conn, error) {

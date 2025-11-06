@@ -18,10 +18,12 @@ import (
 
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -52,6 +54,7 @@ var (
 var embededFiles embed.FS
 
 func init() {
+	launcher.RegisterApp("skychat", RunSkychat)
 	RootCmd.Flags().StringVar(&addr, "addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
@@ -66,83 +69,12 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(_ *cobra.Command, args []string) {
+		ctx := context.Background()
 
-		appCl = app.NewClient(nil)
-		defer appCl.Close()
-
-		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-			print(fmt.Sprintf("Failed to output build info: %v\n", err))
+		if err := RunSkychat(ctx, args); err != nil {
+			log.Fatal(err)
 		}
-
-		fmt.Println("Successfully started skychat.")
-
-		clientCh = make(chan string)
-		defer close(clientCh)
-
-		port := appCl.Config().RoutingPort
-		if appPort != 0 {
-			port = routing.Port(appPort)
-			setAppPort(appCl, port)
-		}
-
-		conns = make(map[cipher.PubKey]net.Conn)
-		go listenLoop(port)
-
-		if runtime.GOOS == "windows" {
-			ipcClient, err := ipc.StartClient(visorconfig.SkychatName, nil)
-			if err != nil {
-				print(fmt.Sprintf("Error creating ipc server for skychat client: %v\n", err))
-				setAppError(appCl, err)
-				os.Exit(1)
-			}
-			go handleIPCSignal(ipcClient)
-		}
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		http.Handle("/", http.FileServer(getFileSystem()))
-		http.HandleFunc("/message", messageHandler(ctx))
-		http.HandleFunc("/sse", sseHandler)
-
-		url := ""
-		//		address := *addr
-		address := addr
-		if len(address) < 5 || (address[:1] != ":" && address[:2] != "*:") {
-			url = "127.0.0.1:8001"
-		} else if address[:1] == ":" {
-			url = "127.0.0.1" + address
-		} else if address[:2] == "*:" {
-			url = address[1:]
-		} else {
-			url = "127.0.0.1:8001"
-		}
-
-		fmt.Println("Serving HTTP on", url)
-
-		if runtime.GOOS != "windows" {
-			termCh := make(chan os.Signal, 1)
-			signal.Notify(termCh, os.Interrupt)
-
-			go func() {
-				<-termCh
-				setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-				os.Exit(1)
-			}()
-		}
-		setAppStatus(appCl, appserver.AppDetailedStatusRunning)
-		srv := &http.Server{ //nolint gosec
-			Addr:         url,
-			ReadTimeout:  5 * time.Second,
-			WriteTimeout: 10 * time.Second,
-		}
-		err := srv.ListenAndServe()
-		if err != nil {
-			print(err.Error())
-			setAppError(appCl, err)
-			os.Exit(1)
-		}
-
 	},
 }
 
@@ -151,6 +83,113 @@ func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
+}
+
+// RunSkychat runs the skychat app logic. This can be called from the visor or from the CLI.
+func RunSkychat(ctx context.Context, args []string) error {
+	// Parse flags when called via internal launcher
+	if len(args) > 0 {
+		// Create independent FlagSet for parsing without initialization cycle
+		fs := pflag.NewFlagSet("skychat", pflag.ContinueOnError)
+		fs.StringVar(&addr, "addr", ":8001", "address to bind")
+		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		if err := fs.Parse(args); err != nil {
+			return fmt.Errorf("failed to parse flags: %w", err)
+		}
+	}
+
+	appCl = app.NewClient(nil)
+	defer appCl.Close()
+
+	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+		print(fmt.Sprintf("Failed to output build info: %v\n", err))
+	}
+
+	fmt.Println("Successfully started skychat.")
+
+	clientCh = make(chan string)
+	defer close(clientCh)
+
+	port := appCl.Config().RoutingPort
+	if appPort != 0 {
+		port = routing.Port(appPort)
+		setAppPort(appCl, port)
+	}
+
+	conns = make(map[cipher.PubKey]net.Conn)
+	go listenLoop(port)
+
+	if runtime.GOOS == "windows" {
+		ipcClient, err := ipc.StartClient(visorconfig.SkychatName, nil)
+		if err != nil {
+			print(fmt.Sprintf("Error creating ipc server for skychat client: %v\n", err))
+			setAppError(appCl, err)
+			return err
+		}
+		go handleIPCSignal(ipcClient)
+	}
+
+	http.Handle("/", http.FileServer(getFileSystem()))
+	http.HandleFunc("/message", messageHandler(ctx))
+	http.HandleFunc("/sse", sseHandler)
+
+	url := ""
+	address := addr
+	if len(address) < 5 || (address[:1] != ":" && address[:2] != "*:") {
+		url = "127.0.0.1:8001"
+	} else if address[:1] == ":" {
+		url = "127.0.0.1" + address
+	} else if address[:2] == "*:" {
+		url = "0.0.0.0" + address[1:]
+	} else {
+		url = "127.0.0.1:8001"
+	}
+
+	fmt.Println("Serving HTTP on", url)
+
+	if runtime.GOOS != "windows" {
+		termCh := make(chan os.Signal, 1)
+		signal.Notify(termCh, os.Interrupt)
+
+		go func() {
+			select {
+			case <-termCh:
+				setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+				os.Exit(1)
+			case <-ctx.Done():
+				setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+				return
+			}
+		}()
+	}
+
+	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
+	srv := &http.Server{
+		Addr:         url,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			print(err.Error())
+			setAppError(appCl, err)
+			return err
+		}
+	case <-ctx.Done():
+		setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+		if err := srv.Shutdown(context.Background()); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func listenLoop(appPort routing.Port) {
