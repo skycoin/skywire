@@ -248,7 +248,7 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 		today = tls.fileName
 	}
 
-t//nolint:gosec
+	//nolint:gosec
 	f, err := os.OpenFile(filepath.Join(tls.dir, today), os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return err
