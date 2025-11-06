@@ -68,7 +68,7 @@ func SystemSurvey() (Survey, error) {
 
 // IsRoot checks for root permissions
 func IsRoot() bool {
-	userLvl, _ := user.Current()
+	userLvl, _ := user.Current() //nolint:errcheck
 	return userLvl.Username == "root"
 }
 
