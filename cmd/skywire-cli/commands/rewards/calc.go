@@ -278,18 +278,18 @@ Architectures:
 			//nolint:errcheck
 			sky, _ = script.File(nodeInfoDotJSON).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String()
 			sky = strings.TrimRight(sky, "\n")
-			arch, _ = script.File(nodeInfoDotJSON).JQ(`.go_arch`).Replace(" ", "").Replace(`"`, "").String()
+			arch, _ = script.File(nodeInfoDotJSON).JQ(`.go_arch`).Replace(" ", "").Replace(`"`, "").String()  //nolint:errcheck
 			arch = strings.TrimRight(arch, "\n")
-			hv, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.node.hypervisor`).Replace(" ", "").Replace(`"`, "").String()
+			hv, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.node.hypervisor`).Replace(" ", "").Replace(`"`, "").String()  //nolint:errcheck
 			hv = strings.TrimRight(hv, "\n")
-			uu, _ = script.File(nodeInfoDotJSON).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String()
+			uu, _ = script.File(nodeInfoDotJSON).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String()  //nolint:errcheck
 			uu = strings.TrimRight(uu, "\n")
-			ifc, _ = script.File(nodeInfoDotJSON).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String()
+			ifc, _ = script.File(nodeInfoDotJSON).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String()  //nolint:errcheck
 			ifc = strings.TrimRight(ifc, "\n")
-			ifc1, _ = script.File(nodeInfoDotJSON).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String()
+			ifc1, _ = script.File(nodeInfoDotJSON).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String()  //nolint:errcheck
 			ifc1 = strings.TrimRight(ifc1, "\n")
-			macs, _ = script.File(nodeInfoDotJSON).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice()
-			macs1, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()
+			macs, _ = script.File(nodeInfoDotJSON).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice()  //nolint:errcheck
+			macs1, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()  //nolint:errcheck
 			if ifc == "[]" && ifc1 != "[]" {
 				ifc = ifc1
 			}
@@ -365,7 +365,7 @@ Architectures:
 			fmt.Printf("this month's rewards: %.6f\n", monthReward)
 			fmt.Printf("reward total per pool: %.6f\n", dayReward)
 		}
-		uniqueIP, _ := script.Echo(func() string {
+		uniqueIP, _ := script.Echo(func() string {  //nolint:errcheck
 			var inputStr strings.Builder
 			for _, ni := range nodesInfos1 {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.IPAddr))
@@ -389,7 +389,7 @@ Architectures:
 				}
 			}
 		}
-		uniqueUUID, _ := script.Echo(func() string {
+		uniqueUUID, _ := script.Echo(func() string {  //nolint:errcheck
 			var inputStr strings.Builder
 			for _, ni := range nodesInfos1 {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.UUID))
@@ -401,7 +401,7 @@ Architectures:
 		}()).Freq().Slice()
 
 		// look at the first non loopback interface macaddress
-		uniqueMac, _ := script.Echo(func() string {
+		uniqueMac, _ := script.Echo(func() string {  //nolint:errcheck
 			var inputStr strings.Builder
 			for _, ni := range nodesInfos1 {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.MacAddr))

@@ -151,7 +151,7 @@ func main() {
 				if err != nil {
 					log.Fatalf("Error fetching data: %v", err)
 				}
-				defer resp.Body.Close()
+				defer resp.Body.Close()  //nolint:errcheck
 
 				if err := json.NewDecoder(resp.Body).Decode(&rewards); err != nil {
 					log.Fatalf("Error decoding JSON: %v", err)
@@ -205,7 +205,7 @@ func main() {
 
 	fourth, tb := ts.NewTab("Log Collection")
 	tb.SetIcon(icons.History)  //nolint:errcheck
-	htmlcore.ReadHTMLString(ctx, fourth, "<a href='/log-collection'>Log Collection</a>")
+	htmlcore.ReadHTMLString(ctx, fourth, "<a href='/log-collection'>Log Collection</a>")  //nolint:errcheck
 	fifth, tb := ts.NewTab("Survey Index")
 	tb.SetIcon(icons.History)
 	if runtime.GOOS == "js" {
@@ -214,7 +214,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error fetching data: %v", err)
 		}  //nolint:errcheck
-		defer resp.Body.Close()
+		defer resp.Body.Close()  //nolint:errcheck
 
 		if err := json.NewDecoder(resp.Body).Decode(&nodes); err != nil {
 			log.Fatalf("Error decoding JSON: %v", err)

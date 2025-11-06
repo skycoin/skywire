@@ -275,7 +275,7 @@ func server(e error) {
 		tpstats, _ := script.Exec("skywire cli tp tree -s").Bytes()  //nolint:errcheck
 		c.Writer.Write(ansihtml.ConvertToHTML(tpstats))  //nolint:errcheck
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend))
+		c.Writer.Write([]byte(htmlend))  //nolint:errcheck
 		c.Writer.Flush()
 	})
 
@@ -286,35 +286,35 @@ func server(e error) {
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Map</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Map</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))  //nolint:errcheck
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks))
+		c.Writer.Write([]byte(navlinks))  //nolint:errcheck
 		c.Writer.Flush()
-		tpstats, _ := script.Exec("skywire cli tp tree -s").Match("Count of transports:").Replace("Count of transports: ", "").Replace("\n", "").String()
+		tpstats, _ := script.Exec("skywire cli tp tree -s").Match("Count of transports:").Replace("Count of transports: ", "").Replace("\n", "").String()  //nolint:errcheck
 		tpcount, _ := strconv.Atoi(tpstats)  //nolint:errcheck
 		if tpcount < 400 {
 			tpTree, _ := script.Exec("skywire cli tp tree").Bytes()  //nolint:errcheck
-			c.Writer.Write(ansihtml.ConvertToHTML(tpTree))
+			c.Writer.Write(ansihtml.ConvertToHTML(tpTree))  //nolint:errcheck
 			c.Writer.Flush()
 		} else {
-			c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map", tpcount)))
+			c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map", tpcount)))  //nolint:errcheck
 			c.Writer.Flush()
 		}
-		c.Writer.Write([]byte(htmlend))
+		c.Writer.Write([]byte(htmlend))  //nolint:errcheck
 		c.Writer.Flush()
 	})
 
 	r1.GET("/log-collection", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
-		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")  //nolint:errcheck
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Survey and Transport Log Collection</title></head>"))
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Survey and Transport Log Collection</title></head>"))  //nolint:errcheck  //nolint:errcheck
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>"))
+		c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>"))  //nolint:errcheck  //nolint:errcheck
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks))
+		c.Writer.Write([]byte(navlinks))  //nolint:errcheck
 		c.Writer.Flush()
 		tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh")
 		if err != nil {
@@ -327,14 +327,14 @@ func server(e error) {
 		_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())  //nolint:errcheck
 		res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String()
 		os.Remove(tmpFile.Name())  //nolint:errcheck
-		c.Writer.Write([]byte(fmt.Sprintf("%s\n", res)))
+		c.Writer.Write([]byte(fmt.Sprintf("%s\n", res)))  //nolint:errcheck
 		c.Writer.Flush()
 
 		// Initial line count
 		initialLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines()  //nolint:errcheck
 		// Read and print the initial lines
 		initialContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").First(initialLineCount).Bytes()  //nolint:errcheck
-		c.Writer.Write(ansihtml.ConvertToHTML(initialContent))
+		c.Writer.Write(ansihtml.ConvertToHTML(initialContent))  //nolint:errcheck
 		c.Writer.Flush()
 		for {
 			select {
@@ -348,9 +348,9 @@ func server(e error) {
 			currentLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines()  //nolint:errcheck
 			// Check if there are new lines
 			if currentLineCount > initialLineCount {
-				newContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(currentLineCount - initialLineCount).Bytes()
+				newContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(currentLineCount - initialLineCount).Bytes()  //nolint:errcheck
 				initialLineCount = currentLineCount
-				c.Writer.Write(ansihtml.ConvertToHTML(newContent))
+				c.Writer.Write(ansihtml.ConvertToHTML(newContent))  //nolint:errcheck
 				c.Writer.Flush()
 			}
 			finished, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(1).MatchRegexp(regexp.MustCompile(".*finished.*")).String()
@@ -359,9 +359,9 @@ func server(e error) {
 			}
 		}
 
-		c.Writer.Write([]byte(htmltoplink))
+		c.Writer.Write([]byte(htmltoplink))  //nolint:errcheck
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend))
+		c.Writer.Write([]byte(htmlend))  //nolint:errcheck
 		c.Writer.Flush()
 	})
 
@@ -369,7 +369,7 @@ func server(e error) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))  //nolint:errcheck
 		c.Writer.Flush()
 		c.Writer.Write([]byte(navlinks))
 		c.Writer.Flush()
@@ -416,10 +416,10 @@ func server(e error) {
 		c.Writer.Flush()
 		c.Writer.Write([]byte(navlinks))
 		c.Writer.Flush()
-		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines()
+		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines()  //nolint:errcheck
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -rup ` + c.Param("pk")).Bytes()
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -rup ` + c.Param("pk")).Bytes()  //nolint:errcheck
 		c.Writer.Write(ansihtml.ConvertToHTML(st))
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmltoplink))
@@ -514,7 +514,7 @@ func server(e error) {
 		l += "</tr>\n"
 		l += "</thead>\n"
 		l += "<tbody>\n"
-		rewardtxncsvs, _ := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+"/hist/", "").Replace("_rewardtxn0.csv", "").Slice()
+		rewardtxncsvs, _ := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+"/hist/", "").Replace("_rewardtxn0.csv", "").Slice()  //nolint:errcheck
 		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
 			skycoinpershare, _ := script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String()
 			skycoinpershare1 := ""
