@@ -79,10 +79,10 @@ func init() {
 	serverCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", deployment.Prod.DmsgDiscovery, "dmsg discovery url")
 	serverCmd.Flags().StringVarP(&ensureOnlineURL, "ensure-online", "O", scriptExecString("${ENSUREONLINE}"), "Exit when the specified URL cannot be fetched;\ni.e. https://fiber.skywire.dev")
 	if os.Getenv("DMSGHTTP_SK") != "" {
-		sk.Set(os.Getenv("DMSGHTTP_SK"))
+		sk.Set(os.Getenv("DMSGHTTP_SK"))  //nolint:errcheck
 	}
 	if scriptExecString("${DMSGHTTP_SK}") != "" {
-		sk.Set(scriptExecString("${DMSGHTTP_SK}"))
+		sk.Set(scriptExecString("${DMSGHTTP_SK}"))  //nolint:errcheck
 	}
 	serverCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 }
@@ -268,12 +268,12 @@ func server(e error) {
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))  //nolint:errcheck
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks))
+		c.Writer.Write([]byte(navlinks))  //nolint:errcheck
 		c.Writer.Flush()
-		tpstats, _ := script.Exec("skywire cli tp tree -s").Bytes()
-		c.Writer.Write(ansihtml.ConvertToHTML(tpstats))
+		tpstats, _ := script.Exec("skywire cli tp tree -s").Bytes()  //nolint:errcheck
+		c.Writer.Write(ansihtml.ConvertToHTML(tpstats))  //nolint:errcheck
 		c.Writer.Flush()
 		c.Writer.Write([]byte(htmlend))
 		c.Writer.Flush()
@@ -291,9 +291,9 @@ func server(e error) {
 		c.Writer.Write([]byte(navlinks))
 		c.Writer.Flush()
 		tpstats, _ := script.Exec("skywire cli tp tree -s").Match("Count of transports:").Replace("Count of transports: ", "").Replace("\n", "").String()
-		tpcount, _ := strconv.Atoi(tpstats)
+		tpcount, _ := strconv.Atoi(tpstats)  //nolint:errcheck
 		if tpcount < 400 {
-			tpTree, _ := script.Exec("skywire cli tp tree").Bytes()
+			tpTree, _ := script.Exec("skywire cli tp tree").Bytes()  //nolint:errcheck
 			c.Writer.Write(ansihtml.ConvertToHTML(tpTree))
 			c.Writer.Flush()
 		} else {
@@ -324,16 +324,16 @@ func server(e error) {
 			return
 		}
 		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()
-		_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())
+		_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())  //nolint:errcheck
 		res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String()
-		os.Remove(tmpFile.Name())
+		os.Remove(tmpFile.Name())  //nolint:errcheck
 		c.Writer.Write([]byte(fmt.Sprintf("%s\n", res)))
 		c.Writer.Flush()
 
 		// Initial line count
-		initialLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines()
+		initialLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines()  //nolint:errcheck
 		// Read and print the initial lines
-		initialContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").First(initialLineCount).Bytes()
+		initialContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").First(initialLineCount).Bytes()  //nolint:errcheck
 		c.Writer.Write(ansihtml.ConvertToHTML(initialContent))
 		c.Writer.Flush()
 		for {
@@ -345,7 +345,7 @@ func server(e error) {
 			// Sleep for a short duration
 			time.Sleep(100 * time.Millisecond)
 			// Get the current line count
-			currentLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines()
+			currentLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines()  //nolint:errcheck
 			// Check if there are new lines
 			if currentLineCount > initialLineCount {
 				newContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(currentLineCount - initialLineCount).Bytes()
@@ -373,7 +373,7 @@ func server(e error) {
 		c.Writer.Flush()
 		c.Writer.Write([]byte(navlinks))
 		c.Writer.Flush()
-		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines()
+		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines()  //nolint:errcheck
 		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))
 		c.Writer.Flush()
 		st, err := script.Exec(`skywire cli log st -d ` + wd + `/log_backups -r`).Bytes()
@@ -1153,10 +1153,10 @@ func server(e error) {
 	//////////////////AAAH/gAAAH4AAAA4AAQAGAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAQA
 	AgAAAIAAAACAAAABwAAAAfAAAAfwAAAP/gAAf/8AAH//AAB//4AB//+AA///wAP///AH///4H///
 	//////////////8=`
-	faviconBuffer, _ := base64.StdEncoding.DecodeString(faviconBase64)
+	faviconBuffer, _ := base64.StdEncoding.DecodeString(faviconBase64)  //nolint:errcheck
 
 	r1.GET("/favicon.ico", func(c *gin.Context) {
-		_, _ = c.Writer.WriteString(string(faviconBuffer))
+		_, _ = c.Writer.WriteString(string(faviconBuffer))  //nolint:errcheck
 	})
 
 	if e != nil {
@@ -1164,7 +1164,7 @@ func server(e error) {
 		r1.GET("/index.html", mainPage)
 	} else {
 		//manually create routes to the compiled cogentcore web app source files
-		filepath.Walk(outputDir+"/bin/web", func(path string, info os.FileInfo, err error) error {
+		filepath.Walk(outputDir+"/bin/web", func(path string, info os.FileInfo, err error) error {  //nolint:errcheck
 			if !info.IsDir() {
 				relPath, err := filepath.Rel(outputDir+"/bin/web", path)
 				if err != nil {
@@ -1196,7 +1196,7 @@ func server(e error) {
 	wg.Add(1)
 	go func() {
 		fmt.Printf("listening on http://127.0.0.1:%d using gin router\n", webPort)
-		r1.Run(fmt.Sprintf(":%d", webPort))
+		r1.Run(fmt.Sprintf(":%d", webPort))  //nolint:errcheck
 		wg.Done()
 	}()
 

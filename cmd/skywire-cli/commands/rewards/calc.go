@@ -217,11 +217,13 @@ Architectures:
 
 		var res []string
 		if pubkey == "" {
+			//nolint:errcheck
 			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice()
 			if len(res) == 0 {
 				log.Fatal("No keys achieved minimum uptime on " + wdate + " !")
 			}
 		} else {
+			//nolint:errcheck
 			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Match(pubkey).Slice()
 			if len(res) == 0 {
 				log.Fatal("Specified key " + pubkey + "\n did not achieve minimum uptime on " + wdate + " !")
@@ -257,6 +259,7 @@ Architectures:
 				continue
 			}
 
+			//nolint:errcheck
 			confType, _ := script.File(nodeInfoDotJSON).JQ(`.services.dmsg_discovery`).Replace("\"", "").String()
 			if err != nil {
 				log.Debug(err.Error())
@@ -269,8 +272,10 @@ Architectures:
 				svcconf = compareAndPrintDiffs(nodeInfoSvc, dConf, true)
 			}
 
+			//nolint:errcheck
 			ip, _ = script.File(nodeInfoDotJSON).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String()
 			ip = strings.TrimRight(ip, "\n")
+			//nolint:errcheck
 			sky, _ = script.File(nodeInfoDotJSON).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String()
 			sky = strings.TrimRight(sky, "\n")
 			arch, _ = script.File(nodeInfoDotJSON).JQ(`.go_arch`).Replace(" ", "").Replace(`"`, "").String()
@@ -375,6 +380,7 @@ Architectures:
 			if line != "" {
 				fields := strings.Fields(line)
 				if len(fields) == 2 {
+					//nolint:errcheck
 					count, _ := strconv.Atoi(fields[0])
 					ipCounts = append(ipCounts, counting{
 						Name:  fields[1],
@@ -411,6 +417,7 @@ Architectures:
 			if line != "" {
 				fields := strings.Fields(line)
 				if len(fields) == 2 {
+					//nolint:errcheck
 					count, _ := strconv.Atoi(fields[0])
 					macCounts = append(macCounts, counting{
 						Name:  fields[1],

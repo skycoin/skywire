@@ -169,6 +169,7 @@ func main() {
 			txid := strings.Replace(httpGetString("/skycoin-rewards/hist/"+string(r.Date)+".txt"), "\n", "", -1)
 			if txid != "" {
 				core.NewText(pg).SetText(`TXID: ` + txid)
+				//nolint:errcheck  //nolint:errcheck
 				htmlcore.ReadHTMLString(ctx, pg, `<a href="https://explorer.skycoin.com/app/transaction/`+txid+`">`+txid+`</a>`)
 			} else {
 				core.NewText(pg).SetText(`Rewards not yet distributed`)
@@ -203,7 +204,7 @@ func main() {
 	}
 
 	fourth, tb := ts.NewTab("Log Collection")
-	tb.SetIcon(icons.History)
+	tb.SetIcon(icons.History)  //nolint:errcheck
 	htmlcore.ReadHTMLString(ctx, fourth, "<a href='/log-collection'>Log Collection</a>")
 	fifth, tb := ts.NewTab("Survey Index")
 	tb.SetIcon(icons.History)
@@ -212,7 +213,7 @@ func main() {
 		resp, err := http.Get("/log-collection/json")
 		if err != nil {
 			log.Fatalf("Error fetching data: %v", err)
-		}
+		}  //nolint:errcheck
 		defer resp.Body.Close()
 
 		if err := json.NewDecoder(resp.Body).Decode(&nodes); err != nil {
