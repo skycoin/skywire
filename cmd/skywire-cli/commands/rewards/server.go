@@ -381,11 +381,11 @@ func server(e error) {
 			log.WithError(err).Error()
 			c.Writer.Write([]byte(err.Error()))  //nolint:errcheck
 		}
-		c.Writer.Write(ansihtml.ConvertToHTML(st))
+		c.Writer.Write(ansihtml.ConvertToHTML(st))  //nolint:errcheck
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmltoplink))
+		c.Writer.Write([]byte(htmltoplink))  //nolint:errcheck
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend))
+		c.Writer.Write([]byte(htmlend))  //nolint:errcheck
 		c.Writer.Flush()
 	})
 

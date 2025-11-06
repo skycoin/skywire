@@ -635,7 +635,7 @@ var treeCmd = &cobra.Command{
 			offlinekeys, _ = script.Echo(uts).JQ(".[] | select(.on  | not) | .pk").Replace("\"", "").Slice()  //nolint:errcheck
 		}
 
-		sortedEdgeKeys, _ = script.Echo(tps).JQ(".[].edges[]").Freq().Column(2).Slice()
+		sortedEdgeKeys, _ = script.Echo(tps).JQ(".[].edges[]").Freq().Column(2).Slice()  //nolint:errcheck
 
 		if isStats {
 			fmt.Printf("Unique keys in Transport Discovery: %d\n", len(sortedEdgeKeys))
@@ -712,7 +712,7 @@ var treeCmd = &cobra.Command{
 		usedkeys = append(usedkeys, edgeKey)
 		var lvl func(n int, k string)
 		lvl = func(n int, k string) {
-			l, _ := script.Echo(tps).JQ(".[] | select(.edges[] == " + k + ") | .edges[] | select(. != " + k + ")").Slice()
+			l, _ := script.Echo(tps).JQ(".[] | select(.edges[] == " + k + ") | .edges[] | select(. != " + k + ")").Slice()  //nolint:errcheck
 			for _, m := range l {
 				if m == k {
 					continue
@@ -808,7 +808,7 @@ var treeCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), errors.New("specified dest or last node public key does not have any transports"))
 				}
 			}
-			l, _ := script.Echo(tps).JQ("[.[] | select(.edges | contains([" + sortedEdgeKeys[0] + "," + sortedEdgeKeys[1] + "]))]").Slice()
+			l, _ := script.Echo(tps).JQ("[.[] | select(.edges | contains([" + sortedEdgeKeys[0] + "," + sortedEdgeKeys[1] + "]))]").Slice()  //nolint:errcheck
 			if len(l) > 0 && fmt.Sprintf("%v", l) != "[[]]" {
 				pterm.Println(pterm.Red("Direct route:"))
 				for _, m := range l {
@@ -821,13 +821,13 @@ var treeCmd = &cobra.Command{
 			re := regexp.MustCompile(`\s+`)
 			for i := len(leveledList) - 1; i >= 0; i-- {
 				if len(routeSlice) == 0 && strings.Contains(leveledList[i].Text, lastnode.String()) {
-					rStepTpid, _ := script.Echo(fmt.Sprintf("%v", leveledList[i].Text)).ReplaceRegexp(re, " ").Column(2).Replace("\n", "").String()
-					rStepTp, _ := script.Echo(tps).JQ(".[] | select(.t_id == "+`"`+strings.TrimRight(rStepTpid, "\n")+`"`+")").Replace("\n", "").String()
+					rStepTpid, _ := script.Echo(fmt.Sprintf("%v", leveledList[i].Text)).ReplaceRegexp(re, " ").Column(2).Replace("\n", "").String()  //nolint:errcheck
+					rStepTp, _ := script.Echo(tps).JQ(".[] | select(.t_id == "+`"`+strings.TrimRight(rStepTpid, "\n")+`"`+")").Replace("\n", "").String()  //nolint:errcheck
 					routeSlice = append(routeSlice, rStepTp)
 					listLevel = leveledList[i].Level
 				}
 				if len(routeSlice) > 0 && leveledList[i].Level == (listLevel-1) {
-					rStepTpid, _ := script.Echo(fmt.Sprintf("%v", leveledList[i].Text)).ReplaceRegexp(re, " ").Column(2).Replace("\n", "").String()
+					rStepTpid, _ := script.Echo(fmt.Sprintf("%v", leveledList[i].Text)).ReplaceRegexp(re, " ").Column(2).Replace("\n", "").String()  //nolint:errcheck
 					rStepTp, _ := script.Echo(tps).JQ(".[] | select(.t_id == "+`"`+strings.TrimRight(rStepTpid, "\n")+`"`+")").Replace("\n", "").String()
 					routeSlice = append(routeSlice, rStepTp)
 					listLevel = leveledList[i].Level
