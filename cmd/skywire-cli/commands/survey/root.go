@@ -72,6 +72,7 @@ var surveyCmd = &cobra.Command{
 		}
 
 		if confPath != "" {
+			//nolint:gosec
 			confJSON, err := os.ReadFile(confPath)
 			if err != nil {
 				log.WithError(err).Fatal("Failed to read config file")

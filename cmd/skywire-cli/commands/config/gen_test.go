@@ -57,6 +57,7 @@ func TestConfigGenCmdFunc(t *testing.T) {
 			expectedErr: true,
 		},
 	}
+	//nolint:errcheck
 	_ = os.Remove("test-config.json")
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -73,5 +74,6 @@ func TestConfigGenCmdFunc(t *testing.T) {
 			}
 		})
 	}
+	//nolint:errcheck
 	_ = os.Remove("test-config.json")
 }

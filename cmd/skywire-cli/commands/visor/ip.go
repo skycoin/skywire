@@ -53,6 +53,7 @@ func getIPAddress(geoipURL string) (string, error) {
 	if err != nil {
 		return info.IP, err
 	}
+	//nolint:errcheck
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)

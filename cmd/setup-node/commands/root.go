@@ -196,12 +196,14 @@ var checkHealthCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("Failed to dial setup node: %v", err)
 		}
+		//nolint:errcheck
 		defer conn.Close()
 
 		log.Infoln("Connected to setup node: ", snpk.String())
 
 		// RPC client
 		client := rpc.NewClient(conn)
+		//nolint:errcheck
 		defer client.Close()
 
 		// Call HealthCheck

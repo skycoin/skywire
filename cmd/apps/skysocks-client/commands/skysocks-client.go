@@ -179,6 +179,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 }
 
 func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey, port routing.Port) (net.Conn, error) {
+	//nolint:errcheck
 	appCl.SetDetailedStatus(appserver.AppDetailedStatusStarting)
 	var conn net.Conn
 	err := r.Do(ctx, func() error {
@@ -229,6 +230,7 @@ func httpProxy(ctx context.Context, httpAddr, sockscAddr string) {
 
 	go func() {
 		<-ctx.Done()
+		//nolint:errcheck
 		httpProxySrv.Close()
 		print("Stopping http proxy")
 	}()

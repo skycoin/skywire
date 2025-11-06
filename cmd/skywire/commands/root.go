@@ -202,7 +202,8 @@ var docCmd = &cobra.Command{
 			use = strings.Split(j.Use, " ")[0]
 			fmt.Printf("\n### %s\n", use)
 			fmt.Printf("\n```\n")
-			j.Help()
+			//nolint:errcheck
+			_ = j.Help()
 			fmt.Printf("\n```\n")
 			if j.Name() == "cli" {
 				fmt.Printf("\n%s\n", "skywire command line interface")
