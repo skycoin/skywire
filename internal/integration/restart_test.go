@@ -65,12 +65,12 @@ func TestRestart(t *testing.T) {
 
 		for attempt := 0; attempt < 5; attempt++ {
 			res, err = env.SendSkyMessage(sender, receiver, t.Name())
-			
+
 			// If HTTP request itself failed (e.g., connection timeout), retry
 			if err != nil {
 				lastError = fmt.Sprintf("HTTP request failed: %v", err)
 				t.Logf("Attempt %d: %s (retrying in 5s)", attempt+1, lastError)
-				
+
 				if attempt < 4 { // Don't sleep after last attempt
 					time.Sleep(5 * time.Second)
 				}
