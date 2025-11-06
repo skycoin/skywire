@@ -140,7 +140,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	} else if address[:1] == ":" {
 		url = "127.0.0.1" + address
 	} else if address[:2] == "*:" {
-		url = address[1:]
+		url = "0.0.0.0" + address[1:]
 	} else {
 		url = "127.0.0.1:8001"
 	}

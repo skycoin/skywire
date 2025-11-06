@@ -4,6 +4,7 @@
 package integration_test
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"testing"
@@ -64,7 +65,17 @@ func TestRestart(t *testing.T) {
 
 		for attempt := 0; attempt < 5; attempt++ {
 			res, err = env.SendSkyMessage(sender, receiver, t.Name())
-			require.NoError(t, err)
+			
+			// If HTTP request itself failed (e.g., connection timeout), retry
+			if err != nil {
+				lastError = fmt.Sprintf("HTTP request failed: %v", err)
+				t.Logf("Attempt %d: %s (retrying in 5s)", attempt+1, lastError)
+				
+				if attempt < 4 { // Don't sleep after last attempt
+					time.Sleep(5 * time.Second)
+				}
+				continue
+			}
 
 			if res.StatusCode == http.StatusOK {
 				require.NoError(t, res.Body.Close())
@@ -84,8 +95,12 @@ func TestRestart(t *testing.T) {
 		}
 
 		// All retries failed
-		t.Logf("All retry attempts failed. Last error: %v", lastError)
-		require.Equal(t, http.StatusOK, res.StatusCode, res)
+		if err != nil {
+			require.NoError(t, err, "HTTP request failed after all retries: %v", lastError)
+		} else {
+			t.Logf("All retry attempts failed. Last error: %v", lastError)
+			require.Equal(t, http.StatusOK, res.StatusCode, res)
+		}
 	}
 	// TODO(ersonp): currently there is some issue with the visor containers that needs to be fixed first that causes the visor to not start properly
 	// after a restart
