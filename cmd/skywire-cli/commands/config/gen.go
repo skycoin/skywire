@@ -424,7 +424,7 @@ var genConfigCmd = &cobra.Command{
 					services = servicesConfig.Test
 				}
 			} else {
-				defer res.Body.Close()
+				defer res.Body.Close()  //nolint:errcheck
 				body, err := io.ReadAll(res.Body)
 				if err != nil {
 					log.WithError(err).Error("Failed to read HTTP response")

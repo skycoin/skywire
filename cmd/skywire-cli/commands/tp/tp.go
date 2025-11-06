@@ -330,7 +330,7 @@ var addTpCmd = &cobra.Command{
 		if transportType != "dmsg" && transportType != "stcpr" && transportType != "sudph" && transportType != "" {
 			logger.Fatal("Invalid transport type specified:", transportType)
 		}
-		isJSON, _ := cmd.Flags().GetBool(internal.JSONString)
+		isJSON, _ := cmd.Flags().GetBool(internal.JSONString)  //nolint:errcheck
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -354,7 +354,7 @@ var addTpCmd = &cobra.Command{
 		//check before connecting stcpr transport that the visor public key is available to be transported via the given transport type unless forceAttempt == true
 		if !forceAttempt {
 			transports = internal.GetData(cacheFileAR, arURL+"/transports", cacheFilesAge)
-			stcprkeys, _ = script.Echo(transports).JQ(".stcpr[]").Replace(`"`, "").Slice()
+			stcprkeys, _ = script.Echo(transports).JQ(".stcpr[]").Replace(`"`, "").Slice()  //nolint:errcheck
 			if transportType == "stcpr" {
 				found := false
 				for i := range stcprkeys {
@@ -369,7 +369,7 @@ var addTpCmd = &cobra.Command{
 					availableSTCPR = true
 				}
 			}
-			sudphkeys, _ = script.Echo(transports).JQ(".sudph[]").Replace(`"`, "").Slice()
+			sudphkeys, _ = script.Echo(transports).JQ(".sudph[]").Replace(`"`, "").Slice()  //nolint:errcheck
 			if transportType == "sudph" {
 				found := false
 				for i := range sudphkeys {

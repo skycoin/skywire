@@ -75,7 +75,7 @@ var startCmd = &cobra.Command{
 			if tCtxCancelFunc != nil {
 				tCtxCancelFunc()
 			}
-			rpcClient.KillApp("vpn-client")
+			rpcClient.KillApp("vpn-client")  //nolint:errcheck
 			fmt.Print("\nStopped!")
 			os.Exit(1)
 		}()

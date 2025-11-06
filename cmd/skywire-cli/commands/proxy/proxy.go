@@ -55,9 +55,9 @@ var startCmd = &cobra.Command{
 
 		// stop possible running proxy before start it again
 		if clientName != "" {
-			rpcClient.StopApp(clientName)
+			rpcClient.StopApp(clientName)  //nolint:errcheck
 		} else {
-			rpcClient.StopApp("skysocks-client")
+			rpcClient.StopApp("skysocks-client")  //nolint:errcheck
 		}
 
 		var tCtxCancelFunc context.CancelFunc
@@ -72,7 +72,7 @@ var startCmd = &cobra.Command{
 			if tCtxCancelFunc != nil {
 				tCtxCancelFunc()
 			}
-			rpcClient.KillApp(clientName)
+			rpcClient.KillApp(clientName)  //nolint:errcheck
 			fmt.Print("\nStopped!")
 			os.Exit(1)
 		}()
@@ -298,7 +298,7 @@ var listCmd = &cobra.Command{
 		// --- If JSON output requested ---
 		if jsonOutput {
 			var list []services.Service
-			json.Unmarshal([]byte(sds), &list)
+			json.Unmarshal([]byte(sds), &list)  //nolint:errcheck
 			var b bytes.Buffer
 			internal.PrintOutput(cmd.Flags(), list, b.String())
 			return
