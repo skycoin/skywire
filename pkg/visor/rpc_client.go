@@ -999,7 +999,7 @@ func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 }
 
 // SetAppKillswitch implements API.
-func (mc *mockRPCClient) SetAppKillswitch(_ string, killswitch bool) error {
+func (mc *mockRPCClient) SetAppKillswitch(_ string, _ bool) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
@@ -1014,7 +1014,7 @@ func (mc *mockRPCClient) SetAppKillswitch(_ string, killswitch bool) error {
 }
 
 // SetAppSecure implements API.
-func (mc *mockRPCClient) SetAppSecure(_ string, isSecure bool) error {
+func (mc *mockRPCClient) SetAppSecure(_ string, _ bool) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
@@ -1029,7 +1029,7 @@ func (mc *mockRPCClient) SetAppSecure(_ string, isSecure bool) error {
 }
 
 // SetAppAddress implements API.
-func (mc *mockRPCClient) SetAppAddress(_ string, address string) error {
+func (mc *mockRPCClient) SetAppAddress(_ string, _ string) error {
 	return mc.do(true, func() error {
 		const chatName = "skychat"
 
@@ -1316,7 +1316,7 @@ func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 }
 
 // Connect implements API.
-func (mc *mockRPCClient) Connect(_ cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+func (mc *mockRPCClient) Connect(_ cipher.PubKey, _, _ int) (uuid.UUID, error) {
 	return uuid.UUID{}, nil
 }
 

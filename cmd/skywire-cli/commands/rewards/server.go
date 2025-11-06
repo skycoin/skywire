@@ -1566,7 +1566,6 @@ func resetColor() string {
 	return reset
 }
 
-
 const (
 	green   = "\033[97;42m"
 	white   = "\033[90;47m"

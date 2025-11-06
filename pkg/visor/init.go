@@ -399,7 +399,7 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	return nil
 }
 
-func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	dmsgC := v.dmsgC
 	if dmsgC == nil {
 		return fmt.Errorf("cannot initialize dmsg log server: dmsg not configured")
@@ -508,12 +508,12 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initStcprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initStcprClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	v.tpM.InitClient(ctx, types.STCPR, v.conf.Transport.StcprPort)
 	return nil
 }
 
-func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initStcpClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	if v.conf.STCP != nil {
 		v.tpM.InitClient(ctx, types.STCP, 0)
 	}
