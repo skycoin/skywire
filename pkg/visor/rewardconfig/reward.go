@@ -19,7 +19,7 @@ func SetReward(confP *Reward, out string) (*Reward, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal json. err=%v", err)
 	}
-	err = os.WriteFile(out, j, 0644) //nolint
+	err = os.WriteFile(out, j, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write config to file. err=%v", err)
 	}

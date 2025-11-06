@@ -72,13 +72,13 @@ func longText() string {
 	//show configured reward address if valid configuration exists
 	//only the default is supported
 	if _, err := os.Stat(rewardFile); err == nil {
-		reward, err := os.ReadFile(rewardFile) 
+		reward, err := os.ReadFile(rewardFile)
 		if err != nil {
-			fmt.Printf("    reward settings misconfigured!") 
+			fmt.Printf("    reward settings misconfigured!")
 		}
 		_, err = coincipher.DecodeBase58Address(strings.TrimSpace(string(reward)))
 		if err != nil {
-			fmt.Printf("    invalid address in reward config %v", err) 
+			fmt.Printf("    invalid address in reward config %v", err)
 		}
 		isRewarded = true
 		defaultRewardAddress = fmt.Sprintf("%s\n", reward)
@@ -96,7 +96,7 @@ var rewardCmd = &cobra.Command{
 		//--all unhides flags, prints help menu, and exits
 		if isAll {
 			for _, j := range cHiddenFlags {
-				f := cmd.Flags().Lookup(j) //nolint
+				f := cmd.Flags().Lookup(j)
 				f.Hidden = false
 			}
 			cmd.Flags().MarkHidden("all")
@@ -141,7 +141,7 @@ var rewardCmd = &cobra.Command{
 		}
 		//print reward address and exit
 		if isRead {
-			dat, err := os.ReadFile(output) 
+			dat, err := os.ReadFile(output)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error reading file. err=%v", err))
 			}
@@ -168,7 +168,7 @@ var rewardCmd = &cobra.Command{
 
 		//using the rpc of the running visor avoids needing sudo permissions
 		if clienterr != nil {
-			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644)) //nolint
+			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644))
 			readRewardFile(cmd.Flags())
 			return
 		}
@@ -176,14 +176,14 @@ var rewardCmd = &cobra.Command{
 		if clienterr == nil {
 			rwdAdd, err := client.SetRewardAddress(rewardAddress)
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err)) //nolint
+				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 				return
 			}
 			output := fmt.Sprintf("Reward address:\n  %s\n", rwdAdd)
 			internal.PrintOutput(cmd.Flags(), output, output)
 		}
 		if clienterr != nil {
-			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644)) //nolint
+			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644))
 			readRewardFile(cmd.Flags())
 		}
 	},
@@ -191,7 +191,7 @@ var rewardCmd = &cobra.Command{
 
 func readRewardFile(cmdFlags *pflag.FlagSet) {
 	//read the file which was written
-	dat, err := os.ReadFile(output) 
+	dat, err := os.ReadFile(output)
 	if err != nil {
 		internal.PrintFatalError(cmdFlags, fmt.Errorf("Error reading file. err=%v", err))
 	}

@@ -12,7 +12,7 @@ func Init(dns string, pgMaxOpenConn int) (*gorm.DB, error) {
 	if err != nil {
 		return db, err
 	}
-	dbConf, _ := db.DB() //nolint
+	dbConf, _ := db.DB()
 	dbConf.SetMaxOpenConns(pgMaxOpenConn)
 	return db, nil
 }

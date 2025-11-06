@@ -205,14 +205,14 @@ func run(conf *visorconfig.V1) error {
 		case <-ctx.Done():
 			mLog.Info("Visor closed early.")
 		default:
-			return fmt.Errorf("Failed to start visor.") //nolint
+			return fmt.Errorf("Failed to start visor.")
 		}
 		return nil
 	}
 
 	stopVisorFn = func() {
 		if err := vis.Close(); err != nil {
-			mLog.WithError(err).Error("Visor closed with error.") //nolint
+			mLog.WithError(err).Error("Visor closed with error.")
 		}
 		cancel()
 	}
@@ -277,7 +277,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
 	if dmsgServer != "" {
-		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer) //nolint
+		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer)
 	}
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
@@ -486,7 +486,7 @@ func initUI() *fs.FS {
 }
 
 func storeLog(conf *visorconfig.V1) {
-	hook, _ := lumberjackrus.NewHook( //nolint
+	hook, _ := lumberjackrus.NewHook(
 		&lumberjackrus.LogFile{
 			Filename:   conf.LocalPath + "/log/skywire.log",
 			MaxSize:    1,

@@ -45,9 +45,9 @@ var utCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
 		if online {
-			utKeysOnline, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Match(pk).Replace("\"", "").Slice() //nolint
+			utKeysOnline, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Match(pk).Replace("\"", "").Slice()
 			if isStats {
-				stats, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").CountLines() //nolint
+				stats, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").CountLines()
 				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", stats), fmt.Sprintf("%d visors online\n", stats))
 				return
 			}
@@ -61,7 +61,7 @@ var utCmd = &cobra.Command{
 			return
 		}
 		if isStats {
-			stats, _ := script.Echo(uts).JQ(".[] | .pk").CountLines() //nolint
+			stats, _ := script.Echo(uts).JQ(".[] | .pk").CountLines()
 			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors\n", stats), fmt.Sprintf("%d visors\n", stats))
 			return
 		}

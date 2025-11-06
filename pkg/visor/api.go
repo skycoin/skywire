@@ -283,7 +283,7 @@ func (v *Visor) Summary() (*Summary, error) {
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
 	if v.isDTMReady() {
-		dmsgTracker, _ := v.dtm.Get(v.conf.PK) //nolint
+		dmsgTracker, _ := v.dtm.Get(v.conf.PK)
 		dmsgStatValue = &dmsgTracker
 	}
 
@@ -1114,7 +1114,7 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 		}
 	}
 	if v.procM != nil {
-		apps, _ := v.Apps() //nolint
+		apps, _ := v.Apps()
 		for _, app := range apps {
 			port, err := v.procM.GetAppPort(app.Name)
 			if err == nil {
@@ -1403,7 +1403,7 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		}
 		latencies, err := v.Ping(conf)
 		if err != nil {
-			go v.StopPing(conf.PK) //nolint
+			go v.StopPing(conf.PK)
 			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
 			continue
 		}
@@ -1420,7 +1420,7 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		}
 		mean = sumLatency / time.Duration(len(latencies))
 		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(maxx), Min: fmt.Sprint(minn), Mean: fmt.Sprint(mean), Status: "Success"})
-		v.StopPing(conf.PK) //nolint
+		v.StopPing(conf.PK)
 	}
 	return result, nil
 }
@@ -1550,7 +1550,7 @@ func (v *Visor) GetSkysocksClientAddress() string {
 // IsDMSGClientReady return availability of dsmg client
 func (v *Visor) IsDMSGClientReady() (bool, error) {
 	if v.isDTMReady() {
-		dmsgTracker, _ := v.dtm.Get(v.conf.PK) //nolint
+		dmsgTracker, _ := v.dtm.Get(v.conf.PK)
 		if dmsgTracker.ServerPK.Hex()[:5] != "00000" {
 			return true, nil
 		}

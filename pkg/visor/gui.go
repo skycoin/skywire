@@ -194,7 +194,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 func vpnStatusBtn(rpcClient API) {
 	for {
 		vpnStatusMx.Lock()
-		stats, _ := rpcClient.GetAppConnectionsSummary(visorconfig.VPNClientName) //nolint
+		stats, _ := rpcClient.GetAppConnectionsSummary(visorconfig.VPNClientName)
 		if len(stats) == 1 {
 			if stats[0].IsAlive {
 				if vpnLastStatus != 1 {
@@ -229,7 +229,7 @@ func serversBtn(servers []*systray.MenuItem, rpcClient API) {
 	btnChannel := make(chan int)
 	for index, server := range servers {
 		go func(chn chan int, server *systray.MenuItem, index int) {
-			for { //nolint
+			for {
 				select {
 				case <-server.ClickedCh:
 					chn <- index
@@ -253,24 +253,24 @@ func serversBtn(servers []*systray.MenuItem, rpcClient API) {
 			continue
 		}
 
-		rpcClient.StopApp(visorconfig.VPNClientName)      //nolint
-		rpcClient.SetAppPK(visorconfig.VPNClientName, pk) //nolint
+		rpcClient.StopApp(visorconfig.VPNClientName)
+		rpcClient.SetAppPK(visorconfig.VPNClientName, pk)
 		vpnStatusMx.Lock()
 		vpnLastStatus = 3
 		vpnStatusMx.Unlock()
-		rpcClient.StartApp(visorconfig.VPNClientName) //nolint
+		rpcClient.StartApp(visorconfig.VPNClientName)
 	}
 }
 
 func handleVPNButton(rpcClient API) {
-	stats, _ := rpcClient.GetAppConnectionsSummary(visorconfig.VPNClientName) //nolint
+	stats, _ := rpcClient.GetAppConnectionsSummary(visorconfig.VPNClientName)
 	if len(stats) == 1 {
-		rpcClient.StopApp(visorconfig.VPNClientName) //nolint
+		rpcClient.StopApp(visorconfig.VPNClientName)
 	} else {
 		vpnStatusMx.Lock()
 		vpnLastStatus = 3
 		vpnStatusMx.Unlock()
-		rpcClient.StartApp(visorconfig.VPNClientName) //nolint
+		rpcClient.StartApp(visorconfig.VPNClientName)
 	}
 }
 
@@ -315,7 +315,7 @@ func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *
 
 func getSystrayHTTPClient(ctx context.Context, conf *visorconfig.V1, logger *logging.MasterLogger) *http.Client {
 	var serviceURL dmsgcurl.URL
-	serviceURL.Fill(conf.Launcher.ServiceDisc) //nolint
+	serviceURL.Fill(conf.Launcher.ServiceDisc)
 	if serviceURL.Scheme == "dmsg" {
 		var keys cipher.PubKeys
 		servers := conf.Dmsg.Servers
@@ -442,7 +442,7 @@ func stopVisor() {
 
 func isHypervisorRunning(addr string) bool {
 	// we check if it's up by querying `health` endpoint
-	resp, err := http.Get(addr) //nolint
+	resp, err := http.Get(addr)
 	if err != nil {
 		// hypervisor is not running in this case
 		return false

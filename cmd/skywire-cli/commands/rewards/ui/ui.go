@@ -169,7 +169,7 @@ func main() {
 			txid := strings.Replace(httpGetString("/skycoin-rewards/hist/"+string(r.Date)+".txt"), "\n", "", -1)
 			if txid != "" {
 				core.NewText(pg).SetText(`TXID: ` + txid)
-				htmlcore.ReadHTMLString(ctx, pg, `<a href="https://explorer.skycoin.com/app/transaction/`+txid+`">`+txid+`</a>`) //nolint
+				htmlcore.ReadHTMLString(ctx, pg, `<a href="https://explorer.skycoin.com/app/transaction/`+txid+`">`+txid+`</a>`)
 			} else {
 				core.NewText(pg).SetText(`Rewards not yet distributed`)
 			}
@@ -204,7 +204,7 @@ func main() {
 
 	fourth, tb := ts.NewTab("Log Collection")
 	tb.SetIcon(icons.History)
-	htmlcore.ReadHTMLString(ctx, fourth, "<a href='/log-collection'>Log Collection</a>") //nolint
+	htmlcore.ReadHTMLString(ctx, fourth, "<a href='/log-collection'>Log Collection</a>")
 	fifth, tb := ts.NewTab("Survey Index")
 	tb.SetIcon(icons.History)
 	if runtime.GOOS == "js" {
@@ -318,7 +318,7 @@ func fmtDuration(d time.Duration) string {
 }
 
 func httpGetString(url string) string {
-	resp, err := http.Get(url) //nolint
+	resp, err := http.Get(url)
 	if err == nil {
 		defer resp.Body.Close()
 		bodyBytes, err := io.ReadAll(resp.Body)

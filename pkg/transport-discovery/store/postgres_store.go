@@ -49,7 +49,7 @@ func (s *postgresStore) RegisterTransport(_ context.Context, sEntry *transport.S
 	return s.client.Save(&tpRecord).Error
 }
 
-func (s *postgresStore) DeregisterTransport(ctx context.Context, id uuid.UUID) error { //nolint
+func (s *postgresStore) DeregisterTransport(ctx context.Context, id uuid.UUID) error {
 	return s.client.Where("transport_id = ?", id).Delete(&Transport{}).Error
 }
 

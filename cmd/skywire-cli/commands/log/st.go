@@ -112,8 +112,8 @@ func makeTree() {
 				continue
 			}
 			if filepath.Base(kid) == "health.json" {
-				fileContents, _ := script.File(kid).String() //nolint
-				fileInfo, _ := os.Stat(kid)                  //nolint
+				fileContents, _ := script.File(kid).String()
+				fileInfo, _ := os.Stat(kid)
 				if time.Since(fileInfo.ModTime()) < time.Hour {
 					coloredFile = pterm.Green(filepath.Base(kid))
 				} else {

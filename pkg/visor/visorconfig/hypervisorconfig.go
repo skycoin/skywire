@@ -154,7 +154,7 @@ func (c *HypervisorConfig) Parse(path string) error {
 		return err
 	}
 
-	defer func() { //nolint
+	defer func() {
 		if err := f.Close(); err != nil {
 			log.Fatalf("Failed to close file %s: %v", f.Name(), err)
 		}

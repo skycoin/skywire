@@ -59,7 +59,7 @@ var topCmd = &cobra.Command{
 			if ec < 2 {
 				logpath := filepath.Join(conf.ConfigDir.QueryCacheFolder().Path, logging.LOGFILE)
 				fmt.Println(tr.Value("error.checklog", logpath))
-				bs, _ := os.ReadFile(logpath) 
+				bs, _ := os.ReadFile(logpath)
 				fmt.Println(string(bs))
 			}
 		}
@@ -202,7 +202,7 @@ func parseArgs() error {
 				return err
 			}
 		default:
-			fmt.Printf(tr.Value("error.unknownopt", *list)) 
+			fmt.Printf(tr.Value("error.unknownopt", *list))
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -438,7 +438,7 @@ func run() int {
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
 	cfg := fs.String("C", "", tr.Value("configfile"))
 	fs.SetOutput(bufio.NewWriter(nil))
-	fs.Parse(os.Args[1:]) 
+	fs.Parse(os.Args[1:])
 	if *cfg != "" {
 		conf.ConfigFile = *cfg
 	}
@@ -515,7 +515,7 @@ func run() int {
 			http.HandleFunc("/metrics", func(w http.ResponseWriter, req *http.Request) {
 				metrics.WritePrometheus(w, true)
 			})
-			http.ListenAndServe(conf.ExportPort, nil) 
+			http.ListenAndServe(conf.ExportPort, nil)
 		}()
 	}
 

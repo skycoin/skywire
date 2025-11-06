@@ -1693,7 +1693,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error { //
 	}()
 
 	v.pushCloseStack("hypervisor", func() error {
-		err := srv.Shutdown(ctx) //nolint
+		err := srv.Shutdown(ctx)
 		cancel()
 		return err
 	})

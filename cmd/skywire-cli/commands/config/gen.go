@@ -44,7 +44,7 @@ var checkPKCmd = &cobra.Command{
 		var checkKey cipher.PubKey
 		err := checkKey.Set(args[0])
 		if err != nil {
-			logger.WithError(err).Fatal("invalid public key ") //nolint
+			logger.WithError(err).Fatal("invalid public key ")
 		}
 		logger.Info("Valid public key: ", checkKey.String())
 	},
@@ -156,7 +156,7 @@ func init() {
 	}
 	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys\033[0m")
 	if scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}") != "0000000000000000000000000000000000000000000000000000000000000000" {
-		sk.Set(scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}")) //nolint
+		sk.Set(scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}"))
 	}
 	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
 	gHiddenFlags = append(gHiddenFlags, "sk")
@@ -266,7 +266,7 @@ var genConfigCmd = &cobra.Command{
 		//--all unhides flags, prints help menu, and exits
 		if isAll {
 			for _, j := range gHiddenFlags {
-				f := cmd.Flags().Lookup(j) //nolint
+				f := cmd.Flags().Lookup(j)
 				f.Hidden = false
 			}
 			cmd.Flags().MarkHidden("all")
@@ -535,7 +535,7 @@ var genConfigCmd = &cobra.Command{
 			dmsghttpConfigData := deployment.DmsghttpJSON
 			if dmsgHTTPPath != "" {
 				// Read the JSON configuration file
-				dmsghttpConfigData, err = os.ReadFile(dmsgHTTPPath) 
+				dmsghttpConfigData, err = os.ReadFile(dmsgHTTPPath)
 				if err != nil {
 					log.Fatalf("Failed to read config file: %v", err)
 				}
@@ -932,7 +932,7 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 			// Write the JSON data back to the file
-			err = os.WriteFile(confPath, jsonData, 0644) //nolint
+			err = os.WriteFile(confPath, jsonData, 0644)
 			if err != nil {
 				log.Fatalf("Failed to write config file: %v", err)
 			}

@@ -79,10 +79,10 @@ func init() {
 	serverCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", deployment.Prod.DmsgDiscovery, "dmsg discovery url")
 	serverCmd.Flags().StringVarP(&ensureOnlineURL, "ensure-online", "O", scriptExecString("${ENSUREONLINE}"), "Exit when the specified URL cannot be fetched;\ni.e. https://fiber.skywire.dev")
 	if os.Getenv("DMSGHTTP_SK") != "" {
-		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint
+		sk.Set(os.Getenv("DMSGHTTP_SK"))
 	}
 	if scriptExecString("${DMSGHTTP_SK}") != "" {
-		sk.Set(scriptExecString("${DMSGHTTP_SK}")) //nolint
+		sk.Set(scriptExecString("${DMSGHTTP_SK}"))
 	}
 	serverCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 }
@@ -92,7 +92,7 @@ var serverCmd = &cobra.Command{
 	Use:   "ui",
 	Short: "reward system UI server",
 	Long: "skycoin reward system user interface server and skywire network metrics:\n https://fiber.skywire.dev\n" + calvin.AsciiFont("fiber") + func() string {
-		if _, err := os.Stat(skyenvfile); err == nil { //nolint
+		if _, err := os.Stat(skyenvfile); err == nil {
 			return `run the web application
 
 skyenv file detected: ` + skyenvfile
@@ -157,7 +157,7 @@ func extractFiles() (string, error) {
 		if err != nil {
 			return fmt.Errorf("failed to read file %s: %w", path, err)
 		}
-		if err := os.WriteFile(outputPath, content, 0644); err != nil { //nolint
+		if err := os.WriteFile(outputPath, content, 0644); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", outputPath, err)
 		}
 		return nil
@@ -268,14 +268,14 @@ func server(e error) {
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Write([]byte(navlinks))
 		c.Writer.Flush()
 		tpstats, _ := script.Exec("skywire cli tp tree -s").Bytes()
-		c.Writer.Write(ansihtml.ConvertToHTML(tpstats)) //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(tpstats))
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Write([]byte(htmlend))
 		c.Writer.Flush()
 	})
 
@@ -286,21 +286,21 @@ func server(e error) {
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Map</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Map</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Write([]byte(navlinks))
 		c.Writer.Flush()
-		tpstats, _ := script.Exec("skywire cli tp tree -s").Match("Count of transports:").Replace("Count of transports: ", "").Replace("\n", "").String() //nolint
+		tpstats, _ := script.Exec("skywire cli tp tree -s").Match("Count of transports:").Replace("Count of transports: ", "").Replace("\n", "").String()
 		tpcount, _ := strconv.Atoi(tpstats)
 		if tpcount < 400 {
 			tpTree, _ := script.Exec("skywire cli tp tree").Bytes()
-			c.Writer.Write(ansihtml.ConvertToHTML(tpTree)) //nolint
+			c.Writer.Write(ansihtml.ConvertToHTML(tpTree))
 			c.Writer.Flush()
 		} else {
-			c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map", tpcount))) //nolint
+			c.Writer.Write([]byte(fmt.Sprintf("Transport count: %v exceeds server resources to map", tpcount)))
 			c.Writer.Flush()
 		}
-		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Write([]byte(htmlend))
 		c.Writer.Flush()
 	})
 
@@ -310,11 +310,11 @@ func server(e error) {
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Survey and Transport Log Collection</title></head>")) //nolint
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Survey and Transport Log Collection</title></head>"))
 		c.Writer.Flush()
-		c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>"))
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Write([]byte(navlinks))
 		c.Writer.Flush()
 		tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh")
 		if err != nil {
@@ -326,15 +326,15 @@ func server(e error) {
 		_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()
 		_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())
 		res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String()
-		os.Remove(tmpFile.Name())                        //nolint
-		c.Writer.Write([]byte(fmt.Sprintf("%s\n", res))) //nolint
+		os.Remove(tmpFile.Name())
+		c.Writer.Write([]byte(fmt.Sprintf("%s\n", res)))
 		c.Writer.Flush()
 
 		// Initial line count
-		initialLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines() //nolint
+		initialLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines()
 		// Read and print the initial lines
-		initialContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").First(initialLineCount).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(initialContent))                                             //nolint
+		initialContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").First(initialLineCount).Bytes()
+		c.Writer.Write(ansihtml.ConvertToHTML(initialContent))
 		c.Writer.Flush()
 		for {
 			select {
@@ -345,23 +345,23 @@ func server(e error) {
 			// Sleep for a short duration
 			time.Sleep(100 * time.Millisecond)
 			// Get the current line count
-			currentLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines() //nolint
+			currentLineCount, _ := script.File(wd + `/` + "skywire-cli-log.txt").CountLines()
 			// Check if there are new lines
 			if currentLineCount > initialLineCount {
-				newContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(currentLineCount - initialLineCount).Bytes() //nolint
+				newContent, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(currentLineCount - initialLineCount).Bytes()
 				initialLineCount = currentLineCount
-				c.Writer.Write(ansihtml.ConvertToHTML(newContent)) //nolint
+				c.Writer.Write(ansihtml.ConvertToHTML(newContent))
 				c.Writer.Flush()
 			}
-			finished, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(1).MatchRegexp(regexp.MustCompile(".*finished.*")).String() //nolint
+			finished, _ := script.File(wd + `/` + "skywire-cli-log.txt").Last(1).MatchRegexp(regexp.MustCompile(".*finished.*")).String()
 			if finished != "" {
 				break
 			}
 		}
 
-		c.Writer.Write([]byte(htmltoplink)) //nolint
+		c.Writer.Write([]byte(htmltoplink))
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Write([]byte(htmlend))
 		c.Writer.Flush()
 	})
 
@@ -369,23 +369,23 @@ func server(e error) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Write([]byte(navlinks))
 		c.Writer.Flush()
-		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines() //nolint
-		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                            //nolint
+		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines()
+		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))
 		c.Writer.Flush()
-		st, err := script.Exec(`skywire cli log st -d ` + wd + `/log_backups -r`).Bytes() //nolint
+		st, err := script.Exec(`skywire cli log st -d ` + wd + `/log_backups -r`).Bytes()
 		if err != nil {
 			log.WithError(err).Error()
-			c.Writer.Write([]byte(err.Error())) //nolint
+			c.Writer.Write([]byte(err.Error()))
 		}
-		c.Writer.Write(ansihtml.ConvertToHTML(st)) //nolint
+		c.Writer.Write(ansihtml.ConvertToHTML(st))
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmltoplink)) //nolint
+		c.Writer.Write([]byte(htmltoplink))
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Write([]byte(htmlend))
 		c.Writer.Flush()
 	})
 
@@ -393,7 +393,7 @@ func server(e error) {
 		c.Writer.Header().Set("Server", "")
 		if c.Param("pk") == "" {
 			c.Writer.WriteHeader(http.StatusBadRequest)
-			c.Writer.Write([]byte("must specify public key")) //nolint
+			c.Writer.Write([]byte("must specify public key"))
 			c.Writer.Flush()
 			return
 		}
@@ -403,7 +403,7 @@ func server(e error) {
 			err := pK.Set(pk)
 			if err != nil {
 				c.Writer.WriteHeader(http.StatusBadRequest)
-				c.Writer.Write([]byte("invalid public key: " + pk + " " + err.Error())) //nolint
+				c.Writer.Write([]byte("invalid public key: " + pk + " " + err.Error()))
 				c.Writer.Flush()
 				return
 			}
@@ -412,37 +412,37 @@ func server(e error) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint
+		c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"))
 		c.Writer.Flush()
-		c.Writer.Write([]byte(navlinks)) //nolint
+		c.Writer.Write([]byte(navlinks))
 		c.Writer.Flush()
-		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines() //nolint
-		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                            //nolint
+		surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines()
+		c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))
 		c.Writer.Flush()
-		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -rup ` + c.Param("pk")).Bytes() //nolint
-		c.Writer.Write(ansihtml.ConvertToHTML(st))                                                      //nolint
+		st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -rup ` + c.Param("pk")).Bytes()
+		c.Writer.Write(ansihtml.ConvertToHTML(st))
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmltoplink)) //nolint
+		c.Writer.Write([]byte(htmltoplink))
 		c.Writer.Flush()
-		c.Writer.Write([]byte(htmlend)) //nolint
+		c.Writer.Write([]byte(htmlend))
 		c.Writer.Flush()
 	})
 
 	r1.GET("/log-collection/tplogs", func(c *gin.Context) {
 		c.Writer.Header().Set("Server", "")
 		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.Write([]byte(func() (l string) { //nolint
+		c.Writer.Write([]byte(func() (l string) {
 			l = "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
 			l += navlinks
 			l += "<p style='color:blue'>Blue = Verified Bandwidth</p>"
 			l += "<p style='color:yellow'>Yellow = Transport bandwidth inconsistent</p>"
 			l += "<p style='color:red'>Red = Error: sent or received is zero</p>"
-			tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint
+			tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String()
 			l += fmt.Sprintf("%s\n", ansihtml.ConvertToHTML([]byte(tp)))
 			l += htmltoplink
 			l += htmlend
 			return l
-		}())) //nolint
+		}()))
 	})
 
 	r1.GET("/stats/ut", func(c *gin.Context) {
@@ -459,7 +459,7 @@ func server(e error) {
 		}
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write([]byte(fmt.Sprintf("Uptime tracker version statistics:\n%s\n", utstats))) //nolint
+		c.Writer.Write([]byte(fmt.Sprintf("Uptime tracker version statistics:\n%s\n", utstats)))
 		c.Writer.Flush()
 	})
 
@@ -514,14 +514,14 @@ func server(e error) {
 		l += "</tr>\n"
 		l += "</thead>\n"
 		l += "<tbody>\n"
-		rewardtxncsvs, _ := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+"/hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint
+		rewardtxncsvs, _ := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+"/hist/", "").Replace("_rewardtxn0.csv", "").Slice()
 		for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
-			skycoinpershare, _ := script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
+			skycoinpershare, _ := script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String()
 			skycoinpershare1 := ""
 			skycoinpershare2 := ""
 			if strings.TrimSpace(skycoinpershare) == "" {
-				skycoinpershare1, _ = script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint
-				skycoinpershare2, _ = script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String() //nolint
+				skycoinpershare1, _ = script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String()
+				skycoinpershare2, _ = script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String()
 				skycoinpershare1 = strings.TrimSpace(skycoinpershare1)
 				skycoinpershare2 = strings.TrimSpace(skycoinpershare2)
 			} else {
@@ -560,7 +560,7 @@ func server(e error) {
 		tmpl := tmpl0
 		htmlPageTemplateData1 := htmlTemplateData{
 			Title:   "Skycoin Reward Calculation and Distribution",
-			Content: htmpl.HTML(l), //nolint
+			Content: htmpl.HTML(l),
 		}
 		tmplData := map[string]interface{}{
 			"Page": htmlPageTemplateData1,
@@ -571,7 +571,7 @@ func server(e error) {
 			fmt.Println("error: ", err)
 		}
 
-		c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)) //nolint
+		c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1))
 		c.Writer.Flush()
 	})
 
@@ -585,28 +585,28 @@ func server(e error) {
 		//override the behavior of `public fallback` for this endpoint
 		if len(wlkeys) == 0 {
 			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("len(wlkeys) == 0")) //nolint
+			c.Writer.Write([]byte("len(wlkeys) == 0"))
 			return
 		}
 		// Read the request body
 		body, err := io.ReadAll(c.Request.Body)
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("io.ReadAll(c.Request.Body) :\n\n" + string(body) + "\n\nError:\n\n" + err.Error())) //nolint
+			c.Writer.Write([]byte("io.ReadAll(c.Request.Body) :\n\n" + string(body) + "\n\nError:\n\n" + err.Error()))
 			return
 		}
 		//check that wallet is running
 		status, err := script.Exec("skycoin-cli status").String()
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("skycoin-cli status:\n\n" + status + "\n\nskycoin-cli status error:\n\n" + err.Error())) //nolint
+			c.Writer.Write([]byte("skycoin-cli status:\n\n" + status + "\n\nskycoin-cli status error:\n\n" + err.Error()))
 			return
 		}
 		//find all transacion csvs
 		f, err := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice()
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte(`script.FindFiles(wd + /hist/).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice():\n\n` + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error())) //nolint
+			c.Writer.Write([]byte(`script.FindFiles(wd + /hist/).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice():\n\n` + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error()))
 			return
 		}
 		//and range through the results
@@ -620,38 +620,38 @@ func server(e error) {
 				decoded, err := script.Exec("skycoin-cli decodeRawTransaction " + string(body)).String()
 				if err != nil {
 					c.Writer.WriteHeader(http.StatusBadRequest)
-					c.Writer.Write([]byte("skycoin-cli decodeRawTransaction:\n\n" + decoded + "\n\nskycoin-cli decodeRawTransaction error:\n\n" + err.Error())) //nolint
+					c.Writer.Write([]byte("skycoin-cli decodeRawTransaction:\n\n" + decoded + "\n\nskycoin-cli decodeRawTransaction error:\n\n" + err.Error()))
 					return
 				}
 				//if all is well, broadcast the transaction
 				txid, err := script.Exec("skycoin-cli broadcastTransaction " + string(body)).String()
 				if err != nil {
 					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte("skycoin-cli broadcastTransaction:\n\n" + txid + "\n\nskycoin-cli broadcastTransaction error:\n\n" + err.Error())) //nolint
+					c.Writer.Write([]byte("skycoin-cli broadcastTransaction:\n\n" + txid + "\n\nskycoin-cli broadcastTransaction error:\n\n" + err.Error()))
 					return
 				}
 				//record the transaction ID for that day's reward
 				_, err = script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))
 				if err != nil {
 					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte(`script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))\n\n` + txid + "\n\n" + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1) + "\n\nerror:\n\n" + err.Error())) //nolint
+					c.Writer.Write([]byte(`script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))\n\n` + txid + "\n\n" + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1) + "\n\nerror:\n\n" + err.Error()))
 					return
 				}
 				//record the transaction ID for the reward notification system - append the file!
 				_, err = script.Echo(txid).AppendFile(wd + `/` + "transactions0.txt")
 				if err != nil {
 					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte(`script.Echo(txid).AppendFile(wd + / + "transactions0.txt")\n\n` + txid + "\n\nerror:\n\n" + err.Error())) //nolint
+					c.Writer.Write([]byte(`script.Echo(txid).AppendFile(wd + / + "transactions0.txt")\n\n` + txid + "\n\nerror:\n\n" + err.Error()))
 					return
 				}
 				c.Writer.WriteHeader(http.StatusOK)
-				c.Writer.Write([]byte(txid)) //nolint
+				c.Writer.Write([]byte(txid))
 				return
 			}
 		}
 		c.Writer.WriteHeader(http.StatusNotFound)
-		h, _ := script.FindFiles(wd + `/hist/`).String()                      //nolint
-		c.Writer.Write([]byte("No undistributed rewards csv found.\n\n" + h)) //nolint
+		h, _ := script.FindFiles(wd + `/hist/`).String()
+		c.Writer.Write([]byte("No undistributed rewards csv found.\n\n" + h))
 	})
 
 	r1.GET("/skycoin-rewards/csv", func(c *gin.Context) {
@@ -662,13 +662,13 @@ func server(e error) {
 			return
 		}
 		c.Writer.Header().Set("Server", "")
-		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice() //nolint
+		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice()
 		for _, f1 := range f {
 			g, err := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 			if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
 				c.Writer.Header().Set("Content-Type", "text/plain")
 				c.Writer.WriteHeader(http.StatusOK)
-				c.Writer.Write([]byte("skycoin-rewards/hist/" + f1)) //nolint
+				c.Writer.Write([]byte("skycoin-rewards/hist/" + f1))
 				return
 			}
 
@@ -706,9 +706,9 @@ func server(e error) {
 		}
 		c.Writer.Header().Set("Server", "")
 		c.Writer.Header().Set("Content-Type", "text/plain")
-		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice() //nolint
+		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice()
 		for _, f1 := range f {
-			g, _ := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint
+			g, _ := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 			if g != "" && g != "\n" {
 				c.Redirect(http.StatusFound, "/skycoin-rewards/hist/"+f1)
 				return
@@ -766,7 +766,7 @@ func server(e error) {
 				c.Writer.Header().Set("Content-Type", "text/plain")
 				c.Writer.WriteHeader(http.StatusOK)
 				c.Writer.Flush()
-				c.Writer.Write([]byte(toserve)) //nolint
+				c.Writer.Write([]byte(toserve))
 				c.Writer.Flush()
 				return
 			}
@@ -809,13 +809,13 @@ func server(e error) {
 				c.Writer.Header().Set("Content-Type", "text/plain")
 				c.Writer.WriteHeader(http.StatusOK)
 				c.Writer.Flush()
-				c.Writer.Write([]byte(toserve)) //nolint
+				c.Writer.Write([]byte(toserve))
 				c.Writer.Flush()
 				return
 			}
 
 		}
-		rewardfiles, err := script.FindFiles(wd + `/hist`).Match(c.Param("date")).Slice() //nolint
+		rewardfiles, err := script.FindFiles(wd + `/hist`).Match(c.Param("date")).Slice()
 		if err != nil {
 			fmt.Println("non nil script.FindFiles(wd + `/hist`).Match(c.Param(\"date\")).Slice() error")
 			c.Writer.WriteHeader(http.StatusNotFound)
@@ -903,7 +903,7 @@ func server(e error) {
 		}
 		l += "</div>"
 
-		l1, err = script.File(wd + `/hist/` + c.Param("date") + "_stats.txt").String() //nolint
+		l1, err = script.File(wd + `/hist/` + c.Param("date") + "_stats.txt").String()
 		if err != nil {
 			fmt.Println("non nil script.File(wd + `/hist/` + c.Param(\"date\") + \"_stats.txt\").String() error")
 			c.Writer.WriteHeader(http.StatusNotFound)
@@ -950,7 +950,7 @@ func server(e error) {
 		tmpl := tmpl0
 		htmlPageTemplateData1 := htmlTemplateData{
 			Title:   "Skycoin Reward Calculation and Distribution",
-			Content: htmpl.HTML(l), //nolint
+			Content: htmpl.HTML(l),
 		}
 		//	htmlPageTemplateData1.Content =
 		tmplData := map[string]interface{}{
@@ -964,7 +964,7 @@ func server(e error) {
 
 		c.Writer.WriteHeader(http.StatusOK)
 		c.Writer.Flush()
-		c.Writer.Write(result.Bytes()) //nolint
+		c.Writer.Write(result.Bytes())
 		c.Writer.Flush()
 	})
 
@@ -973,7 +973,7 @@ func server(e error) {
 		//override the behavior of `public fallback` for this endpoint
 		if len(wlkeys) == 0 {
 			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("len(wlkeys) == 0")) //nolint
+			c.Writer.Write([]byte("len(wlkeys) == 0"))
 			return
 		}
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
@@ -1000,10 +1000,10 @@ func server(e error) {
 
 	r1.GET("/skycoin-rewards.json", func(c *gin.Context) {
 		data := rewards{}
-		rewardtxncsvs, err := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Basename().Replace("_rewardtxn0.csv", "").Slice() //nolint
+		rewardtxncsvs, err := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Basename().Replace("_rewardtxn0.csv", "").Slice()
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("500 Internal Server Error #1 " + err.Error())) //nolint
+			c.Writer.Write([]byte("500 Internal Server Error #1 " + err.Error()))
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
@@ -1015,18 +1015,18 @@ func server(e error) {
 			counter++
 			var rdata reward
 			rdata.Date = rewardtxncsvs[i]
-			skycoinpershare, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint
+			skycoinpershare, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String()
 			if err != nil {
 				c.Writer.WriteHeader(http.StatusInternalServerError)
-				c.Writer.Write([]byte("500 Internal Server Error #2 " + err.Error())) //nolint
+				c.Writer.Write([]byte("500 Internal Server Error #2 " + err.Error()))
 				c.AbortWithStatus(http.StatusInternalServerError)
 				return
 			}
 			if strings.TrimSpace(skycoinpershare) == "" {
-				pool1, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint
+				pool1, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String()
 				if err != nil {
 					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte("500 Internal Server Error #3 " + err.Error())) //nolint
+					c.Writer.Write([]byte("500 Internal Server Error #3 " + err.Error()))
 					c.AbortWithStatus(http.StatusInternalServerError)
 					return
 				}
@@ -1034,10 +1034,10 @@ func server(e error) {
 				if err != nil {
 					rdata.One = 0.0
 				}
-				pool2, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String() //nolint
+				pool2, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String()
 				if err != nil {
 					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte("500 Internal Server Error #5 " + err.Error())) //nolint
+					c.Writer.Write([]byte("500 Internal Server Error #5 " + err.Error()))
 					c.AbortWithStatus(http.StatusInternalServerError)
 					return
 				}
@@ -1067,7 +1067,7 @@ func server(e error) {
 		txids, err := script.File(wd + "/transactions0.txt").Slice()
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("500 Internal Server Error" + err.Error())) //nolint
+			c.Writer.Write([]byte("500 Internal Server Error" + err.Error()))
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
@@ -1153,7 +1153,7 @@ func server(e error) {
 	//////////////////AAAH/gAAAH4AAAA4AAQAGAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAQA
 	AgAAAIAAAACAAAABwAAAAfAAAAfwAAAP/gAAf/8AAH//AAB//4AB//+AA///wAP///AH///4H///
 	//////////////8=`
-	faviconBuffer, _ := base64.StdEncoding.DecodeString(faviconBase64) //nolint
+	faviconBuffer, _ := base64.StdEncoding.DecodeString(faviconBase64)
 
 	r1.GET("/favicon.ico", func(c *gin.Context) {
 		_, _ = c.Writer.WriteString(string(faviconBuffer))
@@ -1164,7 +1164,7 @@ func server(e error) {
 		r1.GET("/index.html", mainPage)
 	} else {
 		//manually create routes to the compiled cogentcore web app source files
-		filepath.Walk(outputDir+"/bin/web", func(path string, info os.FileInfo, err error) error { //nolint
+		filepath.Walk(outputDir+"/bin/web", func(path string, info os.FileInfo, err error) error {
 			if !info.IsDir() {
 				relPath, err := filepath.Rel(outputDir+"/bin/web", path)
 				if err != nil {
@@ -1196,7 +1196,7 @@ func server(e error) {
 	wg.Add(1)
 	go func() {
 		fmt.Printf("listening on http://127.0.0.1:%d using gin router\n", webPort)
-		r1.Run(fmt.Sprintf(":%d", webPort)) //nolint
+		r1.Run(fmt.Sprintf(":%d", webPort))
 		wg.Done()
 	}()
 
@@ -1404,7 +1404,7 @@ func generateAndCacheStats() (err error) {
 		return err
 	}
 
-	archstats, err := script.Echo(surveyarches).Freq().String() //nolint
+	archstats, err := script.Echo(surveyarches).Freq().String()
 	if err != nil {
 		return err
 	}
@@ -1413,7 +1413,7 @@ func generateAndCacheStats() (err error) {
 		return err
 	}
 
-	namestats, err := script.Echo(surveyOSNames).Freq().String() //nolint
+	namestats, err := script.Echo(surveyOSNames).Freq().String()
 	if err != nil {
 		return err
 	}
@@ -1432,12 +1432,12 @@ func generateAndCacheStats() (err error) {
 		return err
 	}
 
-	_, err = script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("T").AppendFile(tempStatsPath + "/mem.txt") //nolint
+	_, err = script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("T").AppendFile(tempStatsPath + "/mem.txt")
 	if err != nil {
 		return err
 	}
 
-	_, err = script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").AppendFile(tempStatsPath + "/mem.txt") //nolint
+	_, err = script.Exec(`bash -c 'jq '.ghw_blockinfo.total_size_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").AppendFile(tempStatsPath + "/mem.txt")
 	if err != nil {
 		return err
 	}
@@ -1451,12 +1451,12 @@ func generateAndCacheStats() (err error) {
 		return err
 	}
 
-	_, err = script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").AppendFile(tempStatsPath + "/ram.txt") //nolint
+	_, err = script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).Reject("G").AppendFile(tempStatsPath + "/ram.txt")
 	if err != nil {
 		return err
 	}
 
-	_, err = script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).AppendFile(tempStatsPath + "/ram.txt") //nolint
+	_, err = script.Exec(`bash -c 'jq '.ghw_memoryinfo.total_usable_bytes' ` + wd + `/log_backups/*/node-info.json | grep -v null | sort -n | numfmt --to=iec | sort -h | uniq -c'`).AppendFile(tempStatsPath + "/ram.txt")
 	if err != nil {
 		return err
 	}
@@ -1566,14 +1566,14 @@ func resetColor() string {
 	return reset
 }
 
-type consoleColorModeValue int //nolint
+type consoleColorModeValue int
 
-var consoleColorMode = autoColor //nolint
+var consoleColorMode = autoColor
 
 const (
-	autoColor    consoleColorModeValue = iota //nolint
-	disableColor                              //nolint
-	forceColor                                //nolint
+	autoColor consoleColorModeValue = iota
+	disableColor
+	forceColor
 )
 
 const (
@@ -1747,7 +1747,7 @@ func scriptExecUint16(s string) uint16 {
 			i, err := strconv.Atoi(strings.TrimSpace(strings.TrimRight(out, "\n")))
 			if err == nil {
 				if i >= 0 && i <= 65535 {
-					return uint16(i) //nolint
+					return uint16(i)
 				}
 				return 0
 			}
@@ -1763,7 +1763,7 @@ func scriptExecUint16(s string) uint16 {
 		i, err := strconv.Atoi(z)
 		if err == nil {
 			if i >= 0 && i <= 65535 {
-				return uint16(i) //nolint
+				return uint16(i)
 			}
 			return 0
 		}
@@ -1777,7 +1777,7 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 		remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 		if err != nil {
 			c.Writer.WriteHeader(http.StatusInternalServerError)
-			c.Writer.Write([]byte("500 Internal Server Error")) //nolint
+			c.Writer.Write([]byte("500 Internal Server Error"))
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
@@ -1798,7 +1798,7 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
 		} else {
 			// Otherwise, return a 401 Unauthorized error.
 			c.Writer.WriteHeader(http.StatusUnauthorized)
-			c.Writer.Write([]byte("401 Unauthorized")) //nolint
+			c.Writer.Write([]byte("401 Unauthorized"))
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
@@ -1833,7 +1833,7 @@ func mainPage(c *gin.Context) {
 	mainnetRulesHtml, _ := script.Exec(`skywire cli reward rules -l`).String()
 	skywireVersion, _ := script.Exec(`skywire -v`).Replace("skywire version ", "").String()
 	htmlPageTemplateData1 := htmlPageTemplateData
-	htmlPageTemplateData1.Content = htmpl.HTML(skywireVersion + "<br>" + skycoinlogohtml + "<br>" + mainnetRulesHtml) //nolint
+	htmlPageTemplateData1.Content = htmpl.HTML(skywireVersion + "<br>" + skycoinlogohtml + "<br>" + mainnetRulesHtml)
 	tmplData := map[string]interface{}{
 		"Page": htmlPageTemplateData1,
 	}
@@ -1845,7 +1845,7 @@ func mainPage(c *gin.Context) {
 		return
 	}
 	c.Writer.WriteHeader(http.StatusOK)
-	c.Writer.Write((bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1))) //nolint
+	c.Writer.Write((bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)))
 }
 
 var htmlMainPageTemplate = `

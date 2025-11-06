@@ -85,12 +85,12 @@ var RootCmd = &cobra.Command{
 						}
 						_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()
 						_, _ = script.Echo(tgbotscript).WriteFile(tmpFile.Name())
-						stats, err := script.Exec(`bash -c 'source ` + tmpFile.Name() + `  ; _stats ` + lastLine + `'`).String() //nolint
+						stats, err := script.Exec(`bash -c 'source ` + tmpFile.Name() + `  ; _stats ` + lastLine + `'`).String()
 						if err != nil {
 							log.Printf("Error getting statistics: %v", err)
 							continue
 						}
-						os.Remove(tmpFile.Name()) //nolint
+						os.Remove(tmpFile.Name())
 
 						dateforlink, err := script.Echo(stats).First(1).Replace("date: ", "").String()
 						if err != nil {

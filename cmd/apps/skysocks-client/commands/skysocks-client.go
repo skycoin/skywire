@@ -179,7 +179,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 }
 
 func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey, port routing.Port) (net.Conn, error) {
-	appCl.SetDetailedStatus(appserver.AppDetailedStatusStarting) //nolint
+	appCl.SetDetailedStatus(appserver.AppDetailedStatusStarting)
 	var conn net.Conn
 	err := r.Do(ctx, func() error {
 		var err error
@@ -212,7 +212,7 @@ func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 func httpProxy(ctx context.Context, httpAddr, sockscAddr string) {
 	proxy := goproxy.NewProxyHttpServer()
 
-	proxyURL, err := url.Parse(fmt.Sprintf("socks5://127.0.0.1%s", sockscAddr)) //nolint
+	proxyURL, err := url.Parse(fmt.Sprintf("socks5://127.0.0.1%s", sockscAddr))
 	if err != nil {
 		print(fmt.Sprintf("Failed to parse socks address: %v\n", err))
 		return
@@ -221,15 +221,15 @@ func httpProxy(ctx context.Context, httpAddr, sockscAddr string) {
 	proxy.Tr.Proxy = http.ProxyURL(proxyURL)
 
 	fmt.Printf("Serving http proxy %v\n", httpAddr)
-	httpProxySrv := &http.Server{Addr: httpAddr, Handler: proxy} //nolint
+	httpProxySrv := &http.Server{Addr: httpAddr, Handler: proxy}
 
 	go func() {
 		<-ctx.Done()
-		httpProxySrv.Close() //nolint
+		httpProxySrv.Close()
 		print("Stopping http proxy")
 	}()
 
-	if err := httpProxySrv.ListenAndServe(); err != nil { //nolint
+	if err := httpProxySrv.ListenAndServe(); err != nil {
 		print(fmt.Sprintf("Error serving http proxy: %v\n", err))
 	}
 }

@@ -180,7 +180,7 @@ type fileTransportLogStore struct {
 
 // FileTransportLogStore implements file TransportLogStore.
 func FileTransportLogStore(ctx context.Context, dir string, rInterval time.Duration, log *logging.Logger) (LogStore, error) {
-	if err := os.MkdirAll(dir, 0755); err != nil { //nolint
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
 
@@ -248,7 +248,7 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 		today = tls.fileName
 	}
 
-	f, err := os.OpenFile(filepath.Join(tls.dir, today), os.O_RDWR|os.O_CREATE, 0644) //nolint
+	f, err := os.OpenFile(filepath.Join(tls.dir, today), os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
@@ -302,7 +302,7 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 }
 
 func (tls *fileTransportLogStore) readFromCSV(fileName string) ([]*CsvEntry, error) {
-	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(fileName)), os.O_RDWR|os.O_CREATE, 0644) //nolint
+	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprint(fileName)), os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, err
 	}

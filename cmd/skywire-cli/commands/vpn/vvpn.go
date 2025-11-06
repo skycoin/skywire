@@ -64,9 +64,9 @@ var startCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), rpcClient.StartVPNClient(pubkey))
 		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		var tCtxCancelFunc context.CancelFunc
-		tCtx := context.Background() //nolint
+		tCtx := context.Background()
 		if startingTimeout != 0 {
-			tCtx, tCtxCancelFunc = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second) //nolint
+			tCtx, tCtxCancelFunc = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second)
 		}
 		ctx, cancel := cmdutil.SignalContext(tCtx, &logrus.Logger{})
 		go func() {
@@ -75,7 +75,7 @@ var startCmd = &cobra.Command{
 			if tCtxCancelFunc != nil {
 				tCtxCancelFunc()
 			}
-			rpcClient.KillApp("vpn-client") //nolint
+			rpcClient.KillApp("vpn-client")
 			fmt.Print("\nStopped!")
 			os.Exit(1)
 		}()
@@ -205,7 +205,7 @@ var listCmd = &cobra.Command{
 		// --- If JSON output requested ---
 		if jsonOutput {
 			var list []services.Service
-			json.Unmarshal([]byte(sds), &list) //nolint
+			json.Unmarshal([]byte(sds), &list)
 			var b bytes.Buffer
 			internal.PrintOutput(cmd.Flags(), list, b.String())
 			return

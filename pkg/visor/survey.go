@@ -20,7 +20,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 	if visconf.IsRoot() {
 		for {
 			// check for valid reward address set as prerequisite for generating the system survey
-			rewardAddressBytes, err := os.ReadFile(v.conf.LocalPath + "/" + visconf.RewardFile) //nolint
+			rewardAddressBytes, err := os.ReadFile(v.conf.LocalPath + "/" + visconf.RewardFile)
 			if err == nil || true {
 				//remove any newline from rewardAddress string
 				rewardAddress := strings.TrimSuffix(string(rewardAddressBytes), "\n")
@@ -32,7 +32,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				}
 				log.Info("Skycoin reward address: ", cAddr.String())
 				//generate the system survey
-				pathutil.EnsureDir(v.conf.LocalPath) //nolint
+				pathutil.EnsureDir(v.conf.LocalPath)
 				survey, err := visconf.SystemSurvey()
 				if err != nil {
 					log.WithError(err).Error("Could not read system info.")
@@ -75,7 +75,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 					log.WithError(err).Error("Could not marshal json.")
 					return
 				}
-				err = os.WriteFile(v.conf.LocalPath+"/"+visconf.NodeInfo, []byte(s), 0644) //nolint
+				err = os.WriteFile(v.conf.LocalPath+"/"+visconf.NodeInfo, []byte(s), 0644)
 				if err != nil {
 					log.WithError(err).Error("Failed to write system hardware survey to file.")
 					return

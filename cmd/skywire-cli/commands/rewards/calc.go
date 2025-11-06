@@ -217,12 +217,12 @@ Architectures:
 
 		var res []string
 		if pubkey == "" {
-			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice() //nolint
+			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice()
 			if len(res) == 0 {
 				log.Fatal("No keys achieved minimum uptime on " + wdate + " !")
 			}
 		} else {
-			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Match(pubkey).Slice() //nolint
+			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Match(pubkey).Slice()
 			if len(res) == 0 {
 				log.Fatal("Specified key " + pubkey + "\n did not achieve minimum uptime on " + wdate + " !")
 			}
@@ -257,7 +257,7 @@ Architectures:
 				continue
 			}
 
-			confType, _ := script.File(nodeInfoDotJSON).JQ(`.services.dmsg_discovery`).Replace("\"", "").String() //nolint
+			confType, _ := script.File(nodeInfoDotJSON).JQ(`.services.dmsg_discovery`).Replace("\"", "").String()
 			if err != nil {
 				log.Debug(err.Error())
 				continue
@@ -360,7 +360,7 @@ Architectures:
 			fmt.Printf("this month's rewards: %.6f\n", monthReward)
 			fmt.Printf("reward total per pool: %.6f\n", dayReward)
 		}
-		uniqueIP, _ := script.Echo(func() string { //nolint
+		uniqueIP, _ := script.Echo(func() string {
 			var inputStr strings.Builder
 			for _, ni := range nodesInfos1 {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.IPAddr))
@@ -369,13 +369,13 @@ Architectures:
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.IPAddr))
 			}
 			return inputStr.String()
-		}()).Freq().Slice() //nolint
+		}()).Freq().Slice()
 		var ipCounts []counting
 		for _, line := range uniqueIP {
 			if line != "" {
 				fields := strings.Fields(line)
 				if len(fields) == 2 {
-					count, _ := strconv.Atoi(fields[0]) //nolint
+					count, _ := strconv.Atoi(fields[0])
 					ipCounts = append(ipCounts, counting{
 						Name:  fields[1],
 						Count: count,
@@ -383,7 +383,7 @@ Architectures:
 				}
 			}
 		}
-		uniqueUUID, _ := script.Echo(func() string { //nolint
+		uniqueUUID, _ := script.Echo(func() string {
 			var inputStr strings.Builder
 			for _, ni := range nodesInfos1 {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.UUID))
@@ -392,10 +392,10 @@ Architectures:
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.UUID))
 			}
 			return inputStr.String()
-		}()).Freq().Slice() //nolint
+		}()).Freq().Slice()
 
 		// look at the first non loopback interface macaddress
-		uniqueMac, _ := script.Echo(func() string { //nolint
+		uniqueMac, _ := script.Echo(func() string {
 			var inputStr strings.Builder
 			for _, ni := range nodesInfos1 {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.MacAddr))
@@ -404,14 +404,14 @@ Architectures:
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.MacAddr))
 			}
 			return inputStr.String()
-		}()).Freq().Slice() //nolint
+		}()).Freq().Slice()
 
 		var macCounts []counting
 		for _, line := range uniqueMac {
 			if line != "" {
 				fields := strings.Fields(line)
 				if len(fields) == 2 {
-					count, _ := strconv.Atoi(fields[0]) //nolint
+					count, _ := strconv.Atoi(fields[0])
 					macCounts = append(macCounts, counting{
 						Name:  fields[1],
 						Count: count,

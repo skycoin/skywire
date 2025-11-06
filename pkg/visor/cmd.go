@@ -153,7 +153,7 @@ var RootCmd = &cobra.Command{
 		// --all unhide flags and print help menu
 		if all {
 			for _, j := range hiddenflags {
-				f := cmd.Flags().Lookup(j) //nolint
+				f := cmd.Flags().Lookup(j)
 				f.Hidden = false
 			}
 			cmd.Flags().MarkHidden("all")
@@ -268,7 +268,7 @@ var RootCmd = &cobra.Command{
 	Version: buildinfo.Version(),
 }
 
-func initConfig() *visorconfig.V1 { //nolint
+func initConfig() *visorconfig.V1 {
 	log := mLog.PackageLogger("visor:config")
 
 	var r io.Reader

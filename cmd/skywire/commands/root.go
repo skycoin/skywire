@@ -202,13 +202,13 @@ var docCmd = &cobra.Command{
 			use = strings.Split(j.Use, " ")[0]
 			fmt.Printf("\n### %s\n", use)
 			fmt.Printf("\n```\n")
-			j.Help() //nolint
+			j.Help()
 			fmt.Printf("\n```\n")
 			if j.Name() == "cli" {
 				fmt.Printf("\n%s\n", "skywire command line interface")
 				fmt.Printf("\n## %s\n", RootCmd.Use)
 				fmt.Printf("\n```\n")
-				RootCmd.Help() //nolint
+				RootCmd.Help()
 				fmt.Printf("\n```\n")
 				fmt.Printf("\n## %s\n", "global flags")
 				fmt.Printf("\n%s\n", "The skywire-cli interacts with the running visor via rpc calls. By default the rpc server is available on localhost:3435. The rpc address and port the visor is using may be changed in the config file, once generated.")
@@ -224,7 +224,7 @@ var docCmd = &cobra.Command{
 				use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0]
 				fmt.Printf("\n#### %s\n", use)
 				fmt.Printf("\n```\n")
-				k.Help() //nolint
+				k.Help()
 				fmt.Printf("\n```\n")
 				if k.Name() == "survey" {
 					fmt.Printf("\n```\n")
@@ -238,7 +238,7 @@ var docCmd = &cobra.Command{
 					use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0] + " " + strings.Split(l.Use, " ")[0]
 					fmt.Printf("\n##### %s\n", use)
 					fmt.Printf("\n```\n")
-					l.Help() //nolint
+					l.Help()
 					fmt.Printf("\n```\n")
 					if l.Name() == "gen" {
 						fmt.Printf("\n##### Example for package / msi\n")
@@ -254,19 +254,19 @@ var docCmd = &cobra.Command{
 						use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0] + " " + strings.Split(l.Use, " ")[0] + " " + strings.Split(m.Use, " ")[0]
 						fmt.Printf("\n###### %s\n", use)
 						fmt.Printf("\n```\n")
-						m.Help() //nolint
+						m.Help()
 						fmt.Printf("\n```\n")
 						for _, n := range m.Commands() {
 							use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0] + " " + strings.Split(l.Use, " ")[0] + " " + strings.Split(m.Use, " ")[0] + " " + strings.Split(n.Use, " ")[0]
 							fmt.Printf("\n###### %s\n", use)
 							fmt.Printf("\n```\n")
-							m.Help() //nolint
+							m.Help()
 							fmt.Printf("\n```\n")
 							for _, o := range n.Commands() {
 								use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0] + " " + strings.Split(l.Use, " ")[0] + " " + strings.Split(m.Use, " ")[0] + " " + strings.Split(n.Use, " ")[0] + " " + strings.Split(o.Use, " ")[0]
 								fmt.Printf("\n###### %s\n", use)
 								fmt.Printf("\n```\n")
-								m.Help() //nolint
+								m.Help()
 								fmt.Printf("\n```\n")
 							}
 						}
