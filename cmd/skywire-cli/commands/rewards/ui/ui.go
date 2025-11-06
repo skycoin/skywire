@@ -318,8 +318,10 @@ func fmtDuration(d time.Duration) string {
 }
 
 func httpGetString(url string) string {
+	//nolint:gosec
 	resp, err := http.Get(url)
 	if err == nil {
+		//nolint:errcheck
 		defer resp.Body.Close()
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {

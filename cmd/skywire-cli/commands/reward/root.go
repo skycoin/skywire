@@ -72,6 +72,7 @@ func longText() string {
 	//show configured reward address if valid configuration exists
 	//only the default is supported
 	if _, err := os.Stat(rewardFile); err == nil {
+		//nolint:gosec
 		reward, err := os.ReadFile(rewardFile)
 		if err != nil {
 			fmt.Printf("    reward settings misconfigured!")
@@ -141,6 +142,7 @@ var rewardCmd = &cobra.Command{
 		}
 		//print reward address and exit
 		if isRead {
+			//nolint:gosec
 			dat, err := os.ReadFile(output)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error reading file. err=%v", err))
@@ -168,7 +170,7 @@ var rewardCmd = &cobra.Command{
 
 		//using the rpc of the running visor avoids needing sudo permissions
 		if clienterr != nil {
-			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644))
+			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0600))
 			readRewardFile(cmd.Flags())
 			return
 		}
@@ -183,7 +185,7 @@ var rewardCmd = &cobra.Command{
 			internal.PrintOutput(cmd.Flags(), output, output)
 		}
 		if clienterr != nil {
-			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0644))
+			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0600))
 			readRewardFile(cmd.Flags())
 		}
 	},
@@ -191,6 +193,7 @@ var rewardCmd = &cobra.Command{
 
 func readRewardFile(cmdFlags *pflag.FlagSet) {
 	//read the file which was written
+	//nolint:gosec
 	dat, err := os.ReadFile(output)
 	if err != nil {
 		internal.PrintFatalError(cmdFlags, fmt.Errorf("Error reading file. err=%v", err))

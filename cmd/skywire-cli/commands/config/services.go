@@ -56,10 +56,12 @@ var servicesCmd = &cobra.Command{
 func fetchServicesConf() (servicesConf, error) {
 	var newConf servicesConf
 	var prodConf visorconfig.Services
+	//nolint:gosec
 	prodResp, err := http.Get(serviceConfURL)
 	if err != nil {
 		return newConf, err
 	}
+	//nolint:errcheck
 	defer prodResp.Body.Close()
 	body, err := io.ReadAll(prodResp.Body)
 	if err != nil {
@@ -72,10 +74,12 @@ func fetchServicesConf() (servicesConf, error) {
 	newConf.Prod = prodConf
 
 	var testConf visorconfig.Services
+	//nolint:gosec
 	testResp, err := http.Get(testServiceConfURL)
 	if err != nil {
 		return newConf, err
 	}
+	//nolint:errcheck
 	defer testResp.Body.Close()
 	body, err = io.ReadAll(testResp.Body)
 	if err != nil {

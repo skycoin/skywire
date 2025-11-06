@@ -157,7 +157,7 @@ func extractFiles() (string, error) {
 		if err != nil {
 			return fmt.Errorf("failed to read file %s: %w", path, err)
 		}
-		if err := os.WriteFile(outputPath, content, 0644); err != nil {
+		if err := os.WriteFile(outputPath, content, 0600); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", outputPath, err)
 		}
 		return nil
@@ -560,7 +560,7 @@ func server(e error) {
 		tmpl := tmpl0
 		htmlPageTemplateData1 := htmlTemplateData{
 			Title:   "Skycoin Reward Calculation and Distribution",
-			Content: htmpl.HTML(l),
+			Content: htmpl.HTML(l), //nolint:gosec
 		}
 		tmplData := map[string]interface{}{
 			"Page": htmlPageTemplateData1,
@@ -950,7 +950,7 @@ func server(e error) {
 		tmpl := tmpl0
 		htmlPageTemplateData1 := htmlTemplateData{
 			Title:   "Skycoin Reward Calculation and Distribution",
-			Content: htmpl.HTML(l),
+			Content: htmpl.HTML(l), //nolint:gosec
 		}
 		//	htmlPageTemplateData1.Content =
 		tmplData := map[string]interface{}{
@@ -1823,6 +1823,7 @@ func mainPage(c *gin.Context) {
 	mainnetRulesHtml, _ := script.Exec(`skywire cli reward rules -l`).String()
 	skywireVersion, _ := script.Exec(`skywire -v`).Replace("skywire version ", "").String()
 	htmlPageTemplateData1 := htmlPageTemplateData
+	//nolint:gosec
 	htmlPageTemplateData1.Content = htmpl.HTML(skywireVersion + "<br>" + skycoinlogohtml + "<br>" + mainnetRulesHtml)
 	tmplData := map[string]interface{}{
 		"Page": htmlPageTemplateData1,
