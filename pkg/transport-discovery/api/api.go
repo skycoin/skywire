@@ -24,7 +24,7 @@ import (
 
 const (
 	transportsNumberDelay   = time.Second * 10
-	sigVerificationCacheTTL = 5 * time.Minute // Cache for httpauth middleware
+	sigVerificationCacheTTL = 5 * time.Minute // Cache signature verifications for 5 minutes
 )
 
 var (
@@ -54,6 +54,7 @@ type API struct {
 	startedAt                   time.Time
 	dmsgAddr                    string
 	DmsgServers                 []string
+	sigVerifier                 *SigVerifier // Caches signature verifications
 }
 
 // HealthCheckResponse is struct of /health endpoint
@@ -78,6 +79,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		startedAt:                   time.Now(),
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
+		sigVerifier:                 NewSigVerifier(sigVerificationCacheTTL),
 	}
 
 	r := chi.NewRouter()
@@ -93,8 +95,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Use(httputil.SetLoggerMiddleware(log))
 
 	r.Group(func(r chi.Router) {
-		cachedAuth := NewCachedAuthMiddleware(nonceStore, sigVerificationCacheTTL)
-		r.Use(cachedAuth.Handle)
+		r.Use(httpauth.MakeMiddleware(nonceStore))
 
 		r.Get("/transports/id:{id}", api.getTransportByID)
 		r.Get("/transports/edge:{edge}", api.getTransportByEdge)
