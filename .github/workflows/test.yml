@@ -69,9 +69,17 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - name: Cache golangci-lint
+        uses: actions/cache@v3
+        with:
+          path: ~/go/bin/golangci-lint
+          key: ${{ runner.os }}-golangci-lint-v2.5.0
+
       - name: Install Requirements
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.5.0
+          if [ ! -f ~/go/bin/golangci-lint ]; then
+            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.5.0
+          fi
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
           make dep
           brew install glfw
@@ -92,11 +100,19 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - name: Cache golangci-lint
+        uses: actions/cache@v3
+        with:
+          path: ~/go/bin/golangci-lint.exe
+          key: ${{ runner.os }}-golangci-lint-v2.5.0
+
       - name: Install Requirements
         run: |
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0
+          if (-not (Test-Path ~/go/bin/golangci-lint.exe)) {
+            go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0
+          }
           make dep
 
       - name: Testing
