@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"runtime"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -189,4 +190,29 @@ func (api *API) updateTransportsNumber(ctx context.Context, logger logrus.FieldL
 		return
 	}
 	api.metrics.SetTPCounts(transports)
+}
+
+// LogStats monitors service health
+func (api *API) LogStats(ctx context.Context, logger logrus.FieldLogger) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Log goroutine count
+			logger.WithField("goroutines", runtime.NumGoroutine()).Info("Service statistics")
+
+			// Log memory stats
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			logger.WithFields(logrus.Fields{
+				"alloc_mb": m.Alloc / 1024 / 1024,
+				"sys_mb":   m.Sys / 1024 / 1024,
+				"num_gc":   m.NumGC,
+			}).Info("Memory statistics")
+		}
+	}
 }
