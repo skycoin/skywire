@@ -50,20 +50,12 @@
 		"apps": [
 			{
 				"name": "vpn-client",
-				"binary": "skywire",
-				"args": [
-					"app",
-					"vpn-client"
-				],
 				"auto_start": false,
 				"port": 43
 			},
 			{
 				"name": "skychat",
-				"binary": "skywire",
 				"args": [
-					"app",
-					"skychat",
 					"--addr",
 					"*:8001"
 				],
@@ -72,21 +64,11 @@
 			},
 			{
 				"name": "skysocks",
-				"binary": "skywire",
-				"args": [
-					"app",
-					"skysocks"
-				],
 				"auto_start": true,
 				"port": 3
 			},
 			{
 				"name": "vpn-server",
-				"binary": "skywire",
-				"args": [
-					"app",
-					"vpn-server"
-				],
 				"auto_start": true,
 				"port": 44
 			}
