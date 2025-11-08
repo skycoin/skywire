@@ -23,8 +23,7 @@ import (
 )
 
 const (
-	transportsNumberDelay   = time.Second * 10
-	sigVerificationCacheTTL = 5 * time.Minute // Cache signature verifications for 5 minutes
+	transportsNumberDelay = time.Second * 10
 )
 
 var (
@@ -54,7 +53,6 @@ type API struct {
 	startedAt                   time.Time
 	dmsgAddr                    string
 	DmsgServers                 []string
-	sigVerifier                 *SigVerifier // Caches signature verifications
 }
 
 // HealthCheckResponse is struct of /health endpoint
@@ -79,7 +77,6 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		startedAt:                   time.Now(),
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
-		sigVerifier:                 NewSigVerifier(sigVerificationCacheTTL),
 	}
 
 	r := chi.NewRouter()
@@ -106,6 +103,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Get("/health", api.health)
 	r.Get("/all-transports", api.getAllTransports)
 	r.Delete("/transports/deregister", api.deregisterTransport)
+	//	r.Post("/statuses", func(w http.ResponseWriter, r *http.Request) {
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})
@@ -149,6 +147,7 @@ func (api *API) renderError(w http.ResponseWriter, r *http.Request, code int, er
 	}
 }
 
+// ServeHTTP implements http.Handler.
 func (api *API) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var status int
 
