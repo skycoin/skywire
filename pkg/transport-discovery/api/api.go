@@ -23,8 +23,7 @@ import (
 )
 
 const (
-	transportsNumberDelay   = time.Second * 10
-	sigVerificationCacheTTL = 5 * time.Minute // Cache for httpauth middleware
+	transportsNumberDelay = time.Second * 10
 )
 
 var (
@@ -93,8 +92,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Use(httputil.SetLoggerMiddleware(log))
 
 	r.Group(func(r chi.Router) {
-		cachedAuth := NewCachedAuthMiddleware(nonceStore, sigVerificationCacheTTL)
-		r.Use(cachedAuth.Handle)
+		r.Use(httpauth.MakeMiddleware(nonceStore))
 
 		r.Get("/transports/id:{id}", api.getTransportByID)
 		r.Get("/transports/edge:{edge}", api.getTransportByEdge)
@@ -105,6 +103,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Get("/health", api.health)
 	r.Get("/all-transports", api.getAllTransports)
 	r.Delete("/transports/deregister", api.deregisterTransport)
+	//	r.Post("/statuses", func(w http.ResponseWriter, r *http.Request) {
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})
@@ -148,6 +147,7 @@ func (api *API) renderError(w http.ResponseWriter, r *http.Request, code int, er
 	}
 }
 
+// ServeHTTP implements http.Handler.
 func (api *API) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var status int
 
