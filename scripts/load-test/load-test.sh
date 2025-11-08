@@ -6,6 +6,8 @@
 # This script creates multiple Skywire visor containers for load testing and
 # development purposes. Each container generates its own unique configuration
 # on startup.
+#
+# Location: scripts/load-test.sh in skycoin/skywire repository
 ################################################################################
 
 # Configuration variables
@@ -149,6 +151,15 @@ case "${1:-help}" in
     #---------------------------------------------------------------------------
     start)
         echo "Starting $NUM_CONTAINERS Skywire containers with ${DELAY_SECONDS}s delay..."
+        
+        # Pull the latest image before starting containers
+        echo "Pulling Docker image: $IMAGE_NAME"
+        docker pull "$IMAGE_NAME"
+        if [ $? -ne 0 ]; then
+            echo "Failed to pull Docker image. Exiting."
+            exit 1
+        fi
+        echo ""
         
         # Loop to create each container
         for i in $(seq 1 $NUM_CONTAINERS); do
