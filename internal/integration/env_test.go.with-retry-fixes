@@ -556,18 +556,23 @@ func (env *TestEnv) ExecInContainerByID(cmd string, containerID string) (string,
 }
 
 func (env *TestEnv) waitForVisorApp(app AppToRun) error {
-	ok, err := env.isVisorAppRunning(app)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		time.Sleep(5 * time.Second)
-		err = env.waitForVisorApp(app)
+	return env.waitForVisorAppWithRetries(app, 12) // 12 * 5s = 60s max wait
+}
+
+func (env *TestEnv) waitForVisorAppWithRetries(app AppToRun, maxRetries int) error {
+	for i := 0; i < maxRetries; i++ {
+		ok, err := env.isVisorAppRunning(app)
 		if err != nil {
 			return err
 		}
+		if ok {
+			return nil
+		}
+		if i < maxRetries-1 {
+			time.Sleep(5 * time.Second)
+		}
 	}
-	return nil
+	return fmt.Errorf("app %s on visor %s did not start after %d retries", app.AppName, app.VisorHostName, maxRetries)
 }
 
 func (env *TestEnv) isVisorAppRunning(app AppToRun) (bool, error) {
