@@ -104,10 +104,6 @@ jobs:
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 
-      - uses: golangci/golangci-lint-action@v7
-        with:
-          version: v2.6.1
-
       - name: Testing
         run: |
           set GO111MODULE=on
