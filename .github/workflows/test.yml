@@ -15,18 +15,15 @@ jobs:
 
       - name: Install Dependencies
         shell: bash
+        env:
+          CGO_ENABLED: 0
         run: |
           set -euo pipefail
 
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 
           sudo apt-get update
-          sudo apt-get install -y \
-            libglfw3-dev \
-            libgl1-mesa-dev \
-            xorg-dev \
-            libglu1-mesa-dev \
-            shellcheck
+          sudo apt-get install -y shellcheck
 
           ./ci_scripts/create-ip-aliases.sh
 
@@ -75,8 +72,9 @@ jobs:
       - name: Install Requirements
         run: |
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          brew install glfw
         shell: bash
+        env:
+          CGO_ENABLED: 0
 
       - uses: golangci/golangci-lint-action@v7
         with:
