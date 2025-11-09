@@ -28,7 +28,6 @@ jobs:
             libglu1-mesa-dev \
             shellcheck
 
-          make dep
           ./ci_scripts/create-ip-aliases.sh
 
           make install-shellcheck
@@ -76,7 +75,6 @@ jobs:
       - name: Install Requirements
         run: |
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          make dep
           brew install glfw
         shell: bash
 
@@ -105,7 +103,6 @@ jobs:
         run: |
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          make dep
 
       - uses: golangci/golangci-lint-action@v7
         with:
