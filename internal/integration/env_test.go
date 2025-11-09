@@ -48,7 +48,7 @@ type TestEnv struct {
 }
 
 func NewEnv() *TestEnv {
-	cli, err := client.NewEnvClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		panic(err)
 	}
