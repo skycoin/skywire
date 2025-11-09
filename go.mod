@@ -41,7 +41,7 @@ require (
 	github.com/pterm/pterm v0.12.82
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.29-0.20251109001145-1f3bf1357f99
+	github.com/skycoin/dmsg v1.3.29-0.20251109221854-32bc477fa4bb
 	github.com/skycoin/skycoin v0.28.1-0.20251109152000-9018c9f37372 //DO NOT MODIFY OR UPDATE v0.28.1-0.20251109152000-9018c9f37372
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.1
@@ -231,7 +231,7 @@ require (
 // To update deps to specific commit hash:
 // 1) Uncomment one of the following lines and substituite version with desired commit hash:
 //replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20251109152000-9018c9f37372
-//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251109001145-1f3bf1357f99
+//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251109221854-32bc477fa4bb
 //replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
 // 2) Run `go mod tidy && go mod vendor`
 // 3) Copy the populated version string to the correct place in require(...) above - replacing the specified version string
