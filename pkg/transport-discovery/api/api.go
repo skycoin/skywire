@@ -25,6 +25,7 @@ import (
 
 const (
 	transportsNumberDelay = time.Second * 10
+	authCacheTTL          = 2 * time.Minute
 )
 
 var (
@@ -92,8 +93,11 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	}
 	r.Use(httputil.SetLoggerMiddleware(log))
 
+	authCache := NewAuthCache(authCacheTTL, log)
+	cachedAuth := NewCachedAuthMiddleware(nonceStore, authCache)
+
 	r.Group(func(r chi.Router) {
-		r.Use(httpauth.MakeMiddleware(nonceStore))
+		r.Use(cachedAuth.Handle)
 
 		r.Get("/transports/id:{id}", api.getTransportByID)
 		r.Get("/transports/edge:{edge}", api.getTransportByEdge)
