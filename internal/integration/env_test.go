@@ -495,13 +495,14 @@ func (env *TestEnv) Exec(cmd string) (string, error) {
 }
 
 func (env *TestEnv) ExecJSON(cmd string, output interface{}) error {
-	cliOutput, err := env.Exec(cmd)
+	result, err := env.execResult(cmd)
 	if err != nil {
 		return err
 	}
-	err = json.Unmarshal([]byte(cliOutput), &output)
+	// Parse only stdout to avoid mixing with stderr log messages
+	err = json.Unmarshal([]byte(result.Stdout()), &output)
 	if err != nil {
-		env.logger.Errorf("cliOutput: %v", cliOutput)
+		env.logger.Errorf("cliOutput: %v", result.Stdout())
 		return err
 	}
 	return nil
@@ -553,6 +554,14 @@ func (env *TestEnv) ExecInContainerByID(cmd string, containerID string) (string,
 	}
 
 	return result.Combined(), nil
+}
+
+func (env *TestEnv) execResult(cmd string) (ExecResult, error) {
+	if env.testRunnerID == "" {
+		return ExecResult{}, errors.New("env.testRunnerID is empty")
+	}
+
+	return Exec(env.ctx, env.cli, env.testRunnerID, strings.Split(cmd, " "))
 }
 
 func (env *TestEnv) waitForVisorApp(app AppToRun) error {
