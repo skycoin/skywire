@@ -9,6 +9,9 @@ import (
 	"strings"
 
 	"github.com/skycoin/skycoin/src/cipher"
+
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
 )
 
 func init() {
@@ -242,7 +245,7 @@ func SignPayload(payload []byte, sec SecKey) (Sig, error) {
 
 // VerifyPubKeySignedPayload verifies that SHA256 hash of the payload was signed by PubKey
 func VerifyPubKeySignedPayload(pubkey PubKey, sig Sig, payload []byte) error {
-	return cipher.VerifyPubKeySignedHash(cipher.PubKey(pubkey), cipher.Sig(sig), cipher.SumSHA256(payload))
+	return VerifyPubKeySignedHashLight(cipher.PubKey(pubkey), cipher.Sig(sig), cipher.SumSHA256(payload))
 }
 
 // RandByte returns rand N bytes
@@ -263,4 +266,25 @@ func SHA256FromBytes(b []byte) (SHA256, error) {
 // SumSHA256 sum sha256
 func SumSHA256(b []byte) SHA256 {
 	return SHA256(cipher.SumSHA256(b))
+}
+
+func VerifyPubKeySignedHashLight(pubkey cipher.PubKey, sig cipher.Sig, hash cipher.SHA256) error {
+	// 1. Parse compressed public key (33 bytes typical)
+	pk, err := secp256k1.ParsePubKey(pubkey[:])
+	if err != nil {
+		return cipher.ErrInvalidSigInvalidPubKey
+	}
+
+	// 2. Decode raw 64-byte signature (R||S)
+	if len(sig) != 64 {
+		return cipher.ErrInvalidSigValidity
+	}
+	sigObj := ecdsa.NewSignatureFromRS(sig[:32], sig[32:])
+
+	// 3. Verify signature
+	if !sigObj.Verify(hash[:], pk) {
+		return cipher.ErrInvalidSigForMessage
+	}
+
+	return nil
 }
