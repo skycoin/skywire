@@ -25,7 +25,6 @@ import (
 
 const (
 	transportsNumberDelay = time.Second * 10
-	authCacheTTL          = 2 * time.Minute
 )
 
 var (

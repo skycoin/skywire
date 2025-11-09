@@ -268,20 +268,31 @@ func SumSHA256(b []byte) SHA256 {
 	return SHA256(cipher.SumSHA256(b))
 }
 
+// VerifyPubKeySignedHashLight is lightweight version of VerifyPubKeySignedHash in cipher lib in skycoin
 func VerifyPubKeySignedHashLight(pubkey cipher.PubKey, sig cipher.Sig, hash cipher.SHA256) error {
-	// 1. Parse compressed public key (33 bytes typical)
+	if len(sig) != 64 {
+		return cipher.ErrInvalidSigValidity
+	}
+
+	// 1. Parse compressed public key
 	pk, err := secp256k1.ParsePubKey(pubkey[:])
 	if err != nil {
 		return cipher.ErrInvalidSigInvalidPubKey
 	}
 
-	// 2. Decode raw 64-byte signature (R||S)
-	if len(sig) != 64 {
+	// 2. Decode raw R||S signature into ModNScalars
+	var r, s secp256k1.ModNScalar
+	if overflow := r.SetByteSlice(sig[:32]); overflow || r.IsZero() {
 		return cipher.ErrInvalidSigValidity
 	}
-	sigObj := ecdsa.NewSignatureFromRS(sig[:32], sig[32:])
+	if overflow := s.SetByteSlice(sig[32:]); overflow || s.IsZero() {
+		return cipher.ErrInvalidSigValidity
+	}
 
-	// 3. Verify signature
+	// 3. Construct signature object (public API)
+	sigObj := ecdsa.NewSignature(&r, &s)
+
+	// 4. Verify
 	if !sigObj.Verify(hash[:], pk) {
 		return cipher.ErrInvalidSigForMessage
 	}
