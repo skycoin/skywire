@@ -92,18 +92,9 @@ linters:
         text: "QF1006:" # could lift into loop condition (staticcheck)
 issues:
   new: false
-formatters:
-  enable:
-    - goimports
-  settings:
-    gofmt:
-      simplify: true
-    goimports:
-      local-prefixes:
-        - github.com/skycoin/skywire
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+linters-settings:
+  gofmt:
+    simplify: true
+  goimports:
+    local-prefixes:
+      - github.com/skycoin/skywire
