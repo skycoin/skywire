@@ -21,13 +21,9 @@ linters:
     - nakedret
     - revive
     - staticcheck
-    - unparam
-    - unused
-    - misspell
-    - unparam
-    - revive
     - unconvert
     - unparam
+    - unused
   settings:
     dupl:
       threshold: 100
@@ -92,9 +88,12 @@ linters:
         text: "QF1006:" # could lift into loop condition (staticcheck)
 issues:
   new: false
-linters-settings:
-  gofmt:
-    simplify: true
-  goimports:
-    local-prefixes:
-      - github.com/skycoin/skywire
+formatters:
+  enable:
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/skycoin/skywire
