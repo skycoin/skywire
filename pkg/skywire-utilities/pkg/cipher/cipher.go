@@ -8,10 +8,9 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/skycoin/skycoin/src/cipher"
-
-	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	secp256k1 "github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
+	"github.com/skycoin/skycoin/src/cipher"
 )
 
 func init() {
@@ -268,32 +267,19 @@ func SumSHA256(b []byte) SHA256 {
 	return SHA256(cipher.SumSHA256(b))
 }
 
-// VerifyPubKeySignedHashLight is lightweight version of VerifyPubKeySignedHash in cipher lib in skycoin
+// VerifyPubKeySignedHashLight verifies that hash was signed by PubKey, a light version of VerifyPubKeySignedHash
 func VerifyPubKeySignedHashLight(pubkey cipher.PubKey, sig cipher.Sig, hash cipher.SHA256) error {
-	if len(sig) != 64 {
-		return cipher.ErrInvalidSigValidity
-	}
-
-	// 1. Parse compressed public key
-	pk, err := secp256k1.ParsePubKey(pubkey[:])
+	pubKey, err := secp256k1.ParsePubKey(pubkey[:])
 	if err != nil {
 		return cipher.ErrInvalidSigInvalidPubKey
 	}
 
-	// 2. Decode raw R||S signature into ModNScalars
-	var r, s secp256k1.ModNScalar
-	if overflow := r.SetByteSlice(sig[:32]); overflow || r.IsZero() {
-		return cipher.ErrInvalidSigValidity
-	}
-	if overflow := s.SetByteSlice(sig[32:]); overflow || s.IsZero() {
+	signature, err := ecdsa.ParseDERSignature(sig[:])
+	if err != nil {
 		return cipher.ErrInvalidSigValidity
 	}
 
-	// 3. Construct signature object (public API)
-	sigObj := ecdsa.NewSignature(&r, &s)
-
-	// 4. Verify
-	if !sigObj.Verify(hash[:], pk) {
+	if !signature.Verify(hash[:], pubKey) {
 		return cipher.ErrInvalidSigForMessage
 	}
 
