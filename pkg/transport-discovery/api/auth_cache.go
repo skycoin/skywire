@@ -11,7 +11,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httpauth"
 )
 
 // AuthCache caches signature verifications
@@ -39,44 +38,6 @@ func NewAuthCache(ttl time.Duration, log logrus.FieldLogger) *AuthCache {
 	go ac.statsLoop()
 
 	return ac
-}
-
-// VerifyWithCache attempts to verify from cache, falls back to actual verification
-func (ac *AuthCache) VerifyWithCache(pubkey cipher.PubKey, sig cipher.Sig, payload []byte, nonce httpauth.Nonce) error {
-	// Create cache key from pubkey + sig (NOT nonce - nonces change every request)
-	cacheKey := ac.makeCacheKey(pubkey, sig)
-
-	// Check cache
-	if entry, ok := ac.cache.Load(cacheKey); ok {
-		cached := entry.(*cacheEntry)
-		if time.Now().Before(cached.expiresAt) {
-			// Cache hit!
-			ac.hits.Add(1)
-			return nil
-		}
-	}
-
-	// Cache miss - do expensive verification
-	ac.misses.Add(1)
-
-	// Use the standard httpauth verification
-	auth := &httpauth.Auth{
-		Key:   pubkey,
-		Sig:   sig,
-		Nonce: nonce,
-	}
-
-	if err := auth.Verify(payload); err != nil {
-		return err
-	}
-
-	// Cache successful verification
-	ac.cache.Store(cacheKey, &cacheEntry{
-		pubkey:    pubkey,
-		expiresAt: time.Now().Add(ac.ttl),
-	})
-
-	return nil
 }
 
 func (ac *AuthCache) makeCacheKey(pubkey cipher.PubKey, sig cipher.Sig) string {
@@ -136,4 +97,29 @@ func (ac *AuthCache) getCacheSize() int {
 		return true
 	})
 	return count
+}
+
+// isAuthCached checks if this pubkey+sig combination is in cache
+func (ac *AuthCache) isAuthCached(pubkey cipher.PubKey, sig cipher.Sig) bool {
+	cacheKey := ac.makeCacheKey(pubkey, sig)
+
+	if entry, ok := ac.cache.Load(cacheKey); ok {
+		cached := entry.(*cacheEntry)
+		if time.Now().Before(cached.expiresAt) {
+			ac.hits.Add(1)
+			return true
+		}
+	}
+
+	ac.misses.Add(1)
+	return false
+}
+
+// cacheSuccessfulAuth stores a successful auth in cache
+func (ac *AuthCache) cacheSuccessfulAuth(pubkey cipher.PubKey, sig cipher.Sig) {
+	cacheKey := ac.makeCacheKey(pubkey, sig)
+	ac.cache.Store(cacheKey, &cacheEntry{
+		pubkey:    pubkey,
+		expiresAt: time.Now().Add(ac.ttl),
+	})
 }
