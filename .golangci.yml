@@ -52,6 +52,10 @@ linters:
       for-loops: false
     unparam:
       check-exported: false
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
   exclusions:
     generated: lax
     paths:
