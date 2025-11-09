@@ -6,11 +6,10 @@ package obj
 
 import (
 	"bytes"
+	"github.com/twitchyliquid64/golang-asm/objabi"
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/twitchyliquid64/golang-asm/objabi"
 )
 
 const REG_NONE = 0

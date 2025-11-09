@@ -25,7 +25,6 @@ package math32
 // Remainder returns the IEEE 754 floating-point remainder of x/y.
 //
 // Special cases are:
-//
 //	Remainder(±Inf, y) = NaN
 //	Remainder(NaN, y) = NaN
 //	Remainder(x, 0) = NaN

@@ -1,4 +1,3 @@
-//go:build !linux && !windows && !darwin && !js
 // +build !linux,!windows,!darwin,!js
 
 package dlgs

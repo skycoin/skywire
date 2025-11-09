@@ -32,10 +32,9 @@
 package obj
 
 import (
+	"github.com/twitchyliquid64/golang-asm/objabi"
 	"log"
 	"math"
-
-	"github.com/twitchyliquid64/golang-asm/objabi"
 )
 
 // Grow increases the length of s.P to lsiz.

@@ -7,13 +7,12 @@
 package obj
 
 import (
-	"fmt"
-	"sort"
-	"sync"
-
 	"github.com/twitchyliquid64/golang-asm/dwarf"
 	"github.com/twitchyliquid64/golang-asm/objabi"
 	"github.com/twitchyliquid64/golang-asm/src"
+	"fmt"
+	"sort"
+	"sync"
 )
 
 // Generate a sequence of opcodes that is as short as possible.

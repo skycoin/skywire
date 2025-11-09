@@ -2,7 +2,6 @@
 Package math32 provides basic constants and mathematical functions for float32 types.
 
 At its core, it's mostly just a wrapper in form of float32(math.XXX). This applies to the following functions:
-
 	Acos
 	Acosh
 	Asin
@@ -30,5 +29,6 @@ At its core, it's mostly just a wrapper in form of float32(math.XXX). This appli
 	Y1
 
 Everything else is a float32 implementation. Implementation schedule is sporadic an uncertain. But eventually all functions will be replaced
+
 */
 package math32

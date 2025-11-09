@@ -20,9 +20,8 @@ import (
 	"time"
 
 	"github.com/NYTimes/gziphandler"
-	"github.com/spf13/cobra"
-
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
+	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skycoin/explorer"
 )

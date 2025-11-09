@@ -31,13 +31,12 @@
 package x86
 
 import (
-	"math"
-	"strings"
-
 	"github.com/twitchyliquid64/golang-asm/obj"
 	"github.com/twitchyliquid64/golang-asm/objabi"
 	"github.com/twitchyliquid64/golang-asm/src"
 	"github.com/twitchyliquid64/golang-asm/sys"
+	"math"
+	"strings"
 )
 
 func CanUse1InsnTLS(ctxt *obj.Link) bool {

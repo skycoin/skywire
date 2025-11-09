@@ -30,13 +30,12 @@
 package mips
 
 import (
-	"fmt"
-	"log"
-	"sort"
-
 	"github.com/twitchyliquid64/golang-asm/obj"
 	"github.com/twitchyliquid64/golang-asm/objabi"
 	"github.com/twitchyliquid64/golang-asm/sys"
+	"fmt"
+	"log"
+	"sort"
 )
 
 // ctxt0 holds state while assembling a single function.

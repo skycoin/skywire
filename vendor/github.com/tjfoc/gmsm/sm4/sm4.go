@@ -26,9 +26,7 @@ import (
 )
 
 const BlockSize = 16
-
-var IV = make([]byte, BlockSize)
-
+var IV=make([]byte,BlockSize)
 type SM4Key []byte
 
 // Cipher is an instance of SM4 encryption.
@@ -157,7 +155,7 @@ func l0(b uint32) uint32 { return b ^ rl(b, 13) ^ rl(b, 23) }
 
 func feistel0(x0, x1, x2, x3, rk uint32) uint32 { return x0 ^ l0(p(x1^x2^x3^rk)) }
 
-// 非线性变换τ(.)
+//非线性变换τ(.)
 func p(a uint32) uint32 {
 	return (uint32(sbox[a>>24]) << 24) ^ (uint32(sbox[(a>>16)&0xff]) << 16) ^ (uint32(sbox[(a>>8)&0xff]) << 8) ^ uint32(sbox[(a)&0xff])
 }
@@ -178,7 +176,7 @@ func permuteFinalBlock(b []byte, block []uint32) {
 	}
 }
 
-// 修改后的加密核心函数
+//修改后的加密核心函数
 func cryptBlock(subkeys []uint32, b []uint32, r []byte, dst, src []byte, decrypt bool) {
 	permuteInitialBlock(b, src)
 
@@ -250,9 +248,13 @@ func (c *Sm4Cipher) Encrypt(dst, src []byte) {
 	cryptBlock(c.subkeys, c.block1, c.block2, dst, src, false)
 }
 
+
+
 func (c *Sm4Cipher) Decrypt(dst, src []byte) {
 	cryptBlock(c.subkeys, c.block1, c.block2, dst, src, true)
 }
+
+
 
 func xor(in, iv []byte) (out []byte) {
 	if len(in) != len(iv) {
@@ -288,12 +290,12 @@ func pkcs7UnPadding(src []byte) ([]byte, error) {
 
 	return src[:(length - unpadding)], nil
 }
-func SetIV(iv []byte) error {
-	if len(iv) != BlockSize {
-		return errors.New("SM4: invalid iv size")
-	}
-	IV = iv
-	return nil
+func SetIV(iv []byte)error{
+      if len(iv)!=BlockSize{
+          return errors.New("SM4: invalid iv size")
+	  }
+	  IV=iv
+	  return nil
 }
 
 func Sm4Cbc(key []byte, in []byte, mode bool) (out []byte, err error) {
@@ -306,8 +308,8 @@ func Sm4Cbc(key []byte, in []byte, mode bool) (out []byte, err error) {
 	} else {
 		inData = in
 	}
-	iv := make([]byte, BlockSize)
-	copy(iv, IV)
+    iv:=make([]byte,BlockSize)
+	copy(iv,IV)
 	out = make([]byte, len(inData))
 	c, err := NewCipher(key)
 	if err != nil {
@@ -370,9 +372,9 @@ func Sm4Ecb(key []byte, in []byte, mode bool) (out []byte, err error) {
 	return out, nil
 }
 
-// 密码反馈模式（Cipher FeedBack (CFB)）
-// https://blog.csdn.net/zy_strive_2012/article/details/102520356
-// https://blog.csdn.net/sinat_23338865/article/details/72869841
+//密码反馈模式（Cipher FeedBack (CFB)）
+//https://blog.csdn.net/zy_strive_2012/article/details/102520356
+//https://blog.csdn.net/sinat_23338865/article/details/72869841
 func Sm4CFB(key []byte, in []byte, mode bool) (out []byte, err error) {
 	if len(key) != BlockSize {
 		return nil, errors.New("SM4: invalid key size " + strconv.Itoa(len(key)))
@@ -429,9 +431,9 @@ func Sm4CFB(key []byte, in []byte, mode bool) (out []byte, err error) {
 	return out, nil
 }
 
-// 输出反馈模式（Output feedback, OFB）
-// https://blog.csdn.net/chengqiuming/article/details/82390910
-// https://blog.csdn.net/sinat_23338865/article/details/72869841
+//输出反馈模式（Output feedback, OFB）
+//https://blog.csdn.net/chengqiuming/article/details/82390910
+//https://blog.csdn.net/sinat_23338865/article/details/72869841
 func Sm4OFB(key []byte, in []byte, mode bool) (out []byte, err error) {
 	if len(key) != BlockSize {
 		return nil, errors.New("SM4: invalid key size " + strconv.Itoa(len(key)))

@@ -5,10 +5,9 @@
 package obj
 
 import (
+	"github.com/twitchyliquid64/golang-asm/goobj"
 	"encoding/binary"
 	"log"
-
-	"github.com/twitchyliquid64/golang-asm/goobj"
 )
 
 // funcpctab writes to dst a pc-value table mapping the code in func to the values

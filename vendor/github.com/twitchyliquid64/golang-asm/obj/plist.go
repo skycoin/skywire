@@ -5,10 +5,9 @@
 package obj
 
 import (
+	"github.com/twitchyliquid64/golang-asm/objabi"
 	"fmt"
 	"strings"
-
-	"github.com/twitchyliquid64/golang-asm/objabi"
 )
 
 type Plist struct {
