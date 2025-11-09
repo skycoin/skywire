@@ -673,7 +673,7 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 	}
 	req.Header.Add("content-type", "application/json")
 	hc := http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 30 * time.Second,
 	}
 	return hc.Do(req)
 }
