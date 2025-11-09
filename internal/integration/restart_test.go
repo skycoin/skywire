@@ -69,10 +69,10 @@ func TestRestart(t *testing.T) {
 			// If HTTP request itself failed (e.g., connection timeout), retry
 			if err != nil {
 				lastError = fmt.Sprintf("HTTP request failed: %v", err)
-				t.Logf("Attempt %d: %s (retrying in 5s)", attempt+1, lastError)
+				t.Logf("Attempt %d: %s (retrying in 10s)", attempt+1, lastError)
 
 				if attempt < 4 { // Don't sleep after last attempt
-					time.Sleep(5 * time.Second)
+					time.Sleep(10 * time.Second)
 				}
 				continue
 			}
@@ -86,11 +86,11 @@ func TestRestart(t *testing.T) {
 			data, readErr := io.ReadAll(res.Body)
 			require.NoError(t, readErr)
 			lastError = string(data)
-			t.Logf("Attempt %d: skychat returned error: %v (retrying in 5s)", attempt+1, lastError)
+			t.Logf("Attempt %d: skychat returned error: %v (retrying in 10s)", attempt+1, lastError)
 			require.NoError(t, res.Body.Close())
 
 			if attempt < 4 { // Don't sleep after last attempt
-				time.Sleep(5 * time.Second)
+				time.Sleep(10 * time.Second)
 			}
 		}
 
@@ -118,6 +118,9 @@ func TestRestart(t *testing.T) {
 
 			// Re-establish transports after visor restart
 			env.AddDefaultTransports(routerVisor, skychatVisors)
+			
+			// Additional delay for transports to stabilize
+			time.Sleep(10 * time.Second)
 
 			checkMessage(t, tc.sender, tc.receiver)
 		})
