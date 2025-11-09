@@ -14,7 +14,7 @@ tmp/
 
 ./skywire.json
 ./build/
-build/
+/build/
 ./apps/
 ./skywire/
 ./local
@@ -30,7 +30,7 @@ rewards
 ./pkg/visor/bar/
 ./pkg/visor/foo/
 
-*.json
+/*.json
 ./bin
 ./node
 ./users.db
