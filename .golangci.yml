@@ -96,7 +96,7 @@ formatters:
       simplify: true
     goimports:
       local-prefixes:
-        - github.com/skycoin/skycoin
+        - github.com/skycoin/skywire
   exclusions:
     generated: lax
     paths:
