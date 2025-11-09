@@ -9,25 +9,9 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.*
+          go-version: '1.25.x'
           cache: true
           cache-dependency-path: go.sum
-
-      - name: Cache Go tools
-        uses: actions/cache@v4
-        with:
-          path: ~/go/bin
-          key: ${{ runner.os }}-go-tools-${{ hashFiles('Makefile') }}
-          restore-keys: |
-            ${{ runner.os }}-go-tools-
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: ${{ runner.os }}-apt-${{ hashFiles('.github/workflows/test.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-apt-
 
       - name: Install Dependencies
         shell: bash
@@ -51,7 +35,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.5.0
+          version: v2.6.1
 
       - name: Lint Shell Scripts
         run: make lint-shell
@@ -85,17 +69,9 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.*
+          go-version: '1.25.x'
           cache: true
           cache-dependency-path: go.sum
-
-      - name: Cache Go tools
-        uses: actions/cache@v4
-        with:
-          path: ~/go/bin
-          key: ${{ runner.os }}-go-tools-${{ hashFiles('Makefile') }}
-          restore-keys: |
-            ${{ runner.os }}-go-tools-
 
       - name: Install Requirements
         run: |
@@ -106,7 +82,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.5.0
+          version: v2.6.1
 
       - name: Checking Format and Testing
         run: make check
@@ -121,17 +97,9 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.*
+          go-version: '1.25.x'
           cache: true
           cache-dependency-path: go.sum
-
-      - name: Cache Go tools
-        uses: actions/cache@v4
-        with:
-          path: ~/go/bin
-          key: ${{ runner.os }}-go-tools-${{ hashFiles('Makefile') }}
-          restore-keys: |
-            ${{ runner.os }}-go-tools-
 
       - name: Install Requirements
         run: |
@@ -141,7 +109,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.5.0
+          version: v2.6.1
 
       - name: Testing
         run: |
