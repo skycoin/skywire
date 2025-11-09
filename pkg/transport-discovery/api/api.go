@@ -93,11 +93,8 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	}
 	r.Use(httputil.SetLoggerMiddleware(log))
 
-	authCache := NewAuthCache(authCacheTTL, log)
-	cachedAuth := NewCachedAuthMiddleware(nonceStore, authCache)
-
 	r.Group(func(r chi.Router) {
-		r.Use(cachedAuth.Handle)
+		r.Use(httpauth.MakeMiddleware(nonceStore))
 
 		r.Get("/transports/id:{id}", api.getTransportByID)
 		r.Get("/transports/edge:{edge}", api.getTransportByEdge)
