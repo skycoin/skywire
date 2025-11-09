@@ -1,3 +1,4 @@
+// Package api pkg/transport-discovery/endpoints.go
 package api
 
 import (
