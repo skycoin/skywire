@@ -56,6 +56,21 @@ func TestRestart(t *testing.T) {
 		GatherVisorPKs([]string{visorA, visorB, visorC}).
 		AddDefaultTransports(routerVisor, skychatVisors)
 
+	dumpLogsOnFailure := func(t *testing.T, visors ...string) {
+		if !t.Failed() {
+			return
+		}
+		t.Log("=== Test failed, dumping visor logs ===")
+		for _, visor := range visors {
+			logs, err := env.ReadLog(visor)
+			if err != nil {
+				t.Logf("Failed to read logs from %s: %v", visor, err)
+				continue
+			}
+			t.Logf("\n=== Logs from %s ===\n%s\n=== End logs from %s ===\n", visor, logs, visor)
+		}
+	}
+
 	checkMessage := func(t *testing.T, sender, receiver string) {
 		// Retry sending message up to 5 times with 5 second delays
 		// to handle transient transport setup delays after restart
@@ -112,13 +127,18 @@ func TestRestart(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Dump logs on failure
+			t.Cleanup(func() {
+				dumpLogsOnFailure(t, visorA, visorB, visorC)
+			})
+
 			// Restart visor containers
 			require.NoError(t, env.ContainerRestart(tc.restartList...))
 			time.Sleep(RestartDelay)
 
 			// Re-establish transports after visor restart
 			env.AddDefaultTransports(routerVisor, skychatVisors)
-			
+
 			// Additional delay for transports to stabilize
 			time.Sleep(10 * time.Second)
 
