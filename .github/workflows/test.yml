@@ -13,23 +13,12 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Cache Go Tools
-        uses: actions/cache@v4
-        with:
-          path: ~/go/bin
-          key: ${{ runner.os }}-go-tools-${{ hashFiles('**/go.mod') }}
-          restore-keys: |
-            ${{ runner.os }}-go-tools-
-
       - name: Install Dependencies
         shell: bash
         run: |
           set -euo pipefail
 
-          # Install gocyclo if not cached
-          if [ ! -f ~/go/bin/gocyclo ]; then
-            go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          fi
+          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 
           sudo apt-get update
           sudo apt-get install -y \
@@ -83,20 +72,9 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Cache Go Tools
-        uses: actions/cache@v4
-        with:
-          path: ~/go/bin
-          key: ${{ runner.os }}-go-tools-${{ hashFiles('**/go.mod') }}
-          restore-keys: |
-            ${{ runner.os }}-go-tools-
-
       - name: Install Requirements
         run: |
-          # Install gocyclo if not cached
-          if [ ! -f ~/go/bin/gocyclo ]; then
-            go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          fi
+          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
           brew install glfw
         shell: bash
 
@@ -121,20 +99,10 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Cache Go Tools
-        uses: actions/cache@v4
-        with:
-          path: ~/go/bin
-          key: ${{ runner.os }}-go-tools-${{ hashFiles('**/go.mod') }}
-          restore-keys: |
-            ${{ runner.os }}-go-tools-
-
       - name: Install Requirements
         run: |
           choco install make
-          if (-not (Test-Path ~/go/bin/gocyclo.exe)) {
-            go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          }
+          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 
       - uses: golangci/golangci-lint-action@v7
         with:
