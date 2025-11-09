@@ -9,7 +9,6 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
-
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/deployment"

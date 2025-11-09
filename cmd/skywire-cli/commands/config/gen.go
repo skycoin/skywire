@@ -16,9 +16,8 @@ import (
 	"github.com/bitfield/script"
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
-	"github.com/spf13/cobra"
-
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
+	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/deployment"

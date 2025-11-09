@@ -21,7 +21,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
-
 	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"

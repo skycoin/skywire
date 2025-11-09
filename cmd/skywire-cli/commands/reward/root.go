@@ -6,10 +6,9 @@ import (
 	"os"
 	"strings"
 
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
-	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"

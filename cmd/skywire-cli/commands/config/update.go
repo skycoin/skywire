@@ -9,9 +9,8 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
-
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
+	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/dmsgc"

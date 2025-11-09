@@ -13,10 +13,9 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/fatih/color"
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
-
-	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
 	"github.com/skycoin/skywire/deployment"

@@ -19,9 +19,8 @@ import (
 	"time"
 
 	"github.com/oschwald/geoip2-golang/v2"
-	"github.com/spf13/cobra"
-
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"

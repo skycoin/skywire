@@ -45,8 +45,8 @@ type Client struct {
 	prevTUNGateway   net.IP
 	prevTUNGatewayMu sync.Mutex
 
-	suidMu sync.Mutex
-	suid   int
+	suidMu sync.Mutex //nolint:unused
+	suid   int        //nolint:unused
 
 	tunMu      sync.Mutex
 	tun        TUNDevice
@@ -279,7 +279,7 @@ func (c *Client) RemoveDirectRoute(ip net.IP) error {
 	return nil
 }
 
-func (c *Client) setSysPrivileges() error {
+func (c *Client) setSysPrivileges() error { //nolint:unused
 	if runtime.GOOS != "windows" {
 		c.suidMu.Lock()
 
