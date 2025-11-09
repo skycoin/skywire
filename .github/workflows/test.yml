@@ -21,7 +21,7 @@ jobs:
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 
           sudo apt-get update
-          sudo apt-get install -y shellcheck libx11-dev
+          sudo apt-get install -y shellcheck libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
 
           ./ci_scripts/create-ip-aliases.sh
 
