@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -39,7 +39,7 @@ type TestEnv struct {
 	intraNet     string
 
 	// run-time information
-	containers   map[string]types.Container
+	containers   map[string]container.Summary
 	visorPKs     map[string]string
 	testRunnerID string
 	logger       *logging.MasterLogger
@@ -84,12 +84,12 @@ func NewEnv() *TestEnv {
 }
 
 func (env *TestEnv) GatherContainersInfo() *TestEnv {
-	containers, err := env.cli.ContainerList(env.ctx, types.ContainerListOptions{})
+	containers, err := env.cli.ContainerList(env.ctx, container.ListOptions{})
 	if err != nil {
 		panic(err)
 	}
 
-	env.containers = make(map[string]types.Container)
+	env.containers = make(map[string]container.Summary)
 
 	for _, container := range containers {
 		name := strings.TrimPrefix(container.Names[0], "/")
@@ -637,8 +637,8 @@ func (env *TestEnv) ContainerRestart(serviceName ...string) error {
 			return errors.New("test-env: service not found")
 		}
 
-		timeout := 2 * time.Minute
-		if err := env.cli.ContainerRestart(env.ctx, svc.ID, &timeout); err != nil {
+		timeout := int((2 * time.Minute).Seconds())
+		if err := env.cli.ContainerRestart(env.ctx, svc.ID, container.StopOptions{Timeout: &timeout}); err != nil {
 			return err
 		}
 	}

@@ -5,11 +5,29 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: 1.25.*
+          cache: true
+          cache-dependency-path: go.sum
 
-      - uses: actions/checkout@v4
+      - name: Cache Go tools
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin
+          key: ${{ runner.os }}-go-tools-${{ hashFiles('Makefile') }}
+          restore-keys: |
+            ${{ runner.os }}-go-tools-
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-${{ hashFiles('.github/workflows/test.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-
 
       - name: Install Dependencies
         shell: bash
@@ -63,27 +81,32 @@ jobs:
   darwin:
     runs-on: macos-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: 1.25.*
+          cache: true
+          cache-dependency-path: go.sum
 
-      - uses: actions/checkout@v4
-
-      - name: Cache golangci-lint
-        uses: actions/cache@v3
+      - name: Cache Go tools
+        uses: actions/cache@v4
         with:
-          path: ~/go/bin/golangci-lint
-          key: ${{ runner.os }}-golangci-lint-v2.5.0
+          path: ~/go/bin
+          key: ${{ runner.os }}-go-tools-${{ hashFiles('Makefile') }}
+          restore-keys: |
+            ${{ runner.os }}-go-tools-
 
       - name: Install Requirements
         run: |
-          if [ ! -f ~/go/bin/golangci-lint ]; then
-            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.5.0
-          fi
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
           make dep
           brew install glfw
         shell: bash
+
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.5.0
 
       - name: Checking Format and Testing
         run: make check
@@ -94,26 +117,31 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: 1.25.*
+          cache: true
+          cache-dependency-path: go.sum
 
-      - uses: actions/checkout@v4
-
-      - name: Cache golangci-lint
-        uses: actions/cache@v3
+      - name: Cache Go tools
+        uses: actions/cache@v4
         with:
-          path: ~/go/bin/golangci-lint.exe
-          key: ${{ runner.os }}-golangci-lint-v2.5.0
+          path: ~/go/bin
+          key: ${{ runner.os }}-go-tools-${{ hashFiles('Makefile') }}
+          restore-keys: |
+            ${{ runner.os }}-go-tools-
 
       - name: Install Requirements
         run: |
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          if (-not (Test-Path ~/go/bin/golangci-lint.exe)) {
-            go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0
-          }
           make dep
+
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.5.0
 
       - name: Testing
         run: |
