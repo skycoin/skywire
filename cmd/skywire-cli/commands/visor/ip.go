@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -43,13 +44,18 @@ var ipCmd = &cobra.Command{
 
 func getIPAddress(geoipURL string) (string, error) {
 	var info ipInfo
-	var resp *http.Response
-	var err error
 
-	resp, err = http.Get(geoipURL) //nolint gosec
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Get(geoipURL)
 	if err != nil {
 		return info.IP, err
 	}
+	//nolint:errcheck
+	defer resp.Body.Close()
+
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return info.IP, err

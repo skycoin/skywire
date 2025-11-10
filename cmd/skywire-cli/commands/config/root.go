@@ -110,7 +110,7 @@ var RootCmd = &cobra.Command{
 	Long:  "Generate or update the config file used by skywire-visor.",
 }
 
-type servicesConf struct { //nolint
+type servicesConf struct {
 	Test visorconfig.Services `json:"test"`
 	Prod visorconfig.Services `json:"prod"`
 }

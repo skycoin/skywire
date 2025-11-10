@@ -34,7 +34,7 @@ func Fetch(mLog *logging.MasterLogger, serviceConf string, stdout bool) (service
 	} else {
 		// nil error from client.Do(req)
 		if res.Body != nil {
-			defer res.Body.Close() //nolint
+			defer res.Body.Close() //nolint:errcheck
 		}
 		body, err := io.ReadAll(res.Body)
 		if err != nil {

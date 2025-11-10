@@ -612,7 +612,7 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 }
 
 func storeLog(log *logging.MasterLogger, localPath string) {
-	hook, _ := lumberjackrus.NewHook( //nolint
+	hook, _ := lumberjackrus.NewHook( //nolint:errcheck
 		&lumberjackrus.LogFile{
 			Filename:   localPath + "/log/skywire.log",
 			MaxSize:    1,

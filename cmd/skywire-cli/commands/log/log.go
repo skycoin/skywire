@@ -23,12 +23,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil" //nolint:errcheck
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 func init() {
-	logCmd.Flags().SortFlags = false
+	logCmd.Flags().SortFlags = false //nolint:errcheck
 	logCmd.Flags().BoolVarP(&logOnly, "log", "l", false, "fetch only transport logs")
 	logCmd.Flags().BoolVarP(&surveyOnly, "survey", "v", false, "fetch only surveys")
 	logCmd.Flags().StringVarP(&fetchFile, "file", "f", "", "fetch only a specific file from all online visors")
@@ -44,7 +44,7 @@ func init() {
 	logCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDiscURL, "dmsg discovery url\n")
 	logCmd.Flags().StringVarP(&utAddr, "ut", "u", utURL, "uptime tracker url\n")
 	if os.Getenv("DMSGCURL_SK") != "" {
-		sk.Set(os.Getenv("DMSGCURL_SK")) //nolint
+		sk.Set(os.Getenv("DMSGCURL_SK")) //nolint:errcheck,gosec
 	}
 	logCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 }
@@ -113,7 +113,7 @@ var logCmd = &cobra.Command{
 
 		dmsgC, closeDmsg, err := dg.StartDmsg(ctx, log, pk, sk)
 		if err != nil {
-			log.Error(err)
+			log.Error(err) //nolint:errcheck
 			return
 		}
 		defer closeDmsg()
@@ -121,10 +121,10 @@ var logCmd = &cobra.Command{
 		// Connect dmsgC to all servers
 		allServer := getAllDMSGServers()
 		for _, server := range allServer {
-			dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint
+			dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint:errcheck,gosec
 		}
 
-		minimumVersion, _ := version.NewVersion(minv) //nolint
+		minimumVersion, _ := version.NewVersion(minv) //nolint:errcheck
 		incVerList := strings.Split(incVer, ",")
 
 		start := time.Now()
@@ -135,7 +135,7 @@ var logCmd = &cobra.Command{
 			//only attempt to fetch from online visors
 			if v.Online {
 				if fetchFile == "" {
-					visorVersion, err := version.NewVersion(v.Version) //nolint
+					visorVersion, err := version.NewVersion(v.Version)
 					if v.Version == "" {
 						log.Warnf("The version for visor %s is blank", v.PubKey)
 						continue
@@ -143,7 +143,7 @@ var logCmd = &cobra.Command{
 					includeV := contains(incVerList, v.Version)
 					if err != nil && !includeV {
 						log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
-						continue
+						continue //nolint:errcheck
 					}
 					if !allVisors && visorVersion.LessThan(minimumVersion) && !includeV {
 						log.Warnf("The version %s for visor %s does not satisfy our minimum version condition", v.Version, v.PubKey)
@@ -176,15 +176,15 @@ var logCmd = &cobra.Command{
 						}
 						if !logOnly {
 							if visorVersion.LessThan(fver) {
-								download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint
+								download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
 							} else {
-								download(ctx, log, httpC, "node-info", "node-info.json", key, maxFileSize) //nolint
+								download(ctx, log, httpC, "node-info", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
 							}
 						}
 						if !surveyOnly {
 							for i := 0; i <= duration; i++ {
 								date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
-								download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize) //nolint
+								download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize) //nolint:errcheck,gosec
 							}
 						}
 					}(v.PubKey, &wg)
@@ -207,7 +207,7 @@ var logCmd = &cobra.Command{
 								return
 							}
 						}
-						_ = download(ctx, log, httpC, fetchFile, fetchFile, key, maxFileSize) //nolint
+						_ = download(ctx, log, httpC, fetchFile, fetchFile, key, maxFileSize) //nolint:errcheck
 					}(v.PubKey, &wg)
 				}
 			}
@@ -225,8 +225,10 @@ var logCmd = &cobra.Command{
 
 func download(ctx context.Context, log *logging.Logger, httpC http.Client, targetPath, fileName, pubkey string, maxSize int64) error {
 	target := fmt.Sprintf("dmsg://%s:80/%s", pubkey, targetPath)
-	file, _ := os.Create(pubkey + "/" + fileName) //nolint
-	defer file.Close()                            //nolint
+	//nolint:errcheck,gosec
+	file, _ := os.Create(pubkey + "/" + fileName)
+	//nolint:errcheck
+	defer file.Close()
 
 	if err := downloadDmsg(ctx, log, &httpC, file, target, maxSize); err != nil {
 		log.WithError(err).Errorf("The %s for visor %s not available", fileName, pubkey)
@@ -320,12 +322,12 @@ func getUptimes(endpoint string, log *logging.Logger) ([]VisorUptimeResponse, er
 	client := http.Client{
 		Timeout: 60 * time.Second,
 	}
-	response, err := client.Get(endpoint) //nolint
+	response, err := client.Get(endpoint)
 	if err != nil {
 		log.Error("Error while fetching data from uptime service. Error: ", err)
 		return results, errors.New("Cannot get Uptime data")
 	}
-	defer response.Body.Close() //nolint
+	defer response.Body.Close() //nolint:errcheck
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		log.Error("Error while reading data from uptime service. Error: ", err)
@@ -343,12 +345,12 @@ func getUptimes(endpoint string, log *logging.Logger) ([]VisorUptimeResponse, er
 func getAllDMSGServers() []dmsgServer {
 	var results []dmsgServer
 
-	response, err := http.Get(dmsgDisc + "/dmsg-discovery/all_servers") //nolint
+	response, err := http.Get(dmsgDisc + "/dmsg-discovery/all_servers")
 	if err != nil {
 		return results
 	}
 
-	defer response.Body.Close() //nolint
+	defer response.Body.Close() //nolint:errcheck
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return results

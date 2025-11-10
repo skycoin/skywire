@@ -1,24 +1,24 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/swarm"
-	"golang.org/x/net/context"
 )
 
-// SecretCreate creates a new Secret.
-func (cli *Client) SecretCreate(ctx context.Context, secret swarm.SecretSpec) (types.SecretCreateResponse, error) {
-	var headers map[string][]string
-
-	var response types.SecretCreateResponse
-	resp, err := cli.post(ctx, "/secrets/create", nil, secret, headers)
+// SecretCreate creates a new secret.
+func (cli *Client) SecretCreate(ctx context.Context, secret swarm.SecretSpec) (swarm.SecretCreateResponse, error) {
+	if err := cli.NewVersionError(ctx, "1.25", "secret create"); err != nil {
+		return swarm.SecretCreateResponse{}, err
+	}
+	resp, err := cli.post(ctx, "/secrets/create", nil, secret, nil)
+	defer ensureReaderClosed(resp)
 	if err != nil {
-		return response, err
+		return swarm.SecretCreateResponse{}, err
 	}
 
-	err = json.NewDecoder(resp.body).Decode(&response)
-	ensureReaderClosed(resp)
+	var response swarm.SecretCreateResponse
+	err = json.NewDecoder(resp.Body).Decode(&response)
 	return response, err
 }

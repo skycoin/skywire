@@ -48,7 +48,7 @@ func redisClient(t *testing.T) *redis.Client {
 
 func postgresClient() (*gorm.DB, *logging.Logger) {
 	logger := logging.NewMasterLogger().PackageLogger("integration_test")
-	dsn := "host=localhost port=8383 user=postgres password=postgres dbname=postgres sslmode=disable" //nolint
+	dsn := "host=localhost port=8383 user=postgres password=postgres dbname=postgres sslmode=disable"
 	gormDB, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic("test failed")
