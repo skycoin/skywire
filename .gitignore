@@ -45,6 +45,16 @@ local/
 ./*.sh
 ./*.log
 
+# Local development files
+/CRUSH.md
+/APP_REFACTOR_PROGRESS.md
+/IMPLEMENTATION_COMPLETE.md
+/NOLINT_CLEANUP_SUMMARY.md
+/NOLINT_FINAL_REPORT.md
+/TESTING_GUIDE.md
+/nolint.txt
+/console.log
+/ci_errors.txt
 
 # Ignore backup go.mod after running '/ci_scripts/go_mod_replace.sh'.
 go.mod-e
