@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -10,63 +11,69 @@ import (
 	"path/filepath"
 	"strings"
 
-	"golang.org/x/net/context"
-
-	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 )
 
-// ContainerStatPath returns Stat information about a path inside the container filesystem.
-func (cli *Client) ContainerStatPath(ctx context.Context, containerID, path string) (types.ContainerPathStat, error) {
+// ContainerStatPath returns stat information about a path inside the container filesystem.
+func (cli *Client) ContainerStatPath(ctx context.Context, containerID, path string) (container.PathStat, error) {
+	containerID, err := trimID("container", containerID)
+	if err != nil {
+		return container.PathStat{}, err
+	}
+
 	query := url.Values{}
 	query.Set("path", filepath.ToSlash(path)) // Normalize the paths used in the API.
 
-	urlStr := fmt.Sprintf("/containers/%s/archive", containerID)
-	response, err := cli.head(ctx, urlStr, query, nil)
+	resp, err := cli.head(ctx, "/containers/"+containerID+"/archive", query, nil)
+	defer ensureReaderClosed(resp)
 	if err != nil {
-		return types.ContainerPathStat{}, err
+		return container.PathStat{}, err
 	}
-	defer ensureReaderClosed(response)
-	return getContainerPathStatFromHeader(response.header)
+	return getContainerPathStatFromHeader(resp.Header)
 }
 
 // CopyToContainer copies content into the container filesystem.
-func (cli *Client) CopyToContainer(ctx context.Context, container, path string, content io.Reader, options types.CopyToContainerOptions) error {
+// Note that `content` must be a Reader for a TAR archive
+func (cli *Client) CopyToContainer(ctx context.Context, containerID, dstPath string, content io.Reader, options container.CopyToContainerOptions) error {
+	containerID, err := trimID("container", containerID)
+	if err != nil {
+		return err
+	}
+
 	query := url.Values{}
-	query.Set("path", filepath.ToSlash(path)) // Normalize the paths used in the API.
+	query.Set("path", filepath.ToSlash(dstPath)) // Normalize the paths used in the API.
 	// Do not allow for an existing directory to be overwritten by a non-directory and vice versa.
 	if !options.AllowOverwriteDirWithFile {
 		query.Set("noOverwriteDirNonDir", "true")
 	}
 
-	apiPath := fmt.Sprintf("/containers/%s/archive", container)
+	if options.CopyUIDGID {
+		query.Set("copyUIDGID", "true")
+	}
 
-	response, err := cli.putRaw(ctx, apiPath, query, content, nil)
+	response, err := cli.putRaw(ctx, "/containers/"+containerID+"/archive", query, content, nil)
+	defer ensureReaderClosed(response)
 	if err != nil {
 		return err
-	}
-	defer ensureReaderClosed(response)
-
-	if response.statusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code from daemon: %d", response.statusCode)
 	}
 
 	return nil
 }
 
 // CopyFromContainer gets the content from the container and returns it as a Reader
-// to manipulate it in the host. It's up to the caller to close the reader.
-func (cli *Client) CopyFromContainer(ctx context.Context, container, srcPath string) (io.ReadCloser, types.ContainerPathStat, error) {
+// for a TAR archive to manipulate it in the host. It's up to the caller to close the reader.
+func (cli *Client) CopyFromContainer(ctx context.Context, containerID, srcPath string) (io.ReadCloser, container.PathStat, error) {
+	containerID, err := trimID("container", containerID)
+	if err != nil {
+		return nil, container.PathStat{}, err
+	}
+
 	query := make(url.Values, 1)
 	query.Set("path", filepath.ToSlash(srcPath)) // Normalize the paths used in the API.
 
-	apiPath := fmt.Sprintf("/containers/%s/archive", container)
-	response, err := cli.get(ctx, apiPath, query, nil)
+	resp, err := cli.get(ctx, "/containers/"+containerID+"/archive", query, nil)
 	if err != nil {
-		return nil, types.ContainerPathStat{}, err
-	}
-
-	if response.statusCode != http.StatusOK {
-		return nil, types.ContainerPathStat{}, fmt.Errorf("unexpected status code from daemon: %d", response.statusCode)
+		return nil, container.PathStat{}, err
 	}
 
 	// In order to get the copy behavior right, we need to know information
@@ -75,15 +82,15 @@ func (cli *Client) CopyFromContainer(ctx context.Context, container, srcPath str
 	// copy it locally. Along with the stat info about the local destination,
 	// we have everything we need to handle the multiple possibilities there
 	// can be when copying a file/dir from one location to another file/dir.
-	stat, err := getContainerPathStatFromHeader(response.header)
+	stat, err := getContainerPathStatFromHeader(resp.Header)
 	if err != nil {
 		return nil, stat, fmt.Errorf("unable to get resource stat from response: %s", err)
 	}
-	return response.body, stat, err
+	return resp.Body, stat, err
 }
 
-func getContainerPathStatFromHeader(header http.Header) (types.ContainerPathStat, error) {
-	var stat types.ContainerPathStat
+func getContainerPathStatFromHeader(header http.Header) (container.PathStat, error) {
+	var stat container.PathStat
 
 	encodedStat := header.Get("X-Docker-Container-Path-Stat")
 	statDecoder := base64.NewDecoder(base64.StdEncoding, strings.NewReader(encodedStat))

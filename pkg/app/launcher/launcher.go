@@ -167,13 +167,13 @@ func (l *AppLauncher) AppState(name string) (*appserver.AppState, bool) {
 		return nil, false
 	}
 	state := &appserver.AppState{AppConfig: ac, Status: appserver.AppStatusStopped}
-	if err, ok := l.procM.ErrorByName(ac.Name); ok { //nolint:errcheck
+	if err, ok := l.procM.ErrorByName(ac.Name); ok {
 		if err != "" {
 			state.DetailedStatus = err
 			state.Status = appserver.AppStatusErrored
 		}
 	}
-	if proc, ok := l.procM.ProcByName(ac.Name); ok { //nolint:errcheck
+	if proc, ok := l.procM.ProcByName(ac.Name); ok {
 		state.DetailedStatus = proc.DetailedStatus()
 		connSummary := proc.ConnectionsSummary()
 		if connSummary != nil {
@@ -337,7 +337,7 @@ func ensureDir(path *string) error {
 	if _, err := os.Stat(*path); !os.IsNotExist(err) {
 		return nil
 	}
-	if err := os.MkdirAll(*path, 0755); err != nil { //nolint
+	if err := os.MkdirAll(*path, 0750); err != nil {
 		return fmt.Errorf("failed to create dir: %s", err)
 	}
 	return nil

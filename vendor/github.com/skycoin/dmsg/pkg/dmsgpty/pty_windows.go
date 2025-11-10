@@ -88,6 +88,7 @@ func (s *Pty) Start(name string, args []string, size *WinSize) error {
 
 	}
 	pty, err := conpty.New(
+		//nolint:gosec // Safe conversion: WinSize values fit in int16 range
 		int16(size.X), int16(size.Y),
 	)
 	if err != nil {

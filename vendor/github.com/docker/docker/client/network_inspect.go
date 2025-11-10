@@ -2,37 +2,46 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"io/ioutil"
-	"net/http"
+	"io"
+	"net/url"
 
-	"github.com/docker/docker/api/types"
-	"golang.org/x/net/context"
+	"github.com/docker/docker/api/types/network"
 )
 
 // NetworkInspect returns the information for a specific network configured in the docker host.
-func (cli *Client) NetworkInspect(ctx context.Context, networkID string) (types.NetworkResource, error) {
-	networkResource, _, err := cli.NetworkInspectWithRaw(ctx, networkID)
+func (cli *Client) NetworkInspect(ctx context.Context, networkID string, options network.InspectOptions) (network.Inspect, error) {
+	networkResource, _, err := cli.NetworkInspectWithRaw(ctx, networkID, options)
 	return networkResource, err
 }
 
 // NetworkInspectWithRaw returns the information for a specific network configured in the docker host and its raw representation.
-func (cli *Client) NetworkInspectWithRaw(ctx context.Context, networkID string) (types.NetworkResource, []byte, error) {
-	var networkResource types.NetworkResource
-	resp, err := cli.get(ctx, "/networks/"+networkID, nil, nil)
+func (cli *Client) NetworkInspectWithRaw(ctx context.Context, networkID string, options network.InspectOptions) (network.Inspect, []byte, error) {
+	networkID, err := trimID("network", networkID)
 	if err != nil {
-		if resp.statusCode == http.StatusNotFound {
-			return networkResource, nil, networkNotFoundError{networkID}
-		}
-		return networkResource, nil, err
+		return network.Inspect{}, nil, err
 	}
-	defer ensureReaderClosed(resp)
+	query := url.Values{}
+	if options.Verbose {
+		query.Set("verbose", "true")
+	}
+	if options.Scope != "" {
+		query.Set("scope", options.Scope)
+	}
 
-	body, err := ioutil.ReadAll(resp.body)
+	resp, err := cli.get(ctx, "/networks/"+networkID, query, nil)
+	defer ensureReaderClosed(resp)
 	if err != nil {
-		return networkResource, nil, err
+		return network.Inspect{}, nil, err
 	}
-	rdr := bytes.NewReader(body)
-	err = json.NewDecoder(rdr).Decode(&networkResource)
-	return networkResource, body, err
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return network.Inspect{}, nil, err
+	}
+
+	var nw network.Inspect
+	err = json.NewDecoder(bytes.NewReader(raw)).Decode(&nw)
+	return nw, raw, err
 }

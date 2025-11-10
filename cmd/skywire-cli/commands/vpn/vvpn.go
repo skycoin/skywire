@@ -64,9 +64,9 @@ var startCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), rpcClient.StartVPNClient(pubkey))
 		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		var tCtxCancelFunc context.CancelFunc
-		tCtx := context.Background() //nolint
+		tCtx := context.Background()
 		if startingTimeout != 0 {
-			tCtx, tCtxCancelFunc = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second) //nolint
+			tCtx, tCtxCancelFunc = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second)
 		}
 		ctx, cancel := cmdutil.SignalContext(tCtx, &logrus.Logger{})
 		go func() {
@@ -75,7 +75,7 @@ var startCmd = &cobra.Command{
 			if tCtxCancelFunc != nil {
 				tCtxCancelFunc()
 			}
-			rpcClient.KillApp("vpn-client") //nolint
+			rpcClient.KillApp("vpn-client") //nolint:errcheck,gosec
 			fmt.Print("\nStopped!")
 			os.Exit(1)
 		}()
@@ -198,14 +198,14 @@ var listCmd = &cobra.Command{
 		// --- Fetch SD ---
 		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
 		if rawData {
-			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint
+			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint:errcheck,gosec
 			return
 		}
 
 		// --- If JSON output requested ---
 		if jsonOutput {
 			var list []services.Service
-			json.Unmarshal([]byte(sds), &list) //nolint
+			json.Unmarshal([]byte(sds), &list) //nolint:errcheck,gosec
 			var b bytes.Buffer
 			internal.PrintOutput(cmd.Flags(), list, b.String())
 			return
@@ -218,7 +218,7 @@ var listCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
-			script.Echo(string(pretty.Color(pretty.Pretty(jsonOut), nil))).Stdout() //nolint
+			script.Echo(string(pretty.Color(pretty.Pretty(jsonOut), nil))).Stdout() //nolint:errcheck,gosec
 			return
 		}
 
@@ -238,10 +238,10 @@ var listCmd = &cobra.Command{
 				if err != nil {
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 				}
-				script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint
+				script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
 				return
 			}
-			script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout() //nolint
+			script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
 			return
 		}
 
@@ -271,10 +271,10 @@ var listCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
-			script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint
+			script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
 			return
 		}
 
-		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint
+		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
 	},
 }

@@ -283,7 +283,7 @@ func (v *Visor) Summary() (*Summary, error) {
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
 	if v.isDTMReady() {
-		dmsgTracker, _ := v.dtm.Get(v.conf.PK) //nolint
+		dmsgTracker, _ := v.dtm.Get(v.conf.PK)
 		dmsgStatValue = &dmsgTracker
 	}
 
@@ -367,7 +367,7 @@ func (v *Visor) Uptime() (float64, error) {
 // SetRewardAddress implements API.
 func (v *Visor) SetRewardAddress(p string) (string, error) {
 	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
-	err := os.WriteFile(path, []byte(p), 0644) //nolint
+	err := os.WriteFile(path, []byte(p), 0600)
 	if err != nil {
 		return p, fmt.Errorf("failed to write config to file. err=%v", err)
 	}
@@ -521,7 +521,7 @@ func (v *Visor) KillApp(appName string) error {
 		return ErrAppLauncherNotAvailable
 	}
 	if v.procM != nil {
-		return v.appL.KillApp(appName) //nolint:errcheck
+		return v.appL.KillApp(appName)
 	}
 	return ErrProcNotAvailable
 }
@@ -622,7 +622,9 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 				if err := pk.Set(serverKey); err != nil {
 					return err
 				}
-				v.SetAppPK(visorconfig.SkysocksClientName, pk) //nolint
+				if err := v.SetAppPK(visorconfig.SkysocksClientName, pk); err != nil {
+					return err
+				}
 				// we set the args in memory and pass it in `v.appL.StartApp`
 				// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 				// but the args are set in the config
@@ -655,7 +657,9 @@ func (v *Visor) StopSkysocksClients() error {
 		for _, app := range v.conf.Launcher.Apps {
 			for _, args := range app.Args {
 				if args == visorconfig.SkysocksClientName {
-					v.appL.StopApp(app.Name) //nolint
+					if _, err := v.appL.StopApp(app.Name); err != nil { //nolint:errcheck
+						v.log.WithError(err).Warnf("Failed to stop app %s", app.Name)
+					}
 				}
 			}
 		}
@@ -1110,7 +1114,7 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 		}
 	}
 	if v.procM != nil {
-		apps, _ := v.Apps() //nolint
+		apps, _ := v.Apps() //nolint:errcheck
 		for _, app := range apps {
 			port, err := v.procM.GetAppPort(app.Name)
 			if err == nil {
@@ -1399,7 +1403,7 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		}
 		latencies, err := v.Ping(conf)
 		if err != nil {
-			go v.StopPing(conf.PK) //nolint
+			go v.StopPing(conf.PK) //nolint:errcheck,gosec
 			result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(0), Min: fmt.Sprint(0), Mean: fmt.Sprint(0), Status: "Failed"})
 			continue
 		}
@@ -1416,7 +1420,7 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		}
 		mean = sumLatency / time.Duration(len(latencies))
 		result = append(result, TestResult{PK: conf.PK.String(), Max: fmt.Sprint(maxx), Min: fmt.Sprint(minn), Mean: fmt.Sprint(mean), Status: "Success"})
-		v.StopPing(conf.PK) //nolint
+		v.StopPing(conf.PK) //nolint:errcheck,gosec
 	}
 	return result, nil
 }
@@ -1546,7 +1550,7 @@ func (v *Visor) GetSkysocksClientAddress() string {
 // IsDMSGClientReady return availability of dsmg client
 func (v *Visor) IsDMSGClientReady() (bool, error) {
 	if v.isDTMReady() {
-		dmsgTracker, _ := v.dtm.Get(v.conf.PK) //nolint
+		dmsgTracker, _ := v.dtm.Get(v.conf.PK)
 		if dmsgTracker.ServerPK.Hex()[:5] != "00000" {
 			return true, nil
 		}

@@ -45,8 +45,8 @@ type Client struct {
 	prevTUNGateway   net.IP
 	prevTUNGatewayMu sync.Mutex
 
-	suidMu sync.Mutex //nolint
-	suid   int        //nolint
+	suidMu sync.Mutex //nolint:unused
+	suid   int        //nolint:unused
 
 	tunMu      sync.Mutex
 	tun        TUNDevice
@@ -54,7 +54,7 @@ type Client struct {
 
 	connectedDuration int64
 
-	defaultSystemDNS string //nolint
+	defaultSystemDNS string //nolint:unused
 }
 
 // NewClient creates VPN client instance.
@@ -279,7 +279,7 @@ func (c *Client) RemoveDirectRoute(ip net.IP) error {
 	return nil
 }
 
-func (c *Client) setSysPrivileges() error { //nolint
+func (c *Client) setSysPrivileges() error { //nolint:unused
 	if runtime.GOOS != "windows" {
 		c.suidMu.Lock()
 

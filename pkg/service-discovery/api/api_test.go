@@ -382,7 +382,7 @@ func TestAPI_UpdateService(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			db := &store.MockStore{}
-			db.On("UpdateService", mock.Anything, &tc.service).Return(tc.updateServiceErr) //nolint
+			db.On("UpdateService", mock.Anything, &tc.service).Return(tc.updateServiceErr)
 			m := sdmetrics.NewEmpty()
 			api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", skyenv.GeoIP)
 

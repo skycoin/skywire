@@ -112,7 +112,9 @@ var RootCmd = &cobra.Command{
 			fmt.Printf("%v\n", buildinfo.DBIVersion())
 			return
 		}
-		cmd.Help() //nolint
+		if err := cmd.Help(); err != nil {
+			log.Printf("Failed to print help: %v", err)
+		}
 	},
 }
 
@@ -189,7 +191,7 @@ var docCmd = &cobra.Command{
 		fmt.Printf("\n## %s\n", "subcommand tree")
 		fmt.Printf("\n%s\n", "A tree representation of the skywire subcommands")
 		fmt.Printf("\n```\n")
-		_, err := script.Exec(os.Args[0] + " tree").Stdout() //nolint
+		_, err := script.Exec(os.Args[0] + " tree").Stdout()
 		if err != nil {
 			fmt.Println(err.Error())
 		}
@@ -200,13 +202,14 @@ var docCmd = &cobra.Command{
 			use = strings.Split(j.Use, " ")[0]
 			fmt.Printf("\n### %s\n", use)
 			fmt.Printf("\n```\n")
-			j.Help() //nolint
+			//nolint:errcheck,gosec
+			_ = j.Help()
 			fmt.Printf("\n```\n")
 			if j.Name() == "cli" {
 				fmt.Printf("\n%s\n", "skywire command line interface")
 				fmt.Printf("\n## %s\n", RootCmd.Use)
 				fmt.Printf("\n```\n")
-				RootCmd.Help() //nolint
+				RootCmd.Help() //nolint:errcheck,gosec
 				fmt.Printf("\n```\n")
 				fmt.Printf("\n## %s\n", "global flags")
 				fmt.Printf("\n%s\n", "The skywire-cli interacts with the running visor via rpc calls. By default the rpc server is available on localhost:3435. The rpc address and port the visor is using may be changed in the config file, once generated.")
@@ -222,11 +225,11 @@ var docCmd = &cobra.Command{
 				use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0]
 				fmt.Printf("\n#### %s\n", use)
 				fmt.Printf("\n```\n")
-				k.Help() //nolint
+				k.Help() //nolint:errcheck,gosec
 				fmt.Printf("\n```\n")
 				if k.Name() == "survey" {
 					fmt.Printf("\n```\n")
-					_, err = script.Exec("sudo " + os.Args[0] + ` survey`).Stdout() //nolint
+					_, err = script.Exec("sudo " + os.Args[0] + ` survey`).Stdout()
 					if err != nil {
 						fmt.Println(err.Error())
 					}
@@ -236,13 +239,13 @@ var docCmd = &cobra.Command{
 					use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0] + " " + strings.Split(l.Use, " ")[0]
 					fmt.Printf("\n##### %s\n", use)
 					fmt.Printf("\n```\n")
-					l.Help() //nolint
+					l.Help() //nolint:errcheck,gosec
 					fmt.Printf("\n```\n")
 					if l.Name() == "gen" {
 						fmt.Printf("\n##### Example for package / msi\n")
 						fmt.Printf("\n```\n")
 						fmt.Printf("$ skywire cli config gen -bpirxn\n")
-						_, err = script.Exec(os.Args[0] + ` cli config gen -bpirxn`).Stdout() //nolint
+						_, err = script.Exec(os.Args[0] + ` cli config gen -bpirxn`).Stdout()
 						if err != nil {
 							fmt.Println(err.Error())
 						}
@@ -252,19 +255,19 @@ var docCmd = &cobra.Command{
 						use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0] + " " + strings.Split(l.Use, " ")[0] + " " + strings.Split(m.Use, " ")[0]
 						fmt.Printf("\n###### %s\n", use)
 						fmt.Printf("\n```\n")
-						m.Help() //nolint
+						m.Help() //nolint:errcheck,gosec
 						fmt.Printf("\n```\n")
 						for _, n := range m.Commands() {
 							use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0] + " " + strings.Split(l.Use, " ")[0] + " " + strings.Split(m.Use, " ")[0] + " " + strings.Split(n.Use, " ")[0]
 							fmt.Printf("\n###### %s\n", use)
 							fmt.Printf("\n```\n")
-							m.Help() //nolint
+							m.Help() //nolint:errcheck,gosec
 							fmt.Printf("\n```\n")
 							for _, o := range n.Commands() {
 								use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0] + " " + strings.Split(l.Use, " ")[0] + " " + strings.Split(m.Use, " ")[0] + " " + strings.Split(n.Use, " ")[0] + " " + strings.Split(o.Use, " ")[0]
 								fmt.Printf("\n###### %s\n", use)
 								fmt.Printf("\n```\n")
-								m.Help() //nolint
+								m.Help() //nolint:errcheck,gosec
 								fmt.Printf("\n```\n")
 							}
 						}
