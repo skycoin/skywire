@@ -21,13 +21,9 @@ linters:
     - nakedret
     - revive
     - staticcheck
-    - unparam
-    - unused
-    - misspell
-    - unparam
-    - revive
     - unconvert
     - unparam
+    - unused
   settings:
     dupl:
       threshold: 100
@@ -52,6 +48,10 @@ linters:
       for-loops: false
     unparam:
       check-exported: false
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
   exclusions:
     generated: lax
     paths:
@@ -59,6 +59,9 @@ linters:
       - builtin$
       - examples$
     rules:
+      - linters:
+          - misspell
+        path: src/cipher/bip39/wordlists/
       - linters:
           - staticcheck
         text: "QF1003:" # could use tagged switch on errCode (staticcheck)
@@ -87,16 +90,7 @@ issues:
   new: false
 formatters:
   enable:
-    - goimports
+    - gofmt
   settings:
     gofmt:
       simplify: true
-    goimports:
-      local-prefixes:
-        - github.com/skycoin/skywire
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$

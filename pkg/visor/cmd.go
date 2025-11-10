@@ -135,7 +135,7 @@ func init() {
 	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 	RootCmd.Flags().BoolVar(&useCsrf, "csrf", true, "Request a CSRF token for sensitive hypervisor API requests")
 	for _, j := range hiddenflags {
-		RootCmd.Flags().MarkHidden(j) //nolint
+		RootCmd.Flags().MarkHidden(j) //nolint:errcheck,gosec
 	}
 }
 
@@ -153,12 +153,14 @@ var RootCmd = &cobra.Command{
 		// --all unhide flags and print help menu
 		if all {
 			for _, j := range hiddenflags {
-				f := cmd.Flags().Lookup(j) //nolint
+				f := cmd.Flags().Lookup(j)
 				f.Hidden = false
 			}
-			cmd.Flags().MarkHidden("all")  //nolint
-			cmd.Flags().MarkHidden("help") //nolint
-			cmd.Help()                     //nolint
+			cmd.Flags().MarkHidden("all")  //nolint:errcheck,gosec
+			cmd.Flags().MarkHidden("help") //nolint:errcheck,gosec
+			if err := cmd.Help(); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to print help: %v\n", err)
+			}
 			fmt.Println("\033[F                            * \u001b[94moverrides config file\u001b[0m")
 			os.Exit(0)
 		}
@@ -266,7 +268,7 @@ var RootCmd = &cobra.Command{
 	Version: buildinfo.Version(),
 }
 
-func initConfig() *visorconfig.V1 { //nolint
+func initConfig() *visorconfig.V1 {
 	log := mLog.PackageLogger("visor:config")
 
 	var r io.Reader

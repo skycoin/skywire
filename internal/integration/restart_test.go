@@ -56,6 +56,21 @@ func TestRestart(t *testing.T) {
 		GatherVisorPKs([]string{visorA, visorB, visorC}).
 		AddDefaultTransports(routerVisor, skychatVisors)
 
+	dumpLogsOnFailure := func(t *testing.T, visors ...string) {
+		if !t.Failed() {
+			return
+		}
+		t.Log("=== Test failed, dumping visor logs ===")
+		for _, visor := range visors {
+			logs, err := env.ReadLog(visor)
+			if err != nil {
+				t.Logf("Failed to read logs from %s: %v", visor, err)
+				continue
+			}
+			t.Logf("\n=== Logs from %s ===\n%s\n=== End logs from %s ===\n", visor, logs, visor)
+		}
+	}
+
 	checkMessage := func(t *testing.T, sender, receiver string) {
 		// Retry sending message up to 5 times with 5 second delays
 		// to handle transient transport setup delays after restart
@@ -69,10 +84,10 @@ func TestRestart(t *testing.T) {
 			// If HTTP request itself failed (e.g., connection timeout), retry
 			if err != nil {
 				lastError = fmt.Sprintf("HTTP request failed: %v", err)
-				t.Logf("Attempt %d: %s (retrying in 5s)", attempt+1, lastError)
+				t.Logf("Attempt %d: %s (retrying in 10s)", attempt+1, lastError)
 
 				if attempt < 4 { // Don't sleep after last attempt
-					time.Sleep(5 * time.Second)
+					time.Sleep(10 * time.Second)
 				}
 				continue
 			}
@@ -86,11 +101,11 @@ func TestRestart(t *testing.T) {
 			data, readErr := io.ReadAll(res.Body)
 			require.NoError(t, readErr)
 			lastError = string(data)
-			t.Logf("Attempt %d: skychat returned error: %v (retrying in 5s)", attempt+1, lastError)
+			t.Logf("Attempt %d: skychat returned error: %v (retrying in 10s)", attempt+1, lastError)
 			require.NoError(t, res.Body.Close())
 
 			if attempt < 4 { // Don't sleep after last attempt
-				time.Sleep(5 * time.Second)
+				time.Sleep(10 * time.Second)
 			}
 		}
 
@@ -112,12 +127,20 @@ func TestRestart(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Dump logs on failure
+			t.Cleanup(func() {
+				dumpLogsOnFailure(t, visorA, visorB, visorC)
+			})
+
 			// Restart visor containers
 			require.NoError(t, env.ContainerRestart(tc.restartList...))
 			time.Sleep(RestartDelay)
 
 			// Re-establish transports after visor restart
 			env.AddDefaultTransports(routerVisor, skychatVisors)
+
+			// Additional delay for transports to stabilize
+			time.Sleep(10 * time.Second)
 
 			checkMessage(t, tc.sender, tc.receiver)
 		})

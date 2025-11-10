@@ -14,7 +14,7 @@ tmp/
 
 ./skywire.json
 ./build/
-build/
+/build/
 ./apps/
 ./skywire/
 ./local
@@ -23,14 +23,13 @@ local/
 ./local*/*
 ./transport_logs
 ./dmsgpty
-./rewards
-./rewards/
-rewards
+/rewards
+/rewards/
 ./pkg/visor/apps/
 ./pkg/visor/bar/
 ./pkg/visor/foo/
 
-*.json
+/*.json
 ./bin
 ./node
 ./users.db

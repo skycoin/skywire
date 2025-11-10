@@ -2,26 +2,26 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"io/ioutil"
-	"net/http"
+	"io"
 
 	"github.com/docker/docker/api/types"
-	"golang.org/x/net/context"
 )
 
 // PluginInspectWithRaw inspects an existing plugin
 func (cli *Client) PluginInspectWithRaw(ctx context.Context, name string) (*types.Plugin, []byte, error) {
-	resp, err := cli.get(ctx, "/plugins/"+name+"/json", nil, nil)
+	name, err := trimID("plugin", name)
 	if err != nil {
-		if resp.statusCode == http.StatusNotFound {
-			return nil, nil, pluginNotFoundError{name}
-		}
+		return nil, nil, err
+	}
+	resp, err := cli.get(ctx, "/plugins/"+name+"/json", nil, nil)
+	defer ensureReaderClosed(resp)
+	if err != nil {
 		return nil, nil, err
 	}
 
-	defer ensureReaderClosed(resp)
-	body, err := ioutil.ReadAll(resp.body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, nil, err
 	}

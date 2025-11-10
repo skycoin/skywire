@@ -171,7 +171,7 @@ func registerModules(logger *logging.MasterLogger) {
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
 	rt = maker("router", initRouter, &tr, &dmsgC, &dmsgHTTP)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
-	cli = maker("cli", initCLI)
+	cli = maker("cli", initCLI, &launch, &tr)
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
@@ -190,7 +190,7 @@ func registerModules(logger *logging.MasterLogger) {
 
 type initFn func(context.Context, *Visor, *logging.Logger) error
 
-func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	var keys cipher.PubKeys
 	servers := shuffleServers(v.conf.Dmsg.Servers)
 
@@ -248,7 +248,7 @@ func rotateServers(servers []*dmsgdisc.Entry) {
 }
 */
 
-func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:revive
 	const ebcTimeout = time.Second
 	ebc := appevent.NewBroadcaster(log, ebcTimeout)
 	v.pushCloseStack("event_broadcaster", ebc.Close)
@@ -292,7 +292,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	return nil
 }
 
-func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	// Prepare app discovery factory.
 	factory := appdisc.Factory{
 		Log:  v.MasterLogger().PackageLogger("app_discovery"),
@@ -326,7 +326,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error { /
 	return nil
 }
 
-func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initStunClient(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	sc := network.GetStunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
@@ -336,7 +336,7 @@ func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error { 
 	return nil
 }
 
-func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) { //nolint:all
+func initDmsg(ctx context.Context, v *Visor, _ *logging.Logger) (err error) {
 	if v.conf.Dmsg == nil {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}
@@ -399,7 +399,7 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	return nil
 }
 
-func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	dmsgC := v.dmsgC
 	if dmsgC == nil {
 		return fmt.Errorf("cannot initialize dmsg log server: dmsg not configured")
@@ -470,12 +470,12 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, log *logging.Logger) e
 	return nil
 }
 
-func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initSystemSurvey(_ context.Context, v *Visor, log *logging.Logger) error {
 	go GenerateSurvey(v, log, true)
 	return nil
 }
 
-func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error { //nolint:all
+func initDmsgTrackers(_ context.Context, v *Visor, _ *logging.Logger) error {
 	dmsgC := v.dmsgC
 
 	dtm := dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), dmsgC, 0, 0)
@@ -508,12 +508,12 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initStcprClient(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initStcprClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	v.tpM.InitClient(ctx, types.STCPR, v.conf.Transport.StcprPort)
 	return nil
 }
 
-func initStcpClient(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initStcpClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	if v.conf.STCP != nil {
 		v.tpM.InitClient(ctx, types.STCP, 0)
 	}
@@ -907,7 +907,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
 		func(rPK cipher.PubKey, tm *transport.Manager) error {
-			establishedTransports, _ := v.Transports([]string{string(types.STCPR), string(types.SUDPH), string(types.DMSG)}, []cipher.PubKey{v.conf.PK}, false) //nolint
+			establishedTransports, _ := v.Transports([]string{string(types.STCPR), string(types.SUDPH), string(types.DMSG)}, []cipher.PubKey{v.conf.PK}, false) //nolint:errcheck
 			for _, transportSum := range establishedTransports {
 				if transportSum.Remote.Hex() == rPK.Hex() {
 					log.Debugf("Established transport exist. Type: %s", transportSum.Type)
@@ -1042,7 +1042,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	conf := v.conf.Launcher
 
 	// Prepare proc manager.
@@ -1152,7 +1152,7 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 	}
 }
 
-func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initCLI(_ context.Context, v *Visor, _ *logging.Logger) error {
 	if v.conf.CLIAddr == "" {
 		v.log.Debug("'cli_addr' is not configured, skipping.")
 		return nil
@@ -1175,7 +1175,7 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error { //nolin
 	return nil
 }
 
-func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 
 	hvErrs := make(map[cipher.PubKey]chan error, len(v.conf.Hypervisors))
 	for _, hv := range v.conf.Hypervisors {
@@ -1296,7 +1296,7 @@ func checkVisorIsPublic(v *Visor) bool {
 	return false
 }
 
-func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error {
 	visorIsPublic := checkVisorIsPublic(v)
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
@@ -1313,7 +1313,9 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 				dmsgTries++
 				if dmsgTries >= 3 {
 					log.Error("Dmsg transport failed after 3 attempts. Reinitiating dmsg...")
-					reinitiateDmsg(ctx, v) //nolint
+					if err := reinitiateDmsg(ctx, v); err != nil {
+						log.WithError(err).Error("Failed to reinitiate dmsg")
+					}
 
 					dmsgTries = 0
 					dmsgOK = tryTransport(v, "dmsg", log)
@@ -1377,7 +1379,7 @@ func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
 // TODO: fix gocyclo error.
 //
 //gocyclo:ignore
-func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger) error {
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
 	go func() {
@@ -1444,7 +1446,7 @@ func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger
 
 // advertise this visor as public in service discovery
 // this service is not considered critical and always returns true
-func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { //nolint:revive
 	if !v.conf.IsPublic {
 		// call Stop() method to clean service discovery for the situation that
 		// visor was public, then stop (not normal shutdown), then start as non-public
@@ -1633,7 +1635,7 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	return nil
 }
 
-func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error { //nolint:all
+func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.Hypervisor == nil {
 		v.log.Error("hypervisor config = nil")
 		return nil
@@ -1670,11 +1672,12 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error { //
 	v.log.Info(fmt.Sprintf("Hypervisor UI: http%s://127.0.0.1%s", tls, conf.HTTPAddr))
 
 	handler := hv.HTTPHandler()
-	srv := &http.Server{ //nolint gosec
-		Addr:         conf.HTTPAddr,
-		Handler:      handler,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+	srv := &http.Server{
+		Addr:              conf.HTTPAddr,
+		Handler:           handler,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	go func() {
@@ -1691,7 +1694,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error { //
 	}()
 
 	v.pushCloseStack("hypervisor", func() error {
-		err := srv.Shutdown(ctx) //nolint
+		err := srv.Shutdown(ctx)
 		cancel()
 		return err
 	})
@@ -1861,14 +1864,15 @@ type ipAPI struct {
 
 // GetIP used for getting current IP of visor
 func GetIP(geoipURL string) (string, error) {
-	var resp *http.Response
-	var err error
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 
-	resp, err = http.Get(geoipURL) //nolint gosec
+	resp, err := client.Get(geoipURL)
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close() // nolint
+	defer resp.Body.Close() //nolint:errcheck
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
