@@ -644,6 +644,25 @@ func (env *TestEnv) AddTransports(routerVisor string, visors []string, tpType tp
 	return env
 }
 
+// RemoveAllTransports removes all transports from the specified visors.
+// This should be called before restarting visors to clean up stale TPD entries.
+func (env *TestEnv) RemoveAllTransports(visors ...string) error {
+	for _, visor := range visors {
+		tps, err := env.VisorTpLs(visor)
+		if err != nil {
+			return fmt.Errorf("failed to list transports for %s: %w", visor, err)
+		}
+
+		for _, tp := range tps {
+			if _, err := env.VisorTpRm(visor, tp.ID); err != nil {
+				return fmt.Errorf("failed to remove transport %s from %s: %w", tp.ID, visor, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (env *TestEnv) ContainerRestart(serviceName ...string) error {
 	for _, svcName := range serviceName {
 		svc, ok := env.containers[svcName]
