@@ -153,6 +153,17 @@ func (env *TestEnv) StopApp(t *testing.T, app AppToRun) *TestEnv {
 	return env
 }
 
+// StopAppBestEffort attempts to stop an app but doesn't fail if it can't.
+// Used for test cleanup where we want to attempt cleanup but not fail the test.
+func (env *TestEnv) StopAppBestEffort(app AppToRun) *TestEnv {
+	if app.AppName == skyenv.VPNClientName {
+		_, _ = env.VPNStop(app) //nolint:errcheck
+	} else {
+		_, _ = env.VisorAppStop(app) //nolint:errcheck
+	}
+	return env
+}
+
 func (env *TestEnv) VisorAppStart(app AppToRun) (string, error) {
 
 	cliOutput := struct {
