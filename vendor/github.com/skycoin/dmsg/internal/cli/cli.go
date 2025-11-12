@@ -137,7 +137,8 @@ func StartDmsgWithSyntheticDiscovery(ctx context.Context, dlog *logging.Logger, 
 				delegatedServers = append(delegatedServers, server.Static)
 			}
 			syntheticEntry := &disc.Entry{
-				Static: discoveryPK,
+				Version: "0.0.1",
+				Static:  discoveryPK,
 				Client: &disc.Client{
 					DelegatedServers: delegatedServers,
 				},
@@ -285,8 +286,10 @@ func StartDmsgDirectWithServers(ctx context.Context, dlog *logging.Logger, pk ci
 	return dmsgC, stop, nil
 }
 
-// StartDmsgWithDirectClient starts dmsg with a direct client that includes synthetic entries
+// StartDmsgWithDirectClient starts dmsg with a fallback discovery client
 // This allows dialing any client including the discovery server which doesn't register itself
+// It uses direct client for known entries (servers, discovery, local client) and falls back
+// to HTTP discovery for unknown entries (arbitrary target clients)
 func StartDmsgWithDirectClient(ctx context.Context, dlog *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, dmsgSessions int) (dmsgC *dmsg.Client, stop func(), err error) {
 	if dlog == nil {
 		return nil, nil, fmt.Errorf("nil logger")
@@ -308,7 +311,8 @@ func StartDmsgWithDirectClient(ctx context.Context, dlog *logging.Logger, pk cip
 				delegatedServers = append(delegatedServers, server.Static)
 			}
 			discoveryEntry := &disc.Entry{
-				Static: discoveryPK,
+				Version: "0.0.1",
+				Static:  discoveryPK,
 				Client: &disc.Client{
 					DelegatedServers: delegatedServers,
 				},
@@ -324,18 +328,25 @@ func StartDmsgWithDirectClient(ctx context.Context, dlog *logging.Logger, pk cip
 		delegatedServers = append(delegatedServers, server.Static)
 	}
 	clientEntry := &disc.Entry{
-		Static: pk,
+		Version: "0.0.1",
+		Static:  pk,
 		Client: &disc.Client{
 			DelegatedServers: delegatedServers,
 		},
 	}
 	entries = append(entries, clientEntry)
 
-	// Create direct client with all entries
+	// Create direct client with known entries
 	directClient := direct.NewClient(entries, dlog)
 
-	dmsgC = dmsg.NewClient(pk, sk, directClient, &dmsg.Config{MinSessions: dmsgSessions})
-	dlog.Debug("Created dmsg client with direct client.")
+	// Create HTTP discovery client as fallback for unknown entries
+	httpDiscClient := disc.NewHTTP(flags.DmsgDiscURL, &http.Client{}, dlog)
+
+	// Wrap with fallback client that tries direct first, then HTTP discovery
+	fallbackClient := newFallbackDiscClient(directClient, httpDiscClient, dlog)
+
+	dmsgC = dmsg.NewClient(pk, sk, fallbackClient, &dmsg.Config{MinSessions: dmsgSessions})
+	dlog.Debug("Created dmsg client with fallback discovery client (direct + HTTP).")
 
 	go dmsgC.Serve(ctx)
 	dlog.Debug("dmsgclient.Serve(ctx)")
@@ -411,6 +422,65 @@ func (c *cachingDiscClient) AllServers(ctx context.Context) ([]*disc.Entry, erro
 // AllEntries delegates to base client
 func (c *cachingDiscClient) AllEntries(ctx context.Context) ([]string, error) {
 	return c.base.AllEntries(ctx)
+}
+
+// fallbackDiscClient tries direct client first, falls back to HTTP discovery for unknown entries
+type fallbackDiscClient struct {
+	direct disc.APIClient
+	http   disc.APIClient
+	log    *logging.Logger
+}
+
+// newFallbackDiscClient creates a discovery client that tries direct first, then HTTP
+func newFallbackDiscClient(direct, http disc.APIClient, log *logging.Logger) disc.APIClient {
+	return &fallbackDiscClient{
+		direct: direct,
+		http:   http,
+		log:    log,
+	}
+}
+
+// Entry tries direct client first, falls back to HTTP for unknown entries
+func (f *fallbackDiscClient) Entry(ctx context.Context, pk cipher.PubKey) (*disc.Entry, error) {
+	// Try direct client first
+	entry, err := f.direct.Entry(ctx, pk)
+	if err == nil && entry.Static == pk {
+		return entry, nil
+	}
+
+	// Fall back to HTTP discovery for unknown entries
+	f.log.WithField("pk", pk.String()).Debug("Entry not in direct client, querying HTTP discovery")
+	return f.http.Entry(ctx, pk)
+}
+
+// PostEntry delegates to direct client
+func (f *fallbackDiscClient) PostEntry(ctx context.Context, entry *disc.Entry) error {
+	return f.direct.PostEntry(ctx, entry)
+}
+
+// PutEntry delegates to HTTP client (direct client doesn't support updates)
+func (f *fallbackDiscClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *disc.Entry) error {
+	return f.http.PutEntry(ctx, sk, entry)
+}
+
+// DelEntry delegates to direct client
+func (f *fallbackDiscClient) DelEntry(ctx context.Context, entry *disc.Entry) error {
+	return f.direct.DelEntry(ctx, entry)
+}
+
+// AvailableServers delegates to direct client
+func (f *fallbackDiscClient) AvailableServers(ctx context.Context) ([]*disc.Entry, error) {
+	return f.direct.AvailableServers(ctx)
+}
+
+// AllServers delegates to direct client
+func (f *fallbackDiscClient) AllServers(ctx context.Context) ([]*disc.Entry, error) {
+	return f.direct.AllServers(ctx)
+}
+
+// AllEntries delegates to direct client
+func (f *fallbackDiscClient) AllEntries(ctx context.Context) ([]string, error) {
+	return f.direct.AllEntries(ctx)
 }
 
 // FallbackRoundTripper tries multiple DMSG transports until one succeeds.

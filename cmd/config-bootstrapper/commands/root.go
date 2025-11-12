@@ -175,7 +175,7 @@ func readConfig(log *logging.Logger, confPath string) (config api.Config) {
 			WithField("filepath", confPath).
 			Fatal("Failed to read config file.")
 	}
-	defer func() { //nolint
+	defer func() {
 		if err := f.Close(); err != nil {
 			log.WithError(err).Fatal("Closing config file resulted in error.")
 		}

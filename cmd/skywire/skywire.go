@@ -1,5 +1,5 @@
-// cmd/skywire/skywire.go
 /*
+cmd/skywire/skywire.go
 skywire
 */
 package main

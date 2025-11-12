@@ -9,7 +9,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 )
@@ -42,7 +42,7 @@ func (res *ExecResult) Combined() string {
 //   - cmd stdin is closed.
 func Exec(ctx context.Context, cli client.APIClient, id string, cmd []string) (ExecResult, error) {
 	// prepare exec
-	execConfig := types.ExecConfig{
+	execConfig := container.ExecOptions{
 		AttachStdout: true,
 		AttachStderr: true,
 		Cmd:          cmd,
@@ -56,7 +56,10 @@ func Exec(ctx context.Context, cli client.APIClient, id string, cmd []string) (E
 	execID := cresp.ID
 
 	// run it, with stdout/stderr attached
-	aresp, err := cli.ContainerExecAttach(ctx, execID, execConfig)
+	aresp, err := cli.ContainerExecAttach(ctx, execID, container.ExecAttachOptions{
+		Detach: false,
+		Tty:    false,
+	})
 	if err != nil {
 		return ExecResult{}, err
 	}
@@ -99,7 +102,7 @@ func (env *TestEnv) ReadLog(service string) (string, error) {
 		return "", errors.New("service not found")
 	}
 
-	logOpts := types.ContainerLogsOptions{
+	logOpts := container.LogsOptions{
 		ShowStdout: true,
 	}
 

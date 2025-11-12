@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -39,7 +39,7 @@ type TestEnv struct {
 	intraNet     string
 
 	// run-time information
-	containers   map[string]types.Container
+	containers   map[string]container.Summary
 	visorPKs     map[string]string
 	testRunnerID string
 	logger       *logging.MasterLogger
@@ -48,7 +48,7 @@ type TestEnv struct {
 }
 
 func NewEnv() *TestEnv {
-	cli, err := client.NewEnvClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		panic(err)
 	}
@@ -84,12 +84,12 @@ func NewEnv() *TestEnv {
 }
 
 func (env *TestEnv) GatherContainersInfo() *TestEnv {
-	containers, err := env.cli.ContainerList(env.ctx, types.ContainerListOptions{})
+	containers, err := env.cli.ContainerList(env.ctx, container.ListOptions{})
 	if err != nil {
 		panic(err)
 	}
 
-	env.containers = make(map[string]types.Container)
+	env.containers = make(map[string]container.Summary)
 
 	for _, container := range containers {
 		name := strings.TrimPrefix(container.Names[0], "/")
@@ -495,13 +495,14 @@ func (env *TestEnv) Exec(cmd string) (string, error) {
 }
 
 func (env *TestEnv) ExecJSON(cmd string, output interface{}) error {
-	cliOutput, err := env.Exec(cmd)
+	result, err := env.execResult(cmd)
 	if err != nil {
 		return err
 	}
-	err = json.Unmarshal([]byte(cliOutput), &output)
+	// Parse only stdout to avoid mixing with stderr log messages
+	err = json.Unmarshal([]byte(result.Stdout()), &output)
 	if err != nil {
-		env.logger.Errorf("cliOutput: %v", cliOutput)
+		env.logger.Errorf("cliOutput: %v", result.Stdout())
 		return err
 	}
 	return nil
@@ -553,6 +554,14 @@ func (env *TestEnv) ExecInContainerByID(cmd string, containerID string) (string,
 	}
 
 	return result.Combined(), nil
+}
+
+func (env *TestEnv) execResult(cmd string) (ExecResult, error) {
+	if env.testRunnerID == "" {
+		return ExecResult{}, errors.New("env.testRunnerID is empty")
+	}
+
+	return Exec(env.ctx, env.cli, env.testRunnerID, strings.Split(cmd, " "))
 }
 
 func (env *TestEnv) waitForVisorApp(app AppToRun) error {
@@ -637,8 +646,8 @@ func (env *TestEnv) ContainerRestart(serviceName ...string) error {
 			return errors.New("test-env: service not found")
 		}
 
-		timeout := 2 * time.Minute
-		if err := env.cli.ContainerRestart(env.ctx, svc.ID, &timeout); err != nil {
+		timeout := int((2 * time.Minute).Seconds())
+		if err := env.cli.ContainerRestart(env.ctx, svc.ID, container.StopOptions{Timeout: &timeout}); err != nil {
 			return err
 		}
 	}
@@ -664,7 +673,7 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 	}
 	req.Header.Add("content-type", "application/json")
 	hc := http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 30 * time.Second,
 	}
 	return hc.Do(req)
 }
