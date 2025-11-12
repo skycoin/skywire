@@ -49,6 +49,8 @@
 			{
 				"name": "vpn-client",
 				"args": [
+					"app",
+					"vpn-client",
 					"--srv",
 					"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 					"-killswitch=false"

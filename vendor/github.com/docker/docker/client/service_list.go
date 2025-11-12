@@ -1,21 +1,20 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"net/url"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/swarm"
-	"golang.org/x/net/context"
 )
 
 // ServiceList returns the list of services.
-func (cli *Client) ServiceList(ctx context.Context, options types.ServiceListOptions) ([]swarm.Service, error) {
+func (cli *Client) ServiceList(ctx context.Context, options swarm.ServiceListOptions) ([]swarm.Service, error) {
 	query := url.Values{}
 
 	if options.Filters.Len() > 0 {
-		filterJSON, err := filters.ToParam(options.Filters)
+		filterJSON, err := filters.ToJSON(options.Filters)
 		if err != nil {
 			return nil, err
 		}
@@ -23,13 +22,17 @@ func (cli *Client) ServiceList(ctx context.Context, options types.ServiceListOpt
 		query.Set("filters", filterJSON)
 	}
 
+	if options.Status {
+		query.Set("status", "true")
+	}
+
 	resp, err := cli.get(ctx, "/services", query, nil)
+	defer ensureReaderClosed(resp)
 	if err != nil {
 		return nil, err
 	}
 
 	var services []swarm.Service
-	err = json.NewDecoder(resp.body).Decode(&services)
-	ensureReaderClosed(resp)
+	err = json.NewDecoder(resp.Body).Decode(&services)
 	return services, err
 }
