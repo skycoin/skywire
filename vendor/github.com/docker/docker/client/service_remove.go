@@ -1,10 +1,15 @@
 package client
 
-import "golang.org/x/net/context"
+import "context"
 
 // ServiceRemove kills and removes a service.
 func (cli *Client) ServiceRemove(ctx context.Context, serviceID string) error {
+	serviceID, err := trimID("service", serviceID)
+	if err != nil {
+		return err
+	}
+
 	resp, err := cli.delete(ctx, "/services/"+serviceID, nil, nil)
-	ensureReaderClosed(resp)
+	defer ensureReaderClosed(resp)
 	return err
 }

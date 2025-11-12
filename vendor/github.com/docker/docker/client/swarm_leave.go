@@ -1,12 +1,11 @@
 package client
 
 import (
+	"context"
 	"net/url"
-
-	"golang.org/x/net/context"
 )
 
-// SwarmLeave leaves the Swarm.
+// SwarmLeave leaves the swarm.
 func (cli *Client) SwarmLeave(ctx context.Context, force bool) error {
 	query := url.Values{}
 	if force {
