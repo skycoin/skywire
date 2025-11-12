@@ -56,7 +56,7 @@ Assumes the local visor public key as an argument if only one argument is given`
 		var pk string
 		//print the help menu if no arguments
 		if len(args) == 0 {
-			cmd.Help() //nolint
+			internal.Catch(cmd.Flags(), cmd.Help())
 			os.Exit(0)
 		}
 		// disble finding route, because of minhop value that set 0

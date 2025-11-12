@@ -214,7 +214,7 @@ func (mt *ManagedTransport) close() {
 		mt.transport = nil
 	}
 	mt.transportMx.Unlock()
-	_ = mt.deleteFromDiscovery() //nolint:errcheck
+	_ = mt.deleteFromDiscovery //nolint:errcheck
 }
 
 // Accept accepts a new underlying transport.
@@ -361,7 +361,7 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 */
 
 // WritePacket writes a packet to the remote.
-func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Packet) error { //nolint:all
+func (mt *ManagedTransport) WritePacket(_ context.Context, packet routing.Packet) error {
 	mt.transportMx.Lock()
 	defer mt.transportMx.Unlock()
 

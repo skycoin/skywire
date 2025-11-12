@@ -57,7 +57,7 @@ var RootCmd = &cobra.Command{
 		}
 
 		if len(args) == 0 && portNo == 0 {
-			cmd.Help() //nolint
+			internal.Catch(cmd.Flags(), cmd.Help())
 			os.Exit(0)
 		}
 

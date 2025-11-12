@@ -142,7 +142,8 @@ func (s *postgresStore) CountServices(ctx context.Context, serviceType string) (
 	return uint64(len(service)), nil
 }
 
-func (s *postgresStore) processErr(err error, status int) *servicedisc.HTTPError { //nolint
+//nolint:unparam
+func (s *postgresStore) processErr(err error, status int) *servicedisc.HTTPError {
 	if err != nil {
 		return &servicedisc.HTTPError{
 			HTTPStatus: status,

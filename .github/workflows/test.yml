@@ -5,11 +5,13 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.*
-
-      - uses: actions/checkout@v4
+          go-version: '1.25.x'
+          cache: true
+          cache-dependency-path: go.sum
 
       - name: Install Dependencies
         shell: bash
@@ -26,14 +28,13 @@ jobs:
             libglu1-mesa-dev \
             shellcheck
 
-          make dep
           ./ci_scripts/create-ip-aliases.sh
 
           make install-shellcheck
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.5.0
+          version: v2.6.1
 
       - name: Lint Shell Scripts
         run: make lint-shell
@@ -63,19 +64,23 @@ jobs:
   darwin:
     runs-on: macos-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.*
-
-      - uses: actions/checkout@v4
+          go-version: '1.25.x'
+          cache: true
+          cache-dependency-path: go.sum
 
       - name: Install Requirements
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.5.0
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          make dep
           brew install glfw
         shell: bash
+
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.6.1
 
       - name: Checking Format and Testing
         run: make check
@@ -86,18 +91,18 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.*
-
-      - uses: actions/checkout@v4
+          go-version: '1.25.x'
+          cache: true
+          cache-dependency-path: go.sum
 
       - name: Install Requirements
         run: |
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0
-          make dep
 
       - name: Testing
         run: |
