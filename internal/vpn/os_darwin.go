@@ -32,10 +32,13 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 
 // SetupDNS trying to set DNS server
 func (c *Client) SetupDNS() {
-	defaultDNSByte, _ := osutil.RunWithResult("networksetup", "-getdnsservers", "Wi-Fi") //nolint
+	defaultDNSByte, err := osutil.RunWithResult("networksetup", "-getdnsservers", "Wi-Fi")
+	if err != nil {
+		fmt.Printf("Failed to get current DNS servers: %s\n", err)
+	}
 	c.defaultSystemDNS = string(defaultDNSByte)
 
-	err := osutil.Run("networksetup", "-setdnsservers", "Wi-Fi", c.cfg.DNSAddr)
+	err = osutil.Run("networksetup", "-setdnsservers", "Wi-Fi", c.cfg.DNSAddr)
 	if err != nil {
 		fmt.Printf("Failed to setup DNS. Continue with machine default DNS setting: %s\n", err)
 	} else {
@@ -46,7 +49,9 @@ func (c *Client) SetupDNS() {
 // RevertDNS trying to revert DNS values same as before starting vpn-client if it changed
 func (c *Client) RevertDNS() {
 	if c.cfg.DNSAddr != "" {
-		osutil.Run("networksetup", "-setdnsservers", "Wi-Fi", c.defaultSystemDNS) //nolint
+		if err := osutil.Run("networksetup", "-setdnsservers", "Wi-Fi", c.defaultSystemDNS); err != nil {
+			fmt.Printf("Failed to revert DNS: %s\n", err)
+		}
 		fmt.Printf("System DNS value revert back to %s\n", c.defaultSystemDNS)
 	}
 }

@@ -16,7 +16,8 @@ func GetClientEntry(pks cipher.PubKeys, servers []*disc.Entry) (clients []*disc.
 
 	for _, pk := range pks {
 		client := &disc.Entry{
-			Static: pk,
+			Version: "0.0.1",
+			Static:  pk,
 			Client: &disc.Client{
 				DelegatedServers: srvPKs,
 			},

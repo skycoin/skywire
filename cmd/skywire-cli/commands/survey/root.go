@@ -72,7 +72,8 @@ var surveyCmd = &cobra.Command{
 		}
 
 		if confPath != "" {
-			confJSON, err := os.ReadFile(confPath) //nolint
+			//nolint:gosec
+			confJSON, err := os.ReadFile(confPath)
 			if err != nil {
 				log.WithError(err).Fatal("Failed to read config file")
 			}
@@ -88,7 +89,7 @@ var surveyCmd = &cobra.Command{
 		if err != nil {
 			internal.Catch(cmd.Flags(), fmt.Errorf("Failed to generate system survey: %v", err))
 		}
-		skyaddr, err := os.ReadFile(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile) //nolint
+		skyaddr, err := os.ReadFile(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile)
 		if err == nil {
 			survey.SkycoinAddress = string(skyaddr)
 		}

@@ -15,7 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
-func homepage(w http.ResponseWriter, r *http.Request) { //nolint:all
+func homepage(w http.ResponseWriter, _ *http.Request) {
 	p := html.HomepageParams{
 		Title:   "Homepage",
 		Message: "Hello from Homepage",
@@ -40,10 +40,11 @@ func main() {
 
 	http.HandleFunc("/", homepage)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(html.FS()))))
-	srv := &http.Server{ //nolint gosec
-		Addr:         fmt.Sprintf(":%v", port),
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+	srv := &http.Server{
+		Addr:              fmt.Sprintf(":%v", port),
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	log.Infof("serving on http://localhost:%v", port)

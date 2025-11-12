@@ -217,12 +217,14 @@ Architectures:
 
 		var res []string
 		if pubkey == "" {
-			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice() //nolint
+			//nolint:errcheck
+			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice()
 			if len(res) == 0 {
 				log.Fatal("No keys achieved minimum uptime on " + wdate + " !")
 			}
 		} else {
-			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Match(pubkey).Slice() //nolint
+			//nolint:errcheck
+			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Match(pubkey).Slice()
 			if len(res) == 0 {
 				log.Fatal("Specified key " + pubkey + "\n did not achieve minimum uptime on " + wdate + " !")
 			}
@@ -257,7 +259,8 @@ Architectures:
 				continue
 			}
 
-			confType, _ := script.File(nodeInfoDotJSON).JQ(`.services.dmsg_discovery`).Replace("\"", "").String() //nolint
+			//nolint:errcheck
+			confType, _ := script.File(nodeInfoDotJSON).JQ(`.services.dmsg_discovery`).Replace("\"", "").String()
 			if err != nil {
 				log.Debug(err.Error())
 				continue
@@ -269,22 +272,24 @@ Architectures:
 				svcconf = compareAndPrintDiffs(nodeInfoSvc, dConf, true)
 			}
 
-			ip, _ = script.File(nodeInfoDotJSON).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			//nolint:errcheck
+			ip, _ = script.File(nodeInfoDotJSON).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String()
 			ip = strings.TrimRight(ip, "\n")
-			sky, _ = script.File(nodeInfoDotJSON).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String() //nolint
+			//nolint:errcheck
+			sky, _ = script.File(nodeInfoDotJSON).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String()
 			sky = strings.TrimRight(sky, "\n")
-			arch, _ = script.File(nodeInfoDotJSON).JQ(`.go_arch`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			arch, _ = script.File(nodeInfoDotJSON).JQ(`.go_arch`).Replace(" ", "").Replace(`"`, "").String() //nolint:errcheck
 			arch = strings.TrimRight(arch, "\n")
-			hv, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.node.hypervisor`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			hv, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.node.hypervisor`).Replace(" ", "").Replace(`"`, "").String() //nolint:errcheck
 			hv = strings.TrimRight(hv, "\n")
-			uu, _ = script.File(nodeInfoDotJSON).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint
+			uu, _ = script.File(nodeInfoDotJSON).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint:errcheck
 			uu = strings.TrimRight(uu, "\n")
-			ifc, _ = script.File(nodeInfoDotJSON).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			ifc, _ = script.File(nodeInfoDotJSON).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String() //nolint:errcheck
 			ifc = strings.TrimRight(ifc, "\n")
-			ifc1, _ = script.File(nodeInfoDotJSON).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String() //nolint
+			ifc1, _ = script.File(nodeInfoDotJSON).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String() //nolint:errcheck
 			ifc1 = strings.TrimRight(ifc1, "\n")
-			macs, _ = script.File(nodeInfoDotJSON).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice() //nolint
-			macs1, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()       //nolint
+			macs, _ = script.File(nodeInfoDotJSON).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice() //nolint:errcheck
+			macs1, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()       //nolint:errcheck
 			if ifc == "[]" && ifc1 != "[]" {
 				ifc = ifc1
 			}
@@ -360,7 +365,7 @@ Architectures:
 			fmt.Printf("this month's rewards: %.6f\n", monthReward)
 			fmt.Printf("reward total per pool: %.6f\n", dayReward)
 		}
-		uniqueIP, _ := script.Echo(func() string { //nolint
+		uniqueIP, _ := script.Echo(func() string { //nolint:errcheck
 			var inputStr strings.Builder
 			for _, ni := range nodesInfos1 {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.IPAddr))
@@ -369,13 +374,14 @@ Architectures:
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.IPAddr))
 			}
 			return inputStr.String()
-		}()).Freq().Slice() //nolint
+		}()).Freq().Slice()
 		var ipCounts []counting
 		for _, line := range uniqueIP {
 			if line != "" {
 				fields := strings.Fields(line)
 				if len(fields) == 2 {
-					count, _ := strconv.Atoi(fields[0]) //nolint
+					//nolint:errcheck
+					count, _ := strconv.Atoi(fields[0])
 					ipCounts = append(ipCounts, counting{
 						Name:  fields[1],
 						Count: count,
@@ -383,7 +389,7 @@ Architectures:
 				}
 			}
 		}
-		uniqueUUID, _ := script.Echo(func() string { //nolint
+		uniqueUUID, _ := script.Echo(func() string { //nolint:errcheck
 			var inputStr strings.Builder
 			for _, ni := range nodesInfos1 {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.UUID))
@@ -392,10 +398,10 @@ Architectures:
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.UUID))
 			}
 			return inputStr.String()
-		}()).Freq().Slice() //nolint
+		}()).Freq().Slice()
 
 		// look at the first non loopback interface macaddress
-		uniqueMac, _ := script.Echo(func() string { //nolint
+		uniqueMac, _ := script.Echo(func() string { //nolint:errcheck
 			var inputStr strings.Builder
 			for _, ni := range nodesInfos1 {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.MacAddr))
@@ -404,14 +410,15 @@ Architectures:
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.MacAddr))
 			}
 			return inputStr.String()
-		}()).Freq().Slice() //nolint
+		}()).Freq().Slice()
 
 		var macCounts []counting
 		for _, line := range uniqueMac {
 			if line != "" {
 				fields := strings.Fields(line)
 				if len(fields) == 2 {
-					count, _ := strconv.Atoi(fields[0]) //nolint
+					//nolint:errcheck
+					count, _ := strconv.Atoi(fields[0])
 					macCounts = append(macCounts, counting{
 						Name:  fields[1],
 						Count: count,

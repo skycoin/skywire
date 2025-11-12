@@ -13,7 +13,7 @@ func init() {
 	commands.RootCmd.SetUsageTemplate(help)
 	commands.RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help menu")
 	commands.RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
-	commands.RootCmd.PersistentFlags().MarkHidden("help") //nolint
+	commands.RootCmd.PersistentFlags().MarkHidden("help") //nolint:errcheck,gosec
 }
 
 func main() {
@@ -29,7 +29,7 @@ func main() {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
-	commands.RootCmd.Execute() //nolint
+	commands.RootCmd.Execute() //nolint:errcheck,gosec
 }
 
 const help = "{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +

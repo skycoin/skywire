@@ -41,7 +41,7 @@ func (c *directClient) Entry(_ context.Context, pubKey cipher.PubKey) (*disc.Ent
 			return entry, nil
 		}
 	}
-	return &disc.Entry{}, nil
+	return nil, disc.ErrKeyNotFound
 }
 
 // PostEntry adds a new Entry to the entries field of directClient.

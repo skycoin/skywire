@@ -21,7 +21,7 @@ var RootCmd = &cobra.Command{
 	RunE: func(_ *cobra.Command, args []string) error {
 		var input string
 
-		stat, _ := os.Stdin.Stat() //nolint
+		stat, _ := os.Stdin.Stat() //nolint:errcheck
 		if (stat.Mode() & os.ModeCharDevice) == 0 {
 			scanner := bufio.NewScanner(os.Stdin)
 			var sb strings.Builder
