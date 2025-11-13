@@ -132,6 +132,9 @@ func TestRestart(t *testing.T) {
 				dumpLogsOnFailure(t, visorA, visorB, visorC)
 			})
 
+			// Remove transports before restart to clean up TPD entries
+			require.NoError(t, env.RemoveAllTransports(tc.restartList...))
+
 			// Restart visor containers
 			require.NoError(t, env.ContainerRestart(tc.restartList...))
 			time.Sleep(RestartDelay)
