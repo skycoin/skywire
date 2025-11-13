@@ -28,7 +28,7 @@ networks:
 services:
   hoster:
     privileged: true
-    image: mrpalide/docker-hoster
+    image: neilpang/docker-hoster
     container_name: hoster
     hostname: hoster
     volumes:
