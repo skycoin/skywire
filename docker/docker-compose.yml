@@ -28,7 +28,7 @@ networks:
 services:
   hoster:
     privileged: true
-    image: neilpang/docker-hoster
+    image: mrpalide/docker-hoster
     container_name: hoster
     hostname: hoster
     volumes:
@@ -112,7 +112,7 @@ services:
       - hoster
   
   postgres-db:
-    image: "postgres:alpine"
+    image: "postgres:17"
     networks:
       srv:
         ipv4_address: 175.0.0.248
