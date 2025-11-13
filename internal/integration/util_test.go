@@ -80,7 +80,8 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 	}
 
 	for _, app := range itc.AppsToRun {
-		env.StopApp(t, app)
+		// Best effort - don't fail test if cleanup fails
+		env.StopAppBestEffort(app)
 	}
 
 	time.Sleep(appStartDelay)
