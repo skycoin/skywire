@@ -1,6 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.25.1
+go 1.25.4
 
 require (
 	cogentcore.org/core v0.3.12
