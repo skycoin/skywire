@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -46,7 +47,10 @@ func (s *postgresStore) RegisterTransport(_ context.Context, sEntry *transport.S
 	tpRecord.Type = string(entry.Type)
 	tpRecord.Label = string(entry.Label)
 
-	return s.client.Save(&tpRecord).Error
+	return s.client.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "transport_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"edge_a", "edge_b", "type", "label"}),
+	}).Create(&tpRecord).Error
 }
 
 func (s *postgresStore) DeregisterTransport(ctx context.Context, id uuid.UUID) error { //nolint:revive
