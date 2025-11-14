@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/ccding/go-stun/stun"
-	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
@@ -180,8 +179,8 @@ func registerModules(logger *logging.MasterLogger) {
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
-	// tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm)
-	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
+	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm)
+	// tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc, &tpdco)
 
@@ -1296,153 +1295,153 @@ func checkVisorIsPublic(v *Visor) bool {
 	return false
 }
 
-// func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error {
-// 	visorIsPublic := checkVisorIsPublic(v)
-// 	const tickDuration = 5 * time.Minute
-// 	ticker := time.NewTicker(tickDuration)
-// 	go func() {
-// 		time.Sleep(time.Minute)
-// 		dmsgTries := 0
-// 		stcprTries := 0
-
-// 		for range ticker.C {
-// 			dmsgOK := tryTransport(v, "dmsg", log)
-// 			if dmsgOK {
-// 				dmsgTries = 0
-// 			} else {
-// 				dmsgTries++
-// 				if dmsgTries >= 3 {
-// 					log.Error("Dmsg transport failed after 3 attempts. Reinitiating dmsg...")
-// 					if err := reinitiateDmsg(ctx, v); err != nil {
-// 						log.WithError(err).Error("Failed to reinitiate dmsg")
-// 					}
-
-// 					dmsgTries = 0
-// 					dmsgOK = tryTransport(v, "dmsg", log)
-// 					if !dmsgOK {
-// 						dmsgTries = 1
-// 					}
-// 				}
-// 			}
-
-// 			stcprOK := true // default for non-public visors
-// 			if visorIsPublic {
-// 				stcprOK = tryTransport(v, "stcpr", log)
-// 				if stcprOK {
-// 					stcprTries = 0
-// 				} else {
-// 					stcprTries++
-// 					if stcprTries >= 3 {
-// 						log.Error("Stcpr transport failed after 3 attempts. Reinitiating stcpr...")
-// 						reinitiateStpcr(ctx, v)
-
-// 						stcprTries = 0
-// 						stcprOK = tryTransport(v, "stcpr", log)
-// 						if !stcprOK {
-// 							stcprTries = 1
-// 						}
-// 					}
-// 				}
-// 			}
-
-// 			if dmsgOK && stcprOK {
-// 				v.isServicesHealthy.set()
-// 				ticker.Reset(tickDuration)
-// 			} else {
-// 				v.isServicesHealthy.unset()
-// 				ticker.Reset(time.Minute)
-// 			}
-// 		}
-// 	}()
-// 	v.pushCloseStack("transportable", func() error {
-// 		ticker.Stop()
-// 		return nil
-// 	})
-
-// 	return nil
-// }
-
-// func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
-// 	tp, err := v.AddTransport(v.conf.PK, tpType, 0)
-// 	if err != nil {
-// 		log.WithError(err).WithField("type", tpType).Warn("Failed to create self-transport")
-// 		return false
-// 	}
-
-// 	err = v.RemoveTransport(tp.ID)
-// 	if err != nil {
-// 		log.WithError(err).WithField("type", tpType).Warn("Failed to remove self-transport")
-// 	}
-// 	return true
-// }
-
-// TODO: fix gocyclo error.
-//
-//gocyclo:ignore
-func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error {
+	visorIsPublic := checkVisorIsPublic(v)
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
 	go func() {
 		time.Sleep(time.Minute)
+		dmsgTries := 0
+		stcprTries := 0
+
 		for range ticker.C {
-			entries, err := v.DiscoverTransportsByPK(v.conf.PK)
-			if err != nil {
-				v.isServicesHealthy.unset()
-				log.WithError(err).Warn("Cannot ensure concurrency with TPD")
-				//reduce tick duration on non nil error
-				ticker.Reset(time.Minute)
+			dmsgOK := tryTransport(v, "dmsg", log)
+			if dmsgOK {
+				dmsgTries = 0
 			} else {
+				dmsgTries++
+				if dmsgTries >= 3 {
+					log.Error("Dmsg transport failed after 3 attempts. Reinitiating dmsg...")
+					if err := reinitiateDmsg(ctx, v); err != nil {
+						log.WithError(err).Error("Failed to reinitiate dmsg")
+					}
+
+					dmsgTries = 0
+					dmsgOK = tryTransport(v, "dmsg", log)
+					if !dmsgOK {
+						dmsgTries = 1
+					}
+				}
+			}
+
+			stcprOK := true // default for non-public visors
+			if visorIsPublic {
+				stcprOK = tryTransport(v, "stcpr", log)
+				if stcprOK {
+					stcprTries = 0
+				} else {
+					stcprTries++
+					if stcprTries >= 3 {
+						log.Error("Stcpr transport failed after 3 attempts. Reinitiating stcpr...")
+						reinitiateStpcr(ctx, v)
+
+						stcprTries = 0
+						stcprOK = tryTransport(v, "stcpr", log)
+						if !stcprOK {
+							stcprTries = 1
+						}
+					}
+				}
+			}
+
+			if dmsgOK && stcprOK {
 				v.isServicesHealthy.set()
-				var dtpids []uuid.UUID
-				var rmtpids []uuid.UUID
-				var tpids []uuid.UUID
-				for _, e := range entries {
-					if e.Edges[0] != e.Edges[1] {
-						dtpids = append(dtpids, e.ID)
-					}
-				}
-				transports, err := v.Transports(nil, nil, false)
-				for _, t := range transports {
-					if t.Local != t.Remote {
-						tpids = append(tpids, t.ID)
-					}
-				}
-				for _, t := range dtpids {
-					var found bool
-					for _, tt := range tpids {
-						if tt == t {
-							found = true
-						}
-					}
-					if !found {
-						rmtpids = append(rmtpids, t)
-					}
-				}
-				if 0 < len(rmtpids) {
-					log.WithError(err).Warn(fmt.Sprintf("Found %v transports in transport discovery not registered locally", len(rmtpids)))
-					tpdC, err := connectToTpDisc(ctx, v, v.MasterLogger().PackageLogger("tpd_concurrency"))
-					if err != nil {
-						log.WithError(err).Warn("failed to create transport discovery client")
-					} else {
-						for _, rm := range rmtpids {
-							err = tpdC.DeleteTransport(ctx, rm)
-							if err != nil {
-								log.WithError(err).Warn(fmt.Sprintf("Failed to remove transport from tpd %v", rm))
-							}
-						}
-					}
-				}
 				ticker.Reset(tickDuration)
+			} else {
+				v.isServicesHealthy.unset()
+				ticker.Reset(time.Minute)
 			}
 		}
 	}()
-
-	v.pushCloseStack("tpd_concurrency", func() error {
+	v.pushCloseStack("transportable", func() error {
 		ticker.Stop()
 		return nil
 	})
+
 	return nil
 }
+
+func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
+	tp, err := v.AddTransport(v.conf.PK, tpType, 0)
+	if err != nil {
+		log.WithError(err).WithField("type", tpType).Warn("Failed to create self-transport")
+		return false
+	}
+
+	err = v.RemoveTransport(tp.ID)
+	if err != nil {
+		log.WithError(err).WithField("type", tpType).Warn("Failed to remove self-transport")
+	}
+	return true
+}
+
+// TODO: fix gocyclo error.
+//
+//gocyclo:ignore
+// func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger) error {
+// 	const tickDuration = 5 * time.Minute
+// 	ticker := time.NewTicker(tickDuration)
+// 	go func() {
+// 		time.Sleep(time.Minute)
+// 		for range ticker.C {
+// 			entries, err := v.DiscoverTransportsByPK(v.conf.PK)
+// 			if err != nil {
+// 				v.isServicesHealthy.unset()
+// 				log.WithError(err).Warn("Cannot ensure concurrency with TPD")
+// 				//reduce tick duration on non nil error
+// 				ticker.Reset(time.Minute)
+// 			} else {
+// 				v.isServicesHealthy.set()
+// 				var dtpids []uuid.UUID
+// 				var rmtpids []uuid.UUID
+// 				var tpids []uuid.UUID
+// 				for _, e := range entries {
+// 					if e.Edges[0] != e.Edges[1] {
+// 						dtpids = append(dtpids, e.ID)
+// 					}
+// 				}
+// 				transports, err := v.Transports(nil, nil, false)
+// 				for _, t := range transports {
+// 					if t.Local != t.Remote {
+// 						tpids = append(tpids, t.ID)
+// 					}
+// 				}
+// 				for _, t := range dtpids {
+// 					var found bool
+// 					for _, tt := range tpids {
+// 						if tt == t {
+// 							found = true
+// 						}
+// 					}
+// 					if !found {
+// 						rmtpids = append(rmtpids, t)
+// 					}
+// 				}
+// 				if 0 < len(rmtpids) {
+// 					log.WithError(err).Warn(fmt.Sprintf("Found %v transports in transport discovery not registered locally", len(rmtpids)))
+// 					tpdC, err := connectToTpDisc(ctx, v, v.MasterLogger().PackageLogger("tpd_concurrency"))
+// 					if err != nil {
+// 						log.WithError(err).Warn("failed to create transport discovery client")
+// 					} else {
+// 						for _, rm := range rmtpids {
+// 							err = tpdC.DeleteTransport(ctx, rm)
+// 							if err != nil {
+// 								log.WithError(err).Warn(fmt.Sprintf("Failed to remove transport from tpd %v", rm))
+// 							}
+// 						}
+// 					}
+// 				}
+// 				ticker.Reset(tickDuration)
+// 			}
+// 		}
+// 	}()
+
+// 	v.pushCloseStack("tpd_concurrency", func() error {
+// 		ticker.Stop()
+// 		return nil
+// 	})
+// 	return nil
+// }
 
 // advertise this visor as public in service discovery
 // this service is not considered critical and always returns true
