@@ -99,7 +99,7 @@ var (
 	// Transportability checker ensures the visor can accept transports by creating a self-transport or exiting after 3 failed attempts to create one
 	tc vinit.Module
 	// TPD concurrency checker removes transports from tpd that the visor does not have registered locally
-	tpdco vinit.Module
+	// tpdco vinit.Module
 	// Transport manager
 	tr vinit.Module
 	// Transport setup
@@ -182,7 +182,7 @@ func registerModules(logger *logging.MasterLogger) {
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm)
 	// tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc, &tpdco)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
