@@ -180,7 +180,7 @@ func registerModules(logger *logging.MasterLogger) {
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
-	// tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm)
+	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tpdco)
@@ -1296,85 +1296,85 @@ func checkVisorIsPublic(v *Visor) bool {
 	return false
 }
 
-// func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error {
-// 	visorIsPublic := checkVisorIsPublic(v)
-// 	const tickDuration = 5 * time.Minute
-// 	ticker := time.NewTicker(tickDuration)
-// 	go func() {
-// 		time.Sleep(time.Minute)
-// 		dmsgTries := 0
-// 		stcprTries := 0
+func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error {
+	visorIsPublic := checkVisorIsPublic(v)
+	const tickDuration = 5 * time.Minute
+	ticker := time.NewTicker(tickDuration)
+	go func() {
+		time.Sleep(time.Minute)
+		dmsgTries := 0
+		stcprTries := 0
 
-// 		for range ticker.C {
-// 			dmsgOK := tryTransport(v, "dmsg", log)
-// 			if dmsgOK {
-// 				dmsgTries = 0
-// 			} else {
-// 				dmsgTries++
-// 				if dmsgTries >= 3 {
-// 					log.Error("Dmsg transport failed after 3 attempts. Reinitiating dmsg...")
-// 					if err := reinitiateDmsg(ctx, v); err != nil {
-// 						log.WithError(err).Error("Failed to reinitiate dmsg")
-// 					}
+		for range ticker.C {
+			dmsgOK := tryTransport(v, "dmsg", log)
+			if dmsgOK {
+				dmsgTries = 0
+			} else {
+				dmsgTries++
+				if dmsgTries >= 3 {
+					log.Error("Dmsg transport failed after 3 attempts. Reinitiating dmsg...")
+					if err := reinitiateDmsg(ctx, v); err != nil {
+						log.WithError(err).Error("Failed to reinitiate dmsg")
+					}
 
-// 					dmsgTries = 0
-// 					dmsgOK = tryTransport(v, "dmsg", log)
-// 					if !dmsgOK {
-// 						dmsgTries = 1
-// 					}
-// 				}
-// 			}
+					dmsgTries = 0
+					dmsgOK = tryTransport(v, "dmsg", log)
+					if !dmsgOK {
+						dmsgTries = 1
+					}
+				}
+			}
 
-// 			stcprOK := true // default for non-public visors
-// 			if visorIsPublic {
-// 				stcprOK = tryTransport(v, "stcpr", log)
-// 				if stcprOK {
-// 					stcprTries = 0
-// 				} else {
-// 					stcprTries++
-// 					if stcprTries >= 3 {
-// 						log.Error("Stcpr transport failed after 3 attempts. Reinitiating stcpr...")
-// 						reinitiateStpcr(ctx, v)
+			stcprOK := true // default for non-public visors
+			if visorIsPublic {
+				stcprOK = tryTransport(v, "stcpr", log)
+				if stcprOK {
+					stcprTries = 0
+				} else {
+					stcprTries++
+					if stcprTries >= 3 {
+						log.Error("Stcpr transport failed after 3 attempts. Reinitiating stcpr...")
+						reinitiateStpcr(ctx, v)
 
-// 						stcprTries = 0
-// 						stcprOK = tryTransport(v, "stcpr", log)
-// 						if !stcprOK {
-// 							stcprTries = 1
-// 						}
-// 					}
-// 				}
-// 			}
+						stcprTries = 0
+						stcprOK = tryTransport(v, "stcpr", log)
+						if !stcprOK {
+							stcprTries = 1
+						}
+					}
+				}
+			}
 
-// 			if dmsgOK && stcprOK {
-// 				v.isServicesHealthy.set()
-// 				ticker.Reset(tickDuration)
-// 			} else {
-// 				v.isServicesHealthy.unset()
-// 				ticker.Reset(time.Minute)
-// 			}
-// 		}
-// 	}()
-// 	v.pushCloseStack("transportable", func() error {
-// 		ticker.Stop()
-// 		return nil
-// 	})
+			if dmsgOK && stcprOK {
+				v.isServicesHealthy.set()
+				ticker.Reset(tickDuration)
+			} else {
+				v.isServicesHealthy.unset()
+				ticker.Reset(time.Minute)
+			}
+		}
+	}()
+	v.pushCloseStack("transportable", func() error {
+		ticker.Stop()
+		return nil
+	})
 
-// 	return nil
-// }
+	return nil
+}
 
-// func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
-// 	tp, err := v.AddTransport(v.conf.PK, tpType, 0)
-// 	if err != nil {
-// 		log.WithError(err).WithField("type", tpType).Warn("Failed to create self-transport")
-// 		return false
-// 	}
+func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
+	tp, err := v.AddTransport(v.conf.PK, tpType, 0)
+	if err != nil {
+		log.WithError(err).WithField("type", tpType).Warn("Failed to create self-transport")
+		return false
+	}
 
-// 	err = v.RemoveTransport(tp.ID)
-// 	if err != nil {
-// 		log.WithError(err).WithField("type", tpType).Warn("Failed to remove self-transport")
-// 	}
-// 	return true
-// }
+	err = v.RemoveTransport(tp.ID)
+	if err != nil {
+		log.WithError(err).WithField("type", tpType).Warn("Failed to remove self-transport")
+	}
+	return true
+}
 
 // TODO: fix gocyclo error.
 //
