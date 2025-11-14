@@ -183,7 +183,7 @@ func registerModules(logger *logging.MasterLogger) {
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tpdco)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc, &tpdco)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
