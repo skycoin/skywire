@@ -576,18 +576,51 @@ func (env *TestEnv) execResult(cmd string) (ExecResult, error) {
 }
 
 func (env *TestEnv) waitForVisorApp(app AppToRun) error {
-	ok, err := env.isVisorAppRunning(app)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		time.Sleep(5 * time.Second)
-		err = env.waitForVisorApp(app)
+	const maxAttempts = 12  // 12 * 5s = 60s timeout
+	const retryDelay = 5 * time.Second
+	
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		ok, err := env.isVisorAppRunning(app)
 		if err != nil {
+			env.logger.WithError(err).
+				WithField("app", app.AppName).
+				WithField("visor", app.VisorHostName).
+				WithField("attempt", attempt).
+				Warn("Error checking app status")
+			
+			// If it's an "errored" status error, fail immediately
+			if err.Error() != "" && (strings.Contains(err.Error(), "errored") || strings.Contains(err.Error(), "status:")) {
+				return err
+			}
+			
+			// Other errors might be transient, retry
+			if attempt < maxAttempts {
+				time.Sleep(retryDelay)
+				continue
+			}
 			return err
 		}
+		
+		if ok {
+			env.logger.WithField("app", app.AppName).
+				WithField("visor", app.VisorHostName).
+				WithField("attempt", attempt).
+				Debug("App is running")
+			return nil
+		}
+		
+		// App not running yet, retry
+		env.logger.WithField("app", app.AppName).
+			WithField("visor", app.VisorHostName).
+			WithField("attempt", attempt).
+			Debug("App not running yet, retrying...")
+		
+		if attempt < maxAttempts {
+			time.Sleep(retryDelay)
+		}
 	}
-	return nil
+	
+	return fmt.Errorf("timeout waiting for app %s on %s to start after %v", app.AppName, app.VisorHostName, time.Duration(maxAttempts)*retryDelay)
 }
 
 func (env *TestEnv) isVisorAppRunning(app AppToRun) (bool, error) {
@@ -605,7 +638,12 @@ func (env *TestEnv) checkAppStatus(app AppToRun) (bool, error) {
 	for _, appState := range appStates {
 		if appState.App == app.AppName {
 			if appState.Status == "errored" {
-				return false, fmt.Errorf("%s", appState.Status)
+				// Include detailed status for better debugging
+				detail := appState.DetailedStatus
+				if detail == "" {
+					detail = "(no details available)"
+				}
+				return false, fmt.Errorf("app %s status: %s, details: %s", app.AppName, appState.Status, detail)
 			}
 			if appState.Status == "running" {
 				return true, nil
@@ -621,7 +659,8 @@ func (env *TestEnv) checkVPNClientStatus(app AppToRun) (bool, error) {
 		return false, err
 	}
 	if appState.Status == "errored" {
-		return false, fmt.Errorf("%s", appState.Status)
+		// VPNStatus doesn't have detailed_status field, but we can provide context
+		return false, fmt.Errorf("VPN client status: %s (check visor logs for details)", appState.Status)
 	}
 	if appState.Status == "running" {
 		return true, nil
