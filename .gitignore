@@ -11,7 +11,8 @@
 .idea/
 .vscode/
 tmp/
-
+./tmp
+/tmp
 ./skywire.json
 ./build/
 /build/
