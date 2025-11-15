@@ -135,19 +135,17 @@ func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		if app.VisorServerName == "" {
 			t.Logf("Starting server app %s on %s", app.AppName, app.VisorHostName)
 			env = env.StartApp(t, app, "")
-			t.Logf("Server app %s on %s started successfully", app.AppName, app.VisorHostName)
+			
+			// After app shows "running", give it time to complete Accept() and
+			// register routing rules. Status changes to "running" when proc starts,
+			// but routing registration happens shortly after.
+			const acceptDelay = 3 * time.Second
+			time.Sleep(acceptDelay)
+			t.Logf("Server app %s on %s ready", app.AppName, app.VisorHostName)
 		}
 	}
 	
-	// Give server apps time to fully initialize and start accepting connections
-	// This is critical for VPN server which needs to be listening before client connects
-	if hasServerApps(itc.AppsToRun) {
-		const serverInitDelay = 5 * time.Second
-		t.Logf("Waiting %v for server apps to initialize and register with router...", serverInitDelay)
-		time.Sleep(serverInitDelay)
-	}
-	
-	// Add transports AFTER server apps are running and have registered with router
+	// Add transports AFTER server apps are ready
 	// This ensures the server-side routing rules exist before transport is established
 	for _, tp := range itc.TransportsToAdd {
 		env = env.TestVisorAddTp(t, tp)

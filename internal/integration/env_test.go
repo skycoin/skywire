@@ -242,13 +242,16 @@ func (env *TestEnv) VisorRouteLsRules(visor string) ([]RouteRule, error) {
 		Output []RouteRule `json:"output,omitempty"`
 		Err    *string     `json:"error,omitempty"`
 	}{}
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route ls-rules --json", visor)
+	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route --json", visor)
 	err := env.ExecJSON(cmd, &cliOutput)
 	if err != nil {
 		return nil, err
 	}
 	if cliOutput.Err != nil {
 		return nil, errors.New(*cliOutput.Err)
+	}
+	if cliOutput.Output == nil {
+		return []RouteRule{}, nil
 	}
 	return cliOutput.Output, nil
 }
