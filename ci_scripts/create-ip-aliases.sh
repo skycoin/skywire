@@ -5,9 +5,9 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
     do 
         sudo ip addr add 12.12.12.$i/32 dev lo 
     done
-elif [[ "$OSTYPE" == "darwin" ]]; then 
+elif [[ "$OSTYPE" == "darwin"* ]]; then 
     for ((i=1; i<=255; i++))
     do 
-        sudo ip addr add 12.12.12.$i/32 dev lo0
+        sudo ifconfig lo0 alias 12.12.12.$i/32
     done
 fi
