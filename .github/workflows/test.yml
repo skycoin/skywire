@@ -28,8 +28,6 @@ jobs:
             libglu1-mesa-dev \
             shellcheck
 
-          ./ci_scripts/create-ip-aliases.sh
-
           make install-shellcheck
 
       - uses: golangci/golangci-lint-action@v7
@@ -49,6 +47,7 @@ jobs:
         shell: bash
         run: |
           set -e
+          sudo ./ci_scripts/create-ip-aliases.sh
           make e2e-build
           make e2e-run
         env:
