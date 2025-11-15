@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
@@ -149,6 +150,23 @@ func MakeSettlementHS(init bool, log *logging.Logger) SettlementHS {
 		if err := dc.RegisterTransports(ctx, recvSE); err != nil {
 			if httpErr, ok := err.(*httputil.HTTPError); ok && httpErr.Status == http.StatusConflict {
 				log.WithError(err).Debug("An expected error occurred while trying to register transport.")
+			} else if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+				// Handle duplicate key constraint error from TPD database.
+				// This can happen if a previous transport registration exists in TPD but not locally
+				// (e.g., after a visor restart or crash). Delete the stale entry and retry.
+				log.WithError(err).Warn("Duplicate transport found in TPD, attempting to clean up and re-register.")
+				
+				if deleteErr := dc.DeleteTransport(ctx, entry.ID); deleteErr != nil {
+					log.WithError(deleteErr).Error("Failed to delete stale transport from TPD.")
+				} else {
+					log.Debug("Successfully deleted stale transport from TPD, retrying registration.")
+					// Retry registration after deleting the stale entry
+					if retryErr := dc.RegisterTransports(ctx, recvSE); retryErr != nil {
+						log.WithError(retryErr).Error("Failed to register transport after cleanup.")
+					} else {
+						log.Debug("Successfully registered transport after cleanup.")
+					}
+				}
 			} else {
 				// TODO(evanlinjin): In the future, this should return error and result in failed HS.
 				log.WithError(err).Error("Failed to register transport.")
