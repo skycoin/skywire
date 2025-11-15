@@ -291,8 +291,8 @@ type RuleSummary struct {
 
 // ToRule converts RoutingRuleSummary to RoutingRule.
 func (rs *RuleSummary) ToRule() (Rule, error) {
-	switch {
-	case rs.Type == RuleReverse:
+	switch rs.Type {
+	case RuleReverse:
 		if rs.ConsumeFields == nil || rs.ForwardFields != nil || rs.IntermediaryForwardFields != nil {
 			return nil, errors.New("invalid routing rule summary")
 		}
@@ -301,7 +301,7 @@ func (rs *RuleSummary) ToRule() (Rule, error) {
 		d := f.RouteDescriptor
 
 		return ConsumeRule(rs.KeepAlive, rs.KeyRouteID, d.SrcPK, d.DstPK, d.SrcPort, d.DstPort), nil
-	case rs.Type == RuleForward:
+	case RuleForward:
 		if rs.ConsumeFields != nil || rs.ForwardFields == nil || rs.IntermediaryForwardFields != nil {
 			return nil, errors.New("invalid routing rule summary")
 		}
@@ -310,7 +310,7 @@ func (rs *RuleSummary) ToRule() (Rule, error) {
 		d := f.RouteDescriptor
 
 		return ForwardRule(rs.KeepAlive, rs.KeyRouteID, f.NextRID, f.NextTID, d.SrcPK, d.DstPK, d.SrcPort, d.DstPort), nil
-	case rs.Type == RuleIntermediary:
+	case RuleIntermediary:
 		if rs.ConsumeFields != nil || rs.ForwardFields != nil || rs.IntermediaryForwardFields == nil {
 			return nil, errors.New("invalid routing rule summary")
 		}

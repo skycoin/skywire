@@ -32,7 +32,7 @@ func NewProcLogger(conf ProcConfig, mLog *logging.MasterLogger) (log *logging.Ma
 	}
 	log = mLog
 
-	log.Logger.AddHook(db)
+	log.AddHook(db)
 
 	return log, db
 }

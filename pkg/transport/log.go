@@ -294,7 +294,7 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 
 	// we reset the entry after it is saved
 	if tls.fileName != "" && tls.fileName != tls.todayFileName() {
-		cEntry.LogEntry.Reset()
+		cEntry.Reset()
 	}
 
 	tls.fileName = tls.todayFileName()

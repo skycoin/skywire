@@ -285,7 +285,7 @@ func CancellableCopy(ctx context.Context, w io.Writer, body io.ReadCloser, lengt
 		// if context has been canceled
 		case <-ctx.Done():
 			// stop process and propagate "Download Canceled" error
-			return 0, errors.New("Download Canceled")
+			return 0, errors.New("download Canceled")
 		default:
 			// otherwise just run default io.Reader implementation
 			return body.Read(p)
@@ -325,19 +325,19 @@ func getUptimes(endpoint string, log *logging.Logger) ([]VisorUptimeResponse, er
 	response, err := client.Get(endpoint)
 	if err != nil {
 		log.Error("Error while fetching data from uptime service. Error: ", err)
-		return results, errors.New("Cannot get Uptime data")
+		return results, errors.New("cannot get Uptime data")
 	}
 	defer response.Body.Close() //nolint:errcheck
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		log.Error("Error while reading data from uptime service. Error: ", err)
-		return results, errors.New("Cannot get Uptime data")
+		return results, errors.New("cannot get uptime data")
 	}
 	log.Debugf("Successfully  called uptime service and received answer %+v", results)
 	err = json.Unmarshal(body, &results)
 	if err != nil {
 		log.Errorf("Error while unmarshalling data from uptime service.\nBody:\n%v\nError:\n%v ", string(body), err)
-		return results, errors.New("Cannot get Uptime data")
+		return results, errors.New("cannot get Uptime data")
 	}
 	return results, nil
 }

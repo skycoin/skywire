@@ -1,12 +1,4 @@
-/*
-Package calvin pkg/skywire-utilities/pkg/calvin/calvin.go
-convert text to ascii art font i.e.:
-go run pkg/skywire-utilities/calvin/cmd/calvin@develop convert text to ascii art font
-┌─┐┌─┐┌┐┌┬  ┬┌─┐┬─┐┌┬┐  ┌┬┐┌─┐─┐ ┬┌┬┐  ┌┬┐┌─┐  ┌─┐┌─┐┌─┐┬┬  ┌─┐┬─┐┌┬┐  ┌─┐┌─┐┌┐┌┌┬┐
-│  │ ││││└┐┌┘├┤ ├┬┘ │    │ ├┤ ┌┴┬┘ │    │ │ │  ├─┤└─┐│  ││  ├─┤├┬┘ │   ├┤ │ ││││ │
-└─┘└─┘┘└┘ └┘ └─┘┴└─ ┴    ┴ └─┘┴ └─ ┴    ┴ └─┘  ┴ ┴└─┘└─┘┴┴  ┴ ┴┴└─ ┴   └  └─┘┘└┘ ┴
-*/
-
+// Package calvin pkg/skywire-utilities/pkg/calvin/calvin.go
 package calvin
 
 import (

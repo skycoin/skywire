@@ -1,5 +1,4 @@
 //go:build windows
-// +build windows
 
 // Package cmdutil pkg/cmdutil/sysloghook_windows.go
 package cmdutil

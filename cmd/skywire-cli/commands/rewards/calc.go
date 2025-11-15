@@ -314,7 +314,7 @@ Architectures:
 				HV:         hv,
 				Reason: func() string {
 					switch {
-					case !(allowed1 || allowed2):
+					case !allowed1 && !allowed2:
 						return arch
 					case strings.Count(ip, ".") != 3:
 						return ip

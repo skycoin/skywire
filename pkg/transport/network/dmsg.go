@@ -84,7 +84,7 @@ type dmsgListenerAdapter struct {
 
 // AcceptTransport implements Listener interface
 func (lis *dmsgListenerAdapter) AcceptTransport() (Transport, error) {
-	stream, err := lis.Listener.AcceptStream()
+	stream, err := lis.AcceptStream()
 	if err != nil {
 		return nil, err
 	}

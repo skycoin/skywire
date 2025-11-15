@@ -1,5 +1,4 @@
 // Package metricsutil pkg/metricsutil/http.go
-
 package metricsutil
 
 import (

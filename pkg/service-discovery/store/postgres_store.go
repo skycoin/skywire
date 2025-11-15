@@ -122,7 +122,7 @@ func (s *postgresStore) DeleteService(_ context.Context, sType string, addr serv
 func (s *postgresStore) CountServiceTypes(_ context.Context) (uint64, error) {
 	var countTypes int64
 	if err := s.client.Model(&servicedisc.Service{}).Distinct("type").Count(&countTypes).Error; err != nil {
-		return uint64(0), fmt.Errorf("Postgres command returned unexpected error: %w", err)
+		return uint64(0), fmt.Errorf("postgres command returned unexpected error: %w", err)
 	}
 
 	u, ok := safecast.To[uint64](countTypes)
@@ -136,7 +136,7 @@ func (s *postgresStore) CountServiceTypes(_ context.Context) (uint64, error) {
 func (s *postgresStore) CountServices(ctx context.Context, serviceType string) (uint64, error) {
 	service, sErr := s.Services(ctx, serviceType, "", "")
 	if sErr != nil {
-		return uint64(0), fmt.Errorf("Postgres command returned unexpected error: %w", sErr)
+		return uint64(0), fmt.Errorf("postgres command returned unexpected error: %w", sErr)
 	}
 
 	return uint64(len(service)), nil

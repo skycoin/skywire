@@ -571,7 +571,7 @@ func server(e error) {
 			fmt.Println("error: ", err)
 		}
 
-		c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)) //nolint:errcheck,gosec
+		_, _ = c.Writer.Write(bytes.ReplaceAll(bytes.ReplaceAll(bytes.ReplaceAll(bytes.ReplaceAll(bytes.ReplaceAll(bytes.ReplaceAll(bytes.ReplaceAll(result.Bytes(), []byte("\n\n"), []byte("\n")), []byte("\n\n"), []byte("\n")), []byte("\n\n"), []byte("\n")), []byte("\n\n"), []byte("\n")), []byte("\n\n"), []byte("\n")), []byte("\n\n"), []byte("\n")), []byte("\n\n"), []byte("\n")))
 		c.Writer.Flush()
 	})
 
@@ -612,7 +612,7 @@ func server(e error) {
 		//and range through the results
 		for _, f1 := range f {
 			//look for .txt file with the same date
-			g, err := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
+			g, err := script.File(strings.ReplaceAll(f1, "_rewardtxn0.csv", ".txt")).String()
 			//error is expected here - file does not exist when rewards have not been distributed for that _rewardtxn0.csv
 			//also consider rewards not distributed if the file exists but is empty or contains "test" - for testing
 			if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
@@ -631,10 +631,10 @@ func server(e error) {
 					return
 				}
 				//record the transaction ID for that day's reward
-				_, err = script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))
+				_, err = c.Writer.Write([]byte(`script.Echo(txid).WriteFile(strings.ReplaceAll(f1, "_rewardtxn0.csv", ".txt"))\n\n` + txid + "\n\n" + strings.ReplaceAll(f1, "_rewardtxn0.csv", ".txt") + "\n\nerror:\n\n" + err.Error()))
 				if err != nil {
 					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte(`script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))\n\n` + txid + "\n\n" + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1) + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
+					c.Writer.Write([]byte(`script.Echo(txid).WriteFile(strings.ReplaceAll(f1, "_rewardtxn0.csv", ".txt"))\n\n` + txid + "\n\n" + strings.ReplaceAll(f1, "_rewardtxn0.csv", ".txt") + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
 					return
 				}
 				//record the transaction ID for the reward notification system - append the file!
@@ -664,7 +664,7 @@ func server(e error) {
 		c.Writer.Header().Set("Server", "")
 		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice() //nolint:errcheck,gosec
 		for _, f1 := range f {
-			g, err := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
+			g, err := script.File(wd + `/hist/` + strings.ReplaceAll(f1, "_rewardtxn0.csv", ".txt")).String()
 			if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
 				c.Writer.Header().Set("Content-Type", "text/plain")
 				c.Writer.WriteHeader(http.StatusOK)
@@ -708,7 +708,7 @@ func server(e error) {
 		c.Writer.Header().Set("Content-Type", "text/plain")
 		f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice() //nolint:errcheck,gosec
 		for _, f1 := range f {
-			g, _ := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint:errcheck,gosec
+			g, _ := script.File(wd + `/hist/` + strings.ReplaceAll(f1, "_rewardtxn0.csv", ".txt")).String() //nolint:errcheck,gosec
 			if g != "" && g != "\n" {
 				c.Redirect(http.StatusFound, "/skycoin-rewards/hist/"+f1)
 				return
@@ -723,11 +723,11 @@ func server(e error) {
 		c.Writer.Header().Set("Transfer-Encoding", "chunked")
 		_, err := time.Parse("2006-01-02", c.Param("date"))
 		if err != nil {
-			_, err1 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_rewardtxn0.csv", "", -1))
-			_, err2 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_stats.txt", "", -1))
-			_, err3 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_ineligible.csv", "", -1))
-			_, err4 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_shares.csv", "", -1))
-			_, err5 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), ".txt", "", -1))
+			_, err1 := time.Parse("2006-01-02", strings.ReplaceAll(c.Param("date"), "_rewardtxn0.csv", ""))
+			_, err2 := time.Parse("2006-01-02", strings.ReplaceAll(c.Param("date"), "_stats.txt", ""))
+			_, err3 := time.Parse("2006-01-02", strings.ReplaceAll(c.Param("date"), "_ineligible.csv", ""))
+			_, err4 := time.Parse("2006-01-02", strings.ReplaceAll(c.Param("date"), "_shares.csv", ""))
+			_, err5 := time.Parse("2006-01-02", strings.ReplaceAll(c.Param("date"), ".txt", ""))
 			if err1 != nil && err2 != nil && err3 != nil && err4 != nil && err5 != nil {
 				fmt.Println("cant parse date or match filename")
 				c.Writer.WriteHeader(http.StatusNotFound)
@@ -879,7 +879,7 @@ func server(e error) {
 					c.Writer.Flush()
 					return
 				}
-				l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + strings.TrimRight(share, "\n") + strings.Replace(sky, ",\n", "\n", -1)
+				l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + strings.TrimRight(share, "\n") + strings.ReplaceAll(sky, ",\n", "\n")
 			}
 		}
 		l2, err = script.File(wd + `/hist/` + c.Param("date") + "_ineligible.csv").Slice()
@@ -897,7 +897,7 @@ func server(e error) {
 						l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Invalid survey\n"
 					}
 				} else {
-					l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Ineligible " + strings.Replace(reason, ",\n", "\n", -1)
+					l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Ineligible " + strings.ReplaceAll(reason, ",\n", "\n")
 				}
 			}
 		}
@@ -1836,7 +1836,7 @@ func mainPage(c *gin.Context) {
 		return
 	}
 	c.Writer.WriteHeader(http.StatusOK)
-	c.Writer.Write((bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1))) //nolint:errcheck,gosec
+	_, _ = c.Writer.Write(bytes.ReplaceAll(bytes.ReplaceAll(bytes.ReplaceAll(bytes.ReplaceAll(bytes.ReplaceAll(bytes.ReplaceAll(bytes.ReplaceAll(result.Bytes(), []byte("\n\n"), []byte("\n")), []byte("\n\n"), []byte("\n")), []byte("\n\n"), []byte("\n")), []byte("\n\n"), []byte("\n")), []byte("\n\n"), []byte("\n")), []byte("\n\n"), []byte("\n")), []byte("\n\n"), []byte("\n")))
 }
 
 var htmlMainPageTemplate = `

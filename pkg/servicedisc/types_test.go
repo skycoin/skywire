@@ -23,5 +23,5 @@ func TestProxy_MarshalBinary(t *testing.T) {
 
 	data, err := ps.MarshalBinary()
 	require.NoError(t, err)
-	fmt.Println("RAW:", data)
+	fmt.Printf("RAW:%s\n", data)
 }

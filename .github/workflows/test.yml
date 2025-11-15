@@ -32,9 +32,9 @@ jobs:
 
           make install-shellcheck
 
-      - uses: golangci/golangci-lint-action@v7
+      - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.6.1
+          version: v2.6.2
 
       - name: Lint Shell Scripts
         run: make lint-shell
@@ -78,9 +78,9 @@ jobs:
           brew install glfw
         shell: bash
 
-      - uses: golangci/golangci-lint-action@v7
+      - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.6.1
+          version: v2.6.2
 
       - name: Checking Format and Testing
         run: make check
@@ -98,6 +98,10 @@ jobs:
           go-version: '1.25.x'
           cache: true
           cache-dependency-path: go.sum
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.6.2
 
       - name: Install Requirements
         run: |

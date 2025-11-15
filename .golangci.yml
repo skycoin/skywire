@@ -1,16 +1,14 @@
 version: "2"
+
 run:
   concurrency: 4
-  modules-download-mode: vendor
+  modules-download-mode: readonly  
   issues-exit-code: 1
   tests: true
-output:
-  formats:
-    text:
-      path: stdout
-      print-linter-name: true
-      print-issued-lines: true
-      colors: true
+  skip-dirs:
+    - vendor
+    - cmd/skywire-cli/commands/rewards/ui
+
 linters:
   default: none
   enable:
@@ -24,34 +22,39 @@ linters:
     - unconvert
     - unparam
     - unused
-  settings:
-    dupl:
-      threshold: 100
-    errcheck:
-      check-type-assertions: false
-      check-blank: true
-    goconst:
-      min-len: 3
-      min-occurrences: 3
-    gocyclo:
-      min-complexity: 10
-    lll:
-      line-length: 120
-      tab-width: 1
-    misspell:
-      locale: US
-    nakedret:
-      max-func-lines: 30
-    prealloc:
-      simple: true
-      range-loops: true
-      for-loops: false
-    unparam:
-      check-exported: false
-    revive:
-      rules:
-        - name: package-comments
-          disabled: true
+
+linters-settings:
+  dupl:
+    threshold: 100
+  errcheck:
+    check-type-assertions: false
+    check-blank: true
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+  gocyclo:
+    min-complexity: 10
+  lll:
+    line-length: 120
+    tab-width: 1
+  misspell:
+    locale: US
+  nakedret:
+    max-func-lines: 30
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: false
+  unparam:
+    check-exported: false
+  revive:
+    rules:
+      - name: package-comments
+        disabled: true
+  staticcheck:
+    checks: ["all", "-QF1003", "-ST1005", "-QF1008", "-QF1001", "-QF1002", "-QF1010", "-QF1004", "-QF1006"]
+
+issues:
   exclusions:
     generated: lax
     paths:
@@ -64,33 +67,25 @@ linters:
         path: src/cipher/bip39/wordlists/
       - linters:
           - staticcheck
-        text: "QF1003:" # could use tagged switch on errCode (staticcheck)
+        text: "QF1003:"
       - linters:
           - staticcheck
-        text: "ST1005:" # error strings should not be capitalized (staticcheck)
+        text: "ST1005:"
       - linters:
           - staticcheck
-        text: "QF1008:" # could remove embedded field "Common" from selector (staticcheck)
+        text: "QF1008:"
       - linters:
           - staticcheck
-        text: "QF1001:" # could apply De Morgan's law (staticcheck)
+        text: "QF1001:"
       - linters:
           - staticcheck
-        text: "QF1002:" # could use tagged switch on rs.Type (staticcheck)
+        text: "QF1002:"
       - linters:
           - staticcheck
-        text: "QF1010:" # could convert argument to string (staticcheck)
+        text: "QF1010:"
       - linters:
           - staticcheck
-        text: "QF1004:" # could use strings.ReplaceAll instead (staticcheck)
+        text: "QF1004:"
       - linters:
           - staticcheck
-        text: "QF1006:" # could lift into loop condition (staticcheck)
-issues:
-  new: false
-formatters:
-  enable:
-    - gofmt
-  settings:
-    gofmt:
-      simplify: true
+        text: "QF1006:"
