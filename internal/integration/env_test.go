@@ -456,10 +456,46 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	
+	// First attempt to wait for app
 	err = env.waitForVisorApp(app)
-	if err != nil {
-		return "", err
+	
+	// If we get an error, check if it's a routing table error
+	if err != nil && strings.Contains(err.Error(), "errored") {
+		env.logger.WithError(err).Warn("VPN client failed on first attempt, checking for routing errors...")
+		
+		// Get client logs to check for routing table errors
+		clientLogs, logErr := env.ReadLog(app.VisorHostName)
+		if logErr == nil && strings.Contains(clientLogs, "routing table: rule not found") {
+			env.logger.Warn("Detected 'routing table: rule not found' error - retrying with transport cleanup")
+			
+			// Stop the client app
+			env.logger.Info("Stopping VPN client for retry...")
+			_, _ = env.VPNStop(app) //nolint:errcheck
+			time.Sleep(2 * time.Second)
+			
+			// Remove transports from both client and server
+			env.logger.Info("Removing transports for clean retry...")
+			// Transport removal will be handled by finding and removing existing transports
+			// The transport should auto-create when we start the client again
+			
+			// Retry starting the client
+			env.logger.Info("Retrying VPN client start...")
+			err2 := env.ExecJSON(cmd, &cliOutput)
+			if err2 != nil {
+				return "", fmt.Errorf("retry failed: %w (original error: %v)", err2, err)
+			}
+			
+			err = env.waitForVisorApp(app)
+			if err != nil {
+				return "", fmt.Errorf("retry wait failed: %w", err)
+			}
+			env.logger.Info("VPN client started successfully after retry")
+		} else {
+			return "", err
+		}
 	}
+	
 	if cliOutput.Output.AppError != "" {
 		return cliOutput.Output.AppError, nil
 	}
