@@ -80,11 +80,19 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 	}
 
 	for _, app := range itc.AppsToRun {
-		// Best effort - don't fail test if cleanup fails
+		// Stop app and wait for it to actually stop to prevent race conditions
 		env.StopAppBestEffort(app)
+		
+		// Wait for app to be fully stopped before proceeding
+		// This prevents the next test from starting while apps are still shutting down
+		if err := env.waitForAppStopped(app, 30*time.Second); err != nil {
+			// Log but don't fail - this is cleanup, we want to continue even if it times out
+			t.Logf("Warning: timeout waiting for app %s to stop: %v", app.AppName, err)
+		}
 	}
 
-	time.Sleep(appStartDelay)
+	// Small additional delay to ensure cleanup is complete
+	time.Sleep(2 * time.Second)
 }
 
 func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {

@@ -142,8 +142,19 @@ func TestRestart(t *testing.T) {
 			// Re-establish transports after visor restart
 			env.AddDefaultTransports(routerVisor, skychatVisors)
 
-			// Additional delay for transports to stabilize
-			time.Sleep(10 * time.Second)
+			// Wait for skychat apps to be ready on both sender and receiver
+			senderApp := AppToRun{VisorHostName: tc.sender, AppName: "skychat"}
+			receiverApp := AppToRun{VisorHostName: tc.receiver, AppName: "skychat"}
+			
+			// Wait for apps to be running before attempting to send messages
+			for _, app := range []AppToRun{senderApp, receiverApp} {
+				if err := env.waitForVisorApp(app); err != nil {
+					t.Logf("Warning: app %s on %s may not be ready: %v", app.AppName, app.VisorHostName, err)
+				}
+			}
+			
+			// Small additional delay for route establishment
+			time.Sleep(5 * time.Second)
 
 			checkMessage(t, tc.sender, tc.receiver)
 		})
