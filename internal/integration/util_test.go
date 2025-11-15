@@ -49,9 +49,20 @@ type AppArg struct {
 }
 
 func RunIntegrationTestCase(t *testing.T, testCases []IntegrationTestCase) {
-	for _, itc := range testCases {
+	for i, itc := range testCases {
 		startIntegrationTestCase(t, itc)
 		resetIntegrationTestCase(t, itc)
+		
+		// Add delay between test cases to ensure complete cleanup
+		// before the next test starts. This prevents race conditions where
+		// the next test's apps start while the previous test's apps are still
+		// shutting down (especially important for VPN server which can receive
+		// client hello messages during shutdown).
+		if i < len(testCases)-1 {
+			const cleanupDelay = 5 * time.Second
+			t.Logf("Waiting %v between test cases for complete cleanup...", cleanupDelay)
+			time.Sleep(cleanupDelay)
+		}
 	}
 }
 
@@ -81,13 +92,17 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 
 	for _, app := range itc.AppsToRun {
 		// Stop app and wait for it to actually stop to prevent race conditions
+		t.Logf("Stopping app %s on %s", app.AppName, app.VisorHostName)
 		env.StopAppBestEffort(app)
 		
 		// Wait for app to be fully stopped before proceeding
 		// This prevents the next test from starting while apps are still shutting down
+		t.Logf("Waiting for app %s on %s to fully stop...", app.AppName, app.VisorHostName)
 		if err := env.waitForAppStopped(app, 30*time.Second); err != nil {
 			// Log but don't fail - this is cleanup, we want to continue even if it times out
 			t.Logf("Warning: timeout waiting for app %s to stop: %v", app.AppName, err)
+		} else {
+			t.Logf("App %s on %s confirmed stopped", app.AppName, app.VisorHostName)
 		}
 	}
 
