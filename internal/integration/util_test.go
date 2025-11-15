@@ -48,16 +48,6 @@ type AppArg struct {
 	Val           string
 }
 
-// hasServerApps returns true if there are any server apps (apps without VisorServerName) in the list.
-func hasServerApps(apps []AppToRun) bool {
-	for _, app := range apps {
-		if app.VisorServerName == "" {
-			return true
-		}
-	}
-	return false
-}
-
 
 func RunIntegrationTestCase(t *testing.T, testCases []IntegrationTestCase) {
 	for i, itc := range testCases {

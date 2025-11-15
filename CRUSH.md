@@ -24,6 +24,26 @@ When in doubt, ask the user before committing non-code files.
 - Port conflicts resolved by commenting out port mappings in docker-compose.yml
 
 ### Known Issues (as of session)
-- VPN test has race condition in cleanup (second test starts before first fully stops)
+- VPN test fails even after startup sequencing fixes
 - TestRestart occasionally fails with EOF errors (similar race condition)
-- Need to implement `waitForAppStopped()` helper to verify cleanup completion
+- Need deeper investigation of VPN-specific issues
+
+### Important Learnings
+
+#### "routing table: rule not found" Error
+This error means:
+- Packets arrived for an app, but the app hasn't registered with the router yet
+- App shows "running" when process starts, but routing rules register slightly later during Accept()
+- Solution: Add 2-3s delay after "running" status before creating transports
+
+#### Test Execution Sequence
+Correct order:
+1. Start server apps (apps without VisorServerName)
+2. Wait for "running" status + small delay for routing registration  
+3. Create transports (now server can handle them)
+4. Start client apps (apps with VisorServerName)
+
+#### CLI Command Structure
+- `skywire cli visor --rpc host:port <command>` - for visor commands
+- `skywire cli route` - does NOT support --rpc (not under visor)
+- `skywire cli route --json` returns `{"output": null}` when no routes exist
