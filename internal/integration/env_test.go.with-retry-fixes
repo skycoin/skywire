@@ -153,6 +153,17 @@ func (env *TestEnv) StopApp(t *testing.T, app AppToRun) *TestEnv {
 	return env
 }
 
+// StopAppBestEffort attempts to stop an app but doesn't fail if it can't.
+// Used for test cleanup where we want to attempt cleanup but not fail the test.
+func (env *TestEnv) StopAppBestEffort(app AppToRun) *TestEnv {
+	if app.AppName == skyenv.VPNClientName {
+		_, _ = env.VPNStop(app) //nolint:errcheck
+	} else {
+		_, _ = env.VisorAppStop(app) //nolint:errcheck
+	}
+	return env
+}
+
 func (env *TestEnv) VisorAppStart(app AppToRun) (string, error) {
 
 	cliOutput := struct {
@@ -642,6 +653,25 @@ func (env *TestEnv) AddTransports(routerVisor string, visors []string, tpType tp
 	}
 
 	return env
+}
+
+// RemoveAllTransports removes all transports from the specified visors.
+// This should be called before restarting visors to clean up stale TPD entries.
+func (env *TestEnv) RemoveAllTransports(visors ...string) error {
+	for _, visor := range visors {
+		tps, err := env.VisorTpLs(visor)
+		if err != nil {
+			return fmt.Errorf("failed to list transports for %s: %w", visor, err)
+		}
+
+		for _, tp := range tps {
+			if _, err := env.VisorTpRm(visor, tp.ID); err != nil {
+				return fmt.Errorf("failed to remove transport %s from %s: %w", tp.ID, visor, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (env *TestEnv) ContainerRestart(serviceName ...string) error {

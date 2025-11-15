@@ -6,3 +6,19 @@ integration
 skywrie-services
 .git
 .gitignore
+.github
+.vscode
+.idea
+
+# Local development files
+local/
+tmp/
+*.log
+*.txt
+*.md
+!README.md
+!CHANGELOG.md
+
+# Build artifacts not needed
+build/
+dist/
