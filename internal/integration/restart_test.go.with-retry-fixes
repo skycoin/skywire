@@ -112,6 +112,9 @@ func TestRestart(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Remove transports before restart to clean up TPD entries
+			require.NoError(t, env.RemoveAllTransports(tc.restartList...))
+
 			// Restart visor containers
 			require.NoError(t, env.ContainerRestart(tc.restartList...))
 			time.Sleep(RestartDelay)
