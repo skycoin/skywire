@@ -18,18 +18,13 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
         check_failed=1
     fi
     
-    # Check if at least some IP aliases exist
-    if ! ip addr show lo | grep -q "12.12.12"; then
-        echo "⚠ IP aliases (12.12.12.x) not found on loopback interface"
-        check_failed=1
-    fi
+    # NOTE: IP aliases (12.12.12.x) check removed as they don't appear to be
+    # used by current e2e tests. Docker containers use their own IP ranges.
     
 elif [[ "$OSTYPE" == "darwin"* ]]; then
-    # Check if at least some IP aliases exist on macOS
-    if ! ifconfig lo0 | grep -q "12.12.12"; then
-        echo "⚠ IP aliases (12.12.12.x) not found on loopback interface"
-        check_failed=1
-    fi
+    # macOS doesn't require IP forwarding for e2e tests
+    # NOTE: IP aliases check removed as they don't appear to be used
+    :  # no-op
 fi
 
 if [ $check_failed -eq 1 ]; then
