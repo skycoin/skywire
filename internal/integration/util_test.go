@@ -48,6 +48,17 @@ type AppArg struct {
 	Val           string
 }
 
+// hasServerApps returns true if there are any server apps (apps without VisorServerName) in the list.
+func hasServerApps(apps []AppToRun) bool {
+	for _, app := range apps {
+		if app.VisorServerName == "" {
+			return true
+		}
+	}
+	return false
+}
+
+
 func RunIntegrationTestCase(t *testing.T, testCases []IntegrationTestCase) {
 	for i, itc := range testCases {
 		startIntegrationTestCase(t, itc)
@@ -115,20 +126,41 @@ func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		GatherContainersInfo().
 		GatherVisorPKs(itc.ParticipatingVisorsHostNames)
 
-	for _, tp := range itc.TransportsToAdd {
-		env = env.TestVisorAddTp(t, tp)
-	}
-
 	for _, appArg := range itc.AppArgsToSet {
 		env = env.VisorSetAppArg(t, appArg)
 	}
 
+	// Start server apps first (apps without VisorServerName)
 	for _, app := range itc.AppsToRun {
-		var pk string
-		if app.VisorServerName != "" {
-			pk = env.visorPKs[app.VisorServerName]
+		if app.VisorServerName == "" {
+			t.Logf("Starting server app %s on %s", app.AppName, app.VisorHostName)
+			env = env.StartApp(t, app, "")
+			t.Logf("Server app %s on %s started successfully", app.AppName, app.VisorHostName)
 		}
-		env = env.StartApp(t, app, pk)
+	}
+	
+	// Give server apps time to fully initialize and start accepting connections
+	// This is critical for VPN server which needs to be listening before client connects
+	if hasServerApps(itc.AppsToRun) {
+		const serverInitDelay = 5 * time.Second
+		t.Logf("Waiting %v for server apps to initialize and register with router...", serverInitDelay)
+		time.Sleep(serverInitDelay)
+	}
+	
+	// Add transports AFTER server apps are running and have registered with router
+	// This ensures the server-side routing rules exist before transport is established
+	for _, tp := range itc.TransportsToAdd {
+		env = env.TestVisorAddTp(t, tp)
+	}
+	
+	// Start client apps last (apps with VisorServerName)
+	for _, app := range itc.AppsToRun {
+		if app.VisorServerName != "" {
+			pk := env.visorPKs[app.VisorServerName]
+			t.Logf("Starting client app %s on %s connecting to %s", app.AppName, app.VisorHostName, app.VisorServerName)
+			env = env.StartApp(t, app, pk)
+			t.Logf("Client app %s on %s started", app.AppName, app.VisorHostName)
+		}
 	}
 
 	time.Sleep(appStartDelay)
