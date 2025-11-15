@@ -125,11 +125,53 @@ func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 	var out string
 	var err error
 
+	env.logger.WithField("app", app.AppName).
+		WithField("visor", app.VisorHostName).
+		WithField("is_vpn_client", app.AppName == skyenv.VPNClientName).
+		Info("StartApp called")
+
 	if app.AppName == skyenv.VPNClientName {
+		env.logger.Info("Using VPNStart path")
 		out, err = env.VPNStart(app, pk)
 	} else {
+		env.logger.Info("Using VisorAppStart path")
 		out, err = env.VisorAppStart(app)
 	}
+	
+	env.logger.WithField("app", app.AppName).
+		WithField("out", out).
+		WithField("err", err).
+		Info("StartApp completed")
+	
+	// If app was already started, we still need to verify it's actually running
+	// because the visor might report it as started but the process could be dead
+	if err != nil && err.Error() == "app already started" {
+		env.logger.WithField("app", app.AppName).
+			Warn("App reported as already started, verifying it's actually running...")
+		
+		// Try to stop it first
+		if app.AppName == skyenv.VPNClientName {
+			_, _ = env.VPNStop(app) //nolint:errcheck
+		} else {
+			_, _ = env.VisorAppStop(app) //nolint:errcheck
+		}
+		
+		// Wait a moment for it to stop
+		time.Sleep(2 * time.Second)
+		
+		// Now start it fresh
+		if app.AppName == skyenv.VPNClientName {
+			out, err = env.VPNStart(app, pk)
+		} else {
+			out, err = env.VisorAppStart(app)
+		}
+		
+		env.logger.WithField("app", app.AppName).
+			WithField("out_after_restart", out).
+			WithField("err_after_restart", err).
+			Info("App restarted after 'already started' error")
+	}
+	
 	if err != nil && err.Error() != "app already started" {
 		require.NoError(t, err)
 		require.Equal(t, "OK", out)
@@ -582,6 +624,10 @@ func (env *TestEnv) waitForVisorApp(app AppToRun) error {
 	const maxAttempts = 12  // 12 * 5s = 60s timeout
 	const retryDelay = 5 * time.Second
 	
+	env.logger.WithField("app", app.AppName).
+		WithField("visor", app.VisorHostName).
+		Info("Starting to wait for app...")
+	
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		ok, err := env.isVisorAppRunning(app)
 		if err != nil {
@@ -591,8 +637,25 @@ func (env *TestEnv) waitForVisorApp(app AppToRun) error {
 				WithField("attempt", attempt).
 				Warn("Error checking app status")
 			
-			// If it's an "errored" status error, fail immediately
+			// If it's an "errored" status error, dump logs and fail immediately
 			if err.Error() != "" && (strings.Contains(err.Error(), "errored") || strings.Contains(err.Error(), "status:")) {
+				// Dump visor logs to help debug
+				logs, logErr := env.ReadLog(app.VisorHostName)
+				if logErr != nil {
+					env.logger.WithError(logErr).Warn("Failed to read visor logs")
+				} else {
+					env.logger.Warnf("\n=== Last 200 lines of %s logs ===\n%s\n=== End logs ===\n", app.VisorHostName, getTailLines(logs, 200))
+				}
+				
+				// For VPN client errors, also dump the server logs
+				if app.AppName == skyenv.VPNClientName && app.VisorServerName != "" {
+					serverLogs, serverLogErr := env.ReadLog(app.VisorServerName)
+					if serverLogErr != nil {
+						env.logger.WithError(serverLogErr).Warn("Failed to read server visor logs")
+					} else {
+						env.logger.Warnf("\n=== Last 200 lines of %s (server) logs ===\n%s\n=== End logs ===\n", app.VisorServerName, getTailLines(serverLogs, 200))
+					}
+				}
 				return err
 			}
 			
@@ -608,7 +671,7 @@ func (env *TestEnv) waitForVisorApp(app AppToRun) error {
 			env.logger.WithField("app", app.AppName).
 				WithField("visor", app.VisorHostName).
 				WithField("attempt", attempt).
-				Debug("App is running")
+				Info("App is running!")
 			return nil
 		}
 		
@@ -638,8 +701,21 @@ func (env *TestEnv) checkAppStatus(app AppToRun) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	
+	env.logger.WithField("app", app.AppName).
+		WithField("visor", app.VisorHostName).
+		WithField("app_count", len(appStates)).
+		Debug("Retrieved app list")
+	
 	for _, appState := range appStates {
 		if appState.App == app.AppName {
+			env.logger.WithField("app", app.AppName).
+				WithField("status", appState.Status).
+				WithField("detailed_status", appState.DetailedStatus).
+				WithField("autostart", appState.AutoStart).
+				WithField("port", appState.Port).
+				Debug("Found app in list")
+			
 			if appState.Status == "errored" {
 				// Include detailed status for better debugging
 				detail := appState.DetailedStatus
@@ -880,4 +956,13 @@ func chdirToRoot(env *TestEnv) error {
 
 	env.dockerDir = filepath.Join(env.rootDir, "docker")
 	return nil
+}
+
+// getTailLines returns the last n lines from a string
+func getTailLines(s string, n int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return strings.Join(lines[len(lines)-n:], "\n")
 }
