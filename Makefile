@@ -469,19 +469,18 @@ docker-push:
 	bash ./docker/docker_build.sh prod ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
 	bash ./docker/docker_push.sh prod
 
-set-forwarding:
-	# following 2 lines are needed for SD to function. these can't be run from within the container and need to be run on the host machine
-	if [ $(shell uname -s) == "Linux" ]; then \
-		sudo bash -c 'echo 1 > /proc/sys/net/ipv4/ip_forward' && \
-		sudo bash -c 'echo 1 > /proc/sys/net/ipv6/conf/all/forwarding'; \
-	fi
+check-e2e-requirements: ## Check if system requirements for e2e tests are configured
+	@bash ./ci_scripts/check-e2e-requirements.sh
+
+set-forwarding: check-e2e-requirements
+	# System requirements checked. If they're not configured, run:
+	#   sudo ./ci_scripts/setup-sudo-requirements.sh
 
 reset-forwarding:
-	# revert the changes
-	if [ $(shell uname -s) == "Linux" ]; then \
-		sudo bash -c 'echo 0 > /proc/sys/net/ipv4/ip_forward' && \
-		sudo bash -c 'echo 0 > /proc/sys/net/ipv6/conf/all/forwarding'; \
-	fi
+	# No-op: We leave forwarding enabled as it doesn't interfere with normal operation
+	# If you need to disable forwarding, run:
+	#   sudo sysctl -w net.ipv4.ip_forward=0
+	#   sudo sysctl -w net.ipv6.conf.all.forwarding=0
 ## : ## _ [Interactive integration tests]
 
 integration-env-build: set-forwarding #build
