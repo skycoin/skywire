@@ -171,7 +171,7 @@ func registerModules(logger *logging.MasterLogger) {
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
 	rt = maker("router", initRouter, &tr, &dmsgC, &dmsgHTTP)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
-	cli = maker("cli", initCLI, &launch, &tr)
+	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
