@@ -427,8 +427,10 @@ help-windows: ## Display help for windows
 
 ## : ## _ [E2E tests suite]
 
-e2e-build: set-forwarding ## E2E. Build dockers and containers for e2e-tests
-	./docker/docker_build.sh e2e ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+e2e-build: set-forwarding e2e-dock ## E2E. Set port forwarding & Build dockers and containers for e2e-tests
+
+e2e-dock: ## E2E. Build dockers and containers for e2e-tests
+		./docker/docker_build.sh e2e ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
 
 e2e-run: ## E2E. Start e2e environment
 	bash -c "DOCKER_TAG=e2e docker compose up -d"
