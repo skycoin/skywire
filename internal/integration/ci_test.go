@@ -201,6 +201,10 @@ func TestEnv_SendSkyMessage(t *testing.T) {
 		GatherVisorPKs([]string{visorA, visorB, visorC}).
 		AddDefaultTransports(routerVisor, skychatVisors)
 
+	// Verify skychat is running on both nodes before attempting to send messages
+	env.VerifyAppRunning(t, visorA, "skychat")
+	env.VerifyAppRunning(t, visorC, "skychat")
+
 	_, err := env.SendSkyMessage(visorA, visorC, visorA+" -> "+visorC)
 	require.NoError(t, err)
 }
@@ -213,6 +217,10 @@ func TestEnv_SendSkyMessage_second(t *testing.T) {
 		GatherContainersInfo().
 		GatherVisorPKs([]string{visorA, visorB, visorC}).
 		AddDefaultTransports(routerVisor, skychatVisors)
+
+	// Verify skychat is running on both nodes before attempting to send messages
+	env.VerifyAppRunning(t, visorA, "skychat")
+	env.VerifyAppRunning(t, visorC, "skychat")
 
 	// For reasons unknown atm with qty big enough messaging FAILs
 	// TODO: Parametrize qty, find value on which messaging FAILs, detect the cause

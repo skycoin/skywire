@@ -121,6 +121,21 @@ func (env *TestEnv) VisorAppLs(visor string) ([]AppState, error) {
 	return cliOutput.Output, nil
 }
 
+// VerifyAppRunning checks if an app is running and fails the test if not
+func (env *TestEnv) VerifyAppRunning(t *testing.T, visor, appName string) {
+	apps, err := env.VisorAppLs(visor)
+	require.NoError(t, err, "Failed to list apps on %s", visor)
+
+	for _, app := range apps {
+		if app.App == appName {
+			require.Equal(t, "running", app.Status, "App %s on %s is not running (status: %s)", appName, visor, app.Status)
+			return
+		}
+	}
+
+	t.Fatalf("App %s not found on %s", appName, visor)
+}
+
 func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 	var out string
 	var err error
