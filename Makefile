@@ -439,11 +439,11 @@ e2e-run: ## E2E. Start e2e environment
 e2e-logs:
 	bash -c "docker compose logs --tail=all --follow"
 
-e2e-test: set-forwarding ## E2E. Run e2e-tests suite. Prepare e2e environment with `make e2e-build && make e2e-run`
+e2e-test:  ## E2E. Run e2e-tests suite. Prepare e2e environment with `make e2e-build && make e2e-run`
 	-go clean -testcache
 	go test  -v -timeout=15m ./internal/integration
 
-e2e-stop: reset-forwarding ## E2E. Stop e2e environment without destroying it. Restart with `make e2e-run`
+e2e-stop: ## E2E. Stop e2e environment without destroying it. Restart with `make e2e-run`
 	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} stop"
 	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} ps"
 
@@ -471,28 +471,22 @@ docker-push:
 	bash ./docker/docker_build.sh prod ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
 	bash ./docker/docker_push.sh prod
 
-check-e2e-requirements: ## Check if system requirements for e2e tests are configured
-	@bash ./ci_scripts/check-e2e-requirements.sh
+set-forwarding: #sudo ./ci_scripts/setup-sudo-requirements.sh
+	sudo ./ci_scripts/setup-sudo-requirements.sh
 
-set-forwarding: check-e2e-requirements
-	# System requirements checked. If they're not configured, run:
-	#   sudo ./ci_scripts/setup-sudo-requirements.sh
-
-reset-forwarding:
-	# No-op: We leave forwarding enabled as it doesn't interfere with normal operation
+#reset-forwarding:
 	# If you need to disable forwarding, run:
 	#   sudo sysctl -w net.ipv4.ip_forward=0
 	#   sudo sysctl -w net.ipv6.conf.all.forwarding=0
-## : ## _ [Interactive integration tests]
 
-integration-env-build: set-forwarding #build
+integration-env-build: #build
 	./docker/docker_build.sh integration ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
 	bash -c "DOCKER_TAG=integration docker compose up -d"
 
-integration-env-start: set-forwarding #start
+integration-env-start: #start
 	bash -c "DOCKER_TAG=integration docker compose up -d"
 
-integration-env-stop: reset-forwarding #stop
+integration-env-stop: #stop
 	bash -c "DOCKER_TAG=integration docker compose -f ${COMPOSE_FILE} stop"
 
 integration-env-clean: #clean
