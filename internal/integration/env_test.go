@@ -4,6 +4,7 @@
 package integration_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -602,19 +603,27 @@ func (env *TestEnv) Exec(cmd string) (string, error) {
 }
 
 func (env *TestEnv) ExecJSON(cmd string, output interface{}) error {
+	// Log the exact command being run
+	env.logger.Infof("[EXEC] %s", cmd)
+
 	result, err := env.execResult(cmd)
 	if err != nil {
+		env.logger.WithError(err).Errorf("[EXEC FAILED] %s", cmd)
 		return err
 	}
+
+	// Show stderr (debug logs) if present
+	if stderr := result.Stderr(); stderr != "" {
+		env.logger.Debugf("[STDERR] %s", stderr)
+	}
+
 	// Parse only stdout to avoid mixing with stderr log messages
 	err = json.Unmarshal([]byte(result.Stdout()), &output)
 	if err != nil {
-		env.logger.Errorf("cliOutput: %v", result.Stdout())
-		return err
+		env.logger.WithError(err).Errorf("[JSON PARSE FAILED] stdout: %s", result.Stdout())
 	}
-	return nil
+	return err
 }
-
 func (env *TestEnv) ExecJSONReturnString(cmd string) (string, error) {
 	cliOutput := struct {
 		Output string  `json:"output,omitempty"`
@@ -1016,4 +1025,120 @@ func getTailLines(s string, n int) string {
 		return s
 	}
 	return strings.Join(lines[len(lines)-n:], "\n")
+}
+
+// WaitForVisorLog waits for a specific log line to appear in visor logs
+func (env *TestEnv) WaitForVisorLog(visor, pattern string, timeout time.Duration) error {
+	env.logger.Infof("[WAIT] Waiting for '%s' in %s logs (timeout: %v)", pattern, visor, timeout)
+
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-ticker.C:
+			// Get recent logs from the container
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			opts := container.LogsOptions{
+				ShowStdout: true,
+				ShowStderr: true,
+				Tail:       "100",
+			}
+
+			c, ok := env.containers[visor]
+			if !ok {
+				cancel()
+				return fmt.Errorf("container %s not found", visor)
+			}
+
+			logs, err := env.cli.ContainerLogs(ctx, c.ID, opts)
+			cancel()
+			if err != nil {
+				continue
+			}
+
+			scanner := bufio.NewScanner(logs)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if strings.Contains(line, pattern) {
+					env.logger.Infof("[WAIT] ✓ Found: %s", line)
+					logs.Close()
+					return nil
+				}
+			}
+			logs.Close()
+		}
+	}
+
+	return fmt.Errorf("timeout waiting for '%s' in %s logs", pattern, visor)
+}
+
+// DumpVisorLogs dumps recent visor logs to test output
+func (env *TestEnv) DumpVisorLogs(t *testing.T, visor string, tail int) {
+	t.Logf("=== %s LOGS (last %d lines) ===", visor, tail)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c, ok := env.containers[visor]
+	if !ok {
+		t.Logf("Container %s not found", visor)
+		return
+	}
+
+	opts := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       fmt.Sprintf("%d", tail),
+	}
+
+	logs, err := env.cli.ContainerLogs(ctx, c.ID, opts)
+	if err != nil {
+		t.Logf("Failed to get logs: %v", err)
+		return
+	}
+	defer logs.Close()
+
+	scanner := bufio.NewScanner(logs)
+	for scanner.Scan() {
+		t.Logf("  %s", scanner.Text())
+	}
+	t.Log("=== END LOGS ===")
+}
+
+// StreamVisorLogs streams visor logs to test output in real-time
+func (env *TestEnv) StreamVisorLogs(t *testing.T, visor string, done <-chan struct{}) {
+	ctx := context.Background()
+
+	c, ok := env.containers[visor]
+	if !ok {
+		t.Logf("Container %s not found", visor)
+		return
+	}
+
+	opts := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+	}
+
+	logs, err := env.cli.ContainerLogs(ctx, c.ID, opts)
+	if err != nil {
+		t.Logf("Failed to stream logs: %v", err)
+		return
+	}
+
+	go func() {
+		defer logs.Close()
+		scanner := bufio.NewScanner(logs)
+		for scanner.Scan() {
+			select {
+			case <-done:
+				return
+			default:
+				t.Logf("[%s] %s", visor, scanner.Text())
+			}
+		}
+	}()
 }
