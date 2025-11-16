@@ -137,41 +137,41 @@ func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 		env.logger.Info("Using VisorAppStart path")
 		out, err = env.VisorAppStart(app)
 	}
-	
+
 	env.logger.WithField("app", app.AppName).
 		WithField("out", out).
 		WithField("err", err).
 		Info("StartApp completed")
-	
+
 	// If app was already started, we still need to verify it's actually running
 	// because the visor might report it as started but the process could be dead
 	if err != nil && err.Error() == "app already started" {
 		env.logger.WithField("app", app.AppName).
 			Warn("App reported as already started, verifying it's actually running...")
-		
+
 		// Try to stop it first
 		if app.AppName == skyenv.VPNClientName {
 			_, _ = env.VPNStop(app) //nolint:errcheck
 		} else {
 			_, _ = env.VisorAppStop(app) //nolint:errcheck
 		}
-		
+
 		// Wait a moment for it to stop
 		time.Sleep(2 * time.Second)
-		
+
 		// Now start it fresh
 		if app.AppName == skyenv.VPNClientName {
 			out, err = env.VPNStart(app, pk)
 		} else {
 			out, err = env.VisorAppStart(app)
 		}
-		
+
 		env.logger.WithField("app", app.AppName).
 			WithField("out_after_restart", out).
 			WithField("err_after_restart", err).
 			Info("App restarted after 'already started' error")
 	}
-	
+
 	if err != nil && err.Error() != "app already started" {
 		require.NoError(t, err)
 		require.Equal(t, "OK", out)
@@ -456,36 +456,36 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	// First attempt to wait for app
 	err = env.waitForVisorApp(app)
-	
+
 	// If we get an error, check if it's a routing table error
 	if err != nil && strings.Contains(err.Error(), "errored") {
 		env.logger.WithError(err).Warn("VPN client failed on first attempt, checking for routing errors...")
-		
+
 		// Get client logs to check for routing table errors
 		clientLogs, logErr := env.ReadLog(app.VisorHostName)
 		if logErr == nil && strings.Contains(clientLogs, "routing table: rule not found") {
 			env.logger.Warn("Detected 'routing table: rule not found' error - retrying with transport cleanup")
-			
+
 			// Stop the client app
 			env.logger.Info("Stopping VPN client for retry...")
 			_, _ = env.VPNStop(app) //nolint:errcheck
 			time.Sleep(2 * time.Second)
-			
+
 			// Remove transports from both client and server
 			env.logger.Info("Removing transports for clean retry...")
 			// Transport removal will be handled by finding and removing existing transports
 			// The transport should auto-create when we start the client again
-			
+
 			// Retry starting the client
 			env.logger.Info("Retrying VPN client start...")
 			err2 := env.ExecJSON(cmd, &cliOutput)
 			if err2 != nil {
 				return "", fmt.Errorf("retry failed: %w (original error: %v)", err2, err)
 			}
-			
+
 			err = env.waitForVisorApp(app)
 			if err != nil {
 				return "", fmt.Errorf("retry wait failed: %w", err)
@@ -495,7 +495,7 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 			return "", err
 		}
 	}
-	
+
 	if cliOutput.Output.AppError != "" {
 		return cliOutput.Output.AppError, nil
 	}
@@ -657,13 +657,13 @@ func (env *TestEnv) execResult(cmd string) (ExecResult, error) {
 }
 
 func (env *TestEnv) waitForVisorApp(app AppToRun) error {
-	const maxAttempts = 12  // 12 * 5s = 60s timeout
+	const maxAttempts = 12 // 12 * 5s = 60s timeout
 	const retryDelay = 5 * time.Second
-	
+
 	env.logger.WithField("app", app.AppName).
 		WithField("visor", app.VisorHostName).
 		Info("Starting to wait for app...")
-	
+
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		ok, err := env.isVisorAppRunning(app)
 		if err != nil {
@@ -672,7 +672,7 @@ func (env *TestEnv) waitForVisorApp(app AppToRun) error {
 				WithField("visor", app.VisorHostName).
 				WithField("attempt", attempt).
 				Warn("Error checking app status")
-			
+
 			// If it's an "errored" status error, dump logs and fail immediately
 			if err.Error() != "" && (strings.Contains(err.Error(), "errored") || strings.Contains(err.Error(), "status:")) {
 				// Dump visor logs to help debug
@@ -682,7 +682,7 @@ func (env *TestEnv) waitForVisorApp(app AppToRun) error {
 				} else {
 					env.logger.Warnf("\n=== Last 200 lines of %s logs ===\n%s\n=== End logs ===\n", app.VisorHostName, getTailLines(logs, 200))
 				}
-				
+
 				// For VPN client errors, also dump the server logs
 				if app.AppName == skyenv.VPNClientName && app.VisorServerName != "" {
 					serverLogs, serverLogErr := env.ReadLog(app.VisorServerName)
@@ -694,7 +694,7 @@ func (env *TestEnv) waitForVisorApp(app AppToRun) error {
 				}
 				return err
 			}
-			
+
 			// Other errors might be transient, retry
 			if attempt < maxAttempts {
 				time.Sleep(retryDelay)
@@ -702,7 +702,7 @@ func (env *TestEnv) waitForVisorApp(app AppToRun) error {
 			}
 			return err
 		}
-		
+
 		if ok {
 			env.logger.WithField("app", app.AppName).
 				WithField("visor", app.VisorHostName).
@@ -710,18 +710,18 @@ func (env *TestEnv) waitForVisorApp(app AppToRun) error {
 				Info("App is running!")
 			return nil
 		}
-		
+
 		// App not running yet, retry
 		env.logger.WithField("app", app.AppName).
 			WithField("visor", app.VisorHostName).
 			WithField("attempt", attempt).
 			Debug("App not running yet, retrying...")
-		
+
 		if attempt < maxAttempts {
 			time.Sleep(retryDelay)
 		}
 	}
-	
+
 	return fmt.Errorf("timeout waiting for app %s on %s to start after %v", app.AppName, app.VisorHostName, time.Duration(maxAttempts)*retryDelay)
 }
 
@@ -737,12 +737,12 @@ func (env *TestEnv) checkAppStatus(app AppToRun) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	
+
 	env.logger.WithField("app", app.AppName).
 		WithField("visor", app.VisorHostName).
 		WithField("app_count", len(appStates)).
 		Debug("Retrieved app list")
-	
+
 	for _, appState := range appStates {
 		if appState.App == app.AppName {
 			env.logger.WithField("app", app.AppName).
@@ -751,7 +751,7 @@ func (env *TestEnv) checkAppStatus(app AppToRun) (bool, error) {
 				WithField("autostart", appState.AutoStart).
 				WithField("port", appState.Port).
 				Debug("Found app in list")
-			
+
 			if appState.Status == "errored" {
 				// Include detailed status for better debugging
 				detail := appState.DetailedStatus
@@ -789,10 +789,10 @@ func (env *TestEnv) checkVPNClientStatus(app AppToRun) (bool, error) {
 func (env *TestEnv) waitForAppStopped(app AppToRun, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	attempt := 0
-	
+
 	for time.Now().Before(deadline) {
 		attempt++
-		
+
 		// For VPN client, check VPN status
 		if app.AppName == skyenv.VPNClientName {
 			_, err := env.VPNStatus(app.VisorHostName)
@@ -812,7 +812,7 @@ func (env *TestEnv) waitForAppStopped(app AppToRun, timeout time.Duration) error
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		
+
 		// For regular apps, check app list
 		appStates, err := env.VisorAppLs(app.VisorHostName)
 		if err != nil {
@@ -822,7 +822,7 @@ func (env *TestEnv) waitForAppStopped(app AppToRun, timeout time.Duration) error
 				Warn("Error checking app list, assuming stopped")
 			return nil
 		}
-		
+
 		// Look for the app in the list
 		found := false
 		for _, state := range appStates {
@@ -836,7 +836,7 @@ func (env *TestEnv) waitForAppStopped(app AppToRun, timeout time.Duration) error
 				break
 			}
 		}
-		
+
 		if !found {
 			// App not in list anymore, it's stopped
 			env.logger.WithField("app", app.AppName).
@@ -845,10 +845,10 @@ func (env *TestEnv) waitForAppStopped(app AppToRun, timeout time.Duration) error
 				Debug("App stopped and removed from list")
 			return nil
 		}
-		
+
 		time.Sleep(1 * time.Second)
 	}
-	
+
 	return fmt.Errorf("timeout waiting for app %s on %s to stop after %v", app.AppName, app.VisorHostName, timeout)
 }
 

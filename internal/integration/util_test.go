@@ -48,12 +48,11 @@ type AppArg struct {
 	Val           string
 }
 
-
 func RunIntegrationTestCase(t *testing.T, testCases []IntegrationTestCase) {
 	for i, itc := range testCases {
 		startIntegrationTestCase(t, itc)
 		resetIntegrationTestCase(t, itc)
-		
+
 		// Add delay between test cases to ensure complete cleanup
 		// before the next test starts. This prevents race conditions where
 		// the next test's apps start while the previous test's apps are still
@@ -95,7 +94,7 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		// Stop app and wait for it to actually stop to prevent race conditions
 		t.Logf("Stopping app %s on %s", app.AppName, app.VisorHostName)
 		env.StopAppBestEffort(app)
-		
+
 		// Wait for app to be fully stopped before proceeding
 		// This prevents the next test from starting while apps are still shutting down
 		t.Logf("Waiting for app %s on %s to fully stop...", app.AppName, app.VisorHostName)
@@ -125,7 +124,7 @@ func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		if app.VisorServerName == "" {
 			t.Logf("Starting server app %s on %s", app.AppName, app.VisorHostName)
 			env = env.StartApp(t, app, "")
-			
+
 			// After app shows "running", give it time to complete Accept() and
 			// register routing rules. Status changes to "running" when proc starts,
 			// but routing registration happens shortly after.
@@ -134,13 +133,13 @@ func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 			t.Logf("Server app %s on %s ready", app.AppName, app.VisorHostName)
 		}
 	}
-	
+
 	// Add transports AFTER server apps are ready
 	// This ensures the server-side routing rules exist before transport is established
 	for _, tp := range itc.TransportsToAdd {
 		env = env.TestVisorAddTp(t, tp)
 	}
-	
+
 	// Start client apps last (apps with VisorServerName)
 	for _, app := range itc.AppsToRun {
 		if app.VisorServerName != "" {

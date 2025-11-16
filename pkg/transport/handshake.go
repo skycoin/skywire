@@ -155,7 +155,7 @@ func MakeSettlementHS(init bool, log *logging.Logger) SettlementHS {
 				// This can happen if a previous transport registration exists in TPD but not locally
 				// (e.g., after a visor restart or crash). Delete the stale entry and retry.
 				log.WithError(err).Warn("Duplicate transport found in TPD, attempting to clean up and re-register.")
-				
+
 				if deleteErr := dc.DeleteTransport(ctx, entry.ID); deleteErr != nil {
 					log.WithError(deleteErr).Error("Failed to delete stale transport from TPD.")
 				} else {
