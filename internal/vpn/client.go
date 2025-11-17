@@ -709,8 +709,8 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 
 func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 	const (
-		netType = appnet.TypeSkynet
-		vpnPort = routing.Port(skyenv.VPNServerPort)
+		netType   = appnet.TypeSkynet
+		serverPort = routing.Port(skyenv.VPNServerPort) // VPN server port (44)
 	)
 
 	var conn net.Conn
@@ -718,7 +718,7 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 	conn, err = appCl.Dial(appnet.Addr{
 		Net:    netType,
 		PubKey: pk,
-		Port:   vpnPort,
+		Port:   serverPort,
 	})
 
 	if err != nil {
