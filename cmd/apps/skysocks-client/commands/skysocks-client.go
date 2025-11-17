@@ -33,7 +33,8 @@ import (
 )
 
 const (
-	netType = appnet.TypeSkynet
+	netType    = appnet.TypeSkynet
+	serverPort = routing.Port(3) // skysocks server port
 )
 
 var (
@@ -124,7 +125,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 
 	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 
-	conn, err := dialServer(ctx, appCl, pk, port)
+	conn, err := dialServer(ctx, appCl, pk, serverPort)
 	if err != nil {
 		print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
 		setAppErr(appCl, err)
