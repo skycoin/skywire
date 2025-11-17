@@ -81,3 +81,8 @@ gh*
 releaseChangelog.md
 musl-data
 .env
+
+# Crush AI local files
+CRUSH.md
+.crush.json
+.crush/
