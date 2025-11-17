@@ -84,6 +84,8 @@ jobs:
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.6.1
+        env:
+          CGO_ENABLED: 0
 
       - name: Checking Format and Testing
         run: make check
