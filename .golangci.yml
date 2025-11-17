@@ -1,23 +1,19 @@
 version: "2"
+
 run:
   concurrency: 4
   modules-download-mode: vendor
   issues-exit-code: 1
   tests: true
   timeout: 5m
-  env:
-    - CGO_ENABLED=0
   skip-files:
     - ".*_cgo\\.go$"
+
 output:
-  formats:
-    text:
-      path: stdout
-      print-linter-name: true
-      print-issued-lines: true
-      colors: true
+  format: colored-line-number
+
 linters:
-  default: none
+  disable-all: true
   enable:
     - errcheck
     - gosec
@@ -29,75 +25,82 @@ linters:
     - unconvert
     - unparam
     - unused
-  settings:
-    dupl:
-      threshold: 100
-    errcheck:
-      check-type-assertions: false
-      check-blank: true
-    goconst:
-      min-len: 3
-      min-occurrences: 3
-    gocyclo:
-      min-complexity: 10
-    lll:
-      line-length: 120
-      tab-width: 1
-    misspell:
-      locale: US
-    nakedret:
-      max-func-lines: 30
-    prealloc:
-      simple: true
-      range-loops: true
-      for-loops: false
-    unparam:
-      check-exported: false
-    revive:
-      rules:
-        - name: package-comments
-          disabled: true
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+
+linters-settings:
+  dupl:
+    threshold: 100
+
+  errcheck:
+    check-type-assertions: false
+    check-blank: true
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  gocyclo:
+    min-complexity: 10
+
+  lll:
+    line-length: 120
+    tab-width: 1
+
+  misspell:
+    locale: US
+
+  nakedret:
+    max-func-lines: 30
+
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: false
+
+  unparam:
+    check-exported: false
+
+  revive:
     rules:
-      - linters:
-          - misspell
-        path: src/cipher/bip39/wordlists/
-      - linters:
-          - staticcheck
-        text: "QF1003:" # could use tagged switch on errCode (staticcheck)
-      - linters:
-          - staticcheck
-        text: "ST1005:" # error strings should not be capitalized (staticcheck)
-      - linters:
-          - staticcheck
-        text: "QF1008:" # could remove embedded field "Common" from selector (staticcheck)
-      - linters:
-          - staticcheck
-        text: "QF1001:" # could apply De Morgan's law (staticcheck)
-      - linters:
-          - staticcheck
-        text: "QF1002:" # could use tagged switch on rs.Type (staticcheck)
-      - linters:
-          - staticcheck
-        text: "QF1010:" # could convert argument to string (staticcheck)
-      - linters:
-          - staticcheck
-        text: "QF1004:" # could use strings.ReplaceAll instead (staticcheck)
-      - linters:
-          - staticcheck
-        text: "QF1006:" # could lift into loop condition (staticcheck)
+      - name: package-comments
+        disabled: true
+
 issues:
-  new: false
-  exclude-rules:
-    # Don't typecheck CGO files
+  exclude:
     - path: cipher_cgo\.go
       linters:
         - typecheck
+
+    - path: third_party$
+    - path: builtin$
+    - path: examples$
+
+    - path: src/cipher/bip39/wordlists/.*  
+      linters: [misspell]
+
+    - text: "QF1003:"
+      linters: [staticcheck]
+
+    - text: "ST1005:"
+      linters: [staticcheck]
+
+    - text: "QF1008:"
+      linters: [staticcheck]
+
+    - text: "QF1001:"
+      linters: [staticcheck]
+
+    - text: "QF1002:"
+      linters: [staticcheck]
+
+    - text: "QF1010:"
+      linters: [staticcheck]
+
+    - text: "QF1004:"
+      linters: [staticcheck]
+
+    - text: "QF1006:"
+      linters: [staticcheck]
+
 formatters:
   enable:
     - gofmt
