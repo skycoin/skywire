@@ -14,11 +14,11 @@ ENV CGO_ENABLED=${CGO_ENABLED} \
 COPY . /skywire
 WORKDIR /skywire
 
-RUN if [ "$image_tag" = "integration" ]; then \
-        apk add --no-cache build-base && \
+RUN apk add --no-cache build-base && \
+    if [ "$image_tag" = "integration" ]; then \
         CGO_ENABLED=1 go build "${build_opts}" -race -o /release/skywire ./cmd/skywire; \
     else \
-        go build "${build_opts}" -o /release/skywire ./cmd/skywire; \
+        CGO_ENABLED=1 go build "${build_opts}" -o /release/skywire ./cmd/skywire; \
     fi
 
 ## Resulting image
