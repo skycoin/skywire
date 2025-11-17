@@ -404,13 +404,6 @@ github.com/eliukblau/pixterm/pkg/ansimage
 # github.com/ericchiang/css v1.4.0
 ## explicit; go 1.15
 github.com/ericchiang/css
-# github.com/ethereum/go-ethereum v1.16.7
-## explicit; go 1.24.0
-github.com/ethereum/go-ethereum/common/math
-github.com/ethereum/go-ethereum/crypto/secp256k1
-github.com/ethereum/go-ethereum/crypto/secp256k1/libsecp256k1/include
-github.com/ethereum/go-ethereum/crypto/secp256k1/libsecp256k1/src
-github.com/ethereum/go-ethereum/crypto/secp256k1/libsecp256k1/src/modules/recovery
 # github.com/fatih/color v1.18.0
 ## explicit; go 1.17
 github.com/fatih/color
