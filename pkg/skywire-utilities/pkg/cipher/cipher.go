@@ -10,8 +10,6 @@ import (
 
 	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/cipher/secp256k1-go"
-
-	secp256k1Eth "github.com/ethereum/go-ethereum/crypto/secp256k1"
 )
 
 func init() {
@@ -282,12 +280,7 @@ func VerifyPubKeySignedHashLight(pubkey cipher.PubKey, sig cipher.Sig, hash ciph
 	}
 
 	// Verify signature (still expensive, but ONLY done once now)
-	// if secp256k1.VerifySignature(hash[:], sig[:], pubkey[:]) != 1 {
-	// 	return cipher.ErrInvalidSigForMessage
-	// }
-
-	// use eth.secp256k1 for test
-	if !secp256k1Eth.VerifySignature(pubkey[:], hash[:], sig[:]) {
+	if secp256k1.VerifySignature(hash[:], sig[:], pubkey[:]) != 1 {
 		return cipher.ErrInvalidSigForMessage
 	}
 
