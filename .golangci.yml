@@ -5,17 +5,16 @@ run:
   modules-download-mode: vendor
   issues-exit-code: 1
   tests: true
-  timeout: 5m
-  skip-files:
-    - ".*_cgo\\.go$"
 
 output:
   formats:
-    - format: text
+    text:
       path: stdout
 
 linters:
-  disable-all: true
+  # In v2, 'disable-all' is replaced with 'default: none'
+  default: none
+  
   enable:
     - errcheck
     - gosec
@@ -27,79 +26,76 @@ linters:
     - unconvert
     - unparam
     - unused
+  
+  # Settings moved under linters section in v2
+  settings:
+    errcheck:
+      check-type-assertions: false
+      check-blank: true
 
-linters-settings:
-  dupl:
-    threshold: 100
+    misspell:
+      locale: US
 
-  errcheck:
-    check-type-assertions: false
-    check-blank: true
+    nakedret:
+      max-func-lines: 30
 
-  goconst:
-    min-len: 3
-    min-occurrences: 3
+    unparam:
+      check-exported: false
 
-  gocyclo:
-    min-complexity: 10
-
-  lll:
-    line-length: 120
-    tab-width: 1
-
-  misspell:
-    locale: US
-
-  nakedret:
-    max-func-lines: 30
-
-  prealloc:
-    simple: true
-    range-loops: true
-    for-loops: false
-
-  unparam:
-    check-exported: false
-
-  revive:
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
+  
+  # Exclusions moved under linters section in v2
+  exclusions:
+    # Excluding configuration per-path, per-linter, per-text and per-source
     rules:
-      - name: package-comments
-        disabled: true
+      - path: third_party$
+      
+      - path: builtin$
+      
+      - path: examples$
+      
+      - path: ".*_cgo\\.go$"
 
+      - path: src/cipher/bip39/wordlists/
+        linters:
+          - misspell
+
+      - linters:
+          - staticcheck
+        text: "QF1003:"
+        
+      - linters:
+          - staticcheck
+        text: "ST1005:"
+        
+      - linters:
+          - staticcheck
+        text: "QF1008:"
+        
+      - linters:
+          - staticcheck
+        text: "QF1001:"
+        
+      - linters:
+          - staticcheck
+        text: "QF1002:"
+        
+      - linters:
+          - staticcheck
+        text: "QF1010:"
+        
+      - linters:
+          - staticcheck
+        text: "QF1004:"
+        
+      - linters:
+          - staticcheck
+        text: "QF1006:"
+
+# The 'issues' section is now separate at top level
 issues:
+  # In v2, the 'new' field moved from root level to issues section
   new: false
-
-  exclude-rules:
-    # skip typecheck on CGO file
-    - path: cipher_cgo\.go
-      linters:
-        - typecheck
-
-    - path: third_party$
-    - path: builtin$
-    - path: examples$
-
-    - path: src/cipher/bip39/wordlists/
-      linters:
-        - misspell
-
-    - linters: [staticcheck]
-      text: "QF1003:"
-    - linters: [staticcheck]
-      text: "ST1005:"
-    - linters: [staticcheck]
-      text: "QF1008:"
-    - linters: [staticcheck]
-      text: "QF1001:"
-    - linters: [staticcheck]
-      text: "QF1002:"
-    - linters: [staticcheck]
-      text: "QF1010:"
-    - linters: [staticcheck]
-      text: "QF1004:"
-    - linters: [staticcheck]
-      text: "QF1006:"
-
-output-formats:
-  gofmt:
-    simplify: true
