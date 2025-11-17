@@ -171,6 +171,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	if httpAddr != "" {
 		go httpProxy(httpCtx, httpAddr, addr)
 	}
+	//nolint:staticcheck // ListenAndServe blocks until error; check is necessary
 	if err := client.ListenAndServe(addr); err != nil {
 		print(fmt.Sprintf("Error serving proxy client: %v\n", err))
 		return err

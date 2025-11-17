@@ -1062,11 +1062,11 @@ func (env *TestEnv) WaitForVisorLog(visor, pattern string, timeout time.Duration
 			line := scanner.Text()
 			if strings.Contains(line, pattern) {
 				env.logger.Infof("[WAIT] ✓ Found: %s", line)
-				_ = logs.Close()
+				logs.Close() //nolint:errcheck,gosec
 				return nil
 			}
 		}
-		_ = logs.Close()
+		logs.Close() //nolint:errcheck,gosec
 	}
 
 	return fmt.Errorf("timeout waiting for '%s' in %s logs", pattern, visor)
@@ -1096,7 +1096,7 @@ func (env *TestEnv) DumpVisorLogs(t *testing.T, visor string, tail int) {
 		t.Logf("Failed to get logs: %v", err)
 		return
 	}
-	defer func() { _ = logs.Close() }()
+	defer func() { logs.Close() }() //nolint:errcheck,gosec
 
 	scanner := bufio.NewScanner(logs)
 	for scanner.Scan() {
@@ -1128,7 +1128,7 @@ func (env *TestEnv) StreamVisorLogs(t *testing.T, visor string, done <-chan stru
 	}
 
 	go func() {
-		defer logs.Close()
+		defer logs.Close() //nolint:errcheck,gosec
 		scanner := bufio.NewScanner(logs)
 		for scanner.Scan() {
 			select {
