@@ -1,4 +1,4 @@
-version: "2"
+version: "1"
 
 run:
   concurrency: 4
@@ -6,14 +6,21 @@ run:
   issues-exit-code: 1
   tests: true
   timeout: 5m
+  env:
+    - CGO_ENABLED=0
   skip-files:
     - ".*_cgo\\.go$"
 
 output:
-  format: colored-line-number
+  formats:
+    - format: text
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck
     - gosec
@@ -65,7 +72,10 @@ linters-settings:
         disabled: true
 
 issues:
-  exclude:
+  new: false
+
+  exclude-rules:
+    # skip typecheck on CGO file
     - path: cipher_cgo\.go
       linters:
         - typecheck
@@ -74,32 +84,26 @@ issues:
     - path: builtin$
     - path: examples$
 
-    - path: src/cipher/bip39/wordlists/.*  
-      linters: [misspell]
+    - path: src/cipher/bip39/wordlists/
+      linters:
+        - misspell
 
-    - text: "QF1003:"
-      linters: [staticcheck]
-
-    - text: "ST1005:"
-      linters: [staticcheck]
-
-    - text: "QF1008:"
-      linters: [staticcheck]
-
-    - text: "QF1001:"
-      linters: [staticcheck]
-
-    - text: "QF1002:"
-      linters: [staticcheck]
-
-    - text: "QF1010:"
-      linters: [staticcheck]
-
-    - text: "QF1004:"
-      linters: [staticcheck]
-
-    - text: "QF1006:"
-      linters: [staticcheck]
+    - linters: [staticcheck]
+      text: "QF1003:"
+    - linters: [staticcheck]
+      text: "ST1005:"
+    - linters: [staticcheck]
+      text: "QF1008:"
+    - linters: [staticcheck]
+      text: "QF1001:"
+    - linters: [staticcheck]
+      text: "QF1002:"
+    - linters: [staticcheck]
+      text: "QF1010:"
+    - linters: [staticcheck]
+      text: "QF1004:"
+    - linters: [staticcheck]
+      text: "QF1006:"
 
 formatters:
   enable:
