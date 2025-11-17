@@ -28,7 +28,7 @@ networks:
 services:
   hoster:
     privileged: true
-    image: neilpang/docker-hoster
+    image: mrpalide/docker-hoster
     container_name: hoster
     hostname: hoster
     volumes:
@@ -36,10 +36,17 @@ services:
       - /etc/hosts:/tmp/hosts
       - ./integration/docker/config/:/app/conf/
     networks:
+      srv:
+        ipv4_address: 175.0.0.249
       intra:
         ipv4_address: 174.0.0.249
+      visors:
+        ipv4_address: 173.0.0.249
     environment:
       - MG_LOG_LEVEL=ERROR
+    depends_on:
+      - visor-c  # Make hoster start last
+    restart: always
 
   dmsgd-redis:
     image: "redis:alpine"
@@ -52,8 +59,6 @@ services:
       - "6385:6379"
     container_name: "dmsgd-redis"
     hostname: dmsgd-redis
-    depends_on:
-      - hoster
 
   ar-redis:
     image: "redis:alpine"
@@ -66,8 +71,6 @@ services:
       - "6380:6379"
     container_name: "ar-redis"
     hostname: ar-redis
-    depends_on:
-      - hoster
 
   sd-redis:
     image: "redis:alpine"
@@ -80,8 +83,6 @@ services:
       - "6381:6379"
     container_name: "sd-redis"
     hostname: sd-redis
-    depends_on:
-      - hoster
 
   tpd-redis:
     image: "redis:alpine"
@@ -94,8 +95,6 @@ services:
       - "6382:6379"
     container_name: "tpd-redis"
     hostname: tpd-redis
-    depends_on:
-      - hoster
 
   ut-redis:
     image: "redis:alpine"
@@ -108,8 +107,6 @@ services:
       - "6384:6379"
     container_name: "ut-redis"
     hostname: ut-redis
-    depends_on:
-      - hoster
   
   postgres-db:
     image: "postgres:17"
@@ -128,8 +125,6 @@ services:
       - db:/var/lib/postgresql/data
     container_name: "postgres-db"
     hostname: postgres-db
-    depends_on:
-      - hoster
 
   transport-discovery:
     privileged: true
@@ -448,3 +443,6 @@ services:
 volumes:
   db:
     driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
