@@ -1036,39 +1036,37 @@ func (env *TestEnv) WaitForVisorLog(visor, pattern string, timeout time.Duration
 	defer ticker.Stop()
 
 	for time.Now().Before(deadline) {
-		select {
-		case <-ticker.C:
-			// Get recent logs from the container
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			opts := container.LogsOptions{
-				ShowStdout: true,
-				ShowStderr: true,
-				Tail:       "100",
-			}
-
-			c, ok := env.containers[visor]
-			if !ok {
-				cancel()
-				return fmt.Errorf("container %s not found", visor)
-			}
-
-			logs, err := env.cli.ContainerLogs(ctx, c.ID, opts)
-			cancel()
-			if err != nil {
-				continue
-			}
-
-			scanner := bufio.NewScanner(logs)
-			for scanner.Scan() {
-				line := scanner.Text()
-				if strings.Contains(line, pattern) {
-					env.logger.Infof("[WAIT] ✓ Found: %s", line)
-					logs.Close()
-					return nil
-				}
-			}
-			logs.Close()
+		<-ticker.C
+		// Get recent logs from the container
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		opts := container.LogsOptions{
+			ShowStdout: true,
+			ShowStderr: true,
+			Tail:       "100",
 		}
+
+		c, ok := env.containers[visor]
+		if !ok {
+			cancel()
+			return fmt.Errorf("container %s not found", visor)
+		}
+
+		logs, err := env.cli.ContainerLogs(ctx, c.ID, opts)
+		cancel()
+		if err != nil {
+			continue
+		}
+
+		scanner := bufio.NewScanner(logs)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.Contains(line, pattern) {
+				env.logger.Infof("[WAIT] ✓ Found: %s", line)
+				_ = logs.Close()
+				return nil
+			}
+		}
+		_ = logs.Close()
 	}
 
 	return fmt.Errorf("timeout waiting for '%s' in %s logs", pattern, visor)
@@ -1098,7 +1096,7 @@ func (env *TestEnv) DumpVisorLogs(t *testing.T, visor string, tail int) {
 		t.Logf("Failed to get logs: %v", err)
 		return
 	}
-	defer logs.Close()
+	defer func() { _ = logs.Close() }()
 
 	scanner := bufio.NewScanner(logs)
 	for scanner.Scan() {

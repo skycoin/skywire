@@ -102,8 +102,8 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	port := appCl.Config().RoutingPort
 	if appPort != 0 {
 		port = routing.Port(appPort)
-		setAppPort(appCl, port)
 	}
+	setAppPort(appCl, port)
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 		print(fmt.Sprintf("Failed to output build info: %v\n", err))

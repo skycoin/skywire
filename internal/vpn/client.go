@@ -709,7 +709,7 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 
 func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 	const (
-		netType   = appnet.TypeSkynet
+		netType    = appnet.TypeSkynet
 		serverPort = routing.Port(skyenv.VPNServerPort) // VPN server port (44)
 	)
 
