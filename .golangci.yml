@@ -49,16 +49,15 @@ linters:
   
   # Exclusions moved under linters section in v2
   exclusions:
-    # Excluding configuration per-path, per-linter, per-text and per-source
+    # For path-only exclusions, use the 'paths' field instead of 'rules'
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - ".*_cgo\\.go$"
+    
+    # Excluding configuration per-path AND per-linter (rules need at least 2 criteria)
     rules:
-      - path: third_party$
-      
-      - path: builtin$
-      
-      - path: examples$
-      
-      - path: ".*_cgo\\.go$"
-
       - path: src/cipher/bip39/wordlists/
         linters:
           - misspell
