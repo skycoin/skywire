@@ -35,12 +35,9 @@ jobs:
 
           make install-shellcheck
 
-      - name: Install golangci-lint v1.61.0
-        run: |
-          curl -sSfL https://github.com/golangci/golangci-lint/releases/download/v1.61.0/golangci-lint-1.61.0-linux-amd64.tar.gz \
-            | tar -xz
-          sudo mv golangci-lint-1.61.0-linux-amd64/golangci-lint /usr/local/bin/
-          golangci-lint version
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.6.1
 
       - name: Lint Shell Scripts
         run: make lint-shell

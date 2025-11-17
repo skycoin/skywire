@@ -1,4 +1,4 @@
-version: "1"
+version: "2"
 
 run:
   concurrency: 4
@@ -6,8 +6,6 @@ run:
   issues-exit-code: 1
   tests: true
   timeout: 5m
-  env:
-    - CGO_ENABLED=0
   skip-files:
     - ".*_cgo\\.go$"
 
@@ -15,12 +13,9 @@ output:
   formats:
     - format: text
       path: stdout
-      print-linter-name: true
-      print-issued-lines: true
-      colors: true
 
 linters:
-  default: none
+  disable-all: true
   enable:
     - errcheck
     - gosec
@@ -105,9 +100,6 @@ issues:
     - linters: [staticcheck]
       text: "QF1006:"
 
-formatters:
-  enable:
-    - gofmt
-  settings:
-    gofmt:
-      simplify: true
+output-formats:
+  gofmt:
+    simplify: true
