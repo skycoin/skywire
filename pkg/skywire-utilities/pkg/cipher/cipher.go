@@ -287,7 +287,7 @@ func VerifyPubKeySignedHashLight(pubkey cipher.PubKey, sig cipher.Sig, hash ciph
 	// }
 
 	// use eth.secp256k1 for test
-	if secp256k1Eth.VerifySignature(pubkey[:], hash[:], sig[:]) {
+	if !secp256k1Eth.VerifySignature(pubkey[:], hash[:], sig[:]) {
 		return cipher.ErrInvalidSigForMessage
 	}
 
