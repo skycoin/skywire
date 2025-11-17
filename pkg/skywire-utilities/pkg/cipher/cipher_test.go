@@ -100,3 +100,39 @@ func TestSigTextMarshaller(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, sig, sig2)
 }
+
+func TestVerifyPubKeySignedPayload(t *testing.T) {
+	t.Logf("Running with CGO: %v", UsingCGO())
+
+	pk, sk := GenerateKeyPair()
+	payload := []byte("test payload")
+
+	sig, err := SignPayload(payload, sk)
+	require.NoError(t, err)
+
+	// Should succeed
+	err = VerifyPubKeySignedPayload(pk, sig, payload)
+	assert.NoError(t, err)
+
+	// Wrong payload should fail
+	err = VerifyPubKeySignedPayload(pk, sig, []byte("wrong"))
+	assert.Error(t, err)
+
+	// Wrong pubkey should fail
+	wrongPK, _ := GenerateKeyPair()
+	err = VerifyPubKeySignedPayload(wrongPK, sig, payload)
+	assert.Error(t, err)
+}
+
+func BenchmarkVerifyPubKeySignedPayload(b *testing.B) {
+	pk, sk := GenerateKeyPair()
+	payload := []byte("benchmark payload")
+	sig, _ := SignPayload(payload, sk) //nolint
+
+	b.Logf("Benchmarking with CGO: %v", UsingCGO())
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = VerifyPubKeySignedPayload(pk, sig, payload) //nolint
+	}
+}
