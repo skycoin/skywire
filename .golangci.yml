@@ -4,6 +4,11 @@ run:
   modules-download-mode: vendor
   issues-exit-code: 1
   tests: true
+  timeout: 5m
+  env:
+    - CGO_ENABLED=0
+  skip-files:
+    - ".*_cgo\\.go$"
 output:
   formats:
     text:
@@ -88,6 +93,11 @@ linters:
         text: "QF1006:" # could lift into loop condition (staticcheck)
 issues:
   new: false
+  exclude-rules:
+    # Don't typecheck CGO files
+    - path: cipher_cgo\.go
+      linters:
+        - typecheck
 formatters:
   enable:
     - gofmt
