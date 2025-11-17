@@ -122,8 +122,8 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DATABASE=postgres
-    ports:
-      - '5432:5432'
+    # ports:
+    #   - '5432:5432'
     volumes: 
       - db:/var/lib/postgresql/data
     container_name: "postgres-db"
@@ -358,9 +358,9 @@ services:
         source: ../docker/integration/visorA.json
         target: /opt/skywire/skywire-visor.json
         read_only: false
-    ports:
-      - "8001:8001"
-      - "3435:3435"
+    # ports:
+    #   - "8001:8001"
+    #   - "3435:3435"
     depends_on:
       - visor-b
     restart: always
@@ -391,9 +391,9 @@ services:
         source: ../docker/integration/hypervisor.key
         target: /opt/integration/hypervisor.key
         read_only: false
-    ports:
-      - "3436:3435"
-      - "8000:8000"
+    # ports:
+    #   - "3436:3435"
+    #   - "8000:8000"
     depends_on:
       - setup-node
       - route-finder
@@ -418,9 +418,9 @@ services:
         source: ../docker/integration/visorC.json
         target: /opt/skywire/skywire-visor.json
         read_only: false
-    ports:
-      - "1080:1080"
-      - "3437:3435"
+    # ports:
+    #   - "1080:1080"
+    #   - "3437:3435"
     depends_on:
       - visor-a
     restart: always

@@ -214,13 +214,15 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 
+	// Clear any previous error for this app before starting
+	delete(m.errors, conf.AppName)
+
 	if err := proc.Start(); err != nil {
 		delete(m.procs, conf.AppName)
 		delete(m.procsByKey, conf.ProcKey)
 
 		return 0, err
 	}
-	delete(m.errors, conf.AppName)
 
 	if proc.cmd == nil {
 		return 0, nil
@@ -263,13 +265,16 @@ func (m *procManager) Register(conf appcommon.ProcConfig) (appcommon.ProcKey, er
 	proc := NewProc(nil, conf, disc, m, conf.AppName, m.logStorePath)
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
+
+	// Clear any previous error for this app
+	delete(m.errors, conf.AppName)
+
 	go func() {
 		if ok := proc.AwaitConn(); !ok {
 			log.WithField("appName", conf.AppName).
 				Warn("AwaitConn.")
 		}
 	}()
-	delete(m.errors, conf.AppName)
 	return proc.conf.ProcKey, nil
 }
 

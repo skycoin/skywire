@@ -49,9 +49,16 @@ type AppArg struct {
 }
 
 func RunIntegrationTestCase(t *testing.T, testCases []IntegrationTestCase) {
-	for _, itc := range testCases {
+	for i, itc := range testCases {
 		startIntegrationTestCase(t, itc)
 		resetIntegrationTestCase(t, itc)
+
+		// Brief delay between test cases since containers are restarted in reset
+		if i < len(testCases)-1 {
+			const cleanupDelay = 1 * time.Second
+			t.Logf("Waiting %v between test cases...", cleanupDelay)
+			time.Sleep(cleanupDelay)
+		}
 	}
 }
 
@@ -79,12 +86,24 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		env = env.VisorSetAppArg(t, appArg)
 	}
 
+	// Restart containers instead of waiting for apps to stop gracefully
+	// This is much faster and ensures a clean state for the next test
+	visorsToRestart := make(map[string]bool)
 	for _, app := range itc.AppsToRun {
-		// Best effort - don't fail test if cleanup fails
-		env.StopAppBestEffort(app)
+		visorsToRestart[app.VisorHostName] = true
 	}
 
-	time.Sleep(appStartDelay)
+	for visor := range visorsToRestart {
+		t.Logf("Restarting container %s for fast cleanup", visor)
+		if err := env.ContainerRestart(visor); err != nil {
+			t.Logf("Warning: failed to restart container %s: %v", visor, err)
+		} else {
+			t.Logf("Container %s restarted", visor)
+		}
+	}
+
+	// Brief delay to ensure containers are fully restarted
+	time.Sleep(2 * time.Second)
 }
 
 func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
@@ -92,20 +111,39 @@ func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		GatherContainersInfo().
 		GatherVisorPKs(itc.ParticipatingVisorsHostNames)
 
-	for _, tp := range itc.TransportsToAdd {
-		env = env.TestVisorAddTp(t, tp)
-	}
-
 	for _, appArg := range itc.AppArgsToSet {
 		env = env.VisorSetAppArg(t, appArg)
 	}
 
+	// Start server apps first (apps without VisorServerName)
 	for _, app := range itc.AppsToRun {
-		var pk string
-		if app.VisorServerName != "" {
-			pk = env.visorPKs[app.VisorServerName]
+		if app.VisorServerName == "" {
+			t.Logf("Starting server app %s on %s", app.AppName, app.VisorHostName)
+			env = env.StartApp(t, app, "")
+
+			// After app shows "running", give it time to complete Accept() and
+			// register routing rules. Status changes to "running" when proc starts,
+			// but routing registration happens shortly after.
+			const acceptDelay = 3 * time.Second
+			time.Sleep(acceptDelay)
+			t.Logf("Server app %s on %s ready", app.AppName, app.VisorHostName)
 		}
-		env = env.StartApp(t, app, pk)
+	}
+
+	// Add transports AFTER server apps are ready
+	// This ensures the server-side routing rules exist before transport is established
+	for _, tp := range itc.TransportsToAdd {
+		env = env.TestVisorAddTp(t, tp)
+	}
+
+	// Start client apps last (apps with VisorServerName)
+	for _, app := range itc.AppsToRun {
+		if app.VisorServerName != "" {
+			pk := env.visorPKs[app.VisorServerName]
+			t.Logf("Starting client app %s on %s connecting to %s", app.AppName, app.VisorHostName, app.VisorServerName)
+			env = env.StartApp(t, app, pk)
+			t.Logf("Client app %s on %s started", app.AppName, app.VisorHostName)
+		}
 	}
 
 	time.Sleep(appStartDelay)
