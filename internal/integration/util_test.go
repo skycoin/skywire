@@ -53,14 +53,10 @@ func RunIntegrationTestCase(t *testing.T, testCases []IntegrationTestCase) {
 		startIntegrationTestCase(t, itc)
 		resetIntegrationTestCase(t, itc)
 
-		// Add delay between test cases to ensure complete cleanup
-		// before the next test starts. This prevents race conditions where
-		// the next test's apps start while the previous test's apps are still
-		// shutting down (especially important for VPN server which can receive
-		// client hello messages during shutdown).
+		// Brief delay between test cases since containers are restarted in reset
 		if i < len(testCases)-1 {
-			const cleanupDelay = 5 * time.Second
-			t.Logf("Waiting %v between test cases for complete cleanup...", cleanupDelay)
+			const cleanupDelay = 1 * time.Second
+			t.Logf("Waiting %v between test cases...", cleanupDelay)
 			time.Sleep(cleanupDelay)
 		}
 	}
@@ -90,23 +86,23 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		env = env.VisorSetAppArg(t, appArg)
 	}
 
+	// Restart containers instead of waiting for apps to stop gracefully
+	// This is much faster and ensures a clean state for the next test
+	visorsToRestart := make(map[string]bool)
 	for _, app := range itc.AppsToRun {
-		// Stop app and wait for it to actually stop to prevent race conditions
-		t.Logf("Stopping app %s on %s", app.AppName, app.VisorHostName)
-		env.StopAppBestEffort(app)
+		visorsToRestart[app.VisorHostName] = true
+	}
 
-		// Wait for app to be fully stopped before proceeding
-		// This prevents the next test from starting while apps are still shutting down
-		t.Logf("Waiting for app %s on %s to fully stop...", app.AppName, app.VisorHostName)
-		if err := env.waitForAppStopped(app, 30*time.Second); err != nil {
-			// Log but don't fail - this is cleanup, we want to continue even if it times out
-			t.Logf("Warning: timeout waiting for app %s to stop: %v", app.AppName, err)
+	for visor := range visorsToRestart {
+		t.Logf("Restarting container %s for fast cleanup", visor)
+		if err := env.ContainerRestart(visor); err != nil {
+			t.Logf("Warning: failed to restart container %s: %v", visor, err)
 		} else {
-			t.Logf("App %s on %s confirmed stopped", app.AppName, app.VisorHostName)
+			t.Logf("Container %s restarted", visor)
 		}
 	}
 
-	// Small additional delay to ensure cleanup is complete
+	// Brief delay to ensure containers are fully restarted
 	time.Sleep(2 * time.Second)
 }
 
