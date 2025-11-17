@@ -222,6 +222,14 @@ test: ## Run tests
 	go run . cli config gen -dnw
 	go run . cli config gen --nofetch -nw
 
+test-cgo: ## Run tests
+	-go clean -testcache &>/dev/null
+	CGO_ENABLED=1 ${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
+	CGO_ENABLED=1 ${OPTS} go test ${TEST_OPTS}
+	go run . --help
+	go run . cli config gen -dnw
+	go run . cli config gen --nofetch -nw
+
 test-windows: ## Run tests on windows
 	@go clean -testcache
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
