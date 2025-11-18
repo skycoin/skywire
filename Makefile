@@ -35,6 +35,8 @@ ifeq ($(COMMIT),)
 	COMMIT = unknown
 endif
 
+SYSTRAY_CGO_ENABLED := 1
+
 ifeq ($(BUILDTAG),)
 	ifeq ($(OS),Windows_NT)
 		BUILDTAG = Windows
