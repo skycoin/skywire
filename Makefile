@@ -231,7 +231,7 @@ test-windows: ## Run tests on windows
 
 test-windows-github-action: ## Run tests on windows
 	@go clean -testcache
-	go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps..."
+	go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
 
 install-linters: ## Install linters
 	- VERSION=1.64.5 ./ci_scripts/install-golangci-lint.sh
