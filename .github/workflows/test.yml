@@ -194,12 +194,27 @@ jobs:
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 
-      - name: Testing
+      - name: Add MSYS2 MinGW to PATH
+        run: echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         shell: powershell
+
+      - name: Verify GCC and libraries
+        run: |
+          gcc --version
+          Get-ChildItem C:\msys64\mingw64\bin\*secp256k1*.dll
+          $env:PATH
+        shell: powershell
+
+      - name: Testing
         run: |
           $env:GO111MODULE='on'
           $env:CGO_ENABLED='1'
+          $env:PATH = "C:\msys64\mingw64\bin;" + $env:PATH
           make test-windows-github-action
+        shell: powershell
+        env:
+          CGO_CFLAGS: -IC:/msys64/mingw64/include
+          CGO_LDFLAGS: -LC:/msys64/mingw64/lib -lsecp256k1
 
       - name: Build
         shell: powershell
