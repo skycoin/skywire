@@ -54,7 +54,7 @@ linters:
       - third_party$
       - builtin$
       - examples$
-      - "pkg/skywire-utilities/pkg/cipher/cipher_cgo.go"
+      - pkg/skywire-utilities/pkg/cipher/cipher_cgo.go
     
     # Excluding configuration per-path AND per-linter (rules need at least 2 criteria)
     rules:
