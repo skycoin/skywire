@@ -1,5 +1,5 @@
-//go:build cgo
-// +build cgo
+//go:build cgo && !windows
+// +build cgo,!windows
 
 // Package cipher - CGO optimized verification (3-5x faster)
 package cipher
