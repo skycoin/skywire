@@ -66,7 +66,7 @@ func NewEnv() *TestEnv {
 			"/transport-discovery",
 			"/address-resolver",
 			"/service-discovery",
-			// "/network-monitor",
+			"/network-monitor",
 			"/uptime-tracker",
 		},
 		visorNames: []string{
