@@ -27,12 +27,6 @@ else
 	.DEFAULT_GOAL := help
 endif
 
-SYSTRAY_CGO_ENABLED := 1
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Linux)
-    SYSTRAY_CGO_ENABLED := 0
-endif
-
 ifeq ($(VERSION),)
 	VERSION = unknown
 endif
@@ -48,6 +42,7 @@ ifeq ($(BUILDTAG),)
 		UNAME_S := $(shell uname -s)
 		ifeq ($(UNAME_S),Linux)
 			BUILDTAG = Linux
+			SYSTRAY_CGO_ENABLED := 0
 		endif
 	 	ifeq ($(UNAME_S),Darwin)
 			BUILDTAG = Darwin
@@ -233,6 +228,10 @@ test-cgo: ## Run tests
 test-windows: ## Run tests on windows
 	@go clean -testcache
 	powershell -Command "$$env:GO111MODULE='on'; $$env:CGO_ENABLED='1'; go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps..."
+
+test-windows-github-action: ## Run tests on windows
+	@go clean -testcache
+	go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps..."
 
 install-linters: ## Install linters
 	- VERSION=1.64.5 ./ci_scripts/install-golangci-lint.sh
