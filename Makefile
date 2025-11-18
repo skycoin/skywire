@@ -61,6 +61,8 @@ DOCKER_REGISTRY:=skycoin
 
 TEST_OPTS:=-cover -timeout=5m -mod=vendor -tags no_ci
 
+TEST_OPTS_WIN:=-cover -timeout=5m -mod=vendor -tags no_ci
+
 GOARCH:=$(shell go env GOARCH)
 
 ifneq (,$(findstring 64,$(GOARCH)))
@@ -227,11 +229,7 @@ test-cgo: ## Run tests
 
 test-windows: ## Run tests on windows
 	@go clean -testcache
-	powershell -Command "$$env:GO111MODULE='on'; $$env:CGO_ENABLED='1'; go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps..."
-
-test-windows-github-action: ## Run tests on windows
-	@go clean -testcache
-	go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
+	${OPTS} go test ${TEST_OPTS_WIN} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps..."
 
 install-linters: ## Install linters
 	- VERSION=1.64.5 ./ci_scripts/install-golangci-lint.sh
