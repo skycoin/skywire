@@ -159,6 +159,35 @@ func TestEnv_VisorPK(t *testing.T) {
 	}
 }
 
+func TestEnv_DmsgHTTPHealth(t *testing.T) {
+	env := NewEnv().
+		GatherContainersInfo().
+		GatherVisorPKs([]string{visorA, visorB, visorC})
+
+	// Test dmsghttp /health endpoint for each visor
+	// The dmsghttp server runs on each visor at port 80
+	const dmsgDiscovery = "http://dmsg-discovery:9090"
+
+	for _, visor := range []string{visorA, visorB, visorC} {
+		pk := env.visorPKs[visor]
+		dmsgURL := fmt.Sprintf("dmsg://%s:80/health", pk)
+
+		t.Logf("Testing dmsghttp /health endpoint for %s at %s", visor, dmsgURL)
+
+		// Use dmsg curl with -U flag to specify dmsg discovery and -Z to set it as default
+		cmd := fmt.Sprintf("/release/skywire dmsg curl -U %s -Z %s", dmsgDiscovery, dmsgURL)
+		result, err := env.execResult(cmd)
+		require.NoError(t, err, "Failed to execute dmsg curl for %s", visor)
+
+		stdout := result.Stdout()
+		t.Logf("dmsghttp /health response from %s:\n%s", visor, stdout)
+
+		// Verify we got a response (should be JSON with health info)
+		require.NotEmpty(t, stdout, "Empty response from dmsghttp /health for %s", visor)
+		require.Contains(t, stdout, "uptime", "Expected 'uptime' in /health response for %s", visor)
+	}
+}
+
 func TestEnv_VisorAddTp(t *testing.T) {
 	env := NewEnv().
 		GatherContainersInfo().
