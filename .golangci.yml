@@ -58,7 +58,6 @@ linters:
       - third_party$
       - builtin$
       - examples$
-      - "cipher_cgo\\.go$"
     rules:
       - linters:
           - misspell

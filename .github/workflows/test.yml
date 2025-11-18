@@ -30,6 +30,22 @@ jobs:
 
           make install-shellcheck
 
+      - name: Cache libsecp256k1
+        id: cache-libsecp256k1
+        uses: actions/cache@v3
+        with:
+          path: /usr/local/lib/libsecp256k1*
+          key: secp256k1-linux-v1
+
+      - name: Install libsecp256k1
+        if: steps.cache-libsecp256k1.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf libtool git
+          cd /tmp && git clone --depth 1 https://github.com/bitcoin-core/secp256k1.git
+          cd secp256k1 && ./autogen.sh && ./configure --enable-module-recovery
+          make -j$(nproc) && sudo make install && sudo ldconfig
+
       - name: Install golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
@@ -79,6 +95,21 @@ jobs:
           brew install glfw
         shell: bash
 
+      - name: Cache libsecp256k1
+        id: cache-libsecp256k1
+        uses: actions/cache@v3
+        with:
+          path: /usr/local/lib/libsecp256k1*
+          key: secp256k1-macos-v1
+
+      - name: Install libsecp256k1
+        if: steps.cache-libsecp256k1.outputs.cache-hit != 'true'
+        run: |
+          brew install autoconf automake libtool
+          cd /tmp && git clone --depth 1 https://github.com/bitcoin-core/secp256k1.git
+          cd secp256k1 && ./autogen.sh && ./configure --enable-module-recovery
+          make -j$(sysctl -n hw.ncpu) && sudo make install
+
       - name: Install golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
@@ -101,6 +132,22 @@ jobs:
           go-version: '1.25.x'
           cache: true
           cache-dependency-path: go.sum
+
+      - name: Cache libsecp256k1
+        id: cache-libsecp256k1
+        uses: actions/cache@v3
+        with:
+          path: C:\secp256k1
+          key: secp256k1-windows-v1
+
+      - name: Install libsecp256k1
+        if: steps.cache-libsecp256k1.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          pacman -S --noconfirm autoconf automake libtool make mingw-w64-x86_64-gcc
+          cd /c/tmp && git clone --depth 1 https://github.com/bitcoin-core/secp256k1.git
+          cd secp256k1 && ./autogen.sh && ./configure --enable-module-recovery --prefix=/c/secp256k1
+          make -j$(nproc) && make install
 
       - name: Install golangci-lint
         run: |
