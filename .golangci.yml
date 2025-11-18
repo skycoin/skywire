@@ -1,20 +1,18 @@
 version: "2"
-
 run:
   concurrency: 4
   modules-download-mode: vendor
   issues-exit-code: 1
   tests: true
-
 output:
   formats:
     text:
       path: stdout
-
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
 linters:
-  # In v2, 'disable-all' is replaced with 'default: none'
   default: none
-  
   enable:
     - errcheck
     - gosec
@@ -26,75 +24,74 @@ linters:
     - unconvert
     - unparam
     - unused
-  
-  # Settings moved under linters section in v2
   settings:
+    dupl:
+      threshold: 100
     errcheck:
       check-type-assertions: false
       check-blank: true
-
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    gocyclo:
+      min-complexity: 10
+    lll:
+      line-length: 120
+      tab-width: 1
     misspell:
       locale: US
-
     nakedret:
       max-func-lines: 30
-
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
     unparam:
       check-exported: false
-
     revive:
       rules:
         - name: package-comments
           disabled: true
-  
-  # Exclusions moved under linters section in v2
   exclusions:
-    # For path-only exclusions, use the 'paths' field instead of 'rules'
+    generated: lax
     paths:
       - third_party$
       - builtin$
       - examples$
-      - ./pkg/skywire-utilities/pkg/cipher/cipher_cgo.go
-    
-    # Excluding configuration per-path AND per-linter (rules need at least 2 criteria)
+      - pkg/skywire-utilities/pkg/cipher/cipher_cgo.go
     rules:
-      - path: src/cipher/bip39/wordlists/
-        linters:
+      - linters:
           - misspell
-
+        path: src/cipher/bip39/wordlists/
       - linters:
           - staticcheck
-        text: "QF1003:"
-        
+        text: "QF1003:" # could use tagged switch on errCode (staticcheck)
       - linters:
           - staticcheck
-        text: "ST1005:"
-        
+        text: "ST1005:" # error strings should not be capitalized (staticcheck)
       - linters:
           - staticcheck
-        text: "QF1008:"
-        
+        text: "QF1008:" # could remove embedded field "Common" from selector (staticcheck)
       - linters:
           - staticcheck
-        text: "QF1001:"
-        
+        text: "QF1001:" # could apply De Morgan's law (staticcheck)
       - linters:
           - staticcheck
-        text: "QF1002:"
-        
+        text: "QF1002:" # could use tagged switch on rs.Type (staticcheck)
       - linters:
           - staticcheck
-        text: "QF1010:"
-        
+        text: "QF1010:" # could convert argument to string (staticcheck)
       - linters:
           - staticcheck
-        text: "QF1004:"
-        
+        text: "QF1004:" # could use strings.ReplaceAll instead (staticcheck)
       - linters:
           - staticcheck
-        text: "QF1006:"
-
-# The 'issues' section is now separate at top level
+        text: "QF1006:" # could lift into loop condition (staticcheck)
 issues:
-  # In v2, the 'new' field moved from root level to issues section
   new: false
+formatters:
+  enable:
+    - gofmt
+  settings:
+    gofmt:
+      simplify: true
