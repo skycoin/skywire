@@ -17,7 +17,7 @@ PROJECT_BASE := github.com/skycoin/skywire
 SKYWIRE_UTILITIES_BASE := github.com/skycoin/skywire/pkg/skywire-utilities
 ifeq ($(OS),Windows_NT)
 	SHELL := pwsh
-	OPTS?=powershell -Command setx GO111MODULE on;
+	OPTS?=powershell -Command "$$env:GO111MODULE='on'";
 	DATE := $(shell powershell -Command date -u ${RFC_3339})
 	.DEFAULT_GOAL := help-windows
 else
@@ -232,7 +232,7 @@ test-cgo: ## Run tests
 
 test-windows: ## Run tests on windows
 	@go clean -testcache
-	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
+	${OPTS} "$$env:CGO_ENABLED='1'"; go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
 
 install-linters: ## Install linters
 	- VERSION=1.64.5 ./ci_scripts/install-golangci-lint.sh
