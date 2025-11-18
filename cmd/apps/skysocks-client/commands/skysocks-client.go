@@ -33,7 +33,8 @@ import (
 )
 
 const (
-	netType = appnet.TypeSkynet
+	netType    = appnet.TypeSkynet
+	serverPort = routing.Port(3) // skysocks server port
 )
 
 var (
@@ -101,8 +102,8 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	port := appCl.Config().RoutingPort
 	if appPort != 0 {
 		port = routing.Port(appPort)
-		setAppPort(appCl, port)
 	}
+	setAppPort(appCl, port)
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 		print(fmt.Sprintf("Failed to output build info: %v\n", err))
@@ -124,7 +125,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 
 	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 
-	conn, err := dialServer(ctx, appCl, pk, port)
+	conn, err := dialServer(ctx, appCl, pk, serverPort)
 	if err != nil {
 		print(fmt.Sprintf("Failed to dial to a server: %v\n", err))
 		setAppErr(appCl, err)
@@ -170,6 +171,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	if httpAddr != "" {
 		go httpProxy(httpCtx, httpAddr, addr)
 	}
+	//nolint:staticcheck // ListenAndServe blocks until error; check is necessary
 	if err := client.ListenAndServe(addr); err != nil {
 		print(fmt.Sprintf("Error serving proxy client: %v\n", err))
 		return err
