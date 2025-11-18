@@ -6,13 +6,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.4'
+          go-version: '1.25.x'
           cache: true
           cache-dependency-path: go.sum
 
@@ -31,13 +28,11 @@ jobs:
             libglu1-mesa-dev \
             shellcheck
 
-          ./ci_scripts/create-ip-aliases.sh
-
           make install-shellcheck
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.5.0
+          version: v2.6.1
 
       - name: Lint Shell Scripts
         run: make lint-shell
@@ -52,6 +47,7 @@ jobs:
         shell: bash
         run: |
           set -e
+          sudo ./ci_scripts/create-ip-aliases.sh
           make e2e-build
           make e2e-run
         env:
@@ -71,7 +67,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.4'
+          go-version: '1.25.x'
           cache: true
           cache-dependency-path: go.sum
 
@@ -83,9 +79,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.5.0
-        env:
-          CGO_ENABLED: 0
+          version: v2.6.1
 
       - name: Checking Format and Testing
         run: make check
@@ -100,7 +94,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.4'
+          go-version: '1.25.x'
           cache: true
           cache-dependency-path: go.sum
 
