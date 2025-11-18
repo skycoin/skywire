@@ -186,6 +186,18 @@ jobs:
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 
+      - name: Install MinGW
+        run: choco install mingw -y
+        shell: powershell
+
+      - name: Add MinGW to PATH
+        run: echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: powershell
+
+      - name: Verify GCC
+        run: gcc --version
+        shell: powershell
+
       - name: Testing
         run: |
           set GO111MODULE=on
