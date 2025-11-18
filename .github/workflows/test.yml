@@ -35,9 +35,9 @@ jobs:
 
           make install-shellcheck
 
-      - uses: golangci/golangci-lint-action@v9
+      - uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.6.1
+          version: v2.5.0
 
       - name: Lint Shell Scripts
         run: make lint-shell
@@ -83,7 +83,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.6.1
+          version: v2.5.0
         env:
           CGO_ENABLED: 0
 
