@@ -31,6 +31,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
@@ -54,6 +55,7 @@ var (
 	wlkeys          []cipher.PubKey
 	webPort         uint
 	ensureOnlineURL string
+	healthOnly      bool
 )
 
 var skyenvfile = os.Getenv("SKYENV")
@@ -85,6 +87,7 @@ func init() {
 		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint:errcheck,gosec
 	}
 	serverCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
+	serverCmd.Flags().BoolVar(&healthOnly, "health-only", false, "serve only /health endpoint for testing")
 }
 
 // serverCmd starts the reward system ui server
@@ -693,9 +696,16 @@ func server(e error) {
 			"reward_system_active":            strings.TrimRight(active, "\n"),
 			"reward_system_next_run":          strings.TrimRight(nextrun, "\n"),
 			"reward_system_prev_run_duration": strings.TrimRight(prevDuration, "\n"),
+			"version":                         buildinfo.Version(),
+			"commit":                          buildinfo.Commit(),
+			"build_date":                      buildinfo.Date(),
 			"whitelisted_keys":                wlkeys,
 		})
+
+	// In health-only mode, skip all other routes
 	})
+	if !healthOnly {
+
 
 	r1.GET("/skycoin-rewards/csv/plain", func(c *gin.Context) {
 		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
@@ -1186,6 +1196,8 @@ func server(e error) {
 
 	}
 	// Start the server using the custom Gin handler
+	}
+
 	serve := &http.Server{
 		Handler:           &ginHandler{Router: r1},
 		ReadHeaderTimeout: 3 * time.Second,
