@@ -1238,6 +1238,11 @@ func (r *router) removeNoiseRouteGroup(desc routing.RouteDescriptor) {
 }
 
 func (r *router) IntroduceRules(rules routing.EdgeRules) error {
+	// Save rules immediately to avoid race with incoming transport packets
+	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+		return fmt.Errorf("SaveRoutingRules: %w", err)
+	}
+
 	select {
 	case <-r.done:
 		return io.ErrClosedPipe
