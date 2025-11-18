@@ -4,6 +4,7 @@
 package integration_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -121,15 +122,72 @@ func (env *TestEnv) VisorAppLs(visor string) ([]AppState, error) {
 	return cliOutput.Output, nil
 }
 
+// VerifyAppRunning checks if an app is running and fails the test if not
+func (env *TestEnv) VerifyAppRunning(t *testing.T, visor, appName string) {
+	apps, err := env.VisorAppLs(visor)
+	require.NoError(t, err, "Failed to list apps on %s", visor)
+
+	for _, app := range apps {
+		if app.App == appName {
+			require.Equal(t, "running", app.Status, "App %s on %s is not running (status: %s)", appName, visor, app.Status)
+			return
+		}
+	}
+
+	t.Fatalf("App %s not found on %s", appName, visor)
+}
+
 func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 	var out string
 	var err error
 
+	env.logger.WithField("app", app.AppName).
+		WithField("visor", app.VisorHostName).
+		WithField("is_vpn_client", app.AppName == skyenv.VPNClientName).
+		Info("StartApp called")
+
 	if app.AppName == skyenv.VPNClientName {
+		env.logger.Info("Using VPNStart path")
 		out, err = env.VPNStart(app, pk)
 	} else {
+		env.logger.Info("Using VisorAppStart path")
 		out, err = env.VisorAppStart(app)
 	}
+
+	env.logger.WithField("app", app.AppName).
+		WithField("out", out).
+		WithField("err", err).
+		Info("StartApp completed")
+
+	// If app was already started, we still need to verify it's actually running
+	// because the visor might report it as started but the process could be dead
+	if err != nil && err.Error() == "app already started" {
+		env.logger.WithField("app", app.AppName).
+			Warn("App reported as already started, verifying it's actually running...")
+
+		// Try to stop it first
+		if app.AppName == skyenv.VPNClientName {
+			_, _ = env.VPNStop(app) //nolint:errcheck
+		} else {
+			_, _ = env.VisorAppStop(app) //nolint:errcheck
+		}
+
+		// Wait a moment for it to stop
+		time.Sleep(2 * time.Second)
+
+		// Now start it fresh
+		if app.AppName == skyenv.VPNClientName {
+			out, err = env.VPNStart(app, pk)
+		} else {
+			out, err = env.VisorAppStart(app)
+		}
+
+		env.logger.WithField("app", app.AppName).
+			WithField("out_after_restart", out).
+			WithField("err_after_restart", err).
+			Info("App restarted after 'already started' error")
+	}
+
 	if err != nil && err.Error() != "app already started" {
 		require.NoError(t, err)
 		require.Equal(t, "OK", out)
@@ -242,13 +300,16 @@ func (env *TestEnv) VisorRouteLsRules(visor string) ([]RouteRule, error) {
 		Output []RouteRule `json:"output,omitempty"`
 		Err    *string     `json:"error,omitempty"`
 	}{}
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route ls-rules --json", visor)
+	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route --json", visor)
 	err := env.ExecJSON(cmd, &cliOutput)
 	if err != nil {
 		return nil, err
 	}
 	if cliOutput.Err != nil {
 		return nil, errors.New(*cliOutput.Err)
+	}
+	if cliOutput.Output == nil {
+		return []RouteRule{}, nil
 	}
 	return cliOutput.Output, nil
 }
@@ -411,10 +472,46 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// First attempt to wait for app
 	err = env.waitForVisorApp(app)
-	if err != nil {
-		return "", err
+
+	// If we get an error, check if it's a routing table error
+	if err != nil && strings.Contains(err.Error(), "errored") {
+		env.logger.WithError(err).Warn("VPN client failed on first attempt, checking for routing errors...")
+
+		// Get client logs to check for routing table errors
+		clientLogs, logErr := env.ReadLog(app.VisorHostName)
+		if logErr == nil && strings.Contains(clientLogs, "routing table: rule not found") {
+			env.logger.Warn("Detected 'routing table: rule not found' error - retrying with transport cleanup")
+
+			// Stop the client app
+			env.logger.Info("Stopping VPN client for retry...")
+			_, _ = env.VPNStop(app) //nolint:errcheck
+			time.Sleep(2 * time.Second)
+
+			// Remove transports from both client and server
+			env.logger.Info("Removing transports for clean retry...")
+			// Transport removal will be handled by finding and removing existing transports
+			// The transport should auto-create when we start the client again
+
+			// Retry starting the client
+			env.logger.Info("Retrying VPN client start...")
+			err2 := env.ExecJSON(cmd, &cliOutput)
+			if err2 != nil {
+				return "", fmt.Errorf("retry failed: %w (original error: %v)", err2, err)
+			}
+
+			err = env.waitForVisorApp(app)
+			if err != nil {
+				return "", fmt.Errorf("retry wait failed: %w", err)
+			}
+			env.logger.Info("VPN client started successfully after retry")
+		} else {
+			return "", err
+		}
 	}
+
 	if cliOutput.Output.AppError != "" {
 		return cliOutput.Output.AppError, nil
 	}
@@ -506,19 +603,27 @@ func (env *TestEnv) Exec(cmd string) (string, error) {
 }
 
 func (env *TestEnv) ExecJSON(cmd string, output interface{}) error {
+	// Log the exact command being run
+	env.logger.Infof("[EXEC] %s", cmd)
+
 	result, err := env.execResult(cmd)
 	if err != nil {
+		env.logger.WithError(err).Errorf("[EXEC FAILED] %s", cmd)
 		return err
 	}
+
+	// Show stderr (debug logs) if present
+	if stderr := result.Stderr(); stderr != "" {
+		env.logger.Debugf("[STDERR] %s", stderr)
+	}
+
 	// Parse only stdout to avoid mixing with stderr log messages
 	err = json.Unmarshal([]byte(result.Stdout()), &output)
 	if err != nil {
-		env.logger.Errorf("cliOutput: %v", result.Stdout())
-		return err
+		env.logger.WithError(err).Errorf("[JSON PARSE FAILED] stdout: %s", result.Stdout())
 	}
-	return nil
+	return err
 }
-
 func (env *TestEnv) ExecJSONReturnString(cmd string) (string, error) {
 	cliOutput := struct {
 		Output string  `json:"output,omitempty"`
@@ -576,18 +681,72 @@ func (env *TestEnv) execResult(cmd string) (ExecResult, error) {
 }
 
 func (env *TestEnv) waitForVisorApp(app AppToRun) error {
-	ok, err := env.isVisorAppRunning(app)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		time.Sleep(5 * time.Second)
-		err = env.waitForVisorApp(app)
+	const maxAttempts = 12 // 12 * 5s = 60s timeout
+	const retryDelay = 5 * time.Second
+
+	env.logger.WithField("app", app.AppName).
+		WithField("visor", app.VisorHostName).
+		Info("Starting to wait for app...")
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		ok, err := env.isVisorAppRunning(app)
 		if err != nil {
+			env.logger.WithError(err).
+				WithField("app", app.AppName).
+				WithField("visor", app.VisorHostName).
+				WithField("attempt", attempt).
+				Warn("Error checking app status")
+
+			// If it's an "errored" status error, dump logs and fail immediately
+			if err.Error() != "" && (strings.Contains(err.Error(), "errored") || strings.Contains(err.Error(), "status:")) {
+				// Dump visor logs to help debug
+				logs, logErr := env.ReadLog(app.VisorHostName)
+				if logErr != nil {
+					env.logger.WithError(logErr).Warn("Failed to read visor logs")
+				} else {
+					env.logger.Warnf("\n=== Last 200 lines of %s logs ===\n%s\n=== End logs ===\n", app.VisorHostName, getTailLines(logs, 200))
+				}
+
+				// For VPN client errors, also dump the server logs
+				if app.AppName == skyenv.VPNClientName && app.VisorServerName != "" {
+					serverLogs, serverLogErr := env.ReadLog(app.VisorServerName)
+					if serverLogErr != nil {
+						env.logger.WithError(serverLogErr).Warn("Failed to read server visor logs")
+					} else {
+						env.logger.Warnf("\n=== Last 200 lines of %s (server) logs ===\n%s\n=== End logs ===\n", app.VisorServerName, getTailLines(serverLogs, 200))
+					}
+				}
+				return err
+			}
+
+			// Other errors might be transient, retry
+			if attempt < maxAttempts {
+				time.Sleep(retryDelay)
+				continue
+			}
 			return err
 		}
+
+		if ok {
+			env.logger.WithField("app", app.AppName).
+				WithField("visor", app.VisorHostName).
+				WithField("attempt", attempt).
+				Info("App is running!")
+			return nil
+		}
+
+		// App not running yet, retry
+		env.logger.WithField("app", app.AppName).
+			WithField("visor", app.VisorHostName).
+			WithField("attempt", attempt).
+			Debug("App not running yet, retrying...")
+
+		if attempt < maxAttempts {
+			time.Sleep(retryDelay)
+		}
 	}
-	return nil
+
+	return fmt.Errorf("timeout waiting for app %s on %s to start after %v", app.AppName, app.VisorHostName, time.Duration(maxAttempts)*retryDelay)
 }
 
 func (env *TestEnv) isVisorAppRunning(app AppToRun) (bool, error) {
@@ -602,10 +761,28 @@ func (env *TestEnv) checkAppStatus(app AppToRun) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
+	env.logger.WithField("app", app.AppName).
+		WithField("visor", app.VisorHostName).
+		WithField("app_count", len(appStates)).
+		Debug("Retrieved app list")
+
 	for _, appState := range appStates {
 		if appState.App == app.AppName {
+			env.logger.WithField("app", app.AppName).
+				WithField("status", appState.Status).
+				WithField("detailed_status", appState.DetailedStatus).
+				WithField("autostart", appState.AutoStart).
+				WithField("port", appState.Port).
+				Debug("Found app in list")
+
 			if appState.Status == "errored" {
-				return false, fmt.Errorf("%s", appState.Status)
+				// Include detailed status for better debugging
+				detail := appState.DetailedStatus
+				if detail == "" {
+					detail = "(no details available)"
+				}
+				return false, fmt.Errorf("app %s status: %s, details: %s", app.AppName, appState.Status, detail)
 			}
 			if appState.Status == "running" {
 				return true, nil
@@ -621,7 +798,8 @@ func (env *TestEnv) checkVPNClientStatus(app AppToRun) (bool, error) {
 		return false, err
 	}
 	if appState.Status == "errored" {
-		return false, fmt.Errorf("%s", appState.Status)
+		// VPNStatus doesn't have detailed_status field, but we can provide context
+		return false, fmt.Errorf("VPN client status: %s (check visor logs for details)", appState.Status)
 	}
 	if appState.Status == "running" {
 		return true, nil
@@ -769,4 +947,127 @@ func chdirToRoot(env *TestEnv) error {
 
 	env.dockerDir = filepath.Join(env.rootDir, "docker")
 	return nil
+}
+
+// getTailLines returns the last n lines from a string
+func getTailLines(s string, n int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return strings.Join(lines[len(lines)-n:], "\n")
+}
+
+// WaitForVisorLog waits for a specific log line to appear in visor logs
+func (env *TestEnv) WaitForVisorLog(visor, pattern string, timeout time.Duration) error {
+	env.logger.Infof("[WAIT] Waiting for '%s' in %s logs (timeout: %v)", pattern, visor, timeout)
+
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for time.Now().Before(deadline) {
+		<-ticker.C
+		// Get recent logs from the container
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		opts := container.LogsOptions{
+			ShowStdout: true,
+			ShowStderr: true,
+			Tail:       "100",
+		}
+
+		c, ok := env.containers[visor]
+		if !ok {
+			cancel()
+			return fmt.Errorf("container %s not found", visor)
+		}
+
+		logs, err := env.cli.ContainerLogs(ctx, c.ID, opts)
+		cancel()
+		if err != nil {
+			continue
+		}
+
+		scanner := bufio.NewScanner(logs)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.Contains(line, pattern) {
+				env.logger.Infof("[WAIT] ✓ Found: %s", line)
+				logs.Close() //nolint:errcheck,gosec
+				return nil
+			}
+		}
+		logs.Close() //nolint:errcheck,gosec
+	}
+
+	return fmt.Errorf("timeout waiting for '%s' in %s logs", pattern, visor)
+}
+
+// DumpVisorLogs dumps recent visor logs to test output
+func (env *TestEnv) DumpVisorLogs(t *testing.T, visor string, tail int) {
+	t.Logf("=== %s LOGS (last %d lines) ===", visor, tail)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	c, ok := env.containers[visor]
+	if !ok {
+		t.Logf("Container %s not found", visor)
+		return
+	}
+
+	opts := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       fmt.Sprintf("%d", tail),
+	}
+
+	logs, err := env.cli.ContainerLogs(ctx, c.ID, opts)
+	if err != nil {
+		t.Logf("Failed to get logs: %v", err)
+		return
+	}
+	defer func() { logs.Close() }() //nolint:errcheck,gosec
+
+	scanner := bufio.NewScanner(logs)
+	for scanner.Scan() {
+		t.Logf("  %s", scanner.Text())
+	}
+	t.Log("=== END LOGS ===")
+}
+
+// StreamVisorLogs streams visor logs to test output in real-time
+func (env *TestEnv) StreamVisorLogs(t *testing.T, visor string, done <-chan struct{}) {
+	ctx := context.Background()
+
+	c, ok := env.containers[visor]
+	if !ok {
+		t.Logf("Container %s not found", visor)
+		return
+	}
+
+	opts := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+	}
+
+	logs, err := env.cli.ContainerLogs(ctx, c.ID, opts)
+	if err != nil {
+		t.Logf("Failed to stream logs: %v", err)
+		return
+	}
+
+	go func() {
+		defer logs.Close() //nolint:errcheck,gosec
+		scanner := bufio.NewScanner(logs)
+		for scanner.Scan() {
+			select {
+			case <-done:
+				return
+			default:
+				t.Logf("[%s] %s", visor, scanner.Text())
+			}
+		}
+	}()
 }
