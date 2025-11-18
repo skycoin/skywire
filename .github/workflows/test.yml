@@ -166,10 +166,11 @@ jobs:
 
 
       - name: Install golangci-lint
-        run: |
-          iwr https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh -useb | `
-            bash -s -- -b "$env:GOPATH\bin" v2.5.0
         shell: powershell
+        run: |
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh" -OutFile "install.sh"
+          bash install.sh -b $HOME/go/bin
+          echo "$HOME/go/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install Requirements
         run: |
