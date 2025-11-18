@@ -199,7 +199,7 @@ jobs:
         run: |
           $env:GO111MODULE='on'
           $env:CGO_ENABLED='1'
-          make test-windows
+          make test-windows-github-action
 
       - name: Build
         shell: powershell
