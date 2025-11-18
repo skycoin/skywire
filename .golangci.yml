@@ -58,7 +58,7 @@ linters:
       - third_party$
       - builtin$
       - examples$
-      - pkg/skywire-utilities/pkg/cipher/cipher_cgo.go
+      - "pkg/skywire-utilities/pkg/cipher/cipher_cgo\\.go$"
     rules:
       - linters:
           - misspell
