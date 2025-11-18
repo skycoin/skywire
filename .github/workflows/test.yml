@@ -148,10 +148,10 @@ jobs:
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 
-      - name: Testing
+      - name: Checking (lint + test)
         run: |
           $env:GO111MODULE='on'
-          make test-windows
+          make check-windows
         shell: powershell
 
       - name: Build
