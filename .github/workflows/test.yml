@@ -136,52 +136,6 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Setup MSYS2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            autoconf
-            automake
-            libtool
-            make
-            mingw-w64-x86_64-gcc
-            git
-
-      - name: Add MSYS2 MinGW to PATH
-        run: echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-        shell: powershell
-
-      - name: Verify GCC
-        run: gcc --version
-        shell: powershell
-
-      - name: Cache libsecp256k1
-        id: cache-libsecp256k1
-        uses: actions/cache@v3
-        with:
-          path: D:\secp256k1
-          key: secp256k1-windows-v1
-
-      - name: Install libsecp256k1
-        if: steps.cache-libsecp256k1.outputs.cache-hit != 'true'
-        shell: msys2 {0}
-        run: |
-          git clone --depth 1 https://github.com/bitcoin-core/secp256k1.git
-          cd secp256k1
-          ./autogen.sh
-          ./configure --enable-module-recovery --prefix=/d/secp256k1
-          make -j$(nproc)
-          make install
-
-      - name: Set CGO flags
-        shell: powershell
-        run: |
-          echo "CGO_CFLAGS=-ID:/secp256k1/include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CGO_LDFLAGS=-LD:/secp256k1/lib -lsecp256k1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "PKG_CONFIG_PATH=D:/secp256k1/lib/pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - name: Install golangci-lint
         shell: powershell
         run: |
@@ -194,27 +148,11 @@ jobs:
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 
-      - name: Add MSYS2 MinGW to PATH
-        run: echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-        shell: powershell
-
-      - name: Verify GCC and libraries
-        run: |
-          gcc --version
-          Get-ChildItem C:\msys64\mingw64\bin\*secp256k1*.dll
-          $env:PATH
-        shell: powershell
-
       - name: Testing
         run: |
           $env:GO111MODULE='on'
-          $env:CGO_ENABLED='1'
-          $env:PATH = "C:\msys64\mingw64\bin;" + $env:PATH
-          make test-windows-github-action
+          make test-windows
         shell: powershell
-        env:
-          CGO_CFLAGS: -IC:/msys64/mingw64/include
-          CGO_LDFLAGS: -LC:/msys64/mingw64/lib -lsecp256k1
 
       - name: Build
         shell: powershell
