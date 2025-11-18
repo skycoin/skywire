@@ -133,21 +133,37 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            autoconf
+            automake
+            libtool
+            make
+            mingw-w64-x86_64-gcc
+            git
+
       - name: Cache libsecp256k1
         id: cache-libsecp256k1
         uses: actions/cache@v3
         with:
-          path: C:\secp256k1
+          path: D:\secp256k1
           key: secp256k1-windows-v1
 
       - name: Install libsecp256k1
         if: steps.cache-libsecp256k1.outputs.cache-hit != 'true'
-        shell: bash
+        shell: msys2 {0}
         run: |
-          pacman -S --noconfirm autoconf automake libtool make mingw-w64-x86_64-gcc
-          cd /c/tmp && git clone --depth 1 https://github.com/bitcoin-core/secp256k1.git
-          cd secp256k1 && ./autogen.sh && ./configure --enable-module-recovery --prefix=/c/secp256k1
-          make -j$(nproc) && make install
+          git clone --depth 1 https://github.com/bitcoin-core/secp256k1.git
+          cd secp256k1
+          ./autogen.sh
+          ./configure --enable-module-recovery --prefix=/d/secp256k1
+          make -j$(nproc)
+          make install
+
 
       - name: Install golangci-lint
         run: |
