@@ -184,7 +184,7 @@ func TestEnv_DmsgHTTPHealth(t *testing.T) {
 
 		// Verify we got a response (should be JSON with health info)
 		require.NotEmpty(t, stdout, "Empty response from dmsghttp /health for %s", visor)
-		require.Contains(t, stdout, "uptime", "Expected 'uptime' in /health response for %s", visor)
+		require.Contains(t, stdout, "started_at", "Expected 'started_at' in /health response for %s", visor)
 	}
 }
 
