@@ -425,6 +425,82 @@ services:
       - visor-a
     restart: always
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
+
+  visor-a-internal:
+    privileged: true
+    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
+    container_name: "visor-a-internal"
+    hostname: visor-a-internal
+    cap_add:
+      - ALL
+    networks:
+      visors:
+        ipv4_address: 173.0.0.21
+      intra:
+        ipv4_address: 174.0.0.21
+    volumes:
+      - type: bind
+        source: ../docker/integration/visorA-internal.json
+        target: /opt/skywire/skywire-visor.json
+        read_only: false
+    depends_on:
+      - visor-b-internal
+    restart: always
+    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
+
+  visor-b-internal:
+    privileged: true
+    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
+    container_name: "visor-b-internal"
+    hostname: visor-b-internal
+    cap_add:
+      - ALL
+    networks:
+      visors:
+        ipv4_address: 173.0.0.22
+      intra:
+        ipv4_address: 174.0.0.22
+    volumes:
+      - type: bind
+        source: ../docker/integration/visorB-internal.json
+        target: /opt/skywire/skywire-visor.json
+        read_only: false
+      - type: bind
+        source: ../docker/integration/hypervisor.crt
+        target: /opt/integration/hypervisor.crt
+        read_only: false
+      - type: bind
+        source: ../docker/integration/hypervisor.key
+        target: /opt/integration/hypervisor.key
+        read_only: false
+    depends_on:
+      - setup-node
+      - route-finder
+      - address-resolver
+    restart: always
+    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
+
+  visor-c-internal:
+    privileged: true
+    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
+    container_name: "visor-c-internal"
+    hostname: visor-c-internal
+    cap_add:
+      - ALL
+    networks:
+      visors:
+        ipv4_address: 173.0.0.23
+      intra:
+        ipv4_address: 174.0.0.23
+    volumes:
+      - type: bind
+        source: ../docker/integration/visorC-internal.json
+        target: /opt/skywire/skywire-visor.json
+        read_only: false
+    depends_on:
+      - visor-a-internal
+    restart: always
+    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
     
   network-monitor:
     image: "${REGISTRY}/skywire:${DOCKER_TAG}"
@@ -441,6 +517,7 @@ services:
     entrypoint: "/release/skywire svc nm --addr :9080 --pprof :6080 --ut-url http://uptime-tracker:9095 --tpd-url http://transport-discovery:9094 --sd-url http://service-discovery:9098 --dmsgd-url http://dmsg-discovery:9090 --ar-url http://address-resolver:9093"
     depends_on:
       - visor-c
+      - visor-c-internal
     restart: always
     stdin_open: true # docker run -i
     tty: true        # docker run -t
