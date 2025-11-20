@@ -37,6 +37,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/orandin/lumberjackrus v1.0.1
+	github.com/oschwald/geoip2-golang/v2 v2.0.0
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/pterm/pterm v0.12.82
 	github.com/robert-nix/ansihtml v1.0.1
@@ -63,8 +64,6 @@ require (
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
 )
-
-require github.com/oschwald/geoip2-golang/v2 v2.0.0
 
 require (
 	atomicgo.dev/cursor v0.2.0 // indirect
@@ -242,4 +241,4 @@ require (
 // 5) Save this file.
 // 6) Run `go mod tidy && go mod vendor`
 
-exclude google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd
+//exclude google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd
