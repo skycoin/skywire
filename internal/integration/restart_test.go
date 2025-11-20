@@ -142,6 +142,9 @@ func TestRestart(t *testing.T) {
 			// Re-establish transports after visor restart
 			env.AddDefaultTransports(routerVisor, skychatVisors)
 
+			// Wait for transports to be fully established before proceeding
+			require.NoError(t, env.WaitForTransportsEstablished(routerVisor, skychatVisors, 30*time.Second))
+
 			// Wait for skychat apps to be ready on both sender and receiver
 			senderApp := AppToRun{VisorHostName: tc.sender, AppName: "skychat"}
 			receiverApp := AppToRun{VisorHostName: tc.receiver, AppName: "skychat"}
@@ -153,8 +156,10 @@ func TestRestart(t *testing.T) {
 				}
 			}
 
-			// Small additional delay for route establishment
-			time.Sleep(5 * time.Second)
+			// Additional delay for route setup services to be ready
+			// After restart, even though transports are established and apps are running,
+			// the route setup service (port 136) needs time to be fully operational
+			time.Sleep(10 * time.Second)
 
 			checkMessage(t, tc.sender, tc.receiver)
 		})
