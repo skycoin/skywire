@@ -6,10 +6,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: '1.25.4'
           cache: true
           cache-dependency-path: go.sum
 
@@ -30,9 +33,27 @@ jobs:
 
           make install-shellcheck
 
-      - uses: golangci/golangci-lint-action@v7
+      - name: Cache libsecp256k1
+        id: cache-libsecp256k1
+        uses: actions/cache@v3
         with:
-          version: v2.6.1
+          path: /usr/local/lib/libsecp256k1*
+          key: secp256k1-linux-v1
+
+      - name: Install libsecp256k1
+        if: steps.cache-libsecp256k1.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf libtool git
+          cd /tmp && git clone --depth 1 https://github.com/bitcoin-core/secp256k1.git
+          cd secp256k1 && ./autogen.sh && ./configure --enable-module-recovery
+          make -j$(nproc) && sudo make install && sudo ldconfig
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+            | sh -s -- -b $(go env GOPATH)/bin v2.6.1
+        shell: bash
 
       - name: Lint Shell Scripts
         run: make lint-shell
@@ -67,7 +88,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: '1.25.4'
           cache: true
           cache-dependency-path: go.sum
 
@@ -77,9 +98,26 @@ jobs:
           brew install glfw
         shell: bash
 
-      - uses: golangci/golangci-lint-action@v7
+      - name: Cache libsecp256k1
+        id: cache-libsecp256k1
+        uses: actions/cache@v3
         with:
-          version: v2.6.1
+          path: /usr/local/lib/libsecp256k1*
+          key: secp256k1-macos-v1
+
+      - name: Install libsecp256k1
+        if: steps.cache-libsecp256k1.outputs.cache-hit != 'true'
+        run: |
+          brew install autoconf automake libtool
+          cd /tmp && git clone --depth 1 https://github.com/bitcoin-core/secp256k1.git
+          cd secp256k1 && ./autogen.sh && ./configure --enable-module-recovery
+          make -j$(sysctl -n hw.ncpu) && sudo make install
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+            | sh -s -- -b $(go env GOPATH)/bin v2.6.1
+        shell: bash
 
       - name: Checking Format and Testing
         run: make check
@@ -94,19 +132,28 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: '1.25.4'
           cache: true
           cache-dependency-path: go.sum
+
+      - name: Install golangci-lint
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh" -OutFile "install.sh"
+          bash install.sh -b $HOME/go/bin v2.6.1
+          echo "$HOME/go/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install Requirements
         run: |
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 
-      - name: Testing
+      - name: Checking (lint + test)
         run: |
-          set GO111MODULE=on
-          make test-windows
+          $env:GO111MODULE='on'
+          make check-windows
+        shell: powershell
 
       - name: Build
+        shell: powershell
         run: make build-windows

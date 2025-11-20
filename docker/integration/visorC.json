@@ -1,5 +1,5 @@
 {
-	"version": "unknown",
+	"version": "v1.3.32",
 	"sk": "0e17cd505d81f998950e22864ae4692249124441bd9148b801f76f1595ac688f",
 	"pk": "031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055",
 	"dmsg": {
@@ -44,7 +44,7 @@
 		"addr": "http://uptime-tracker:9095"
 	},
 	"launcher": {
-		"service_discovery": "http://service-discovery:9098",
+		"service_discovery": "http://service-discovery:9091",
 		"apps": [
 			{
 				"name": "vpn-client",
@@ -97,6 +97,11 @@
 			},
 			{
 				"name": "vpn-server",
+				"binary": "skywire",
+				"args": [
+					"app",
+					"vpn-server"
+				],
 				"auto_start": false,
 				"port": 44
 			}

@@ -242,7 +242,7 @@ func SignPayload(payload []byte, sec SecKey) (Sig, error) {
 
 // VerifyPubKeySignedPayload verifies that SHA256 hash of the payload was signed by PubKey
 func VerifyPubKeySignedPayload(pubkey PubKey, sig Sig, payload []byte) error {
-	return cipher.VerifyPubKeySignedHash(cipher.PubKey(pubkey), cipher.Sig(sig), cipher.SumSHA256(payload))
+	return VerifyPubKeySignedHashLight(cipher.PubKey(pubkey), cipher.Sig(sig), cipher.SumSHA256(payload))
 }
 
 // RandByte returns rand N bytes
@@ -264,3 +264,7 @@ func SHA256FromBytes(b []byte) (SHA256, error) {
 func SumSHA256(b []byte) SHA256 {
 	return SHA256(cipher.SumSHA256(b))
 }
+
+// VerifyPubKeySignedHashLight is implemented in cipher_cgo.go or cipher_nocgo.go
+// depending on build tags. This allows automatic selection of CGO-optimized
+// verification (3-5x faster) or pure Go fallback.
