@@ -129,6 +129,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "publicip")
 	genConfigCmd.Flags().BoolVarP(&addExampleApps, "example-apps", "m", false, "add example apps to the config\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
+	genConfigCmd.Flags().BoolVar(&externalApps, "external-apps", false, "configure launcher apps as external processes\033[0m")
+	gHiddenFlags = append(gHiddenFlags, "external-apps")
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout\033[0m")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
 	genConfigCmd.Flags().BoolVarP(&isSquash, "squash", "N", false, "output config without whitespace or newlines\033[0m")
@@ -753,37 +755,79 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		// App config settings
-		conf.Launcher.Apps = []appserver.AppConfig{
-			{
-				Name:      visorconfig.VPNClientName,
-				AutoStart: false,
-				Port:      routing.Port(skyenv.VPNClientPort),
-				Args:      []string{"--dns", dnsServer},
-			},
-			{
-				Name:      visorconfig.SkychatName,
-				AutoStart: true,
-				Port:      routing.Port(skyenv.SkychatPort),
-				Args:      []string{"--addr", visorconfig.SkychatAddr},
-			},
-			{
-				Name:      visorconfig.SkysocksName,
-				AutoStart: true,
-				Port:      routing.Port(visorconfig.SkysocksPort),
-				Args:      []string{},
-			},
-			{
-				Name:      visorconfig.SkysocksClientName,
-				AutoStart: false,
-				Port:      routing.Port(visorconfig.SkysocksClientPort),
-				Args:      []string{"--addr", visorconfig.SkysocksClientAddr},
-			},
-			{
-				Name:      visorconfig.VPNServerName,
-				AutoStart: isVpnServerEnable,
-				Args:      []string{},
-				Port:      routing.Port(visorconfig.VPNServerPort),
-			},
+		if externalApps {
+			// External apps configuration (apps run as separate processes)
+			conf.Launcher.Apps = []appserver.AppConfig{
+				{
+					Name:      visorconfig.VPNClientName,
+					Binary:    "skywire",
+					AutoStart: false,
+					Port:      routing.Port(skyenv.VPNClientPort),
+					Args:      append([]string{"app", "vpn-client"}, "--dns", dnsServer),
+				},
+				{
+					Name:      visorconfig.SkychatName,
+					Binary:    "skywire",
+					AutoStart: true,
+					Port:      routing.Port(skyenv.SkychatPort),
+					Args:      append([]string{"app", "skychat"}, "--addr", visorconfig.SkychatAddr),
+				},
+				{
+					Name:      visorconfig.SkysocksName,
+					Binary:    "skywire",
+					AutoStart: true,
+					Port:      routing.Port(visorconfig.SkysocksPort),
+					Args:      []string{"app", "skysocks"},
+				},
+				{
+					Name:      visorconfig.SkysocksClientName,
+					Binary:    "skywire",
+					AutoStart: false,
+					Port:      routing.Port(visorconfig.SkysocksClientPort),
+					Args:      append([]string{"app", "skysocks-client"}, "--addr", visorconfig.SkysocksClientAddr),
+				},
+				{
+					Name:      visorconfig.VPNServerName,
+					Binary:    "skywire",
+					AutoStart: isVpnServerEnable,
+					Port:      routing.Port(visorconfig.VPNServerPort),
+					Args:      []string{"app", "vpn-server"},
+				},
+			}
+		} else {
+			// Internal apps configuration (default - apps run within visor process)
+			conf.Launcher.Apps = []appserver.AppConfig{
+				{
+					Name:      visorconfig.VPNClientName,
+					AutoStart: false,
+					Port:      routing.Port(skyenv.VPNClientPort),
+					Args:      []string{"--dns", dnsServer},
+				},
+				{
+					Name:      visorconfig.SkychatName,
+					AutoStart: true,
+					Port:      routing.Port(skyenv.SkychatPort),
+					Args:      []string{"--addr", visorconfig.SkychatAddr},
+				},
+				{
+					Name:      visorconfig.SkysocksName,
+					AutoStart: true,
+					Port:      routing.Port(visorconfig.SkysocksPort),
+					Args:      []string{},
+				},
+				{
+					Name:      visorconfig.SkysocksClientName,
+					AutoStart: false,
+					Port:      routing.Port(visorconfig.SkysocksClientPort),
+					Args:      []string{"--addr", visorconfig.SkysocksClientAddr},
+				},
+				{
+					Name:      visorconfig.VPNServerName,
+					AutoStart: isVpnServerEnable,
+					Args:      []string{},
+					Port:      routing.Port(visorconfig.VPNServerPort),
+				},
+			}
 		}
 
 		// Disable apps --disable-apps flag
