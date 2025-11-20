@@ -27,6 +27,9 @@ const (
 	visorA         = "visor-a"
 	visorB         = "visor-b"
 	visorC         = "visor-c"
+	visorAInternal = "visor-a-internal"
+	visorBInternal = "visor-b-internal"
+	visorCInternal = "visor-c-internal"
 	visorVPNServer = visorA
 	visorVPNClient = visorC
 	statusRunning  = swarm.TaskStateRunning
@@ -141,9 +144,22 @@ func TestEnv_cli(t *testing.T) {
 func TestEnv_VisorAppLs(t *testing.T) {
 	env := NewEnv().GatherContainersInfo()
 
-	output, err := env.VisorAppLs(visorB)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(output))
+	// Test both external and internal app configurations
+	testCases := []struct {
+		name  string
+		visor string
+	}{
+		{"external-apps", visorB},
+		{"internal-apps", visorBInternal},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output, err := env.VisorAppLs(tc.visor)
+			require.NoError(t, err)
+			require.Equal(t, 2, len(output))
+		})
+	}
 }
 
 func TestEnv_VisorPK(t *testing.T) {
@@ -151,11 +167,43 @@ func TestEnv_VisorPK(t *testing.T) {
 
 	visorsPKs := map[string]string{}
 
-	for _, visor := range []string{visorA, visorB, visorC} {
+	// Test both external and internal app configurations
+	allVisors := []string{visorA, visorB, visorC, visorAInternal, visorBInternal, visorCInternal}
+	for _, visor := range allVisors {
 		pk, err := env.VisorPK(visor)
 		require.NoError(t, err)
 
 		visorsPKs[visor] = pk
+	}
+}
+
+func TestEnv_DmsgHTTPHealth(t *testing.T) {
+	allVisors := []string{visorA, visorB, visorC, visorAInternal, visorBInternal, visorCInternal}
+	env := NewEnv().
+		GatherContainersInfo().
+		GatherVisorPKs(allVisors)
+
+	// Test dmsghttp /health endpoint for each visor
+	// The dmsghttp server runs on each visor at port 80
+	const dmsgDiscovery = "http://dmsg-discovery:9090"
+
+	for _, visor := range allVisors {
+		pk := env.visorPKs[visor]
+		dmsgURL := fmt.Sprintf("dmsg://%s:80/health", pk)
+
+		t.Logf("Testing dmsghttp /health endpoint for %s at %s", visor, dmsgURL)
+
+		// Use dmsg curl with -U flag to specify dmsg discovery and -Z to set it as default
+		cmd := fmt.Sprintf("/release/skywire dmsg curl -U %s -Z %s", dmsgDiscovery, dmsgURL)
+		result, err := env.execResult(cmd)
+		require.NoError(t, err, "Failed to execute dmsg curl for %s", visor)
+
+		stdout := result.Stdout()
+		t.Logf("dmsghttp /health response from %s:\n%s", visor, stdout)
+
+		// Verify we got a response (should be JSON with health info)
+		require.NotEmpty(t, stdout, "Empty response from dmsghttp /health for %s", visor)
+		require.Contains(t, stdout, "started_at", "Expected 'started_at' in /health response for %s", visor)
 	}
 }
 
