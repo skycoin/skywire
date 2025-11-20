@@ -17,7 +17,7 @@ PROJECT_BASE := github.com/skycoin/skywire
 SKYWIRE_UTILITIES_BASE := github.com/skycoin/skywire/pkg/skywire-utilities
 ifeq ($(OS),Windows_NT)
 	SHELL := pwsh
-	OPTS?=powershell -Command setx GO111MODULE on;
+	OPTS?=powershell -Command "$$env:GO111MODULE='on'";
 	DATE := $(shell powershell -Command date -u ${RFC_3339})
 	.DEFAULT_GOAL := help-windows
 else
@@ -25,12 +25,6 @@ else
 	OPTS?=GO111MODULE=on
 	DATE := $(shell date -u $(RFC_3339))
 	.DEFAULT_GOAL := help
-endif
-
-SYSTRAY_CGO_ENABLED := 1
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Linux)
-    SYSTRAY_CGO_ENABLED := 0
 endif
 
 ifeq ($(VERSION),)
@@ -41,6 +35,8 @@ ifeq ($(COMMIT),)
 	COMMIT = unknown
 endif
 
+SYSTRAY_CGO_ENABLED := 1
+
 ifeq ($(BUILDTAG),)
 	ifeq ($(OS),Windows_NT)
 		BUILDTAG = Windows
@@ -48,6 +44,7 @@ ifeq ($(BUILDTAG),)
 		UNAME_S := $(shell uname -s)
 		ifeq ($(UNAME_S),Linux)
 			BUILDTAG = Linux
+			SYSTRAY_CGO_ENABLED := 0
 		endif
 	 	ifeq ($(UNAME_S),Darwin)
 			BUILDTAG = Darwin
@@ -65,6 +62,8 @@ DOCKER_COMPOSE_FILE:=./docker/docker-compose.yml
 DOCKER_REGISTRY:=skycoin
 
 TEST_OPTS:=-cover -timeout=5m -mod=vendor -tags no_ci
+
+TEST_OPTS_WIN:=-cover -timeout=5m -mod=vendor -tags no_ci
 
 GOARCH:=$(shell go env GOARCH)
 
@@ -222,9 +221,17 @@ test: ## Run tests
 	go run . cli config gen -dnw
 	go run . cli config gen --nofetch -nw
 
+test-cgo: ## Run tests
+	-go clean -testcache &>/dev/null
+	CGO_ENABLED=1 ${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
+	CGO_ENABLED=1 ${OPTS} go test ${TEST_OPTS}
+	go run . --help
+	go run . cli config gen -dnw
+	go run . cli config gen --nofetch -nw
+
 test-windows: ## Run tests on windows
 	@go clean -testcache
-	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
+	${OPTS} go test ${TEST_OPTS_WIN} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
 
 install-linters: ## Install linters
 	- VERSION=1.64.5 ./ci_scripts/install-golangci-lint.sh
