@@ -219,7 +219,6 @@ PG_USER="postgres" PG_DATABASE="tpd" PG_PASSWORD="" transport-discovery --sk $(t
 		logger.Infof("Listening on %s", addr)
 
 		go tpdAPI.RunBackgroundTasks(ctx, logger)
-		go tpdAPI.LogStats(ctx, logger)
 
 		go func() {
 			if err := tcpproxy.ListenAndServe(addr, tpdAPI); err != nil {

@@ -1,4 +1,4 @@
-// Package main cmd/skycoin-skywire/skywire.go
+// Package main skywire.go
 /*
 skywire + skycoin
 */

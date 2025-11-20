@@ -262,13 +262,13 @@ services:
       - sd-redis
       - postgres-db
     ports:
-      - "9098:9098"
-      - "6098:6098"
+      - "9091:9091"
+      - "6091:6091"
     environment:
       - PG_USER=postgres
       - PG_PASSWORD=postgres
       - PG_DATABASE=postgres
-    entrypoint: "/release/skywire svc sd --addr :9098 --pprof :6098 --pg-host postgres-db --pg-port 5432 --redis redis://sd-redis:6379 --sk ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f --dmsg-disc http://dmsg-discovery:9090"
+    entrypoint: "/release/skywire svc sd --addr :9091 --pprof :6091 --pg-host postgres-db --pg-port 5432 --redis redis://sd-redis:6379 --sk ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
@@ -514,7 +514,7 @@ services:
     ports:
       - "9080:9080"
       - "6080:6080"
-    entrypoint: "/release/skywire svc nm --addr :9080 --pprof :6080 --ut-url http://uptime-tracker:9095 --tpd-url http://transport-discovery:9094 --sd-url http://service-discovery:9098 --dmsgd-url http://dmsg-discovery:9090 --ar-url http://address-resolver:9093"
+    entrypoint: "/release/skywire svc nm --addr :9080 --pprof :6080 --ut-url http://uptime-tracker:9095 --tpd-url http://transport-discovery:9094 --sd-url http://service-discovery:9091 --dmsgd-url http://dmsg-discovery:9090 --ar-url http://address-resolver:9093"
     depends_on:
       - visor-c
       - visor-c-internal
@@ -525,3 +525,6 @@ services:
 volumes:
   db:
     driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs

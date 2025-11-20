@@ -12,7 +12,6 @@ skywrie-services
 
 # Local development files
 local/
-tmp/
 *.log
 *.txt
 *.md
