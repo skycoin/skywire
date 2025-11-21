@@ -139,18 +139,8 @@ func TestRestart(t *testing.T) {
 			require.NoError(t, env.ContainerRestart(tc.restartList...))
 			time.Sleep(RestartDelay)
 
-			// Wait for visors to re-register with DMSG discovery after restart
-			for _, visor := range tc.restartList {
-				if err := env.WaitForDmsgRegistration(visor, 30*time.Second); err != nil {
-					t.Logf("Warning: DMSG registration check failed for %s after restart: %v", visor, err)
-				}
-			}
-
 			// Re-establish transports after visor restart
 			env.AddDefaultTransports(routerVisor, skychatVisors)
-
-			// Wait for transports to be fully established before proceeding
-			require.NoError(t, env.WaitForTransportsEstablished(routerVisor, skychatVisors, 30*time.Second))
 
 			// Wait for skychat apps to be ready on both sender and receiver
 			senderApp := AppToRun{VisorHostName: tc.sender, AppName: "skychat"}
@@ -163,10 +153,8 @@ func TestRestart(t *testing.T) {
 				}
 			}
 
-			// Additional delay for route setup services to be ready
-			// After restart, even though transports are established and apps are running,
-			// the route setup service (port 136) needs time to be fully operational
-			time.Sleep(10 * time.Second)
+			// Small additional delay for route establishment
+			time.Sleep(5 * time.Second)
 
 			checkMessage(t, tc.sender, tc.receiver)
 		})

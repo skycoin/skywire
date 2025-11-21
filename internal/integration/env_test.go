@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -83,14 +82,6 @@ func NewEnv() *TestEnv {
 	}
 
 	return env
-}
-
-// ansiRegex matches ANSI color codes and control sequences
-var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-
-// stripANSI removes ANSI color codes from a string
-func stripANSI(s string) string {
-	return ansiRegex.ReplaceAllString(s, "")
 }
 
 func (env *TestEnv) GatherContainersInfo() *TestEnv {
@@ -456,7 +447,7 @@ func (env *TestEnv) visorTpExec(cmd string) ([]*skyvisor.TransportSummary, error
 }
 
 func (env *TestEnv) VPNList(visor string) ([]servicedisc.Service, error) {
-	cmd := fmt.Sprintf("/release/skywire cli vpn --rpc %v:3435 list --sdurl http://service-discovery:9091 --json", visor)
+	cmd := fmt.Sprintf("/release/skywire cli vpn --rpc %v:3435 list --sdurl http://service-discovery:9098 --json", visor)
 	cliOutput := struct {
 		Output []servicedisc.Service `json:"output,omitempty"`
 		Err    *string               `json:"error,omitempty"`
@@ -837,85 +828,6 @@ func (env *TestEnv) AddTransports(routerVisor string, visors []string, tpType tp
 	return env
 }
 
-// WaitForTransportsEstablished waits for all transports from routerVisor to the specified visors
-// to be fully established (IsSetup=true). Retries for up to timeout duration per visor.
-func (env *TestEnv) WaitForTransportsEstablished(routerVisor string, visors []string, timeout time.Duration) error {
-	checkInterval := 500 * time.Millisecond
-
-	for _, targetVisor := range visors {
-		targetPK := env.visorPKs[targetVisor]
-		env.logger.Infof("[TRANSPORT] Waiting for transport from %s to %s to be established...", routerVisor, targetVisor)
-
-		// Each visor gets the full timeout period
-		deadline := time.Now().Add(timeout)
-		established := false
-
-		for time.Now().Before(deadline) {
-			tps, err := env.VisorTpLs(routerVisor)
-			if err != nil {
-				env.logger.Debugf("[TRANSPORT] Failed to list transports: %v", err)
-				time.Sleep(checkInterval)
-				continue
-			}
-
-			// Find transport to target visor
-			for _, tp := range tps {
-				if tp.Remote.String() == targetPK {
-					if tp.IsSetup {
-						env.logger.Infof("[TRANSPORT] ✓ Transport from %s to %s is established", routerVisor, targetVisor)
-						established = true
-						break
-					} else {
-						env.logger.Debugf("[TRANSPORT] Transport exists but not yet setup: IsSetup=%v", tp.IsSetup)
-					}
-				}
-			}
-
-			if established {
-				break
-			}
-			time.Sleep(checkInterval)
-		}
-
-		if !established {
-			return fmt.Errorf("timeout waiting for transport from %s to %s to be established", routerVisor, targetVisor)
-		}
-	}
-
-	return nil
-}
-
-// WaitForDmsgRegistration waits for a visor to successfully register in DMSG discovery
-// with delegated servers. This is required before creating dmsg transports.
-func (env *TestEnv) WaitForDmsgRegistration(visor string, timeout time.Duration) error {
-	checkInterval := 1 * time.Second
-	deadline := time.Now().Add(timeout)
-
-	env.logger.Infof("[DMSG] Waiting for %s to register in DMSG discovery...", visor)
-
-	for time.Now().Before(deadline) {
-		// Check visor logs for successful registration with delegated servers
-		logs, err := env.ReadLog(visor)
-		if err != nil {
-			env.logger.Debugf("[DMSG] Failed to read logs: %v", err)
-			time.Sleep(checkInterval)
-			continue
-		}
-
-		// Look for "Updating entry" or successful connection messages
-		// A visor that has delegated servers will show these patterns
-		if strings.Contains(logs, "delegated servers:") &&
-			strings.Contains(logs, "Connected to the dmsg network") {
-			env.logger.Infof("[DMSG] ✓ %s successfully registered with delegated servers", visor)
-			return nil
-		}
-
-		time.Sleep(checkInterval)
-	}
-
-	return fmt.Errorf("timeout waiting for %s to register in DMSG discovery", visor)
-}
-
 // RemoveAllTransports removes all transports from the specified visors.
 // This should be called before restarting visors to clean up stale TPD entries.
 func (env *TestEnv) RemoveAllTransports(visors ...string) error {
@@ -1078,7 +990,7 @@ func (env *TestEnv) WaitForVisorLog(visor, pattern string, timeout time.Duration
 
 		scanner := bufio.NewScanner(logs)
 		for scanner.Scan() {
-			line := stripANSI(scanner.Text())
+			line := scanner.Text()
 			if strings.Contains(line, pattern) {
 				env.logger.Infof("[WAIT] ✓ Found: %s", line)
 				logs.Close() //nolint:errcheck,gosec
@@ -1119,7 +1031,7 @@ func (env *TestEnv) DumpVisorLogs(t *testing.T, visor string, tail int) {
 
 	scanner := bufio.NewScanner(logs)
 	for scanner.Scan() {
-		t.Logf("  [%s] %s", visor, stripANSI(scanner.Text()))
+		t.Logf("  %s", scanner.Text())
 	}
 	t.Log("=== END LOGS ===")
 }
@@ -1154,7 +1066,7 @@ func (env *TestEnv) StreamVisorLogs(t *testing.T, visor string, done <-chan stru
 			case <-done:
 				return
 			default:
-				t.Logf("[%s] %s", visor, stripANSI(scanner.Text()))
+				t.Logf("[%s] %s", visor, scanner.Text())
 			}
 		}
 	}()

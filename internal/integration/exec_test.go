@@ -116,5 +116,5 @@ func (env *TestEnv) ReadLog(service string) (string, error) {
 		return "", err
 	}
 
-	return stripANSI(string(buf)), nil
+	return string(buf), nil
 }

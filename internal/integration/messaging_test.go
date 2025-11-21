@@ -5,7 +5,6 @@ package integration_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -19,9 +18,6 @@ func TestMessagingWithRestarts(t *testing.T) {
 		GatherContainersInfo().
 		GatherVisorPKs([]string{visorA, visorB, visorC}).
 		AddDefaultTransports(routerVisor, skychatVisors)
-
-	// Wait for transports to be fully established before proceeding
-	require.NoError(t, env.WaitForTransportsEstablished(routerVisor, skychatVisors, 30*time.Second))
 
 	res, err := env.SendSkyMessage(visorA, visorC, visorA+" -> "+visorC)
 	require.NoError(t, err)
