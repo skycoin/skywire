@@ -152,6 +152,9 @@ print-run-source: ## Print the command used to go run from source
 build-merged: ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire .
 
+build-merged-cgo: ## Build with CGO optimization for faster DMSG handshakes (requires libsecp256k1-dev)
+	${OPTS} go build -tags=cgo ${BUILD_OPTS} -o $(BUILD_PATH)skywire .
+
 build-merged-windows: clean-windows
 	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire.exe .'
 
@@ -340,6 +343,13 @@ dep-github-release:
 	tar -xzf riscv64-linux-musl-cross.tgz -C ./musl-data && rm riscv64-linux-musl-cross.tgz
 	go run github.com/melbahja/got/cmd/got@latest https://github.com/skycoin/skywire/releases/download/v1.3.29/x86_64-linux-musl-cross.tgz #https://more.musl.cc/10/x86_64-linux-musl/i686-linux-musl-cross.tgz
 	tar -xzf x86_64-linux-musl-cross.tgz -C ./musl-data && rm x86_64-linux-musl-cross.tgz
+	# Build secp256k1 static libraries for each musl target
+	./ci_scripts/build-secp256k1-musl.sh amd64 x86_64-linux-musl ./musl-data/x86_64-linux-musl-cross
+	./ci_scripts/build-secp256k1-musl.sh arm64 aarch64-linux-musl ./musl-data/aarch64-linux-musl-cross
+	./ci_scripts/build-secp256k1-musl.sh arm arm-linux-musleabi ./musl-data/arm-linux-musleabi-cross
+	./ci_scripts/build-secp256k1-musl.sh armhf arm-linux-musleabihf ./musl-data/arm-linux-musleabihf-cross
+	./ci_scripts/build-secp256k1-musl.sh 386 i686-linux-musl ./musl-data/i686-linux-musl-cross
+	#./ci_scripts/build-secp256k1-musl.sh riscv64 riscv64-linux-musl ./musl-data/riscv64-linux-musl-cross
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
