@@ -890,9 +890,9 @@ func (env *TestEnv) WaitForTransportsEstablished(routerVisor string, visors []st
 func (env *TestEnv) WaitForDmsgRegistration(visor string, timeout time.Duration) error {
 	checkInterval := 1 * time.Second
 	deadline := time.Now().Add(timeout)
-	
+
 	env.logger.Infof("[DMSG] Waiting for %s to register in DMSG discovery...", visor)
-	
+
 	for time.Now().Before(deadline) {
 		// Check visor logs for successful registration with delegated servers
 		logs, err := env.ReadLog(visor)
@@ -901,18 +901,18 @@ func (env *TestEnv) WaitForDmsgRegistration(visor string, timeout time.Duration)
 			time.Sleep(checkInterval)
 			continue
 		}
-		
+
 		// Look for "Updating entry" or successful connection messages
 		// A visor that has delegated servers will show these patterns
-		if strings.Contains(logs, "delegated servers:") && 
-		   strings.Contains(logs, "Connected to the dmsg network") {
+		if strings.Contains(logs, "delegated servers:") &&
+			strings.Contains(logs, "Connected to the dmsg network") {
 			env.logger.Infof("[DMSG] ✓ %s successfully registered with delegated servers", visor)
 			return nil
 		}
-		
+
 		time.Sleep(checkInterval)
 	}
-	
+
 	return fmt.Errorf("timeout waiting for %s to register in DMSG discovery", visor)
 }
 
