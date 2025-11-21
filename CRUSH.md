@@ -114,30 +114,132 @@ conn, err := dialServer(ctx, appCl, pk, serverPort)
 **Testing Required:**
 Build and test with manual visor setup or e2e tests to verify proxy client can now connect to proxy server.
 
-### VPN Test Root Cause - RESOLVED
+### E2E Test Failures - INVESTIGATING (Nov 21, 2025)
 
-**The Issue:**
-Commit d3d014c38 ("Fix CLI RPC server race condition with external app launcher") added dependencies to the CLI module:
-```go
-cli = maker("cli", initCLI, &launch, &tr)  // Added &launch and &tr dependencies
+**Current Status:**
+Tests failing after upstream merge (commit a52c15b00). Multiple issues identified:
+
+#### Issue 1: "Invalid Signature" on DMSG Discovery Registration
+
+**Symptoms:**
+```
+ERROR [dmsgC:disc]: endpoint="http://dmsg-discovery:9090/dmsg-discovery/entry/" resp_body="invalid signature" resp_status=401
+WARN [dmsgC]: Initial post entry failed error="invalid signature"
 ```
 
-This was intended to fix "no app launcher available" errors in e2e tests by ensuring CLI RPC server only starts after launcher and transport manager are ready.
+**Analysis:**
+- Happens consistently on FIRST registration attempt for all visors
+- Visors retry and successfully register seconds later
+- Once registered, "Updating entry" shows valid signatures and delegated servers
+- Current cipher implementation (CGO and no-CGO variants) verified as correct
 
-**Why It Broke VPN Tests:**
-- v1.3.31: CLI had NO dependencies → initialized concurrently with launcher → WORKED
-- PR 2095: Internal launcher (no binary field) → WORKED
-- PR 2096: External launcher + CLI depends on launcher → FAILED
+**Possible Causes:**
+1. Race condition: Discovery service not fully initialized when visors start
+2. Clock skew between containers (though 5s tolerance should handle this)
+3. Network transient during container startup
 
-Making CLI wait for launcher changed the module initialization timing in a way that affected routing setup. The vinit module system waits for ALL dependencies to fully complete before a module can start.
+**Impact:** Appears to be harmless - visors eventually register successfully. May add startup latency.
 
-**The Fix:**
-Reverted CLI module to have no dependencies (matching v1.3.31):
-```go
-cli = maker("cli", initCLI)  // No dependencies
+#### Issue 2: Transports Created But Never Reach IsSetup=true
+
+**Symptoms:**
+```
+DEBUG [TRANSPORT] Transport exists but not yet setup: IsSetup=false
+ERROR [router]: Error dialing route group error="route setup: failed to instantiate route id reserver: a dial attempt failed with: dial X@136: i/o deadline reached"
 ```
 
-This allows CLI RPC server to start concurrently during initialization. The "no app launcher available" errors mentioned in commit d3d014c38 haven't been observed in practice - the RPC server handles requests properly as long as the visor has finished initializing before tests make RPC calls.
+**Analysis:**
+- Transports are created successfully (tp add command succeeds)
+- Transport shows in tp ls but IsSetup remains false indefinitely
+- Route setup service (port 136) dial attempts timeout after 20 seconds
+- Causes TestRestart to fail (all 4 subtests timeout)
 
-**Testing Required:**
-Run e2e tests with this fix to verify VPN test passes and no "no app launcher available" errors appear.
+**Root Cause:**
+The route setup service on port 136 is not ready to accept connections when transports are created. Possible reasons:
+1. Service hasn't started yet (initialization order)
+2. DMSG connection not fully established (still in "invalid signature" retry phase)
+3. Upstream changes to transportable/tpd_concurrency modules interfering
+
+**Related Upstream Changes:**
+- Commit 9c07ac096: Re-enabled "transportable" module
+- Series of commits toggling transportable/tpd_concurrency modules
+- Commit 340c1364f: Added CGO secp256k1 (later refactored)
+
+#### Issue 3: TestVPN Fails with "No Delegated Servers"
+
+**Symptoms:**
+```
+Failed to establish dmsg transport: save transport: mt.client.Dial: dmsg error 103 - client entry in discovery has no delegated servers
+```
+
+**Analysis:**
+- TestVPN runs ~4 minutes after previous tests
+- visor-c (031b80cd...) should have registered by then
+- But when adding dmsg transport, discovery reports no delegated servers
+
+**Possible Cause:**
+- Discovery entry was deleted/expired between tests
+- Registration retry loop interfered by container restart between test cases
+- Timing issue specific to dmsg transport type
+
+#### Proposed Fixes
+
+1. **Add DMSG Registration Wait:**
+   ```go
+   func (env *TestEnv) WaitForDmsgRegistration(visor string, timeout time.Duration) error {
+       // Poll dmsg discovery until visor entry has delegated servers
+       // Ensure registration complete before creating dmsg transports
+   }
+   ```
+
+2. **Add Route Setup Service Wait:**
+   ```go
+   func (env *TestEnv) WaitForRouteSetupReady(visor string, timeout time.Duration) error {
+       // Try connecting to visor's route setup service (port 136)
+       // Or check specific log message indicating service is ready
+   }
+   ```
+
+3. **Increase Delays in Test Flow:**
+   - Current: 3s delay after server apps start
+   - Proposal: 10s delay + explicit service readiness checks
+   - Apply before transport creation AND before client app start
+
+4. **Investigate Upstream Changes:**
+   - Test with transportable module disabled (line 183 in init.go)
+   - Check if commit 9c07ac096 introduced regression
+   - Compare behavior with v1.3.31 release
+
+**Next Steps:**
+1. Try disabling transportable module to isolate issue
+2. Add detailed logging to route setup process
+3. Implement explicit readiness checks before transport creation
+4. Consider if upstream merge should be reverted pending fixes
+
+---
+
+## UPDATE: E2E Test Timing Fixes Implemented (Nov 21, 2025)
+
+**Fixes Applied:**
+
+1. **Added `WaitForDmsgRegistration()` Function** (env_test.go:888-917):
+   - Polls visor logs for successful DMSG registration with delegated servers
+   - Looks for "delegated servers:" + "Connected to the dmsg network" patterns
+   - 30s timeout with 1s check interval
+
+2. **Increased Server App Initialization Delay** (util_test.go:129):
+   - Changed from 3s to 10s after server apps report "running"  
+   - Allows route setup service (port 136) to be fully operational
+
+3. **Added DMSG Registration Checks**:
+   - Before starting test cases (util_test.go:110-118)
+   - After container restarts (restart_test.go:142-149)
+   - Ensures visors have delegated servers before transport creation
+
+**Expected Results:**
+- TestRestart: Transports should reach IsSetup=true reliably
+- TestVPN: Visors will have delegated servers when creating dmsg transports
+- All messaging tests: More stable with proper initialization order
+
+**Testing:** Full e2e test suite run required to verify fixes.
+

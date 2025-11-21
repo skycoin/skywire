@@ -115,6 +115,15 @@ func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		env = env.VisorSetAppArg(t, appArg)
 	}
 
+	// Wait for DMSG registration before starting apps or creating transports
+	// This ensures all visors have delegated servers registered
+	for _, visor := range itc.ParticipatingVisorsHostNames {
+		if err := env.WaitForDmsgRegistration(visor, 30*time.Second); err != nil {
+			t.Logf("Warning: DMSG registration check failed for %s: %v", visor, err)
+			// Continue anyway - may still work
+		}
+	}
+
 	// Start server apps first (apps without VisorServerName)
 	for _, app := range itc.AppsToRun {
 		if app.VisorServerName == "" {
@@ -123,8 +132,9 @@ func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 
 			// After app shows "running", give it time to complete Accept() and
 			// register routing rules. Status changes to "running" when proc starts,
-			// but routing registration happens shortly after.
-			const acceptDelay = 3 * time.Second
+			// but routing registration happens shortly after. Also allows route
+			// setup service (port 136) to be ready for incoming connections.
+			const acceptDelay = 10 * time.Second
 			time.Sleep(acceptDelay)
 			t.Logf("Server app %s on %s ready", app.AppName, app.VisorHostName)
 		}

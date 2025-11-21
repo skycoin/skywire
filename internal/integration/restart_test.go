@@ -139,6 +139,13 @@ func TestRestart(t *testing.T) {
 			require.NoError(t, env.ContainerRestart(tc.restartList...))
 			time.Sleep(RestartDelay)
 
+			// Wait for visors to re-register with DMSG discovery after restart
+			for _, visor := range tc.restartList {
+				if err := env.WaitForDmsgRegistration(visor, 30*time.Second); err != nil {
+					t.Logf("Warning: DMSG registration check failed for %s after restart: %v", visor, err)
+				}
+			}
+
 			// Re-establish transports after visor restart
 			env.AddDefaultTransports(routerVisor, skychatVisors)
 

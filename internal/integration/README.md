@@ -10,6 +10,11 @@ This directory contains end-to-end integration tests for Skywire.
 ```bash
 sudo ./ci_scripts/setup-sudo-requirements.sh
 ```
+OR
+
+```bash
+make set-forwarding
+```
 
 This configures:
 - IP aliases (12.12.12.1-255) on loopback interface for service discovery
@@ -21,7 +26,7 @@ These settings persist across reboots, so you only need to run this once per mac
 
 ```bash
 # Build test environment
-make e2e-build
+make e2e-dock
 
 # Start containers
 make e2e-run
@@ -143,7 +148,7 @@ When adding new tests:
 ### SendSkyMessage / Messaging Tests
 
 **Symptoms**: EOF errors, "no suitable transport"
-**Causes**: 
+**Causes**:
 - Transport not fully established
 - Stale transport entries in TPD
 - Race condition during app startup
