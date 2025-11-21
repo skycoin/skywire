@@ -43,7 +43,7 @@ cd "secp256k1-${SECP256K1_VERSION#v}"
     --disable-tests \
     --disable-exhaustive-tests
 
-make -j$(nproc)
+make -j"$(nproc)"
 
 # Install to sysroot
 make install
