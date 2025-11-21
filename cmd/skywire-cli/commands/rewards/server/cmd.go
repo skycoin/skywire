@@ -81,15 +81,17 @@ skyenv file detected: ` + skyenvfile
 SKYENV=/path/to/fiber.conf fiber run`
 	}(),
 	Run: func(_ *cobra.Command, _ []string) {
-		outputDir, err = extractFiles()
-		if err != nil {
-			fmt.Println("Error extracting files:", err)
-			return
-		}
-		fmt.Printf("All files successfully extracted to '%s'.\n", outputDir)
-		_, err = script.Exec(`bash -c 'cd ` + outputDir + ` || exit 0 ; go mod init fiber.skywire.dev/ui ; go get github.com/skycoin/skywire@develop && go mod tidy && go mod vendor && go run cogentcore.org/core@main build web'`).Stdout()
-		if err != nil {
-			fmt.Println("Error:", err)
+		if !healthOnly {
+			outputDir, err = extractFiles()
+			if err != nil {
+				fmt.Println("Error extracting files:", err)
+				return
+			}
+			fmt.Printf("All files successfully extracted to '%s'.\n", outputDir)
+			_, err = script.Exec(`bash -c 'cd ` + outputDir + ` || exit 0 ; go mod init fiber.skywire.dev/ui ; go get github.com/skycoin/skywire@develop && go mod tidy && go mod vendor && go run cogentcore.org/core@main build web'`).Stdout()
+			if err != nil {
+				fmt.Println("Error:", err)
+			}
 		}
 
 		server(err)
