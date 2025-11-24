@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/bitfield/script"
@@ -83,9 +82,7 @@ func modifySubcommands(cmd *cobra.Command) {
 
 // RootCmd contains literally every 'command' from four repos here
 var RootCmd = &cobra.Command{
-	Use: func() string {
-		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
-	}(),
+	Use: "skywire",
 	Long: func() (ret string) {
 		ret = calvin.AsciiFont("skywire")
 		if buildinfo.DBIVersion() != "" {
