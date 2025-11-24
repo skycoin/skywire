@@ -64,7 +64,10 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
-require github.com/oschwald/geoip2-golang/v2 v2.0.0
+require (
+	github.com/oschwald/geoip2-golang/v2 v2.0.0
+	golang.org/x/time v0.14.0
+)
 
 require (
 	atomicgo.dev/cursor v0.2.0 // indirect
