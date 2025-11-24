@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/skycoin/skycoin/src/cipher"
+	"github.com/skycoin/skycoin/src/cipher/secp256k1-go"
 )
 
 func init() {
@@ -265,6 +266,23 @@ func SumSHA256(b []byte) SHA256 {
 	return SHA256(cipher.SumSHA256(b))
 }
 
-// VerifyPubKeySignedHashLight is implemented in cipher_cgo.go or cipher_nocgo.go
-// depending on build tags. This allows automatic selection of CGO-optimized
-// verification (3-5x faster) or pure Go fallback.
+// VerifyPubKeySignedHashLight uses standard Skycoin implementation
+// This is your original optimized version that skips pubkey recovery
+func VerifyPubKeySignedHashLight(pubkey cipher.PubKey, sig cipher.Sig, hash cipher.SHA256) error {
+	// Validate pubkey format (fast)
+	if secp256k1.VerifyPubkey(pubkey[:]) != 1 {
+		return cipher.ErrInvalidSigInvalidPubKey
+	}
+
+	// Validate signature format (fast)
+	if secp256k1.VerifySignatureValidity(sig[:]) != 1 {
+		return cipher.ErrInvalidSigValidity
+	}
+
+	// Verify signature (expensive, but still faster than full recovery)
+	if secp256k1.VerifySignature(hash[:], sig[:], pubkey[:]) != 1 {
+		return cipher.ErrInvalidSigForMessage
+	}
+
+	return nil
+}
