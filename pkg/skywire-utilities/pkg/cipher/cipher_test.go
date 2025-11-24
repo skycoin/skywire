@@ -102,8 +102,6 @@ func TestSigTextMarshaller(t *testing.T) {
 }
 
 func TestVerifyPubKeySignedPayload(t *testing.T) {
-	t.Logf("Running with CGO: %v", UsingCGO())
-
 	pk, sk := GenerateKeyPair()
 	payload := []byte("test payload")
 
@@ -128,8 +126,6 @@ func BenchmarkVerifyPubKeySignedPayload(b *testing.B) {
 	pk, sk := GenerateKeyPair()
 	payload := []byte("benchmark payload")
 	sig, _ := SignPayload(payload, sk) //nolint
-
-	b.Logf("Benchmarking with CGO: %v", UsingCGO())
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
