@@ -21,7 +21,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-chi/cors v1.2.2
 	github.com/go-chi/httprate v0.15.0
-	github.com/go-echarts/go-echarts/v2 v2.6.6
+	github.com/go-echarts/go-echarts/v2 v2.6.7
 	github.com/go-playground/validator/v10 v10.28.0
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.11.5
@@ -37,12 +37,13 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/orandin/lumberjackrus v1.0.1
+	github.com/oschwald/geoip2-golang/v2 v2.0.0
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/pterm/pterm v0.12.82
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/skycoin/dmsg v1.3.29-0.20251109221854-32bc477fa4bb
-	github.com/skycoin/skycoin v0.28.1-0.20251109152000-9018c9f37372 //DO NOT MODIFY OR UPDATE v0.28.1-0.20251109152000-9018c9f37372
+	github.com/skycoin/skycoin v0.28.1-0.20251118235745-fe01b849604b //DO NOT MODIFY OR UPDATE v0.28.1-0.20251118235745-fe01b849604b
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
@@ -54,10 +55,10 @@ require (
 	github.com/yuin/goldmark v1.7.13
 	github.com/zcalusic/sysinfo v1.1.3
 	go.etcd.io/bbolt v1.4.3
-	golang.org/x/net v0.46.0
+	golang.org/x/net v0.47.0
 	golang.org/x/sync v0.18.0
 	golang.org/x/sys v0.38.0
-	golang.org/x/term v0.36.0
+	golang.org/x/term v0.37.0
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	gopkg.in/telebot.v3 v3.3.8
 	gorm.io/driver/postgres v1.6.0
@@ -127,7 +128,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.18.0 // indirect
-	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/godbus/dbus/v5 v5.2.0 // indirect
 	github.com/gomarkdown/markdown v0.0.0-20250810172220-2e2c11897d1a // indirect
 	github.com/gookit/color v1.6.0 // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
@@ -165,12 +166,12 @@ require (
 	github.com/onsi/gomega v1.36.3 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
-	github.com/oschwald/maxminddb-golang/v2 v2.0.0 // indirect
+	github.com/oschwald/maxminddb-golang/v2 v2.1.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/quic-go/qpack v0.5.1 // indirect
-	github.com/quic-go/quic-go v0.56.0 // indirect
+	github.com/quic-go/qpack v0.6.0 // indirect
+	github.com/quic-go/quic-go v0.57.0 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
@@ -190,7 +191,7 @@ require (
 	github.com/valyala/histogram v1.2.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
-	github.com/xtaci/smux v1.5.35 // indirect
+	github.com/xtaci/smux v1.5.40 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
@@ -203,12 +204,12 @@ require (
 	go.uber.org/mock v0.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.23.0 // indirect
-	golang.org/x/crypto v0.43.0 // indirect
-	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
-	golang.org/x/image v0.32.0 // indirect
-	golang.org/x/mod v0.29.0 // indirect
-	golang.org/x/text v0.30.0 // indirect
-	golang.org/x/tools v0.38.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/exp v0.0.0-20251113190631-e25ba8c21ef6 // indirect
+	golang.org/x/image v0.33.0 // indirect
+	golang.org/x/mod v0.30.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/tools v0.39.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251111163417-95abcf5c77ba // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251111163417-95abcf5c77ba // indirect
@@ -236,7 +237,7 @@ require (
 // Below should reflect current versions of the following deps
 // To update deps to specific commit hash:
 // 1) Uncomment one of the following lines and substituite version with desired commit hash:
-//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20251109152000-9018c9f37372
+//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.1-0.20251118235745-fe01b849604b
 //replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251109221854-32bc477fa4bb
 //replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
 // 2) Run `go mod tidy && go mod vendor`
@@ -245,4 +246,4 @@ require (
 // 5) Save this file.
 // 6) Run `go mod tidy && go mod vendor`
 
-exclude google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd
+//exclude google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd
