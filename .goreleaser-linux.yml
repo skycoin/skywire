@@ -23,6 +23,8 @@ builds:
       - linux
     goarch:
       - amd64
+    flags:
+      - -tags=cgo
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
@@ -35,6 +37,8 @@ builds:
       - linux
     goarch:
       - 386
+    flags:
+      - -tags=cgo
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/i686-linux-musl-cross/bin/i686-linux-musl-gcc
@@ -47,6 +51,8 @@ builds:
       - linux
     goarch:
       - arm64
+    flags:
+      - -tags=cgo
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
@@ -61,6 +67,8 @@ builds:
       - arm
     goarm:
       - 6
+    flags:
+      - -tags=cgo
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
@@ -75,6 +83,8 @@ builds:
       - arm
     goarm:
       - 7
+    flags:
+      - -tags=cgo
     env:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
