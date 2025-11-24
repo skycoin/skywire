@@ -101,6 +101,7 @@ var (
 	configServicePath           string
 	dmsgHTTPPath                string
 	snConfig                    bool
+	externalApps                bool
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor

@@ -30,7 +30,23 @@ func InitFlags(cmd *cobra.Command, usage bool) {
 		NoExtraNewlines: true,
 		NoBottomNewline: true,
 	})
+
+	// Set help template AFTER cc.Init() to ensure it's not overridden
+	if !usage {
+		cmd.SetHelpTemplate(helpTemplateNoUsage)
+	}
 }
+
+const helpTemplateNoUsage = `{{with (or .Long .Short)}}{{. | trimTrailingWhitespaces}}
+
+{{end}}{{if .HasAvailableSubCommands}}Available Commands:{{range .Commands}}{{if and (ne .Name "completion") .IsAvailableCommand}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}
+
+{{end}}{{if .HasAvailableLocalFlags}}Flags:
+{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
+
+Global Flags:
+{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}`
 
 const help = `{{if gt (len .Aliases) 0}}{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}Available Commands:{{range .Commands}}{{if and (ne .Name "completion") .IsAvailableCommand}}
   {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
