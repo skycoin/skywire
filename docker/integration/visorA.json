@@ -105,5 +105,6 @@
 	"stun_servers": null,
 	"shutdown_timeout": "30s",
 	"is_public": false,
+	"geoip": "http://ip.skycoin.com",
 	"persistent_transports": null
 }
