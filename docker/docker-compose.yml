@@ -26,21 +26,6 @@ networks:
       com.docker.network.bridge.name: br-intra
 
 services:
-  hoster:
-    privileged: true
-    image: mrpalide/docker-hoster
-    container_name: hoster
-    hostname: hoster
-    volumes:
-      - /var/run/docker.sock:/tmp/docker.sock
-      - /etc/hosts:/tmp/hosts
-      - ./integration/docker/config/:/app/conf/
-    networks:
-      intra:
-        ipv4_address: 174.0.0.249
-    environment:
-      - MG_LOG_LEVEL=ERROR
-
   dmsgd-redis:
     image: "redis:alpine"
     networks:
@@ -52,8 +37,6 @@ services:
       - "6385:6379"
     container_name: "dmsgd-redis"
     hostname: dmsgd-redis
-    depends_on:
-      - hoster
 
   ar-redis:
     image: "redis:alpine"
@@ -66,8 +49,6 @@ services:
       - "6380:6379"
     container_name: "ar-redis"
     hostname: ar-redis
-    depends_on:
-      - hoster
 
   sd-redis:
     image: "redis:alpine"
@@ -80,8 +61,6 @@ services:
       - "6381:6379"
     container_name: "sd-redis"
     hostname: sd-redis
-    depends_on:
-      - hoster
 
   tpd-redis:
     image: "redis:alpine"
@@ -94,8 +73,6 @@ services:
       - "6382:6379"
     container_name: "tpd-redis"
     hostname: tpd-redis
-    depends_on:
-      - hoster
 
   ut-redis:
     image: "redis:alpine"
@@ -108,8 +85,6 @@ services:
       - "6384:6379"
     container_name: "ut-redis"
     hostname: ut-redis
-    depends_on:
-      - hoster
   
   postgres-db:
     image: "postgres:alpine"
@@ -128,8 +103,6 @@ services:
       - db:/var/lib/postgresql/data
     container_name: "postgres-db"
     hostname: postgres-db
-    depends_on:
-      - hoster
 
   transport-discovery:
     privileged: true
@@ -521,8 +494,32 @@ services:
     restart: always
     stdin_open: true # docker run -i
     tty: true        # docker run -t
+  
+  e2e-test:
+    image: golang:1.25.4-alpine
+    container_name: e2e-test
+    networks:
+      - visors
+      - intra
+      - srv
+    volumes:
+      - ../:/workspace
+      - go-test-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Add Docker socket
+    working_dir: /workspace
+    environment:
+      - CGO_ENABLED=0
+    depends_on:
+      - visor-a
+      - visor-b
+      - visor-c
+    profiles:
+      - test
 
 volumes:
+  go-test-cache:
+  go-mod-cache:
   db:
     driver: local
     driver_opts:
