@@ -44,7 +44,7 @@
 		"addr": "http://uptime-tracker:9095"
 	},
 	"launcher": {
-		"service_discovery": "http://service-discovery:9098",
+		"service_discovery": "http://service-discovery:9091",
 		"apps": [
 			{
 				"name": "vpn-client",

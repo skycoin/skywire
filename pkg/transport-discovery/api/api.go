@@ -49,6 +49,7 @@ type API struct {
 	http.Handler
 	metrics                     tpdiscmetrics.Metrics
 	reqsInFlightCountMiddleware *metricsutil.RequestsInFlightCountMiddleware
+	rateLimiter                 *PubKeyRateLimiter
 	store                       store.Store
 	startedAt                   time.Time
 	dmsgAddr                    string
@@ -73,6 +74,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	api := &API{
 		metrics:                     m,
 		reqsInFlightCountMiddleware: metricsutil.NewRequestsInFlightCountMiddleware(),
+		rateLimiter:                 NewPubKeyRateLimiter(30, 10), // 30 req/min with burst of 10
 		store:                       s,
 		startedAt:                   time.Now(),
 		dmsgAddr:                    dmsgAddr,
@@ -90,6 +92,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		r.Use(metricsutil.RequestDurationMiddleware)
 	}
 	r.Use(httputil.SetLoggerMiddleware(log))
+	r.Use(api.rateLimiter.Middleware()) // Add rate limiting middleware
 
 	r.Group(func(r chi.Router) {
 		r.Use(httpauth.MakeMiddleware(nonceStore))

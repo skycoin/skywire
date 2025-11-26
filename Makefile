@@ -17,7 +17,7 @@ PROJECT_BASE := github.com/skycoin/skywire
 SKYWIRE_UTILITIES_BASE := github.com/skycoin/skywire/pkg/skywire-utilities
 ifeq ($(OS),Windows_NT)
 	SHELL := pwsh
-	OPTS?=powershell -Command "$$env:GO111MODULE='on'";
+	OPTS?=powershell -Command setx GO111MODULE on;
 	DATE := $(shell powershell -Command date -u ${RFC_3339})
 	.DEFAULT_GOAL := help-windows
 else
@@ -62,8 +62,6 @@ DOCKER_COMPOSE_FILE:=./docker/docker-compose.yml
 DOCKER_REGISTRY:=skycoin
 
 TEST_OPTS:=-cover -timeout=5m -mod=vendor -tags no_ci
-
-TEST_OPTS_WIN:=-cover -timeout=5m -mod=vendor -tags no_ci
 
 GOARCH:=$(shell go env GOARCH)
 
@@ -224,17 +222,9 @@ test: ## Run tests
 	go run . cli config gen -dnw
 	go run . cli config gen --nofetch -nw
 
-test-cgo: ## Run tests
-	-go clean -testcache &>/dev/null
-	CGO_ENABLED=1 ${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
-	CGO_ENABLED=1 ${OPTS} go test ${TEST_OPTS}
-	go run . --help
-	go run . cli config gen -dnw
-	go run . cli config gen --nofetch -nw
-
 test-windows: ## Run tests on windows
 	@go clean -testcache
-	${OPTS} go test ${TEST_OPTS_WIN} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
+	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
 
 install-linters: ## Install linters
 	- VERSION=1.64.5 ./ci_scripts/install-golangci-lint.sh
@@ -456,9 +446,15 @@ e2e-run: ## E2E. Start e2e environment
 e2e-logs:
 	bash -c "docker compose logs --tail=all --follow"
 
-e2e-test:  ## E2E. Run e2e-tests suite. Prepare e2e environment with `make e2e-build && make e2e-run`
-	-go clean -testcache
-	go test  -v -timeout=15m ./internal/integration
+e2e-test:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment with `make e2e-build && make e2e-run`
+	DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} run --rm \
+		e2e-test \
+		sh -c "go clean -testcache && go test -v -timeout=15m ./internal/integration"
+
+e2e-test-local:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment with `make e2e-build && make e2e-run`
+	DOCKER_TAG=integration docker compose -f ${COMPOSE_FILE} run --rm \
+		e2e-test \
+		sh -c "go clean -testcache && go test -v -timeout=15m ./internal/integration"
 
 e2e-stop: ## E2E. Stop e2e environment without destroying it. Restart with `make e2e-run`
 	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} stop"
