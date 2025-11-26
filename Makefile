@@ -446,9 +446,15 @@ e2e-run: ## E2E. Start e2e environment
 e2e-logs:
 	bash -c "docker compose logs --tail=all --follow"
 
-e2e-test:  ## E2E. Run e2e-tests suite. Prepare e2e environment with `make e2e-build && make e2e-run`
-	-go clean -testcache
-	go test  -v -timeout=15m ./internal/integration
+e2e-test:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment with `make e2e-build && make e2e-run`
+	DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} run --rm \
+		e2e-test \
+		sh -c "go clean -testcache && go test -v -timeout=15m ./internal/integration"
+
+e2e-test-local:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment with `make e2e-build && make e2e-run`
+	DOCKER_TAG=integration docker compose -f ${COMPOSE_FILE} run --rm \
+		e2e-test \
+		sh -c "go clean -testcache && go test -v -timeout=15m ./internal/integration"
 
 e2e-stop: ## E2E. Stop e2e environment without destroying it. Restart with `make e2e-run`
 	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} stop"
