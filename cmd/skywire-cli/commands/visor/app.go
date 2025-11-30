@@ -123,14 +123,14 @@ var startAppCmd = &cobra.Command{
 		if err != nil {
 			os.Exit(1)
 		}
-		
+
 		launcherMode := ""
 		if useInternal {
 			launcherMode = "internal"
 		} else if useExternal {
 			launcherMode = "external"
 		}
-		
+
 		internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(args[0], launcherMode))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},

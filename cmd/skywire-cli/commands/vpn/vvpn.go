@@ -64,14 +64,14 @@ var startCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
-		
+
 		launcherMode := ""
 		if useInternal {
 			launcherMode = "internal"
 		} else if useExternal {
 			launcherMode = "external"
 		}
-		
+
 		internal.Catch(cmd.Flags(), rpcClient.StartVPNClientWithMode(pubkey, launcherMode))
 		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		var tCtxCancelFunc context.CancelFunc

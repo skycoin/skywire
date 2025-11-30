@@ -476,7 +476,7 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 	} else if app.LauncherMode == "external" {
 		launcherFlag = " --external"
 	}
-	
+
 	cmd := fmt.Sprintf("/release/skywire cli vpn --rpc %v:3435 start %v%s --json", app.VisorHostName, serverPk, launcherFlag)
 	cliOutput := struct {
 		Output VPNStart `json:"output,omitempty"`
