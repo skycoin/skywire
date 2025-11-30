@@ -22,6 +22,8 @@ import (
 var appName string
 var localPath string
 var procKey string
+var useInternal bool
+var useExternal bool
 
 func init() {
 	cobra.EnableCommandSorting = false
@@ -45,6 +47,9 @@ func init() {
 	registerAppCmd.Flags().StringVarP(&appName, "appname", "a", "", "name of the app")
 	registerAppCmd.Flags().StringVarP(&localPath, "localpath", "p", "./local", "path of the local folder")
 	deregisterAppCmd.Flags().StringVarP(&procKey, "procKey", "k", "", "proc key of the app to deregister")
+	startAppCmd.Flags().BoolVar(&useInternal, "internal", false, "force internal launcher")
+	startAppCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
+	startAppCmd.MarkFlagsMutuallyExclusive("internal", "external")
 }
 
 var argCmd = &cobra.Command{
@@ -118,7 +123,15 @@ var startAppCmd = &cobra.Command{
 		if err != nil {
 			os.Exit(1)
 		}
-		internal.Catch(cmd.Flags(), rpcClient.StartApp(args[0]))
+		
+		launcherMode := ""
+		if useInternal {
+			launcherMode = "internal"
+		} else if useExternal {
+			launcherMode = "external"
+		}
+		
+		internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(args[0], launcherMode))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
