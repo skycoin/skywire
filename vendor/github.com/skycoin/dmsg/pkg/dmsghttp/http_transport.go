@@ -43,7 +43,15 @@ func (t HTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := req.Write(stream); err != nil {
+
+	// Ensure stream is closed if we return an error before wrapping the response body
+	defer func() {
+		if err != nil {
+			_ = stream.Close() //nolint:errcheck // best-effort cleanup on error path
+		}
+	}()
+
+	if err = req.Write(stream); err != nil {
 		return nil, err
 	}
 	bufR := bufio.NewReader(stream)
