@@ -38,6 +38,7 @@ type AppToRun struct {
 	VisorHostName   string
 	AppName         string
 	VisorServerName string
+	LauncherMode    string // "internal", "external", or "" for default
 }
 
 // AppArg describes app argument to set.

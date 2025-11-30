@@ -229,7 +229,14 @@ func (env *TestEnv) VisorAppStart(app AppToRun) (string, error) {
 		Err    *string `json:"error,omitempty"`
 	}{}
 
-	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 app start %s --json", app.VisorHostName, app.AppName)
+	launcherFlag := ""
+	if app.LauncherMode == "internal" {
+		launcherFlag = " --internal"
+	} else if app.LauncherMode == "external" {
+		launcherFlag = " --external"
+	}
+
+	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 app start %s%s --json", app.VisorHostName, app.AppName, launcherFlag)
 	err := env.ExecJSON(cmd, &cliOutput)
 	if err != nil {
 		return "", err
@@ -463,7 +470,14 @@ func (env *TestEnv) VPNList(visor string) ([]servicedisc.Service, error) {
 }
 
 func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
-	cmd := fmt.Sprintf("/release/skywire cli vpn --rpc %v:3435 start %v --json", app.VisorHostName, serverPk)
+	launcherFlag := ""
+	if app.LauncherMode == "internal" {
+		launcherFlag = " --internal"
+	} else if app.LauncherMode == "external" {
+		launcherFlag = " --external"
+	}
+	
+	cmd := fmt.Sprintf("/release/skywire cli vpn --rpc %v:3435 start %v%s --json", app.VisorHostName, serverPk, launcherFlag)
 	cliOutput := struct {
 		Output VPNStart `json:"output,omitempty"`
 		Err    *string  `json:"error,omitempty"`
