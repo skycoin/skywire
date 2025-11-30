@@ -136,7 +136,7 @@ func newSession(config *Config, conn io.ReadWriteCloser, client bool) *Session {
 	s.chAccepts = make(chan *stream, defaultAcceptBacklog)
 	s.bucket = int32(config.MaxReceiveBuffer)
 	s.bucketNotify = make(chan struct{}, 1)
-	s.shaper = make(chan writeRequest)
+	s.shaper = make(chan writeRequest, maxShaperSize)
 	s.chSocketReadError = make(chan struct{})
 	s.chSocketWriteError = make(chan struct{})
 	s.chProtoError = make(chan struct{})
@@ -497,6 +497,7 @@ func (s *Session) shaperLoop() {
 			if len(chShaper) == 0 || s.sq.Len() > minShaperNotifySize {
 				s.notifyShaperPending()
 			}
+
 			if s.sq.Len() >= maxShaperSize {
 				// stop accepting new requests temporarily if shaper queue is full
 				chShaper = nil
@@ -551,12 +552,9 @@ EVENT_LOOP:
 			for {
 				request, ok := s.sq.Pop()
 				if !ok {
-					goto EVENT_LOOP
-				}
-
-				// notify shaperLoop to accept new requests
-				if s.sq.Len() < maxShaperSize {
+					// notify shaperLoop to accept new requests
 					s.notifyShaperConsumed()
+					goto EVENT_LOOP
 				}
 
 				buf[0] = request.frame.ver
