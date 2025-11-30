@@ -65,6 +65,8 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
+require golang.org/x/time v0.14.0
+
 require (
 	atomicgo.dev/cursor v0.2.0 // indirect
 	atomicgo.dev/keyboard v0.2.9 // indirect
