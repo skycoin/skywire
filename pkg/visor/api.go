@@ -63,6 +63,7 @@ type API interface {
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
+	StartAppWithMode(appName, launcherMode string) error
 	AddApp(appName, binaryName string) error
 	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)
 	DeregisterApp(procKey appcommon.ProcKey) error
@@ -87,6 +88,7 @@ type API interface {
 
 	//vpn controls
 	StartVPNClient(pk cipher.PubKey) error
+	StartVPNClientWithMode(pk cipher.PubKey, launcherMode string) error
 	StopVPNClient(appName string) error
 	VPNServers(version, country string) ([]servicedisc.Service, error)
 
@@ -437,6 +439,12 @@ func (v *Visor) SkybianBuildVersion() string {
 
 // StartApp implements API.
 func (v *Visor) StartApp(appName string) error {
+	return v.StartAppWithMode(appName, "")
+}
+
+// StartAppWithMode implements API with launcher mode override.
+// launcherMode can be "internal", "external", or "" for default behavior.
+func (v *Visor) StartAppWithMode(appName, launcherMode string) error {
 	// check app launcher availability
 	if v.appL == nil {
 		return ErrAppLauncherNotAvailable
@@ -463,7 +471,7 @@ func (v *Visor) StartApp(appName string) error {
 	}
 	// check process manager availability
 	if v.procM != nil {
-		return v.appL.StartApp(appName, nil, envs)
+		return v.appL.StartAppWithMode(appName, nil, envs, launcherMode)
 	}
 	return ErrProcNotAvailable
 }
@@ -528,6 +536,11 @@ func (v *Visor) KillApp(appName string) error {
 
 // StartVPNClient implements API.
 func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
+	return v.StartVPNClientWithMode(pk, "")
+}
+
+// StartVPNClientWithMode implements API with launcher mode override.
+func (v *Visor) StartVPNClientWithMode(pk cipher.PubKey, launcherMode string) error {
 	var envs []string
 	var err error
 	if v.tpM == nil {
@@ -543,7 +556,7 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 
 	for index, app := range v.conf.Launcher.Apps {
 		if app.Name == visorconfig.VPNClientName {
-			// we set the args in memory and pass it in `v.appL.StartApp`
+			// we set the args in memory and pass it in `v.appL.StartAppWithMode`
 			// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 			// but the args are set in the config
 			v.conf.Launcher.Apps[index].Args = []string{"app", "vpn-client", "--srv", pk.Hex()}
@@ -559,7 +572,7 @@ func (v *Visor) StartVPNClient(pk cipher.PubKey) error {
 
 			// check process manager availability
 			if v.procM != nil {
-				return v.appL.StartApp(visorconfig.VPNClientName, v.conf.Launcher.Apps[index].Args, envs)
+				return v.appL.StartAppWithMode(visorconfig.VPNClientName, v.conf.Launcher.Apps[index].Args, envs, launcherMode)
 			}
 			return ErrProcNotAvailable
 		}

@@ -229,7 +229,14 @@ func (env *TestEnv) VisorAppStart(app AppToRun) (string, error) {
 		Err    *string `json:"error,omitempty"`
 	}{}
 
-	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 app start %s --json", app.VisorHostName, app.AppName)
+	launcherFlag := ""
+	if app.LauncherMode == "internal" {
+		launcherFlag = " --internal"
+	} else if app.LauncherMode == "external" {
+		launcherFlag = " --external"
+	}
+
+	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 app start %s%s --json", app.VisorHostName, app.AppName, launcherFlag)
 	err := env.ExecJSON(cmd, &cliOutput)
 	if err != nil {
 		return "", err
@@ -379,7 +386,7 @@ func (env *TestEnv) VisorStart(visor string) (string, error) {
 }
 
 func (env *TestEnv) VisorTpType(visor string) ([]tptypes.Type, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp type --json", visor)
+	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp --tptypes --json", visor)
 	cliOutput := struct {
 		Output []tptypes.Type `json:"output,omitempty"`
 		Err    *string        `json:"error,omitempty"`
@@ -395,7 +402,7 @@ func (env *TestEnv) VisorTpType(visor string) ([]tptypes.Type, error) {
 }
 
 func (env *TestEnv) VisorTpLs(visor string) ([]*skyvisor.TransportSummary, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp ls --json", visor)
+	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp --json", visor)
 	return env.visorTpExec(cmd)
 }
 
@@ -463,7 +470,14 @@ func (env *TestEnv) VPNList(visor string) ([]servicedisc.Service, error) {
 }
 
 func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
-	cmd := fmt.Sprintf("/release/skywire cli vpn --rpc %v:3435 start %v --json", app.VisorHostName, serverPk)
+	launcherFlag := ""
+	if app.LauncherMode == "internal" {
+		launcherFlag = " --internal"
+	} else if app.LauncherMode == "external" {
+		launcherFlag = " --external"
+	}
+
+	cmd := fmt.Sprintf("/release/skywire cli vpn --rpc %v:3435 start %v%s --json", app.VisorHostName, serverPk, launcherFlag)
 	cliOutput := struct {
 		Output VPNStart `json:"output,omitempty"`
 		Err    *string  `json:"error,omitempty"`
@@ -553,7 +567,7 @@ func (env *TestEnv) VisorGetTransportUUID(tp Transport) ([]*skyvisor.TransportSu
 	if len(env.visorPKs) == 0 {
 		env.GatherVisorPKs(env.visorNames)
 	}
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp ls --types %s --pks %s --json", tp.FromVisorHostName, tp.Type, env.visorPKs[tp.ToVisorHostName])
+	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp --types %s --pks %s --json", tp.FromVisorHostName, tp.Type, env.visorPKs[tp.ToVisorHostName])
 	out, err := env.visorTpExec(cmd)
 	if err != nil {
 		return nil, err
@@ -608,8 +622,18 @@ func (env *TestEnv) ExecJSON(cmd string, output interface{}) error {
 
 	result, err := env.execResult(cmd)
 	if err != nil {
-		env.logger.WithError(err).Errorf("[EXEC FAILED] %s", cmd)
+		env.logger.WithError(err).Errorf("[EXEC FAILED] %s\n", cmd)
+		if stdout := result.Stdout(); stdout != "" {
+			env.logger.Debugf("[STDOUT] %s", stdout)
+		}
+		if stderr := result.Stderr(); stderr != "" {
+			env.logger.Debugf("[STDERR] %s", stderr)
+		}
 		return err
+	}
+
+	if stdout := result.Stdout(); stdout != "" {
+		env.logger.Debugf("[STDOUT] %s", stdout)
 	}
 
 	// Show stderr (debug logs) if present
