@@ -85,3 +85,4 @@ musl-data
 CRUSH.md
 .crush.json
 .crush/
+e2e-test.log
