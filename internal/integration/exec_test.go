@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
+	"testing"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -117,4 +119,40 @@ func (env *TestEnv) ReadLog(service string) (string, error) {
 	}
 
 	return string(buf), nil
+}
+
+// CheckErrorLogs reads logs from a service and fails the test if ERROR level logs are found
+func (env *TestEnv) CheckErrorLogs(t *testing.T, service string, ignorePatterns ...string) {
+	t.Helper()
+	logs, err := env.ReadLog(service)
+	if err != nil {
+		t.Logf("Failed to read logs from %s: %v", service, err)
+		return
+	}
+
+	// Split logs into lines
+	lines := strings.Split(logs, "\n")
+	var errorLines []string
+
+	for _, line := range lines {
+		// Check if line contains ERROR level log
+		if strings.Contains(line, " ERROR ") || strings.Contains(line, `level="error"`) {
+			// Check if any ignore pattern matches
+			ignored := false
+			for _, pattern := range ignorePatterns {
+				if strings.Contains(line, pattern) {
+					ignored = true
+					break
+				}
+			}
+
+			if !ignored {
+				errorLines = append(errorLines, line)
+			}
+		}
+	}
+
+	if len(errorLines) > 0 {
+		t.Errorf("Found %d ERROR log lines in %s:\n%s", len(errorLines), service, strings.Join(errorLines, "\n"))
+	}
 }
