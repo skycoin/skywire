@@ -327,7 +327,7 @@ func TestEnv_Tp(t *testing.T) {
 
 		tpTypes, err := env.VisorTpType(visorB)
 		require.NoError(t, err)
-		
+
 		for _, tpType := range tpTypes {
 			if tpType != types.STCP {
 				// Use retry logic for transport creation (up to 3 attempts)
