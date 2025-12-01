@@ -59,7 +59,7 @@ func init() {
 		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint:errcheck,gosec
 	}
 	if scriptExecString("${DMSGHTTP_SK}") != "" {
-		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint:errcheck,gosec
+		sk.Set(scriptExecString("${DMSGHTTP_SK}")) //nolint:errcheck,gosec
 	}
 	ServerCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 	ServerCmd.Flags().BoolVar(&healthOnly, "health-only", false, "serve only /health endpoint for testing")
