@@ -308,6 +308,12 @@ func TestEnv_Tp(t *testing.T) {
 	env := NewEnv().GatherContainersInfo().
 		GatherVisorPKs([]string{visorA, visorB, visorC})
 
+	// Wait for DMSG registration on all visors before creating transports
+	for _, visor := range []string{visorA, visorB, visorC} {
+		err := env.WaitForDmsgRegistration(visor, 30*time.Second)
+		require.NoError(t, err, "Visor %s failed to register with DMSG", visor)
+	}
+
 	for _, visor := range []string{visorA, visorC} {
 		pk := env.visorPKs[visor]
 

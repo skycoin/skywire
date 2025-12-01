@@ -887,6 +887,37 @@ func (env *TestEnv) ContainerRestart(serviceName ...string) error {
 	return nil
 }
 
+// WaitForDmsgRegistration waits for a visor to successfully register with DMSG discovery
+// and have delegated servers. This ensures the visor is ready to create DMSG transports.
+func (env *TestEnv) WaitForDmsgRegistration(visor string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	checkInterval := 1 * time.Second
+
+	for time.Now().Before(deadline) {
+		// Check logs for successful registration with delegated servers
+		logs, err := env.ReadLog(visor)
+		if err != nil {
+			time.Sleep(checkInterval)
+			continue
+		}
+
+		// Look for two indicators:
+		// 1. "delegated servers:" - visor has DMSG servers assigned
+		// 2. "Connected to the dmsg network" - connection established
+		hasDelegatedServers := strings.Contains(logs, "delegated servers:")
+		isConnected := strings.Contains(logs, "Connected to the dmsg network")
+
+		if hasDelegatedServers && isConnected {
+			env.logger.Infof("Visor %s successfully registered with DMSG", visor)
+			return nil
+		}
+
+		time.Sleep(checkInterval)
+	}
+
+	return fmt.Errorf("visor %s failed to register with DMSG within %v", visor, timeout)
+}
+
 func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (resp *http.Response, err error) {
 	url := fmt.Sprintf("http://%v:8001/message", senderNode)
 	msgData := map[string]string{
