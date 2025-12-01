@@ -433,6 +433,32 @@ func (env *TestEnv) VisorTpAdd(visor, pk string, tpType tptypes.Type) (*skyvisor
 	return output[0], nil
 }
 
+// VisorTpAddWithRetry attempts to add a transport with retry logic for transient failures
+func (env *TestEnv) VisorTpAddWithRetry(visor, pk string, tpType tptypes.Type, maxRetries int) (*skyvisor.TransportSummary, error) {
+	var lastErr error
+	
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		env.logger.Infof("Attempting to add %s transport from %s to %s (attempt %d/%d)", tpType, visor, pk, attempt, maxRetries)
+		
+		result, err := env.VisorTpAdd(visor, pk, tpType)
+		if err == nil {
+			env.logger.Infof("Successfully created %s transport on attempt %d", tpType, attempt)
+			return result, nil
+		}
+		
+		lastErr = err
+		env.logger.Warnf("Transport creation attempt %d/%d failed: %v", attempt, maxRetries, err)
+		
+		if attempt < maxRetries {
+			// Wait before retrying
+			time.Sleep(2 * time.Second)
+		}
+	}
+	
+	return nil, fmt.Errorf("failed to create %s transport after %d attempts: %w", tpType, maxRetries, lastErr)
+}
+
+
 func (env *TestEnv) VisorTpRm(visor string, tpID uuid.UUID) (string, error) {
 	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp rm -i %v --json", visor, tpID)
 	return env.ExecJSONReturnString(cmd)
@@ -887,35 +913,65 @@ func (env *TestEnv) ContainerRestart(serviceName ...string) error {
 	return nil
 }
 
-// WaitForDmsgRegistration waits for a visor to successfully register with DMSG discovery
-// and have delegated servers. This ensures the visor is ready to create DMSG transports.
-func (env *TestEnv) WaitForDmsgRegistration(visor string, timeout time.Duration) error {
+// WaitForDmsgDiscoveryEntry waits for a visor's entry to appear in DMSG discovery
+// with delegated servers. This ensures the visor is ready to create DMSG transports.
+func (env *TestEnv) WaitForDmsgDiscoveryEntry(visor string, timeout time.Duration) error {
+	if len(env.visorPKs) == 0 {
+		return fmt.Errorf("visor public keys not gathered")
+	}
+
+	pk, ok := env.visorPKs[visor]
+	if !ok {
+		return fmt.Errorf("public key for visor %s not found", visor)
+	}
+
 	deadline := time.Now().Add(timeout)
-	checkInterval := 1 * time.Second
+	checkInterval := 3 * time.Second
 
 	for time.Now().Before(deadline) {
-		// Check logs for successful registration with delegated servers
-		logs, err := env.ReadLog(visor)
+		// Query DMSG discovery for this visor's entry
+		cmd := fmt.Sprintf("/release/skywire cli mdisc entry %s --url http://dmsg-discovery:9090 --json", pk)
+		
+		type dmsgClient struct {
+			DelegatedServers []string `json:"delegated_servers"`
+		}
+		
+		type dmsgEntry struct {
+			Version   string      `json:"version"`
+			Static    string      `json:"static"`
+			Client    *dmsgClient `json:"client,omitempty"`
+			Timestamp int64       `json:"timestamp"`
+		}
+
+		cliOutput := struct {
+			Output *dmsgEntry `json:"output,omitempty"`
+			Err    *string    `json:"error,omitempty"`
+		}{}
+
+		err := env.ExecJSON(cmd, &cliOutput)
 		if err != nil {
+			env.logger.Debugf("mdisc query for %s failed: %v", visor, err)
 			time.Sleep(checkInterval)
 			continue
 		}
 
-		// Look for two indicators:
-		// 1. "delegated servers:" - visor has DMSG servers assigned
-		// 2. "Connected to the dmsg network" - connection established
-		hasDelegatedServers := strings.Contains(logs, "delegated servers:")
-		isConnected := strings.Contains(logs, "Connected to the dmsg network")
+		if cliOutput.Err != nil {
+			env.logger.Debugf("mdisc error for %s: %s", visor, *cliOutput.Err)
+			time.Sleep(checkInterval)
+			continue
+		}
 
-		if hasDelegatedServers && isConnected {
-			env.logger.Infof("Visor %s successfully registered with DMSG", visor)
+		if cliOutput.Output != nil && cliOutput.Output.Client != nil && len(cliOutput.Output.Client.DelegatedServers) > 0 {
+			env.logger.Infof("Visor %s registered in DMSG discovery with %d delegated servers", 
+				visor, len(cliOutput.Output.Client.DelegatedServers))
 			return nil
 		}
 
+		env.logger.Debugf("Visor %s not yet fully registered (no delegated servers)", visor)
 		time.Sleep(checkInterval)
 	}
 
-	return fmt.Errorf("visor %s failed to register with DMSG within %v", visor, timeout)
+	return fmt.Errorf("visor %s did not appear in DMSG discovery with delegated servers within %v", visor, timeout)
 }
 
 func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (resp *http.Response, err error) {
