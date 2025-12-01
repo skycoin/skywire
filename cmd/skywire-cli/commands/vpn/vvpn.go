@@ -37,6 +37,9 @@ func init() {
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
 	startCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "server public key")
 	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 0, "starting timeout value in second")
+	startCmd.Flags().BoolVar(&useInternal, "internal", false, "force internal launcher")
+	startCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
+	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 }
 
 var startCmd = &cobra.Command{
@@ -61,7 +64,15 @@ var startCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
-		internal.Catch(cmd.Flags(), rpcClient.StartVPNClient(pubkey))
+
+		launcherMode := ""
+		if useInternal {
+			launcherMode = "internal"
+		} else if useExternal {
+			launcherMode = "external"
+		}
+
+		internal.Catch(cmd.Flags(), rpcClient.StartVPNClientWithMode(pubkey, launcherMode))
 		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		var tCtxCancelFunc context.CancelFunc
 		tCtx := context.Background()
