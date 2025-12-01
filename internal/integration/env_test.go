@@ -46,6 +46,7 @@ type TestEnv struct {
 	logger       *logging.MasterLogger
 	rootDir      string
 	dockerDir    string
+	transports   []Transport // Transports configured for current test case
 }
 
 func NewEnv() *TestEnv {
@@ -495,6 +496,9 @@ func (env *TestEnv) VPNList(visor string) ([]servicedisc.Service, error) {
 }
 
 func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
+	const maxRetries = 3
+	const retryDelay = 2 * time.Second
+
 	launcherFlag := ""
 	if app.LauncherMode == "internal" {
 		launcherFlag = " --internal"
@@ -503,58 +507,111 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 	}
 
 	cmd := fmt.Sprintf("/release/skywire cli vpn --rpc %v:3435 start %v%s --json", app.VisorHostName, serverPk, launcherFlag)
-	cliOutput := struct {
-		Output VPNStart `json:"output,omitempty"`
-		Err    *string  `json:"error,omitempty"`
-	}{}
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
-		return "", err
-	}
 
-	// First attempt to wait for app
-	err = env.waitForVisorApp(app)
+	var lastErr error
 
-	// If we get an error, check if it's a routing table error
-	if err != nil && strings.Contains(err.Error(), "errored") {
-		env.logger.WithError(err).Warn("VPN client failed on first attempt, checking for routing errors...")
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		env.logger.Infof("VPN start attempt %d/%d for %s -> %s", attempt, maxRetries, app.VisorHostName, serverPk)
 
-		// Get client logs to check for routing table errors
-		clientLogs, logErr := env.ReadLog(app.VisorHostName)
-		if logErr == nil && strings.Contains(clientLogs, "routing table: rule not found") {
-			env.logger.Warn("Detected 'routing table: rule not found' error - retrying with transport cleanup")
+		cliOutput := struct {
+			Output VPNStart `json:"output,omitempty"`
+			Err    *string  `json:"error,omitempty"`
+		}{}
 
-			// Stop the client app
-			env.logger.Info("Stopping VPN client for retry...")
-			_, _ = env.VPNStop(app) //nolint:errcheck
-			time.Sleep(2 * time.Second)
+		err := env.ExecJSON(cmd, &cliOutput)
+		if err != nil {
+			lastErr = err
+			env.logger.WithError(err).Warnf("VPN start command failed on attempt %d", attempt)
+			if attempt < maxRetries {
+				time.Sleep(retryDelay)
+				continue
+			}
+			return "", fmt.Errorf("VPN start command failed after %d attempts: %w", maxRetries, lastErr)
+		}
 
-			// Remove transports from both client and server
-			env.logger.Info("Removing transports for clean retry...")
-			// Transport removal will be handled by finding and removing existing transports
-			// The transport should auto-create when we start the client again
+		// Wait for app to start
+		err = env.waitForVisorApp(app)
 
-			// Retry starting the client
-			env.logger.Info("Retrying VPN client start...")
-			err2 := env.ExecJSON(cmd, &cliOutput)
-			if err2 != nil {
-				return "", fmt.Errorf("retry failed: %w (original error: %v)", err2, err)
+		// If successful, we're done
+		if err == nil {
+			env.logger.Infof("VPN client started successfully on attempt %d", attempt)
+			if cliOutput.Output.AppError != "" {
+				return cliOutput.Output.AppError, nil
+			}
+			return "OK", nil
+		}
+
+		lastErr = err
+
+		// Check if it's a transport/routing error that we can retry
+		if strings.Contains(err.Error(), "errored") {
+			env.logger.WithError(err).Warnf("VPN client failed on attempt %d, checking logs...", attempt)
+
+			// Get client logs to check for transport/routing errors
+			clientLogs, logErr := env.ReadLog(app.VisorHostName)
+			isTransportError := false
+
+			if logErr == nil {
+				if strings.Contains(clientLogs, "routing table: rule not found") {
+					env.logger.Warn("Detected 'routing table: rule not found' error")
+					isTransportError = true
+				} else if strings.Contains(clientLogs, "no suitable transport") {
+					env.logger.Warn("Detected 'no suitable transport' error")
+					isTransportError = true
+				} else if strings.Contains(clientLogs, "failed to connect to the server") {
+					env.logger.Warn("Detected 'failed to connect to the server' error")
+					isTransportError = true
+				}
 			}
 
-			err = env.waitForVisorApp(app)
-			if err != nil {
-				return "", fmt.Errorf("retry wait failed: %w", err)
+			// If it's a transport error and we have retries left, cleanup and retry
+			if isTransportError && attempt < maxRetries {
+				env.logger.Info("Performing transport cleanup for retry...")
+
+				// Stop the client app
+				env.logger.Info("Stopping VPN client...")
+				_, _ = env.VPNStop(app) //nolint:errcheck
+				time.Sleep(retryDelay)
+
+				// Remove ALL transports from the client visor to clear stale entries
+				env.logger.Infof("Removing all transports from %s...", app.VisorHostName)
+				if err := env.RemoveAllTransports(app.VisorHostName); err != nil {
+					env.logger.WithError(err).Warn("Failed to remove transports, continuing anyway...")
+				}
+
+				// Wait for transport discovery to settle
+				time.Sleep(retryDelay)
+
+				// Wait for DMSG discovery to be ready before re-adding transport
+				env.logger.Infof("Waiting for DMSG discovery readiness for %s...", app.VisorHostName)
+				if err := env.WaitForDmsgDiscoveryEntry(app.VisorHostName, 30*time.Second); err != nil {
+					env.logger.WithError(err).Warn("DMSG discovery wait failed, continuing anyway...")
+				}
+
+				// Re-add the DMSG transport with retry
+				env.logger.Infof("Re-adding DMSG transport from %s to %s...", app.VisorHostName, serverPk)
+				if _, err := env.VisorTpAddWithRetry(app.VisorHostName, serverPk, tptypes.DMSG, 3); err != nil {
+					env.logger.WithError(err).Warnf("Failed to re-add transport on attempt %d", attempt)
+					// Continue to retry anyway - the VPN start command might still work
+				} else {
+					env.logger.Info("Transport re-added successfully")
+				}
+
+				// Wait a bit before retrying VPN start
+				time.Sleep(retryDelay)
+
+				// Continue to next retry attempt
+				continue
 			}
-			env.logger.Info("VPN client started successfully after retry")
-		} else {
-			return "", err
+		}
+
+		// If not a transport error or no retries left, fail
+		if attempt >= maxRetries {
+			return "", fmt.Errorf("VPN client failed after %d attempts: %w", maxRetries, lastErr)
 		}
 	}
 
-	if cliOutput.Output.AppError != "" {
-		return cliOutput.Output.AppError, nil
-	}
-	return "OK", nil
+	return "", fmt.Errorf("VPN client failed after %d attempts: %w", maxRetries, lastErr)
 }
 
 func (env *TestEnv) VPNStop(app AppToRun) (string, error) {
