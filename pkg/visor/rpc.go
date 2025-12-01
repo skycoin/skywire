@@ -241,11 +241,17 @@ func (r *RPC) Apps(_ *struct{}, reply *[]*appserver.AppState) (err error) {
 	return err
 }
 
-// StartApp start App with provided name.
-func (r *RPC) StartApp(name *string, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "StartApp", name)(nil, &err)
+// StartAppIn is input for StartApp.
+type StartAppIn struct {
+	AppName      string
+	LauncherMode string // "internal", "external", or "" for default
+}
 
-	return r.visor.StartApp(*name)
+// StartApp start App with provided name.
+func (r *RPC) StartApp(in *StartAppIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StartApp", in)(nil, &err)
+
+	return r.visor.StartAppWithMode(in.AppName, in.LauncherMode)
 }
 
 // SetAppAddIn is input for SetAppAdd.
@@ -295,11 +301,17 @@ func (r *RPC) KillApp(name *string, _ *struct{}) (err error) {
 	return r.visor.KillApp(*name)
 }
 
-// StartVPNClient starts VPNClient App
-func (r *RPC) StartVPNClient(pk *cipher.PubKey, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "StartApp", pk)(nil, &err)
+// StartVPNClientIn is input for StartVPNClient.
+type StartVPNClientIn struct {
+	PK           cipher.PubKey
+	LauncherMode string // "internal", "external", or "" for default
+}
 
-	return r.visor.StartVPNClient(*pk)
+// StartVPNClient starts VPNClient App
+func (r *RPC) StartVPNClient(in *StartVPNClientIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StartVPNClient", in)(nil, &err)
+
+	return r.visor.StartVPNClientWithMode(in.PK, in.LauncherMode)
 }
 
 // StopVPNClient stops VPNClient App
