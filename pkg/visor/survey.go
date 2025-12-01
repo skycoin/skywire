@@ -27,7 +27,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				// //validate the skycoin address
 				cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
 				if err != nil {
-					log.WithError(err).Error("Invalid skycoin reward address.")
+					log.WithError(err).Warn("Invalid skycoin reward address.")
 					return
 				}
 				log.Info("Skycoin reward address: ", cAddr.String())

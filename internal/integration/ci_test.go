@@ -308,14 +308,37 @@ func TestEnv_Tp(t *testing.T) {
 	env := NewEnv().GatherContainersInfo().
 		GatherVisorPKs([]string{visorA, visorB, visorC})
 
+	// Wait for DMSG discovery entries for all visors before creating transports
+	// This ensures visors are registered with delegated servers
+	for _, visor := range []string{visorA, visorB, visorC} {
+		err := env.WaitForDmsgDiscoveryEntry(visor, 60*time.Second)
+		if err != nil {
+			// Dump logs on failure for debugging
+			t.Logf("Failed to find DMSG discovery entry for %s: %v", visor, err)
+			if logs, logErr := env.ReadLog(visor); logErr == nil {
+				t.Logf("Logs for %s:\n%s", visor, logs)
+			}
+		}
+		require.NoError(t, err, "Visor %s not found in DMSG discovery", visor)
+	}
+
 	for _, visor := range []string{visorA, visorC} {
 		pk := env.visorPKs[visor]
 
 		tpTypes, err := env.VisorTpType(visorB)
 		require.NoError(t, err)
+
 		for _, tpType := range tpTypes {
 			if tpType != types.STCP {
-				addTpSum, err := env.VisorTpAdd(visorB, pk, tpType)
+				// Use retry logic for transport creation (up to 3 attempts)
+				addTpSum, err := env.VisorTpAddWithRetry(visorB, pk, tpType, 3)
+				if err != nil {
+					// Dump visor-b logs on transport creation failure
+					t.Logf("Failed to create %s transport from %s to %s: %v", tpType, visorB, visor, err)
+					if logs, logErr := env.ReadLog(visorB); logErr == nil {
+						t.Logf("Logs for %s:\n%s", visorB, logs)
+					}
+				}
 				require.NoError(t, err)
 				require.Contains(t, addTpSum.Remote.Hex(), pk)
 
@@ -328,7 +351,6 @@ func TestEnv_Tp(t *testing.T) {
 				require.Equal(t, "OK", rmTpSum)
 			}
 		}
-
 	}
 }
 

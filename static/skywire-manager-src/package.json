@@ -63,5 +63,8 @@
     "protractor": "~7.0.0",
     "ts-node": "~7.0.0",
     "typescript": "~5.0.4"
+  },
+  "overrides": {
+    "express": "4.22.0"
   }
 }

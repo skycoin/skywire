@@ -153,7 +153,14 @@ func TestVPN(t *testing.T) {
 					VisorServerName: visorVPNServer,
 				},
 			},
-			AppArgsToSet: []AppArg{},
+			AppArgsToSet: []AppArg{
+				{
+					VisorHostName: visorVPNClient,
+					AppName:       skyenv.VPNClientName,
+					ArgName:       "killswitch",
+					Val:           "true",
+				},
+			},
 			TransportsToAdd: []Transport{
 				{
 					FromVisorHostName: visorVPNClient,
