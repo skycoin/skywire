@@ -46,7 +46,6 @@ type TestEnv struct {
 	logger       *logging.MasterLogger
 	rootDir      string
 	dockerDir    string
-	transports   []Transport // Transports configured for current test case
 }
 
 func NewEnv() *TestEnv {

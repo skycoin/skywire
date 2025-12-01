@@ -3,8 +3,10 @@ package clitp
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"text/tabwriter"
 
@@ -14,19 +16,25 @@ import (
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 var (
-	tpID string
-	tpPK string
+	tpID      string
+	tpPK      string
+	tpdDirect bool
 )
 
 func init() {
 	discTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "obtain transport of given ID")
 	discTpCmd.Flags().StringVarP(&tpPK, "pk", "p", "", "obtain transports by public key")
+	discTpCmd.Flags().StringVar(&tpdURL, "tpdurl", "", "transport discovery url (e.g., http://transport-discovery:9091)")
+	discTpCmd.Flags().BoolVar(&tpdDirect, "direct", false, "query transport discovery directly, bypass RPC")
 }
 
 var discTpCmd = &cobra.Command{
@@ -51,18 +59,66 @@ var discTpCmd = &cobra.Command{
 		if tpPK != "" {
 			internal.Catch(cmd.Flags(), tppk.Set(tpPK))
 		}
-		rpcClient, err := clirpc.Client(cmd.Flags())
-		if err != nil {
-			os.Exit(1)
+
+		// Determine if we should query transport discovery directly
+		useDirectQuery := tpdDirect || tpdURL != ""
+
+		// Try RPC first unless direct query is requested
+		if !useDirectQuery {
+			rpcClient, err := clirpc.Client(cmd.Flags())
+			if err == nil {
+				// RPC available, use it
+				if tppk.Null() {
+					entry, err := rpcClient.DiscoverTransportByID(uuid.UUID(tpid))
+					if err == nil {
+						PrintTransportEntries(cmd.Flags(), entry)
+						return
+					}
+					// RPC query failed, fall back to direct query
+					fmt.Fprintf(os.Stderr, "RPC query failed: %v, falling back to direct query...\n", err)
+					useDirectQuery = true
+				} else {
+					entries, err := rpcClient.DiscoverTransportsByPK(tppk)
+					if err == nil {
+						PrintTransportEntries(cmd.Flags(), entries...)
+						return
+					}
+					// RPC query failed, fall back to direct query
+					fmt.Fprintf(os.Stderr, "RPC query failed: %v, falling back to direct query...\n", err)
+					useDirectQuery = true
+				}
+			} else {
+				// RPC connection failed, fall back to direct query
+				fmt.Fprintf(os.Stderr, "RPC connection failed: %v, falling back to direct query...\n", err)
+				useDirectQuery = true
+			}
 		}
-		if tppk.Null() {
-			entry, err := rpcClient.DiscoverTransportByID(uuid.UUID(tpid))
-			internal.Catch(cmd.Flags(), err)
-			PrintTransportEntries(cmd.Flags(), entry)
-		} else {
-			entries, err := rpcClient.DiscoverTransportsByPK(tppk)
-			internal.Catch(cmd.Flags(), err)
-			PrintTransportEntries(cmd.Flags(), entries...)
+
+		// Query transport discovery directly
+		if useDirectQuery {
+			// Use provided URL or default
+			url := tpdURL
+			if url == "" {
+				url = deployment.Prod.TransportDiscovery
+			}
+
+			// Create HTTP client for transport discovery
+			masterLogger := logging.NewMasterLogger()
+			tpdClient, err := tpdclient.NewHTTP(url, cipher.PubKey{}, cipher.SecKey{}, &http.Client{}, "", masterLogger)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to create transport discovery client: %w", err))
+			}
+
+			ctx := context.Background()
+			if tppk.Null() {
+				entry, err := tpdClient.GetTransportByID(ctx, uuid.UUID(tpid))
+				internal.Catch(cmd.Flags(), err)
+				PrintTransportEntries(cmd.Flags(), entry)
+			} else {
+				entries, err := tpdClient.GetTransportsByEdge(ctx, tppk)
+				internal.Catch(cmd.Flags(), err)
+				PrintTransportEntries(cmd.Flags(), entries...)
+			}
 		}
 	},
 }
