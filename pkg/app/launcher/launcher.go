@@ -205,10 +205,16 @@ func (l *AppLauncher) AppStates() []*appserver.AppState {
 // StartApp starts cmd with given args and env.
 // If 'args' is nil, default args will be used.
 func (l *AppLauncher) StartApp(cmd string, args, envs []string) error {
+	return l.StartAppWithMode(cmd, args, envs, "")
+}
+
+// StartAppWithMode starts cmd with given args, env, and launcher mode override.
+// launcherMode can be "internal", "external", or "" for default behavior.
+func (l *AppLauncher) StartAppWithMode(cmd string, args, envs []string, launcherMode string) error {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
-	return l.startApp(cmd, args, envs)
+	return l.startAppWithMode(cmd, args, envs, launcherMode)
 }
 
 // RegisterApp registers a proc for an external app to use.
@@ -228,6 +234,10 @@ func (l *AppLauncher) DeregisterApp(procKey appcommon.ProcKey) error {
 }
 
 func (l *AppLauncher) startApp(cmd string, args, envs []string) error {
+	return l.startAppWithMode(cmd, args, envs, "")
+}
+
+func (l *AppLauncher) startAppWithMode(cmd string, args, envs []string, launcherMode string) error {
 	log := l.log.WithField("func", "StartApp").WithField("cmd", cmd)
 
 	// Obtain associated app config.
@@ -238,6 +248,22 @@ func (l *AppLauncher) startApp(cmd string, args, envs []string) error {
 
 	if args != nil {
 		ac.Args = args
+	}
+
+	// Override launcher mode if specified
+	if launcherMode != "" {
+		acCopy := ac
+		if launcherMode == "internal" {
+			// Force internal: clear binary
+			acCopy.Binary = ""
+		} else if launcherMode == "external" {
+			// Force external: ensure binary is set
+			if ac.Binary == "" {
+				// Use default binary name (app name)
+				acCopy.Binary = cmd
+			}
+		}
+		ac = acCopy
 	}
 
 	// Make proc config.

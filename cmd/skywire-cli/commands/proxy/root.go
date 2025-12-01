@@ -31,6 +31,8 @@ var (
 	httpAddr        string
 	jsonOutput      bool
 	appPort         uint16
+	useInternal     bool
+	useExternal     bool
 )
 
 // RootCmd contains commands that interact with the skywire-visor

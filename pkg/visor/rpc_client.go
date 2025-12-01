@@ -158,7 +158,15 @@ func (rc *rpcClient) App(appName string) (*appserver.AppState, error) {
 
 // StartApp calls StartApp.
 func (rc *rpcClient) StartApp(appName string) error {
-	return rc.Call("StartApp", &appName, &struct{}{})
+	return rc.StartAppWithMode(appName, "")
+}
+
+// StartAppWithMode calls StartApp with launcher mode override.
+func (rc *rpcClient) StartAppWithMode(appName, launcherMode string) error {
+	return rc.Call("StartApp", &StartAppIn{
+		AppName:      appName,
+		LauncherMode: launcherMode,
+	}, &struct{}{})
 }
 
 // AddApp calls AddApp.
@@ -193,7 +201,15 @@ func (rc *rpcClient) KillApp(appName string) error {
 
 // StartVPNClient calls StartVPNClient.
 func (rc *rpcClient) StartVPNClient(pk cipher.PubKey) error {
-	return rc.Call("StartVPNClient", &pk, &struct{}{})
+	return rc.StartVPNClientWithMode(pk, "")
+}
+
+// StartVPNClientWithMode calls StartVPNClient with launcher mode override.
+func (rc *rpcClient) StartVPNClientWithMode(pk cipher.PubKey, launcherMode string) error {
+	return rc.Call("StartVPNClient", &StartVPNClientIn{
+		PK:           pk,
+		LauncherMode: launcherMode,
+	}, &struct{}{})
 }
 
 // StopVPNClient calls StopVPNClient.
@@ -857,6 +873,11 @@ func (*mockRPCClient) StartApp(string) error {
 	return nil
 }
 
+// StartAppWithMode implements API.
+func (*mockRPCClient) StartAppWithMode(string, string) error {
+	return nil
+}
+
 // AddApp implement API.
 func (*mockRPCClient) AddApp(string, string) error {
 	return nil
@@ -884,6 +905,11 @@ func (*mockRPCClient) KillApp(string) error {
 
 // StartVPNClient implements API.
 func (*mockRPCClient) StartVPNClient(cipher.PubKey) error {
+	return nil
+}
+
+// StartVPNClientWithMode implements API.
+func (*mockRPCClient) StartVPNClientWithMode(cipher.PubKey, string) error {
 	return nil
 }
 

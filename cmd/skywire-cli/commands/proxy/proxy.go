@@ -39,6 +39,9 @@ func init() {
 	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 0, "timeout for starting proxy")
 	startCmd.Flags().StringVar(&httpAddr, "http", "", "address for http proxy")
 	startCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between proxy (skysocks) and visor")
+	startCmd.Flags().BoolVar(&useInternal, "internal", false, "force internal launcher")
+	startCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
+	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
 	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 }
@@ -124,13 +127,13 @@ var startCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client. error: %s", err))
 				}
 			}
-			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
+			internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(clientName, getLauncherMode()))
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		} else {
 			if clientName == "" {
 				clientName = "skysocks-client"
 			}
-			internal.Catch(cmd.Flags(), rpcClient.StartApp(clientName))
+			internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(clientName, getLauncherMode()))
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		}
 
@@ -370,4 +373,13 @@ var listCmd = &cobra.Command{
 
 		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
 	},
+}
+
+func getLauncherMode() string {
+	if useInternal {
+		return "internal"
+	} else if useExternal {
+		return "external"
+	}
+	return ""
 }

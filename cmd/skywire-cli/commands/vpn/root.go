@@ -28,6 +28,8 @@ var (
 	country         string
 	version         string
 	geoipURL        string
+	useInternal     bool
+	useExternal     bool
 )
 
 // RootCmd contains commands that interact with the skywire-visor
