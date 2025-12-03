@@ -263,14 +263,15 @@ func (r *router) DialRoutes(
 
 	if r.conf.MinHops == 1 {
 		r.routeSetupHookMu.Lock()
-		defer r.routeSetupHookMu.Unlock()
 		if len(r.routeSetupHooks) != 0 {
 			for _, rsf := range r.routeSetupHooks {
 				if err := rsf(rPK, r.tm); err != nil {
+					r.routeSetupHookMu.Unlock()
 					return nil, err
 				}
 			}
 		}
+		r.routeSetupHookMu.Unlock()
 	}
 
 	forwardPath, reversePath, err := r.fetchBestRoutes(lPK, rPK, opts)
