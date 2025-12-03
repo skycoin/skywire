@@ -105,6 +105,17 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 
 	// Brief delay to ensure containers are fully restarted
 	time.Sleep(2 * time.Second)
+
+	// Wait for DMSG to be ready on all restarted visors
+	// This ensures visors can establish DMSG connections before the next test
+	for visor := range visorsToRestart {
+		t.Logf("Waiting for DMSG to be ready on %s", visor)
+		if err := env.WaitForDmsgDiscoveryEntry(visor, 30*time.Second); err != nil {
+			t.Logf("Warning: DMSG not ready on %s after 30s: %v", visor, err)
+		} else {
+			t.Logf("DMSG ready on %s", visor)
+		}
+	}
 }
 
 func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
