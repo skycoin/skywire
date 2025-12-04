@@ -116,6 +116,14 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 			t.Logf("DMSG ready on %s", visor)
 		}
 	}
+
+	// Additional delay to allow router GC to clean up stale routing rules
+	// from previous tests. Router GC runs every 5s by default. After restart,
+	// old rules referencing deleted transports need to be cleaned up before
+	// new transports/apps can work properly.
+	const routerGCWait = 8 * time.Second
+	t.Logf("Waiting %v for router garbage collection to clean up stale routes...", routerGCWait)
+	time.Sleep(routerGCWait)
 }
 
 func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
