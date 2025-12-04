@@ -120,8 +120,9 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 	// Additional delay to allow router GC to clean up stale routing rules
 	// from previous tests. Router GC runs every 5s by default. After restart,
 	// old rules referencing deleted transports need to be cleaned up before
-	// new transports/apps can work properly.
-	const routerGCWait = 8 * time.Second
+	// new transports/apps can work properly. 15s guarantees at least 2-3 GC
+	// cycles regardless of timing, ensuring all stale rules are removed.
+	const routerGCWait = 15 * time.Second
 	t.Logf("Waiting %v for router garbage collection to clean up stale routes...", routerGCWait)
 	time.Sleep(routerGCWait)
 }
