@@ -1413,6 +1413,7 @@ func reconcileTPDWithRetry(ctx context.Context, v *Visor, log *logging.Logger) {
 		attempt++
 		if err := reconcileTPD(ctx, v, log); err != nil {
 			// Calculate exponential backoff: 10s, 20s, 40s, 80s, 160s, capped at 5min
+			//nolint:gosec
 			backoff := time.Duration(10*(1<<uint(attempt-1))) * time.Second
 			if backoff > maxBackoff {
 				backoff = maxBackoff
