@@ -1385,7 +1385,7 @@ func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger
 	go func() {
 		reconcileTPDWithRetry(ctx, v, log)
 	}()
-	
+
 	// Run periodic reconciliation every 5 minutes
 	// At scale (3000+ visors), more frequent intervals create too much TPD load
 	const tickDuration = 5 * time.Minute
@@ -1408,7 +1408,7 @@ func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger
 func reconcileTPDWithRetry(ctx context.Context, v *Visor, log *logging.Logger) {
 	attempt := 0
 	maxBackoff := 5 * time.Minute
-	
+
 	for {
 		attempt++
 		if err := reconcileTPD(ctx, v, log); err != nil {
@@ -1417,9 +1417,9 @@ func reconcileTPDWithRetry(ctx context.Context, v *Visor, log *logging.Logger) {
 			if backoff > maxBackoff {
 				backoff = maxBackoff
 			}
-			
+
 			log.WithError(err).Warnf("TPD reconciliation failed (attempt %d), retrying in %v", attempt, backoff)
-			
+
 			select {
 			case <-ctx.Done():
 				return
@@ -1454,9 +1454,9 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 		v.isServicesHealthy.unset()
 		return fmt.Errorf("failed to query TPD after retries: %w", err)
 	}
-	
+
 	v.isServicesHealthy.set()
-	
+
 	// Build map of TPD entries (non-loopback only)
 	var tpdIDs []uuid.UUID
 	for _, e := range entries {
@@ -1464,20 +1464,20 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 			tpdIDs = append(tpdIDs, e.ID)
 		}
 	}
-	
+
 	// Get local transports (non-loopback only)
 	transports, err := v.Transports(nil, nil, false)
 	if err != nil {
 		return fmt.Errorf("failed to get local transports: %w", err)
 	}
-	
+
 	var localIDs []uuid.UUID
 	for _, t := range transports {
 		if t.Local != t.Remote {
 			localIDs = append(localIDs, t.ID)
 		}
 	}
-	
+
 	// Find stale TPD entries (in TPD but not local)
 	var staleIDs []uuid.UUID
 	for _, tpdID := range tpdIDs {
@@ -1492,11 +1492,11 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 			staleIDs = append(staleIDs, tpdID)
 		}
 	}
-	
+
 	// Remove stale entries from TPD with retry logic
 	if len(staleIDs) > 0 {
 		log.Infof("Removing %d stale transports from TPD", len(staleIDs))
-		
+
 		var tpdC transport.DiscoveryClient
 		for retries := 0; retries < 3; retries++ {
 			tpdC, err = connectToTpDisc(ctx, v, log)
@@ -1512,7 +1512,7 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 		if err != nil {
 			return fmt.Errorf("failed to connect to TPD after retries: %w", err)
 		}
-		
+
 		for _, id := range staleIDs {
 			// Retry each deletion
 			var deleteErr error
@@ -1532,7 +1532,7 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 

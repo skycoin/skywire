@@ -175,7 +175,7 @@ func MakeSettlementHS(init bool, log *logging.Logger) SettlementHS {
 				for attempt := 1; attempt <= maxRetries; attempt++ {
 					backoff := time.Duration(attempt) * time.Second
 					time.Sleep(backoff)
-					
+
 					if retryErr := dc.RegisterTransports(ctx, recvSE); retryErr != nil {
 						log.WithError(retryErr).Warnf("Registration retry %d/%d failed", attempt, maxRetries)
 						if attempt == maxRetries {
