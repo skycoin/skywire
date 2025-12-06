@@ -1380,58 +1380,26 @@ func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
 //
 //gocyclo:ignore
 func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger) error {
-	const tickDuration = 5 * time.Minute
+	// Run immediate reconciliation on startup (no delay)
+	// This ensures stale TPD entries from previous runs are cleaned up quickly
+	go func() {
+		if err := reconcileTPD(ctx, v, log); err != nil {
+			log.WithError(err).Warn("Initial TPD reconciliation failed")
+		}
+	}()
+	
+	// Run periodic reconciliation every 30 seconds (not 5 minutes)
+	// This catches transient registration failures quickly
+	const tickDuration = 30 * time.Second
 	ticker := time.NewTicker(tickDuration)
 	go func() {
-		time.Sleep(time.Minute)
 		for range ticker.C {
-			entries, err := v.DiscoverTransportsByPK(v.conf.PK)
-			if err != nil {
-				v.isServicesHealthy.unset()
-				log.WithError(err).Warn("Cannot ensure concurrency with TPD")
-				//reduce tick duration on non nil error
-				ticker.Reset(time.Minute)
+			if err := reconcileTPD(ctx, v, log); err != nil {
+				log.WithError(err).Warn("TPD reconciliation failed")
+				// Retry faster on errors
+				ticker.Reset(10 * time.Second)
 			} else {
-				v.isServicesHealthy.set()
-				var dtpids []uuid.UUID
-				var rmtpids []uuid.UUID
-				var tpids []uuid.UUID
-				for _, e := range entries {
-					if e.Edges[0] != e.Edges[1] {
-						dtpids = append(dtpids, e.ID)
-					}
-				}
-				transports, err := v.Transports(nil, nil, false)
-				for _, t := range transports {
-					if t.Local != t.Remote {
-						tpids = append(tpids, t.ID)
-					}
-				}
-				for _, t := range dtpids {
-					var found bool
-					for _, tt := range tpids {
-						if tt == t {
-							found = true
-						}
-					}
-					if !found {
-						rmtpids = append(rmtpids, t)
-					}
-				}
-				if 0 < len(rmtpids) {
-					log.WithError(err).Warn(fmt.Sprintf("Found %v transports in transport discovery not registered locally", len(rmtpids)))
-					tpdC, err := connectToTpDisc(ctx, v, v.MasterLogger().PackageLogger("tpd_concurrency"))
-					if err != nil {
-						log.WithError(err).Warn("failed to create transport discovery client")
-					} else {
-						for _, rm := range rmtpids {
-							err = tpdC.DeleteTransport(ctx, rm)
-							if err != nil {
-								log.WithError(err).Warn(fmt.Sprintf("Failed to remove transport from tpd %v", rm))
-							}
-						}
-					}
-				}
+				// Reset to normal interval on success
 				ticker.Reset(tickDuration)
 			}
 		}
@@ -1441,6 +1409,70 @@ func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger
 		ticker.Stop()
 		return nil
 	})
+	return nil
+}
+
+func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
+	entries, err := v.DiscoverTransportsByPK(v.conf.PK)
+	if err != nil {
+		v.isServicesHealthy.unset()
+		return fmt.Errorf("failed to query TPD: %w", err)
+	}
+	
+	v.isServicesHealthy.set()
+	
+	// Build map of TPD entries (non-loopback only)
+	var tpdIDs []uuid.UUID
+	for _, e := range entries {
+		if e.Edges[0] != e.Edges[1] {
+			tpdIDs = append(tpdIDs, e.ID)
+		}
+	}
+	
+	// Get local transports (non-loopback only)
+	transports, err := v.Transports(nil, nil, false)
+	if err != nil {
+		return fmt.Errorf("failed to get local transports: %w", err)
+	}
+	
+	var localIDs []uuid.UUID
+	for _, t := range transports {
+		if t.Local != t.Remote {
+			localIDs = append(localIDs, t.ID)
+		}
+	}
+	
+	// Find stale TPD entries (in TPD but not local)
+	var staleIDs []uuid.UUID
+	for _, tpdID := range tpdIDs {
+		found := false
+		for _, localID := range localIDs {
+			if localID == tpdID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			staleIDs = append(staleIDs, tpdID)
+		}
+	}
+	
+	// Remove stale entries from TPD
+	if len(staleIDs) > 0 {
+		log.Infof("Removing %d stale transports from TPD", len(staleIDs))
+		tpdC, err := connectToTpDisc(ctx, v, log)
+		if err != nil {
+			return fmt.Errorf("failed to connect to TPD: %w", err)
+		}
+		for _, id := range staleIDs {
+			if err := tpdC.DeleteTransport(ctx, id); err != nil {
+				log.WithError(err).Warnf("Failed to remove stale transport %v", id)
+			} else {
+				log.Debugf("Removed stale transport %v from TPD", id)
+			}
+		}
+	}
+	
 	return nil
 }
 

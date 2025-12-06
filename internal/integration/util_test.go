@@ -117,15 +117,13 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		}
 	}
 
-	// Additional delay to allow router GC to clean up stale routing rules
-	// from previous tests. Router GC runs every 5s by default. After restart,
-	// old rules referencing deleted transports need to be cleaned up before
-	// new transports/apps can work properly. With 12+ stale rules possible
-	// and GC removing 1-3 rules per cycle, 30s guarantees at least 6 cycles,
-	// ensuring all stale rules are fully removed before apps start.
-	const routerGCWait = 30 * time.Second
-	t.Logf("Waiting %v for router garbage collection to clean up stale routes...", routerGCWait)
-	time.Sleep(routerGCWait)
+	// Brief delay after DMSG readiness to allow initial TPD reconciliation to complete.
+	// The visor runs aggressive TPD cleanup on startup (see initEnsureTPDConcurrency)
+	// which removes stale transport entries from previous tests. Give it a few seconds
+	// to complete before starting apps that depend on accurate routing information.
+	const tpdReconciliationWait = 5 * time.Second
+	t.Logf("Waiting %v for TPD reconciliation to clean up stale transport entries...", tpdReconciliationWait)
+	time.Sleep(tpdReconciliationWait)
 }
 
 func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
