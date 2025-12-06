@@ -1383,25 +1383,16 @@ func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger
 	// Run immediate reconciliation on startup (no delay)
 	// This ensures stale TPD entries from previous runs are cleaned up quickly
 	go func() {
-		if err := reconcileTPD(ctx, v, log); err != nil {
-			log.WithError(err).Warn("Initial TPD reconciliation failed")
-		}
+		reconcileTPDWithRetry(ctx, v, log)
 	}()
 	
-	// Run periodic reconciliation every 30 seconds (not 5 minutes)
-	// This catches transient registration failures quickly
-	const tickDuration = 30 * time.Second
+	// Run periodic reconciliation every 5 minutes
+	// At scale (3000+ visors), more frequent intervals create too much TPD load
+	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
 	go func() {
 		for range ticker.C {
-			if err := reconcileTPD(ctx, v, log); err != nil {
-				log.WithError(err).Warn("TPD reconciliation failed")
-				// Retry faster on errors
-				ticker.Reset(10 * time.Second)
-			} else {
-				// Reset to normal interval on success
-				ticker.Reset(tickDuration)
-			}
+			reconcileTPDWithRetry(ctx, v, log)
 		}
 	}()
 
@@ -1412,11 +1403,56 @@ func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger
 	return nil
 }
 
+// reconcileTPDWithRetry retries TPD reconciliation until success
+// This is critical because routing breaks completely if TPD data is stale
+func reconcileTPDWithRetry(ctx context.Context, v *Visor, log *logging.Logger) {
+	attempt := 0
+	maxBackoff := 5 * time.Minute
+	
+	for {
+		attempt++
+		if err := reconcileTPD(ctx, v, log); err != nil {
+			// Calculate exponential backoff: 10s, 20s, 40s, 80s, 160s, capped at 5min
+			backoff := time.Duration(10*(1<<uint(attempt-1))) * time.Second
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			
+			log.WithError(err).Warnf("TPD reconciliation failed (attempt %d), retrying in %v", attempt, backoff)
+			
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+				continue
+			}
+		} else {
+			if attempt > 1 {
+				log.Infof("TPD reconciliation succeeded after %d attempts", attempt)
+			}
+			return
+		}
+	}
+}
+
 func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
-	entries, err := v.DiscoverTransportsByPK(v.conf.PK)
+	// Query TPD with retry logic
+	var entries []*transport.Entry
+	var err error
+	for retries := 0; retries < 3; retries++ {
+		entries, err = v.DiscoverTransportsByPK(v.conf.PK)
+		if err == nil {
+			break
+		}
+		if retries < 2 {
+			backoff := time.Duration(retries+1) * 2 * time.Second
+			log.WithError(err).Warnf("Failed to query TPD (attempt %d/3), retrying in %v", retries+1, backoff)
+			time.Sleep(backoff)
+		}
+	}
 	if err != nil {
 		v.isServicesHealthy.unset()
-		return fmt.Errorf("failed to query TPD: %w", err)
+		return fmt.Errorf("failed to query TPD after retries: %w", err)
 	}
 	
 	v.isServicesHealthy.set()
@@ -1457,18 +1493,42 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 	
-	// Remove stale entries from TPD
+	// Remove stale entries from TPD with retry logic
 	if len(staleIDs) > 0 {
 		log.Infof("Removing %d stale transports from TPD", len(staleIDs))
-		tpdC, err := connectToTpDisc(ctx, v, log)
-		if err != nil {
-			return fmt.Errorf("failed to connect to TPD: %w", err)
+		
+		var tpdC transport.DiscoveryClient
+		for retries := 0; retries < 3; retries++ {
+			tpdC, err = connectToTpDisc(ctx, v, log)
+			if err == nil {
+				break
+			}
+			if retries < 2 {
+				backoff := time.Duration(retries+1) * 2 * time.Second
+				log.WithError(err).Warnf("Failed to connect to TPD (attempt %d/3), retrying in %v", retries+1, backoff)
+				time.Sleep(backoff)
+			}
 		}
+		if err != nil {
+			return fmt.Errorf("failed to connect to TPD after retries: %w", err)
+		}
+		
 		for _, id := range staleIDs {
-			if err := tpdC.DeleteTransport(ctx, id); err != nil {
-				log.WithError(err).Warnf("Failed to remove stale transport %v", id)
-			} else {
-				log.Debugf("Removed stale transport %v from TPD", id)
+			// Retry each deletion
+			var deleteErr error
+			for retries := 0; retries < 3; retries++ {
+				deleteErr = tpdC.DeleteTransport(ctx, id)
+				if deleteErr == nil {
+					log.Debugf("Removed stale transport %v from TPD", id)
+					break
+				}
+				if retries < 2 {
+					backoff := time.Duration(retries+1) * time.Second
+					time.Sleep(backoff)
+				}
+			}
+			if deleteErr != nil {
+				log.WithError(deleteErr).Warnf("Failed to remove stale transport %v after retries", id)
 			}
 		}
 	}
