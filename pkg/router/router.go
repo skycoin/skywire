@@ -519,7 +519,17 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	nrg, ok := r.rgsNs[rules.Desc]
 
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc, r.mLogger)
-	rg.appendRules(rules.Forward, rules.Reverse, r.tm.Transport(rules.Forward.NextTransportID()))
+	
+	// Validate that transport exists locally before setting up route.
+	// If transport from TPD doesn't exist (stale data), fail fast so caller can retry.
+	tp := r.tm.Transport(rules.Forward.NextTransportID())
+	if tp == nil {
+		r.mx.Unlock()
+		return nil, fmt.Errorf("transport %v not found locally (likely stale TPD data), route setup cannot proceed", 
+			rules.Forward.NextTransportID())
+	}
+	
+	rg.appendRules(rules.Forward, rules.Reverse, tp)
 	// we put raw rg so it can be accessible to the router when handshake packets come in
 	r.rgsRaw[rules.Desc] = rg
 	r.mx.Unlock()
