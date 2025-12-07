@@ -199,6 +199,11 @@ func testVPNKillServer(t *testing.T, env *TestEnv) {
 	err = env.ContainerRestart(visorVPNServer)
 	require.NoError(t, err)
 
+	// Wait for VPN client to detect server is down and disconnect
+	// The VPN client with killswitch needs time to detect the connection
+	// is lost, tear down the TUN interface, and remove routes
+	time.Sleep(3 * time.Second)
+
 	// Check client's should not be connected to the vpn anymore / traceroute should not show VPNServer's IP
 	firstHop, err := getFirstTracerouteHop(targetHost, env)
 	if err != nil {
@@ -220,6 +225,12 @@ func testVPNRemoveTransport(t *testing.T, env *TestEnv) {
 	})
 
 	require.NoError(t, err)
+
+	// Wait for VPN client to detect transport loss and disconnect
+	// The VPN client with killswitch needs time to detect the connection
+	// is lost, tear down the TUN interface, and remove routes
+	time.Sleep(3 * time.Second)
+
 	firstHop, err := getFirstTracerouteHop(targetHost, env)
 	if err != nil {
 		require.EqualError(t, err, "no ip found")

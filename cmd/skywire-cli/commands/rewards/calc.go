@@ -1,10 +1,11 @@
-// Package clirewards cmd/skywire-cli/commands/rewards/calc.go
 package clirewards
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"reflect"
 	"sort"
 	"strconv"
@@ -29,7 +30,7 @@ const yearlyTotalRewardsPerPool int = 408000
 var (
 	yearlyTotal           int
 	hwSurveyPath          string
-	wdate                 = time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	wdate                 = time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
 	wDate                 time.Time
 	utfile                string
 	disallowArchitectures []string
@@ -41,6 +42,7 @@ var (
 	grr                   bool
 	pubkey                string
 	logLvl                string
+	processRewards        bool
 	log                   = logging.MustGetLogger("rewards")
 	nodeInfoSvc           []byte
 )
@@ -69,6 +71,110 @@ type rewardData struct {
 	SkyAddr string
 	Reward  float64
 	Shares  float64
+}
+
+// runRewardProcessing executes the complete reward processing workflow
+// This is equivalent to the reward.sh script functionality:
+// 1. Checks if rewards already processed for the date
+// 2. Fetches uptime tracker data
+// 3. Generates ineligible list, shares CSV, reward transaction CSV, and stats
+// All outputs are saved to hist/ directory with date prefix
+func runRewardProcessing() {
+	// Check if already processed
+	txnFile := fmt.Sprintf("hist/%s.txt", wdate)
+	if _, err := os.Stat(txnFile); err == nil {
+		log.Fatal("Transaction already broadcasted for ", wdate)
+	}
+
+	// Create hist directory if it doesn't exist
+	if err := os.MkdirAll("hist", 0750); err != nil {
+		log.Fatal("Failed to create hist directory: ", err)
+	}
+
+	log.Info("Processing rewards for date: ", wdate)
+
+	// Fetch uptime tracker data
+	utCacheFile := fmt.Sprintf("hist/%s_ut.json", wdate)
+	utOutputFile := fmt.Sprintf("hist/%s_ut.txt", wdate)
+	log.Info("Fetching uptime tracker data...")
+
+	//nolint:gosec
+	cmd := exec.Command("skywire-cli", "ut", "--cfu", utCacheFile)
+	utData, err := cmd.Output()
+	if err != nil {
+		log.Fatal("Failed to fetch uptime tracker data: ", err)
+	}
+
+	if err := os.WriteFile(utOutputFile, utData, 0600); err != nil {
+		log.Fatal("Failed to write uptime tracker data: ", err)
+	}
+
+	// Update utfile to use the newly created file
+	utfile = utOutputFile
+
+	// Generate ineligible list
+	ineligibleFile := fmt.Sprintf("hist/%s_ineligible.csv", wdate)
+	log.Info("Generating ineligible list...")
+	//nolint:gosec
+	cmd = exec.Command("skywire-cli", "rewards", "--utfile", utfile, "-e", "-d", wdate, "-p", hwSurveyPath)
+	var ineligibleOut bytes.Buffer
+	cmd.Stdout = &ineligibleOut
+	if err := cmd.Run(); err != nil {
+		log.Fatal("Failed to generate ineligible list: ", err)
+	}
+	if err := os.WriteFile(ineligibleFile, ineligibleOut.Bytes(), 0600); err != nil {
+		log.Fatal("Failed to write ineligible list: ", err)
+	}
+
+	// Generate shares CSV
+	sharesFile := fmt.Sprintf("hist/%s_shares.csv", wdate)
+	log.Info("Generating shares CSV...")
+	//nolint:gosec
+	cmd = exec.Command("skywire-cli", "rewards", "--utfile", utfile, "-2", "-0", "-d", wdate, "-p", hwSurveyPath)
+	var sharesOut bytes.Buffer
+	cmd.Stdout = &sharesOut
+	if err := cmd.Run(); err != nil {
+		log.Fatal("Failed to generate shares CSV: ", err)
+	}
+	if err := os.WriteFile(sharesFile, sharesOut.Bytes(), 0600); err != nil {
+		log.Fatal("Failed to write shares CSV: ", err)
+	}
+
+	// Generate reward transaction CSV
+	rewardTxnFile := fmt.Sprintf("hist/%s_rewardtxn0.csv", wdate)
+	log.Info("Generating reward transaction CSV...")
+	//nolint:gosec
+	cmd = exec.Command("skywire-cli", "rewards", "--utfile", utfile, "-1", "-0", "-d", wdate, "-p", hwSurveyPath)
+	var rewardTxnOut bytes.Buffer
+	cmd.Stdout = &rewardTxnOut
+	if err := cmd.Run(); err != nil {
+		log.Fatal("Failed to generate reward transaction CSV: ", err)
+	}
+	if err := os.WriteFile(rewardTxnFile, rewardTxnOut.Bytes(), 0600); err != nil {
+		log.Fatal("Failed to write reward transaction CSV: ", err)
+	}
+
+	// Generate stats
+	statsFile := fmt.Sprintf("hist/%s_stats.txt", wdate)
+	log.Info("Generating stats...")
+	//nolint:gosec
+	cmd = exec.Command("skywire-cli", "rewards", "--utfile", utfile, "-1", "-2", "-d", wdate, "-p", hwSurveyPath)
+	var statsOut bytes.Buffer
+	cmd.Stdout = &statsOut
+	if err := cmd.Run(); err != nil {
+		log.Fatal("Failed to generate stats: ", err)
+	}
+	if err := os.WriteFile(statsFile, statsOut.Bytes(), 0600); err != nil {
+		log.Fatal("Failed to write stats: ", err)
+	}
+
+	log.Info("Reward processing complete!")
+	log.Info("Files generated:")
+	log.Info("  - ", utOutputFile)
+	log.Info("  - ", ineligibleFile)
+	log.Info("  - ", sharesFile)
+	log.Info("  - ", rewardTxnFile)
+	log.Info("  - ", statsFile)
 }
 
 func init() {
@@ -118,6 +224,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&h1, "h1", "1", false, "hide survey csv data")
 	RootCmd.Flags().BoolVarP(&h2, "h2", "2", false, "hide reward csv data")
 	RootCmd.Flags().BoolVarP(&grr, "err", "e", false, "account for non rewarded keys")
+	RootCmd.Flags().BoolVarP(&processRewards, "process", "r", false, "run complete reward processing workflow")
 }
 
 // RootCmd is the root command for skywire-cli rewards
@@ -127,6 +234,8 @@ var RootCmd = &cobra.Command{
 	Long: `
 Collect surveys:  skywire-cli log
 Fetch uptimes:    skywire-cli ut > ut.txt
+
+Process rewards:  skywire-cli rewards --process
 
 Architectures:
 ` + fmt.Sprintf("%v", append(rewards.Architectures, "null", "all")) + `
@@ -141,6 +250,11 @@ Architectures:
 			if lvl, err := logging.LevelFromString(logLvl); err == nil {
 				logging.SetLevel(lvl)
 			}
+		}
+
+		if processRewards {
+			runRewardProcessing()
+			return
 		}
 
 		sConf, err := script.Echo(string(deployment.ServicesJSON)).JQ(`.prod  | del(.stun_servers)`).Bytes()

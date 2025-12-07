@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/rpc"
+	"strings"
 	"sync"
 	"time"
 
@@ -273,51 +274,79 @@ func (r *router) DialRoutes(
 		}
 	}
 
-	forwardPath, reversePath, err := r.fetchBestRoutes(lPK, rPK, opts)
-	if err != nil {
-		return nil, fmt.Errorf("route finder: %w", err)
+	// Retry route setup with fresh routes if it fails due to stale TPD data.
+	// Route-finder may return routes with non-existent transports (TPD sync issues),
+	// so we query for fresh routes on each retry instead of retrying the same bad route.
+	const maxRetries = 3
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		forwardPath, reversePath, err := r.fetchBestRoutes(lPK, rPK, opts)
+		if err != nil {
+			if attempt < maxRetries {
+				r.logger.WithError(err).Warnf("Route finder failed (attempt %d/%d), retrying with fresh query...", attempt, maxRetries)
+				continue
+			}
+			return nil, fmt.Errorf("route finder: %w", err)
+		}
+
+		req := routing.BidirectionalRoute{
+			Desc:      forwardDesc,
+			KeepAlive: DefaultRouteKeepAlive,
+			Forward:   forwardPath,
+			Reverse:   reversePath,
+		}
+
+		rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
+		if err != nil {
+			if attempt < maxRetries {
+				r.logger.WithError(err).Warnf("Route setup failed (attempt %d/%d), retrying with fresh route...", attempt, maxRetries)
+				continue
+			}
+			r.logger.WithError(err).Error("Error dialing route group")
+			return nil, err
+		}
+
+		if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+			if attempt < maxRetries {
+				r.logger.WithError(err).Warnf("Saving routing rules failed (attempt %d/%d), retrying with fresh route...", attempt, maxRetries)
+				continue
+			}
+			r.logger.WithError(err).Error("Error saving routing rules")
+			return nil, err
+		}
+
+		nsConf := noise.Config{
+			LocalPK:   r.conf.PubKey,
+			LocalSK:   r.conf.SecKey,
+			RemotePK:  rPK,
+			Initiator: true,
+		}
+
+		nrg, err := r.saveRouteGroupRules(rules, nsConf)
+		if err != nil {
+			// Check if this is a "no suitable transport" error (stale TPD data)
+			if strings.Contains(err.Error(), "no suitable transport") || strings.Contains(err.Error(), "transport") {
+				if attempt < maxRetries {
+					r.logger.WithError(err).Warnf("Route handshake failed due to transport issue (attempt %d/%d), querying route-finder for fresh route...", attempt, maxRetries)
+					continue
+				}
+			}
+			return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
+		}
+
+		nrg.rg.startOffServiceLoops()
+
+		r.logger.Debugf("Created new routes to %s on port %d", rPK, lPort)
+
+		// reset MinHops default value if changed before
+		if defaultMinHops != 1 {
+			r.conf.MinHops = defaultMinHops
+		}
+
+		return nrg, nil
 	}
 
-	req := routing.BidirectionalRoute{
-		Desc:      forwardDesc,
-		KeepAlive: DefaultRouteKeepAlive,
-		Forward:   forwardPath,
-		Reverse:   reversePath,
-	}
-
-	rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
-	if err != nil {
-		r.logger.WithError(err).Error("Error dialing route group")
-		return nil, err
-	}
-
-	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
-		r.logger.WithError(err).Error("Error saving routing rules")
-		return nil, err
-	}
-
-	nsConf := noise.Config{
-		LocalPK:   r.conf.PubKey,
-		LocalSK:   r.conf.SecKey,
-		RemotePK:  rPK,
-		Initiator: true,
-	}
-
-	nrg, err := r.saveRouteGroupRules(rules, nsConf)
-	if err != nil {
-		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
-	}
-
-	nrg.rg.startOffServiceLoops()
-
-	r.logger.Debugf("Created new routes to %s on port %d", rPK, lPort)
-
-	// reset MinHops default value if changed before
-	if defaultMinHops != 1 {
-		r.conf.MinHops = defaultMinHops
-	}
-
-	return nrg, nil
+	// Should never reach here, but handle it gracefully
+	return nil, fmt.Errorf("failed to establish route after %d attempts", maxRetries)
 }
 
 // PingRoute dials to a given visor of 'rPK'.
