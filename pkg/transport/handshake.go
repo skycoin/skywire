@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
@@ -168,8 +169,23 @@ func MakeSettlementHS(init bool, log *logging.Logger) SettlementHS {
 					}
 				}
 			} else {
-				// TODO(evanlinjin): In the future, this should return error and result in failed HS.
-				log.WithError(err).Error("Failed to register transport.")
+				// Retry registration with exponential backoff for transient errors
+				log.WithError(err).Warn("Failed to register transport, retrying with backoff...")
+				maxRetries := 3
+				for attempt := 1; attempt <= maxRetries; attempt++ {
+					backoff := time.Duration(attempt) * time.Second
+					time.Sleep(backoff)
+
+					if retryErr := dc.RegisterTransports(ctx, recvSE); retryErr != nil {
+						log.WithError(retryErr).Warnf("Registration retry %d/%d failed", attempt, maxRetries)
+						if attempt == maxRetries {
+							log.WithError(retryErr).Error("Failed to register transport after all retries.")
+						}
+					} else {
+						log.Infof("Successfully registered transport after %d retries", attempt)
+						break
+					}
+				}
 			}
 		}
 		return writeHsResponse(transport, responseOK)
