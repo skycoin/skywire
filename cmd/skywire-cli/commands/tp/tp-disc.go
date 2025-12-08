@@ -3,9 +3,10 @@ package clitp
 
 import (
 	"bytes"
-	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"text/tabwriter"
@@ -18,23 +19,21 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 var (
-	tpID      string
-	tpPK      string
-	tpdDirect bool
+	tpID    string
+	tpPK    string
+	tpdHTTP bool
 )
 
 func init() {
 	discTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "obtain transport of given ID")
 	discTpCmd.Flags().StringVarP(&tpPK, "pk", "p", "", "obtain transports by public key")
 	discTpCmd.Flags().StringVar(&tpdURL, "tpdurl", "", "transport discovery url (e.g., http://transport-discovery:9091)")
-	discTpCmd.Flags().BoolVar(&tpdDirect, "direct", false, "query transport discovery directly, bypass RPC")
+	discTpCmd.Flags().BoolVar(&tpdHTTP, "http", false, "query transport discovery via HTTP, bypass RPC")
 }
 
 var discTpCmd = &cobra.Command{
@@ -60,11 +59,11 @@ var discTpCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), tppk.Set(tpPK))
 		}
 
-		// Determine if we should query transport discovery directly
-		useDirectQuery := tpdDirect || tpdURL != ""
+		// Determine if we should query transport discovery via HTTP
+		useHTTPQuery := tpdHTTP || tpdURL != ""
 
-		// Try RPC first unless direct query is requested
-		if !useDirectQuery {
+		// Try RPC first unless HTTP query is requested
+		if !useHTTPQuery {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err == nil {
 				// RPC available, use it
@@ -74,53 +73,105 @@ var discTpCmd = &cobra.Command{
 						PrintTransportEntries(cmd.Flags(), entry)
 						return
 					}
-					// RPC query failed, fall back to direct query
-					fmt.Fprintf(os.Stderr, "RPC query failed: %v, falling back to direct query...\n", err)
-					useDirectQuery = true
+					// RPC query failed, fall back to HTTP query
+					fmt.Fprintf(os.Stderr, "RPC query failed: %v, falling back to HTTP query...\n", err)
+					useHTTPQuery = true
 				} else {
 					entries, err := rpcClient.DiscoverTransportsByPK(tppk)
 					if err == nil {
 						PrintTransportEntries(cmd.Flags(), entries...)
 						return
 					}
-					// RPC query failed, fall back to direct query
-					fmt.Fprintf(os.Stderr, "RPC query failed: %v, falling back to direct query...\n", err)
-					useDirectQuery = true
+					// RPC query failed, fall back to HTTP query
+					fmt.Fprintf(os.Stderr, "RPC query failed: %v, falling back to HTTP query...\n", err)
+					useHTTPQuery = true
 				}
 			} else {
-				// RPC connection failed, fall back to direct query
-				fmt.Fprintf(os.Stderr, "RPC connection failed: %v, falling back to direct query...\n", err)
-				useDirectQuery = true
+				// RPC connection failed, fall back to HTTP query
+				fmt.Fprintf(os.Stderr, "RPC connection failed: %v, falling back to HTTP query...\n", err)
+				useHTTPQuery = true
 			}
 		}
 
-		// Query transport discovery directly
-		if useDirectQuery {
+		// Query transport discovery via HTTP
+		if useHTTPQuery {
 			// Use provided URL or default
 			url := tpdURL
 			if url == "" {
 				url = deployment.Prod.TransportDiscovery
 			}
 
-			// Create HTTP client for transport discovery
-			masterLogger := logging.NewMasterLogger()
-			tpdClient, err := tpdclient.NewHTTP(url, cipher.PubKey{}, cipher.SecKey{}, &http.Client{}, "", masterLogger)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to create transport discovery client: %w", err))
-			}
-
-			ctx := context.Background()
+			// Query via plain HTTP
 			if tppk.Null() {
-				entry, err := tpdClient.GetTransportByID(ctx, uuid.UUID(tpid))
+				entry, err := getTransportByID(url, uuid.UUID(tpid))
 				internal.Catch(cmd.Flags(), err)
 				PrintTransportEntries(cmd.Flags(), entry)
 			} else {
-				entries, err := tpdClient.GetTransportsByEdge(ctx, tppk)
+				entries, err := getTransportsByEdge(url, tppk)
 				internal.Catch(cmd.Flags(), err)
 				PrintTransportEntries(cmd.Flags(), entries...)
 			}
 		}
 	},
+}
+
+// getTransportByID queries transport discovery HTTP endpoint for a transport by ID
+func getTransportByID(baseURL string, id uuid.UUID) (*transport.Entry, error) {
+	url := fmt.Sprintf("%s/all-transports", baseURL)
+	resp, err := http.Get(url) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("failed to query transport discovery: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+		return nil, fmt.Errorf("transport discovery returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var entries []*transport.Entry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Find the transport by ID
+	for _, entry := range entries {
+		if entry.ID == id {
+			return entry, nil
+		}
+	}
+
+	return nil, fmt.Errorf("transport not found")
+}
+
+// getTransportsByEdge queries transport discovery HTTP endpoint for transports by edge public key
+func getTransportsByEdge(baseURL string, pk cipher.PubKey) ([]*transport.Entry, error) {
+	url := fmt.Sprintf("%s/all-transports", baseURL)
+	resp, err := http.Get(url) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("failed to query transport discovery: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+		return nil, fmt.Errorf("transport discovery returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var allEntries []*transport.Entry
+	if err := json.NewDecoder(resp.Body).Decode(&allEntries); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Filter transports by edge
+	var entries []*transport.Entry
+	for _, entry := range allEntries {
+		if entry.Edges[0] == pk || entry.Edges[1] == pk {
+			entries = append(entries, entry)
+		}
+	}
+
+	return entries, nil
 }
 
 // PrintTransportEntries prints the transport entries
