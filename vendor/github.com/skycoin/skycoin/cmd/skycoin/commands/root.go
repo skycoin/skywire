@@ -13,7 +13,9 @@ and then run cmd/newcoin
 import (
 	_ "net/http/pprof"
 	"os"
+	"strings"
 
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skycoin/src/fiber"
@@ -106,6 +108,39 @@ var (
 )
 
 func init() {
+	// Check for FIBER_TOML environment variable to load custom fibercoin config
+	// This sets the default values before flag registration, so CLI flags naturally override
+	if fiberTomlPath := os.Getenv("FIBER_TOML"); fiberTomlPath != "" {
+		if err := nodeConfig.LoadFromFiberConfig(fiberTomlPath); err != nil {
+			logger.Errorf("Failed to load FIBER_TOML config: %v", err)
+			os.Exit(1)
+		}
+		logger.Infof("Loaded fiber config from FIBER_TOML: %s", fiberTomlPath)
+	}
+
+	// Check for GENESIS environment variable to load genesis wallet credentials
+	// This takes precedence over fiber.toml values (address/pubkey/seckey)
+	if genesisWalletPath := os.Getenv("GENESIS"); genesisWalletPath != "" {
+		if err := nodeConfig.LoadFromGenesisWallet(genesisWalletPath); err != nil {
+			logger.Errorf("Failed to load GENESIS wallet: %v", err)
+			os.Exit(1)
+		}
+		logger.Infof("Loaded genesis credentials from GENESIS: %s", genesisWalletPath)
+	}
+
+	// Set dynamic Long description based on loaded config
+	// Use DisplayName if available (from fiber.toml), otherwise CoinName (from template)
+	coinName := nodeConfig.Fiber.DisplayName
+	if coinName == "" {
+		coinName = nodeConfig.Fiber.Name
+	}
+	if coinName == "" {
+		coinName = "skycoin"
+	}
+	// Use lowercase for ASCII art and wallet text
+	coinNameLower := strings.ToLower(coinName)
+	RootCmd.Long = calvin.AsciiFont(coinNameLower) + "\n " + coinNameLower + " wallet"
+
 	nodeConfig.RegisterFlags(RootCmd)
 }
 
@@ -113,11 +148,7 @@ func init() {
 var RootCmd = &cobra.Command{
 	Use:   "skycoin",
 	Short: "skycoin wallet",
-	Long: `
-┌─┐┬┌─┬ ┬┌─┐┌─┐┬┌┐┌
-└─┐├┴┐└┬┘│  │ │││││
-└─┘┴ ┴ ┴ └─┘└─┘┴┘└┘
-	skycoin wallet`,
+	Long:  "", // Set dynamically in init()
 	Run: func(cmd *cobra.Command, args []string) {
 		// create a new fiber coin instance
 		coin := skycoin.NewCoin(skycoin.Config{

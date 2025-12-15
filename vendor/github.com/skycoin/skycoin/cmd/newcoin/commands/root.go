@@ -6,14 +6,16 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"text/template"
 
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
+
 	"github.com/skycoin/skycoin/src/fiber"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skycoin/src/util/useragent"
+	"github.com/skycoin/skycoin/templates"
 )
 
 const (
@@ -36,13 +38,13 @@ var (
 func init() {
 	createCoinCmd.Flags().SortFlags = false
 	createCoinCmd.Flags().StringVarP(&coinName, "coin", "c", "skycoin", "name of the coin to create")
-	createCoinCmd.Flags().StringVarP(&templateDir, "template-dir", "d", "./template", "template directory path")
-	createCoinCmd.Flags().StringVarP(&coinTemplateFile, "coin-template-file", "e", "coin.template", "coin template file (importable)")
-	createCoinCmd.Flags().StringVarP(&commandTemplateFile, "command-template-file", "f", "command.template", "command template file (executable)")
-	createCoinCmd.Flags().StringVarP(&coinTestTemplateFile, "coin-test-template-file", "g", "coin_test.template", "coin test template file")
-	createCoinCmd.Flags().StringVarP(&paramsTemplateFile, "params-template-file", "i", "params.template", "params template file")
+	createCoinCmd.Flags().StringVarP(&templateDir, "template-dir", "d", "./templates", "template directory path")
+	createCoinCmd.Flags().StringVarP(&coinTemplateFile, "coin-template-file", "e", templates.CoinTemplate, "coin template file (importable)")
+	createCoinCmd.Flags().StringVarP(&commandTemplateFile, "command-template-file", "f", templates.CommandTemplate, "command template file (executable)")
+	createCoinCmd.Flags().StringVarP(&coinTestTemplateFile, "coin-test-template-file", "g", templates.CoinTestTemplate, "coin test template file")
+	createCoinCmd.Flags().StringVarP(&paramsTemplateFile, "params-template-file", "i", templates.ParamsTemplate, "params template file")
 	createCoinCmd.Flags().StringVarP(&configDir, "config-dir", "j", "./", "config directory path")
-	createCoinCmd.Flags().StringVarP(&configFile, "config-file", "k", "fiber.toml", "config file path")
+	createCoinCmd.Flags().StringVarP(&configFile, "config-file", "k", "config/fiber.toml", "config file path")
 	RootCmd.AddCommand(createCoinCmd)
 }
 
@@ -50,10 +52,7 @@ func init() {
 var RootCmd = &cobra.Command{
 	Use:   "newcoin",
 	Short: "newcoin is a helper tool for creating new fiber coins",
-	Long: `
-	┌┐┌┌─┐┬ ┬┌─┐┌─┐┬┌┐┌
-	│││├┤ ││││  │ │││││
-	┘└┘└─┘└┴┘└─┘└─┘┴┘└┘
+	Long: calvin.AsciiFont("newcoin") + `
 newcoin is a helper tool for creating new fiber coins`,
 }
 
@@ -62,15 +61,6 @@ var createCoinCmd = &cobra.Command{
 	Short: "Create a new coin from a template file",
 	RunE: func(_ *cobra.Command, _ []string) error {
 		if err := validateCoinName(coinName); err != nil {
-			return err
-		}
-		if _, err := os.Stat(filepath.Join(templateDir, coinTemplateFile)); os.IsNotExist(err) {
-			return err
-		}
-		if _, err := os.Stat(filepath.Join(templateDir, coinTestTemplateFile)); os.IsNotExist(err) {
-			return err
-		}
-		if _, err := os.Stat(filepath.Join(templateDir, paramsTemplateFile)); os.IsNotExist(err) {
 			return err
 		}
 		configFilepath := filepath.Join(configDir, configFile)
@@ -122,25 +112,54 @@ var createCoinCmd = &cobra.Command{
 			return err
 		}
 		defer paramsFile.Close() //nolint
-		err = os.Chdir(templateDir)
+
+		// Read embedded template files
+		coinTemplateContent, err := templates.FS.ReadFile(coinTemplateFile)
 		if err != nil {
-			log.Errorf("failed to change directory to %s", templateDir)
+			log.Errorf("failed to read embedded coin template: %v", err)
 			return err
 		}
-		templateFiles := []string{
-			coinTemplateFile,
-			commandTemplateFile,
-			coinTestTemplateFile,
-			paramsTemplateFile,
+		commandTemplateContent, err := templates.FS.ReadFile(commandTemplateFile)
+		if err != nil {
+			log.Errorf("failed to read embedded command template: %v", err)
+			return err
 		}
+		coinTestTemplateContent, err := templates.FS.ReadFile(coinTestTemplateFile)
+		if err != nil {
+			log.Errorf("failed to read embedded coin test template: %v", err)
+			return err
+		}
+		paramsTemplateContent, err := templates.FS.ReadFile(paramsTemplateFile)
+		if err != nil {
+			log.Errorf("failed to read embedded params template: %v", err)
+			return err
+		}
+
+		// Parse templates from embedded content
 		t := template.New(coinTemplateFile)
-		t, err = t.ParseFiles(templateFiles...)
+		t, err = t.Parse(string(coinTemplateContent))
 		if err != nil {
-			log.Errorf("failed to parse template files: %v", templateFiles)
+			log.Errorf("failed to parse coin template: %v", err)
 			return err
 		}
+		t, err = t.New(commandTemplateFile).Parse(string(commandTemplateContent))
+		if err != nil {
+			log.Errorf("failed to parse command template: %v", err)
+			return err
+		}
+		t, err = t.New(coinTestTemplateFile).Parse(string(coinTestTemplateContent))
+		if err != nil {
+			log.Errorf("failed to parse coin test template: %v", err)
+			return err
+		}
+		t, err = t.New(paramsTemplateFile).Parse(string(paramsTemplateContent))
+		if err != nil {
+			log.Errorf("failed to parse params template: %v", err)
+			return err
+		}
+
 		config.Node.CoinName = coinName
-		config.Node.CoinAscii = asciiFont(coinName)
+		config.Node.CoinAscii = calvin.AsciiFont(coinName)
 		config.Node.DataDirectory = "$HOME/." + coinName
 		err = t.ExecuteTemplate(commandFile, coinTemplateFile, config.Node)
 		if err != nil {
@@ -176,50 +195,6 @@ func validateCoinName(s string) error {
 		return fmt.Errorf("invalid coin name. must only contain the characters %s", useragent.NamePattern)
 	}
 	return nil
-}
-
-var boxFont = map[rune][]string{
-	'a': {"┌─┐", "├─┤", "┴ ┴"},
-	'b': {"┌┐ ", "├┴┐", "└─┘"},
-	'c': {"┌─┐", "│  ", "└─┘"},
-	'd': {"┌┬┐", " ││", "─┴┘"},
-	'e': {"┌─┐", "├┤ ", "└─┘"},
-	'f': {"┌─┐", "├┤ ", "└  "},
-	'g': {"┌─┐", "│ ┬", "└─┘"},
-	'h': {"┬ ┬", "├─┤", "┴ ┴"},
-	'i': {"┬", "│", "┴"},
-	'j': {" ┬", " │", "└┘"},
-	'k': {"┬┌─", "├┴┐", "┴ ┴"},
-	'l': {"┬  ", "│  ", "┴─┘"},
-	'm': {"┌┬┐", "│││", "┴ ┴"},
-	'n': {"┌┐┌", "│││", "┘└┘"},
-	'o': {"┌─┐", "│ │", "└─┘"},
-	'p': {"┌─┐", "├─┘", "┴  "},
-	'q': {"┌─┐ ", "│─┼┐", "└─┘└"},
-	'r': {"┬─┐", "├┬┘", "┴└─"},
-	's': {"┌─┐", "└─┐", "└─┘"},
-	't': {"┌┬┐", " │ ", " ┴ "},
-	'u': {"┬ ┬", "│ │", "└─┘"},
-	'v': {"┬  ┬", "└┐┌┘", " └┘ "},
-	'w': {"┬ ┬", "│││", "└┴┘"},
-	'x': {"─┐ ┬", "┌┴┬┘", "┴ └─"},
-	'y': {"┬ ┬", "└┬┘", " ┴ "},
-	'z': {"┌─┐", "┌─┘", "└─┘"},
-}
-
-// ConvertToBoxFont converts a lowercase string to box drawing characters.
-func asciiFont(input string) string {
-	var output [3]string
-
-	for _, char := range input {
-		if row, ok := boxFont[char]; ok {
-			for i := 0; i < len(row); i++ {
-				output[i] += row[i]
-			}
-		}
-	}
-
-	return strings.Join(output[:], "\n")
 }
 
 const helpTemplate = `
