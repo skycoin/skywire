@@ -87,6 +87,7 @@ type Session struct {
 	conn io.ReadWriteCloser
 
 	config           *Config
+	goAway           int32  // flag id exhausted
 	nextStreamID     uint32 // next stream identifier
 	nextStreamIDLock sync.Mutex
 
@@ -114,11 +115,8 @@ type Session struct {
 
 	chAccepts chan *stream
 
-	dataReady int32 // flag data has arrived
-
-	goAway int32 // flag id exhausted
-
-	deadline atomic.Value
+	sessionIsActive int32        // flag session is active
+	acceptDeadline  atomic.Value // deadline for Accept()
 
 	requestID        uint32            // Monotonic increasing write request ID
 	shaper           chan writeRequest // a shaper for writing
@@ -172,13 +170,16 @@ func (s *Session) OpenStream() (*Stream, error) {
 		return nil, ErrGoAway
 	}
 
-	s.nextStreamID += 2
-	sid := s.nextStreamID
-	if sid == sid%2 { // stream-id overflows
+	// check for stream id overflow
+	if s.nextStreamID+2 < s.nextStreamID {
 		s.goAway = 1
 		s.nextStreamIDLock.Unlock()
 		return nil, ErrGoAway
 	}
+
+	// allocate next stream id
+	s.nextStreamID += 2
+	sid := s.nextStreamID
 	s.nextStreamIDLock.Unlock()
 
 	stream := newStream(sid, s.config.MaxFrameSize, s)
@@ -218,7 +219,7 @@ func (s *Session) Open() (io.ReadWriteCloser, error) {
 // is ready to be accepted.
 func (s *Session) AcceptStream() (*Stream, error) {
 	var deadline <-chan time.Time
-	if d, ok := s.deadline.Load().(time.Time); ok && !d.IsZero() {
+	if d, ok := s.acceptDeadline.Load().(time.Time); ok && !d.IsZero() {
 		timer := time.NewTimer(time.Until(d))
 		defer timer.Stop()
 		deadline = timer.C
@@ -255,16 +256,16 @@ func (s *Session) Close() error {
 		once = true
 	})
 
-	if once {
-		s.streamLock.Lock()
-		for k := range s.streams {
-			s.streams[k].sessionClose()
-		}
-		s.streamLock.Unlock()
-		return s.conn.Close()
-	} else {
+	if !once {
 		return io.ErrClosedPipe
 	}
+
+	s.streamLock.Lock()
+	for k := range s.streams {
+		s.streams[k].sessionClose()
+	}
+	s.streamLock.Unlock()
+	return s.conn.Close()
 }
 
 // CloseChan can be used by someone who wants to be notified immediately when this
@@ -325,7 +326,7 @@ func (s *Session) NumStreams() int {
 // SetDeadline sets a deadline used by Accept* calls.
 // A zero time value disables the deadline.
 func (s *Session) SetDeadline(t time.Time) error {
-	s.deadline.Store(t)
+	s.acceptDeadline.Store(t)
 	return nil
 }
 
@@ -352,16 +353,20 @@ func (s *Session) RemoteAddr() net.Addr {
 // notify the session that a stream has closed
 func (s *Session) streamClosed(sid uint32) {
 	s.streamLock.Lock()
-	if stream, ok := s.streams[sid]; ok {
-		n := stream.recycleTokens()
-		if n > 0 { // return remaining tokens to the bucket
-			if atomic.AddInt32(&s.bucket, int32(n)) > 0 {
-				s.notifyBucket()
-			}
-		}
-		delete(s.streams, sid)
+	defer s.streamLock.Unlock()
+
+	stream, ok := s.streams[sid]
+	if !ok {
+		return
 	}
-	s.streamLock.Unlock()
+
+	if n := stream.recycleTokens(); n > 0 {
+		// return remaining tokens to the bucket
+		if atomic.AddInt32(&s.bucket, int32(n)) > 0 {
+			s.notifyBucket()
+		}
+	}
+	delete(s.streams, sid)
 }
 
 // returnTokens is called by stream to return token after read
@@ -377,85 +382,109 @@ func (s *Session) recvLoop() {
 	var updHdr updHeader
 
 	for {
+		// Wait until we have tokens or session is closed.
 		for atomic.LoadInt32(&s.bucket) <= 0 && !s.IsClosed() {
 			select {
 			case <-s.bucketNotify:
 			case <-s.die:
+				// If it returns here, Accept() and OpenStream() are unblocked with io.ErrClosedPipe,
+				// causing recvLoop to exit gracefully. If recvLoop is blocked in io.ReadFull, however,
+				// it will be unblocked by a socket read error instead.
 				return
 			}
 		}
 
+		// As long as we have tokens, try to read frames.
 		// read header first
-		if _, err := io.ReadFull(s.conn, hdr[:]); err == nil {
-			atomic.StoreInt32(&s.dataReady, 1)
-			if hdr.Version() != byte(s.config.Version) {
-				s.notifyProtoError(ErrInvalidProtocol)
-				return
-			}
-			sid := hdr.StreamID()
-			switch hdr.Cmd() {
-			case cmdNOP:
-			case cmdSYN: // stream opening
-				s.streamLock.Lock()
-				if _, ok := s.streams[sid]; !ok {
-					stream := newStream(sid, s.config.MaxFrameSize, s)
-					s.streams[sid] = stream
-					select {
-					case s.chAccepts <- stream:
-					case <-s.die:
-					}
-				}
-				s.streamLock.Unlock()
-			case cmdFIN: // stream closing
-				s.streamLock.Lock()
-				if stream, ok := s.streams[sid]; ok {
-					stream.fin()
-					stream.notifyReadEvent()
-				}
-				s.streamLock.Unlock()
-			case cmdPSH: // data frame
-				if hdr.Length() > 0 {
-					pNewbuf := defaultAllocator.Get(int(hdr.Length()))
-					if written, err := io.ReadFull(s.conn, *pNewbuf); err == nil {
-						s.streamLock.Lock()
-						if stream, ok := s.streams[sid]; ok {
-							stream.pushBytes(pNewbuf)
-							// a stream used some token
-							atomic.AddInt32(&s.bucket, -int32(written))
-							stream.notifyReadEvent()
-						} else {
-							// data directed to a missing/closed stream, recycle the buffer immediately.
-							defaultAllocator.Put(pNewbuf)
-						}
-						s.streamLock.Unlock()
-					} else {
-						s.notifyReadError(err)
-						return
-					}
-				}
-			case cmdUPD: // a window update signal
-				if _, err := io.ReadFull(s.conn, updHdr[:]); err == nil {
-					s.streamLock.Lock()
-					if stream, ok := s.streams[sid]; ok {
-						stream.update(updHdr.Consumed(), updHdr.Window())
-					}
-					s.streamLock.Unlock()
-				} else {
-					s.notifyReadError(err)
-					return
-				}
-			default:
-				s.notifyProtoError(ErrInvalidProtocol)
-				return
-			}
-		} else {
+		_, err := io.ReadFull(s.conn, hdr[:])
+		if err != nil {
 			s.notifyReadError(err)
+			return
+		}
+
+		// Mark the session as active
+		atomic.StoreInt32(&s.sessionIsActive, 1)
+
+		// validate protocol version
+		if hdr.Version() != byte(s.config.Version) {
+			s.notifyProtoError(ErrInvalidProtocol)
+			return
+		}
+
+		// handle different command types
+		sid := hdr.StreamID()
+		switch hdr.Cmd() {
+		case cmdNOP:
+		case cmdSYN: // stream opening
+			s.streamLock.Lock()
+			if _, ok := s.streams[sid]; !ok {
+				stream := newStream(sid, s.config.MaxFrameSize, s)
+				s.streams[sid] = stream
+				select {
+				case s.chAccepts <- stream:
+				case <-s.die:
+				}
+			}
+			s.streamLock.Unlock()
+
+		case cmdFIN: // stream closing
+			s.streamLock.Lock()
+			if stream, ok := s.streams[sid]; ok {
+				stream.fin() // fin unblocks the readers and writers
+			}
+			s.streamLock.Unlock()
+
+		case cmdPSH: // data frame
+			if hdr.Length() == 0 {
+				continue
+			}
+
+			// read payload from the underlying connection
+			pNewbuf := defaultAllocator.Get(int(hdr.Length()))
+			written, err := io.ReadFull(s.conn, *pNewbuf)
+			if err != nil {
+				s.notifyReadError(err)
+
+				// recycle the buffer immediately.
+				defaultAllocator.Put(pNewbuf)
+				return
+			}
+
+			// push data to the corresponding stream
+			s.streamLock.Lock()
+			if stream, ok := s.streams[sid]; ok {
+				stream.pushBytes(pNewbuf)
+				// deduct tokens from the bucket
+				atomic.AddInt32(&s.bucket, -int32(written))
+				stream.wakeupReader()
+			} else {
+				// data directed to a missing/closed stream, recycle the buffer immediately.
+				defaultAllocator.Put(pNewbuf)
+			}
+			s.streamLock.Unlock()
+
+		case cmdUPD: // a window update signal
+			_, err := io.ReadFull(s.conn, updHdr[:])
+			if err != nil {
+				s.notifyReadError(err)
+				return
+			}
+
+			// update the window size for the corresponding stream
+			s.streamLock.Lock()
+			if stream, ok := s.streams[sid]; ok {
+				stream.update(updHdr.Consumed(), updHdr.Window())
+			}
+			s.streamLock.Unlock()
+
+		default:
+			s.notifyProtoError(ErrInvalidProtocol)
 			return
 		}
 	}
 }
 
-// keepalive sends NOP frame to peer to keep the connection alive, and detect dead peers
+// keepalive sends NOP frames periodically to keep the connection alive
 func (s *Session) keepalive() {
 	tickerPing := time.NewTicker(s.config.KeepAliveInterval)
 	tickerTimeout := time.NewTicker(s.config.KeepAliveTimeout)
@@ -465,9 +494,9 @@ func (s *Session) keepalive() {
 		select {
 		case <-tickerPing.C:
 			s.writeFrameInternal(newFrame(byte(s.config.Version), cmdNOP, 0), tickerPing.C, CLSCTRL)
-			s.notifyBucket() // force a signal to the recvLoop
+			s.notifyBucket() // force a wakeup signal to the recvLoop
 		case <-tickerTimeout.C:
-			if !atomic.CompareAndSwapInt32(&s.dataReady, 1, 0) {
+			if !atomic.CompareAndSwapInt32(&s.sessionIsActive, 1, 0) {
 				// recvLoop may block while bucket is 0, in this case,
 				// session should not be closed.
 				if atomic.LoadInt32(&s.bucket) > 0 {
@@ -525,7 +554,7 @@ func (s *Session) notifyShaperConsumed() {
 	}
 }
 
-// sendLoop sends frames to the underlying connection
+// sendLoop sends frames over the underlying connection
 func (s *Session) sendLoop() {
 	var buf []byte
 	var n int
