@@ -1,17 +1,17 @@
 package skycoin
 
 import (
+	"encoding/json"
 	"errors"
-	//	"flag"
 	"fmt"
 	"math"
-
-	//	"os"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skycoin/src/cipher/crypto"
@@ -125,7 +125,7 @@ type NodeConfig struct {
 	// Launch System Default Browser after client startup
 	LaunchBrowser bool
 
-	// Data directory holds app data -- defaults to ~/.skycoin
+	// Data directory holds app data
 	DataDirectory string
 	// GUI directory contains assets for the HTML interface
 	GUIDirectory string
@@ -216,6 +216,16 @@ type NodeConfig struct {
 	blockchainSeckey cipher.SecKey
 
 	Fiber readable.FiberConfig
+
+	// Paths for auto-updating fiber.toml
+	fiberTomlPath     string // Set from FIBER_TOML env
+	genesisWalletPath string // Set from GENESIS env
+	// Distribution addresses from fiber.toml [params] section
+	distributionAddresses      []string // Loaded from fiber.Params.DistributionAddresses
+	distributionMaxCoinSupply  uint64   // Loaded from fiber.Params.MaxCoinSupply
+	distributionUnlockedCount  uint64   // Loaded from fiber.Params.InitialUnlockedCount
+	distributionUnlockRate     uint64   // Loaded from fiber.Params.UnlockAddressRate
+	distributionUnlockInterval uint64   // Loaded from fiber.Params.UnlockTimeInterval
 }
 
 // NewNodeConfig returns a new node config instance
@@ -684,8 +694,8 @@ func (c *NodeConfig) RegisterFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&c.WebInterfacePlaintextAuth, "web-interface-plaintext-auth", c.WebInterfacePlaintextAuth, "allow web interface auth without https")
 
 	cmd.Flags().BoolVar(&c.LaunchBrowser, "launch-browser", c.LaunchBrowser, "launch system default webbrowser at client startup")
-	cmd.Flags().StringVar(&c.DataDirectory, "data-dir", c.DataDirectory, "directory to store app data (defaults to ~/.skycoin)")
-	cmd.Flags().StringVar(&c.DBPath, "db-path", c.DBPath, "path of database file (defaults to ~/.skycoin/data.db)")
+	cmd.Flags().StringVar(&c.DataDirectory, "data-dir", c.DataDirectory, fmt.Sprintf("directory to store app data (defaults to %s)", c.DataDirectory))
+	cmd.Flags().StringVar(&c.DBPath, "db-path", c.DBPath, "path of database file")
 	cmd.Flags().BoolVar(&c.DBReadOnly, "db-read-only", c.DBReadOnly, "open bolt db read-only")
 	cmd.Flags().BoolVar(&c.ProfileCPU, "profile-cpu", c.ProfileCPU, "enable cpu profiling")
 	cmd.Flags().StringVar(&c.ProfileCPUFile, "profile-cpu-file", c.ProfileCPUFile, "where to write the cpu profile file")
@@ -722,8 +732,8 @@ func (c *NodeConfig) RegisterFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&c.GenesisSignatureStr, "genesis-signature", c.GenesisSignatureStr, "genesis block signature")
 	cmd.Flags().Uint64Var(&c.GenesisTimestamp, "genesis-timestamp", c.GenesisTimestamp, "genesis block timestamp")
 
-	cmd.Flags().StringVar(&c.WalletDirectory, "wallet-dir", c.WalletDirectory, "location of the wallet files. Defaults to ~/.skycoin/wallet/")
-	cmd.Flags().StringVar(&c.KVStorageDirectory, "storage-dir", c.KVStorageDirectory, "location of the storage data files. Defaults to ~/.skycoin/data/")
+	cmd.Flags().StringVar(&c.WalletDirectory, "wallet-dir", c.WalletDirectory, "location of the wallet files")
+	cmd.Flags().StringVar(&c.KVStorageDirectory, "storage-dir", c.KVStorageDirectory, "location of the storage data files")
 	cmd.Flags().IntVar(&c.MaxConnections, "max-connections", c.MaxConnections, "Maximum number of total connections allowed")
 	cmd.Flags().IntVar(&c.MaxOutgoingConnections, "max-outgoing-connections", c.MaxOutgoingConnections, "Maximum number of outgoing connections allowed")
 	cmd.Flags().IntVar(&c.MaxIncomingConnections, "max-incoming-connections", c.MaxIncomingConnections, "Maximum number of incoming connections allowed")
@@ -735,6 +745,18 @@ func (c *NodeConfig) RegisterFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&c.LocalhostOnly, "localhost-only", c.LocalhostOnly, "Run on localhost and only connect to localhost peers")
 	cmd.Flags().StringVar(&c.WalletCryptoType, "wallet-crypto-type", c.WalletCryptoType, "wallet crypto type. Can be sha256-xor or scrypt-chacha20poly1305")
 	cmd.Flags().BoolVar(&c.Version, "version", false, "show node version")
+
+	// Display/Branding flags
+	cmd.Flags().StringVar(&c.Fiber.Name, "coin-name", c.Fiber.Name, "name of the coin")
+	cmd.Flags().StringVar(&c.Fiber.Ticker, "ticker", c.Fiber.Ticker, "coin ticker symbol (e.g., SKY)")
+	cmd.Flags().StringVar(&c.Fiber.DisplayName, "display-name", c.Fiber.DisplayName, "display name of the coin")
+	cmd.Flags().StringVar(&c.Fiber.CoinHoursName, "coin-hours-name", c.Fiber.CoinHoursName, "display name for coin hours")
+	cmd.Flags().StringVar(&c.Fiber.CoinHoursNameSingular, "coin-hours-name-singular", c.Fiber.CoinHoursNameSingular, "singular display name for coin hours")
+	cmd.Flags().StringVar(&c.Fiber.CoinHoursTicker, "coin-hours-ticker", c.Fiber.CoinHoursTicker, "ticker symbol for coin hours")
+	cmd.Flags().StringVar(&c.Fiber.QrURIPrefix, "qr-uri-prefix", c.Fiber.QrURIPrefix, "prefix for QR code URIs")
+	cmd.Flags().StringVar(&c.Fiber.ExplorerURL, "explorer-url", c.Fiber.ExplorerURL, "URL of the block explorer")
+	cmd.Flags().StringVar(&c.Fiber.VersionURL, "version-url", c.Fiber.VersionURL, "URL for version checking")
+	cmd.Flags().Uint32Var((*uint32)(&c.Fiber.Bip44Coin), "bip44-coin", uint32(c.Fiber.Bip44Coin), "BIP44 coin type")
 }
 
 func (c *NodeConfig) applyConfigMode(configMode string) {
@@ -759,6 +781,247 @@ func (c *NodeConfig) applyConfigMode(configMode string) {
 	default:
 		panic("Invalid ConfigMode")
 	}
+}
+
+// LoadFromFiberConfig loads configuration from a fiber.toml file
+// and overrides the default values in NodeConfig
+func (c *NodeConfig) LoadFromFiberConfig(configPath string) error {
+	if configPath == "" {
+		return nil // No config file specified
+	}
+
+	// Store path for later writing
+	c.fiberTomlPath = configPath
+
+	// Load fiber config
+	fiberCfg, err := fiber.NewConfig(filepath.Base(configPath), filepath.Dir(configPath))
+	if err != nil {
+		return fmt.Errorf("failed to load fiber config: %w", err)
+	}
+
+	// Map fiber.NodeConfig to skycoin.NodeConfig
+	c.applyFiberNodeConfig(fiberCfg.Node)
+
+	// Store distribution parameters from fiber.ParamsConfig
+	if len(fiberCfg.Params.DistributionAddresses) > 0 {
+		c.distributionAddresses = fiberCfg.Params.DistributionAddresses
+		c.distributionMaxCoinSupply = fiberCfg.Params.MaxCoinSupply
+		c.distributionUnlockedCount = fiberCfg.Params.InitialUnlockedCount
+		c.distributionUnlockRate = fiberCfg.Params.UnlockAddressRate
+		c.distributionUnlockInterval = fiberCfg.Params.UnlockTimeInterval
+	}
+
+	return nil
+}
+
+// LoadFromGenesisWallet loads genesis credentials from a genesis wallet JSON file
+// This takes precedence over fiber.toml values for address, pubkey, and seckey
+func (c *NodeConfig) LoadFromGenesisWallet(walletPath string) error {
+	if walletPath == "" {
+		return nil
+	}
+
+	// Store path for later use
+	c.genesisWalletPath = walletPath
+
+	// Read the genesis wallet file
+	data, err := os.ReadFile(walletPath) //nolint:gosec // G304: User-specified wallet path is intentional
+	if err != nil {
+		return fmt.Errorf("failed to read genesis wallet: %w", err)
+	}
+
+	// Parse the wallet JSON
+	var wallet struct {
+		Entries []struct {
+			Address   string `json:"address"`
+			PublicKey string `json:"public_key"`
+			SecretKey string `json:"secret_key"`
+		} `json:"entries"`
+	}
+
+	if err := json.Unmarshal(data, &wallet); err != nil {
+		return fmt.Errorf("failed to parse genesis wallet JSON: %w", err)
+	}
+
+	if len(wallet.Entries) == 0 {
+		return fmt.Errorf("genesis wallet has no entries")
+	}
+
+	// Use the first entry
+	entry := wallet.Entries[0]
+
+	// Set genesis address and blockchain keys
+	c.GenesisAddressStr = entry.Address
+	c.BlockchainPubkeyStr = entry.PublicKey
+	c.BlockchainSeckeyStr = entry.SecretKey
+
+	// Clear the genesis signature since it's not valid for this wallet
+	// The signature will be generated when the genesis block is created
+	c.GenesisSignatureStr = ""
+
+	return nil
+}
+
+// applyFiberNodeConfig maps fiber.NodeConfig fields to NodeConfig
+func (c *NodeConfig) applyFiberNodeConfig(node fiber.NodeConfig) {
+	// Core blockchain parameters
+	if node.CoinName != "" {
+		c.CoinName = node.CoinName
+		c.Fiber.Name = node.CoinName
+	}
+	if node.Port != 0 {
+		c.Port = node.Port
+	}
+	if node.WebInterfacePort != 0 {
+		c.WebInterfacePort = node.WebInterfacePort
+	}
+	if node.GenesisSignatureStr != "" {
+		c.GenesisSignatureStr = node.GenesisSignatureStr
+	}
+	if node.GenesisAddressStr != "" {
+		c.GenesisAddressStr = node.GenesisAddressStr
+	}
+	if node.BlockchainPubkeyStr != "" {
+		c.BlockchainPubkeyStr = node.BlockchainPubkeyStr
+	}
+	if node.BlockchainSeckeyStr != "" {
+		c.BlockchainSeckeyStr = node.BlockchainSeckeyStr
+	}
+	if node.GenesisTimestamp != 0 {
+		c.GenesisTimestamp = node.GenesisTimestamp
+	}
+	if node.GenesisCoinVolume != 0 {
+		c.GenesisCoinVolume = node.GenesisCoinVolume
+	}
+	if len(node.DefaultConnections) > 0 {
+		c.DefaultConnections = node.DefaultConnections
+	}
+	if node.PeerListURL != "" {
+		c.PeerListURL = node.PeerListURL
+	}
+
+	// Data directory - expand $HOME
+	// If not explicitly set, derive from coin name or display name
+	if node.DataDirectory != "" {
+		dataDir := node.DataDirectory
+		home := file.UserHome()
+		dataDir = replaceHome(dataDir, home)
+		c.DataDirectory = dataDir
+	} else if c.DataDirectory == "$HOME/.skycoin" {
+		// Auto-derive data directory from coin name or display name (matches newcoin behavior)
+		home := file.UserHome()
+		derivedName := ""
+		if node.CoinName != "" {
+			derivedName = node.CoinName
+		} else if node.DisplayName != "" {
+			derivedName = node.DisplayName
+		}
+		if derivedName != "" {
+			c.DataDirectory = replaceHome("$HOME/."+strings.ToLower(derivedName), home)
+		}
+	}
+
+	// Transaction verification params
+	if node.UnconfirmedBurnFactor != 0 {
+		c.UnconfirmedVerifyTxn.BurnFactor = node.UnconfirmedBurnFactor
+		c.unconfirmedBurnFactor = uint64(node.UnconfirmedBurnFactor)
+	}
+	if node.UnconfirmedMaxTransactionSize != 0 {
+		c.UnconfirmedVerifyTxn.MaxTransactionSize = node.UnconfirmedMaxTransactionSize
+		c.maxUnconfirmedTransactionSize = uint64(node.UnconfirmedMaxTransactionSize)
+	}
+	if node.UnconfirmedMaxDropletPrecision != 0 {
+		c.UnconfirmedVerifyTxn.MaxDropletPrecision = node.UnconfirmedMaxDropletPrecision
+		c.unconfirmedMaxDropletPrecision = uint64(node.UnconfirmedMaxDropletPrecision)
+	}
+	if node.CreateBlockBurnFactor != 0 {
+		c.CreateBlockVerifyTxn.BurnFactor = node.CreateBlockBurnFactor
+		c.createBlockBurnFactor = uint64(node.CreateBlockBurnFactor)
+	}
+	if node.CreateBlockMaxTransactionSize != 0 {
+		c.CreateBlockVerifyTxn.MaxTransactionSize = node.CreateBlockMaxTransactionSize
+		c.createBlockMaxTransactionSize = uint64(node.CreateBlockMaxTransactionSize)
+	}
+	if node.CreateBlockMaxDropletPrecision != 0 {
+		c.CreateBlockVerifyTxn.MaxDropletPrecision = node.CreateBlockMaxDropletPrecision
+		c.createBlockMaxDropletPrecision = uint64(node.CreateBlockMaxDropletPrecision)
+	}
+	if node.MaxBlockTransactionsSize != 0 {
+		c.MaxBlockTransactionsSize = node.MaxBlockTransactionsSize
+		c.maxBlockSize = uint64(node.MaxBlockTransactionsSize)
+	}
+
+	// Display/Branding
+	if node.Ticker != "" {
+		c.Fiber.Ticker = node.Ticker
+	}
+	if node.DisplayName != "" {
+		c.Fiber.DisplayName = node.DisplayName
+	}
+	if node.CoinHoursName != "" {
+		c.Fiber.CoinHoursName = node.CoinHoursName
+	}
+	if node.CoinHoursNameSingular != "" {
+		c.Fiber.CoinHoursNameSingular = node.CoinHoursNameSingular
+	}
+	if node.CoinHoursTicker != "" {
+		c.Fiber.CoinHoursTicker = node.CoinHoursTicker
+	}
+	if node.QrURIPrefix != "" {
+		c.Fiber.QrURIPrefix = node.QrURIPrefix
+	}
+	if node.ExplorerURL != "" {
+		c.Fiber.ExplorerURL = node.ExplorerURL
+	}
+	if node.VersionURL != "" {
+		c.Fiber.VersionURL = node.VersionURL
+	}
+	if node.Bip44Coin != 0 {
+		c.Fiber.Bip44Coin = node.Bip44Coin
+	}
+}
+
+// WriteFiberTomlGenesis writes genesis address, pubkey, and signature to fiber.toml
+// This is called after the genesis block is created to persist the values
+func (c *NodeConfig) WriteFiberTomlGenesis(signature string) error {
+	if c.fiberTomlPath == "" {
+		return nil // No fiber.toml path set, nothing to write
+	}
+
+	// Read the current fiber.toml
+	data, err := os.ReadFile(c.fiberTomlPath)
+	if err != nil {
+		return fmt.Errorf("failed to read fiber.toml: %w", err)
+	}
+
+	// Parse as map
+	var tomlMap map[string]interface{}
+	if err := toml.Unmarshal(data, &tomlMap); err != nil {
+		return fmt.Errorf("failed to parse fiber.toml: %w", err)
+	}
+
+	// Get or create [node] section
+	nodeSection, ok := tomlMap["node"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("missing [node] section in fiber.toml")
+	}
+
+	// Update genesis fields
+	nodeSection["genesis_address_str"] = c.GenesisAddressStr
+	nodeSection["blockchain_pubkey_str"] = c.BlockchainPubkeyStr
+	nodeSection["genesis_signature_str"] = signature
+
+	// Write back to file
+	updatedData, err := toml.Marshal(tomlMap)
+	if err != nil {
+		return fmt.Errorf("failed to marshal fiber.toml: %w", err)
+	}
+
+	if err := os.WriteFile(c.fiberTomlPath, updatedData, 0600); err != nil {
+		return fmt.Errorf("failed to write fiber.toml: %w", err)
+	}
+
+	return nil
 }
 
 func panicIfError(err error, msg string, args ...interface{}) { //nolint:unparam
