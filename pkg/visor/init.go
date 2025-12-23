@@ -46,6 +46,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -1445,6 +1446,20 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 		if err == nil {
 			break
 		}
+		
+		// Check if it's an HTTPError with a 4xx status code
+		var httpErr *httputil.HTTPError
+		if errors.As(err, &httpErr) {
+			// Don't retry on 4xx errors (client errors) - these are expected
+			// For example, 404 means no transports found, which is normal
+			if httpErr.Status >= 400 && httpErr.Status < 500 {
+				log.WithError(err).Debug("TPD query returned client error (4xx), not retrying")
+				err = nil // Treat 4xx as success (no transports to reconcile)
+				break
+			}
+		}
+		
+		// Retry on 5xx errors and connection failures
 		if retries < 2 {
 			backoff := time.Duration(retries+1) * 2 * time.Second
 			log.WithError(err).Warnf("Failed to query TPD (attempt %d/3), retrying in %v", retries+1, backoff)
