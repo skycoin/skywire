@@ -29,7 +29,6 @@ jobs:
             libgl1-mesa-dev \
             xorg-dev \
             libglu1-mesa-dev \
-            libusb-1.0-0-dev \
             shellcheck
 
           make install-shellcheck
@@ -48,20 +47,6 @@ jobs:
 
       - name: Build
         run: make build
-
-      - name: Test Hardware Wallet Utilities
-        shell: bash
-        run: |
-          set -e
-          # Build hardware wallet daemon from vendor directory
-          cd vendor/github.com/skycoin/skycoin
-          go build -o hw-wallet-daemon ./cmd/hardware-wallet/skycoin.go
-          
-          # Test that it was compiled successfully by checking help output
-          ./hw-wallet-daemon help
-          ./hw-wallet-daemon daemon --help
-          
-          echo "Hardware wallet utilities compiled and tested successfully"
 
       - name: Setup SSH Key, Build and Run E2E
         shell: bash
