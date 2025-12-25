@@ -1446,7 +1446,7 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 		if err == nil {
 			break
 		}
-		
+
 		// Check if it's an HTTPError with a 4xx status code
 		var httpErr *httputil.HTTPError
 		if errors.As(err, &httpErr) {
@@ -1458,7 +1458,7 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 				break
 			}
 		}
-		
+
 		// Retry on 5xx errors and connection failures
 		if retries < 2 {
 			backoff := time.Duration(retries+1) * 2 * time.Second

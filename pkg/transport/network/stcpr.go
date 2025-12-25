@@ -100,6 +100,7 @@ func (c *stcprClient) serve() {
 			if err != nil {
 				retryCount++
 				// Calculate exponential backoff: 10s, 20s, 40s, 80s, capped at 5 minutes
+				//nolint:gosec
 				backoff := time.Duration(10*(1<<uint(retryCount-1))) * time.Second
 				maxBackoff := 5 * time.Minute
 				if backoff > maxBackoff {
