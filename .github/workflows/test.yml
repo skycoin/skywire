@@ -117,6 +117,10 @@ jobs:
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 
+      - name: Fix godbus Windows vendor issue
+        shell: bash
+        run: make fix-godbus-windows-vendor
+
       - name: Checking (lint + test)
         run: |
           $env:GO111MODULE='on'
