@@ -41,7 +41,7 @@ type stream struct {
 	id   uint32 // Stream identifier
 	sess *Session
 
-	buffers []*[]byte // slice of buffers holding ordered incoming data
+	buffers [][]byte  // slice of buffers holding ordered incoming data
 	heads   []*[]byte // slice heads of the buffers above, kept for recycle
 
 	bufferLock sync.Mutex // Mutex to protect access to buffers
@@ -123,11 +123,11 @@ func (s *stream) tryReadV1(b []byte) (n int, err error) {
 	// A critical section to copy data from buffers to b
 	s.bufferLock.Lock()
 	if len(s.buffers) > 0 {
-		n = copy(b, *s.buffers[0])
-		*s.buffers[0] = (*s.buffers[0])[n:]
+		n = copy(b, s.buffers[0])
+		s.buffers[0] = s.buffers[0][n:]
 
 		// recycle buffer when fully consumed
-		if len(*s.buffers[0]) == 0 {
+		if len(s.buffers[0]) == 0 {
 			s.buffers[0] = nil
 			s.buffers = s.buffers[1:]
 			defaultAllocator.Put(s.heads[0])
@@ -161,11 +161,11 @@ func (s *stream) tryReadV2(b []byte) (n int, err error) {
 	var notifyConsumed uint32
 	s.bufferLock.Lock()
 	if len(s.buffers) > 0 {
-		n = copy(b, *s.buffers[0])
-		*s.buffers[0] = (*s.buffers[0])[n:]
+		n = copy(b, s.buffers[0])
+		s.buffers[0] = s.buffers[0][n:]
 
 		// recycle buffer when fully consumed
-		if len(*s.buffers[0]) == 0 {
+		if len(s.buffers[0]) == 0 {
 			s.buffers[0] = nil
 			s.buffers = s.buffers[1:]
 			defaultAllocator.Put(s.heads[0])
@@ -227,23 +227,25 @@ func (s *stream) WriteTo(w io.Writer) (n int64, err error) {
 // check comments in WriteTo
 func (s *stream) writeToV1(w io.Writer) (n int64, err error) {
 	for {
-		var pbuf *[]byte
+		var buf []byte
+		var head *[]byte
 
 		// get the next buffer to write
 		s.bufferLock.Lock()
 		if len(s.buffers) > 0 {
-			pbuf = s.buffers[0]
+			buf = s.buffers[0]
+			head = s.heads[0]
 			s.buffers = s.buffers[1:]
 			s.heads = s.heads[1:]
 		}
 		s.bufferLock.Unlock()
 
 		// write the buffer to w
-		if pbuf != nil {
-			nw, ew := w.Write(*pbuf)
+		if buf != nil {
+			nw, ew := w.Write(buf)
 			// NOTE: WriteTo is a reader, so we need to return tokens here
-			s.sess.returnTokens(len(*pbuf))
-			defaultAllocator.Put(pbuf)
+			s.sess.returnTokens(len(buf))
+			defaultAllocator.Put(head)
 			if nw > 0 {
 				n += int64(nw)
 			}
@@ -261,20 +263,22 @@ func (s *stream) writeToV1(w io.Writer) (n int64, err error) {
 func (s *stream) writeToV2(w io.Writer) (n int64, err error) {
 	for {
 		var notifyConsumed uint32
-		var pbuf *[]byte
+		var buf []byte
+		var head *[]byte
 
 		// get the next buffer to write
 		s.bufferLock.Lock()
 		if len(s.buffers) > 0 {
-			pbuf = s.buffers[0]
+			buf = s.buffers[0]
+			head = s.heads[0]
 			s.buffers = s.buffers[1:]
 			s.heads = s.heads[1:]
 		}
 
 		// in v2, we need to track the number of bytes read
 		var bufLen uint32
-		if pbuf != nil {
-			bufLen = uint32(len(*pbuf))
+		if buf != nil {
+			bufLen = uint32(len(buf))
 		}
 		s.numRead += bufLen
 		s.incr += bufLen
@@ -287,11 +291,11 @@ func (s *stream) writeToV2(w io.Writer) (n int64, err error) {
 		s.bufferLock.Unlock()
 
 		// same as v1, write the buffer to w
-		if pbuf != nil {
-			nw, ew := w.Write(*pbuf)
+		if buf != nil {
+			nw, ew := w.Write(buf)
 			// NOTE: WriteTo is a reader, so we need to return tokens here
-			s.sess.returnTokens(len(*pbuf))
-			defaultAllocator.Put(pbuf)
+			s.sess.returnTokens(len(buf))
+			defaultAllocator.Put(head)
 			if nw > 0 {
 				n += int64(nw)
 			}
@@ -412,7 +416,7 @@ func (s *stream) writeV1(b []byte) (n int, err error) {
 
 		frame.data = b[:size]
 		n, err := s.sess.writeFrameInternal(frame, deadline, CLSDATA)
-		s.numWritten++
+		atomic.AddUint32(&s.numWritten, uint32(size))
 		sent += n
 		if err != nil {
 			return sent, err
@@ -444,13 +448,28 @@ func (s *stream) writeV2(b []byte) (n int, err error) {
 	sent := 0
 	frame := newFrame(byte(s.sess.config.Version), cmdPSH, s.id)
 
+	var deadlineTimer *time.Timer
+	defer func() {
+		stopTimer(deadlineTimer)
+	}()
+
 	for {
-		// update write deadline timer
-		var deadline <-chan time.Time
+		deadline := (<-chan time.Time)(nil)
 		if d, ok := s.writeDeadline.Load().(time.Time); ok && !d.IsZero() {
-			timer := time.NewTimer(time.Until(d))
-			defer timer.Stop()
-			deadline = timer.C
+			dur := time.Until(d)
+			if dur < 0 {
+				dur = 0
+			}
+			if deadlineTimer == nil {
+				deadlineTimer = time.NewTimer(dur)
+			} else {
+				stopTimer(deadlineTimer)
+				deadlineTimer.Reset(dur)
+			}
+			deadline = deadlineTimer.C
+		} else if deadlineTimer != nil {
+			stopTimer(deadlineTimer)
+			deadlineTimer = nil
 		}
 
 		// per stream sliding window control
@@ -613,7 +632,7 @@ func (s *stream) pushBytes(pbuf *[]byte) {
 	s.bufferLock.Lock()
 	defer s.bufferLock.Unlock()
 
-	s.buffers = append(s.buffers, pbuf)
+	s.buffers = append(s.buffers, *pbuf)
 	s.heads = append(s.heads, pbuf)
 }
 
@@ -623,7 +642,7 @@ func (s *stream) recycleTokens() (n int) {
 	defer s.bufferLock.Unlock()
 
 	for k := range s.buffers {
-		n += len(*s.buffers[k])
+		n += len(s.buffers[k])
 		defaultAllocator.Put(s.heads[k])
 	}
 	s.buffers = nil
@@ -665,4 +684,17 @@ func (s *stream) fin() {
 	s.finEventOnce.Do(func() {
 		close(s.chFinEvent)
 	})
+}
+
+// stopTimer stops the supplied timer and drains its channel if needed.
+func stopTimer(t *time.Timer) {
+	if t == nil {
+		return
+	}
+	if !t.Stop() {
+		select {
+		case <-t.C:
+		default:
+		}
+	}
 }
