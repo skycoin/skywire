@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"os"
+	"os/user"
 )
 
 // AuthCookieSha1 returns an Auth that authenticates as the given user with the
