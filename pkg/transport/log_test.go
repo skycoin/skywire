@@ -54,11 +54,11 @@ func TestFileTransportLogStore(t *testing.T) {
 	log := logging.MustGetLogger("transport")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	
+
 	ls, err := transport.FileTransportLogStore(ctx, dir, time.Hour*24*7, log)
 	require.NoError(t, err)
 	testTransportLogStore(t, ls)
-	
+
 	// Cancel context and wait briefly for background goroutine to exit
 	cancel()
 	time.Sleep(100 * time.Millisecond)
