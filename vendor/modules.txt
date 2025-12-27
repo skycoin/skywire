@@ -119,7 +119,7 @@ cogentcore.org/core/text/textpos
 cogentcore.org/core/text/token
 cogentcore.org/core/tree
 cogentcore.org/core/types
-# fyne.io/systray v1.11.0
+# fyne.io/systray v1.12.0
 ## explicit; go 1.19
 fyne.io/systray
 fyne.io/systray/internal/generated/menu
@@ -198,7 +198,7 @@ github.com/alecthomas/chroma/lexers/x
 github.com/alecthomas/chroma/lexers/y
 github.com/alecthomas/chroma/lexers/z
 github.com/alecthomas/chroma/styles
-# github.com/alecthomas/chroma/v2 v2.20.0
+# github.com/alecthomas/chroma/v2 v2.21.1
 ## explicit; go 1.22
 github.com/alecthomas/chroma/v2
 github.com/alecthomas/chroma/v2/formatters/html
@@ -484,7 +484,7 @@ github.com/go-playground/locales/currency
 # github.com/go-playground/universal-translator v0.18.1
 ## explicit; go 1.18
 github.com/go-playground/universal-translator
-# github.com/go-playground/validator/v10 v10.29.0
+# github.com/go-playground/validator/v10 v10.30.1
 ## explicit; go 1.24.0
 github.com/go-playground/validator/v10
 # github.com/go-redis/redis v6.15.9+incompatible
@@ -506,7 +506,7 @@ github.com/go-redis/redis/v8/internal/pool
 github.com/go-redis/redis/v8/internal/proto
 github.com/go-redis/redis/v8/internal/rand
 github.com/go-redis/redis/v8/internal/util
-# github.com/go-text/typesetting v0.3.1
+# github.com/go-text/typesetting v0.3.2
 ## explicit; go 1.19
 github.com/go-text/typesetting/di
 github.com/go-text/typesetting/font
@@ -548,7 +548,7 @@ github.com/goccy/go-json/internal/encoder/vm_color_indent
 github.com/goccy/go-json/internal/encoder/vm_indent
 github.com/goccy/go-json/internal/errors
 github.com/goccy/go-json/internal/runtime
-# github.com/goccy/go-yaml v1.19.0
+# github.com/goccy/go-yaml v1.19.1
 ## explicit; go 1.21.0
 github.com/goccy/go-yaml
 github.com/goccy/go-yaml/ast
@@ -559,8 +559,8 @@ github.com/goccy/go-yaml/parser
 github.com/goccy/go-yaml/printer
 github.com/goccy/go-yaml/scanner
 github.com/goccy/go-yaml/token
-# github.com/godbus/dbus/v5 v5.2.0
-## explicit; go 1.20
+# github.com/godbus/dbus/v5 v5.1.0
+## explicit; go 1.12
 github.com/godbus/dbus/v5
 github.com/godbus/dbus/v5/introspect
 github.com/godbus/dbus/v5/prop
@@ -636,8 +636,8 @@ github.com/jackc/pgpassfile
 # github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
 ## explicit; go 1.14
 github.com/jackc/pgservicefile
-# github.com/jackc/pgx/v5 v5.7.6
-## explicit; go 1.23.0
+# github.com/jackc/pgx/v5 v5.8.0
+## explicit; go 1.24.0
 github.com/jackc/pgx/v5
 github.com/jackc/pgx/v5/internal/iobufpool
 github.com/jackc/pgx/v5/internal/pgio
@@ -657,7 +657,7 @@ github.com/jackc/puddle/v2/internal/genstack
 # github.com/james-barrow/golang-ipc v1.2.4
 ## explicit; go 1.15
 github.com/james-barrow/golang-ipc
-# github.com/jaypipes/ghw v0.21.1
+# github.com/jaypipes/ghw v0.21.2
 ## explicit; go 1.21
 github.com/jaypipes/ghw
 github.com/jaypipes/ghw/pkg/accelerator
@@ -761,7 +761,7 @@ github.com/opencontainers/image-spec/specs-go/v1
 # github.com/orandin/lumberjackrus v1.0.1
 ## explicit
 github.com/orandin/lumberjackrus
-# github.com/oschwald/geoip2-golang/v2 v2.0.1
+# github.com/oschwald/geoip2-golang/v2 v2.1.0
 ## explicit; go 1.24.0
 github.com/oschwald/geoip2-golang/v2
 # github.com/oschwald/maxminddb-golang/v2 v2.1.1
@@ -769,6 +769,7 @@ github.com/oschwald/geoip2-golang/v2
 github.com/oschwald/maxminddb-golang/v2
 github.com/oschwald/maxminddb-golang/v2/internal/decoder
 github.com/oschwald/maxminddb-golang/v2/internal/mmdberrors
+github.com/oschwald/maxminddb-golang/v2/mmdbdata
 # github.com/pelletier/go-toml/v2 v2.2.4
 ## explicit; go 1.21.0
 github.com/pelletier/go-toml/v2
@@ -793,7 +794,7 @@ github.com/pterm/pterm/putils
 # github.com/quic-go/qpack v0.6.0
 ## explicit; go 1.24
 github.com/quic-go/qpack
-# github.com/quic-go/quic-go v0.57.1
+# github.com/quic-go/quic-go v0.58.0
 ## explicit; go 1.24
 github.com/quic-go/quic-go
 github.com/quic-go/quic-go/http3
@@ -831,8 +832,8 @@ github.com/shopspring/decimal
 ## explicit; go 1.13
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20251215165124-9654b31f23f2
-## explicit; go 1.25.1
+# github.com/skycoin/dmsg v1.3.29-0.20251227143147-f0f96b6e2087
+## explicit; go 1.25.4
 github.com/skycoin/dmsg/cmd/conf/commands
 github.com/skycoin/dmsg/cmd/dial/commands
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
@@ -870,7 +871,7 @@ github.com/skycoin/dmsg/pkg/noise
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.1-0.20251215160458-f84f07154eae
+# github.com/skycoin/skycoin v0.28.2
 ## explicit; go 1.25.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
@@ -1032,7 +1033,7 @@ github.com/xo/terminfo
 github.com/xtaci/kcp-go
 # github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
 ## explicit; go 1.13
-# github.com/xtaci/smux v1.5.47
+# github.com/xtaci/smux v1.5.49
 ## explicit; go 1.18
 github.com/xtaci/smux
 # github.com/yuin/goldmark v1.7.13
@@ -1126,7 +1127,7 @@ golang.org/x/crypto/sha3
 golang.org/x/crypto/tea
 golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
-# golang.org/x/exp v0.0.0-20251209150349-8475f28825e9
+# golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93
 ## explicit; go 1.24.0
 golang.org/x/exp/maps
 # golang.org/x/image v0.34.0

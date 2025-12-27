@@ -46,6 +46,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -1302,55 +1303,38 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 	ticker := time.NewTicker(tickDuration)
 	go func() {
 		time.Sleep(time.Minute)
-		dmsgTries := 0
-		stcprTries := 0
+		tries := 0
 
 		for range ticker.C {
 			dmsgOK := tryTransport(v, "dmsg", log)
-			if dmsgOK {
-				dmsgTries = 0
-			} else {
-				dmsgTries++
-				if dmsgTries >= 3 {
-					log.Error("Dmsg transport failed after 3 attempts. Reinitiating dmsg...")
-					if err := reinitiateDmsg(ctx, v); err != nil {
-						log.WithError(err).Error("Failed to reinitiate dmsg")
-					}
-
-					dmsgTries = 0
-					dmsgOK = tryTransport(v, "dmsg", log)
-					if !dmsgOK {
-						dmsgTries = 1
-					}
-				}
-			}
-
 			stcprOK := true // default for non-public visors
+
 			if visorIsPublic {
 				stcprOK = tryTransport(v, "stcpr", log)
-				if stcprOK {
-					stcprTries = 0
-				} else {
-					stcprTries++
-					if stcprTries >= 3 {
-						log.Error("Stcpr transport failed after 3 attempts. Reinitiating stcpr...")
-						reinitiateStpcr(ctx, v)
-
-						stcprTries = 0
-						stcprOK = tryTransport(v, "stcpr", log)
-						if !stcprOK {
-							stcprTries = 1
-						}
-					}
-				}
 			}
 
 			if dmsgOK && stcprOK {
 				v.isServicesHealthy.set()
+				tries = 0
 				ticker.Reset(tickDuration)
 			} else {
 				v.isServicesHealthy.unset()
+				tries++
 				ticker.Reset(time.Minute)
+			}
+
+			if tries >= 3 {
+				if v.conf.DisableShutdownOnNonTransportable {
+					log.Error("Visor is not transportable after 3 failed attempts, but shutdown is disabled for troubleshooting")
+					// Keep trying but don't accumulate tries forever
+					tries = 0
+				} else {
+					log.Error("Visor is not transportable after 3 failed attempts. Shutting down...")
+					if err := v.Shutdown(); err != nil {
+						log.WithError(err).Fatal("Failed to shut down gracefully")
+					}
+					return
+				}
 			}
 		}
 	}()
@@ -1445,6 +1429,20 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 		if err == nil {
 			break
 		}
+
+		// Check if it's an HTTPError with a 4xx status code
+		var httpErr *httputil.HTTPError
+		if errors.As(err, &httpErr) {
+			// Don't retry on 4xx errors (client errors) - these are expected
+			// For example, 404 means no transports found, which is normal
+			if httpErr.Status >= 400 && httpErr.Status < 500 {
+				log.WithError(err).Debug("TPD query returned client error (4xx), not retrying")
+				err = nil // Treat 4xx as success (no transports to reconcile)
+				break
+			}
+		}
+
+		// Retry on 5xx errors and connection failures
 		if retries < 2 {
 			backoff := time.Duration(retries+1) * 2 * time.Second
 			log.WithError(err).Warnf("Failed to query TPD (attempt %d/3), retrying in %v", retries+1, backoff)
