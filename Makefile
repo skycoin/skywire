@@ -275,12 +275,6 @@ unfix-systray-vendor:
 		sed -i '/conn.handleCall(msg)/c\			go conn.handleCall(msg)' ./vendor/github.com/godbus/dbus/v5/conn.go ;\
 	fi
 
-# Fix godbus/dbus v5.2.1 Windows build issue: removes unused os/user import
-# Upstream issue: https://github.com/godbus/dbus/commit/d3fc3b583895e27c3337f77ea7134b0a81159955
-# This fix will be unnecessary once godbus releases v5.2.2 or later
-fix-godbus-windows-vendor:
-	@sed -i '/^[[:space:]]*"os\/user"$$/d' ./vendor/github.com/godbus/dbus/v5/auth_sha1_windows.go
-
 build-windows: ## Build `skywire-visor`
 	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH) ./cmd/skywire'
 
