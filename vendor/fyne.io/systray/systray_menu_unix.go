@@ -3,7 +3,9 @@
 package systray
 
 import (
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
@@ -21,6 +23,17 @@ func (item *MenuItem) SetIcon(iconBytes []byte) {
 		m.V1["icon-data"] = dbus.MakeVariant(iconBytes)
 		refresh()
 	}
+}
+
+// SetIconFromFilePath sets the icon of a menu item from a file path.
+// iconFilePath should be the path to a .ico for windows and .ico/.jpg/.png for other platforms.
+func (item *MenuItem) SetIconFromFilePath(iconFilePath string) error {
+	iconBytes, err := os.ReadFile(iconFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read icon file: %v", err)
+	}
+	item.SetIcon(iconBytes)
+	return nil
 }
 
 // copyLayout makes full copy of layout
@@ -46,6 +59,7 @@ func copyLayout(in *menuLayout, depth int32) *menuLayout {
 
 // GetLayout is com.canonical.dbusmenu.GetLayout method.
 func (t *tray) GetLayout(parentID int32, recursionDepth int32, propertyNames []string) (revision uint32, layout menuLayout, err *dbus.Error) {
+	initialMenuBuilt.Wait()
 	instance.menuLock.Lock()
 	defer instance.menuLock.Unlock()
 	if m, ok := findLayout(parentID); ok {
@@ -94,8 +108,20 @@ func (t *tray) GetProperty(id int32, name string) (value dbus.Variant, err *dbus
 
 // Event is com.canonical.dbusmenu.Event method.
 func (t *tray) Event(id int32, eventID string, data dbus.Variant, timestamp uint32) (err *dbus.Error) {
-	if eventID == "clicked" {
+	switch eventID {
+	case "clicked":
 		systrayMenuItemSelected(uint32(id))
+	case "opened":
+		t.menuLock.RLock()
+		rootMenuID := t.menu.V0
+		t.menuLock.RUnlock()
+
+		if id == rootMenuID {
+			select {
+			case TrayOpenedCh <- struct{}{}:
+			default:
+			}
+		}
 	}
 	return
 }
@@ -311,6 +337,8 @@ func showMenuItem(item *MenuItem) {
 }
 
 func refresh() {
+	instance.lock.Lock()
+	defer instance.lock.Unlock()
 	if instance.conn == nil || instance.menuProps == nil {
 		return
 	}

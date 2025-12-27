@@ -10,14 +10,18 @@ import (
 )
 
 var (
-	systrayReady      func()
-	systrayExit       func()
-	systrayExitCalled bool
-	menuItems         = make(map[uint32]*MenuItem)
-	menuItemsLock     sync.RWMutex
+	systrayReady, systrayExit func()
+	tappedLeft, tappedRight   func()
+	systrayExitCalled         bool
+	menuItems                 = make(map[uint32]*MenuItem)
+	menuItemsLock             sync.RWMutex
 
-	currentID atomic.Uint32
-	quitOnce  sync.Once
+	initialMenuBuilt sync.WaitGroup
+	currentID        atomic.Uint32
+	quitOnce         sync.Once
+
+	// TrayOpenedCh receives an entry each time the system tray menu is opened.
+	TrayOpenedCh = make(chan struct{})
 )
 
 // This helper function allows us to call systrayExit only once,
@@ -85,7 +89,7 @@ func Run(onReady, onExit func()) {
 	nativeLoop()
 }
 
-// RunWithExternalLoop allows the systemtray module to operate with other tookits.
+// RunWithExternalLoop allows the system tray module to operate with other toolkits.
 // The returned start and end functions should be called by the toolkit when the application has started and will end.
 func RunWithExternalLoop(onReady, onExit func()) (start, end func()) {
 	Register(onReady, onExit)
@@ -107,9 +111,11 @@ func Register(onReady func(), onExit func()) {
 	} else {
 		// Run onReady on separate goroutine to avoid blocking event loop
 		readyCh := make(chan interface{})
+		initialMenuBuilt.Add(1)
 		go func() {
 			<-readyCh
 			onReady()
+			initialMenuBuilt.Done()
 		}()
 		systrayReady = func() {
 			close(readyCh)
@@ -131,7 +137,7 @@ func ResetMenu() {
 	id := currentID.Load()
 	menuItemsLock.Unlock()
 	for i, item := range menuItems {
-		if i < id {
+		if i < id && item.parent == nil {
 			item.Remove()
 		}
 	}
@@ -141,6 +147,14 @@ func ResetMenu() {
 // Quit the systray
 func Quit() {
 	quitOnce.Do(quit)
+}
+
+func SetOnTapped(f func()) {
+	tappedLeft = f
+}
+
+func SetOnSecondaryTapped(f func()) {
+	tappedRight = f
 }
 
 // AddMenuItem adds a menu item with the designated title and tooltip.
@@ -229,6 +243,17 @@ func (item *MenuItem) Hide() {
 
 // Remove removes a menu item
 func (item *MenuItem) Remove() {
+	menuItemsLock.RLock()
+	var childList []*MenuItem
+	for _, child := range menuItems {
+		if child.parent == item {
+			childList = append(childList, child)
+		}
+	}
+	menuItemsLock.RUnlock()
+	for _, child := range childList {
+		child.Remove()
+	}
 	removeMenuItem(item)
 	menuItemsLock.Lock()
 	delete(menuItems, item.id)

@@ -139,6 +139,18 @@ func TestRestart(t *testing.T) {
 			require.NoError(t, env.ContainerRestart(tc.restartList...))
 			time.Sleep(RestartDelay)
 
+			// Wait for DMSG to be ready on all restarted visors
+			for _, visor := range tc.restartList {
+				t.Logf("Waiting for DMSG to be ready on %s", visor)
+				if err := env.WaitForDmsgDiscoveryEntry(visor, 60*time.Second); err != nil {
+					t.Fatalf("DMSG not ready on %s after 60s: %v", visor, err)
+				}
+				t.Logf("DMSG ready on %s", visor)
+			}
+
+			// Brief delay for TPD reconciliation
+			time.Sleep(5 * time.Second)
+
 			// Re-establish transports after visor restart
 			env.AddDefaultTransports(routerVisor, skychatVisors)
 

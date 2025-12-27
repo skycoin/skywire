@@ -16,35 +16,19 @@ import (
 type Introspectable string
 
 // NewIntrospectable returns an Introspectable that returns the introspection
-// data that corresponds to the given Node.
-//
-// If n.Interfaces doesn't contain the data for
-// org.freedesktop.DBus.Introspectable or org.freedesktop.DBus.Peer, they are
-// added automatically.
+// data that corresponds to the given Node. If n.Interfaces doesn't contain the
+// data for org.freedesktop.DBus.Introspectable, it is added automatically.
 func NewIntrospectable(n *Node) Introspectable {
-	foundIntrospect := false
-	foundPeer := false
-
+	found := false
 	for _, v := range n.Interfaces {
 		if v.Name == "org.freedesktop.DBus.Introspectable" {
-			foundIntrospect = true
-			break
-		}
-
-		if v.Name == "org.freedesktop.DBus.Peer" {
-			foundPeer = true
+			found = true
 			break
 		}
 	}
-
-	if !foundIntrospect {
+	if !found {
 		n.Interfaces = append(n.Interfaces, IntrospectData)
 	}
-
-	if !foundPeer {
-		n.Interfaces = append(n.Interfaces, PeerData)
-	}
-
 	b, err := xml.Marshal(n)
 	if err != nil {
 		panic(err)
@@ -59,7 +43,7 @@ func (i Introspectable) Introspect() (string, *dbus.Error) {
 
 // Methods returns the description of the methods of v. This can be used to
 // create a Node which can be passed to NewIntrospectable.
-func Methods(v any) []Method {
+func Methods(v interface{}) []Method {
 	t := reflect.TypeOf(v)
 	ms := make([]Method, 0, t.NumMethod())
 	for i := 0; i < t.NumMethod(); i++ {

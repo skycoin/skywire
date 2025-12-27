@@ -14,6 +14,8 @@ void setInternalLoop(bool);
 import "C"
 
 import (
+	"fmt"
+	"os"
 	"unsafe"
 )
 
@@ -33,6 +35,17 @@ func (item *MenuItem) SetIcon(iconBytes []byte) {
 	C.setMenuItemIcon(cstr, (C.int)(len(iconBytes)), C.int(item.id), false)
 }
 
+// SetIconFromFilePath sets the icon of a menu item from a file path.
+// iconFilePath should be the path to a .ico for windows and .ico/.jpg/.png for other platforms.
+func (item *MenuItem) SetIconFromFilePath(iconFilePath string) error {
+	iconBytes, err := os.ReadFile(iconFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read icon file: %v", err)
+	}
+	item.SetIcon(iconBytes)
+	return nil
+}
+
 // SetTemplateIcon sets the icon of a menu item as a template icon (on macOS). On Windows, it
 // falls back to the regular icon bytes and on Linux it does nothing.
 // templateIconBytes and regularIconBytes should be the content of .ico for windows and
@@ -40,6 +53,12 @@ func (item *MenuItem) SetIcon(iconBytes []byte) {
 func (item *MenuItem) SetTemplateIcon(templateIconBytes []byte, regularIconBytes []byte) {
 	cstr := (*C.char)(unsafe.Pointer(&templateIconBytes[0]))
 	C.setMenuItemIcon(cstr, (C.int)(len(templateIconBytes)), C.int(item.id), true)
+}
+
+// SetRemovalAllowed sets whether a user can remove the systray icon or not.
+// This is only supported on macOS.
+func SetRemovalAllowed(allowed bool) {
+	C.setRemovalAllowed((C.bool)(allowed))
 }
 
 func registerSystray() {
@@ -72,6 +91,17 @@ func setInternalLoop(internal bool) {
 func SetIcon(iconBytes []byte) {
 	cstr := (*C.char)(unsafe.Pointer(&iconBytes[0]))
 	C.setIcon(cstr, (C.int)(len(iconBytes)), false)
+}
+
+// SetIconFromFilePath sets the systray icon from a file path.
+// iconFilePath should be the path to a .ico for windows and .ico/.jpg/.png for other platforms.
+func SetIconFromFilePath(iconFilePath string) error {
+	bytes, err := os.ReadFile(iconFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read icon file: %v", err)
+	}
+	SetIcon(bytes)
+	return nil
 }
 
 // SetTitle sets the systray title, only available on Mac and Linux.
@@ -139,6 +169,26 @@ func resetMenu() {
 	C.reset_menu()
 }
 
+//export systray_left_click
+func systray_left_click() {
+	if fn := tappedLeft; fn != nil {
+		fn()
+		return
+	}
+
+	C.show_menu()
+}
+
+//export systray_right_click
+func systray_right_click() {
+	if fn := tappedRight; fn != nil {
+		fn()
+		return
+	}
+
+	C.show_menu()
+}
+
 //export systray_ready
 func systray_ready() {
 	systrayReady()
@@ -152,4 +202,12 @@ func systray_on_exit() {
 //export systray_menu_item_selected
 func systray_menu_item_selected(cID C.int) {
 	systrayMenuItemSelected(uint32(cID))
+}
+
+//export systray_menu_will_open
+func systray_menu_will_open() {
+	select {
+	case TrayOpenedCh <- struct{}{}:
+	default:
+	}
 }
