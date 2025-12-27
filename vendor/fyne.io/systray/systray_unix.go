@@ -25,7 +25,7 @@ import (
 
 const (
 	path     = "/StatusNotifierItem"
-	menuPath = "/StatusNotifierMenu"
+	menuPath = "/StatusNotifierItem/menu"
 )
 
 var (
@@ -73,6 +73,17 @@ func SetIcon(iconBytes []byte) {
 		log.Printf("systray error: failed to emit new icon signal: %s\n", err)
 		return
 	}
+}
+
+// SetIconFromFilePath sets the systray icon from a file path.
+// iconFilePath should be the path to a .ico for windows and .ico/.jpg/.png for other platforms.
+func SetIconFromFilePath(iconFilePath string) error {
+	bytes, err := os.ReadFile(iconFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read icon file: %v", err)
+	}
+	SetIcon(bytes)
+	return nil
 }
 
 // SetTitle sets the systray title, only available on Mac and Linux.
@@ -134,6 +145,11 @@ func (item *MenuItem) SetTemplateIcon(templateIconBytes []byte, regularIconBytes
 	item.SetIcon(regularIconBytes)
 }
 
+// SetRemovalAllowed sets whether a user can remove the systray icon or not.
+// This is only supported on macOS.
+func SetRemovalAllowed(allowed bool) {
+}
+
 func setInternalLoop(_ bool) {
 	// nothing to action on Linux
 }
@@ -164,7 +180,7 @@ func nativeStart() {
 		log.Printf("systray error: failed to connect to DBus: %v\n", err)
 		return
 	}
-	err = notifier.ExportStatusNotifierItem(conn, path, &notifier.UnimplementedStatusNotifierItem{})
+	err = notifier.ExportStatusNotifierItem(conn, path, newLeftRightNotifierItem())
 	if err != nil {
 		log.Printf("systray error: failed to export status notifier item: %v\n", err)
 	}
@@ -349,7 +365,7 @@ func (t *tray) createPropSpec() map[string]map[string]*prop.Prop {
 				Callback: nil,
 			},
 			"ItemIsMenu": {
-				Value:    true,
+				Value:    tappedLeft == nil && tappedRight == nil,
 				Writable: false,
 				Emit:     prop.EmitTrue,
 				Callback: nil,
