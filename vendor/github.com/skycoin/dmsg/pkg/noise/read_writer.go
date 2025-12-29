@@ -176,12 +176,17 @@ func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 func (rw *ReadWriter) Handshake(hsTimeout time.Duration) error {
 	errCh := make(chan error, 1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				errCh <- fmt.Errorf("handshake panic: %v", r)
+			}
+			close(errCh)
+		}()
 		if rw.ns.init {
 			errCh <- InitiatorHandshake(rw.ns, rw.rawInput, rw.origin)
 		} else {
 			errCh <- ResponderHandshake(rw.ns, rw.rawInput, rw.origin)
 		}
-		close(errCh)
 	}()
 	select {
 	case err := <-errCh:
