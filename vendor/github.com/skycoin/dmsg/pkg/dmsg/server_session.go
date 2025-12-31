@@ -62,6 +62,11 @@ func (ss *ServerSession) Serve() {
 			log.Info("Initiating stream.")
 
 			go func(sStr *smux.Stream) {
+				defer func() {
+					if r := recover(); r != nil {
+						log.WithField("panic", r).Error("Recovered from panic in serveStream")
+					}
+				}()
 				err := ss.serveStream(log, sStr, ss.sm.addr)
 				log.WithError(err).Info("Stopped stream.")
 			}(sStr)
@@ -83,6 +88,11 @@ func (ss *ServerSession) Serve() {
 			log.Info("Initiating stream.")
 
 			go func(yStr *yamux.Stream) {
+				defer func() {
+					if r := recover(); r != nil {
+						log.WithField("panic", r).Error("Recovered from panic in serveStream")
+					}
+				}()
 				err := ss.serveStream(log, yStr, ss.sm.addr)
 				log.WithError(err).Info("Stopped stream.")
 			}(yStr)

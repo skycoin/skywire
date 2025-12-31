@@ -22,9 +22,24 @@ func (Secp256k1) GenerateKeypair(_ io.Reader) (noise.DHKey, error) {
 
 // DH helps to implement `noise.DHFunc`.
 func (Secp256k1) DH(sk, pk []byte) []byte {
-	return append(
-		cipher.MustECDH(cipher.MustNewPubKey(pk), cipher.MustNewSecKey(sk)),
-		byte(0))
+	// Use non-panic versions to handle invalid keys gracefully
+	pubKey, err := cipher.NewPubKey(pk)
+	if err != nil {
+		// Return empty key on error to prevent panic
+		// The handshake will fail with this invalid key
+		return make([]byte, 33)
+	}
+	secKey, err := cipher.NewSecKey(sk)
+	if err != nil {
+		// Return empty key on error to prevent panic
+		return make([]byte, 33)
+	}
+	ecdh, err := cipher.ECDH(pubKey, secKey)
+	if err != nil {
+		// Return empty key on error to prevent panic
+		return make([]byte, 33)
+	}
+	return append(ecdh, byte(0))
 }
 
 // DHLen helps to implement `noise.DHFunc`.
