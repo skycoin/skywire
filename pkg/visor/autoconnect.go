@@ -144,7 +144,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			if err != nil {
 				a.log.WithError(err).Warn("Failed to fetch transport discovery cache, continuing without it")
 				transportCache = &transportDiscoveryCache{
-					entriesByPK:  make(map[cipher.PubKey][]*transport.Entry),
+					entriesByPK:     make(map[cipher.PubKey][]*transport.Entry),
 					transportCounts: make(map[cipher.PubKey]int),
 				}
 			} else {
@@ -375,7 +375,7 @@ type transportDiscoveryCache struct {
 // GetAllTransports call, dramatically reducing load on the transport discovery service.
 func (a *autoconnector) buildTransportCache(ctx context.Context, v *Visor) (*transportDiscoveryCache, error) {
 	tpD := v.tpDiscClient()
-	
+
 	// Fetch ALL transports in one API call (instead of per-key calls)
 	allEntries, err := tpD.GetAllTransports(ctx)
 	if err != nil {
