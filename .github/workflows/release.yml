@@ -82,7 +82,7 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}" -replace '^v',''
-          if ($tag -match '-rc') {
+          if ($tag -match '-(rc|alpha|beta)') {
             Write-Host "Pre-release detected ($tag), skipping WinGet publish."
             exit 0
           }
