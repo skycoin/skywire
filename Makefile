@@ -186,11 +186,11 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' .
 
 lint: ## Run linters. Use make install-linters first
-	golangci-lint --version
-	${OPTS} golangci-lint run -c .golangci.yml skywire.go
-	${OPTS} golangci-lint run -c .golangci.yml ./cmd/...
-	${OPTS} golangci-lint run -c .golangci.yml ./pkg/...
-	${OPTS} golangci-lint run -c .golangci.yml	 ./...
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 --version
+	${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml skywire.go
+	${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml ./cmd/...
+	${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml ./pkg/...
+	${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml	 ./...
 	${OPTS} go vet -all -mod=vendor ./...
 
 lint-extra: ## Run linters with extra checks.
@@ -201,8 +201,8 @@ gocyclo: ## Run gocyclo
 	gocyclo -over 14 .
 
 lint-windows: ## Run linters. Use make install-linters-windows first
-	powershell 'golangci-lint --version'
-	powershell 'golangci-lint run -c .golangci.yml ./...'
+	powershell 'go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 --version'
+	powershell 'go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml ./...'
 
 gocyclo-windows: ## Run gocyclo on windows
 	powershell 'gocyclo -over 14 .'
