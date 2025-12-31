@@ -42,7 +42,7 @@ require (
 	github.com/pterm/pterm v0.12.82
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/skycoin/dmsg v1.3.29-0.20251227143147-f0f96b6e2087
+	github.com/skycoin/dmsg v1.3.29-0.20251231130430-f3155f3ddf60
 	github.com/skycoin/skycoin v0.28.2
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
@@ -125,7 +125,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.1 // indirect
-	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/gomarkdown/markdown v0.0.0-20250810172220-2e2c11897d1a // indirect
 	github.com/gookit/color v1.6.0 // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
@@ -188,7 +188,7 @@ require (
 	github.com/valyala/histogram v1.2.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
-	github.com/xtaci/smux v1.5.49 // indirect
+	github.com/xtaci/smux v1.5.50 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
@@ -235,7 +235,7 @@ require (
 // To update deps to specific commit hash:
 // 1) Uncomment one of the following lines and substituite version with desired commit hash:
 //replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.2
-//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251227143147-f0f96b6e2087
+//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251231130430-f3155f3ddf60
 //replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
 // 2) Run `go mod tidy && go mod vendor`
 // 3) Copy the populated version string to the correct place in require(...) above - replacing the specified version string
