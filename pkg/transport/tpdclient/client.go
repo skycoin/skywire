@@ -181,6 +181,37 @@ func (c *apiClient) GetAllTransports(ctx context.Context) ([]*transport.Entry, e
 	return entries, nil
 }
 
+// GetTransportStats returns transport statistics for the given public key.
+// Returns just the count of transports, which is much lighter than fetching all entries.
+func (c *apiClient) GetTransportStats(ctx context.Context, pk cipher.PubKey) (int, error) {
+	resp, err := c.Get(ctx, fmt.Sprintf("/transports/stats/%s", pk))
+	if err != nil {
+		return 0, err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
+
+	if err := httputil.ErrorFromResp(resp); err != nil {
+		return 0, err
+	}
+
+	var stats map[string]int
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return 0, fmt.Errorf("json: %w", err)
+	}
+
+	count, ok := stats["count"]
+	if !ok {
+		return 0, fmt.Errorf("missing count in stats response")
+	}
+
+	return count, nil
+}
+
 // DeleteTransport deletes given transport by it's ID. A visor can only delete transports if he is one of it's edges.
 func (c *apiClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
 	resp, err := c.Delete(ctx, fmt.Sprintf("/transports/id:%s", id.String()))

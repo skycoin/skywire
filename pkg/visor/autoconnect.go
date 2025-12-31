@@ -251,8 +251,29 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					continue // silently skip
 				}
 
-				// Use cached transport count instead of individual API call
-				transportCount := transportCache.transportCounts[pk]
+				// Hybrid approach for connection count checking:
+				// - For STCPR to public visors: get FRESH stats (critical bottleneck)
+				// - For everything else: use cached data (stale is acceptable)
+				isPublicVisor := a.isInList(pk, absent1)
+				var transportCount int
+				if netType == tptypes.STCPR && isPublicVisor {
+					// Fresh check for STCPR to public visors - these are most prone to overload
+					tpD := v.tpDiscClient()
+					freshCount, err := tpD.GetTransportStats(ctx, pk)
+					if err != nil {
+						a.log.WithField("pk", pk).WithError(err).
+							Warn("Failed to get fresh transport stats, using cached count")
+						transportCount = transportCache.transportCounts[pk]
+					} else {
+						transportCount = freshCount
+						a.log.WithField("pk", pk).WithField("fresh_count", freshCount).
+							Debug("Got fresh transport count for public visor")
+					}
+				} else {
+					// Use cached count for SUDPH or non-public visors
+					transportCount = transportCache.transportCounts[pk]
+				}
+
 				if transportCount >= a.maxConns*100 {
 					a.log.WithField("pk", pk).WithField("count", transportCount).
 						Debugln("Remote visor has reached or exceeded max connections, skipping")
@@ -350,6 +371,16 @@ func (a *autoconnector) filterDuplicates(pks []cipher.PubKey, trs []*transport.M
 		}
 	}
 	return absent
+}
+
+// isInList checks if a public key is in the given list
+func (a *autoconnector) isInList(pk cipher.PubKey, list []cipher.PubKey) bool {
+	for _, listPK := range list {
+		if listPK == pk {
+			return true
+		}
+	}
+	return false
 }
 
 // randInt returns a secure random integer in [min, max).

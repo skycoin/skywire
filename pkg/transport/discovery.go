@@ -18,6 +18,7 @@ type DiscoveryClient interface {
 	GetTransportByID(ctx context.Context, id uuid.UUID) (*Entry, error)
 	GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*Entry, error)
 	GetAllTransports(ctx context.Context) ([]*Entry, error)
+	GetTransportStats(ctx context.Context, pk cipher.PubKey) (int, error)
 	DeleteTransport(ctx context.Context, id uuid.UUID) error
 }
 
@@ -88,6 +89,19 @@ func (td *mockDiscoveryClient) GetAllTransports(_ context.Context) ([]*Entry, er
 	td.Unlock()
 
 	return res, nil
+}
+
+func (td *mockDiscoveryClient) GetTransportStats(_ context.Context, pk cipher.PubKey) (int, error) {
+	td.Lock()
+	count := 0
+	for _, entry := range td.entries {
+		if entry.HasEdge(pk) {
+			count++
+		}
+	}
+	td.Unlock()
+
+	return count, nil
 }
 
 // NOTE that mock implementation doesn't checks whether the transport to be deleted is valid or not, this is, that

@@ -89,6 +89,32 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (api *API) getTransportStats(w http.ResponseWriter, r *http.Request) {
+	edgeParam := chi.URLParam(r, "edge")
+
+	pk := cipher.PubKey{}
+	if err := pk.UnmarshalText([]byte(edgeParam)); err != nil {
+		api.log(r).WithError(err).Error("Error parsing PK")
+		api.writeError(w, r, ErrInvalidPubKey)
+		return
+	}
+
+	entries, err := api.store.GetTransportsByEdge(r.Context(), pk)
+	if err != nil {
+		if err != store.ErrTransportNotFound {
+			api.log(r).WithError(err).Error("Error getting transport count")
+		}
+		api.writeError(w, r, err)
+		return
+	}
+
+	stats := map[string]int{"count": len(entries)}
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		api.log(r).WithError(err).Error("Error encoding stats")
+		api.writeError(w, r, err)
+	}
+}
+
 func (api *API) getAllTransports(w http.ResponseWriter, r *http.Request) {
 	selfTransports := true
 	query := r.URL.Query()
