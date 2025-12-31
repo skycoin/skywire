@@ -155,6 +155,32 @@ func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) (
 	return entries, nil
 }
 
+// GetAllTransports returns all registered transports from the discovery service.
+// This is useful for caching transport data to reduce API calls.
+func (c *apiClient) GetAllTransports(ctx context.Context) ([]*transport.Entry, error) {
+	resp, err := c.Get(ctx, "/all-transports")
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
+
+	if err := httputil.ErrorFromResp(resp); err != nil {
+		return nil, err
+	}
+
+	var entries []*transport.Entry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, fmt.Errorf("json: %w", err)
+	}
+
+	return entries, nil
+}
+
 // DeleteTransport deletes given transport by it's ID. A visor can only delete transports if he is one of it's edges.
 func (c *apiClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
 	resp, err := c.Delete(ctx, fmt.Sprintf("/transports/id:%s", id.String()))

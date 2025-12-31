@@ -133,8 +133,23 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					stcprKeys = map[cipher.PubKey][]string{}
 				}
 			} else {
-				a.log.Debug("STCPR not supported locally, skipping")
+				a.log.Debugln("STCPR not supported locally, skipping")
 				stcprKeys = map[cipher.PubKey][]string{}
+			}
+
+			// Fetch ALL transport discovery data once per cycle to reduce API load
+			// This replaces individual DiscoverTransportsByPK calls throughout the cycle
+			a.log.Debug("Fetching all transport discovery data for caching")
+			transportCache, err := a.buildTransportCache(ctx, v)
+			if err != nil {
+				a.log.WithError(err).Warn("Failed to fetch transport discovery cache, continuing without it")
+				transportCache = &transportDiscoveryCache{
+					entriesByPK:  make(map[cipher.PubKey][]*transport.Entry),
+					transportCounts: make(map[cipher.PubKey]int),
+				}
+			} else {
+				a.log.WithField("cached_keys", len(transportCache.transportCounts)).
+					Debug("Successfully cached transport discovery data")
 			}
 
 			// auto-transport logic - for non-public visors connecting to public visors
@@ -148,16 +163,9 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				autoTransports := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
 				absent2Set := make(map[cipher.PubKey]struct{})
 
-				// ✅ Fixed: slice of pointers
-				var entries []*transport.Entry
+				// Use cached transport data instead of individual API calls
 				for _, pk := range addrs {
-					entries, err = v.DiscoverTransportsByPK(pk)
-					if err != nil {
-						v.isServicesHealthy.unset()
-						a.log.WithError(err).Warn("cannot connect to transport discovery service")
-						continue
-					}
-					v.isServicesHealthy.set()
+					entries := transportCache.entriesByPK[pk]
 
 					seen := make(map[cipher.PubKey]struct{})
 					for _, entry := range entries {
@@ -216,8 +224,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				continue
 			}
 
-			// ✅ Fixed: slice of pointers
-			var entries []*transport.Entry
 			for _, pk := range append(shufflePubKeys(absent1), shufflePubKeys(absent2)...) {
 				if time.Now().After(attemptDeadline) {
 					a.log.Debugln("Refreshing list of keys for public autoconnect")
@@ -245,17 +251,10 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					continue // silently skip
 				}
 
-				entries, err = v.DiscoverTransportsByPK(pk)
-				if err != nil {
-					v.isServicesHealthy.unset()
-					a.log.WithField("pk", pk).WithError(err).
-						Warn("Failed to discover transports for remote visor")
-					continue
-				}
-				v.isServicesHealthy.set()
-
-				if len(entries) >= a.maxConns*100 {
-					a.log.WithField("pk", pk).WithField("count", len(entries)).
+				// Use cached transport count instead of individual API call
+				transportCount := transportCache.transportCounts[pk]
+				if transportCount >= a.maxConns*100 {
+					a.log.WithField("pk", pk).WithField("count", transportCount).
 						Debugln("Remote visor has reached or exceeded max connections, skipping")
 					continue
 				}
@@ -363,4 +362,38 @@ func randInt(n, x int) (int, error) {
 		return 0, err
 	}
 	return int(nBig.Int64()) + n, nil
+}
+
+// transportDiscoveryCache holds cached transport discovery data to reduce API calls
+type transportDiscoveryCache struct {
+	entriesByPK     map[cipher.PubKey][]*transport.Entry
+	transportCounts map[cipher.PubKey]int
+}
+
+// buildTransportCache fetches all transport discovery data once and builds lookup maps.
+// This replaces hundreds of individual DiscoverTransportsByPK API calls with a single
+// GetAllTransports call, dramatically reducing load on the transport discovery service.
+func (a *autoconnector) buildTransportCache(ctx context.Context, v *Visor) (*transportDiscoveryCache, error) {
+	tpD := v.tpDiscClient()
+	
+	// Fetch ALL transports in one API call (instead of per-key calls)
+	allEntries, err := tpD.GetAllTransports(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cache := &transportDiscoveryCache{
+		entriesByPK:     make(map[cipher.PubKey][]*transport.Entry),
+		transportCounts: make(map[cipher.PubKey]int),
+	}
+
+	// Build lookup maps: pk -> entries and pk -> count
+	for _, entry := range allEntries {
+		for _, edge := range entry.Edges {
+			cache.entriesByPK[edge] = append(cache.entriesByPK[edge], entry)
+			cache.transportCounts[edge]++
+		}
+	}
+
+	return cache, nil
 }

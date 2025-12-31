@@ -17,6 +17,7 @@ type DiscoveryClient interface {
 	RegisterTransports(ctx context.Context, entries ...*SignedEntry) error
 	GetTransportByID(ctx context.Context, id uuid.UUID) (*Entry, error)
 	GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*Entry, error)
+	GetAllTransports(ctx context.Context) ([]*Entry, error)
 	DeleteTransport(ctx context.Context, id uuid.UUID) error
 }
 
@@ -72,6 +73,19 @@ func (td *mockDiscoveryClient) GetTransportsByEdge(_ context.Context, pk cipher.
 	if len(res) == 0 {
 		return nil, nil
 	}
+
+	return res, nil
+}
+
+func (td *mockDiscoveryClient) GetAllTransports(_ context.Context) ([]*Entry, error) {
+	td.Lock()
+	res := make([]*Entry, 0, len(td.entries))
+	for _, entry := range td.entries {
+		e := &Entry{}
+		*e = entry
+		res = append(res, e)
+	}
+	td.Unlock()
 
 	return res, nil
 }
