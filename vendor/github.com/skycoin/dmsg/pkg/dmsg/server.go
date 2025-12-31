@@ -207,10 +207,22 @@ func (s *Server) Ready() <-chan struct{} {
 }
 
 func (s *Server) handleSession(conn net.Conn) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.WithField("panic", r).
+				WithField("remote_tcp", conn.RemoteAddr()).
+				Error("Recovered from panic in handleSession, connection will be closed")
+			if err := conn.Close(); err != nil {
+				s.log.WithError(err).Warn("Failed to close connection after panic recovery")
+			}
+		}
+	}()
+
 	log := s.log.WithField("remote_tcp", conn.RemoteAddr())
 
 	dSes, err := makeServerSession(s.m, &s.EntityCommon, conn)
 	if err != nil {
+		log.WithError(err).Warn("Failed to create server session")
 		if err := conn.Close(); err != nil {
 			log.WithError(err).Warn("On handleSession() failure, close connection resulted in error.")
 		}
