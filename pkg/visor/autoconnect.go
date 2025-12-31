@@ -102,19 +102,38 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 			absent1 := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
 
-			// Get keys available for SUDPH transport
+			// Check which transport types are supported locally
+			localSupportsSUDPH := a.tm.IsKnownNetwork(tptypes.SUDPH)
+			localSupportsSTCPR := a.tm.IsKnownNetwork(tptypes.STCPR)
+
+			if !localSupportsSUDPH && !localSupportsSTCPR {
+				a.log.Warn("No supported network types available locally (SUDPH and STCPR both unavailable)")
+				continue
+			}
+
+			// Get keys available for SUDPH transport (only if locally supported)
 			var sudphKeys map[cipher.PubKey][]string
-			sudphKeys, err = v.arClient.TransportsType(ctx, tptypes.SUDPH)
-			if err != nil {
-				a.log.WithError(err).Warn("could not fetch keys from address resolver for SUDPH")
+			if localSupportsSUDPH {
+				sudphKeys, err = v.arClient.TransportsType(ctx, tptypes.SUDPH)
+				if err != nil {
+					a.log.WithError(err).Warn("could not fetch keys from address resolver for SUDPH")
+					sudphKeys = map[cipher.PubKey][]string{}
+				}
+			} else {
+				a.log.Debug("SUDPH not supported locally, skipping")
 				sudphKeys = map[cipher.PubKey][]string{}
 			}
 
-			// Get keys available for STCPR transport
+			// Get keys available for STCPR transport (only if locally supported)
 			var stcprKeys map[cipher.PubKey][]string
-			stcprKeys, err = v.arClient.TransportsType(ctx, tptypes.STCPR)
-			if err != nil {
-				a.log.WithError(err).Warn("could not fetch keys from address resolver for STCPR")
+			if localSupportsSTCPR {
+				stcprKeys, err = v.arClient.TransportsType(ctx, tptypes.STCPR)
+				if err != nil {
+					a.log.WithError(err).Warn("could not fetch keys from address resolver for STCPR")
+					stcprKeys = map[cipher.PubKey][]string{}
+				}
+			} else {
+				a.log.Debug("STCPR not supported locally, skipping")
 				stcprKeys = map[cipher.PubKey][]string{}
 			}
 
@@ -243,6 +262,14 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 				a.log.WithField("pk", pk).WithField("type", netType).
 					Debugln("Trying to add transport to public visor")
+
+				// Double-check that the network type is supported locally before attempting
+				if !a.tm.IsKnownNetwork(netType) {
+					a.log.WithField("pk", pk).WithField("type", netType).
+						Warnln("Network type not supported locally, skipping")
+					continue
+				}
+
 				logger := a.log.WithField("pk", pk).WithField("type", string(netType))
 				if err = a.tryEstablishTransport(ctx, pk, netType, logger); err != nil {
 					logger.WithError(err).Warnln("Failed to add transport to visor")
