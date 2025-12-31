@@ -259,14 +259,14 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				if netType == tptypes.STCPR && isPublicVisor {
 					// Fresh check for STCPR to public visors - these are most prone to overload
 					tpD := v.tpDiscClient()
-					freshCount, err := tpD.GetTransportStats(ctx, pk)
+					freshStats, err := tpD.GetTransportStats(ctx, pk)
 					if err != nil {
 						a.log.WithField("pk", pk).WithError(err).
 							Warn("Failed to get fresh transport stats, using cached count")
 						transportCount = transportCache.transportCounts[pk]
 					} else {
-						transportCount = freshCount
-						a.log.WithField("pk", pk).WithField("fresh_count", freshCount).
+						transportCount = freshStats.Total
+						a.log.WithField("pk", pk).WithField("fresh_count", freshStats.Total).
 							Debug("Got fresh transport count for public visor")
 					}
 				} else {

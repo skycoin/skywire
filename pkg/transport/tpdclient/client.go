@@ -182,11 +182,11 @@ func (c *apiClient) GetAllTransports(ctx context.Context) ([]*transport.Entry, e
 }
 
 // GetTransportStats returns transport statistics for the given public key.
-// Returns just the count of transports, which is much lighter than fetching all entries.
-func (c *apiClient) GetTransportStats(ctx context.Context, pk cipher.PubKey) (int, error) {
+// Returns both total count and breakdown by transport type.
+func (c *apiClient) GetTransportStats(ctx context.Context, pk cipher.PubKey) (*transport.TransportStats, error) {
 	resp, err := c.Get(ctx, fmt.Sprintf("/transports/stats/%s", pk))
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	defer func() {
@@ -196,20 +196,41 @@ func (c *apiClient) GetTransportStats(ctx context.Context, pk cipher.PubKey) (in
 	}()
 
 	if err := httputil.ErrorFromResp(resp); err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	var stats map[string]int
+	var stats transport.TransportStats
 	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
-		return 0, fmt.Errorf("json: %w", err)
+		return nil, fmt.Errorf("json: %w", err)
 	}
 
-	count, ok := stats["count"]
-	if !ok {
-		return 0, fmt.Errorf("missing count in stats response")
+	return &stats, nil
+}
+
+// GetAllTransportsStats returns network-wide transport statistics.
+// This provides aggregate statistics without returning all individual transport entries.
+func (c *apiClient) GetAllTransportsStats(ctx context.Context) (*transport.NetworkTransportStats, error) {
+	resp, err := c.Get(ctx, "/all-transports/stats")
+	if err != nil {
+		return nil, err
 	}
 
-	return count, nil
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
+
+	if err := httputil.ErrorFromResp(resp); err != nil {
+		return nil, err
+	}
+
+	var stats transport.NetworkTransportStats
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("json: %w", err)
+	}
+
+	return &stats, nil
 }
 
 // DeleteTransport deletes given transport by it's ID. A visor can only delete transports if he is one of it's edges.

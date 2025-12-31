@@ -105,6 +105,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 
 	r.Get("/health", api.health)
 	r.Get("/all-transports", api.getAllTransports)
+	r.Get("/all-transports/stats", api.getAllTransportsStats)
 	r.Get("/transports/stats/{edge}", api.getTransportStats)
 	r.Delete("/transports/deregister", api.deregisterTransport)
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
