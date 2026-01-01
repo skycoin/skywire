@@ -204,18 +204,6 @@ func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !a.hasAddress(remoteAddr, localAddresses) {
-		// visor didn't provide the IP it's trying to bind from
-		// probably is behind NAT and shouldn't bind
-		err := fmt.Sprintf("Cannot bind %v to %v (STCPR). Remote address not present in request: %v", pk, remoteAddr, localAddresses)
-		a.logger(r).Errorf(err)
-
-		a.writeJSON(w, r, http.StatusBadRequest, &Error{
-			Error: err,
-		})
-		return
-	}
-
 	visorData := addrresolver.VisorData{
 		RemoteAddr:     remoteAddr,
 		LocalAddresses: localAddresses,
@@ -254,18 +242,6 @@ func (a *API) delBind(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	a.logger(r).Debugf("Deleted bind %v from %v (STCPR)", pk, remoteAddr)
-}
-
-// Check if localAddresses contains given address
-// Address provided must be in host:port form while addresses
-// in the local are plain IP addresses
-func (a *API) hasAddress(ip string, local addrresolver.LocalAddresses) bool {
-	for _, localIP := range local.Addresses {
-		if ip == localIP {
-			return true
-		}
-	}
-	return false
 }
 
 func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
