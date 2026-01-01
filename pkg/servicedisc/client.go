@@ -178,6 +178,22 @@ func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
 		for _, ip := range ips {
 			c.entry.LocalIPs = append(c.entry.LocalIPs, ip.String())
 		}
+
+		// Include public IP in local IPs for NAT compatibility
+		// Service discovery server checks that remote IP is in local IPs
+		if c.clientPublicIP != "" {
+			// Check if public IP is already in the list
+			found := false
+			for _, ip := range c.entry.LocalIPs {
+				if ip == c.clientPublicIP {
+					found = true
+					break
+				}
+			}
+			if !found {
+				c.entry.LocalIPs = append(c.entry.LocalIPs, c.clientPublicIP)
+			}
+		}
 	}
 	c.entry.Addr = NewSWAddr(c.conf.PK, c.conf.Port) // Just in case.
 

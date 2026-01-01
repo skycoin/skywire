@@ -17,7 +17,23 @@ type DiscoveryClient interface {
 	RegisterTransports(ctx context.Context, entries ...*SignedEntry) error
 	GetTransportByID(ctx context.Context, id uuid.UUID) (*Entry, error)
 	GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*Entry, error)
+	GetAllTransports(ctx context.Context) ([]*Entry, error)
+	GetTransportStats(ctx context.Context, pk cipher.PubKey) (*TransportStats, error)
+	GetAllTransportsStats(ctx context.Context) (*NetworkTransportStats, error)
 	DeleteTransport(ctx context.Context, id uuid.UUID) error
+}
+
+// TransportStats contains statistics about transports for a given public key.
+type TransportStats struct {
+	Total  int            `json:"total"`
+	ByType map[string]int `json:"by_type"`
+}
+
+// NetworkTransportStats contains network-wide transport statistics.
+type NetworkTransportStats struct {
+	TotalTransports int            `json:"total_transports"`
+	ByType          map[string]int `json:"by_type"`
+	UniqueVisors    int            `json:"unique_visors"`
 }
 
 type mockDiscoveryClient struct {
@@ -74,6 +90,57 @@ func (td *mockDiscoveryClient) GetTransportsByEdge(_ context.Context, pk cipher.
 	}
 
 	return res, nil
+}
+
+func (td *mockDiscoveryClient) GetAllTransports(_ context.Context) ([]*Entry, error) {
+	td.Lock()
+	res := make([]*Entry, 0, len(td.entries))
+	for _, entry := range td.entries {
+		e := &Entry{}
+		*e = entry
+		res = append(res, e)
+	}
+	td.Unlock()
+
+	return res, nil
+}
+
+func (td *mockDiscoveryClient) GetTransportStats(_ context.Context, pk cipher.PubKey) (*TransportStats, error) {
+	td.Lock()
+	byType := make(map[string]int)
+	count := 0
+	for _, entry := range td.entries {
+		if entry.HasEdge(pk) {
+			count++
+			byType[string(entry.Type)]++
+		}
+	}
+	td.Unlock()
+
+	return &TransportStats{
+		Total:  count,
+		ByType: byType,
+	}, nil
+}
+
+func (td *mockDiscoveryClient) GetAllTransportsStats(_ context.Context) (*NetworkTransportStats, error) {
+	td.Lock()
+	byType := make(map[string]int)
+	uniqueVisors := make(map[cipher.PubKey]struct{})
+
+	for _, entry := range td.entries {
+		byType[string(entry.Type)]++
+		for _, edge := range entry.Edges {
+			uniqueVisors[edge] = struct{}{}
+		}
+	}
+	td.Unlock()
+
+	return &NetworkTransportStats{
+		TotalTransports: len(td.entries),
+		ByType:          byType,
+		UniqueVisors:    len(uniqueVisors),
+	}, nil
 }
 
 // NOTE that mock implementation doesn't checks whether the transport to be deleted is valid or not, this is, that
