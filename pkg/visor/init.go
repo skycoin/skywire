@@ -493,9 +493,13 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 
 	logger.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
 		Debug("Serving...")
+	// Increased timeouts for dmsg latency characteristics
+	// DMSG has higher latency than direct TCP due to multi-hop routing
 	srv := &http.Server{
-		ReadHeaderTimeout: 2 * time.Second,
-		IdleTimeout:       30 * time.Second,
+		ReadTimeout:       30 * time.Second, // Allow for dmsg multi-hop latency
+		WriteTimeout:      60 * time.Second, // Allow time to generate large responses (logs, surveys)
+		IdleTimeout:       90 * time.Second, // Keep connections alive longer
+		ReadHeaderTimeout: 10 * time.Second, // Headers can be slow over dmsg
 		Handler:           lsAPI,
 	}
 
@@ -508,13 +512,19 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		if errors.Is(err, dmsg.ErrEntityClosed) {
 			return
 		}
+		if errors.Is(err, http.ErrServerClosed) {
+			return
+		}
 		if err != nil {
 			logger.WithError(err).Error("Logserver exited with error.")
 		}
 	}()
 	v.pushCloseStack("dmsghttp.logserver", func() error {
-		if err := srv.Close(); err != nil {
-			return err
+		// Graceful shutdown
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			logger.WithError(err).Warn("HTTP server shutdown error")
 		}
 		wg.Wait()
 		return nil
