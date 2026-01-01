@@ -1363,47 +1363,67 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 	visorIsPublic := checkVisorIsPublic(v)
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
+	
+	// Perform transportability check logic
+	performCheck := func(tries int) int {
+		dmsgOK := tryTransport(v, "dmsg", log)
+		stcprOK := true // default for non-public visors
+
+		if visorIsPublic {
+			stcprOK = tryTransport(v, "stcpr", log)
+		}
+
+		if dmsgOK && stcprOK {
+			v.isServicesHealthy.set()
+			if tries > 0 {
+				log.Info("Visor is now transportable (recovered)")
+			} else {
+				log.Debug("Visor transportability check passed")
+			}
+			tries = 0
+			ticker.Reset(tickDuration)
+		} else {
+			v.isServicesHealthy.unset()
+			tries++
+			log.WithField("tries", tries).WithField("dmsg_ok", dmsgOK).WithField("stcpr_ok", stcprOK).
+				Warn("Visor transportability check failed")
+			ticker.Reset(time.Minute)
+		}
+
+		if tries >= 3 {
+			if v.conf.DisableShutdownOnNonTransportable {
+				log.Error("Visor is not transportable after 3 failed attempts, but shutdown is disabled for troubleshooting")
+				// Keep trying but don't accumulate tries forever
+				tries = 0
+			} else {
+				log.Error("Visor is not transportable after 3 failed attempts. Shutting down...")
+				if err := v.Shutdown(); err != nil {
+					log.WithError(err).Fatal("Failed to shut down gracefully")
+				}
+				// Signal shutdown to stop the ticker loop
+				tries = -1
+			}
+		}
+		
+		return tries
+	}
+	
 	go func() {
+		// Wait 1 minute after startup before first check
 		time.Sleep(time.Minute)
 		tries := 0
+		
+		// Perform first check immediately after initial delay
+		tries = performCheck(tries)
+		if tries == -1 {
+			return // Shutdown triggered
+		}
 
+		// Continue periodic checks
 		for range ticker.C {
-			dmsgOK := tryTransport(v, "dmsg", log)
-			stcprOK := true // default for non-public visors
-
-			if visorIsPublic {
-				stcprOK = tryTransport(v, "stcpr", log)
-			}
-
-			if dmsgOK && stcprOK {
-				v.isServicesHealthy.set()
-				if tries > 0 {
-					log.Info("Visor is now transportable (recovered)")
-				} else {
-					log.Debug("Visor transportability check passed")
-				}
-				tries = 0
-				ticker.Reset(tickDuration)
-			} else {
-				v.isServicesHealthy.unset()
-				tries++
-				log.WithField("tries", tries).WithField("dmsg_ok", dmsgOK).WithField("stcpr_ok", stcprOK).
-					Warn("Visor transportability check failed")
-				ticker.Reset(time.Minute)
-			}
-
-			if tries >= 3 {
-				if v.conf.DisableShutdownOnNonTransportable {
-					log.Error("Visor is not transportable after 3 failed attempts, but shutdown is disabled for troubleshooting")
-					// Keep trying but don't accumulate tries forever
-					tries = 0
-				} else {
-					log.Error("Visor is not transportable after 3 failed attempts. Shutting down...")
-					if err := v.Shutdown(); err != nil {
-						log.WithError(err).Fatal("Failed to shut down gracefully")
-					}
-					return
-				}
+			tries = performCheck(tries)
+			if tries == -1 {
+				return // Shutdown triggered
 			}
 		}
 	}()
