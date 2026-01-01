@@ -965,6 +965,10 @@ func (env *TestEnv) ContainerRestart(serviceName ...string) error {
 		}
 	}
 
+	// Wait for restarted services to fully initialize
+	env.logger.Infof("Waiting %v for restarted services to stabilize", RestartDelay)
+	time.Sleep(RestartDelay)
+
 	return nil
 }
 

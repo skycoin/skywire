@@ -150,8 +150,8 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 	c.log.Debugf("listening on addr: %v", c.connListener.Addr())
 	for {
 		if err := c.acceptTransport(); err != nil {
-			if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "encrypt connection to") {
-				continue // likely it's a dummy connection from service discovery
+			if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "encrypt connection to") || strings.Contains(err.Error(), "EOF") {
+				continue // likely it's a dummy connection from service discovery or port scanner
 			}
 
 			if c.isClosed() && (errors.Is(err, io.ErrClosedPipe) || strings.Contains(err.Error(), "use of closed network connection")) {
@@ -179,6 +179,7 @@ func (c *genericClient) wrapTransport(rawConn net.Conn, hs handshake.Handshake, 
 	transport.freePort = onClose
 	c.log.Debugf("Sent handshake to %v, local addr %v, remote addr %v", rawConn.RemoteAddr(), transport.lAddr, transport.rAddr)
 	if err := transport.encrypt(c.lPK, c.lSK, initiator); err != nil {
+		transport.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
 	return transport, nil

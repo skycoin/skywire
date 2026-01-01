@@ -233,6 +233,27 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		return err
 	}
 
+	// Include public IP in addresses list to pass address resolver's hasAddress check
+	// when behind NAT (public IP won't be on local interfaces)
+	if c.clientPublicIP != "" {
+		// Extract just the IP (without port) from clientPublicIP
+		publicIP := c.clientPublicIP
+		if host, _, err := net.SplitHostPort(publicIP); err == nil {
+			publicIP = host
+		}
+		// Add public IP if not already in the list
+		found := false
+		for _, addr := range addresses {
+			if addr == publicIP {
+				found = true
+				break
+			}
+		}
+		if !found {
+			addresses = append(addresses, publicIP)
+		}
+	}
+
 	localAddresses := LocalAddresses{
 		Addresses: addresses,
 		Port:      port,
