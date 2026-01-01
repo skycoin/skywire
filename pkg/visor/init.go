@@ -155,7 +155,7 @@ func registerModules(logger *logging.MasterLogger) {
 	//	visorConfig = maker("visor_config", initVisorConfig)
 	dmsgHTTP = maker("dmsg_http", initDmsgHTTP)
 	ebc = maker("event_broadcaster", initEventBroadcaster)
-	ar = maker("address_resolver", initAddressResolver, &dmsgC, &dmsgHTTP)
+	ar = maker("address_resolver", initAddressResolver, &dmsgC, &sc, &dmsgHTTP)
 	disc = maker("discovery", initDiscovery, &dmsgHTTP)
 	tr = maker("transport", initTransport, &ar, &ebc, &dmsgHTTP)
 
@@ -268,12 +268,35 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	// Get public IP from dmsg server for address resolver binding (needed for NAT setups)
+	// Get public IP for address resolver binding (needed for NAT setups)
+	// Try multiple methods with fallback chain:
+	// 1. dmsg server (may fail if local dmsg server returns private IP)
+	// 2. GeoIP service
+	// 3. STUN servers
 	var pIP string
+
+	// Try dmsg LookupIP first
 	ipAddr, err := v.dmsgC.LookupIP(ctx, nil)
 	if err != nil {
-		log.WithError(err).Warn("Failed to get public IP from dmsg server")
-		pIP = ""
+		log.WithError(err).Debug("Failed to get public IP from dmsg server, trying GeoIP")
+
+		// Fall back to GeoIP
+		pIP, err = GetIP(v.conf.GeoIP)
+		if err != nil {
+			log.WithError(err).Debug("Failed to get public IP from GeoIP, trying STUN")
+
+			// Fall back to STUN
+			<-v.stunReady
+			if v.stunClient.PublicIP != nil {
+				pIP = v.stunClient.PublicIP.IP()
+				log.WithField("public_ip", pIP).Debug("Got public IP from STUN")
+			} else {
+				log.Warn("Failed to determine public IP from dmsg, GeoIP, and STUN")
+				pIP = ""
+			}
+		} else {
+			log.WithField("public_ip", pIP).Debug("Got public IP from GeoIP")
+		}
 	} else {
 		pIP = ipAddr.String()
 		log.WithField("public_ip", pIP).Debug("Got public IP from dmsg server")
