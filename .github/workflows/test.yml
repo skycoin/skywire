@@ -33,12 +33,6 @@ jobs:
 
           make install-shellcheck
 
-      - name: Install golangci-lint
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-            | sh -s -- -b $(go env GOPATH)/bin v2.6.1
-        shell: bash
-
       - name: Lint Shell Scripts
         run: make lint-shell
 
@@ -82,12 +76,6 @@ jobs:
           brew install glfw
         shell: bash
 
-      - name: Install golangci-lint
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-            | sh -s -- -b $(go env GOPATH)/bin v2.6.1
-        shell: bash
-
       - name: Checking Format and Testing
         run: make check
 
@@ -104,13 +92,6 @@ jobs:
           go-version: '1.25.4'
           cache: true
           cache-dependency-path: go.sum
-
-      - name: Install golangci-lint
-        shell: powershell
-        run: |
-          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh" -OutFile "install.sh"
-          bash install.sh -b $HOME/go/bin v2.6.1
-          echo "$HOME/go/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install Requirements
         run: |
