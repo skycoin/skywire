@@ -181,7 +181,7 @@ func registerModules(logger *logging.MasterLogger) {
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
-	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm)
+	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm, &stcprC)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc, &tpdco)
