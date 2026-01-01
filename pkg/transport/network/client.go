@@ -179,6 +179,7 @@ func (c *genericClient) wrapTransport(rawConn net.Conn, hs handshake.Handshake, 
 	transport.freePort = onClose
 	c.log.Debugf("Sent handshake to %v, local addr %v, remote addr %v", rawConn.RemoteAddr(), transport.lAddr, transport.rAddr)
 	if err := transport.encrypt(c.lPK, c.lSK, initiator); err != nil {
+		transport.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
 	return transport, nil
