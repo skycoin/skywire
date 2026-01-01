@@ -268,10 +268,18 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	// only needed for dmsghttp
-	pIP, err := getPublicIP(v, conf.AddressResolver)
+	// Get public IP for address resolver binding (needed for NAT setups)
+	// Try GeoIP first, fall back to STUN
+	pIP, err := GetIP(v.conf.GeoIP)
 	if err != nil {
-		return err
+		log.WithError(err).Debug("Failed to get public IP from GeoIP, waiting for STUN")
+		<-v.stunReady
+		if v.stunClient.PublicIP != nil {
+			pIP = v.stunClient.PublicIP.IP()
+		} else {
+			log.Warn("Failed to determine public IP from both GeoIP and STUN")
+			pIP = ""
+		}
 	}
 
 	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
