@@ -1545,15 +1545,6 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { /
 		return nil
 	}
 	logger := v.MasterLogger().PackageLogger("public_visor")
-	hasPublic, err := netutil.HasPublicIP()
-	if err != nil {
-		logger.WithError(err).Warn("Failed to check for existing public IP address")
-		return nil
-	}
-	if !hasPublic {
-		logger.Warn("No public IP address found, stopping")
-		return nil
-	}
 
 	stcpr, ok := v.tpM.Stcpr()
 	if !ok {
