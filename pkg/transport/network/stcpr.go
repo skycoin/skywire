@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -76,14 +75,6 @@ func (c *stcprClient) serve() {
 	_, port, err := net.SplitHostPort(localAddr)
 	if err != nil {
 		c.log.Errorf("Failed to extract port from addr %v: %v", err)
-		return
-	}
-	hasPublic, err := netutil.HasPublicIP()
-	if err != nil {
-		c.log.Errorf("Failed to check for public IP: %v", err)
-	}
-	if !hasPublic {
-		c.log.Debug("Not binding STCPR: no public IP address found")
 		return
 	}
 	c.log.Debug("Binding")

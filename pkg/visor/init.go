@@ -155,8 +155,8 @@ func registerModules(logger *logging.MasterLogger) {
 	//	visorConfig = maker("visor_config", initVisorConfig)
 	dmsgHTTP = maker("dmsg_http", initDmsgHTTP)
 	ebc = maker("event_broadcaster", initEventBroadcaster)
-	ar = maker("address_resolver", initAddressResolver, &dmsgHTTP)
-	disc = maker("discovery", initDiscovery, &dmsgHTTP)
+	ar = maker("address_resolver", initAddressResolver, &dmsgC, &sc, &dmsgHTTP)
+	disc = maker("discovery", initDiscovery, &dmsgC, &sc, &dmsgHTTP)
 	tr = maker("transport", initTransport, &ar, &ebc, &dmsgHTTP)
 
 	sc = maker("stun_client", initStunClient)
@@ -181,7 +181,7 @@ func registerModules(logger *logging.MasterLogger) {
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
-	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm)
+	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm, &stcprC)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc, &tpdco)
@@ -268,10 +268,38 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	// only needed for dmsghttp
-	pIP, err := getPublicIP(v, conf.AddressResolver)
+	// Get public IP for address resolver binding (needed for NAT setups)
+	// Try multiple methods with fallback chain:
+	// 1. dmsg server (may fail if local dmsg server returns private IP)
+	// 2. GeoIP service
+	// 3. STUN servers
+	var pIP string
+
+	// Try dmsg LookupIP first
+	ipAddr, err := v.dmsgC.LookupIP(ctx, nil)
 	if err != nil {
-		return err
+		log.WithError(err).Debug("Failed to get public IP from dmsg server, trying GeoIP")
+
+		// Fall back to GeoIP
+		pIP, err = GetIP(v.conf.GeoIP)
+		if err != nil {
+			log.WithError(err).Debug("Failed to get public IP from GeoIP, trying STUN")
+
+			// Fall back to STUN
+			<-v.stunReady
+			if v.stunClient.PublicIP != nil {
+				pIP = v.stunClient.PublicIP.IP()
+				log.WithField("public_ip", pIP).Debug("Got public IP from STUN")
+			} else {
+				log.Warn("Failed to determine public IP from dmsg, GeoIP, and STUN")
+				pIP = ""
+			}
+		} else {
+			log.WithField("public_ip", pIP).Debug("Got public IP from GeoIP")
+		}
+	} else {
+		pIP = ipAddr.String()
+		log.WithField("public_ip", pIP).Debug("Got public IP from dmsg server")
 	}
 
 	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
@@ -313,11 +341,35 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		factory.ServiceDisc = conf.ServiceDisc
 		factory.DisplayNodeIP = conf.DisplayNodeIP
 		factory.Client = httpC
-		// only needed for dmsghttp
-		pIP, err := getPublicIP(v, conf.ServiceDisc)
+
+		// Get public IP for service discovery (needed for NAT setups)
+		// Use same fallback chain as address resolver: dmsg -> GeoIP -> STUN
+		logger := factory.Log
+		var pIP string
+		ipAddr, err := v.dmsgC.LookupIP(ctx, nil)
 		if err != nil {
-			return err
+			logger.WithError(err).Debug("Failed to get public IP from dmsg server, trying GeoIP")
+
+			pIP, err = GetIP(v.conf.GeoIP)
+			if err != nil {
+				logger.WithError(err).Debug("Failed to get public IP from GeoIP, trying STUN")
+
+				<-v.stunReady
+				if v.stunClient.PublicIP != nil {
+					pIP = v.stunClient.PublicIP.IP()
+					logger.WithField("public_ip", pIP).Debug("Got public IP from STUN for service discovery")
+				} else {
+					logger.Warn("Failed to determine public IP for service discovery from dmsg, GeoIP, and STUN")
+					pIP = ""
+				}
+			} else {
+				logger.WithField("public_ip", pIP).Debug("Got public IP from GeoIP for service discovery")
+			}
+		} else {
+			pIP = ipAddr.String()
+			logger.WithField("public_ip", pIP).Debug("Got public IP from dmsg server for service discovery")
 		}
+
 		factory.ClientPublicIP = pIP
 	}
 
@@ -441,9 +493,13 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 
 	logger.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
 		Debug("Serving...")
+	// Increased timeouts for dmsg latency characteristics
+	// DMSG has higher latency than direct TCP due to multi-hop routing
 	srv := &http.Server{
-		ReadHeaderTimeout: 2 * time.Second,
-		IdleTimeout:       30 * time.Second,
+		ReadTimeout:       30 * time.Second, // Allow for dmsg multi-hop latency
+		WriteTimeout:      60 * time.Second, // Allow time to generate large responses (logs, surveys)
+		IdleTimeout:       90 * time.Second, // Keep connections alive longer
+		ReadHeaderTimeout: 10 * time.Second, // Headers can be slow over dmsg
 		Handler:           lsAPI,
 	}
 
@@ -456,13 +512,19 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		if errors.Is(err, dmsg.ErrEntityClosed) {
 			return
 		}
+		if errors.Is(err, http.ErrServerClosed) {
+			return
+		}
 		if err != nil {
 			logger.WithError(err).Error("Logserver exited with error.")
 		}
 	}()
 	v.pushCloseStack("dmsghttp.logserver", func() error {
-		if err := srv.Close(); err != nil {
-			return err
+		// Graceful shutdown
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			logger.WithError(err).Warn("HTTP server shutdown error")
 		}
 		wg.Wait()
 		return nil
@@ -1301,40 +1363,67 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 	visorIsPublic := checkVisorIsPublic(v)
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
+
+	// Perform transportability check logic
+	performCheck := func(tries int) int {
+		dmsgOK := tryTransport(v, "dmsg", log)
+		stcprOK := true // default for non-public visors
+
+		if visorIsPublic {
+			stcprOK = tryTransport(v, "stcpr", log)
+		}
+
+		if dmsgOK && stcprOK {
+			v.isServicesHealthy.set()
+			if tries > 0 {
+				log.Info("Visor is now transportable (recovered)")
+			} else {
+				log.Debug("Visor transportability check passed")
+			}
+			tries = 0
+			ticker.Reset(tickDuration)
+		} else {
+			v.isServicesHealthy.unset()
+			tries++
+			log.WithField("tries", tries).WithField("dmsg_ok", dmsgOK).WithField("stcpr_ok", stcprOK).
+				Warn("Visor transportability check failed")
+			ticker.Reset(time.Minute)
+		}
+
+		if tries >= 3 {
+			if v.conf.DisableShutdownOnNonTransportable {
+				log.Error("Visor is not transportable after 3 failed attempts, but shutdown is disabled for troubleshooting")
+				// Keep trying but don't accumulate tries forever
+				tries = 0
+			} else {
+				log.Error("Visor is not transportable after 3 failed attempts. Shutting down...")
+				if err := v.Shutdown(); err != nil {
+					log.WithError(err).Fatal("Failed to shut down gracefully")
+				}
+				// Signal shutdown to stop the ticker loop
+				tries = -1
+			}
+		}
+
+		return tries
+	}
+
 	go func() {
+		// Wait 1 minute after startup before first check
 		time.Sleep(time.Minute)
 		tries := 0
 
+		// Perform first check immediately after initial delay
+		tries = performCheck(tries)
+		if tries == -1 {
+			return // Shutdown triggered
+		}
+
+		// Continue periodic checks
 		for range ticker.C {
-			dmsgOK := tryTransport(v, "dmsg", log)
-			stcprOK := true // default for non-public visors
-
-			if visorIsPublic {
-				stcprOK = tryTransport(v, "stcpr", log)
-			}
-
-			if dmsgOK && stcprOK {
-				v.isServicesHealthy.set()
-				tries = 0
-				ticker.Reset(tickDuration)
-			} else {
-				v.isServicesHealthy.unset()
-				tries++
-				ticker.Reset(time.Minute)
-			}
-
-			if tries >= 3 {
-				if v.conf.DisableShutdownOnNonTransportable {
-					log.Error("Visor is not transportable after 3 failed attempts, but shutdown is disabled for troubleshooting")
-					// Keep trying but don't accumulate tries forever
-					tries = 0
-				} else {
-					log.Error("Visor is not transportable after 3 failed attempts. Shutting down...")
-					if err := v.Shutdown(); err != nil {
-						log.WithError(err).Fatal("Failed to shut down gracefully")
-					}
-					return
-				}
+			tries = performCheck(tries)
+			if tries == -1 {
+				return // Shutdown triggered
 			}
 		}
 	}()
@@ -1545,15 +1634,6 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { /
 		return nil
 	}
 	logger := v.MasterLogger().PackageLogger("public_visor")
-	hasPublic, err := netutil.HasPublicIP()
-	if err != nil {
-		logger.WithError(err).Warn("Failed to check for existing public IP address")
-		return nil
-	}
-	if !hasPublic {
-		logger.Warn("No public IP address found, stopping")
-		return nil
-	}
 
 	stcpr, ok := v.tpM.Stcpr()
 	if !ok {

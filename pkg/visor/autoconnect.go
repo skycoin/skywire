@@ -34,10 +34,11 @@ type Autoconnector interface {
 }
 
 type autoconnector struct {
-	client   *servicedisc.HTTPClient
-	maxConns int
-	log      *logging.Logger
-	tm       *transport.Manager
+	client        *servicedisc.HTTPClient
+	maxConns      int
+	log           *logging.Logger
+	tm            *transport.Manager
+	visorIsPublic bool
 }
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
@@ -73,6 +74,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 	}
 
 	visorIsPublic := checkVisorIsPublic(v)
+	a.visorIsPublic = visorIsPublic
 	publicServiceTicker := time.NewTicker(PublicServiceDelay)
 
 	for {
@@ -102,20 +104,54 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 			absent1 := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
 
-			// Get keys available for SUDPH transport
+			// Check which transport types are supported locally
+			localSupportsSUDPH := a.tm.IsKnownNetwork(tptypes.SUDPH)
+			localSupportsSTCPR := a.tm.IsKnownNetwork(tptypes.STCPR)
+
+			if !localSupportsSUDPH && !localSupportsSTCPR {
+				a.log.Warn("No supported network types available locally (SUDPH and STCPR both unavailable)")
+				continue
+			}
+
+			// Get keys available for SUDPH transport (only if locally supported)
 			var sudphKeys map[cipher.PubKey][]string
-			sudphKeys, err = v.arClient.TransportsType(ctx, tptypes.SUDPH)
-			if err != nil {
-				a.log.WithError(err).Warn("could not fetch keys from address resolver for SUDPH")
+			if localSupportsSUDPH {
+				sudphKeys, err = v.arClient.TransportsType(ctx, tptypes.SUDPH)
+				if err != nil {
+					a.log.WithError(err).Warn("could not fetch keys from address resolver for SUDPH")
+					sudphKeys = map[cipher.PubKey][]string{}
+				}
+			} else {
+				a.log.Debug("SUDPH not supported locally, skipping")
 				sudphKeys = map[cipher.PubKey][]string{}
 			}
 
-			// Get keys available for STCPR transport
+			// Get keys available for STCPR transport (only if locally supported)
 			var stcprKeys map[cipher.PubKey][]string
-			stcprKeys, err = v.arClient.TransportsType(ctx, tptypes.STCPR)
-			if err != nil {
-				a.log.WithError(err).Warn("could not fetch keys from address resolver for STCPR")
+			if localSupportsSTCPR {
+				stcprKeys, err = v.arClient.TransportsType(ctx, tptypes.STCPR)
+				if err != nil {
+					a.log.WithError(err).Warn("could not fetch keys from address resolver for STCPR")
+					stcprKeys = map[cipher.PubKey][]string{}
+				}
+			} else {
+				a.log.Debugln("STCPR not supported locally, skipping")
 				stcprKeys = map[cipher.PubKey][]string{}
+			}
+
+			// Fetch ALL transport discovery data once per cycle to reduce API load
+			// This replaces individual DiscoverTransportsByPK calls throughout the cycle
+			a.log.Debug("Fetching all transport discovery data for caching")
+			transportCache, err := a.buildTransportCache(ctx, v)
+			if err != nil {
+				a.log.WithError(err).Warn("Failed to fetch transport discovery cache, continuing without it")
+				transportCache = &transportDiscoveryCache{
+					entriesByPK:     make(map[cipher.PubKey][]*transport.Entry),
+					transportCounts: make(map[cipher.PubKey]int),
+				}
+			} else {
+				a.log.WithField("cached_keys", len(transportCache.transportCounts)).
+					Debug("Successfully cached transport discovery data")
 			}
 
 			// auto-transport logic - for non-public visors connecting to public visors
@@ -129,16 +165,9 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				autoTransports := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
 				absent2Set := make(map[cipher.PubKey]struct{})
 
-				// ✅ Fixed: slice of pointers
-				var entries []*transport.Entry
+				// Use cached transport data instead of individual API calls
 				for _, pk := range addrs {
-					entries, err = v.DiscoverTransportsByPK(pk)
-					if err != nil {
-						v.isServicesHealthy.unset()
-						a.log.WithError(err).Warn("cannot connect to transport discovery service")
-						continue
-					}
-					v.isServicesHealthy.set()
+					entries := transportCache.entriesByPK[pk]
 
 					seen := make(map[cipher.PubKey]struct{})
 					for _, entry := range entries {
@@ -197,8 +226,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				continue
 			}
 
-			// ✅ Fixed: slice of pointers
-			var entries []*transport.Entry
 			for _, pk := range append(shufflePubKeys(absent1), shufflePubKeys(absent2)...) {
 				if time.Now().After(attemptDeadline) {
 					a.log.Debugln("Refreshing list of keys for public autoconnect")
@@ -226,23 +253,50 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					continue // silently skip
 				}
 
-				entries, err = v.DiscoverTransportsByPK(pk)
-				if err != nil {
-					v.isServicesHealthy.unset()
-					a.log.WithField("pk", pk).WithError(err).
-						Warn("Failed to discover transports for remote visor")
-					continue
+				// Hybrid approach for connection count checking:
+				// - For STCPR to public visors: get FRESH stats (critical bottleneck)
+				// - For everything else: use cached data (stale is acceptable)
+				isPublicVisor := a.isInList(pk, absent1)
+				var transportCount int
+				if netType == tptypes.STCPR && isPublicVisor {
+					// Fresh check for STCPR to public visors - these are most prone to overload
+					tpD := v.tpDiscClient()
+					freshStats, err := tpD.GetTransportStats(ctx, pk)
+					if err != nil {
+						a.log.WithField("pk", pk).WithError(err).
+							Warn("Failed to get fresh transport stats, using cached count")
+						transportCount = transportCache.transportCounts[pk]
+					} else {
+						transportCount = freshStats.Total
+						a.log.WithField("pk", pk).WithField("fresh_count", freshStats.Total).
+							Debug("Got fresh transport count for public visor")
+					}
+				} else {
+					// Use cached count for SUDPH or non-public visors
+					transportCount = transportCache.transportCounts[pk]
 				}
-				v.isServicesHealthy.set()
 
-				if len(entries) >= a.maxConns*100 {
-					a.log.WithField("pk", pk).WithField("count", len(entries)).
+				// Skip transport limit check for public-to-public connections
+				// Public visors must maintain full mesh connectivity regardless of individual transport limits
+				if a.visorIsPublic && isPublicVisor {
+					a.log.WithField("pk", pk).WithField("count", transportCount).
+						Debug("Public-to-public connection: bypassing transport limit check")
+				} else if transportCount >= a.maxConns*100 {
+					a.log.WithField("pk", pk).WithField("count", transportCount).
 						Debugln("Remote visor has reached or exceeded max connections, skipping")
 					continue
 				}
 
 				a.log.WithField("pk", pk).WithField("type", netType).
 					Debugln("Trying to add transport to public visor")
+
+				// Double-check that the network type is supported locally before attempting
+				if !a.tm.IsKnownNetwork(netType) {
+					a.log.WithField("pk", pk).WithField("type", netType).
+						Warnln("Network type not supported locally, skipping")
+					continue
+				}
+
 				logger := a.log.WithField("pk", pk).WithField("type", string(netType))
 				if err = a.tryEstablishTransport(ctx, pk, netType, logger); err != nil {
 					logger.WithError(err).Warnln("Failed to add transport to visor")
@@ -326,6 +380,16 @@ func (a *autoconnector) filterDuplicates(pks []cipher.PubKey, trs []*transport.M
 	return absent
 }
 
+// isInList checks if a public key is in the given list
+func (a *autoconnector) isInList(pk cipher.PubKey, list []cipher.PubKey) bool {
+	for _, listPK := range list {
+		if listPK == pk {
+			return true
+		}
+	}
+	return false
+}
+
 // randInt returns a secure random integer in [min, max).
 func randInt(n, x int) (int, error) {
 	if n >= x {
@@ -336,4 +400,38 @@ func randInt(n, x int) (int, error) {
 		return 0, err
 	}
 	return int(nBig.Int64()) + n, nil
+}
+
+// transportDiscoveryCache holds cached transport discovery data to reduce API calls
+type transportDiscoveryCache struct {
+	entriesByPK     map[cipher.PubKey][]*transport.Entry
+	transportCounts map[cipher.PubKey]int
+}
+
+// buildTransportCache fetches all transport discovery data once and builds lookup maps.
+// This replaces hundreds of individual DiscoverTransportsByPK API calls with a single
+// GetAllTransports call, dramatically reducing load on the transport discovery service.
+func (a *autoconnector) buildTransportCache(ctx context.Context, v *Visor) (*transportDiscoveryCache, error) {
+	tpD := v.tpDiscClient()
+
+	// Fetch ALL transports in one API call (instead of per-key calls)
+	allEntries, err := tpD.GetAllTransports(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cache := &transportDiscoveryCache{
+		entriesByPK:     make(map[cipher.PubKey][]*transport.Entry),
+		transportCounts: make(map[cipher.PubKey]int),
+	}
+
+	// Build lookup maps: pk -> entries and pk -> count
+	for _, entry := range allEntries {
+		for _, edge := range entry.Edges {
+			cache.entriesByPK[edge] = append(cache.entriesByPK[edge], entry)
+			cache.transportCounts[edge]++
+		}
+	}
+
+	return cache, nil
 }
