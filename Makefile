@@ -1,5 +1,6 @@
 
 .PHONY : check lint install-linters dep test lint-extra
+.PHONY : update-deps update-dmsg update-skycoin push-deps
 .PHONY : build clean install format  bin build-race deploy
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
@@ -246,6 +247,33 @@ format-windows: tidy ## Formats the code. Must have goimports and goimports-revi
 
 dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
+
+update-deps: ## Update all dependencies to latest versions (use 'make update-deps push-deps' to also commit and push)
+	${OPTS} go get -v -u ./...
+	${OPTS} go mod tidy -v
+	${OPTS} go mod vendor -v
+	@echo "Dependencies updated. Run 'make push-deps' to commit and push changes."
+
+update-dmsg: ## Update dmsg to latest develop branch
+	@echo "Updating dmsg to latest develop..."
+	${OPTS} go get -v github.com/skycoin/dmsg@develop
+	${OPTS} go mod tidy -v
+	${OPTS} go mod vendor -v
+	@echo "dmsg updated successfully"
+
+update-skycoin: ## Update skycoin to latest develop branch
+	@echo "Updating skycoin to latest develop..."
+	${OPTS} go get -v github.com/skycoin/skycoin@develop
+	${OPTS} go mod tidy -v
+	${OPTS} go mod vendor -v
+	@echo "skycoin updated successfully"
+
+push-deps: ## Commit and push dependency updates
+	@echo "Committing dependency updates..."
+	git add go.mod go.sum vendor
+	git commit -m "Update dependencies"
+	git push
+	@echo "Dependencies pushed successfully"
 
 snapshot: ## goreleaser --snapshot --clean --skip=publish
 	goreleaser --snapshot --clean --skip=publish
