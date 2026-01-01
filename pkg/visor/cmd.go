@@ -66,13 +66,15 @@ func init() {
 	//the default is not set to fix the aesthetic of the help command
 	RootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+visorconfig.ConfigName)
 	RootCmd.Flags().StringVarP(&confArg, "confarg", "C", "", "supply config as argument")
+	hiddenflags = append(hiddenflags, "confarg")
+	RootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
+	hiddenflags = append(hiddenflags, "stdin")
 	if ((visorconfig.OS == "linux") && !root) || ((visorconfig.OS == "mac") && !root) || (visorconfig.OS == "win") {
 		RootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
+		hiddenflags = append(hiddenflags, "browser")
 	}
 	RootCmd.Flags().StringVar(&dmsgServer, "dmsg-server", "", "use specified dmsg server public key")
 	hiddenflags = append(hiddenflags, "dmsg-server")
-	RootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
-	hiddenflags = append(hiddenflags, "stdin")
 	//only show flags for configs which exist
 
 	if _, err := os.Stat(visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON); err == nil {
@@ -118,7 +120,7 @@ func init() {
 	hiddenflags = append(hiddenflags, "hv")
 	RootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors \u001b[0m*")
 	hiddenflags = append(hiddenflags, "xhv")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
 	hiddenflags = append(hiddenflags, "loglvl")
 	RootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
 	hiddenflags = append(hiddenflags, "pprofmode")
@@ -128,12 +130,13 @@ func init() {
 	hiddenflags = append(hiddenflags, "logtag")
 	RootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	hiddenflags = append(hiddenflags, "completion")
-	RootCmd.Flags().BoolVarP(&isStoreLog, "storelog", "l", false, "store all logs to file")
+	RootCmd.Flags().BoolVarP(&isStoreLog, "storelog", "s", false, "store all logs to file")
 	hiddenflags = append(hiddenflags, "storelog")
 	RootCmd.Flags().BoolVar(&isForceColor, "forcecolor", false, "force color logging when out is not STDOUT")
 	hiddenflags = append(hiddenflags, "forcecolor")
-	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 	RootCmd.Flags().BoolVar(&useCsrf, "csrf", true, "Request a CSRF token for sensitive hypervisor API requests")
+	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags") //newline here is important
+	hiddenflags = append(hiddenflags, "csrf")
 	for _, j := range hiddenflags {
 		RootCmd.Flags().MarkHidden(j) //nolint:errcheck,gosec
 	}
@@ -156,7 +159,7 @@ var RootCmd = &cobra.Command{
 				f := cmd.Flags().Lookup(j)
 				f.Hidden = false
 			}
-			cmd.Flags().MarkHidden("all")  //nolint:errcheck,gosec
+			//cmd.Flags().MarkHidden("all")  //nolint:errcheck,gosec
 			cmd.Flags().MarkHidden("help") //nolint:errcheck,gosec
 			if err := cmd.Help(); err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to print help: %v\n", err)
