@@ -89,6 +89,42 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (api *API) getTransportStats(w http.ResponseWriter, r *http.Request) {
+	edgeParam := chi.URLParam(r, "edge")
+
+	pk := cipher.PubKey{}
+	if err := pk.UnmarshalText([]byte(edgeParam)); err != nil {
+		api.log(r).WithError(err).Error("Error parsing PK")
+		api.writeError(w, r, ErrInvalidPubKey)
+		return
+	}
+
+	entries, err := api.store.GetTransportsByEdge(r.Context(), pk)
+	if err != nil {
+		if err != store.ErrTransportNotFound {
+			api.log(r).WithError(err).Error("Error getting transport count")
+		}
+		api.writeError(w, r, err)
+		return
+	}
+
+	// Break down counts by transport type
+	byType := make(map[string]int)
+	for _, entry := range entries {
+		byType[string(entry.Type)]++
+	}
+
+	stats := map[string]interface{}{
+		"total":   len(entries),
+		"by_type": byType,
+	}
+
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		api.log(r).WithError(err).Error("Error encoding stats")
+		api.writeError(w, r, err)
+	}
+}
+
 func (api *API) getAllTransports(w http.ResponseWriter, r *http.Request) {
 	selfTransports := true
 	query := r.URL.Query()
@@ -106,6 +142,46 @@ func (api *API) getAllTransports(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewEncoder(w).Encode(entries); err != nil {
 		api.log(r).WithError(err).Error("Error encoding entries")
+		api.writeError(w, r, err)
+	}
+}
+
+func (api *API) getAllTransportsStats(w http.ResponseWriter, r *http.Request) {
+	selfTransports := true
+	query := r.URL.Query()
+	selfTransportsParam := query.Get("selfTransports")
+	if selfTransportsParam == "hide" {
+		selfTransports = false
+	}
+
+	entries, err := api.store.GetAllTransports(r.Context(), selfTransports)
+	if err != nil {
+		if err != store.ErrTransportNotFound {
+			api.log(r).WithError(err).Error("Error getting transports for stats")
+		}
+		api.writeError(w, r, err)
+		return
+	}
+
+	// Calculate network-wide statistics
+	byType := make(map[string]int)
+	uniqueVisors := make(map[cipher.PubKey]struct{})
+
+	for _, entry := range entries {
+		byType[string(entry.Type)]++
+		for _, edge := range entry.Edges {
+			uniqueVisors[edge] = struct{}{}
+		}
+	}
+
+	stats := map[string]interface{}{
+		"total_transports": len(entries),
+		"by_type":          byType,
+		"unique_visors":    len(uniqueVisors),
+	}
+
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		api.log(r).WithError(err).Error("Error encoding stats")
 		api.writeError(w, r, err)
 	}
 }

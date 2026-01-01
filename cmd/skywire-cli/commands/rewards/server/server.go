@@ -973,9 +973,14 @@ func server(e error) {
 		// Start the server using the custom Gin handler
 	}
 
+	// Increased timeouts for dmsg latency characteristics
+	// DMSG has higher latency than direct TCP due to multi-hop routing
 	serve := &http.Server{
 		Handler:           &ginHandler{Router: r1},
-		ReadHeaderTimeout: 3 * time.Second,
+		ReadTimeout:       30 * time.Second, // Allow for dmsg multi-hop latency
+		WriteTimeout:      60 * time.Second, // Allow time to generate large responses
+		IdleTimeout:       90 * time.Second, // Keep connections alive longer
+		ReadHeaderTimeout: 10 * time.Second, // Headers can be slow over dmsg
 	}
 
 	wg := new(sync.WaitGroup)
@@ -994,6 +999,17 @@ func server(e error) {
 			log.Fatalf("Serve: %v", err)
 		}
 		wg.Done()
+	}()
+
+	// Graceful shutdown handler
+	go func() {
+		<-ctx.Done()
+		log.Info("Shutting down dmsghttp reward server...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := serve.Shutdown(shutdownCtx); err != nil {
+			log.WithError(err).Error("HTTP server shutdown error")
+		}
 	}()
 
 	if ensureOnlineURL != "" {
