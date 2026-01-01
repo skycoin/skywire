@@ -1367,11 +1367,18 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 
 			if dmsgOK && stcprOK {
 				v.isServicesHealthy.set()
+				if tries > 0 {
+					log.Info("Visor is now transportable (recovered)")
+				} else {
+					log.Debug("Visor transportability check passed")
+				}
 				tries = 0
 				ticker.Reset(tickDuration)
 			} else {
 				v.isServicesHealthy.unset()
 				tries++
+				log.WithField("tries", tries).WithField("dmsg_ok", dmsgOK).WithField("stcpr_ok", stcprOK).
+					Warn("Visor transportability check failed")
 				ticker.Reset(time.Minute)
 			}
 

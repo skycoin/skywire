@@ -34,10 +34,11 @@ type Autoconnector interface {
 }
 
 type autoconnector struct {
-	client   *servicedisc.HTTPClient
-	maxConns int
-	log      *logging.Logger
-	tm       *transport.Manager
+	client        *servicedisc.HTTPClient
+	maxConns      int
+	log           *logging.Logger
+	tm            *transport.Manager
+	visorIsPublic bool
 }
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
@@ -73,6 +74,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 	}
 
 	visorIsPublic := checkVisorIsPublic(v)
+	a.visorIsPublic = visorIsPublic
 	publicServiceTicker := time.NewTicker(PublicServiceDelay)
 
 	for {
@@ -274,7 +276,12 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					transportCount = transportCache.transportCounts[pk]
 				}
 
-				if transportCount >= a.maxConns*100 {
+				// Skip transport limit check for public-to-public connections
+				// Public visors must maintain full mesh connectivity regardless of individual transport limits
+				if a.visorIsPublic && isPublicVisor {
+					a.log.WithField("pk", pk).WithField("count", transportCount).
+						Debug("Public-to-public connection: bypassing transport limit check")
+				} else if transportCount >= a.maxConns*100 {
 					a.log.WithField("pk", pk).WithField("count", transportCount).
 						Debugln("Remote visor has reached or exceeded max connections, skipping")
 					continue
