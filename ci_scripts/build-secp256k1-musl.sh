@@ -15,6 +15,9 @@ if [ -z "$ARCH" ] || [ -z "$TOOLCHAIN_PREFIX" ] || [ -z "$SYSROOT" ]; then
     exit 1
 fi
 
+# Convert SYSROOT to absolute path (configure requires absolute paths)
+SYSROOT="$(cd "${SYSROOT}" && pwd)"
+
 SECP256K1_VERSION="v0.6.0"
 BUILD_DIR="/tmp/secp256k1-build-${ARCH}"
 
