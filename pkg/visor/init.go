@@ -1363,7 +1363,7 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 	visorIsPublic := checkVisorIsPublic(v)
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
-	
+
 	// Perform transportability check logic
 	performCheck := func(tries int) int {
 		dmsgOK := tryTransport(v, "dmsg", log)
@@ -1404,15 +1404,15 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 				tries = -1
 			}
 		}
-		
+
 		return tries
 	}
-	
+
 	go func() {
 		// Wait 1 minute after startup before first check
 		time.Sleep(time.Minute)
 		tries := 0
-		
+
 		// Perform first check immediately after initial delay
 		tries = performCheck(tries)
 		if tries == -1 {
