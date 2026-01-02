@@ -78,7 +78,8 @@ var tpCmd = &cobra.Command{
 	and has a Transport Type that identifies
 	a specific implementation of the Transport.
 
-	Types: stcp stcpr sudph dmsg`,
+	Types: stcp stcpr sudph dmsg
+`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
