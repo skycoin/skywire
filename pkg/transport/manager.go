@@ -418,10 +418,19 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 		return nil, fmt.Errorf("client not found for the type %s", netType)
 	}
 
+	// Use no-op discovery client for self-transports
+	// Self-transports can't be used for routing (routes can't go through same key twice)
+	// so they shouldn't be registered in transport discovery
+	dc := tm.Conf.DiscoveryClient
+	if remote == client.PK() {
+		dc = NewNoopDiscoveryClient()
+		tm.Logger.Debug("Using no-op discovery client for self-transport")
+	}
+
 	mTp := NewManagedTransport(ManagedTransportConfig{
 		client:         client,
 		ebc:            tm.ebc,
-		DC:             tm.Conf.DiscoveryClient,
+		DC:             dc,
 		LS:             tm.Conf.LogStore,
 		RemotePK:       remote,
 		TransportLabel: label,

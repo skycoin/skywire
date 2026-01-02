@@ -157,3 +157,41 @@ func (td *mockDiscoveryClient) DeleteTransport(ctx context.Context, id uuid.UUID
 	delete(td.entries, id)
 	return nil
 }
+
+// noopDiscoveryClient is a no-op transport discovery client that doesn't register transports.
+// Used for self-transports which cannot be used for routing and shouldn't clutter TPD.
+type noopDiscoveryClient struct{}
+
+// NewNoopDiscoveryClient constructs a new no-op transport discovery client.
+func NewNoopDiscoveryClient() DiscoveryClient {
+	return &noopDiscoveryClient{}
+}
+
+func (nd *noopDiscoveryClient) RegisterTransports(_ context.Context, _ ...*SignedEntry) error {
+	return nil
+}
+
+func (nd *noopDiscoveryClient) GetTransportByID(_ context.Context, _ uuid.UUID) (*Entry, error) {
+	return nil, errors.New("transport not found")
+}
+
+func (nd *noopDiscoveryClient) GetTransportsByEdge(_ context.Context, _ cipher.PubKey) ([]*Entry, error) {
+	return nil, nil
+}
+
+func (nd *noopDiscoveryClient) GetAllTransports(_ context.Context) ([]*Entry, error) {
+	return nil, nil
+}
+
+func (nd *noopDiscoveryClient) GetTransportStats(_ context.Context, _ cipher.PubKey) (*TransportStats, error) {
+	return &TransportStats{Total: 0, ByType: make(map[string]int)}, nil
+}
+
+func (nd *noopDiscoveryClient) GetAllTransportsStats(_ context.Context) (*NetworkTransportStats, error) {
+	return &NetworkTransportStats{TotalTransports: 0, ByType: make(map[string]int), UniqueVisors: 0}, nil
+}
+
+func (nd *noopDiscoveryClient) DeleteTransport(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+
