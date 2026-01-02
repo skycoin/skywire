@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
@@ -200,6 +201,14 @@ func (c *genericClient) acceptTransport() error {
 	remoteAddr := conn.RemoteAddr()
 	c.log.Debugf("Accepted connection from %v", remoteAddr)
 
+	// Set read deadline to detect dead connections early and prevent CLOSE_WAIT accumulation
+	// This gives the remote peer 30 seconds to complete handshake or the connection is closed
+	if err := conn.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
+		c.log.WithError(err).Warn("Failed to set read deadline on connection")
+		conn.Close() //nolint:errcheck,gosec
+		return err
+	}
+
 	onClose := func() {}
 	hs := handshake.ResponderHandshake(handshake.MakeF2PortChecker(c.checkListener))
 	wrappedTransport, err := c.wrapTransport(conn, hs, false, onClose)
@@ -207,11 +216,19 @@ func (c *genericClient) acceptTransport() error {
 		conn.Close() //nolint:errcheck,gosec
 		return err
 	}
+	
+	// Clear read deadline after successful handshake
+	if err := wrappedTransport.SetReadDeadline(time.Time{}); err != nil {
+		c.log.WithError(err).Warn("Failed to clear read deadline")
+	}
+	
 	lis, err := c.getListener(wrappedTransport.lAddr.Port)
 	if err != nil {
 		wrappedTransport.Close() //nolint:errcheck,gosec
 		return err
 	}
+	
+	// If introduce fails (e.g., timeout or listener closed), the transport is already closed by introduce()
 	return lis.introduce(wrappedTransport)
 }
 

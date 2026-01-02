@@ -5,10 +5,12 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -31,6 +33,7 @@ type listener struct {
 	accept   chan *transport
 	done     chan struct{}
 	network  types.Type
+	log      *logging.Logger
 }
 
 // NewListener returns a new Listener.
@@ -42,9 +45,10 @@ func newListener(lAddr dmsg.Addr, freePort func(), network types.Type) *listener
 	return &listener{
 		lAddr:    lAddr,
 		freePort: freePort,
-		accept:   make(chan *transport),
+		accept:   make(chan *transport, 10), // Buffered to reduce blocking
 		done:     make(chan struct{}),
 		network:  network,
+		log:      logging.MustGetLogger("listener"),
 	}
 }
 
@@ -100,6 +104,7 @@ func (l *listener) Network() types.Type {
 }
 
 // Introduce is used by Client to introduce a new transport to this Listener
+// If the transport cannot be delivered within 30 seconds, it is closed and an error is returned
 func (l *listener) introduce(transport *transport) error {
 	select {
 	case <-l.done:
@@ -107,9 +112,19 @@ func (l *listener) introduce(transport *transport) error {
 	default:
 		l.mx.Lock()
 		defer l.mx.Unlock()
+		
+		// Try to deliver transport with a timeout to prevent accumulation
+		timeout := time.NewTimer(30 * time.Second)
+		defer timeout.Stop()
+		
 		select {
 		case l.accept <- transport:
 			return nil
+		case <-timeout.C:
+			// No one is consuming from this listener, close the transport to prevent leak
+			l.log.Warn("Transport not accepted within timeout, closing to prevent connection leak")
+			transport.Close() //nolint:errcheck,gosec
+			return io.ErrClosedPipe
 		case <-l.done:
 			return io.ErrClosedPipe
 		}
