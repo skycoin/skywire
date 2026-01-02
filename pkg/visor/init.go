@@ -1360,16 +1360,27 @@ func checkVisorIsPublic(v *Visor) bool {
 }
 
 func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error {
-	visorIsPublic := checkVisorIsPublic(v)
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
+
+	// Check once if this visor is registered in address resolver for STCPR
+	// If it is, it must maintain STCPR transportability
+	var mustCheckSTCPR bool
+	if stcprKeys, err := v.arClient.TransportsType(ctx, types.STCPR); err == nil {
+		_, mustCheckSTCPR = stcprKeys[v.conf.PK]
+		if mustCheckSTCPR {
+			log.Info("Visor is registered for STCPR in address resolver - STCPR transportability required")
+		}
+	} else {
+		log.WithError(err).Warn("Failed to check address resolver for STCPR registration")
+	}
 
 	// Perform transportability check logic
 	performCheck := func(tries int) int {
 		dmsgOK := tryTransport(v, "dmsg", log)
-		stcprOK := true // default for non-public visors
+		stcprOK := true // default when not required
 
-		if visorIsPublic {
+		if mustCheckSTCPR {
 			stcprOK = tryTransport(v, "stcpr", log)
 		}
 
