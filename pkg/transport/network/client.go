@@ -350,13 +350,20 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 	}
 	c.log.Debugf("Resolved PK %v to visor data %v", rPK, visorData)
 
-	if visorData.IsLocal {
+	// For self-connections (rPK == local PK), always try local addresses first
+	// to avoid NAT hairpinning issues when connecting via public IP
+	isSelfConnection := rPK == c.lPK
+	if visorData.IsLocal || isSelfConnection {
+		if isSelfConnection {
+			c.log.Debug("Detected self-connection, trying local addresses to avoid NAT issues")
+		}
 		for _, host := range visorData.Addresses {
 			addr := net.JoinHostPort(host, visorData.Port)
 			conn, err := dial(ctx, addr)
 			if err == nil {
 				return conn, nil
 			}
+			c.log.WithError(err).Debugf("Failed to dial %s, trying next address", addr)
 		}
 	}
 
