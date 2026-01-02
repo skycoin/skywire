@@ -325,10 +325,10 @@ github-prepare-release:
 	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
 
 github-release: github-prepare-release
-	goreleaser --clean --config .goreleaser-linux.yml --release-notes releaseChangelog.md
+	go run github.com/goreleaser/goreleaser/v2@main --clean --config .goreleaser-linux.yml --release-notes releaseChangelog.md
 
 github-release-darwin:
-	goreleaser --clean  --config .goreleaser-darwin.yml --skip=publish
+	go run github.com/goreleaser/goreleaser/v2@main --clean --config .goreleaser-darwin.yml --skip=publish
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-amd64.tar.gz
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-arm64.tar.gz
@@ -337,7 +337,7 @@ github-release-darwin:
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
 
 github-release-windows:
-	.\goreleaser\goreleaser.exe --clean  --config .goreleaser-windows.yml --skip=publish
+	go run github.com/goreleaser/goreleaser/v2@main --clean --config .goreleaser-windows.yml --skip=publish
 	$(eval GITHUB_TAG=$(shell powershell git describe --abbrev=0 --tags))
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-amd64.zip
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-386.zip
