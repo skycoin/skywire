@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	types "github.com/skycoin/skywire/pkg/transport/types"
@@ -82,29 +81,6 @@ func (c *stcprClient) serve() {
 		c.log.Errorf("Failed to bind STCPR: %v", err)
 		return
 	}
-	// simple heartbeat process for stcpr with exponential backoff on failures
-	go func() {
-		retryCount := 0
-		for {
-			time.Sleep(5 * time.Minute)
-			err := c.ar.BindSTCPR(context.Background(), port)
-			if err != nil {
-				retryCount++
-				// Calculate exponential backoff: 10s, 20s, 40s, 80s, capped at 5 minutes
-				//nolint:gosec
-				backoff := time.Duration(10*(1<<uint(retryCount-1))) * time.Second
-				maxBackoff := 5 * time.Minute
-				if backoff > maxBackoff {
-					backoff = maxBackoff
-				}
-				c.log.Errorf("Failed to bind STCPR (retry %d): %v, retrying in %v", retryCount, err, backoff)
-				time.Sleep(backoff)
-				continue
-			}
-			retryCount = 0 // Reset on success
-			c.log.Infof("STCPR rebinded in heartbeating process")
-		}
-	}()
 	c.log.Debugf("Successfully bound stcpr to port %s", port)
 	c.acceptTransports(lis)
 }
