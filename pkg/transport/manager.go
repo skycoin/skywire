@@ -317,6 +317,10 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 	}
 
 	if err := mTp.Accept(ctx, transport); err != nil {
+		// Close the transport to prevent CLOSE_WAIT connection leak
+		if closeErr := transport.Close(); closeErr != nil {
+			tm.Logger.WithError(closeErr).Warn("Failed to close transport after Accept error")
+		}
 		return err
 	}
 
