@@ -14,12 +14,10 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	services "github.com/skycoin/skywire/pkg/servicedisc"
 )
 
 var (
 	visorServiceType = servicedisc.ServiceTypeVisor
-	visorPort        = "0" // Public visors don't have a specific port like proxy/vpn
 )
 
 var (
@@ -72,7 +70,7 @@ Set cache file location to "" to avoid using cache files`,
 
 		// --- If JSON output requested ---
 		if vJSONOutput {
-			var list []services.Service
+			var list []servicedisc.Service
 			json.Unmarshal([]byte(sds), &list) //nolint:errcheck,gosec
 			var b bytes.Buffer
 			internal.PrintOutput(cmd.Flags(), list, b.String())

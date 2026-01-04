@@ -1,5 +1,5 @@
-// Package clitp cmd/skywire-cli/commands/tp/tp-network.go
-package clitp
+// Package clisd cmd/skywire-cli/commands/sd/network.go
+package clisd
 
 import (
 	"bytes"
