@@ -542,7 +542,7 @@ Note that the binary at: `/opt/skywire/bin/skywire` is already symlinked to `/us
 
 ### Transport setup
 
-_Note: transports should be set up automatically in most cases. The user should not need to do this manually._
+_Note: transports should be set up automatically when starting an app in most cases. The user should not need to do this manually._
 
 A Transport represents a bidirectional line of communication between two Skywire Visors:
 - [Transports](https://github.com/skycoin/skywire/wiki/Transports)
@@ -555,9 +555,17 @@ Their creation is attempted in the following order:
 
 Transports can be manually created. Existing suitable transports will be automatically used by client applications when they are started.
 
-To create a transport, first copy the public key of an online visor from the uptime tracker (or service discovery endpoints):
-https://ut.skywire.skycoin.com/uptimes
+To create a transport, first copy the public key of an online visor from the uptime tracker:
+```
+skywire cli ut -o
+```
+or service discovery:
+```
+skywire cli vpn list #list vpn server keys
+skywire cli proxy list #list proxy server keys
+```
 
+Add the transport:
 ```
 skywire cli visor tp add -t <transport-type> <public-key>
 ```
@@ -569,7 +577,7 @@ skywire cli visor tp ls
 
 Remove a transport:
 ```
-skywire cli visor tp rm <transport-id>
+skywire cli visor tp rm -i <transport-id>
 ```
 
 ### Routing Rules
