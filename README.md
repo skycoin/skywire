@@ -42,7 +42,7 @@ The name 'visor' was chosen as a less ambiguous term than 'node' to refer to the
 
 `skywire cli` is the primary interface to a running Skywire visor. Skywire cli provides an interface to generate a JSON config file for the Skywire visor, to control visor native applications, and to access data from different Skywire services.
 
-## Skywire Proxy & VPN
+## Skywire Apps
 
 Skywire visors include native VPN and SOCKS5 proxy server and client applications, as well as a messenger application, which are started and managed by the visor. When a server application is started, it registers itself in the service discovery as a [proxy server](https://sd.skycoin.com/api/services?type=proxy) or [VPN server](https://sd.skycoin.com/api/services?type=proxy). These services may then be consumed by respective client applications via either a direct or multi-hop route. Refer to the documentation for `skywire cli proxy` and `skywire cli vpn` for more details.
 
@@ -99,19 +99,17 @@ Table of Contents
   * [How to create a GitHub release](#how-to-create-a-github-release)
   * [Dependency Graph](#dependency-graph)
 
-Compiling Skywire requires a Golang version of at least `1.16`.
-
 ## Commands and Subcommands
 
-Documentation of all commands and subcommands is available in the command documentation README:
+Documentation is available in the command documentation README:
 
 * [skywire](cmd/skywire/README.md)
-* [skywire-cli](cmd/skywire-cli/README.md)
-* [skywire-visor](cmd/skywire-visor/README.md)
+* [skywire cli](cmd/skywire-cli/README.md)
+* [skywire visor](cmd/skywire-visor/README.md)
 
 ## Visor Native Applications
 
-Visor apps are not executed directly by the user, but hosted by the visor process.
+_Note: Visor apps are not executed directly by the user, but hosted by the visor process._
 
 * [API](docs/skywire_app_api.md)
 * [skychat](cmd/apps/skychat/README.md)
@@ -119,6 +117,9 @@ Visor apps are not executed directly by the user, but hosted by the visor proces
 * [skysocks-client](cmd/apps/skysocks-client/README.md)
 * [vpn-client](cmd/apps/vpn-client/README.md)
 * [vpn-server](cmd/apps/vpn-server/README.md)
+
+### Example custom applications
+
 * [example-server-app](example/example-server-app/README.md)
 * [example-client-app](example/example-client-app/README.md)
 
@@ -126,7 +127,7 @@ Further documentation can be found in the [skywire wiki](https://github.com/skyc
 
 ## `go install` or `go run` Skywire (go1.24.3)
 
-Most skywire commands can be executed via `go run`:
+Skywire commands can be executed via `go run`:
 
 ```
 $ go run github.com/skycoin/skywire@develop
@@ -149,35 +150,130 @@ Flags:
   -v, --version   version for skywire
 ```
 
-### Running the Visor with Internal Apps
-
-As of the latest updates, **the skywire visor can now be run directly with `go run`** using the internal app launcher:
+The skywire visor can now (as of v1.3.32) run directly with `go run` when using the default in-process visor native applications configuration
 
 ```
-go run github.com/skycoin/skywire@develop visor
+go run github.com/skycoin/skywire@develop cli config gen -br #print the config & output to skywire-config.json
+go run github.com/skycoin/skywire@develop visor #uses skywire-config.json by default
 ```
 
-This simplified method runs the visor with **in-process native applications** (VPN client/server, SOCKS5 proxy, skychat) that are built into the visor binary. These internal apps run within the same process as the visor, eliminating the need for separate app binaries.
-
-**External apps can still be managed alongside internal apps** for backwards compatibility or custom applications.
-
-### Alternative: go install Method
-
-For production use or if you prefer a compiled binary, you can `go install` skywire:
+The new config omits the `"binary"` field and the first two arguments `app <app-name>` :
 
 ```
-[user@linux skywire]$ go install github.com/skycoin/skywire@develop
-[user@linux skywire]$ ls $GOBIN/skywire
-/home/user/go/bin/skywire
+[
+  {
+    "name": "vpn-client",
+    "args": [
+      "--dns",
+      "1.1.1.1"
+    ],
+    "auto_start": false,
+    "port": 43
+  },
+  {
+    "name": "skychat",
+    "args": [
+      "--addr",
+      ":8001"
+    ],
+    "auto_start": true,
+    "port": 1
+  },
+  {
+    "name": "skysocks",
+    "auto_start": true,
+    "port": 3
+  },
+  {
+    "name": "skysocks-client",
+    "args": [
+      "--addr",
+      ":1080"
+    ],
+    "auto_start": false,
+    "port": 13
+  },
+  {
+    "name": "vpn-server",
+    "auto_start": false,
+    "port": 44
+  }
+]
 ```
 
-Optionally copy the binary to your working directory:
+For comparison, the external apps launcher config:
 
 ```
-[user@linux skywire]$ mv $GOBIN/skywire .
-[user@linux skywire]$ ls skywire
-skywire
+[
+  {
+    "name": "vpn-client",
+    "binary": "skywire",
+    "args": [
+      "app",
+      "vpn-client",
+      "--dns",
+      "1.1.1.1"
+    ],
+    "auto_start": false,
+    "port": 43
+  },
+  {
+    "name": "skychat",
+    "binary": "skywire",
+    "args": [
+      "app",
+      "skychat",
+      "--addr",
+      ":8001"
+    ],
+    "auto_start": true,
+    "port": 1
+  },
+  {
+    "name": "skysocks",
+    "binary": "skywire",
+    "args": [
+      "app",
+      "skysocks"
+    ],
+    "auto_start": true,
+    "port": 3
+  },
+  {
+    "name": "skysocks-client",
+    "binary": "skywire",
+    "args": [
+      "app",
+      "skysocks-client",
+      "--addr",
+      ":1080"
+    ],
+    "auto_start": false,
+    "port": 13
+  },
+  {
+    "name": "vpn-server",
+    "binary": "skywire",
+    "args": [
+      "app",
+      "vpn-server"
+    ],
+    "auto_start": false,
+    "port": 44
+  }
+]
 ```
+
+To run the visor native applications with _external_ apps configuration, one must first have the skywire binary explicitly installed:
+```
+go install github.com/skycoin/skywire@develop
+```
+Then, either:
+* place the binary in the current working directory where skywire is running
+OR
+* set the`bin_path` in the skywire-config.json to the directory containing the skywire binary
+
+Running a custom skywire visor app requires that the binary for that app exists in the directory specified by `"bin_path"` in the visor's config
 
 ## Installing Skywire from Release
 
@@ -241,11 +337,10 @@ sudo skywire visor
 
 **Note for systemd services:** When running skywire as a systemd service (non-interactive), `pkexec` cannot prompt for authentication. Use the sudoers method or run the service as root.
 
-**Note:** Prior to recent updates, the VPN server would fail silently or return permission errors when trying to configure iptables without proper elevation. This has been fixed to properly request elevated privileges when needed.
 
 ### Other Permissions
 
-* **File system access**: Writing to the `local` folder path and default config paths (generated by linux/macOS packages or windows .msi installer)
+* **File system access**: Writing to the `local` folder path and default config paths generated by linux/macOS packages or windows .msi installer
 * **System survey**: Some aspects require elevated access - only generated _if a reward address is set_
 
 See [mainnet_rules.md](/rewards/mainnet_rules.md) for more details about the system survey and eligibility requirements for rewards.
