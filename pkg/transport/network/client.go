@@ -151,6 +151,7 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 	for {
 		if err := c.acceptTransport(); err != nil {
 			if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "encrypt connection to") || strings.Contains(err.Error(), "EOF") {
+				c.log.Debugf("Ignoring likely scanner/dummy connection: %v", err)
 				continue // likely it's a dummy connection from service discovery or port scanner
 			}
 

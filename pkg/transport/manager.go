@@ -213,7 +213,8 @@ func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener, t
 					return
 				}
 				log.Warnf("Failed to accept transport")
-				return
+				// Continue accepting other transports instead of stopping
+				continue
 			}
 		}
 	}
