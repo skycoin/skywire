@@ -247,6 +247,12 @@ func (p *Proc) startInProcess() error {
 		// global state modification.
 
 		defer func() {
+			if r := recover(); r != nil {
+				p.errMx.Lock()
+				p.err = fmt.Sprintf("app panic: %v", r)
+				p.errMx.Unlock()
+				p.log.Errorf("App %s panicked: %v", p.conf.AppName, r)
+			}
 
 			for _, env := range envs {
 				parts := strings.SplitN(env, "=", 2)
