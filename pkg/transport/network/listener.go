@@ -106,27 +106,27 @@ func (l *listener) Network() types.Type {
 // Introduce is used by Client to introduce a new transport to this Listener
 // If the transport cannot be delivered within 30 seconds, it is closed and an error is returned
 func (l *listener) introduce(transport *transport) error {
+	// Check if listener is closed (without holding lock during blocking operations)
 	select {
 	case <-l.done:
 		return io.ErrClosedPipe
 	default:
-		l.mx.Lock()
-		defer l.mx.Unlock()
+	}
 
-		// Try to deliver transport with a timeout to prevent accumulation
-		timeout := time.NewTimer(30 * time.Second)
-		defer timeout.Stop()
+	// Try to deliver transport with a timeout to prevent accumulation
+	// Do NOT hold mutex during this blocking operation to avoid deadlocks
+	timeout := time.NewTimer(30 * time.Second)
+	defer timeout.Stop()
 
-		select {
-		case l.accept <- transport:
-			return nil
-		case <-timeout.C:
-			// No one is consuming from this listener, close the transport to prevent leak
-			l.log.Warn("Transport not accepted within timeout, closing to prevent connection leak")
-			transport.Close() //nolint:errcheck,gosec
-			return io.ErrClosedPipe
-		case <-l.done:
-			return io.ErrClosedPipe
-		}
+	select {
+	case l.accept <- transport:
+		return nil
+	case <-timeout.C:
+		// No one is consuming from this listener, close the transport to prevent leak
+		l.log.Warn("Transport not accepted within timeout, closing to prevent connection leak")
+		transport.Close() //nolint:errcheck,gosec
+		return io.ErrClosedPipe
+	case <-l.done:
+		return io.ErrClosedPipe
 	}
 }
