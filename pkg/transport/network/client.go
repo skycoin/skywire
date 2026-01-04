@@ -208,13 +208,13 @@ func (c *genericClient) acceptTransport() error {
 		conn.Close() //nolint:errcheck,gosec
 		return err
 	}
-	
+
 	lis, err := c.getListener(wrappedTransport.lAddr.Port)
 	if err != nil {
 		wrappedTransport.Close() //nolint:errcheck,gosec
 		return err
 	}
-	
+
 	// If introduce fails (e.g., timeout or listener closed), the transport is already closed by introduce()
 	return lis.introduce(wrappedTransport)
 }

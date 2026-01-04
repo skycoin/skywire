@@ -112,11 +112,11 @@ func (l *listener) introduce(transport *transport) error {
 	default:
 		l.mx.Lock()
 		defer l.mx.Unlock()
-		
+
 		// Try to deliver transport with a timeout to prevent accumulation
 		timeout := time.NewTimer(30 * time.Second)
 		defer timeout.Stop()
-		
+
 		select {
 		case l.accept <- transport:
 			return nil

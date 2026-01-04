@@ -1336,29 +1336,6 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	return nil
 }
 
-// This logic modified from from func initPublicVisor
-// Check if the visor is indeed running as a public visor
-// To run a public visor requires public ip or port forwarding
-// --> more than just config setting alone <--
-func checkVisorIsPublic(v *Visor) bool {
-	if v.conf.IsPublic {
-		hasPublic, err := netutil.HasPublicIP()
-		if err == nil && hasPublic {
-			stcpr, ok := v.tpM.Stcpr()
-			if ok {
-				addr, err := stcpr.LocalAddr()
-				if err == nil {
-					_, err = netutil.ExtractPort(addr)
-					if err == nil {
-						return true
-					}
-				}
-			}
-		}
-	}
-	return false
-}
-
 func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error {
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)

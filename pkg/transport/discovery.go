@@ -194,4 +194,3 @@ func (nd *noopDiscoveryClient) GetAllTransportsStats(_ context.Context) (*Networ
 func (nd *noopDiscoveryClient) DeleteTransport(_ context.Context, _ uuid.UUID) error {
 	return nil
 }
-
