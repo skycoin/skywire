@@ -79,10 +79,11 @@ Shows public keys with their services and transport counts by type.`,
 
 		// Build service map by public key
 		type serviceInfo struct {
-			PK       string
-			Country  string
-			Version  string
-			Services []string
+			PK        string
+			DisplayPK string
+			Country   string
+			Version   string
+			Services  []string
 		}
 		serviceMap := make(map[string]*serviceInfo)
 
@@ -111,7 +112,9 @@ Shows public keys with their services and transport counts by type.`,
 		for _, e := range visorEntries {
 			pk := strings.Split(e.Address, ":")[0]
 			if serviceMap[pk] == nil {
-				serviceMap[pk] = &serviceInfo{PK: pk, Country: e.Geo.Country, Version: e.Version}
+				serviceMap[pk] = &serviceInfo{PK: pk, DisplayPK: e.Address, Country: e.Geo.Country, Version: e.Version}
+			} else if serviceMap[pk].DisplayPK == "" {
+				serviceMap[pk].DisplayPK = e.Address
 			}
 			serviceMap[pk].Services = append(serviceMap[pk].Services, "visor")
 			if serviceMap[pk].Country == "" {
@@ -194,8 +197,13 @@ Shows public keys with their services and transport counts by type.`,
 				continue
 			}
 
+			displayPK := pk
+			if info.DisplayPK != "" {
+				displayPK = info.DisplayPK
+			}
+
 			entries = append(entries, networkEntry{
-				PK:       pk,
+				PK:       displayPK,
 				Country:  info.Country,
 				Version:  info.Version,
 				Services: services,
