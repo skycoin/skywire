@@ -18,26 +18,32 @@ import (
 )
 
 var (
-	sdURL         string
-	tpdURL        string
-	cacheFileSD   string
-	cacheFileTPD  string
-	cacheFilesAge int
-	country       string
-	version       string
-	minTransports int
-	jsonOutput    bool
+	sdURL          string
+	tpdURL         string
+	utURL          string
+	cacheFileSD    string
+	cacheFileTPD   string
+	cacheFileUT    string
+	cacheFilesAge  int
+	country        string
+	version        string
+	minTransports  int
+	noFilterOnline bool
+	jsonOutput     bool
 )
 
 func init() {
 	RootCmd.Flags().StringVarP(&sdURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
 	RootCmd.Flags().StringVarP(&tpdURL, "tpdurl", "b", deployment.Prod.TransportDiscovery, "transport discovery url")
+	RootCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
 	RootCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/networksd.json", "SD cache file location")
 	RootCmd.Flags().StringVar(&cacheFileTPD, "cft", os.TempDir()+"/networktpd.json", "TPD cache file location")
+	RootCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/networkut.json", "UT cache file location")
 	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	RootCmd.Flags().StringVarP(&country, "country", "c", "", "filter by country code")
 	RootCmd.Flags().StringVarP(&version, "version", "e", "", "filter by version")
 	RootCmd.Flags().IntVarP(&minTransports, "min", "n", 0, "filter by minimum transport count")
+	RootCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	RootCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
 }
 
@@ -122,6 +128,34 @@ Shows public keys with their services and transport counts by type.`,
 			}
 			if serviceMap[pk].Version == "" {
 				serviceMap[pk].Version = e.Version
+			}
+		}
+
+		// Filter by online status
+		if !noFilterOnline {
+			utData := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+
+			type utEntry struct {
+				PK string `json:"pk"`
+				On bool   `json:"on"`
+			}
+
+			var utEntries []utEntry
+			json.Unmarshal([]byte(utData), &utEntries) //nolint:errcheck,gosec
+
+			// Build online keys set
+			onlineKeys := make(map[string]bool)
+			for _, ut := range utEntries {
+				if ut.On {
+					onlineKeys[ut.PK] = true
+				}
+			}
+
+			// Filter serviceMap to only include online keys
+			for pk := range serviceMap {
+				if !onlineKeys[pk] {
+					delete(serviceMap, pk)
+				}
 			}
 		}
 
