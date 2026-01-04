@@ -238,41 +238,15 @@ func (p *Proc) startInProcess() error {
 	}
 
 	go func() {
-		// Save original stdout/stderr
-		origStdout := os.Stdout
-		origStderr := os.Stderr
-
-		// Redirect stdout/stderr to logger if logging is enabled
-		var stdoutReader, stdoutWriter, stderrReader, stderrWriter *os.File
-		if p.masterLog != nil {
-			moduleName := fmt.Sprintf("proc:%s:%s", p.conf.AppName, p.conf.ProcKey)
-			stdoutLogger := p.masterLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
-			stderrLogger := p.masterLog.WithField("_module", moduleName).WithField("func", "(STDERR)").WriterLevel(logrus.ErrorLevel)
-
-			// Create pipes for stdout/stderr
-			stdoutReader, stdoutWriter, _ = os.Pipe() //nolint:errcheck
-			stderrReader, stderrWriter, _ = os.Pipe() //nolint:errcheck
-
-			os.Stdout = stdoutWriter
-			os.Stderr = stderrWriter
-
-			// Copy from pipes to logger
-			go io.Copy(stdoutLogger, stdoutReader) //nolint:errcheck
-			go io.Copy(stderrLogger, stderrReader) //nolint:errcheck
-		}
+		// NOTE: Stdout/stderr redirection disabled to prevent race conditions
+		// when multiple in-process apps start concurrently. Global os.Stdout/os.Stderr
+		// replacement causes apps to capture each other's output, leading to nested
+		// logging and crashes. Apps should use visor's logger directly instead.
+		//
+		// TODO: Implement per-goroutine or per-app stdout/stderr capture without
+		// global state modification.
 
 		defer func() {
-			// Close pipes and restore original stdout/stderr
-			if stdoutWriter != nil {
-				_ = stdoutWriter.Close() //nolint:errcheck
-				_ = stdoutReader.Close() //nolint:errcheck
-			}
-			if stderrWriter != nil {
-				_ = stderrWriter.Close() //nolint:errcheck
-				_ = stderrReader.Close() //nolint:errcheck
-			}
-			os.Stdout = origStdout
-			os.Stderr = origStderr
 
 			for _, env := range envs {
 				parts := strings.SplitN(env, "=", 2)
