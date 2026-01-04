@@ -32,6 +32,9 @@ import (
 var (
 	errProcAlreadyRunning = errors.New("process already running")
 	errProcNotStarted     = errors.New("process is not started")
+	
+	// stdoutMutex serializes stdout/stderr replacement for in-process apps
+	stdoutMutex sync.Mutex
 )
 
 // Proc is an instance of a skywire app. It encapsulates the running process itself and the RPC server for app/visor
@@ -238,7 +241,46 @@ func (p *Proc) startInProcess() error {
 	}
 
 	go func() {
+		// Redirect stdout/stderr for this app using pipes
+		var origStdout, origStderr *os.File
+		var stdoutR, stdoutW, stderrR, stderrW *os.File
+		
+		if p.masterLog != nil {
+			moduleName := fmt.Sprintf("proc:%s:%s", p.conf.AppName, p.conf.ProcKey)
+			stdoutLogger := p.masterLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
+			stderrLogger := p.masterLog.WithField("_module", moduleName).WithField("func", "(STDERR)").WriterLevel(logrus.ErrorLevel)
+			
+			// Create pipes for stdout/stderr
+			stdoutR, stdoutW, _ = os.Pipe()
+			stderrR, stderrW, _ = os.Pipe()
+			
+			// Start goroutines to copy from pipes to loggers
+			go io.Copy(stdoutLogger, stdoutR)
+			go io.Copy(stderrLogger, stderrR)
+			
+			// Replace stdout/stderr
+			stdoutMutex.Lock()
+			origStdout = os.Stdout
+			origStderr = os.Stderr
+			os.Stdout = stdoutW
+			os.Stderr = stderrW
+			stdoutMutex.Unlock()
+		}
+		
 		defer func() {
+			// Restore original stdout/stderr and close pipes
+			if origStdout != nil {
+				stdoutMutex.Lock()
+				os.Stdout = origStdout
+				os.Stderr = origStderr
+				stdoutMutex.Unlock()
+				
+				stdoutW.Close()
+				stderrW.Close()
+				stdoutR.Close()
+				stderrR.Close()
+			}
+			
 			if r := recover(); r != nil {
 				p.errMx.Lock()
 				p.err = fmt.Sprintf("app panic: %v", r)
