@@ -192,13 +192,13 @@ func (c *sudphClient) dial(remoteAddr string) (net.Conn, error) {
 func (c *sudphClient) Close() error {
 	// First call parent Close to stop acceptTransports loop
 	err := c.resolvedClient.Close()
-	
+
 	// Close the underlying UDP packet connection to stop PacketFilter loop
 	if c.packetListener != nil {
 		if closeErr := c.packetListener.Close(); closeErr != nil {
 			c.log.WithError(closeErr).Warn("Failed to close packet listener")
 		}
 	}
-	
+
 	return err
 }
