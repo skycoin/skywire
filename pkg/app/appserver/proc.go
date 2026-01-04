@@ -238,14 +238,6 @@ func (p *Proc) startInProcess() error {
 	}
 
 	go func() {
-		// NOTE: Stdout/stderr redirection disabled to prevent race conditions
-		// when multiple in-process apps start concurrently. Global os.Stdout/os.Stderr
-		// replacement causes apps to capture each other's output, leading to nested
-		// logging and crashes. Apps should use visor's logger directly instead.
-		//
-		// TODO: Implement per-goroutine or per-app stdout/stderr capture without
-		// global state modification.
-
 		defer func() {
 			if r := recover(); r != nil {
 				p.errMx.Lock()
@@ -262,11 +254,15 @@ func (p *Proc) startInProcess() error {
 			}
 		}()
 
+		p.log.Debug("Calling app RunFunc")
 		err := runFunc(p.appCtx, p.conf.ProcArgs)
 		if err != nil {
 			p.errMx.Lock()
 			p.err = err.Error()
 			p.errMx.Unlock()
+			p.log.WithError(err).Error("App RunFunc returned error")
+		} else {
+			p.log.Debug("App RunFunc returned normally")
 		}
 	}()
 
