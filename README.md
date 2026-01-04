@@ -584,18 +584,6 @@ skywire cli visor tp rm -i <transport-id>
 
 _Note: In most cases, routes are automatically created when applications connect. Manual routing is an advanced feature for specific use cases._
 
-#### Why Manual Routes?
-
-Manual routing provides:
-- **Privacy**: Multi-hop routes obscure source and destination
-- **Censorship resistance**: Bypass throttling or blocking
-- **Network resilience**: Route around unreliable connections
-
-Skywire routes provide an anonymizing overlay where:
-- Packets are uniform in size and stripped of identifying headers
-- Intermediate visors only know the previous and next hop (not source/destination)
-- Traffic is fuzzed to appear as noise, defeating traffic analysis
-
 #### Route Types
 
 **1. App/Consume Rule** - Terminates at the local visor for app consumption
