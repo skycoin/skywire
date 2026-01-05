@@ -491,25 +491,60 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 
 	// Deregister transport before closing the underlying transport.
 	if tp, ok := tm.tps[id]; ok {
-		// Close underlying transport.
-		tp.close()
+		// Delete from map immediately so other operations don't see it
 		delete(tm.tps, id)
+
+		// Close transport asynchronously with timeout to avoid blocking
+		// This prevents deadlocks during transport removal, especially in Docker/test environments
+		go func() {
+			done := make(chan struct{})
+			go func() {
+				tp.close()
+				close(done)
+			}()
+
+			// Wait up to 5 seconds for graceful close
+			select {
+			case <-done:
+				tm.Logger.Debug("Transport closed successfully")
+			case <-time.After(5 * time.Second):
+				tm.Logger.Warn("Transport close timed out after 5s, continuing anyway")
+			}
+		}()
 	}
 }
 
 // DeleteAllTransports deregisters all Transports in transport discovery and deletes them locally.
 func (tm *Manager) DeleteAllTransports() {
 	tm.mx.Lock()
-	defer tm.mx.Unlock()
-
 	if tm.isClosing() {
+		tm.mx.Unlock()
 		return
 	}
 
-	// Deregister transports before closing the underlying transport.
+	// Collect transports to close
+	transports := make([]*ManagedTransport, 0, len(tm.tps))
 	for _, tp := range tm.tps {
-		tp.close()
+		transports = append(transports, tp)
 		delete(tm.tps, tp.Entry.ID)
+	}
+	tm.mx.Unlock()
+
+	// Close all transports asynchronously with timeout
+	for _, tp := range transports {
+		go func(t *ManagedTransport) {
+			done := make(chan struct{})
+			go func() {
+				t.close()
+				close(done)
+			}()
+
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				tm.Logger.Warn("Transport close timed out after 5s during DeleteAllTransports")
+			}
+		}(tp)
 	}
 }
 
