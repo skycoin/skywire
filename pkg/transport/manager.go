@@ -499,10 +499,10 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		return
 	}
 
-	// Close transport outside the lock
-	// This makes HTTP calls to TPD which can take time,
-	// but won't block other operations since lock is released
-	tp.close()
+	// Close transport asynchronously
+	// For individual deletions (RPC calls), we want to return quickly
+	// The reconciliation process will catch any TPD cleanup failures
+	go tp.close()
 }
 
 // DeleteAllTransports deregisters all Transports in transport discovery and deletes them locally.
@@ -531,9 +531,24 @@ func (tm *Manager) DeleteAllTransports() {
 		}(tp)
 	}
 
-	// Wait for all transports to close
-	// Lock is already released so other operations can proceed
-	wg.Wait()
+	// Wait for all transports to close, with timeout
+	// This is critical for tests that restart - we need TPD cleanup to finish
+	// But can't wait forever if TPD is unreachable
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// All transports closed and deregistered from TPD
+		tm.Logger.Debug("All transports closed successfully")
+	case <-time.After(30 * time.Second):
+		// Timeout - some transports may not have completed TPD cleanup
+		// Reconciliation process will clean up stale entries later
+		tm.Logger.Warnf("Timeout waiting for %d transports to close after 30s", len(tps))
+	}
 }
 
 // ReadPacket reads data packets from routes.
