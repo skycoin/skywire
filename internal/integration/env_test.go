@@ -146,12 +146,65 @@ func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 		WithField("is_vpn_client", app.AppName == skyenv.VPNClientName).
 		Info("StartApp called")
 
+	// For VPN server, dump routing table before/after to verify CONSUME rule creation
+	if app.AppName == skyenv.VPNServerName {
+		env.logger.Info("VPN SERVER: Checking routing table BEFORE server start...")
+		if routes, err := env.VisorRouteLsRules(app.VisorHostName); err == nil {
+			env.logger.WithField("route_count", len(routes)).Info("VPN SERVER: Routing table before start")
+		}
+	}
+
 	if app.AppName == skyenv.VPNClientName {
 		env.logger.Info("Using VPNStart path")
 		out, err = env.VPNStart(app, pk)
 	} else {
 		env.logger.Info("Using VisorAppStart path")
 		out, err = env.VisorAppStart(app)
+	}
+
+	// For VPN server, dump routing table after to verify CONSUME rule was created
+	if app.AppName == skyenv.VPNServerName {
+		time.Sleep(2 * time.Second) // Give time for Listen() to complete
+		env.logger.Info("VPN SERVER: Checking routing table AFTER server start...")
+		if routes, err := env.VisorRouteLsRules(app.VisorHostName); err == nil {
+			hasConsumeRule := false
+			for _, route := range routes {
+				ruleStr := fmt.Sprintf("%+v", route)
+				if strings.Contains(ruleStr, "Consume") && strings.Contains(ruleStr, ":44") {
+					hasConsumeRule = true
+					env.logger.WithField("rule", ruleStr).Info("VPN SERVER: Found CONSUME rule for port 44")
+				}
+			}
+			if !hasConsumeRule {
+				env.logger.Warn("VPN SERVER: NO CONSUME RULE FOUND FOR PORT 44!")
+				for i, route := range routes {
+					env.logger.WithField("route", fmt.Sprintf("%+v", route)).Warnf("VPN SERVER: Route %d", i)
+				}
+			} else {
+				env.logger.Info("VPN SERVER: CONSUME rule for port 44 exists - server ready to accept connections")
+			}
+		}
+	}
+
+	// For VPN client, also dump routing table after connection to verify route setup
+	if app.AppName == skyenv.VPNClientName && err == nil {
+		time.Sleep(1 * time.Second) // Give time for routes to be established
+		env.logger.Info("VPN CLIENT: Checking routing table AFTER dial...")
+		if routes, err := env.VisorRouteLsRules(app.VisorHostName); err == nil {
+			hasFwdRule := false
+			for _, route := range routes {
+				ruleStr := fmt.Sprintf("%+v", route)
+				if strings.Contains(ruleStr, "Forward") && strings.Contains(ruleStr, ":44") {
+					hasFwdRule = true
+					env.logger.WithField("rule", ruleStr).Info("VPN CLIENT: Found FWD rule for port 44")
+				}
+			}
+			if !hasFwdRule {
+				env.logger.Warn("VPN CLIENT: NO FWD RULE FOUND FOR PORT 44!")
+			} else {
+				env.logger.Info("VPN CLIENT: Route to server port 44 established")
+			}
+		}
 	}
 
 	env.logger.WithField("app", app.AppName).
