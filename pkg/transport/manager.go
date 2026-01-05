@@ -483,33 +483,80 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 // DeleteTransport deregisters the Transport of Transport ID in transport discovery and deletes it locally.
 func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	tm.mx.Lock()
-	defer tm.mx.Unlock()
-
 	if tm.isClosing() {
+		tm.mx.Unlock()
 		return
 	}
 
-	// Deregister transport before closing the underlying transport.
-	if tp, ok := tm.tps[id]; ok {
-		// Close underlying transport.
-		tp.close()
+	// Get transport and remove from map immediately (before closing)
+	tp, ok := tm.tps[id]
+	if ok {
 		delete(tm.tps, id)
+	}
+	tm.mx.Unlock()
+
+	if !ok {
+		return
+	}
+
+	// Close transport outside the lock with timeout
+	// tp.close() makes HTTP calls to TPD which can block
+	done := make(chan struct{})
+	go func() {
+		tp.close()
+		close(done)
+	}()
+
+	// Wait up to 10 seconds for graceful close
+	select {
+	case <-done:
+		// Clean shutdown completed
+	case <-time.After(10 * time.Second):
+		// Timeout - log warning but don't block
+		// The goroutine will continue in background and eventually finish
+		tm.Logger.WithField("transport_id", id).Warn("Transport close timed out after 10s, continuing anyway")
 	}
 }
 
 // DeleteAllTransports deregisters all Transports in transport discovery and deletes them locally.
 func (tm *Manager) DeleteAllTransports() {
 	tm.mx.Lock()
-	defer tm.mx.Unlock()
-
 	if tm.isClosing() {
+		tm.mx.Unlock()
 		return
 	}
 
-	// Deregister transports before closing the underlying transport.
+	// Get all transports and clear map immediately
+	tps := make([]*ManagedTransport, 0, len(tm.tps))
 	for _, tp := range tm.tps {
-		tp.close()
-		delete(tm.tps, tp.Entry.ID)
+		tps = append(tps, tp)
+	}
+	tm.tps = make(map[uuid.UUID]*ManagedTransport)
+	tm.mx.Unlock()
+
+	// Close all transports concurrently with timeout
+	var wg sync.WaitGroup
+	for _, tp := range tps {
+		wg.Add(1)
+		go func(mtp *ManagedTransport) {
+			defer wg.Done()
+			mtp.close()
+		}(tp)
+	}
+
+	// Wait up to 10 seconds for all to close
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// All transports closed successfully
+	case <-time.After(10 * time.Second):
+		// Timeout - log warning but don't block
+		tm.Logger.Warnf("Timeout waiting for %d transports to close after 10s, continuing anyway", len(tps))
 	}
 }
 
