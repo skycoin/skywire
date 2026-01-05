@@ -360,7 +360,7 @@ func (env *TestEnv) VisorRouteLsRules(visor string) ([]RouteRule, error) {
 		Output []RouteRule `json:"output,omitempty"`
 		Err    *string     `json:"error,omitempty"`
 	}{}
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route --json", visor)
+	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 route --json", visor)
 	err := env.ExecJSON(cmd, &cliOutput)
 	if err != nil {
 		return nil, err
@@ -379,7 +379,7 @@ func (env *TestEnv) VisorRouteRule(visor string, routeID routing.RouteID) (*Rout
 		Output []RouteRule `json:"output,omitempty"`
 		Err    *string     `json:"error,omitempty"`
 	}{}
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route rule %v --json", visor, routeID)
+	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 route rule %v --json", visor, routeID)
 	err := env.ExecJSON(cmd, &cliOutput)
 	if err != nil {
 		return nil, err
@@ -391,17 +391,17 @@ func (env *TestEnv) VisorRouteRule(visor string, routeID routing.RouteID) (*Rout
 }
 
 func (env *TestEnv) VisorRouteAddAppRule(visor, routeID, localPK, localPort, remotePK, remotePort string) (*RouteKey, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route add-rule app %v %v %v %v %v --json", visor, routeID, localPK, localPort, remotePK, remotePort)
+	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 route add-rule app %v %v %v %v %v --json", visor, routeID, localPK, localPort, remotePK, remotePort)
 	return env.visorRouteAddRule(cmd)
 }
 
 func (env *TestEnv) VisorRouteAddFwdRule(visor, routeID, nextRouteID, nextTpID, localPK, localPort, remotePK, remotePort string) (*RouteKey, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route add-rule fwd %v %v %v %v %v %v %v --json", visor, routeID, nextRouteID, nextTpID, localPK, localPort, remotePK, remotePort)
+	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 route add-rule fwd %v %v %v %v %v %v %v --json", visor, routeID, nextRouteID, nextTpID, localPK, localPort, remotePK, remotePort)
 	return env.visorRouteAddRule(cmd)
 }
 
 func (env *TestEnv) VisorRouteAddIntFwdRule(visor, routeID, nextRouteID, nextTpID string) (*RouteKey, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route add-rule intfwd %v %v %v --json", visor, routeID, nextRouteID, nextTpID)
+	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 route add-rule intfwd %v %v %v --json", visor, routeID, nextRouteID, nextTpID)
 	return env.visorRouteAddRule(cmd)
 }
 
@@ -422,7 +422,7 @@ func (env *TestEnv) visorRouteAddRule(cmd string) (*RouteKey, error) {
 }
 
 func (env *TestEnv) VisorRouteRmRule(visor string, routeID routing.RouteID) (string, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route rm-rule %v --json", visor, routeID)
+	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 route rm-rule %v --json", visor, routeID)
 	return env.ExecJSONReturnString(cmd)
 }
 
