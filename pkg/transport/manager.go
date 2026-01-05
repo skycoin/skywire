@@ -491,66 +491,26 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 
 	// Deregister transport before closing the underlying transport.
 	if tp, ok := tm.tps[id]; ok {
-		// Delete from map immediately so other operations don't see it
+		// Close underlying transport.
+		tp.close()
 		delete(tm.tps, id)
-
-		// Close transport synchronously but with timeout protection
-		// We do this in a goroutine with timeout to prevent indefinite blocking
-		// but we wait for completion to avoid connection state issues
-		done := make(chan struct{})
-		go func() {
-			tp.close()
-			close(done)
-		}()
-
-		// Wait up to 2 seconds for graceful close
-		select {
-		case <-done:
-			tm.Logger.Debug("Transport closed successfully")
-		case <-time.After(2 * time.Second):
-			tm.Logger.Warn("Transport close timed out after 2s, transport may not be fully cleaned up")
-			// Continue anyway - transport is already removed from map
-		}
 	}
 }
 
 // DeleteAllTransports deregisters all Transports in transport discovery and deletes them locally.
 func (tm *Manager) DeleteAllTransports() {
 	tm.mx.Lock()
+	defer tm.mx.Unlock()
+
 	if tm.isClosing() {
-		tm.mx.Unlock()
 		return
 	}
 
-	// Collect transports to close
-	transports := make([]*ManagedTransport, 0, len(tm.tps))
+	// Deregister transports before closing the underlying transport.
 	for _, tp := range tm.tps {
-		transports = append(transports, tp)
+		tp.close()
 		delete(tm.tps, tp.Entry.ID)
 	}
-	tm.mx.Unlock()
-
-	// Close all transports with timeout protection
-	// Use WaitGroup to wait for all closures (or timeouts)
-	var wg sync.WaitGroup
-	for _, tp := range transports {
-		wg.Add(1)
-		go func(t *ManagedTransport) {
-			defer wg.Done()
-			done := make(chan struct{})
-			go func() {
-				t.close()
-				close(done)
-			}()
-
-			select {
-			case <-done:
-			case <-time.After(2 * time.Second):
-				tm.Logger.Warn("Transport close timed out after 2s during DeleteAllTransports")
-			}
-		}(tp)
-	}
-	wg.Wait()
 }
 
 // ReadPacket reads data packets from routes.
