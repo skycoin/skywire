@@ -596,8 +596,10 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 					env.logger.Info("Transport re-added successfully")
 				}
 
-				// Wait a bit before retrying VPN start
-				time.Sleep(retryDelay)
+				// Wait longer for transport to settle and routes to be established
+				// Transport deletion now uses 10s timeout, so we need more time for cleanup + re-establishment
+				env.logger.Info("Waiting for transport settlement and route establishment...")
+				time.Sleep(5 * time.Second)
 
 				// Continue to next retry attempt
 				continue
