@@ -488,7 +488,7 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		return
 	}
 
-	// Get transport and remove from map immediately (before closing)
+	// Get transport and remove from map immediately
 	tp, ok := tm.tps[id]
 	if ok {
 		delete(tm.tps, id)
@@ -499,23 +499,10 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		return
 	}
 
-	// Close transport outside the lock with timeout
-	// tp.close() makes HTTP calls to TPD which can block
-	done := make(chan struct{})
-	go func() {
-		tp.close()
-		close(done)
-	}()
-
-	// Wait up to 10 seconds for graceful close
-	select {
-	case <-done:
-		// Clean shutdown completed
-	case <-time.After(10 * time.Second):
-		// Timeout - log warning but don't block
-		// The goroutine will continue in background and eventually finish
-		tm.Logger.WithField("transport_id", id).Warn("Transport close timed out after 10s, continuing anyway")
-	}
+	// Close transport outside the lock
+	// This makes HTTP calls to TPD which can take time,
+	// but won't block other operations since lock is released
+	tp.close()
 }
 
 // DeleteAllTransports deregisters all Transports in transport discovery and deletes them locally.
@@ -534,7 +521,7 @@ func (tm *Manager) DeleteAllTransports() {
 	tm.tps = make(map[uuid.UUID]*ManagedTransport)
 	tm.mx.Unlock()
 
-	// Close all transports concurrently with timeout
+	// Close all transports concurrently
 	var wg sync.WaitGroup
 	for _, tp := range tps {
 		wg.Add(1)
@@ -544,20 +531,9 @@ func (tm *Manager) DeleteAllTransports() {
 		}(tp)
 	}
 
-	// Wait up to 10 seconds for all to close
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// All transports closed successfully
-	case <-time.After(10 * time.Second):
-		// Timeout - log warning but don't block
-		tm.Logger.Warnf("Timeout waiting for %d transports to close after 10s, continuing anyway", len(tps))
-	}
+	// Wait for all transports to close
+	// Lock is already released so other operations can proceed
+	wg.Wait()
 }
 
 // ReadPacket reads data packets from routes.
