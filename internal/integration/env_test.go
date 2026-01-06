@@ -146,12 +146,44 @@ func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 		WithField("is_vpn_client", app.AppName == skyenv.VPNClientName).
 		Info("StartApp called")
 
-	// For VPN server, dump routing table before/after to verify CONSUME rule creation
-	if app.AppName == skyenv.VPNServerName {
-		env.logger.Info("VPN SERVER: Checking routing table BEFORE server start...")
-		if routes, err := env.VisorRouteLsRules(app.VisorHostName); err == nil {
-			env.logger.WithField("route_count", len(routes)).Info("VPN SERVER: Routing table before start")
+	// For VPN client, check transport state on BOTH visors before starting
+	if app.AppName == skyenv.VPNClientName && pk != "" {
+		env.logger.Info("=== VPN CLIENT PRE-START DIAGNOSTICS ===")
+		
+		// Get client-side transports
+		clientTps, err := env.VisorTpLs(app.VisorHostName)
+		if err != nil {
+			env.logger.WithError(err).Warn("Failed to get client transports")
+		} else {
+			env.logger.WithField("count", len(clientTps)).Infof("Client (%s) has %d transports:", app.VisorHostName, len(clientTps))
+			for i, tp := range clientTps {
+				env.logger.Infof("  [%d] %s -> %s (ID: %s, type: %s)", i, tp.Local, tp.Remote, tp.ID, tp.Type)
+			}
 		}
+		
+		// Get server-side transports (the visor we're connecting to)
+		serverVisor := "" 
+		if pk == env.visorPKs[visorA] {
+			serverVisor = visorA
+		} else if pk == env.visorPKs[visorB] {
+			serverVisor = visorB  
+		} else if pk == env.visorPKs[visorC] {
+			serverVisor = visorC
+		}
+		
+		if serverVisor != "" {
+			serverTps, err := env.VisorTpLs(serverVisor)
+			if err != nil {
+				env.logger.WithError(err).Warn("Failed to get server transports")
+			} else {
+				env.logger.WithField("count", len(serverTps)).Infof("Server (%s) has %d transports:", serverVisor, len(serverTps))
+				for i, tp := range serverTps {
+					env.logger.Infof("  [%d] %s -> %s (ID: %s, type: %s)", i, tp.Local, tp.Remote, tp.ID, tp.Type)
+				}
+			}
+		}
+		
+		env.logger.Info("=== END PRE-START DIAGNOSTICS ===")
 	}
 
 	if app.AppName == skyenv.VPNClientName {
@@ -162,49 +194,17 @@ func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 		out, err = env.VisorAppStart(app)
 	}
 
-	// For VPN server, dump routing table after to verify CONSUME rule was created
-	if app.AppName == skyenv.VPNServerName {
-		time.Sleep(2 * time.Second) // Give time for Listen() to complete
-		env.logger.Info("VPN SERVER: Checking routing table AFTER server start...")
-		if routes, err := env.VisorRouteLsRules(app.VisorHostName); err == nil {
-			hasConsumeRule := false
-			for _, route := range routes {
-				ruleStr := fmt.Sprintf("%+v", route)
-				if strings.Contains(ruleStr, "Consume") && strings.Contains(ruleStr, ":44") {
-					hasConsumeRule = true
-					env.logger.WithField("rule", ruleStr).Info("VPN SERVER: Found CONSUME rule for port 44")
-				}
-			}
-			if !hasConsumeRule {
-				env.logger.Warn("VPN SERVER: NO CONSUME RULE FOUND FOR PORT 44!")
-				for i, route := range routes {
-					env.logger.WithField("route", fmt.Sprintf("%+v", route)).Warnf("VPN SERVER: Route %d", i)
-				}
-			} else {
-				env.logger.Info("VPN SERVER: CONSUME rule for port 44 exists - server ready to accept connections")
-			}
+	// On VPN client failure, dump transport state again
+	if app.AppName == skyenv.VPNClientName && err != nil {
+		env.logger.WithError(err).Warn("=== VPN CLIENT START FAILED - DUMPING TRANSPORT STATE ===")
+		
+		clientTps, _ := env.VisorTpLs(app.VisorHostName)
+		env.logger.Infof("Client (%s) transports after failure: %d", app.VisorHostName, len(clientTps))
+		for i, tp := range clientTps {
+			env.logger.Infof("  [%d] %s -> %s (ID: %s, type: %s)", i, tp.Local, tp.Remote, tp.ID, tp.Type)
 		}
-	}
-
-	// For VPN client, also dump routing table after connection to verify route setup
-	if app.AppName == skyenv.VPNClientName && err == nil {
-		time.Sleep(1 * time.Second) // Give time for routes to be established
-		env.logger.Info("VPN CLIENT: Checking routing table AFTER dial...")
-		if routes, err := env.VisorRouteLsRules(app.VisorHostName); err == nil {
-			hasFwdRule := false
-			for _, route := range routes {
-				ruleStr := fmt.Sprintf("%+v", route)
-				if strings.Contains(ruleStr, "Forward") && strings.Contains(ruleStr, ":44") {
-					hasFwdRule = true
-					env.logger.WithField("rule", ruleStr).Info("VPN CLIENT: Found FWD rule for port 44")
-				}
-			}
-			if !hasFwdRule {
-				env.logger.Warn("VPN CLIENT: NO FWD RULE FOUND FOR PORT 44!")
-			} else {
-				env.logger.Info("VPN CLIENT: Route to server port 44 established")
-			}
-		}
+		
+		env.logger.Info("=== END FAILURE DIAGNOSTICS ===")
 	}
 
 	env.logger.WithField("app", app.AppName).
