@@ -86,3 +86,9 @@ CRUSH.md
 .crush.json
 .crush/
 e2e-test.log
+
+# Build artifacts and local files
+/skywire
+*.bak
+/help_output/
+/go-files-by-lines.txt

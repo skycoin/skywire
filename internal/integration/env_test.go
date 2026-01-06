@@ -146,12 +146,69 @@ func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 		WithField("is_vpn_client", app.AppName == skyenv.VPNClientName).
 		Info("StartApp called")
 
+	// For VPN client, check transport state on BOTH visors before starting
+	if app.AppName == skyenv.VPNClientName && pk != "" {
+		env.logger.Info("=== VPN CLIENT PRE-START DIAGNOSTICS ===")
+
+		// Get client-side transports
+		clientTps, err := env.VisorTpLs(app.VisorHostName)
+		if err != nil {
+			env.logger.WithError(err).Warn("Failed to get client transports")
+		} else {
+			env.logger.WithField("count", len(clientTps)).Infof("Client (%s) has %d transports:", app.VisorHostName, len(clientTps))
+			for i, tp := range clientTps {
+				env.logger.Infof("  [%d] %s -> %s (ID: %s, type: %s)", i, tp.Local, tp.Remote, tp.ID, tp.Type)
+			}
+		}
+
+		// Get server-side transports (the visor we're connecting to)
+		serverVisor := ""
+		if pk == env.visorPKs[visorA] {
+			serverVisor = visorA
+		} else if pk == env.visorPKs[visorB] {
+			serverVisor = visorB
+		} else if pk == env.visorPKs[visorC] {
+			serverVisor = visorC
+		}
+
+		if serverVisor != "" {
+			serverTps, err := env.VisorTpLs(serverVisor)
+			if err != nil {
+				env.logger.WithError(err).Warn("Failed to get server transports")
+			} else {
+				env.logger.WithField("count", len(serverTps)).Infof("Server (%s) has %d transports:", serverVisor, len(serverTps))
+				for i, tp := range serverTps {
+					env.logger.Infof("  [%d] %s -> %s (ID: %s, type: %s)", i, tp.Local, tp.Remote, tp.ID, tp.Type)
+				}
+			}
+		}
+
+		env.logger.Info("=== END PRE-START DIAGNOSTICS ===")
+	}
+
 	if app.AppName == skyenv.VPNClientName {
 		env.logger.Info("Using VPNStart path")
 		out, err = env.VPNStart(app, pk)
 	} else {
 		env.logger.Info("Using VisorAppStart path")
 		out, err = env.VisorAppStart(app)
+	}
+
+	// On VPN client failure, dump transport state again
+	if app.AppName == skyenv.VPNClientName && err != nil {
+		env.logger.WithError(err).Warn("=== VPN CLIENT START FAILED - DUMPING TRANSPORT STATE ===")
+
+		clientTps, tpErr := env.VisorTpLs(app.VisorHostName)
+		if tpErr != nil {
+			env.logger.WithError(tpErr).Warn("Failed to get client transports after failure")
+		} else {
+			env.logger.Infof("Client (%s) transports after failure: %d", app.VisorHostName, len(clientTps))
+			for i, tp := range clientTps {
+				env.logger.Infof("  [%d] %s -> %s (ID: %s, type: %s)", i, tp.Local, tp.Remote, tp.ID, tp.Type)
+			}
+		}
+
+		env.logger.Info("=== END FAILURE DIAGNOSTICS ===")
 	}
 
 	env.logger.WithField("app", app.AppName).
@@ -307,7 +364,7 @@ func (env *TestEnv) VisorRouteLsRules(visor string) ([]RouteRule, error) {
 		Output []RouteRule `json:"output,omitempty"`
 		Err    *string     `json:"error,omitempty"`
 	}{}
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route --json", visor)
+	cmd := fmt.Sprintf("/release/skywire cli route --rpc %v:3435 --json", visor)
 	err := env.ExecJSON(cmd, &cliOutput)
 	if err != nil {
 		return nil, err
@@ -326,7 +383,7 @@ func (env *TestEnv) VisorRouteRule(visor string, routeID routing.RouteID) (*Rout
 		Output []RouteRule `json:"output,omitempty"`
 		Err    *string     `json:"error,omitempty"`
 	}{}
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route rule %v --json", visor, routeID)
+	cmd := fmt.Sprintf("/release/skywire cli route --rpc %v:3435 rule %v --json", visor, routeID)
 	err := env.ExecJSON(cmd, &cliOutput)
 	if err != nil {
 		return nil, err
@@ -338,17 +395,17 @@ func (env *TestEnv) VisorRouteRule(visor string, routeID routing.RouteID) (*Rout
 }
 
 func (env *TestEnv) VisorRouteAddAppRule(visor, routeID, localPK, localPort, remotePK, remotePort string) (*RouteKey, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route add-rule app %v %v %v %v %v --json", visor, routeID, localPK, localPort, remotePK, remotePort)
+	cmd := fmt.Sprintf("/release/skywire cli route --rpc %v:3435 add-rule app %v %v %v %v %v --json", visor, routeID, localPK, localPort, remotePK, remotePort)
 	return env.visorRouteAddRule(cmd)
 }
 
 func (env *TestEnv) VisorRouteAddFwdRule(visor, routeID, nextRouteID, nextTpID, localPK, localPort, remotePK, remotePort string) (*RouteKey, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route add-rule fwd %v %v %v %v %v %v %v --json", visor, routeID, nextRouteID, nextTpID, localPK, localPort, remotePK, remotePort)
+	cmd := fmt.Sprintf("/release/skywire cli route --rpc %v:3435 add-rule fwd %v %v %v %v %v %v %v --json", visor, routeID, nextRouteID, nextTpID, localPK, localPort, remotePK, remotePort)
 	return env.visorRouteAddRule(cmd)
 }
 
 func (env *TestEnv) VisorRouteAddIntFwdRule(visor, routeID, nextRouteID, nextTpID string) (*RouteKey, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route add-rule intfwd %v %v %v --json", visor, routeID, nextRouteID, nextTpID)
+	cmd := fmt.Sprintf("/release/skywire cli route --rpc %v:3435 add-rule intfwd %v %v %v --json", visor, routeID, nextRouteID, nextTpID)
 	return env.visorRouteAddRule(cmd)
 }
 
@@ -369,7 +426,7 @@ func (env *TestEnv) visorRouteAddRule(cmd string) (*RouteKey, error) {
 }
 
 func (env *TestEnv) VisorRouteRmRule(visor string, routeID routing.RouteID) (string, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route rm-rule %v --json", visor, routeID)
+	cmd := fmt.Sprintf("/release/skywire cli route --rpc %v:3435 rm-rule %v --json", visor, routeID)
 	return env.ExecJSONReturnString(cmd)
 }
 
@@ -596,8 +653,10 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 					env.logger.Info("Transport re-added successfully")
 				}
 
-				// Wait a bit before retrying VPN start
-				time.Sleep(retryDelay)
+				// Wait longer for transport to settle and routes to be established
+				// Transport deletion now uses 10s timeout, so we need more time for cleanup + re-establishment
+				env.logger.Info("Waiting for transport settlement and route establishment...")
+				time.Sleep(5 * time.Second)
 
 				// Continue to next retry attempt
 				continue

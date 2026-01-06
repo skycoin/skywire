@@ -213,7 +213,8 @@ func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener, t
 					return
 				}
 				log.Warnf("Failed to accept transport")
-				return
+				// Continue accepting other transports instead of stopping
+				continue
 			}
 		}
 	}
@@ -317,6 +318,10 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 	}
 
 	if err := mTp.Accept(ctx, transport); err != nil {
+		// Close the transport to prevent CLOSE_WAIT connection leak
+		if closeErr := transport.Close(); closeErr != nil {
+			tm.Logger.WithError(closeErr).Warn("Failed to close transport after Accept error")
+		}
 		return err
 	}
 
@@ -418,10 +423,19 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 		return nil, fmt.Errorf("client not found for the type %s", netType)
 	}
 
+	// Use no-op discovery client for self-transports
+	// Self-transports can't be used for routing (routes can't go through same key twice)
+	// so they shouldn't be registered in transport discovery
+	dc := tm.Conf.DiscoveryClient
+	if remote == client.PK() {
+		dc = NewNoopDiscoveryClient()
+		tm.Logger.Debug("Using no-op discovery client for self-transport")
+	}
+
 	mTp := NewManagedTransport(ManagedTransportConfig{
 		client:         client,
 		ebc:            tm.ebc,
-		DC:             tm.Conf.DiscoveryClient,
+		DC:             dc,
 		LS:             tm.Conf.LogStore,
 		RemotePK:       remote,
 		TransportLabel: label,
@@ -469,33 +483,71 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 // DeleteTransport deregisters the Transport of Transport ID in transport discovery and deletes it locally.
 func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	tm.mx.Lock()
-	defer tm.mx.Unlock()
-
 	if tm.isClosing() {
+		tm.mx.Unlock()
 		return
 	}
 
-	// Deregister transport before closing the underlying transport.
-	if tp, ok := tm.tps[id]; ok {
-		// Close underlying transport.
-		tp.close()
+	// Get transport and remove from map immediately
+	tp, ok := tm.tps[id]
+	if ok {
 		delete(tm.tps, id)
 	}
+	tm.mx.Unlock()
+
+	if !ok {
+		return
+	}
+
+	// Close transport asynchronously
+	// For individual deletions (RPC calls), we want to return quickly
+	// The reconciliation process will catch any TPD cleanup failures
+	go tp.close()
 }
 
 // DeleteAllTransports deregisters all Transports in transport discovery and deletes them locally.
 func (tm *Manager) DeleteAllTransports() {
 	tm.mx.Lock()
-	defer tm.mx.Unlock()
-
 	if tm.isClosing() {
+		tm.mx.Unlock()
 		return
 	}
 
-	// Deregister transports before closing the underlying transport.
+	// Get all transports and clear map immediately
+	tps := make([]*ManagedTransport, 0, len(tm.tps))
 	for _, tp := range tm.tps {
-		tp.close()
-		delete(tm.tps, tp.Entry.ID)
+		tps = append(tps, tp)
+	}
+	tm.tps = make(map[uuid.UUID]*ManagedTransport)
+	tm.mx.Unlock()
+
+	// Close all transports concurrently
+	var wg sync.WaitGroup
+	for _, tp := range tps {
+		wg.Add(1)
+		go func(mtp *ManagedTransport) {
+			defer wg.Done()
+			mtp.close()
+		}(tp)
+	}
+
+	// Wait for all transports to close, with timeout
+	// This is critical for tests that restart - we need TPD cleanup to finish
+	// But can't wait forever if TPD is unreachable
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// All transports closed and deregistered from TPD
+		tm.Logger.Debug("All transports closed successfully")
+	case <-time.After(30 * time.Second):
+		// Timeout - some transports may not have completed TPD cleanup
+		// Reconciliation process will clean up stale entries later
+		tm.Logger.Warnf("Timeout waiting for %d transports to close after 30s", len(tps))
 	}
 }
 

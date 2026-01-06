@@ -70,6 +70,12 @@ func run(bin string, stdout io.Writer, withEscalate bool, args ...string) error 
 
 	var fullCmd string
 	var cmd *exec.Cmd
+
+	// If already running as root (uid 0), no need to escalate
+	if withEscalate && os.Geteuid() == 0 {
+		withEscalate = false
+	}
+
 	if withEscalate {
 		switch runtime.GOOS {
 		case "linux":
