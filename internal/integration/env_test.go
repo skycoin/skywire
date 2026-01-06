@@ -149,7 +149,7 @@ func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 	// For VPN client, check transport state on BOTH visors before starting
 	if app.AppName == skyenv.VPNClientName && pk != "" {
 		env.logger.Info("=== VPN CLIENT PRE-START DIAGNOSTICS ===")
-		
+
 		// Get client-side transports
 		clientTps, err := env.VisorTpLs(app.VisorHostName)
 		if err != nil {
@@ -160,17 +160,17 @@ func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 				env.logger.Infof("  [%d] %s -> %s (ID: %s, type: %s)", i, tp.Local, tp.Remote, tp.ID, tp.Type)
 			}
 		}
-		
+
 		// Get server-side transports (the visor we're connecting to)
-		serverVisor := "" 
+		serverVisor := ""
 		if pk == env.visorPKs[visorA] {
 			serverVisor = visorA
 		} else if pk == env.visorPKs[visorB] {
-			serverVisor = visorB  
+			serverVisor = visorB
 		} else if pk == env.visorPKs[visorC] {
 			serverVisor = visorC
 		}
-		
+
 		if serverVisor != "" {
 			serverTps, err := env.VisorTpLs(serverVisor)
 			if err != nil {
@@ -182,7 +182,7 @@ func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 				}
 			}
 		}
-		
+
 		env.logger.Info("=== END PRE-START DIAGNOSTICS ===")
 	}
 
@@ -197,13 +197,17 @@ func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 	// On VPN client failure, dump transport state again
 	if app.AppName == skyenv.VPNClientName && err != nil {
 		env.logger.WithError(err).Warn("=== VPN CLIENT START FAILED - DUMPING TRANSPORT STATE ===")
-		
-		clientTps, _ := env.VisorTpLs(app.VisorHostName)
-		env.logger.Infof("Client (%s) transports after failure: %d", app.VisorHostName, len(clientTps))
-		for i, tp := range clientTps {
-			env.logger.Infof("  [%d] %s -> %s (ID: %s, type: %s)", i, tp.Local, tp.Remote, tp.ID, tp.Type)
+
+		clientTps, tpErr := env.VisorTpLs(app.VisorHostName)
+		if tpErr != nil {
+			env.logger.WithError(tpErr).Warn("Failed to get client transports after failure")
+		} else {
+			env.logger.Infof("Client (%s) transports after failure: %d", app.VisorHostName, len(clientTps))
+			for i, tp := range clientTps {
+				env.logger.Infof("  [%d] %s -> %s (ID: %s, type: %s)", i, tp.Local, tp.Remote, tp.ID, tp.Type)
+			}
 		}
-		
+
 		env.logger.Info("=== END FAILURE DIAGNOSTICS ===")
 	}
 
