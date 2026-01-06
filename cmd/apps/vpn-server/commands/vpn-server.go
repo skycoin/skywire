@@ -99,7 +99,7 @@ func RunVPNServer(ctx context.Context, args []string) error {
 		err := errors.New("OS is not supported")
 		print(err)
 		setAppErr(appCl, err)
-		os.Exit(1)
+		return err
 	}
 
 	localPK := cipher.PubKey{}
@@ -107,7 +107,7 @@ func RunVPNServer(ctx context.Context, args []string) error {
 		if err := localPK.UnmarshalText([]byte(localPKStr)); err != nil {
 			print(fmt.Sprintf("Invalid local PK: %v\n", err))
 			setAppErr(appCl, err)
-			os.Exit(1)
+			return err
 		}
 	}
 
@@ -116,7 +116,7 @@ func RunVPNServer(ctx context.Context, args []string) error {
 		if err := localSK.UnmarshalText([]byte(localSKStr)); err != nil {
 			print(fmt.Sprintf("Invalid local SK: %v\n", err))
 			setAppErr(appCl, err)
-			os.Exit(1)
+			return err
 		}
 	}
 
@@ -131,7 +131,7 @@ func RunVPNServer(ctx context.Context, args []string) error {
 	if err != nil {
 		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
 		setAppErr(appCl, err)
-		os.Exit(1)
+		return err
 	}
 
 	srvCfg := vpn.ServerConfig{
@@ -143,7 +143,7 @@ func RunVPNServer(ctx context.Context, args []string) error {
 	if err != nil {
 		print(fmt.Sprintf("Error creating VPN server: %v\n", err))
 		setAppErr(appCl, err)
-		os.Exit(1)
+		return err
 	}
 	defer func() {
 		if err := srv.Close(); err != nil {

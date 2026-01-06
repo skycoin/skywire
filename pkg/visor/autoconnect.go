@@ -73,8 +73,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 	case <-time.After(randomDelay):
 	}
 
-	visorIsPublic := checkVisorIsPublic(v)
-	a.visorIsPublic = visorIsPublic
 	publicServiceTicker := time.NewTicker(PublicServiceDelay)
 
 	for {
@@ -137,6 +135,14 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			} else {
 				a.log.Debugln("STCPR not supported locally, skipping")
 				stcprKeys = map[cipher.PubKey][]string{}
+			}
+
+			// Check if this visor is public by seeing if it's registered in address resolver for STCPR
+			// This is more reliable than checking config/network conditions
+			_, visorIsPublic := stcprKeys[v.conf.PK]
+			a.visorIsPublic = visorIsPublic
+			if visorIsPublic {
+				a.log.Debug("This visor is registered as public (found in STCPR address resolver)")
 			}
 
 			// Fetch ALL transport discovery data once per cycle to reduce API load

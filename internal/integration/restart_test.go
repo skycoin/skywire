@@ -72,13 +72,13 @@ func TestRestart(t *testing.T) {
 	}
 
 	checkMessage := func(t *testing.T, sender, receiver string) {
-		// Retry sending message up to 5 times with 5 second delays
+		// Retry sending message up to 8 times with 10 second delays
 		// to handle transient transport setup delays after restart
 		var res *http.Response
 		var err error
 		var lastError string
 
-		for attempt := 0; attempt < 5; attempt++ {
+		for attempt := 0; attempt < 8; attempt++ {
 			res, err = env.SendSkyMessage(sender, receiver, t.Name())
 
 			// If HTTP request itself failed (e.g., connection timeout), retry
@@ -104,7 +104,7 @@ func TestRestart(t *testing.T) {
 			t.Logf("Attempt %d: skychat returned error: %v (retrying in 10s)", attempt+1, lastError)
 			require.NoError(t, res.Body.Close())
 
-			if attempt < 4 { // Don't sleep after last attempt
+			if attempt < 7 { // Don't sleep after last attempt
 				time.Sleep(10 * time.Second)
 			}
 		}

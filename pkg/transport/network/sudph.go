@@ -30,8 +30,10 @@ const (
 
 type sudphClient struct {
 	*resolvedClient
-	filter *pfilter.PacketFilter
-	port   int
+	filter          *pfilter.PacketFilter
+	packetListener  net.PacketConn
+	sudphVisorsConn net.PacketConn
+	port            int
 }
 
 func newSudph(resolved *resolvedClient, port int) Client {
@@ -77,8 +79,9 @@ func (c *sudphClient) listen() (net.Listener, error) {
 		}
 		break
 	}
+	c.packetListener = packetListener
 	c.filter = pfilter.NewPacketFilter(packetListener)
-	sudphVisorsConn := c.filter.NewConn(visorsConnPriority, nil)
+	c.sudphVisorsConn = c.filter.NewConn(visorsConnPriority, nil)
 	c.filter.Start()
 	c.log.Debug("Binding")
 	addrCh, err := c.ar.BindSUDPH(c.filter, c.makeBindHandshake())
@@ -93,8 +96,8 @@ func (c *sudphClient) listen() (net.Listener, error) {
 
 	c.log.Debugf("Successfully bound sudph to port %s", localPort)
 
-	go c.acceptAddresses(sudphVisorsConn, addrCh)
-	return kcp.ServeConn(nil, 0, 0, sudphVisorsConn)
+	go c.acceptAddresses(c.sudphVisorsConn, addrCh)
+	return kcp.ServeConn(nil, 0, 0, c.sudphVisorsConn)
 }
 
 // make a handshake function that is compatible with address resolver interface
@@ -183,4 +186,29 @@ func (c *sudphClient) dial(remoteAddr string) (net.Conn, error) {
 	}
 
 	return kcpConn, nil
+}
+
+// Close implements Client interface
+// Overrides genericClient.Close to also close the underlying packet connection
+func (c *sudphClient) Close() error {
+	// First call parent Close to stop acceptTransports loop and close KCP listener
+	err := c.resolvedClient.Close()
+
+	// Close the underlying UDP packet connection to stop PacketFilter loop
+	// This must be done before closing sudphVisorsConn to prevent the filter
+	// from trying to write to a closed connection
+	if c.packetListener != nil {
+		if closeErr := c.packetListener.Close(); closeErr != nil {
+			c.log.WithError(closeErr).Warn("Failed to close packet listener")
+		}
+	}
+
+	// Close sudphVisorsConn to unblock acceptAddresses goroutine
+	if c.sudphVisorsConn != nil {
+		if closeErr := c.sudphVisorsConn.Close(); closeErr != nil {
+			c.log.WithError(closeErr).Warn("Failed to close SUDPH visors connection")
+		}
+	}
+
+	return err
 }

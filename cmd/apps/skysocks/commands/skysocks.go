@@ -80,7 +80,7 @@ func RunSkysocks(ctx context.Context, args []string) error {
 	if err != nil {
 		setAppError(appCl, err)
 		print(fmt.Sprintf("Failed to create a new server: %v\n", err))
-		os.Exit(1)
+		return err
 	}
 
 	port := appCl.Config().RoutingPort
@@ -93,7 +93,7 @@ func RunSkysocks(ctx context.Context, args []string) error {
 	if err != nil {
 		setAppError(appCl, err)
 		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
-		os.Exit(1)
+		return err
 	}
 
 	fmt.Println("Starting serving proxy server")
@@ -103,7 +103,7 @@ func RunSkysocks(ctx context.Context, args []string) error {
 		if err != nil {
 			setAppError(appCl, err)
 			print(fmt.Sprintf("Error creating ipc server for skysocks: %v\n", err))
-			os.Exit(1)
+			return err
 		}
 		go srv.ListenIPC(ipcClient)
 	} else {
@@ -115,7 +115,6 @@ func RunSkysocks(ctx context.Context, args []string) error {
 
 			if err := srv.Close(); err != nil {
 				print(fmt.Sprintf("%v\n", err))
-				os.Exit(1)
 			}
 		}()
 	}

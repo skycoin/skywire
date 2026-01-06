@@ -214,7 +214,7 @@ func (mt *ManagedTransport) close() {
 		mt.transport = nil
 	}
 	mt.transportMx.Unlock()
-	_ = mt.deleteFromDiscovery //nolint:errcheck
+	_ = mt.deleteFromDiscovery() //nolint:errcheck
 }
 
 // Accept accepts a new underlying transport.
@@ -238,9 +238,15 @@ func (mt *ManagedTransport) Accept(ctx context.Context, transport network.Transp
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 
-	mt.log.Debug("Performing settlement handshake...")
-	if err := MakeSettlementHS(false, mt.log).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
-		return fmt.Errorf("settlement handshake failed: %w", err)
+	// Skip settlement handshake for self-connections (noopDiscoveryClient)
+	// Self-connections don't register to TPD and would deadlock during settlement
+	if _, isNoop := mt.dc.(*noopDiscoveryClient); !isNoop {
+		mt.log.Debug("Performing settlement handshake...")
+		if err := MakeSettlementHS(false, mt.log).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
+			return fmt.Errorf("settlement handshake failed: %w", err)
+		}
+	} else {
+		mt.log.Debug("Skipping settlement handshake for self-connection (noop discovery client)")
 	}
 
 	mt.log.Debug("Setting underlying transport...")
@@ -277,8 +283,14 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 
-	if err := MakeSettlementHS(true, mt.log).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
-		return fmt.Errorf("settlement handshake failed: %w", err)
+	// Skip settlement handshake for self-connections (noopDiscoveryClient)
+	// Self-connections don't register to TPD and would deadlock during settlement
+	if _, isNoop := mt.dc.(*noopDiscoveryClient); !isNoop {
+		if err := MakeSettlementHS(true, mt.log).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
+			return fmt.Errorf("settlement handshake failed: %w", err)
+		}
+	} else {
+		mt.log.Debug("Skipping settlement handshake for self-connection (noop discovery client)")
 	}
 
 	if err := mt.setTransport(transport); err != nil {
