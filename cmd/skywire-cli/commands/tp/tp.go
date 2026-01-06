@@ -49,6 +49,7 @@ func init() {
 		rmTpCmd,
 		discTpCmd,
 		treeCmd,
+		visorListCmd,
 	)
 	tpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated")
 	tpCmd.Flags().StringSliceVarP(&filterPubKeys, "pks", "p", filterPubKeys, "show transport(s) for public key(s) comma-separated")
@@ -57,6 +58,7 @@ func init() {
 	tpCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
 	tpCmd.Flags().StringVar(&cacheFileSDProxy, "cfsp", os.TempDir()+"/proxysd.json", "SD cache file location")
 	tpCmd.Flags().StringVar(&cacheFileSDVPN, "cfsv", os.TempDir()+"/vpnsd.json", "SD cache file location")
+	tpCmd.Flags().StringVar(&cacheFileSDVisor, "cfsvisor", os.TempDir()+"/visorsd.json", "SD cache file location")
 	tpCmd.Flags().StringVarP(&sdURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
 	tpCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
 	tpCmd.Flags().StringVarP(&tpID, "id", "i", "", "display transport matching ID")
@@ -78,7 +80,8 @@ var tpCmd = &cobra.Command{
 	and has a Transport Type that identifies
 	a specific implementation of the Transport.
 
-	Types: stcp stcpr sudph dmsg`,
+	Types: stcp stcpr sudph dmsg
+`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -121,6 +124,7 @@ var (
 	utData    string
 	vpnData   string
 	proxyData string
+	visorData string
 )
 
 // PrintTransports prints transports used by the visor
@@ -154,6 +158,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 
 	proxyByPK := make(map[string]string)
 	vpnByPK := make(map[string]string)
+	visorByPK := make(map[string]string)
 
 	if showMore && len(proxyData) > 0 {
 		var proxyEntries []serviceEntry
@@ -172,6 +177,16 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 		for _, e := range vpnEntries {
 			pk := strings.SplitN(e.Address, ":", 2)[0]
 			vpnByPK[pk] = e.Geo.Country
+		}
+	}
+
+	if showMore && len(visorData) > 0 {
+		var visorEntries []serviceEntry
+		err := json.Unmarshal([]byte(visorData), &visorEntries)
+		internal.Catch(cmdFlags, err)
+		for _, e := range visorEntries {
+			pk := strings.SplitN(e.Address, ":", 2)[0]
+			visorByPK[pk] = e.Geo.Country
 		}
 	}
 
@@ -217,20 +232,37 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 		pk := tp.Remote.String()
 		proxyCountry, inProxy := proxyByPK[pk]
 		vpnCountry, inVPN := vpnByPK[pk]
+		visorCountry, inVisor := visorByPK[pk]
 
-		if inProxy && inVPN {
-			services = "proxy,vpn"
-			if proxyCountry == vpnCountry {
-				country = proxyCountry
-			} else {
-				country = proxyCountry + "/" + vpnCountry
+		// Build services list
+		var svcList []string
+		var countries []string
+
+		if inProxy {
+			svcList = append(svcList, "proxy")
+			countries = append(countries, proxyCountry)
+		}
+		if inVPN {
+			svcList = append(svcList, "vpn")
+			countries = append(countries, vpnCountry)
+		}
+		if inVisor {
+			svcList = append(svcList, "visor")
+			countries = append(countries, visorCountry)
+		}
+
+		if len(svcList) > 0 {
+			services = strings.Join(svcList, ",")
+			// Deduplicate countries
+			countryMap := make(map[string]bool)
+			var uniqueCountries []string
+			for _, c := range countries {
+				if c != "" && !countryMap[c] {
+					countryMap[c] = true
+					uniqueCountries = append(uniqueCountries, c)
+				}
 			}
-		} else if inProxy {
-			services = "proxy"
-			country = proxyCountry
-		} else if inVPN {
-			services = "vpn"
-			country = vpnCountry
+			country = strings.Join(uniqueCountries, "/")
 		}
 
 		oTP := outputTP{

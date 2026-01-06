@@ -29,6 +29,7 @@ var (
 	cacheFileUT      string
 	cacheFileSDProxy string
 	cacheFileSDVPN   string
+	cacheFileSDVisor string
 	padSpaces        int
 	isStats          bool
 	rawData          bool

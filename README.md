@@ -42,7 +42,7 @@ The name 'visor' was chosen as a less ambiguous term than 'node' to refer to the
 
 `skywire cli` is the primary interface to a running Skywire visor. Skywire cli provides an interface to generate a JSON config file for the Skywire visor, to control visor native applications, and to access data from different Skywire services.
 
-## Skywire Proxy & VPN
+## Skywire Apps
 
 Skywire visors include native VPN and SOCKS5 proxy server and client applications, as well as a messenger application, which are started and managed by the visor. When a server application is started, it registers itself in the service discovery as a [proxy server](https://sd.skycoin.com/api/services?type=proxy) or [VPN server](https://sd.skycoin.com/api/services?type=proxy). These services may then be consumed by respective client applications via either a direct or multi-hop route. Refer to the documentation for `skywire cli proxy` and `skywire cli vpn` for more details.
 
@@ -99,19 +99,17 @@ Table of Contents
   * [How to create a GitHub release](#how-to-create-a-github-release)
   * [Dependency Graph](#dependency-graph)
 
-Compiling Skywire requires a Golang version of at least `1.16`.
-
 ## Commands and Subcommands
 
-Documentation of all commands and subcommands is available in the command documentation README:
+Documentation is available in the command documentation README:
 
 * [skywire](cmd/skywire/README.md)
-* [skywire-cli](cmd/skywire-cli/README.md)
-* [skywire-visor](cmd/skywire-visor/README.md)
+* [skywire cli](cmd/skywire-cli/README.md)
+* [skywire visor](cmd/skywire-visor/README.md)
 
 ## Visor Native Applications
 
-Visor apps are not executed directly by the user, but hosted by the visor process.
+_Note: Visor apps are not executed directly by the user, but hosted by the visor process._
 
 * [API](docs/skywire_app_api.md)
 * [skychat](cmd/apps/skychat/README.md)
@@ -119,6 +117,9 @@ Visor apps are not executed directly by the user, but hosted by the visor proces
 * [skysocks-client](cmd/apps/skysocks-client/README.md)
 * [vpn-client](cmd/apps/vpn-client/README.md)
 * [vpn-server](cmd/apps/vpn-server/README.md)
+
+### Example custom applications
+
 * [example-server-app](example/example-server-app/README.md)
 * [example-client-app](example/example-client-app/README.md)
 
@@ -126,7 +127,7 @@ Further documentation can be found in the [skywire wiki](https://github.com/skyc
 
 ## `go install` or `go run` Skywire (go1.24.3)
 
-Most skywire commands can be executed via `go run` - except the skywire visor.
+Skywire commands can be executed via `go run`:
 
 ```
 $ go run github.com/skycoin/skywire@develop
@@ -149,25 +150,130 @@ Flags:
   -v, --version   version for skywire
 ```
 
-Due to the nature of the current app launcher, the skywire visor requires a compiled binary in order to invoke apps such as the vpn client / server, proxy client / server & skychat.
-
-To run the visor, It's recommended to `go install` skywire as follows. Ensuring that you have your go envs such as GOPATH and GOBIN set correctly:
+The skywire visor can now (as of v1.3.32) run directly with `go run` when using the default in-process visor native applications configuration
 
 ```
-[user@linux skywire]$ go install github.com/skycoin/skywire@develop
-[user@linux skywire]$ ls $GOBIN/skywire
-/home/user/go/bin/skywire
+go run github.com/skycoin/skywire@develop cli config gen -br #print the config & output to skywire-config.json
+go run github.com/skycoin/skywire@develop visor #uses skywire-config.json by default
 ```
 
-It's recommended at this point to copy or move the skywire binary into the directory where you wish to execute it. In this example, the cloned source code directory is used, but any directory will suffice:
+The new config omits the `"binary"` field and the first two arguments `app <app-name>` :
 
 ```
-[user@linux skywire]$ mv $GOBIN/skywire .
-[user@linux skywire]$ ls skywire
-skywire
+[
+  {
+    "name": "vpn-client",
+    "args": [
+      "--dns",
+      "1.1.1.1"
+    ],
+    "auto_start": false,
+    "port": 43
+  },
+  {
+    "name": "skychat",
+    "args": [
+      "--addr",
+      ":8001"
+    ],
+    "auto_start": true,
+    "port": 1
+  },
+  {
+    "name": "skysocks",
+    "auto_start": true,
+    "port": 3
+  },
+  {
+    "name": "skysocks-client",
+    "args": [
+      "--addr",
+      ":1080"
+    ],
+    "auto_start": false,
+    "port": 13
+  },
+  {
+    "name": "vpn-server",
+    "auto_start": false,
+    "port": 44
+  }
+]
 ```
 
-After completing the above steps, the apps will be able to launch normally when the visor is started. We hope to eliminate these extra steps in the future.
+For comparison, the external apps launcher config:
+
+```
+[
+  {
+    "name": "vpn-client",
+    "binary": "skywire",
+    "args": [
+      "app",
+      "vpn-client",
+      "--dns",
+      "1.1.1.1"
+    ],
+    "auto_start": false,
+    "port": 43
+  },
+  {
+    "name": "skychat",
+    "binary": "skywire",
+    "args": [
+      "app",
+      "skychat",
+      "--addr",
+      ":8001"
+    ],
+    "auto_start": true,
+    "port": 1
+  },
+  {
+    "name": "skysocks",
+    "binary": "skywire",
+    "args": [
+      "app",
+      "skysocks"
+    ],
+    "auto_start": true,
+    "port": 3
+  },
+  {
+    "name": "skysocks-client",
+    "binary": "skywire",
+    "args": [
+      "app",
+      "skysocks-client",
+      "--addr",
+      ":1080"
+    ],
+    "auto_start": false,
+    "port": 13
+  },
+  {
+    "name": "vpn-server",
+    "binary": "skywire",
+    "args": [
+      "app",
+      "vpn-server"
+    ],
+    "auto_start": false,
+    "port": 44
+  }
+]
+```
+
+To run the visor native applications with _external_ apps configuration, one must first have the skywire binary explicitly installed:
+```
+go install github.com/skycoin/skywire@develop
+```
+Then, either:
+* place the binary in the current working directory where skywire is running
+OR
+* set the`bin_path` in the skywire-config.json to the directory containing the skywire binary
+
+Running a custom skywire visor app requires that the binary for that app exists in the directory specified by `"bin_path"` in the visor's config
 
 ## Installing Skywire from Release
 
@@ -179,13 +285,65 @@ Install as a package on debian or arch linux: [Package Installation Guide](https
 
 ## Permissions
 
-The only aspects of this software which actually require root / elevated / special permissions are:
+The following aspects of skywire require elevated or special permissions:
 
-* the VPN client app
-* writing to the `local` folder path & to the default config path generated on installation of the linux / macOS packages or windows .msi
-* some aspects of the system survey
+### VPN Applications
 
-The system survey is only generated _if a reward address is set_ - see [mainnet_rules.md](/rewards/mainnet_rules.md) for more details about the system survey and how eligibility requirements are enforced for rewards.
+Both VPN client and server require special permissions for network configuration:
+
+#### VPN Client
+
+The VPN client requires the `CAP_NET_ADMIN` capability to create and configure TUN/TAP network interfaces.
+
+**Method 1: Using setcap (Recommended)**
+```bash
+# Grant CAP_NET_ADMIN capability to the skywire binary
+sudo setcap cap_net_admin+eip /path/to/skywire
+
+# Verify the capability was set
+getcap /path/to/skywire
+# Should output: /path/to/skywire cap_net_admin=eip
+```
+
+**Method 2: Running as root**
+```bash
+sudo skywire visor
+```
+
+#### VPN Server
+
+The VPN server requires elevated privileges to execute `iptables` and `sysctl` commands for:
+- Configuring iptables FORWARD policy
+- Enabling IP masquerading (NAT)
+- Setting IP forwarding (IPv4/IPv6)
+- Managing firewall rules for client traffic
+
+**Method 1: Configure sudoers (Recommended for systemd services)**
+```bash
+# Add to /etc/sudoers.d/skywire-vpn
+yourusername ALL=(ALL) NOPASSWD: /usr/sbin/iptables, /usr/sbin/ip6tables, /usr/sbin/sysctl
+```
+
+**Method 2: Using setcap for network administration**
+```bash
+# Grant CAP_NET_ADMIN and CAP_NET_RAW capabilities
+sudo setcap cap_net_admin,cap_net_raw+eip /path/to/skywire
+```
+
+**Method 3: Running as root**
+```bash
+sudo skywire visor
+```
+
+**Note for systemd services:** When running skywire as a systemd service (non-interactive), `pkexec` cannot prompt for authentication. Use the sudoers method or run the service as root.
+
+
+### Other Permissions
+
+* **File system access**: Writing to the `local` folder path and default config paths generated by linux/macOS packages or windows .msi installer
+* **System survey**: Some aspects require elevated access - only generated _if a reward address is set_
+
+See [mainnet_rules.md](/rewards/mainnet_rules.md) for more details about the system survey and eligibility requirements for rewards.
 
 ## Dependencies
 
@@ -303,15 +461,24 @@ Some of these files are served via the [dmsghttp logserver](https://github.com/s
 
 `skywire visor` requires a valid configuration to be provided.
 
-_Note: root permissions are currently required only for the vpn client app!_
+_Note: Root permissions or special capabilities are required for VPN client and VPN server apps. See the [Permissions](#permissions) section for details._
 
 Run the visor:
 ```
- sudo skywire visor -c skywire-config.json
+skywire visor -c skywire-config.json
 ```
 If the default `skywire-config.json` exists in the current dir, this can be shortened to:
 ```
- sudo skywire visor
+skywire visor
+```
+
+When running VPN applications, ensure proper permissions are configured:
+```bash
+# With setcap configured (recommended):
+skywire visor
+
+# Or with sudo if setcap is not configured:
+sudo skywire visor
 ```
 
 `skywire visor` can be run on Windows. The setup requires additional setup steps that are specified
@@ -375,7 +542,7 @@ Note that the binary at: `/opt/skywire/bin/skywire` is already symlinked to `/us
 
 ### Transport setup
 
-_Note: transports should be set up automatically in most cases. The user should not need to do this manually._
+_Note: transports should be set up automatically when starting an app in most cases. The user should not need to do this manually._
 
 A Transport represents a bidirectional line of communication between two Skywire Visors:
 - [Transports](https://github.com/skycoin/skywire/wiki/Transports)
@@ -388,9 +555,17 @@ Their creation is attempted in the following order:
 
 Transports can be manually created. Existing suitable transports will be automatically used by client applications when they are started.
 
-To create a transport, first copy the public key of an online visor from the uptime tracker (or service discovery endpoints):
-https://ut.skywire.skycoin.com/uptimes
+To create a transport, first copy the public key of an online visor from the uptime tracker:
+```
+skywire cli ut -o
+```
+or service discovery:
+```
+skywire cli vpn list #list vpn server keys
+skywire cli proxy list #list proxy server keys
+```
 
+Add the transport:
 ```
 skywire cli visor tp add -t <transport-type> <public-key>
 ```
@@ -402,49 +577,168 @@ skywire cli visor tp ls
 
 Remove a transport:
 ```
-skywire cli visor tp rm <transport-id>
+skywire cli visor tp rm -i <transport-id>
 ```
 
-### Routing Rules
+### Manual Routing (Advanced)
 
-In the current era of internet connectivity, certain direct connections between servers in different countries are throttled or may drop intermittently. It is advantageous, in these instances, to establish an indirect or multi-hop route.
+_Note: In most cases, routes are automatically created when applications connect. Manual routing is an advanced feature for specific use cases._
 
-Establishing skywire routing rules brings the advantage of an anonymizing overlay to the connection. The intermediate visor handling a certain packet only knows the previous and next hop of that packet. All packets through skywire are of uniform size, stripped of their headers and fuzzed to appear no differently from noise.
+#### Route Types
 
-__disclaimer: this process is pending improvements & revisions!__
+**1. App/Consume Rule** - Terminates at the local visor for app consumption
+**2. Forward Rule** - Forwards packets to the next hop in a multi-hop route  
+**3. Intermediary Forward Rule** - Forwards without app-level routing info
 
-To create a route, first copy the public key of an online visor from the uptime tracker (or service discovery endpoints):
-https://ut.skywire.skycoin.com/uptimes
+#### Creating a Simple Direct Route
 
-```
-skywire cli visor route add-rule app <route-id> $(skywire cli visor pk) <local-port> <public-key> <remote-port>
-```
+First, list existing routes to find an available route ID:
 
-To understand these arguments, observe the help menu for `skywire cli visor route add-rule`:
-```
-Usage:
-  skywire cli visor route add-rule app \
-               <route-id> \
-               <local-pk> \
-               <local-port> \
-               <remote-pk> \
-               <remote-port> \
-               ||  [flags]
-
-Flags:
-  -i, --rid string   route id
-  -l, --lpk string   local public key
-  -m, --lpt string   local port
-  -p, --rpk string   remote pk
-  -q, --rpt string   remote port
-
-Global Flags:
-      --keep-alive duration   timeout for rule expiration (default 30s)
+```bash
+skywire cli visor route ls
 ```
 
-<local-port> <remote-port> and <route-id> are all just integers. It's suggested to create the first route with id 1, unless another route exists with that id.
+Create an app/consume rule from your visor to a remote visor:
 
-The port numbers are similarly inconsequential.
+```bash
+# Get your local public key
+LOCAL_PK=$(skywire cli visor pk)
+
+# Get destination visor public key (from service discovery)
+REMOTE_PK="02..." # VPN server, proxy server, or any visor
+
+# Create consume rule
+skywire cli visor route add a \
+  -i 1 \              # route ID (increment for each route)
+  -l $LOCAL_PK \      # local public key  
+  -m 43 \             # local port (app-specific: 43=VPN client, 13=proxy client)
+  -p $REMOTE_PK \     # remote public key
+  -q 44               # remote port (44=VPN server, 3=proxy server)
+```
+
+#### Port Numbers by Application
+
+Common app port mappings:
+- **1** - skychat
+- **3** - skysocks (proxy server)
+- **13** - skysocks-client (proxy client)
+- **43** - vpn-client
+- **44** - vpn-server
+
+View app ports:
+```bash
+skywire cli visor app ls
+```
+
+#### Making Apps Use Your Manual Route
+
+**Important**: Apps will automatically use manually created routes if the route's local/remote PK and ports match the app's connection requirements.
+
+Example - VPN client using manual route:
+```bash
+# 1. Create route with local port 43, remote port 44
+skywire cli visor route add a -i 1 -l $LOCAL_PK -m 43 -p $VPN_SERVER_PK -q 44
+
+# 2. Start VPN client - it will automatically use route ID 1
+skywire cli vpn start $VPN_SERVER_PK
+```
+
+The VPN client connects from port 43 → server port 44, matching the route rule, so it's used automatically.
+
+#### Creating Multi-Hop Routes
+
+Multi-hop routes require coordination between visors. This example creates a 2-hop route: A → B → C
+
+**On Visor A (source):**
+```bash
+# Create forward rule to visor B
+skywire cli visor route add c \
+  -i 1 \
+  -j 2 \              # next route ID (on visor B)
+  -k $TRANSPORT_ID \  # transport ID to visor B
+  -l $VISOR_A_PK \
+  -m 43 \
+  -p $VISOR_C_PK \    # final destination
+  -q 44
+```
+
+**On Visor B (intermediary):**
+```bash
+# Create intermediary forward rule to visor C  
+skywire cli visor route add b \
+  -i 2 \
+  -j 3 \              # next route ID (on visor C)
+  -k $TRANSPORT_ID    # transport ID to visor C
+```
+
+**On Visor C (destination):**
+```bash
+# Create consume rule
+skywire cli visor route add a \
+  -i 3 \
+  -l $VISOR_C_PK \
+  -m 44 \
+  -p $VISOR_A_PK \
+  -q 43
+```
+
+#### Finding Transport IDs
+
+Get transport IDs for multi-hop routing:
+```bash
+# List all transports
+skywire cli visor tp ls
+
+# Find specific transport by remote public key
+skywire cli visor tp ls | grep $REMOTE_PK
+```
+
+#### Route Finder (Automatic Multi-Hop Discovery)
+
+Query the route finder to discover available multi-hop paths:
+
+```bash
+# Find routes between two visors
+skywire cli visor route find $SOURCE_PK $DEST_PK
+
+# With custom hop limits
+skywire cli visor route find $SOURCE_PK $DEST_PK --min 2 --max 3
+
+# Find routes from local visor to destination (auto-detects local PK)
+skywire cli visor route find $DEST_PK
+```
+
+The route finder returns the optimal path, which you can then configure manually using the commands above.
+
+#### Managing Routes
+
+List all routing rules:
+```bash
+skywire cli visor route ls
+```
+
+View specific route details:
+```bash
+skywire cli visor route ls -i <route-id>
+```
+
+Remove a routing rule:
+```bash
+skywire cli visor route rm <route-id>
+```
+
+#### Troubleshooting
+
+**Routes not being used:**
+- Verify local/remote ports match app requirements (`skywire cli visor app ls`)
+- Check transports exist to the next hop (`skywire cli visor tp ls`)
+- Ensure route IDs are sequential and unique
+- Verify public keys are correct
+
+**Multi-hop routes failing:**
+- Each intermediary must have the correct transport ID to the next hop
+- Route IDs must chain correctly across visors
+- Keep-alive duration may need adjustment for long routes (`--keep-alive 60s`)
 
 ### Using the Skywire VPN
 
