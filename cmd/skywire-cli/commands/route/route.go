@@ -143,6 +143,7 @@ var (
 var RootCmd = routeCmd
 
 func init() {
+	routeCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
 	routeCmd.AddCommand(
 		rmRuleCmd,
 		addRuleCmd,
