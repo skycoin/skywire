@@ -151,6 +151,7 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 	for {
 		if err := c.acceptTransport(); err != nil {
 			if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "encrypt connection to") || strings.Contains(err.Error(), "EOF") {
+				c.log.Debugf("Ignoring likely scanner/dummy connection: %v", err)
 				continue // likely it's a dummy connection from service discovery or port scanner
 			}
 
@@ -207,11 +208,14 @@ func (c *genericClient) acceptTransport() error {
 		conn.Close() //nolint:errcheck,gosec
 		return err
 	}
+
 	lis, err := c.getListener(wrappedTransport.lAddr.Port)
 	if err != nil {
 		wrappedTransport.Close() //nolint:errcheck,gosec
 		return err
 	}
+
+	// If introduce fails (e.g., timeout or listener closed), the transport is already closed by introduce()
 	return lis.introduce(wrappedTransport)
 }
 
@@ -333,13 +337,20 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 	}
 	c.log.Debugf("Resolved PK %v to visor data %v", rPK, visorData)
 
-	if visorData.IsLocal {
+	// For self-connections (rPK == local PK), always try local addresses first
+	// to avoid NAT hairpinning issues when connecting via public IP
+	isSelfConnection := rPK == c.lPK
+	if visorData.IsLocal || isSelfConnection {
+		if isSelfConnection {
+			c.log.Debug("Detected self-connection, trying local addresses to avoid NAT issues")
+		}
 		for _, host := range visorData.Addresses {
 			addr := net.JoinHostPort(host, visorData.Port)
 			conn, err := dial(ctx, addr)
 			if err == nil {
 				return conn, nil
 			}
+			c.log.WithError(err).Debugf("Failed to dial %s, trying next address", addr)
 		}
 	}
 
