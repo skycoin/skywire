@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -487,6 +488,26 @@ func initUI() *fs.FS {
 }
 
 func storeLog(conf *visorconfig.V1) {
+	logPath := conf.LocalPath + "/log"
+	logFile := logPath + "/skywire.log"
+
+	// Create log directory with world-readable permissions
+	if err := os.MkdirAll(logPath, 0755); err != nil {
+		mLog.WithError(err).Warn("Failed to create log directory")
+	}
+
+	// Pre-create or fix permissions on the log file to make it readable
+	// This is important when running as root in a directory not owned by root
+	if _, err := os.Stat(logFile); os.IsNotExist(err) {
+		// Create new file with readable permissions
+		if f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			f.Close()
+		}
+	} else if err == nil {
+		// Fix permissions on existing file
+		os.Chmod(logFile, 0644) //nolint:errcheck
+	}
+
 	hook, _ := lumberjackrus.NewHook( //nolint:errcheck
 		&lumberjackrus.LogFile{
 			Filename:   conf.LocalPath + "/log/skywire.log",
