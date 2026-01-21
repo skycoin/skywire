@@ -85,6 +85,9 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	}
 
 	var directIPsCh, nonDirectIPsCh = make(chan net.IP, 100), make(chan net.IP, 100)
+	// done channel signals event callbacks to stop sending to IP channels
+	done := make(chan struct{})
+	defer close(done)
 	defer close(directIPsCh)
 	defer close(nonDirectIPsCh)
 
@@ -106,13 +109,19 @@ func RunVPNClient(ctx context.Context, args []string) error {
 
 	eventSub.OnTCPDial(func(data appevent.TCPDialData) {
 		if ip := parseIP(data.RemoteAddr); ip != nil {
-			directIPsCh <- ip
+			select {
+			case directIPsCh <- ip:
+			case <-done:
+			}
 		}
 	})
 
 	eventSub.OnTCPClose(func(data appevent.TCPCloseData) {
 		if ip := parseIP(data.RemoteAddr); ip != nil {
-			nonDirectIPsCh <- ip
+			select {
+			case nonDirectIPsCh <- ip:
+			case <-done:
+			}
 		}
 	})
 
