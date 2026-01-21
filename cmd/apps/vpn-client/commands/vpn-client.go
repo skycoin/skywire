@@ -187,6 +187,7 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	if err != nil {
 		print(fmt.Sprintf("Error creating VPN client: %v\n", err))
 		setAppErr(appCl, err)
+		return err
 	}
 
 	var directRoutesDone bool
