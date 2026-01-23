@@ -1405,10 +1405,10 @@ func (env *TestEnv) DumpTPDState(visors ...string) {
 			continue
 		}
 
-		env.logger.Infof("TPD entries for %s (%s): %d entries", visor, pk[:16]+"...", len(entries))
+		env.logger.Infof("TPD entries for %s (%s): %d entries", visor, truncatePK(pk), len(entries))
 		for i, entry := range entries {
 			env.logger.Infof("  [%d] ID=%s Type=%s Edge1=%s Edge2=%s",
-				i, entry.ID[:8]+"...", entry.Type, entry.Edge1[:16]+"...", entry.Edge2[:16]+"...")
+				i, truncateID(entry.ID), entry.Type, truncatePK(entry.Edge1), truncatePK(entry.Edge2))
 		}
 	}
 	env.logger.Info("=== END TPD STATE ===")
@@ -1509,4 +1509,20 @@ func (env *TestEnv) ExecJSONWithTimeout(cmd string, output interface{}, timeout 
 		env.logger.WithError(err).Errorf("[JSON PARSE FAILED] stdout: %s", result.Stdout())
 	}
 	return err
+}
+
+// truncatePK safely truncates a public key string for logging
+func truncatePK(pk string) string {
+	if len(pk) < 16 {
+		return pk
+	}
+	return pk[:16] + "..."
+}
+
+// truncateID safely truncates an ID string for logging
+func truncateID(id string) string {
+	if len(id) < 8 {
+		return id
+	}
+	return id[:8] + "..."
 }
