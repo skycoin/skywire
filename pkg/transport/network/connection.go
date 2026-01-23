@@ -2,8 +2,12 @@
 package network
 
 import (
+	"bufio"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
@@ -90,6 +94,53 @@ func (c *transport) encrypt(lPK cipher.PubKey, lSK cipher.SecKey, initator bool)
 	return nil
 }
 
+// debugConn wraps a net.Conn to capture initial bytes for debugging noise handshake failures
+type debugConn struct {
+	net.Conn
+	reader      *bufio.Reader
+	capturedBuf []byte
+}
+
+func newDebugConn(conn net.Conn) *debugConn {
+	return &debugConn{
+		Conn:   conn,
+		reader: bufio.NewReader(conn),
+	}
+}
+
+func (d *debugConn) Read(p []byte) (int, error) {
+	n, err := d.reader.Read(p)
+	// Capture first 64 bytes for debugging
+	if len(d.capturedBuf) < 64 && n > 0 {
+		remaining := 64 - len(d.capturedBuf)
+		if n < remaining {
+			remaining = n
+		}
+		d.capturedBuf = append(d.capturedBuf, p[:remaining]...)
+	}
+	return n, err
+}
+
+func (d *debugConn) capturedData() string {
+	if len(d.capturedBuf) == 0 {
+		return "(no data captured)"
+	}
+	hexStr := hex.EncodeToString(d.capturedBuf)
+	// Try to show as ASCII if printable
+	var ascii strings.Builder
+	for _, b := range d.capturedBuf {
+		if b >= 32 && b < 127 {
+			ascii.WriteByte(b)
+		} else {
+			ascii.WriteByte('.')
+		}
+	}
+	return fmt.Sprintf("hex=%s ascii=%s", hexStr, ascii.String())
+}
+
+// Ensure debugConn implements io.Reader for bufio
+var _ io.Reader = (*debugConn)(nil)
+
 // EncryptConn encrypts given connection
 func EncryptConn(config noise.Config, conn net.Conn) (net.Conn, error) {
 	ns, err := noise.New(noise.HandshakeKK, config)
@@ -97,9 +148,12 @@ func EncryptConn(config noise.Config, conn net.Conn) (net.Conn, error) {
 		return nil, fmt.Errorf("failed to prepare stream noise object: %w", err)
 	}
 
-	wrappedConn, err := noise.WrapConn(conn, ns, encryptHSTimout)
+	// Wrap connection with debug reader to capture bytes on failure
+	dc := newDebugConn(conn)
+
+	wrappedConn, err := noise.WrapConn(dc, ns, encryptHSTimout)
 	if err != nil {
-		return nil, fmt.Errorf("error performing noise handshake: %w", err)
+		return nil, fmt.Errorf("error performing noise handshake (first bytes: %s): %w", dc.capturedData(), err)
 	}
 
 	return wrappedConn, nil
