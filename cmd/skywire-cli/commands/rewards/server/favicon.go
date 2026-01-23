@@ -1,7 +1,9 @@
 // Package clirewardsserver cmd/skywire-cli/commands/rewards/server/ui.go
 package clirewardsserver
 
-import "encoding/base64"
+import (
+	"encoding/base64"
+)
 
 const faviconBase64 = `AAABAAEAICAAAAEAIACoEAAAFgAAACgAAAAgAAAAQAAAAAEAIAAAAAAAABAAACIuAAAiLgAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
