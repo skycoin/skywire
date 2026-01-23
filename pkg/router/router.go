@@ -35,7 +35,7 @@ const (
 	DefaultRulesGCInterval = 5 * time.Second
 	acceptSize             = 1024
 
-	handshakeAwaitTimeout = 10 * time.Second
+	handshakeAwaitTimeout = 2 * time.Second
 
 	maxHops       = 1000
 	retryDuration = 2 * time.Second
