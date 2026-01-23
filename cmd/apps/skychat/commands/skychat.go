@@ -98,6 +98,10 @@ func RunSkychat(ctx context.Context, args []string) error {
 		}
 	}
 
+	// Wrap context with cancel to allow graceful shutdown
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	appCl = app.NewClient(nil)
 	defer appCl.Close()
 
@@ -155,7 +159,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 			select {
 			case <-termCh:
 				setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-				os.Exit(1)
+				cancel()
 			case <-ctx.Done():
 				setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 				return

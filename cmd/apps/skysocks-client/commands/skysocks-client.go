@@ -113,14 +113,14 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		err := errors.New("Empty server PubKey. Exiting")
 		print(fmt.Sprintf("%v\n", err))
 		setAppErr(appCl, err)
-		os.Exit(1)
+		return err
 	}
 
 	pk := cipher.PubKey{}
 	if err := pk.UnmarshalText([]byte(serverPK)); err != nil {
 		print(fmt.Sprintf("Invalid server PubKey: %v\n", err))
 		setAppErr(appCl, err)
-		os.Exit(1)
+		return err
 	}
 
 	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
