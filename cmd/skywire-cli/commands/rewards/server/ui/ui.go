@@ -138,8 +138,10 @@ func main() {
 		core.NewText(memtab).SetText(httpGetString("/stats/mem"))
 		ramtab, _ := ts.NewTab("RAM")
 		core.NewText(ramtab).SetText(httpGetString("/stats/ram"))
-		countrytab, _ := ts.NewTab("Country")
-		core.NewText(countrytab).SetText(httpGetString("/stats/country"))
+		countryUniquetab, _ := ts.NewTab("Country (IPs)")
+		core.NewText(countryUniquetab).SetText(httpGetString("/stats/country/unique"))
+		countryFulltab, _ := ts.NewTab("Country (Visors)")
+		core.NewText(countryFulltab).SetText(httpGetString("/stats/country/full"))
 	}
 
 	second, tb := ts.NewTab("Rewards")

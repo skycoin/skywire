@@ -263,15 +263,21 @@ func countryCodeToFlag(code string) string {
 	return string([]rune{r1, r2})
 }
 
+// geoIPResult holds cached geoip lookup result
+type geoIPResult struct {
+	CountryCode string
+	CountryName string
+}
+
 func generateAndCacheCountryStats() error {
 	pks, err := script.ListFiles(wd + "/log_backups").Basename().Slice()
 	if err != nil {
 		return err
 	}
 
-	// Map to count visors by country
-	countryCount := make(map[string]int)
-	countryNames := make(map[string]string)
+	// First pass: collect all IPs and build unique IP set
+	ipToVisors := make(map[string]int) // IP -> count of visors with this IP
+	visorIPs := make([]string, 0)      // all visor IPs (including duplicates)
 
 	for i := range pks {
 		ni := wd + "/log_backups/" + pks[i] + "/node-info.json"
@@ -283,8 +289,16 @@ func generateAndCacheCountryStats() error {
 		}
 		ipAddr = strings.TrimSpace(ipAddr)
 
+		ipToVisors[ipAddr]++
+		visorIPs = append(visorIPs, ipAddr)
+	}
+
+	// Second pass: query geoip for unique IPs only (cache results)
+	ipCache := make(map[string]geoIPResult)
+
+	for ip := range ipToVisors {
 		// Query geoip for this IP
-		geoResult, err := script.Exec(`skywire svc ip ` + ipAddr).String()
+		geoResult, err := script.Exec(`skywire svc ip ` + ip).String()
 		if err != nil {
 			continue
 		}
@@ -294,8 +308,6 @@ func generateAndCacheCountryStats() error {
 		var jsonStr string
 		for _, line := range lines {
 			if strings.HasPrefix(strings.TrimSpace(line), "{") {
-				jsonStr = line
-				// Collect rest of JSON if multiline
 				idx := strings.Index(geoResult, line)
 				jsonStr = geoResult[idx:]
 				break
@@ -310,19 +322,53 @@ func generateAndCacheCountryStats() error {
 			continue
 		}
 
-		if geoData.CountryCode == "" {
-			continue
-		}
-
-		countryCount[geoData.CountryCode]++
-		if countryNames[geoData.CountryCode] == "" {
-			countryNames[geoData.CountryCode] = geoData.CountryName
+		if geoData.CountryCode != "" {
+			ipCache[ip] = geoIPResult{
+				CountryCode: geoData.CountryCode,
+				CountryName: geoData.CountryName,
+			}
 		}
 	}
 
-	// Build sorted list of country stats
+	// Build stats for unique IPs (deduplicated)
+	uniqueCountryCount := make(map[string]int)
+	countryNames := make(map[string]string)
+
+	for ip := range ipToVisors {
+		if geo, ok := ipCache[ip]; ok {
+			uniqueCountryCount[geo.CountryCode]++
+			if countryNames[geo.CountryCode] == "" {
+				countryNames[geo.CountryCode] = geo.CountryName
+			}
+		}
+	}
+
+	// Build stats for all visors (full count)
+	fullCountryCount := make(map[string]int)
+
+	for _, ip := range visorIPs {
+		if geo, ok := ipCache[ip]; ok {
+			fullCountryCount[geo.CountryCode]++
+		}
+	}
+
+	// Generate unique IP stats
+	if err := writeCountryStats(uniqueCountryCount, countryNames, "country_unique", "Unique IPs by country"); err != nil {
+		return err
+	}
+
+	// Generate full visor count stats
+	if err := writeCountryStats(fullCountryCount, countryNames, "country_full", "Visor count by country"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func writeCountryStats(countryCount map[string]int, countryNames map[string]string, filePrefix, title string) error {
 	var stats []CountryStat
 	totalNodes := 0
+
 	for code, count := range countryCount {
 		stats = append(stats, CountryStat{
 			Count:       count,
@@ -340,13 +386,13 @@ func generateAndCacheCountryStats() error {
 
 	// Generate plaintext output
 	var plaintext strings.Builder
-	plaintext.WriteString("Visor count by country:\n\n")
+	plaintext.WriteString(title + ":\n\n")
 	for _, s := range stats {
 		plaintext.WriteString(fmt.Sprintf("%d %s %s\n", s.Count, s.CountryName, s.Flag))
 	}
-	plaintext.WriteString(fmt.Sprintf("\nTotal: %d visors\n", totalNodes))
+	plaintext.WriteString(fmt.Sprintf("\nTotal: %d\n", totalNodes))
 
-	_, err = script.Echo(plaintext.String()).WriteFile(tempStatsPath + "/country.txt")
+	_, err := script.Echo(plaintext.String()).WriteFile(tempStatsPath + "/" + filePrefix + ".txt")
 	if err != nil {
 		return err
 	}
@@ -362,5 +408,5 @@ func generateAndCacheCountryStats() error {
 		return err
 	}
 
-	return os.WriteFile(tempStatsPath+"/country.json", jsonData, 0600)
+	return os.WriteFile(tempStatsPath+"/"+filePrefix+".json", jsonData, 0600)
 }
