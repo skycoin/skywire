@@ -491,6 +491,45 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		}
 	}()
 
+	// Monitor DMSG session availability to detect when HTTP server becomes unreachable
+	// When all sessions are lost, the listener can't receive new connections
+	// Give the client time to reconnect before closing the listener
+	go func() {
+		const (
+			checkInterval     = 10 * time.Second
+			maxNoSessionsTime = 2 * time.Minute
+		)
+		var noSessionsSince time.Time
+		ticker := time.NewTicker(checkInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				sessionCount := dmsgC.SessionCount()
+				if sessionCount == 0 {
+					if noSessionsSince.IsZero() {
+						noSessionsSince = time.Now()
+						logger.Warn("No DMSG sessions available, HTTP server may be unreachable")
+					} else if time.Since(noSessionsSince) > maxNoSessionsTime {
+						logger.Error("No DMSG sessions available for extended period, closing listener to trigger recovery")
+						if err := lis.Close(); err != nil {
+							logger.WithError(err).Error("Failed to close listener")
+						}
+						return
+					}
+				} else {
+					if !noSessionsSince.IsZero() {
+						logger.WithField("session_count", sessionCount).Info("DMSG sessions restored")
+					}
+					noSessionsSince = time.Time{}
+				}
+			}
+		}
+	}()
+
 	logger.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
 		Debug("Serving...")
 	// Increased timeouts for dmsg latency characteristics

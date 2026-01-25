@@ -92,6 +92,41 @@ func server(e error) {
 		}
 	}()
 
+	// Monitor DMSG session availability to detect when HTTP server becomes unreachable
+	// When all sessions are lost, the listener can't receive new connections
+	// Give the client time to reconnect before closing the listener
+	go func() {
+		const (
+			checkInterval     = 10 * time.Second
+			maxNoSessionsTime = 2 * time.Minute
+		)
+		var noSessionsSince time.Time
+		ticker := time.NewTicker(checkInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				sessionCount := dmsgclient.SessionCount()
+				if sessionCount == 0 {
+					if noSessionsSince.IsZero() {
+						noSessionsSince = time.Now()
+						log.Warn("No DMSG sessions available, HTTP server may be unreachable")
+					} else if time.Since(noSessionsSince) > maxNoSessionsTime {
+						log.Fatal("No DMSG sessions available for extended period, exiting to trigger recovery")
+					}
+				} else {
+					if !noSessionsSince.IsZero() {
+						log.WithField("session_count", sessionCount).Info("DMSG sessions restored")
+					}
+					noSessionsSince = time.Time{}
+				}
+			}
+		}
+	}()
+
 	htmlPageTemplateData = htmlTemplateData{
 		Title: "skycoin rewards",
 		Page:  "front",
