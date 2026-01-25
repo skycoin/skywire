@@ -347,6 +347,8 @@ func server(e error) {
 		r1.StaticFile("/stats/cpu", tempStatsPath+"/cpu.txt")
 		r1.StaticFile("/stats/mem", tempStatsPath+"/mem.txt")
 		r1.StaticFile("/stats/ram", tempStatsPath+"/ram.txt")
+		r1.StaticFile("/stats/country", tempStatsPath+"/country.txt")
+		r1.StaticFile("/stats/country/json", tempStatsPath+"/country.json")
 
 		// Aggregated stats page
 		r1.GET("/stats", func(c *gin.Context) {
@@ -425,6 +427,18 @@ func server(e error) {
 				l += "Error loading RAM stats"
 			}
 			l += "</pre>"
+
+			// Country Stats
+			l += "<h2><a href='/stats/country'>Country Statistics</a></h2>"
+			l += "<pre>"
+			countryStats, err := script.File(tempStatsPath + "/country.txt").String()
+			if err == nil {
+				l += countryStats
+			} else {
+				l += "Error loading country stats"
+			}
+			l += "</pre>"
+			l += "<p><a href='/stats/country/json'>View as JSON</a></p>"
 
 			l += "<br>" + htmltoplink
 			l += "</body></html>"
