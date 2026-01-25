@@ -30,6 +30,7 @@ var (
 func init() {
 	nl = append(nl, "  <a href='/'>fiber</a>")
 	nl = append(nl, "  <a href='/skycoin-rewards'>skycoin rewards</a>")
+	nl = append(nl, "  <a href='/stats'>network stats</a>")
 	nl = append(nl, "  <a href='/log-collection'>log collection</a>")
 	nl = append(nl, "  <a href='/log-collection/tree'>survey index</a>")
 	nl = append(nl, "  <a href='/log-collection/tplogs'>transport logging</a>")
@@ -96,6 +97,7 @@ var htmlMainPageTemplate = `
   <nav class='absolute' style='white-space: nowrap;'>
   <a href='/'>fiber</a>
   <a href='/skycoin-rewards'>skycoin rewards</a>
+  <a href='/stats'>network stats</a>
   <a href='/log-collection'>log collection</a>
   <a href='/log-collection/tree'>survey index</a>
   <a href='/log-collection/tplogs'>transport logging</a>
