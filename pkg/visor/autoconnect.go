@@ -137,12 +137,12 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				stcprKeys = map[cipher.PubKey][]string{}
 			}
 
-			// Check if this visor is public by seeing if it's registered in address resolver for STCPR
-			// This is more reliable than checking config/network conditions
-			_, visorIsPublic := stcprKeys[v.conf.PK]
+			// Check if this visor is configured as public
+			// This uses the same config flag that initPublicVisor uses to decide whether to register in SD
+			visorIsPublic := v.conf.IsPublic
 			a.visorIsPublic = visorIsPublic
 			if visorIsPublic {
-				a.log.Debug("This visor is registered as public (found in STCPR address resolver)")
+				a.log.Debug("This visor is configured as public")
 			}
 
 			// Fetch ALL transport discovery data once per cycle to reduce API load

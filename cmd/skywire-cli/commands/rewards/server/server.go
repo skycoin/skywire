@@ -347,6 +347,118 @@ func server(e error) {
 		r1.StaticFile("/stats/cpu", tempStatsPath+"/cpu.txt")
 		r1.StaticFile("/stats/mem", tempStatsPath+"/mem.txt")
 		r1.StaticFile("/stats/ram", tempStatsPath+"/ram.txt")
+		r1.StaticFile("/stats/country/unique", tempStatsPath+"/country_unique.txt")
+		r1.StaticFile("/stats/country/unique/json", tempStatsPath+"/country_unique.json")
+		r1.StaticFile("/stats/country/full", tempStatsPath+"/country_full.txt")
+		r1.StaticFile("/stats/country/full/json", tempStatsPath+"/country_full.json")
+
+		// Aggregated stats page
+		r1.GET("/stats", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+			c.Writer.WriteHeader(http.StatusOK)
+
+			l := "<html><head><title>Network Statistics</title></head>"
+			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
+			l += "<a id='top'></a>"
+			l += navlinks
+			l += "<h1>Skywire Network Statistics</h1>"
+
+			// Uptime Tracker Version Stats
+			l += "<h2><a href='/stats/ut'>Uptime Tracker Version Statistics</a></h2>"
+			l += "<pre>"
+			utstats, err := script.Exec(`skywire cli ut -t`).String()
+			if err == nil {
+				l += utstats
+			} else {
+				l += "Error fetching uptime tracker stats"
+			}
+			l += "</pre>"
+
+			// Architecture Stats
+			l += "<h2><a href='/stats/arch'>Architecture Statistics</a></h2>"
+			l += "<pre>"
+			archStats, err := script.File(tempStatsPath + "/arch.txt").String()
+			if err == nil {
+				l += archStats
+			} else {
+				l += "Error loading architecture stats"
+			}
+			l += "</pre>"
+
+			// OS Stats
+			l += "<h2><a href='/stats/os'>Operating System Statistics</a></h2>"
+			l += "<pre>"
+			osStats, err := script.File(tempStatsPath + "/os.txt").String()
+			if err == nil {
+				l += osStats
+			} else {
+				l += "Error loading OS stats"
+			}
+			l += "</pre>"
+
+			// CPU Stats
+			l += "<h2><a href='/stats/cpu'>CPU Statistics</a></h2>"
+			l += "<pre>"
+			cpuStats, err := script.File(tempStatsPath + "/cpu.txt").String()
+			if err == nil {
+				l += cpuStats
+			} else {
+				l += "Error loading CPU stats"
+			}
+			l += "</pre>"
+
+			// Memory (Disk) Stats
+			l += "<h2><a href='/stats/mem'>Storage Statistics</a></h2>"
+			l += "<pre>"
+			memStats, err := script.File(tempStatsPath + "/mem.txt").String()
+			if err == nil {
+				l += memStats
+			} else {
+				l += "Error loading storage stats"
+			}
+			l += "</pre>"
+
+			// RAM Stats
+			l += "<h2><a href='/stats/ram'>RAM Statistics</a></h2>"
+			l += "<pre>"
+			ramStats, err := script.File(tempStatsPath + "/ram.txt").String()
+			if err == nil {
+				l += ramStats
+			} else {
+				l += "Error loading RAM stats"
+			}
+			l += "</pre>"
+
+			// Country Stats - Unique IPs
+			l += "<h2><a href='/stats/country/unique'>Country Statistics (Unique IPs)</a></h2>"
+			l += "<pre>"
+			countryUniqueStats, err := script.File(tempStatsPath + "/country_unique.txt").String()
+			if err == nil {
+				l += countryUniqueStats
+			} else {
+				l += "Error loading country stats (unique)"
+			}
+			l += "</pre>"
+			l += "<p><a href='/stats/country/unique/json'>View as JSON</a></p>"
+
+			// Country Stats - Full Visor Count
+			l += "<h2><a href='/stats/country/full'>Country Statistics (All Visors)</a></h2>"
+			l += "<pre>"
+			countryFullStats, err := script.File(tempStatsPath + "/country_full.txt").String()
+			if err == nil {
+				l += countryFullStats
+			} else {
+				l += "Error loading country stats (full)"
+			}
+			l += "</pre>"
+			l += "<p><a href='/stats/country/full/json'>View as JSON</a></p>"
+
+			l += "<br>" + htmltoplink
+			l += "</body></html>"
+
+			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+		})
 
 		r1.GET("/skycoin-rewards", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")
