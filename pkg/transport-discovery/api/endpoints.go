@@ -186,6 +186,62 @@ func (api *API) getAllTransportsStats(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// PerKeyStats represents transport statistics for a single public key
+type PerKeyStats struct {
+	PK     string         `json:"pk"`
+	Total  int            `json:"total"`
+	ByType map[string]int `json:"by_type"`
+}
+
+func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Request) {
+	selfTransports := true
+	query := r.URL.Query()
+	selfTransportsParam := query.Get("selfTransports")
+	if selfTransportsParam == "hide" {
+		selfTransports = false
+	}
+
+	entries, err := api.store.GetAllTransports(r.Context(), selfTransports)
+	if err != nil {
+		if err != store.ErrTransportNotFound {
+			api.log(r).WithError(err).Error("Error getting transports for per-key stats")
+		}
+		api.writeError(w, r, err)
+		return
+	}
+
+	// Build per-key statistics
+	perKeyStats := make(map[cipher.PubKey]map[string]int)
+
+	for _, entry := range entries {
+		for _, edge := range entry.Edges {
+			if perKeyStats[edge] == nil {
+				perKeyStats[edge] = make(map[string]int)
+			}
+			perKeyStats[edge][string(entry.Type)]++
+		}
+	}
+
+	// Convert to response format
+	var result []PerKeyStats
+	for pk, byType := range perKeyStats {
+		total := 0
+		for _, count := range byType {
+			total += count
+		}
+		result = append(result, PerKeyStats{
+			PK:     pk.String(),
+			Total:  total,
+			ByType: byType,
+		})
+	}
+
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		api.log(r).WithError(err).Error("Error encoding per-key stats")
+		api.writeError(w, r, err)
+	}
+}
+
 func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
 	pk, ok := r.Context().Value(httpauth.ContextAuthKey).(cipher.PubKey)
 	if !ok {
