@@ -33,11 +33,11 @@ var (
 	wd              string
 	wlkeys          []cipher.PubKey
 	webPort         uint
-	ensureOnlineURL  string
-	healthOnly       bool
-	noUI             bool
-	buildTimeout     time.Duration
-	log              = logging.MustGetLogger("rewards")
+	ensureOnlineURL string
+	healthOnly      bool
+	noUI            bool
+	buildTimeout    time.Duration
+	log             = logging.MustGetLogger("rewards")
 )
 
 var skyenvfile = os.Getenv("SKYENV")
