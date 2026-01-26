@@ -8,11 +8,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 
 	"github.com/skycoin/skywire/internal/sdmetrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
@@ -46,18 +45,8 @@ func redisClient(t *testing.T) *redis.Client {
 	return redisC
 }
 
-func postgresClient() (*gorm.DB, *logging.Logger) {
-	logger := logging.NewMasterLogger().PackageLogger("integration_test")
-	dsn := "host=localhost port=8383 user=postgres password=postgres dbname=postgres sslmode=disable"
-	gormDB, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		panic("test failed")
-	}
-	return gormDB, logger
-}
-
 func clearRedis(t *testing.T, redisC *redis.Client) {
-	require.NoError(t, redisC.FlushAll().Err())
+	require.NoError(t, redisC.FlushAll(context.Background()).Err())
 }
 
 func serveAPI(t *testing.T) *httptest.Server {
@@ -66,7 +55,9 @@ func serveAPI(t *testing.T) *httptest.Server {
 		URL:  redisAddr(t),
 	}
 
-	dbGorm, logger := postgresClient()
+	logger := logging.NewMasterLogger().PackageLogger("integration_test")
+
+	redisC := redisClient(t)
 
 	ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
 	defer cancel()
@@ -74,7 +65,7 @@ func serveAPI(t *testing.T) *httptest.Server {
 	nonceDB, err := httpauth.NewNonceStore(ctx, dbConf, "auth::")
 	require.NoError(t, err)
 
-	discDB, err := store.NewStore(dbGorm, logger)
+	discDB, err := store.NewStore(ctx, redisC, logger, 15*time.Minute)
 	require.NoError(t, err)
 
 	m := sdmetrics.NewEmpty()
