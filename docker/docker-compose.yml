@@ -233,15 +233,10 @@ services:
     depends_on:
       - transport-discovery
       - sd-redis
-      - postgres-db
     ports:
       - "9091:9091"
       - "6091:6091"
-    environment:
-      - PG_USER=postgres
-      - PG_PASSWORD=postgres
-      - PG_DATABASE=postgres
-    entrypoint: "/release/skywire svc sd --addr :9091 --pprof :6091 --pg-host postgres-db --pg-port 5432 --redis redis://sd-redis:6379 --sk ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f --dmsg-disc http://dmsg-discovery:9090"
+    entrypoint: "/release/skywire svc sd --addr :9091 --pprof :6091 --redis redis://sd-redis:6379 --entry-timeout 15m --sk ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
