@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/tpviz"
 )
 
 // TODO: fix gocyclo error.
@@ -187,7 +188,13 @@ func server(e error) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write([]byte(transportGraphHTML)) //nolint:errcheck,gosec
+			// Use shared tpviz package with rewards server nav links
+			navLinks := []tpviz.NavLink{
+				{URL: "/", Label: "fiber"},
+				{URL: "/skycoin-rewards", Label: "rewards"},
+				{URL: "/stats", Label: "stats"},
+			}
+			c.Writer.Write([]byte(tpviz.GetTransportGraphHTMLWithNavLinks("", navLinks))) //nolint:errcheck,gosec
 		})
 		r1.GET("/log-collection", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")
