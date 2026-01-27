@@ -183,6 +183,12 @@ func server(e error) {
 			c.Writer.Flush()
 		})
 
+		r1.GET("/transport-graph", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
+			c.Writer.WriteHeader(http.StatusOK)
+			c.Writer.Write([]byte(transportGraphHTML)) //nolint:errcheck,gosec
+		})
 		r1.GET("/log-collection", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
