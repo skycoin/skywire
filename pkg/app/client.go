@@ -64,6 +64,11 @@ func (c *Client) Config() appcommon.ProcConfig {
 	return c.conf
 }
 
+// Log returns the client's logger for apps to use for logging.
+func (c *Client) Log() logrus.FieldLogger {
+	return c.log
+}
+
 // SetDetailedStatus sets detailed app status within the visor.
 func (c *Client) SetDetailedStatus(status string) error {
 	return c.rpcC.SetDetailedStatus(status)

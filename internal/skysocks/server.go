@@ -65,16 +65,16 @@ func (s *Server) Serve(l net.Listener) error {
 		conn, err := l.Accept()
 		if err != nil {
 			if s.isClosed() {
-				fmt.Printf("Failed to accept skysocks connection, but server is closed: %v\n", err)
+				s.appCl.Log().Debugf("Failed to accept skysocks connection, but server is closed: %v", err)
 				return nil
 			}
 
-			fmt.Printf("Failed to accept skysocks connection: %v\n", err)
+			s.appCl.Log().Errorf("Failed to accept skysocks connection: %v", err)
 
 			return fmt.Errorf("accept: %w", err)
 		}
 
-		fmt.Println("Accepted new skysocks connection")
+		s.appCl.Log().Debug("Accepted new skysocks connection")
 
 		sessionCfg := yamux.DefaultConfig()
 		sessionCfg.EnableKeepAlive = false
@@ -85,7 +85,7 @@ func (s *Server) Serve(l net.Listener) error {
 
 		go func() {
 			if err := s.socks.Serve(session); err != nil {
-				print(fmt.Sprintf("Failed to start SOCKS5 server: %v\n", err))
+				s.appCl.Log().Errorf("Failed to start SOCKS5 server: %v", err)
 			}
 		}()
 	}
@@ -93,10 +93,10 @@ func (s *Server) Serve(l net.Listener) error {
 
 // ListenIPC starts named-pipe based connection server for windows or unix socket in Linux/Mac
 func (s *Server) ListenIPC(client *ipc.Client) {
-	listenIPC(client, skyenv.SkysocksName, func() {
+	listenIPC(client, skyenv.SkysocksName, s.appCl.Log(), func() {
 		client.Close()
 		if err := s.Close(); err != nil {
-			fmt.Println("Error closing skysocks server: ", err.Error())
+			s.appCl.Log().Errorf("Error closing skysocks server: %v", err)
 			os.Exit(1)
 		}
 	})
@@ -104,7 +104,7 @@ func (s *Server) ListenIPC(client *ipc.Client) {
 
 func (s *Server) setAppStatus(status appserver.AppDetailedStatus) {
 	if err := s.appCl.SetDetailedStatus(string(status)); err != nil {
-		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
+		s.appCl.Log().Errorf("Failed to set status %v: %v", status, err)
 	}
 }
 

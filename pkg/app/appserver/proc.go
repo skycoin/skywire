@@ -229,6 +229,10 @@ func (p *Proc) startInProcess() error {
 	appConn, serverConn := net.Pipe()
 	appcommon.RegisterInProcessConn(p.conf.ProcKey, appConn)
 
+	// Acquire lock to serialize env var access for internal apps
+	// This prevents race conditions where multiple apps overwrite each other's PROC_CONFIG
+	configReadDone := appcommon.AcquireInternalAppStart(p.conf.ProcKey)
+
 	envs := p.conf.Envs()
 	for _, env := range envs {
 		parts := strings.SplitN(env, "=", 2)
@@ -269,6 +273,15 @@ func (p *Proc) startInProcess() error {
 			p.log.Debug("App RunFunc returned normally")
 		}
 	}()
+
+	// Wait for app to read config (with timeout to prevent deadlock)
+	select {
+	case <-configReadDone:
+		// App has read its config, safe to release lock
+	case <-time.After(30 * time.Second):
+		p.log.Warn("Timeout waiting for app to read config, releasing lock anyway")
+	}
+	appcommon.ReleaseInternalAppStart(p.conf.ProcKey)
 
 	go func() {
 		defer func() {
