@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 // Client is used by skywire apps.
@@ -30,6 +31,15 @@ type Client struct {
 // NewClient creates a new Client, panicking on any error.
 func NewClient(eventSubs *appevent.Subscriber) *Client {
 	log := logrus.New()
+	// Use same formatter as visor for consistent log output
+	log.SetFormatter(&logging.TextFormatter{
+		FullTimestamp:      true,
+		AlwaysQuoteStrings: true,
+		QuoteEmptyFields:   true,
+		ForceFormatting:    true,
+		DisableColors:      false,
+		ForceColors:        true,
+	})
 
 	conf, err := appcommon.ProcConfigFromEnv()
 	if err != nil {
