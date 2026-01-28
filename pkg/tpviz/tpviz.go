@@ -112,13 +112,37 @@ func (s *Server) setupRoutes() {
 	// Health check
 	s.mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+
+		// Get actual cache file ages in seconds
+		tpdAge := s.getCacheAgeSeconds(s.config.CacheFile)
+		utAge := s.getCacheAgeSeconds(s.config.CacheFileUT)
+		sdAge := s.getCacheAgeSeconds(s.config.CacheFileSD)
+
+		// Find the oldest cache age
+		maxAge := tpdAge
+		if utAge > maxAge {
+			maxAge = utAge
+		}
+		if sdAge > maxAge {
+			maxAge = sdAge
+		}
+
+		// Calculate seconds until next refresh
+		maxAgeSeconds := s.config.CacheMaxAge * 60
+		nextRefreshIn := maxAgeSeconds - int(maxAge)
+		if nextRefreshIn < 0 {
+			nextRefreshIn = 0
+		}
+
 		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
-			"status":       "ok",
-			"cache_file":   s.config.CacheFile,
-			"cache_age":    s.config.CacheMaxAge,
-			"tpd_url":      s.config.TPDURL,
-			"ut_url":       s.config.UTURL,
-			"sd_url":       s.config.SDURL,
+			"status":          "ok",
+			"cache_max_age":   s.config.CacheMaxAge,
+			"next_refresh_in": nextRefreshIn,
+			"cache_ages": map[string]int{
+				"tpd": int(tpdAge),
+				"ut":  int(utAge),
+				"sd":  int(sdAge),
+			},
 			"auto_refresh": s.config.AutoRefresh,
 		})
 	})
@@ -423,6 +447,18 @@ func (s *Server) startAutoRefresh() {
 			}
 		}
 	}()
+}
+
+// getCacheAgeSeconds returns the age of a cache file in seconds
+func (s *Server) getCacheAgeSeconds(cacheFile string) int64 {
+	if cacheFile == "" {
+		return 0
+	}
+	info, err := os.Stat(cacheFile)
+	if err != nil {
+		return int64(s.config.CacheMaxAge * 60) // Return max age if file doesn't exist
+	}
+	return int64(time.Since(info.ModTime()).Seconds())
 }
 
 // Handler returns the HTTP handler for the server

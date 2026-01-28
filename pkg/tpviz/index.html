@@ -316,7 +316,7 @@
 
                 processData();
                 // Reset countdown timer after successful fetch
-                if (serverCacheAge) resetRefreshTimer();
+                if (serverCacheAge) syncWithServer();
             } catch (err) {
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('error').style.display = 'block';
@@ -730,11 +730,31 @@
             if (!nextRefreshTime) return;
             const remaining = Math.max(0, Math.ceil((nextRefreshTime - Date.now()) / 1000));
             document.getElementById('cache-info').innerHTML = 'Auto-refresh in: ' + formatCountdown(remaining);
+
+            // Re-sync with server every 30 seconds to stay accurate
+            if (remaining % 30 === 0 && remaining > 0) {
+                syncWithServer();
+            }
         }
 
-        // Reset refresh timer (called after each data fetch)
-        function resetRefreshTimer() {
-            nextRefreshTime = Date.now() + 5 * 60 * 1000;
+        // Sync countdown with actual server cache age
+        async function syncWithServer() {
+            try {
+                const resp = await fetch('/health');
+                if (resp.ok) {
+                    const info = await resp.json();
+                    if (info.auto_refresh && typeof info.next_refresh_in === 'number') {
+                        nextRefreshTime = Date.now() + (info.next_refresh_in * 1000);
+                    }
+                }
+            } catch (e) {
+                // Ignore sync errors
+            }
+        }
+
+        // Start refresh timer based on server's actual cache age
+        function startRefreshTimer(secondsUntilRefresh) {
+            nextRefreshTime = Date.now() + (secondsUntilRefresh * 1000);
             if (!countdownInterval) {
                 countdownInterval = setInterval(updateCountdown, 1000);
             }
@@ -747,9 +767,11 @@
                 const resp = await fetch('/health');
                 if (resp.ok) {
                     const info = await resp.json();
-                    serverCacheAge = info.cache_age;
+                    serverCacheAge = info.cache_max_age;
                     if (info.auto_refresh) {
-                        resetRefreshTimer();
+                        // Use actual time until next refresh from server
+                        const secondsUntilRefresh = info.next_refresh_in || (info.cache_max_age * 60);
+                        startRefreshTimer(secondsUntilRefresh);
                     }
                 }
             } catch (e) {
