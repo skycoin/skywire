@@ -67,7 +67,10 @@
         .visor-item .v-pk .pk-end { flex-shrink: 0; }
         .visor-item .v-pk .pk-ellipsis { display: none; flex-shrink: 0; color: #666; }
         .visor-item .v-ver { color: #888; font-size: 0.9em; flex-shrink: 0; margin-left: auto; }
-        .visor-item .v-row2 { width: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 3px; margin-top: 2px; padding-left: 22px; }
+        .visor-item .v-row2 { width: 100%; display: flex; align-items: center; margin-top: 2px; padding-left: 22px; font-size: 0.9em; }
+        .visor-item .v-col-ver { width: 45px; flex-shrink: 0; }
+        .visor-item .v-col-svc { width: 75px; flex-shrink: 0; display: flex; gap: 2px; }
+        .visor-item .v-col-tp { flex-shrink: 0; display: flex; gap: 3px; }
         .visor-item .v-svc { font-size: 0.85em; padding: 0 3px; border-radius: 2px; }
         .visor-item .v-svc.vpn { background: rgba(138, 43, 226, 0.4); color: #c9a8ff; }
         .visor-item .v-svc.proxy { background: rgba(255, 165, 0, 0.4); color: #ffc966; }
@@ -259,14 +262,21 @@
                 row1 += '<span class="pk-end">' + pkEnd + '</span>';
                 row1 += '</span>';
 
-                // Build row 2: version + services + transport counts
+                // Build row 2: version | services | transport counts (table-like columns)
                 let row2 = '<div class="v-row2">';
-                if (verShort) row2 += '<span class="v-ver">' + verShort + '</span>';
+                // Column 1: Version
+                row2 += '<span class="v-col-ver">' + (verShort ? '<span class="v-ver">' + verShort + '</span>' : '') + '</span>';
+                // Column 2: Services
+                row2 += '<span class="v-col-svc">';
                 services.forEach(s => {
                     row2 += '<span class="v-svc ' + s + '">' + s.toUpperCase() + '</span>';
                 });
+                row2 += '</span>';
+                // Column 3: Transport counts
+                row2 += '<span class="v-col-tp">';
                 if (stcprCount > 0) row2 += '<span class="v-tp"><span class="stcpr">S:' + stcprCount + '</span></span>';
                 if (sudphCount > 0) row2 += '<span class="v-tp"><span class="sudph">U:' + sudphCount + '</span></span>';
+                row2 += '</span>';
                 row2 += '</div>';
 
                 return '<div class="visor-item" onclick="focusVisor(\'' + v.id + '\')">' + row1 + row2 + '</div>';
