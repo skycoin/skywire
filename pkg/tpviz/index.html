@@ -132,8 +132,8 @@
                     </div>
                     <div class="control-group">
                         <label><input type="checkbox" id="show-online" checked> Show Online</label>
-                        <label><input type="checkbox" id="show-offline" checked> Show Offline</label>
-                        <label><input type="checkbox" id="show-unknown" checked> Show Unknown</label>
+                        <label><input type="checkbox" id="show-offline"> Show Offline</label>
+                        <label><input type="checkbox" id="show-unknown"> Show Unknown</label>
                     </div>
                     <div class="control-group">
                         <label><input type="checkbox" id="show-services"> Highlight Services</label>
@@ -444,11 +444,16 @@
         function processData() {
             const visors = new Map();
             visorConnections = {};
-            let countStcpr = 0, countSudph = 0, countDmsg = 0;
+            let countStcpr = 0, countSudph = 0, countDmsg = 0, totalTransports = 0;
 
             allData.forEach(transport => {
                 const [pk1, pk2] = transport.edges;
                 const type = transport.type;
+
+                // Skip self-transports (connectivity tests, not used for routes)
+                if (pk1 === pk2) return;
+
+                totalTransports++;
                 if (type === 'stcpr') countStcpr++;
                 else if (type === 'sudph') countSudph++;
                 else if (type === 'dmsg') countDmsg++;
@@ -461,10 +466,8 @@
 
                 if (!visorConnections[pk1]) visorConnections[pk1] = [];
                 if (!visorConnections[pk2]) visorConnections[pk2] = [];
-                if (pk1 !== pk2) {
-                    visorConnections[pk1].push({ pk: pk2, type });
-                    visorConnections[pk2].push({ pk: pk1, type });
-                }
+                visorConnections[pk1].push({ pk: pk2, type });
+                visorConnections[pk2].push({ pk: pk1, type });
             });
 
             // Count by status
@@ -476,7 +479,7 @@
                 else countUnknown++;
             });
 
-            document.getElementById('total-transports').textContent = allData.length;
+            document.getElementById('total-transports').textContent = totalTransports;
             document.getElementById('total-visors').textContent = visors.size;
             document.getElementById('count-online').textContent = countOnline;
             document.getElementById('count-offline').textContent = countOffline;
@@ -519,10 +522,12 @@
                 };
             });
 
-            const edges = allData.map((transport, idx) => ({
-                id: idx, from: transport.edges[0], to: transport.edges[1],
-                color: { color: colors[transport.type], opacity: 0.6 }, type: transport.type, width: 1, smooth: { type: 'continuous' }
-            }));
+            const edges = allData
+                .filter(transport => transport.edges[0] !== transport.edges[1])
+                .map((transport, idx) => ({
+                    id: idx, from: transport.edges[0], to: transport.edges[1],
+                    color: { color: colors[transport.type], opacity: 0.6 }, type: transport.type, width: 1, smooth: { type: 'continuous' }
+                }));
 
             if (network) {
                 // Update existing network - preserve view position
@@ -538,6 +543,7 @@
                 edgesDataset = new vis.DataSet(edges);
                 createNetwork();
                 populateVersionFilter();
+                applyFilters();
             }
             document.getElementById('loading').style.display = 'none';
         }
