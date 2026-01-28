@@ -280,45 +280,74 @@
             statsEl.innerHTML = html;
         }
 
+        // Fetch with timeout
+        function fetchWithTimeout(url, timeoutMs = 25000) {
+            return Promise.race([
+                fetch(url),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+                )
+            ]);
+        }
+
         async function fetchAllData() {
             const isRefresh = network !== null;
+            const loadingEl = document.getElementById('loading');
+            const errorEl = document.getElementById('error');
+
             if (isRefresh) {
-                // Show subtle refresh indicator in cache info
-                const cacheInfo = document.getElementById('cache-info');
-                if (cacheInfo.innerHTML) cacheInfo.innerHTML = cacheInfo.innerHTML.replace(/Auto-refresh in:.*/, 'Refreshing...');
-            } else {
-                document.getElementById('loading').style.display = 'block';
+                console.log('Starting auto-refresh...');
+            } else if (loadingEl) {
+                loadingEl.style.display = 'block';
             }
-            document.getElementById('error').style.display = 'none';
+            if (errorEl) errorEl.style.display = 'none';
+
             try {
-                // Fetch all data in parallel
-                const [tpResp, utResp, sdResp] = await Promise.all([
-                    fetch(API_BASE + '/api/transports').catch(() => fetch('https://tpd.skywire.skycoin.com/all-transports')),
-                    fetch(API_BASE + '/api/uptimes').catch(() => null),
-                    fetch(API_BASE + '/api/services').catch(() => null)
-                ]);
+                // Fetch transport data with fallback
+                let tpResp;
+                try {
+                    tpResp = await fetchWithTimeout(API_BASE + '/api/transports');
+                } catch (e) {
+                    console.log('Primary fetch failed, trying fallback:', e.message);
+                    tpResp = await fetchWithTimeout('https://tpd.skywire.skycoin.com/all-transports');
+                }
 
                 if (!tpResp.ok) throw new Error('HTTP ' + tpResp.status);
                 allData = await tpResp.json();
+                console.log('Transport data loaded:', allData.length, 'transports');
+
+                // Fetch uptime and services data in parallel (non-blocking)
+                const [utResp, sdResp] = await Promise.all([
+                    fetchWithTimeout(API_BASE + '/api/uptimes').catch(e => { console.log('UT fetch error:', e.message); return null; }),
+                    fetchWithTimeout(API_BASE + '/api/services').catch(e => { console.log('SD fetch error:', e.message); return null; })
+                ]);
 
                 // Parse uptime data
                 if (utResp && utResp.ok) {
                     uptimeData = await utResp.json();
                     processUptimeData();
                     updateVersionStats();
+                    console.log('Uptime data loaded:', uptimeData.length, 'entries');
                 }
 
                 // Parse services data
                 if (sdResp && sdResp.ok) {
                     servicesData = await sdResp.json();
                     processServicesData();
+                    console.log('Services data loaded:', Object.keys(servicesData).length, 'services');
                 }
 
                 processData();
+                console.log('Data processing complete');
+                return true; // Indicate success
             } catch (err) {
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('error').style.display = 'block';
-                document.getElementById('error').textContent = 'Failed to load data: ' + err.message;
+                console.error('fetchAllData error:', err);
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (errorEl) {
+                    errorEl.style.display = 'block';
+                    errorEl.textContent = 'Failed to load data: ' + err.message;
+                }
+                throw err; // Re-throw so .catch() in updateCountdown gets called
             }
         }
 
@@ -734,10 +763,25 @@
                 // Countdown reached 0 - fetch new data
                 isRefreshing = true;
                 document.getElementById('cache-info').innerHTML = 'Refreshing...';
-                fetchAllData().then(() => {
-                    isRefreshing = false;
-                    syncWithServer();
-                });
+                console.log('Auto-refresh triggered at', new Date().toLocaleTimeString());
+
+                fetchAllData()
+                    .then(() => {
+                        console.log('Auto-refresh succeeded at', new Date().toLocaleTimeString());
+                        document.getElementById('cache-info').innerHTML = 'Refresh complete';
+                    })
+                    .catch(err => {
+                        console.error('Auto-refresh failed:', err);
+                        document.getElementById('cache-info').innerHTML = 'Refresh failed: ' + err.message;
+                    })
+                    .finally(() => {
+                        console.log('Auto-refresh finished, syncing with server');
+                        isRefreshing = false;
+                        // Small delay before syncing to ensure server has updated cache times
+                        setTimeout(() => {
+                            syncWithServer();
+                        }, 500);
+                    });
             } else if (!isRefreshing) {
                 document.getElementById('cache-info').innerHTML = 'Auto-refresh in: ' + formatCountdown(remaining);
             }
@@ -746,17 +790,23 @@
         // Sync countdown with actual server cache age
         async function syncWithServer() {
             try {
-                const resp = await fetch('/health');
+                const resp = await fetchWithTimeout('/health', 5000);
                 if (resp.ok) {
                     const info = await resp.json();
+                    console.log('Server health:', info);
                     if (info.auto_refresh && typeof info.next_refresh_in === 'number') {
-                        const seconds = Math.max(1, info.next_refresh_in); // At least 1 second
+                        // Ensure at least 5 seconds between refreshes to avoid tight loops
+                        const seconds = Math.max(5, info.next_refresh_in);
                         nextRefreshTime = Date.now() + (seconds * 1000);
-                        updateCountdown();
+                        console.log('Next refresh in', seconds, 'seconds');
+                    } else {
+                        // Auto-refresh disabled, set a long interval
+                        nextRefreshTime = Date.now() + (serverCacheAge || 5) * 60 * 1000;
                     }
                 }
             } catch (e) {
-                // Ignore sync errors, set a default
+                console.log('Sync with server failed:', e.message);
+                // On error, set a reasonable default
                 nextRefreshTime = Date.now() + (serverCacheAge || 5) * 60 * 1000;
             }
         }
