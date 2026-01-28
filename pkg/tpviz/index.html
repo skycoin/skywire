@@ -38,6 +38,8 @@
         .status-online { background: #00d9a5; }
         .status-offline { background: #e94560; border: 2px solid #fff; }
         .status-unknown { background: #ffd166; }
+        .status-vpn { background: #9f6efc; }
+        .status-proxy { background: #ffa500; }
 
         .control-group { margin: 8px 0; }
         label { display: block; margin-bottom: 4px; color: #aaa; font-size: 0.85em; }
@@ -111,30 +113,15 @@
                     <div class="stat"><span class="stat-label">Online</span><span class="stat-value" id="count-online" style="color:#00d9a5">-</span></div>
                     <div class="stat"><span class="stat-label">Offline</span><span class="stat-value" id="count-offline" style="color:#e94560">-</span></div>
                     <div class="stat"><span class="stat-label">Not in UT</span><span class="stat-value" id="count-unknown" style="color:#ffd166">-</span></div>
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;font-size:0.8em;color:#888;">Versions</div>
+                    <div id="version-stats"></div>
                 </div>
             </div>
 
-            <!-- Legend - collapsed by default -->
-            <div class="section collapsed" id="section-legend">
-                <div class="section-header" onclick="toggleSection('section-legend')">
-                    <span class="section-title">Legend</span>
-                    <span class="section-toggle">▼</span>
-                </div>
-                <div class="section-content">
-                    <div class="legend-item"><div class="legend-color stcpr"></div><span>STCPR (TCP)</span></div>
-                    <div class="legend-item"><div class="legend-color sudph"></div><span>SUDPH (UDP)</span></div>
-                    <div class="legend-item"><div class="legend-color dmsg"></div><span>DMSG</span></div>
-                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;"></div>
-                    <div class="status-item"><div class="status-dot status-online"></div><span>Online (in UT)</span></div>
-                    <div class="status-item"><div class="status-dot status-offline"></div><span>Offline (in UT)</span></div>
-                    <div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>
-                </div>
-            </div>
-
-            <!-- Filters - collapsed by default -->
+            <!-- Filters & Legend - collapsed by default -->
             <div class="section collapsed" id="section-filters">
                 <div class="section-header" onclick="toggleSection('section-filters')">
-                    <span class="section-title">Filters</span>
+                    <span class="section-title">Filters & Legend</span>
                     <span class="section-toggle">▼</span>
                 </div>
                 <div class="section-content">
@@ -160,6 +147,18 @@
                     <div class="control-group">
                         <label for="search">Search PK</label>
                         <input type="text" id="search" placeholder="e.g. 027087fe">
+                    </div>
+                    <!-- Dynamic Legend -->
+                    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #0f3460;">
+                        <div style="font-size:0.8em;color:#888;margin-bottom:6px;">Legend</div>
+                        <div class="legend-item"><div class="legend-color stcpr"></div><span>STCPR (TCP)</span></div>
+                        <div class="legend-item"><div class="legend-color sudph"></div><span>SUDPH (UDP)</span></div>
+                        <div class="legend-item"><div class="legend-color dmsg"></div><span>DMSG</span></div>
+                        <div id="node-legend">
+                            <div class="status-item"><div class="status-dot status-online"></div><span>Online (in UT)</span></div>
+                            <div class="status-item"><div class="status-dot status-offline"></div><span>Offline (in UT)</span></div>
+                            <div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -225,6 +224,54 @@
             }
         }
 
+        // Update legend based on highlight services checkbox
+        function updateLegend() {
+            const showServices = document.getElementById('show-services').checked;
+            const legendEl = document.getElementById('node-legend');
+            if (showServices) {
+                legendEl.innerHTML =
+                    '<div class="status-item"><div class="status-dot status-vpn"></div><span>VPN Service</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-proxy"></div><span>Proxy Service</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-online"></div><span>Online (no service)</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-offline"></div><span>Offline</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>';
+            } else {
+                legendEl.innerHTML =
+                    '<div class="status-item"><div class="status-dot status-online"></div><span>Online (in UT)</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-offline"></div><span>Offline (in UT)</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>';
+            }
+        }
+
+        // Calculate and display version statistics
+        function updateVersionStats() {
+            const statsEl = document.getElementById('version-stats');
+            if (!uptimeData || Object.keys(visorVersions).length === 0) {
+                statsEl.innerHTML = '<div class="stat"><span class="stat-label">No data</span></div>';
+                return;
+            }
+
+            // Count versions (base versions only)
+            const versionCounts = {};
+            for (const [pk, version] of Object.entries(visorVersions)) {
+                const base = getBaseVersion(version);
+                if (base) {
+                    versionCounts[base] = (versionCounts[base] || 0) + 1;
+                }
+            }
+
+            // Sort by version (newest first)
+            const sorted = Object.entries(versionCounts)
+                .sort((a, b) => compareVersions(b[0], a[0]));
+
+            // Display top versions
+            const total = Object.values(versionCounts).reduce((a, b) => a + b, 0);
+            statsEl.innerHTML = sorted.slice(0, 5).map(([ver, count]) => {
+                const pct = ((count / total) * 100).toFixed(1);
+                return '<div class="stat"><span class="stat-label">' + ver + '</span><span class="stat-value">' + count + ' (' + pct + '%)</span></div>';
+            }).join('') + (sorted.length > 5 ? '<div class="stat" style="color:#666;"><span class="stat-label">+ ' + (sorted.length - 5) + ' more</span></div>' : '');
+        }
+
         async function fetchAllData() {
             const isRefresh = network !== null;
             if (isRefresh) {
@@ -250,6 +297,7 @@
                 if (utResp && utResp.ok) {
                     uptimeData = await utResp.json();
                     processUptimeData();
+                    updateVersionStats();
                 }
 
                 // Parse services data
@@ -642,9 +690,7 @@
         function updateCountdown() {
             if (!nextRefreshTime) return;
             const remaining = Math.max(0, Math.ceil((nextRefreshTime - Date.now()) / 1000));
-            let cacheInfo = 'Cache max age: ' + serverCacheAge + ' min';
-            cacheInfo += '<br>Auto-refresh in: ' + formatCountdown(remaining);
-            document.getElementById('cache-info').innerHTML = cacheInfo;
+            document.getElementById('cache-info').innerHTML = 'Auto-refresh in: ' + formatCountdown(remaining);
         }
 
         // Reset refresh timer (called after each data fetch)
@@ -663,15 +709,12 @@
                 if (resp.ok) {
                     const info = await resp.json();
                     serverCacheAge = info.cache_age;
-                    let cacheInfo = 'Cache max age: ' + info.cache_age + ' min';
                     if (info.auto_refresh) {
                         resetRefreshTimer();
-                    } else {
-                        document.getElementById('cache-info').innerHTML = cacheInfo;
                     }
                 }
             } catch (e) {
-                document.getElementById('cache-info').innerHTML = 'Direct mode (no local caching)';
+                document.getElementById('cache-info').innerHTML = 'Direct mode (no caching)';
             }
         }
 
@@ -681,7 +724,7 @@
         document.getElementById('show-online').addEventListener('change', applyFilters);
         document.getElementById('show-offline').addEventListener('change', applyFilters);
         document.getElementById('show-unknown').addEventListener('change', applyFilters);
-        document.getElementById('show-services').addEventListener('change', applyFilters);
+        document.getElementById('show-services').addEventListener('change', () => { applyFilters(); updateLegend(); });
         document.getElementById('version-filter').addEventListener('change', applyFilters);
         document.getElementById('search').addEventListener('input', applyFilters);
         document.getElementById('btn-fit').addEventListener('click', () => network && network.fit());
