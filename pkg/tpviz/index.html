@@ -53,15 +53,20 @@
         button:disabled { background: #555; cursor: not-allowed; }
 
         /* Visor list */
-        .visor-list { max-height: 300px; overflow-y: auto; margin-top: 8px; }
-        .visor-item { display: flex; flex-wrap: wrap; align-items: center; padding: 4px 6px; font-size: 0.7em; border-bottom: 1px solid #0f3460; cursor: pointer; gap: 2px; }
+        .visor-list { max-height: 300px; overflow-y: auto; margin-top: 8px; overflow-x: hidden; }
+        .visor-item { display: flex; flex-wrap: wrap; align-items: center; padding: 4px 6px; font-size: 0.7em; border-bottom: 1px solid #0f3460; cursor: pointer; gap: 2px; overflow: hidden; }
         .visor-item:hover { background: #1a3a5c; }
         .visor-item:last-child { border-bottom: none; }
-        .visor-item .v-flag { margin-right: 4px; font-size: 1.1em; }
-        .visor-item .v-pk { font-family: monospace; color: #0f9b8e; }
+        .visor-item .v-flag { flex-shrink: 0; margin-right: 4px; font-size: 1.1em; }
+        .visor-item .v-pk { font-family: monospace; color: #0f9b8e; display: flex; overflow: hidden; min-width: 0; }
         .visor-item .v-pk.offline { color: #e94560; }
+        .visor-item .v-pk.offline .pk-start, .visor-item .v-pk.offline .pk-end { color: #e94560; }
         .visor-item .v-pk.unknown { background: rgba(233, 69, 96, 0.3); padding: 0 2px; border-radius: 2px; }
-        .visor-item .v-ver { color: #888; font-size: 0.9em; margin-left: auto; }
+        .visor-item .v-pk .pk-start { flex-shrink: 0; }
+        .visor-item .v-pk .pk-mid { flex-shrink: 1; overflow: hidden; text-overflow: clip; white-space: nowrap; }
+        .visor-item .v-pk .pk-end { flex-shrink: 0; }
+        .visor-item .v-pk .pk-ellipsis { display: none; flex-shrink: 0; color: #666; }
+        .visor-item .v-ver { color: #888; font-size: 0.9em; flex-shrink: 0; margin-left: auto; }
         .visor-item .v-row2 { width: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 3px; margin-top: 2px; padding-left: 22px; }
         .visor-item .v-svc { font-size: 0.85em; padding: 0 3px; border-radius: 2px; }
         .visor-item .v-svc.vpn { background: rgba(138, 43, 226, 0.4); color: #c9a8ff; }
@@ -240,9 +245,19 @@
                 // Status class for PK text
                 const pkClass = status === 'offline' ? 'offline' : (status === 'unknown' ? 'unknown' : '');
 
-                // Build row 1: flag/dot + PK
+                // Split PK for middle truncation: first 8 chars + middle + last 8 chars
+                const pkStart = v.id.substring(0, 8);
+                const pkMid = v.id.substring(8, v.id.length - 8);
+                const pkEnd = v.id.substring(v.id.length - 8);
+
+                // Build row 1: flag/dot + PK (with truncation support)
                 let row1 = '<span class="v-flag">' + (flag || '●') + '</span>';
-                row1 += '<span class="v-pk ' + pkClass + '">' + v.id + '</span>';
+                row1 += '<span class="v-pk ' + pkClass + '" title="' + v.id + '">';
+                row1 += '<span class="pk-start">' + pkStart + '</span>';
+                row1 += '<span class="pk-mid">' + pkMid + '</span>';
+                row1 += '<span class="pk-ellipsis">…</span>';
+                row1 += '<span class="pk-end">' + pkEnd + '</span>';
+                row1 += '</span>';
 
                 // Build row 2: version + services + transport counts
                 let row2 = '<div class="v-row2">';
@@ -256,6 +271,23 @@
 
                 return '<div class="visor-item" onclick="focusVisor(\'' + v.id + '\')">' + row1 + row2 + '</div>';
             }).join('');
+
+            // Update truncation display after rendering
+            requestAnimationFrame(updatePkTruncation);
+        }
+
+        // Update PK truncation display based on available space
+        function updatePkTruncation() {
+            document.querySelectorAll('.v-pk').forEach(pk => {
+                const mid = pk.querySelector('.pk-mid');
+                const ellipsis = pk.querySelector('.pk-ellipsis');
+                if (!mid || !ellipsis) return;
+
+                // Check if middle part is fully visible (scrollWidth > clientWidth means truncated)
+                const isTruncated = mid.scrollWidth > mid.clientWidth + 1;
+                ellipsis.style.display = isTruncated ? 'inline' : 'none';
+                mid.style.display = isTruncated ? 'none' : 'inline';
+            });
         }
 
         // Focus on a visor in the network
@@ -679,17 +711,19 @@
                 populateVersionFilter();
                 applyFilters();
 
-                // Re-enable physics only if there are new nodes to position
+                // Re-enable physics if there are new nodes to position them
                 if (newNodesCount > 0) {
-                    // Brief physics run to position new nodes, then stabilize
-                    network.setOptions({
-                        physics: {
-                            enabled: true,
-                            stabilization: { enabled: true, iterations: 50 }
-                        }
-                    });
+                    // Enable physics and run stabilization to position new nodes
+                    network.setOptions({ physics: { enabled: true } });
+                    network.stabilize(100); // Run 100 iterations to spread out new nodes
                     network.once('stabilizationIterationsDone', () => {
-                        network.setOptions({ physics: { enabled: false } });
+                        // Keep physics running with low intensity for smooth layout
+                        network.setOptions({
+                            physics: {
+                                enabled: true,
+                                barnesHut: { gravitationalConstant: -1000, springConstant: 0.0005 }
+                            }
+                        });
                     });
                 }
 
@@ -1002,6 +1036,7 @@
             const newWidth = e.clientX;
             if (newWidth >= 200 && newWidth <= 600) {
                 sidebar.style.width = newWidth + 'px';
+                updatePkTruncation();
             }
         });
 
@@ -1010,6 +1045,7 @@
                 isResizing = false;
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
+                updatePkTruncation();
             }
         });
 
