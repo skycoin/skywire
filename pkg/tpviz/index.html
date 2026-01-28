@@ -315,8 +315,6 @@
                 }
 
                 processData();
-                // Reset countdown timer after successful fetch
-                if (serverCacheAge) syncWithServer();
             } catch (err) {
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('error').style.display = 'block';
@@ -725,15 +723,23 @@
             return mins + ':' + (secs < 10 ? '0' : '') + secs;
         }
 
+        let isRefreshing = false;
+
         // Update countdown display
         function updateCountdown() {
             if (!nextRefreshTime) return;
             const remaining = Math.max(0, Math.ceil((nextRefreshTime - Date.now()) / 1000));
-            document.getElementById('cache-info').innerHTML = 'Auto-refresh in: ' + formatCountdown(remaining);
 
-            // Re-sync with server every 30 seconds to stay accurate
-            if (remaining % 30 === 0 && remaining > 0) {
-                syncWithServer();
+            if (remaining === 0 && !isRefreshing) {
+                // Countdown reached 0 - fetch new data
+                isRefreshing = true;
+                document.getElementById('cache-info').innerHTML = 'Refreshing...';
+                fetchAllData().then(() => {
+                    isRefreshing = false;
+                    syncWithServer();
+                });
+            } else if (!isRefreshing) {
+                document.getElementById('cache-info').innerHTML = 'Auto-refresh in: ' + formatCountdown(remaining);
             }
         }
 
@@ -744,11 +750,14 @@
                 if (resp.ok) {
                     const info = await resp.json();
                     if (info.auto_refresh && typeof info.next_refresh_in === 'number') {
-                        nextRefreshTime = Date.now() + (info.next_refresh_in * 1000);
+                        const seconds = Math.max(1, info.next_refresh_in); // At least 1 second
+                        nextRefreshTime = Date.now() + (seconds * 1000);
+                        updateCountdown();
                     }
                 }
             } catch (e) {
-                // Ignore sync errors
+                // Ignore sync errors, set a default
+                nextRefreshTime = Date.now() + (serverCacheAge || 5) * 60 * 1000;
             }
         }
 
@@ -789,9 +798,6 @@
         document.getElementById('version-filter').addEventListener('change', applyFilters);
         document.getElementById('search').addEventListener('input', applyFilters);
         document.getElementById('btn-fit').addEventListener('click', () => network && network.fit());
-
-        // Auto-refresh every 5 minutes
-        setInterval(fetchAllData, 5 * 60 * 1000);
 
         checkServer();
         fetchAllData();
