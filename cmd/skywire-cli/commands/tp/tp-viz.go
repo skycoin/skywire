@@ -29,9 +29,9 @@ var (
 func init() {
 	vizCmd.Flags().StringVarP(&vizAddr, "addr", "a", "127.0.0.1", "address to bind to")
 	vizCmd.Flags().IntVarP(&vizPort, "port", "p", 8080, "port to listen on")
-	vizCmd.Flags().StringVar(&vizCacheFile, "cache", filepath.Join(os.TempDir(), "tpviz-tpd.json"), "TPD cache file location")
-	vizCmd.Flags().StringVar(&vizCacheFileUT, "cache-ut", filepath.Join(os.TempDir(), "tpviz-ut.json"), "uptime tracker cache file location")
-	vizCmd.Flags().StringVar(&vizCacheFileSD, "cache-sd", filepath.Join(os.TempDir(), "tpviz-sd.json"), "service discovery cache file location")
+	vizCmd.Flags().StringVar(&vizCacheFile, "cache", filepath.Join(os.TempDir(), "tpd.json"), "TPD cache file location")
+	vizCmd.Flags().StringVar(&vizCacheFileUT, "cache-ut", filepath.Join(os.TempDir(), "ut.json"), "uptime tracker cache file location")
+	vizCmd.Flags().StringVar(&vizCacheFileSD, "cache-sd", filepath.Join(os.TempDir(), "sd.json"), "service discovery cache file location")
 	vizCmd.Flags().IntVarP(&vizCacheMaxAge, "max-age", "m", 5, "update cache file if older than n minutes")
 	vizCmd.Flags().StringVar(&vizTPDURL, "tpd-url", deployment.Prod.TransportDiscovery, "transport discovery URL")
 	vizCmd.Flags().StringVarP(&vizUTURL, "ut-url", "w", deployment.Prod.UptimeTracker, "uptime tracker URL")

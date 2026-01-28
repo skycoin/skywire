@@ -52,9 +52,9 @@ func DefaultConfig() Config {
 	return Config{
 		Addr:        "127.0.0.1",
 		Port:        8080,
-		CacheFile:   filepath.Join(os.TempDir(), "tpviz-tpd.json"),
-		CacheFileUT: filepath.Join(os.TempDir(), "tpviz-ut.json"),
-		CacheFileSD: filepath.Join(os.TempDir(), "tpviz-sd.json"),
+		CacheFile:   filepath.Join(os.TempDir(), "tpd.json"),
+		CacheFileUT: filepath.Join(os.TempDir(), "ut.json"),
+		CacheFileSD: filepath.Join(os.TempDir(), "sd.json"),
 		CacheMaxAge: 5,
 		TPDURL:      deployment.Prod.TransportDiscovery,
 		UTURL:       deployment.Prod.UptimeTracker,
@@ -149,23 +149,34 @@ func (s *Server) handleUptimes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
-	// Fetch all service types and combine them
+	// Try to use cached SD data first
+	if s.config.CacheFileSD != "" && !s.config.NoCache {
+		data, err := s.getSDData()
+		if err == nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Write([]byte(data)) //nolint:errcheck,gosec
+			return
+		}
+	}
+
+	// Fallback: Fetch all service types and combine them
 	services := make(map[string]ServiceInfo)
 
 	// Fetch proxy services
-	proxyData, err := s.getData("", s.config.SDURL+"/api/services?type="+servicedisc.ServiceTypeProxy)
+	proxyData, err := fetchURL(s.config.SDURL + "/api/services?type=" + servicedisc.ServiceTypeProxy)
 	if err == nil {
 		s.parseServices(proxyData, "proxy", services)
 	}
 
 	// Fetch VPN services
-	vpnData, err := s.getData("", s.config.SDURL+"/api/services?type="+servicedisc.ServiceTypeVPN)
+	vpnData, err := fetchURL(s.config.SDURL + "/api/services?type=" + servicedisc.ServiceTypeVPN)
 	if err == nil {
 		s.parseServices(vpnData, "vpn", services)
 	}
 
 	// Fetch visor services
-	visorData, err := s.getData("", s.config.SDURL+"/api/services?type="+servicedisc.ServiceTypeVisor)
+	visorData, err := fetchURL(s.config.SDURL + "/api/services?type=" + servicedisc.ServiceTypeVisor)
 	if err == nil {
 		s.parseServices(visorData, "visor", services)
 	}
@@ -180,6 +191,30 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Write(result) //nolint:errcheck,gosec
+}
+
+// getSDData gets service discovery data from cache or fetches fresh
+func (s *Server) getSDData() (string, error) {
+	s.cacheMu.RLock()
+	info, err := os.Stat(s.config.CacheFileSD)
+	if err != nil {
+		s.cacheMu.RUnlock()
+		return "", err
+	}
+
+	// Check if cache is too old
+	if time.Since(info.ModTime()).Minutes() > float64(s.config.CacheMaxAge) {
+		s.cacheMu.RUnlock()
+		// Trigger refresh in background
+		go s.refreshSDCache()
+		// Still return stale data for now
+	} else {
+		s.cacheMu.RUnlock()
+	}
+
+	s.cacheMu.RLock()
+	defer s.cacheMu.RUnlock()
+	return readFile(s.config.CacheFileSD)
 }
 
 // ServiceInfo holds service information for a visor
@@ -310,6 +345,57 @@ func (s *Server) refreshCache() {
 		s.cacheMu.Unlock()
 		fmt.Printf("Auto-refreshed cache: %s\n", cacheFile)
 	}
+
+	// Refresh service discovery cache (combined from multiple service types)
+	s.refreshSDCache()
+}
+
+// refreshSDCache refreshes the service discovery cache
+func (s *Server) refreshSDCache() {
+	if s.config.CacheFileSD == "" {
+		return
+	}
+
+	// Check if file needs refresh
+	info, err := os.Stat(s.config.CacheFileSD)
+	if err == nil && time.Since(info.ModTime()).Minutes() <= float64(s.config.CacheMaxAge) {
+		return // File is fresh enough
+	}
+
+	// Fetch all service types and combine them
+	services := make(map[string]ServiceInfo)
+
+	// Fetch proxy services
+	proxyData, err := fetchURL(s.config.SDURL + "/api/services?type=" + servicedisc.ServiceTypeProxy)
+	if err == nil {
+		s.parseServices(proxyData, "proxy", services)
+	}
+
+	// Fetch VPN services
+	vpnData, err := fetchURL(s.config.SDURL + "/api/services?type=" + servicedisc.ServiceTypeVPN)
+	if err == nil {
+		s.parseServices(vpnData, "vpn", services)
+	}
+
+	// Fetch visor services
+	visorData, err := fetchURL(s.config.SDURL + "/api/services?type=" + servicedisc.ServiceTypeVisor)
+	if err == nil {
+		s.parseServices(visorData, "visor", services)
+	}
+
+	// Convert to JSON and save
+	result, err := json.Marshal(services)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Auto-refresh SD failed to marshal: %v\n", err)
+		return
+	}
+
+	s.cacheMu.Lock()
+	if err := os.WriteFile(s.config.CacheFileSD, result, 0644); err != nil { //nolint:gosec
+		fmt.Fprintf(os.Stderr, "Warning: Failed to write SD cache file %s: %v\n", s.config.CacheFileSD, err)
+	}
+	s.cacheMu.Unlock()
+	fmt.Printf("Auto-refreshed cache: %s\n", s.config.CacheFileSD)
 }
 
 // startAutoRefresh starts the auto-refresh goroutine
@@ -351,6 +437,7 @@ func (s *Server) ListenAndServe() error {
 	fmt.Printf("Cache files:\n")
 	fmt.Printf("  TPD: %s\n", s.config.CacheFile)
 	fmt.Printf("  UT:  %s\n", s.config.CacheFileUT)
+	fmt.Printf("  SD:  %s\n", s.config.CacheFileSD)
 	fmt.Printf("Cache max age: %d minutes\n", s.config.CacheMaxAge)
 	fmt.Printf("TPD URL: %s\n", s.config.TPDURL)
 	fmt.Printf("UT URL:  %s\n", s.config.UTURL)
