@@ -137,6 +137,7 @@
                     </div>
                     <div class="control-group">
                         <label><input type="checkbox" id="show-services"> Highlight Services</label>
+                        <label><input type="checkbox" id="show-flags"> Show Country Flags</label>
                     </div>
                     <div class="control-group">
                         <label for="version-filter">Version</label>
@@ -381,6 +382,16 @@
             }
         }
 
+        // Convert ISO country code to flag emoji (e.g., "US" -> "🇺🇸")
+        function countryToFlag(countryCode) {
+            if (!countryCode || countryCode.length !== 2) return '';
+            const code = countryCode.toUpperCase();
+            // Convert each letter to regional indicator symbol
+            const first = 0x1F1E6 + (code.charCodeAt(0) - 65);
+            const second = 0x1F1E6 + (code.charCodeAt(1) - 65);
+            return String.fromCodePoint(first, second);
+        }
+
         // Extract base version (before hyphen), e.g., "v1.3.33-abc" -> "v1.3.33"
         function getBaseVersion(version) {
             if (!version) return '';
@@ -527,11 +538,15 @@
             populateVisorList(visors);
 
             const maxConn = Math.max(...Array.from(visors.values()).map(v => v.connections));
+            const showFlags = document.getElementById('show-flags').checked;
             const nodes = Array.from(visors.values()).map(v => {
                 const color = getNodeColor(v);
                 const status = getVisorStatus(v.id);
                 const svcInfo = visorServices[v.id];
                 const version = visorVersions[v.id] || '';
+                const country = svcInfo ? svcInfo.country : '';
+                const flag = countryToFlag(country);
+
                 let title = v.id + '\nTransports: ' + v.connections + '\nStatus: ' + status;
                 if (version) {
                     title += '\nVersion: ' + version;
@@ -539,19 +554,26 @@
                 if (svcInfo && svcInfo.services.length > 0) {
                     title += '\nServices: ' + svcInfo.services.join(', ');
                 }
-                if (svcInfo && svcInfo.country) {
-                    title += '\nCountry: ' + svcInfo.country;
+                if (country) {
+                    title += '\nCountry: ' + country;
                 }
+
+                // Determine node display based on flag setting
+                const useFlag = showFlags && flag;
+                const nodeSize = 5 + (v.connections / maxConn) * 25;
 
                 return {
                     id: v.id,
-                    label: v.id.substring(0, 8),
+                    label: useFlag ? flag : v.id.substring(0, 8),
                     title: title,
-                    size: 5 + (v.connections / maxConn) * 25,
+                    size: useFlag ? nodeSize * 1.5 : nodeSize,
+                    shape: useFlag ? 'text' : 'dot',
+                    font: useFlag ? { size: Math.max(16, nodeSize * 1.2), color: '#fff' } : { size: 10, color: '#aaa' },
                     color: { background: color.background, border: color.border, highlight: { background: '#e94560', border: '#ff6b6b' } },
                     connections: v.connections,
                     status: status,
                     version: version,
+                    country: country,
                     mass: getVersionMass(version),
                     borderWidth: status === 'offline' ? 3 : 2
                 };
@@ -684,6 +706,7 @@
             const showOffline = document.getElementById('show-offline').checked;
             const showUnknown = document.getElementById('show-unknown').checked;
             const showServices = document.getElementById('show-services').checked;
+            const showFlags = document.getElementById('show-flags').checked;
             const searchTerm = document.getElementById('search').value.toLowerCase();
             const versionFilter = document.getElementById('version-filter').value;
 
@@ -708,7 +731,19 @@
                 if (!visible) hiddenNodes.add(node.id);
 
                 const color = getNodeColor({ id: node.id, connections: node.connections });
-                nodeUpdates.push({ id: node.id, hidden: !visible, color: { background: color.background, border: color.border, highlight: { background: '#e94560', border: '#ff6b6b' } } });
+                const svcInfo = visorServices[node.id];
+                const country = svcInfo ? svcInfo.country : '';
+                const flag = countryToFlag(country);
+                const useFlag = showFlags && flag;
+
+                nodeUpdates.push({
+                    id: node.id,
+                    hidden: !visible,
+                    label: useFlag ? flag : node.id.substring(0, 8),
+                    shape: useFlag ? 'text' : 'dot',
+                    font: useFlag ? { size: Math.max(16, node.size * 1.2), color: '#fff' } : { size: 10, color: '#aaa' },
+                    color: { background: color.background, border: color.border, highlight: { background: '#e94560', border: '#ff6b6b' } }
+                });
             });
             nodesDataset.update(nodeUpdates);
 
@@ -845,6 +880,7 @@
         document.getElementById('show-offline').addEventListener('change', applyFilters);
         document.getElementById('show-unknown').addEventListener('change', applyFilters);
         document.getElementById('show-services').addEventListener('change', () => { applyFilters(); updateLegend(); });
+        document.getElementById('show-flags').addEventListener('change', applyFilters);
         document.getElementById('version-filter').addEventListener('change', applyFilters);
         document.getElementById('search').addEventListener('input', applyFilters);
         document.getElementById('btn-fit').addEventListener('click', () => network && network.fit());
