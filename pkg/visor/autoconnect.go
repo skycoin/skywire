@@ -55,24 +55,6 @@ func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager,
 
 // Run implements Autoconnector interface
 func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
-	// Wait for a random interval between 0 and 5 minutes before starting public autoconnect
-	const maxDelaySeconds = 5 * 60 // 5 minutes
-
-	var randomDelaySeconds int
-	randomDelaySeconds, err = randInt(0, maxDelaySeconds)
-	if err != nil {
-		a.log.WithError(err).Warn("Failed to generate secure random delay; falling back to 0")
-		randomDelaySeconds = 0
-	}
-	randomDelay := time.Duration(randomDelaySeconds) * time.Second
-	a.log.Debugln("Waiting for a random interval before starting public autoconnect:", randomDelay)
-
-	select {
-	case <-ctx.Done():
-		return context.Canceled
-	case <-time.After(randomDelay):
-	}
-
 	publicServiceTicker := time.NewTicker(PublicServiceDelay)
 
 	for {
