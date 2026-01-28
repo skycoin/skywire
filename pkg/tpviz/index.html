@@ -141,6 +141,7 @@
         let network = null, allData = null, uptimeData = null, servicesData = null;
         let nodesDataset = null, edgesDataset = null, visorConnections = {};
         let onlineVisors = new Set(), offlineVisors = new Set(), visorServices = {}, visorVersions = {};
+        let nextRefreshTime = null, countdownInterval = null, serverCacheAge = null;
 
         const colors = { stcpr: '#00d9a5', sudph: '#00b4d8', dmsg: '#ffd166' };
 
@@ -171,6 +172,8 @@
                 }
 
                 processData();
+                // Reset countdown timer after successful fetch
+                if (serverCacheAge) resetRefreshTimer();
             } catch (err) {
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('error').style.display = 'block';
@@ -527,17 +530,44 @@
             }
         }
 
+        // Format seconds as mm:ss
+        function formatCountdown(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return mins + ':' + (secs < 10 ? '0' : '') + secs;
+        }
+
+        // Update countdown display
+        function updateCountdown() {
+            if (!nextRefreshTime) return;
+            const remaining = Math.max(0, Math.ceil((nextRefreshTime - Date.now()) / 1000));
+            let cacheInfo = 'Cache max age: ' + serverCacheAge + ' min';
+            cacheInfo += '<br>Auto-refresh in: ' + formatCountdown(remaining);
+            document.getElementById('cache-info').innerHTML = cacheInfo;
+        }
+
+        // Reset refresh timer (called after each data fetch)
+        function resetRefreshTimer() {
+            nextRefreshTime = Date.now() + 5 * 60 * 1000;
+            if (!countdownInterval) {
+                countdownInterval = setInterval(updateCountdown, 1000);
+            }
+            updateCountdown();
+        }
+
         // Check if running from Go server and show cache info
         async function checkServer() {
             try {
                 const resp = await fetch('/health');
                 if (resp.ok) {
                     const info = await resp.json();
+                    serverCacheAge = info.cache_age;
                     let cacheInfo = 'Cache max age: ' + info.cache_age + ' min';
                     if (info.auto_refresh) {
-                        cacheInfo += '<br>Auto-refresh: enabled';
+                        resetRefreshTimer();
+                    } else {
+                        document.getElementById('cache-info').innerHTML = cacheInfo;
                     }
-                    document.getElementById('cache-info').innerHTML = cacheInfo;
                 }
             } catch (e) {
                 document.getElementById('cache-info').innerHTML = 'Direct mode (no local caching)';
