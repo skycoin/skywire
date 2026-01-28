@@ -45,8 +45,8 @@ func NewClient(eventSubs *appevent.Subscriber) *Client {
 	if err != nil {
 		log.WithError(err).Fatal("Failed to obtain proc config.")
 	}
-	// Add app name to logger for identification
-	appLog := log.WithField("_", conf.AppName)
+	// Add app name to logger for identification (uses _module key for bracket display)
+	appLog := log.WithField("_module", conf.AppName)
 	client, err := NewClientFromConfig(appLog, conf, eventSubs)
 	if err != nil {
 		log.WithError(err).Panic("Failed to create app client.")
