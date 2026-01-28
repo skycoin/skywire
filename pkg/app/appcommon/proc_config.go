@@ -93,6 +93,7 @@ type ProcConfig struct {
 }
 
 // ProcConfigFromEnv obtains a ProcConfig from the associated env variable, returning an error if any.
+// For internal apps, this also signals that the config has been read, allowing the next app to start.
 func ProcConfigFromEnv() (ProcConfig, error) {
 	v, ok := os.LookupEnv(EnvProcConfig)
 	if !ok {
@@ -102,6 +103,8 @@ func ProcConfigFromEnv() (ProcConfig, error) {
 	if err := json.Unmarshal([]byte(v), &conf); err != nil {
 		return ProcConfig{}, fmt.Errorf("invalid %s env value: %w", EnvProcConfig, err)
 	}
+	// Signal that config has been read (for internal apps synchronization)
+	signalConfigRead(conf.ProcKey)
 	return conf, nil
 }
 
@@ -171,6 +174,12 @@ func (c *ProcConfig) encodeJSON() []byte {
 var (
 	inProcessConnsMu sync.RWMutex
 	inProcessConns   = make(map[ProcKey]net.Conn)
+
+	// internalAppStartMu serializes internal app startup to prevent env var races
+	internalAppStartMu sync.Mutex
+	// configReadDones tracks channels for signaling when config has been read
+	configReadDones   = make(map[ProcKey]chan struct{})
+	configReadDonesMu sync.Mutex
 )
 
 // RegisterInProcessConn registers a net.Conn for an in-process app by its ProcKey.
@@ -192,4 +201,42 @@ func UnregisterInProcessConn(key ProcKey) {
 	inProcessConnsMu.Lock()
 	defer inProcessConnsMu.Unlock()
 	delete(inProcessConns, key)
+}
+
+// AcquireInternalAppStart acquires the lock for starting an internal app.
+// This must be called before setting env vars for internal apps.
+// Returns a channel that should be waited on after starting the app goroutine.
+func AcquireInternalAppStart(key ProcKey) chan struct{} {
+	internalAppStartMu.Lock()
+
+	configReadDonesMu.Lock()
+	done := make(chan struct{})
+	configReadDones[key] = done
+	configReadDonesMu.Unlock()
+
+	return done
+}
+
+// ReleaseInternalAppStart releases the lock after the app has read its config.
+// The done channel should be waited on before calling this.
+func ReleaseInternalAppStart(key ProcKey) {
+	configReadDonesMu.Lock()
+	delete(configReadDones, key)
+	configReadDonesMu.Unlock()
+
+	internalAppStartMu.Unlock()
+}
+
+// signalConfigRead signals that the config for the given ProcKey has been read.
+// Called internally by ProcConfigFromEnv.
+func signalConfigRead(key ProcKey) {
+	configReadDonesMu.Lock()
+	defer configReadDonesMu.Unlock()
+	if ch, ok := configReadDones[key]; ok {
+		select {
+		case <-ch: // Already closed
+		default:
+			close(ch)
+		}
+	}
 }
