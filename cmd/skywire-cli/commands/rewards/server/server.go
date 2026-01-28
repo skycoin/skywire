@@ -184,17 +184,37 @@ func server(e error) {
 			c.Writer.Flush()
 		})
 
+		// Create tpviz server with file caching (same as standalone skywire cli tp viz)
+		tpvizCfg := tpviz.DefaultConfig()
+		tpvizCfg.CacheFile = filepath.Join(wd, "tpd.json")
+		tpvizCfg.CacheFileUT = filepath.Join(wd, "ut.json")
+		tpvizCfg.CacheFileSD = filepath.Join(wd, "sd.json")
+		tpvizServer := tpviz.NewServer(tpvizCfg)
+		tpvizServer.Start() // Initialize cache and start auto-refresh
+
+		// Delegate /api/* and /health to tpviz server (uses file caching to avoid rate limits)
+		tpvizHandler := tpvizServer.Handler()
+		r1.GET("/api/transports", gin.WrapH(tpvizHandler))
+		r1.GET("/api/uptimes", gin.WrapH(tpvizHandler))
+		r1.GET("/api/services", gin.WrapH(tpvizHandler))
+		r1.GET("/health", gin.WrapH(tpvizHandler))
+
 		r1.GET("/transport-graph", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
-			// Use shared tpviz package with rewards server nav links
+			// Use full embedded index.html with nav links
 			navLinks := []tpviz.NavLink{
 				{URL: "/", Label: "fiber"},
 				{URL: "/skycoin-rewards", Label: "rewards"},
 				{URL: "/stats", Label: "stats"},
 			}
-			c.Writer.Write([]byte(tpviz.GetTransportGraphHTMLWithNavLinks("", navLinks))) //nolint:errcheck,gosec
+			html, err := tpviz.GetEmbeddedIndexWithNavLinks(navLinks)
+			if err != nil {
+				c.Writer.Write([]byte("Error loading transport graph: " + err.Error())) //nolint:errcheck,gosec
+				return
+			}
+			c.Writer.Write([]byte(html)) //nolint:errcheck,gosec
 		})
 		r1.GET("/log-collection", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")
