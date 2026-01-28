@@ -754,6 +754,7 @@
             const options = {
                 nodes: { shape: 'dot', font: { size: 10, color: '#aaa' }, borderWidth: 2 },
                 edges: { smooth: { type: 'continuous', roundness: 0.5 } },
+                layout: { improvedLayout: false },
                 physics: { stabilization: { iterations: 100, fit: true }, barnesHut: { gravitationalConstant: -3000, springConstant: 0.001, springLength: 200 } },
                 interaction: { hover: true, tooltipDelay: 100, selectConnectedEdges: false }
             };
