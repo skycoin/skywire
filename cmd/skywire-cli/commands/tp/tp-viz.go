@@ -13,16 +13,16 @@ import (
 )
 
 var (
-	vizAddr         string
-	vizPort         int
-	vizCacheFile    string
-	vizCacheFileUT  string
-	vizCacheFileSD  string
-	vizCacheMaxAge  int
-	vizTPDURL       string
-	vizUTURL        string
-	vizSDURL        string
-	vizNoCache      bool
+	vizAddr          string
+	vizPort          int
+	vizCacheFile     string
+	vizCacheFileUT   string
+	vizCacheFileSD   string
+	vizCacheMaxAge   int
+	vizTPDURL        string
+	vizUTURL         string
+	vizSDURL         string
+	vizNoCache       bool
 	vizNoAutoRefresh bool
 )
 
