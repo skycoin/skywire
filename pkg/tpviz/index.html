@@ -57,6 +57,7 @@
         .status-unknown { background: #ffd166; }
         .selected-services { margin-top: 10px; }
         .selected-country { color: #888; font-size: 0.9em; margin-top: 5px; }
+        .selected-version { color: #0f9b8e; font-size: 0.9em; margin-top: 5px; font-family: monospace; }
     </style>
 </head>
 <body>
@@ -112,6 +113,7 @@
                 <h2>Selected Visor</h2>
                 <div id="selected-pk"></div>
                 <div id="selected-status"></div>
+                <div id="selected-version" class="selected-version"></div>
                 <div id="selected-country" class="selected-country"></div>
                 <div id="selected-services" class="selected-services"></div>
                 <div class="stat"><span class="stat-label">Connections</span><span class="stat-value" id="selected-conn-count">-</span></div>
@@ -132,7 +134,7 @@
 
         let network = null, allData = null, uptimeData = null, servicesData = null;
         let nodesDataset = null, edgesDataset = null, visorConnections = {};
-        let onlineVisors = new Set(), offlineVisors = new Set(), visorServices = {};
+        let onlineVisors = new Set(), offlineVisors = new Set(), visorServices = {}, visorVersions = {};
 
         const colors = { stcpr: '#00d9a5', sudph: '#00b4d8', dmsg: '#ffd166' };
 
@@ -173,6 +175,7 @@
         function processUptimeData() {
             onlineVisors.clear();
             offlineVisors.clear();
+            visorVersions = {};
             if (!uptimeData) return;
 
             uptimeData.forEach(entry => {
@@ -180,6 +183,9 @@
                     onlineVisors.add(entry.pk);
                 } else {
                     offlineVisors.add(entry.pk);
+                }
+                if (entry.version) {
+                    visorVersions[entry.pk] = entry.version;
                 }
             });
         }
@@ -276,7 +282,11 @@
                 const color = getNodeColor(v);
                 const status = getVisorStatus(v.id);
                 const svcInfo = visorServices[v.id];
+                const version = visorVersions[v.id] || '';
                 let title = v.id + '\nConnections: ' + v.connections + '\nStatus: ' + status;
+                if (version) {
+                    title += '\nVersion: ' + version;
+                }
                 if (svcInfo && svcInfo.services.length > 0) {
                     title += '\nServices: ' + svcInfo.services.join(', ');
                 }
@@ -326,6 +336,7 @@
             const connections = visorConnections[nodeId] || [];
             const status = getVisorStatus(nodeId);
             const svcInfo = visorServices[nodeId];
+            const version = visorVersions[nodeId];
 
             document.getElementById('selected-pk').textContent = nodeId;
             document.getElementById('selected-conn-count').textContent = connections.length;
@@ -333,6 +344,15 @@
             // Status display
             const statusEl = document.getElementById('selected-status');
             statusEl.innerHTML = '<span class="status-dot status-' + status + '" style="display:inline-block;vertical-align:middle;margin-right:5px;"></span>' + status.charAt(0).toUpperCase() + status.slice(1);
+
+            // Version display
+            const versionEl = document.getElementById('selected-version');
+            if (version) {
+                versionEl.textContent = 'Version: ' + version;
+                versionEl.style.display = 'block';
+            } else {
+                versionEl.style.display = 'none';
+            }
 
             // Country display
             const countryEl = document.getElementById('selected-country');
@@ -355,7 +375,9 @@
             document.getElementById('conn-list').innerHTML = connections.sort((a, b) => a.type.localeCompare(b.type))
                 .map(c => {
                     const cStatus = getVisorStatus(c.pk);
-                    return '<div class="conn-item"><span class="conn-type ' + c.type + '">' + c.type.toUpperCase() + '</span><span class="status-dot status-' + cStatus + '" style="display:inline-block;width:8px;height:8px;margin-right:5px;"></span>' + c.pk.substring(0, 16) + '...</div>';
+                    const cVersion = visorVersions[c.pk];
+                    let versionTag = cVersion ? ' <span style="color:#0f9b8e;font-size:0.8em;">' + cVersion + '</span>' : '';
+                    return '<div class="conn-item"><span class="conn-type ' + c.type + '">' + c.type.toUpperCase() + '</span><span class="status-dot status-' + cStatus + '" style="display:inline-block;width:8px;height:8px;margin-right:5px;"></span>' + c.pk.substring(0, 16) + '...' + versionTag + '</div>';
                 }).join('');
 
             info.classList.add('visible');
