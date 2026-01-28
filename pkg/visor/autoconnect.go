@@ -55,24 +55,6 @@ func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager,
 
 // Run implements Autoconnector interface
 func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
-	// Wait for a random interval between 0 and 5 minutes before starting public autoconnect
-	const maxDelaySeconds = 5 * 60 // 5 minutes
-
-	var randomDelaySeconds int
-	randomDelaySeconds, err = randInt(0, maxDelaySeconds)
-	if err != nil {
-		a.log.WithError(err).Warn("Failed to generate secure random delay; falling back to 0")
-		randomDelaySeconds = 0
-	}
-	randomDelay := time.Duration(randomDelaySeconds) * time.Second
-	a.log.Debugln("Waiting for a random interval before starting public autoconnect:", randomDelay)
-
-	select {
-	case <-ctx.Done():
-		return context.Canceled
-	case <-time.After(randomDelay):
-	}
-
 	publicServiceTicker := time.NewTicker(PublicServiceDelay)
 
 	for {
@@ -109,32 +91,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			if !localSupportsSUDPH && !localSupportsSTCPR {
 				a.log.Warn("No supported network types available locally (SUDPH and STCPR both unavailable)")
 				continue
-			}
-
-			// Get keys available for SUDPH transport (only if locally supported)
-			var sudphKeys map[cipher.PubKey][]string
-			if localSupportsSUDPH {
-				sudphKeys, err = v.arClient.TransportsType(ctx, tptypes.SUDPH)
-				if err != nil {
-					a.log.WithError(err).Warn("could not fetch keys from address resolver for SUDPH")
-					sudphKeys = map[cipher.PubKey][]string{}
-				}
-			} else {
-				a.log.Debug("SUDPH not supported locally, skipping")
-				sudphKeys = map[cipher.PubKey][]string{}
-			}
-
-			// Get keys available for STCPR transport (only if locally supported)
-			var stcprKeys map[cipher.PubKey][]string
-			if localSupportsSTCPR {
-				stcprKeys, err = v.arClient.TransportsType(ctx, tptypes.STCPR)
-				if err != nil {
-					a.log.WithError(err).Warn("could not fetch keys from address resolver for STCPR")
-					stcprKeys = map[cipher.PubKey][]string{}
-				}
-			} else {
-				a.log.Debugln("STCPR not supported locally, skipping")
-				stcprKeys = map[cipher.PubKey][]string{}
 			}
 
 			// Check if this visor is configured as public
@@ -197,9 +153,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 						if _, seen := absent2Set[newPK]; seen {
 							continue
 						}
-						if _, ok := sudphKeys[newPK]; !ok {
-							continue
-						}
 
 						absent2Set[newPK] = struct{}{}
 						absent2 = append(absent2, newPK)
@@ -242,13 +195,17 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					continue
 				}
 
+				// Determine transport type based on visor category:
+				// - Public visors (from service discovery) -> STCPR (they have public IPs)
+				// - Non-public visors (discovered via transport data) -> SUDPH
 				var netType tptypes.Type
-				if _, ok := stcprKeys[pk]; ok {
+				isPublicVisor := a.isInList(pk, absent1)
+				if isPublicVisor && localSupportsSTCPR {
 					netType = tptypes.STCPR
-				} else if _, ok := sudphKeys[pk]; ok {
+				} else if localSupportsSUDPH {
 					netType = tptypes.SUDPH
 				} else {
-					a.log.WithField("pk", pk).Debugln("No supported network type found for visor")
+					a.log.WithField("pk", pk).Debugln("No supported network type available for visor")
 					continue
 				}
 
@@ -262,7 +219,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				// Hybrid approach for connection count checking:
 				// - For STCPR to public visors: get FRESH stats (critical bottleneck)
 				// - For everything else: use cached data (stale is acceptable)
-				isPublicVisor := a.isInList(pk, absent1)
 				var transportCount int
 				if netType == tptypes.STCPR && isPublicVisor {
 					// Fresh check for STCPR to public visors - these are most prone to overload
@@ -394,18 +350,6 @@ func (a *autoconnector) isInList(pk cipher.PubKey, list []cipher.PubKey) bool {
 		}
 	}
 	return false
-}
-
-// randInt returns a secure random integer in [min, max).
-func randInt(n, x int) (int, error) {
-	if n >= x {
-		return n, nil
-	}
-	nBig, err := rand.Int(rand.Reader, big.NewInt(int64(x-n)))
-	if err != nil {
-		return 0, err
-	}
-	return int(nBig.Int64()) + n, nil
 }
 
 // transportDiscoveryCache holds cached transport discovery data to reduce API calls

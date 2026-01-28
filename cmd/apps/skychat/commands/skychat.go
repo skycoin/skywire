@@ -42,6 +42,7 @@ var r = netutil.NewRetrier(nil, 50*time.Millisecond, netutil.DefaultMaxBackoff, 
 var (
 	addr     string
 	appCl    *app.Client
+	appLog   func(format string, args ...interface{}) // App logger function
 	clientCh chan string
 	conns    map[cipher.PubKey]net.Conn // Chat connections
 	connsMu  sync.Mutex
@@ -105,11 +106,13 @@ func RunSkychat(ctx context.Context, args []string) error {
 	appCl = app.NewClient(nil)
 	defer appCl.Close()
 
-	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		print(fmt.Sprintf("Failed to output build info: %v\n", err))
+	// Set up app logger
+	appLog = func(format string, args ...interface{}) {
+		appCl.Log().Infof(format, args...)
 	}
 
-	fmt.Println("Successfully started skychat.")
+	appLog("Build info: %s", buildinfo.Version())
+	appLog("Successfully started skychat.")
 
 	clientCh = make(chan string)
 	defer close(clientCh)
@@ -126,7 +129,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	if runtime.GOOS == "windows" {
 		ipcClient, err := ipc.StartClient(visorconfig.SkychatName, nil)
 		if err != nil {
-			print(fmt.Sprintf("Error creating ipc server for skychat client: %v\n", err))
+			appLog("Error creating ipc server for skychat client: %v", err)
 			setAppError(appCl, err)
 			return err
 		}
@@ -149,7 +152,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		url = "127.0.0.1:8001"
 	}
 
-	fmt.Println("Serving HTTP on", url)
+	appLog("Serving HTTP on %s", url)
 
 	if runtime.GOOS != "windows" {
 		termCh := make(chan os.Signal, 1)
@@ -182,7 +185,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	select {
 	case err := <-errCh:
 		if err != nil {
-			print(err.Error())
+			appLog("HTTP server error: %v", err)
 			setAppError(appCl, err)
 			return err
 		}
@@ -199,25 +202,25 @@ func RunSkychat(ctx context.Context, args []string) error {
 func listenLoop(appPort routing.Port) {
 	l, err := appCl.Listen(netType, appPort)
 	if err != nil {
-		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, appPort, err))
+		appLog("Error listening network %v on port %d: %v", netType, appPort, err)
 		setAppError(appCl, err)
 		return
 	}
 
 	for {
-		fmt.Println("Accepting skychat conn...")
+		appCl.Log().Debug("Accepting skychat conn...")
 		conn, err := l.Accept()
 		if err != nil {
-			print(fmt.Sprintf("Failed to accept conn: %v\n", err))
+			appLog("Failed to accept conn: %v", err)
 			return
 		}
-		fmt.Println("Accepted skychat conn")
+		appCl.Log().Debug("Accepted skychat conn")
 
 		raddr := conn.RemoteAddr().(appnet.Addr)
 		connsMu.Lock()
 		conns[raddr.PubKey] = conn
 		connsMu.Unlock()
-		fmt.Printf("Accepted skychat conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
+		appLog("Accepted skychat conn on %s from %s", conn.LocalAddr(), raddr.PubKey)
 
 		go handleConn(conn)
 	}
@@ -229,7 +232,7 @@ func handleConn(conn net.Conn) {
 		buf := make([]byte, 32*1024)
 		n, err := conn.Read(buf)
 		if err != nil {
-			fmt.Println("Failed to read packet:", err)
+			appLog("Failed to read packet: %v", err)
 			raddr := conn.RemoteAddr().(appnet.Addr)
 			connsMu.Lock()
 			delete(conns, raddr.PubKey)
@@ -239,13 +242,13 @@ func handleConn(conn net.Conn) {
 
 		clientMsg, err := json.Marshal(map[string]string{"sender": raddr.PubKey.Hex(), "message": string(buf[:n])})
 		if err != nil {
-			print(fmt.Sprintf("Failed to marshal json: %v\n", err))
+			appLog("Failed to marshal json: %v", err)
 		}
 		select {
 		case clientCh <- string(clientMsg):
-			fmt.Printf("Received and sent to ui: %s\n", clientMsg)
+			appCl.Log().Debugf("Received and sent to ui: %s", clientMsg)
 		default:
-			fmt.Printf("Received and trashed: %s\n", clientMsg)
+			appCl.Log().Debugf("Received and trashed: %s", clientMsg)
 		}
 	}
 }
@@ -329,7 +332,7 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 			}
 
 		case <-req.Context().Done():
-			fmt.Print("SSE connection were closed.")
+			appCl.Log().Debug("SSE connection was closed.")
 			return
 		}
 	}
@@ -346,18 +349,18 @@ func getFileSystem() http.FileSystem {
 func handleIPCSignal(client *ipc.Client) {
 	time.Sleep(5 * time.Second)
 	if client == nil {
-		print(fmt.Sprintln("Unable to create IPC Client: server is non-existent"))
+		appLog("Unable to create IPC Client: server is non-existent")
 		return
 	}
 	for {
 		m, err := client.Read()
 		if err != nil {
-			print(fmt.Sprintf("%s IPC received error: %v\n", visorconfig.SkychatName, err))
+			appLog("%s IPC received error: %v", visorconfig.SkychatName, err)
 		}
 
 		if m != nil {
 			if m.MsgType == visorconfig.IPCShutdownMessageType {
-				fmt.Println("Stopping " + visorconfig.SkychatName + " via IPC")
+				appLog("Stopping %s via IPC", visorconfig.SkychatName)
 				break
 			}
 		}
@@ -368,18 +371,18 @@ func handleIPCSignal(client *ipc.Client) {
 
 func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
-		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
+		appCl.Log().Errorf("Failed to set status %v: %v", status, err)
 	}
 }
 
 func setAppError(appCl *app.Client, appErr error) {
 	if err := appCl.SetError(appErr.Error()); err != nil {
-		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
+		appCl.Log().Errorf("Failed to set error %v: %v", appErr, err)
 	}
 }
 
 func setAppPort(appCl *app.Client, port routing.Port) {
 	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
+		appCl.Log().Errorf("Failed to set port %v: %v", port, err)
 	}
 }
