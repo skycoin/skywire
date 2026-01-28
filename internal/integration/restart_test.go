@@ -155,8 +155,8 @@ func TestRestart(t *testing.T) {
 			env.AddDefaultTransports(routerVisor, skychatVisors)
 
 			// Wait for skychat apps to be ready on both sender and receiver
-			senderApp := AppToRun{VisorHostName: tc.sender, AppName: "skychat"}
-			receiverApp := AppToRun{VisorHostName: tc.receiver, AppName: "skychat"}
+			senderApp := AppToRun{VisorHostName: tc.sender, AppName: "skychat", LauncherMode: "internal"}
+			receiverApp := AppToRun{VisorHostName: tc.receiver, AppName: "skychat", LauncherMode: "internal"}
 
 			// Wait for apps to be running before attempting to send messages
 			for _, app := range []AppToRun{senderApp, receiverApp} {

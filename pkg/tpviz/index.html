@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skywire Transport Discovery Visualizer</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background: #1a1a2e; color: #eee; }
+        #container { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
+        #sidebar { width: 320px; min-width: 200px; max-width: 600px; background: #16213e; padding: 15px; overflow-y: auto; border-right: 1px solid #0f3460; flex-shrink: 0; }
+        #resize-handle { width: 5px; background: #0f3460; cursor: col-resize; flex-shrink: 0; }
+        #resize-handle:hover { background: #e94560; }
+        #network { flex: 1; background: #1a1a2e; position: relative; overflow: hidden; min-width: 0; }
+        h1 { font-size: 1.2em; margin-bottom: 15px; color: #e94560; }
+
+        /* Collapsible sections */
+        .section { margin-bottom: 10px; border: 1px solid #0f3460; border-radius: 4px; overflow: hidden; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #0f3460; cursor: pointer; user-select: none; }
+        .section-header:hover { background: #1a3a5c; }
+        .section-title { font-size: 0.9em; font-weight: 600; color: #0f9b8e; }
+        .section-toggle { color: #888; font-size: 0.8em; transition: transform 0.2s; }
+        .section.collapsed .section-toggle { transform: rotate(-90deg); }
+        .section-content { padding: 10px 12px; display: block; }
+        .section.collapsed .section-content { display: none; }
+
+        .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #0f3460; font-size: 0.85em; }
+        .stat:last-child { border-bottom: none; }
+        .stat-label { color: #aaa; }
+        .stat-value { font-weight: bold; }
+
+        .legend-item { display: flex; align-items: center; margin: 6px 0; font-size: 0.85em; }
+        .legend-color { width: 24px; height: 4px; margin-right: 8px; border-radius: 2px; }
+        .stcpr { background: #00d9a5; }
+        .sudph { background: #00b4d8; }
+        .dmsg { background: #ffd166; }
+        .status-item { display: flex; align-items: center; margin: 6px 0; font-size: 0.85em; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+        .status-online { background: #00d9a5; }
+        .status-offline { background: #e94560; border: 2px solid #fff; }
+        .status-unknown { background: #ffd166; }
+        .status-vpn { background: #9f6efc; }
+        .status-proxy { background: #ffa500; }
+
+        .control-group { margin: 8px 0; }
+        label { display: block; margin-bottom: 4px; color: #aaa; font-size: 0.85em; }
+        input[type="checkbox"] { margin-right: 6px; }
+        input[type="text"], select { width: 100%; padding: 6px 8px; background: #1a1a2e; border: 1px solid #0f3460; color: #eee; border-radius: 4px; font-size: 0.85em; }
+        input[type="text"]:focus, select:focus { outline: none; border-color: #e94560; }
+        button { width: 100%; padding: 8px; margin-top: 8px; background: #e94560; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
+        button:hover { background: #ff6b6b; }
+        button:disabled { background: #555; cursor: not-allowed; }
+
+        /* Visor list */
+        .visor-list { max-height: 300px; overflow-y: auto; margin-top: 8px; overflow-x: hidden; }
+        .visor-item { display: flex; flex-wrap: wrap; align-items: center; padding: 4px 6px; font-size: 0.7em; border-bottom: 1px solid #0f3460; cursor: pointer; gap: 2px; overflow: hidden; }
+        .visor-item:hover { background: #1a3a5c; }
+        .visor-item:last-child { border-bottom: none; }
+        .visor-item .v-flag { flex-shrink: 0; margin-right: 4px; font-size: 1.1em; }
+        .visor-item .v-pk { font-family: monospace; color: #0f9b8e; display: flex; overflow: hidden; min-width: 0; }
+        .visor-item .v-pk.offline { color: #e94560; }
+        .visor-item .v-pk.offline .pk-start, .visor-item .v-pk.offline .pk-end { color: #e94560; }
+        .visor-item .v-pk.unknown { background: rgba(233, 69, 96, 0.3); padding: 0 2px; border-radius: 2px; }
+        .visor-item .v-pk .pk-start { flex-shrink: 0; }
+        .visor-item .v-pk .pk-mid { flex-shrink: 1; overflow: hidden; text-overflow: clip; white-space: nowrap; }
+        .visor-item .v-pk .pk-end { flex-shrink: 0; }
+        .visor-item .v-pk .pk-ellipsis { display: none; flex-shrink: 0; color: #666; }
+        .visor-item .v-ver { color: #888; font-size: 0.9em; flex-shrink: 0; margin-left: auto; }
+        .visor-item .v-row2 { width: 100%; display: flex; align-items: center; margin-top: 2px; padding-left: 22px; font-size: 0.9em; }
+        .visor-item .v-col-ver { width: 42px; flex-shrink: 0; }
+        .visor-item .v-col-svc { width: 24px; flex-shrink: 0; text-align: center; }
+        .visor-item .v-col-tp { width: 32px; flex-shrink: 0; text-align: right; }
+        .visor-item .v-svc { font-size: 0.85em; padding: 0 4px; border-radius: 2px; font-weight: bold; }
+        .visor-item .v-svc.vpn { background: rgba(138, 43, 226, 0.4); color: #c9a8ff; }
+        .visor-item .v-svc.proxy { background: rgba(255, 165, 0, 0.4); color: #ffc966; }
+        .visor-item .v-svc.visor { background: rgba(50, 205, 50, 0.4); color: #7fff7f; }
+        .visor-item .v-tp { font-size: 0.85em; padding: 0 2px; border-radius: 2px; }
+        .visor-item .v-tp.stcpr { background: rgba(0, 217, 165, 0.3); color: #66ffdd; }
+        .visor-item .v-tp.sudph { background: rgba(0, 180, 216, 0.3); color: #66d9ff; }
+
+        #selected-info { margin-top: 10px; padding: 12px; background: #0f3460; border-radius: 4px; display: none; }
+        #selected-info.visible { display: block; }
+        #selected-info h3 { font-size: 0.9em; color: #0f9b8e; margin-bottom: 8px; }
+        #selected-pk { font-family: monospace; font-size: 0.65em; word-break: break-all; color: #e94560; margin: 8px 0; }
+        .conn-list { max-height: 150px; overflow-y: auto; font-size: 0.8em; }
+        .conn-item { padding: 3px 0; border-bottom: 1px solid #1a1a2e; font-family: monospace; font-size: 0.8em; }
+        .conn-type { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 0.75em; margin-right: 4px; }
+        .conn-type.stcpr { background: rgba(0, 217, 165, 0.3); color: #00d9a5; }
+        .conn-type.sudph { background: rgba(0, 180, 216, 0.3); color: #00b4d8; }
+        .conn-type.dmsg { background: rgba(255, 209, 102, 0.3); color: #ffd166; }
+
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+        .spinner { width: 50px; height: 50px; border: 3px solid #0f3460; border-top-color: #e94560; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #error { color: #e94560; padding: 20px; text-align: center; display: none; }
+        #cache-info { margin-top: 8px; font-size: 0.75em; color: #888; }
+        .service-badge { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 0.7em; margin: 1px; }
+        .service-badge.proxy { background: rgba(255, 165, 0, 0.3); color: #ffa500; }
+        .service-badge.vpn { background: rgba(138, 43, 226, 0.3); color: #9f6efc; }
+        .service-badge.visor { background: rgba(50, 205, 50, 0.3); color: #32cd32; }
+        .selected-services { margin-top: 8px; }
+        .selected-country { color: #888; font-size: 0.85em; margin-top: 4px; }
+        .selected-version { color: #0f9b8e; font-size: 0.85em; margin-top: 4px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="sidebar">
+            <h1>TPD Visualizer</h1>
+
+            <!-- TPD Statistics - expanded by default -->
+            <div class="section" id="section-tpd">
+                <div class="section-header" onclick="toggleSection('section-tpd')">
+                    <span class="section-title">Transport Discovery</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="stat"><span class="stat-label">Total Transports</span><span class="stat-value" id="total-transports">-</span></div>
+                    <div class="stat"><span class="stat-label">Unique Visors</span><span class="stat-value" id="total-visors">-</span></div>
+                    <div class="stat"><span class="stat-label">STCPR</span><span class="stat-value" id="count-stcpr">-</span></div>
+                    <div class="stat"><span class="stat-label">SUDPH</span><span class="stat-value" id="count-sudph">-</span></div>
+                    <div class="stat"><span class="stat-label">DMSG</span><span class="stat-value" id="count-dmsg">-</span></div>
+                    <div class="visor-list" id="visor-list"></div>
+                </div>
+            </div>
+
+            <!-- Uptime Tracker - collapsed by default -->
+            <div class="section collapsed" id="section-ut">
+                <div class="section-header" onclick="toggleSection('section-ut')">
+                    <span class="section-title">Uptime Tracker</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="stat"><span class="stat-label">Online</span><span class="stat-value" id="count-online" style="color:#00d9a5">-</span></div>
+                    <div class="stat"><span class="stat-label">Offline</span><span class="stat-value" id="count-offline" style="color:#e94560">-</span></div>
+                    <div class="stat"><span class="stat-label">Not in UT</span><span class="stat-value" id="count-unknown" style="color:#ffd166">-</span></div>
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;font-size:0.8em;color:#888;">Versions</div>
+                    <div id="version-stats"></div>
+                </div>
+            </div>
+
+            <!-- Filters & Legend - collapsed by default -->
+            <div class="section collapsed" id="section-filters">
+                <div class="section-header" onclick="toggleSection('section-filters')">
+                    <span class="section-title">Filters & Legend</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="control-group">
+                        <label><input type="checkbox" id="show-stcpr" checked> Show STCPR</label>
+                        <label><input type="checkbox" id="show-sudph" checked> Show SUDPH</label>
+                        <label><input type="checkbox" id="show-dmsg" checked> Show DMSG</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="show-online" checked> Show Online</label>
+                        <label><input type="checkbox" id="show-offline"> Show Offline</label>
+                        <label><input type="checkbox" id="show-unknown"> Show Unknown</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="show-services"> Highlight Services</label>
+                        <label><input type="checkbox" id="show-flags"> Show Country Flags</label>
+                    </div>
+                    <div class="control-group">
+                        <label for="version-filter">Version</label>
+                        <select id="version-filter">
+                            <option value="">All Versions</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="search">Search PK</label>
+                        <input type="text" id="search" placeholder="e.g. 027087fe">
+                    </div>
+                    <!-- Dynamic Legend -->
+                    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #0f3460;">
+                        <div style="font-size:0.8em;color:#888;margin-bottom:6px;">Legend</div>
+                        <div class="legend-item"><div class="legend-color stcpr"></div><span>STCPR (TCP)</span></div>
+                        <div class="legend-item"><div class="legend-color sudph"></div><span>SUDPH (UDP)</span></div>
+                        <div class="legend-item"><div class="legend-color dmsg"></div><span>DMSG</span></div>
+                        <div id="node-legend">
+                            <div class="status-item"><div class="status-dot status-online"></div><span>Online (in UT)</span></div>
+                            <div class="status-item"><div class="status-dot status-offline"></div><span>Offline (in UT)</span></div>
+                            <div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button id="btn-fit">Fit to Screen</button>
+            <div id="cache-info"></div>
+
+            <div id="selected-info">
+                <h3>Selected Visor</h3>
+                <div id="selected-pk"></div>
+                <div id="selected-status"></div>
+                <div id="selected-version" class="selected-version"></div>
+                <div id="selected-country" class="selected-country"></div>
+                <div id="selected-services" class="selected-services"></div>
+                <div class="stat"><span class="stat-label">Transports</span><span class="stat-value" id="selected-conn-count">-</span></div>
+                <h3 style="margin-top:10px;">Connected To</h3>
+                <div class="conn-list" id="conn-list"></div>
+            </div>
+        </div>
+        <div id="resize-handle"></div>
+        <div id="network">
+            <div id="loading"><div class="spinner"></div><div>Loading transport data...</div></div>
+            <div id="error"></div>
+        </div>
+    </div>
+    <script>
+        // Use local API endpoint when served from Go server
+        const API_BASE = window.location.hostname === '' || window.location.protocol === 'file:'
+            ? 'https://tpd.skywire.skycoin.com'
+            : '';
+
+        let network = null, allData = null, uptimeData = null, servicesData = null;
+        let nodesDataset = null, edgesDataset = null, visorConnections = {};
+        let onlineVisors = new Set(), offlineVisors = new Set(), visorServices = {}, visorVersions = {};
+        let nextRefreshTime = null, countdownInterval = null, serverCacheAge = null;
+
+        const colors = { stcpr: '#00d9a5', sudph: '#00b4d8', dmsg: '#ffd166' };
+        let selectedNodeId = null;
+
+        // Toggle collapsible sections
+        function toggleSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            section.classList.toggle('collapsed');
+        }
+
+        // Populate visor list in TPD section
+        function populateVisorList(visors) {
+            const list = document.getElementById('visor-list');
+            const sorted = Array.from(visors.values()).sort((a, b) => b.connections - a.connections);
+            list.innerHTML = sorted.map(v => {
+                const status = getVisorStatus(v.id);
+                const svcInfo = visorServices[v.id];
+                const country = svcInfo ? svcInfo.country : '';
+                const flag = countryToFlag(country);
+                const version = visorVersions[v.id] || '';
+                const verShort = version ? getBaseVersion(version).replace('v', '') : '';
+                const services = svcInfo ? svcInfo.services : [];
+
+                // Count transports by type (only STCPR and SUDPH)
+                const conns = visorConnections[v.id] || [];
+                const stcprCount = conns.filter(c => c.type === 'stcpr').length;
+                const sudphCount = conns.filter(c => c.type === 'sudph').length;
+
+                // Status class for PK text
+                const pkClass = status === 'offline' ? 'offline' : (status === 'unknown' ? 'unknown' : '');
+
+                // Split PK for middle truncation: first 8 chars + middle + last 8 chars
+                const pkStart = v.id.substring(0, 8);
+                const pkMid = v.id.substring(8, v.id.length - 8);
+                const pkEnd = v.id.substring(v.id.length - 8);
+
+                // Build row 1: flag/dot + PK (with truncation support)
+                let row1 = '<span class="v-flag">' + (flag || '●') + '</span>';
+                row1 += '<span class="v-pk ' + pkClass + '" title="' + v.id + '">';
+                row1 += '<span class="pk-start">' + pkStart + '</span>';
+                row1 += '<span class="pk-mid">' + pkMid + '</span>';
+                row1 += '<span class="pk-ellipsis">…</span>';
+                row1 += '<span class="pk-end">' + pkEnd + '</span>';
+                row1 += '</span>';
+
+                // Build row 2: version | proxy | vpn | visor | stcpr | sudph (table-like columns)
+                const hasProxy = services.includes('proxy');
+                const hasVpn = services.includes('vpn');
+                const hasVisor = services.includes('visor');
+
+                let row2 = '<div class="v-row2">';
+                row2 += '<span class="v-col-ver">' + (verShort ? '<span class="v-ver">' + verShort + '</span>' : '') + '</span>';
+                row2 += '<span class="v-col-svc">' + (hasProxy ? '<span class="v-svc proxy">P</span>' : '') + '</span>';
+                row2 += '<span class="v-col-svc">' + (hasVpn ? '<span class="v-svc vpn">V</span>' : '') + '</span>';
+                row2 += '<span class="v-col-svc">' + (hasVisor ? '<span class="v-svc visor">R</span>' : '') + '</span>';
+                row2 += '<span class="v-col-tp">' + (stcprCount > 0 ? '<span class="v-tp stcpr">S' + stcprCount + '</span>' : '') + '</span>';
+                row2 += '<span class="v-col-tp">' + (sudphCount > 0 ? '<span class="v-tp sudph">U' + sudphCount + '</span>' : '') + '</span>';
+                row2 += '</div>';
+
+                return '<div class="visor-item" onclick="focusVisor(\'' + v.id + '\')">' + row1 + row2 + '</div>';
+            }).join('');
+
+            // Update truncation display after rendering
+            requestAnimationFrame(updatePkTruncation);
+        }
+
+        // Update PK truncation display based on available space
+        function updatePkTruncation() {
+            document.querySelectorAll('.v-pk').forEach(pk => {
+                const mid = pk.querySelector('.pk-mid');
+                const ellipsis = pk.querySelector('.pk-ellipsis');
+                if (!mid || !ellipsis) return;
+
+                // Check if middle part is fully visible (scrollWidth > clientWidth means truncated)
+                const isTruncated = mid.scrollWidth > mid.clientWidth + 1;
+                ellipsis.style.display = isTruncated ? 'inline' : 'none';
+                mid.style.display = isTruncated ? 'none' : 'inline';
+            });
+        }
+
+        // Focus on a visor in the network
+        function focusVisor(pk) {
+            if (network) {
+                network.focus(pk, { scale: 1.5, animation: true });
+                network.selectNodes([pk]);
+                showNodeInfo(pk);
+            }
+        }
+
+        // Update legend based on highlight services checkbox
+        function updateLegend() {
+            const showServices = document.getElementById('show-services').checked;
+            const legendEl = document.getElementById('node-legend');
+            if (showServices) {
+                legendEl.innerHTML =
+                    '<div class="status-item"><div class="status-dot status-vpn"></div><span>VPN</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-proxy"></div><span>Proxy</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-online"></div><span>Online (no service)</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-offline"></div><span>Offline</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>';
+            } else {
+                legendEl.innerHTML =
+                    '<div class="status-item"><div class="status-dot status-online"></div><span>Online (in UT)</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-offline"></div><span>Offline (in UT)</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>';
+            }
+        }
+
+        // Calculate and display version statistics
+        function updateVersionStats() {
+            const statsEl = document.getElementById('version-stats');
+            if (!uptimeData || Object.keys(visorVersions).length === 0) {
+                statsEl.innerHTML = '<div class="stat"><span class="stat-label">No data</span></div>';
+                return;
+            }
+
+            // Count versions (base versions only)
+            const versionCounts = {};
+            for (const [pk, version] of Object.entries(visorVersions)) {
+                const base = getBaseVersion(version);
+                if (base) {
+                    versionCounts[base] = (versionCounts[base] || 0) + 1;
+                }
+            }
+
+            // Sort by version (newest first)
+            const sorted = Object.entries(versionCounts)
+                .sort((a, b) => compareVersions(b[0], a[0]));
+
+            // Display top versions as table
+            const total = Object.values(versionCounts).reduce((a, b) => a + b, 0);
+            let html = '<table style="width:100%;font-size:0.85em;border-collapse:collapse;">';
+            html += '<tr style="color:#888;font-size:0.9em;"><td>Version</td><td style="text-align:right;">Count</td><td style="text-align:right;">%</td></tr>';
+            sorted.slice(0, 5).forEach(([ver, count]) => {
+                const pct = ((count / total) * 100).toFixed(1);
+                html += '<tr><td style="color:#0f9b8e;">' + ver + '</td><td style="text-align:right;">' + count + '</td><td style="text-align:right;color:#888;">' + pct + '%</td></tr>';
+            });
+            html += '</table>';
+            if (sorted.length > 5) {
+                html += '<div style="color:#666;font-size:0.8em;margin-top:4px;">+ ' + (sorted.length - 5) + ' more versions</div>';
+            }
+            statsEl.innerHTML = html;
+        }
+
+        // Fetch with timeout
+        function fetchWithTimeout(url, timeoutMs = 25000) {
+            return Promise.race([
+                fetch(url),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+                )
+            ]);
+        }
+
+        async function fetchAllData() {
+            const isRefresh = network !== null;
+            const loadingEl = document.getElementById('loading');
+            const errorEl = document.getElementById('error');
+
+            if (isRefresh) {
+                console.log('Starting auto-refresh...');
+            } else if (loadingEl) {
+                loadingEl.style.display = 'block';
+            }
+            if (errorEl) errorEl.style.display = 'none';
+
+            try {
+                // Fetch transport data with fallback
+                let tpResp;
+                try {
+                    tpResp = await fetchWithTimeout(API_BASE + '/api/transports');
+                } catch (e) {
+                    console.log('Primary fetch failed, trying fallback:', e.message);
+                    tpResp = await fetchWithTimeout('https://tpd.skywire.skycoin.com/all-transports');
+                }
+
+                if (!tpResp.ok) throw new Error('HTTP ' + tpResp.status);
+                allData = await tpResp.json();
+                console.log('Transport data loaded:', allData.length, 'transports');
+
+                // Fetch uptime and services data in parallel (non-blocking)
+                const [utResp, sdResp] = await Promise.all([
+                    fetchWithTimeout(API_BASE + '/api/uptimes').catch(e => { console.log('UT fetch error:', e.message); return null; }),
+                    fetchWithTimeout(API_BASE + '/api/services').catch(e => { console.log('SD fetch error:', e.message); return null; })
+                ]);
+
+                // Parse uptime data
+                if (utResp && utResp.ok) {
+                    uptimeData = await utResp.json();
+                    processUptimeData();
+                    updateVersionStats();
+                    console.log('Uptime data loaded:', uptimeData.length, 'entries');
+                }
+
+                // Parse services data
+                if (sdResp && sdResp.ok) {
+                    servicesData = await sdResp.json();
+                    processServicesData();
+                    console.log('Services data loaded:', Object.keys(servicesData).length, 'services');
+                }
+
+                processData();
+                console.log('Data processing complete');
+                return true; // Indicate success
+            } catch (err) {
+                console.error('fetchAllData error:', err);
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (errorEl) {
+                    errorEl.style.display = 'block';
+                    errorEl.textContent = 'Failed to load data: ' + err.message;
+                }
+                throw err; // Re-throw so .catch() in updateCountdown gets called
+            }
+        }
+
+        function processUptimeData() {
+            onlineVisors.clear();
+            offlineVisors.clear();
+            visorVersions = {};
+            if (!uptimeData) return;
+
+            uptimeData.forEach(entry => {
+                if (entry.on) {
+                    onlineVisors.add(entry.pk);
+                } else {
+                    offlineVisors.add(entry.pk);
+                }
+                if (entry.version) {
+                    visorVersions[entry.pk] = entry.version;
+                }
+            });
+        }
+
+        function processServicesData() {
+            visorServices = {};
+            if (!servicesData) return;
+
+            for (const [pk, info] of Object.entries(servicesData)) {
+                visorServices[pk] = {
+                    services: info.services || [],
+                    country: info.country || ''
+                };
+            }
+        }
+
+        // Convert ISO country code to flag emoji (e.g., "US" -> "🇺🇸")
+        function countryToFlag(countryCode) {
+            if (!countryCode || countryCode.length !== 2) return '';
+            const code = countryCode.toUpperCase();
+            // Convert each letter to regional indicator symbol
+            const first = 0x1F1E6 + (code.charCodeAt(0) - 65);
+            const second = 0x1F1E6 + (code.charCodeAt(1) - 65);
+            return String.fromCodePoint(first, second);
+        }
+
+        // Extract base version (before hyphen), e.g., "v1.3.33-abc" -> "v1.3.33"
+        function getBaseVersion(version) {
+            if (!version) return '';
+            const idx = version.indexOf('-');
+            return idx > 0 ? version.substring(0, idx) : version;
+        }
+
+        // Parse version into comparable parts [major, minor, patch]
+        function parseVersion(version) {
+            const base = getBaseVersion(version);
+            const match = base.match(/v?(\d+)\.(\d+)\.(\d+)/);
+            if (!match) return [0, 0, 0];
+            return [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])];
+        }
+
+        // Compare two versions: returns positive if a > b, negative if a < b, 0 if equal
+        function compareVersions(a, b) {
+            const pa = parseVersion(a);
+            const pb = parseVersion(b);
+            for (let i = 0; i < 3; i++) {
+                if (pa[i] !== pb[i]) return pa[i] - pb[i];
+            }
+            return 0;
+        }
+
+        // Get unique base versions sorted newest first
+        function getUniqueVersions() {
+            const versions = new Set();
+            for (const v of Object.values(visorVersions)) {
+                const base = getBaseVersion(v);
+                if (base) versions.add(base);
+            }
+            return Array.from(versions).sort((a, b) => compareVersions(b, a));
+        }
+
+        // Populate version filter dropdown
+        function populateVersionFilter() {
+            const select = document.getElementById('version-filter');
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">All Versions</option>';
+            const versions = getUniqueVersions();
+            versions.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v;
+                opt.textContent = v;
+                select.appendChild(opt);
+            });
+            select.value = currentValue; // Restore selection
+        }
+
+        // Calculate node mass based on version (newer = higher mass = more central)
+        function getVersionMass(version) {
+            if (!version) return 1;
+            const versions = getUniqueVersions();
+            if (versions.length === 0) return 1;
+            const base = getBaseVersion(version);
+            const idx = versions.indexOf(base);
+            if (idx === -1) return 1;
+            // Newest version (idx 0) gets highest mass, oldest gets lowest
+            // Scale from 1 to 3
+            const ratio = 1 - (idx / versions.length);
+            return 1 + ratio * 2;
+        }
+
+        function getVisorStatus(pk) {
+            if (onlineVisors.has(pk)) return 'online';
+            if (offlineVisors.has(pk)) return 'offline';
+            return 'unknown';
+        }
+
+        function getNodeColor(visor) {
+            const status = getVisorStatus(visor.id);
+            const hasService = visorServices[visor.id] && visorServices[visor.id].services.length > 0;
+            const showServices = document.getElementById('show-services').checked;
+
+            // Service highlighting takes priority
+            if (showServices && hasService) {
+                const services = visorServices[visor.id].services;
+                if (services.includes('vpn')) {
+                    return { background: '#9f6efc', border: '#7c3aed' };
+                } else if (services.includes('proxy')) {
+                    return { background: '#ffa500', border: '#cc8400' };
+                }
+            }
+
+            // Status-based coloring
+            if (status === 'online') {
+                return { background: '#00d9a5', border: '#00b386' };
+            } else if (status === 'offline') {
+                return { background: '#e94560', border: '#fff' };
+            } else {
+                return { background: '#ffd166', border: '#ccaa52' };
+            }
+        }
+
+        function processData() {
+            const visors = new Map();
+            visorConnections = {};
+            let countStcpr = 0, countSudph = 0, countDmsg = 0, totalTransports = 0;
+
+            allData.forEach(transport => {
+                const [pk1, pk2] = transport.edges;
+                const type = transport.type;
+
+                // Skip self-transports (connectivity tests, not used for routes)
+                if (pk1 === pk2) return;
+
+                totalTransports++;
+                if (type === 'stcpr') countStcpr++;
+                else if (type === 'sudph') countSudph++;
+                else if (type === 'dmsg') countDmsg++;
+
+                [pk1, pk2].forEach(pk => {
+                    if (!visors.has(pk)) visors.set(pk, { id: pk, connections: 0, types: new Set() });
+                    visors.get(pk).connections++;
+                    visors.get(pk).types.add(type);
+                });
+
+                if (!visorConnections[pk1]) visorConnections[pk1] = [];
+                if (!visorConnections[pk2]) visorConnections[pk2] = [];
+                visorConnections[pk1].push({ pk: pk2, type });
+                visorConnections[pk2].push({ pk: pk1, type });
+            });
+
+            // Count by status
+            let countOnline = 0, countOffline = 0, countUnknown = 0;
+            visors.forEach(v => {
+                const status = getVisorStatus(v.id);
+                if (status === 'online') countOnline++;
+                else if (status === 'offline') countOffline++;
+                else countUnknown++;
+            });
+
+            document.getElementById('total-transports').textContent = totalTransports;
+            document.getElementById('total-visors').textContent = visors.size;
+            document.getElementById('count-online').textContent = countOnline;
+            document.getElementById('count-offline').textContent = countOffline;
+            document.getElementById('count-unknown').textContent = countUnknown;
+            document.getElementById('count-stcpr').textContent = countStcpr;
+            document.getElementById('count-sudph').textContent = countSudph;
+            document.getElementById('count-dmsg').textContent = countDmsg;
+
+            // Populate visor list
+            populateVisorList(visors);
+
+            const maxConn = Math.max(...Array.from(visors.values()).map(v => v.connections));
+            const showFlags = document.getElementById('show-flags').checked;
+            const nodes = Array.from(visors.values()).map(v => {
+                const color = getNodeColor(v);
+                const status = getVisorStatus(v.id);
+                const svcInfo = visorServices[v.id];
+                const version = visorVersions[v.id] || '';
+                const country = svcInfo ? svcInfo.country : '';
+                const flag = countryToFlag(country);
+
+                let title = v.id + '\nTransports: ' + v.connections + '\nStatus: ' + status;
+                if (version) {
+                    title += '\nVersion: ' + version;
+                }
+                if (svcInfo && svcInfo.services.length > 0) {
+                    title += '\nServices: ' + svcInfo.services.join(', ');
+                }
+                if (country) {
+                    title += '\nCountry: ' + country;
+                }
+
+                // Determine node display based on flag setting
+                const useFlag = showFlags && flag;
+                const nodeSize = 5 + (v.connections / maxConn) * 25;
+
+                return {
+                    id: v.id,
+                    label: useFlag ? flag : v.id.substring(0, 8),
+                    title: title,
+                    size: useFlag ? nodeSize * 1.5 : nodeSize,
+                    shape: useFlag ? 'text' : 'dot',
+                    font: useFlag ? { size: Math.max(16, nodeSize * 1.2), color: '#fff' } : { size: 10, color: '#aaa' },
+                    color: { background: color.background, border: color.border, highlight: { background: '#e94560', border: '#ff6b6b' } },
+                    connections: v.connections,
+                    status: status,
+                    version: version,
+                    country: country,
+                    mass: getVersionMass(version),
+                    borderWidth: status === 'offline' ? 3 : 2
+                };
+            });
+
+            // Create edge ID from transport data (consistent across refreshes)
+            const makeEdgeId = (t) => t.edges[0] < t.edges[1]
+                ? t.edges[0] + '-' + t.edges[1] + '-' + t.type
+                : t.edges[1] + '-' + t.edges[0] + '-' + t.type;
+
+            const edges = allData
+                .filter(transport => transport.edges[0] !== transport.edges[1])
+                .map(transport => ({
+                    id: makeEdgeId(transport), from: transport.edges[0], to: transport.edges[1],
+                    color: { color: colors[transport.type], opacity: 0.6 }, type: transport.type, width: 1, smooth: { type: 'continuous' }
+                }));
+
+            if (network) {
+                // Update existing network - preserve node positions
+                const positions = network.getPositions();
+
+                // Pause physics during update to prevent jitter
+                network.setOptions({ physics: { enabled: false } });
+
+                // Update nodes: preserve positions for existing nodes
+                const existingNodeIds = new Set(nodesDataset.getIds());
+                const newNodeIds = new Set(nodes.map(n => n.id));
+
+                // Nodes to remove (exist in dataset but not in new data)
+                const nodesToRemove = [...existingNodeIds].filter(id => !newNodeIds.has(id));
+
+                // Count new nodes (don't exist yet)
+                const newNodesCount = [...newNodeIds].filter(id => !existingNodeIds.has(id)).length;
+
+                // Nodes to add or update
+                const nodesToUpdate = nodes.map(node => {
+                    if (positions[node.id]) {
+                        // Preserve existing position
+                        return { ...node, x: positions[node.id].x, y: positions[node.id].y };
+                    }
+                    return node;
+                });
+
+                // Apply node updates
+                if (nodesToRemove.length > 0) {
+                    nodesDataset.remove(nodesToRemove);
+                }
+                nodesDataset.update(nodesToUpdate);
+
+                // Update edges similarly
+                const existingEdgeIds = new Set(edgesDataset.getIds());
+                const newEdgeIds = new Set(edges.map(e => e.id));
+
+                // Edges to remove
+                const edgesToRemove = [...existingEdgeIds].filter(id => !newEdgeIds.has(id));
+
+                if (edgesToRemove.length > 0) {
+                    edgesDataset.remove(edgesToRemove);
+                }
+                edgesDataset.update(edges);
+
+                populateVersionFilter();
+                applyFilters();
+
+                // Re-enable physics after update
+                if (newNodesCount > 0) {
+                    // New nodes need positioning - run stabilization first
+                    network.setOptions({ physics: { enabled: true } });
+                    network.stabilize(100);
+                    network.once('stabilizationIterationsDone', () => {
+                        network.setOptions({
+                            physics: {
+                                enabled: true,
+                                barnesHut: { gravitationalConstant: -1000, springConstant: 0.0005 }
+                            }
+                        });
+                    });
+                } else {
+                    // No new nodes - just resume physics at low intensity
+                    network.setOptions({
+                        physics: {
+                            enabled: true,
+                            barnesHut: { gravitationalConstant: -1000, springConstant: 0.0005 }
+                        }
+                    });
+                }
+
+                console.log('Graph updated:', nodesToUpdate.length, 'nodes,', edges.length, 'edges,',
+                    newNodesCount, 'new nodes,', nodesToRemove.length, 'removed');
+            } else {
+                // First load - create new network
+                nodesDataset = new vis.DataSet(nodes);
+                edgesDataset = new vis.DataSet(edges);
+                createNetwork();
+                populateVersionFilter();
+                applyFilters();
+            }
+            const loadingEl = document.getElementById('loading');
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+
+        function createNetwork() {
+            const container = document.getElementById('network');
+            const data = { nodes: nodesDataset, edges: edgesDataset };
+            const options = {
+                nodes: { shape: 'dot', font: { size: 10, color: '#aaa' }, borderWidth: 2 },
+                edges: { smooth: { type: 'continuous', roundness: 0.5 } },
+                layout: { improvedLayout: false },
+                physics: { stabilization: { iterations: 100, fit: true }, barnesHut: { gravitationalConstant: -3000, springConstant: 0.001, springLength: 200 } },
+                interaction: { hover: true, tooltipDelay: 100, selectConnectedEdges: false }
+            };
+            network = new vis.Network(container, data, options);
+            network.on('click', params => { if (params.nodes.length > 0) showNodeInfo(params.nodes[0]); else hideNodeInfo(); });
+            network.on('hoverNode', params => { if (!selectedNodeId) showNodeEdgesOnly(params.node); });
+            network.on('blurNode', params => { if (!selectedNodeId) showAllEdges(); });
+            network.on('stabilizationIterationsDone', () => network.fit());
+        }
+
+        function showNodeInfo(nodeId) {
+            const info = document.getElementById('selected-info');
+            const connections = visorConnections[nodeId] || [];
+            const status = getVisorStatus(nodeId);
+            const svcInfo = visorServices[nodeId];
+            const version = visorVersions[nodeId];
+
+            document.getElementById('selected-pk').textContent = nodeId;
+            document.getElementById('selected-conn-count').textContent = connections.length;
+
+            // Status display
+            const statusEl = document.getElementById('selected-status');
+            statusEl.innerHTML = '<span class="status-dot status-' + status + '" style="display:inline-block;vertical-align:middle;margin-right:5px;"></span>' + status.charAt(0).toUpperCase() + status.slice(1);
+
+            // Version display
+            const versionEl = document.getElementById('selected-version');
+            if (version) {
+                versionEl.textContent = 'Version: ' + version;
+                versionEl.style.display = 'block';
+            } else {
+                versionEl.style.display = 'none';
+            }
+
+            // Country display
+            const countryEl = document.getElementById('selected-country');
+            if (svcInfo && svcInfo.country) {
+                countryEl.textContent = 'Country: ' + svcInfo.country;
+                countryEl.style.display = 'block';
+            } else {
+                countryEl.style.display = 'none';
+            }
+
+            // Services display
+            const servicesEl = document.getElementById('selected-services');
+            if (svcInfo && svcInfo.services.length > 0) {
+                servicesEl.innerHTML = svcInfo.services.map(s => '<span class="service-badge ' + s + '">' + s.toUpperCase() + '</span>').join('');
+                servicesEl.style.display = 'block';
+            } else {
+                servicesEl.style.display = 'none';
+            }
+
+            document.getElementById('conn-list').innerHTML = connections.sort((a, b) => a.type.localeCompare(b.type))
+                .map(c => {
+                    const cStatus = getVisorStatus(c.pk);
+                    const cVersion = visorVersions[c.pk];
+                    let versionTag = cVersion ? ' <span style="color:#0f9b8e;font-size:0.8em;">' + cVersion + '</span>' : '';
+                    return '<div class="conn-item"><span class="conn-type ' + c.type + '">' + c.type.toUpperCase() + '</span><span class="status-dot status-' + cStatus + '" style="display:inline-block;width:8px;height:8px;margin-right:5px;"></span>' + c.pk.substring(0, 16) + '...' + versionTag + '</div>';
+                }).join('');
+
+            info.classList.add('visible');
+
+            // Show only edges connected to selected node
+            selectedNodeId = nodeId;
+            showNodeEdgesOnly(nodeId);
+        }
+
+        function hideNodeInfo() {
+            document.getElementById('selected-info').classList.remove('visible');
+            selectedNodeId = null;
+            showAllEdges();
+        }
+
+        // Show only edges connected to a specific node, hide others
+        function showNodeEdgesOnly(nodeId) {
+            const edgeUpdates = [];
+            edgesDataset.forEach(edge => {
+                const isConnected = edge.from === nodeId || edge.to === nodeId;
+                edgeUpdates.push({ id: edge.id, hidden: !isConnected });
+            });
+            edgesDataset.update(edgeUpdates);
+        }
+
+        // Show all edges (respecting current filters)
+        function showAllEdges() {
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const showStcpr = document.getElementById('show-stcpr').checked;
+            const showSudph = document.getElementById('show-sudph').checked;
+            const showDmsg = document.getElementById('show-dmsg').checked;
+            const showOnline = document.getElementById('show-online').checked;
+            const showOffline = document.getElementById('show-offline').checked;
+            const showUnknown = document.getElementById('show-unknown').checked;
+            const showServices = document.getElementById('show-services').checked;
+            const showFlags = document.getElementById('show-flags').checked;
+            const searchTerm = document.getElementById('search').value.toLowerCase();
+            const versionFilter = document.getElementById('version-filter').value;
+
+            // Batch node updates
+            const nodeUpdates = [];
+            const hiddenNodes = new Set();
+            nodesDataset.forEach(node => {
+                const status = getVisorStatus(node.id);
+                let visible = true;
+
+                if (status === 'online' && !showOnline) visible = false;
+                if (status === 'offline' && !showOffline) visible = false;
+                if (status === 'unknown' && !showUnknown) visible = false;
+
+                // Version filtering - match base version only
+                if (versionFilter) {
+                    const nodeVersion = visorVersions[node.id];
+                    const nodeBaseVersion = getBaseVersion(nodeVersion);
+                    if (nodeBaseVersion !== versionFilter) visible = false;
+                }
+
+                if (!visible) hiddenNodes.add(node.id);
+
+                const color = getNodeColor({ id: node.id, connections: node.connections });
+                const svcInfo = visorServices[node.id];
+                const country = svcInfo ? svcInfo.country : '';
+                const flag = countryToFlag(country);
+                const useFlag = showFlags && flag;
+
+                nodeUpdates.push({
+                    id: node.id,
+                    hidden: !visible,
+                    label: useFlag ? flag : node.id.substring(0, 8),
+                    shape: useFlag ? 'text' : 'dot',
+                    font: useFlag ? { size: Math.max(16, node.size * 1.2), color: '#fff' } : { size: 10, color: '#aaa' },
+                    color: { background: color.background, border: color.border, highlight: { background: '#e94560', border: '#ff6b6b' } }
+                });
+            });
+            nodesDataset.update(nodeUpdates);
+
+            // Batch edge updates
+            const edgeUpdates = [];
+            edgesDataset.forEach(edge => {
+                let visible = true;
+                if (edge.type === 'stcpr' && !showStcpr) visible = false;
+                if (edge.type === 'sudph' && !showSudph) visible = false;
+                if (edge.type === 'dmsg' && !showDmsg) visible = false;
+
+                // Also hide edge if either connected node is hidden
+                if (hiddenNodes.has(edge.from) || hiddenNodes.has(edge.to)) {
+                    visible = false;
+                }
+
+                edgeUpdates.push({ id: edge.id, hidden: !visible });
+            });
+            edgesDataset.update(edgeUpdates);
+
+            // Search highlighting
+            if (searchTerm.length >= 4) {
+                let foundNode = null;
+                nodesDataset.forEach(node => {
+                    if (node.id.toLowerCase().startsWith(searchTerm)) {
+                        foundNode = node.id;
+                    }
+                });
+                if (foundNode) {
+                    nodesDataset.update({ id: foundNode, color: { background: '#e94560', border: '#ff6b6b' } });
+                    network.focus(foundNode, { scale: 1.5, animation: true });
+                    showNodeInfo(foundNode);
+                }
+            }
+        }
+
+        // Format seconds as mm:ss
+        function formatCountdown(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return mins + ':' + (secs < 10 ? '0' : '') + secs;
+        }
+
+        let isRefreshing = false;
+
+        // Update countdown display
+        function updateCountdown() {
+            if (!nextRefreshTime) return;
+            const remaining = Math.max(0, Math.ceil((nextRefreshTime - Date.now()) / 1000));
+
+            if (remaining === 0 && !isRefreshing) {
+                // Countdown reached 0 - fetch new data
+                isRefreshing = true;
+                document.getElementById('cache-info').innerHTML = 'Refreshing...';
+                console.log('Auto-refresh triggered at', new Date().toLocaleTimeString());
+
+                fetchAllData()
+                    .then(() => {
+                        console.log('Auto-refresh succeeded at', new Date().toLocaleTimeString());
+                        document.getElementById('cache-info').innerHTML = 'Refresh complete';
+                    })
+                    .catch(err => {
+                        console.error('Auto-refresh failed:', err);
+                        document.getElementById('cache-info').innerHTML = 'Refresh failed: ' + err.message;
+                    })
+                    .finally(() => {
+                        console.log('Auto-refresh finished, syncing with server');
+                        isRefreshing = false;
+                        // Small delay before syncing to ensure server has updated cache times
+                        setTimeout(() => {
+                            syncWithServer();
+                        }, 500);
+                    });
+            } else if (!isRefreshing) {
+                document.getElementById('cache-info').innerHTML = 'Auto-refresh in: ' + formatCountdown(remaining);
+            }
+        }
+
+        // Sync countdown with actual server cache age
+        async function syncWithServer() {
+            try {
+                const resp = await fetchWithTimeout('/health', 5000);
+                if (resp.ok) {
+                    const info = await resp.json();
+                    console.log('Server health:', info);
+                    if (info.auto_refresh && typeof info.next_refresh_in === 'number') {
+                        // Ensure at least 5 seconds between refreshes to avoid tight loops
+                        const seconds = Math.max(5, info.next_refresh_in);
+                        nextRefreshTime = Date.now() + (seconds * 1000);
+                        console.log('Next refresh in', seconds, 'seconds');
+                    } else {
+                        // Auto-refresh disabled, set a long interval
+                        nextRefreshTime = Date.now() + (serverCacheAge || 5) * 60 * 1000;
+                    }
+                }
+            } catch (e) {
+                console.log('Sync with server failed:', e.message);
+                // On error, set a reasonable default
+                nextRefreshTime = Date.now() + (serverCacheAge || 5) * 60 * 1000;
+            }
+        }
+
+        // Start refresh timer based on server's actual cache age
+        function startRefreshTimer(secondsUntilRefresh) {
+            nextRefreshTime = Date.now() + (secondsUntilRefresh * 1000);
+            if (!countdownInterval) {
+                countdownInterval = setInterval(updateCountdown, 1000);
+            }
+            updateCountdown();
+        }
+
+        // Check if running from Go server and show cache info
+        async function checkServer() {
+            try {
+                const resp = await fetch('/health');
+                if (resp.ok) {
+                    const info = await resp.json();
+                    serverCacheAge = info.cache_max_age;
+                    if (info.auto_refresh) {
+                        // Use actual time until next refresh from server
+                        const secondsUntilRefresh = info.next_refresh_in || (info.cache_max_age * 60);
+                        startRefreshTimer(secondsUntilRefresh);
+                    }
+                }
+            } catch (e) {
+                document.getElementById('cache-info').innerHTML = 'Direct mode (no caching)';
+            }
+        }
+
+        document.getElementById('show-stcpr').addEventListener('change', applyFilters);
+        document.getElementById('show-sudph').addEventListener('change', applyFilters);
+        document.getElementById('show-dmsg').addEventListener('change', applyFilters);
+        document.getElementById('show-online').addEventListener('change', applyFilters);
+        document.getElementById('show-offline').addEventListener('change', applyFilters);
+        document.getElementById('show-unknown').addEventListener('change', applyFilters);
+        document.getElementById('show-services').addEventListener('change', () => { applyFilters(); updateLegend(); });
+        document.getElementById('show-flags').addEventListener('change', applyFilters);
+        document.getElementById('version-filter').addEventListener('change', applyFilters);
+        document.getElementById('search').addEventListener('input', applyFilters);
+        document.getElementById('btn-fit').addEventListener('click', () => network && network.fit());
+
+        // Resizable sidebar
+        const resizeHandle = document.getElementById('resize-handle');
+        const sidebar = document.getElementById('sidebar');
+        let isResizing = false;
+
+        resizeHandle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        let truncationTimeout = null;
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = e.clientX;
+            if (newWidth >= 200 && newWidth <= 600) {
+                sidebar.style.width = newWidth + 'px';
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                // Debounce truncation update
+                clearTimeout(truncationTimeout);
+                truncationTimeout = setTimeout(updatePkTruncation, 100);
+            }
+        });
+
+        checkServer();
+        fetchAllData();
+    </script>
+</body>
+</html>
