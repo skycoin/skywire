@@ -976,7 +976,7 @@
         // Sync countdown with actual server cache age
         async function syncWithServer() {
             try {
-                const resp = await fetchWithTimeout('/health', 5000);
+                const resp = await fetchWithTimeout('/api/health', 5000);
                 if (resp.ok) {
                     const info = await resp.json();
                     console.log('Server health:', info);
@@ -1009,7 +1009,7 @@
         // Check if running from Go server and show cache info
         async function checkServer() {
             try {
-                const resp = await fetch('/health');
+                const resp = await fetch('/api/health');
                 if (resp.ok) {
                     const info = await resp.json();
                     serverCacheAge = info.cache_max_age;

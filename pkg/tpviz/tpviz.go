@@ -109,8 +109,9 @@ func (s *Server) setupRoutes() {
 	// API endpoint for service discovery data (combined proxy, VPN, visor)
 	s.mux.HandleFunc("/api/services", s.handleServices)
 
-	// Health check
-	s.mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	// Health check - available at both /health and /api/health
+	// /api/health is used when embedded in other servers that have their own /health
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		// Get actual cache file ages in seconds
@@ -145,7 +146,9 @@ func (s *Server) setupRoutes() {
 			},
 			"auto_refresh": s.config.AutoRefresh,
 		})
-	})
+	}
+	s.mux.HandleFunc("/health", healthHandler)
+	s.mux.HandleFunc("/api/health", healthHandler)
 }
 
 func (s *Server) handleTransports(w http.ResponseWriter, r *http.Request) {
