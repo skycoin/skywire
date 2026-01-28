@@ -39,7 +39,7 @@ func NewClient(eventSubs *appevent.Subscriber) *Client {
 		ForceFormatting:    true,
 		DisableColors:      false,
 		ForceColors:        true,
-		TimestampFormat:    "2006-01-02T15:04:05.000000000Z07:00",
+		TimestampFormat:    "2006-01-02T15:04:05.0000Z07:00",
 	})
 
 	conf, err := appcommon.ProcConfigFromEnv()
