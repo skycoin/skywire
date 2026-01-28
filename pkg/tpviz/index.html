@@ -9,7 +9,9 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background: #1a1a2e; color: #eee; }
         #container { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
-        #sidebar { width: 320px; min-width: 320px; background: #16213e; padding: 15px; overflow-y: auto; border-right: 1px solid #0f3460; }
+        #sidebar { width: 320px; min-width: 200px; max-width: 600px; background: #16213e; padding: 15px; overflow-y: auto; border-right: 1px solid #0f3460; flex-shrink: 0; }
+        #resize-handle { width: 5px; background: #0f3460; cursor: col-resize; flex-shrink: 0; }
+        #resize-handle:hover { background: #e94560; }
         #network { flex: 1; background: #1a1a2e; position: relative; overflow: hidden; min-width: 0; }
         h1 { font-size: 1.2em; margin-bottom: 15px; color: #e94560; }
 
@@ -51,11 +53,22 @@
         button:disabled { background: #555; cursor: not-allowed; }
 
         /* Visor list */
-        .visor-list { max-height: 200px; overflow-y: auto; margin-top: 8px; }
-        .visor-item { display: flex; align-items: center; padding: 4px 6px; font-family: monospace; font-size: 0.75em; border-bottom: 1px solid #0f3460; cursor: pointer; }
+        .visor-list { max-height: 300px; overflow-y: auto; margin-top: 8px; }
+        .visor-item { display: flex; flex-wrap: wrap; align-items: center; padding: 4px 6px; font-size: 0.7em; border-bottom: 1px solid #0f3460; cursor: pointer; gap: 2px; }
         .visor-item:hover { background: #1a3a5c; }
         .visor-item:last-child { border-bottom: none; }
-        .visor-item .status-dot { width: 8px; height: 8px; margin-right: 6px; flex-shrink: 0; }
+        .visor-item .v-flag { margin-right: 4px; font-size: 1.1em; }
+        .visor-item .v-pk { font-family: monospace; color: #0f9b8e; }
+        .visor-item .v-pk.offline { color: #e94560; }
+        .visor-item .v-pk.unknown { background: rgba(233, 69, 96, 0.3); padding: 0 2px; border-radius: 2px; }
+        .visor-item .v-ver { color: #888; font-size: 0.9em; margin-left: auto; }
+        .visor-item .v-row2 { width: 100%; display: flex; align-items: center; gap: 4px; margin-top: 1px; padding-left: 20px; }
+        .visor-item .v-svc { font-size: 0.85em; padding: 0 3px; border-radius: 2px; }
+        .visor-item .v-svc.vpn { background: rgba(138, 43, 226, 0.3); color: #9f6efc; }
+        .visor-item .v-svc.proxy { background: rgba(255, 165, 0, 0.3); color: #ffa500; }
+        .visor-item .v-tp { font-size: 0.85em; color: #666; }
+        .visor-item .v-tp .stcpr { color: #00d9a5; }
+        .visor-item .v-tp .sudph { color: #00b4d8; }
 
         #selected-info { margin-top: 10px; padding: 12px; background: #0f3460; border-radius: 4px; display: none; }
         #selected-info.visible { display: block; }
@@ -179,6 +192,7 @@
                 <div class="conn-list" id="conn-list"></div>
             </div>
         </div>
+        <div id="resize-handle"></div>
         <div id="network">
             <div id="loading"><div class="spinner"></div><div>Loading transport data...</div></div>
             <div id="error"></div>
@@ -210,10 +224,44 @@
             const sorted = Array.from(visors.values()).sort((a, b) => b.connections - a.connections);
             list.innerHTML = sorted.map(v => {
                 const status = getVisorStatus(v.id);
-                return '<div class="visor-item" onclick="focusVisor(\'' + v.id + '\')">' +
-                    '<span class="status-dot status-' + status + '"></span>' +
-                    '<span>' + v.id.substring(0, 16) + '...</span>' +
-                    '</div>';
+                const svcInfo = visorServices[v.id];
+                const country = svcInfo ? svcInfo.country : '';
+                const flag = countryToFlag(country);
+                const version = visorVersions[v.id] || '';
+                const verShort = version ? getBaseVersion(version).replace('v', '') : '';
+                const services = svcInfo ? svcInfo.services.filter(s => s === 'vpn' || s === 'proxy') : [];
+
+                // Count transports by type (only STCPR and SUDPH)
+                const conns = visorConnections[v.id] || [];
+                const stcprCount = conns.filter(c => c.type === 'stcpr').length;
+                const sudphCount = conns.filter(c => c.type === 'sudph').length;
+
+                // Status class for PK text
+                const pkClass = status === 'offline' ? 'offline' : (status === 'unknown' ? 'unknown' : '');
+
+                // Build row 1: flag/dot + PK + version
+                let row1 = '<span class="v-flag">' + (flag || '●') + '</span>';
+                row1 += '<span class="v-pk ' + pkClass + '">' + v.id.substring(0, 12) + '</span>';
+                if (verShort) row1 += '<span class="v-ver">' + verShort + '</span>';
+
+                // Build row 2: services + transport counts (only if there's data)
+                let row2 = '';
+                if (services.length > 0 || stcprCount > 0 || sudphCount > 0) {
+                    row2 = '<div class="v-row2">';
+                    services.forEach(s => {
+                        row2 += '<span class="v-svc ' + s + '">' + s.toUpperCase() + '</span>';
+                    });
+                    if (stcprCount > 0 || sudphCount > 0) {
+                        row2 += '<span class="v-tp">';
+                        if (stcprCount > 0) row2 += '<span class="stcpr">S:' + stcprCount + '</span>';
+                        if (stcprCount > 0 && sudphCount > 0) row2 += ' ';
+                        if (sudphCount > 0) row2 += '<span class="sudph">U:' + sudphCount + '</span>';
+                        row2 += '</span>';
+                    }
+                    row2 += '</div>';
+                }
+
+                return '<div class="visor-item" onclick="focusVisor(\'' + v.id + '\')">' + row1 + row2 + '</div>';
             }).join('');
         }
 
@@ -944,6 +992,33 @@
         document.getElementById('version-filter').addEventListener('change', applyFilters);
         document.getElementById('search').addEventListener('input', applyFilters);
         document.getElementById('btn-fit').addEventListener('click', () => network && network.fit());
+
+        // Resizable sidebar
+        const resizeHandle = document.getElementById('resize-handle');
+        const sidebar = document.getElementById('sidebar');
+        let isResizing = false;
+
+        resizeHandle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = e.clientX;
+            if (newWidth >= 200 && newWidth <= 600) {
+                sidebar.style.width = newWidth + 'px';
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
 
         checkServer();
         fetchAllData();
