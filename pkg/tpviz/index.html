@@ -146,7 +146,14 @@
         const colors = { stcpr: '#00d9a5', sudph: '#00b4d8', dmsg: '#ffd166' };
 
         async function fetchAllData() {
-            document.getElementById('loading').style.display = 'block';
+            const isRefresh = network !== null;
+            if (isRefresh) {
+                // Show subtle refresh indicator in cache info
+                const cacheInfo = document.getElementById('cache-info');
+                if (cacheInfo.innerHTML) cacheInfo.innerHTML = cacheInfo.innerHTML.replace(/Auto-refresh in:.*/, 'Refreshing...');
+            } else {
+                document.getElementById('loading').style.display = 'block';
+            }
             document.getElementById('error').style.display = 'none';
             try {
                 // Fetch all data in parallel
@@ -386,10 +393,21 @@
                 color: { color: colors[transport.type], opacity: 0.6 }, type: transport.type, width: 1, smooth: { type: 'continuous' }
             }));
 
-            nodesDataset = new vis.DataSet(nodes);
-            edgesDataset = new vis.DataSet(edges);
-            createNetwork();
-            populateVersionFilter();
+            if (network) {
+                // Update existing network - preserve view position
+                nodesDataset.clear();
+                nodesDataset.add(nodes);
+                edgesDataset.clear();
+                edgesDataset.add(edges);
+                populateVersionFilter();
+                applyFilters();
+            } else {
+                // First load - create new network
+                nodesDataset = new vis.DataSet(nodes);
+                edgesDataset = new vis.DataSet(edges);
+                createNetwork();
+                populateVersionFilter();
+            }
             document.getElementById('loading').style.display = 'none';
         }
 
