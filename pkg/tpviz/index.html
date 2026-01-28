@@ -68,16 +68,16 @@
         .visor-item .v-pk .pk-ellipsis { display: none; flex-shrink: 0; color: #666; }
         .visor-item .v-ver { color: #888; font-size: 0.9em; flex-shrink: 0; margin-left: auto; }
         .visor-item .v-row2 { width: 100%; display: flex; align-items: center; margin-top: 2px; padding-left: 22px; font-size: 0.9em; }
-        .visor-item .v-col-ver { width: 45px; flex-shrink: 0; }
-        .visor-item .v-col-svc { width: 75px; flex-shrink: 0; display: flex; gap: 2px; }
-        .visor-item .v-col-tp { flex-shrink: 0; display: flex; gap: 3px; }
-        .visor-item .v-svc { font-size: 0.85em; padding: 0 3px; border-radius: 2px; }
+        .visor-item .v-col-ver { width: 42px; flex-shrink: 0; }
+        .visor-item .v-col-svc { width: 24px; flex-shrink: 0; text-align: center; }
+        .visor-item .v-col-tp { width: 32px; flex-shrink: 0; text-align: right; }
+        .visor-item .v-svc { font-size: 0.85em; padding: 0 4px; border-radius: 2px; font-weight: bold; }
         .visor-item .v-svc.vpn { background: rgba(138, 43, 226, 0.4); color: #c9a8ff; }
         .visor-item .v-svc.proxy { background: rgba(255, 165, 0, 0.4); color: #ffc966; }
         .visor-item .v-svc.visor { background: rgba(50, 205, 50, 0.4); color: #7fff7f; }
-        .visor-item .v-tp { font-size: 0.85em; }
-        .visor-item .v-tp .stcpr { background: rgba(0, 217, 165, 0.3); color: #66ffdd; padding: 0 3px; border-radius: 2px; }
-        .visor-item .v-tp .sudph { background: rgba(0, 180, 216, 0.3); color: #66d9ff; padding: 0 3px; border-radius: 2px; }
+        .visor-item .v-tp { font-size: 0.85em; padding: 0 2px; border-radius: 2px; }
+        .visor-item .v-tp.stcpr { background: rgba(0, 217, 165, 0.3); color: #66ffdd; }
+        .visor-item .v-tp.sudph { background: rgba(0, 180, 216, 0.3); color: #66d9ff; }
 
         #selected-info { margin-top: 10px; padding: 12px; background: #0f3460; border-radius: 4px; display: none; }
         #selected-info.visible { display: block; }
@@ -262,21 +262,18 @@
                 row1 += '<span class="pk-end">' + pkEnd + '</span>';
                 row1 += '</span>';
 
-                // Build row 2: version | services | transport counts (table-like columns)
+                // Build row 2: version | proxy | vpn | visor | stcpr | sudph (table-like columns)
+                const hasProxy = services.includes('proxy');
+                const hasVpn = services.includes('vpn');
+                const hasVisor = services.includes('visor');
+
                 let row2 = '<div class="v-row2">';
-                // Column 1: Version
                 row2 += '<span class="v-col-ver">' + (verShort ? '<span class="v-ver">' + verShort + '</span>' : '') + '</span>';
-                // Column 2: Services
-                row2 += '<span class="v-col-svc">';
-                services.forEach(s => {
-                    row2 += '<span class="v-svc ' + s + '">' + s.toUpperCase() + '</span>';
-                });
-                row2 += '</span>';
-                // Column 3: Transport counts
-                row2 += '<span class="v-col-tp">';
-                if (stcprCount > 0) row2 += '<span class="v-tp"><span class="stcpr">S:' + stcprCount + '</span></span>';
-                if (sudphCount > 0) row2 += '<span class="v-tp"><span class="sudph">U:' + sudphCount + '</span></span>';
-                row2 += '</span>';
+                row2 += '<span class="v-col-svc">' + (hasProxy ? '<span class="v-svc proxy">P</span>' : '') + '</span>';
+                row2 += '<span class="v-col-svc">' + (hasVpn ? '<span class="v-svc vpn">V</span>' : '') + '</span>';
+                row2 += '<span class="v-col-svc">' + (hasVisor ? '<span class="v-svc visor">R</span>' : '') + '</span>';
+                row2 += '<span class="v-col-tp">' + (stcprCount > 0 ? '<span class="v-tp stcpr">S' + stcprCount + '</span>' : '') + '</span>';
+                row2 += '<span class="v-col-tp">' + (sudphCount > 0 ? '<span class="v-tp sudph">U' + sudphCount + '</span>' : '') + '</span>';
                 row2 += '</div>';
 
                 return '<div class="visor-item" onclick="focusVisor(\'' + v.id + '\')">' + row1 + row2 + '</div>';
@@ -1041,12 +1038,12 @@
             document.body.style.userSelect = 'none';
         });
 
+        let truncationTimeout = null;
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
             const newWidth = e.clientX;
             if (newWidth >= 200 && newWidth <= 600) {
                 sidebar.style.width = newWidth + 'px';
-                updatePkTruncation();
             }
         });
 
@@ -1055,7 +1052,9 @@
                 isResizing = false;
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
-                updatePkTruncation();
+                // Debounce truncation update
+                clearTimeout(truncationTimeout);
+                truncationTimeout = setTimeout(updatePkTruncation, 100);
             }
         });
 
