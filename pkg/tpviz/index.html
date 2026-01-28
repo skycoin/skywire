@@ -62,13 +62,14 @@
         .visor-item .v-pk.offline { color: #e94560; }
         .visor-item .v-pk.unknown { background: rgba(233, 69, 96, 0.3); padding: 0 2px; border-radius: 2px; }
         .visor-item .v-ver { color: #888; font-size: 0.9em; margin-left: auto; }
-        .visor-item .v-row2 { width: 100%; display: flex; align-items: center; gap: 4px; margin-top: 1px; padding-left: 20px; }
+        .visor-item .v-row2 { width: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 3px; margin-top: 2px; padding-left: 22px; }
         .visor-item .v-svc { font-size: 0.85em; padding: 0 3px; border-radius: 2px; }
-        .visor-item .v-svc.vpn { background: rgba(138, 43, 226, 0.3); color: #9f6efc; }
-        .visor-item .v-svc.proxy { background: rgba(255, 165, 0, 0.3); color: #ffa500; }
-        .visor-item .v-tp { font-size: 0.85em; color: #666; }
-        .visor-item .v-tp .stcpr { color: #00d9a5; }
-        .visor-item .v-tp .sudph { color: #00b4d8; }
+        .visor-item .v-svc.vpn { background: rgba(138, 43, 226, 0.4); color: #c9a8ff; }
+        .visor-item .v-svc.proxy { background: rgba(255, 165, 0, 0.4); color: #ffc966; }
+        .visor-item .v-svc.visor { background: rgba(50, 205, 50, 0.4); color: #7fff7f; }
+        .visor-item .v-tp { font-size: 0.85em; }
+        .visor-item .v-tp .stcpr { background: rgba(0, 217, 165, 0.3); color: #66ffdd; padding: 0 3px; border-radius: 2px; }
+        .visor-item .v-tp .sudph { background: rgba(0, 180, 216, 0.3); color: #66d9ff; padding: 0 3px; border-radius: 2px; }
 
         #selected-info { margin-top: 10px; padding: 12px; background: #0f3460; border-radius: 4px; display: none; }
         #selected-info.visible { display: block; }
@@ -229,7 +230,7 @@
                 const flag = countryToFlag(country);
                 const version = visorVersions[v.id] || '';
                 const verShort = version ? getBaseVersion(version).replace('v', '') : '';
-                const services = svcInfo ? svcInfo.services.filter(s => s === 'vpn' || s === 'proxy') : [];
+                const services = svcInfo ? svcInfo.services : [];
 
                 // Count transports by type (only STCPR and SUDPH)
                 const conns = visorConnections[v.id] || [];
@@ -239,27 +240,19 @@
                 // Status class for PK text
                 const pkClass = status === 'offline' ? 'offline' : (status === 'unknown' ? 'unknown' : '');
 
-                // Build row 1: flag/dot + PK + version
+                // Build row 1: flag/dot + PK
                 let row1 = '<span class="v-flag">' + (flag || '●') + '</span>';
-                row1 += '<span class="v-pk ' + pkClass + '">' + v.id.substring(0, 12) + '</span>';
-                if (verShort) row1 += '<span class="v-ver">' + verShort + '</span>';
+                row1 += '<span class="v-pk ' + pkClass + '">' + v.id + '</span>';
 
-                // Build row 2: services + transport counts (only if there's data)
-                let row2 = '';
-                if (services.length > 0 || stcprCount > 0 || sudphCount > 0) {
-                    row2 = '<div class="v-row2">';
-                    services.forEach(s => {
-                        row2 += '<span class="v-svc ' + s + '">' + s.toUpperCase() + '</span>';
-                    });
-                    if (stcprCount > 0 || sudphCount > 0) {
-                        row2 += '<span class="v-tp">';
-                        if (stcprCount > 0) row2 += '<span class="stcpr">S:' + stcprCount + '</span>';
-                        if (stcprCount > 0 && sudphCount > 0) row2 += ' ';
-                        if (sudphCount > 0) row2 += '<span class="sudph">U:' + sudphCount + '</span>';
-                        row2 += '</span>';
-                    }
-                    row2 += '</div>';
-                }
+                // Build row 2: version + services + transport counts
+                let row2 = '<div class="v-row2">';
+                if (verShort) row2 += '<span class="v-ver">' + verShort + '</span>';
+                services.forEach(s => {
+                    row2 += '<span class="v-svc ' + s + '">' + s.toUpperCase() + '</span>';
+                });
+                if (stcprCount > 0) row2 += '<span class="v-tp"><span class="stcpr">S:' + stcprCount + '</span></span>';
+                if (sudphCount > 0) row2 += '<span class="v-tp"><span class="sudph">U:' + sudphCount + '</span></span>';
+                row2 += '</div>';
 
                 return '<div class="visor-item" onclick="focusVisor(\'' + v.id + '\')">' + row1 + row2 + '</div>';
             }).join('');
@@ -280,8 +273,8 @@
             const legendEl = document.getElementById('node-legend');
             if (showServices) {
                 legendEl.innerHTML =
-                    '<div class="status-item"><div class="status-dot status-vpn"></div><span>VPN Service</span></div>' +
-                    '<div class="status-item"><div class="status-dot status-proxy"></div><span>Proxy Service</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-vpn"></div><span>VPN</span></div>' +
+                    '<div class="status-item"><div class="status-dot status-proxy"></div><span>Proxy</span></div>' +
                     '<div class="status-item"><div class="status-dot status-online"></div><span>Online (no service)</span></div>' +
                     '<div class="status-item"><div class="status-dot status-offline"></div><span>Offline</span></div>' +
                     '<div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>';
@@ -710,7 +703,7 @@
                 populateVersionFilter();
                 applyFilters();
             }
-            document.getElementById('loading').style.display = 'none';
+            if (loadingEl) loadingEl.style.display = 'none';
         }
 
         function createNetwork() {
