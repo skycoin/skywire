@@ -195,6 +195,7 @@
         let nextRefreshTime = null, countdownInterval = null, serverCacheAge = null;
 
         const colors = { stcpr: '#00d9a5', sudph: '#00b4d8', dmsg: '#ffd166' };
+        const brightColors = { stcpr: '#00ffcc', sudph: '#00e5ff', dmsg: '#ffe066' };
 
         // Toggle collapsible sections
         function toggleSection(sectionId) {
@@ -560,9 +561,13 @@
             const data = { nodes: nodesDataset, edges: edgesDataset };
             const options = {
                 nodes: { shape: 'dot', font: { size: 10, color: '#aaa' }, borderWidth: 2 },
-                edges: { smooth: { type: 'continuous', roundness: 0.5 } },
+                edges: {
+                    smooth: { type: 'continuous', roundness: 0.5 },
+                    selectionWidth: 0,  // Disable default selection width change
+                    hoverWidth: 0       // Disable default hover width change
+                },
                 physics: { stabilization: { iterations: 100, fit: true }, barnesHut: { gravitationalConstant: -3000, springConstant: 0.001, springLength: 200 } },
-                interaction: { hover: true, tooltipDelay: 100 }
+                interaction: { hover: true, tooltipDelay: 100, selectConnectedEdges: false }
             };
             network = new vis.Network(container, data, options);
             network.on('click', params => { if (params.nodes.length > 0) showNodeInfo(params.nodes[0]); else hideNodeInfo(); });
@@ -638,14 +643,14 @@
                     // Highlight connected edges - brighter color and thicker
                     edgeUpdates.push({
                         id: edge.id,
-                        color: { color: colors[edge.type], opacity: 1 },
-                        width: 3
+                        color: { color: brightColors[edge.type], opacity: 1, highlight: brightColors[edge.type], hover: brightColors[edge.type] },
+                        width: 4
                     });
                 } else {
-                    // Dim unconnected edges
+                    // Dim unconnected edges - very faint
                     edgeUpdates.push({
                         id: edge.id,
-                        color: { color: '#333', opacity: 0.3 },
+                        color: { color: '#222', opacity: 0.15, highlight: '#222', hover: '#222' },
                         width: 1
                     });
                 }
@@ -659,7 +664,7 @@
             edgesDataset.forEach(edge => {
                 edgeUpdates.push({
                     id: edge.id,
-                    color: { color: colors[edge.type], opacity: 0.6 },
+                    color: { color: colors[edge.type], opacity: 0.6, highlight: colors[edge.type], hover: colors[edge.type] },
                     width: 1
                 });
             });
