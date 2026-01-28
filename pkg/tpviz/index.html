@@ -264,12 +264,19 @@
             const sorted = Object.entries(versionCounts)
                 .sort((a, b) => compareVersions(b[0], a[0]));
 
-            // Display top versions
+            // Display top versions as table
             const total = Object.values(versionCounts).reduce((a, b) => a + b, 0);
-            statsEl.innerHTML = sorted.slice(0, 5).map(([ver, count]) => {
+            let html = '<table style="width:100%;font-size:0.85em;border-collapse:collapse;">';
+            html += '<tr style="color:#888;font-size:0.9em;"><td>Version</td><td style="text-align:right;">Count</td><td style="text-align:right;">%</td></tr>';
+            sorted.slice(0, 5).forEach(([ver, count]) => {
                 const pct = ((count / total) * 100).toFixed(1);
-                return '<div class="stat"><span class="stat-label">' + ver + '</span><span class="stat-value">' + count + ' (' + pct + '%)</span></div>';
-            }).join('') + (sorted.length > 5 ? '<div class="stat" style="color:#666;"><span class="stat-label">+ ' + (sorted.length - 5) + ' more</span></div>' : '');
+                html += '<tr><td style="color:#0f9b8e;">' + ver + '</td><td style="text-align:right;">' + count + '</td><td style="text-align:right;color:#888;">' + pct + '%</td></tr>';
+            });
+            html += '</table>';
+            if (sorted.length > 5) {
+                html += '<div style="color:#666;font-size:0.8em;margin-top:4px;">+ ' + (sorted.length - 5) + ' more versions</div>';
+            }
+            statsEl.innerHTML = html;
         }
 
         async function fetchAllData() {
