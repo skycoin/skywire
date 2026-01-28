@@ -26,8 +26,8 @@
         .control-group { margin: 10px 0; }
         label { display: block; margin-bottom: 5px; color: #aaa; font-size: 0.9em; }
         input[type="checkbox"] { margin-right: 8px; }
-        input[type="text"] { width: 100%; padding: 8px; background: #0f3460; border: 1px solid #1a1a2e; color: #eee; border-radius: 4px; }
-        input[type="text"]:focus { outline: none; border-color: #e94560; }
+        input[type="text"], select { width: 100%; padding: 8px; background: #0f3460; border: 1px solid #1a1a2e; color: #eee; border-radius: 4px; }
+        input[type="text"]:focus, select:focus { outline: none; border-color: #e94560; }
         button { width: 100%; padding: 10px; margin-top: 10px; background: #e94560; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; }
         button:hover { background: #ff6b6b; }
         button:disabled { background: #555; cursor: not-allowed; }
@@ -100,6 +100,12 @@
                 </div>
                 <div class="control-group">
                     <label><input type="checkbox" id="show-services"> Highlight Services (proxy/VPN)</label>
+                </div>
+                <div class="control-group">
+                    <label for="version-filter">Filter by Version</label>
+                    <select id="version-filter">
+                        <option value="">All Versions</option>
+                    </select>
                 </div>
                 <div class="control-group">
                     <label for="search">Search PK (first 8 chars)</label>
@@ -202,6 +208,70 @@
             }
         }
 
+        // Extract base version (before hyphen), e.g., "v1.3.33-abc" -> "v1.3.33"
+        function getBaseVersion(version) {
+            if (!version) return '';
+            const idx = version.indexOf('-');
+            return idx > 0 ? version.substring(0, idx) : version;
+        }
+
+        // Parse version into comparable parts [major, minor, patch]
+        function parseVersion(version) {
+            const base = getBaseVersion(version);
+            const match = base.match(/v?(\d+)\.(\d+)\.(\d+)/);
+            if (!match) return [0, 0, 0];
+            return [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])];
+        }
+
+        // Compare two versions: returns positive if a > b, negative if a < b, 0 if equal
+        function compareVersions(a, b) {
+            const pa = parseVersion(a);
+            const pb = parseVersion(b);
+            for (let i = 0; i < 3; i++) {
+                if (pa[i] !== pb[i]) return pa[i] - pb[i];
+            }
+            return 0;
+        }
+
+        // Get unique base versions sorted newest first
+        function getUniqueVersions() {
+            const versions = new Set();
+            for (const v of Object.values(visorVersions)) {
+                const base = getBaseVersion(v);
+                if (base) versions.add(base);
+            }
+            return Array.from(versions).sort((a, b) => compareVersions(b, a));
+        }
+
+        // Populate version filter dropdown
+        function populateVersionFilter() {
+            const select = document.getElementById('version-filter');
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">All Versions</option>';
+            const versions = getUniqueVersions();
+            versions.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v;
+                opt.textContent = v;
+                select.appendChild(opt);
+            });
+            select.value = currentValue; // Restore selection
+        }
+
+        // Calculate node mass based on version (newer = higher mass = more central)
+        function getVersionMass(version) {
+            if (!version) return 1;
+            const versions = getUniqueVersions();
+            if (versions.length === 0) return 1;
+            const base = getBaseVersion(version);
+            const idx = versions.indexOf(base);
+            if (idx === -1) return 1;
+            // Newest version (idx 0) gets highest mass, oldest gets lowest
+            // Scale from 1 to 3
+            const ratio = 1 - (idx / versions.length);
+            return 1 + ratio * 2;
+        }
+
         function getVisorStatus(pk) {
             if (onlineVisors.has(pk)) return 'online';
             if (offlineVisors.has(pk)) return 'offline';
@@ -302,6 +372,8 @@
                     color: { background: color.background, border: color.border, highlight: { background: '#e94560', border: '#ff6b6b' } },
                     connections: v.connections,
                     status: status,
+                    version: version,
+                    mass: getVersionMass(version),
                     borderWidth: status === 'offline' ? 3 : 2
                 };
             });
@@ -314,6 +386,7 @@
             nodesDataset = new vis.DataSet(nodes);
             edgesDataset = new vis.DataSet(edges);
             createNetwork();
+            populateVersionFilter();
             document.getElementById('loading').style.display = 'none';
         }
 
@@ -394,6 +467,7 @@
             const showUnknown = document.getElementById('show-unknown').checked;
             const showServices = document.getElementById('show-services').checked;
             const searchTerm = document.getElementById('search').value.toLowerCase();
+            const versionFilter = document.getElementById('version-filter').value;
 
             // Batch node updates
             const nodeUpdates = [];
@@ -405,6 +479,13 @@
                 if (status === 'online' && !showOnline) visible = false;
                 if (status === 'offline' && !showOffline) visible = false;
                 if (status === 'unknown' && !showUnknown) visible = false;
+
+                // Version filtering - match base version only
+                if (versionFilter) {
+                    const nodeVersion = visorVersions[node.id];
+                    const nodeBaseVersion = getBaseVersion(nodeVersion);
+                    if (nodeBaseVersion !== versionFilter) visible = false;
+                }
 
                 if (!visible) hiddenNodes.add(node.id);
 
@@ -470,6 +551,7 @@
         document.getElementById('show-offline').addEventListener('change', applyFilters);
         document.getElementById('show-unknown').addEventListener('change', applyFilters);
         document.getElementById('show-services').addEventListener('change', applyFilters);
+        document.getElementById('version-filter').addEventListener('change', applyFilters);
         document.getElementById('search').addEventListener('input', applyFilters);
         document.getElementById('btn-fit').addEventListener('click', () => network && network.fit());
 
