@@ -173,7 +173,7 @@
                 <div id="selected-version" class="selected-version"></div>
                 <div id="selected-country" class="selected-country"></div>
                 <div id="selected-services" class="selected-services"></div>
-                <div class="stat"><span class="stat-label">Connections</span><span class="stat-value" id="selected-conn-count">-</span></div>
+                <div class="stat"><span class="stat-label">Transports</span><span class="stat-value" id="selected-conn-count">-</span></div>
                 <h3 style="margin-top:10px;">Connected To</h3>
                 <div class="conn-list" id="conn-list"></div>
             </div>
@@ -494,7 +494,7 @@
                 const status = getVisorStatus(v.id);
                 const svcInfo = visorServices[v.id];
                 const version = visorVersions[v.id] || '';
-                let title = v.id + '\nConnections: ' + v.connections + '\nStatus: ' + status;
+                let title = v.id + '\nTransports: ' + v.connections + '\nStatus: ' + status;
                 if (version) {
                     title += '\nVersion: ' + version;
                 }
