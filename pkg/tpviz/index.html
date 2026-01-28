@@ -53,13 +53,7 @@
         button:disabled { background: #555; cursor: not-allowed; }
 
         /* Visor list */
-        .visor-list-header { display: flex; padding: 4px 6px; font-size: 0.65em; color: #666; border-bottom: 1px solid #0f3460; margin-top: 8px; }
-        .visor-list-header .vh-pk { flex: 1; padding-left: 22px; }
-        .visor-list-header .vh-col { text-align: center; }
-        .visor-list-header .vh-ver { width: 42px; text-align: left; }
-        .visor-list-header .vh-svc { width: 24px; }
-        .visor-list-header .vh-tp { width: 32px; text-align: right; }
-        .visor-list { max-height: 300px; overflow-y: auto; overflow-x: hidden; }
+        .visor-list { max-height: 300px; overflow-y: auto; margin-top: 8px; overflow-x: hidden; }
         .visor-item { display: flex; flex-wrap: wrap; align-items: center; padding: 4px 6px; font-size: 0.7em; border-bottom: 1px solid #0f3460; cursor: pointer; gap: 2px; overflow: hidden; }
         .visor-item:hover { background: #1a3a5c; }
         .visor-item:last-child { border-bottom: none; }
@@ -127,15 +121,6 @@
                     <div class="stat"><span class="stat-label">STCPR</span><span class="stat-value" id="count-stcpr">-</span></div>
                     <div class="stat"><span class="stat-label">SUDPH</span><span class="stat-value" id="count-sudph">-</span></div>
                     <div class="stat"><span class="stat-label">DMSG</span><span class="stat-value" id="count-dmsg">-</span></div>
-                    <div class="visor-list-header">
-                        <span class="vh-pk">Public Key</span>
-                        <span class="vh-col vh-ver">Ver</span>
-                        <span class="vh-col vh-svc">P</span>
-                        <span class="vh-col vh-svc">V</span>
-                        <span class="vh-col vh-svc">R</span>
-                        <span class="vh-col vh-tp">S</span>
-                        <span class="vh-col vh-tp">U</span>
-                    </div>
                     <div class="visor-list" id="visor-list"></div>
                 </div>
             </div>
