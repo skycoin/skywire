@@ -352,18 +352,6 @@ func (a *autoconnector) isInList(pk cipher.PubKey, list []cipher.PubKey) bool {
 	return false
 }
 
-// randInt returns a secure random integer in [min, max).
-func randInt(n, x int) (int, error) {
-	if n >= x {
-		return n, nil
-	}
-	nBig, err := rand.Int(rand.Reader, big.NewInt(int64(x-n)))
-	if err != nil {
-		return 0, err
-	}
-	return int(nBig.Int64()) + n, nil
-}
-
 // transportDiscoveryCache holds cached transport discovery data to reduce API calls
 type transportDiscoveryCache struct {
 	entriesByPK     map[cipher.PubKey][]*transport.Entry
