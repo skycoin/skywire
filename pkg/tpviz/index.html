@@ -579,21 +579,81 @@
                 };
             });
 
+            // Create edge ID from transport data (consistent across refreshes)
+            const makeEdgeId = (t) => t.edges[0] < t.edges[1]
+                ? t.edges[0] + '-' + t.edges[1] + '-' + t.type
+                : t.edges[1] + '-' + t.edges[0] + '-' + t.type;
+
             const edges = allData
                 .filter(transport => transport.edges[0] !== transport.edges[1])
-                .map((transport, idx) => ({
-                    id: idx, from: transport.edges[0], to: transport.edges[1],
+                .map(transport => ({
+                    id: makeEdgeId(transport), from: transport.edges[0], to: transport.edges[1],
                     color: { color: colors[transport.type], opacity: 0.6 }, type: transport.type, width: 1, smooth: { type: 'continuous' }
                 }));
 
             if (network) {
-                // Update existing network - preserve view position
-                nodesDataset.clear();
-                nodesDataset.add(nodes);
-                edgesDataset.clear();
-                edgesDataset.add(edges);
+                // Update existing network - preserve node positions
+                const positions = network.getPositions();
+
+                // Pause physics during update to prevent jitter
+                network.setOptions({ physics: { enabled: false } });
+
+                // Update nodes: preserve positions for existing nodes
+                const existingNodeIds = new Set(nodesDataset.getIds());
+                const newNodeIds = new Set(nodes.map(n => n.id));
+
+                // Nodes to remove (exist in dataset but not in new data)
+                const nodesToRemove = [...existingNodeIds].filter(id => !newNodeIds.has(id));
+
+                // Count new nodes (don't exist yet)
+                const newNodesCount = [...newNodeIds].filter(id => !existingNodeIds.has(id)).length;
+
+                // Nodes to add or update
+                const nodesToUpdate = nodes.map(node => {
+                    if (positions[node.id]) {
+                        // Preserve existing position
+                        return { ...node, x: positions[node.id].x, y: positions[node.id].y };
+                    }
+                    return node;
+                });
+
+                // Apply node updates
+                if (nodesToRemove.length > 0) {
+                    nodesDataset.remove(nodesToRemove);
+                }
+                nodesDataset.update(nodesToUpdate);
+
+                // Update edges similarly
+                const existingEdgeIds = new Set(edgesDataset.getIds());
+                const newEdgeIds = new Set(edges.map(e => e.id));
+
+                // Edges to remove
+                const edgesToRemove = [...existingEdgeIds].filter(id => !newEdgeIds.has(id));
+
+                if (edgesToRemove.length > 0) {
+                    edgesDataset.remove(edgesToRemove);
+                }
+                edgesDataset.update(edges);
+
                 populateVersionFilter();
                 applyFilters();
+
+                // Re-enable physics only if there are new nodes to position
+                if (newNodesCount > 0) {
+                    // Brief physics run to position new nodes, then stabilize
+                    network.setOptions({
+                        physics: {
+                            enabled: true,
+                            stabilization: { enabled: true, iterations: 50 }
+                        }
+                    });
+                    network.once('stabilizationIterationsDone', () => {
+                        network.setOptions({ physics: { enabled: false } });
+                    });
+                }
+
+                console.log('Graph updated:', nodesToUpdate.length, 'nodes,', edges.length, 'edges,',
+                    newNodesCount, 'new nodes,', nodesToRemove.length, 'removed');
             } else {
                 // First load - create new network
                 nodesDataset = new vis.DataSet(nodes);
