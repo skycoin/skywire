@@ -57,7 +57,9 @@ func (c *Client) ListenAndServe(addr string) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 
-	c.appCl.Log().Infof("Listening skysocks client on %s", addr)
+	if c.appCl != nil {
+		c.appCl.Log().Infof("Listening skysocks client on %s", addr)
+	}
 
 	c.listener = l
 	go func() {
@@ -68,11 +70,15 @@ func (c *Client) ListenAndServe(addr string) error {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			c.appCl.Log().Errorf("Error accepting: %v", err)
+			if c.appCl != nil {
+				c.appCl.Log().Errorf("Error accepting: %v", err)
+			}
 			return fmt.Errorf("accept: %w", err)
 		}
 
-		c.appCl.Log().Debug("Accepted skysocks client")
+		if c.appCl != nil {
+			c.appCl.Log().Debug("Accepted skysocks client")
+		}
 
 		stream, err := c.session.Open()
 		if err != nil {
@@ -81,7 +87,9 @@ func (c *Client) ListenAndServe(addr string) error {
 			return fmt.Errorf("error opening yamux stream: %w", err)
 		}
 
-		c.appCl.Log().Debug("Opened session skysocks client")
+		if c.appCl != nil {
+			c.appCl.Log().Debug("Opened session skysocks client")
+		}
 
 		go c.handleStream(conn, stream)
 	}
@@ -124,7 +132,7 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 
 	for err := range errCh {
 		if !connClosed {
-			if err := conn.Close(); err != nil {
+			if err := conn.Close(); err != nil && c.appCl != nil {
 				c.appCl.Log().Debugf("Failed to close connection: %v", err)
 			}
 
@@ -132,14 +140,14 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 		}
 
 		if !streamClosed {
-			if err := stream.Close(); err != nil {
+			if err := stream.Close(); err != nil && c.appCl != nil {
 				c.appCl.Log().Debugf("Failed to close stream: %v", err)
 			}
 
 			streamClosed = true
 		}
 
-		if err != nil {
+		if err != nil && c.appCl != nil {
 			c.appCl.Log().Debugf("Copy error: %v", err)
 		}
 	}
@@ -152,14 +160,19 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 }
 
 func (c *Client) close() {
-	c.appCl.Log().Debug("Session failed, closing skysocks client")
-	if err := c.Close(); err != nil {
+	if c.appCl != nil {
+		c.appCl.Log().Debug("Session failed, closing skysocks client")
+	}
+	if err := c.Close(); err != nil && c.appCl != nil {
 		c.appCl.Log().Errorf("Error closing skysocks client: %v", err)
 	}
 }
 
 // ListenIPC starts named-pipe based connection server for windows or unix socket for other OSes
 func (c *Client) ListenIPC(client *ipc.Client) {
+	if c.appCl == nil {
+		return
+	}
 	listenIPC(client, skyenv.SkysocksClientName, c.appCl.Log(), func() {
 		client.Close()
 		if err := c.Close(); err != nil {
@@ -182,7 +195,9 @@ func (c *Client) Close() error {
 
 	var err error
 	c.once.Do(func() {
-		c.appCl.Log().Debug("Closing proxy client")
+		if c.appCl != nil {
+			c.appCl.Log().Debug("Closing proxy client")
+		}
 
 		close(c.closeC)
 	})
