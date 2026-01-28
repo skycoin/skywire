@@ -619,9 +619,52 @@
                 }).join('');
 
             info.classList.add('visible');
+
+            // Highlight edges connected to selected node, dim others
+            highlightNodeEdges(nodeId);
         }
 
-        function hideNodeInfo() { document.getElementById('selected-info').classList.remove('visible'); }
+        function hideNodeInfo() {
+            document.getElementById('selected-info').classList.remove('visible');
+            resetEdgeHighlighting();
+        }
+
+        // Highlight edges for selected node
+        function highlightNodeEdges(nodeId) {
+            const edgeUpdates = [];
+            edgesDataset.forEach(edge => {
+                const isConnected = edge.from === nodeId || edge.to === nodeId;
+                if (isConnected) {
+                    // Highlight connected edges - brighter color and thicker
+                    edgeUpdates.push({
+                        id: edge.id,
+                        color: { color: colors[edge.type], opacity: 1 },
+                        width: 3
+                    });
+                } else {
+                    // Dim unconnected edges
+                    edgeUpdates.push({
+                        id: edge.id,
+                        color: { color: '#333', opacity: 0.3 },
+                        width: 1
+                    });
+                }
+            });
+            edgesDataset.update(edgeUpdates);
+        }
+
+        // Reset edge highlighting to default
+        function resetEdgeHighlighting() {
+            const edgeUpdates = [];
+            edgesDataset.forEach(edge => {
+                edgeUpdates.push({
+                    id: edge.id,
+                    color: { color: colors[edge.type], opacity: 0.6 },
+                    width: 1
+                });
+            });
+            edgesDataset.update(edgeUpdates);
+        }
 
         function applyFilters() {
             const showStcpr = document.getElementById('show-stcpr').checked;
