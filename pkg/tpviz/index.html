@@ -9,121 +9,173 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background: #1a1a2e; color: #eee; }
         #container { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
-        #sidebar { width: 320px; min-width: 320px; background: #16213e; padding: 20px; overflow-y: auto; border-right: 1px solid #0f3460; }
+        #sidebar { width: 320px; min-width: 320px; background: #16213e; padding: 15px; overflow-y: auto; border-right: 1px solid #0f3460; }
         #network { flex: 1; background: #1a1a2e; position: relative; overflow: hidden; min-width: 0; }
-        h1 { font-size: 1.2em; margin-bottom: 20px; color: #e94560; }
-        h2 { font-size: 1em; margin: 15px 0 10px; color: #0f9b8e; }
-        .stat { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #0f3460; }
+        h1 { font-size: 1.2em; margin-bottom: 15px; color: #e94560; }
+
+        /* Collapsible sections */
+        .section { margin-bottom: 10px; border: 1px solid #0f3460; border-radius: 4px; overflow: hidden; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #0f3460; cursor: pointer; user-select: none; }
+        .section-header:hover { background: #1a3a5c; }
+        .section-title { font-size: 0.9em; font-weight: 600; color: #0f9b8e; }
+        .section-toggle { color: #888; font-size: 0.8em; transition: transform 0.2s; }
+        .section.collapsed .section-toggle { transform: rotate(-90deg); }
+        .section-content { padding: 10px 12px; display: block; }
+        .section.collapsed .section-content { display: none; }
+
+        .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #0f3460; font-size: 0.85em; }
+        .stat:last-child { border-bottom: none; }
         .stat-label { color: #aaa; }
         .stat-value { font-weight: bold; }
-        .legend { margin-top: 15px; }
-        .legend-item { display: flex; align-items: center; margin: 8px 0; }
-        .legend-color { width: 30px; height: 4px; margin-right: 10px; border-radius: 2px; }
+
+        .legend-item { display: flex; align-items: center; margin: 6px 0; font-size: 0.85em; }
+        .legend-color { width: 24px; height: 4px; margin-right: 8px; border-radius: 2px; }
         .stcpr { background: #00d9a5; }
         .sudph { background: #00b4d8; }
         .dmsg { background: #ffd166; }
-        .controls { margin-top: 20px; }
-        .control-group { margin: 10px 0; }
-        label { display: block; margin-bottom: 5px; color: #aaa; font-size: 0.9em; }
-        input[type="checkbox"] { margin-right: 8px; }
-        input[type="text"], select { width: 100%; padding: 8px; background: #0f3460; border: 1px solid #1a1a2e; color: #eee; border-radius: 4px; }
+        .status-item { display: flex; align-items: center; margin: 6px 0; font-size: 0.85em; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+        .status-online { background: #00d9a5; }
+        .status-offline { background: #e94560; border: 2px solid #fff; }
+        .status-unknown { background: #ffd166; }
+
+        .control-group { margin: 8px 0; }
+        label { display: block; margin-bottom: 4px; color: #aaa; font-size: 0.85em; }
+        input[type="checkbox"] { margin-right: 6px; }
+        input[type="text"], select { width: 100%; padding: 6px 8px; background: #1a1a2e; border: 1px solid #0f3460; color: #eee; border-radius: 4px; font-size: 0.85em; }
         input[type="text"]:focus, select:focus { outline: none; border-color: #e94560; }
-        button { width: 100%; padding: 10px; margin-top: 10px; background: #e94560; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; }
+        button { width: 100%; padding: 8px; margin-top: 8px; background: #e94560; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
         button:hover { background: #ff6b6b; }
         button:disabled { background: #555; cursor: not-allowed; }
-        #selected-info { margin-top: 20px; padding: 15px; background: #0f3460; border-radius: 4px; display: none; }
+
+        /* Visor list */
+        .visor-list { max-height: 200px; overflow-y: auto; margin-top: 8px; }
+        .visor-item { display: flex; align-items: center; padding: 4px 6px; font-family: monospace; font-size: 0.75em; border-bottom: 1px solid #0f3460; cursor: pointer; }
+        .visor-item:hover { background: #1a3a5c; }
+        .visor-item:last-child { border-bottom: none; }
+        .visor-item .status-dot { width: 8px; height: 8px; margin-right: 6px; flex-shrink: 0; }
+
+        #selected-info { margin-top: 10px; padding: 12px; background: #0f3460; border-radius: 4px; display: none; }
         #selected-info.visible { display: block; }
-        #selected-pk { font-family: monospace; font-size: 0.7em; word-break: break-all; color: #e94560; margin: 10px 0; }
-        .conn-list { max-height: 200px; overflow-y: auto; font-size: 0.8em; }
-        .conn-item { padding: 4px 0; border-bottom: 1px solid #1a1a2e; font-family: monospace; font-size: 0.85em; }
-        .conn-type { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; margin-right: 5px; }
+        #selected-info h3 { font-size: 0.9em; color: #0f9b8e; margin-bottom: 8px; }
+        #selected-pk { font-family: monospace; font-size: 0.65em; word-break: break-all; color: #e94560; margin: 8px 0; }
+        .conn-list { max-height: 150px; overflow-y: auto; font-size: 0.8em; }
+        .conn-item { padding: 3px 0; border-bottom: 1px solid #1a1a2e; font-family: monospace; font-size: 0.8em; }
+        .conn-type { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 0.75em; margin-right: 4px; }
         .conn-type.stcpr { background: rgba(0, 217, 165, 0.3); color: #00d9a5; }
         .conn-type.sudph { background: rgba(0, 180, 216, 0.3); color: #00b4d8; }
         .conn-type.dmsg { background: rgba(255, 209, 102, 0.3); color: #ffd166; }
+
         #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
         .spinner { width: 50px; height: 50px; border: 3px solid #0f3460; border-top-color: #e94560; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
         #error { color: #e94560; padding: 20px; text-align: center; display: none; }
-        #cache-info { margin-top: 10px; font-size: 0.8em; color: #888; }
-        .service-badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 0.7em; margin: 2px; }
+        #cache-info { margin-top: 8px; font-size: 0.75em; color: #888; }
+        .service-badge { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 0.7em; margin: 1px; }
         .service-badge.proxy { background: rgba(255, 165, 0, 0.3); color: #ffa500; }
         .service-badge.vpn { background: rgba(138, 43, 226, 0.3); color: #9f6efc; }
         .service-badge.visor { background: rgba(50, 205, 50, 0.3); color: #32cd32; }
-        .status-legend { margin-top: 10px; padding: 10px; background: #0f3460; border-radius: 4px; font-size: 0.8em; }
-        .status-item { display: flex; align-items: center; margin: 5px 0; }
-        .status-dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
-        .status-online { background: #00d9a5; }
-        .status-offline { background: #e94560; border: 2px solid #fff; }
-        .status-unknown { background: #ffd166; }
-        .selected-services { margin-top: 10px; }
-        .selected-country { color: #888; font-size: 0.9em; margin-top: 5px; }
-        .selected-version { color: #0f9b8e; font-size: 0.9em; margin-top: 5px; font-family: monospace; }
+        .selected-services { margin-top: 8px; }
+        .selected-country { color: #888; font-size: 0.85em; margin-top: 4px; }
+        .selected-version { color: #0f9b8e; font-size: 0.85em; margin-top: 4px; font-family: monospace; }
     </style>
 </head>
 <body>
     <div id="container">
         <div id="sidebar">
-            <h1>Transport Discovery</h1>
-            <h2>Statistics</h2>
-            <div class="stat"><span class="stat-label">Total Transports</span><span class="stat-value" id="total-transports">-</span></div>
-            <div class="stat"><span class="stat-label">Unique Visors</span><span class="stat-value" id="total-visors">-</span></div>
-            <div class="stat"><span class="stat-label">Online</span><span class="stat-value" id="count-online" style="color:#00d9a5">-</span></div>
-            <div class="stat"><span class="stat-label">Offline</span><span class="stat-value" id="count-offline" style="color:#e94560">-</span></div>
-            <div class="stat"><span class="stat-label">Unknown</span><span class="stat-value" id="count-unknown" style="color:#ffd166">-</span></div>
-            <div class="stat"><span class="stat-label">STCPR</span><span class="stat-value" id="count-stcpr">-</span></div>
-            <div class="stat"><span class="stat-label">SUDPH</span><span class="stat-value" id="count-sudph">-</span></div>
-            <div class="stat"><span class="stat-label">DMSG</span><span class="stat-value" id="count-dmsg">-</span></div>
+            <h1>TPD Visualizer</h1>
 
-            <h2>Legend</h2>
-            <div class="legend">
-                <div class="legend-item"><div class="legend-color stcpr"></div><span>STCPR (TCP)</span></div>
-                <div class="legend-item"><div class="legend-color sudph"></div><span>SUDPH (UDP Hole Punch)</span></div>
-                <div class="legend-item"><div class="legend-color dmsg"></div><span>DMSG</span></div>
-            </div>
-            <div class="status-legend">
-                <div class="status-item"><div class="status-dot status-online"></div><span>Online (in UT)</span></div>
-                <div class="status-item"><div class="status-dot status-offline"></div><span>Offline (in UT)</span></div>
-                <div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>
+            <!-- TPD Statistics - expanded by default -->
+            <div class="section" id="section-tpd">
+                <div class="section-header" onclick="toggleSection('section-tpd')">
+                    <span class="section-title">Transport Discovery</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="stat"><span class="stat-label">Total Transports</span><span class="stat-value" id="total-transports">-</span></div>
+                    <div class="stat"><span class="stat-label">Unique Visors</span><span class="stat-value" id="total-visors">-</span></div>
+                    <div class="stat"><span class="stat-label">STCPR</span><span class="stat-value" id="count-stcpr">-</span></div>
+                    <div class="stat"><span class="stat-label">SUDPH</span><span class="stat-value" id="count-sudph">-</span></div>
+                    <div class="stat"><span class="stat-label">DMSG</span><span class="stat-value" id="count-dmsg">-</span></div>
+                    <div class="visor-list" id="visor-list"></div>
+                </div>
             </div>
 
-            <h2>Filters</h2>
-            <div class="controls">
-                <div class="control-group">
-                    <label><input type="checkbox" id="show-stcpr" checked> Show STCPR</label>
-                    <label><input type="checkbox" id="show-sudph" checked> Show SUDPH</label>
-                    <label><input type="checkbox" id="show-dmsg" checked> Show DMSG</label>
+            <!-- Uptime Tracker - collapsed by default -->
+            <div class="section collapsed" id="section-ut">
+                <div class="section-header" onclick="toggleSection('section-ut')">
+                    <span class="section-title">Uptime Tracker</span>
+                    <span class="section-toggle">▼</span>
                 </div>
-                <div class="control-group">
-                    <label><input type="checkbox" id="show-online" checked> Show Online</label>
-                    <label><input type="checkbox" id="show-offline" checked> Show Offline</label>
-                    <label><input type="checkbox" id="show-unknown" checked> Show Unknown (not in UT)</label>
+                <div class="section-content">
+                    <div class="stat"><span class="stat-label">Online</span><span class="stat-value" id="count-online" style="color:#00d9a5">-</span></div>
+                    <div class="stat"><span class="stat-label">Offline</span><span class="stat-value" id="count-offline" style="color:#e94560">-</span></div>
+                    <div class="stat"><span class="stat-label">Not in UT</span><span class="stat-value" id="count-unknown" style="color:#ffd166">-</span></div>
                 </div>
-                <div class="control-group">
-                    <label><input type="checkbox" id="show-services"> Highlight Services (proxy/VPN)</label>
-                </div>
-                <div class="control-group">
-                    <label for="version-filter">Filter by Version</label>
-                    <select id="version-filter">
-                        <option value="">All Versions</option>
-                    </select>
-                </div>
-                <div class="control-group">
-                    <label for="search">Search PK (first 8 chars)</label>
-                    <input type="text" id="search" placeholder="e.g. 027087fe">
-                </div>
-                <button id="btn-fit">Fit to Screen</button>
-                <div id="cache-info"></div>
             </div>
+
+            <!-- Legend - collapsed by default -->
+            <div class="section collapsed" id="section-legend">
+                <div class="section-header" onclick="toggleSection('section-legend')">
+                    <span class="section-title">Legend</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="legend-item"><div class="legend-color stcpr"></div><span>STCPR (TCP)</span></div>
+                    <div class="legend-item"><div class="legend-color sudph"></div><span>SUDPH (UDP)</span></div>
+                    <div class="legend-item"><div class="legend-color dmsg"></div><span>DMSG</span></div>
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;"></div>
+                    <div class="status-item"><div class="status-dot status-online"></div><span>Online (in UT)</span></div>
+                    <div class="status-item"><div class="status-dot status-offline"></div><span>Offline (in UT)</span></div>
+                    <div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>
+                </div>
+            </div>
+
+            <!-- Filters - collapsed by default -->
+            <div class="section collapsed" id="section-filters">
+                <div class="section-header" onclick="toggleSection('section-filters')">
+                    <span class="section-title">Filters</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="control-group">
+                        <label><input type="checkbox" id="show-stcpr" checked> Show STCPR</label>
+                        <label><input type="checkbox" id="show-sudph" checked> Show SUDPH</label>
+                        <label><input type="checkbox" id="show-dmsg" checked> Show DMSG</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="show-online" checked> Show Online</label>
+                        <label><input type="checkbox" id="show-offline" checked> Show Offline</label>
+                        <label><input type="checkbox" id="show-unknown" checked> Show Unknown</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="show-services"> Highlight Services</label>
+                    </div>
+                    <div class="control-group">
+                        <label for="version-filter">Version</label>
+                        <select id="version-filter">
+                            <option value="">All Versions</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="search">Search PK</label>
+                        <input type="text" id="search" placeholder="e.g. 027087fe">
+                    </div>
+                </div>
+            </div>
+
+            <button id="btn-fit">Fit to Screen</button>
+            <div id="cache-info"></div>
 
             <div id="selected-info">
-                <h2>Selected Visor</h2>
+                <h3>Selected Visor</h3>
                 <div id="selected-pk"></div>
                 <div id="selected-status"></div>
                 <div id="selected-version" class="selected-version"></div>
                 <div id="selected-country" class="selected-country"></div>
                 <div id="selected-services" class="selected-services"></div>
                 <div class="stat"><span class="stat-label">Connections</span><span class="stat-value" id="selected-conn-count">-</span></div>
-                <h2>Connected To</h2>
+                <h3 style="margin-top:10px;">Connected To</h3>
                 <div class="conn-list" id="conn-list"></div>
             </div>
         </div>
@@ -144,6 +196,34 @@
         let nextRefreshTime = null, countdownInterval = null, serverCacheAge = null;
 
         const colors = { stcpr: '#00d9a5', sudph: '#00b4d8', dmsg: '#ffd166' };
+
+        // Toggle collapsible sections
+        function toggleSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            section.classList.toggle('collapsed');
+        }
+
+        // Populate visor list in TPD section
+        function populateVisorList(visors) {
+            const list = document.getElementById('visor-list');
+            const sorted = Array.from(visors.values()).sort((a, b) => b.connections - a.connections);
+            list.innerHTML = sorted.map(v => {
+                const status = getVisorStatus(v.id);
+                return '<div class="visor-item" onclick="focusVisor(\'' + v.id + '\')">' +
+                    '<span class="status-dot status-' + status + '"></span>' +
+                    '<span>' + v.id.substring(0, 16) + '...</span>' +
+                    '</div>';
+            }).join('');
+        }
+
+        // Focus on a visor in the network
+        function focusVisor(pk) {
+            if (network) {
+                network.focus(pk, { scale: 1.5, animation: true });
+                network.selectNodes([pk]);
+                showNodeInfo(pk);
+            }
+        }
 
         async function fetchAllData() {
             const isRefresh = network !== null;
@@ -356,6 +436,9 @@
             document.getElementById('count-stcpr').textContent = countStcpr;
             document.getElementById('count-sudph').textContent = countSudph;
             document.getElementById('count-dmsg').textContent = countDmsg;
+
+            // Populate visor list
+            populateVisorList(visors);
 
             const maxConn = Math.max(...Array.from(visors.values()).map(v => v.connections));
             const nodes = Array.from(visors.values()).map(v => {
