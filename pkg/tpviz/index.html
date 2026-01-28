@@ -718,19 +718,26 @@
                 populateVersionFilter();
                 applyFilters();
 
-                // Re-enable physics if there are new nodes to position them
+                // Re-enable physics after update
                 if (newNodesCount > 0) {
-                    // Enable physics and run stabilization to position new nodes
+                    // New nodes need positioning - run stabilization first
                     network.setOptions({ physics: { enabled: true } });
-                    network.stabilize(100); // Run 100 iterations to spread out new nodes
+                    network.stabilize(100);
                     network.once('stabilizationIterationsDone', () => {
-                        // Keep physics running with low intensity for smooth layout
                         network.setOptions({
                             physics: {
                                 enabled: true,
                                 barnesHut: { gravitationalConstant: -1000, springConstant: 0.0005 }
                             }
                         });
+                    });
+                } else {
+                    // No new nodes - just resume physics at low intensity
+                    network.setOptions({
+                        physics: {
+                            enabled: true,
+                            barnesHut: { gravitationalConstant: -1000, springConstant: 0.0005 }
+                        }
                     });
                 }
 
