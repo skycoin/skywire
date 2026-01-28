@@ -16,10 +16,10 @@ import (
 
 var (
 	// html snippets
-	nl          []string
-	navlinks    string
-	htmltoplink = "<a href='#top'>top of page</a>\n"
-	htmlend     = "</pre></body></html>"
+	nl                     []string
+	navlinks               string
+	htmltoplink            = "<a href='#top'>top of page</a>\n"
+	htmlend                = "</pre></body></html>"
 	htmlRewardPageTemplate = `
 {{.Page.Content}}
 `

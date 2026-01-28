@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -65,11 +66,11 @@ func DefaultConfig() Config {
 
 // Server is the transport visualizer HTTP server
 type Server struct {
-	config    Config
-	mux       *http.ServeMux
-	cacheMu   sync.RWMutex
-	stopChan  chan struct{}
-	autoTick  *time.Ticker
+	config   Config
+	mux      *http.ServeMux
+	cacheMu  sync.RWMutex
+	stopChan chan struct{}
+	autoTick *time.Ticker
 }
 
 // NewServer creates a new visualizer server with the given config
@@ -96,7 +97,7 @@ func (s *Server) setupRoutes() {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(content) //nolint:errcheck
+		w.Write(content) //nolint:errcheck,gosec
 	})
 
 	// API endpoint for transport data (with caching)
@@ -111,7 +112,7 @@ func (s *Server) setupRoutes() {
 	// Health check
 	s.mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
 			"status":       "ok",
 			"cache_file":   s.config.CacheFile,
 			"cache_age":    s.config.CacheMaxAge,
@@ -132,7 +133,7 @@ func (s *Server) handleTransports(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Write([]byte(data)) //nolint:errcheck
+	w.Write([]byte(data)) //nolint:errcheck,gosec
 }
 
 func (s *Server) handleUptimes(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +145,7 @@ func (s *Server) handleUptimes(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Write([]byte(data)) //nolint:errcheck
+	w.Write([]byte(data)) //nolint:errcheck,gosec
 }
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +179,7 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Write(result) //nolint:errcheck
+	w.Write(result) //nolint:errcheck,gosec
 }
 
 // ServiceInfo holds service information for a visor
@@ -378,7 +379,7 @@ func fetchURL(url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer resp.Body.Close() //nolint:errcheck,gosec
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
@@ -393,7 +394,7 @@ func fetchURL(url string) (string, error) {
 }
 
 func readFile(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
 		return "", err
 	}
@@ -434,7 +435,9 @@ func generateHTML(tpdURL string, navLinks []NavLink) string {
 		navLinksHTML += `</div>`
 	}
 
-	return fmt.Sprintf(htmlTemplate, navLinksHTML, tpdURL)
+	result := strings.Replace(htmlTemplate, "{{NAV_LINKS}}", navLinksHTML, 1)
+	result = strings.Replace(result, "{{TPD_URL}}", tpdURL, 1)
+	return result
 }
 
 const htmlTemplate = `<!DOCTYPE html>
@@ -465,9 +468,9 @@ const htmlTemplate = `<!DOCTYPE html>
         .control-group { margin: 10px 0; }
         label { display: block; margin-bottom: 5px; color: #aaa; font-size: 0.9em; }
         input[type="checkbox"] { margin-right: 8px; }
-        input[type="text"] { width: 100%%; padding: 8px; background: #0f3460; border: 1px solid #1a1a2e; color: #eee; border-radius: 4px; }
+        input[type="text"] { width: 100%; padding: 8px; background: #0f3460; border: 1px solid #1a1a2e; color: #eee; border-radius: 4px; }
         input[type="text"]:focus { outline: none; border-color: #e94560; }
-        button { width: 100%%; padding: 10px; margin-top: 10px; background: #e94560; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; }
+        button { width: 100%; padding: 10px; margin-top: 10px; background: #e94560; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; }
         button:hover { background: #ff6b6b; }
         button:disabled { background: #555; cursor: not-allowed; }
         #selected-info { margin-top: 20px; padding: 15px; background: #0f3460; border-radius: 4px; display: none; }
@@ -479,8 +482,8 @@ const htmlTemplate = `<!DOCTYPE html>
         .conn-type.stcpr { background: rgba(0, 217, 165, 0.3); color: #00d9a5; }
         .conn-type.sudph { background: rgba(0, 180, 216, 0.3); color: #00b4d8; }
         .conn-type.dmsg { background: rgba(255, 209, 102, 0.3); color: #ffd166; }
-        #loading { position: absolute; top: 50%%; left: 50%%; transform: translate(-50%%, -50%%); text-align: center; }
-        .spinner { width: 50px; height: 50px; border: 3px solid #0f3460; border-top-color: #e94560; border-radius: 50%%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+        .spinner { width: 50px; height: 50px; border: 3px solid #0f3460; border-top-color: #e94560; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
         #error { color: #e94560; padding: 20px; text-align: center; display: none; }
         .nav-links { padding: 10px 0; border-bottom: 1px solid #0f3460; margin-bottom: 15px; }
@@ -492,7 +495,7 @@ const htmlTemplate = `<!DOCTYPE html>
 <body>
     <div id="container">
         <div id="sidebar">
-            %s
+            {{NAV_LINKS}}
             <h1>Transport Discovery</h1>
             <h2>Statistics</h2>
             <div class="stat"><span class="stat-label">Total Transports</span><span class="stat-value" id="total-transports">-</span></div>
@@ -535,7 +538,7 @@ const htmlTemplate = `<!DOCTYPE html>
         </div>
     </div>
     <script>
-        const TPD_URL = '%s';
+        const TPD_URL = '{{TPD_URL}}';
         let network = null, allData = null, nodesDataset = null, edgesDataset = null, visorConnections = {};
         const colors = { stcpr: '#00d9a5', sudph: '#00b4d8', dmsg: '#ffd166' };
 
