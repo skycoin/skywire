@@ -43,7 +43,7 @@ func NewMasterLogger() *MasterLogger {
 				ForceFormatting:    true,
 				DisableColors:      false,
 				ForceColors:        false,
-				TimestampFormat:    "2006-01-02T15:04:05.999999999Z07:00",
+				TimestampFormat:    "2006-01-02T15:04:05.000000000Z07:00",
 			},
 			Hooks: hooks,
 			Level: logrus.DebugLevel,
