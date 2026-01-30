@@ -1101,130 +1101,65 @@
         let groupForceInterval = null; // Interval for applying group separation forces
         let currentGroupKeyFn = null; // Current function to get group key for a node
 
-        // Apply forces to keep groups separated
-        function startGroupSeparationForces(getGroupKey) {
-            stopGroupSeparationForces();
+        // Store fixed group centroids for boundary enforcement
+        let fixedGroupCentroids = null;
+
+        // Hard boundary enforcement - keeps nodes strictly inside their assigned circles
+        function startGroupBoundaryEnforcement(getGroupKey, groupCentroids) {
+            stopGroupBoundaryEnforcement();
             currentGroupKeyFn = getGroupKey;
+            fixedGroupCentroids = groupCentroids;
 
             groupForceInterval = setInterval(() => {
-                if (!network || !groupingMode) return;
+                if (!network || !groupingMode || !fixedGroupCentroids) return;
 
                 const positions = network.getPositions();
+                const updates = [];
 
-                // Calculate current group centroids and radii
-                const groups = new Map(); // groupKey -> {nodes, cx, cy, radius}
+                // For each node, ensure it stays inside its group's circle
                 nodesDataset.forEach(node => {
                     if (node.hidden || !positions[node.id]) return;
+
                     const key = currentGroupKeyFn(node.id);
-                    if (!groups.has(key)) {
-                        groups.set(key, { nodes: [], cx: 0, cy: 0, radius: 0 });
-                    }
-                    groups.get(key).nodes.push({
-                        id: node.id,
-                        x: positions[node.id].x,
-                        y: positions[node.id].y
-                    });
-                });
+                    const centroid = fixedGroupCentroids.get(key);
+                    if (!centroid) return;
 
-                // Calculate centroids and radii
-                groups.forEach(group => {
-                    group.cx = group.nodes.reduce((s, n) => s + n.x, 0) / group.nodes.length;
-                    group.cy = group.nodes.reduce((s, n) => s + n.y, 0) / group.nodes.length;
-                    // Radius = max distance from centroid + padding
-                    let maxDist = 0;
-                    for (const n of group.nodes) {
-                        const d = Math.sqrt((n.x - group.cx) ** 2 + (n.y - group.cy) ** 2);
-                        if (d > maxDist) maxDist = d;
-                    }
-                    group.radius = maxDist + 60; // 60px padding for circle boundary
-                });
+                    const nodeX = positions[node.id].x;
+                    const nodeY = positions[node.id].y;
 
-                // Calculate repulsion between groups based on circle overlap
-                const groupList = Array.from(groups.entries());
-                const centroidForces = new Map();
-                groupList.forEach(([key]) => centroidForces.set(key, { fx: 0, fy: 0 }));
+                    // Distance from group centroid
+                    const dx = nodeX - centroid.x;
+                    const dy = nodeY - centroid.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
 
-                const padding = 80; // Extra padding between circles
-                const repulsionStrength = 150; // Strong repulsion
+                    // Maximum allowed distance (inside the circle with margin)
+                    const maxDist = centroid.radius - 40;
 
-                for (let i = 0; i < groupList.length; i++) {
-                    for (let j = i + 1; j < groupList.length; j++) {
-                        const [keyA, groupA] = groupList[i];
-                        const [keyB, groupB] = groupList[j];
-
-                        const dx = groupB.cx - groupA.cx;
-                        const dy = groupB.cy - groupA.cy;
-                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-
-                        // Minimum distance = sum of radii + padding
-                        const minDist = groupA.radius + groupB.radius + padding;
-
-                        if (dist < minDist) {
-                            // Circles overlapping or too close - strong repulsion
-                            const overlap = minDist - dist;
-                            const force = repulsionStrength * (overlap / minDist);
-                            const fx = (dx / dist) * force;
-                            const fy = (dy / dist) * force;
-
-                            centroidForces.get(keyA).fx -= fx;
-                            centroidForces.get(keyA).fy -= fy;
-                            centroidForces.get(keyB).fx += fx;
-                            centroidForces.get(keyB).fy += fy;
-                        }
-                    }
-                }
-
-                // Apply forces to nodes
-                const updates = [];
-                const cohesionStrength = 0.05; // Pull toward group centroid
-                const containmentStrength = 0.1; // Keep nodes inside circle
-
-                groups.forEach((group, key) => {
-                    const centroidForce = centroidForces.get(key);
-                    const targetRadius = group.radius - 50; // Keep nodes inside with margin
-
-                    group.nodes.forEach(node => {
-                        // Distance from centroid
-                        const dx = node.x - group.cx;
-                        const dy = node.y - group.cy;
-                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-
-                        // Cohesion: pull toward group centroid
-                        let fx = (group.cx - node.x) * cohesionStrength;
-                        let fy = (group.cy - node.y) * cohesionStrength;
-
-                        // Containment: push back if outside target radius
-                        if (dist > targetRadius && targetRadius > 0) {
-                            const pushBack = (dist - targetRadius) * containmentStrength;
-                            fx -= (dx / dist) * pushBack;
-                            fy -= (dy / dist) * pushBack;
-                        }
-
-                        // Add centroid repulsion force (distributed to all nodes)
-                        fx += centroidForce.fx / group.nodes.length;
-                        fy += centroidForce.fy / group.nodes.length;
-
+                    if (dist > maxDist && maxDist > 0) {
+                        // Node is outside its circle - snap it back inside
+                        const scale = maxDist / dist;
                         updates.push({
                             id: node.id,
-                            x: node.x + fx,
-                            y: node.y + fy
+                            x: centroid.x + dx * scale,
+                            y: centroid.y + dy * scale
                         });
-                    });
+                    }
                 });
 
                 if (updates.length > 0) {
                     nodesDataset.update(updates);
                     updateGroupBoundaries();
                 }
-            }, 50); // Run every 50ms
+            }, 30); // Run every 30ms for responsive enforcement
         }
 
-        function stopGroupSeparationForces() {
+        function stopGroupBoundaryEnforcement() {
             if (groupForceInterval) {
                 clearInterval(groupForceInterval);
                 groupForceInterval = null;
             }
             currentGroupKeyFn = null;
+            fixedGroupCentroids = null;
         }
 
         // Generate color for a country based on its code
@@ -1571,22 +1506,22 @@
             // Apply position updates
             nodesDataset.update(nodeUpdates);
 
-            // Enable physics with group separation forces
+            // Enable physics with very weak edge forces (so edges don't pull nodes across boundaries)
             network.setOptions({
                 physics: {
                     enabled: true,
                     barnesHut: {
-                        gravitationalConstant: -800,
-                        springConstant: 0.001,
-                        springLength: 100,
-                        damping: 0.5
+                        gravitationalConstant: -500,
+                        springConstant: 0.0001, // Very weak springs
+                        springLength: 50,
+                        damping: 0.9
                     },
                     stabilization: false
                 }
             });
 
-            // Start group separation force loop
-            startGroupSeparationForces(getGroupKey);
+            // Start group boundary enforcement (keeps nodes inside their circles)
+            startGroupBoundaryEnforcement(getGroupKey, groupCentroids);
 
             // Update boundaries and redraw
             setTimeout(() => {
@@ -1650,7 +1585,7 @@
         // Disable all grouping and restore original positions
         function disableGrouping() {
             // Stop group separation forces
-            stopGroupSeparationForces();
+            stopGroupBoundaryEnforcement();
 
             groupingMode = null;
             groupBoundaries = [];
