@@ -1104,11 +1104,34 @@
         // Store fixed group centroids for boundary enforcement
         let fixedGroupCentroids = null;
 
-        // Hard boundary enforcement - keeps nodes strictly inside their assigned circles
+        // Count cross-group connections for a node
+        function countCrossGroupConnections(nodeId, getGroupKey) {
+            const connections = visorConnections[nodeId] || [];
+            const myGroup = getGroupKey(nodeId);
+            let crossCount = 0;
+            for (const conn of connections) {
+                const otherGroup = getGroupKey(conn.peer);
+                if (otherGroup !== myGroup) {
+                    crossCount++;
+                }
+            }
+            return crossCount;
+        }
+
+        // Hard boundary enforcement + gravity toward center for high-connection nodes
         function startGroupBoundaryEnforcement(getGroupKey, groupCentroids) {
             stopGroupBoundaryEnforcement();
             currentGroupKeyFn = getGroupKey;
             fixedGroupCentroids = groupCentroids;
+
+            // Pre-calculate cross-group connection counts
+            const crossCounts = new Map();
+            let maxCross = 1;
+            nodesDataset.forEach(node => {
+                const count = countCrossGroupConnections(node.id, getGroupKey);
+                crossCounts.set(node.id, count);
+                if (count > maxCross) maxCross = count;
+            });
 
             groupForceInterval = setInterval(() => {
                 if (!network || !groupingMode || !fixedGroupCentroids) return;
@@ -1116,7 +1139,6 @@
                 const positions = network.getPositions();
                 const updates = [];
 
-                // For each node, ensure it stays inside its group's circle
                 nodesDataset.forEach(node => {
                     if (node.hidden || !positions[node.id]) return;
 
@@ -1124,25 +1146,40 @@
                     const centroid = fixedGroupCentroids.get(key);
                     if (!centroid) return;
 
-                    const nodeX = positions[node.id].x;
-                    const nodeY = positions[node.id].y;
+                    let nodeX = positions[node.id].x;
+                    let nodeY = positions[node.id].y;
 
                     // Distance from group centroid
                     const dx = nodeX - centroid.x;
                     const dy = nodeY - centroid.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
-                    // Maximum allowed distance (inside the circle with margin)
+                    // Gravity toward center - stronger for nodes with more cross-group connections
+                    const crossCount = crossCounts.get(node.id) || 0;
+                    const gravityStrength = 0.02 + (crossCount / maxCross) * 0.08; // 0.02 to 0.10
+
+                    if (dist > 5) { // Only apply if not already at center
+                        nodeX -= dx * gravityStrength;
+                        nodeY -= dy * gravityStrength;
+                    }
+
+                    // Hard boundary - maximum allowed distance
                     const maxDist = centroid.radius - 40;
+                    const newDx = nodeX - centroid.x;
+                    const newDy = nodeY - centroid.y;
+                    const newDist = Math.sqrt(newDx * newDx + newDy * newDy);
 
-                    if (dist > maxDist && maxDist > 0) {
-                        // Node is outside its circle - snap it back inside
-                        const scale = maxDist / dist;
-                        updates.push({
-                            id: node.id,
-                            x: centroid.x + dx * scale,
-                            y: centroid.y + dy * scale
-                        });
+                    if (newDist > maxDist && maxDist > 0) {
+                        // Snap back inside circle
+                        const scale = maxDist / newDist;
+                        nodeX = centroid.x + newDx * scale;
+                        nodeY = centroid.y + newDy * scale;
+                    }
+
+                    // Only update if position changed significantly
+                    if (Math.abs(nodeX - positions[node.id].x) > 0.5 ||
+                        Math.abs(nodeY - positions[node.id].y) > 0.5) {
+                        updates.push({ id: node.id, x: nodeX, y: nodeY });
                     }
                 });
 
@@ -1380,10 +1417,10 @@
 
         // Calculate radius needed for a group based on node count
         function calculateGroupRadius(nodeCount) {
-            // Nodes arranged in concentric circles, ~15px per node diameter
+            // Generous spacing to prevent crowding and jumping
             // radius = sqrt(count * nodeArea / pi) + padding
-            const nodeArea = 400; // ~20x20 per node with spacing
-            return Math.max(80, Math.sqrt(nodeCount * nodeArea / Math.PI) + 60);
+            const nodeArea = 900; // ~30x30 per node with spacing
+            return Math.max(100, Math.sqrt(nodeCount * nodeArea / Math.PI) + 80);
         }
 
         // Check if a circle overlaps with any placed circles
