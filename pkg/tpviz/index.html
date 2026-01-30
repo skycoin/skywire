@@ -1154,9 +1154,10 @@
                     const dy = nodeY - centroid.y;
                     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
-                    // Gravity toward center - stronger for nodes with more cross-group connections
+                    // Strong gravity toward center - much stronger for nodes with cross-group connections
                     const crossCount = crossCounts.get(node.id) || 0;
-                    const gravityStrength = 0.02 + (crossCount / maxCross) * 0.08; // 0.02 to 0.10
+                    // Base gravity + strong multiplier for cross-connections
+                    const gravityStrength = 0.05 + (crossCount / maxCross) * 0.4; // 0.05 to 0.45
 
                     if (dist > 5) { // Only apply if not already at center
                         nodeX -= dx * gravityStrength;
@@ -1543,15 +1544,15 @@
             // Apply position updates
             nodesDataset.update(nodeUpdates);
 
-            // Enable physics with very weak edge forces (so edges don't pull nodes across boundaries)
+            // Enable physics with extremely weak edge forces (so edges don't pull nodes across boundaries)
             network.setOptions({
                 physics: {
                     enabled: true,
                     barnesHut: {
-                        gravitationalConstant: -500,
-                        springConstant: 0.0001, // Very weak springs
-                        springLength: 50,
-                        damping: 0.9
+                        gravitationalConstant: -300,
+                        springConstant: 0.00002, // Extremely weak springs
+                        springLength: 30,
+                        damping: 0.95
                     },
                     stabilization: false
                 }
