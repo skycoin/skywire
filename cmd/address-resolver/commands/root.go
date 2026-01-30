@@ -42,6 +42,7 @@ var (
 	metricsAddr     string
 	redisURL        string
 	redisPoolSize   int
+	entryTimeout    time.Duration
 	tag             string
 	logLvl          string
 	testing         bool
@@ -60,6 +61,7 @@ func init() {
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m")
 	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\033[0m")
 	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\033[0m")
+	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for address entry expiration\033[0m")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\033[0m")
 	RootCmd.Flags().StringVar(&tag, "tag", "address_resolver", "logging tag\033[0m")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
@@ -152,7 +154,7 @@ skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 a
 		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
 		defer cancel()
 
-		transportStore, err := store.New(ctx, storeConfig, logger)
+		transportStore, err := store.New(ctx, storeConfig, entryTimeout, logger)
 		if err != nil {
 			logger.Fatal("Failed to initialize redis store: ", err)
 		}
