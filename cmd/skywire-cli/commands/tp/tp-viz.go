@@ -24,6 +24,7 @@ var (
 	vizSDURL         string
 	vizNoCache       bool
 	vizNoAutoRefresh bool
+	vizSurveyDir     string
 )
 
 func init() {
@@ -38,6 +39,7 @@ func init() {
 	vizCmd.Flags().StringVar(&vizSDURL, "sd-url", deployment.Prod.ServiceDiscovery, "service discovery URL")
 	vizCmd.Flags().BoolVar(&vizNoCache, "no-cache", false, "disable caching, always fetch fresh data")
 	vizCmd.Flags().BoolVar(&vizNoAutoRefresh, "no-auto-refresh", false, "disable auto-refresh of cache")
+	vizCmd.Flags().StringVar(&vizSurveyDir, "survey-dir", "", "directory containing visor surveys for IP-based grouping (node-info.json files)")
 }
 
 var vizCmd = &cobra.Command{
@@ -66,6 +68,7 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 			SDURL:       vizSDURL,
 			NoCache:     vizNoCache,
 			AutoRefresh: !vizNoAutoRefresh,
+			SurveyDir:   vizSurveyDir,
 		}
 
 		server := tpviz.NewServer(cfg)

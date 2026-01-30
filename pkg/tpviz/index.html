@@ -160,6 +160,7 @@
                     <div class="control-group">
                         <label><input type="checkbox" id="show-services"> Highlight Services</label>
                         <label><input type="checkbox" id="show-flags"> Show Country Flags</label>
+                        <label id="ip-groups-label" style="display:none;"><input type="checkbox" id="show-ip-groups"> Color by IP Group</label>
                     </div>
                     <div class="control-group">
                         <label for="version-filter">Version</label>
@@ -217,9 +218,31 @@
         let nodesDataset = null, edgesDataset = null, visorConnections = {};
         let onlineVisors = new Set(), offlineVisors = new Set(), visorServices = {}, visorVersions = {};
         let nextRefreshTime = null, countdownInterval = null, serverCacheAge = null;
+        let ipGroupsData = null, ipGroupsEnabled = false;
 
         const colors = { stcpr: '#00d9a5', sudph: '#00b4d8', dmsg: '#ffd166' };
         let selectedNodeId = null;
+
+        // Generate distinct colors for IP groups using golden ratio distribution
+        const ipGroupColors = {};
+        function getIPGroupColor(groupId) {
+            if (!ipGroupColors[groupId]) {
+                // Use golden ratio to generate evenly distributed hues
+                const goldenRatio = 0.618033988749895;
+                const hue = (groupId * goldenRatio * 360) % 360;
+                const saturation = 70 + (groupId % 3) * 10; // 70-90%
+                const lightness = 50 + (groupId % 2) * 10;  // 50-60%
+                ipGroupColors[groupId] = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+            }
+            return ipGroupColors[groupId];
+        }
+
+        // Get border color (darker version) for IP group
+        function getIPGroupBorder(groupId) {
+            const goldenRatio = 0.618033988749895;
+            const hue = (groupId * goldenRatio * 360) % 360;
+            return `hsl(${hue}, 60%, 35%)`;
+        }
 
         // Toggle collapsible sections
         function toggleSection(sectionId) {
@@ -306,11 +329,26 @@
             }
         }
 
-        // Update legend based on highlight services checkbox
+        // Update legend based on highlight services checkbox and IP groups
         function updateLegend() {
             const showServices = document.getElementById('show-services').checked;
+            const showIPGroups = document.getElementById('show-ip-groups').checked;
             const legendEl = document.getElementById('node-legend');
-            if (showServices) {
+
+            if (showIPGroups && ipGroupsEnabled && ipGroupsData && ipGroupsData.total_groups > 1) {
+                // IP group mode - show sample colors
+                let html = '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">IP Groups (' + ipGroupsData.total_groups + ' unique)</div>';
+                // Show first 5 group colors as examples
+                const sampleGroups = Math.min(5, ipGroupsData.total_groups);
+                for (let i = 1; i <= sampleGroups; i++) {
+                    html += '<div class="status-item"><div class="status-dot" style="background:' + getIPGroupColor(i) + ';"></div><span>Group ' + i + '</span></div>';
+                }
+                if (ipGroupsData.total_groups > 5) {
+                    html += '<div style="font-size:0.75em;color:#666;margin-top:2px;">+ ' + (ipGroupsData.total_groups - 5) + ' more groups</div>';
+                }
+                html += '<div class="status-item"><div class="status-dot" style="background:#666;"></div><span>No IP data</span></div>';
+                legendEl.innerHTML = html;
+            } else if (showServices) {
                 legendEl.innerHTML =
                     '<div class="status-item"><div class="status-dot status-vpn"></div><span>VPN</span></div>' +
                     '<div class="status-item"><div class="status-dot status-proxy"></div><span>Proxy</span></div>' +
@@ -397,10 +435,11 @@
                 allData = await tpResp.json();
                 console.log('Transport data loaded:', allData.length, 'transports');
 
-                // Fetch uptime and services data in parallel (non-blocking)
-                const [utResp, sdResp] = await Promise.all([
+                // Fetch uptime, services, and IP groups data in parallel (non-blocking)
+                const [utResp, sdResp, ipResp] = await Promise.all([
                     fetchWithTimeout(API_BASE + '/api/uptimes').catch(e => { console.log('UT fetch error:', e.message); return null; }),
-                    fetchWithTimeout(API_BASE + '/api/services').catch(e => { console.log('SD fetch error:', e.message); return null; })
+                    fetchWithTimeout(API_BASE + '/api/services').catch(e => { console.log('SD fetch error:', e.message); return null; }),
+                    fetchWithTimeout(API_BASE + '/api/ip-groups').catch(e => { console.log('IP groups fetch error:', e.message); return null; })
                 ]);
 
                 // Parse uptime data
@@ -416,6 +455,21 @@
                     servicesData = await sdResp.json();
                     processServicesData();
                     console.log('Services data loaded:', Object.keys(servicesData).length, 'services');
+                }
+
+                // Parse IP groups data
+                if (ipResp && ipResp.ok) {
+                    ipGroupsData = await ipResp.json();
+                    ipGroupsEnabled = ipGroupsData && ipGroupsData.enabled;
+                    // Show/hide the IP groups checkbox based on data availability
+                    const ipGroupsLabel = document.getElementById('ip-groups-label');
+                    if (ipGroupsEnabled && ipGroupsData.total_groups > 1) {
+                        ipGroupsLabel.style.display = 'block';
+                        console.log('IP groups data loaded:', ipGroupsData.total_groups, 'groups,', Object.keys(ipGroupsData.groups).length, 'visors');
+                    } else {
+                        ipGroupsLabel.style.display = 'none';
+                        console.log('IP groups not available or only 1 group');
+                    }
                 }
 
                 processData();
@@ -546,6 +600,17 @@
             const status = getVisorStatus(visor.id);
             const hasService = visorServices[visor.id] && visorServices[visor.id].services.length > 0;
             const showServices = document.getElementById('show-services').checked;
+            const showIPGroups = document.getElementById('show-ip-groups').checked;
+
+            // IP group coloring takes highest priority (when enabled and data available)
+            if (showIPGroups && ipGroupsEnabled && ipGroupsData && ipGroupsData.groups) {
+                const groupId = ipGroupsData.groups[visor.id];
+                if (groupId !== undefined) {
+                    return { background: getIPGroupColor(groupId), border: getIPGroupBorder(groupId) };
+                }
+                // Visor not in any IP group - use gray
+                return { background: '#666', border: '#444' };
+            }
 
             // Service highlighting takes priority
             if (showServices && hasService) {
@@ -1032,6 +1097,7 @@
         document.getElementById('show-unknown').addEventListener('change', applyFilters);
         document.getElementById('show-services').addEventListener('change', () => { applyFilters(); updateLegend(); });
         document.getElementById('show-flags').addEventListener('change', applyFilters);
+        document.getElementById('show-ip-groups').addEventListener('change', () => { applyFilters(); updateLegend(); });
         document.getElementById('version-filter').addEventListener('change', applyFilters);
         document.getElementById('search').addEventListener('input', applyFilters);
         document.getElementById('btn-fit').addEventListener('click', () => network && network.fit());

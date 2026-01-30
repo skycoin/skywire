@@ -45,6 +45,9 @@ type Config struct {
 	NoCache bool
 	// AutoRefresh enables auto-refresh of cache at specified interval
 	AutoRefresh bool
+	// SurveyDir is the directory containing visor surveys (node-info.json files)
+	// Used for IP-based grouping without exposing actual IP addresses
+	SurveyDir string
 }
 
 // DefaultConfig returns a Config with default values
@@ -71,6 +74,17 @@ type Server struct {
 	cacheMu  sync.RWMutex
 	stopChan chan struct{}
 	autoTick *time.Ticker
+
+	// Cached IP groups data (refreshed periodically)
+	ipGroupsMu    sync.RWMutex
+	ipGroupsCache *ipGroupsResponse
+}
+
+// ipGroupsResponse is the cached response for /api/ip-groups
+type ipGroupsResponse struct {
+	Enabled     bool           `json:"enabled"`
+	Groups      map[string]int `json:"groups"`
+	TotalGroups int            `json:"total_groups"`
 }
 
 // NewServer creates a new visualizer server with the given config
@@ -108,6 +122,9 @@ func (s *Server) setupRoutes() {
 
 	// API endpoint for service discovery data (combined proxy, VPN, visor)
 	s.mux.HandleFunc("/api/services", s.handleServices)
+
+	// API endpoint for IP-based grouping (when survey data is available)
+	s.mux.HandleFunc("/api/ip-groups", s.handleIPGroups)
 
 	// Health check - available at both /health and /api/health
 	// /api/health is used when embedded in other servers that have their own /health
@@ -218,6 +235,122 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Write(result) //nolint:errcheck,gosec
+}
+
+// handleIPGroups returns cached anonymized IP-based groupings of visors
+func (s *Server) handleIPGroups(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	s.ipGroupsMu.RLock()
+	cache := s.ipGroupsCache
+	s.ipGroupsMu.RUnlock()
+
+	if cache == nil {
+		// No cache yet, return disabled
+		json.NewEncoder(w).Encode(&ipGroupsResponse{ //nolint:errcheck,gosec
+			Enabled: false,
+			Groups:  map[string]int{},
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(cache) //nolint:errcheck,gosec
+}
+
+// refreshIPGroupsCache reads survey files and updates the cached IP groups data.
+// This is called periodically along with other cache refreshes.
+func (s *Server) refreshIPGroupsCache() {
+	// If no survey dir configured, mark as disabled
+	if s.config.SurveyDir == "" {
+		s.ipGroupsMu.Lock()
+		s.ipGroupsCache = &ipGroupsResponse{
+			Enabled: false,
+			Groups:  map[string]int{},
+		}
+		s.ipGroupsMu.Unlock()
+		return
+	}
+
+	// Map from IP address to group ID
+	ipToGroup := make(map[string]int)
+	// Map from public key to group ID
+	pkToGroup := make(map[string]int)
+	nextGroupID := 1
+
+	// Walk the survey directory looking for node-info.json files
+	// Expected structure: SurveyDir/<pk>/node-info.json
+	entries, err := os.ReadDir(s.config.SurveyDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to read survey directory: %v\n", err)
+		s.ipGroupsMu.Lock()
+		s.ipGroupsCache = &ipGroupsResponse{
+			Enabled: false,
+			Groups:  map[string]int{},
+		}
+		s.ipGroupsMu.Unlock()
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		surveyFile := filepath.Join(s.config.SurveyDir, entry.Name(), "node-info.json")
+		data, err := os.ReadFile(surveyFile) //nolint:gosec
+		if err != nil {
+			continue // Skip if no survey file for this PK
+		}
+
+		var survey surveyData
+		if err := json.Unmarshal(data, &survey); err != nil {
+			continue // Skip malformed files
+		}
+
+		// Skip entries without IP address
+		if survey.IPAddr == "" {
+			continue
+		}
+
+		// Use the public key from the survey if available, otherwise use directory name
+		pk := survey.PubKey
+		if pk == "" {
+			pk = entry.Name()
+		}
+
+		// Get or create group ID for this IP
+		groupID, exists := ipToGroup[survey.IPAddr]
+		if !exists {
+			groupID = nextGroupID
+			ipToGroup[survey.IPAddr] = groupID
+			nextGroupID++
+		}
+
+		pkToGroup[pk] = groupID
+	}
+
+	// Count unique groups
+	totalGroups := len(ipToGroup)
+
+	// Update cache
+	s.ipGroupsMu.Lock()
+	s.ipGroupsCache = &ipGroupsResponse{
+		Enabled:     totalGroups > 0,
+		Groups:      pkToGroup,
+		TotalGroups: totalGroups,
+	}
+	s.ipGroupsMu.Unlock()
+
+	if totalGroups > 0 {
+		fmt.Printf("Refreshed IP groups cache: %d groups, %d visors\n", totalGroups, len(pkToGroup))
+	}
+}
+
+// surveyData holds the minimal survey fields we need for IP grouping
+type surveyData struct {
+	PubKey string `json:"public_key"`
+	IPAddr string `json:"ip_address"`
 }
 
 // getSDData gets service discovery data from cache or fetches fresh
@@ -375,6 +508,9 @@ func (s *Server) refreshCache() {
 
 	// Refresh service discovery cache (combined from multiple service types)
 	s.refreshSDCache()
+
+	// Refresh IP groups cache (from survey files)
+	s.refreshIPGroupsCache()
 }
 
 // refreshSDCache refreshes the service discovery cache
