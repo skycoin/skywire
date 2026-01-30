@@ -335,23 +335,23 @@
         // Update legend based on current display mode
         function updateLegend() {
             const showServices = document.getElementById('show-services').checked;
-            const clusterCountry = document.getElementById('cluster-country').checked;
-            const clusterIP = document.getElementById('cluster-ip').checked;
+            const groupCountry = document.getElementById('cluster-country').checked;
+            const groupIP = document.getElementById('cluster-ip').checked;
             const legendEl = document.getElementById('node-legend');
 
-            if (clusterCountry) {
-                // Country clustering mode
+            if (groupCountry) {
+                // Country grouping mode
                 const countries = new Set();
                 Object.values(visorServices).forEach(svc => {
                     if (svc.country) countries.add(svc.country);
                 });
-                let html = '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">Country Clusters (' + countries.size + ')</div>';
-                html += '<div style="font-size:0.75em;color:#aaa;">Double-click cluster to expand</div>';
+                let html = '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">Country Groups (' + countries.size + ')</div>';
+                html += '<div style="font-size:0.75em;color:#aaa;">Colored boundaries show country groups</div>';
                 legendEl.innerHTML = html;
-            } else if (clusterIP && ipGroupsEnabled && ipGroupsData) {
-                // IP group clustering mode
-                let html = '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">IP Clusters (' + ipGroupsData.total_groups + ')</div>';
-                html += '<div style="font-size:0.75em;color:#aaa;">Double-click cluster to expand</div>';
+            } else if (groupIP && ipGroupsEnabled && ipGroupsData) {
+                // IP group mode
+                let html = '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">IP Groups (' + ipGroupsData.total_groups + ')</div>';
+                html += '<div style="font-size:0.75em;color:#aaa;">Colored boundaries show IP groups</div>';
                 legendEl.innerHTML = html;
             } else if (showServices) {
                 legendEl.innerHTML =
@@ -839,8 +839,8 @@
             network.on('hoverNode', params => { if (!selectedNodeId) showNodeEdgesOnly(params.node); });
             network.on('blurNode', params => { if (!selectedNodeId) showAllEdges(); });
             network.on('stabilizationIterationsDone', () => network.fit());
-            // Setup double-click to expand clusters
-            setupClusterInteraction();
+            // Setup visual group boundary drawing
+            setupGroupDrawing();
         }
 
         function showNodeInfo(nodeId) {
@@ -1095,168 +1095,259 @@
             }
         }
 
-        // Clustering functions
-        let countryClusters = new Set();
-        let ipClusters = new Set();
+        // Visual grouping (draws boundaries around groups while keeping all nodes visible)
+        let groupingMode = null; // 'country', 'ip', or null
+        let groupBoundaries = []; // Array of {points, color, label, flag}
 
         // Generate color for a country based on its code
         function getCountryColor(countryCode) {
-            if (!countryCode) return { background: '#666', border: '#444' };
-            // Use hash of country code to generate consistent hue
+            if (!countryCode) return { background: 'rgba(102, 102, 102, 0.3)', border: '#666' };
             let hash = 0;
             for (let i = 0; i < countryCode.length; i++) {
                 hash = countryCode.charCodeAt(i) + ((hash << 5) - hash);
             }
             const hue = Math.abs(hash) % 360;
             return {
-                background: `hsl(${hue}, 70%, 50%)`,
-                border: `hsl(${hue}, 60%, 35%)`
+                background: `hsla(${hue}, 70%, 50%, 0.15)`,
+                border: `hsl(${hue}, 70%, 50%)`
             };
         }
 
-        // Cluster nodes by country
-        function clusterByCountry() {
-            if (!network) return;
+        // Calculate convex hull of a set of points (Graham scan algorithm)
+        function convexHull(points) {
+            if (points.length < 3) return points;
 
-            // First uncluster any existing clusters
-            unclustersAll();
+            // Find the lowest point (and leftmost if tied)
+            let lowest = 0;
+            for (let i = 1; i < points.length; i++) {
+                if (points[i].y > points[lowest].y ||
+                    (points[i].y === points[lowest].y && points[i].x < points[lowest].x)) {
+                    lowest = i;
+                }
+            }
+            [points[0], points[lowest]] = [points[lowest], points[0]];
+            const pivot = points[0];
 
-            // Get unique countries
-            const countries = new Map(); // country -> [nodeIds]
+            // Sort by polar angle with pivot
+            const sorted = points.slice(1).sort((a, b) => {
+                const angleA = Math.atan2(a.y - pivot.y, a.x - pivot.x);
+                const angleB = Math.atan2(b.y - pivot.y, b.x - pivot.x);
+                return angleA - angleB;
+            });
+
+            const hull = [pivot];
+            for (const p of sorted) {
+                while (hull.length > 1) {
+                    const a = hull[hull.length - 2];
+                    const b = hull[hull.length - 1];
+                    const cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+                    if (cross <= 0) hull.pop();
+                    else break;
+                }
+                hull.push(p);
+            }
+            return hull;
+        }
+
+        // Expand hull points outward by padding amount
+        function expandHull(hull, padding) {
+            if (hull.length < 3) {
+                // For 1-2 points, create a circle-like boundary
+                if (hull.length === 1) {
+                    const p = hull[0];
+                    const r = padding;
+                    return [
+                        {x: p.x - r, y: p.y - r},
+                        {x: p.x + r, y: p.y - r},
+                        {x: p.x + r, y: p.y + r},
+                        {x: p.x - r, y: p.y + r}
+                    ];
+                } else {
+                    // Two points - create a rounded rectangle
+                    const p1 = hull[0], p2 = hull[1];
+                    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+                    const len = Math.sqrt(dx*dx + dy*dy) || 1;
+                    const nx = -dy/len * padding, ny = dx/len * padding;
+                    return [
+                        {x: p1.x + nx - dx/len*padding, y: p1.y + ny - dy/len*padding},
+                        {x: p2.x + nx + dx/len*padding, y: p2.y + ny + dy/len*padding},
+                        {x: p2.x - nx + dx/len*padding, y: p2.y - ny + dy/len*padding},
+                        {x: p1.x - nx - dx/len*padding, y: p1.y - ny - dy/len*padding}
+                    ];
+                }
+            }
+
+            // Calculate centroid
+            let cx = 0, cy = 0;
+            for (const p of hull) { cx += p.x; cy += p.y; }
+            cx /= hull.length; cy /= hull.length;
+
+            // Expand each point outward from centroid
+            return hull.map(p => {
+                const dx = p.x - cx, dy = p.y - cy;
+                const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+                return {
+                    x: p.x + (dx/dist) * padding,
+                    y: p.y + (dy/dist) * padding
+                };
+            });
+        }
+
+        // Update group boundaries based on current node positions
+        function updateGroupBoundaries() {
+            groupBoundaries = [];
+            if (!network || !groupingMode) return;
+
+            const positions = network.getPositions();
+            const groups = new Map(); // groupKey -> {nodeIds, color, label, flag}
+
             nodesDataset.forEach(node => {
-                const svcInfo = visorServices[node.id];
-                const country = svcInfo ? svcInfo.country : '';
-                if (!countries.has(country)) {
-                    countries.set(country, []);
-                }
-                countries.get(country).push(node.id);
-            });
+                // Skip hidden nodes
+                if (node.hidden) return;
 
-            // Create clusters for each country with more than 1 node
-            countries.forEach((nodeIds, country) => {
-                if (nodeIds.length < 2) return; // Don't cluster single nodes
+                let groupKey, color, label, flag;
 
-                const clusterName = country || 'Unknown';
-                const flag = countryToFlag(country);
-                const color = getCountryColor(country);
-
-                const clusterOptions = {
-                    joinCondition: (nodeOptions) => {
-                        const svcInfo = visorServices[nodeOptions.id];
-                        const nodeCountry = svcInfo ? svcInfo.country : '';
-                        return nodeCountry === country;
-                    },
-                    clusterNodeProperties: {
-                        id: 'cluster:country:' + clusterName,
-                        label: (flag || '🌍') + ' ' + clusterName + '\n(' + nodeIds.length + ')',
-                        shape: 'dot',
-                        size: Math.min(50, 15 + Math.sqrt(nodeIds.length) * 5),
-                        color: color,
-                        font: { size: 14, color: '#fff', multi: true },
-                        borderWidth: 3,
-                        title: clusterName + ': ' + nodeIds.length + ' visors\nDouble-click to expand'
+                if (groupingMode === 'country') {
+                    const svcInfo = visorServices[node.id];
+                    const country = svcInfo ? svcInfo.country : '';
+                    groupKey = country || '_unknown';
+                    color = getCountryColor(country);
+                    label = country || 'Unknown';
+                    flag = countryToFlag(country);
+                } else if (groupingMode === 'ip' && ipGroupsData && ipGroupsData.groups) {
+                    const gid = ipGroupsData.groups[node.id];
+                    if (gid === undefined) {
+                        groupKey = '_no_ip';
+                        color = { background: 'rgba(102, 102, 102, 0.15)', border: '#666' };
+                        label = 'No IP Data';
+                        flag = '';
+                    } else {
+                        groupKey = 'ip_' + gid;
+                        color = {
+                            background: getIPGroupColor(gid).replace(')', ', 0.15)').replace('hsl', 'hsla'),
+                            border: getIPGroupColor(gid)
+                        };
+                        label = 'IP Group ' + gid;
+                        flag = '';
                     }
-                };
+                } else {
+                    return;
+                }
 
-                network.cluster(clusterOptions);
-                countryClusters.add('cluster:country:' + clusterName);
+                if (!groups.has(groupKey)) {
+                    groups.set(groupKey, { nodeIds: [], color, label, flag });
+                }
+                groups.get(groupKey).nodeIds.push(node.id);
             });
 
-            console.log('Created', countryClusters.size, 'country clusters');
-            network.fit();
+            // Build boundaries for each group
+            groups.forEach((group, key) => {
+                const points = group.nodeIds
+                    .filter(id => positions[id])
+                    .map(id => ({ x: positions[id].x, y: positions[id].y }));
+
+                if (points.length === 0) return;
+
+                const hull = convexHull([...points]);
+                const expanded = expandHull(hull, 40); // 40px padding
+
+                groupBoundaries.push({
+                    points: expanded,
+                    color: group.color,
+                    label: group.label,
+                    flag: group.flag,
+                    count: group.nodeIds.length,
+                    centroid: {
+                        x: points.reduce((s, p) => s + p.x, 0) / points.length,
+                        y: points.reduce((s, p) => s + p.y, 0) / points.length
+                    }
+                });
+            });
         }
 
-        // Cluster nodes by IP group
-        function clusterByIPGroup() {
-            if (!network || !ipGroupsEnabled || !ipGroupsData || !ipGroupsData.groups) return;
+        // Draw group boundaries on canvas
+        function drawGroupBoundaries(ctx) {
+            if (!groupBoundaries.length) return;
 
-            // First uncluster any existing clusters
-            unclustersAll();
+            for (const boundary of groupBoundaries) {
+                if (boundary.points.length < 3) continue;
 
-            // Get nodes by IP group
-            const groups = new Map(); // groupId -> [nodeIds]
-            nodesDataset.forEach(node => {
-                const groupId = ipGroupsData.groups[node.id];
-                if (groupId !== undefined) {
-                    if (!groups.has(groupId)) {
-                        groups.set(groupId, []);
-                    }
-                    groups.get(groupId).push(node.id);
+                ctx.beginPath();
+                ctx.moveTo(boundary.points[0].x, boundary.points[0].y);
+                for (let i = 1; i < boundary.points.length; i++) {
+                    ctx.lineTo(boundary.points[i].x, boundary.points[i].y);
                 }
-            });
+                ctx.closePath();
 
-            // Create clusters for each IP group with more than 1 node
-            groups.forEach((nodeIds, groupId) => {
-                if (nodeIds.length < 2) return; // Don't cluster single nodes
+                // Fill
+                ctx.fillStyle = boundary.color.background;
+                ctx.fill();
 
-                const color = {
-                    background: getIPGroupColor(groupId),
-                    border: getIPGroupBorder(groupId)
-                };
+                // Stroke
+                ctx.strokeStyle = boundary.color.border;
+                ctx.lineWidth = 2;
+                ctx.stroke();
 
-                const clusterOptions = {
-                    joinCondition: (nodeOptions) => {
-                        return ipGroupsData.groups[nodeOptions.id] === groupId;
-                    },
-                    clusterNodeProperties: {
-                        id: 'cluster:ip:' + groupId,
-                        label: 'IP Group ' + groupId + '\n(' + nodeIds.length + ')',
-                        shape: 'dot',
-                        size: Math.min(50, 15 + Math.sqrt(nodeIds.length) * 5),
-                        color: color,
-                        font: { size: 14, color: '#fff', multi: true },
-                        borderWidth: 3,
-                        title: 'IP Group ' + groupId + ': ' + nodeIds.length + ' visors\nDouble-click to expand'
-                    }
-                };
+                // Label at centroid
+                ctx.font = '14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const labelText = (boundary.flag ? boundary.flag + ' ' : '') + boundary.label + ' (' + boundary.count + ')';
 
-                network.cluster(clusterOptions);
-                ipClusters.add('cluster:ip:' + groupId);
-            });
+                // Background for label
+                const metrics = ctx.measureText(labelText);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(
+                    boundary.centroid.x - metrics.width/2 - 4,
+                    boundary.centroid.y - 10,
+                    metrics.width + 8,
+                    20
+                );
 
-            console.log('Created', ipClusters.size, 'IP clusters');
-            network.fit();
+                ctx.fillStyle = '#fff';
+                ctx.fillText(labelText, boundary.centroid.x, boundary.centroid.y);
+            }
         }
 
-        // Remove all clusters
-        function unclustersAll() {
+        // Enable country grouping
+        function enableCountryGrouping() {
+            groupingMode = 'country';
+            updateGroupBoundaries();
+            if (network) network.redraw();
+        }
+
+        // Enable IP grouping
+        function enableIPGrouping() {
+            if (!ipGroupsEnabled || !ipGroupsData) return;
+            groupingMode = 'ip';
+            updateGroupBoundaries();
+            if (network) network.redraw();
+        }
+
+        // Disable all grouping
+        function disableGrouping() {
+            groupingMode = null;
+            groupBoundaries = [];
+            if (network) network.redraw();
+        }
+
+        // Setup drawing handler for group boundaries
+        function setupGroupDrawing() {
             if (!network) return;
-
-            // Uncluster country clusters
-            countryClusters.forEach(clusterId => {
-                if (network.isCluster(clusterId)) {
-                    network.openCluster(clusterId);
+            network.on('beforeDrawing', (ctx) => {
+                drawGroupBoundaries(ctx);
+            });
+            // Update boundaries when nodes move
+            network.on('dragEnd', () => {
+                if (groupingMode) {
+                    updateGroupBoundaries();
                 }
             });
-            countryClusters.clear();
-
-            // Uncluster IP clusters
-            ipClusters.forEach(clusterId => {
-                if (network.isCluster(clusterId)) {
-                    network.openCluster(clusterId);
-                }
-            });
-            ipClusters.clear();
-        }
-
-        // Handle double-click to expand clusters
-        function setupClusterInteraction() {
-            if (!network) return;
-            network.on('doubleClick', (params) => {
-                if (params.nodes.length === 1) {
-                    const nodeId = params.nodes[0];
-                    if (network.isCluster(nodeId)) {
-                        network.openCluster(nodeId);
-                        countryClusters.delete(nodeId);
-                        ipClusters.delete(nodeId);
-                        // Uncheck the clustering checkbox if all clusters are gone
-                        if (countryClusters.size === 0) {
-                            document.getElementById('cluster-country').checked = false;
-                        }
-                        if (ipClusters.size === 0) {
-                            document.getElementById('cluster-ip').checked = false;
-                        }
-                    }
+            // Update during stabilization
+            network.on('stabilized', () => {
+                if (groupingMode) {
+                    updateGroupBoundaries();
+                    network.redraw();
                 }
             });
         }
@@ -1272,18 +1363,18 @@
         document.getElementById('cluster-country').addEventListener('change', (e) => {
             if (e.target.checked) {
                 document.getElementById('cluster-ip').checked = false; // Mutual exclusion
-                clusterByCountry();
+                enableCountryGrouping();
             } else {
-                unclustersAll();
+                disableGrouping();
             }
             updateLegend();
         });
         document.getElementById('cluster-ip').addEventListener('change', (e) => {
             if (e.target.checked) {
                 document.getElementById('cluster-country').checked = false; // Mutual exclusion
-                clusterByIPGroup();
+                enableIPGrouping();
             } else {
-                unclustersAll();
+                disableGrouping();
             }
             updateLegend();
         });
