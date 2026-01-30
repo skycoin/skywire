@@ -24,6 +24,7 @@ import (
 
 const reconnectPhaseDelay = 10 * time.Second
 const reconnectRemoteTimeout = 3 * time.Second
+const transportReRegisterInterval = 90 * time.Second
 
 // PersistentTransports is a persistent transports description
 type PersistentTransports struct {
@@ -92,10 +93,11 @@ func (tm *Manager) InitDmsgClient(ctx context.Context, dmsgC *dmsg.Client) {
 // from all those clients
 // Additionally, it runs cleanup and persistent reconnection routines
 func (tm *Manager) Serve(ctx context.Context) {
-	// for cleanup and reconnect goroutines
-	tm.wg.Add(2)
+	// for cleanup, reconnect and re-registration goroutines
+	tm.wg.Add(3)
 	go tm.cleanupTransports(ctx)
 	go tm.runReconnectPersistent(ctx)
+	go tm.runReRegisterTransports(ctx)
 	tm.Logger.Debug("transport manager is serving.")
 }
 
@@ -128,6 +130,65 @@ func (tm *Manager) reconnectPersistent(ctx context.Context) {
 				Warnf("Cannot connect to persistent remote")
 		}
 		cancel()
+	}
+}
+
+func (tm *Manager) runReRegisterTransports(ctx context.Context) {
+	defer tm.wg.Done()
+	ticker := time.NewTicker(transportReRegisterInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			tm.reRegisterTransports(ctx)
+		case <-tm.done:
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (tm *Manager) reRegisterTransports(ctx context.Context) {
+	tm.mx.RLock()
+	entries := make([]*SignedEntry, 0, len(tm.tps))
+	for _, tp := range tm.tps {
+		if tp.IsClosed() {
+			continue
+		}
+		// Create signed entry for re-registration with previous latency
+		se := &SignedEntry{
+			Entry:   &tp.Entry,
+			Latency: tp.GetLatency(),
+		}
+		entries = append(entries, se)
+	}
+	tm.mx.RUnlock()
+
+	if len(entries) == 0 {
+		return
+	}
+
+	tm.Logger.Debugf("Re-registering %d transports with discovery", len(entries))
+
+	// Measure round-trip time to TPD
+	start := time.Now()
+	err := tm.Conf.DiscoveryClient.RegisterTransports(ctx, entries...)
+	latencyMs := time.Since(start).Milliseconds()
+
+	if err != nil {
+		tm.Logger.WithError(err).Warn("Failed to re-register transports with discovery")
+	} else {
+		tm.Logger.Debugf("Successfully re-registered %d transports (latency: %dms)", len(entries), latencyMs)
+		// Update latency for all transports for next re-registration
+		tm.mx.RLock()
+		for _, tp := range tm.tps {
+			if !tp.IsClosed() {
+				tp.SetLatency(latencyMs)
+			}
+		}
+		tm.mx.RUnlock()
 	}
 }
 

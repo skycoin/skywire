@@ -3,12 +3,13 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -22,6 +23,12 @@ var (
 
 	// ErrTransportNotFound indicates that requested transport is not registered.
 	ErrTransportNotFound = errors.New("transport not found")
+
+	// ErrBadEntry is returned when entry is malformed.
+	ErrBadEntry = errors.New("bad entry format")
+
+	// ErrUnknownStoreType means that store type is unknown.
+	ErrUnknownStoreType = errors.New("unknown store type")
 )
 
 // Store stores Transport metadata and generated nonce values.
@@ -41,25 +48,13 @@ type TransportStore interface {
 }
 
 // New constructs a new Store of requested type.
-// When memoryStore is false, it creates a PostgreSQL store with an in-memory cache layer.
-// When memoryStore is true, it creates a mock store for testing (no PostgreSQL, no persistence).
-func New(logger *logging.Logger, gormDB *gorm.DB, memoryStore bool, onlyPGStore bool) (TransportStore, error) {
-	if memoryStore {
-		// For testing: use mock store (no persistence)
-		return newMockStore(), nil
+func New(ctx context.Context, config storeconfig.Config, ttl time.Duration, logger *logging.Logger) (TransportStore, error) {
+	switch config.Type {
+	case storeconfig.Memory:
+		return newMemoryStore(), nil
+	case storeconfig.Redis:
+		return newRedisStore(ctx, config.URL, config.Password, config.PoolSize, ttl, logger)
+	default:
+		return nil, ErrUnknownStoreType
 	}
-
-	// For production: use PostgreSQL with in-memory cache
-	pgStore, err := NewPostgresStore(logger, gormDB)
-	if err != nil {
-		return nil, err
-	}
-
-	// For route-finder we use pg only
-	if onlyPGStore {
-		return pgStore, nil
-	}
-
-	// Wrap PostgreSQL store with caching layer
-	return NewCachedStore(pgStore)
 }
