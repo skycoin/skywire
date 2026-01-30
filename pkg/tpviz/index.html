@@ -1098,6 +1098,109 @@
         // Visual grouping (draws boundaries around groups while keeping all nodes visible)
         let groupingMode = null; // 'country', 'ip', or null
         let groupBoundaries = []; // Array of {points, color, label, flag}
+        let groupForceInterval = null; // Interval for applying group separation forces
+        let currentGroupKeyFn = null; // Current function to get group key for a node
+
+        // Apply forces to keep groups separated
+        function startGroupSeparationForces(getGroupKey) {
+            stopGroupSeparationForces();
+            currentGroupKeyFn = getGroupKey;
+
+            groupForceInterval = setInterval(() => {
+                if (!network || !groupingMode) return;
+
+                const positions = network.getPositions();
+
+                // Calculate current group centroids
+                const groups = new Map(); // groupKey -> {nodes: [{id, x, y}], cx, cy}
+                nodesDataset.forEach(node => {
+                    if (node.hidden || !positions[node.id]) return;
+                    const key = currentGroupKeyFn(node.id);
+                    if (!groups.has(key)) {
+                        groups.set(key, { nodes: [], cx: 0, cy: 0 });
+                    }
+                    groups.get(key).nodes.push({
+                        id: node.id,
+                        x: positions[node.id].x,
+                        y: positions[node.id].y
+                    });
+                });
+
+                // Calculate centroids
+                groups.forEach(group => {
+                    group.cx = group.nodes.reduce((s, n) => s + n.x, 0) / group.nodes.length;
+                    group.cy = group.nodes.reduce((s, n) => s + n.y, 0) / group.nodes.length;
+                });
+
+                // Calculate repulsion between group centroids
+                const groupList = Array.from(groups.entries());
+                const centroidForces = new Map(); // groupKey -> {fx, fy}
+                groupList.forEach(([key]) => centroidForces.set(key, { fx: 0, fy: 0 }));
+
+                const minDist = 400; // Minimum desired distance between group centers
+                const repulsionStrength = 50;
+
+                for (let i = 0; i < groupList.length; i++) {
+                    for (let j = i + 1; j < groupList.length; j++) {
+                        const [keyA, groupA] = groupList[i];
+                        const [keyB, groupB] = groupList[j];
+
+                        const dx = groupB.cx - groupA.cx;
+                        const dy = groupB.cy - groupA.cy;
+                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+                        if (dist < minDist) {
+                            // Groups too close, apply repulsion
+                            const force = repulsionStrength * (minDist - dist) / dist;
+                            const fx = (dx / dist) * force;
+                            const fy = (dy / dist) * force;
+
+                            centroidForces.get(keyA).fx -= fx;
+                            centroidForces.get(keyA).fy -= fy;
+                            centroidForces.get(keyB).fx += fx;
+                            centroidForces.get(keyB).fy += fy;
+                        }
+                    }
+                }
+
+                // Apply forces to nodes
+                const updates = [];
+                const cohesionStrength = 0.02; // Pull toward group centroid
+
+                groups.forEach((group, key) => {
+                    const centroidForce = centroidForces.get(key);
+
+                    group.nodes.forEach(node => {
+                        // Cohesion: pull toward group centroid
+                        let fx = (group.cx - node.x) * cohesionStrength;
+                        let fy = (group.cy - node.y) * cohesionStrength;
+
+                        // Add centroid repulsion force (distributed to all nodes)
+                        fx += centroidForce.fx / group.nodes.length;
+                        fy += centroidForce.fy / group.nodes.length;
+
+                        updates.push({
+                            id: node.id,
+                            x: node.x + fx,
+                            y: node.y + fy
+                        });
+                    });
+                });
+
+                if (updates.length > 0) {
+                    nodesDataset.update(updates);
+                    updateGroupBoundaries();
+                }
+            }, 50); // Run every 50ms
+        }
+
+        function stopGroupSeparationForces() {
+            if (groupForceInterval) {
+                clearInterval(groupForceInterval);
+                groupForceInterval = null;
+            }
+            currentGroupKeyFn = null;
+        }
 
         // Generate color for a country based on its code
         function getCountryColor(countryCode) {
@@ -1382,9 +1485,22 @@
             // Apply position updates
             nodesDataset.update(nodeUpdates);
 
-            // Disable physics entirely to keep groups separated
-            // (edges between countries would pull nodes back together otherwise)
-            network.setOptions({ physics: { enabled: false } });
+            // Enable physics with group separation forces
+            network.setOptions({
+                physics: {
+                    enabled: true,
+                    barnesHut: {
+                        gravitationalConstant: -800,
+                        springConstant: 0.001,
+                        springLength: 100,
+                        damping: 0.5
+                    },
+                    stabilization: false
+                }
+            });
+
+            // Start group separation force loop
+            startGroupSeparationForces(getGroupKey);
 
             // Update boundaries and redraw
             setTimeout(() => {
@@ -1447,6 +1563,9 @@
 
         // Disable all grouping and restore original positions
         function disableGrouping() {
+            // Stop group separation forces
+            stopGroupSeparationForces();
+
             groupingMode = null;
             groupBoundaries = [];
 
