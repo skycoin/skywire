@@ -43,6 +43,9 @@ type Entry struct {
 	Type types.Type `json:"type"`
 
 	Label Label `json:"label"`
+
+	// Latency is the round-trip time to TPD in milliseconds, updated on each re-registration
+	Latency int64 `json:"latency_ms,omitempty"`
 }
 
 // MakeEntry creates a new transport entry
@@ -131,7 +134,7 @@ type SignedEntry struct {
 	Entry      *Entry        `json:"entry"`
 	Signatures [2]cipher.Sig `json:"signatures"`
 	Registered int64         `json:"registered,omitempty"`
-	Latency    int64         `json:"latency,omitempty"` // Latency in milliseconds, measured during re-registration
+	Latency    int64         `json:"latency_ms,omitempty"` // Latency in milliseconds, measured during re-registration
 }
 
 // Sign sets Signature for a given PubKey in correct position
