@@ -1382,7 +1382,8 @@
             // Apply position updates
             nodesDataset.update(nodeUpdates);
 
-            // Disable physics temporarily, then run brief stabilization
+            // Disable physics entirely to keep groups separated
+            // (edges between countries would pull nodes back together otherwise)
             network.setOptions({ physics: { enabled: false } });
 
             // Update boundaries and redraw
@@ -1390,19 +1391,6 @@
                 updateGroupBoundaries();
                 network.fit();
                 network.redraw();
-
-                // Re-enable gentle physics for fine adjustment
-                network.setOptions({
-                    physics: {
-                        enabled: true,
-                        barnesHut: {
-                            gravitationalConstant: -500,
-                            springConstant: 0.001,
-                            springLength: 50
-                        },
-                        stabilization: false
-                    }
-                });
             }, 100);
         }
 
@@ -1494,27 +1482,8 @@
             network.on('beforeDrawing', (ctx) => {
                 drawGroupBoundaries(ctx);
             });
-            // Update boundaries when nodes move
+            // Update boundaries when user drags nodes
             network.on('dragEnd', () => {
-                if (groupingMode) {
-                    updateGroupBoundaries();
-                }
-            });
-            // Periodic boundary updates during physics
-            let boundaryUpdateTimer = null;
-            network.on('startStabilizing', () => {
-                if (groupingMode && !boundaryUpdateTimer) {
-                    boundaryUpdateTimer = setInterval(() => {
-                        updateGroupBoundaries();
-                        network.redraw();
-                    }, 200);
-                }
-            });
-            network.on('stabilized', () => {
-                if (boundaryUpdateTimer) {
-                    clearInterval(boundaryUpdateTimer);
-                    boundaryUpdateTimer = null;
-                }
                 if (groupingMode) {
                     updateGroupBoundaries();
                     network.redraw();
