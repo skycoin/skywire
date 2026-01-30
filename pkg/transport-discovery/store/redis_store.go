@@ -292,9 +292,10 @@ func (s *redisStore) dataToEntry(data TransportData) (*transport.Entry, error) {
 	}
 
 	return &transport.Entry{
-		ID:    id,
-		Edges: [2]cipher.PubKey{edgeA, edgeB},
-		Type:  types.Type(data.Type),
-		Label: transport.Label(data.Label),
+		ID:      id,
+		Edges:   [2]cipher.PubKey{edgeA, edgeB},
+		Type:    types.Type(data.Type),
+		Label:   transport.Label(data.Label),
+		Latency: data.Latency,
 	}, nil
 }
