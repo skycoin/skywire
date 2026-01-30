@@ -160,7 +160,10 @@
                     <div class="control-group">
                         <label><input type="checkbox" id="show-services"> Highlight Services</label>
                         <label><input type="checkbox" id="show-flags"> Show Country Flags</label>
-                        <label id="ip-groups-label" style="display:none;"><input type="checkbox" id="show-ip-groups"> Color by IP Group</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="cluster-country"> Cluster by Country</label>
+                        <label id="ip-groups-label" style="display:none;"><input type="checkbox" id="cluster-ip"> Cluster by IP Group</label>
                     </div>
                     <div class="control-group">
                         <label for="version-filter">Version</label>
@@ -329,24 +332,26 @@
             }
         }
 
-        // Update legend based on highlight services checkbox and IP groups
+        // Update legend based on current display mode
         function updateLegend() {
             const showServices = document.getElementById('show-services').checked;
-            const showIPGroups = document.getElementById('show-ip-groups').checked;
+            const clusterCountry = document.getElementById('cluster-country').checked;
+            const clusterIP = document.getElementById('cluster-ip').checked;
             const legendEl = document.getElementById('node-legend');
 
-            if (showIPGroups && ipGroupsEnabled && ipGroupsData && ipGroupsData.total_groups > 1) {
-                // IP group mode - show sample colors
-                let html = '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">IP Groups (' + ipGroupsData.total_groups + ' unique)</div>';
-                // Show first 5 group colors as examples
-                const sampleGroups = Math.min(5, ipGroupsData.total_groups);
-                for (let i = 1; i <= sampleGroups; i++) {
-                    html += '<div class="status-item"><div class="status-dot" style="background:' + getIPGroupColor(i) + ';"></div><span>Group ' + i + '</span></div>';
-                }
-                if (ipGroupsData.total_groups > 5) {
-                    html += '<div style="font-size:0.75em;color:#666;margin-top:2px;">+ ' + (ipGroupsData.total_groups - 5) + ' more groups</div>';
-                }
-                html += '<div class="status-item"><div class="status-dot" style="background:#666;"></div><span>No IP data</span></div>';
+            if (clusterCountry) {
+                // Country clustering mode
+                const countries = new Set();
+                Object.values(visorServices).forEach(svc => {
+                    if (svc.country) countries.add(svc.country);
+                });
+                let html = '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">Country Clusters (' + countries.size + ')</div>';
+                html += '<div style="font-size:0.75em;color:#aaa;">Double-click cluster to expand</div>';
+                legendEl.innerHTML = html;
+            } else if (clusterIP && ipGroupsEnabled && ipGroupsData) {
+                // IP group clustering mode
+                let html = '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">IP Clusters (' + ipGroupsData.total_groups + ')</div>';
+                html += '<div style="font-size:0.75em;color:#aaa;">Double-click cluster to expand</div>';
                 legendEl.innerHTML = html;
             } else if (showServices) {
                 legendEl.innerHTML =
@@ -600,17 +605,6 @@
             const status = getVisorStatus(visor.id);
             const hasService = visorServices[visor.id] && visorServices[visor.id].services.length > 0;
             const showServices = document.getElementById('show-services').checked;
-            const showIPGroups = document.getElementById('show-ip-groups').checked;
-
-            // IP group coloring takes highest priority (when enabled and data available)
-            if (showIPGroups && ipGroupsEnabled && ipGroupsData && ipGroupsData.groups) {
-                const groupId = ipGroupsData.groups[visor.id];
-                if (groupId !== undefined) {
-                    return { background: getIPGroupColor(groupId), border: getIPGroupBorder(groupId) };
-                }
-                // Visor not in any IP group - use gray
-                return { background: '#666', border: '#444' };
-            }
 
             // Service highlighting takes priority
             if (showServices && hasService) {
@@ -831,10 +825,22 @@
                 interaction: { hover: true, tooltipDelay: 100, selectConnectedEdges: false }
             };
             network = new vis.Network(container, data, options);
-            network.on('click', params => { if (params.nodes.length > 0) showNodeInfo(params.nodes[0]); else hideNodeInfo(); });
+            network.on('click', params => {
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    // Don't show info for cluster nodes
+                    if (!network.isCluster(nodeId)) {
+                        showNodeInfo(nodeId);
+                    }
+                } else {
+                    hideNodeInfo();
+                }
+            });
             network.on('hoverNode', params => { if (!selectedNodeId) showNodeEdgesOnly(params.node); });
             network.on('blurNode', params => { if (!selectedNodeId) showAllEdges(); });
             network.on('stabilizationIterationsDone', () => network.fit());
+            // Setup double-click to expand clusters
+            setupClusterInteraction();
         }
 
         function showNodeInfo(nodeId) {
@@ -1089,6 +1095,172 @@
             }
         }
 
+        // Clustering functions
+        let countryClusters = new Set();
+        let ipClusters = new Set();
+
+        // Generate color for a country based on its code
+        function getCountryColor(countryCode) {
+            if (!countryCode) return { background: '#666', border: '#444' };
+            // Use hash of country code to generate consistent hue
+            let hash = 0;
+            for (let i = 0; i < countryCode.length; i++) {
+                hash = countryCode.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const hue = Math.abs(hash) % 360;
+            return {
+                background: `hsl(${hue}, 70%, 50%)`,
+                border: `hsl(${hue}, 60%, 35%)`
+            };
+        }
+
+        // Cluster nodes by country
+        function clusterByCountry() {
+            if (!network) return;
+
+            // First uncluster any existing clusters
+            unclustersAll();
+
+            // Get unique countries
+            const countries = new Map(); // country -> [nodeIds]
+            nodesDataset.forEach(node => {
+                const svcInfo = visorServices[node.id];
+                const country = svcInfo ? svcInfo.country : '';
+                if (!countries.has(country)) {
+                    countries.set(country, []);
+                }
+                countries.get(country).push(node.id);
+            });
+
+            // Create clusters for each country with more than 1 node
+            countries.forEach((nodeIds, country) => {
+                if (nodeIds.length < 2) return; // Don't cluster single nodes
+
+                const clusterName = country || 'Unknown';
+                const flag = countryToFlag(country);
+                const color = getCountryColor(country);
+
+                const clusterOptions = {
+                    joinCondition: (nodeOptions) => {
+                        const svcInfo = visorServices[nodeOptions.id];
+                        const nodeCountry = svcInfo ? svcInfo.country : '';
+                        return nodeCountry === country;
+                    },
+                    clusterNodeProperties: {
+                        id: 'cluster:country:' + clusterName,
+                        label: (flag || '🌍') + ' ' + clusterName + '\n(' + nodeIds.length + ')',
+                        shape: 'dot',
+                        size: Math.min(50, 15 + Math.sqrt(nodeIds.length) * 5),
+                        color: color,
+                        font: { size: 14, color: '#fff', multi: true },
+                        borderWidth: 3,
+                        title: clusterName + ': ' + nodeIds.length + ' visors\nDouble-click to expand'
+                    }
+                };
+
+                network.cluster(clusterOptions);
+                countryClusters.add('cluster:country:' + clusterName);
+            });
+
+            console.log('Created', countryClusters.size, 'country clusters');
+            network.fit();
+        }
+
+        // Cluster nodes by IP group
+        function clusterByIPGroup() {
+            if (!network || !ipGroupsEnabled || !ipGroupsData || !ipGroupsData.groups) return;
+
+            // First uncluster any existing clusters
+            unclustersAll();
+
+            // Get nodes by IP group
+            const groups = new Map(); // groupId -> [nodeIds]
+            nodesDataset.forEach(node => {
+                const groupId = ipGroupsData.groups[node.id];
+                if (groupId !== undefined) {
+                    if (!groups.has(groupId)) {
+                        groups.set(groupId, []);
+                    }
+                    groups.get(groupId).push(node.id);
+                }
+            });
+
+            // Create clusters for each IP group with more than 1 node
+            groups.forEach((nodeIds, groupId) => {
+                if (nodeIds.length < 2) return; // Don't cluster single nodes
+
+                const color = {
+                    background: getIPGroupColor(groupId),
+                    border: getIPGroupBorder(groupId)
+                };
+
+                const clusterOptions = {
+                    joinCondition: (nodeOptions) => {
+                        return ipGroupsData.groups[nodeOptions.id] === groupId;
+                    },
+                    clusterNodeProperties: {
+                        id: 'cluster:ip:' + groupId,
+                        label: 'IP Group ' + groupId + '\n(' + nodeIds.length + ')',
+                        shape: 'dot',
+                        size: Math.min(50, 15 + Math.sqrt(nodeIds.length) * 5),
+                        color: color,
+                        font: { size: 14, color: '#fff', multi: true },
+                        borderWidth: 3,
+                        title: 'IP Group ' + groupId + ': ' + nodeIds.length + ' visors\nDouble-click to expand'
+                    }
+                };
+
+                network.cluster(clusterOptions);
+                ipClusters.add('cluster:ip:' + groupId);
+            });
+
+            console.log('Created', ipClusters.size, 'IP clusters');
+            network.fit();
+        }
+
+        // Remove all clusters
+        function unclustersAll() {
+            if (!network) return;
+
+            // Uncluster country clusters
+            countryClusters.forEach(clusterId => {
+                if (network.isCluster(clusterId)) {
+                    network.openCluster(clusterId);
+                }
+            });
+            countryClusters.clear();
+
+            // Uncluster IP clusters
+            ipClusters.forEach(clusterId => {
+                if (network.isCluster(clusterId)) {
+                    network.openCluster(clusterId);
+                }
+            });
+            ipClusters.clear();
+        }
+
+        // Handle double-click to expand clusters
+        function setupClusterInteraction() {
+            if (!network) return;
+            network.on('doubleClick', (params) => {
+                if (params.nodes.length === 1) {
+                    const nodeId = params.nodes[0];
+                    if (network.isCluster(nodeId)) {
+                        network.openCluster(nodeId);
+                        countryClusters.delete(nodeId);
+                        ipClusters.delete(nodeId);
+                        // Uncheck the clustering checkbox if all clusters are gone
+                        if (countryClusters.size === 0) {
+                            document.getElementById('cluster-country').checked = false;
+                        }
+                        if (ipClusters.size === 0) {
+                            document.getElementById('cluster-ip').checked = false;
+                        }
+                    }
+                }
+            });
+        }
+
         document.getElementById('show-stcpr').addEventListener('change', applyFilters);
         document.getElementById('show-sudph').addEventListener('change', applyFilters);
         document.getElementById('show-dmsg').addEventListener('change', applyFilters);
@@ -1097,7 +1269,24 @@
         document.getElementById('show-unknown').addEventListener('change', applyFilters);
         document.getElementById('show-services').addEventListener('change', () => { applyFilters(); updateLegend(); });
         document.getElementById('show-flags').addEventListener('change', applyFilters);
-        document.getElementById('show-ip-groups').addEventListener('change', () => { applyFilters(); updateLegend(); });
+        document.getElementById('cluster-country').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                document.getElementById('cluster-ip').checked = false; // Mutual exclusion
+                clusterByCountry();
+            } else {
+                unclustersAll();
+            }
+            updateLegend();
+        });
+        document.getElementById('cluster-ip').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                document.getElementById('cluster-country').checked = false; // Mutual exclusion
+                clusterByIPGroup();
+            } else {
+                unclustersAll();
+            }
+            updateLegend();
+        });
         document.getElementById('version-filter').addEventListener('change', applyFilters);
         document.getElementById('search').addEventListener('input', applyFilters);
         document.getElementById('btn-fit').addEventListener('click', () => network && network.fit());
