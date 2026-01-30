@@ -1309,25 +1309,182 @@
             }
         }
 
+        // Store original positions to restore when disabling grouping
+        let originalPositions = null;
+
+        // Arrange nodes into non-overlapping group clusters
+        function arrangeNodesIntoGroups(getGroupKey, getGroupInfo) {
+            if (!network) return;
+
+            // Save original positions if not already saved
+            if (!originalPositions) {
+                originalPositions = network.getPositions();
+            }
+
+            // Collect nodes by group
+            const groups = new Map(); // groupKey -> [nodeIds]
+            nodesDataset.forEach(node => {
+                if (node.hidden) return;
+                const key = getGroupKey(node.id);
+                if (!groups.has(key)) {
+                    groups.set(key, []);
+                }
+                groups.get(key).push(node.id);
+            });
+
+            // Sort groups by size (largest first) for better layout
+            const sortedGroups = Array.from(groups.entries())
+                .sort((a, b) => b[1].length - a[1].length);
+
+            // Calculate group centroid positions in a spiral/grid pattern
+            const groupCentroids = new Map();
+            const spacing = 600; // Space between group centers
+            const cols = Math.ceil(Math.sqrt(sortedGroups.length));
+
+            sortedGroups.forEach(([key, nodeIds], index) => {
+                const row = Math.floor(index / cols);
+                const col = index % cols;
+                // Offset odd rows for honeycomb-like packing
+                const xOffset = (row % 2) * (spacing / 2);
+                groupCentroids.set(key, {
+                    x: col * spacing + xOffset,
+                    y: row * spacing,
+                    count: nodeIds.length
+                });
+            });
+
+            // Position nodes around their group centroid
+            const nodeUpdates = [];
+            groups.forEach((nodeIds, key) => {
+                const centroid = groupCentroids.get(key);
+                const count = nodeIds.length;
+
+                // Arrange nodes in a circle around centroid
+                // Radius based on node count
+                const radius = Math.max(50, Math.sqrt(count) * 30);
+
+                nodeIds.forEach((nodeId, i) => {
+                    let x, y;
+                    if (count === 1) {
+                        x = centroid.x;
+                        y = centroid.y;
+                    } else {
+                        // Spiral arrangement for many nodes
+                        const angle = (i / count) * 2 * Math.PI;
+                        const r = radius * (0.3 + 0.7 * (i / count)); // Spiral outward
+                        x = centroid.x + r * Math.cos(angle);
+                        y = centroid.y + r * Math.sin(angle);
+                    }
+                    nodeUpdates.push({ id: nodeId, x: x, y: y });
+                });
+            });
+
+            // Apply position updates
+            nodesDataset.update(nodeUpdates);
+
+            // Disable physics temporarily, then run brief stabilization
+            network.setOptions({ physics: { enabled: false } });
+
+            // Update boundaries and redraw
+            setTimeout(() => {
+                updateGroupBoundaries();
+                network.fit();
+                network.redraw();
+
+                // Re-enable gentle physics for fine adjustment
+                network.setOptions({
+                    physics: {
+                        enabled: true,
+                        barnesHut: {
+                            gravitationalConstant: -500,
+                            springConstant: 0.001,
+                            springLength: 50
+                        },
+                        stabilization: false
+                    }
+                });
+            }, 100);
+        }
+
         // Enable country grouping
         function enableCountryGrouping() {
             groupingMode = 'country';
-            updateGroupBoundaries();
-            if (network) network.redraw();
+
+            arrangeNodesIntoGroups(
+                (nodeId) => {
+                    const svcInfo = visorServices[nodeId];
+                    return svcInfo ? (svcInfo.country || '_unknown') : '_unknown';
+                },
+                (key) => {
+                    const country = key === '_unknown' ? '' : key;
+                    return {
+                        color: getCountryColor(country),
+                        label: country || 'Unknown',
+                        flag: countryToFlag(country)
+                    };
+                }
+            );
         }
 
         // Enable IP grouping
         function enableIPGrouping() {
             if (!ipGroupsEnabled || !ipGroupsData) return;
             groupingMode = 'ip';
-            updateGroupBoundaries();
-            if (network) network.redraw();
+
+            arrangeNodesIntoGroups(
+                (nodeId) => {
+                    const gid = ipGroupsData.groups[nodeId];
+                    return gid !== undefined ? ('ip_' + gid) : '_no_ip';
+                },
+                (key) => {
+                    if (key === '_no_ip') {
+                        return {
+                            color: { background: 'rgba(102, 102, 102, 0.15)', border: '#666' },
+                            label: 'No IP Data',
+                            flag: ''
+                        };
+                    }
+                    const gid = parseInt(key.replace('ip_', ''));
+                    return {
+                        color: {
+                            background: getIPGroupColor(gid).replace(')', ', 0.15)').replace('hsl', 'hsla'),
+                            border: getIPGroupColor(gid)
+                        },
+                        label: 'IP Group ' + gid,
+                        flag: ''
+                    };
+                }
+            );
         }
 
-        // Disable all grouping
+        // Disable all grouping and restore original positions
         function disableGrouping() {
             groupingMode = null;
             groupBoundaries = [];
+
+            if (network && originalPositions) {
+                // Restore original positions
+                const updates = [];
+                for (const [id, pos] of Object.entries(originalPositions)) {
+                    updates.push({ id: id, x: pos.x, y: pos.y });
+                }
+                nodesDataset.update(updates);
+                originalPositions = null;
+
+                // Re-enable normal physics
+                network.setOptions({
+                    physics: {
+                        enabled: true,
+                        barnesHut: {
+                            gravitationalConstant: -3000,
+                            springConstant: 0.001,
+                            springLength: 200
+                        }
+                    }
+                });
+                network.fit();
+            }
+
             if (network) network.redraw();
         }
 
@@ -1343,8 +1500,21 @@
                     updateGroupBoundaries();
                 }
             });
-            // Update during stabilization
+            // Periodic boundary updates during physics
+            let boundaryUpdateTimer = null;
+            network.on('startStabilizing', () => {
+                if (groupingMode && !boundaryUpdateTimer) {
+                    boundaryUpdateTimer = setInterval(() => {
+                        updateGroupBoundaries();
+                        network.redraw();
+                    }, 200);
+                }
+            });
             network.on('stabilized', () => {
+                if (boundaryUpdateTimer) {
+                    clearInterval(boundaryUpdateTimer);
+                    boundaryUpdateTimer = null;
+                }
                 if (groupingMode) {
                     updateGroupBoundaries();
                     network.redraw();
