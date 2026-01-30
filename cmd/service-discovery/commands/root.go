@@ -63,7 +63,7 @@ func init() {
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\033[0m\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
-	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 15*time.Minute, "timeout for service entry expiration\033[0m")
+	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for service entry expiration\033[0m")
 }
 
 // RootCmd contains the root service-discovery command
