@@ -1137,8 +1137,9 @@
                 if (!network || !groupingMode || !fixedGroupCentroids) return;
 
                 const positions = network.getPositions();
-                const updates = [];
+                const nodePositions = new Map(); // Track updated positions for collision detection
 
+                // First pass: apply gravity and collect positions
                 nodesDataset.forEach(node => {
                     if (node.hidden || !positions[node.id]) return;
 
@@ -1156,13 +1157,51 @@
 
                     // Strong gravity toward center - much stronger for nodes with cross-group connections
                     const crossCount = crossCounts.get(node.id) || 0;
-                    // Base gravity + strong multiplier for cross-connections
-                    const gravityStrength = 0.05 + (crossCount / maxCross) * 0.4; // 0.05 to 0.45
+                    const gravityStrength = 0.05 + (crossCount / maxCross) * 0.4;
 
-                    if (dist > 5) { // Only apply if not already at center
+                    if (dist > 5) {
                         nodeX -= dx * gravityStrength;
                         nodeY -= dy * gravityStrength;
                     }
+
+                    nodePositions.set(node.id, { x: nodeX, y: nodeY, key: key, centroid: centroid });
+                });
+
+                // Second pass: node-to-node repulsion within same group
+                const minNodeDist = 35; // Minimum distance between node centers
+                const repulsionStrength = 0.5;
+
+                const nodeList = Array.from(nodePositions.entries());
+                for (let i = 0; i < nodeList.length; i++) {
+                    for (let j = i + 1; j < nodeList.length; j++) {
+                        const [idA, posA] = nodeList[i];
+                        const [idB, posB] = nodeList[j];
+
+                        // Only repel nodes in the same group
+                        if (posA.key !== posB.key) continue;
+
+                        const dx = posB.x - posA.x;
+                        const dy = posB.y - posA.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+                        if (dist < minNodeDist) {
+                            // Nodes too close - push apart
+                            const overlap = minNodeDist - dist;
+                            const pushX = (dx / dist) * overlap * repulsionStrength;
+                            const pushY = (dy / dist) * overlap * repulsionStrength;
+
+                            posA.x -= pushX;
+                            posA.y -= pushY;
+                            posB.x += pushX;
+                            posB.y += pushY;
+                        }
+                    }
+                }
+
+                // Third pass: enforce boundaries and collect updates
+                const updates = [];
+                nodePositions.forEach((pos, nodeId) => {
+                    let { x: nodeX, y: nodeY, centroid } = pos;
 
                     // Hard boundary - maximum allowed distance
                     const maxDist = centroid.radius - 40;
@@ -1171,16 +1210,15 @@
                     const newDist = Math.sqrt(newDx * newDx + newDy * newDy);
 
                     if (newDist > maxDist && maxDist > 0) {
-                        // Snap back inside circle
                         const scale = maxDist / newDist;
                         nodeX = centroid.x + newDx * scale;
                         nodeY = centroid.y + newDy * scale;
                     }
 
                     // Only update if position changed significantly
-                    if (Math.abs(nodeX - positions[node.id].x) > 0.5 ||
-                        Math.abs(nodeY - positions[node.id].y) > 0.5) {
-                        updates.push({ id: node.id, x: nodeX, y: nodeY });
+                    if (Math.abs(nodeX - positions[nodeId].x) > 0.5 ||
+                        Math.abs(nodeY - positions[nodeId].y) > 0.5) {
+                        updates.push({ id: nodeId, x: nodeX, y: nodeY });
                     }
                 });
 
