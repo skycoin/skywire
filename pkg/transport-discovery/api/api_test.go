@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/skycoin/skywire/internal/tpdiscmetrics"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -54,17 +53,19 @@ func newTestEntry() *transport.Entry {
 	}
 }
 
-func TestBadRequest(t *testing.T) {
-	logger := &logging.Logger{}
-	gormDB := &gorm.DB{}
-	memoryStore := true
-	onlyPGStore := false
-	nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
-
-	mock, err := store.New(logger, gormDB, memoryStore, onlyPGStore)
+func newTestStore(t *testing.T) store.TransportStore {
+	ctx := context.Background()
+	storeConfig := storeconfig.Config{Type: storeconfig.Memory}
+	logger := logging.MustGetLogger("test")
+	s, err := store.New(ctx, storeConfig, 10*time.Minute, logger)
 	require.NoError(t, err)
+	return s
+}
 
+func TestBadRequest(t *testing.T) {
+	mock := newTestStore(t)
 	ctx := context.TODO()
+	nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
 
 	nonceMock, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, "")
 	require.NoError(t, err)
@@ -83,14 +84,8 @@ func TestBadRequest(t *testing.T) {
 }
 
 func TestRegisterTransport(t *testing.T) {
-	logger := &logging.Logger{}
-	gormDB := &gorm.DB{}
-	memoryStore := true
-	onlyPGStore := false
+	mock := newTestStore(t)
 	nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
-
-	mock, err := store.New(logger, gormDB, memoryStore, onlyPGStore)
-	require.NoError(t, err)
 
 	sEntry := &transport.SignedEntry{Entry: newTestEntry(), Signatures: [2]cipher.Sig{}}
 	ctx := context.TODO()
@@ -121,14 +116,8 @@ func TestRegisterTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	logger := &logging.Logger{}
-	gormDB := &gorm.DB{}
-	memoryStore := true
-	onlyPGStore := false
+	mock := newTestStore(t)
 	nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
-
-	mock, err := store.New(logger, gormDB, memoryStore, onlyPGStore)
-	require.NoError(t, err)
 
 	sEntry := &transport.SignedEntry{Entry: newTestEntry(), Signatures: [2]cipher.Sig{}}
 	nonceMock, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, "")
@@ -153,14 +142,8 @@ func TestRegisterTimeout(t *testing.T) {
 }
 
 func TestGETTransportByID(t *testing.T) {
-	logger := &logging.Logger{}
-	gormDB := &gorm.DB{}
-	memoryStore := true
-	onlyPGStore := false
+	mock := newTestStore(t)
 	nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
-
-	mock, err := store.New(logger, gormDB, memoryStore, onlyPGStore)
-	require.NoError(t, err)
 
 	ctx := context.Background()
 	nonceMock, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, "")
@@ -191,14 +174,9 @@ func TestGETTransportByID(t *testing.T) {
 }
 
 func TestDELETETransportByID(t *testing.T) {
-	logger := &logging.Logger{}
-	gormDB := &gorm.DB{}
-	memoryStore := true
-	onlyPGStore := false
+	mock := newTestStore(t)
 	nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
 
-	mock, err := store.New(logger, gormDB, memoryStore, onlyPGStore)
-	require.NoError(t, err)
 	ctx := context.Background()
 	nonceMock, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, "")
 	require.NoError(t, err)
@@ -249,14 +227,8 @@ func TestDELETETransportByID(t *testing.T) {
 }
 
 func TestGETTransportByEdge(t *testing.T) {
-	logger := &logging.Logger{}
-	gormDB := &gorm.DB{}
-	memoryStore := true
-	onlyPGStore := false
+	mock := newTestStore(t)
 	nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
-
-	mock, err := store.New(logger, gormDB, memoryStore, onlyPGStore)
-	require.NoError(t, err)
 
 	ctx := context.Background()
 	nonceMock, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, "")
@@ -287,14 +259,8 @@ func TestGETTransportByEdge(t *testing.T) {
 }
 
 func TestGETAllTransports(t *testing.T) {
-	logger := &logging.Logger{}
-	gormDB := &gorm.DB{}
-	memoryStore := true
-	onlyPGStore := false
+	mock := newTestStore(t)
 	nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
-
-	mock, err := store.New(logger, gormDB, memoryStore, onlyPGStore)
-	require.NoError(t, err)
 
 	ctx := context.Background()
 	nonceMock, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, "")
@@ -336,14 +302,8 @@ func TestGETAllTransports(t *testing.T) {
 }
 
 func TestGETIncrementingNonces(t *testing.T) {
-	logger := &logging.Logger{}
-	gormDB := &gorm.DB{}
-	memoryStore := true
-	onlyPGStore := false
+	mock := newTestStore(t)
 	nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
-
-	mock, err := store.New(logger, gormDB, memoryStore, onlyPGStore)
-	require.NoError(t, err)
 
 	pubKey, _ := cipher.GenerateKeyPair()
 

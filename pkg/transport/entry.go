@@ -131,6 +131,7 @@ type SignedEntry struct {
 	Entry      *Entry        `json:"entry"`
 	Signatures [2]cipher.Sig `json:"signatures"`
 	Registered int64         `json:"registered,omitempty"`
+	Latency    int64         `json:"latency,omitempty"` // Latency in milliseconds, measured during re-registration
 }
 
 // Sign sets Signature for a given PubKey in correct position

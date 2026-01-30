@@ -74,6 +74,9 @@ type ManagedTransport struct {
 	wg   sync.WaitGroup
 
 	timeout time.Duration
+
+	latency   int64 // Last measured latency to TPD in milliseconds
+	latencyMx sync.RWMutex
 }
 
 // NewManagedTransport creates a new ManagedTransport.
@@ -99,6 +102,20 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		timeout:     conf.InactiveTimeout,
 	}
 	return mt
+}
+
+// GetLatency returns the last measured latency to TPD in milliseconds.
+func (mt *ManagedTransport) GetLatency() int64 {
+	mt.latencyMx.RLock()
+	defer mt.latencyMx.RUnlock()
+	return mt.latency
+}
+
+// SetLatency sets the latency to TPD in milliseconds.
+func (mt *ManagedTransport) SetLatency(latencyMs int64) {
+	mt.latencyMx.Lock()
+	defer mt.latencyMx.Unlock()
+	mt.latency = latencyMs
 }
 
 // Serve serves and manages the transport.
