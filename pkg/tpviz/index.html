@@ -1133,11 +1133,18 @@
                 if (count > maxCross) maxCross = count;
             });
 
+            // Track movement per group to dynamically expand bubbles
+            const groupMovement = new Map(); // key -> { totalMovement, frameCount }
+            fixedGroupCentroids.forEach((centroid, key) => {
+                groupMovement.set(key, { totalMovement: 0, frameCount: 0 });
+            });
+
             groupForceInterval = setInterval(() => {
                 if (!network || !groupingMode || !fixedGroupCentroids) return;
 
                 const positions = network.getPositions();
-                const nodePositions = new Map(); // Track updated positions for collision detection
+                const nodePositions = new Map();
+                const groupNodes = new Map(); // key -> [nodeIds] for repulsion
 
                 // First pass: apply gravity and collect positions
                 nodesDataset.forEach(node => {
@@ -1155,7 +1162,7 @@
                     const dy = nodeY - centroid.y;
                     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
-                    // Strong gravity toward center - much stronger for nodes with cross-group connections
+                    // Strong gravity toward center - stronger for cross-group connections
                     const crossCount = crossCounts.get(node.id) || 0;
                     const gravityStrength = 0.05 + (crossCount / maxCross) * 0.4;
 
@@ -1164,46 +1171,52 @@
                         nodeY -= dy * gravityStrength;
                     }
 
-                    nodePositions.set(node.id, { x: nodeX, y: nodeY, key: key, centroid: centroid });
+                    nodePositions.set(node.id, {
+                        x: nodeX, y: nodeY,
+                        origX: positions[node.id].x, origY: positions[node.id].y,
+                        key: key, centroid: centroid
+                    });
+
+                    if (!groupNodes.has(key)) groupNodes.set(key, []);
+                    groupNodes.get(key).push(node.id);
                 });
 
-                // Second pass: node-to-node repulsion within same group
-                const minNodeDist = 35; // Minimum distance between node centers
-                const repulsionStrength = 0.5;
+                // Second pass: gentle node-to-node repulsion within same group
+                const minNodeDist = 30;
+                const repulsionStrength = 0.3; // Gentler to reduce jitter
 
-                const nodeList = Array.from(nodePositions.entries());
-                for (let i = 0; i < nodeList.length; i++) {
-                    for (let j = i + 1; j < nodeList.length; j++) {
-                        const [idA, posA] = nodeList[i];
-                        const [idB, posB] = nodeList[j];
+                groupNodes.forEach((nodeIds, key) => {
+                    for (let i = 0; i < nodeIds.length; i++) {
+                        for (let j = i + 1; j < nodeIds.length; j++) {
+                            const posA = nodePositions.get(nodeIds[i]);
+                            const posB = nodePositions.get(nodeIds[j]);
 
-                        // Only repel nodes in the same group
-                        if (posA.key !== posB.key) continue;
+                            const dx = posB.x - posA.x;
+                            const dy = posB.y - posA.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
-                        const dx = posB.x - posA.x;
-                        const dy = posB.y - posA.y;
-                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                            if (dist < minNodeDist) {
+                                const overlap = minNodeDist - dist;
+                                const pushX = (dx / dist) * overlap * repulsionStrength;
+                                const pushY = (dy / dist) * overlap * repulsionStrength;
 
-                        if (dist < minNodeDist) {
-                            // Nodes too close - push apart
-                            const overlap = minNodeDist - dist;
-                            const pushX = (dx / dist) * overlap * repulsionStrength;
-                            const pushY = (dy / dist) * overlap * repulsionStrength;
-
-                            posA.x -= pushX;
-                            posA.y -= pushY;
-                            posB.x += pushX;
-                            posB.y += pushY;
+                                posA.x -= pushX;
+                                posA.y -= pushY;
+                                posB.x += pushX;
+                                posB.y += pushY;
+                            }
                         }
                     }
-                }
+                });
 
-                // Third pass: enforce boundaries and collect updates
+                // Third pass: enforce boundaries, track movement, expand if needed
                 const updates = [];
-                nodePositions.forEach((pos, nodeId) => {
-                    let { x: nodeX, y: nodeY, centroid } = pos;
+                const movementByGroup = new Map();
 
-                    // Hard boundary - maximum allowed distance
+                nodePositions.forEach((pos, nodeId) => {
+                    let { x: nodeX, y: nodeY, origX, origY, key, centroid } = pos;
+
+                    // Hard boundary
                     const maxDist = centroid.radius - 40;
                     const newDx = nodeX - centroid.x;
                     const newDy = nodeY - centroid.y;
@@ -1215,10 +1228,37 @@
                         nodeY = centroid.y + newDy * scale;
                     }
 
-                    // Only update if position changed significantly
-                    if (Math.abs(nodeX - positions[nodeId].x) > 0.5 ||
-                        Math.abs(nodeY - positions[nodeId].y) > 0.5) {
+                    // Track movement for this frame
+                    const movement = Math.sqrt((nodeX - origX) ** 2 + (nodeY - origY) ** 2);
+                    if (!movementByGroup.has(key)) movementByGroup.set(key, 0);
+                    movementByGroup.set(key, movementByGroup.get(key) + movement);
+
+                    if (Math.abs(nodeX - origX) > 0.3 || Math.abs(nodeY - origY) > 0.3) {
                         updates.push({ id: nodeId, x: nodeX, y: nodeY });
+                    }
+                });
+
+                // Expand bubbles that have too much movement
+                movementByGroup.forEach((movement, key) => {
+                    const gm = groupMovement.get(key);
+                    gm.totalMovement += movement;
+                    gm.frameCount++;
+
+                    // Every 30 frames (~1 second), check if bubble needs expansion
+                    if (gm.frameCount >= 30) {
+                        const avgMovement = gm.totalMovement / gm.frameCount;
+                        const nodeCount = groupNodes.get(key)?.length || 1;
+                        const movementPerNode = avgMovement / nodeCount;
+
+                        // If average movement per node > threshold, expand bubble
+                        if (movementPerNode > 3) {
+                            const centroid = fixedGroupCentroids.get(key);
+                            centroid.radius = Math.min(centroid.radius * 1.1, centroid.radius + 50);
+                        }
+
+                        // Reset counters
+                        gm.totalMovement = 0;
+                        gm.frameCount = 0;
                     }
                 });
 
@@ -1226,7 +1266,7 @@
                     nodesDataset.update(updates);
                     updateGroupBoundaries();
                 }
-            }, 30); // Run every 30ms for responsive enforcement
+            }, 30);
         }
 
         function stopGroupBoundaryEnforcement() {
