@@ -2,8 +2,10 @@
 package pv
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
@@ -12,33 +14,42 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 var (
 	serviceType    = servicedisc.ServiceTypeVisor
 	sdURL          string
 	utURL          string
+	tpdURL         string
 	cacheFileSD    string
 	cacheFileUT    string
+	cacheFileTPD   string
 	cacheFilesAge  int
 	rawData        bool
 	noFilterOnline bool
 	country        string
 	version        string
 	isStats        bool
+	showTransports bool
+	minTransports  int
 )
 
 func init() {
 	RootCmd.Flags().StringVarP(&sdURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
 	RootCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
+	RootCmd.Flags().StringVarP(&tpdURL, "tpdurl", "d", deployment.Prod.TransportDiscovery, "transport discovery url")
 	RootCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw json data")
 	RootCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	RootCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/visorsd.json", "SD cache file location")
 	RootCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location")
+	RootCmd.Flags().StringVar(&cacheFileTPD, "cft", os.TempDir()+"/tpd.json", "TPD cache file location")
 	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	RootCmd.Flags().StringVarP(&country, "country", "c", "", "filter by country code")
 	RootCmd.Flags().StringVarP(&version, "version", "v", "", "filter by version")
 	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
+	RootCmd.Flags().BoolVarP(&showTransports, "transports", "t", false, "show transport count per visor")
+	RootCmd.Flags().IntVarP(&minTransports, "min", "n", 0, "minimum transport count (requires -t)")
 }
 
 // RootCmd is the command for listing public visors
@@ -49,6 +60,7 @@ var RootCmd = &cobra.Command{
 %v/api/services?type=%v
 
 Returns only public keys, one per line.
+Use -t to show transport counts per visor.
 Set cache file location to "" to avoid using cache files`, deployment.Prod.ServiceDiscovery, serviceType),
 	Run: func(cmd *cobra.Command, _ []string) {
 		// Fetch SD
@@ -57,6 +69,9 @@ Set cache file location to "" to avoid using cache files`, deployment.Prod.Servi
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint:errcheck,gosec
 			return
 		}
+
+		// Get list of PKs first (we'll need this for transport counting)
+		var pks []string
 
 		// No filtering by online status - just get PKs from SD
 		if noFilterOnline {
@@ -69,48 +84,104 @@ Set cache file location to "" to avoid using cache files`, deployment.Prod.Servi
 			}
 			sdJQ += ` | .address | split(":")[0]`
 
-			if isStats {
-				count, err := script.Echo(sds).JQ(sdJQ).Replace(`"`, "").CountLines()
-				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
+			if !showTransports {
+				if isStats {
+					count, err := script.Echo(sds).JQ(sdJQ).Replace(`"`, "").CountLines()
+					if err != nil {
+						internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
+					}
+					script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
+					return
 				}
-				script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
+				script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
 				return
 			}
-			script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
-			return
+
+			// Get PKs for transport counting
+			pks, _ = script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Slice() //nolint:errcheck
+		} else {
+			// Filter by online status via jq join
+			uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+			joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, uts)
+
+			// Build jq filter with optional country and version conditions
+			countryCond := ""
+			if country != "" {
+				countryCond = ` | select(.geo.country == "` + country + `")`
+			}
+			versionCond := ""
+			if version != "" {
+				versionCond = ` | select(.version | startswith("` + version + `"))`
+			}
+
+			jqFilter := `
+			[ .ut[] | select(.on) | .pk ] as $online
+			| .sd[]
+			| select((.address | split(":")[0]) as $pk | $pk | IN($online[]))` + countryCond + versionCond + `
+			| .address | split(":")[0]
+			`
+
+			if !showTransports {
+				if isStats {
+					count, err := script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").CountLines()
+					if err != nil {
+						internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
+					}
+					script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
+					return
+				}
+				script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
+				return
+			}
+
+			// Get PKs for transport counting
+			pks, _ = script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Slice() //nolint:errcheck
 		}
 
-		// Filter by online status via jq join
-		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
-		joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, uts)
+		// Show transports mode - fetch TPD and count transports per visor
+		tpd := internal.GetData(cacheFileTPD, tpdURL+"/all-transports", cacheFilesAge)
 
-		// Build jq filter with optional country and version conditions
-		countryCond := ""
-		if country != "" {
-			countryCond = ` | select(.geo.country == "` + country + `")`
-		}
-		versionCond := ""
-		if version != "" {
-			versionCond = ` | select(.version | startswith("` + version + `"))`
+		var entries []*transport.Entry
+		if err := json.Unmarshal([]byte(tpd), &entries); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse transport discovery data: %w", err))
 		}
 
-		jqFilter := `
-		[ .ut[] | select(.on) | .pk ] as $online
-		| .sd[]
-		| select((.address | split(":")[0]) as $pk | $pk | IN($online[]))` + countryCond + versionCond + `
-		| .address | split(":")[0]
-		`
+		// Count transports per PK
+		tpCount := make(map[string]int)
+		for _, entry := range entries {
+			// Skip self-transports
+			if entry.Edges[0] == entry.Edges[1] {
+				continue
+			}
+			tpCount[entry.Edges[0].String()]++
+			tpCount[entry.Edges[1].String()]++
+		}
+
+		// Build result with transport counts
+		type visorInfo struct {
+			pk    string
+			count int
+		}
+		var results []visorInfo
+		for _, pk := range pks {
+			count := tpCount[pk]
+			if count >= minTransports {
+				results = append(results, visorInfo{pk: pk, count: count})
+			}
+		}
+
+		// Sort by transport count descending
+		sort.Slice(results, func(i, j int) bool {
+			return results[i].count > results[j].count
+		})
 
 		if isStats {
-			count, err := script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").CountLines()
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
-			}
-			script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
+			fmt.Printf("%d\n", len(results))
 			return
 		}
 
-		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
+		for _, r := range results {
+			fmt.Printf("%s %d\n", r.pk, r.count)
+		}
 	},
 }
