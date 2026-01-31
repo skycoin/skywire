@@ -28,6 +28,7 @@ import (
 	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -39,6 +40,7 @@ type proxyTestClient interface {
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	DoCustomSetting(appName string, customSetting map[string]any) error
+	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*visor.TransportSummary, error)
 }
 
 func init() {
@@ -72,7 +74,9 @@ func init() {
 	testCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/proxysd.json", "SD cache file location")
 	testCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location")
 	testCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
-	testCmd.Flags().StringVarP(&country, "country", "c", "", "filter proxies by country code")
+	testCmd.Flags().StringVarP(&country, "country", "k", "", "filter proxies by country code")
+	testCmd.Flags().BoolVarP(&testConnectOnly, "connect", "c", false, "connect only mode: add transports without HTTP testing")
+	testCmd.Flags().StringVarP(&testVersion, "version", "V", "", "filter proxies by version (empty to skip)")
 }
 
 var startCmd = &cobra.Command{
@@ -417,7 +421,9 @@ func getLauncherMode() string {
 type ProxyTestResult struct {
 	PublicKey    string  `json:"public_key"`
 	Country      string  `json:"country,omitempty"`
+	Version      string  `json:"version,omitempty"`
 	HasTransport bool    `json:"has_transport"`
+	Connected    bool    `json:"connected,omitempty"`
 	Success      bool    `json:"success"`
 	Latency      float64 `json:"latency_ms,omitempty"`
 	Response     string  `json:"response,omitempty"`
@@ -430,6 +436,9 @@ var testCmd = &cobra.Command{
 	Long: `Fetch proxy servers from service discovery and test connectivity.
 For each proxy, check if visor has a transport to it, then attempt to
 make an HTTP request through the proxy to verify it's working.
+
+With --connect flag, connects to all online proxies (adds transports)
+without HTTP testing. Use --version to filter by visor version.
 
 Results show which proxies are reachable and their response latency.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -450,6 +459,17 @@ Results show which proxies are reachable and their response latency.`,
 			var filtered []services.Service
 			for _, svc := range proxyServices {
 				if svc.Geo != nil && strings.EqualFold(svc.Geo.Country, country) {
+					filtered = append(filtered, svc)
+				}
+			}
+			proxyServices = filtered
+		}
+
+		// Filter by version if specified
+		if testVersion != "" {
+			var filtered []services.Service
+			for _, svc := range proxyServices {
+				if strings.HasPrefix(svc.Version, testVersion) {
 					filtered = append(filtered, svc)
 				}
 			}
@@ -481,6 +501,7 @@ Results show which proxies are reachable and their response latency.`,
 		type proxyToTest struct {
 			pk           cipher.PubKey
 			country      string
+			version      string
 			hasTransport bool
 		}
 		var proxiesToTest []proxyToTest
@@ -498,7 +519,14 @@ Results show which proxies are reachable and their response latency.`,
 			}
 
 			hasTransport := transportPKs[pkStr]
-			if testOnlyWithTp && !hasTransport {
+
+			// In connect-only mode, skip proxies we already have transports to
+			if testConnectOnly && hasTransport {
+				continue
+			}
+
+			// In normal test mode with --transport flag, skip proxies without transport
+			if !testConnectOnly && testOnlyWithTp && !hasTransport {
 				continue
 			}
 
@@ -510,6 +538,7 @@ Results show which proxies are reachable and their response latency.`,
 			proxiesToTest = append(proxiesToTest, proxyToTest{
 				pk:           pk,
 				country:      countryCode,
+				version:      svc.Version,
 				hasTransport: hasTransport,
 			})
 		}
@@ -520,13 +549,17 @@ Results show which proxies are reachable and their response latency.`,
 		}
 
 		if testVerbose {
-			withTp := 0
-			for _, p := range proxiesToTest {
-				if p.hasTransport {
-					withTp++
+			if testConnectOnly {
+				fmt.Printf("Connecting to %d proxies\n", len(proxiesToTest))
+			} else {
+				withTp := 0
+				for _, p := range proxiesToTest {
+					if p.hasTransport {
+						withTp++
+					}
 				}
+				fmt.Printf("Testing %d proxies (%d with existing transport)\n", len(proxiesToTest), withTp)
 			}
-			fmt.Printf("Testing %d proxies (%d with existing transport)\n", len(proxiesToTest), withTp)
 		}
 
 		// Process in batches
@@ -544,18 +577,39 @@ Results show which proxies are reachable and their response latency.`,
 				result := ProxyTestResult{
 					PublicKey:    pxy.pk.String(),
 					Country:      pxy.country,
+					Version:      pxy.version,
 					HasTransport: pxy.hasTransport,
 				}
 
-				// Test the proxy
-				latency, response, err := testProxyServer(rpcClient, pxy.pk, testURL, testTimeout)
-				if err != nil {
-					result.Success = false
-					result.Error = err.Error()
+				if testConnectOnly {
+					// Connect-only mode: just add transport
+					start := time.Now()
+					// Try STCPR first (for public visors), then SUDPH
+					_, err := rpcClient.AddTransport(pxy.pk, "stcpr", time.Duration(testTimeout)*time.Second)
+					if err != nil {
+						// Try SUDPH as fallback
+						_, err = rpcClient.AddTransport(pxy.pk, "sudph", time.Duration(testTimeout)*time.Second)
+					}
+					if err != nil {
+						result.Success = false
+						result.Connected = false
+						result.Error = err.Error()
+					} else {
+						result.Success = true
+						result.Connected = true
+						result.Latency = float64(time.Since(start).Milliseconds())
+					}
 				} else {
-					result.Success = true
-					result.Latency = latency
-					result.Response = response
+					// Normal test mode: test proxy via HTTP
+					latency, response, err := testProxyServer(rpcClient, pxy.pk, testURL, testTimeout)
+					if err != nil {
+						result.Success = false
+						result.Error = err.Error()
+					} else {
+						result.Success = true
+						result.Latency = latency
+						result.Response = response
+					}
 				}
 
 				results[idx] = result
@@ -565,14 +619,14 @@ Results show which proxies are reachable and their response latency.`,
 					if !result.Success {
 						status = "✗"
 					}
-					tpStatus := ""
-					if result.HasTransport {
-						tpStatus = " [tp]"
+					verStr := ""
+					if pxy.version != "" {
+						verStr = " [" + pxy.version + "]"
 					}
 					if result.Success {
-						fmt.Printf("%s %s%s - %.0fms\n", status, pxy.pk.String()[:8], tpStatus, result.Latency)
+						fmt.Printf("%s %s%s - %.0fms\n", status, pxy.pk.String()[:8], verStr, result.Latency)
 					} else {
-						fmt.Printf("%s %s%s - %s\n", status, pxy.pk.String()[:8], tpStatus, result.Error)
+						fmt.Printf("%s %s%s - %s\n", status, pxy.pk.String()[:8], verStr, result.Error)
 					}
 				}
 			}(i, p)
@@ -589,13 +643,13 @@ Results show which proxies are reachable and their response latency.`,
 		// Print summary
 		var b bytes.Buffer
 		w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-		fmt.Fprintf(w, "PUBLIC KEY\tCOUNTRY\tTRANSPORT\tSTATUS\tLATENCY\n")
+		if testConnectOnly {
+			fmt.Fprintf(w, "PUBLIC KEY\tCOUNTRY\tVERSION\tSTATUS\tTIME\n")
+		} else {
+			fmt.Fprintf(w, "PUBLIC KEY\tCOUNTRY\tTRANSPORT\tSTATUS\tLATENCY\n")
+		}
 		successCount := 0
 		for _, r := range results {
-			tpStr := "no"
-			if r.HasTransport {
-				tpStr = "yes"
-			}
 			status := "fail"
 			latency := "-"
 			if r.Success {
@@ -603,12 +657,24 @@ Results show which proxies are reachable and their response latency.`,
 				latency = fmt.Sprintf("%.0fms", r.Latency)
 				successCount++
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", r.Country, tpStr, status, latency)
+			if testConnectOnly {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", r.Country, r.Version, status, latency)
+			} else {
+				tpStr := "no"
+				if r.HasTransport {
+					tpStr = "yes"
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", r.Country, tpStr, status, latency)
+			}
 		}
 		w.Flush()
 
 		fmt.Print(b.String())
-		fmt.Printf("\nSummary: %d/%d proxies working\n", successCount, len(results))
+		if testConnectOnly {
+			fmt.Printf("\nSummary: %d/%d proxies connected\n", successCount, len(results))
+		} else {
+			fmt.Printf("\nSummary: %d/%d proxies working\n", successCount, len(results))
+		}
 	},
 }
 

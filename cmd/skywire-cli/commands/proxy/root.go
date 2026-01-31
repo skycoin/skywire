@@ -34,11 +34,13 @@ var (
 	useInternal     bool
 	useExternal     bool
 	// test command vars
-	testURL        string
-	testTimeout    int
-	testBatchSize  int
-	testOnlyWithTp bool
-	testVerbose    bool
+	testURL         string
+	testTimeout     int
+	testBatchSize   int
+	testOnlyWithTp  bool
+	testVerbose     bool
+	testConnectOnly bool
+	testVersion     string
 )
 
 // RootCmd contains commands that interact with the skywire-visor
