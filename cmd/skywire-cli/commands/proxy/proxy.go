@@ -566,6 +566,12 @@ Results show which proxies are reachable and their response latency.`,
 		results := make([]ProxyTestResult, len(proxiesToTest))
 		var wg sync.WaitGroup
 		semaphore := make(chan struct{}, testBatchSize)
+		var completed int32
+		var mu sync.Mutex
+
+		// Progress indicator
+		total := len(proxiesToTest)
+		fmt.Printf("Processing %d proxies...\n", total)
 
 		for i, p := range proxiesToTest {
 			wg.Add(1)
@@ -601,7 +607,9 @@ Results show which proxies are reachable and their response latency.`,
 					}
 				} else {
 					// Normal test mode: test proxy via HTTP
-					latency, response, err := testProxyServer(rpcClient, pxy.pk, testURL, testTimeout)
+					// Use unique port per test to avoid conflicts
+					port := 10800 + idx
+					latency, response, err := testProxyServerWithPort(rpcClient, pxy.pk, testURL, testTimeout, port)
 					if err != nil {
 						result.Success = false
 						result.Error = err.Error()
@@ -614,6 +622,12 @@ Results show which proxies are reachable and their response latency.`,
 
 				results[idx] = result
 
+				// Update progress
+				mu.Lock()
+				completed++
+				current := completed
+				mu.Unlock()
+
 				if testVerbose {
 					status := "✓"
 					if !result.Success {
@@ -624,10 +638,12 @@ Results show which proxies are reachable and their response latency.`,
 						verStr = " [" + pxy.version + "]"
 					}
 					if result.Success {
-						fmt.Printf("%s %s%s - %.0fms\n", status, pxy.pk.String()[:8], verStr, result.Latency)
+						fmt.Printf("[%d/%d] %s %s%s - %.0fms\n", current, total, status, pxy.pk.String()[:8], verStr, result.Latency)
 					} else {
-						fmt.Printf("%s %s%s - %s\n", status, pxy.pk.String()[:8], verStr, result.Error)
+						fmt.Printf("[%d/%d] %s %s%s - %s\n", current, total, status, pxy.pk.String()[:8], verStr, result.Error)
 					}
+				} else if current%10 == 0 || current == int32(total) {
+					fmt.Printf("Progress: %d/%d\n", current, total)
 				}
 			}(i, p)
 		}
@@ -678,14 +694,14 @@ Results show which proxies are reachable and their response latency.`,
 	},
 }
 
-// testProxyServer tests a single proxy server by starting the client and making an HTTP request
-func testProxyServer(rpcClient proxyTestClient, serverPK cipher.PubKey, testURL string, timeoutSec int) (latencyMs float64, response string, err error) {
+// testProxyServerWithPort tests a single proxy server by starting the client and making an HTTP request
+func testProxyServerWithPort(rpcClient proxyTestClient, serverPK cipher.PubKey, testURL string, timeoutSec int, port int) (latencyMs float64, response string, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
 	// Use a unique client name for this test
 	testClientName := fmt.Sprintf("proxy-test-%s", serverPK.String()[:8])
-	proxyAddr := "127.0.0.1:10800" // TODO: find available port
+	proxyAddr := fmt.Sprintf("127.0.0.1:%d", port)
 
 	// Stop any existing test client first
 	_ = rpcClient.StopApp(testClientName)
@@ -695,7 +711,7 @@ func testProxyServer(rpcClient proxyTestClient, serverPK cipher.PubKey, testURL 
 	arguments := map[string]any{
 		"app":    "skysocks-client",
 		"--srv":  serverPK.String(),
-		"--addr": ":" + "10800",
+		"--addr": fmt.Sprintf(":%d", port),
 	}
 
 	// Check if app exists, if not add it
