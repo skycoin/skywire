@@ -427,50 +427,60 @@ func (s *Server) getData(cacheFile, url string) (string, error) {
 	}
 
 	s.cacheMu.RLock()
-	shouldFetch := false
-
 	info, err := os.Stat(cacheFile)
 	if err != nil {
-		// Cache file doesn't exist
-		shouldFetch = true
-	} else {
-		// Check if cache is too old
-		if time.Since(info.ModTime()).Minutes() > float64(s.config.CacheMaxAge) {
-			shouldFetch = true
-		}
-	}
-	s.cacheMu.RUnlock()
-
-	if shouldFetch {
-		s.cacheMu.Lock()
-		defer s.cacheMu.Unlock()
-
-		// Double-check after acquiring write lock
-		info, err = os.Stat(cacheFile)
-		if err == nil && time.Since(info.ModTime()).Minutes() <= float64(s.config.CacheMaxAge) {
-			// Another goroutine updated the cache
-			return readFile(cacheFile)
-		}
-
+		s.cacheMu.RUnlock()
+		// Cache file doesn't exist, fetch synchronously
 		data, err := fetchURL(url)
 		if err != nil {
-			// If fetch fails but we have a cache file, use it
-			if info != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Failed to fetch fresh data, using cache: %v\n", err)
-				return readFile(cacheFile)
-			}
 			return "", err
 		}
-		// Write to cache file
+		s.cacheMu.Lock()
+		defer s.cacheMu.Unlock()
 		if err := os.WriteFile(cacheFile, []byte(data), 0644); err != nil { //nolint:gosec
 			fmt.Fprintf(os.Stderr, "Warning: Failed to write cache file: %v\n", err)
 		}
+		fmt.Printf("Auto-refreshed cache: %s\n", cacheFile)
 		return data, nil
+	}
+
+	// Check if cache is too old
+	if time.Since(info.ModTime()).Minutes() > float64(s.config.CacheMaxAge) {
+		s.cacheMu.RUnlock()
+		// Trigger refresh in background, return stale data
+		go s.refreshCacheFile(cacheFile, url)
+	} else {
+		s.cacheMu.RUnlock()
 	}
 
 	s.cacheMu.RLock()
 	defer s.cacheMu.RUnlock()
 	return readFile(cacheFile)
+}
+
+// refreshCacheFile refreshes a single cache file in the background
+func (s *Server) refreshCacheFile(cacheFile, url string) {
+	// Check if file needs refresh
+	s.cacheMu.RLock()
+	info, err := os.Stat(cacheFile)
+	if err == nil && time.Since(info.ModTime()).Minutes() <= float64(s.config.CacheMaxAge) {
+		s.cacheMu.RUnlock()
+		return // File is fresh enough
+	}
+	s.cacheMu.RUnlock()
+
+	data, err := fetchURL(url)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Auto-refresh failed for %s: %v\n", url, err)
+		return
+	}
+
+	s.cacheMu.Lock()
+	if err := os.WriteFile(cacheFile, []byte(data), 0644); err != nil { //nolint:gosec
+		fmt.Fprintf(os.Stderr, "Warning: Failed to write cache file %s: %v\n", cacheFile, err)
+	}
+	s.cacheMu.Unlock()
+	fmt.Printf("Auto-refreshed cache: %s\n", cacheFile)
 }
 
 // refreshCache proactively refreshes all cache files

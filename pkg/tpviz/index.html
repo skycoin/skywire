@@ -1133,10 +1133,20 @@
                 if (count > maxCross) maxCross = count;
             });
 
-            // Track movement per group to dynamically expand bubbles
-            const groupMovement = new Map(); // key -> { totalMovement, frameCount }
+            // Track heat per group using exponential moving average
+            // Heat includes: boundary collisions, node proximity violations, velocity
+            const groupHeat = new Map(); // key -> { heat, baseRadius, nodeCount }
+            const minNodeDist = 35;
+            const heatDecay = 0.92; // How fast heat dissipates (lower = faster cooling)
+            const heatThresholdHigh = 15; // Expand when heat above this
+            const heatThresholdLow = 3;   // Contract when heat below this
+
             fixedGroupCentroids.forEach((centroid, key) => {
-                groupMovement.set(key, { totalMovement: 0, frameCount: 0 });
+                groupHeat.set(key, {
+                    heat: 0,
+                    baseRadius: centroid.radius,
+                    nodeCount: 0
+                });
             });
 
             groupForceInterval = setInterval(() => {
@@ -1144,7 +1154,13 @@
 
                 const positions = network.getPositions();
                 const nodePositions = new Map();
-                const groupNodes = new Map(); // key -> [nodeIds] for repulsion
+                const groupNodes = new Map(); // key -> [nodeIds]
+                const frameHeat = new Map(); // Heat generated this frame per group
+
+                // Initialize frame heat
+                fixedGroupCentroids.forEach((_, key) => {
+                    frameHeat.set(key, 0);
+                });
 
                 // First pass: apply gravity and collect positions
                 nodesDataset.forEach(node => {
@@ -1181,11 +1197,9 @@
                     groupNodes.get(key).push(node.id);
                 });
 
-                // Second pass: gentle node-to-node repulsion within same group
-                const minNodeDist = 30;
-                const repulsionStrength = 0.3; // Gentler to reduce jitter
-
+                // Second pass: node-to-node repulsion + track proximity heat
                 groupNodes.forEach((nodeIds, key) => {
+                    let proximityHeat = 0;
                     for (let i = 0; i < nodeIds.length; i++) {
                         for (let j = i + 1; j < nodeIds.length; j++) {
                             const posA = nodePositions.get(nodeIds[i]);
@@ -1197,21 +1211,24 @@
 
                             if (dist < minNodeDist) {
                                 const overlap = minNodeDist - dist;
-                                const pushX = (dx / dist) * overlap * repulsionStrength;
-                                const pushY = (dy / dist) * overlap * repulsionStrength;
+                                const pushX = (dx / dist) * overlap * 0.3;
+                                const pushY = (dy / dist) * overlap * 0.3;
 
                                 posA.x -= pushX;
                                 posA.y -= pushY;
                                 posB.x += pushX;
                                 posB.y += pushY;
+
+                                // Add heat proportional to overlap severity
+                                proximityHeat += (overlap / minNodeDist) * 5;
                             }
                         }
                     }
+                    frameHeat.set(key, frameHeat.get(key) + proximityHeat);
                 });
 
-                // Third pass: enforce boundaries, track movement, expand if needed
+                // Third pass: enforce boundaries, track boundary heat
                 const updates = [];
-                const movementByGroup = new Map();
 
                 nodePositions.forEach((pos, nodeId) => {
                     let { x: nodeX, y: nodeY, origX, origY, key, centroid } = pos;
@@ -1223,42 +1240,44 @@
                     const newDist = Math.sqrt(newDx * newDx + newDy * newDy);
 
                     if (newDist > maxDist && maxDist > 0) {
+                        // Add heat for boundary collision - more heat for harder collisions
+                        const overshoot = newDist - maxDist;
+                        frameHeat.set(key, frameHeat.get(key) + overshoot * 0.5);
+
                         const scale = maxDist / newDist;
                         nodeX = centroid.x + newDx * scale;
                         nodeY = centroid.y + newDy * scale;
                     }
 
-                    // Track movement for this frame
+                    // Track velocity as heat
                     const movement = Math.sqrt((nodeX - origX) ** 2 + (nodeY - origY) ** 2);
-                    if (!movementByGroup.has(key)) movementByGroup.set(key, 0);
-                    movementByGroup.set(key, movementByGroup.get(key) + movement);
+                    frameHeat.set(key, frameHeat.get(key) + movement * 0.2);
 
                     if (Math.abs(nodeX - origX) > 0.3 || Math.abs(nodeY - origY) > 0.3) {
                         updates.push({ id: nodeId, x: nodeX, y: nodeY });
                     }
                 });
 
-                // Expand bubbles that have too much movement
-                movementByGroup.forEach((movement, key) => {
-                    const gm = groupMovement.get(key);
-                    gm.totalMovement += movement;
-                    gm.frameCount++;
+                // Update heat with exponential moving average and adjust bubble sizes
+                groupHeat.forEach((gh, key) => {
+                    const nodeCount = groupNodes.get(key)?.length || 1;
+                    const normalizedHeat = (frameHeat.get(key) || 0) / nodeCount;
 
-                    // Every 30 frames (~1 second), check if bubble needs expansion
-                    if (gm.frameCount >= 30) {
-                        const avgMovement = gm.totalMovement / gm.frameCount;
-                        const nodeCount = groupNodes.get(key)?.length || 1;
-                        const movementPerNode = avgMovement / nodeCount;
+                    // Exponential moving average
+                    gh.heat = gh.heat * heatDecay + normalizedHeat * (1 - heatDecay);
+                    gh.nodeCount = nodeCount;
 
-                        // If average movement per node > threshold, expand bubble
-                        if (movementPerNode > 3) {
-                            const centroid = fixedGroupCentroids.get(key);
-                            centroid.radius = Math.min(centroid.radius * 1.1, centroid.radius + 50);
-                        }
+                    const centroid = fixedGroupCentroids.get(key);
+                    if (!centroid) return;
 
-                        // Reset counters
-                        gm.totalMovement = 0;
-                        gm.frameCount = 0;
+                    // Adjust radius based on heat - seeking equilibrium
+                    if (gh.heat > heatThresholdHigh) {
+                        // Too hot - expand
+                        const expansion = Math.min((gh.heat - heatThresholdHigh) * 0.5, 10);
+                        centroid.radius += expansion;
+                    } else if (gh.heat < heatThresholdLow && centroid.radius > gh.baseRadius) {
+                        // Cool enough - contract slowly toward base
+                        centroid.radius = Math.max(gh.baseRadius, centroid.radius - 1);
                     }
                 });
 
@@ -1498,8 +1517,8 @@
         function calculateGroupRadius(nodeCount) {
             // Generous spacing to prevent crowding and jumping
             // radius = sqrt(count * nodeArea / pi) + padding
-            const nodeArea = 900; // ~30x30 per node with spacing
-            return Math.max(100, Math.sqrt(nodeCount * nodeArea / Math.PI) + 80);
+            const nodeArea = 3600; // ~60x60 per node with spacing
+            return Math.max(120, Math.sqrt(nodeCount * nodeArea / Math.PI) + 100);
         }
 
         // Check if a circle overlaps with any placed circles
@@ -1628,10 +1647,11 @@
                     enabled: true,
                     barnesHut: {
                         gravitationalConstant: -300,
-                        springConstant: 0.00002, // Extremely weak springs
+                        springConstant: 0.00002,
                         springLength: 30,
-                        damping: 0.95
+                        damping: 0.98
                     },
+                    maxVelocity: 20,
                     stabilization: false
                 }
             });
