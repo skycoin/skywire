@@ -33,6 +33,12 @@ var (
 	appPort         uint16
 	useInternal     bool
 	useExternal     bool
+	// test command vars
+	testURL        string
+	testTimeout    int
+	testBatchSize  int
+	testOnlyWithTp bool
+	testVerbose    bool
 )
 
 // RootCmd contains commands that interact with the skywire-visor

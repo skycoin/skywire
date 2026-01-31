@@ -6,7 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
+	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -14,6 +18,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
+	"golang.org/x/net/proxy"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -21,9 +26,20 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	services "github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
+
+// proxyTestClient is a minimal interface for proxy testing
+type proxyTestClient interface {
+	StopApp(appName string) error
+	StartApp(appName string) error
+	AddApp(appName, binaryName string) error
+	App(appName string) (*appserver.AppState, error)
+	Apps() ([]*appserver.AppState, error)
+	DoCustomSetting(appName string, customSetting map[string]any) error
+}
 
 func init() {
 	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
@@ -32,6 +48,7 @@ func init() {
 		stopCmd,
 		statusCmd,
 		listCmd,
+		testCmd,
 	)
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
 	startCmd.Flags().StringVarP(&addr, "addr", "a", visorconfig.SkysocksClientAddr, "address of proxy for use")
@@ -44,6 +61,18 @@ func init() {
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
 	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
+	// test command flags
+	testCmd.Flags().StringVarP(&testURL, "url", "u", "https://ip.skycoin.com", "URL to fetch through proxy for testing")
+	testCmd.Flags().IntVarP(&testTimeout, "timeout", "t", 30, "timeout in seconds for each proxy test")
+	testCmd.Flags().IntVarP(&testBatchSize, "batch", "b", 5, "number of proxies to test in parallel")
+	testCmd.Flags().BoolVarP(&testOnlyWithTp, "transport", "p", false, "only test proxies that have an existing transport")
+	testCmd.Flags().BoolVarP(&testVerbose, "verbose", "v", false, "verbose output")
+	testCmd.Flags().StringVarP(&sdURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
+	testCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
+	testCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/proxysd.json", "SD cache file location")
+	testCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location")
+	testCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
+	testCmd.Flags().StringVarP(&country, "country", "c", "", "filter proxies by country code")
 }
 
 var startCmd = &cobra.Command{
@@ -382,4 +411,339 @@ func getLauncherMode() string {
 		return "external"
 	}
 	return ""
+}
+
+// ProxyTestResult holds the result of testing a single proxy
+type ProxyTestResult struct {
+	PublicKey    string  `json:"public_key"`
+	Country      string  `json:"country,omitempty"`
+	HasTransport bool    `json:"has_transport"`
+	Success      bool    `json:"success"`
+	Latency      float64 `json:"latency_ms,omitempty"`
+	Response     string  `json:"response,omitempty"`
+	Error        string  `json:"error,omitempty"`
+}
+
+var testCmd = &cobra.Command{
+	Use:   "test",
+	Short: "Test proxy servers from service discovery",
+	Long: `Fetch proxy servers from service discovery and test connectivity.
+For each proxy, check if visor has a transport to it, then attempt to
+make an HTTP request through the proxy to verify it's working.
+
+Results show which proxies are reachable and their response latency.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+
+		// Fetch proxy servers from service discovery
+		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
+		var proxyServices []services.Service
+		if err := json.Unmarshal([]byte(sds), &proxyServices); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse service discovery response: %w", err))
+		}
+
+		// Filter by country if specified
+		if country != "" {
+			var filtered []services.Service
+			for _, svc := range proxyServices {
+				if svc.Geo != nil && strings.EqualFold(svc.Geo.Country, country) {
+					filtered = append(filtered, svc)
+				}
+			}
+			proxyServices = filtered
+		}
+
+		if len(proxyServices) == 0 {
+			internal.PrintOutput(cmd.Flags(), nil, "No proxy servers found\n")
+			return
+		}
+
+		if testVerbose {
+			fmt.Printf("Found %d proxy servers\n", len(proxyServices))
+		}
+
+		// Get current transports from visor
+		transports, err := rpcClient.Transports(nil, nil, false)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get transports: %w", err))
+		}
+
+		// Build a set of PKs we have transports to
+		transportPKs := make(map[string]bool)
+		for _, tp := range transports {
+			transportPKs[tp.Remote.String()] = true
+		}
+
+		// Collect proxies to test
+		type proxyToTest struct {
+			pk           cipher.PubKey
+			country      string
+			hasTransport bool
+		}
+		var proxiesToTest []proxyToTest
+
+		for _, svc := range proxyServices {
+			// Parse PK from address (format: pk:port)
+			addrParts := strings.Split(svc.Addr.String(), ":")
+			if len(addrParts) < 1 {
+				continue
+			}
+			pkStr := addrParts[0]
+			var pk cipher.PubKey
+			if err := pk.Set(pkStr); err != nil {
+				continue
+			}
+
+			hasTransport := transportPKs[pkStr]
+			if testOnlyWithTp && !hasTransport {
+				continue
+			}
+
+			countryCode := ""
+			if svc.Geo != nil {
+				countryCode = svc.Geo.Country
+			}
+
+			proxiesToTest = append(proxiesToTest, proxyToTest{
+				pk:           pk,
+				country:      countryCode,
+				hasTransport: hasTransport,
+			})
+		}
+
+		if len(proxiesToTest) == 0 {
+			internal.PrintOutput(cmd.Flags(), nil, "No proxies to test (with current filters)\n")
+			return
+		}
+
+		if testVerbose {
+			withTp := 0
+			for _, p := range proxiesToTest {
+				if p.hasTransport {
+					withTp++
+				}
+			}
+			fmt.Printf("Testing %d proxies (%d with existing transport)\n", len(proxiesToTest), withTp)
+		}
+
+		// Process in batches
+		results := make([]ProxyTestResult, len(proxiesToTest))
+		var wg sync.WaitGroup
+		semaphore := make(chan struct{}, testBatchSize)
+
+		for i, p := range proxiesToTest {
+			wg.Add(1)
+			go func(idx int, pxy proxyToTest) {
+				defer wg.Done()
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+
+				result := ProxyTestResult{
+					PublicKey:    pxy.pk.String(),
+					Country:      pxy.country,
+					HasTransport: pxy.hasTransport,
+				}
+
+				// Test the proxy
+				latency, response, err := testProxyServer(rpcClient, pxy.pk, testURL, testTimeout)
+				if err != nil {
+					result.Success = false
+					result.Error = err.Error()
+				} else {
+					result.Success = true
+					result.Latency = latency
+					result.Response = response
+				}
+
+				results[idx] = result
+
+				if testVerbose {
+					status := "✓"
+					if !result.Success {
+						status = "✗"
+					}
+					tpStatus := ""
+					if result.HasTransport {
+						tpStatus = " [tp]"
+					}
+					if result.Success {
+						fmt.Printf("%s %s%s - %.0fms\n", status, pxy.pk.String()[:8], tpStatus, result.Latency)
+					} else {
+						fmt.Printf("%s %s%s - %s\n", status, pxy.pk.String()[:8], tpStatus, result.Error)
+					}
+				}
+			}(i, p)
+		}
+
+		wg.Wait()
+
+		// Output results
+		if jsonOutput {
+			internal.PrintOutput(cmd.Flags(), results, "")
+			return
+		}
+
+		// Print summary
+		var b bytes.Buffer
+		w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+		fmt.Fprintf(w, "PUBLIC KEY\tCOUNTRY\tTRANSPORT\tSTATUS\tLATENCY\n")
+		successCount := 0
+		for _, r := range results {
+			tpStr := "no"
+			if r.HasTransport {
+				tpStr = "yes"
+			}
+			status := "fail"
+			latency := "-"
+			if r.Success {
+				status = "ok"
+				latency = fmt.Sprintf("%.0fms", r.Latency)
+				successCount++
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", r.Country, tpStr, status, latency)
+		}
+		w.Flush()
+
+		fmt.Print(b.String())
+		fmt.Printf("\nSummary: %d/%d proxies working\n", successCount, len(results))
+	},
+}
+
+// testProxyServer tests a single proxy server by starting the client and making an HTTP request
+func testProxyServer(rpcClient proxyTestClient, serverPK cipher.PubKey, testURL string, timeoutSec int) (latencyMs float64, response string, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
+	defer cancel()
+
+	// Use a unique client name for this test
+	testClientName := fmt.Sprintf("proxy-test-%s", serverPK.String()[:8])
+	proxyAddr := "127.0.0.1:10800" // TODO: find available port
+
+	// Stop any existing test client first
+	_ = rpcClient.StopApp(testClientName)
+	time.Sleep(100 * time.Millisecond)
+
+	// Configure and start the proxy client
+	arguments := map[string]any{
+		"app":    "skysocks-client",
+		"--srv":  serverPK.String(),
+		"--addr": ":" + "10800",
+	}
+
+	// Check if app exists, if not add it
+	_, err = rpcClient.App(testClientName)
+	if err != nil {
+		err = rpcClient.AddApp(testClientName, "skywire")
+		if err != nil {
+			return 0, "", fmt.Errorf("failed to add test app: %w", err)
+		}
+	}
+
+	err = rpcClient.DoCustomSetting(testClientName, arguments)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to configure proxy: %w", err)
+	}
+
+	err = rpcClient.StartApp(testClientName)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to start proxy: %w", err)
+	}
+
+	// Wait for proxy to be ready
+	defer func() {
+		_ = rpcClient.StopApp(testClientName)
+	}()
+
+	// Wait for the proxy client to start
+	ready := false
+	for i := 0; i < 10; i++ {
+		select {
+		case <-ctx.Done():
+			return 0, "", ctx.Err()
+		default:
+		}
+		states, err := rpcClient.Apps()
+		if err == nil {
+			for _, state := range states {
+				if state.Name == testClientName && state.Status == appserver.AppStatusRunning {
+					ready = true
+					break
+				}
+			}
+		}
+		if ready {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	if !ready {
+		return 0, "", fmt.Errorf("proxy client failed to start")
+	}
+
+	// Give it a moment to establish connection
+	time.Sleep(500 * time.Millisecond)
+
+	// Make HTTP request through the SOCKS5 proxy
+	start := time.Now()
+
+	dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
+	}
+
+	// Create a context-aware dial function
+	dialFunc := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		// Use a channel to handle context cancellation
+		type dialResult struct {
+			conn net.Conn
+			err  error
+		}
+		ch := make(chan dialResult, 1)
+		go func() {
+			conn, err := dialer.Dial(network, addr)
+			ch <- dialResult{conn, err}
+		}()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case result := <-ch:
+			return result.conn, result.err
+		}
+	}
+
+	transport := &http.Transport{
+		DialContext: dialFunc,
+	}
+
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   time.Duration(timeoutSec) * time.Second,
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", testURL, nil)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	latencyMs = float64(time.Since(start).Milliseconds())
+
+	// Read response body (limit to first 256 bytes)
+	buf := make([]byte, 256)
+	n, _ := resp.Body.Read(buf)
+	response = strings.TrimSpace(string(buf[:n]))
+
+	if resp.StatusCode != http.StatusOK {
+		return latencyMs, response, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	return latencyMs, response, nil
 }
