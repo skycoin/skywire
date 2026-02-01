@@ -15,8 +15,10 @@ import (
 
 var (
 	logger = logging.MustGetLogger("skywire-cli")
-	//Addr is the address (ip:port) of the rpc server
+	// Addr is the address (ip:port) of the rpc server
 	Addr string
+	// Timeout is the timeout for RPC calls in seconds (0 = unlimited)
+	Timeout int = 30
 )
 
 // Client is used by other skywire-cli commands to query the visor rpc
@@ -27,5 +29,7 @@ func Client(cmdFlags *pflag.FlagSet) (visor.API, error) {
 		internal.PrintError(cmdFlags, fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
 		return nil, err
 	}
-	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, 0), nil
+	// Timeout of 0 means unlimited
+	rpcCallTimeout := time.Duration(Timeout) * time.Second
+	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, rpcCallTimeout), nil
 }

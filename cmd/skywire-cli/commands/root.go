@@ -29,6 +29,7 @@ import (
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
 	clitp "github.com/skycoin/skywire/cmd/skywire-cli/commands/tp"
 	cliut "github.com/skycoin/skywire/cmd/skywire-cli/commands/ut"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -62,6 +63,8 @@ func init() {
 	var jsonOutput bool
 	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
 	RootCmd.PersistentFlags().MarkHidden(internal.JSONString) //nolint:errcheck,gosec
+	RootCmd.PersistentFlags().IntVar(&clirpc.Timeout, "timeout", 30, "RPC timeout in seconds (0 = unlimited)")
+	RootCmd.PersistentFlags().MarkHidden("timeout") //nolint:errcheck,gosec
 }
 
 // RootCmd is the root command for skywire-cli

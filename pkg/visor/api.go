@@ -1753,11 +1753,13 @@ func reinitiateDmsg(ctx context.Context, v *Visor) error {
 }
 
 func shutdownDmsgDependentComponents(v *Visor, log *logging.Logger) error {
+	// Order matters: close dependents first, then dmsg client itself
 	components := []string{
 		"router.serve", // a.k.a. dmsgpty
 		"dmsghttp.logserver",
 		"dmsg_tracker_manager",
 		"dmsgctrl",
+		"dmsg", // Close the dmsg client last, after all dependents
 	}
 
 	v.closeMu.Lock()
