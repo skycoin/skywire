@@ -192,6 +192,9 @@ func (v *Visor) Overview() (*Overview, error) {
 	if v.tpM == nil {
 		return &Overview{}, ErrTrpMangerNotAvailable
 	}
+	if v.router == nil {
+		return &Overview{}, ErrRouterNotReady
+	}
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		tSummaries = append(tSummaries,
 			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))

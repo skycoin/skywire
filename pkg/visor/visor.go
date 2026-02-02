@@ -50,6 +50,8 @@ var (
 	ErrTrpMangerNotAvailable = errors.New("no transport manager available")
 	// ErrAppLauncherNotAvailable represents error for unavailable app launcher
 	ErrAppLauncherNotAvailable = errors.New("no app launcher available")
+	// ErrRouterNotReady represents error for router not yet initialized
+	ErrRouterNotReady = errors.New("router not ready")
 )
 
 const (
