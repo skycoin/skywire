@@ -1218,15 +1218,15 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 
 // cliRPCStats tracks CLI RPC connection statistics for diagnostics
 type cliRPCStats struct {
-	mu              sync.Mutex
-	activeConns     int32
-	totalConns      uint64
-	totalErrors     uint64
-	lastError       string
-	lastErrorTime   time.Time
-	peakConns       int32
-	connSemaphore   chan struct{}
-	maxConns        int
+	mu            sync.Mutex
+	activeConns   int32
+	totalConns    uint64
+	totalErrors   uint64
+	lastError     string
+	lastErrorTime time.Time
+	peakConns     int32
+	connSemaphore chan struct{}
+	maxConns      int
 }
 
 func (s *cliRPCStats) acquire() bool {

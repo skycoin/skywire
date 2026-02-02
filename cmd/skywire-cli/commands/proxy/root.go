@@ -43,10 +43,10 @@ var (
 	testConnectOnly bool
 	testVersion     string
 	// existing transport flag
-	existingTpOnly    bool
-	forceLocalRoutes  bool
+	existingTpOnly   bool
+	forceLocalRoutes bool
 	// multi-hop testing
-	viaVisor          string
+	viaVisor string
 )
 
 // RootCmd contains commands that interact with the skywire-visor

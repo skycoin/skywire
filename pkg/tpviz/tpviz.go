@@ -86,11 +86,11 @@ type Server struct {
 	ipGroupsCache *ipGroupsResponse
 
 	// Local visor RPC connection (optional)
-	visorMu        sync.RWMutex
-	visorAPI       visor.API
-	visorConn      net.Conn
-	visorCache     *LocalVisorData
-	prevBandwidth  map[string]bandwidthSnapshot // track previous bandwidth for deltas
+	visorMu       sync.RWMutex
+	visorAPI      visor.API
+	visorConn     net.Conn
+	visorCache    *LocalVisorData
+	prevBandwidth map[string]bandwidthSnapshot // track previous bandwidth for deltas
 }
 
 // LocalVisorData holds data from the local visor for overlay display

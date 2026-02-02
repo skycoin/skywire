@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	tpdCacheFile     = "/tmp/tpd.json"
-	tpdCacheMaxAge   = 5 * time.Minute
+	tpdCacheFile      = "/tmp/tpd.json"
+	tpdCacheMaxAge    = 5 * time.Minute
 	tpdPerKeyStatsURL = "https://tpd.skywire.skycoin.com/all-transports/per-key-stats"
-	minTransports    = 2
+	minTransports     = 2
 )
 
 // PerKeyStats represents transport statistics for a single public key

@@ -881,7 +881,7 @@ Results show which proxies are reachable and their response latency.`,
 					continue
 				}
 
-					// Wait for it to be ready - use longer timeout for route setup (30s)
+				// Wait for it to be ready - use longer timeout for route setup (30s)
 				startupTimeout := 30
 				ready := false
 				var lastStatus string

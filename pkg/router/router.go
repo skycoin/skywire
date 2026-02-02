@@ -160,27 +160,27 @@ type Router interface {
 // communicating with setup nodes, forward packets according to local
 // rules and manages route groups for apps.
 type router struct {
-	mx               sync.Mutex
-	conf             *Config
-	logger           *logging.Logger
-	mLogger          *logging.MasterLogger
-	sl               *dmsg.Listener
-	dmsgC            *dmsg.Client
-	trustedVisors    map[cipher.PubKey]struct{}
-	tm               *transport.Manager
-	rt               routing.Table
-	rgsNs            map[routing.RouteDescriptor]*NoiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
-	rgsRaw           map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
-	rpcSrv           *rpc.Server
-	accept           chan routing.EdgeRules
-	done             chan struct{}
-	once             sync.Once
-	routeSetupHookMu sync.Mutex
-	routeSetupHooks  []RouteSetupHook // see RouteSetupHook description
-	existingTpOnly    bool       // when true, don't create new transports for routing
-	existingTpOnlyMu  sync.Mutex // protects existingTpOnly
-	forceLocalRoutes  bool       // when true, skip route finder and use local route calculation
-	forceLocalRoutesMu sync.Mutex // protects forceLocalRoutes
+	mx                 sync.Mutex
+	conf               *Config
+	logger             *logging.Logger
+	mLogger            *logging.MasterLogger
+	sl                 *dmsg.Listener
+	dmsgC              *dmsg.Client
+	trustedVisors      map[cipher.PubKey]struct{}
+	tm                 *transport.Manager
+	rt                 routing.Table
+	rgsNs              map[routing.RouteDescriptor]*NoiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
+	rgsRaw             map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
+	rpcSrv             *rpc.Server
+	accept             chan routing.EdgeRules
+	done               chan struct{}
+	once               sync.Once
+	routeSetupHookMu   sync.Mutex
+	routeSetupHooks    []RouteSetupHook // see RouteSetupHook description
+	existingTpOnly     bool             // when true, don't create new transports for routing
+	existingTpOnlyMu   sync.Mutex       // protects existingTpOnly
+	forceLocalRoutes   bool             // when true, skip route finder and use local route calculation
+	forceLocalRoutesMu sync.Mutex       // protects forceLocalRoutes
 }
 
 // New constructs a new Router.
