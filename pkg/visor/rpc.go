@@ -684,6 +684,20 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	return err
 }
 
+// SetExistingTPOnly sets whether to only use existing transports for routing
+func (r *RPC) SetExistingTPOnly(enabled *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetExistingTPOnly", *enabled)(nil, &err)
+	err = r.visor.SetExistingTPOnly(*enabled)
+	return err
+}
+
+// SetForceLocalRoutes sets whether to skip the route finder and use local route calculation
+func (r *RPC) SetForceLocalRoutes(enabled *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetForceLocalRoutes", *enabled)(nil, &err)
+	err = r.visor.SetForceLocalRoutes(*enabled)
+	return err
+}
+
 // FilterServersIn is input for VPNServers and ProxyServers
 type FilterServersIn struct {
 	Version string

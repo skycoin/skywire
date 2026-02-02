@@ -97,6 +97,10 @@ type API interface {
 	StopSkysocksClients() error
 	ProxyServers(version, country string) ([]servicedisc.Service, error)
 
+	//transport settings
+	SetExistingTPOnly(enabled bool) error
+	SetForceLocalRoutes(enabled bool) error
+
 	//transports
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -135,6 +139,9 @@ type API interface {
 
 	//uptime-tracker tools
 	FetchUptimeTrackerData(pk string) ([]byte, error)
+
+	// Close closes the API connection (for RPC clients)
+	Close() error
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -1145,6 +1152,28 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 	return ports, nil
 }
 
+// SetExistingTPOnly implements API.
+// Sets whether to only use existing transports for routing (no new transport creation).
+func (v *Visor) SetExistingTPOnly(enabled bool) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+	v.router.SetExistingTPOnly(enabled)
+	v.log.Infof("SetExistingTPOnly: %v", enabled)
+	return nil
+}
+
+// SetForceLocalRoutes implements API.
+// Sets whether to skip the route finder and use local route calculation.
+func (v *Visor) SetForceLocalRoutes(enabled bool) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+	v.router.SetForceLocalRoutes(enabled)
+	v.log.Infof("SetForceLocalRoutes: %v", enabled)
+	return nil
+}
+
 // TransportTypes implements API.
 func (v *Visor) TransportTypes() ([]string, error) {
 	var types []string
@@ -1207,6 +1236,10 @@ func (v *Visor) Transport(tid uuid.UUID) (*TransportSummary, error) {
 
 // AddTransport implements API.
 func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error) {
+	if v.tpM == nil {
+		return nil, ErrTrpMangerNotAvailable
+	}
+
 	ctx := context.Background()
 
 	if timeout > 0 {

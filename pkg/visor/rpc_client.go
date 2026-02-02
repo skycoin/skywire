@@ -65,6 +65,19 @@ func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string
 	}
 }
 
+// Close closes the RPC client connection.
+func (rc *rpcClient) Close() error {
+	if rc.client != nil {
+		rc.log.Debug("Closing RPC client connection")
+		err := rc.client.Close()
+		if err != nil {
+			rc.log.WithError(err).Debug("Error closing RPC client")
+		}
+		return err
+	}
+	return nil
+}
+
 // Call calls the internal rpc.Client with the serviceMethod arg prefixed.
 func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 	ctx := context.Background()
@@ -435,6 +448,16 @@ func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, erro
 // SetPublicAutoconnect implements API.
 func (rc *rpcClient) SetPublicAutoconnect(pAc bool) error {
 	return rc.Call("SetPublicAutoconnect", &pAc, &struct{}{})
+}
+
+// SetExistingTPOnly sets whether to only use existing transports for routing.
+func (rc *rpcClient) SetExistingTPOnly(enabled bool) error {
+	return rc.Call("SetExistingTPOnly", &enabled, &struct{}{})
+}
+
+// SetForceLocalRoutes sets whether to skip the route finder and use local route calculation.
+func (rc *rpcClient) SetForceLocalRoutes(enabled bool) error {
+	return rc.Call("SetForceLocalRoutes", &enabled, &struct{}{})
 }
 
 // RoutingRules calls RoutingRules.
@@ -1225,6 +1248,14 @@ func (mc *mockRPCClient) SetPublicAutoconnect(_ bool) error {
 	return nil
 }
 
+func (mc *mockRPCClient) SetExistingTPOnly(_ bool) error {
+	return nil
+}
+
+func (mc *mockRPCClient) SetForceLocalRoutes(_ bool) error {
+	return nil
+}
+
 // RoutingRules implements API.
 func (mc *mockRPCClient) RoutingRules() ([]routing.Rule, error) {
 	return mc.rt.AllRules(), nil
@@ -1393,5 +1424,10 @@ func (mc *mockRPCClient) TestVisor(_ PingConfig) ([]TestResult, error) {
 
 // ReinitiateModule implements API.
 func (mc *mockRPCClient) ReinitiateModule(_ string) error {
+	return nil
+}
+
+// Close implements API.
+func (mc *mockRPCClient) Close() error {
 	return nil
 }
