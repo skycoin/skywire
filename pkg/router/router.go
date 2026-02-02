@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/noise"
 
@@ -96,11 +97,12 @@ func (c *Config) SetDefaults() {
 
 // DialOptions describes dial options.
 type DialOptions struct {
-	MinForwardRts int
-	MaxForwardRts int
-	MinConsumeRts int
-	MaxConsumeRts int
-	Retries       int
+	MinForwardRts     int
+	MaxForwardRts     int
+	MinConsumeRts     int
+	MaxConsumeRts     int
+	Retries           int
+	UseExistingTpOnly bool // If true, only use routes through existing transports, don't create new ones
 }
 
 // DefaultDialOptions returns default dial options.
@@ -143,6 +145,8 @@ type Router interface {
 	Serve(context.Context) error
 	SetupIsTrusted(cipher.PubKey) bool
 	SetMinHop(uint16)
+	SetExistingTPOnly(bool)
+	SetForceLocalRoutes(bool)
 
 	// Routing table related methods
 	RoutesCount() int
@@ -173,6 +177,10 @@ type router struct {
 	once             sync.Once
 	routeSetupHookMu sync.Mutex
 	routeSetupHooks  []RouteSetupHook // see RouteSetupHook description
+	existingTpOnly    bool       // when true, don't create new transports for routing
+	existingTpOnlyMu  sync.Mutex // protects existingTpOnly
+	forceLocalRoutes  bool       // when true, skip route finder and use local route calculation
+	forceLocalRoutesMu sync.Mutex // protects forceLocalRoutes
 }
 
 // New constructs a new Router.
@@ -262,7 +270,15 @@ func (r *router) DialRoutes(
 		r.conf.MinHops = 1
 	}
 
-	if r.conf.MinHops == 1 {
+	// Check if existing transport only mode is set on the router
+	r.existingTpOnlyMu.Lock()
+	routerExistingTpOnly := r.existingTpOnly
+	r.existingTpOnlyMu.Unlock()
+
+	// Only run route setup hooks (which may create new transports) if UseExistingTpOnly is false
+	// on both the router level and the dial options level
+	useExistingOnly := routerExistingTpOnly || (opts != nil && opts.UseExistingTpOnly)
+	if r.conf.MinHops == 1 && !useExistingOnly {
 		r.routeSetupHookMu.Lock()
 		if len(r.routeSetupHooks) != 0 {
 			for _, rsf := range r.routeSetupHooks {
@@ -273,6 +289,8 @@ func (r *router) DialRoutes(
 			}
 		}
 		r.routeSetupHookMu.Unlock()
+	} else if useExistingOnly {
+		r.logger.Debug("UseExistingTpOnly is set, skipping transport creation hooks")
 	}
 
 	// Retry route setup with fresh routes if it fails due to stale TPD data.
@@ -1087,6 +1105,16 @@ func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd
 		opts = DefaultDialOptions() // nolint
 	}
 
+	// Check if force local routes is enabled
+	r.forceLocalRoutesMu.Lock()
+	forceLocal := r.forceLocalRoutes
+	r.forceLocalRoutesMu.Unlock()
+
+	if forceLocal {
+		r.logger.Info("Force local routes enabled, using local route calculation")
+		return r.calculateLocalRoutes(context.Background(), src, dst)
+	}
+
 	retries := opts.Retries
 
 	r.logger.Debugf("Requesting new routes from %s to %s", src, dst)
@@ -1108,6 +1136,14 @@ fetchRoutesAgain:
 	}
 	// simple retries condition
 	if retries == 0 {
+		// Try local route calculation as fallback before giving up
+		r.logger.Info("Route finder exhausted retries, attempting local route calculation...")
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst)
+		if localErr == nil {
+			r.logger.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
+			return localFwd, localRev, nil
+		}
+		r.logger.WithError(localErr).Warn("Local route calculation also failed")
 		r.logger.Errorf(ErrNoRouteFound.Error())
 		return nil, nil, ErrNoRouteFound
 	}
@@ -1118,6 +1154,14 @@ fetchRoutesAgain:
 	if err != nil {
 		select {
 		case <-timer.C:
+			// Try local route calculation as fallback
+			r.logger.Info("Route finder timed out, attempting local route calculation...")
+			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst)
+			if localErr == nil {
+				r.logger.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
+				return localFwd, localRev, nil
+			}
+			r.logger.WithError(localErr).Warn("Local route calculation also failed")
 			return nil, nil, err
 		default:
 			time.Sleep(retryInterval)
@@ -1128,6 +1172,93 @@ fetchRoutesAgain:
 	r.logger.Debugf("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])
 
 	return paths[forward][0], paths[backward][0], nil
+}
+
+// calculateLocalRoutes attempts to calculate routes locally using the transport manager
+// and transport discovery data, without relying on the route finder service.
+// It supports 1-hop (direct) and 2-hop routes.
+func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKey) (fwd, rev []routing.Hop, err error) {
+	if r.tm == nil {
+		return nil, nil, errors.New("transport manager not available")
+	}
+
+	dc := r.tm.Conf.DiscoveryClient
+	if dc == nil {
+		return nil, nil, errors.New("discovery client not available")
+	}
+
+	r.logger.Debugf("Calculating local routes from %s to %s", src, dst)
+
+	// Collect local transports
+	type localTp struct {
+		id       uuid.UUID
+		remotePK cipher.PubKey
+	}
+	var localTps []localTp
+
+	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if tp == nil {
+			return true
+		}
+		localTps = append(localTps, localTp{
+			id:       tp.Entry.ID,
+			remotePK: tp.Entry.RemoteEdge(src),
+		})
+		return true
+	})
+
+	if len(localTps) == 0 {
+		return nil, nil, errors.New("no local transports available")
+	}
+
+	r.logger.Debugf("Found %d local transports", len(localTps))
+
+	// Check for direct (1-hop) route first
+	for _, tp := range localTps {
+		if tp.remotePK == dst {
+			r.logger.Debugf("Found direct transport to destination: %s", tp.id)
+			fwdHop := routing.Hop{TpID: tp.id, From: src, To: dst}
+			revHop := routing.Hop{TpID: tp.id, From: dst, To: src}
+			return []routing.Hop{fwdHop}, []routing.Hop{revHop}, nil
+		}
+	}
+
+	// Try 2-hop routes through intermediate visors
+	for _, tp := range localTps {
+		intermediatePK := tp.remotePK
+		r.logger.Debugf("Checking intermediate visor %s for routes to %s", intermediatePK, dst)
+
+		// Query TPD for transports of the intermediate visor
+		intermediateEntries, err := dc.GetTransportsByEdge(ctx, intermediatePK)
+		if err != nil {
+			r.logger.WithError(err).Debugf("Failed to get transports for intermediate visor %s", intermediatePK)
+			continue
+		}
+
+		// Check if any of the intermediate visor's transports connect to our destination
+		for _, entry := range intermediateEntries {
+			if entry == nil {
+				continue
+			}
+			// Check if this transport connects to our destination
+			remotePK := entry.RemoteEdge(intermediatePK)
+			if remotePK == dst {
+				r.logger.Debugf("Found 2-hop route via %s (tp1=%s, tp2=%s)", intermediatePK, tp.id, entry.ID)
+
+				// Build forward route: src -> intermediate -> dst
+				fwdHop1 := routing.Hop{TpID: tp.id, From: src, To: intermediatePK}
+				fwdHop2 := routing.Hop{TpID: entry.ID, From: intermediatePK, To: dst}
+
+				// Build reverse route: dst -> intermediate -> src
+				revHop1 := routing.Hop{TpID: entry.ID, From: dst, To: intermediatePK}
+				revHop2 := routing.Hop{TpID: tp.id, From: intermediatePK, To: src}
+
+				return []routing.Hop{fwdHop1, fwdHop2}, []routing.Hop{revHop1, revHop2}, nil
+			}
+		}
+	}
+
+	return nil, nil, errors.New("no route found through local transports")
 }
 
 func (r *router) fetchPingRoute(src, pingKey cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
@@ -1203,6 +1334,24 @@ func (r *router) SetupIsTrusted(sPK cipher.PubKey) bool {
 // SetMinHop set minhop when visor running
 func (r *router) SetMinHop(minhop uint16) {
 	r.conf.MinHops = minhop
+}
+
+// SetExistingTPOnly sets whether to only use existing transports for routing.
+// When true, no new transports will be created when dialing routes.
+func (r *router) SetExistingTPOnly(enabled bool) {
+	r.existingTpOnlyMu.Lock()
+	defer r.existingTpOnlyMu.Unlock()
+	r.existingTpOnly = enabled
+	r.logger.Infof("SetExistingTPOnly: %v", enabled)
+}
+
+// SetForceLocalRoutes sets whether to skip the route finder and use local route calculation.
+// When true, routes are calculated locally using transport manager and TPD data.
+func (r *router) SetForceLocalRoutes(enabled bool) {
+	r.forceLocalRoutesMu.Lock()
+	defer r.forceLocalRoutesMu.Unlock()
+	r.forceLocalRoutes = enabled
+	r.logger.Infof("SetForceLocalRoutes: %v", enabled)
 }
 
 // Saves `rules` to the routing table.
