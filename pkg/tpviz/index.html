@@ -118,6 +118,55 @@
 
         /* Route highlight styling */
         .route-highlight { background: rgba(0, 255, 200, 0.1); border-left: 3px solid #00ffc8; padding-left: 8px; margin: 4px 0; }
+
+        /* Local visor enhanced styling */
+        .local-visor-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+        .local-visor-icon { font-size: 1.5em; filter: drop-shadow(0 0 8px #00ffff); }
+        .local-visor-title { color: #00ffff; font-weight: bold; text-shadow: 0 0 10px rgba(0,255,255,0.5); }
+        .local-visor-pk { font-family: monospace; font-size: 0.75em; color: #888; background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px; }
+        .local-visor-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 10px 0; }
+        .local-stat { background: rgba(0,255,255,0.1); padding: 8px; border-radius: 6px; border-left: 3px solid #00ffff; }
+        .local-stat.routes { border-left-color: #ff00ff; background: rgba(255,0,255,0.1); }
+        .local-stat-label { font-size: 0.7em; color: #888; text-transform: uppercase; }
+        .local-stat-value { font-size: 1.1em; font-weight: bold; color: #fff; }
+        .local-stat-delta { font-size: 0.75em; color: #00ff88; margin-left: 4px; }
+
+        /* Transport list styling */
+        .local-transport { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin: 4px 0; background: rgba(0,0,0,0.2); border-radius: 4px; cursor: pointer; transition: all 0.2s; border-left: 3px solid transparent; }
+        .local-transport:hover { background: rgba(0,255,255,0.15); transform: translateX(2px); }
+        .local-transport.active { border-left-color: #00ff88; background: rgba(0,255,136,0.1); }
+        .local-transport.stcpr { border-left-color: #00d9a5; }
+        .local-transport.sudph { border-left-color: #00b4d8; }
+        .local-transport.dmsg { border-left-color: #ffd166; }
+        .tp-type-badge { font-size: 0.65em; padding: 2px 6px; border-radius: 3px; font-weight: bold; text-transform: uppercase; }
+        .tp-type-badge.stcpr { background: rgba(0,217,165,0.3); color: #00d9a5; }
+        .tp-type-badge.sudph { background: rgba(0,180,216,0.3); color: #00b4d8; }
+        .tp-type-badge.dmsg { background: rgba(255,209,102,0.3); color: #ffd166; }
+        .tp-remote { font-family: monospace; font-size: 0.8em; color: #aaa; flex: 1; }
+        .tp-traffic { font-size: 0.7em; color: #666; display: flex; gap: 8px; }
+        .tp-traffic .up { color: #00d9a5; }
+        .tp-traffic .down { color: #00b4d8; }
+
+        /* Route list styling */
+        .local-route { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin: 4px 0; background: rgba(255,0,255,0.05); border-radius: 4px; border-left: 3px solid #ff00ff; }
+        .route-type-badge { font-size: 0.6em; padding: 2px 5px; border-radius: 3px; font-weight: bold; text-transform: uppercase; }
+        .route-type-badge.consume { background: rgba(0,255,200,0.3); color: #00ffc8; }
+        .route-type-badge.forward { background: rgba(255,165,0,0.3); color: #ffa500; }
+        .route-type-badge.intermediary { background: rgba(138,43,226,0.3); color: #9f6efc; }
+        .route-dest { font-family: monospace; font-size: 0.75em; color: #ff00ff; cursor: pointer; text-decoration: underline; }
+        .route-via { font-size: 0.7em; color: #666; }
+        .route-id { font-size: 0.65em; color: #555; font-family: monospace; }
+
+        /* Section labels */
+        .section-label { font-size: 0.75em; color: #888; text-transform: uppercase; letter-spacing: 1px; margin: 12px 0 6px 0; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .section-label .count { background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 10px; font-size: 0.9em; }
+        .section-label.transports { color: #00ffff; border-bottom-color: rgba(0,255,255,0.3); }
+        .section-label.routes { color: #ff00ff; border-bottom-color: rgba(255,0,255,0.3); }
+
+        /* Live indicator */
+        .live-indicator { display: inline-flex; align-items: center; gap: 4px; font-size: 0.7em; color: #00ff88; }
+        .live-dot { width: 6px; height: 6px; background: #00ff88; border-radius: 50%; animation: live-pulse 1.5s ease-in-out infinite; }
+        @keyframes live-pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,136,0.7); } 50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(0,255,136,0); } }
     </style>
 </head>
 <body>
@@ -549,6 +598,8 @@
                             'Transports:', localVisorData.transports?.length || 0,
                             'Routes:', localVisorData.routes_count,
                             'Route destinations:', routeDestinations.size);
+                        // Start fast refresh for local visor data (every 2 seconds)
+                        startLocalVisorFastRefresh();
                     }
                 }
 
@@ -2316,54 +2367,125 @@
             });
 
             const isActive = totalSentDelta > 0 || totalRecvDelta > 0;
-            const activityIndicator = isActive
-                ? '<span class="bandwidth-indicator active">● ACTIVE</span>'
-                : '<span style="color:#666;font-size:0.7em;margin-left:4px;">idle</span>';
+
+            // Group transports by type for summary
+            const tpByType = { stcpr: 0, sudph: 0, dmsg: 0 };
+            tps.forEach(t => { if (tpByType[t.type] !== undefined) tpByType[t.type]++; });
 
             content.innerHTML = `
-                <div style="font-size:0.85em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
-                    <div>
-                        <strong style="color:#00ffff;">⬢ Local Visor</strong>${activityIndicator}<br>
-                        <span style="color:#888;font-size:0.8em;">${pk.substring(0, 16)}...</span>
+                <!-- Header -->
+                <div class="local-visor-header">
+                    <span class="local-visor-icon">⬢</span>
+                    <div style="flex:1;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="local-visor-title">Local Visor</span>
+                            ${isActive ? '<span class="live-indicator"><span class="live-dot"></span>LIVE</span>' : '<span style="color:#555;font-size:0.7em;">idle</span>'}
+                        </div>
+                        <div class="local-visor-pk">${pk.substring(0, 20)}...</div>
                     </div>
-                    <button onclick="focusLocalVisor()" style="background:linear-gradient(135deg,#00ffff,#ff00ff);color:#000;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.75em;font-weight:bold;">
-                        FOCUS
+                    <button onclick="focusLocalVisor()" style="background:linear-gradient(135deg,#00ffff,#ff00ff);color:#000;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.75em;font-weight:bold;box-shadow:0 2px 8px rgba(0,255,255,0.3);">
+                        ◎ FOCUS
                     </button>
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.8em;">
-                    <div>Transports: <strong>${tps.length}</strong></div>
-                    <div>Routes: <strong>${routesCount}</strong></div>
-                    <div>Sent: <strong>${formatBytes(totalSent)}</strong> ${totalSentDelta > 0 ? '<span style="color:#00ff88;">+' + formatBytes(totalSentDelta) + '/s</span>' : ''}</div>
-                    <div>Recv: <strong>${formatBytes(totalRecv)}</strong> ${totalRecvDelta > 0 ? '<span style="color:#00ff88;">+' + formatBytes(totalRecvDelta) + '/s</span>' : ''}</div>
+
+                <!-- Stats Grid -->
+                <div class="local-visor-stats">
+                    <div class="local-stat">
+                        <div class="local-stat-label">Transports</div>
+                        <div class="local-stat-value">${tps.length}</div>
+                        <div style="font-size:0.65em;color:#666;margin-top:2px;">
+                            ${tpByType.stcpr > 0 ? `<span style="color:#00d9a5;">${tpByType.stcpr} STCPR</span> ` : ''}
+                            ${tpByType.sudph > 0 ? `<span style="color:#00b4d8;">${tpByType.sudph} SUDPH</span> ` : ''}
+                            ${tpByType.dmsg > 0 ? `<span style="color:#ffd166;">${tpByType.dmsg} DMSG</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="local-stat routes">
+                        <div class="local-stat-label">Routes</div>
+                        <div class="local-stat-value">${routesCount}</div>
+                        <div style="font-size:0.65em;color:#666;margin-top:2px;">
+                            ${routes.filter(r => r.type === 'consume').length > 0 ? `<span style="color:#00ffc8;">${routes.filter(r => r.type === 'consume').length} consume</span> ` : ''}
+                            ${routes.filter(r => r.type === 'forward').length > 0 ? `<span style="color:#ffa500;">${routes.filter(r => r.type === 'forward').length} forward</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="local-stat">
+                        <div class="local-stat-label">↑ Sent</div>
+                        <div class="local-stat-value">${formatBytes(totalSent)}${totalSentDelta > 0 ? `<span class="local-stat-delta">+${formatBytes(totalSentDelta)}/s</span>` : ''}</div>
+                    </div>
+                    <div class="local-stat">
+                        <div class="local-stat-label">↓ Received</div>
+                        <div class="local-stat-value">${formatBytes(totalRecv)}${totalRecvDelta > 0 ? `<span class="local-stat-delta">+${formatBytes(totalRecvDelta)}/s</span>` : ''}</div>
+                    </div>
                 </div>
-                <div style="margin-top:8px;font-size:0.75em;color:#888;">Transports:</div>
-                <div style="max-height:100px;overflow-y:auto;font-size:0.75em;">
+
+                <!-- Transports List -->
+                <div class="section-label transports">
+                    <span>Transports</span>
+                    <span class="count">${tps.length}</span>
+                </div>
+                <div style="max-height:120px;overflow-y:auto;">
+                    ${tps.length === 0 ? '<div style="color:#555;font-size:0.8em;padding:8px;text-align:center;">No transports established</div>' : ''}
                     ${tps.map(t => {
-                        const isActive = (t.sent_delta || 0) > 0 || (t.recv_delta || 0) > 0;
+                        const tpActive = (t.sent_delta || 0) > 0 || (t.recv_delta || 0) > 0;
                         return `
-                        <div style="padding:3px 0;border-bottom:1px solid #0f3460;cursor:pointer;${isActive ? 'background:rgba(0,255,200,0.1);' : ''}" onclick="focusNode('${t.remote_pk}')">
-                            <span style="color:${colors[t.type] || '#888'}">${t.type}</span>
-                            → ${t.remote_pk.substring(0, 8)}...
-                            <span style="color:#666;float:right;">↑${formatBytes(t.sent_bytes)} ↓${formatBytes(t.recv_bytes)}</span>
+                        <div class="local-transport ${t.type} ${tpActive ? 'active' : ''}" onclick="focusNode('${t.remote_pk}')">
+                            <span class="tp-type-badge ${t.type}">${t.type}</span>
+                            <span class="tp-remote">${t.remote_pk.substring(0, 12)}...</span>
+                            <div class="tp-traffic">
+                                <span class="up">↑${formatBytes(t.sent_bytes)}</span>
+                                <span class="down">↓${formatBytes(t.recv_bytes)}</span>
+                            </div>
                         </div>
                     `;}).join('')}
                 </div>
-                ${routes.length > 0 ? `
-                <div style="margin-top:8px;font-size:0.75em;color:#ff00ff;">Active Routes (${routes.length}):</div>
-                <div style="max-height:100px;overflow-y:auto;font-size:0.7em;">
-                    ${routes.slice(0, 15).map(r => `
-                        <div style="padding:3px 4px;border-bottom:1px solid rgba(255,0,255,0.2);display:flex;align-items:center;gap:4px;">
-                            <span style="color:#ff00ff;font-size:0.9em;">⬡</span>
-                            <span style="color:#00ffc8;min-width:50px;">${r.type}</span>
-                            ${r.dst_pk ? `<span style="color:#ff00ff;cursor:pointer;text-decoration:underline;" onclick="focusNode('${r.dst_pk}')" title="Click to focus">${r.dst_pk.substring(0,8)}...</span>` : ''}
-                            ${r.next_hop_pk && r.next_hop_pk !== r.dst_pk ? `<span style="color:#888;">via ${r.next_hop_pk.substring(0,6)}</span>` : ''}
+
+                <!-- Routes List -->
+                ${routesCount > 0 ? `
+                <div class="section-label routes">
+                    <span>Active Routes</span>
+                    <span class="count">${routesCount}</span>
+                </div>
+                <div style="max-height:120px;overflow-y:auto;">
+                    ${routes.slice(0, 20).map(r => `
+                        <div class="local-route">
+                            <span class="route-type-badge ${r.type}">${r.type}</span>
+                            <span class="route-id">#${r.route_id || '?'}</span>
+                            ${r.dst_pk ? `<span class="route-dest" onclick="focusNode('${r.dst_pk}')" title="Click to focus on destination">${r.dst_pk.substring(0,10)}...</span>` : '<span style="color:#555;">—</span>'}
+                            ${r.transport_id ? `<span class="route-via">via tp:${r.transport_id.substring(0,6)}</span>` : ''}
                         </div>
                     `).join('')}
-                    ${routes.length > 15 ? `<div style="color:#666;padding:2px;text-align:center;">...and ${routes.length - 15} more routes</div>` : ''}
+                    ${routes.length > 20 ? `<div style="color:#666;padding:6px;text-align:center;font-size:0.75em;">...and ${routes.length - 20} more routes</div>` : ''}
                 </div>
-                ` : ''}
+                ` : `
+                <div class="section-label routes">
+                    <span>Routes</span>
+                    <span class="count">0</span>
+                </div>
+                <div style="color:#555;font-size:0.8em;padding:8px;text-align:center;">No active routes</div>
+                `}
             `;
         }
+
+        // Fast refresh for local visor data (every 2 seconds)
+        let localVisorRefreshInterval = null;
+        function startLocalVisorFastRefresh() {
+            if (localVisorRefreshInterval) return;
+            localVisorRefreshInterval = setInterval(async () => {
+                try {
+                    const resp = await fetchWithTimeout(API_BASE + '/api/local-visor', 3000);
+                    if (resp && resp.ok) {
+                        const newData = await resp.json();
+                        if (newData && newData.connected) {
+                            localVisorData = newData;
+                            updateLocalVisorDisplayEnhanced();
+                            highlightLocalVisorInGraph();
+                        }
+                    }
+                } catch (e) {
+                    // Silently ignore refresh errors
+                }
+            }, 2000);
+        }
+
         // ============ END DATA FLOW ANIMATION ============
 
         document.getElementById('show-stcpr').addEventListener('change', applyFilters);
