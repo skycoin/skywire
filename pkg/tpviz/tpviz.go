@@ -9,16 +9,21 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/rpc"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/transport"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 //go:embed index.html
@@ -73,6 +78,74 @@ func DefaultConfig() Config {
 	}
 }
 
+// VisorAPI defines the interface for accessing visor data.
+// This is defined locally to avoid import cycles with the visor package.
+type VisorAPI interface {
+	Overview() (*VisorOverview, error)
+	RoutingRules() ([]routing.Rule, error)
+	Close() error
+}
+
+// VisorOverview contains visor overview data.
+// This mirrors visor.Overview but is defined locally to avoid import cycles.
+type VisorOverview struct {
+	PubKey      cipher.PubKey       `json:"local_pk"`
+	Transports  []*TransportSummary `json:"transports"`
+	RoutesCount int                 `json:"routes_count"`
+}
+
+// TransportSummary contains transport summary data.
+// This mirrors visor.TransportSummary but is defined locally.
+type TransportSummary struct {
+	ID      uuid.UUID           `json:"id"`
+	Local   cipher.PubKey       `json:"local_pk"`
+	Remote  cipher.PubKey       `json:"remote_pk"`
+	Type    tptypes.Type        `json:"type"`
+	Log     *transport.LogEntry `json:"log,omitempty"`
+	IsSetup bool                `json:"is_setup"`
+	Label   transport.Label     `json:"label"`
+}
+
+// rpcVisorClient is a local RPC client wrapper that implements VisorAPI.
+// It uses the standard net/rpc package to call visor RPC methods.
+type rpcVisorClient struct {
+	conn   net.Conn
+	client *rpc.Client
+}
+
+// RPCPrefix is the prefix for visor RPC methods.
+const RPCPrefix = "app-visor"
+
+// newRPCVisorClient creates a new RPC client wrapper for the visor.
+func newRPCVisorClient(conn net.Conn) *rpcVisorClient {
+	return &rpcVisorClient{
+		conn:   conn,
+		client: rpc.NewClient(conn),
+	}
+}
+
+// Overview implements VisorAPI.
+func (c *rpcVisorClient) Overview() (*VisorOverview, error) {
+	var out VisorOverview
+	err := c.client.Call(RPCPrefix+".Overview", &struct{}{}, &out)
+	return &out, err
+}
+
+// RoutingRules implements VisorAPI.
+func (c *rpcVisorClient) RoutingRules() ([]routing.Rule, error) {
+	var out []routing.Rule
+	err := c.client.Call(RPCPrefix+".RoutingRules", &struct{}{}, &out)
+	return out, err
+}
+
+// Close implements VisorAPI.
+func (c *rpcVisorClient) Close() error {
+	if c.client != nil {
+		return c.client.Close()
+	}
+	return nil
+}
+
 // Server is the transport visualizer HTTP server
 type Server struct {
 	config   Config
@@ -87,7 +160,7 @@ type Server struct {
 
 	// Local visor RPC connection (optional)
 	visorMu       sync.RWMutex
-	visorAPI      visor.API
+	visorAPI      VisorAPI
 	visorConn     net.Conn
 	visorCache    *LocalVisorData
 	prevBandwidth map[string]bandwidthSnapshot // track previous bandwidth for deltas
@@ -157,7 +230,7 @@ func NewServer(cfg Config) *Server {
 
 // SetVisorAPI sets the visor API directly, bypassing RPC connection.
 // This is used when the tp-viz server is embedded in the visor itself.
-func (s *Server) SetVisorAPI(api visor.API, pubKey string) {
+func (s *Server) SetVisorAPI(api VisorAPI, pubKey string) {
 	s.visorMu.Lock()
 	defer s.visorMu.Unlock()
 
@@ -778,8 +851,7 @@ func (s *Server) tryVisorConnect() bool {
 		tc.SetKeepAlivePeriod(10 * time.Second)
 	}
 
-	log := logging.MustGetLogger("tpviz")
-	api := visor.NewRPCClient(log, conn, visor.RPCPrefix, 10*time.Second)
+	api := newRPCVisorClient(conn)
 
 	s.visorMu.Lock()
 	s.visorConn = conn

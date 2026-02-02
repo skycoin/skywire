@@ -50,6 +50,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/tpviz"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -139,6 +140,8 @@ var (
 	skyFwd vinit.Module
 	// Ping module
 	pi vinit.Module
+	// UI server module (serves tp-viz)
+	uiServer vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 	// config initialization
@@ -184,8 +187,9 @@ func registerModules(logger *logging.MasterLogger) {
 	pi = maker("ping", initPing, &dmsgC, &tm)
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm, &stcprC)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
+	uiServer = maker("ui_server", initUIServer, &dmsgC, &tr)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc, &tpdco)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc, &tpdco, &uiServer)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -2161,4 +2165,176 @@ func GetIP(geoipURL string) (string, error) {
 	}
 
 	return ip.PublicIP, nil
+}
+
+// visorAPIAdapter adapts *Visor to the tpviz.VisorAPI interface.
+// It converts between visor types and tpviz types.
+type visorAPIAdapter struct {
+	v *Visor
+}
+
+// Overview implements tpviz.VisorAPI.
+func (a *visorAPIAdapter) Overview() (*tpviz.VisorOverview, error) {
+	ov, err := a.v.Overview()
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert visor.Overview to tpviz.VisorOverview
+	result := &tpviz.VisorOverview{
+		PubKey:      ov.PubKey,
+		RoutesCount: ov.RoutesCount,
+	}
+
+	// Convert transports
+	for _, tp := range ov.Transports {
+		result.Transports = append(result.Transports, &tpviz.TransportSummary{
+			ID:      tp.ID,
+			Local:   tp.Local,
+			Remote:  tp.Remote,
+			Type:    tp.Type,
+			Log:     tp.Log,
+			IsSetup: tp.IsSetup,
+			Label:   tp.Label,
+		})
+	}
+
+	return result, nil
+}
+
+// RoutingRules implements tpviz.VisorAPI.
+func (a *visorAPIAdapter) RoutingRules() ([]routing.Rule, error) {
+	return a.v.RoutingRules()
+}
+
+// Close implements tpviz.VisorAPI.
+func (a *visorAPIAdapter) Close() error {
+	// Don't actually close the visor - the adapter doesn't own it
+	return nil
+}
+
+func initUIServer(ctx context.Context, v *Visor, log *logging.Logger) error {
+	// Check if UI server is configured and enabled
+	if v.conf.UIServer == nil || !v.conf.UIServer.Enable {
+		log.Debug("UI server not configured or disabled, skipping")
+		return nil
+	}
+
+	conf := v.conf.UIServer
+
+	// Set default local address if not specified
+	localAddr := conf.LocalAddr
+	if localAddr == "" {
+		localAddr = "localhost:8081"
+	}
+
+	// Create tpviz config
+	tpvizCfg := tpviz.DefaultConfig()
+	// Don't set Addr/Port since we're managing the HTTP server ourselves
+
+	// Create tpviz server
+	tpvizServer := tpviz.NewServer(tpvizCfg)
+
+	// Set visor API directly (bypasses RPC connection) using an adapter
+	adapter := &visorAPIAdapter{v: v}
+	tpvizServer.SetVisorAPI(adapter, v.conf.PK.Hex())
+
+	// Start cache refresh (without starting HTTP server)
+	tpvizServer.Start()
+
+	// Start local HTTP server
+	localListener, err := net.Listen("tcp", localAddr)
+	if err != nil {
+		return fmt.Errorf("failed to start UI server on %s: %w", localAddr, err)
+	}
+
+	srv := &http.Server{
+		Handler:           tpvizServer.Handler(),
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       90 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		log.Infof("UI server listening on http://%s", localAddr)
+		if err := srv.Serve(localListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.WithError(err).Error("UI server exited with error")
+		}
+	}()
+
+	// Start DMSG listener if configured
+	var dmsgListener net.Listener
+	if conf.DmsgPort > 0 && v.dmsgC != nil {
+		dmsgListener, err = v.dmsgC.Listen(conf.DmsgPort)
+		if err != nil {
+			log.WithError(err).Warnf("Failed to start UI server on DMSG port %d", conf.DmsgPort)
+		} else {
+			// Create whitelist middleware if whitelist is configured
+			var handler http.Handler = tpvizServer.Handler()
+			if len(conf.DmsgWhitelist) > 0 {
+				whitelistMap := make(map[cipher.PubKey]struct{}, len(conf.DmsgWhitelist))
+				for _, pk := range conf.DmsgWhitelist {
+					whitelistMap[pk] = struct{}{}
+				}
+				handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					// Extract remote public key from dmsg connection
+					remoteAddr := r.RemoteAddr
+					// DMSG addresses are in format "pk:port"
+					if idx := strings.Index(remoteAddr, ":"); idx > 0 {
+						pkStr := remoteAddr[:idx]
+						var remotePK cipher.PubKey
+						if err := remotePK.UnmarshalText([]byte(pkStr)); err == nil {
+							if _, allowed := whitelistMap[remotePK]; !allowed {
+								log.Warnf("UI server DMSG access denied for %s", pkStr)
+								http.Error(w, "Forbidden", http.StatusForbidden)
+								return
+							}
+						}
+					}
+					tpvizServer.Handler().ServeHTTP(w, r)
+				})
+			}
+
+			dmsgSrv := &http.Server{
+				Handler:           handler,
+				ReadTimeout:       30 * time.Second,
+				WriteTimeout:      60 * time.Second,
+				IdleTimeout:       90 * time.Second,
+				ReadHeaderTimeout: 10 * time.Second,
+			}
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				log.Infof("UI server listening on DMSG port %d", conf.DmsgPort)
+				if err := dmsgSrv.Serve(dmsgListener); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, dmsg.ErrEntityClosed) {
+					log.WithError(err).Error("UI server DMSG listener exited with error")
+				}
+			}()
+
+			v.pushCloseStack("ui_server.dmsg", func() error {
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				return dmsgSrv.Shutdown(shutdownCtx)
+			})
+		}
+	}
+
+	v.pushCloseStack("ui_server", func() error {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.WithError(err).Warn("UI server shutdown error")
+		}
+		tpvizServer.Stop()
+		wg.Wait()
+		return nil
+	})
+
+	return nil
 }
