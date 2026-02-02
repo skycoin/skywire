@@ -54,7 +54,11 @@ var RootCmd = &cobra.Command{
     ┌─┐┬┌─┬ ┬┌─┐┌─┐┬┌┐┌
     └─┐├┴┐└┬┘│  │ │││││
     └─┘┴ ┴ ┴ └─┘└─┘┴┘└┘`
-		if buildinfo.DBIVersion() != "" {
+		// Get skycoin's version from dependency info, not main module
+		skycoinVer := buildinfo.DepVersion("github.com/skycoin/skycoin")
+		if skycoinVer != "" {
+			ret += fmt.Sprintf("\n%v", skycoinVer)
+		} else if buildinfo.DBIVersion() != "" {
 			ret += fmt.Sprintf("\n%v", buildinfo.DBIVersion())
 		} else {
 			ret += fmt.Sprintf("\nskycoin version %v", buildinfo.Version())
@@ -68,7 +72,7 @@ var RootCmd = &cobra.Command{
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
-	Version:               buildinfo.Version(),
+	Version:               buildinfo.DepVersion("github.com/skycoin/skycoin"),
 	Run: func(cmd *cobra.Command, _ []string) {
 		if di {
 			fmt.Printf("%v\n", buildinfo.DebugBuildInfo())
