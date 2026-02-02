@@ -119,6 +119,7 @@ type Server struct {
 	visorAPI      VisorAPI
 	visorConn     net.Conn
 	visorCache    *LocalVisorData
+	embeddedMode  bool                         // true when visor API is set directly (not via RPC)
 	prevBandwidth map[string]bandwidthSnapshot // track previous bandwidth for deltas
 }
 
@@ -196,6 +197,7 @@ func (s *Server) SetVisorAPI(api VisorAPI, pubKey string) {
 	}
 
 	s.visorAPI = api
+	s.embeddedMode = true // Mark as embedded mode - API is always valid
 	s.visorCache = &LocalVisorData{
 		Connected: true,
 		PubKey:    pubKey,
@@ -728,6 +730,14 @@ func (s *Server) Start() {
 	// Initial cache population
 	s.refreshCache()
 
+	// Initial visor data population (if in embedded mode)
+	s.visorMu.RLock()
+	embedded := s.embeddedMode
+	s.visorMu.RUnlock()
+	if embedded {
+		s.refreshVisorData()
+	}
+
 	// Start auto-refresh
 	s.startAutoRefresh()
 }
@@ -774,6 +784,7 @@ func (s *Server) Stop() {
 func (s *Server) refreshVisorData() {
 	s.visorMu.RLock()
 	api := s.visorAPI
+	embedded := s.embeddedMode
 	s.visorMu.RUnlock()
 
 	if api == nil {
@@ -789,7 +800,15 @@ func (s *Server) refreshVisorData() {
 	// Get overview (includes PK and transports)
 	overview, err := api.Overview()
 	if err != nil {
-		// Connection lost, mark as disconnected and close connection
+		// In embedded mode, don't clear the API - it's always valid,
+		// just mark as temporarily unavailable (visor might still be initializing)
+		if embedded {
+			s.visorMu.Lock()
+			s.visorCache = &LocalVisorData{Connected: true, LastUpdated: time.Now()}
+			s.visorMu.Unlock()
+			return
+		}
+		// RPC mode: connection lost, mark as disconnected and close connection
 		s.visorMu.Lock()
 		if s.visorAPI != nil {
 			_ = s.visorAPI.Close() // Close API first (also closes underlying conn)

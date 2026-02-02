@@ -1735,10 +1735,12 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 // advertise this visor as public in service discovery
 // this service is not considered critical and always returns true
 func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { //nolint:revive
+	// Always attempt to deregister stale entries on startup.
+	// This handles the case where visor crashed while public and restarts,
+	// ensuring old service discovery entries are cleaned up before re-registering.
+	v.serviceDisc.VisorUpdater(0).Stop()
+
 	if !v.conf.IsPublic {
-		// call Stop() method to clean service discovery for the situation that
-		// visor was public, then stop (not normal shutdown), then start as non-public
-		v.serviceDisc.VisorUpdater(0).Stop()
 		return nil
 	}
 	logger := v.MasterLogger().PackageLogger("public_visor")
