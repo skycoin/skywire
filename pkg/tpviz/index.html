@@ -148,7 +148,11 @@
         .tp-traffic .down { color: #00b4d8; }
 
         /* Route list styling */
-        .local-route { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin: 4px 0; background: rgba(255,0,255,0.05); border-radius: 4px; border-left: 3px solid #ff00ff; }
+        .local-route { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin: 4px 0; background: rgba(255,0,255,0.05); border-radius: 4px; border-left: 3px solid #ff00ff; transition: all 0.2s; }
+        .local-route.clickable { cursor: pointer; }
+        .local-route.clickable:hover { background: rgba(255,0,255,0.15); transform: translateX(2px); border-left-color: #ff66ff; }
+        .local-route.highlighted { background: rgba(255,0,255,0.25); border-left-color: #ffffff; animation: route-flash 0.5s ease-out; }
+        @keyframes route-flash { 0% { background: rgba(255,0,255,0.5); } 100% { background: rgba(255,0,255,0.25); } }
         .route-type-badge { font-size: 0.6em; padding: 2px 5px; border-radius: 3px; font-weight: bold; text-transform: uppercase; }
         .route-type-badge.consume { background: rgba(0,255,200,0.3); color: #00ffc8; }
         .route-type-badge.forward { background: rgba(255,165,0,0.3); color: #ffa500; }
@@ -235,14 +239,14 @@
                     </div>
                     <div class="control-group">
                         <label><input type="checkbox" id="show-services"> Highlight Services</label>
-                        <label><input type="checkbox" id="show-flags"> Show Country Flags</label>
+                        <label><input type="checkbox" id="show-flags" checked> Show Country Flags</label>
                     </div>
                     <div class="control-group anim-controls">
                         <label><input type="checkbox" id="show-dataflow" checked> Data Flow Animation</label>
                         <label><input type="checkbox" id="show-routes" checked> Show Routes</label>
                     </div>
                     <div class="control-group">
-                        <label><input type="checkbox" id="cluster-country"> Cluster by Country</label>
+                        <label><input type="checkbox" id="cluster-country" checked> Cluster by Country</label>
                         <label id="ip-groups-label" style="display:none;"><input type="checkbox" id="cluster-ip"> Cluster by IP Group</label>
                     </div>
                     <div class="control-group">
@@ -609,6 +613,11 @@
                 // Update local transport edge styling after data is processed
                 updateLocalTransportStyles();
 
+                // Enable country grouping if checkbox is checked (default on)
+                if (document.getElementById('cluster-country').checked) {
+                    enableCountryGrouping();
+                }
+
                 return true; // Indicate success
             } catch (err) {
                 console.error('fetchAllData error:', err);
@@ -814,6 +823,100 @@
                 scale: 1.5,
                 animation: { duration: 500, easingFunction: 'easeInOutQuad' }
             });
+        }
+
+        // Highlight a route - shows the path from local visor to destination
+        let highlightedRouteTimeout = null;
+        function highlightRoute(route) {
+            if (!network || !localVisorData || !localVisorData.connected) return;
+
+            const localPK = localVisorData.pub_key;
+            const dstPK = route.dst_pk;
+            const transportId = route.transport_id;
+
+            // Clear any previous highlight timeout
+            if (highlightedRouteTimeout) {
+                clearTimeout(highlightedRouteTimeout);
+            }
+
+            // Find nodes to select
+            const nodesToSelect = [localPK];
+            if (dstPK) nodesToSelect.push(dstPK);
+
+            // Find edges to highlight
+            const edgesToSelect = [];
+            if (edgesDataset && transportId) {
+                // Try to find edge by transport ID
+                edgesDataset.forEach(edge => {
+                    if (edge.id && edge.id.includes(transportId.substring(0, 8))) {
+                        edgesToSelect.push(edge.id);
+                    }
+                });
+            }
+
+            // If no edge found by transport ID, try to find edge between local and dst
+            if (edgesToSelect.length === 0 && dstPK && edgesDataset) {
+                edgesDataset.forEach(edge => {
+                    if ((edge.from === localPK && edge.to === dstPK) ||
+                        (edge.from === dstPK && edge.to === localPK)) {
+                        edgesToSelect.push(edge.id);
+                    }
+                });
+            }
+
+            // Select nodes and edges
+            network.setSelection({
+                nodes: nodesToSelect,
+                edges: edgesToSelect
+            }, { highlightEdges: true });
+
+            // Temporarily highlight the edges with a bright color
+            if (edgesToSelect.length > 0) {
+                const originalColors = {};
+                edgesToSelect.forEach(edgeId => {
+                    const edge = edgesDataset.get(edgeId);
+                    if (edge) {
+                        originalColors[edgeId] = edge.color;
+                        edgesDataset.update({
+                            id: edgeId,
+                            color: { color: '#ff00ff', highlight: '#ff66ff' },
+                            width: 6,
+                            shadow: { enabled: true, color: '#ff00ff', size: 15, x: 0, y: 0 }
+                        });
+                    }
+                });
+
+                // Restore original colors after 3 seconds
+                highlightedRouteTimeout = setTimeout(() => {
+                    edgesToSelect.forEach(edgeId => {
+                        if (originalColors[edgeId]) {
+                            const edge = edgesDataset.get(edgeId);
+                            if (edge) {
+                                edgesDataset.update({
+                                    id: edgeId,
+                                    color: originalColors[edgeId],
+                                    width: edge.isLocal || edge.isLocalOnly ? 4 : 1,
+                                    shadow: edge.isLocal || edge.isLocalOnly ?
+                                        { enabled: true, color: '#00ffff', size: 10, x: 0, y: 0 } : false
+                                });
+                            }
+                        }
+                    });
+                }, 3000);
+            }
+
+            // Fit view to show all selected nodes
+            if (nodesToSelect.length > 1) {
+                network.fit({
+                    nodes: nodesToSelect,
+                    animation: { duration: 500, easingFunction: 'easeInOutQuad' }
+                });
+            } else if (dstPK) {
+                network.focus(dstPK, {
+                    scale: 1.2,
+                    animation: { duration: 500, easingFunction: 'easeInOutQuad' }
+                });
+            }
         }
 
         // Check if a PK is the local visor
@@ -2445,11 +2548,11 @@
                     <span class="count">${routesCount}</span>
                 </div>
                 <div style="max-height:120px;overflow-y:auto;">
-                    ${routes.slice(0, 20).map(r => `
-                        <div class="local-route">
+                    ${routes.slice(0, 20).map((r, idx) => `
+                        <div class="local-route clickable" onclick="highlightRouteByIndex(${idx})" title="Click to highlight route path">
                             <span class="route-type-badge ${r.type}">${r.type}</span>
                             <span class="route-id">#${r.route_id || '?'}</span>
-                            ${r.dst_pk ? `<span class="route-dest" onclick="focusNode('${r.dst_pk}')" title="Click to focus on destination">${r.dst_pk.substring(0,10)}...</span>` : '<span style="color:#555;">—</span>'}
+                            ${r.dst_pk ? `<span class="route-dest">${r.dst_pk.substring(0,10)}...</span>` : '<span style="color:#555;">—</span>'}
                             ${r.transport_id ? `<span class="route-via">via tp:${r.transport_id.substring(0,6)}</span>` : ''}
                         </div>
                     `).join('')}
@@ -2465,6 +2568,33 @@
             `;
         }
 
+        // Highlight route by index (called from route list click)
+        function highlightRouteByIndex(idx) {
+            if (!localVisorData || !localVisorData.routes || !localVisorData.routes[idx]) return;
+            highlightRoute(localVisorData.routes[idx]);
+        }
+
+        // Track previous routes for detecting new ones
+        let previousRouteIds = new Set();
+
+        // Detect and highlight new routes
+        function detectAndHighlightNewRoutes(routes) {
+            if (!routes || routes.length === 0) return;
+
+            const currentRouteIds = new Set(routes.map(r => r.route_id || r.dst_pk || JSON.stringify(r)));
+
+            // Find new routes (in current but not in previous)
+            routes.forEach(route => {
+                const routeKey = route.route_id || route.dst_pk || JSON.stringify(route);
+                if (!previousRouteIds.has(routeKey)) {
+                    // This is a new route - highlight it automatically
+                    setTimeout(() => highlightRoute(route), 100);
+                }
+            });
+
+            previousRouteIds = currentRouteIds;
+        }
+
         // Fast refresh for local visor data (every 2 seconds)
         let localVisorRefreshInterval = null;
         function startLocalVisorFastRefresh() {
@@ -2475,6 +2605,8 @@
                     if (resp && resp.ok) {
                         const newData = await resp.json();
                         if (newData && newData.connected) {
+                            // Detect new routes before updating data
+                            detectAndHighlightNewRoutes(newData.routes);
                             localVisorData = newData;
                             updateLocalVisorDisplayEnhanced();
                             highlightLocalVisorInGraph();
