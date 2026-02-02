@@ -32,7 +32,7 @@ var (
 func init() {
 	discTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "obtain transport of given ID")
 	discTpCmd.Flags().StringVarP(&tpPK, "pk", "p", "", "obtain transports by public key")
-	discTpCmd.Flags().StringVar(&tpdURL, "tpdurl", "", "transport discovery url (e.g., http://transport-discovery:9091)")
+	discTpCmd.Flags().StringVar(&tpdURL, "tpdurl", deployment.Prod.TransportDiscovery, "transport discovery url")
 	discTpCmd.Flags().BoolVar(&tpdHTTP, "http", false, "query transport discovery via HTTP, bypass RPC")
 }
 
@@ -60,7 +60,7 @@ var discTpCmd = &cobra.Command{
 		}
 
 		// Determine if we should query transport discovery via HTTP
-		useHTTPQuery := tpdHTTP || tpdURL != ""
+		useHTTPQuery := tpdHTTP
 
 		// Try RPC first unless HTTP query is requested
 		if !useHTTPQuery {
@@ -95,19 +95,13 @@ var discTpCmd = &cobra.Command{
 
 		// Query transport discovery via HTTP
 		if useHTTPQuery {
-			// Use provided URL or default
-			url := tpdURL
-			if url == "" {
-				url = deployment.Prod.TransportDiscovery
-			}
-
 			// Query via plain HTTP
 			if tppk.Null() {
-				entry, err := getTransportByID(url, uuid.UUID(tpid))
+				entry, err := getTransportByID(tpdURL, uuid.UUID(tpid))
 				internal.Catch(cmd.Flags(), err)
 				PrintTransportEntries(cmd.Flags(), entry)
 			} else {
-				entries, err := getTransportsByEdge(url, tppk)
+				entries, err := getTransportsByEdge(tpdURL, tppk)
 				internal.Catch(cmd.Flags(), err)
 				PrintTransportEntries(cmd.Flags(), entries...)
 			}

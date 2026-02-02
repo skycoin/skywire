@@ -49,6 +49,11 @@ func (r *SkywireNetworker) Dial(addr Addr) (net.Conn, error) {
 
 // DialContext dials remote `addr` via `skynet` with context.
 func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (conn net.Conn, err error) {
+	return r.DialContextWithOptions(ctx, addr, nil)
+}
+
+// DialContextWithOptions dials remote `addr` via `skynet` with context and custom dial options.
+func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr, opts *router.DialOptions) (conn net.Conn, err error) {
 	localPort, freePort, err := r.porter.ReserveEphemeral(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -61,7 +66,11 @@ func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (conn net
 		}
 	}()
 
-	conn, err = r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
+	if opts == nil {
+		opts = router.DefaultDialOptions()
+	}
+
+	conn, err = r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, opts)
 	if err != nil {
 		return nil, err
 	}

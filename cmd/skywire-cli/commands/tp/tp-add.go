@@ -39,11 +39,10 @@ var (
 	transportType    string
 	timeout          time.Duration
 	rpk              string
-	cacheFileAR      string
 	cacheFilesAge    int
 	forceAttempt     bool
-	arURL            string
 	dmsgdURL         string
+	retries          int
 
 // queryHealth	bool
 )
@@ -52,22 +51,22 @@ func init() {
 	addTpCmd.Flags().StringVarP(&rpk, "rpk", "r", "", "remote public key.")
 	addTpCmd.Flags().StringVarP(&transportType, "type", "t", "", "type of transport to add.")
 	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "o", 0, "if specified, sets an operation timeout")
-	addTpCmd.Flags().StringVarP(&arURL, "ar", "a", deployment.Prod.AddressResolver, "address resolver URL")
 	addTpCmd.Flags().StringVarP(&dmsgdURL, "dmsg", "d", deployment.Prod.DmsgDiscovery, "dmsg discovery URL")
 	//TODO
 	//	listCmd.Flags().BoolVarP(&queryHealth, "health", "q", false, "check /health of remote visor over dmsg before creating transport")
-	addTpCmd.Flags().BoolVarP(&forceAttempt, "force", "f", false, "attempt transport creation without check of SD") // or visor /health over dmsg
-	addTpCmd.Flags().StringVar(&cacheFileAR, "cfar", os.TempDir()+"/ar.json", "AR cache file location")
+	addTpCmd.Flags().BoolVarP(&forceAttempt, "force", "f", false, "attempt dmsg transport creation without checking dmsg discovery")
 	addTpCmd.Flags().StringVar(&cacheFileDmsgD, "cfdd", os.TempDir()+"/dmsgd.json", "Dmsg Discovery cache file location")
 	addTpCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
+	addTpCmd.Flags().IntVarP(&retries, "retries", "n", 1, "number of times to retry per transport type")
 	addTpCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
 }
 
 var addTpCmd = &cobra.Command{
-	Use:   "add",
-	Short: "Add a transport",
+	Use:   "add <public-key> [public-key]...",
+	Short: "Add transport(s) to one or more remote public keys",
 	Long: `
-    Add a transport
+    Add transport(s)
+		Accepts one or more remote public keys as arguments.
 		If the transport type is unspecified,
 		the visor will attempt to establish a transport
 		in the following order: stcpr, sudph, dmsg`,
@@ -82,116 +81,141 @@ var addTpCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		var pk cipher.PubKey
 
-		if rpk == "" {
-			pk = internal.ParsePK(cmd.Flags(), "remote-public-key", args[0])
-		} else {
+		// Collect public keys from args and -r flag
+		var pks []cipher.PubKey
+		if rpk != "" {
+			var pk cipher.PubKey
 			internal.Catch(cmd.Flags(), pk.Set(rpk))
+			pks = append(pks, pk)
+		}
+		for _, arg := range args {
+			pk := internal.ParsePK(cmd.Flags(), "remote-public-key", arg)
+			pks = append(pks, pk)
 		}
 
-		var transports string
-		var dmsgEntries string
-		var stcprkeys []string
-		var sudphkeys []string
+		if len(pks) == 0 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("no public keys specified"))
+		}
+
+		// Fetch dmsg discovery data once (for all PKs) - only used for dmsg transport checks
 		var dmsgkeys []string
-		var availableSTCPR bool
-		var availableSUDPH bool
-		var availableDMSG bool
-		//check before connecting stcpr transport that the visor public key is available to be transported via the given transport type unless forceAttempt == true
-		if !forceAttempt {
-			transports = internal.GetData(cacheFileAR, arURL+"/transports", cacheFilesAge)
-			stcprkeys, _ = script.Echo(transports).JQ(".stcpr[]").Replace(`"`, "").Slice() //nolint:errcheck
-			if transportType == "stcpr" {
-				found := false
-				for i := range stcprkeys {
-					if pk.String() == stcprkeys[i] {
-						found = true
-						break
-					}
-				}
-				if !found {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot create stcpr transport ; public key not found in address resolver %v/transports.\nUse -f --force to force attempt transport creation", arURL))
-				} else {
-					availableSTCPR = true
-				}
-			}
-			sudphkeys, _ = script.Echo(transports).JQ(".sudph[]").Replace(`"`, "").Slice() //nolint:errcheck
-			if transportType == "sudph" {
-				found := false
-				for i := range sudphkeys {
-					if pk.String() == sudphkeys[i] {
-						found = true
-						break
-					}
-				}
-				if !found {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot create sudph transport ; public key not found in address resolver %v/transports.\nUse -f --force to force attempt transport creation", arURL))
-				} else {
-					availableSUDPH = true
-				}
-			}
-			dmsgEntries = internal.GetData(cacheFileDmsgD, dmsgdURL+"/dmsg-discovery/entries", cacheFilesAge)
+		if !forceAttempt && (transportType == "" || transportType == "dmsg") {
+			dmsgEntries := internal.GetData(cacheFileDmsgD, dmsgdURL+"/dmsg-discovery/entries", cacheFilesAge)
 			dmsgkeys, _ = script.Echo(dmsgEntries).JQ(".[]").Replace(`"`, "").Slice() //nolint:errcheck
-			if transportType == "dmsg" {
-				found := false
-				for i := range dmsgkeys {
-					if pk.String() == dmsgkeys[i] {
-						found = true
-						break
-					}
-				}
-				if !found {
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot create dmsg transport ; public key not found in dmsg discovery entries %v/dmsg-discovery/entries.\nUse -f --force to force attempt transport creation", dmsgdURL))
-				} else {
-					availableDMSG = true
-				}
-			}
 		}
 
-		var tp *visor.TransportSummary
+		// Helper to check if pk is in slice
+		contains := func(slice []string, s string) bool {
+			for _, item := range slice {
+				if item == s {
+					return true
+				}
+			}
+			return false
+		}
 
-		if transportType != "" {
-			tp, err = rpcClient.AddTransport(pk, transportType, timeout)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to establish %v transport: %v", transportType, err))
+		// Process each public key
+		var results []*visor.TransportSummary
+		successCount := 0
+		failCount := 0
+
+		for i, pk := range pks {
+			if len(pks) > 1 && !isJSON {
+				fmt.Printf("[%d/%d] Adding transport to %s...\n", i+1, len(pks), pk.String()[:16]+"...")
 			}
-			if !isJSON {
-				logger.Infof("Established %v transport to %v", transportType, pk)
+
+			// Check dmsg availability if dmsg is explicitly requested
+			if !forceAttempt && transportType == "dmsg" && !contains(dmsgkeys, pk.String()) {
+				if !isJSON {
+					logger.Warnf("Skipping %s: not found in dmsg discovery", pk.String()[:16])
+				}
+				failCount++
+				continue
 			}
-		} else {
-			var transportTypes []types.Type
-			if forceAttempt {
-				transportTypes = []types.Type{
-					types.STCPR,
-					types.SUDPH,
-					types.DMSG,
+
+			var tp *visor.TransportSummary
+			var tpErr error
+
+			if transportType != "" {
+				// Specific transport type requested
+				for attempt := 1; attempt <= retries; attempt++ {
+					tp, tpErr = rpcClient.AddTransport(pk, transportType, timeout)
+					if tpErr == nil {
+						if !isJSON {
+							logger.Infof("Established %v transport to %v", transportType, pk)
+						}
+						break
+					}
+					if !isJSON && attempt < retries {
+						logger.WithError(tpErr).Warnf("Failed to establish %v transport (attempt %d/%d), retrying...", transportType, attempt, retries)
+					}
+				}
+				if tpErr != nil {
+					if !isJSON {
+						logger.WithError(tpErr).Errorf("Failed to establish %v transport to %v after %d attempts", transportType, pk, retries)
+					}
+					failCount++
+					continue
 				}
 			} else {
-				if availableSTCPR {
-					transportTypes = append(transportTypes, types.STCPR)
+				// No transport type specified - try stcpr, sudph, dmsg in order
+				transportTypes := []types.Type{
+					types.STCPR,
+					types.SUDPH,
 				}
-				if availableSUDPH {
-					transportTypes = append(transportTypes, types.SUDPH)
-				}
-				if availableDMSG {
+				// Only include dmsg if found in dmsg discovery (or force is set)
+				if forceAttempt || contains(dmsgkeys, pk.String()) {
 					transportTypes = append(transportTypes, types.DMSG)
+				}
+
+			typeLoop:
+				for _, tpType := range transportTypes {
+					for attempt := 1; attempt <= retries; attempt++ {
+						tp, tpErr = rpcClient.AddTransport(pk, string(tpType), timeout)
+						if tpErr == nil {
+							if !isJSON {
+								logger.Infof("Established %v transport to %v", tpType, pk)
+							}
+							break typeLoop
+						}
+						if !isJSON {
+							if attempt < retries {
+								logger.WithError(tpErr).Warnf("Failed to establish %v transport (attempt %d/%d), retrying...", tpType, attempt, retries)
+							} else {
+								logger.WithError(tpErr).Warnf("Failed to establish %v transport after %d attempts", tpType, retries)
+							}
+						}
+					}
+				}
+
+				if tpErr != nil {
+					failCount++
+					continue
 				}
 			}
 
-			for _, transportType := range transportTypes {
-				tp, err = rpcClient.AddTransport(pk, string(transportType), timeout)
-				if err == nil {
-					if !isJSON {
-						logger.Infof("Established %v transport to %v", transportType, pk)
-					}
-					break
-				}
-				if !isJSON {
-					logger.WithError(err).Warnf("Failed to establish %v transport", transportType)
-				}
+			if tp != nil {
+				results = append(results, tp)
+				successCount++
 			}
 		}
-		PrintTransports(cmd.Flags(), tp)
+
+		// Print results
+		if len(pks) > 1 && !isJSON {
+			fmt.Printf("\nSummary: %d/%d transports established\n", successCount, len(pks))
+		}
+
+		if isJSON {
+			internal.PrintOutput(cmd.Flags(), results, "")
+		} else {
+			for _, tp := range results {
+				PrintTransports(cmd.Flags(), tp)
+			}
+		}
+
+		if failCount > 0 && successCount == 0 {
+			os.Exit(1)
+		}
 	},
 }
