@@ -102,12 +102,39 @@
         .selected-services { margin-top: 8px; }
         .selected-country { color: #888; font-size: 0.85em; margin-top: 4px; }
         .selected-version { color: #0f9b8e; font-size: 0.85em; margin-top: 4px; font-family: monospace; }
+
+        /* Data flow animation overlay */
+        #flow-canvas { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
+
+        /* Animation controls */
+        .anim-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .anim-controls label { display: inline-flex; align-items: center; color: #aaa; font-size: 0.85em; cursor: pointer; }
+        .anim-controls input[type="checkbox"] { margin-right: 4px; }
+
+        /* Bandwidth indicator */
+        .bandwidth-indicator { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 0.7em; margin-left: 4px; animation: pulse 1s ease-in-out infinite; }
+        .bandwidth-indicator.active { background: rgba(0, 255, 200, 0.3); color: #00ffc8; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        /* Route highlight styling */
+        .route-highlight { background: rgba(0, 255, 200, 0.1); border-left: 3px solid #00ffc8; padding-left: 8px; margin: 4px 0; }
     </style>
 </head>
 <body>
     <div id="container">
         <div id="sidebar">
             <h1>TPD Visualizer</h1>
+
+            <!-- Local Visor - shown when connected via RPC -->
+            <div class="section" id="local-visor-section" style="display:none;border-color:#00ffff;border-width:2px;">
+                <div class="section-header" onclick="toggleSection('local-visor-section')" style="background:linear-gradient(135deg,rgba(0,255,255,0.2),rgba(255,0,255,0.2));">
+                    <span class="section-title" style="color:#00ffff;">⬢ Local Visor</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content" id="local-visor-content">
+                    <!-- Populated by updateLocalVisorDisplay() -->
+                </div>
+            </div>
 
             <!-- TPD Statistics - expanded by default -->
             <div class="section" id="section-tpd">
@@ -161,6 +188,10 @@
                         <label><input type="checkbox" id="show-services"> Highlight Services</label>
                         <label><input type="checkbox" id="show-flags"> Show Country Flags</label>
                     </div>
+                    <div class="control-group anim-controls">
+                        <label><input type="checkbox" id="show-dataflow" checked> Data Flow Animation</label>
+                        <label><input type="checkbox" id="show-routes" checked> Show Routes</label>
+                    </div>
                     <div class="control-group">
                         <label><input type="checkbox" id="cluster-country"> Cluster by Country</label>
                         <label id="ip-groups-label" style="display:none;"><input type="checkbox" id="cluster-ip"> Cluster by IP Group</label>
@@ -207,6 +238,7 @@
         </div>
         <div id="resize-handle"></div>
         <div id="network">
+            <canvas id="flow-canvas"></canvas>
             <div id="loading"><div class="spinner"></div><div>Loading transport data...</div></div>
             <div id="error"></div>
         </div>
@@ -222,9 +254,18 @@
         let onlineVisors = new Set(), offlineVisors = new Set(), visorServices = {}, visorVersions = {};
         let nextRefreshTime = null, countdownInterval = null, serverCacheAge = null;
         let ipGroupsData = null, ipGroupsEnabled = false;
+        let localVisorData = null; // Local visor data from RPC
 
         const colors = { stcpr: '#00d9a5', sudph: '#00b4d8', dmsg: '#ffd166' };
+        // Vibrant cyan/magenta for local visor - highly visible
+        const LOCAL_VISOR_COLOR = { background: '#00ffff', border: '#ff00ff', highlight: { background: '#00ffff', border: '#ffffff' } };
+        // Vibrant cyan for local visor edges (transports)
+        const LOCAL_EDGE_COLOR = '#00ffff';
+        // Route destination highlight color (bright magenta/pink)
+        const ROUTE_DEST_COLOR = { background: '#ff00ff', border: '#ffffff', highlight: { background: '#ff66ff', border: '#ffffff' } };
         let selectedNodeId = null;
+        // Track route destinations for highlighting
+        let routeDestinations = new Set();
 
         // Generate distinct colors for IP groups using golden ratio distribution
         const ipGroupColors = {};
@@ -335,9 +376,20 @@
         // Update legend based on current display mode
         function updateLegend() {
             const showServices = document.getElementById('show-services').checked;
+            const showRoutes = document.getElementById('show-routes').checked;
             const groupCountry = document.getElementById('cluster-country').checked;
             const groupIP = document.getElementById('cluster-ip').checked;
             const legendEl = document.getElementById('node-legend');
+
+            // Local visor legend items (always shown if connected)
+            let localLegend = '';
+            if (localVisorData && localVisorData.connected) {
+                localLegend = '<div class="status-item"><div class="status-dot" style="background:linear-gradient(135deg,#00ffff,#ff00ff);border:2px solid #fff;"></div><span style="color:#00ffff;">Local Visor</span></div>';
+                if (showRoutes && routeDestinations.size > 0) {
+                    localLegend += '<div class="status-item"><div class="status-dot" style="background:#ff00ff;border:2px solid #fff;"></div><span style="color:#ff00ff;">Route Destination (' + routeDestinations.size + ')</span></div>';
+                }
+                localLegend += '<div style="font-size:0.7em;color:#00ffff;margin:4px 0;">━━ Local Transport</div>';
+            }
 
             if (groupCountry) {
                 // Country grouping mode
@@ -345,23 +397,23 @@
                 Object.values(visorServices).forEach(svc => {
                     if (svc.country) countries.add(svc.country);
                 });
-                let html = '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">Country Groups (' + countries.size + ')</div>';
+                let html = localLegend + '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">Country Groups (' + countries.size + ')</div>';
                 html += '<div style="font-size:0.75em;color:#aaa;">Colored boundaries show country groups</div>';
                 legendEl.innerHTML = html;
             } else if (groupIP && ipGroupsEnabled && ipGroupsData) {
                 // IP group mode
-                let html = '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">IP Groups (' + ipGroupsData.total_groups + ')</div>';
+                let html = localLegend + '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">IP Groups (' + ipGroupsData.total_groups + ')</div>';
                 html += '<div style="font-size:0.75em;color:#aaa;">Colored boundaries show IP groups</div>';
                 legendEl.innerHTML = html;
             } else if (showServices) {
-                legendEl.innerHTML =
+                legendEl.innerHTML = localLegend +
                     '<div class="status-item"><div class="status-dot status-vpn"></div><span>VPN</span></div>' +
                     '<div class="status-item"><div class="status-dot status-proxy"></div><span>Proxy</span></div>' +
                     '<div class="status-item"><div class="status-dot status-online"></div><span>Online (no service)</span></div>' +
                     '<div class="status-item"><div class="status-dot status-offline"></div><span>Offline</span></div>' +
                     '<div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>';
             } else {
-                legendEl.innerHTML =
+                legendEl.innerHTML = localLegend +
                     '<div class="status-item"><div class="status-dot status-online"></div><span>Online (in UT)</span></div>' +
                     '<div class="status-item"><div class="status-dot status-offline"></div><span>Offline (in UT)</span></div>' +
                     '<div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>';
@@ -440,11 +492,12 @@
                 allData = await tpResp.json();
                 console.log('Transport data loaded:', allData.length, 'transports');
 
-                // Fetch uptime, services, and IP groups data in parallel (non-blocking)
-                const [utResp, sdResp, ipResp] = await Promise.all([
+                // Fetch uptime, services, IP groups, and local visor data in parallel (non-blocking)
+                const [utResp, sdResp, ipResp, lvResp] = await Promise.all([
                     fetchWithTimeout(API_BASE + '/api/uptimes').catch(e => { console.log('UT fetch error:', e.message); return null; }),
                     fetchWithTimeout(API_BASE + '/api/services').catch(e => { console.log('SD fetch error:', e.message); return null; }),
-                    fetchWithTimeout(API_BASE + '/api/ip-groups').catch(e => { console.log('IP groups fetch error:', e.message); return null; })
+                    fetchWithTimeout(API_BASE + '/api/ip-groups').catch(e => { console.log('IP groups fetch error:', e.message); return null; }),
+                    fetchWithTimeout(API_BASE + '/api/local-visor').catch(e => { console.log('Local visor fetch error:', e.message); return null; })
                 ]);
 
                 // Parse uptime data
@@ -477,8 +530,34 @@
                     }
                 }
 
+                // Parse local visor data
+                if (lvResp && lvResp.ok) {
+                    localVisorData = await lvResp.json();
+                    updateLocalVisorDisplayEnhanced();
+
+                    // Update route destinations for highlighting
+                    routeDestinations.clear();
+                    if (localVisorData.connected && localVisorData.routes) {
+                        localVisorData.routes.forEach(route => {
+                            if (route.dst_pk) routeDestinations.add(route.dst_pk);
+                            if (route.next_hop_pk) routeDestinations.add(route.next_hop_pk);
+                        });
+                    }
+
+                    if (localVisorData.connected) {
+                        console.log('Local visor connected:', localVisorData.pub_key.substring(0, 16) + '...',
+                            'Transports:', localVisorData.transports?.length || 0,
+                            'Routes:', localVisorData.routes_count,
+                            'Route destinations:', routeDestinations.size);
+                    }
+                }
+
                 processData();
                 console.log('Data processing complete');
+
+                // Update local transport edge styling after data is processed
+                updateLocalTransportStyles();
+
                 return true; // Indicate success
             } catch (err) {
                 console.error('fetchAllData error:', err);
@@ -601,10 +680,129 @@
             return 'unknown';
         }
 
+        // Format bytes to human readable (KB, MB, GB)
+        function formatBytes(bytes) {
+            if (!bytes || bytes === 0) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
+        }
+
+        // Focus view on local visor node
+        function focusLocalVisor() {
+            if (!localVisorData || !localVisorData.connected || !network) return;
+            const pk = localVisorData.pub_key;
+
+            // Select and focus on the node
+            network.selectNodes([pk]);
+            network.focus(pk, {
+                scale: 1.5,
+                animation: {
+                    duration: 500,
+                    easingFunction: 'easeInOutQuad'
+                }
+            });
+        }
+
+        // Update local visor display section
+        function updateLocalVisorDisplay() {
+            const section = document.getElementById('local-visor-section');
+            const content = document.getElementById('local-visor-content');
+            if (!section || !content) return;
+
+            if (!localVisorData || !localVisorData.connected) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'block';
+            const pk = localVisorData.pub_key;
+            const tps = localVisorData.transports || [];
+            const routes = localVisorData.routes_count || 0;
+
+            // Calculate total traffic
+            let totalSent = 0, totalRecv = 0;
+            tps.forEach(t => {
+                totalSent += t.sent_bytes || 0;
+                totalRecv += t.recv_bytes || 0;
+            });
+
+            content.innerHTML = `
+                <div style="font-size:0.85em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <strong style="color:#e94560;">Local Visor</strong><br>
+                        <span style="color:#888;font-size:0.8em;">${pk.substring(0, 16)}...</span>
+                    </div>
+                    <button onclick="focusLocalVisor()" style="background:#e94560;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.75em;font-weight:bold;">
+                        FOCUS
+                    </button>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.8em;">
+                    <div>Transports: <strong>${tps.length}</strong></div>
+                    <div>Routes: <strong>${routes}</strong></div>
+                    <div>Sent: <strong>${formatBytes(totalSent)}</strong></div>
+                    <div>Recv: <strong>${formatBytes(totalRecv)}</strong></div>
+                </div>
+                <div style="margin-top:8px;max-height:150px;overflow-y:auto;font-size:0.75em;">
+                    ${tps.map(t => `
+                        <div style="padding:3px 0;border-bottom:1px solid #0f3460;cursor:pointer;" onclick="focusNode('${t.remote_pk}')">
+                            <span style="color:${colors[t.type] || '#888'}">${t.type}</span>
+                            → ${t.remote_pk.substring(0, 8)}...
+                            <span style="color:#666;float:right;">↑${formatBytes(t.sent_bytes)} ↓${formatBytes(t.recv_bytes)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Focus on any node by PK
+        function focusNode(pk) {
+            if (!network) return;
+            network.selectNodes([pk]);
+            network.focus(pk, {
+                scale: 1.5,
+                animation: { duration: 500, easingFunction: 'easeInOutQuad' }
+            });
+        }
+
+        // Check if a PK is the local visor
+        function isLocalVisor(pk) {
+            return localVisorData && localVisorData.connected && localVisorData.pub_key === pk;
+        }
+
+        // Check if a transport involves the local visor
+        function isLocalTransport(pk1, pk2) {
+            if (!localVisorData || !localVisorData.connected || !localVisorData.transports) return false;
+            const localPK = localVisorData.pub_key;
+            return localVisorData.transports.some(t =>
+                (t.remote_pk === pk1 && localPK === pk2) ||
+                (t.remote_pk === pk2 && localPK === pk1) ||
+                (localPK === pk1 && t.remote_pk === pk2) ||
+                (localPK === pk2 && t.remote_pk === pk1)
+            );
+        }
+
+        // Get local transport stats for a remote PK
+        function getLocalTransportStats(remotePK) {
+            if (!localVisorData || !localVisorData.transports) return null;
+            return localVisorData.transports.find(t => t.remote_pk === remotePK);
+        }
+
         function getNodeColor(visor) {
+            // Local visor highlighting takes highest priority
+            if (isLocalVisor(visor.id)) {
+                return LOCAL_VISOR_COLOR;
+            }
+
             const status = getVisorStatus(visor.id);
             const hasService = visorServices[visor.id] && visorServices[visor.id].services.length > 0;
             const showServices = document.getElementById('show-services').checked;
+            const showRoutes = document.getElementById('show-routes').checked;
+
+            // Route destination highlighting (second highest priority)
+            if (showRoutes && routeDestinations.has(visor.id)) {
+                return ROUTE_DEST_COLOR;
+            }
 
             // Service highlighting takes priority
             if (showServices && hasService) {
@@ -631,12 +829,20 @@
             visorConnections = {};
             let countStcpr = 0, countSudph = 0, countDmsg = 0, totalTransports = 0;
 
+            // Track which edges we've seen (to avoid duplicates when merging local visor data)
+            const seenEdges = new Set();
+            const makeEdgeKey = (pk1, pk2, type) => {
+                return pk1 < pk2 ? `${pk1}-${pk2}-${type}` : `${pk2}-${pk1}-${type}`;
+            };
+
             allData.forEach(transport => {
                 const [pk1, pk2] = transport.edges;
                 const type = transport.type;
 
                 // Skip self-transports (connectivity tests, not used for routes)
                 if (pk1 === pk2) return;
+
+                seenEdges.add(makeEdgeKey(pk1, pk2, type));
 
                 totalTransports++;
                 if (type === 'stcpr') countStcpr++;
@@ -654,6 +860,56 @@
                 visorConnections[pk1].push({ pk: pk2, type });
                 visorConnections[pk2].push({ pk: pk1, type });
             });
+
+            // Merge local visor transports that aren't in TPD yet
+            if (localVisorData && localVisorData.connected && localVisorData.transports) {
+                const localPK = localVisorData.pub_key;
+
+                // Ensure local visor node exists
+                if (!visors.has(localPK)) {
+                    visors.set(localPK, { id: localPK, connections: 0, types: new Set(), isLocal: true });
+                }
+                visors.get(localPK).isLocal = true;
+
+                localVisorData.transports.forEach(tp => {
+                    const remotePK = tp.remote_pk;
+                    const type = tp.type;
+                    const edgeKey = makeEdgeKey(localPK, remotePK, type);
+
+                    // Skip if we already have this edge from TPD
+                    if (seenEdges.has(edgeKey)) return;
+
+                    // Add this transport (it's only on local visor, not in TPD)
+                    seenEdges.add(edgeKey);
+
+                    // Mark as local-only transport (for different visual treatment)
+                    allData.push({
+                        edges: [localPK, remotePK],
+                        type: type,
+                        isLocalOnly: true // Flag to indicate this is from local visor, not TPD
+                    });
+
+                    totalTransports++;
+                    if (type === 'stcpr') countStcpr++;
+                    else if (type === 'sudph') countSudph++;
+                    else if (type === 'dmsg') countDmsg++;
+
+                    // Ensure remote visor node exists
+                    if (!visors.has(remotePK)) {
+                        visors.set(remotePK, { id: remotePK, connections: 0, types: new Set() });
+                    }
+
+                    visors.get(localPK).connections++;
+                    visors.get(localPK).types.add(type);
+                    visors.get(remotePK).connections++;
+                    visors.get(remotePK).types.add(type);
+
+                    if (!visorConnections[localPK]) visorConnections[localPK] = [];
+                    if (!visorConnections[remotePK]) visorConnections[remotePK] = [];
+                    visorConnections[localPK].push({ pk: remotePK, type });
+                    visorConnections[remotePK].push({ pk: localPK, type });
+                });
+            }
 
             // Count by status
             let countOnline = 0, countOffline = 0, countUnknown = 0;
@@ -725,10 +981,42 @@
 
             const edges = allData
                 .filter(transport => transport.edges[0] !== transport.edges[1])
-                .map(transport => ({
-                    id: makeEdgeId(transport), from: transport.edges[0], to: transport.edges[1],
-                    color: { color: colors[transport.type], opacity: 0.6 }, type: transport.type, width: 1, smooth: { type: 'continuous' }
-                }));
+                .map(transport => {
+                    const isLocal = isLocalTransport(transport.edges[0], transport.edges[1]);
+                    const isLocalOnly = transport.isLocalOnly; // From local visor but not in TPD
+                    const stats = isLocal ? getLocalTransportStats(
+                        transport.edges[0] === localVisorData?.pub_key ? transport.edges[1] : transport.edges[0]
+                    ) : null;
+
+                    // Build title with traffic stats for local transports
+                    let title = transport.type.toUpperCase();
+                    if (isLocalOnly) {
+                        title += ' (local only - not in TPD)';
+                    }
+                    if (stats) {
+                        const sent = formatBytes(stats.sent_bytes);
+                        const recv = formatBytes(stats.recv_bytes);
+                        title += `\nSent: ${sent}\nRecv: ${recv}`;
+                    }
+
+                    // Local transports (both from TPD and local-only) get vibrant cyan styling
+                    const isLocalEdge = isLocal || isLocalOnly;
+
+                    return {
+                        id: makeEdgeId(transport),
+                        from: transport.edges[0],
+                        to: transport.edges[1],
+                        color: { color: isLocalEdge ? LOCAL_EDGE_COLOR : colors[transport.type], opacity: isLocalEdge ? 1 : 0.6 },
+                        type: transport.type,
+                        width: isLocalEdge ? 4 : 1,
+                        dashes: isLocalOnly ? [5, 5] : false, // Dashed line for local-only transports
+                        smooth: { type: 'continuous' },
+                        title: title,
+                        isLocal: isLocal,
+                        isLocalOnly: isLocalOnly,
+                        shadow: isLocalEdge ? { enabled: true, color: LOCAL_EDGE_COLOR, size: 10, x: 0, y: 0 } : false
+                    };
+                });
 
             if (network) {
                 // Update existing network - preserve node positions
@@ -918,6 +1206,44 @@
         // Show all edges (respecting current filters)
         function showAllEdges() {
             applyFilters();
+        }
+
+        // Update edge styling for local transports (called after local visor data loads)
+        function updateLocalTransportStyles() {
+            if (!localVisorData || !localVisorData.connected || !edgesDataset) return;
+
+            const localPK = localVisorData.pub_key;
+            const localTransportRemotes = new Set();
+
+            // Build set of remote PKs that are connected to local visor
+            if (localVisorData.transports) {
+                localVisorData.transports.forEach(tp => {
+                    localTransportRemotes.add(tp.remote_pk);
+                });
+            }
+
+            const edgeUpdates = [];
+            edgesDataset.forEach(edge => {
+                // Check if this edge connects to/from local visor OR is marked as local
+                const involvesLocal = edge.from === localPK || edge.to === localPK;
+                const remotePK = edge.from === localPK ? edge.to : edge.from;
+                const isLocalTransport = involvesLocal && localTransportRemotes.has(remotePK);
+                const isLocalEdge = isLocalTransport || edge.isLocal || edge.isLocalOnly;
+
+                if (isLocalEdge) {
+                    edgeUpdates.push({
+                        id: edge.id,
+                        color: { color: LOCAL_EDGE_COLOR, opacity: 1 },
+                        width: 4,
+                        shadow: { enabled: true, color: LOCAL_EDGE_COLOR, size: 10, x: 0, y: 0 }
+                    });
+                }
+            });
+
+            if (edgeUpdates.length > 0) {
+                edgesDataset.update(edgeUpdates);
+                console.log('Updated', edgeUpdates.length, 'local transport edges to cyan');
+            }
         }
 
         function applyFilters() {
@@ -1767,6 +2093,279 @@
             });
         }
 
+        // ============ DATA FLOW ANIMATION SYSTEM ============
+        const flowCanvas = document.getElementById('flow-canvas');
+        const flowCtx = flowCanvas.getContext('2d');
+        let flowParticles = [];
+        let flowAnimationId = null;
+        let lastFlowUpdate = 0;
+
+        // Resize canvas to match network container
+        function resizeFlowCanvas() {
+            const networkEl = document.getElementById('network');
+            flowCanvas.width = networkEl.offsetWidth;
+            flowCanvas.height = networkEl.offsetHeight;
+        }
+
+        // Particle class for data flow visualization
+        class FlowParticle {
+            constructor(fromNode, toNode, speed, color, size) {
+                this.fromNode = fromNode;
+                this.toNode = toNode;
+                this.progress = 0;
+                this.speed = speed || 0.02;
+                this.color = color || '#00ffff';
+                this.size = size || 3;
+                this.opacity = 1;
+            }
+
+            update() {
+                this.progress += this.speed;
+                if (this.progress >= 1) {
+                    return false; // Particle finished
+                }
+                return true;
+            }
+
+            draw(ctx, fromPos, toPos) {
+                if (!fromPos || !toPos) return;
+
+                const x = fromPos.x + (toPos.x - fromPos.x) * this.progress;
+                const y = fromPos.y + (toPos.y - fromPos.y) * this.progress;
+
+                ctx.beginPath();
+                ctx.arc(x, y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = this.opacity * (1 - this.progress * 0.3);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+
+                // Add glow effect
+                ctx.beginPath();
+                ctx.arc(x, y, this.size * 2, 0, Math.PI * 2);
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, this.size * 2);
+                gradient.addColorStop(0, this.color + '80');
+                gradient.addColorStop(1, this.color + '00');
+                ctx.fillStyle = gradient;
+                ctx.fill();
+            }
+        }
+
+        // Spawn particles based on bandwidth and transport activity
+        function spawnFlowParticles() {
+            if (!localVisorData || !localVisorData.connected || !network) return;
+
+            const showDataflow = document.getElementById('show-dataflow').checked;
+            if (!showDataflow) return;
+
+            const localPK = localVisorData.pub_key;
+            const transports = localVisorData.transports || [];
+
+            transports.forEach(tp => {
+                // Spawn particles based on bandwidth delta
+                const sentDelta = tp.sent_delta || 0;
+                const recvDelta = tp.recv_delta || 0;
+                const hasSentData = tp.sent_bytes > 0;
+                const hasRecvData = tp.recv_bytes > 0;
+
+                // Active bandwidth: more particles proportional to bandwidth
+                // Idle with data: occasional ambient particles to show connection exists
+                let sentCount = 0, recvCount = 0;
+
+                if (sentDelta > 0) {
+                    // Active sending: 1-5 particles based on bandwidth
+                    sentCount = Math.min(5, Math.floor(sentDelta / 10240) + 1);
+                } else if (hasSentData && Math.random() < 0.2) {
+                    // Idle but has sent data: occasional ambient particle
+                    sentCount = 1;
+                }
+
+                if (recvDelta > 0) {
+                    // Active receiving: 1-5 particles based on bandwidth
+                    recvCount = Math.min(5, Math.floor(recvDelta / 10240) + 1);
+                } else if (hasRecvData && Math.random() < 0.2) {
+                    // Idle but has received data: occasional ambient particle
+                    recvCount = 1;
+                }
+
+                // Use cyan for local visor transports to match edge color
+                const tpColor = '#00ffff';
+
+                // Outgoing particles (sent) - cyan
+                for (let i = 0; i < sentCount; i++) {
+                    flowParticles.push(new FlowParticle(
+                        localPK,
+                        tp.remote_pk,
+                        0.012 + Math.random() * 0.008,
+                        tpColor,
+                        3 + Math.random() * 2
+                    ));
+                }
+
+                // Incoming particles (received) - magenta
+                for (let i = 0; i < recvCount; i++) {
+                    flowParticles.push(new FlowParticle(
+                        tp.remote_pk,
+                        localPK,
+                        0.012 + Math.random() * 0.008,
+                        '#ff00ff',
+                        3 + Math.random() * 2
+                    ));
+                }
+            });
+
+            // Limit total particles to prevent performance issues
+            if (flowParticles.length > 150) {
+                flowParticles = flowParticles.slice(-150);
+            }
+        }
+
+        // Convert network coordinates to canvas coordinates
+        function networkToCanvas(nodeId) {
+            if (!network) return null;
+            try {
+                const pos = network.getPosition(nodeId);
+                if (!pos) return null;
+                const canvasPos = network.canvasToDOM(pos);
+                return canvasPos;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // Animate flow particles
+        function animateFlow() {
+            const showDataflow = document.getElementById('show-dataflow').checked;
+
+            flowCtx.clearRect(0, 0, flowCanvas.width, flowCanvas.height);
+
+            if (showDataflow && flowParticles.length > 0) {
+                flowParticles = flowParticles.filter(particle => {
+                    const fromPos = networkToCanvas(particle.fromNode);
+                    const toPos = networkToCanvas(particle.toNode);
+
+                    if (fromPos && toPos) {
+                        particle.draw(flowCtx, fromPos, toPos);
+                    }
+
+                    return particle.update();
+                });
+            }
+
+            // Draw local visor glow effect
+            if (localVisorData && localVisorData.connected) {
+                const localPos = networkToCanvas(localVisorData.pub_key);
+                if (localPos) {
+                    const glowSize = 30 + Math.sin(Date.now() / 200) * 5;
+                    const gradient = flowCtx.createRadialGradient(
+                        localPos.x, localPos.y, 0,
+                        localPos.x, localPos.y, glowSize
+                    );
+                    gradient.addColorStop(0, 'rgba(0, 255, 255, 0.4)');
+                    gradient.addColorStop(0.5, 'rgba(255, 0, 255, 0.2)');
+                    gradient.addColorStop(1, 'rgba(0, 255, 255, 0)');
+                    flowCtx.beginPath();
+                    flowCtx.arc(localPos.x, localPos.y, glowSize, 0, Math.PI * 2);
+                    flowCtx.fillStyle = gradient;
+                    flowCtx.fill();
+                }
+            }
+
+            flowAnimationId = requestAnimationFrame(animateFlow);
+        }
+
+        // Start flow animation
+        function startFlowAnimation() {
+            resizeFlowCanvas();
+            if (!flowAnimationId) {
+                animateFlow();
+            }
+            // Spawn particles periodically based on bandwidth
+            setInterval(() => {
+                spawnFlowParticles();
+            }, 500);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', resizeFlowCanvas);
+
+        // Update local visor display to show routes and bandwidth activity
+        function updateLocalVisorDisplayEnhanced() {
+            const section = document.getElementById('local-visor-section');
+            const content = document.getElementById('local-visor-content');
+            if (!section || !content) return;
+
+            if (!localVisorData || !localVisorData.connected) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'block';
+            const pk = localVisorData.pub_key;
+            const tps = localVisorData.transports || [];
+            const routes = localVisorData.routes || [];
+            const routesCount = localVisorData.routes_count || routes.length;
+
+            // Calculate total traffic and activity
+            let totalSent = 0, totalRecv = 0;
+            let totalSentDelta = localVisorData.total_sent_delta || 0;
+            let totalRecvDelta = localVisorData.total_recv_delta || 0;
+            tps.forEach(t => {
+                totalSent += t.sent_bytes || 0;
+                totalRecv += t.recv_bytes || 0;
+            });
+
+            const isActive = totalSentDelta > 0 || totalRecvDelta > 0;
+            const activityIndicator = isActive
+                ? '<span class="bandwidth-indicator active">● ACTIVE</span>'
+                : '<span style="color:#666;font-size:0.7em;margin-left:4px;">idle</span>';
+
+            content.innerHTML = `
+                <div style="font-size:0.85em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <strong style="color:#00ffff;">⬢ Local Visor</strong>${activityIndicator}<br>
+                        <span style="color:#888;font-size:0.8em;">${pk.substring(0, 16)}...</span>
+                    </div>
+                    <button onclick="focusLocalVisor()" style="background:linear-gradient(135deg,#00ffff,#ff00ff);color:#000;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.75em;font-weight:bold;">
+                        FOCUS
+                    </button>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.8em;">
+                    <div>Transports: <strong>${tps.length}</strong></div>
+                    <div>Routes: <strong>${routesCount}</strong></div>
+                    <div>Sent: <strong>${formatBytes(totalSent)}</strong> ${totalSentDelta > 0 ? '<span style="color:#00ff88;">+' + formatBytes(totalSentDelta) + '/s</span>' : ''}</div>
+                    <div>Recv: <strong>${formatBytes(totalRecv)}</strong> ${totalRecvDelta > 0 ? '<span style="color:#00ff88;">+' + formatBytes(totalRecvDelta) + '/s</span>' : ''}</div>
+                </div>
+                <div style="margin-top:8px;font-size:0.75em;color:#888;">Transports:</div>
+                <div style="max-height:100px;overflow-y:auto;font-size:0.75em;">
+                    ${tps.map(t => {
+                        const isActive = (t.sent_delta || 0) > 0 || (t.recv_delta || 0) > 0;
+                        return `
+                        <div style="padding:3px 0;border-bottom:1px solid #0f3460;cursor:pointer;${isActive ? 'background:rgba(0,255,200,0.1);' : ''}" onclick="focusNode('${t.remote_pk}')">
+                            <span style="color:${colors[t.type] || '#888'}">${t.type}</span>
+                            → ${t.remote_pk.substring(0, 8)}...
+                            <span style="color:#666;float:right;">↑${formatBytes(t.sent_bytes)} ↓${formatBytes(t.recv_bytes)}</span>
+                        </div>
+                    `;}).join('')}
+                </div>
+                ${routes.length > 0 ? `
+                <div style="margin-top:8px;font-size:0.75em;color:#ff00ff;">Active Routes (${routes.length}):</div>
+                <div style="max-height:100px;overflow-y:auto;font-size:0.7em;">
+                    ${routes.slice(0, 15).map(r => `
+                        <div style="padding:3px 4px;border-bottom:1px solid rgba(255,0,255,0.2);display:flex;align-items:center;gap:4px;">
+                            <span style="color:#ff00ff;font-size:0.9em;">⬡</span>
+                            <span style="color:#00ffc8;min-width:50px;">${r.type}</span>
+                            ${r.dst_pk ? `<span style="color:#ff00ff;cursor:pointer;text-decoration:underline;" onclick="focusNode('${r.dst_pk}')" title="Click to focus">${r.dst_pk.substring(0,8)}...</span>` : ''}
+                            ${r.next_hop_pk && r.next_hop_pk !== r.dst_pk ? `<span style="color:#888;">via ${r.next_hop_pk.substring(0,6)}</span>` : ''}
+                        </div>
+                    `).join('')}
+                    ${routes.length > 15 ? `<div style="color:#666;padding:2px;text-align:center;">...and ${routes.length - 15} more routes</div>` : ''}
+                </div>
+                ` : ''}
+            `;
+        }
+        // ============ END DATA FLOW ANIMATION ============
+
         document.getElementById('show-stcpr').addEventListener('change', applyFilters);
         document.getElementById('show-sudph').addEventListener('change', applyFilters);
         document.getElementById('show-dmsg').addEventListener('change', applyFilters);
@@ -1830,6 +2429,20 @@
 
         checkServer();
         fetchAllData();
+
+        // Start data flow animation after a short delay
+        setTimeout(() => {
+            startFlowAnimation();
+        }, 1000);
+
+        // Add event listeners for animation controls
+        document.getElementById('show-dataflow').addEventListener('change', () => {
+            if (!document.getElementById('show-dataflow').checked) {
+                flowParticles = [];
+                flowCtx.clearRect(0, 0, flowCanvas.width, flowCanvas.height);
+            }
+        });
+        document.getElementById('show-routes').addEventListener('change', () => { applyFilters(); updateLegend(); });
     </script>
 </body>
 </html>

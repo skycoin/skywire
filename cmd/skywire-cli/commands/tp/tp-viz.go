@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/tpviz"
 )
@@ -25,6 +26,7 @@ var (
 	vizNoCache       bool
 	vizNoAutoRefresh bool
 	vizSurveyDir     string
+	vizNoVisor       bool
 )
 
 func init() {
@@ -40,6 +42,8 @@ func init() {
 	vizCmd.Flags().BoolVar(&vizNoCache, "no-cache", false, "disable caching, always fetch fresh data")
 	vizCmd.Flags().BoolVar(&vizNoAutoRefresh, "no-auto-refresh", false, "disable auto-refresh of cache")
 	vizCmd.Flags().StringVar(&vizSurveyDir, "survey-dir", "", "directory containing visor surveys for IP-based grouping (node-info.json files)")
+	vizCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "visor RPC address (connects if available to show local transports/traffic)")
+	vizCmd.Flags().BoolVar(&vizNoVisor, "no-visor", false, "disable visor RPC connection (don't show local transport overlay)")
 }
 
 var vizCmd = &cobra.Command{
@@ -69,6 +73,11 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 			NoCache:     vizNoCache,
 			AutoRefresh: !vizNoAutoRefresh,
 			SurveyDir:   vizSurveyDir,
+		}
+
+		// Connect to visor RPC unless disabled
+		if !vizNoVisor {
+			cfg.VisorRPCAddr = clirpc.Addr
 		}
 
 		server := tpviz.NewServer(cfg)

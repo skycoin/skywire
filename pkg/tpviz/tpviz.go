@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 //go:embed index.html
@@ -48,6 +51,9 @@ type Config struct {
 	// SurveyDir is the directory containing visor surveys (node-info.json files)
 	// Used for IP-based grouping without exposing actual IP addresses
 	SurveyDir string
+	// VisorRPCAddr is the address of the local visor RPC server
+	// If set, will try to connect and show local transport/route overlay
+	VisorRPCAddr string
 }
 
 // DefaultConfig returns a Config with default values
@@ -78,6 +84,56 @@ type Server struct {
 	// Cached IP groups data (refreshed periodically)
 	ipGroupsMu    sync.RWMutex
 	ipGroupsCache *ipGroupsResponse
+
+	// Local visor RPC connection (optional)
+	visorMu        sync.RWMutex
+	visorAPI       visor.API
+	visorConn      net.Conn
+	visorCache     *LocalVisorData
+	prevBandwidth  map[string]bandwidthSnapshot // track previous bandwidth for deltas
+}
+
+// LocalVisorData holds data from the local visor for overlay display
+type LocalVisorData struct {
+	Connected   bool             `json:"connected"`
+	PubKey      string           `json:"pub_key,omitempty"`
+	Transports  []LocalTransport `json:"transports,omitempty"`
+	Routes      []LocalRoute     `json:"routes,omitempty"`
+	RoutesCount int              `json:"routes_count"`
+	LastUpdated time.Time        `json:"last_updated"`
+	// Bandwidth deltas for animation (bytes since last update)
+	TotalSentDelta uint64 `json:"total_sent_delta"`
+	TotalRecvDelta uint64 `json:"total_recv_delta"`
+}
+
+// LocalTransport represents a transport from the local visor with traffic stats
+type LocalTransport struct {
+	ID        string `json:"id"`
+	RemotePK  string `json:"remote_pk"`
+	Type      string `json:"type"`
+	Label     string `json:"label,omitempty"`
+	IsSetup   bool   `json:"is_setup"`
+	SentBytes uint64 `json:"sent_bytes"`
+	RecvBytes uint64 `json:"recv_bytes"`
+	// Bandwidth deltas for animation
+	SentDelta uint64 `json:"sent_delta"`
+	RecvDelta uint64 `json:"recv_delta"`
+}
+
+// LocalRoute represents a routing rule from the local visor
+type LocalRoute struct {
+	RouteID     uint32 `json:"route_id"`
+	Type        string `json:"type"` // "forward", "consume", "intermediary"
+	SrcPK       string `json:"src_pk,omitempty"`
+	DstPK       string `json:"dst_pk,omitempty"`
+	NextHopPK   string `json:"next_hop_pk,omitempty"` // For forward/intermediary routes
+	TransportID string `json:"transport_id,omitempty"`
+}
+
+// bandwidthSnapshot tracks bandwidth for delta calculation
+type bandwidthSnapshot struct {
+	sent uint64
+	recv uint64
 }
 
 // ipGroupsResponse is the cached response for /api/ip-groups
@@ -90,9 +146,10 @@ type ipGroupsResponse struct {
 // NewServer creates a new visualizer server with the given config
 func NewServer(cfg Config) *Server {
 	s := &Server{
-		config:   cfg,
-		mux:      http.NewServeMux(),
-		stopChan: make(chan struct{}),
+		config:        cfg,
+		mux:           http.NewServeMux(),
+		stopChan:      make(chan struct{}),
+		prevBandwidth: make(map[string]bandwidthSnapshot),
 	}
 	s.setupRoutes()
 	return s
@@ -125,6 +182,9 @@ func (s *Server) setupRoutes() {
 
 	// API endpoint for IP-based grouping (when survey data is available)
 	s.mux.HandleFunc("/api/ip-groups", s.handleIPGroups)
+
+	// API endpoint for local visor data (transports, routes, traffic stats)
+	s.mux.HandleFunc("/api/local-visor", s.handleLocalVisor)
 
 	// Health check - available at both /health and /api/health
 	// /api/health is used when embedded in other servers that have their own /health
@@ -641,6 +701,11 @@ func (s *Server) ListenAndServe() error {
 		fmt.Printf("Auto-refresh: enabled\n")
 	}
 
+	// Try to connect to local visor RPC if configured
+	if s.config.VisorRPCAddr != "" {
+		s.connectToVisor()
+	}
+
 	// Initial cache population
 	s.refreshCache()
 
@@ -653,6 +718,267 @@ func (s *Server) ListenAndServe() error {
 // Stop stops the server and cleans up resources
 func (s *Server) Stop() {
 	close(s.stopChan)
+	s.visorMu.Lock()
+	if s.visorAPI != nil {
+		_ = s.visorAPI.Close()
+	}
+	s.visorConn = nil
+	s.visorAPI = nil
+	s.visorMu.Unlock()
+}
+
+// connectToVisor attempts to connect to the local visor RPC
+func (s *Server) connectToVisor() {
+	// Initial connection attempt
+	s.tryVisorConnect()
+
+	// Start background connection maintainer
+	go s.visorConnectionMaintainer()
+}
+
+// tryVisorConnect attempts a single connection to the visor RPC
+// Returns true if connected successfully
+func (s *Server) tryVisorConnect() bool {
+	s.visorMu.Lock()
+	if s.visorAPI != nil {
+		s.visorMu.Unlock()
+		return true // Already connected
+	}
+	s.visorMu.Unlock()
+
+	conn, err := net.DialTimeout("tcp", s.config.VisorRPCAddr, 3*time.Second)
+	if err != nil {
+		s.visorMu.Lock()
+		s.visorCache = &LocalVisorData{Connected: false, LastUpdated: time.Now()}
+		s.visorMu.Unlock()
+		return false
+	}
+
+	// Set TCP keepalive
+	if tc, ok := conn.(*net.TCPConn); ok {
+		tc.SetKeepAlive(true)
+		tc.SetKeepAlivePeriod(10 * time.Second)
+	}
+
+	log := logging.MustGetLogger("tpviz")
+	api := visor.NewRPCClient(log, conn, visor.RPCPrefix, 10*time.Second)
+
+	s.visorMu.Lock()
+	s.visorConn = conn
+	s.visorAPI = api
+	s.visorMu.Unlock()
+
+	// Fetch initial data
+	s.refreshVisorData()
+
+	s.visorMu.RLock()
+	if s.visorCache != nil && s.visorCache.Connected {
+		fmt.Printf("Visor RPC: connected to %s (PK: %s...)\n", s.config.VisorRPCAddr, s.visorCache.PubKey[:16])
+		fmt.Printf("  Transports: %d, Routes: %d\n", len(s.visorCache.Transports), s.visorCache.RoutesCount)
+	}
+	s.visorMu.RUnlock()
+
+	return true
+}
+
+// visorConnectionMaintainer runs in background to maintain visor RPC connection
+func (s *Server) visorConnectionMaintainer() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	wasConnected := false
+	consecutiveFailures := 0
+
+	for {
+		select {
+		case <-s.stopChan:
+			return
+		case <-ticker.C:
+			s.visorMu.RLock()
+			api := s.visorAPI
+			s.visorMu.RUnlock()
+
+			if api == nil {
+				// Not connected, try to connect
+				if s.tryVisorConnect() {
+					if !wasConnected {
+						fmt.Println("Visor RPC: connection established")
+					}
+					wasConnected = true
+					consecutiveFailures = 0
+				} else {
+					consecutiveFailures++
+					if wasConnected || consecutiveFailures == 1 {
+						fmt.Printf("Visor RPC: connection failed (attempt %d)\n", consecutiveFailures)
+					}
+					wasConnected = false
+				}
+			} else {
+				// Connected, do a health check by refreshing data
+				s.refreshVisorData()
+
+				s.visorMu.RLock()
+				stillConnected := s.visorCache != nil && s.visorCache.Connected
+				s.visorMu.RUnlock()
+
+				if !stillConnected {
+					fmt.Println("Visor RPC: connection lost, will retry...")
+					wasConnected = false
+				} else if !wasConnected {
+					fmt.Println("Visor RPC: connection restored")
+					wasConnected = true
+				}
+			}
+		}
+	}
+}
+
+// refreshVisorData fetches current data from the visor RPC
+func (s *Server) refreshVisorData() {
+	s.visorMu.RLock()
+	api := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if api == nil {
+		// Not connected, background maintainer will handle reconnection
+		return
+	}
+
+	data := &LocalVisorData{
+		Connected:   true,
+		LastUpdated: time.Now(),
+	}
+
+	// Get overview (includes PK and transports)
+	overview, err := api.Overview()
+	if err != nil {
+		// Connection lost, mark as disconnected and close connection
+		s.visorMu.Lock()
+		if s.visorAPI != nil {
+			_ = s.visorAPI.Close() // Close API first (also closes underlying conn)
+		}
+		s.visorConn = nil
+		s.visorAPI = nil
+		s.visorCache = &LocalVisorData{Connected: false, LastUpdated: time.Now()}
+		s.visorMu.Unlock()
+		return
+	}
+
+	data.PubKey = overview.PubKey.String()
+	data.RoutesCount = overview.RoutesCount
+
+	// Track total bandwidth for animation
+	var totalSent, totalRecv uint64
+
+	for _, tp := range overview.Transports {
+		lt := LocalTransport{
+			ID:       tp.ID.String(),
+			RemotePK: tp.Remote.String(),
+			Type:     string(tp.Type),
+			Label:    string(tp.Label),
+			IsSetup:  tp.IsSetup,
+		}
+		if tp.Log != nil {
+			if tp.Log.RecvBytes != nil {
+				lt.RecvBytes = *tp.Log.RecvBytes
+				totalRecv += lt.RecvBytes
+			}
+			if tp.Log.SentBytes != nil {
+				lt.SentBytes = *tp.Log.SentBytes
+				totalSent += lt.SentBytes
+			}
+		}
+
+		// Calculate delta from previous snapshot
+		tpKey := tp.ID.String()
+		if prev, ok := s.prevBandwidth[tpKey]; ok {
+			if lt.SentBytes >= prev.sent {
+				lt.SentDelta = lt.SentBytes - prev.sent
+			}
+			if lt.RecvBytes >= prev.recv {
+				lt.RecvDelta = lt.RecvBytes - prev.recv
+			}
+		}
+		// Update snapshot
+		s.prevBandwidth[tpKey] = bandwidthSnapshot{sent: lt.SentBytes, recv: lt.RecvBytes}
+
+		data.Transports = append(data.Transports, lt)
+	}
+
+	// Calculate total deltas
+	totalKey := "__total__"
+	if prev, ok := s.prevBandwidth[totalKey]; ok {
+		if totalSent >= prev.sent {
+			data.TotalSentDelta = totalSent - prev.sent
+		}
+		if totalRecv >= prev.recv {
+			data.TotalRecvDelta = totalRecv - prev.recv
+		}
+	}
+	s.prevBandwidth[totalKey] = bandwidthSnapshot{sent: totalSent, recv: totalRecv}
+
+	// Fetch routing rules
+	rules, err := api.RoutingRules()
+	if err == nil {
+		for _, rule := range rules {
+			summary := rule.Summary()
+			if summary == nil {
+				continue
+			}
+
+			lr := LocalRoute{
+				RouteID: uint32(summary.KeyRouteID),
+			}
+
+			switch summary.Type.String() {
+			case "Consume":
+				lr.Type = "consume"
+				if summary.ConsumeFields != nil {
+					lr.SrcPK = summary.ConsumeFields.RouteDescriptor.SrcPK.String()
+					lr.DstPK = summary.ConsumeFields.RouteDescriptor.DstPK.String()
+				}
+			case "Forward":
+				lr.Type = "forward"
+				if summary.ForwardFields != nil {
+					lr.SrcPK = summary.ForwardFields.RouteDescriptor.SrcPK.String()
+					lr.DstPK = summary.ForwardFields.RouteDescriptor.DstPK.String()
+					lr.TransportID = summary.ForwardFields.NextTID.String()
+				}
+			case "IntermediaryForward":
+				lr.Type = "intermediary"
+				if summary.IntermediaryForwardFields != nil {
+					lr.TransportID = summary.IntermediaryForwardFields.NextTID.String()
+				}
+			}
+
+			data.Routes = append(data.Routes, lr)
+		}
+	}
+
+	s.visorMu.Lock()
+	s.visorCache = data
+	s.visorMu.Unlock()
+}
+
+// handleLocalVisor returns data about the local visor's transports and routes
+func (s *Server) handleLocalVisor(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Refresh data on each request (or could use cached with periodic refresh)
+	if s.config.VisorRPCAddr != "" {
+		s.refreshVisorData()
+	}
+
+	s.visorMu.RLock()
+	cache := s.visorCache
+	s.visorMu.RUnlock()
+
+	if cache == nil {
+		cache = &LocalVisorData{Connected: false}
+	}
+
+	json.NewEncoder(w).Encode(cache) //nolint:errcheck,gosec
 }
 
 func fetchURL(url string) (string, error) {
