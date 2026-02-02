@@ -47,6 +47,9 @@ func init() {
 		sk.Set(os.Getenv("DMSGCURL_SK")) //nolint:errcheck,gosec
 	}
 	logCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
+	logCmd.Flags().BoolVar(&runCleanup, "cleanup", true, "run cleanup after collection (remove old/invalid files)")
+	logCmd.Flags().StringVar(&backupDir, "backup-dir", "log_backups", "backup directory to also clean")
+	logCmd.Flags().IntVar(&maxAgeDays, "max-age", 7, "maximum age in days for files before deletion")
 }
 
 var logCmd = &cobra.Command{
@@ -219,7 +222,28 @@ var logCmd = &cobra.Command{
 				log.Warnf("Unable to remove directory %s", key)
 			}
 		}
-		log.Infof("Process Duration: %s", time.Since(start))
+		log.Infof("Collection Duration: %s", time.Since(start))
+
+		// Run cleanup if enabled
+		if runCleanup {
+			cleanupStart := time.Now()
+			log.Info("Running cleanup...")
+
+			// Clean the collection directory (current working directory)
+			cleanupDirectory(log, ".", maxAgeDays)
+
+			// Also clean the backup directory if it exists
+			// Need to go back to original directory first
+			if err := os.Chdir(".."); err == nil {
+				if _, err := os.Stat(backupDir); err == nil {
+					cleanupDirectory(log, backupDir, maxAgeDays)
+				}
+			}
+
+			log.Infof("Cleanup Duration: %s", time.Since(cleanupStart))
+		}
+
+		log.Infof("Total Process Duration: %s", time.Since(start))
 	},
 }
 
@@ -381,4 +405,144 @@ type httpError struct {
 
 func (e *httpError) Error() string {
 	return fmt.Sprintf("http error: %d", e.Status)
+}
+
+// cleanupDirectory performs all cleanup operations on a directory
+func cleanupDirectory(log *logging.Logger, dir string, maxAgeDays int) {
+	log.Infof("Cleaning directory: %s", dir)
+
+	// Get list of subdirectories (each is a visor public key)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		log.WithError(err).Warnf("Failed to read directory %s", dir)
+		return
+	}
+
+	var removedFiles, removedDirs int
+	maxAge := time.Duration(maxAgeDays) * 24 * time.Hour
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		visorDir := dir + "/" + entry.Name()
+
+		// Process files in this visor directory
+		files, err := os.ReadDir(visorDir)
+		if err != nil {
+			continue
+		}
+
+		for _, file := range files {
+			if file.IsDir() {
+				continue
+			}
+
+			filePath := visorDir + "/" + file.Name()
+			info, err := file.Info()
+			if err != nil {
+				continue
+			}
+
+			shouldRemove := false
+			reason := ""
+
+			// Check file age for JSON files
+			if strings.HasSuffix(file.Name(), ".json") {
+				if time.Since(info.ModTime()) > maxAge {
+					shouldRemove = true
+					reason = "old file"
+				} else if info.Size() == 0 {
+					shouldRemove = true
+					reason = "empty file"
+				} else if !isValidJSON(filePath) {
+					shouldRemove = true
+					reason = "invalid JSON"
+				}
+			}
+
+			// Check for HTTP 404 error files (typically 18-19 bytes)
+			if info.Size() == 18 || info.Size() == 19 {
+				shouldRemove = true
+				reason = "HTTP 404 error response"
+			}
+
+			// Check for empty files
+			if info.Size() == 0 {
+				shouldRemove = true
+				reason = "empty file"
+			}
+
+			// Check CSV files for error content
+			if strings.HasSuffix(file.Name(), ".csv") {
+				if containsErrorContent(filePath) {
+					shouldRemove = true
+					reason = "contains error content"
+				} else {
+					// Strip CSV header if present
+					stripCSVHeader(filePath, log)
+				}
+			}
+
+			if shouldRemove {
+				if err := os.Remove(filePath); err == nil {
+					log.Debugf("Removed %s (%s)", filePath, reason)
+					removedFiles++
+				}
+			}
+		}
+
+		// Remove empty directories
+		remaining, _ := os.ReadDir(visorDir)
+		if len(remaining) == 0 {
+			if err := os.Remove(visorDir); err == nil {
+				log.Debugf("Removed empty directory: %s", visorDir)
+				removedDirs++
+			}
+		}
+	}
+
+	log.Infof("Cleanup complete for %s: removed %d files and %d empty directories", dir, removedFiles, removedDirs)
+}
+
+// isValidJSON checks if a file contains valid JSON
+func isValidJSON(filePath string) bool {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return false
+	}
+	var js json.RawMessage
+	return json.Unmarshal(data, &js) == nil
+}
+
+// containsErrorContent checks if a file contains HTTP error messages
+func containsErrorContent(filePath string) bool {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return false
+	}
+	content := string(data)
+	return strings.Contains(content, "404 page not found") ||
+		strings.Contains(content, "Not Found")
+}
+
+// stripCSVHeader removes the header line if it matches the old transport log format
+func stripCSVHeader(filePath string, log *logging.Logger) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return
+	}
+
+	content := string(data)
+	if strings.HasPrefix(content, "tp_id,recv,sent,time_stamp") {
+		// Find the first newline and remove everything before it
+		idx := strings.Index(content, "\n")
+		if idx != -1 {
+			newContent := content[idx+1:]
+			if err := os.WriteFile(filePath, []byte(newContent), 0600); err == nil {
+				log.Debugf("Stripped CSV header from %s", filePath)
+			}
+		}
+	}
 }
