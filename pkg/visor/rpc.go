@@ -848,3 +848,33 @@ func (r *RPC) ReinitiateModule(module string, _ *struct{}) (err error) {
 
 	return r.visor.ReinitiateModule(module)
 }
+
+// StartUIServer starts the embedded UI server.
+func (r *RPC) StartUIServer(addr *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StartUIServer", addr)(nil, &err)
+
+	addrStr := ""
+	if addr != nil {
+		addrStr = *addr
+	}
+	return r.visor.StartUIServer(addrStr)
+}
+
+// StopUIServer stops the embedded UI server.
+func (r *RPC) StopUIServer(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopUIServer", nil)(nil, &err)
+
+	return r.visor.StopUIServer()
+}
+
+// UIServerStatus returns the status of the UI server.
+func (r *RPC) UIServerStatus(_ *struct{}, out *UIServerStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "UIServerStatus", nil)(out, &err)
+
+	status, err := r.visor.UIServerStatus()
+	if err != nil {
+		return err
+	}
+	*out = *status
+	return nil
+}

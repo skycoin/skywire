@@ -121,6 +121,12 @@ type Visor struct {
 
 	existingTpOnly   bool       // when true, don't create new transports for routing
 	existingTpOnlyMu sync.Mutex // protects existingTpOnly
+
+	// UI server state (dynamically started/stopped via RPC)
+	uiServerMu      sync.Mutex
+	uiServer        *http.Server
+	uiServerAddr    string
+	uiServerRunning bool
 }
 
 // todo: consider moving module closing to the module system

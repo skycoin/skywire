@@ -33,6 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/tpviz"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
@@ -142,8 +143,20 @@ type API interface {
 	//uptime-tracker tools
 	FetchUptimeTrackerData(pk string) ([]byte, error)
 
+	//ui server controls
+	StartUIServer(addr string) error
+	StopUIServer() error
+	UIServerStatus() (*UIServerStatus, error)
+
 	// Close closes the API connection (for RPC clients)
 	Close() error
+}
+
+// UIServerStatus contains the status of the UI server.
+type UIServerStatus struct {
+	Running   bool   `json:"running"`
+	LocalAddr string `json:"local_addr,omitempty"`
+	DmsgPort  uint16 `json:"dmsg_port,omitempty"`
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -1982,4 +1995,108 @@ func shutdownDmsgDependentComponents(v *Visor, log *logging.Logger) error {
 		return fmt.Errorf("encountered %d errors during shutdown", len(errs))
 	}
 	return nil
+}
+
+// StartUIServer starts the embedded UI server on the specified address.
+// If addr is empty, uses the configured LocalAddr or defaults to localhost:8081.
+func (v *Visor) StartUIServer(addr string) error {
+	v.uiServerMu.Lock()
+	defer v.uiServerMu.Unlock()
+
+	if v.uiServerRunning {
+		return fmt.Errorf("UI server is already running on %s", v.uiServerAddr)
+	}
+
+	// Determine address
+	if addr == "" {
+		if v.conf.UIServer != nil && v.conf.UIServer.LocalAddr != "" {
+			addr = v.conf.UIServer.LocalAddr
+		} else {
+			addr = "localhost:8081"
+		}
+	}
+
+	// Create tpviz server
+	tpvizCfg := tpviz.DefaultConfig()
+	tpvizServer := tpviz.NewServer(tpvizCfg)
+
+	// Set visor API directly via adapter
+	adapter := &visorAPIAdapter{v: v}
+	tpvizServer.SetVisorAPI(adapter, v.conf.PK.Hex())
+
+	// Start cache refresh
+	tpvizServer.Start()
+
+	// Start HTTP server
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		tpvizServer.Stop()
+		return fmt.Errorf("failed to listen on %s: %w", addr, err)
+	}
+
+	srv := &http.Server{
+		Handler:           tpvizServer.Handler(),
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       90 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	go func() {
+		v.log.Infof("UI server started on http://%s", addr)
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			v.log.WithError(err).Error("UI server exited with error")
+		}
+	}()
+
+	v.uiServer = srv
+	v.uiServerAddr = addr
+	v.uiServerRunning = true
+
+	return nil
+}
+
+// StopUIServer stops the embedded UI server if running.
+func (v *Visor) StopUIServer() error {
+	v.uiServerMu.Lock()
+	defer v.uiServerMu.Unlock()
+
+	if !v.uiServerRunning {
+		return fmt.Errorf("UI server is not running")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := v.uiServer.Shutdown(ctx); err != nil {
+		v.log.WithError(err).Warn("UI server shutdown error")
+	}
+
+	v.uiServer = nil
+	v.uiServerAddr = ""
+	v.uiServerRunning = false
+
+	v.log.Info("UI server stopped")
+	return nil
+}
+
+// UIServerStatus returns the current status of the UI server.
+func (v *Visor) UIServerStatus() (*UIServerStatus, error) {
+	v.uiServerMu.Lock()
+	defer v.uiServerMu.Unlock()
+
+	status := &UIServerStatus{
+		Running: v.uiServerRunning,
+	}
+
+	if v.uiServerRunning {
+		status.LocalAddr = v.uiServerAddr
+	}
+
+	// Include configured DMSG port if UI server config exists
+	if v.conf.UIServer != nil {
+		status.DmsgPort = v.conf.UIServer.DmsgPort
+	}
+
+	return status, nil
 }

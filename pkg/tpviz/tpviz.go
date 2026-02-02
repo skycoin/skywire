@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/rpc"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,9 +55,6 @@ type Config struct {
 	// SurveyDir is the directory containing visor surveys (node-info.json files)
 	// Used for IP-based grouping without exposing actual IP addresses
 	SurveyDir string
-	// VisorRPCAddr is the address of the local visor RPC server
-	// If set, will try to connect and show local transport/route overlay
-	VisorRPCAddr string
 }
 
 // DefaultConfig returns a Config with default values
@@ -104,46 +100,6 @@ type TransportSummary struct {
 	Log     *transport.LogEntry `json:"log,omitempty"`
 	IsSetup bool                `json:"is_setup"`
 	Label   transport.Label     `json:"label"`
-}
-
-// rpcVisorClient is a local RPC client wrapper that implements VisorAPI.
-// It uses the standard net/rpc package to call visor RPC methods.
-type rpcVisorClient struct {
-	conn   net.Conn
-	client *rpc.Client
-}
-
-// RPCPrefix is the prefix for visor RPC methods.
-const RPCPrefix = "app-visor"
-
-// newRPCVisorClient creates a new RPC client wrapper for the visor.
-func newRPCVisorClient(conn net.Conn) *rpcVisorClient {
-	return &rpcVisorClient{
-		conn:   conn,
-		client: rpc.NewClient(conn),
-	}
-}
-
-// Overview implements VisorAPI.
-func (c *rpcVisorClient) Overview() (*VisorOverview, error) {
-	var out VisorOverview
-	err := c.client.Call(RPCPrefix+".Overview", &struct{}{}, &out)
-	return &out, err
-}
-
-// RoutingRules implements VisorAPI.
-func (c *rpcVisorClient) RoutingRules() ([]routing.Rule, error) {
-	var out []routing.Rule
-	err := c.client.Call(RPCPrefix+".RoutingRules", &struct{}{}, &out)
-	return out, err
-}
-
-// Close implements VisorAPI.
-func (c *rpcVisorClient) Close() error {
-	if c.client != nil {
-		return c.client.Close()
-	}
-	return nil
 }
 
 // Server is the transport visualizer HTTP server
@@ -791,11 +747,7 @@ func (s *Server) ListenAndServe() error {
 	if s.config.AutoRefresh {
 		fmt.Printf("Auto-refresh: enabled\n")
 	}
-
-	// Try to connect to local visor RPC if configured
-	if s.config.VisorRPCAddr != "" {
-		s.connectToVisor()
-	}
+	fmt.Println("Note: Local visor data overlay is available when running from the visor (use 'skywire cli tp viz --visor')")
 
 	// Initial cache population
 	s.refreshCache()
@@ -818,112 +770,7 @@ func (s *Server) Stop() {
 	s.visorMu.Unlock()
 }
 
-// connectToVisor attempts to connect to the local visor RPC
-func (s *Server) connectToVisor() {
-	// Initial connection attempt
-	s.tryVisorConnect()
-
-	// Start background connection maintainer
-	go s.visorConnectionMaintainer()
-}
-
-// tryVisorConnect attempts a single connection to the visor RPC
-// Returns true if connected successfully
-func (s *Server) tryVisorConnect() bool {
-	s.visorMu.Lock()
-	if s.visorAPI != nil {
-		s.visorMu.Unlock()
-		return true // Already connected
-	}
-	s.visorMu.Unlock()
-
-	conn, err := net.DialTimeout("tcp", s.config.VisorRPCAddr, 3*time.Second)
-	if err != nil {
-		s.visorMu.Lock()
-		s.visorCache = &LocalVisorData{Connected: false, LastUpdated: time.Now()}
-		s.visorMu.Unlock()
-		return false
-	}
-
-	// Set TCP keepalive
-	if tc, ok := conn.(*net.TCPConn); ok {
-		tc.SetKeepAlive(true)
-		tc.SetKeepAlivePeriod(10 * time.Second)
-	}
-
-	api := newRPCVisorClient(conn)
-
-	s.visorMu.Lock()
-	s.visorConn = conn
-	s.visorAPI = api
-	s.visorMu.Unlock()
-
-	// Fetch initial data
-	s.refreshVisorData()
-
-	s.visorMu.RLock()
-	if s.visorCache != nil && s.visorCache.Connected {
-		fmt.Printf("Visor RPC: connected to %s (PK: %s...)\n", s.config.VisorRPCAddr, s.visorCache.PubKey[:16])
-		fmt.Printf("  Transports: %d, Routes: %d\n", len(s.visorCache.Transports), s.visorCache.RoutesCount)
-	}
-	s.visorMu.RUnlock()
-
-	return true
-}
-
-// visorConnectionMaintainer runs in background to maintain visor RPC connection
-func (s *Server) visorConnectionMaintainer() {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	wasConnected := false
-	consecutiveFailures := 0
-
-	for {
-		select {
-		case <-s.stopChan:
-			return
-		case <-ticker.C:
-			s.visorMu.RLock()
-			api := s.visorAPI
-			s.visorMu.RUnlock()
-
-			if api == nil {
-				// Not connected, try to connect
-				if s.tryVisorConnect() {
-					if !wasConnected {
-						fmt.Println("Visor RPC: connection established")
-					}
-					wasConnected = true
-					consecutiveFailures = 0
-				} else {
-					consecutiveFailures++
-					if wasConnected || consecutiveFailures == 1 {
-						fmt.Printf("Visor RPC: connection failed (attempt %d)\n", consecutiveFailures)
-					}
-					wasConnected = false
-				}
-			} else {
-				// Connected, do a health check by refreshing data
-				s.refreshVisorData()
-
-				s.visorMu.RLock()
-				stillConnected := s.visorCache != nil && s.visorCache.Connected
-				s.visorMu.RUnlock()
-
-				if !stillConnected {
-					fmt.Println("Visor RPC: connection lost, will retry...")
-					wasConnected = false
-				} else if !wasConnected {
-					fmt.Println("Visor RPC: connection restored")
-					wasConnected = true
-				}
-			}
-		}
-	}
-}
-
-// refreshVisorData fetches current data from the visor RPC
+// refreshVisorData fetches current data from the visor API (when embedded in visor)
 func (s *Server) refreshVisorData() {
 	s.visorMu.RLock()
 	api := s.visorAPI
@@ -1055,8 +902,12 @@ func (s *Server) handleLocalVisor(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	// Refresh data on each request (or could use cached with periodic refresh)
-	if s.config.VisorRPCAddr != "" {
+	// Refresh data on each request (only when visor API is set via SetVisorAPI - embedded mode)
+	s.visorMu.RLock()
+	hasAPI := s.visorAPI != nil
+	s.visorMu.RUnlock()
+
+	if hasAPI {
 		s.refreshVisorData()
 	}
 

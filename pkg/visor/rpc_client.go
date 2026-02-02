@@ -672,6 +672,23 @@ func (rc *rpcClient) ReinitiateModule(module string) error {
 	return rc.Call("ReinitiateModule", &module, &struct{}{})
 }
 
+// StartUIServer calls StartUIServer.
+func (rc *rpcClient) StartUIServer(addr string) error {
+	return rc.Call("StartUIServer", &addr, &struct{}{})
+}
+
+// StopUIServer calls StopUIServer.
+func (rc *rpcClient) StopUIServer() error {
+	return rc.Call("StopUIServer", &struct{}{}, &struct{}{})
+}
+
+// UIServerStatus calls UIServerStatus.
+func (rc *rpcClient) UIServerStatus() (*UIServerStatus, error) {
+	var status UIServerStatus
+	err := rc.Call("UIServerStatus", &struct{}{}, &status)
+	return &status, err
+}
+
 // MockRPCClient mocks API.
 type mockRPCClient struct {
 	startedAt time.Time
@@ -1437,6 +1454,21 @@ func (mc *mockRPCClient) TestProxy(_ ProxyTestConfig) ([]ProxyTestResult, error)
 // ReinitiateModule implements API.
 func (mc *mockRPCClient) ReinitiateModule(_ string) error {
 	return nil
+}
+
+// StartUIServer implements API.
+func (mc *mockRPCClient) StartUIServer(_ string) error {
+	return nil
+}
+
+// StopUIServer implements API.
+func (mc *mockRPCClient) StopUIServer() error {
+	return nil
+}
+
+// UIServerStatus implements API.
+func (mc *mockRPCClient) UIServerStatus() (*UIServerStatus, error) {
+	return &UIServerStatus{}, nil
 }
 
 // Close implements API.
