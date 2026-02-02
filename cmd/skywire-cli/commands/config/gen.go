@@ -662,6 +662,13 @@ var genConfigCmd = &cobra.Command{
 			PKTable:          nil,
 		}
 
+		// UI Server configuration (disabled by default)
+		conf.UIServer = &visorconfig.UIServer{
+			Enable:    false,
+			LocalAddr: "localhost:8081",
+			DmsgPort:  81,
+		}
+
 		// Use dmsg urls for services and add dmsg-servers
 		if isDmsgHTTP {
 			if dmsgHTTPServersList != nil {
