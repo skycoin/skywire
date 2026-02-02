@@ -660,6 +660,13 @@ func (rc *rpcClient) TestVisor(conf PingConfig) ([]TestResult, error) {
 	return results, err
 }
 
+// TestProxy calls TestProxy.
+func (rc *rpcClient) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
+	var results []ProxyTestResult
+	err := rc.Call("TestProxy", &conf, &results)
+	return results, err
+}
+
 // ReinitiateModule calls ReinitiateModule.
 func (rc *rpcClient) ReinitiateModule(module string) error {
 	return rc.Call("ReinitiateModule", &module, &struct{}{})
@@ -1420,6 +1427,11 @@ func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
 // TestVisor implements API.
 func (mc *mockRPCClient) TestVisor(_ PingConfig) ([]TestResult, error) {
 	return []TestResult{}, nil
+}
+
+// TestProxy implements API.
+func (mc *mockRPCClient) TestProxy(_ ProxyTestConfig) ([]ProxyTestResult, error) {
+	return []ProxyTestResult{}, nil
 }
 
 // ReinitiateModule implements API.

@@ -834,6 +834,14 @@ func (r *RPC) TestVisor(conf PingConfig, out *[]TestResult) (err error) {
 	return err
 }
 
+// TestProxy tests proxy servers by connecting through them.
+func (r *RPC) TestProxy(conf ProxyTestConfig, out *[]ProxyTestResult) (err error) {
+	defer rpcutil.LogCall(r.log, "TestProxy", conf)(out, &err)
+
+	*out, err = r.visor.TestProxy(conf)
+	return err
+}
+
 // ReinitiateModule reinitiate/restart modules
 func (r *RPC) ReinitiateModule(module string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "ReinitiateModule", module)(nil, &err)

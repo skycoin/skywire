@@ -21,6 +21,7 @@ import (
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -96,6 +97,7 @@ type API interface {
 	StartSkysocksClient(pk string) error
 	StopSkysocksClients() error
 	ProxyServers(version, country string) ([]servicedisc.Service, error)
+	TestProxy(config ProxyTestConfig) ([]ProxyTestResult, error)
 
 	//transport settings
 	SetExistingTPOnly(enabled bool) error
@@ -1418,6 +1420,23 @@ type TestResult struct {
 	Status string
 }
 
+// ProxyTestConfig configures proxy testing
+type ProxyTestConfig struct {
+	Servers []cipher.PubKey `json:"servers"`   // Proxy servers to test
+	TestURL string          `json:"test_url"`  // URL to fetch through proxy (default: https://ip.skycoin.com)
+	Timeout time.Duration   `json:"timeout"`   // Timeout per test (default: 30s)
+}
+
+// ProxyTestResult contains the result of a single proxy test
+type ProxyTestResult struct {
+	PK       string `json:"pk"`       // Proxy server public key
+	Status   string `json:"status"`   // "OK", "FAIL", "TIMEOUT"
+	Duration int64  `json:"duration"` // Duration in milliseconds
+	IP       string `json:"ip"`       // IP returned by test
+	Location string `json:"location"` // Geo location (City, Country)
+	Error    string `json:"error"`    // Error message if failed
+}
+
 // TestVisor trying to test visor
 func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 	result := []TestResult{}
@@ -1469,6 +1488,134 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		v.StopPing(conf.PK) //nolint:errcheck,gosec
 	}
 	return result, nil
+}
+
+// TestProxy tests proxy servers by connecting through them and fetching a test URL
+func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
+	results := make([]ProxyTestResult, 0, len(conf.Servers))
+
+	// Set defaults
+	if conf.TestURL == "" {
+		conf.TestURL = "https://ip.skycoin.com"
+	}
+	if conf.Timeout == 0 {
+		conf.Timeout = 30 * time.Second
+	}
+
+	// Get the skysocks-client address from config
+	socksAddr := visorconfig.SkysocksClientAddr
+
+	for _, serverPK := range conf.Servers {
+		result := ProxyTestResult{
+			PK: serverPK.String(),
+		}
+
+		start := time.Now()
+
+		// Start skysocks-client with this server
+		err := v.StartSkysocksClient(serverPK.String())
+		if err != nil {
+			result.Status = "FAIL"
+			result.Error = fmt.Sprintf("failed to start client: %v", err)
+			result.Duration = time.Since(start).Milliseconds()
+			results = append(results, result)
+			continue
+		}
+
+		// Give it a moment to establish connection
+		time.Sleep(500 * time.Millisecond)
+
+		// Create SOCKS5 dialer
+		dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, proxy.Direct)
+		if err != nil {
+			v.StopSkysocksClients() //nolint:errcheck
+			result.Status = "FAIL"
+			result.Error = fmt.Sprintf("failed to create SOCKS dialer: %v", err)
+			result.Duration = time.Since(start).Milliseconds()
+			results = append(results, result)
+			continue
+		}
+
+		// Create HTTP client with SOCKS transport
+		httpTransport := &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.Dial(network, addr)
+			},
+		}
+		httpClient := &http.Client{
+			Transport: httpTransport,
+			Timeout:   conf.Timeout,
+		}
+
+		// Make test request
+		ctx, cancel := context.WithTimeout(context.Background(), conf.Timeout)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, conf.TestURL, nil)
+		if err != nil {
+			cancel()
+			v.StopSkysocksClients() //nolint:errcheck
+			result.Status = "FAIL"
+			result.Error = fmt.Sprintf("failed to create request: %v", err)
+			result.Duration = time.Since(start).Milliseconds()
+			results = append(results, result)
+			continue
+		}
+
+		resp, err := httpClient.Do(req)
+		cancel()
+		if err != nil {
+			v.StopSkysocksClients() //nolint:errcheck
+			if strings.Contains(err.Error(), "context deadline exceeded") {
+				result.Status = "TIMEOUT"
+			} else {
+				result.Status = "FAIL"
+			}
+			result.Error = err.Error()
+			result.Duration = time.Since(start).Milliseconds()
+			results = append(results, result)
+			continue
+		}
+
+		// Read response body
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close() //nolint:errcheck
+		if err != nil {
+			v.StopSkysocksClients() //nolint:errcheck
+			result.Status = "FAIL"
+			result.Error = fmt.Sprintf("failed to read response: %v", err)
+			result.Duration = time.Since(start).Milliseconds()
+			results = append(results, result)
+			continue
+		}
+
+		// Parse response - try to extract IP and location
+		// Expected format from ip.skycoin.com: {"ip":"1.2.3.4","country":"US","city":"New York",...}
+		var ipData struct {
+			IP      string `json:"ip"`
+			Country string `json:"country"`
+			City    string `json:"city"`
+		}
+		if err := json.Unmarshal(body, &ipData); err == nil {
+			result.IP = ipData.IP
+			if ipData.City != "" && ipData.Country != "" {
+				result.Location = fmt.Sprintf("%s,%s", ipData.City, ipData.Country)
+			} else if ipData.Country != "" {
+				result.Location = ipData.Country
+			}
+		} else {
+			// If JSON parsing fails, try to use the body as plain text IP
+			result.IP = strings.TrimSpace(string(body))
+		}
+
+		result.Status = "OK"
+		result.Duration = time.Since(start).Milliseconds()
+
+		// Stop the client before next iteration
+		v.StopSkysocksClients() //nolint:errcheck
+
+		results = append(results, result)
+	}
+
+	return results, nil
 }
 
 // RoutingRule implements API.

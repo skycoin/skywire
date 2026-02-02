@@ -155,6 +155,24 @@ func NewServer(cfg Config) *Server {
 	return s
 }
 
+// SetVisorAPI sets the visor API directly, bypassing RPC connection.
+// This is used when the tp-viz server is embedded in the visor itself.
+func (s *Server) SetVisorAPI(api visor.API, pubKey string) {
+	s.visorMu.Lock()
+	defer s.visorMu.Unlock()
+
+	// Close existing connection if any
+	if s.visorAPI != nil {
+		s.visorAPI.Close() //nolint:errcheck
+	}
+
+	s.visorAPI = api
+	s.visorCache = &LocalVisorData{
+		Connected: true,
+		PubKey:    pubKey,
+	}
+}
+
 func (s *Server) setupRoutes() {
 	// Serve the embedded index.html at root
 	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

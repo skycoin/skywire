@@ -23,6 +23,7 @@ type V1 struct {
 
 	Dmsg          *dmsgc.DmsgConfig   `json:"dmsg"`
 	Dmsgpty       *Dmsgpty            `json:"dmsgpty,omitempty"`
+	UIServer      *UIServer           `json:"ui_server,omitempty"`
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *Transport          `json:"transport"`
 	Routing       *Routing            `json:"routing"`
@@ -52,6 +53,14 @@ type Dmsgpty struct {
 	CLINet    string          `json:"cli_network"`
 	CLIAddr   string          `json:"cli_address"`
 	Whitelist []cipher.PubKey `json:"whitelist"`
+}
+
+// UIServer configures the visor UI server (serves tp-viz and other UIs).
+type UIServer struct {
+	Enable        bool            `json:"enable"`         // Enable the UI server
+	LocalAddr     string          `json:"local_addr"`     // Local HTTP address (default: localhost:8081)
+	DmsgPort      uint16          `json:"dmsg_port"`      // DMSG port to serve on (default: 81, 0 to disable)
+	DmsgWhitelist []cipher.PubKey `json:"dmsg_whitelist"` // Keys allowed to access via DMSG
 }
 
 // Transport defines a transport config.
