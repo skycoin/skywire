@@ -118,6 +118,9 @@ type Visor struct {
 
 	survey     visorconfig.Survey
 	surveyLock *sync.RWMutex
+
+	existingTpOnly   bool       // when true, don't create new transports for routing
+	existingTpOnlyMu sync.Mutex // protects existingTpOnly
 }
 
 // todo: consider moving module closing to the module system

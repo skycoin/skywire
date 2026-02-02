@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -1215,7 +1216,57 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 	}
 }
 
-func initCLI(_ context.Context, v *Visor, _ *logging.Logger) error {
+// cliRPCStats tracks CLI RPC connection statistics for diagnostics
+type cliRPCStats struct {
+	mu              sync.Mutex
+	activeConns     int32
+	totalConns      uint64
+	totalErrors     uint64
+	lastError       string
+	lastErrorTime   time.Time
+	peakConns       int32
+	connSemaphore   chan struct{}
+	maxConns        int
+}
+
+func (s *cliRPCStats) acquire() bool {
+	select {
+	case s.connSemaphore <- struct{}{}:
+		s.mu.Lock()
+		s.activeConns++
+		if s.activeConns > s.peakConns {
+			s.peakConns = s.activeConns
+		}
+		s.totalConns++
+		s.mu.Unlock()
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *cliRPCStats) release() {
+	s.mu.Lock()
+	s.activeConns--
+	s.mu.Unlock()
+	<-s.connSemaphore
+}
+
+func (s *cliRPCStats) recordError(err string) {
+	s.mu.Lock()
+	s.totalErrors++
+	s.lastError = err
+	s.lastErrorTime = time.Now()
+	s.mu.Unlock()
+}
+
+func (s *cliRPCStats) snapshot() (active int32, total uint64, errors uint64, peak int32, lastErr string, lastErrTime time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.activeConns, s.totalConns, s.totalErrors, s.peakConns, s.lastError, s.lastErrorTime
+}
+
+func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.CLIAddr == "" {
 		v.log.Debug("'cli_addr' is not configured, skipping.")
 		return nil
@@ -1233,7 +1284,88 @@ func initCLI(_ context.Context, v *Visor, _ *logging.Logger) error {
 		err := fmt.Errorf("failed to start rpc server for cli: %w", err)
 		return err
 	}
-	go rpcS.Accept(cliL) // We do not use sync.WaitGroup here as it will never return anyway.
+
+	// Connection limiting and stats
+	const maxConcurrentConns = 50
+	stats := &cliRPCStats{
+		connSemaphore: make(chan struct{}, maxConcurrentConns),
+		maxConns:      maxConcurrentConns,
+	}
+
+	// Run RPC accept loop with panic recovery, connection limiting, and logging
+	go func() {
+		rpcLog := v.MasterLogger().PackageLogger("cli_rpc")
+		rpcLog.Infof("CLI RPC server listening on %s (max %d concurrent connections)", v.conf.CLIAddr, maxConcurrentConns)
+
+		// Periodic stats logging
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					active, total, errors, peak, lastErr, lastErrTime := stats.snapshot()
+					if total > 0 {
+						rpcLog.Debugf("CLI RPC stats: active=%d, total=%d, errors=%d, peak=%d", active, total, errors, peak)
+						if lastErr != "" && time.Since(lastErrTime) < time.Minute {
+							rpcLog.Debugf("CLI RPC last error (%s ago): %s", time.Since(lastErrTime).Round(time.Second), lastErr)
+						}
+					}
+				}
+			}
+		}()
+
+		var connID uint64
+		for {
+			conn, err := cliL.Accept()
+			if err != nil {
+				// Check if listener was closed (normal shutdown)
+				if strings.Contains(err.Error(), "use of closed network connection") {
+					rpcLog.Debug("CLI RPC listener closed")
+					return
+				}
+				stats.recordError(fmt.Sprintf("accept: %v", err))
+				rpcLog.WithError(err).Warn("CLI RPC accept error, continuing...")
+				continue
+			}
+
+			connID++
+			thisConnID := connID
+
+			// Try to acquire connection slot
+			if !stats.acquire() {
+				stats.recordError("connection limit reached")
+				active, _, _, _, _, _ := stats.snapshot()
+				rpcLog.Warnf("CLI RPC connection limit reached (%d/%d), rejecting connection", active, maxConcurrentConns)
+				conn.Close()
+				continue
+			}
+
+			rpcLog.Debugf("CLI RPC conn #%d accepted from %s (active: %d)", thisConnID, conn.RemoteAddr(), stats.activeConns)
+
+			// Handle each connection in a goroutine with panic recovery
+			go func(c net.Conn, id uint64) {
+				startTime := time.Now()
+				defer func() {
+					if r := recover(); r != nil {
+						stats.recordError(fmt.Sprintf("panic: %v", r))
+						rpcLog.Errorf("CLI RPC conn #%d panic recovered: %v", id, r)
+					}
+					c.Close()
+					stats.release()
+					rpcLog.Debugf("CLI RPC conn #%d closed after %s (active: %d)", id, time.Since(startTime).Round(time.Millisecond), stats.activeConns)
+				}()
+
+				// Set read/write deadlines to prevent hung connections
+				if tc, ok := c.(*net.TCPConn); ok {
+					tc.SetKeepAlive(true)
+					tc.SetKeepAlivePeriod(30 * time.Second)
+				}
+
+				rpcS.ServeConn(c)
+			}(conn, thisConnID)
+		}
+	}()
 
 	return nil
 }
