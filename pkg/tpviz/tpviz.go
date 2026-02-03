@@ -202,7 +202,7 @@ func (s *Server) SetVisorAPI(api VisorAPI, pubKey string) {
 
 	// Close existing connection if any
 	if s.visorAPI != nil {
-		s.visorAPI.Close() //nolint:errcheck
+		s.visorAPI.Close() //nolint:errcheck,gosec
 	}
 
 	s.visorAPI = api
@@ -793,14 +793,14 @@ func (s *Server) Stop() {
 	// Close all websocket connections
 	s.wsClientsMu.Lock()
 	for ws := range s.wsClients {
-		_ = ws.Close(websocket.StatusGoingAway, "server shutting down")
+		ws.Close(websocket.StatusGoingAway, "server shutting down") //nolint:errcheck,gosec
 	}
 	s.wsClients = make(map[*websocket.Conn]struct{})
 	s.wsClientsMu.Unlock()
 
 	s.visorMu.Lock()
 	if s.visorAPI != nil {
-		_ = s.visorAPI.Close()
+		s.visorAPI.Close() //nolint:errcheck,gosec
 	}
 	s.visorConn = nil
 	s.visorAPI = nil
@@ -838,7 +838,7 @@ func (s *Server) refreshVisorData() {
 		// RPC mode: connection lost, mark as disconnected and close connection
 		s.visorMu.Lock()
 		if s.visorAPI != nil {
-			_ = s.visorAPI.Close() // Close API first (also closes underlying conn)
+			s.visorAPI.Close() //nolint:errcheck,gosec
 		}
 		s.visorConn = nil
 		s.visorAPI = nil
@@ -1027,7 +1027,7 @@ func (s *Server) handleLocalVisorWS(w http.ResponseWriter, r *http.Request) {
 
 	initialData, err := json.Marshal(cache)
 	if err == nil {
-		_ = ws.Write(r.Context(), websocket.MessageText, initialData)
+		ws.Write(r.Context(), websocket.MessageText, initialData) //nolint:errcheck,gosec
 	}
 
 	// Keep connection alive and handle incoming messages (heartbeat)

@@ -337,7 +337,7 @@ Architectures:
 		transportMap := make(map[string]struct{})
 		if requireTransports {
 			transportFile := fmt.Sprintf("%s/%s_transports.txt", transportHistPath, wdate)
-			if data, err := os.ReadFile(transportFile); err == nil {
+			if data, err := os.ReadFile(transportFile); err == nil { //nolint:gosec
 				for _, line := range strings.Split(string(data), "\n") {
 					line = strings.TrimSpace(line)
 					if line != "" {

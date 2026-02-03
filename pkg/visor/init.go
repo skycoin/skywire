@@ -1311,15 +1311,12 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 		go func() {
 			ticker := time.NewTicker(30 * time.Second)
 			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					active, total, errors, peak, lastErr, lastErrTime := stats.snapshot()
-					if total > 0 {
-						rpcLog.Debugf("CLI RPC stats: active=%d, total=%d, errors=%d, peak=%d", active, total, errors, peak)
-						if lastErr != "" && time.Since(lastErrTime) < time.Minute {
-							rpcLog.Debugf("CLI RPC last error (%s ago): %s", time.Since(lastErrTime).Round(time.Second), lastErr)
-						}
+			for range ticker.C {
+				active, total, errors, peak, lastErr, lastErrTime := stats.snapshot()
+				if total > 0 {
+					rpcLog.Debugf("CLI RPC stats: active=%d, total=%d, errors=%d, peak=%d", active, total, errors, peak)
+					if lastErr != "" && time.Since(lastErrTime) < time.Minute {
+						rpcLog.Debugf("CLI RPC last error (%s ago): %s", time.Since(lastErrTime).Round(time.Second), lastErr)
 					}
 				}
 			}
@@ -1347,7 +1344,7 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 				stats.recordError("connection limit reached")
 				active, _, _, _, _, _ := stats.snapshot()
 				rpcLog.Warnf("CLI RPC connection limit reached (%d/%d), rejecting connection", active, maxConcurrentConns)
-				conn.Close()
+				conn.Close() //nolint:errcheck,gosec
 				continue
 			}
 
@@ -1361,15 +1358,15 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 						stats.recordError(fmt.Sprintf("panic: %v", r))
 						rpcLog.Errorf("CLI RPC conn #%d panic recovered: %v", id, r)
 					}
-					c.Close()
+					c.Close() //nolint:errcheck,gosec
 					stats.release()
 					rpcLog.Debugf("CLI RPC conn #%d closed after %s (active: %d)", id, time.Since(startTime).Round(time.Millisecond), stats.activeConns)
 				}()
 
 				// Set read/write deadlines to prevent hung connections
 				if tc, ok := c.(*net.TCPConn); ok {
-					tc.SetKeepAlive(true)
-					tc.SetKeepAlivePeriod(30 * time.Second)
+					tc.SetKeepAlive(true)                   //nolint:errcheck,gosec
+					tc.SetKeepAlivePeriod(30 * time.Second) //nolint:errcheck,gosec
 				}
 
 				rpcS.ServeConn(c)
@@ -2284,7 +2281,7 @@ func initUIServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 			log.WithError(err).Warnf("Failed to start UI server on DMSG port %d", conf.DmsgPort)
 		} else {
 			// Create whitelist middleware if whitelist is configured
-			var handler http.Handler = tpvizServer.Handler()
+			handler := tpvizServer.Handler()
 			if len(conf.DmsgWhitelist) > 0 {
 				whitelistMap := make(map[cipher.PubKey]struct{}, len(conf.DmsgWhitelist))
 				for _, pk := range conf.DmsgWhitelist {

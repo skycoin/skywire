@@ -121,9 +121,6 @@ type Visor struct {
 	survey     visorconfig.Survey
 	surveyLock *sync.RWMutex
 
-	existingTpOnly   bool       // when true, don't create new transports for routing
-	existingTpOnlyMu sync.Mutex // protects existingTpOnly
-
 	// UI server state (dynamically started/stopped via RPC)
 	uiServerMu      sync.Mutex
 	uiServer        *http.Server

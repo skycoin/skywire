@@ -108,7 +108,7 @@ var startCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
-		defer rpcClient.Close()
+		defer rpcClient.Close() //nolint:errcheck,gosec
 
 		// stop possible running proxy before start it again
 		if clientName != "" {
@@ -250,7 +250,7 @@ var stopCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
-		defer rpcClient.Close()
+		defer rpcClient.Close() //nolint:errcheck,gosec
 		if allClients && clientName != "" {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot use both --all and --name flag in together"))
 		}
@@ -276,7 +276,7 @@ var statusCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
-		defer rpcClient.Close()
+		defer rpcClient.Close() //nolint:errcheck,gosec
 		states, err := rpcClient.Apps()
 		internal.Catch(cmd.Flags(), err)
 
@@ -488,7 +488,7 @@ Results show which proxies are reachable and their response latency.`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
-		defer rpcClient.Close() // Ensure connection is closed when command finishes
+		defer rpcClient.Close() //nolint:errcheck // Ensure connection is closed when command finishes
 
 		// If --via is specified, auto-enable local routes and existing-tp-only
 		if viaVisor != "" {
@@ -550,7 +550,7 @@ Results show which proxies are reachable and their response latency.`,
 			}
 
 			// Stop existing client
-			_ = rpcClient.StopApp("skysocks-client")
+			rpcClient.StopApp("skysocks-client") //nolint:errcheck,gosec
 			time.Sleep(200 * time.Millisecond)
 
 			// Configure and start the existing skysocks-client
@@ -630,7 +630,7 @@ Results show which proxies are reachable and their response latency.`,
 			if err != nil {
 				fmt.Printf("HTTP test failed: %v\n", err)
 			} else {
-				defer resp.Body.Close()
+				defer resp.Body.Close() //nolint:errcheck,gosec
 				latency := time.Since(start).Milliseconds()
 				fmt.Printf("HTTP test succeeded in %dms (status: %d)\n", latency, resp.StatusCode)
 			}
@@ -806,7 +806,7 @@ Results show which proxies are reachable and their response latency.`,
 					fmt.Println("[RPC] Connection lost, reconnecting...")
 					// Close old connection to prevent leak
 					if rpcClient != nil {
-						_ = rpcClient.Close()
+						rpcClient.Close() //nolint:errcheck,gosec
 					}
 					newClient, err := clirpc.Client(cmd.Flags())
 					if err != nil {
@@ -818,7 +818,7 @@ Results show which proxies are reachable and their response latency.`,
 					}
 					rpcClient = newClient
 					fmt.Println("[RPC] Reconnected successfully")
-					_ = rpcClient.StopApp("skysocks-client")
+					rpcClient.StopApp("skysocks-client") //nolint:errcheck,gosec
 				}
 				time.Sleep(100 * time.Millisecond)
 
@@ -835,7 +835,7 @@ Results show which proxies are reachable and their response latency.`,
 					fmt.Println("[RPC] Connection lost during configure, reconnecting...")
 					// Close old connection to prevent leak
 					if rpcClient != nil {
-						_ = rpcClient.Close()
+						rpcClient.Close() //nolint:errcheck,gosec
 					}
 					newClient, reconnErr := clirpc.Client(cmd.Flags())
 					if reconnErr != nil {
@@ -861,7 +861,7 @@ Results show which proxies are reachable and their response latency.`,
 					fmt.Println("[RPC] Connection lost during start, reconnecting...")
 					// Close old connection to prevent leak
 					if rpcClient != nil {
-						_ = rpcClient.Close()
+						rpcClient.Close() //nolint:errcheck,gosec
 					}
 					newClient, reconnErr := clirpc.Client(cmd.Flags())
 					if reconnErr != nil {
@@ -893,7 +893,7 @@ Results show which proxies are reachable and their response latency.`,
 						fmt.Println("[RPC] Connection lost during status check, reconnecting...")
 						// Close old connection to prevent leak
 						if rpcClient != nil {
-							_ = rpcClient.Close()
+							rpcClient.Close() //nolint:errcheck,gosec
 						}
 						newClient, reconnErr := clirpc.Client(cmd.Flags())
 						if reconnErr == nil {
@@ -986,8 +986,8 @@ Results show which proxies are reachable and their response latency.`,
 
 				// Read response
 				bodyStart := time.Now()
-				body, _ := readAllWithLimit(resp.Body, 64*1024)
-				resp.Body.Close()
+				body := readAllWithLimit(resp.Body, 64*1024)
+				resp.Body.Close() //nolint:errcheck,gosec
 				bodyDuration := time.Since(bodyStart)
 
 				if bodyDuration.Milliseconds() > 0 {
@@ -1025,7 +1025,7 @@ Results show which proxies are reachable and their response latency.`,
 			}
 
 			// Stop the client when done
-			_ = rpcClient.StopApp("skysocks-client")
+			rpcClient.StopApp("skysocks-client") //nolint:errcheck,gosec
 
 		} else {
 			// Parallel processing with pooled test clients (reuse N clients for batch size N)
@@ -1064,7 +1064,7 @@ Results show which proxies are reachable and their response latency.`,
 			defer func() {
 				fmt.Printf("Cleaning up test clients...\n")
 				for _, name := range createdClients {
-					_ = rpcClient.StopApp(name)
+					rpcClient.StopApp(name) //nolint:errcheck,gosec
 				}
 			}()
 
@@ -1087,7 +1087,7 @@ Results show which proxies are reachable and their response latency.`,
 				fmt.Println("[RPC] Connection lost, reconnecting...")
 				// Close old connection to prevent leak
 				if rpcWrapper.client != nil {
-					_ = rpcWrapper.client.Close()
+					rpcWrapper.client.Close() //nolint:errcheck,gosec
 				}
 				newClient, err := clirpc.Client(cmd.Flags())
 				if err != nil {
@@ -1252,11 +1252,11 @@ Results show which proxies are reachable and their response latency.`,
 		var b bytes.Buffer
 		w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 		if testConnectOnly {
-			fmt.Fprintf(w, "PUBLIC KEY\tCOUNTRY\tVERSION\tSTATUS\tTIME\n")
+			fmt.Fprintf(w, "PUBLIC KEY\tCOUNTRY\tVERSION\tSTATUS\tTIME\n") //nolint:errcheck,gosec
 		} else if viaVisor != "" {
-			fmt.Fprintf(w, "PUBLIC KEY\tVIA\tSTATUS\tLATENCY\tBW\tLOCATION\tPROXY IP\n")
+			fmt.Fprintf(w, "PUBLIC KEY\tVIA\tSTATUS\tLATENCY\tBW\tLOCATION\tPROXY IP\n") //nolint:errcheck,gosec
 		} else {
-			fmt.Fprintf(w, "PUBLIC KEY\tCOUNTRY\tSTATUS\tLATENCY\tBW\tLOCATION\tPROXY IP\n")
+			fmt.Fprintf(w, "PUBLIC KEY\tCOUNTRY\tSTATUS\tLATENCY\tBW\tLOCATION\tPROXY IP\n") //nolint:errcheck,gosec
 		}
 		successCount := 0
 		for _, r := range results {
@@ -1283,18 +1283,18 @@ Results show which proxies are reachable and their response latency.`,
 				successCount++
 			}
 			if testConnectOnly {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", r.Country, r.Version, statusStr, latency)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", r.Country, r.Version, statusStr, latency) //nolint:errcheck,gosec
 			} else if viaVisor != "" {
 				via := "-"
 				if r.ViaVisor != "" {
 					via = r.ViaVisor[:8] + "..."
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", via, statusStr, latency, bandwidth, proxyLoc, proxyIP)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", via, statusStr, latency, bandwidth, proxyLoc, proxyIP) //nolint:errcheck,gosec
 			} else {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", r.Country, statusStr, latency, bandwidth, proxyLoc, proxyIP)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", r.Country, statusStr, latency, bandwidth, proxyLoc, proxyIP) //nolint:errcheck,gosec
 			}
 		}
-		w.Flush()
+		w.Flush() //nolint:errcheck,gosec
 
 		fmt.Print(b.String())
 		if testConnectOnly {
@@ -1316,172 +1316,8 @@ type proxyTestMetrics struct {
 	err           error
 }
 
-// testProxyServerWithPort tests a single proxy server by starting the client and making an HTTP request
-func testProxyServerWithPort(rpcClient proxyTestClient, serverPK cipher.PubKey, testURL string, timeoutSec int, port int) proxyTestMetrics {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
-	defer cancel()
-
-	result := proxyTestMetrics{}
-
-	// Use a unique client name for this test
-	testClientName := fmt.Sprintf("proxy-test-%s", serverPK.String()[:8])
-	proxyAddr := fmt.Sprintf("127.0.0.1:%d", port)
-
-	// Stop any existing test client first
-	_ = rpcClient.StopApp(testClientName)
-	time.Sleep(100 * time.Millisecond)
-
-	// Configure and start the proxy client
-	arguments := map[string]any{
-		"app":    "skysocks-client",
-		"--srv":  serverPK.String(),
-		"--addr": fmt.Sprintf(":%d", port),
-	}
-
-	// Check if app exists, if not add it
-	_, err := rpcClient.App(testClientName)
-	if err != nil {
-		err = rpcClient.AddApp(testClientName, "skywire")
-		if err != nil {
-			result.err = fmt.Errorf("failed to add test app: %w", err)
-			return result
-		}
-	}
-
-	err = rpcClient.DoCustomSetting(testClientName, arguments)
-	if err != nil {
-		result.err = fmt.Errorf("failed to configure proxy: %w", err)
-		return result
-	}
-
-	err = rpcClient.StartApp(testClientName)
-	if err != nil {
-		result.err = fmt.Errorf("failed to start proxy: %w", err)
-		return result
-	}
-
-	// Wait for proxy to be ready
-	defer func() {
-		_ = rpcClient.StopApp(testClientName)
-	}()
-
-	// Wait for the proxy client to start
-	ready := false
-	for i := 0; i < 10; i++ {
-		select {
-		case <-ctx.Done():
-			result.err = ctx.Err()
-			return result
-		default:
-		}
-		states, err := rpcClient.Apps()
-		if err == nil {
-			for _, state := range states {
-				if state.Name == testClientName && state.Status == appserver.AppStatusRunning {
-					ready = true
-					break
-				}
-			}
-		}
-		if ready {
-			break
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	if !ready {
-		result.err = fmt.Errorf("proxy client failed to start")
-		return result
-	}
-
-	// Give it a moment to establish connection
-	time.Sleep(500 * time.Millisecond)
-
-	// Make HTTP request through the SOCKS5 proxy
-	start := time.Now()
-
-	dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
-	if err != nil {
-		result.err = fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
-		return result
-	}
-
-	// Create a context-aware dial function
-	dialFunc := func(ctx context.Context, network, addr string) (net.Conn, error) {
-		// Use a channel to handle context cancellation
-		type dialResult struct {
-			conn net.Conn
-			err  error
-		}
-		ch := make(chan dialResult, 1)
-		go func() {
-			conn, err := dialer.Dial(network, addr)
-			ch <- dialResult{conn, err}
-		}()
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case result := <-ch:
-			return result.conn, result.err
-		}
-	}
-
-	transport := &http.Transport{
-		DialContext: dialFunc,
-	}
-
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   time.Duration(timeoutSec) * time.Second,
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", testURL, nil)
-	if err != nil {
-		result.err = fmt.Errorf("failed to create request: %w", err)
-		return result
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		result.err = fmt.Errorf("request failed: %w", err)
-		return result
-	}
-	defer resp.Body.Close()
-
-	result.latencyMs = float64(time.Since(start).Milliseconds())
-
-	// Read full response body to measure bandwidth
-	bodyStart := time.Now()
-	body, err := readAllWithLimit(resp.Body, 64*1024) // Limit to 64KB
-	bodyDuration := time.Since(bodyStart)
-
-	if err != nil {
-		result.err = fmt.Errorf("failed to read response: %w", err)
-		return result
-	}
-
-	// Calculate bandwidth in kbps (kilobits per second)
-	if bodyDuration.Milliseconds() > 0 {
-		bytesReceived := float64(len(body))
-		durationSec := bodyDuration.Seconds()
-		result.bandwidthKbps = (bytesReceived * 8 / 1000) / durationSec
-	}
-
-	result.response = strings.TrimSpace(string(body))
-
-	// Try to extract IP and geo info from response
-	result.proxyIP, result.proxyCountry, result.proxyCity = extractGeoInfo(result.response)
-
-	if resp.StatusCode != http.StatusOK {
-		result.err = fmt.Errorf("HTTP %d", resp.StatusCode)
-		return result
-	}
-
-	return result
-}
-
 // readAllWithLimit reads up to maxBytes from the reader
-func readAllWithLimit(r interface{ Read([]byte) (int, error) }, maxBytes int) ([]byte, error) {
+func readAllWithLimit(r interface{ Read([]byte) (int, error) }, maxBytes int) []byte {
 	buf := make([]byte, maxBytes)
 	totalRead := 0
 	for totalRead < maxBytes {
@@ -1491,7 +1327,7 @@ func readAllWithLimit(r interface{ Read([]byte) (int, error) }, maxBytes int) ([
 			break // EOF or error
 		}
 	}
-	return buf[:totalRead], nil
+	return buf[:totalRead]
 }
 
 // extractGeoInfo tries to extract IP address and geolocation from the response
@@ -1678,13 +1514,13 @@ func testProxyWithPooledClient(rpcClient proxyTestClient, clientName string, por
 		result.err = fmt.Errorf("request failed: %w", err)
 		return result
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck,gosec
 
 	result.latencyMs = float64(time.Since(start).Milliseconds())
 
 	// Read response
 	bodyStart := time.Now()
-	body, _ := readAllWithLimit(resp.Body, 64*1024)
+	body := readAllWithLimit(resp.Body, 64*1024)
 	bodyDuration := time.Since(bodyStart)
 
 	if bodyDuration.Milliseconds() > 0 {

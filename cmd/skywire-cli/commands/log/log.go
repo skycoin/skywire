@@ -494,7 +494,7 @@ func cleanupDirectory(log *logging.Logger, dir string, maxAgeDays int) {
 		}
 
 		// Remove empty directories
-		remaining, _ := os.ReadDir(visorDir)
+		remaining, _ := os.ReadDir(visorDir) //nolint:errcheck
 		if len(remaining) == 0 {
 			if err := os.Remove(visorDir); err == nil {
 				log.Debugf("Removed empty directory: %s", visorDir)
@@ -508,7 +508,7 @@ func cleanupDirectory(log *logging.Logger, dir string, maxAgeDays int) {
 
 // isValidJSON checks if a file contains valid JSON
 func isValidJSON(filePath string) bool {
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) //nolint:gosec
 	if err != nil {
 		return false
 	}
@@ -518,7 +518,7 @@ func isValidJSON(filePath string) bool {
 
 // containsErrorContent checks if a file contains HTTP error messages
 func containsErrorContent(filePath string) bool {
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) //nolint:gosec
 	if err != nil {
 		return false
 	}
@@ -529,7 +529,7 @@ func containsErrorContent(filePath string) bool {
 
 // stripCSVHeader removes the header line if it matches the old transport log format
 func stripCSVHeader(filePath string, log *logging.Logger) {
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) //nolint:gosec
 	if err != nil {
 		return
 	}

@@ -109,7 +109,7 @@ This is designed to be run hourly by the reward service.`,
 
 		// Read existing entries to avoid duplicates
 		existing := make(map[string]struct{})
-		if data, err := os.ReadFile(dailyFile); err == nil {
+		if data, err := os.ReadFile(dailyFile); err == nil { //nolint:gosec
 			for _, line := range strings.Split(string(data), "\n") {
 				line = strings.TrimSpace(line)
 				if line != "" {
@@ -119,7 +119,7 @@ This is designed to be run hourly by the reward service.`,
 		}
 
 		// Append new qualifying PKs
-		file, err := os.OpenFile(dailyFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+		file, err := os.OpenFile(dailyFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600) //nolint:gosec
 		if err != nil {
 			tpLog.Fatal("Failed to open daily file: ", err)
 		}

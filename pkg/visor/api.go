@@ -541,7 +541,7 @@ func (v *Visor) StopApp(appName string) error {
 		return ErrAppLauncherNotAvailable
 	}
 	if v.procM != nil {
-		_, err := v.appL.StopApp(appName) //nolint:errcheck
+		_, err := v.appL.StopApp(appName) //nolint:errcheck,gosec
 		return err
 	}
 	return ErrProcNotAvailable
@@ -612,7 +612,7 @@ func (v *Visor) StopVPNClient(appName string) error {
 		return ErrAppLauncherNotAvailable
 	}
 	if v.procM != nil {
-		_, err := v.appL.StopApp(appName) //nolint:errcheck
+		_, err := v.appL.StopApp(appName) //nolint:errcheck,gosec
 		return err
 	}
 	return ErrProcNotAvailable
@@ -695,7 +695,7 @@ func (v *Visor) StopSkysocksClients() error {
 		for _, app := range v.conf.Launcher.Apps {
 			for _, args := range app.Args {
 				if args == visorconfig.SkysocksClientName {
-					if _, err := v.appL.StopApp(app.Name); err != nil { //nolint:errcheck
+					if _, err := v.appL.StopApp(app.Name); err != nil { //nolint:errcheck,gosec
 						v.log.WithError(err).Warnf("Failed to stop app %s", app.Name)
 					}
 				}
@@ -738,7 +738,7 @@ func (v *Visor) RestartApp(appName string) error {
 		v.log.Warn("app launcher not ready yet")
 		return ErrAppLauncherNotAvailable
 	}
-	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck
+	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck,gosec
 		v.log.Infof("Updated %v password, restarting it", appName)
 		return v.appL.RestartApp(appName, appName)
 	}
@@ -1152,7 +1152,7 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 		}
 	}
 	if v.procM != nil {
-		apps, _ := v.Apps() //nolint:errcheck
+		apps, _ := v.Apps() //nolint:errcheck,gosec
 		for _, app := range apps {
 			port, err := v.procM.GetAppPort(app.Name)
 			if err == nil {
@@ -1402,26 +1402,26 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 		}
 
 		// Read "ok" ack with timeout
-		_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 		buf := make([]byte, 32*1024)
 		if _, err = conn.Read(buf); err != nil {
-			_ = conn.SetReadDeadline(time.Time{})
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 			return latencies, fmt.Errorf("read ack: %w", err)
 		}
 
 		// Send ping data
 		if _, err = conn.Write(ping); err != nil {
-			_ = conn.SetReadDeadline(time.Time{})
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 			return latencies, fmt.Errorf("write ping: %w", err)
 		}
 
 		// Read echo response with timeout
-		_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 		if _, err = conn.Read(buf); err != nil {
-			_ = conn.SetReadDeadline(time.Time{})
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 			return latencies, fmt.Errorf("read echo: %w", err)
 		}
-		_ = conn.SetReadDeadline(time.Time{})
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 
 		rtt := time.Since(start)
 		latencies = append(latencies, rtt)
@@ -1560,7 +1560,7 @@ func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
 		// Create SOCKS5 dialer
 		dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, proxy.Direct)
 		if err != nil {
-			v.StopSkysocksClients() //nolint:errcheck
+			v.StopSkysocksClients() //nolint:errcheck,gosec
 			result.Status = "FAIL"
 			result.Error = fmt.Sprintf("failed to create SOCKS dialer: %v", err)
 			result.Duration = time.Since(start).Milliseconds()
@@ -1584,7 +1584,7 @@ func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, conf.TestURL, nil)
 		if err != nil {
 			cancel()
-			v.StopSkysocksClients() //nolint:errcheck
+			v.StopSkysocksClients() //nolint:errcheck,gosec
 			result.Status = "FAIL"
 			result.Error = fmt.Sprintf("failed to create request: %v", err)
 			result.Duration = time.Since(start).Milliseconds()
@@ -1595,7 +1595,7 @@ func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
 		resp, err := httpClient.Do(req)
 		cancel()
 		if err != nil {
-			v.StopSkysocksClients() //nolint:errcheck
+			v.StopSkysocksClients() //nolint:errcheck,gosec
 			if strings.Contains(err.Error(), "context deadline exceeded") {
 				result.Status = "TIMEOUT"
 			} else {
@@ -1609,9 +1609,9 @@ func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
 
 		// Read response body
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close() //nolint:errcheck
+		resp.Body.Close() //nolint:errcheck,gosec
 		if err != nil {
-			v.StopSkysocksClients() //nolint:errcheck
+			v.StopSkysocksClients() //nolint:errcheck,gosec
 			result.Status = "FAIL"
 			result.Error = fmt.Sprintf("failed to read response: %v", err)
 			result.Duration = time.Since(start).Milliseconds()
@@ -1642,7 +1642,7 @@ func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
 		result.Duration = time.Since(start).Milliseconds()
 
 		// Stop the client before next iteration
-		v.StopSkysocksClients() //nolint:errcheck
+		v.StopSkysocksClients() //nolint:errcheck,gosec
 
 		results = append(results, result)
 	}
