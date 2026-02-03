@@ -65,7 +65,10 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
-require golang.org/x/time v0.14.0
+require (
+	github.com/coder/websocket v1.8.14
+	golang.org/x/time v0.14.0
+)
 
 require (
 	atomicgo.dev/cursor v0.2.0 // indirect
@@ -93,7 +96,6 @@ require (
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.3.1 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/coder/websocket v1.8.14 // indirect
 	github.com/cogentcore/webgpu v0.23.0 // indirect
 	github.com/confiant-inc/go-socks5 v0.0.0-20210816151940-c1124825b1d6 // indirect
 	github.com/containerd/console v1.0.5 // indirect

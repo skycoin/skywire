@@ -904,7 +904,7 @@ Results show which proxies are reachable and their response latency.`,
 					if err == nil {
 						for _, state := range states {
 							if state.Name == "skysocks-client" {
-								lastStatus = string(state.Status)
+								lastStatus = state.Status.String()
 								lastDetailedStatus = state.DetailedStatus
 								if state.Status == appserver.AppStatusRunning {
 									ready = true

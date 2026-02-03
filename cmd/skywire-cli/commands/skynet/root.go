@@ -1,11 +1,10 @@
-// Package skyrev cmd/skywire-cli/commands/skyfwd/root.go
-package skyrev
+// Package skynet cmd/skywire-cli/commands/skynet/root.go
+package skynet
 
 import (
 	"bytes"
 	"fmt"
 	"os"
-	"strconv"
 	"text/tabwriter"
 
 	"github.com/google/uuid"
@@ -20,32 +19,39 @@ var (
 	remotePort int
 	remotePk   string
 	localPort  int
-	lsPorts    bool
+	lsConns    bool
 	disconnect string
 )
 
 func init() {
-	RootCmd.Flags().IntVarP(&remotePort, "remote", "r", 0, "remote port to read from")
-	RootCmd.Flags().StringVarP(&remotePk, "pk", "k", "", "remote public key to connect to")
-	RootCmd.Flags().IntVarP(&localPort, "port", "p", 0, "local port to reverse proxy")
-	RootCmd.Flags().BoolVarP(&lsPorts, "ls", "l", false, "list configured connections")
-	RootCmd.Flags().StringVarP(&disconnect, "stop", "d", "", "disconnect from specified <id>")
+	RootCmd.Flags().IntVarP(&remotePort, "remote", "r", 0, "remote port to connect to")
+	RootCmd.Flags().StringVarP(&remotePk, "pk", "k", "", "remote public key")
+	RootCmd.Flags().IntVarP(&localPort, "port", "p", 0, "local port to listen on")
+	RootCmd.Flags().BoolVarP(&lsConns, "ls", "l", false, "list active connections")
+	RootCmd.Flags().StringVarP(&disconnect, "stop", "d", "", "disconnect connection by <id>")
+
+	RootCmd.AddCommand(srvCmd)
 }
 
-// RootCmd contains commands that interact with the skyforwarding
+// RootCmd contains skynet client commands
 var RootCmd = &cobra.Command{
-	Use:   "rev",
-	Short: "reverse proxy skyfwd",
-	Long:  "connect or disconnect from remote ports",
-	Args:  cobra.MinimumNArgs(0),
-	Run: func(cmd *cobra.Command, args []string) {
+	Use:   "skynet <public-key> -r <remote-port> -p <local-port>",
+	Short: "Skynet port forwarding client",
+	Long: `Connect to remote services over Skywire routes
 
+Examples:
+  skywire cli skynet 02abc... -r 8080 -p 8080    Connect remote :8080 to local :8080
+  skywire cli skynet --ls                         List active connections
+  skywire cli skynet --stop <id>                  Disconnect by ID`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
 
-		if lsPorts {
+		// List connections
+		if lsConns {
 			forwardConns, err := rpcClient.List()
 			internal.Catch(cmd.Flags(), err)
 
@@ -55,8 +61,10 @@ var RootCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), err)
 
 			for _, forwardConn := range forwardConns {
-				_, err = fmt.Fprintf(w, "%s\t%s\t%s\n", forwardConn.ID, strconv.Itoa(forwardConn.LocalPort),
-					strconv.Itoa(forwardConn.RemotePort))
+				_, err = fmt.Fprintf(w, "%s\t%d\t%d\n",
+					forwardConn.ID,
+					forwardConn.LocalPort,
+					forwardConn.RemotePort)
 				internal.Catch(cmd.Flags(), err)
 			}
 			internal.Catch(cmd.Flags(), w.Flush())
@@ -64,6 +72,7 @@ var RootCmd = &cobra.Command{
 			os.Exit(0)
 		}
 
+		// Disconnect connection
 		if disconnect != "" {
 			id, err := uuid.Parse(disconnect)
 			internal.Catch(cmd.Flags(), err)
@@ -73,6 +82,7 @@ var RootCmd = &cobra.Command{
 			os.Exit(0)
 		}
 
+		// Connect to remote service
 		if len(args) == 0 && remotePk == "" {
 			internal.Catch(cmd.Flags(), cmd.Help())
 			os.Exit(0)
@@ -80,25 +90,26 @@ var RootCmd = &cobra.Command{
 
 		var remotePK cipher.PubKey
 
-		//if pk is specified via flag, argument will override
+		// Parse public key from args or flag
 		if len(args) > 0 {
 			internal.Catch(cmd.Flags(), remotePK.Set(args[0]))
+		} else if remotePk != "" {
+			internal.Catch(cmd.Flags(), remotePK.Set(remotePk))
 		} else {
-			if remotePk != "" {
-				internal.Catch(cmd.Flags(), remotePK.Set(remotePk))
-			}
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("remote public key required"))
 		}
 
+		// Validate ports
 		if remotePort == 0 || localPort == 0 {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("port cannot be 0"))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("both remote and local ports required"))
 		}
-		//65535 is the highest TCP port number
-		if 65536 < remotePort || 65536 < localPort {
+		if remotePort > 65535 || localPort > 65535 {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("port cannot be greater than 65535"))
 		}
 
+		// Establish connection
 		id, err := rpcClient.Connect(remotePK, remotePort, localPort)
 		internal.Catch(cmd.Flags(), err)
-		internal.PrintOutput(cmd.Flags(), id, fmt.Sprintln(id))
+		internal.PrintOutput(cmd.Flags(), id, fmt.Sprintf("Connected: %s\n", id))
 	},
 }
