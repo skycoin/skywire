@@ -3,6 +3,7 @@ package tpviz
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/deployment"
@@ -121,6 +123,11 @@ type Server struct {
 	visorCache    *LocalVisorData
 	embeddedMode  bool                         // true when visor API is set directly (not via RPC)
 	prevBandwidth map[string]bandwidthSnapshot // track previous bandwidth for deltas
+
+	// Websocket clients for local visor data streaming
+	wsClientsMu sync.RWMutex
+	wsClients   map[*websocket.Conn]struct{}
+	wsBroadcast chan []byte
 }
 
 // LocalVisorData holds data from the local visor for overlay display
@@ -180,6 +187,8 @@ func NewServer(cfg Config) *Server {
 		mux:           http.NewServeMux(),
 		stopChan:      make(chan struct{}),
 		prevBandwidth: make(map[string]bandwidthSnapshot),
+		wsClients:     make(map[*websocket.Conn]struct{}),
+		wsBroadcast:   make(chan []byte, 100),
 	}
 	s.setupRoutes()
 	return s
@@ -234,6 +243,9 @@ func (s *Server) setupRoutes() {
 
 	// API endpoint for local visor data (transports, routes, traffic stats)
 	s.mux.HandleFunc("/api/local-visor", s.handleLocalVisor)
+
+	// Websocket endpoint for live local visor data streaming
+	s.mux.HandleFunc("/ws/local-visor", s.handleLocalVisorWS)
 
 	// Health check - available at both /health and /api/health
 	// /api/health is used when embedded in other servers that have their own /health
@@ -740,6 +752,9 @@ func (s *Server) Start() {
 
 	// Start auto-refresh
 	s.startAutoRefresh()
+
+	// Start websocket broadcast goroutine for local visor data
+	go s.startLocalVisorBroadcast()
 }
 
 // ListenAndServe starts the HTTP server
@@ -765,12 +780,24 @@ func (s *Server) ListenAndServe() error {
 	// Start auto-refresh
 	s.startAutoRefresh()
 
+	// Start websocket broadcast goroutine for local visor data
+	go s.startLocalVisorBroadcast()
+
 	return http.ListenAndServe(listenAddr, s.mux) //nolint:gosec
 }
 
 // Stop stops the server and cleans up resources
 func (s *Server) Stop() {
 	close(s.stopChan)
+
+	// Close all websocket connections
+	s.wsClientsMu.Lock()
+	for ws := range s.wsClients {
+		_ = ws.Close(websocket.StatusGoingAway, "server shutting down")
+	}
+	s.wsClients = make(map[*websocket.Conn]struct{})
+	s.wsClientsMu.Unlock()
+
 	s.visorMu.Lock()
 	if s.visorAPI != nil {
 		_ = s.visorAPI.Close()
@@ -873,6 +900,12 @@ func (s *Server) refreshVisorData() {
 	}
 	s.prevBandwidth[totalKey] = bandwidthSnapshot{sent: totalSent, recv: totalRecv}
 
+	// Build transport ID -> remote PK lookup map
+	transportRemotes := make(map[string]string)
+	for _, tp := range overview.Transports {
+		transportRemotes[tp.ID.String()] = tp.Remote.String()
+	}
+
 	// Fetch routing rules
 	rules, err := api.RoutingRules()
 	if err == nil {
@@ -898,12 +931,22 @@ func (s *Server) refreshVisorData() {
 				if summary.ForwardFields != nil {
 					lr.SrcPK = summary.ForwardFields.RouteDescriptor.SrcPK.String()
 					lr.DstPK = summary.ForwardFields.RouteDescriptor.DstPK.String()
-					lr.TransportID = summary.ForwardFields.NextTID.String()
+					tpID := summary.ForwardFields.NextTID.String()
+					lr.TransportID = tpID
+					// Look up next hop from transport
+					if remote, ok := transportRemotes[tpID]; ok {
+						lr.NextHopPK = remote
+					}
 				}
 			case "IntermediaryForward":
 				lr.Type = "intermediary"
 				if summary.IntermediaryForwardFields != nil {
-					lr.TransportID = summary.IntermediaryForwardFields.NextTID.String()
+					tpID := summary.IntermediaryForwardFields.NextTID.String()
+					lr.TransportID = tpID
+					// Look up next hop from transport
+					if remote, ok := transportRemotes[tpID]; ok {
+						lr.NextHopPK = remote
+					}
 				}
 			}
 
@@ -939,6 +982,136 @@ func (s *Server) handleLocalVisor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(cache) //nolint:errcheck,gosec
+}
+
+// handleLocalVisorWS handles websocket connections for live local visor data streaming
+func (s *Server) handleLocalVisorWS(w http.ResponseWriter, r *http.Request) {
+	// Accept websocket connection
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{"*"}, // Allow any origin for local development
+	})
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to accept websocket: %v", err), http.StatusBadRequest)
+		return
+	}
+	defer ws.Close(websocket.StatusNormalClosure, "closed") //nolint:errcheck
+
+	// Register client
+	s.wsClientsMu.Lock()
+	s.wsClients[ws] = struct{}{}
+	s.wsClientsMu.Unlock()
+
+	// Unregister on disconnect
+	defer func() {
+		s.wsClientsMu.Lock()
+		delete(s.wsClients, ws)
+		s.wsClientsMu.Unlock()
+	}()
+
+	// Send initial data immediately
+	s.visorMu.RLock()
+	hasAPI := s.visorAPI != nil
+	s.visorMu.RUnlock()
+
+	if hasAPI {
+		s.refreshVisorData()
+	}
+
+	s.visorMu.RLock()
+	cache := s.visorCache
+	s.visorMu.RUnlock()
+
+	if cache == nil {
+		cache = &LocalVisorData{Connected: false}
+	}
+
+	initialData, err := json.Marshal(cache)
+	if err == nil {
+		_ = ws.Write(r.Context(), websocket.MessageText, initialData)
+	}
+
+	// Keep connection alive and handle incoming messages (heartbeat)
+	ctx := r.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.stopChan:
+			return
+		default:
+			// Read heartbeat or close signal from client
+			_, _, err := ws.Read(ctx)
+			if err != nil {
+				return
+			}
+		}
+	}
+}
+
+// broadcastLocalVisorData broadcasts the current local visor data to all connected websocket clients
+func (s *Server) broadcastLocalVisorData() {
+	s.visorMu.RLock()
+	cache := s.visorCache
+	s.visorMu.RUnlock()
+
+	if cache == nil {
+		cache = &LocalVisorData{Connected: false}
+	}
+
+	data, err := json.Marshal(cache)
+	if err != nil {
+		return
+	}
+
+	s.wsClientsMu.RLock()
+	clients := make([]*websocket.Conn, 0, len(s.wsClients))
+	for ws := range s.wsClients {
+		clients = append(clients, ws)
+	}
+	s.wsClientsMu.RUnlock()
+
+	// Send to all clients with a timeout context
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	for _, ws := range clients {
+		err := ws.Write(ctx, websocket.MessageText, data)
+		if err != nil {
+			// Client disconnected, will be cleaned up when their read loop exits
+			continue
+		}
+	}
+}
+
+// startLocalVisorBroadcast starts the periodic broadcast of local visor data to websocket clients
+func (s *Server) startLocalVisorBroadcast() {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.stopChan:
+			return
+		case <-ticker.C:
+			// Only broadcast if there are connected clients and visor API is available
+			s.wsClientsMu.RLock()
+			hasClients := len(s.wsClients) > 0
+			s.wsClientsMu.RUnlock()
+
+			if !hasClients {
+				continue
+			}
+
+			s.visorMu.RLock()
+			hasAPI := s.visorAPI != nil
+			s.visorMu.RUnlock()
+
+			if hasAPI {
+				s.refreshVisorData()
+				s.broadcastLocalVisorData()
+			}
+		}
+	}
 }
 
 func fetchURL(url string) (string, error) {

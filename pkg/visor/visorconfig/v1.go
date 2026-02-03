@@ -61,6 +61,7 @@ type UIServer struct {
 	LocalAddr     string          `json:"local_addr"`     // Local HTTP address (default: localhost:8081)
 	DmsgPort      uint16          `json:"dmsg_port"`      // DMSG port to serve on (default: 81, 0 to disable)
 	DmsgWhitelist []cipher.PubKey `json:"dmsg_whitelist"` // Keys allowed to access via DMSG
+	SurveyDir     string          `json:"survey_dir"`     // Directory with visor surveys for IP-based grouping
 }
 
 // Transport defines a transport config.
