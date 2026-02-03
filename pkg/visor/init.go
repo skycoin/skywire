@@ -920,50 +920,56 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func handlePingConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
+func handlePingConn(log *logging.Logger, remoteConn net.Conn, _ *Visor) {
+	defer func() {
+		if err := remoteConn.Close(); err != nil {
+			log.WithError(err).Debug("Error closing ping conn")
+		}
+	}()
 	for {
-		buf := make([]byte, (32+v.pingPcktSize)*1024)
+		buf := make([]byte, 32*1024)
 		n, err := remoteConn.Read(buf)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				log.WithError(err).Error("Failed to read packet")
+				log.WithError(err).Error("Failed to read ping packet")
 			}
 			return
 		}
 		var size PingSizeMsg
 		err = json.Unmarshal(buf[:n], &size)
 		if err != nil {
-			log.WithError(err).Error("Failed to unmarshal json")
+			log.WithError(err).Error("Failed to unmarshal ping size")
 			return
 		}
 
+		// Ack the size message
 		_, err = remoteConn.Write([]byte("ok"))
 		if err != nil {
-			log.WithError(err).Error("Failed to write message")
+			log.WithError(err).Error("Failed to write ping ack")
 			return
 		}
+
+		// Read the full ping payload
 		var ping []byte
-		for len(ping) != size.Size {
+		for len(ping) < size.Size {
 			n, err = remoteConn.Read(buf)
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
-					log.WithError(err).Error("Failed to read packet")
+					log.WithError(err).Error("Failed to read ping data")
 				}
 				return
 			}
 			ping = append(ping, buf[:n]...)
 		}
-		var msg PingMsg
-		err = json.Unmarshal(ping, &msg)
+
+		// Echo back for RTT measurement
+		_, err = remoteConn.Write([]byte("pong"))
 		if err != nil {
-			log.WithError(err).Error("Failed to unmarshal json")
+			log.WithError(err).Error("Failed to write ping echo")
 			return
 		}
-		now := time.Now()
-		diff := now.Sub(msg.Timestamp)
-		v.pingConns[msg.PingPk].latency <- diff
 
-		log.Debugf("Received: %s", buf[:n])
+		log.Debug("Echoed ping response")
 	}
 }
 
@@ -2233,6 +2239,7 @@ func initUIServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Create tpviz config
 	tpvizCfg := tpviz.DefaultConfig()
 	// Don't set Addr/Port since we're managing the HTTP server ourselves
+	tpvizCfg.SurveyDir = conf.SurveyDir
 
 	// Create tpviz server
 	tpvizServer := tpviz.NewServer(tpvizCfg)

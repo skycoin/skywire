@@ -298,7 +298,7 @@ func (r *router) DialRoutes(
 	// so we query for fresh routes on each retry instead of retrying the same bad route.
 	const maxRetries = 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		forwardPath, reversePath, err := r.fetchBestRoutes(lPK, rPK, opts)
+		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, lPK, rPK, opts)
 		if err != nil {
 			if attempt < maxRetries {
 				r.logger.WithError(err).Warnf("Route finder failed (attempt %d/%d), retrying with fresh query...", attempt, maxRetries)
@@ -368,14 +368,10 @@ func (r *router) DialRoutes(
 	return nil, fmt.Errorf("failed to establish route after %d attempts", maxRetries)
 }
 
-// PingRoute dials to a given visor of 'rPK'.
-// 'lPort'/'rPort' specifies the local/remote ports respectively.
-// A nil 'opts' input results in a value of '1' for all DialOptions fields.
-// A single call to DialRoutes should perform the following:
-// - Find routes via RouteFinder (in one call).
-// - Setup routes via SetupNode (in one call).
-// - Save to routing.Table and internal RouteGroup map.
-// - Return RouteGroup if successful.
+// PingRoute dials to a given visor of 'rPK' to establish a ping route.
+// Uses the same route-finding and setup machinery as DialRoutes but
+// without route setup hooks (transport creation). This tests the routing
+// infrastructure directly.
 func (r *router) PingRoute(
 	ctx context.Context,
 	rPK cipher.PubKey,
@@ -385,53 +381,76 @@ func (r *router) PingRoute(
 
 	if rPK.Null() {
 		err := ErrRemoteEmptyPK
-		r.logger.WithError(err).Error("Failed to dial routes.")
-		return nil, fmt.Errorf("failed to dial routes: %w", err)
+		r.logger.WithError(err).Error("Failed to dial ping route.")
+		return nil, fmt.Errorf("failed to dial ping route: %w", err)
 	}
 
 	lPK := r.conf.PubKey
-	forwardDesc := routing.NewRouteDescriptor(lPK, lPK, lPort, rPort)
+	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
-	forwardPath, reversePath, err := r.fetchPingRoute(lPK, rPK, opts)
-	if err != nil {
-		return nil, fmt.Errorf("route finder: %w", err)
+	const maxRetries = 3
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, lPK, rPK, opts)
+		if err != nil {
+			if attempt < maxRetries {
+				r.logger.WithError(err).Warnf("Ping route finder failed (attempt %d/%d), retrying...", attempt, maxRetries)
+				continue
+			}
+			return nil, fmt.Errorf("route finder: %w", err)
+		}
+
+		req := routing.BidirectionalRoute{
+			Desc:      forwardDesc,
+			KeepAlive: DefaultRouteKeepAlive,
+			Forward:   forwardPath,
+			Reverse:   reversePath,
+		}
+
+		rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
+		if err != nil {
+			if attempt < maxRetries {
+				r.logger.WithError(err).Warnf("Ping route setup failed (attempt %d/%d), retrying...", attempt, maxRetries)
+				continue
+			}
+			r.logger.WithError(err).Error("Error dialing ping route group")
+			return nil, err
+		}
+
+		if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+			if attempt < maxRetries {
+				r.logger.WithError(err).Warnf("Saving ping routing rules failed (attempt %d/%d), retrying...", attempt, maxRetries)
+				continue
+			}
+			r.logger.WithError(err).Error("Error saving ping routing rules")
+			return nil, err
+		}
+
+		nsConf := noise.Config{
+			LocalPK:   r.conf.PubKey,
+			LocalSK:   r.conf.SecKey,
+			RemotePK:  rPK,
+			Initiator: true,
+		}
+
+		nrg, err := r.saveRouteGroupRules(rules, nsConf)
+		if err != nil {
+			if strings.Contains(err.Error(), "no suitable transport") || strings.Contains(err.Error(), "transport") {
+				if attempt < maxRetries {
+					r.logger.WithError(err).Warnf("Ping route handshake failed (attempt %d/%d), retrying...", attempt, maxRetries)
+					continue
+				}
+			}
+			return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
+		}
+
+		nrg.rg.startOffServiceLoops()
+
+		r.logger.Debugf("Created new ping route to %s on port %d", rPK, lPort)
+
+		return nrg, nil
 	}
 
-	req := routing.BidirectionalRoute{
-		Desc:      forwardDesc,
-		KeepAlive: DefaultRouteKeepAlive,
-		Forward:   forwardPath,
-		Reverse:   reversePath,
-	}
-
-	rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
-	if err != nil {
-		r.logger.WithError(err).Error("Error dialing route group")
-		return nil, err
-	}
-
-	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
-		r.logger.WithError(err).Error("Error saving routing rules")
-		return nil, err
-	}
-
-	nsConf := noise.Config{
-		LocalPK:   r.conf.PubKey,
-		LocalSK:   r.conf.SecKey,
-		RemotePK:  r.conf.PubKey,
-		Initiator: true,
-	}
-
-	nrg, err := r.saveRouteGroupRules(rules, nsConf)
-	if err != nil {
-		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
-	}
-
-	nrg.rg.startOffServiceLoops()
-
-	r.logger.Debugf("Created new routes to %s on port %d", lPK, lPort)
-
-	return nrg, nil
+	return nil, fmt.Errorf("failed to establish ping route after %d attempts", maxRetries)
 }
 
 // AcceptRoutes should block until we receive an AddRules packet from SetupNode
@@ -1099,7 +1118,7 @@ func (r *router) RemoveRouteDescriptor(desc routing.RouteDescriptor) {
 	}
 }
 
-func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
+func (r *router) fetchBestRoutes(ctx context.Context, src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
 	// TODO: use opts
 	if opts == nil {
 		opts = DefaultDialOptions() // nolint
@@ -1112,7 +1131,7 @@ func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd
 
 	if forceLocal {
 		r.logger.Info("Force local routes enabled, using local route calculation")
-		return r.calculateLocalRoutes(context.Background(), src, dst)
+		return r.calculateLocalRoutes(ctx, src, dst)
 	}
 
 	retries := opts.Retries
@@ -1126,7 +1145,10 @@ func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd
 	backward := [2]cipher.PubKey{dst, src}
 
 fetchRoutesAgain:
-	ctx := context.Background()
+	// Check context before making network calls
+	if err := ctx.Err(); err != nil {
+		return nil, nil, fmt.Errorf("context canceled before route fetch: %w", err)
+	}
 
 	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
 		&rfclient.RouteOptions{MinHops: r.conf.MinHops, MaxHops: r.conf.MaxHops})
@@ -1259,70 +1281,6 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 	}
 
 	return nil, nil, errors.New("no route found through local transports")
-}
-
-func (r *router) fetchPingRoute(src, pingKey cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
-	// TODO: use opts
-	if opts == nil {
-		opts = DefaultDialOptions() // nolint
-	}
-
-	r.logger.Debugf("Requesting new routes from %s to %s", src, src)
-
-	timer := time.NewTimer(retryDuration)
-	defer timer.Stop()
-
-	forward := [2]cipher.PubKey{src, src}
-	backward := [2]cipher.PubKey{src, src}
-
-fetchRoutesAgain:
-	ctx := context.Background()
-
-	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
-		&rfclient.RouteOptions{MinHops: 0, MaxHops: 2})
-	if err == rfclient.ErrTransportNotFound {
-		return nil, nil, err
-	}
-
-	if err != nil {
-		select {
-		case <-timer.C:
-			return nil, nil, err
-		default:
-			time.Sleep(retryInterval)
-			goto fetchRoutesAgain
-		}
-	}
-
-	var hopTo, hopFrom bool
-	// check if the remote pk is present in both the hops
-	// [
-	// 	{
-	// 		"TpID":"<tp-id>",
-	// 		"From":"<local-pk>",
-	// 		"To":"<remote-pk>"
-	// 	},
-	// 	{
-	// 		"TpID":"<tp-id>",
-	// 		"From":"<remote-pk>",
-	// 		"To":"<local-pk>"
-	// 	}
-	// ]
-	for _, hop := range paths[forward][0] {
-		if hop.To == pingKey {
-			hopTo = true
-		}
-		if hop.From == pingKey {
-			hopFrom = true
-		}
-	}
-	if !hopTo && hopFrom {
-		return nil, nil, fmt.Errorf("Unable to fetch route with a hop from %v", pingKey)
-	}
-
-	r.logger.Debugf("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])
-
-	return paths[forward][0], paths[backward][0], nil
 }
 
 // SetupIsTrusted checks if setup node is trusted.

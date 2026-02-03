@@ -1329,53 +1329,54 @@ type PingConfig struct {
 
 // DialPing implements API.
 func (v *Visor) DialPing(conf PingConfig) error {
-	if conf.PK == v.conf.PK {
-		return fmt.Errorf("Visor cannot ping itself")
-	}
 	v.pingPcktSize = conf.PcktSize
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
 
 	addr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
-		PubKey: v.conf.PK,
+		PubKey: conf.PK,
 		Port:   routing.Port(skyenv.SkyPingPort),
 	}
 
 	var err error
 	var conn net.Conn
 
-	ctx := context.TODO()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 1, 2)
 	err = r.Do(ctx, func() error {
-		conn, err = appnet.Ping(conf.PK, addr)
+		conn, err = appnet.PingContext(ctx, conf.PK, addr)
 		return err
 	})
 	if err != nil {
 		return err
 	}
 
-	skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
-	if !isSkywireConn {
-		return fmt.Errorf("Can't get such info from this conn")
-	}
 	v.pingConnMx.Lock()
 	v.pingConns[conf.PK] = ping{
-		conn:    skywireConn,
-		latency: make(chan time.Duration),
+		conn: conn,
 	}
 	v.pingConnMx.Unlock()
 	return nil
 }
 
 // Ping implements API.
+// Measures round-trip time by sending ping data and waiting for an echo response.
 func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 	v.pingConnMx.Lock()
 	defer v.pingConnMx.Unlock()
+
+	pingEntry, ok := v.pingConns[conf.PK]
+	if !ok {
+		return nil, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
+	}
+
 	latencies := []time.Duration{}
 	data := make([]byte, conf.PcktSize*1024)
+
 	for i := 1; i <= conf.Tries; i++ {
-		skywireConn := v.pingConns[conf.PK].conn
+		conn := pingEntry.conn
 		msg := PingMsg{
 			Timestamp: time.Now(),
 			PingPk:    conf.PK,
@@ -1392,23 +1393,38 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 		if err != nil {
 			return latencies, err
 		}
-		_, err = skywireConn.Write(size)
-		if err != nil {
-			return latencies, err
+
+		start := time.Now()
+
+		// Send size message
+		if _, err = conn.Write(size); err != nil {
+			return latencies, fmt.Errorf("write size: %w", err)
 		}
 
+		// Read "ok" ack with timeout
+		_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 		buf := make([]byte, 32*1024)
-		_, err = skywireConn.Read(buf)
-		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				return latencies, err
-			}
+		if _, err = conn.Read(buf); err != nil {
+			_ = conn.SetReadDeadline(time.Time{})
+			return latencies, fmt.Errorf("read ack: %w", err)
 		}
-		_, err = skywireConn.Write(ping)
-		if err != nil {
-			return latencies, err
+
+		// Send ping data
+		if _, err = conn.Write(ping); err != nil {
+			_ = conn.SetReadDeadline(time.Time{})
+			return latencies, fmt.Errorf("write ping: %w", err)
 		}
-		latencies = append(latencies, <-v.pingConns[conf.PK].latency)
+
+		// Read echo response with timeout
+		_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		if _, err = conn.Read(buf); err != nil {
+			_ = conn.SetReadDeadline(time.Time{})
+			return latencies, fmt.Errorf("read echo: %w", err)
+		}
+		_ = conn.SetReadDeadline(time.Time{})
+
+		rtt := time.Since(start)
+		latencies = append(latencies, rtt)
 	}
 	return latencies, nil
 }
