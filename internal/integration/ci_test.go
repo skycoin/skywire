@@ -81,20 +81,61 @@ func TestWAN(t *testing.T) {
 }
 
 func TestNewEnv(t *testing.T) {
-	env := NewEnv().GatherContainersInfo()
+	// Wait for all containers to reach "running" state.
+	// Services may restart during initial startup while waiting for dependencies.
+	const maxWait = 90 * time.Second
+	const pollInterval = 5 * time.Second
 
+	env := NewEnv()
+	deadline := time.Now().Add(maxWait)
+
+	var lastFailed string
+	for time.Now().Before(deadline) {
+		env.GatherContainersInfo()
+
+		runningContainers := map[string]string{}
+		for _, container := range env.containers {
+			runningContainers[container.Names[0]] = container.State
+		}
+
+		allRunning := true
+		lastFailed = ""
+		for _, n := range env.visorNames {
+			if runningContainers[n] != string(statusRunning) {
+				allRunning = false
+				lastFailed = fmt.Sprintf("visor %s: state=%q", n, runningContainers[n])
+				break
+			}
+		}
+		if allRunning {
+			for _, n := range env.serviceNames {
+				if runningContainers[n] != string(statusRunning) {
+					allRunning = false
+					lastFailed = fmt.Sprintf("service %s: state=%q", n, runningContainers[n])
+					break
+				}
+			}
+		}
+
+		if allRunning {
+			return
+		}
+
+		t.Logf("Waiting for containers... (%s)", lastFailed)
+		time.Sleep(pollInterval)
+	}
+
+	// Final check after timeout
+	env.GatherContainersInfo()
 	runningContainers := map[string]string{}
-
 	for _, container := range env.containers {
 		runningContainers[container.Names[0]] = container.State
 	}
-
 	for _, n := range env.visorNames {
-		require.EqualValues(t, statusRunning, runningContainers[n])
+		require.EqualValues(t, statusRunning, runningContainers[n], "visor %s not running after %v", n, maxWait)
 	}
-
 	for _, n := range env.serviceNames {
-		require.EqualValues(t, statusRunning, runningContainers[n])
+		require.EqualValues(t, statusRunning, runningContainers[n], "service %s not running after %v", n, maxWait)
 	}
 }
 
@@ -141,6 +182,9 @@ func TestEnv_cli(t *testing.T) {
 func TestEnv_VisorAppLs(t *testing.T) {
 	env := NewEnv().GatherContainersInfo()
 
+	// Wait for visor-b RPC to be ready before querying apps
+	require.NoError(t, env.WaitForVisorReady(visorB, 60*time.Second), "visor-b not ready")
+
 	output, err := env.VisorAppLs(visorB)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(output))
@@ -152,6 +196,8 @@ func TestEnv_VisorPK(t *testing.T) {
 	visorsPKs := map[string]string{}
 
 	for _, visor := range []string{visorA, visorB, visorC} {
+		// WaitForVisorReady already polls VisorPK, so use it with retry
+		require.NoError(t, env.WaitForVisorReady(visor, 60*time.Second), "visor %s not ready", visor)
 		pk, err := env.VisorPK(visor)
 		require.NoError(t, err)
 
@@ -161,8 +207,14 @@ func TestEnv_VisorPK(t *testing.T) {
 
 func TestEnv_VisorAddTp(t *testing.T) {
 	env := NewEnv().
-		GatherContainersInfo().
-		GatherVisorPKs([]string{visorA, visorB, visorC})
+		GatherContainersInfo()
+
+	// Wait for all visors to be ready before gathering PKs
+	for _, visor := range []string{visorA, visorB, visorC} {
+		require.NoError(t, env.WaitForVisorReady(visor, 60*time.Second), "visor %s not ready", visor)
+	}
+
+	env.GatherVisorPKs([]string{visorA, visorB, visorC})
 
 	pkA := env.visorPKs[visorA]
 

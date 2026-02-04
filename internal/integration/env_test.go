@@ -1526,3 +1526,20 @@ func truncateID(id string) string {
 	}
 	return id[:8] + "..."
 }
+
+// WaitForVisorReady waits until a visor's RPC is responsive by polling VisorPK.
+// This ensures the visor has fully initialized its transport manager and app launcher.
+func (env *TestEnv) WaitForVisorReady(visor string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	pollInterval := 3 * time.Second
+
+	for time.Now().Before(deadline) {
+		_, err := env.VisorPK(visor)
+		if err == nil {
+			return nil
+		}
+		env.logger.Debugf("Visor %s not ready yet: %v", visor, err)
+		time.Sleep(pollInterval)
+	}
+	return fmt.Errorf("visor %s RPC not ready after %v", visor, timeout)
+}
