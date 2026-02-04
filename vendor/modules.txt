@@ -9,8 +9,8 @@ atomicgo.dev/keyboard/keys
 # atomicgo.dev/schedule v0.1.0
 ## explicit; go 1.18
 atomicgo.dev/schedule
-# cogentcore.org/core v0.3.12
-## explicit; go 1.23.4
+# cogentcore.org/core v0.3.15
+## explicit; go 1.25.6
 cogentcore.org/core/base/bools
 cogentcore.org/core/base/datasize
 cogentcore.org/core/base/elide
@@ -61,11 +61,13 @@ cogentcore.org/core/icons
 cogentcore.org/core/keymap
 cogentcore.org/core/math32
 cogentcore.org/core/paint
+cogentcore.org/core/paint/pdf
 cogentcore.org/core/paint/pimage
 cogentcore.org/core/paint/ppath
 cogentcore.org/core/paint/render
 cogentcore.org/core/paint/renderers
 cogentcore.org/core/paint/renderers/htmlcanvas
+cogentcore.org/core/paint/renderers/pdfrender
 cogentcore.org/core/paint/renderers/rasterx
 cogentcore.org/core/paint/renderers/rasterx/scan
 cogentcore.org/core/paint/renderers/svgrender
@@ -105,6 +107,7 @@ cogentcore.org/core/text/parse/lexer
 cogentcore.org/core/text/parse/parser
 cogentcore.org/core/text/parse/supportedlanguages
 cogentcore.org/core/text/parse/syms
+cogentcore.org/core/text/printer
 cogentcore.org/core/text/rich
 cogentcore.org/core/text/runes
 cogentcore.org/core/text/search
@@ -198,7 +201,7 @@ github.com/alecthomas/chroma/lexers/x
 github.com/alecthomas/chroma/lexers/y
 github.com/alecthomas/chroma/lexers/z
 github.com/alecthomas/chroma/styles
-# github.com/alecthomas/chroma/v2 v2.21.1
+# github.com/alecthomas/chroma/v2 v2.23.1
 ## explicit; go 1.22
 github.com/alecthomas/chroma/v2
 github.com/alecthomas/chroma/v2/formatters/html
@@ -229,7 +232,7 @@ github.com/blang/semver/v4
 # github.com/bytedance/gopkg v0.1.3
 ## explicit; go 1.18
 github.com/bytedance/gopkg/lang/dirtmake
-# github.com/bytedance/sonic v1.14.2
+# github.com/bytedance/sonic v1.15.0
 ## explicit; go 1.18
 github.com/bytedance/sonic
 github.com/bytedance/sonic/ast
@@ -264,7 +267,7 @@ github.com/bytedance/sonic/internal/utils
 github.com/bytedance/sonic/option
 github.com/bytedance/sonic/unquote
 github.com/bytedance/sonic/utf8
-# github.com/bytedance/sonic/loader v0.4.0
+# github.com/bytedance/sonic/loader v0.5.0
 ## explicit; go 1.16
 github.com/bytedance/sonic/loader
 github.com/bytedance/sonic/loader/internal/abi
@@ -291,10 +294,9 @@ github.com/chewxy/math32
 # github.com/clipperhouse/stringish v0.1.1
 ## explicit; go 1.18
 github.com/clipperhouse/stringish
-# github.com/clipperhouse/uax29/v2 v2.3.1
+# github.com/clipperhouse/uax29/v2 v2.5.0
 ## explicit; go 1.18
 github.com/clipperhouse/uax29/v2/graphemes
-github.com/clipperhouse/uax29/v2/internal/iterators
 # github.com/cloudwego/base64x v0.1.6
 ## explicit; go 1.17
 github.com/cloudwego/base64x
@@ -390,7 +392,7 @@ github.com/docker/go-connections/tlsconfig
 # github.com/docker/go-units v0.4.0
 ## explicit
 github.com/docker/go-units
-# github.com/elazarl/goproxy v1.8.0
+# github.com/elazarl/goproxy v1.8.1
 ## explicit; go 1.23.0
 github.com/elazarl/goproxy
 github.com/elazarl/goproxy/internal/http1parser
@@ -411,7 +413,7 @@ github.com/felixge/httpsnoop
 ## explicit; go 1.17
 github.com/fsnotify/fsnotify
 github.com/fsnotify/fsnotify/internal
-# github.com/gabriel-vasile/mimetype v1.4.12
+# github.com/gabriel-vasile/mimetype v1.4.13
 ## explicit; go 1.21
 github.com/gabriel-vasile/mimetype
 github.com/gabriel-vasile/mimetype/internal/charset
@@ -503,7 +505,7 @@ github.com/go-redis/redis/v8/internal/pool
 github.com/go-redis/redis/v8/internal/proto
 github.com/go-redis/redis/v8/internal/rand
 github.com/go-redis/redis/v8/internal/util
-# github.com/go-text/typesetting v0.3.2
+# github.com/go-text/typesetting v0.3.3
 ## explicit; go 1.19
 github.com/go-text/typesetting/di
 github.com/go-text/typesetting/font
@@ -684,6 +686,9 @@ github.com/jaypipes/ghw/pkg/util
 github.com/jaypipes/pcidb
 github.com/jaypipes/pcidb/internal
 github.com/jaypipes/pcidb/types
+# github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade
+## explicit; go 1.18
+github.com/jeandeaual/go-locale
 # github.com/jinzhu/copier v0.4.0
 ## explicit; go 1.13
 github.com/jinzhu/copier
@@ -699,7 +704,7 @@ github.com/json-iterator/go
 # github.com/klauspost/cpuid/v2 v2.3.0
 ## explicit; go 1.22
 github.com/klauspost/cpuid/v2
-# github.com/klauspost/reedsolomon v1.13.0
+# github.com/klauspost/reedsolomon v1.13.2
 ## explicit; go 1.23
 github.com/klauspost/reedsolomon
 # github.com/kyokomi/emoji/v2 v2.2.13
@@ -709,9 +714,13 @@ github.com/kyokomi/emoji/v2
 ## explicit; go 1.18
 github.com/leodido/go-urn
 github.com/leodido/go-urn/scim/schema
-# github.com/lib/pq v1.10.9
-## explicit; go 1.13
+# github.com/lib/pq v1.11.1
+## explicit; go 1.21
 github.com/lib/pq
+github.com/lib/pq/internal/pgpass
+github.com/lib/pq/internal/pqsql
+github.com/lib/pq/internal/pqutil
+github.com/lib/pq/internal/proto
 github.com/lib/pq/oid
 github.com/lib/pq/scram
 # github.com/lithammer/fuzzysearch v1.1.8
@@ -774,7 +783,7 @@ github.com/pelletier/go-toml/v2/internal/characters
 github.com/pelletier/go-toml/v2/internal/danger
 github.com/pelletier/go-toml/v2/internal/tracker
 github.com/pelletier/go-toml/v2/unstable
-# github.com/pires/go-proxyproto v0.9.0
+# github.com/pires/go-proxyproto v0.9.2
 ## explicit; go 1.24
 github.com/pires/go-proxyproto
 # github.com/pkg/errors v0.9.1
@@ -829,7 +838,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20251231130430-f3155f3ddf60
+# github.com/skycoin/dmsg v1.3.29-0.20260204193624-80acbd3e0bff
 ## explicit; go 1.25.4
 github.com/skycoin/dmsg/cmd/conf/commands
 github.com/skycoin/dmsg/cmd/dial/commands
@@ -1051,8 +1060,8 @@ github.com/yusufpapurcu/wmi
 ## explicit; go 1.22
 github.com/zcalusic/sysinfo
 github.com/zcalusic/sysinfo/cpuid
-# github.com/zeebo/xxh3 v1.0.2
-## explicit; go 1.17
+# github.com/zeebo/xxh3 v1.1.0
+## explicit; go 1.22
 github.com/zeebo/xxh3
 # go.etcd.io/bbolt v1.4.3
 ## explicit; go 1.23
@@ -1124,7 +1133,7 @@ golang.org/x/crypto/sha3
 golang.org/x/crypto/tea
 golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
-# golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93
+# golang.org/x/exp v0.0.0-20260112195511-716be5621a96
 ## explicit; go 1.24.0
 golang.org/x/exp/maps
 # golang.org/x/image v0.35.0
@@ -1140,7 +1149,7 @@ golang.org/x/image/tiff/lzw
 golang.org/x/image/vp8
 golang.org/x/image/vp8l
 golang.org/x/image/webp
-# golang.org/x/mod v0.31.0
+# golang.org/x/mod v0.32.0
 ## explicit; go 1.24.0
 golang.org/x/mod/semver
 # golang.org/x/net v0.49.0
@@ -1206,7 +1215,7 @@ golang.org/x/text/width
 # golang.org/x/time v0.14.0
 ## explicit; go 1.24.0
 golang.org/x/time/rate
-# golang.org/x/tools v0.40.0
+# golang.org/x/tools v0.41.0
 ## explicit; go 1.24.0
 golang.org/x/tools/go/ast/edge
 golang.org/x/tools/go/ast/inspector
