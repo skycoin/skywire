@@ -1578,6 +1578,15 @@ func (env *TestEnv) WaitForVisorReady(visor string, timeout time.Duration) error
 		visor, elapsed, attempt, lastErr)
 	env.logContainerTail(visor, 30)
 
+	// Log service container status and logs when visor fails due to service connectivity
+	env.GatherContainersInfo()
+	for _, svc := range []string{"transport-discovery", "dmsg-discovery", "dmsg-server", "address-resolver"} {
+		if c, ok := env.containers[svc]; ok {
+			env.logger.Infof("Service %s: state=%s status=%s", svc, c.State, c.Status)
+		}
+		env.logContainerTail(svc, 20)
+	}
+
 	return fmt.Errorf("visor %s RPC not ready after %v (%d attempts, last error: %s)",
 		visor, timeout, attempt, lastErr)
 }
