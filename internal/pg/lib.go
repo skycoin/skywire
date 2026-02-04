@@ -12,8 +12,8 @@ import (
 
 // Init creates a connection to database with retry logic for startup resilience.
 func Init(dns string, pgMaxOpenConn int) (*gorm.DB, error) {
-	const maxRetries = 10
-	const retryDelay = 3 * time.Second
+	const maxRetries = 5
+	const retryDelay = 1 * time.Second
 
 	var db *gorm.DB
 	var err error
