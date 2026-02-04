@@ -280,8 +280,10 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	// 3. STUN servers
 	var pIP string
 
-	// Try dmsg LookupIP first
-	ipAddr, err := v.dmsgC.LookupIP(ctx, nil)
+	// Try dmsg LookupIP first (with timeout to avoid blocking init if dmsg isn't ready)
+	lookupCtx, lookupCancel := context.WithTimeout(ctx, 10*time.Second)
+	ipAddr, err := v.dmsgC.LookupIP(lookupCtx, nil)
+	lookupCancel()
 	if err != nil {
 		log.WithError(err).Debug("Failed to get public IP from dmsg server, trying GeoIP")
 
@@ -351,7 +353,9 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		// Use same fallback chain as address resolver: dmsg -> GeoIP -> STUN
 		logger := factory.Log
 		var pIP string
-		ipAddr, err := v.dmsgC.LookupIP(ctx, nil)
+		lookupCtx, lookupCancel := context.WithTimeout(ctx, 10*time.Second)
+		ipAddr, err := v.dmsgC.LookupIP(lookupCtx, nil)
+		lookupCancel()
 		if err != nil {
 			logger.WithError(err).Debug("Failed to get public IP from dmsg server, trying GeoIP")
 

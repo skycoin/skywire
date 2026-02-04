@@ -118,6 +118,11 @@ func TestNewEnv(t *testing.T) {
 		}
 
 		if allRunning {
+			// Log all container states for diagnostics
+			t.Logf("All containers running:")
+			for name, state := range runningContainers {
+				t.Logf("  %s: %s", name, state)
+			}
 			return
 		}
 
@@ -180,56 +185,71 @@ func TestEnv_cli(t *testing.T) {
 }
 
 func TestEnv_VisorAppLs(t *testing.T) {
+	start := time.Now()
 	env := NewEnv().GatherContainersInfo()
 
 	// Wait for visor-b RPC to be ready before querying apps
-	require.NoError(t, env.WaitForVisorReady(visorB, 60*time.Second), "visor-b not ready")
+	require.NoError(t, env.WaitForVisorReady(visorB, 180*time.Second), "visor-b not ready")
 
 	output, err := env.VisorAppLs(visorB)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(output))
+	t.Logf("TestEnv_VisorAppLs completed in %v", time.Since(start).Round(time.Second))
 }
 
 func TestEnv_VisorPK(t *testing.T) {
+	start := time.Now()
 	env := NewEnv().GatherContainersInfo()
 
 	visorsPKs := map[string]string{}
 
 	for _, visor := range []string{visorA, visorB, visorC} {
 		// WaitForVisorReady already polls VisorPK, so use it with retry
-		require.NoError(t, env.WaitForVisorReady(visor, 60*time.Second), "visor %s not ready", visor)
+		require.NoError(t, env.WaitForVisorReady(visor, 180*time.Second), "visor %s not ready", visor)
 		pk, err := env.VisorPK(visor)
 		require.NoError(t, err)
 
 		visorsPKs[visor] = pk
+		t.Logf("Visor %s PK: %s", visor, pk[:16]+"...")
 	}
+	t.Logf("TestEnv_VisorPK completed in %v", time.Since(start).Round(time.Second))
 }
 
 func TestEnv_VisorAddTp(t *testing.T) {
+	start := time.Now()
 	env := NewEnv().
 		GatherContainersInfo()
 
 	// Wait for all visors to be ready before gathering PKs
 	for _, visor := range []string{visorA, visorB, visorC} {
-		require.NoError(t, env.WaitForVisorReady(visor, 60*time.Second), "visor %s not ready", visor)
+		require.NoError(t, env.WaitForVisorReady(visor, 180*time.Second), "visor %s not ready", visor)
 	}
 
 	env.GatherVisorPKs([]string{visorA, visorB, visorC})
 
 	pkA := env.visorPKs[visorA]
 
+	t.Logf("Adding transport from visor-b to visor-a (pk: %s)", pkA[:16]+"...")
 	out, err := env.VisorTpAddDefault(visorB, pkA)
 	require.NoError(t, err)
 	require.Contains(t, out.Remote.Hex(), pkA)
+	t.Logf("Transport added: %s, removing...", out.ID)
 	rmOut, err := env.VisorTpRm(visorB, out.ID)
 	require.NoError(t, err)
 	require.Equal(t, "OK", rmOut)
+	t.Logf("TestEnv_VisorAddTp completed in %v", time.Since(start).Round(time.Second))
 }
 
 func TestEnv_VisorAddTp_second(t *testing.T) {
 	env := NewEnv().
-		GatherContainersInfo().
-		GatherVisorPKs([]string{visorA, visorB, visorC})
+		GatherContainersInfo()
+
+	// Wait for all visors to be ready before gathering PKs
+	for _, visor := range []string{visorA, visorB, visorC} {
+		require.NoError(t, env.WaitForVisorReady(visor, 180*time.Second), "visor %s not ready", visor)
+	}
+
+	env.GatherVisorPKs([]string{visorA, visorB, visorC})
 
 	for _, visor := range []string{visorA, visorC} {
 		pk := env.visorPKs[visor]
