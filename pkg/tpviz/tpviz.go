@@ -879,9 +879,33 @@ func (s *Server) refreshVisorData() {
 	if err != nil {
 		// In embedded mode, don't clear the API - it's always valid,
 		// just mark as temporarily unavailable (visor might still be initializing)
+		// IMPORTANT: Preserve the PubKey from SetVisorAPI so local visor still appears in UI
 		if embedded {
 			s.visorMu.Lock()
-			s.visorCache = &LocalVisorData{Connected: true, LastUpdated: time.Now()}
+			existingPK := ""
+			existingCountry := ""
+			existingIP := ""
+			if s.visorCache != nil {
+				existingPK = s.visorCache.PubKey
+				existingCountry = s.visorCache.Country
+				existingIP = s.visorCache.IP
+			}
+			// Get geoip data if not already set
+			if existingCountry == "" {
+				s.localGeoMu.RLock()
+				if s.localGeo != nil {
+					existingCountry = s.localGeo.Country
+					existingIP = s.localGeo.IP
+				}
+				s.localGeoMu.RUnlock()
+			}
+			s.visorCache = &LocalVisorData{
+				Connected:   true,
+				PubKey:      existingPK,
+				Country:     existingCountry,
+				IP:          existingIP,
+				LastUpdated: time.Now(),
+			}
 			s.visorMu.Unlock()
 			return
 		}

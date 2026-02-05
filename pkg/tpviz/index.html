@@ -2523,8 +2523,14 @@
                 // Count only actual IP groups (not _no_ip) for sizing multiplier
                 const actualIPGroups = Array.from(ipMap.keys()).filter(k => k !== '_no_ip').length;
                 // Country radius needs extra space when containing multiple IP sub-groups
-                const radius = calculateGroupRadius(totalNodes) * (actualIPGroups > 1 ? 1.4 : 1.0);
-                countries.push({ country, totalNodes, radius, ipMap });
+                // Scale more aggressively based on number of IP groups to prevent overlap
+                let sizeMultiplier = 1.0;
+                if (actualIPGroups > 1) {
+                    // More groups need more space: 1.5 for 2 groups, up to 2.5 for many groups
+                    sizeMultiplier = 1.5 + Math.min(1.0, (actualIPGroups - 2) * 0.25);
+                }
+                const radius = calculateGroupRadius(totalNodes) * sizeMultiplier;
+                countries.push({ country, totalNodes, radius, ipMap, actualIPGroups });
             });
             countries.sort((a, b) => b.radius - a.radius);
 
@@ -2533,7 +2539,7 @@
             const countryCentroids = new Map();
 
             for (const c of countries) {
-                const pos = findNonOverlappingPosition(c.radius, placedCountries, 120);
+                const pos = findNonOverlappingPosition(c.radius, placedCountries, 150);
                 placedCountries.push({ x: pos.x, y: pos.y, radius: c.radius });
                 countryCentroids.set(c.country, { x: pos.x, y: pos.y, radius: c.radius, count: c.totalNodes });
             }
@@ -2572,10 +2578,13 @@
 
                     // Scale sub-circles to fit within country (with room for _no_ip nodes)
                     const totalSubArea = ipGroups.reduce((s, g) => s + Math.PI * g.radius * g.radius, 0);
-                    const availableArea = Math.PI * Math.pow(cc.radius - 80, 2);
-                    const scaleFactor = Math.min(1, Math.sqrt(availableArea / totalSubArea) * 0.75);
+                    const availableArea = Math.PI * Math.pow(cc.radius - 100, 2);
+                    // Use less aggressive scaling to maintain circle sizes
+                    const scaleFactor = Math.min(1, Math.sqrt(availableArea / totalSubArea) * 0.85);
 
                     const placedSubs = [];
+                    // Use larger padding between sub-circles to prevent overlap
+                    const subCirclePadding = 80;
                     for (const ig of ipGroups) {
                         const scaledRadius = Math.max(60, ig.radius * scaleFactor);
                         let pos;
@@ -2583,8 +2592,8 @@
                             pos = { x: cc.x, y: cc.y };
                         } else {
                             pos = findNonOverlappingPositionWithin(
-                                scaledRadius, placedSubs, 50,
-                                cc.x, cc.y, cc.radius - scaledRadius - 60
+                                scaledRadius, placedSubs, subCirclePadding,
+                                cc.x, cc.y, cc.radius - scaledRadius - 80
                             );
                         }
                         placedSubs.push({ x: pos.x, y: pos.y, radius: scaledRadius });
