@@ -718,8 +718,8 @@ github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9 h1:DElGw1Fhj4a
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9/go.mod h1:OQz8NXVJUWEw7PWYASZ/1BIw5GXgVMTGvrCGDlZa9+k=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0duwyG+7WliWz5u9kgk1h5MnLuA=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6/go.mod h1:UXghlricA7J3aRD/k7p/zBObQfmBawwCxIVPVjz2Q3o=
-github.com/skycoin/skycoin v0.28.3-0.20251231165540-546626800e91 h1:ODtb8b7zedUyUQx3cqIF2W8ZVIozDu4j7oNFxArBeRQ=
-github.com/skycoin/skycoin v0.28.3-0.20251231165540-546626800e91/go.mod h1:tvncrDn11WE/myRpWABXBwOAkMrUGkty3a0G9eQEvh0=
+github.com/skycoin/skycoin v0.28.3-alpha1 h1:EvAIuSvUXsSyptKex6CJ2ZgdRGMs+QhA3EIEhoOxDio=
+github.com/skycoin/skycoin v0.28.3-alpha1/go.mod h1:FxRzVp/LzhrJXdPSDxVr1AUTp0v36PwwPNTvEVxrVpI=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8/go.mod h1:P5HUIBuIWKbyjl083/loAegFkfbFNx5i2qEP4CNbm7E=
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
