@@ -1869,7 +1869,7 @@
                 nodePositions.forEach((pos, nodeId) => {
                     let { x: nodeX, y: nodeY, origX, origY, key, centroid } = pos;
 
-                    // Hard boundary
+                    // Hard boundary - keep node inside its group circle
                     const maxDist = centroid.radius - 40;
                     const newDx = nodeX - centroid.x;
                     const newDy = nodeY - centroid.y;
@@ -1883,6 +1883,27 @@
                         const scale = maxDist / newDist;
                         nodeX = centroid.x + newDx * scale;
                         nodeY = centroid.y + newDy * scale;
+                    }
+
+                    // For _country nodes (have country but no IP data), push them OUT of IP sub-circles
+                    if (key.endsWith('|_country')) {
+                        const country = key.split('|')[0];
+                        // Check against all IP sub-circles in this country
+                        fixedGroupCentroids.forEach((subCircle, subKey) => {
+                            // Skip if not an IP sub-circle in this country
+                            if (!subKey.startsWith(country + '|') || subKey.endsWith('|_country')) return;
+                            // Check if node is inside this IP sub-circle
+                            const sdx = nodeX - subCircle.x;
+                            const sdy = nodeY - subCircle.y;
+                            const sDist = Math.sqrt(sdx * sdx + sdy * sdy);
+                            const minDist = subCircle.radius + 25; // Stay outside with margin
+                            if (sDist < minDist && sDist > 0) {
+                                // Push node out of the sub-circle
+                                const pushScale = (minDist - sDist) / sDist;
+                                nodeX += sdx * pushScale * 0.8;
+                                nodeY += sdy * pushScale * 0.8;
+                            }
+                        });
                     }
 
                     // Track velocity as heat
