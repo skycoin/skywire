@@ -423,7 +423,7 @@
 
         // Focus on a visor in the network
         function focusVisor(pk) {
-            if (network) {
+            if (network && nodesDataset.get(pk)) {
                 network.focus(pk, { scale: 1.5, animation: true });
                 network.selectNodes([pk]);
                 showNodeInfo(pk);
@@ -624,9 +624,19 @@
                         console.log('Local visor connected:', localVisorData.pub_key.substring(0, 16) + '...',
                             'Transports:', localVisorData.transports?.length || 0,
                             'Routes:', localVisorData.routes_count,
+                            'Country:', localVisorData.country || 'unknown',
                             'Route destinations:', routeDestinations.size);
                         // Start fast refresh for local visor data (every 2 seconds)
                         startLocalVisorFastRefresh();
+
+                        // Register local visor in visorServices with its country (from geoip)
+                        // This ensures proper country grouping even if the visor isn't in service discovery yet
+                        if (localVisorData.pub_key) {
+                            visorServices[localVisorData.pub_key] = {
+                                services: visorServices[localVisorData.pub_key]?.services || [],
+                                country: localVisorData.country || visorServices[localVisorData.pub_key]?.country || ''
+                            };
+                        }
                     }
                 }
 
@@ -774,6 +784,12 @@
             if (!localVisorData || !localVisorData.connected || !network) return;
             const pk = localVisorData.pub_key;
 
+            // Check if node exists in the network before selecting/focusing
+            if (!nodesDataset.get(pk)) {
+                console.log('Local visor node not in network graph yet:', pk.substring(0, 16) + '...');
+                return;
+            }
+
             // Select and focus on the node
             network.selectNodes([pk]);
             network.focus(pk, {
@@ -838,7 +854,7 @@
 
         // Focus on any node by PK
         function focusNode(pk) {
-            if (!network) return;
+            if (!network || !nodesDataset.get(pk)) return;
             network.selectNodes([pk]);
             network.focus(pk, {
                 scale: 1.5,
@@ -2033,22 +2049,20 @@
                     }
                 } else if (groupingMode === 'dual' && ipGroupsData && ipGroupsData.groups) {
                     // Dual mode: compute IP-level inner boundaries
+                    // Skip nodes without country (they float freely outside)
+                    // Skip nodes without IP data (they float freely inside country)
                     const svcInfo = visorServices[node.id];
-                    const country = svcInfo ? (svcInfo.country || '_unknown') : '_unknown';
+                    const country = svcInfo ? svcInfo.country : '';
+                    if (!country) return; // No boundary for unknown country nodes
                     const gid = ipGroupsData.groups[node.id];
-                    const ipKey = gid !== undefined ? String(gid) : '_no_ip';
-                    groupKey = `${country}|${ipKey}`;
+                    if (gid === undefined) return; // No IP bubble for _no_ip nodes (they use country boundary)
 
-                    if (gid === undefined) {
-                        color = { background: 'rgba(102, 102, 102, 0.1)', border: '#555' };
-                        label = 'No IP';
-                    } else {
-                        color = {
-                            background: getIPGroupColor(gid).replace(')', ', 0.15)').replace('hsl', 'hsla'),
-                            border: getIPGroupColor(gid)
-                        };
-                        label = 'IP ' + gid;
-                    }
+                    groupKey = `${country}|${gid}`;
+                    color = {
+                        background: getIPGroupColor(gid).replace(')', ', 0.15)').replace('hsl', 'hsla'),
+                        border: getIPGroupColor(gid)
+                    };
+                    label = 'IP ' + gid;
                     flag = '';
                 } else {
                     return;
@@ -2091,12 +2105,13 @@
 
             // For dual mode: also add country-level outer boundaries
             if (groupingMode === 'dual') {
-                // Group inner boundaries by country
+                // Group inner boundaries by country (skip unknown country)
                 const countryNodes = new Map(); // country -> [nodeIds]
                 nodesDataset.forEach(node => {
                     if (node.hidden) return;
                     const svcInfo = visorServices[node.id];
-                    const country = svcInfo ? (svcInfo.country || '_unknown') : '_unknown';
+                    const country = svcInfo ? svcInfo.country : '';
+                    if (!country) return; // Skip unknown country - those nodes float freely
                     if (!countryNodes.has(country)) countryNodes.set(country, []);
                     countryNodes.get(country).push(node.id);
                 });
@@ -2118,15 +2133,14 @@
                     }
                     const radius = maxDist + 80; // Extra padding for outer boundary
 
-                    const displayCountry = country === '_unknown' ? '' : country;
-                    const countryColor = getCountryColor(displayCountry);
+                    const countryColor = getCountryColor(country);
 
                     groupBoundaries.push({
                         centroid: { x: cx, y: cy },
                         radius: Math.max(radius, 100),
                         color: { background: countryColor.background.replace('0.15', '0.08'), border: countryColor.border },
-                        label: displayCountry || 'Unknown',
-                        flag: countryToFlag(displayCountry),
+                        label: country,
+                        flag: countryToFlag(country),
                         count: nodeIds.length,
                         level: 'outer'
                     });
@@ -2224,26 +2238,30 @@
                 return { x: 0, y: 0 };
             }
 
-            // Spiral outward from center to find a free spot
-            const spiralStep = 50;
-            let angle = 0;
-            let spiralRadius = radius + padding;
+            // Try concentric rings with multiple angles per ring
+            const minSpacing = radius + padding;
+            for (let ring = 1; ring <= 50; ring++) {
+                const ringRadius = minSpacing * ring * 0.4;
+                const numAngles = Math.max(8, Math.floor(ring * 4)); // More angles on outer rings
 
-            for (let attempts = 0; attempts < 1000; attempts++) {
-                const x = spiralRadius * Math.cos(angle);
-                const y = spiralRadius * Math.sin(angle);
+                for (let i = 0; i < numAngles; i++) {
+                    const angle = (i / numAngles) * 2 * Math.PI + (ring % 2) * (Math.PI / numAngles);
+                    const x = ringRadius * Math.cos(angle);
+                    const y = ringRadius * Math.sin(angle);
 
-                if (!circleOverlaps(x, y, radius, placedCircles, padding)) {
-                    return { x, y };
+                    if (!circleOverlaps(x, y, radius, placedCircles, padding)) {
+                        return { x, y };
+                    }
                 }
-
-                // Spiral outward
-                angle += 0.5;
-                spiralRadius += spiralStep * 0.1;
             }
 
-            // Fallback: place far away
-            return { x: spiralRadius * 2, y: spiralRadius * 2 };
+            // Fallback: use hexagonal packing
+            const cols = Math.ceil(Math.sqrt(placedCircles.length + 1));
+            const row = Math.floor(placedCircles.length / cols);
+            const col = placedCircles.length % cols;
+            const spacing = (radius + padding) * 2.5;
+            const xOffset = (row % 2) * spacing * 0.5;
+            return { x: col * spacing + xOffset, y: row * spacing * 0.866 };
         }
 
         // Arrange nodes into non-overlapping circular group clusters
@@ -2462,28 +2480,37 @@
             if (!originalPositions) originalPositions = network.getPositions();
 
             // Build country -> ipGroup -> nodeIds hierarchy
+            // Nodes with unknown country go to '_unknown' (will float freely outside)
+            // Nodes with no IP data go to '_no_ip' (will float freely inside their country)
             const hierarchy = new Map();
+            const unknownCountryNodes = []; // Nodes without country float outside all bubbles
             nodesDataset.forEach(node => {
                 if (node.hidden) return;
                 const svcInfo = visorServices[node.id];
-                const country = svcInfo ? (svcInfo.country || '_unknown') : '_unknown';
+                const country = svcInfo ? svcInfo.country : '';
                 const gid = ipGroupsData.groups[node.id];
                 const ipKey = gid !== undefined ? String(gid) : '_no_ip';
 
-                if (!hierarchy.has(country)) hierarchy.set(country, new Map());
-                const ipMap = hierarchy.get(country);
-                if (!ipMap.has(ipKey)) ipMap.set(ipKey, []);
-                ipMap.get(ipKey).push(node.id);
+                if (!country) {
+                    // No country - these nodes float freely outside all bubbles
+                    unknownCountryNodes.push(node.id);
+                } else {
+                    if (!hierarchy.has(country)) hierarchy.set(country, new Map());
+                    const ipMap = hierarchy.get(country);
+                    if (!ipMap.has(ipKey)) ipMap.set(ipKey, []);
+                    ipMap.get(ipKey).push(node.id);
+                }
             });
 
-            // Calculate country sizes and radii
+            // Calculate country sizes and radii (excluding unknown country)
             const countries = [];
             hierarchy.forEach((ipMap, country) => {
                 let totalNodes = 0;
                 ipMap.forEach(nodes => totalNodes += nodes.length);
-                const numIPGroups = ipMap.size;
+                // Count only actual IP groups (not _no_ip) for sizing multiplier
+                const actualIPGroups = Array.from(ipMap.keys()).filter(k => k !== '_no_ip').length;
                 // Country radius needs extra space when containing multiple IP sub-groups
-                const radius = calculateGroupRadius(totalNodes) * (numIPGroups > 1 ? 1.4 : 1.0);
+                const radius = calculateGroupRadius(totalNodes) * (actualIPGroups > 1 ? 1.4 : 1.0);
                 countries.push({ country, totalNodes, radius, ipMap });
             });
             countries.sort((a, b) => b.radius - a.radius);
@@ -2505,25 +2532,35 @@
             for (const c of countries) {
                 const cc = countryCentroids.get(c.country);
 
-                if (c.ipMap.size <= 1) {
-                    // Single IP group: place nodes directly in country circle
-                    const [ipKey, nodeIds] = Array.from(c.ipMap.entries())[0];
+                // Separate _no_ip nodes from actual IP groups
+                const noIpNodes = c.ipMap.get('_no_ip') || [];
+                const actualIPEntries = Array.from(c.ipMap.entries()).filter(([k]) => k !== '_no_ip');
+
+                if (actualIPEntries.length === 0) {
+                    // Only _no_ip nodes in this country - place them directly in country circle
+                    // They use country boundary for enforcement
+                    const key = `${c.country}|_country`;
+                    compositeGroups.set(key, { x: cc.x, y: cc.y, radius: cc.radius, count: noIpNodes.length });
+                    placeNodesInCircle(noIpNodes, cc, nodeUpdates);
+                } else if (actualIPEntries.length === 1 && noIpNodes.length === 0) {
+                    // Single IP group, no _no_ip: place nodes directly in country circle
+                    const [ipKey, nodeIds] = actualIPEntries[0];
                     const key = `${c.country}|${ipKey}`;
                     compositeGroups.set(key, { x: cc.x, y: cc.y, radius: cc.radius, count: nodeIds.length });
                     placeNodesInCircle(nodeIds, cc, nodeUpdates);
                 } else {
-                    // Multiple IP groups: pack sub-circles within country circle
-                    const ipGroups = Array.from(c.ipMap.entries())
+                    // Multiple IP groups or mix of IP groups + _no_ip: pack sub-circles within country circle
+                    const ipGroups = actualIPEntries
                         .map(([ipKey, nodeIds]) => ({
                             ipKey, nodeIds,
                             radius: calculateGroupRadius(nodeIds.length)
                         }))
                         .sort((a, b) => b.radius - a.radius);
 
-                    // Scale sub-circles to fit within country
+                    // Scale sub-circles to fit within country (with room for _no_ip nodes)
                     const totalSubArea = ipGroups.reduce((s, g) => s + Math.PI * g.radius * g.radius, 0);
                     const availableArea = Math.PI * Math.pow(cc.radius - 80, 2);
-                    const scaleFactor = Math.min(1, Math.sqrt(availableArea / totalSubArea) * 0.8);
+                    const scaleFactor = Math.min(1, Math.sqrt(availableArea / totalSubArea) * 0.75);
 
                     const placedSubs = [];
                     for (const ig of ipGroups) {
@@ -2533,8 +2570,8 @@
                             pos = { x: cc.x, y: cc.y };
                         } else {
                             pos = findNonOverlappingPositionWithin(
-                                scaledRadius, placedSubs, 20,
-                                cc.x, cc.y, cc.radius - scaledRadius - 40
+                                scaledRadius, placedSubs, 50,
+                                cc.x, cc.y, cc.radius - scaledRadius - 60
                             );
                         }
                         placedSubs.push({ x: pos.x, y: pos.y, radius: scaledRadius });
@@ -2543,7 +2580,21 @@
                         compositeGroups.set(key, { x: pos.x, y: pos.y, radius: scaledRadius, count: ig.nodeIds.length });
                         placeNodesInCircle(ig.nodeIds, { x: pos.x, y: pos.y, radius: scaledRadius }, nodeUpdates);
                     }
+
+                    // Place _no_ip nodes freely inside country (use country boundary)
+                    if (noIpNodes.length > 0) {
+                        const key = `${c.country}|_country`;
+                        compositeGroups.set(key, { x: cc.x, y: cc.y, radius: cc.radius, count: noIpNodes.length });
+                        // Scatter them in available space within country
+                        placeNodesScattered(noIpNodes, cc, placedSubs, nodeUpdates);
+                    }
                 }
+            }
+
+            // Place unknown country nodes outside all country bubbles (no boundary)
+            if (unknownCountryNodes.length > 0) {
+                placeNodesOutside(unknownCountryNodes, placedCountries, nodeUpdates);
+                // These nodes have no boundary enforcement - they float freely
             }
 
             nodesDataset.update(nodeUpdates);
@@ -2559,13 +2610,15 @@
             });
 
             // Start boundary enforcement with composite keys
+            // Nodes with unknown country or _no_ip use special handling
             startGroupBoundaryEnforcement(
                 (nodeId) => {
                     const svcInfo = visorServices[nodeId];
-                    const country = svcInfo ? (svcInfo.country || '_unknown') : '_unknown';
+                    const country = svcInfo ? svcInfo.country : '';
+                    if (!country) return '_free'; // No boundary enforcement
                     const gid = ipGroupsData.groups[nodeId];
-                    const ipKey = gid !== undefined ? String(gid) : '_no_ip';
-                    return `${country}|${ipKey}`;
+                    if (gid === undefined) return `${country}|_country`; // Use country boundary
+                    return `${country}|${gid}`;
                 },
                 compositeGroups
             );
@@ -2578,6 +2631,85 @@
                 network.fit();
                 network.redraw();
             }, 100);
+        }
+
+        // Helper: scatter nodes within a circle, avoiding placed sub-circles
+        function placeNodesScattered(nodeIds, countryCircle, placedSubs, updates) {
+            const count = nodeIds.length;
+            const margin = 50;
+            let placed = 0;
+            let attempts = 0;
+
+            while (placed < count && attempts < count * 50) {
+                // Random position within country circle
+                const angle = Math.random() * 2 * Math.PI;
+                const r = Math.random() * (countryCircle.radius - margin);
+                const x = countryCircle.x + r * Math.cos(angle);
+                const y = countryCircle.y + r * Math.sin(angle);
+
+                // Check if it's outside all placed sub-circles
+                let valid = true;
+                for (const sub of placedSubs) {
+                    const dist = Math.sqrt((x - sub.x) ** 2 + (y - sub.y) ** 2);
+                    if (dist < sub.radius + 30) {
+                        valid = false;
+                        break;
+                    }
+                }
+
+                if (valid) {
+                    updates.push({ id: nodeIds[placed], x: x, y: y });
+                    placed++;
+                }
+                attempts++;
+            }
+
+            // Fallback: place remaining nodes at edge of country
+            while (placed < count) {
+                const angle = (placed / count) * 2 * Math.PI;
+                const r = countryCircle.radius - margin;
+                const x = countryCircle.x + r * Math.cos(angle);
+                const y = countryCircle.y + r * Math.sin(angle);
+                updates.push({ id: nodeIds[placed], x: x, y: y });
+                placed++;
+            }
+        }
+
+        // Helper: place nodes outside all placed circles
+        function placeNodesOutside(nodeIds, placedCircles, updates) {
+            if (placedCircles.length === 0) {
+                // No circles, just scatter around origin
+                nodeIds.forEach((nodeId, i) => {
+                    const angle = (i / nodeIds.length) * 2 * Math.PI;
+                    const r = 200 + i * 30;
+                    updates.push({ id: nodeId, x: r * Math.cos(angle), y: r * Math.sin(angle) });
+                });
+                return;
+            }
+
+            // Find bounding box of all circles
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            for (const c of placedCircles) {
+                minX = Math.min(minX, c.x - c.radius);
+                maxX = Math.max(maxX, c.x + c.radius);
+                minY = Math.min(minY, c.y - c.radius);
+                maxY = Math.max(maxY, c.y + c.radius);
+            }
+
+            // Place nodes in a band outside the bounding box
+            const padding = 150;
+            nodeIds.forEach((nodeId, i) => {
+                const side = i % 4;
+                const offset = Math.floor(i / 4) * 60;
+                let x, y;
+                switch (side) {
+                    case 0: x = maxX + padding + offset; y = minY + (i * 50) % (maxY - minY); break;
+                    case 1: x = minX - padding - offset; y = minY + (i * 50) % (maxY - minY); break;
+                    case 2: x = minX + (i * 50) % (maxX - minX); y = maxY + padding + offset; break;
+                    case 3: x = minX + (i * 50) % (maxX - minX); y = minY - padding - offset; break;
+                }
+                updates.push({ id: nodeId, x: x, y: y });
+            });
         }
 
         // Helper: place nodes within a circular area using sunflower pattern
@@ -2608,27 +2740,57 @@
 
         // Find non-overlapping position within a bounded circle
         function findNonOverlappingPositionWithin(radius, placed, padding, cx, cy, maxDist) {
+            // Check center first
             if (!circleOverlaps(cx, cy, radius, placed, padding)) {
                 return { x: cx, y: cy };
             }
 
-            let angle = 0;
-            let spiralR = radius + padding;
+            // Try concentric rings with multiple angles per ring
+            const minSpacing = radius + padding;
+            for (let ring = 1; ring <= 20; ring++) {
+                const ringRadius = minSpacing * ring * 0.5;
+                if (ringRadius + radius > maxDist) break; // Can't fit at this distance
 
-            for (let attempts = 0; attempts < 500; attempts++) {
-                const x = cx + spiralR * Math.cos(angle);
-                const y = cy + spiralR * Math.sin(angle);
+                const numAngles = Math.max(8, Math.floor(ring * 6)); // More angles on outer rings
+                for (let i = 0; i < numAngles; i++) {
+                    const angle = (i / numAngles) * 2 * Math.PI + (ring % 2) * (Math.PI / numAngles);
+                    const x = cx + ringRadius * Math.cos(angle);
+                    const y = cy + ringRadius * Math.sin(angle);
 
-                const distFromCenter = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-                if (distFromCenter + radius <= maxDist && !circleOverlaps(x, y, radius, placed, padding)) {
-                    return { x, y };
+                    const distFromCenter = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+                    if (distFromCenter + radius <= maxDist && !circleOverlaps(x, y, radius, placed, padding)) {
+                        return { x, y };
+                    }
                 }
-
-                angle += 0.5;
-                spiralR += 20 * 0.1;
             }
 
-            return { x: cx + maxDist * 0.3, y: cy + maxDist * 0.3 };
+            // Fallback: find the position with minimum overlap
+            // Try to push the circle away from existing circles
+            let bestPos = { x: cx, y: cy };
+            let bestScore = Infinity;
+
+            for (let angle = 0; angle < 2 * Math.PI; angle += Math.PI / 8) {
+                for (let dist = 0; dist <= maxDist - radius; dist += 20) {
+                    const x = cx + dist * Math.cos(angle);
+                    const y = cy + dist * Math.sin(angle);
+
+                    let score = 0;
+                    for (const p of placed) {
+                        const d = Math.sqrt((x - p.x) ** 2 + (y - p.y) ** 2);
+                        const minD = radius + p.radius + padding;
+                        if (d < minD) {
+                            score += (minD - d) * 10; // Penalize overlap
+                        }
+                    }
+
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestPos = { x, y };
+                    }
+                }
+            }
+
+            return bestPos;
         }
 
         // Setup drawing handler for group boundaries
@@ -3023,6 +3185,13 @@
                             // Detect new routes before updating data
                             detectAndHighlightNewRoutes(newData.routes);
                             localVisorData = newData;
+                            // Update visorServices with local visor's geoip country
+                            if (newData.pub_key && newData.country) {
+                                visorServices[newData.pub_key] = {
+                                    services: visorServices[newData.pub_key]?.services || [],
+                                    country: newData.country
+                                };
+                            }
                             updateLocalVisorDisplayEnhanced();
                             // Update local transport edge styling (don't zoom)
                             updateLocalEdgeStyling();
@@ -3090,6 +3259,13 @@
                             // Detect new routes before updating data
                             detectAndHighlightNewRoutes(newData.routes);
                             localVisorData = newData;
+                            // Update visorServices with local visor's geoip country
+                            if (newData.pub_key && newData.country) {
+                                visorServices[newData.pub_key] = {
+                                    services: visorServices[newData.pub_key]?.services || [],
+                                    country: newData.country
+                                };
+                            }
                             updateLocalVisorDisplayEnhanced();
                             // Update local transport edge styling (don't zoom)
                             updateLocalEdgeStyling();

@@ -57,6 +57,8 @@ type Config struct {
 	// SurveyDir is the directory containing visor surveys (node-info.json files)
 	// Used for IP-based grouping without exposing actual IP addresses
 	SurveyDir string
+	// GeoIPURL is the URL of the geoip service (default: http://ip.skycoin.com)
+	GeoIPURL string
 }
 
 // DefaultConfig returns a Config with default values
@@ -73,6 +75,7 @@ func DefaultConfig() Config {
 		SDURL:       deployment.Prod.ServiceDiscovery,
 		NoCache:     false,
 		AutoRefresh: true,
+		GeoIPURL:    "http://ip.skycoin.com",
 	}
 }
 
@@ -128,12 +131,53 @@ type Server struct {
 	wsClientsMu sync.RWMutex
 	wsClients   map[*websocket.Conn]struct{}
 	wsBroadcast chan []byte
+
+	// Local visor geoip data (fetched once at startup)
+	localGeoMu sync.RWMutex
+	localGeo   *localGeoData
+}
+
+// localGeoData holds geoip information for the local visor
+type localGeoData struct {
+	IP      string `json:"ip"`
+	Country string `json:"country_code"`
+}
+
+// fetchLocalGeoIP fetches the local visor's IP and country from the geoip service
+func (s *Server) fetchLocalGeoIP() {
+	if s.config.GeoIPURL == "" {
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(s.config.GeoIPURL)
+	if err != nil {
+		fmt.Printf("Warning: failed to fetch geoip data: %v\n", err)
+		return
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	var geo localGeoData
+	if err := json.NewDecoder(resp.Body).Decode(&geo); err != nil {
+		fmt.Printf("Warning: failed to parse geoip response: %v\n", err)
+		return
+	}
+
+	s.localGeoMu.Lock()
+	s.localGeo = &geo
+	s.localGeoMu.Unlock()
+
+	if geo.Country != "" {
+		fmt.Printf("Local visor geoip: IP=%s, Country=%s\n", geo.IP, geo.Country)
+	}
 }
 
 // LocalVisorData holds data from the local visor for overlay display
 type LocalVisorData struct {
 	Connected   bool             `json:"connected"`
 	PubKey      string           `json:"pub_key,omitempty"`
+	Country     string           `json:"country,omitempty"`
+	IP          string           `json:"ip,omitempty"`
 	Transports  []LocalTransport `json:"transports,omitempty"`
 	Routes      []LocalRoute     `json:"routes,omitempty"`
 	RoutesCount int              `json:"routes_count"`
@@ -739,6 +783,9 @@ func (s *Server) Handler() http.Handler {
 // Start initializes the cache and starts auto-refresh without starting the HTTP server.
 // Use this when embedding the tpviz server in another HTTP server.
 func (s *Server) Start() {
+	// Fetch local geoip data (for placing local visor in correct country)
+	s.fetchLocalGeoIP()
+
 	// Initial cache population
 	s.refreshCache()
 
@@ -773,6 +820,9 @@ func (s *Server) ListenAndServe() error {
 		fmt.Printf("Auto-refresh: enabled\n")
 	}
 	fmt.Println("Note: Local visor data overlay is available when running from the visor (use 'skywire cli tp viz --visor')")
+
+	// Fetch local geoip data (for placing local visor in correct country)
+	s.fetchLocalGeoIP()
 
 	// Initial cache population
 	s.refreshCache()
@@ -953,6 +1003,14 @@ func (s *Server) refreshVisorData() {
 			data.Routes = append(data.Routes, lr)
 		}
 	}
+
+	// Add geoip data if available
+	s.localGeoMu.RLock()
+	if s.localGeo != nil {
+		data.Country = s.localGeo.Country
+		data.IP = s.localGeo.IP
+	}
+	s.localGeoMu.RUnlock()
 
 	s.visorMu.Lock()
 	s.visorCache = data
