@@ -139,7 +139,7 @@ type Server struct {
 
 // localGeoData holds geoip information for the local visor
 type localGeoData struct {
-	IP      string `json:"ip"`
+	IP      string `json:"ip_address"`
 	Country string `json:"country_code"`
 }
 
