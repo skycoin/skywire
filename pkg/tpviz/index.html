@@ -1082,15 +1082,28 @@
                 visorConnections[pk2].push({ pk: pk1, type });
             });
 
-            // Merge local visor transports that aren't in TPD yet
-            if (localVisorData && localVisorData.connected && localVisorData.transports) {
+            // Always add local visor to the visualization (even if it has no transports yet)
+            if (localVisorData && localVisorData.connected && localVisorData.pub_key) {
                 const localPK = localVisorData.pub_key;
 
-                // Ensure local visor node exists
+                // Ensure local visor node exists in the graph
                 if (!visors.has(localPK)) {
                     visors.set(localPK, { id: localPK, connections: 0, types: new Set(), isLocal: true });
                 }
                 visors.get(localPK).isLocal = true;
+
+                // Ensure visorServices has the local visor's geoip data for proper country grouping
+                if (!visorServices[localPK] || !visorServices[localPK].country) {
+                    visorServices[localPK] = {
+                        services: visorServices[localPK]?.services || [],
+                        country: localVisorData.country || visorServices[localPK]?.country || ''
+                    };
+                }
+            }
+
+            // Merge local visor transports that aren't in TPD yet
+            if (localVisorData && localVisorData.connected && localVisorData.transports) {
+                const localPK = localVisorData.pub_key;
 
                 localVisorData.transports.forEach(tp => {
                     const remotePK = tp.remote_pk;
