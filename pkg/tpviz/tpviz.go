@@ -495,6 +495,37 @@ func (s *Server) refreshIPGroupsCache() {
 		pkToGroup[pk] = groupID
 	}
 
+	// Add local visor to the correct IP group based on its geoip IP
+	s.localGeoMu.RLock()
+	localIP := ""
+	if s.localGeo != nil {
+		localIP = s.localGeo.IP
+	}
+	s.localGeoMu.RUnlock()
+
+	s.visorMu.RLock()
+	localPK := ""
+	if s.visorCache != nil {
+		localPK = s.visorCache.PubKey
+	}
+	s.visorMu.RUnlock()
+
+	if localIP != "" && localPK != "" {
+		// Check if this IP already has a group
+		if groupID, exists := ipToGroup[localIP]; exists {
+			pkToGroup[localPK] = groupID
+			fmt.Printf("Local visor %s... added to existing IP group %d (IP: %s)\n",
+				localPK[:16], groupID, localIP)
+		} else {
+			// Create a new group for this IP
+			groupID := nextGroupID
+			ipToGroup[localIP] = groupID
+			pkToGroup[localPK] = groupID
+			fmt.Printf("Local visor %s... added to new IP group %d (IP: %s)\n",
+				localPK[:16], groupID, localIP)
+		}
+	}
+
 	// Count unique groups
 	totalGroups := len(ipToGroup)
 
