@@ -1093,11 +1093,14 @@
                 visors.get(localPK).isLocal = true;
 
                 // Ensure visorServices has the local visor's geoip data for proper country grouping
-                if (!visorServices[localPK] || !visorServices[localPK].country) {
+                // ALWAYS use local geoip country when available - it's more accurate than services API
+                if (localVisorData.country) {
                     visorServices[localPK] = {
                         services: visorServices[localPK]?.services || [],
-                        country: localVisorData.country || visorServices[localPK]?.country || ''
+                        country: localVisorData.country
                     };
+                } else if (!visorServices[localPK]) {
+                    visorServices[localPK] = { services: [], country: '' };
                 }
             }
 
