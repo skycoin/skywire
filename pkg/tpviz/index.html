@@ -323,6 +323,8 @@
         let selectedNodeId = null;
         // Track route destinations for highlighting
         let routeDestinations = new Set();
+        // Track which node IDs were newly added in the last updateGraph cycle
+        let lastNewNodeIds = new Set();
 
         // Generate distinct colors for IP groups using golden ratio distribution
         const ipGroupColors = {};
@@ -647,7 +649,8 @@
                 updateLocalTransportStyles();
 
                 // Apply grouping based on checkbox state (both may be checked)
-                applyGrouping();
+                // Pass isRefresh so grouping functions preserve zoom/pan on auto-refresh
+                applyGrouping(isRefresh);
 
                 return true; // Indicate success
             } catch (err) {
@@ -1329,8 +1332,9 @@
                 // Nodes to remove (exist in dataset but not in new data)
                 const nodesToRemove = [...existingNodeIds].filter(id => !newNodeIds.has(id));
 
-                // Count new nodes (don't exist yet)
-                const newNodesCount = [...newNodeIds].filter(id => !existingNodeIds.has(id)).length;
+                // Track new nodes (don't exist yet) for grouping functions
+                lastNewNodeIds = new Set([...newNodeIds].filter(id => !existingNodeIds.has(id)));
+                const newNodesCount = lastNewNodeIds.size;
 
                 // Nodes to add or update
                 const nodesToUpdate = nodes.map(node => {
@@ -2302,7 +2306,8 @@
         }
 
         // Arrange nodes into non-overlapping circular group clusters
-        function arrangeNodesIntoGroups(getGroupKey, getGroupInfo) {
+        // isRefresh: when true, only position new nodes and skip network.fit()
+        function arrangeNodesIntoGroups(getGroupKey, getGroupInfo, isRefresh) {
             if (!network) return;
 
             // Save original positions if not already saved
@@ -2345,6 +2350,7 @@
             }
 
             // Position nodes within their group's circle
+            // On refresh, only position genuinely new nodes; existing nodes keep their positions
             const nodeUpdates = [];
             for (const group of groupsWithRadius) {
                 const centroid = groupCentroids.get(group.key);
@@ -2353,6 +2359,9 @@
                 const innerRadius = centroid.radius - 50; // Keep nodes inside boundary
 
                 nodeIds.forEach((nodeId, i) => {
+                    // On refresh, skip nodes that already existed (they keep their positions)
+                    if (isRefresh && !lastNewNodeIds.has(nodeId)) return;
+
                     let x, y;
                     if (count === 1) {
                         x = centroid.x;
@@ -2377,7 +2386,9 @@
             }
 
             // Apply position updates
-            nodesDataset.update(nodeUpdates);
+            if (nodeUpdates.length > 0) {
+                nodesDataset.update(nodeUpdates);
+            }
 
             // Enable physics with extremely weak edge forces (so edges don't pull nodes across boundaries)
             network.setOptions({
@@ -2400,13 +2411,14 @@
             // Update boundaries and redraw
             setTimeout(() => {
                 updateGroupBoundaries();
-                network.fit();
+                // Only fit viewport on initial grouping, not on data refresh
+                if (!isRefresh) network.fit();
                 network.redraw();
             }, 100);
         }
 
         // Enable country grouping
-        function enableCountryGrouping() {
+        function enableCountryGrouping(isRefresh) {
             groupingMode = 'country';
 
             arrangeNodesIntoGroups(
@@ -2421,12 +2433,13 @@
                         label: country || 'Unknown',
                         flag: countryToFlag(country)
                     };
-                }
+                },
+                isRefresh
             );
         }
 
         // Enable IP grouping
-        function enableIPGrouping() {
+        function enableIPGrouping(isRefresh) {
             if (!ipGroupsEnabled || !ipGroupsData) return;
             groupingMode = 'ip';
 
@@ -2452,12 +2465,13 @@
                         label: 'IP Group ' + gid,
                         flag: ''
                     };
-                }
+                },
+                isRefresh
             );
         }
 
         // Disable all grouping and restore original positions
-        function disableGrouping() {
+        function disableGrouping(isRefresh) {
             // Stop group separation forces
             stopGroupBoundaryEnforcement();
 
@@ -2487,7 +2501,8 @@
                 });
                 network.stabilize(50);
                 network.once('stabilizationIterationsDone', () => {
-                    network.fit();
+                    // Only fit viewport on initial disable, not on data refresh
+                    if (!isRefresh) network.fit();
                 });
             }
 
@@ -2495,23 +2510,24 @@
         }
 
         // Unified grouping dispatcher based on checkbox state
-        function applyGrouping() {
+        // isRefresh: true when called from auto-refresh (preserve zoom/pan)
+        function applyGrouping(isRefresh) {
             const countryChecked = document.getElementById('cluster-country').checked;
             const ipChecked = document.getElementById('cluster-ip').checked && ipGroupsEnabled && ipGroupsData;
 
             if (countryChecked && ipChecked) {
-                enableDualGrouping();
+                enableDualGrouping(isRefresh);
             } else if (countryChecked) {
-                enableCountryGrouping();
+                enableCountryGrouping(isRefresh);
             } else if (ipChecked) {
-                enableIPGrouping();
+                enableIPGrouping(isRefresh);
             } else {
-                disableGrouping();
+                disableGrouping(isRefresh);
             }
         }
 
         // Enable dual grouping: IP clusters nested within country clusters
-        function enableDualGrouping() {
+        function enableDualGrouping(isRefresh) {
             groupingMode = 'dual';
             if (!network) return;
             if (!originalPositions) originalPositions = network.getPositions();
@@ -2658,7 +2674,13 @@
                 // These nodes have no boundary enforcement - they float freely
             }
 
-            nodesDataset.update(nodeUpdates);
+            // On refresh, only position genuinely new nodes; existing nodes keep their positions
+            const filteredUpdates = isRefresh
+                ? nodeUpdates.filter(u => lastNewNodeIds.has(u.id))
+                : nodeUpdates;
+            if (filteredUpdates.length > 0) {
+                nodesDataset.update(filteredUpdates);
+            }
 
             // Enable weak physics
             network.setOptions({
@@ -2689,7 +2711,8 @@
 
             setTimeout(() => {
                 updateGroupBoundaries();
-                network.fit();
+                // Only fit viewport on initial grouping, not on data refresh
+                if (!isRefresh) network.fit();
                 network.redraw();
             }, 100);
         }
