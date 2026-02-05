@@ -2524,15 +2524,33 @@
                 let totalNodes = 0;
                 ipMap.forEach(nodes => totalNodes += nodes.length);
                 // Count only actual IP groups (not _no_ip) for sizing multiplier
-                const actualIPGroups = Array.from(ipMap.keys()).filter(k => k !== '_no_ip').length;
-                // Country radius needs extra space when containing multiple IP sub-groups
-                // Scale more aggressively based on number of IP groups to prevent overlap
-                let sizeMultiplier = 1.0;
-                if (actualIPGroups > 1) {
-                    // More groups need more space: 1.5 for 2 groups, up to 2.5 for many groups
-                    sizeMultiplier = 1.5 + Math.min(1.0, (actualIPGroups - 2) * 0.25);
+                const actualIPEntries = Array.from(ipMap.entries()).filter(([k]) => k !== '_no_ip');
+                const actualIPGroups = actualIPEntries.length;
+
+                let radius;
+                if (actualIPGroups <= 1) {
+                    // Single IP group or none: just use node-based radius
+                    radius = calculateGroupRadius(totalNodes);
+                } else {
+                    // Multiple IP groups: calculate radius based on actual sub-circle sizes
+                    // Calculate total area needed for all IP sub-circles with generous padding
+                    let totalSubCircleArea = 0;
+                    for (const [, nodeIds] of actualIPEntries) {
+                        const subRadius = calculateGroupRadius(nodeIds.length);
+                        totalSubCircleArea += Math.PI * Math.pow(subRadius + 60, 2); // +60 for padding between circles
+                    }
+                    // Add extra space for _no_ip nodes if present
+                    const noIpNodes = ipMap.get('_no_ip') || [];
+                    if (noIpNodes.length > 0) {
+                        totalSubCircleArea *= 1.3; // 30% more space for scattered nodes
+                    }
+                    // Country radius = sqrt(totalArea / pi) + margin
+                    // Use packing efficiency of ~0.6 (circles don't pack perfectly)
+                    const requiredRadius = Math.sqrt(totalSubCircleArea / (Math.PI * 0.55)) + 100;
+                    // Also ensure it's at least as big as the largest sub-circle
+                    const maxSubRadius = Math.max(...actualIPEntries.map(([, ids]) => calculateGroupRadius(ids.length)));
+                    radius = Math.max(requiredRadius, maxSubRadius * 2.2);
                 }
-                const radius = calculateGroupRadius(totalNodes) * sizeMultiplier;
                 countries.push({ country, totalNodes, radius, ipMap, actualIPGroups });
             });
             countries.sort((a, b) => b.radius - a.radius);
@@ -2579,31 +2597,28 @@
                         }))
                         .sort((a, b) => b.radius - a.radius);
 
-                    // Scale sub-circles to fit within country (with room for _no_ip nodes)
-                    const totalSubArea = ipGroups.reduce((s, g) => s + Math.PI * g.radius * g.radius, 0);
-                    const availableArea = Math.PI * Math.pow(cc.radius - 100, 2);
-                    // Use less aggressive scaling to maintain circle sizes
-                    const scaleFactor = Math.min(1, Math.sqrt(availableArea / totalSubArea) * 0.85);
-
+                    // Country radius is now calculated to have enough space, so minimal/no scaling needed
                     const placedSubs = [];
-                    // Use larger padding between sub-circles to prevent overlap
-                    const subCirclePadding = 80;
+                    const subCirclePadding = 60; // Padding between sub-circles
+
                     for (const ig of ipGroups) {
-                        const scaledRadius = Math.max(60, ig.radius * scaleFactor);
+                        const subRadius = ig.radius;
                         let pos;
                         if (placedSubs.length === 0) {
+                            // First circle goes at center
                             pos = { x: cc.x, y: cc.y };
                         } else {
+                            // Find non-overlapping position for subsequent circles
                             pos = findNonOverlappingPositionWithin(
-                                scaledRadius, placedSubs, subCirclePadding,
-                                cc.x, cc.y, cc.radius - scaledRadius - 80
+                                subRadius, placedSubs, subCirclePadding,
+                                cc.x, cc.y, cc.radius - subRadius - 40
                             );
                         }
-                        placedSubs.push({ x: pos.x, y: pos.y, radius: scaledRadius });
+                        placedSubs.push({ x: pos.x, y: pos.y, radius: subRadius });
 
                         const key = `${c.country}|${ig.ipKey}`;
-                        compositeGroups.set(key, { x: pos.x, y: pos.y, radius: scaledRadius, count: ig.nodeIds.length });
-                        placeNodesInCircle(ig.nodeIds, { x: pos.x, y: pos.y, radius: scaledRadius }, nodeUpdates);
+                        compositeGroups.set(key, { x: pos.x, y: pos.y, radius: subRadius, count: ig.nodeIds.length });
+                        placeNodesInCircle(ig.nodeIds, { x: pos.x, y: pos.y, radius: subRadius }, nodeUpdates);
                     }
 
                     // Place _no_ip nodes freely inside country (use country boundary)
