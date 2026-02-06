@@ -5,6 +5,7 @@ package ui
 import (
 	"math"
 	"math/rand"
+	"sort"
 )
 
 // TransportType represents the type of transport
@@ -14,6 +15,15 @@ const (
 	TransportSTCPR TransportType = "stcpr"
 	TransportSUDPH TransportType = "sudph"
 	TransportDMSG  TransportType = "dmsg"
+)
+
+// ServiceType represents a visor's service type
+type ServiceType int
+
+const (
+	ServiceNone  ServiceType = iota
+	ServiceVPN
+	ServiceProxy
 )
 
 // NodeStatus represents the online/offline status of a node
@@ -35,6 +45,13 @@ type Node struct {
 	Country string
 	Version string
 	Label   string // Short label for display
+
+	// Service and connection info
+	Service         ServiceType
+	ConnectionCount int
+	STCPRCount      int
+	SUDPHCount      int
+	DMSGCount       int
 
 	// Flags
 	IsLocalVisor bool
@@ -190,6 +207,33 @@ func (g *Graph) CountByStatus() (online, offline, unknown int) {
 	return
 }
 
+// SortedNodes returns all nodes sorted by connection count descending
+func (g *Graph) SortedNodes() []*Node {
+	nodes := make([]*Node, 0, len(g.Nodes))
+	for _, n := range g.Nodes {
+		nodes = append(nodes, n)
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].ConnectionCount > nodes[j].ConnectionCount
+	})
+	return nodes
+}
+
+// CountByType returns counts of edges by transport type
+func (g *Graph) CountByType() (stcpr, sudph, dmsg int) {
+	for _, edge := range g.Edges {
+		switch edge.Type {
+		case TransportSTCPR:
+			stcpr++
+		case TransportSUDPH:
+			sudph++
+		case TransportDMSG:
+			dmsg++
+		}
+	}
+	return
+}
+
 // View manages the viewport transform
 type View struct {
 	OffsetX, OffsetY float64 // Pan offset
@@ -333,10 +377,10 @@ func (o *RenderOptions) ShowNodeStatus(s NodeStatus) bool {
 
 // shortPK returns a shortened version of a public key
 func shortPK(pk string) string {
-	if len(pk) <= 12 {
+	if len(pk) <= 8 {
 		return pk
 	}
-	return pk[:6] + ".." + pk[len(pk)-4:]
+	return pk[:8]
 }
 
 // itoa converts int to string without fmt

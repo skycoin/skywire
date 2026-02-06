@@ -105,10 +105,10 @@ func (c *Canvas) QuadraticCurve(x1, y1, x2, y2, lineWidth float64, color string)
 		return
 	}
 
-	// Perpendicular direction with roundness factor (0.5)
+	// Perpendicular direction matching vis-network 'continuous' smooth (roundness 0.5)
 	roundness := 0.5
-	perpX := -dy * roundness * 0.15
-	perpY := dx * roundness * 0.15
+	perpX := -dy * roundness
+	perpY := dx * roundness
 
 	// Control point
 	ctrlX := midX + perpX
@@ -131,10 +131,84 @@ func (c *Canvas) Text(text string, x, y float64, color string, font string) {
 	c.ctx.Call("fillText", text, x, y)
 }
 
+// StrokeText draws text outline at the given position (for readability against backgrounds)
+func (c *Canvas) StrokeText(text string, x, y float64, color string, lineWidth float64, font string) {
+	if font != "" {
+		c.ctx.Set("font", font)
+	}
+	c.ctx.Set("strokeStyle", color)
+	c.ctx.Set("lineWidth", lineWidth)
+	c.ctx.Call("strokeText", text, x, y)
+}
+
 // FillRect draws a filled rectangle
 func (c *Canvas) FillRect(x, y, width, height float64, color string) {
 	c.ctx.Set("fillStyle", color)
 	c.ctx.Call("fillRect", x, y, width, height)
+}
+
+// RoundedRect draws a filled rounded rectangle
+func (c *Canvas) RoundedRect(x, y, width, height, radius float64, fillColor string) {
+	c.ctx.Call("beginPath")
+	c.ctx.Call("moveTo", x+radius, y)
+	c.ctx.Call("lineTo", x+width-radius, y)
+	c.ctx.Call("arcTo", x+width, y, x+width, y+radius, radius)
+	c.ctx.Call("lineTo", x+width, y+height-radius)
+	c.ctx.Call("arcTo", x+width, y+height, x+width-radius, y+height, radius)
+	c.ctx.Call("lineTo", x+radius, y+height)
+	c.ctx.Call("arcTo", x, y+height, x, y+height-radius, radius)
+	c.ctx.Call("lineTo", x, y+radius)
+	c.ctx.Call("arcTo", x, y, x+radius, y, radius)
+	c.ctx.Call("closePath")
+	c.ctx.Set("fillStyle", fillColor)
+	c.ctx.Call("fill")
+}
+
+// StrokeRoundedRect draws a rounded rectangle outline
+func (c *Canvas) StrokeRoundedRect(x, y, width, height, radius, lineWidth float64, strokeColor string) {
+	c.ctx.Call("beginPath")
+	c.ctx.Call("moveTo", x+radius, y)
+	c.ctx.Call("lineTo", x+width-radius, y)
+	c.ctx.Call("arcTo", x+width, y, x+width, y+radius, radius)
+	c.ctx.Call("lineTo", x+width, y+height-radius)
+	c.ctx.Call("arcTo", x+width, y+height, x+width-radius, y+height, radius)
+	c.ctx.Call("lineTo", x+radius, y+height)
+	c.ctx.Call("arcTo", x, y+height, x, y+height-radius, radius)
+	c.ctx.Call("lineTo", x, y+radius)
+	c.ctx.Call("arcTo", x, y, x+radius, y, radius)
+	c.ctx.Call("closePath")
+	c.ctx.Set("strokeStyle", strokeColor)
+	c.ctx.Set("lineWidth", lineWidth)
+	c.ctx.Call("stroke")
+}
+
+// MeasureText returns the width of a text string in pixels
+func (c *Canvas) MeasureText(text string, font string) float64 {
+	if font != "" {
+		c.ctx.Set("font", font)
+	}
+	metrics := c.ctx.Call("measureText", text)
+	return metrics.Get("width").Float()
+}
+
+// Save saves the current canvas state (transform, styles, clipping)
+func (c *Canvas) Save() {
+	c.ctx.Call("save")
+}
+
+// Restore restores the most recently saved canvas state
+func (c *Canvas) Restore() {
+	c.ctx.Call("restore")
+}
+
+// Translate applies a translation to the canvas transform
+func (c *Canvas) Translate(x, y float64) {
+	c.ctx.Call("translate", x, y)
+}
+
+// SetScale applies scaling to the canvas transform
+func (c *Canvas) SetScale(sx, sy float64) {
+	c.ctx.Call("scale", sx, sy)
 }
 
 // SetGlobalAlpha sets the global alpha (transparency)

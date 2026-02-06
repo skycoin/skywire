@@ -22,8 +22,8 @@
         }
 
         #sidebar {
-            width: 280px;
-            min-width: 280px;
+            width: 300px;
+            min-width: 300px;
             background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
             border-right: 1px solid #0f3460;
             overflow-y: auto;
@@ -31,6 +31,12 @@
             z-index: 10;
             flex-shrink: 0;
         }
+
+        /* Scrollbar styling */
+        #sidebar::-webkit-scrollbar { width: 6px; }
+        #sidebar::-webkit-scrollbar-track { background: transparent; }
+        #sidebar::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 3px; }
+        #sidebar::-webkit-scrollbar-thumb:hover { background: #1a4a7a; }
 
         #canvas-container {
             flex: 1;
@@ -73,8 +79,9 @@
             border-bottom: 1px solid #0f3460;
         }
 
+        /* Sections */
         .section {
-            margin-bottom: 16px;
+            margin-bottom: 12px;
             border: 1px solid #0f3460;
             border-radius: 4px;
             overflow: hidden;
@@ -87,34 +94,274 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            user-select: none;
         }
 
-        .section-header:hover {
-            background: #1a4a7a;
-        }
+        .section-header:hover { background: #1a4a7a; }
 
         .section-title {
             font-weight: 600;
             font-size: 0.9em;
         }
 
+        .section-toggle {
+            font-size: 0.7em;
+            transition: transform 0.2s;
+        }
+
+        .section.collapsed .section-toggle { transform: rotate(-90deg); }
+        .section.collapsed .section-content { display: none; }
+
         .section-content {
-            padding: 12px;
+            padding: 10px 12px;
             background: rgba(15, 52, 96, 0.3);
         }
 
-        .section.collapsed .section-content {
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 8px;
+            background: rgba(15, 52, 96, 0.4);
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+
+        .stat-label { color: #aaa; }
+        .stat-value { font-weight: 600; font-family: monospace; }
+        .stat-full { grid-column: 1 / -1; }
+
+        /* Filter checkboxes */
+        .filter-group { margin-top: 6px; }
+
+        .filter-item {
+            display: flex;
+            align-items: center;
+            padding: 3px 0;
+            font-size: 0.82em;
+            cursor: pointer;
+        }
+
+        .filter-item input[type="checkbox"] {
+            margin-right: 8px;
+            accent-color: #00d9a5;
+            cursor: pointer;
+        }
+
+        .filter-item .color-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+            display: inline-block;
+        }
+
+        .filter-item .line-indicator {
+            width: 16px;
+            height: 2px;
+            margin-right: 6px;
+            display: inline-block;
+        }
+
+        /* Search */
+        #search-input {
+            width: 100%;
+            padding: 6px 10px;
+            background: #0a0a1a;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            color: #eee;
+            font-size: 0.85em;
+            outline: none;
+        }
+
+        #search-input:focus { border-color: #00d9a5; }
+        #search-input::placeholder { color: #555; }
+
+        /* Node info panel */
+        #node-info-panel {
             display: none;
         }
 
-        .legend {
-            margin-top: 8px;
+        .node-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 0;
+            font-size: 0.82em;
+            border-bottom: 1px solid rgba(15, 52, 96, 0.3);
         }
 
+        .node-info-row:last-child { border-bottom: none; }
+        .node-info-label { color: #aaa; }
+        .node-info-value { color: #eee; font-family: monospace; text-align: right; }
+
+        #node-info-pk {
+            font-family: monospace;
+            font-size: 0.75em;
+            color: #00d9a5;
+            word-break: break-all;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(15, 52, 96, 0.3);
+            margin-bottom: 4px;
+        }
+
+        #node-info-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px;
+        }
+
+        /* Visor list */
+        #visor-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        #visor-list::-webkit-scrollbar { width: 4px; }
+        #visor-list::-webkit-scrollbar-track { background: transparent; }
+        #visor-list::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 2px; }
+
+        .visor-item {
+            display: flex;
+            align-items: center;
+            padding: 4px 6px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 0.78em;
+            gap: 6px;
+        }
+
+        .visor-item:hover { background: rgba(15, 52, 96, 0.6); }
+
+        .visor-status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .visor-pk {
+            flex: 1;
+            font-family: monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #ccc;
+        }
+
+        .visor-country {
+            font-size: 0.9em;
+            flex-shrink: 0;
+        }
+
+        .visor-count {
+            font-family: monospace;
+            color: #888;
+            flex-shrink: 0;
+            min-width: 20px;
+            text-align: right;
+        }
+
+        .visor-services {
+            display: flex;
+            gap: 2px;
+            flex-shrink: 0;
+        }
+
+        .service-badge {
+            font-size: 0.7em;
+            font-weight: 700;
+            padding: 0 3px;
+            border-radius: 2px;
+            line-height: 1.4;
+        }
+
+        .service-badge.vpn { background: #9f6efc; color: #fff; }
+        .service-badge.proxy { background: #ffa500; color: #fff; }
+
+        .tp-badge {
+            font-size: 0.65em;
+            font-weight: 600;
+            padding: 0 3px;
+            border-radius: 2px;
+            line-height: 1.4;
+            font-family: monospace;
+        }
+
+        .tp-badge.stcpr { background: rgba(0,217,165,0.25); color: #00d9a5; }
+        .tp-badge.sudph { background: rgba(0,180,216,0.25); color: #00b4d8; }
+        .tp-badge.dmsg { background: rgba(255,209,102,0.25); color: #ffd166; }
+
+        .visor-version {
+            font-size: 0.7em;
+            color: #666;
+            font-family: monospace;
+            flex-shrink: 0;
+        }
+
+        /* Local visor section */
+        .local-visor-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-size: 0.82em;
+            border-bottom: 1px solid rgba(15, 52, 96, 0.3);
+        }
+        .local-visor-row:last-child { border-bottom: none; }
+        .local-visor-label { color: #aaa; }
+        .local-visor-value { color: #eee; font-family: monospace; text-align: right; }
+        .local-visor-pk {
+            font-family: monospace;
+            font-size: 0.75em;
+            color: #00ffff;
+            word-break: break-all;
+            padding: 4px 0;
+        }
+
+        /* Status indicators */
+        .status-dot-inline {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+
+        /* Auto-refresh bar */
+        #refresh-bar {
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.78em;
+            color: #888;
+        }
+        #refresh-bar button {
+            background: #0f3460;
+            border: 1px solid #1a4a7a;
+            color: #ccc;
+            padding: 2px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        #refresh-bar button:hover { background: #1a4a7a; color: #fff; }
+
+        /* Legend */
         .legend-item {
             display: flex;
             align-items: center;
-            padding: 4px 0;
+            padding: 3px 0;
             font-size: 0.8em;
         }
 
@@ -123,28 +370,32 @@
             height: 12px;
             border-radius: 50%;
             margin-right: 8px;
+            flex-shrink: 0;
         }
 
         .legend-line {
             width: 20px;
             height: 2px;
             margin-right: 8px;
+            flex-shrink: 0;
         }
 
+        /* Shortcuts */
         .shortcut {
             display: flex;
-            padding: 4px 0;
-            font-size: 0.85em;
+            padding: 3px 0;
+            font-size: 0.82em;
         }
 
         .shortcut-key {
             background: #0f3460;
-            padding: 2px 8px;
+            padding: 1px 6px;
             border-radius: 3px;
             margin-right: 8px;
             font-family: monospace;
-            min-width: 24px;
+            min-width: 20px;
             text-align: center;
+            font-size: 0.9em;
         }
 
         #error {
@@ -152,92 +403,325 @@
             font-size: 0.85em;
             margin-top: 8px;
         }
+
+        /* Zoom controls */
+        #zoom-controls {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            z-index: 20;
+        }
+
+        #zoom-controls button {
+            width: 32px;
+            height: 32px;
+            border: 1px solid #0f3460;
+            background: rgba(22, 33, 62, 0.85);
+            color: #ccc;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            line-height: 1;
+            transition: background 0.15s;
+        }
+
+        #zoom-controls button:hover {
+            background: rgba(15, 52, 96, 0.95);
+            color: #fff;
+            border-color: #00d9a5;
+        }
+
+        #zoom-controls button:active {
+            background: #0f3460;
+        }
     </style>
 </head>
 <body>
     <div id="container">
         <div id="sidebar">
-            <h1>Skywire</h1>
+            <h1>Skywire Network</h1>
 
-            <!-- Legend Section -->
-            <div class="section" id="section-legend">
-                <div class="section-header" onclick="toggleSection('section-legend')">
-                    <span class="section-title">Legend</span>
-                    <span class="section-toggle">▼</span>
+            <!-- Auto-refresh bar -->
+            <div id="refresh-bar" style="display:none;">
+                <span id="refresh-text">Next refresh in --s</span>
+                <button id="refresh-now">Refresh</button>
+            </div>
+
+            <!-- Search -->
+            <div style="margin-bottom: 12px;">
+                <input type="text" id="search-input" placeholder="Search by public key (4+ chars)...">
+            </div>
+
+            <!-- Stats Section -->
+            <div class="section" id="section-stats">
+                <div class="section-header" onclick="toggleSection('section-stats')">
+                    <span class="section-title">Network Stats</span>
+                    <span class="section-toggle">&#9660;</span>
                 </div>
                 <div class="section-content">
-                    <div class="legend">
-                        <div class="legend-item">
-                            <div class="legend-dot" style="background:#00d9a5"></div>
-                            <span>Online</span>
+                    <div class="stats-grid">
+                        <div class="stat stat-full">
+                            <span class="stat-label">Transports</span>
+                            <span class="stat-value" id="stat-total-transports">-</span>
                         </div>
-                        <div class="legend-item">
-                            <div class="legend-dot" style="background:#e94560"></div>
-                            <span>Offline</span>
+                        <div class="stat stat-full">
+                            <span class="stat-label">Visors</span>
+                            <span class="stat-value" id="stat-total-visors">-</span>
                         </div>
-                        <div class="legend-item">
-                            <div class="legend-dot" style="background:#ffd166"></div>
-                            <span>Unknown</span>
+                        <div class="stat">
+                            <span class="stat-label" style="color:#00d9a5">Online</span>
+                            <span class="stat-value" style="color:#00d9a5" id="stat-online">-</span>
                         </div>
-                        <div class="legend-item">
-                            <div class="legend-dot" style="background:#00ffff;border:2px solid #ff00ff"></div>
-                            <span>Local Visor</span>
+                        <div class="stat">
+                            <span class="stat-label" style="color:#e94560">Offline</span>
+                            <span class="stat-value" style="color:#e94560" id="stat-offline">-</span>
                         </div>
+                        <div class="stat">
+                            <span class="stat-label" style="color:#ffd166">Unknown</span>
+                            <span class="stat-value" style="color:#ffd166" id="stat-unknown">-</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">STCPR</span>
+                            <span class="stat-value" style="color:#00d9a5" id="stat-stcpr">-</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">SUDPH</span>
+                            <span class="stat-value" style="color:#00b4d8" id="stat-sudph">-</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">DMSG</span>
+                            <span class="stat-value" style="color:#ffd166" id="stat-dmsg">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Selected Node Info -->
+            <div class="section" id="node-info-panel">
+                <div class="section-header">
+                    <span class="section-title">Selected Visor</span>
+                    <span style="cursor:pointer;font-size:0.8em;" id="node-info-close">&#10005;</span>
+                </div>
+                <div class="section-content">
+                    <div id="node-info-pk">-</div>
+                    <div class="node-info-row">
+                        <span class="node-info-label">Status</span>
+                        <span class="node-info-value"><span id="node-info-status-dot"></span><span id="node-info-status">-</span></span>
+                    </div>
+                    <div class="node-info-row">
+                        <span class="node-info-label">Transports</span>
+                        <span class="node-info-value" id="node-info-transports">-</span>
+                    </div>
+                    <div class="node-info-row">
+                        <span class="node-info-label">Country</span>
+                        <span class="node-info-value" id="node-info-country">-</span>
+                    </div>
+                    <div class="node-info-row">
+                        <span class="node-info-label">Version</span>
+                        <span class="node-info-value" id="node-info-version">-</span>
+                    </div>
+                    <div class="node-info-row">
+                        <span class="node-info-label">STCPR</span>
+                        <span class="node-info-value" id="node-info-stcpr">-</span>
+                    </div>
+                    <div class="node-info-row">
+                        <span class="node-info-label">SUDPH</span>
+                        <span class="node-info-value" id="node-info-sudph">-</span>
+                    </div>
+                    <div class="node-info-row">
+                        <span class="node-info-label">DMSG</span>
+                        <span class="node-info-value" id="node-info-dmsg">-</span>
+                    </div>
+                    <div class="node-info-row">
+                        <span class="node-info-label">Services</span>
+                        <span class="node-info-value" id="node-info-services">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Local Visor Section -->
+            <div class="section" id="section-local-visor" style="display:none;">
+                <div class="section-header" onclick="toggleSection('section-local-visor')">
+                    <span class="section-title">Local Visor</span>
+                    <span class="section-toggle">&#9660;</span>
+                </div>
+                <div class="section-content">
+                    <div id="local-visor-pk" class="local-visor-pk">-</div>
+                    <div class="local-visor-row">
+                        <span class="local-visor-label">Status</span>
+                        <span class="local-visor-value"><span id="local-visor-status-dot" class="status-dot-inline"></span><span id="local-visor-status">-</span></span>
+                    </div>
+                    <div class="local-visor-row">
+                        <span class="local-visor-label">Transports</span>
+                        <span class="local-visor-value" id="local-visor-transports">-</span>
+                    </div>
+                    <div class="local-visor-row">
+                        <span class="local-visor-label">Routes</span>
+                        <span class="local-visor-value" id="local-visor-routes">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TPS Status Section -->
+            <div class="section" id="section-tps" style="display:none;">
+                <div class="section-header" onclick="toggleSection('section-tps')">
+                    <span class="section-title">Transport Setup</span>
+                    <span class="section-toggle">&#9660;</span>
+                </div>
+                <div class="section-content">
+                    <div class="local-visor-row">
+                        <span class="local-visor-label">Status</span>
+                        <span class="local-visor-value"><span id="tps-status-dot" class="status-dot-inline"></span><span id="tps-status">-</span></span>
+                    </div>
+                    <div class="local-visor-row" id="tps-pk-row" style="display:none;">
+                        <span class="local-visor-label">PK</span>
+                        <span class="local-visor-value" id="tps-pk" style="font-size:0.7em;word-break:break-all;">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters Section -->
+            <div class="section" id="section-filters">
+                <div class="section-header" onclick="toggleSection('section-filters')">
+                    <span class="section-title">Filters</span>
+                    <span class="section-toggle">&#9660;</span>
+                </div>
+                <div class="section-content">
+                    <div class="filter-group">
+                        <div style="font-size:0.75em;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Transport Types</div>
+                        <label class="filter-item">
+                            <input type="checkbox" id="filter-stcpr" checked>
+                            <span class="line-indicator" style="background:#00d9a5"></span>
+                            STCPR
+                        </label>
+                        <label class="filter-item">
+                            <input type="checkbox" id="filter-sudph" checked>
+                            <span class="line-indicator" style="background:#00b4d8"></span>
+                            SUDPH
+                        </label>
+                        <label class="filter-item">
+                            <input type="checkbox" id="filter-dmsg" checked>
+                            <span class="line-indicator" style="background:#ffd166"></span>
+                            DMSG
+                        </label>
+                    </div>
+                    <div class="filter-group" style="margin-top:10px;">
+                        <div style="font-size:0.75em;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Node Status</div>
+                        <label class="filter-item">
+                            <input type="checkbox" id="filter-online" checked>
+                            <span class="color-indicator" style="background:#00d9a5"></span>
+                            Online
+                        </label>
+                        <label class="filter-item">
+                            <input type="checkbox" id="filter-offline" checked>
+                            <span class="color-indicator" style="background:#e94560"></span>
+                            Offline
+                        </label>
+                        <label class="filter-item">
+                            <input type="checkbox" id="filter-unknown" checked>
+                            <span class="color-indicator" style="background:#ffd166"></span>
+                            Unknown
+                        </label>
+                    </div>
+                    <div class="filter-group" style="margin-top:10px;">
+                        <div style="font-size:0.75em;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Display</div>
+                        <label class="filter-item">
+                            <input type="checkbox" id="filter-labels">
+                            Show Labels
+                        </label>
+                        <label class="filter-item">
+                            <input type="checkbox" id="filter-services" checked>
+                            Show Services
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visor List Section -->
+            <div class="section" id="section-visors">
+                <div class="section-header" onclick="toggleSection('section-visors')">
+                    <span class="section-title">Visors <span id="visor-list-count" style="color:#888;font-weight:400;font-size:0.85em"></span></span>
+                    <span class="section-toggle">&#9660;</span>
+                </div>
+                <div class="section-content" style="padding:6px;">
+                    <div id="visor-list"></div>
+                </div>
+            </div>
+
+            <!-- Legend Section -->
+            <div class="section collapsed" id="section-legend">
+                <div class="section-header" onclick="toggleSection('section-legend')">
+                    <span class="section-title">Legend</span>
+                    <span class="section-toggle">&#9660;</span>
+                </div>
+                <div class="section-content">
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#00d9a5"></div>
+                        <span>Online</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#e94560"></div>
+                        <span>Offline</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#ffd166"></div>
+                        <span>Unknown</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#00ffff;border:2px solid #ff00ff"></div>
+                        <span>Local Visor</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#9f6efc"></div>
+                        <span>VPN Service</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#ffa500"></div>
+                        <span>Proxy Service</span>
+                    </div>
+                    <div style="margin-top:6px;">
                         <div class="legend-item">
                             <div class="legend-line" style="background:#00d9a5"></div>
-                            <span>STCPR Transport</span>
+                            <span>STCPR</span>
                         </div>
                         <div class="legend-item">
                             <div class="legend-line" style="background:#00b4d8"></div>
-                            <span>SUDPH Transport</span>
+                            <span>SUDPH</span>
                         </div>
                         <div class="legend-item">
                             <div class="legend-line" style="background:#ffd166"></div>
-                            <span>DMSG Transport</span>
+                            <span>DMSG</span>
                         </div>
                         <div class="legend-item">
-                            <div class="legend-line" style="background:#00ffff"></div>
+                            <div class="legend-line" style="background:#00ffff;height:3px"></div>
                             <span>Local Transport</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Controls Section -->
-            <div class="section" id="section-controls">
+            <!-- Shortcuts Section -->
+            <div class="section collapsed" id="section-controls">
                 <div class="section-header" onclick="toggleSection('section-controls')">
                     <span class="section-title">Keyboard Shortcuts</span>
-                    <span class="section-toggle">▼</span>
+                    <span class="section-toggle">&#9660;</span>
                 </div>
                 <div class="section-content">
-                    <div class="shortcut">
-                        <span class="shortcut-key">F</span>
-                        <span>Fit to screen</span>
-                    </div>
-                    <div class="shortcut">
-                        <span class="shortcut-key">R</span>
-                        <span>Refresh data</span>
-                    </div>
-                    <div class="shortcut">
-                        <span class="shortcut-key">P</span>
-                        <span>Toggle physics</span>
-                    </div>
-                    <div class="shortcut">
-                        <span class="shortcut-key">L</span>
-                        <span>Toggle labels</span>
-                    </div>
-                    <div class="shortcut">
-                        <span class="shortcut-key">Scroll</span>
-                        <span>Zoom in/out</span>
-                    </div>
-                    <div class="shortcut">
-                        <span class="shortcut-key">Drag</span>
-                        <span>Pan view</span>
-                    </div>
-                    <div class="shortcut">
-                        <span class="shortcut-key">Click</span>
-                        <span>Select node</span>
-                    </div>
+                    <div class="shortcut"><span class="shortcut-key">F</span><span>Fit to screen</span></div>
+                    <div class="shortcut"><span class="shortcut-key">R</span><span>Refresh data</span></div>
+                    <div class="shortcut"><span class="shortcut-key">P</span><span>Toggle physics</span></div>
+                    <div class="shortcut"><span class="shortcut-key">L</span><span>Toggle labels</span></div>
+                    <div class="shortcut"><span class="shortcut-key">Esc</span><span>Deselect</span></div>
+                    <div class="shortcut"><span class="shortcut-key">Scroll</span><span>Zoom</span></div>
+                    <div class="shortcut"><span class="shortcut-key">Drag</span><span>Pan</span></div>
+                    <div class="shortcut"><span class="shortcut-key">Click</span><span>Select node</span></div>
                 </div>
             </div>
 
@@ -250,6 +734,11 @@
                 <div>Loading Skywire Network...</div>
             </div>
             <canvas id="graph-canvas"></canvas>
+            <div id="zoom-controls">
+                <button id="zoom-in" title="Zoom in">+</button>
+                <button id="zoom-out" title="Zoom out">&minus;</button>
+                <button id="zoom-fit" title="Fit to screen" style="font-size:13px;">&#8962;</button>
+            </div>
         </div>
     </div>
 

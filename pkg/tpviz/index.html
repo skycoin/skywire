@@ -112,6 +112,10 @@
         .spinner { width: 50px; height: 50px; border: 3px solid #0f3460; border-top-color: #e94560; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
         #error { color: #e94560; padding: 20px; text-align: center; display: none; }
+        #zoom-controls { position: absolute; bottom: 16px; right: 16px; display: flex; flex-direction: column; gap: 4px; z-index: 20; }
+        #zoom-controls button { width: 32px; height: 32px; border: 1px solid #0f3460; background: rgba(22, 33, 62, 0.85); color: #ccc; font-size: 16px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; transition: background 0.15s; }
+        #zoom-controls button:hover { background: rgba(15, 52, 96, 0.95); color: #fff; border-color: #00d9a5; }
+        #zoom-controls button:active { background: #0f3460; }
         #cache-info { margin-top: 8px; font-size: 0.75em; color: #888; }
         .service-badge { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 0.7em; margin: 1px; }
         .service-badge.proxy { background: rgba(255, 165, 0, 0.3); color: #ffa500; }
@@ -422,6 +426,11 @@
             <canvas id="flow-canvas"></canvas>
             <div id="loading"><div class="spinner"></div><div>Loading transport data...</div></div>
             <div id="error"></div>
+            <div id="zoom-controls">
+                <button id="zoom-in" title="Zoom in">+</button>
+                <button id="zoom-out" title="Zoom out">&minus;</button>
+                <button id="zoom-fit" title="Fit to screen" style="font-size:13px;">&#8962;</button>
+            </div>
         </div>
     </div>
     <script>
@@ -4219,6 +4228,19 @@
         document.getElementById('version-filter').addEventListener('change', applyFilters);
         document.getElementById('search').addEventListener('input', applyFilters);
         document.getElementById('btn-fit').addEventListener('click', () => network && network.fit());
+        document.getElementById('zoom-in').addEventListener('click', () => {
+            if (!network) return;
+            const scale = network.getScale();
+            network.moveTo({ scale: scale * 1.3 });
+        });
+        document.getElementById('zoom-out').addEventListener('click', () => {
+            if (!network) return;
+            const scale = network.getScale();
+            network.moveTo({ scale: scale / 1.3 });
+        });
+        document.getElementById('zoom-fit').addEventListener('click', () => {
+            if (network) network.fit();
+        });
 
         // Resizable sidebar
         const resizeHandle = document.getElementById('resize-handle');
