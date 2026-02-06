@@ -123,12 +123,15 @@ func (le *LogEntry) GobDecode(b []byte) error {
 	if err := dec.Decode(&sb); err != nil {
 		return err
 	}
-	if le.RecvBytes != nil {
-		atomic.StoreUint64(le.RecvBytes, rb)
+	// Allocate pointers if nil (happens when decoding into a fresh struct)
+	if le.RecvBytes == nil {
+		le.RecvBytes = new(uint64)
 	}
-	if le.SentBytes != nil {
-		atomic.StoreUint64(le.SentBytes, sb)
+	atomic.StoreUint64(le.RecvBytes, rb)
+	if le.SentBytes == nil {
+		le.SentBytes = new(uint64)
 	}
+	atomic.StoreUint64(le.SentBytes, sb)
 	return nil
 }
 

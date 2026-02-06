@@ -1526,3 +1526,118 @@ func truncateID(id string) string {
 	}
 	return id[:8] + "..."
 }
+
+// WaitForVisorReady waits until a visor's RPC is responsive by polling VisorPK.
+// This ensures the visor has fully initialized its transport manager and app launcher.
+// Provides detailed logging for CI diagnostics.
+func (env *TestEnv) WaitForVisorReady(visor string, timeout time.Duration) error {
+	start := time.Now()
+	deadline := start.Add(timeout)
+	pollInterval := 5 * time.Second
+	attempt := 0
+
+	env.logger.Infof("WaitForVisorReady: waiting for %s (timeout: %v)", visor, timeout)
+
+	var lastErr string
+	for time.Now().Before(deadline) {
+		attempt++
+		_, err := env.VisorPK(visor)
+		if err == nil {
+			env.logger.Infof("WaitForVisorReady: %s ready after %v (%d attempts)",
+				visor, time.Since(start).Round(time.Second), attempt)
+			return nil
+		}
+
+		errStr := err.Error()
+		elapsed := time.Since(start).Round(time.Second)
+		remaining := time.Until(deadline).Round(time.Second)
+
+		// Log every attempt with elapsed/remaining time
+		env.logger.Infof("WaitForVisorReady: %s attempt %d failed (elapsed: %v, remaining: %v): %s",
+			visor, attempt, elapsed, remaining, errStr)
+
+		// If error changed, note it
+		if errStr != lastErr {
+			if lastErr != "" {
+				env.logger.Infof("WaitForVisorReady: %s error changed from %q to %q", visor, lastErr, errStr)
+			}
+			lastErr = errStr
+		}
+
+		// On longer waits, try to get visor container logs for diagnostics
+		if attempt%6 == 0 { // Every ~30 seconds
+			env.logContainerTail(visor, 10)
+		}
+
+		time.Sleep(pollInterval)
+	}
+
+	// Final diagnostic dump before failing
+	elapsed := time.Since(start).Round(time.Second)
+	env.logger.Infof("WaitForVisorReady: %s TIMED OUT after %v (%d attempts). Last error: %s",
+		visor, elapsed, attempt, lastErr)
+	env.logContainerTail(visor, 30)
+
+	// Log service container status and logs when visor fails due to service connectivity
+	env.GatherContainersInfo()
+	for _, svc := range []string{"transport-discovery", "dmsg-discovery", "dmsg-server", "address-resolver"} {
+		if c, ok := env.containers[svc]; ok {
+			env.logger.Infof("Service %s: state=%s status=%s", svc, c.State, c.Status)
+		}
+		env.logContainerTail(svc, 20)
+	}
+
+	return fmt.Errorf("visor %s RPC not ready after %v (%d attempts, last error: %s)",
+		visor, timeout, attempt, lastErr)
+}
+
+// logContainerTail logs the last N lines from a container's logs for diagnostics.
+func (env *TestEnv) logContainerTail(containerName string, lines int) {
+	tail := fmt.Sprintf("%d", lines)
+	opts := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       tail,
+	}
+
+	reader, err := env.cli.ContainerLogs(env.ctx, containerName, opts)
+	if err != nil {
+		env.logger.Warnf("logContainerTail: failed to get logs for %s: %v", containerName, err)
+		return
+	}
+	defer reader.Close() //nolint:errcheck,gosec
+
+	buf := make([]byte, 32*1024)
+	n, _ := reader.Read(buf) //nolint:errcheck,gosec
+	if n > 0 {
+		// Docker multiplexed stream has 8-byte header per frame; strip them for readability
+		logOutput := stripDockerLogHeaders(buf[:n])
+		env.logger.Infof("=== Container logs [%s] (last %d lines) ===\n%s\n=== End [%s] ===",
+			containerName, lines, logOutput, containerName)
+	}
+}
+
+// stripDockerLogHeaders removes the 8-byte multiplexed stream headers from Docker container log output.
+func stripDockerLogHeaders(data []byte) string {
+	var lines []string
+	for len(data) >= 8 {
+		// Docker multiplexed stream: [stream_type(1)][0(3)][size(4)][payload(size)]
+		size := int(data[4])<<24 | int(data[5])<<16 | int(data[6])<<8 | int(data[7])
+		data = data[8:]
+		if size > len(data) {
+			size = len(data)
+		}
+		if size > 0 {
+			line := strings.TrimRight(string(data[:size]), "\n\r")
+			if line != "" {
+				lines = append(lines, line)
+			}
+		}
+		data = data[size:]
+	}
+	if len(lines) == 0 && len(data) > 0 {
+		// Fallback: if no headers detected, return raw output
+		return string(data)
+	}
+	return strings.Join(lines, "\n")
+}

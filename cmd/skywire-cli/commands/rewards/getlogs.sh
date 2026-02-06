@@ -5,6 +5,11 @@ timeout 30.0m unbuffer skywire-cli log $( [[ ! -z "${_minversion}" ]] && echo "-
 echo "finished "$(date) | tee -a skywire-cli-log0.txt
 mv skywire-cli-log0.txt skywire-cli-log.txt
 
+#Collect transport data (tracks which visors have >= 2 transports)
+#Uncomment when ready to enforce transport requirement for rewards
+#printf "collecting transport data... \n"
+#skywire-cli rewards tp-collect 2>&1 | tee -a skywire-cli-log.txt
+
 #Remove surveys below minimum version
 
 [[ ! -z "${_minversion}" ]] && for f in log_backups/*/node-info.json; do version=$(jq -r '.skywire_version' "$f" | cut -d'-' -f1); if [[ "$(echo -e "${_minversion}\n$version" | sort -V | head -n1)" == "$version" && "$version" != "${_minversion}" ]]; then rm -v "$f"; fi; done

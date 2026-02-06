@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -93,14 +94,19 @@ func RunVPNClient(ctx context.Context, args []string) error {
 
 	eventSub := appevent.NewSubscriber()
 
+	// Create app client early to get logger
+	appCl := app.NewClient(eventSub)
+	defer appCl.Close()
+	logger := appCl.Log()
+
 	parseIP := func(addr string) net.IP {
 		ip, ok, err := vpn.ParseIP(addr)
 		if err != nil {
-			print(fmt.Sprintf("Failed to parse IP %s: %v\n", addr, err))
+			logger.WithError(err).WithField("addr", addr).Warn("Failed to parse IP")
 			return nil
 		}
 		if !ok {
-			print(fmt.Sprintf("Failed to parse IP %s\n", addr))
+			logger.WithField("addr", addr).Warn("Failed to parse IP")
 			return nil
 		}
 
@@ -125,38 +131,34 @@ func RunVPNClient(ctx context.Context, args []string) error {
 		}
 	})
 
-	appCl := app.NewClient(eventSub)
-	defer appCl.Close()
-
 	port := appCl.Config().RoutingPort
 	if appPort != 0 {
 		port = routing.Port(appPort)
 	}
-	setAppPort(appCl, port)
+	setAppPort(appCl, logger, port)
 
-	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		print(fmt.Sprintf("Failed to output build info: %v\n", err))
-	}
+	bi := buildinfo.Get()
+	logger.Infof("Version %q built on %q against commit %q", bi.Version, bi.Date, bi.Commit)
 
 	if serverPKStr == "" {
 		err := errors.New("VPN server pub key is missing")
-		print(fmt.Sprintf("%v\n", err))
-		setAppErr(appCl, err)
+		logger.Error(err)
+		setAppErr(appCl, logger, err)
 		return err
 	}
 
 	serverPK := cipher.PubKey{}
 	if err := serverPK.UnmarshalText([]byte(serverPKStr)); err != nil {
-		print(fmt.Sprintf("Invalid VPN server pub key: %v\n", err))
-		setAppErr(appCl, err)
+		logger.WithError(err).Error("Invalid VPN server pub key")
+		setAppErr(appCl, logger, err)
 		return err
 	}
 
 	localPK := cipher.PubKey{}
 	if localPKStr != "" {
 		if err := localPK.UnmarshalText([]byte(localPKStr)); err != nil {
-			print(fmt.Sprintf("Invalid local PK: %v\n", err))
-			setAppErr(appCl, err)
+			logger.WithError(err).Error("Invalid local PK")
+			setAppErr(appCl, logger, err)
 			return err
 		}
 	}
@@ -164,8 +166,8 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	localSK := cipher.SecKey{}
 	if localSKStr != "" {
 		if err := localSK.UnmarshalText([]byte(localSKStr)); err != nil {
-			print(fmt.Sprintf("Invalid local SK: %v\n", err))
-			setAppErr(appCl, err)
+			logger.WithError(err).Error("Invalid local SK")
+			setAppErr(appCl, logger, err)
 			return err
 		}
 	}
@@ -174,14 +176,14 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	if dnsAddr != "" {
 		dnsIP := parseIP(dnsAddr)
 		if dnsIP == nil {
-			fmt.Println("Invalid DNS Address value. VPN will use current machine DNS.")
+			logger.Warn("Invalid DNS Address value. VPN will use current machine DNS.")
 			dnsAddress = ""
 		} else {
 			dnsAddress = dnsIP.String()
 		}
 	}
 
-	fmt.Printf("Connecting to VPN server %s\n", serverPK.String())
+	logger.Infof("Connecting to VPN server %s", serverPK.String())
 
 	vpnClientCfg := vpn.ClientConfig{
 		Passcode:   passcode,
@@ -192,8 +194,8 @@ func RunVPNClient(ctx context.Context, args []string) error {
 
 	vpnClient, err := vpn.NewClient(vpnClientCfg, appCl)
 	if err != nil {
-		print(fmt.Sprintf("Error creating VPN client: %v\n", err))
-		setAppErr(appCl, err)
+		logger.WithError(err).Error("Error creating VPN client")
+		setAppErr(appCl, logger, err)
 		return err
 	}
 
@@ -202,8 +204,8 @@ func RunVPNClient(ctx context.Context, args []string) error {
 		select {
 		case ip := <-directIPsCh:
 			if err := vpnClient.AddDirectRoute(ip); err != nil {
-				print(fmt.Sprintf("Failed to setup direct route to %s: %v\n", ip.String(), err))
-				setAppErr(appCl, err)
+				logger.WithError(err).WithField("ip", ip.String()).Warn("Failed to setup direct route")
+				setAppErr(appCl, logger, err)
 			}
 		default:
 			directRoutesDone = true
@@ -213,8 +215,8 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	go func() {
 		for ip := range directIPsCh {
 			if err := vpnClient.AddDirectRoute(ip); err != nil {
-				print(fmt.Sprintf("Failed to setup direct route to %s: %v\n", ip.String(), err))
-				setAppErr(appCl, err)
+				logger.WithError(err).WithField("ip", ip.String()).Warn("Failed to setup direct route")
+				setAppErr(appCl, logger, err)
 			}
 		}
 	}()
@@ -222,8 +224,8 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	go func() {
 		for ip := range nonDirectIPsCh {
 			if err := vpnClient.RemoveDirectRoute(ip); err != nil {
-				print(fmt.Sprintf("Failed to remove direct route to %s: %v\n", ip.String(), err))
-				setAppErr(appCl, err)
+				logger.WithError(err).WithField("ip", ip.String()).Warn("Failed to remove direct route")
+				setAppErr(appCl, logger, err)
 			}
 		}
 	}()
@@ -242,14 +244,14 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	} else {
 		ipcClient, err := ipc.StartClient(visorconfig.VPNClientName, nil)
 		if err != nil {
-			print(fmt.Sprintf("Error creating ipc server for VPN client: %v\n", err))
-			setAppErr(appCl, err)
+			logger.WithError(err).Error("Error creating ipc server for VPN client")
+			setAppErr(appCl, logger, err)
 			return err
 		}
 		go vpnClient.ListenIPC(ipcClient)
 	}
 
-	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+	defer setAppStatus(appCl, logger, appserver.AppDetailedStatusStopped)
 
 	serveCh := make(chan error, 1)
 	go func() {
@@ -259,7 +261,7 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	select {
 	case err := <-serveCh:
 		if err != nil {
-			print(fmt.Sprintf("Failed to serve VPN: %v\n", err))
+			logger.WithError(err).Error("Failed to serve VPN")
 			return err
 		}
 	case <-ctx.Done():
@@ -270,15 +272,15 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	return nil
 }
 
-func setAppErr(appCl *app.Client, err error) {
+func setAppErr(appCl *app.Client, log logrus.FieldLogger, err error) {
 	if appErr := appCl.SetError(err.Error()); appErr != nil {
-		print(fmt.Sprintf("Failed to set error %v: %v\n", err, appErr))
+		log.WithError(appErr).WithField("original_error", err).Warn("Failed to set error")
 	}
 }
 
-func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
+func setAppStatus(appCl *app.Client, log logrus.FieldLogger, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
-		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
+		log.WithError(err).WithField("status", status).Warn("Failed to set status")
 	}
 }
 
@@ -289,8 +291,8 @@ func Execute() {
 	}
 }
 
-func setAppPort(appCl *app.Client, port routing.Port) {
+func setAppPort(appCl *app.Client, log logrus.FieldLogger, port routing.Port) {
 	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
+		log.WithError(err).WithField("port", port).Warn("Failed to set port")
 	}
 }

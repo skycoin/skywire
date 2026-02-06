@@ -89,5 +89,5 @@ const (
 	blue    = "\033[97;44m"
 	magenta = "\033[97;45m"
 	cyan    = "\033[97;46m"
-	reset   = "\033[0m"
+	reset   = ""
 )
