@@ -35,8 +35,14 @@ func NewProcLogger(conf ProcConfig, mLog *logging.MasterLogger) (appLog *logging
 
 	// Create isolated MasterLogger for this app instead of reusing shared one.
 	// This prevents hooks from one app affecting logs from other apps.
+	// We copy the essential settings (Out, Formatter, Level) from the parent logger
+	// to ensure consistent behavior.
 	appLog = logging.NewMasterLogger()
 	appLog.SetLevel(mLog.GetLevel())
+	appLog.Logger.Out = mLog.Logger.Out
+	if mLog.Logger.Formatter != nil {
+		appLog.Logger.Formatter = mLog.Logger.Formatter
+	}
 	appLog.Logger.AddHook(db)
 
 	return appLog, db

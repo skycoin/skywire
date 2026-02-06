@@ -45,6 +45,8 @@ var (
 	processRewards        bool
 	log                   = logging.MustGetLogger("rewards")
 	nodeInfoSvc           []byte
+	requireTransports     bool
+	transportHistPath     string
 )
 
 type nodeinfo struct {
@@ -182,7 +184,7 @@ func init() {
 		tgbot.RootCmd,
 	)
 	RootCmd.Flags().SortFlags = false
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ]")
 	RootCmd.Flags().StringVarP(&wdate, "date", "d", wdate, "date for which to calculate reward")
 	RootCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "check reward for pubkey")
 	RootCmd.Flags().StringSliceVarP(&disallowArchitectures, "noarch", "n", []string{"null", "wasm"}, "disallowed architectures, comma separated")
@@ -225,6 +227,8 @@ func init() {
 	RootCmd.Flags().BoolVarP(&h2, "h2", "2", false, "hide reward csv data")
 	RootCmd.Flags().BoolVarP(&grr, "err", "e", false, "account for non rewarded keys")
 	RootCmd.Flags().BoolVarP(&processRewards, "process", "r", false, "run complete reward processing workflow")
+	RootCmd.Flags().BoolVarP(&requireTransports, "require-tp", "t", true, "require minimum transports (from hist/YYYY-MM-DD_transports.txt)")
+	RootCmd.Flags().StringVarP(&transportHistPath, "tp-hist", "T", "hist", "path to transport history directory")
 }
 
 // RootCmd is the root command for skywire-cli rewards
@@ -329,6 +333,24 @@ Architectures:
 			}
 		}
 
+		// Load transport requirement data (visors that had >= 2 transports)
+		transportMap := make(map[string]struct{})
+		if requireTransports {
+			transportFile := fmt.Sprintf("%s/%s_transports.txt", transportHistPath, wdate)
+			if data, err := os.ReadFile(transportFile); err == nil { //nolint:gosec
+				for _, line := range strings.Split(string(data), "\n") {
+					line = strings.TrimSpace(line)
+					if line != "" {
+						transportMap[line] = struct{}{}
+					}
+				}
+				log.Infof("Loaded %d visors with sufficient transports from %s", len(transportMap), transportFile)
+			} else {
+				log.Warnf("Transport file not found: %s (transport requirement will be skipped)", transportFile)
+				requireTransports = false
+			}
+		}
+
 		var res []string
 		if pubkey == "" {
 			//nolint:errcheck
@@ -416,6 +438,10 @@ Architectures:
 			_, allowed2 := allowArchMap2[arch]
 			_, err := coincipher.DecodeBase58Address(sky)
 
+			// Check transport requirement
+			_, hasTransports := transportMap[pk]
+			meetsTransportReq := !requireTransports || hasTransports
+
 			ni := nodeinfo{
 				IPAddr:     ip,
 				SkyAddr:    sky,
@@ -442,13 +468,15 @@ Architectures:
 						return hv
 					case err != nil:
 						return "Invalid Skycoin address"
+					case !meetsTransportReq:
+						return "No transports"
 					default:
 						return "Unknown reason"
 					}
 				}(),
 			}
 
-			if (allowed1 || allowed2) && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && err == nil {
+			if (allowed1 || allowed2) && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && err == nil && meetsTransportReq {
 				if allowed1 {
 					nodesInfos1 = append(nodesInfos1, ni)
 				}
@@ -692,7 +720,7 @@ func init() {
 		testCmd,
 	)
 	testCmd.Flags().SortFlags = false
-	testCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
+	testCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ]")
 	testCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "verify services in survey for pubkey")
 	testCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
 }

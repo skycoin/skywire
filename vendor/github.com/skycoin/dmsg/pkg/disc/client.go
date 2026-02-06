@@ -26,6 +26,8 @@ type APIClient interface {
 	AvailableServers(context.Context) ([]*Entry, error)
 	AllServers(context.Context) ([]*Entry, error)
 	AllEntries(ctx context.Context) ([]string, error)
+	AllClientsByServer(ctx context.Context) (map[string][]*Entry, error)
+	ClientsByServer(ctx context.Context, serverPK cipher.PubKey) ([]*Entry, error)
 }
 
 // HTTPClient represents a client that communicates with a dmsg-discovery service through http, it
@@ -347,6 +349,86 @@ func (c *httpClient) AllEntries(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 
+		return nil, errFromString(message.Message)
+	}
+
+	err = json.NewDecoder(resp.Body).Decode(&entries)
+	if err != nil {
+		return nil, err
+	}
+
+	return entries, nil
+}
+
+// AllClientsByServer returns all client entries grouped by server public key.
+func (c *httpClient) AllClientsByServer(ctx context.Context) (map[string][]*Entry, error) {
+	endpoint := c.address + "/dmsg-discovery/servers/clients"
+
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+
+	resp, err := c.client.Do(req)
+	if resp != nil {
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				c.log.WithError(err).Warn("Failed to close response body")
+			}
+		}()
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var message HTTPMessage
+		err = json.NewDecoder(resp.Body).Decode(&message)
+		if err != nil {
+			return nil, err
+		}
+		return nil, errFromString(message.Message)
+	}
+
+	var result map[string][]*Entry
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// ClientsByServer returns all client entries delegated to a specific server.
+func (c *httpClient) ClientsByServer(ctx context.Context, serverPK cipher.PubKey) ([]*Entry, error) {
+	var entries []*Entry
+	endpoint := fmt.Sprintf("%s/dmsg-discovery/server/%s/clients", c.address, serverPK.Hex())
+
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+
+	resp, err := c.client.Do(req)
+	if resp != nil {
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				c.log.WithError(err).Warn("Failed to close response body")
+			}
+		}()
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var message HTTPMessage
+		err = json.NewDecoder(resp.Body).Decode(&message)
+		if err != nil {
+			return nil, err
+		}
 		return nil, errFromString(message.Message)
 	}
 

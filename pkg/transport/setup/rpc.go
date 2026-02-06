@@ -59,8 +59,8 @@ func (gw *TransportGateway) AddTransport(req TransportRequest, res *TransportRes
 	return nil
 }
 
-// ErrIncorrectType is returned when transport was not created by transport setup
-var ErrIncorrectType = errors.New("transport was not created by skycoin")
+// ErrIncorrectType is returned when transport was not created by the setup system
+var ErrIncorrectType = errors.New("transport was not created by skycoin or autoconnect")
 
 // RemoveTransport removes all transports that match given request
 func (gw *TransportGateway) RemoveTransport(req UUIDRequest, res *BoolResponse) error {
@@ -69,7 +69,7 @@ func (gw *TransportGateway) RemoveTransport(req UUIDRequest, res *BoolResponse) 
 	if err != nil {
 		return err
 	}
-	if tr.Entry.Label != transport.LabelSkycoin {
+	if tr.Entry.Label != transport.LabelSkycoin && tr.Entry.Label != transport.LabelAutomatic {
 		return ErrIncorrectType
 	}
 	gw.tm.DeleteTransport(req.ID)
@@ -77,9 +77,10 @@ func (gw *TransportGateway) RemoveTransport(req UUIDRequest, res *BoolResponse) 
 	return nil
 }
 
-// GetTransports returns all transports of this node that have been established by transport setup system
+// GetTransports returns all transports of this node that have been established by
+// the transport setup system or autoconnect (skycoin + automatic labels)
 func (gw *TransportGateway) GetTransports(_ struct{}, res *[]TransportResponse) error {
-	tps := gw.tm.GetTransportsByLabel(transport.LabelSkycoin)
+	tps := gw.tm.GetTransportsByLabels(transport.LabelSkycoin, transport.LabelAutomatic)
 	for _, tp := range tps {
 		tResp := TransportResponse{
 			ID:     tp.Entry.ID,
