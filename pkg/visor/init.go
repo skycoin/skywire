@@ -702,7 +702,7 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 
 func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 	tpsSK := v.conf.Transport.TPSetupSK
-	if tpsSK == (cipher.SecKey{}) {
+	if tpsSK == nil || *tpsSK == (cipher.SecKey{}) {
 		log.Debug("No embedded TPS configured (tps_sk empty), skipping")
 		return nil
 	}
@@ -731,7 +731,7 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 	log.WithField("min_sessions", minSessions).WithField("server_type", serverType).Debug("TPS dmsg config")
 	httpC := &http.Client{}
 	tpsDisc := dmsgdisc.NewHTTP(v.conf.Dmsg.Discovery, httpC, v.MasterLogger().PackageLogger("embedded_tps:disc"))
-	tpsDmsgC := dmsg.NewClient(tpsPK, tpsSK, tpsDisc, dmsgConf)
+	tpsDmsgC := dmsg.NewClient(tpsPK, *tpsSK, tpsDisc, dmsgConf)
 	tpsDmsgC.SetLogger(v.MasterLogger().PackageLogger("embedded_tps:dmsg"))
 
 	go tpsDmsgC.Serve(ctx)

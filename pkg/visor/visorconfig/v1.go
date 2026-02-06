@@ -70,7 +70,7 @@ type Transport struct {
 	AddressResolver   string          `json:"address_resolver"`
 	PublicAutoconnect bool            `json:"public_autoconnect"`
 	TransportSetupPKs []cipher.PubKey `json:"transport_setup"`
-	TPSetupSK         cipher.SecKey   `json:"tps_sk,omitempty"`
+	TPSetupSK         *cipher.SecKey  `json:"tps_sk,omitempty"`
 	TPSDmsg           *TPSDmsgConfig  `json:"tps_dmsg,omitempty"`
 	LogStore          *LogStore       `json:"log_store"`
 	StcprPort         int             `json:"stcpr_port"`
