@@ -242,8 +242,15 @@ func (mt *ManagedTransport) Accept(ctx context.Context, transport network.Transp
 	// Self-connections don't register to TPD and would deadlock during settlement
 	if _, isNoop := mt.dc.(*noopDiscoveryClient); !isNoop {
 		mt.log.Debug("Performing settlement handshake...")
-		if err := MakeSettlementHS(false, mt.log).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
+		receivedLabel, err := MakeSettlementHS(false, mt.log, mt.Entry.Label).Do(ctx, mt.dc, transport, mt.client.SK())
+		if err != nil {
 			return fmt.Errorf("settlement handshake failed: %w", err)
+		}
+		// Adopt the initiator's label so both ends agree on the transport's origin.
+		// This is backward-compatible: older visors always send LabelUser, which is
+		// the same default the responder used before this change.
+		if receivedLabel != "" {
+			mt.Entry.Label = receivedLabel
 		}
 	} else {
 		mt.log.Debug("Skipping settlement handshake for self-connection (noop discovery client)")
@@ -286,7 +293,7 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 	// Skip settlement handshake for self-connections (noopDiscoveryClient)
 	// Self-connections don't register to TPD and would deadlock during settlement
 	if _, isNoop := mt.dc.(*noopDiscoveryClient); !isNoop {
-		if err := MakeSettlementHS(true, mt.log).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
+		if _, err := MakeSettlementHS(true, mt.log, mt.Entry.Label).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
 			return fmt.Errorf("settlement handshake failed: %w", err)
 		}
 	} else {

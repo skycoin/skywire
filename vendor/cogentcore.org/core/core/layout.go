@@ -109,8 +109,8 @@ func (ct geomCT) String() string {
 	return fmt.Sprintf("Content: %v, \tTotal: %v", ct.Content, ct.Total)
 }
 
-// geomSize has all of the relevant Layout sizes
-type geomSize struct {
+// GeomSize has all of the relevant Layout sizes
+type GeomSize struct {
 	// Actual is the actual size for the purposes of rendering, representing
 	// the "external" demands of the widget for space from its parent.
 	// This is initially the bottom-up constraint computed by SizeUp,
@@ -152,41 +152,41 @@ type geomSize struct {
 	Max math32.Vector2
 }
 
-func (ls geomSize) String() string {
+func (ls GeomSize) String() string {
 	return fmt.Sprintf("Actual: %v, \tAlloc: %v", ls.Actual, ls.Alloc)
 }
 
 // setInitContentMin sets initial Actual.Content size from given Styles.Min,
 // further subject to the current Max constraint.
-func (ls *geomSize) setInitContentMin(styMin math32.Vector2) {
+func (ls *GeomSize) setInitContentMin(styMin math32.Vector2) {
 	csz := &ls.Actual.Content
 	*csz = styMin
 	styles.SetClampMaxVector(csz, ls.Max)
 }
 
 // FitSizeMax increases given size to fit given fm value, subject to Max constraints
-func (ls *geomSize) FitSizeMax(to *math32.Vector2, fm math32.Vector2) {
+func (ls *GeomSize) FitSizeMax(to *math32.Vector2, fm math32.Vector2) {
 	styles.SetClampMinVector(to, fm)
 	styles.SetClampMaxVector(to, ls.Max)
 }
 
-// setTotalFromContent sets the Total size as Content plus Space
-func (ls *geomSize) setTotalFromContent(ct *geomCT) {
+// SetTotalFromContent sets the Total size as Content plus Space
+func (ls *GeomSize) SetTotalFromContent(ct *geomCT) {
 	ct.Total = ct.Content.Add(ls.Space)
 }
 
-// setContentFromTotal sets the Content from Total size,
+// SetContentFromTotal sets the Content from Total size,
 // subtracting Space
-func (ls *geomSize) setContentFromTotal(ct *geomCT) {
+func (ls *GeomSize) SetContentFromTotal(ct *geomCT) {
 	ct.Content = ct.Total.Sub(ls.Space)
 }
 
-// geomState contains the the layout geometry state for each widget.
+// GeomState contains the the layout geometry state for each widget.
 // Set by the parent Layout during the Layout process.
-type geomState struct {
+type GeomState struct {
 	// Size has sizing data for the widget: use Actual for rendering.
 	// Alloc shows the potentially larger space top-down allocated.
-	Size geomSize `display:"add-fields"`
+	Size GeomSize `display:"add-fields"`
 
 	// Pos is position within the overall Scene that we render into,
 	// including effects of scroll offset, for both Total outer dimension
@@ -216,14 +216,14 @@ type geomState struct {
 	ContentBBox image.Rectangle `edit:"-" copier:"-" json:"-" xml:"-" set:"-"`
 }
 
-func (ls *geomState) String() string {
+func (ls *GeomState) String() string {
 	return "Size: " + ls.Size.String() + "\nPos: " + ls.Pos.String() + "\tCell: " + ls.Cell.String() +
 		"\tRelPos: " + ls.RelPos.String() + "\tScroll: " + ls.Scroll.String()
 }
 
 // contentRangeDim returns the Content bounding box min, max
 // along given dimension
-func (ls *geomState) contentRangeDim(d math32.Dims) (cmin, cmax float32) {
+func (ls *GeomState) contentRangeDim(d math32.Dims) (cmin, cmax float32) {
 	cmin = float32(math32.PointDim(ls.ContentBBox.Min, d))
 	cmax = float32(math32.PointDim(ls.ContentBBox.Max, d))
 	return
@@ -231,20 +231,20 @@ func (ls *geomState) contentRangeDim(d math32.Dims) (cmin, cmax float32) {
 
 // totalRect returns Pos.Total -- Size.Actual.Total
 // as an image.Rectangle, e.g., for bounding box
-func (ls *geomState) totalRect() image.Rectangle {
+func (ls *GeomState) totalRect() image.Rectangle {
 	return math32.RectFromPosSizeMax(ls.Pos.Total, ls.Size.Actual.Total)
 }
 
 // contentRect returns Pos.Content, Size.Actual.Content
 // as an image.Rectangle, e.g., for bounding box.
-func (ls *geomState) contentRect() image.Rectangle {
+func (ls *GeomState) contentRect() image.Rectangle {
 	return math32.RectFromPosSizeMax(ls.Pos.Content, ls.Size.Actual.Content)
 }
 
 // ScrollOffset computes the net scrolling offset as a function of
 // the difference between the allocated position and the actual
 // content position according to the clipped bounding box.
-func (ls *geomState) ScrollOffset() image.Point {
+func (ls *GeomState) ScrollOffset() image.Point {
 	return ls.ContentBBox.Min.Sub(ls.Pos.Content.ToPoint())
 }
 
@@ -313,6 +313,9 @@ func (lc *layoutCells) cellsSize() math32.Vector2 {
 		sum := float32(0)
 		for mi := 0; mi < n; mi++ {
 			md := lc.cell(ma, mi) // X, Y
+			if md == nil {
+				continue
+			}
 			mx := md.Size.Dim(ma)
 			sum += mx // sum of maxes
 		}
@@ -588,7 +591,7 @@ func (fr *Frame) laySetContentFitOverflow(nsz math32.Vector2, pass LayoutPasses)
 		}
 	}
 	styles.SetClampMaxVector(asz, mx)
-	sz.setTotalFromContent(&sz.Actual)
+	sz.SetTotalFromContent(&sz.Actual)
 }
 
 // SizeUp (bottom-up) gathers Actual sizes from our Children & Parts,
@@ -605,7 +608,7 @@ func (wb *WidgetBase) SizeUpWidget() {
 	wb.sizeFromStyle()
 	wb.sizeUpParts()
 	sz := &wb.Geom.Size
-	sz.setTotalFromContent(&sz.Actual)
+	sz.SetTotalFromContent(&sz.Actual)
 }
 
 // spaceFromStyle sets the Space based on Style BoxSpace().Size()
@@ -636,7 +639,7 @@ func (wb *WidgetBase) sizeFromStyle() {
 	}
 	sz.Internal.SetZero()
 	sz.setInitContentMin(sz.Min)
-	sz.setTotalFromContent(&sz.Actual)
+	sz.SetTotalFromContent(&sz.Actual)
 	if DebugSettings.LayoutTrace && (sz.Actual.Content.X > 0 || sz.Actual.Content.Y > 0) {
 		fmt.Println(wb, "SizeUp from Style:", sz.Actual.Content.String())
 	}
@@ -675,8 +678,8 @@ func (wb *WidgetBase) updateParentRelSizes() bool {
 	if got {
 		sz.FitSizeMax(&sz.Actual.Total, effmin)
 		sz.FitSizeMax(&sz.Alloc.Total, effmin)
-		sz.setContentFromTotal(&sz.Actual)
-		sz.setContentFromTotal(&sz.Alloc)
+		sz.SetContentFromTotal(&sz.Actual)
+		sz.SetContentFromTotal(&sz.Alloc)
 	}
 	return got
 }
@@ -949,7 +952,7 @@ func (fr *Frame) sizeFromChildrenCells(iter int, pass LayoutPasses) math32.Vecto
 			md := li.cell(ma, mi, ci) // X, Y
 			cd := li.cell(ca, ci, mi) // Y, X
 			if md == nil || cd == nil {
-				break
+				continue
 			}
 			msz := sz.Dim(ma) // main axis size dim: X, Y
 			mx := md.Size.Dim(ma)
@@ -987,6 +990,9 @@ func (fr *Frame) sizeFromChildrenStacked() math32.Vector2 {
 		kgrw := kwb.Styles.Grow
 		for ma := math32.X; ma <= math32.Y; ma++ { // main axis = X then Y
 			md := li.cell(ma, 0, 0)
+			if md == nil {
+				continue
+			}
 			md.Size = ksz
 			md.Grow = kgrw
 		}
@@ -1018,7 +1024,7 @@ func (wb *WidgetBase) sizeDownParts(iter int) bool {
 	psz := &wb.Parts.Geom.Size
 	pgrow, _ := wb.growToAllocSize(sz.Actual.Content, sz.Alloc.Content)
 	psz.Alloc.Total = pgrow // parts = content
-	psz.setContentFromTotal(&psz.Alloc)
+	psz.SetContentFromTotal(&psz.Alloc)
 	redo := wb.Parts.SizeDown(iter)
 	if redo && DebugSettings.LayoutTrace {
 		fmt.Println(wb, "Parts triggered redo")
@@ -1107,7 +1113,7 @@ func (fr *Frame) sizeDownFrame(iter int) bool {
 	fr.updateParentRelSizes()
 	sz := &fr.Geom.Size
 	styles.SetClampMaxVector(&sz.Alloc.Content, sz.Max) // can't be more than max..
-	sz.setTotalFromContent(&sz.Alloc)
+	sz.SetTotalFromContent(&sz.Alloc)
 	if DebugSettings.LayoutTrace {
 		fmt.Println(fr, "Managing Alloc:", sz.Alloc.Content)
 	}
@@ -1198,8 +1204,8 @@ func (fr *Frame) ManageOverflow(iter int, updateSize bool) bool {
 	}
 	fr.This.(Layouter).LayoutSpace() // adds the scroll space
 	if updateSize {
-		sz.setTotalFromContent(&sz.Actual)
-		sz.setContentFromTotal(&sz.Alloc) // alloc is *decreased* from any increase in space
+		sz.SetTotalFromContent(&sz.Actual)
+		sz.SetContentFromTotal(&sz.Alloc) // alloc is *decreased* from any increase in space
 	}
 	if change && DebugSettings.LayoutTrace {
 		fmt.Println(fr, "ManageOverflow changed")
@@ -1252,7 +1258,7 @@ func (fr *Frame) sizeDownGrowCells(iter int, extra math32.Vector2) bool {
 				md := li.cell(ma, mi, ci)       // X, Y
 				cd := li.cell(ca, ci, mi)       // Y, X
 				if md == nil || cd == nil {
-					break
+					continue
 				}
 				mx := md.Size.Dim(ma)
 				asz := mx
@@ -1280,12 +1286,12 @@ func (fr *Frame) sizeDownGrowCells(iter int, extra math32.Vector2) bool {
 						}
 					}
 					if asz > math32.Ceil(alloc.Dim(ma))+1 { // bug!
-						// if DebugSettings.LayoutTrace {
-						fmt.Println(fr, "SizeDownGrowCells error: sub alloc > total to alloc:", asz, alloc.Dim(ma))
-						fmt.Println("ma:", ma, "mi:", mi, "ci:", ci, "mx:", mx, "gsum:", gsum, "gr:", gr, "ex:", exd, "par act:", sz.Actual.Content.Dim(ma))
-						fmt.Println(fr.layout.String())
-						fmt.Println(fr.layout.cellsSize())
-						// }
+						if DebugSettings.LayoutTrace {
+							fmt.Println(fr, "SizeDownGrowCells error: sub alloc > total to alloc:", asz, alloc.Dim(ma))
+							fmt.Println("ma:", ma, "mi:", mi, "ci:", ci, "mx:", mx, "gsum:", gsum, "gr:", gr, "ex:", exd, "par act:", sz.Actual.Content.Dim(ma))
+							fmt.Println(fr.layout.String())
+							fmt.Println(fr.layout.cellsSize())
+						}
 					}
 				}
 				if DebugSettings.LayoutTraceDetail {
@@ -1293,7 +1299,7 @@ func (fr *Frame) sizeDownGrowCells(iter int, extra math32.Vector2) bool {
 				}
 				ksz.Alloc.Total.SetDim(ma, asz)
 			}
-			ksz.setContentFromTotal(&ksz.Alloc)
+			ksz.SetContentFromTotal(&ksz.Alloc)
 			return tree.Continue
 		})
 		if exn.X == 0 && exn.Y == 0 {
@@ -1380,7 +1386,7 @@ func (fr *Frame) sizeDownGrowStacked(iter int, extra math32.Vector2) bool {
 				chg = true
 			}
 			ksz.Alloc.Total = asz
-			ksz.setContentFromTotal(&ksz.Alloc)
+			ksz.SetContentFromTotal(&ksz.Alloc)
 		}
 		return chg
 	}
@@ -1392,7 +1398,7 @@ func (fr *Frame) sizeDownGrowStacked(iter int, extra math32.Vector2) bool {
 			chg = true
 		}
 		ksz.Alloc.Total = asz
-		ksz.setContentFromTotal(&ksz.Alloc)
+		ksz.SetContentFromTotal(&ksz.Alloc)
 		return tree.Continue
 	})
 	return chg
@@ -1420,10 +1426,13 @@ func (fr *Frame) sizeDownAllocActualCells(iter int) {
 			mi := math32.PointDim(cidx, ma)  // X, Y
 			ci := math32.PointDim(cidx, ca)  // Y, X
 			md := fr.layout.cell(ma, mi, ci) // X, Y
+			if md == nil {
+				continue
+			}
 			asz := md.Size.Dim(ma)
 			ksz.Alloc.Total.SetDim(ma, asz)
 		}
-		ksz.setContentFromTotal(&ksz.Alloc)
+		ksz.SetContentFromTotal(&ksz.Alloc)
 		return tree.Continue
 	})
 }
@@ -1437,7 +1446,7 @@ func (fr *Frame) sizeDownAllocActualStacked(iter int) {
 		if kwb != nil {
 			ksz := &kwb.Geom.Size
 			ksz.Alloc.Total = asz
-			ksz.setContentFromTotal(&ksz.Alloc)
+			ksz.SetContentFromTotal(&ksz.Alloc)
 		}
 		return
 	}
@@ -1446,7 +1455,7 @@ func (fr *Frame) sizeDownAllocActualStacked(iter int) {
 	fr.ForWidgetChildren(func(i int, cw Widget, cwb *WidgetBase) bool {
 		ksz := &cwb.Geom.Size
 		ksz.Alloc.Total = asz
-		ksz.setContentFromTotal(&ksz.Alloc)
+		ksz.SetContentFromTotal(&ksz.Alloc)
 		return tree.Continue
 	})
 }
@@ -1464,7 +1473,7 @@ func (fr *Frame) sizeDownCustom(iter int) bool {
 	fr.ForWidgetChildren(func(i int, cw Widget, cwb *WidgetBase) bool {
 		ksz := &cwb.Geom.Size
 		ksz.Alloc.Total = asz
-		ksz.setContentFromTotal(&ksz.Alloc)
+		ksz.SetContentFromTotal(&ksz.Alloc)
 		return tree.Continue
 	})
 	redo := fr.sizeDownChildren(iter)
@@ -1496,7 +1505,7 @@ func (wb *WidgetBase) SizeFinal() {
 	wb.growToAlloc()
 	wb.styleSizeUpdate() // now that sizes are stable, ensure styling based on size is updated
 	wb.sizeFinalParts()
-	sz.setTotalFromContent(&sz.Actual)
+	sz.SetTotalFromContent(&sz.Actual)
 }
 
 // growToAlloc grows our Actual size up to current Alloc size
@@ -1515,7 +1524,7 @@ func (wb *WidgetBase) growToAlloc() bool {
 			fmt.Println(wb, "GrowToAlloc:", sz.Alloc.Total, "from actual:", sz.Actual.Total)
 		}
 		sz.Actual.Total = act // already has max constraint
-		sz.setContentFromTotal(&sz.Actual)
+		sz.SetContentFromTotal(&sz.Actual)
 	}
 	return change
 }
