@@ -42,21 +42,21 @@ func init() {
 	addTPCmd.Flags().SortFlags = false
 	rmTPCmd.Flags().SortFlags = false
 	listTPCmd.Flags().SortFlags = false
-	RootCmd.Flags().StringVarP(&configFile, "config", "c", "", "path to config file\033[0m")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[info|error|warn|debug|trace|panic]\033[0m")
+	RootCmd.Flags().StringVarP(&configFile, "config", "c", "", "path to config file")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[info|error|warn|debug|trace|panic]")
 	RootCmd.AddCommand(addTPCmd, rmTPCmd, listTPCmd)
-	addTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport setup\033[0m")
-	addTPCmd.Flags().StringVarP(&toPK, "to", "2", "", "other transport edge PK\033[0m")
-	addTPCmd.Flags().StringVarP(&tpType, "type", "t", "", "transport type to request creation of [stcpr|sudph|dmsg]\033[0m")
-	rmTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport takedown\033[0m")
-	rmTPCmd.Flags().StringVarP(&tpID, "tpid", "i", "", "id of transport to remove\033[0m")
-	listTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport list\033[0m")
-	addTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result\033[0m")
-	rmTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result\033[0m")
-	listTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result\033[0m")
-	addTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node\033[0m")
-	rmTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node\033[0m")
-	listTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node\033[0m")
+	addTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport setup")
+	addTPCmd.Flags().StringVarP(&toPK, "to", "2", "", "other transport edge PK")
+	addTPCmd.Flags().StringVarP(&tpType, "type", "t", "", "transport type to request creation of [stcpr|sudph|dmsg]")
+	rmTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport takedown")
+	rmTPCmd.Flags().StringVarP(&tpID, "tpid", "i", "", "id of transport to remove")
+	listTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport list")
+	addTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result")
+	rmTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result")
+	listTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result")
+	addTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node")
+	rmTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node")
+	listTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node")
 }
 
 // RootCmd contains the root command

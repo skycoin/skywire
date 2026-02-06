@@ -384,6 +384,27 @@ func (tm *Manager) GetTransportsByLabel(label Label) []*ManagedTransport {
 	return trs
 }
 
+// GetTransportsByLabels returns all transports matching any of the given labels
+func (tm *Manager) GetTransportsByLabels(labels ...Label) []*ManagedTransport {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
+	var trs []*ManagedTransport
+	for _, tr := range tm.tps {
+		for _, label := range labels {
+			if tr.Entry.Label == label {
+				trs = append(trs, tr)
+				break
+			}
+		}
+	}
+	return trs
+}
+
+// ARClient returns the address resolver client used by this transport manager.
+func (tm *Manager) ARClient() addrresolver.APIClient {
+	return tm.arClient
+}
+
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
 func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label) (*ManagedTransport, error) {
 	if tm.isClosing() {

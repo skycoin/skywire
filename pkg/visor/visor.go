@@ -50,6 +50,8 @@ var (
 	ErrTrpMangerNotAvailable = errors.New("no transport manager available")
 	// ErrAppLauncherNotAvailable represents error for unavailable app launcher
 	ErrAppLauncherNotAvailable = errors.New("no app launcher available")
+	// ErrRouterNotReady represents error for router not yet initialized
+	ErrRouterNotReady = errors.New("router not ready")
 )
 
 const (
@@ -118,6 +120,15 @@ type Visor struct {
 
 	survey     visorconfig.Survey
 	surveyLock *sync.RWMutex
+
+	// UI server state (dynamically started/stopped via RPC)
+	uiServerMu      sync.Mutex
+	uiServer        *http.Server
+	uiServerAddr    string
+	uiServerRunning bool
+
+	// Embedded Transport Setup Node (nil if tps_sk not configured)
+	embeddedTPS *embeddedTPS
 }
 
 // todo: consider moving module closing to the module system

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"math/big"
+	"net"
 	"net/http"
 	"time"
 
@@ -34,22 +35,30 @@ type Autoconnector interface {
 }
 
 type autoconnector struct {
-	client        *servicedisc.HTTPClient
-	maxConns      int
-	log           *logging.Logger
-	tm            *transport.Manager
-	visorIsPublic bool
+	client         *servicedisc.HTTPClient
+	maxConns       int
+	log            *logging.Logger
+	tm             *transport.Manager
+	visorIsPublic  bool
+	clientPublicIP string
 }
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
 // services
 func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager, httpC *http.Client, clientPublicIP string,
 	log *logging.Logger, mLog *logging.MasterLogger) Autoconnector {
+	// Extract just the IP from clientPublicIP (may include port)
+	publicIP := clientPublicIP
+	if host, _, err := net.SplitHostPort(publicIP); err == nil {
+		publicIP = host
+	}
+
 	connector := &autoconnector{}
 	connector.client = servicedisc.NewClient(log, mLog, conf, httpC, clientPublicIP)
 	connector.maxConns = maxConns
 	connector.log = log
 	connector.tm = tm
+	connector.clientPublicIP = publicIP
 	return connector
 }
 
@@ -249,6 +258,16 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					continue
 				}
 
+				// Skip visors behind the same NAT (same LAN) to avoid unnecessary transports.
+				// Two visors with the same public IP are behind the same router.
+				if a.clientPublicIP != "" {
+					if sameLAN := a.isSameLAN(ctx, pk, netType); sameLAN {
+						a.log.WithField("pk", pk).
+							Debugln("Skipping same-LAN visor (same public IP)")
+						continue
+					}
+				}
+
 				a.log.WithField("pk", pk).WithField("type", netType).
 					Debugln("Trying to add transport to public visor")
 
@@ -340,6 +359,27 @@ func (a *autoconnector) filterDuplicates(pks []cipher.PubKey, trs []*transport.M
 		}
 	}
 	return absent
+}
+
+// isSameLAN checks if the remote visor is behind the same NAT as us by comparing
+// public IPs via the address resolver. Returns false on any error (fail-open).
+func (a *autoconnector) isSameLAN(ctx context.Context, pk cipher.PubKey, netType tptypes.Type) bool {
+	arClient := a.tm.ARClient()
+	if arClient == nil {
+		return false
+	}
+
+	visorData, err := arClient.Resolve(ctx, string(netType), pk)
+	if err != nil {
+		return false
+	}
+
+	remoteIP := visorData.RemoteAddr
+	if host, _, err := net.SplitHostPort(remoteIP); err == nil {
+		remoteIP = host
+	}
+
+	return remoteIP != "" && remoteIP == a.clientPublicIP
 }
 
 // isInList checks if a public key is in the given list

@@ -92,6 +92,9 @@ var RootCmd = &cobra.Command{
 		}
 		if buildinfo.Go() != "unknown" && buildinfo.Go() != "" {
 			ret += "\nbuilt with " + buildinfo.Go()
+			if buildinfo.Date() != "unknown" && buildinfo.Date() != "" {
+				ret += " on " + buildinfo.Date()
+			}
 		}
 		return ret
 	}(),

@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,6 +50,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/tpviz"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -138,6 +140,10 @@ var (
 	skyFwd vinit.Module
 	// Ping module
 	pi vinit.Module
+	// Embedded Transport Setup Node (separate dmsg client with TPS identity)
+	embTPS vinit.Module
+	// UI server module (serves tp-viz)
+	uiServer vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 	// config initialization
@@ -183,8 +189,10 @@ func registerModules(logger *logging.MasterLogger) {
 	pi = maker("ping", initPing, &dmsgC, &tm)
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm, &stcprC)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
+	embTPS = maker("embedded_tps", initEmbeddedTPS, &dmsgC)
+	uiServer = maker("ui_server", initUIServer, &dmsgC, &tr, &embTPS)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc, &tpdco)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc, &tpdco, &embTPS, &uiServer)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -275,8 +283,10 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	// 3. STUN servers
 	var pIP string
 
-	// Try dmsg LookupIP first
-	ipAddr, err := v.dmsgC.LookupIP(ctx, nil)
+	// Try dmsg LookupIP first (with timeout to avoid blocking init if dmsg isn't ready)
+	lookupCtx, lookupCancel := context.WithTimeout(ctx, 10*time.Second)
+	ipAddr, err := v.dmsgC.LookupIP(lookupCtx, nil)
+	lookupCancel()
 	if err != nil {
 		log.WithError(err).Debug("Failed to get public IP from dmsg server, trying GeoIP")
 
@@ -346,7 +356,9 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		// Use same fallback chain as address resolver: dmsg -> GeoIP -> STUN
 		logger := factory.Log
 		var pIP string
-		ipAddr, err := v.dmsgC.LookupIP(ctx, nil)
+		lookupCtx, lookupCancel := context.WithTimeout(ctx, 10*time.Second)
+		ipAddr, err := v.dmsgC.LookupIP(lookupCtx, nil)
+		lookupCancel()
 		if err != nil {
 			logger.WithError(err).Debug("Failed to get public IP from dmsg server, trying GeoIP")
 
@@ -688,6 +700,63 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 	return nil
 }
 
+func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
+	tpsSK := v.conf.Transport.TPSetupSK
+	if tpsSK == nil || *tpsSK == (cipher.SecKey{}) {
+		log.Debug("No embedded TPS configured (tps_sk empty), skipping")
+		return nil
+	}
+
+	tpsPK, err := tpsSK.PubKey()
+	if err != nil {
+		return fmt.Errorf("invalid tps_sk: %w", err)
+	}
+	log.WithField("tps_pk", tpsPK).Info("Starting embedded Transport Setup Node")
+
+	// Create a separate dmsg client with the TPS identity.
+	// Reuses the visor's dmsg discovery URL but with TPS keys.
+	// Default: MinSessions=0 (connect to ALL servers), ServerType="" (all types).
+	minSessions := 0
+	serverType := ""
+	if tpsDmsgConf := v.conf.Transport.TPSDmsg; tpsDmsgConf != nil {
+		minSessions = tpsDmsgConf.MinSessions
+		serverType = tpsDmsgConf.ServerType
+	}
+	dmsgConf := &dmsg.Config{
+		MinSessions:          minSessions,
+		ConnectedServersType: serverType,
+		Protocol:             v.conf.Dmsg.Protocol,
+	}
+	dmsgConf.ClientType = "tps"
+	log.WithField("min_sessions", minSessions).WithField("server_type", serverType).Debug("TPS dmsg config")
+	httpC := &http.Client{}
+	tpsDisc := dmsgdisc.NewHTTP(v.conf.Dmsg.Discovery, httpC, v.MasterLogger().PackageLogger("embedded_tps:disc"))
+	tpsDmsgC := dmsg.NewClient(tpsPK, *tpsSK, tpsDisc, dmsgConf)
+	tpsDmsgC.SetLogger(v.MasterLogger().PackageLogger("embedded_tps:dmsg"))
+
+	go tpsDmsgC.Serve(ctx)
+
+	select {
+	case <-tpsDmsgC.Ready():
+		log.Info("Embedded TPS dmsg client connected")
+	case <-ctx.Done():
+		return fmt.Errorf("context canceled waiting for TPS dmsg client")
+	}
+
+	v.initLock.Lock()
+	v.embeddedTPS = &embeddedTPS{
+		dmsgC: tpsDmsgC,
+		pk:    tpsPK,
+		log:   log,
+	}
+	v.initLock.Unlock()
+
+	v.pushCloseStack("embedded_tps", func() error {
+		return tpsDmsgC.Close()
+	})
+	return nil
+}
+
 func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
 	// waiting for at least one transport to initialize
@@ -915,50 +984,56 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func handlePingConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
+func handlePingConn(log *logging.Logger, remoteConn net.Conn, _ *Visor) {
+	defer func() {
+		if err := remoteConn.Close(); err != nil {
+			log.WithError(err).Debug("Error closing ping conn")
+		}
+	}()
 	for {
-		buf := make([]byte, (32+v.pingPcktSize)*1024)
+		buf := make([]byte, 32*1024)
 		n, err := remoteConn.Read(buf)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				log.WithError(err).Error("Failed to read packet")
+				log.WithError(err).Error("Failed to read ping packet")
 			}
 			return
 		}
 		var size PingSizeMsg
 		err = json.Unmarshal(buf[:n], &size)
 		if err != nil {
-			log.WithError(err).Error("Failed to unmarshal json")
+			log.WithError(err).Error("Failed to unmarshal ping size")
 			return
 		}
 
+		// Ack the size message
 		_, err = remoteConn.Write([]byte("ok"))
 		if err != nil {
-			log.WithError(err).Error("Failed to write message")
+			log.WithError(err).Error("Failed to write ping ack")
 			return
 		}
+
+		// Read the full ping payload
 		var ping []byte
-		for len(ping) != size.Size {
+		for len(ping) < size.Size {
 			n, err = remoteConn.Read(buf)
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
-					log.WithError(err).Error("Failed to read packet")
+					log.WithError(err).Error("Failed to read ping data")
 				}
 				return
 			}
 			ping = append(ping, buf[:n]...)
 		}
-		var msg PingMsg
-		err = json.Unmarshal(ping, &msg)
+
+		// Echo back for RTT measurement
+		_, err = remoteConn.Write([]byte("pong"))
 		if err != nil {
-			log.WithError(err).Error("Failed to unmarshal json")
+			log.WithError(err).Error("Failed to write ping echo")
 			return
 		}
-		now := time.Now()
-		diff := now.Sub(msg.Timestamp)
-		v.pingConns[msg.PingPk].latency <- diff
 
-		log.Debugf("Received: %s", buf[:n])
+		log.Debug("Echoed ping response")
 	}
 }
 
@@ -1215,7 +1290,57 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 	}
 }
 
-func initCLI(_ context.Context, v *Visor, _ *logging.Logger) error {
+// cliRPCStats tracks CLI RPC connection statistics for diagnostics
+type cliRPCStats struct {
+	mu            sync.Mutex
+	activeConns   int32
+	totalConns    uint64
+	totalErrors   uint64
+	lastError     string
+	lastErrorTime time.Time
+	peakConns     int32
+	connSemaphore chan struct{}
+	maxConns      int
+}
+
+func (s *cliRPCStats) acquire() bool {
+	select {
+	case s.connSemaphore <- struct{}{}:
+		s.mu.Lock()
+		s.activeConns++
+		if s.activeConns > s.peakConns {
+			s.peakConns = s.activeConns
+		}
+		s.totalConns++
+		s.mu.Unlock()
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *cliRPCStats) release() {
+	s.mu.Lock()
+	s.activeConns--
+	s.mu.Unlock()
+	<-s.connSemaphore
+}
+
+func (s *cliRPCStats) recordError(err string) {
+	s.mu.Lock()
+	s.totalErrors++
+	s.lastError = err
+	s.lastErrorTime = time.Now()
+	s.mu.Unlock()
+}
+
+func (s *cliRPCStats) snapshot() (active int32, total uint64, errors uint64, peak int32, lastErr string, lastErrTime time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.activeConns, s.totalConns, s.totalErrors, s.peakConns, s.lastError, s.lastErrorTime
+}
+
+func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.CLIAddr == "" {
 		v.log.Debug("'cli_addr' is not configured, skipping.")
 		return nil
@@ -1233,7 +1358,85 @@ func initCLI(_ context.Context, v *Visor, _ *logging.Logger) error {
 		err := fmt.Errorf("failed to start rpc server for cli: %w", err)
 		return err
 	}
-	go rpcS.Accept(cliL) // We do not use sync.WaitGroup here as it will never return anyway.
+
+	// Connection limiting and stats
+	const maxConcurrentConns = 50
+	stats := &cliRPCStats{
+		connSemaphore: make(chan struct{}, maxConcurrentConns),
+		maxConns:      maxConcurrentConns,
+	}
+
+	// Run RPC accept loop with panic recovery, connection limiting, and logging
+	go func() {
+		rpcLog := v.MasterLogger().PackageLogger("cli_rpc")
+		rpcLog.Infof("CLI RPC server listening on %s (max %d concurrent connections)", v.conf.CLIAddr, maxConcurrentConns)
+
+		// Periodic stats logging
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for range ticker.C {
+				active, total, errors, peak, lastErr, lastErrTime := stats.snapshot()
+				if total > 0 {
+					rpcLog.Debugf("CLI RPC stats: active=%d, total=%d, errors=%d, peak=%d", active, total, errors, peak)
+					if lastErr != "" && time.Since(lastErrTime) < time.Minute {
+						rpcLog.Debugf("CLI RPC last error (%s ago): %s", time.Since(lastErrTime).Round(time.Second), lastErr)
+					}
+				}
+			}
+		}()
+
+		var connID uint64
+		for {
+			conn, err := cliL.Accept()
+			if err != nil {
+				// Check if listener was closed (normal shutdown)
+				if strings.Contains(err.Error(), "use of closed network connection") {
+					rpcLog.Debug("CLI RPC listener closed")
+					return
+				}
+				stats.recordError(fmt.Sprintf("accept: %v", err))
+				rpcLog.WithError(err).Warn("CLI RPC accept error, continuing...")
+				continue
+			}
+
+			connID++
+			thisConnID := connID
+
+			// Try to acquire connection slot
+			if !stats.acquire() {
+				stats.recordError("connection limit reached")
+				active, _, _, _, _, _ := stats.snapshot()
+				rpcLog.Warnf("CLI RPC connection limit reached (%d/%d), rejecting connection", active, maxConcurrentConns)
+				conn.Close() //nolint:errcheck,gosec
+				continue
+			}
+
+			rpcLog.Debugf("CLI RPC conn #%d accepted from %s (active: %d)", thisConnID, conn.RemoteAddr(), stats.activeConns)
+
+			// Handle each connection in a goroutine with panic recovery
+			go func(c net.Conn, id uint64) {
+				startTime := time.Now()
+				defer func() {
+					if r := recover(); r != nil {
+						stats.recordError(fmt.Sprintf("panic: %v", r))
+						rpcLog.Errorf("CLI RPC conn #%d panic recovered: %v", id, r)
+					}
+					c.Close() //nolint:errcheck,gosec
+					stats.release()
+					rpcLog.Debugf("CLI RPC conn #%d closed after %s (active: %d)", id, time.Since(startTime).Round(time.Millisecond), stats.activeConns)
+				}()
+
+				// Set read/write deadlines to prevent hung connections
+				if tc, ok := c.(*net.TCPConn); ok {
+					tc.SetKeepAlive(true)                   //nolint:errcheck,gosec
+					tc.SetKeepAlivePeriod(30 * time.Second) //nolint:errcheck,gosec
+				}
+
+				rpcS.ServeConn(c)
+			}(conn, thisConnID)
+		}
+	}()
 
 	return nil
 }
@@ -1339,29 +1542,13 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error {
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
+	_ = ctx // unused after removing AR check
 
-	// Check once if this visor is registered in address resolver for STCPR
-	// If it is, it must maintain STCPR transportability
-	var mustCheckSTCPR bool
-	if stcprKeys, err := v.arClient.TransportsType(ctx, types.STCPR); err == nil {
-		_, mustCheckSTCPR = stcprKeys[v.conf.PK]
-		if mustCheckSTCPR {
-			log.Info("Visor is registered for STCPR in address resolver - STCPR transportability required")
-		}
-	} else {
-		log.WithError(err).Warn("Failed to check address resolver for STCPR registration")
-	}
-
-	// Perform transportability check logic
+	// Perform transportability check logic - only DMSG is required
 	performCheck := func(tries int) int {
 		dmsgOK := tryTransport(v, "dmsg", log)
-		stcprOK := true // default when not required
 
-		if mustCheckSTCPR {
-			stcprOK = tryTransport(v, "stcpr", log)
-		}
-
-		if dmsgOK && stcprOK {
+		if dmsgOK {
 			v.isServicesHealthy.set()
 			if tries > 0 {
 				log.Info("Visor is now transportable (recovered)")
@@ -1373,7 +1560,7 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 		} else {
 			v.isServicesHealthy.unset()
 			tries++
-			log.WithField("tries", tries).WithField("dmsg_ok", dmsgOK).WithField("stcpr_ok", stcprOK).
+			log.WithField("tries", tries).WithField("dmsg_ok", dmsgOK).
 				Warn("Visor transportability check failed")
 			ticker.Reset(time.Minute)
 		}
@@ -1615,10 +1802,12 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 // advertise this visor as public in service discovery
 // this service is not considered critical and always returns true
 func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { //nolint:revive
+	// Always attempt to deregister stale entries on startup.
+	// This handles the case where visor crashed while public and restarts,
+	// ensuring old service discovery entries are cleaned up before re-registering.
+	v.serviceDisc.VisorUpdater(0).Stop()
+
 	if !v.conf.IsPublic {
-		// call Stop() method to clean service discovery for the situation that
-		// visor was public, then stop (not normal shutdown), then start as non-public
-		v.serviceDisc.VisorUpdater(0).Stop()
 		return nil
 	}
 	logger := v.MasterLogger().PackageLogger("public_visor")
@@ -2045,4 +2234,393 @@ func GetIP(geoipURL string) (string, error) {
 	}
 
 	return ip.PublicIP, nil
+}
+
+// visorAPIAdapter adapts *Visor to the tpviz.VisorAPI interface.
+// It converts between visor types and tpviz types.
+type visorAPIAdapter struct {
+	v *Visor
+}
+
+// Overview implements tpviz.VisorAPI.
+func (a *visorAPIAdapter) Overview() (*tpviz.VisorOverview, error) {
+	ov, err := a.v.Overview()
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert visor.Overview to tpviz.VisorOverview
+	result := &tpviz.VisorOverview{
+		PubKey:      ov.PubKey,
+		RoutesCount: ov.RoutesCount,
+	}
+
+	// Convert transports
+	for _, tp := range ov.Transports {
+		result.Transports = append(result.Transports, &tpviz.TransportSummary{
+			ID:      tp.ID,
+			Local:   tp.Local,
+			Remote:  tp.Remote,
+			Type:    tp.Type,
+			Log:     tp.Log,
+			IsSetup: tp.IsSetup,
+			Label:   tp.Label,
+		})
+	}
+
+	return result, nil
+}
+
+// RoutingRules implements tpviz.VisorAPI.
+func (a *visorAPIAdapter) RoutingRules() ([]routing.Rule, error) {
+	return a.v.RoutingRules()
+}
+
+// Close implements tpviz.VisorAPI.
+func (a *visorAPIAdapter) Close() error {
+	// Don't actually close the visor - the adapter doesn't own it
+	return nil
+}
+
+// AddTransport implements tpviz.VisorAPI - creates a transport from the local visor to a remote visor.
+func (a *visorAPIAdapter) AddTransport(ctx context.Context, remotePK, tpType string) (*tpviz.TransportSummary, error) {
+	var remote cipher.PubKey
+	if err := remote.UnmarshalText([]byte(remotePK)); err != nil {
+		return nil, fmt.Errorf("invalid remote PK: %w", err)
+	}
+
+	netType := types.Type(tpType)
+	if netType != types.STCPR && netType != types.SUDPH {
+		return nil, fmt.Errorf("transport type must be stcpr or sudph")
+	}
+
+	tp, err := a.v.tpM.SaveTransport(ctx, remote, netType, transport.LabelSkycoin)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tpviz.TransportSummary{
+		ID:      tp.Entry.ID,
+		Local:   a.v.conf.PK,
+		Remote:  tp.Remote(),
+		Type:    tp.Type(),
+		IsSetup: true,
+		Label:   tp.Entry.Label,
+	}, nil
+}
+
+// RemoveTransport implements tpviz.VisorAPI - removes a transport from the local visor.
+func (a *visorAPIAdapter) RemoveTransport(ctx context.Context, tpID string) error {
+	id, err := uuid.Parse(tpID)
+	if err != nil {
+		return fmt.Errorf("invalid transport ID: %w", err)
+	}
+
+	a.v.tpM.DeleteTransport(id)
+	return nil
+}
+
+// DMSGHealth performs a health check on a remote visor via DMSG.
+// It dials the target visor on port 80 and fetches the /health endpoint.
+func (a *visorAPIAdapter) DMSGHealth(ctx context.Context, pk string) (*tpviz.DMSGHealthResponse, error) {
+	var targetPK cipher.PubKey
+	if err := targetPK.UnmarshalText([]byte(pk)); err != nil {
+		return nil, fmt.Errorf("invalid PK: %w", err)
+	}
+
+	dmsgC := a.v.dmsgC
+	if dmsgC == nil {
+		return nil, fmt.Errorf("DMSG client not available")
+	}
+
+	// Dial the target visor on port 80 (HTTP port)
+	conn, err := dmsgC.Dial(ctx, dmsg.Addr{PK: targetPK, Port: 80})
+	if err != nil {
+		return &tpviz.DMSGHealthResponse{
+			Status: "unreachable",
+			Error:  fmt.Sprintf("dmsg dial failed: %v", err),
+		}, nil
+	}
+	defer conn.Close() //nolint:errcheck
+
+	// Create HTTP client over the DMSG connection
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+				return conn, nil
+			},
+		},
+		Timeout: 10 * time.Second,
+	}
+
+	// Make the health check request
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://dmsg/health", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return &tpviz.DMSGHealthResponse{
+			Status: "error",
+			Error:  fmt.Sprintf("HTTP request failed: %v", err),
+		}, nil
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return &tpviz.DMSGHealthResponse{
+			Status: "error",
+			Error:  fmt.Sprintf("read response: %v", err),
+		}, nil
+	}
+
+	// Try to parse as JSON
+	var healthResp map[string]interface{}
+	if err := json.Unmarshal(body, &healthResp); err == nil {
+		status := "healthy"
+		if resp.StatusCode != http.StatusOK {
+			status = "unhealthy"
+		}
+		buildInfo := ""
+		if bi, ok := healthResp["build_info"].(string); ok {
+			buildInfo = bi
+		}
+		return &tpviz.DMSGHealthResponse{
+			Status:    status,
+			BuildInfo: buildInfo,
+			Message:   string(body),
+		}, nil
+	}
+
+	// Return raw response
+	return &tpviz.DMSGHealthResponse{
+		Status:  "healthy",
+		Message: string(body),
+	}, nil
+}
+
+// tpsAPIAdapter adapts *Visor's embeddedTPS to the tpviz.TPSAPI interface.
+type tpsAPIAdapter struct {
+	v *Visor
+}
+
+// AddTransport implements tpviz.TPSAPI.
+func (a *tpsAPIAdapter) AddTransport(ctx context.Context, targetPK, remotePK, tpType string) (*tpviz.TPSTransportResponse, error) {
+	tps := a.v.embeddedTPS
+	if tps == nil {
+		return nil, fmt.Errorf("embedded TPS not running")
+	}
+
+	var target, remote cipher.PubKey
+	if err := target.UnmarshalText([]byte(targetPK)); err != nil {
+		return nil, fmt.Errorf("invalid target PK: %w", err)
+	}
+	if err := remote.UnmarshalText([]byte(remotePK)); err != nil {
+		return nil, fmt.Errorf("invalid remote PK: %w", err)
+	}
+
+	res, err := tps.AddTransport(ctx, target, remote, types.Type(tpType))
+	if err != nil {
+		return nil, err
+	}
+
+	return &tpviz.TPSTransportResponse{
+		ID:     res.ID.String(),
+		Local:  res.Local.String(),
+		Remote: res.Remote.String(),
+		Type:   string(res.Type),
+	}, nil
+}
+
+// RemoveTransport implements tpviz.TPSAPI.
+func (a *tpsAPIAdapter) RemoveTransport(ctx context.Context, targetPK, tpID string) error {
+	tps := a.v.embeddedTPS
+	if tps == nil {
+		return fmt.Errorf("embedded TPS not running")
+	}
+
+	var target cipher.PubKey
+	if err := target.UnmarshalText([]byte(targetPK)); err != nil {
+		return fmt.Errorf("invalid target PK: %w", err)
+	}
+
+	id, err := uuid.Parse(tpID)
+	if err != nil {
+		return fmt.Errorf("invalid transport ID: %w", err)
+	}
+
+	return tps.RemoveTransport(ctx, target, id)
+}
+
+// GetTransports implements tpviz.TPSAPI.
+func (a *tpsAPIAdapter) GetTransports(ctx context.Context, targetPK string) ([]tpviz.TPSTransportResponse, error) {
+	tps := a.v.embeddedTPS
+	if tps == nil {
+		return nil, fmt.Errorf("embedded TPS not running")
+	}
+
+	var target cipher.PubKey
+	if err := target.UnmarshalText([]byte(targetPK)); err != nil {
+		return nil, fmt.Errorf("invalid target PK: %w", err)
+	}
+
+	entries, err := tps.GetTransports(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]tpviz.TPSTransportResponse, len(entries))
+	for i, e := range entries {
+		result[i] = tpviz.TPSTransportResponse{
+			ID:     e.ID.String(),
+			Local:  e.Local.String(),
+			Remote: e.Remote.String(),
+			Type:   string(e.Type),
+		}
+	}
+	return result, nil
+}
+
+// PK implements tpviz.TPSAPI.
+func (a *tpsAPIAdapter) PK() string {
+	tps := a.v.embeddedTPS
+	if tps == nil {
+		return ""
+	}
+	return tps.pk.String()
+}
+
+func initUIServer(ctx context.Context, v *Visor, log *logging.Logger) error {
+	// Check if UI server is configured and enabled
+	if v.conf.UIServer == nil || !v.conf.UIServer.Enable {
+		log.Debug("UI server not configured or disabled, skipping")
+		return nil
+	}
+
+	conf := v.conf.UIServer
+
+	// Set default local address if not specified
+	localAddr := conf.LocalAddr
+	if localAddr == "" {
+		localAddr = "localhost:8081"
+	}
+
+	// Create tpviz config
+	tpvizCfg := tpviz.DefaultConfig()
+	// Don't set Addr/Port since we're managing the HTTP server ourselves
+	tpvizCfg.SurveyDir = conf.SurveyDir
+
+	// Create tpviz server
+	tpvizServer := tpviz.NewServer(tpvizCfg)
+
+	// Set visor API directly (bypasses RPC connection) using an adapter
+	adapter := &visorAPIAdapter{v: v}
+	tpvizServer.SetVisorAPI(adapter, v.conf.PK.Hex())
+
+	// Set TPS API if embedded TPS is running
+	if v.embeddedTPS != nil {
+		tpvizServer.SetTPSAPI(&tpsAPIAdapter{v: v})
+		log.WithField("tps_pk", v.embeddedTPS.pk.Hex()).Info("TPS API connected to UI server")
+	}
+
+	// Start cache refresh (without starting HTTP server)
+	tpvizServer.Start()
+
+	// Start local HTTP server
+	localListener, err := net.Listen("tcp", localAddr)
+	if err != nil {
+		return fmt.Errorf("failed to start UI server on %s: %w", localAddr, err)
+	}
+
+	srv := &http.Server{
+		Handler:           tpvizServer.Handler(),
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       90 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		log.Infof("UI server listening on http://%s", localAddr)
+		if err := srv.Serve(localListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.WithError(err).Error("UI server exited with error")
+		}
+	}()
+
+	// Start DMSG listener if configured
+	var dmsgListener net.Listener
+	if conf.DmsgPort > 0 && v.dmsgC != nil {
+		dmsgListener, err = v.dmsgC.Listen(conf.DmsgPort)
+		if err != nil {
+			log.WithError(err).Warnf("Failed to start UI server on DMSG port %d", conf.DmsgPort)
+		} else {
+			// Create whitelist middleware if whitelist is configured
+			handler := tpvizServer.Handler()
+			if len(conf.DmsgWhitelist) > 0 {
+				whitelistMap := make(map[cipher.PubKey]struct{}, len(conf.DmsgWhitelist))
+				for _, pk := range conf.DmsgWhitelist {
+					whitelistMap[pk] = struct{}{}
+				}
+				handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					// Extract remote public key from dmsg connection
+					remoteAddr := r.RemoteAddr
+					// DMSG addresses are in format "pk:port"
+					if idx := strings.Index(remoteAddr, ":"); idx > 0 {
+						pkStr := remoteAddr[:idx]
+						var remotePK cipher.PubKey
+						if err := remotePK.UnmarshalText([]byte(pkStr)); err == nil {
+							if _, allowed := whitelistMap[remotePK]; !allowed {
+								log.Warnf("UI server DMSG access denied for %s", pkStr)
+								http.Error(w, "Forbidden", http.StatusForbidden)
+								return
+							}
+						}
+					}
+					tpvizServer.Handler().ServeHTTP(w, r)
+				})
+			}
+
+			dmsgSrv := &http.Server{
+				Handler:           handler,
+				ReadTimeout:       30 * time.Second,
+				WriteTimeout:      60 * time.Second,
+				IdleTimeout:       90 * time.Second,
+				ReadHeaderTimeout: 10 * time.Second,
+			}
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				log.Infof("UI server listening on DMSG port %d", conf.DmsgPort)
+				if err := dmsgSrv.Serve(dmsgListener); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, dmsg.ErrEntityClosed) {
+					log.WithError(err).Error("UI server DMSG listener exited with error")
+				}
+			}()
+
+			v.pushCloseStack("ui_server.dmsg", func() error {
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				return dmsgSrv.Shutdown(shutdownCtx)
+			})
+		}
+	}
+
+	v.pushCloseStack("ui_server", func() error {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.WithError(err).Warn("UI server shutdown error")
+		}
+		tpvizServer.Stop()
+		wg.Wait()
+		return nil
+	})
+
+	return nil
 }

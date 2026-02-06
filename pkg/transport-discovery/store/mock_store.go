@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -47,6 +48,7 @@ func (s *mockStore) RegisterTransport(_ context.Context, entry *transport.Signed
 		return ErrBadEntry
 	}
 
+	entry.Registered = time.Now().UnixNano()
 	s.transports[entry.Entry.ID] = entry.Entry
 
 	return nil

@@ -21,6 +21,7 @@ import (
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -32,6 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/tpviz"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
@@ -96,6 +98,11 @@ type API interface {
 	StartSkysocksClient(pk string) error
 	StopSkysocksClients() error
 	ProxyServers(version, country string) ([]servicedisc.Service, error)
+	TestProxy(config ProxyTestConfig) ([]ProxyTestResult, error)
+
+	//transport settings
+	SetExistingTPOnly(enabled bool) error
+	SetForceLocalRoutes(enabled bool) error
 
 	//transports
 	TransportTypes() ([]string, error)
@@ -135,6 +142,21 @@ type API interface {
 
 	//uptime-tracker tools
 	FetchUptimeTrackerData(pk string) ([]byte, error)
+
+	//ui server controls
+	StartUIServer(addr string) error
+	StopUIServer() error
+	UIServerStatus() (*UIServerStatus, error)
+
+	// Close closes the API connection (for RPC clients)
+	Close() error
+}
+
+// UIServerStatus contains the status of the UI server.
+type UIServerStatus struct {
+	Running   bool   `json:"running"`
+	LocalAddr string `json:"local_addr,omitempty"`
+	DmsgPort  uint16 `json:"dmsg_port,omitempty"`
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -169,6 +191,9 @@ func (v *Visor) Overview() (*Overview, error) {
 	}
 	if v.tpM == nil {
 		return &Overview{}, ErrTrpMangerNotAvailable
+	}
+	if v.router == nil {
+		return &Overview{}, ErrRouterNotReady
 	}
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		tSummaries = append(tSummaries,
@@ -516,7 +541,7 @@ func (v *Visor) StopApp(appName string) error {
 		return ErrAppLauncherNotAvailable
 	}
 	if v.procM != nil {
-		_, err := v.appL.StopApp(appName) //nolint:errcheck
+		_, err := v.appL.StopApp(appName) //nolint:errcheck,gosec
 		return err
 	}
 	return ErrProcNotAvailable
@@ -587,7 +612,7 @@ func (v *Visor) StopVPNClient(appName string) error {
 		return ErrAppLauncherNotAvailable
 	}
 	if v.procM != nil {
-		_, err := v.appL.StopApp(appName) //nolint:errcheck
+		_, err := v.appL.StopApp(appName) //nolint:errcheck,gosec
 		return err
 	}
 	return ErrProcNotAvailable
@@ -670,7 +695,7 @@ func (v *Visor) StopSkysocksClients() error {
 		for _, app := range v.conf.Launcher.Apps {
 			for _, args := range app.Args {
 				if args == visorconfig.SkysocksClientName {
-					if _, err := v.appL.StopApp(app.Name); err != nil { //nolint:errcheck
+					if _, err := v.appL.StopApp(app.Name); err != nil { //nolint:errcheck,gosec
 						v.log.WithError(err).Warnf("Failed to stop app %s", app.Name)
 					}
 				}
@@ -713,7 +738,7 @@ func (v *Visor) RestartApp(appName string) error {
 		v.log.Warn("app launcher not ready yet")
 		return ErrAppLauncherNotAvailable
 	}
-	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck
+	if _, ok := v.procM.ProcByName(appName); ok { //nolint:errcheck,gosec
 		v.log.Infof("Updated %v password, restarting it", appName)
 		return v.appL.RestartApp(appName, appName)
 	}
@@ -1127,7 +1152,7 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 		}
 	}
 	if v.procM != nil {
-		apps, _ := v.Apps() //nolint:errcheck
+		apps, _ := v.Apps() //nolint:errcheck,gosec
 		for _, app := range apps {
 			port, err := v.procM.GetAppPort(app.Name)
 			if err == nil {
@@ -1143,6 +1168,28 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 		}
 	}
 	return ports, nil
+}
+
+// SetExistingTPOnly implements API.
+// Sets whether to only use existing transports for routing (no new transport creation).
+func (v *Visor) SetExistingTPOnly(enabled bool) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+	v.router.SetExistingTPOnly(enabled)
+	v.log.Infof("SetExistingTPOnly: %v", enabled)
+	return nil
+}
+
+// SetForceLocalRoutes implements API.
+// Sets whether to skip the route finder and use local route calculation.
+func (v *Visor) SetForceLocalRoutes(enabled bool) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+	v.router.SetForceLocalRoutes(enabled)
+	v.log.Infof("SetForceLocalRoutes: %v", enabled)
+	return nil
 }
 
 // TransportTypes implements API.
@@ -1207,6 +1254,10 @@ func (v *Visor) Transport(tid uuid.UUID) (*TransportSummary, error) {
 
 // AddTransport implements API.
 func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error) {
+	if v.tpM == nil {
+		return nil, ErrTrpMangerNotAvailable
+	}
+
 	ctx := context.Background()
 
 	if timeout > 0 {
@@ -1278,53 +1329,54 @@ type PingConfig struct {
 
 // DialPing implements API.
 func (v *Visor) DialPing(conf PingConfig) error {
-	if conf.PK == v.conf.PK {
-		return fmt.Errorf("Visor cannot ping itself")
-	}
 	v.pingPcktSize = conf.PcktSize
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
 
 	addr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
-		PubKey: v.conf.PK,
+		PubKey: conf.PK,
 		Port:   routing.Port(skyenv.SkyPingPort),
 	}
 
 	var err error
 	var conn net.Conn
 
-	ctx := context.TODO()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 1, 2)
 	err = r.Do(ctx, func() error {
-		conn, err = appnet.Ping(conf.PK, addr)
+		conn, err = appnet.PingContext(ctx, conf.PK, addr)
 		return err
 	})
 	if err != nil {
 		return err
 	}
 
-	skywireConn, isSkywireConn := conn.(*appnet.SkywireConn)
-	if !isSkywireConn {
-		return fmt.Errorf("Can't get such info from this conn")
-	}
 	v.pingConnMx.Lock()
 	v.pingConns[conf.PK] = ping{
-		conn:    skywireConn,
-		latency: make(chan time.Duration),
+		conn: conn,
 	}
 	v.pingConnMx.Unlock()
 	return nil
 }
 
 // Ping implements API.
+// Measures round-trip time by sending ping data and waiting for an echo response.
 func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 	v.pingConnMx.Lock()
 	defer v.pingConnMx.Unlock()
+
+	pingEntry, ok := v.pingConns[conf.PK]
+	if !ok {
+		return nil, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
+	}
+
 	latencies := []time.Duration{}
 	data := make([]byte, conf.PcktSize*1024)
+
 	for i := 1; i <= conf.Tries; i++ {
-		skywireConn := v.pingConns[conf.PK].conn
+		conn := pingEntry.conn
 		msg := PingMsg{
 			Timestamp: time.Now(),
 			PingPk:    conf.PK,
@@ -1341,23 +1393,38 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 		if err != nil {
 			return latencies, err
 		}
-		_, err = skywireConn.Write(size)
-		if err != nil {
-			return latencies, err
+
+		start := time.Now()
+
+		// Send size message
+		if _, err = conn.Write(size); err != nil {
+			return latencies, fmt.Errorf("write size: %w", err)
 		}
 
+		// Read "ok" ack with timeout
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 		buf := make([]byte, 32*1024)
-		_, err = skywireConn.Read(buf)
-		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				return latencies, err
-			}
+		if _, err = conn.Read(buf); err != nil {
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+			return latencies, fmt.Errorf("read ack: %w", err)
 		}
-		_, err = skywireConn.Write(ping)
-		if err != nil {
-			return latencies, err
+
+		// Send ping data
+		if _, err = conn.Write(ping); err != nil {
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+			return latencies, fmt.Errorf("write ping: %w", err)
 		}
-		latencies = append(latencies, <-v.pingConns[conf.PK].latency)
+
+		// Read echo response with timeout
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+		if _, err = conn.Read(buf); err != nil {
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+			return latencies, fmt.Errorf("read echo: %w", err)
+		}
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+
+		rtt := time.Since(start)
+		latencies = append(latencies, rtt)
 	}
 	return latencies, nil
 }
@@ -1383,6 +1450,23 @@ type TestResult struct {
 	Min    string
 	Mean   string
 	Status string
+}
+
+// ProxyTestConfig configures proxy testing
+type ProxyTestConfig struct {
+	Servers []cipher.PubKey `json:"servers"`  // Proxy servers to test
+	TestURL string          `json:"test_url"` // URL to fetch through proxy (default: https://ip.skycoin.com)
+	Timeout time.Duration   `json:"timeout"`  // Timeout per test (default: 30s)
+}
+
+// ProxyTestResult contains the result of a single proxy test
+type ProxyTestResult struct {
+	PK       string `json:"pk"`       // Proxy server public key
+	Status   string `json:"status"`   // "OK", "FAIL", "TIMEOUT"
+	Duration int64  `json:"duration"` // Duration in milliseconds
+	IP       string `json:"ip"`       // IP returned by test
+	Location string `json:"location"` // Geo location (City, Country)
+	Error    string `json:"error"`    // Error message if failed
 }
 
 // TestVisor trying to test visor
@@ -1436,6 +1520,134 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		v.StopPing(conf.PK) //nolint:errcheck,gosec
 	}
 	return result, nil
+}
+
+// TestProxy tests proxy servers by connecting through them and fetching a test URL
+func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
+	results := make([]ProxyTestResult, 0, len(conf.Servers))
+
+	// Set defaults
+	if conf.TestURL == "" {
+		conf.TestURL = "https://ip.skycoin.com"
+	}
+	if conf.Timeout == 0 {
+		conf.Timeout = 30 * time.Second
+	}
+
+	// Get the skysocks-client address from config
+	socksAddr := visorconfig.SkysocksClientAddr
+
+	for _, serverPK := range conf.Servers {
+		result := ProxyTestResult{
+			PK: serverPK.String(),
+		}
+
+		start := time.Now()
+
+		// Start skysocks-client with this server
+		err := v.StartSkysocksClient(serverPK.String())
+		if err != nil {
+			result.Status = "FAIL"
+			result.Error = fmt.Sprintf("failed to start client: %v", err)
+			result.Duration = time.Since(start).Milliseconds()
+			results = append(results, result)
+			continue
+		}
+
+		// Give it a moment to establish connection
+		time.Sleep(500 * time.Millisecond)
+
+		// Create SOCKS5 dialer
+		dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, proxy.Direct)
+		if err != nil {
+			v.StopSkysocksClients() //nolint:errcheck,gosec
+			result.Status = "FAIL"
+			result.Error = fmt.Sprintf("failed to create SOCKS dialer: %v", err)
+			result.Duration = time.Since(start).Milliseconds()
+			results = append(results, result)
+			continue
+		}
+
+		// Create HTTP client with SOCKS transport
+		httpTransport := &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.Dial(network, addr)
+			},
+		}
+		httpClient := &http.Client{
+			Transport: httpTransport,
+			Timeout:   conf.Timeout,
+		}
+
+		// Make test request
+		ctx, cancel := context.WithTimeout(context.Background(), conf.Timeout)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, conf.TestURL, nil)
+		if err != nil {
+			cancel()
+			v.StopSkysocksClients() //nolint:errcheck,gosec
+			result.Status = "FAIL"
+			result.Error = fmt.Sprintf("failed to create request: %v", err)
+			result.Duration = time.Since(start).Milliseconds()
+			results = append(results, result)
+			continue
+		}
+
+		resp, err := httpClient.Do(req)
+		cancel()
+		if err != nil {
+			v.StopSkysocksClients() //nolint:errcheck,gosec
+			if strings.Contains(err.Error(), "context deadline exceeded") {
+				result.Status = "TIMEOUT"
+			} else {
+				result.Status = "FAIL"
+			}
+			result.Error = err.Error()
+			result.Duration = time.Since(start).Milliseconds()
+			results = append(results, result)
+			continue
+		}
+
+		// Read response body
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close() //nolint:errcheck,gosec
+		if err != nil {
+			v.StopSkysocksClients() //nolint:errcheck,gosec
+			result.Status = "FAIL"
+			result.Error = fmt.Sprintf("failed to read response: %v", err)
+			result.Duration = time.Since(start).Milliseconds()
+			results = append(results, result)
+			continue
+		}
+
+		// Parse response - try to extract IP and location
+		// Expected format from ip.skycoin.com: {"ip":"1.2.3.4","country":"US","city":"New York",...}
+		var ipData struct {
+			IP      string `json:"ip"`
+			Country string `json:"country"`
+			City    string `json:"city"`
+		}
+		if err := json.Unmarshal(body, &ipData); err == nil {
+			result.IP = ipData.IP
+			if ipData.City != "" && ipData.Country != "" {
+				result.Location = fmt.Sprintf("%s,%s", ipData.City, ipData.Country)
+			} else if ipData.Country != "" {
+				result.Location = ipData.Country
+			}
+		} else {
+			// If JSON parsing fails, try to use the body as plain text IP
+			result.IP = strings.TrimSpace(string(body))
+		}
+
+		result.Status = "OK"
+		result.Duration = time.Since(start).Milliseconds()
+
+		// Stop the client before next iteration
+		v.StopSkysocksClients() //nolint:errcheck,gosec
+
+		results = append(results, result)
+	}
+
+	return results, nil
 }
 
 // RoutingRule implements API.
@@ -1753,11 +1965,13 @@ func reinitiateDmsg(ctx context.Context, v *Visor) error {
 }
 
 func shutdownDmsgDependentComponents(v *Visor, log *logging.Logger) error {
+	// Order matters: close dependents first, then dmsg client itself
 	components := []string{
 		"router.serve", // a.k.a. dmsgpty
 		"dmsghttp.logserver",
 		"dmsg_tracker_manager",
 		"dmsgctrl",
+		"dmsg", // Close the dmsg client last, after all dependents
 	}
 
 	v.closeMu.Lock()
@@ -1800,4 +2014,108 @@ func shutdownDmsgDependentComponents(v *Visor, log *logging.Logger) error {
 		return fmt.Errorf("encountered %d errors during shutdown", len(errs))
 	}
 	return nil
+}
+
+// StartUIServer starts the embedded UI server on the specified address.
+// If addr is empty, uses the configured LocalAddr or defaults to localhost:8081.
+func (v *Visor) StartUIServer(addr string) error {
+	v.uiServerMu.Lock()
+	defer v.uiServerMu.Unlock()
+
+	if v.uiServerRunning {
+		return fmt.Errorf("UI server is already running on %s", v.uiServerAddr)
+	}
+
+	// Determine address
+	if addr == "" {
+		if v.conf.UIServer != nil && v.conf.UIServer.LocalAddr != "" {
+			addr = v.conf.UIServer.LocalAddr
+		} else {
+			addr = "localhost:8081"
+		}
+	}
+
+	// Create tpviz server
+	tpvizCfg := tpviz.DefaultConfig()
+	tpvizServer := tpviz.NewServer(tpvizCfg)
+
+	// Set visor API directly via adapter
+	adapter := &visorAPIAdapter{v: v}
+	tpvizServer.SetVisorAPI(adapter, v.conf.PK.Hex())
+
+	// Start cache refresh
+	tpvizServer.Start()
+
+	// Start HTTP server
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		tpvizServer.Stop()
+		return fmt.Errorf("failed to listen on %s: %w", addr, err)
+	}
+
+	srv := &http.Server{
+		Handler:           tpvizServer.Handler(),
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       90 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	go func() {
+		v.log.Infof("UI server started on http://%s", addr)
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			v.log.WithError(err).Error("UI server exited with error")
+		}
+	}()
+
+	v.uiServer = srv
+	v.uiServerAddr = addr
+	v.uiServerRunning = true
+
+	return nil
+}
+
+// StopUIServer stops the embedded UI server if running.
+func (v *Visor) StopUIServer() error {
+	v.uiServerMu.Lock()
+	defer v.uiServerMu.Unlock()
+
+	if !v.uiServerRunning {
+		return fmt.Errorf("UI server is not running")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := v.uiServer.Shutdown(ctx); err != nil {
+		v.log.WithError(err).Warn("UI server shutdown error")
+	}
+
+	v.uiServer = nil
+	v.uiServerAddr = ""
+	v.uiServerRunning = false
+
+	v.log.Info("UI server stopped")
+	return nil
+}
+
+// UIServerStatus returns the current status of the UI server.
+func (v *Visor) UIServerStatus() (*UIServerStatus, error) {
+	v.uiServerMu.Lock()
+	defer v.uiServerMu.Unlock()
+
+	status := &UIServerStatus{
+		Running: v.uiServerRunning,
+	}
+
+	if v.uiServerRunning {
+		status.LocalAddr = v.uiServerAddr
+	}
+
+	// Include configured DMSG port if UI server config exists
+	if v.conf.UIServer != nil {
+		status.DmsgPort = v.conf.UIServer.DmsgPort
+	}
+
+	return status, nil
 }

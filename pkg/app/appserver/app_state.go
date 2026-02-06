@@ -20,6 +20,22 @@ const (
 	AppStatusStarting
 )
 
+// String returns a string representation of the AppStatus.
+func (s AppStatus) String() string {
+	switch s {
+	case AppStatusStopped:
+		return "stopped"
+	case AppStatusRunning:
+		return "running"
+	case AppStatusErrored:
+		return "errored"
+	case AppStatusStarting:
+		return "starting"
+	default:
+		return "unknown"
+	}
+}
+
 // AppConfig defines app startup parameters.
 type AppConfig struct {
 	Name      string       `json:"name"`
