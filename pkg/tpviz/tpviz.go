@@ -29,7 +29,10 @@ import (
 )
 
 //go:embed index.html
-var embeddedFS embed.FS
+var legacyIndexHTML embed.FS
+
+//go:embed dist/*
+var wasmDistFS embed.FS
 
 // Config holds the configuration for the visualizer server
 type Config struct {
@@ -330,15 +333,48 @@ func (s *Server) SetTPSAPI(api TPSAPI) {
 }
 
 func (s *Server) setupRoutes() {
-	// Serve the embedded index.html at root
+	// Serve WASM assets from embedded dist directory
 	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" && r.URL.Path != "/index.html" {
-			http.NotFound(w, r)
+		path := r.URL.Path
+		if path == "/" || path == "/index.html" {
+			content, err := wasmDistFS.ReadFile("dist/index.html")
+			if err != nil {
+				http.Error(w, "Failed to read index.html", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write(content) //nolint:errcheck,gosec
 			return
 		}
-		content, err := embeddedFS.ReadFile("index.html")
+		http.NotFound(w, r)
+	})
+
+	s.mux.HandleFunc("/main.wasm", func(w http.ResponseWriter, r *http.Request) {
+		content, err := wasmDistFS.ReadFile("dist/main.wasm")
 		if err != nil {
-			http.Error(w, "Failed to read index.html", http.StatusInternalServerError)
+			http.Error(w, "Failed to read main.wasm", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/wasm")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Write(content) //nolint:errcheck,gosec
+	})
+
+	s.mux.HandleFunc("/wasm_exec.js", func(w http.ResponseWriter, r *http.Request) {
+		content, err := wasmDistFS.ReadFile("dist/wasm_exec.js")
+		if err != nil {
+			http.Error(w, "Failed to read wasm_exec.js", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Write(content) //nolint:errcheck,gosec
+	})
+
+	// Legacy JavaScript UI at /legacy for fallback
+	s.mux.HandleFunc("/legacy", func(w http.ResponseWriter, r *http.Request) {
+		content, err := legacyIndexHTML.ReadFile("index.html")
+		if err != nil {
+			http.Error(w, "Failed to read legacy index.html", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1826,10 +1862,10 @@ type NavLink struct {
 	Label string
 }
 
-// GetEmbeddedIndexWithNavLinks returns the full embedded index.html with navigation links.
-// This is the single source of truth for the transport graph HTML - no duplicate templates.
+// GetEmbeddedIndexWithNavLinks returns the full embedded legacy index.html with navigation links.
+// This is for the legacy JavaScript UI.
 func GetEmbeddedIndexWithNavLinks(navLinks []NavLink) (string, error) {
-	content, err := embeddedFS.ReadFile("index.html")
+	content, err := legacyIndexHTML.ReadFile("index.html")
 	if err != nil {
 		return "", err
 	}

@@ -173,6 +173,20 @@ generate: ## Generate mocks and config README's
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./build ./local
 
+tpviz-wasm: ## Build transport visualizer WASM binary into pkg/tpviz/dist for embedding
+	GOOS=js GOARCH=wasm go build -o ./pkg/tpviz/dist/main.wasm ./pkg/tpviz/wasm
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./pkg/tpviz/dist/
+
+tpviz-wasm-standalone: ## Build transport visualizer WASM binary to build/tpviz (standalone)
+	mkdir -p ./build/tpviz
+	GOOS=js GOARCH=wasm go build -o ./build/tpviz/main.wasm ./pkg/tpviz/wasm
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/tpviz/
+	cp ./pkg/tpviz/dist/index.html ./build/tpviz/
+
+tpviz-wasm-tinygo: ## Build transport visualizer WASM binary with tinygo (smaller)
+	tinygo build -o ./pkg/tpviz/dist/main.wasm -target wasm ./pkg/tpviz/wasm
+	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./pkg/tpviz/dist/
+
 clean-windows: ## Clean project: remove created binaries and apps
 	powershell -Command "If (Test-Path ./local) { Remove-Item -Path ./local -Force -Recurse }"
 	powershell -Command "If (Test-Path ./build) { Remove-Item -Path ./build -Force -Recurse }"
