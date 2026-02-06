@@ -392,28 +392,6 @@ github.com/docker/go-connections/tlsconfig
 # github.com/docker/go-units v0.4.0
 ## explicit
 github.com/docker/go-units
-# github.com/ebitengine/gomobile v0.0.0-20250923094054-ea854a63cce1
-## explicit; go 1.24.0
-github.com/ebitengine/gomobile/app
-github.com/ebitengine/gomobile/app/internal/callfn
-github.com/ebitengine/gomobile/event/key
-github.com/ebitengine/gomobile/event/lifecycle
-github.com/ebitengine/gomobile/event/paint
-github.com/ebitengine/gomobile/event/size
-github.com/ebitengine/gomobile/event/touch
-github.com/ebitengine/gomobile/geom
-github.com/ebitengine/gomobile/gl
-github.com/ebitengine/gomobile/internal/mobileinit
-# github.com/ebitengine/hideconsole v1.0.0
-## explicit; go 1.18
-github.com/ebitengine/hideconsole
-# github.com/ebitengine/purego v0.9.0
-## explicit; go 1.18
-github.com/ebitengine/purego
-github.com/ebitengine/purego/internal/cgo
-github.com/ebitengine/purego/internal/fakecgo
-github.com/ebitengine/purego/internal/strings
-github.com/ebitengine/purego/objc
 # github.com/elazarl/goproxy v1.8.1
 ## explicit; go 1.23.0
 github.com/elazarl/goproxy
@@ -633,49 +611,6 @@ github.com/hack-pad/hackpadfs/mount
 github.com/hack-pad/safejs
 github.com/hack-pad/safejs/internal/catch
 github.com/hack-pad/safejs/internal/stackerr
-# github.com/hajimehoshi/ebiten/v2 v2.9.8
-## explicit; go 1.24.0
-github.com/hajimehoshi/ebiten/v2
-github.com/hajimehoshi/ebiten/v2/ebitenutil
-github.com/hajimehoshi/ebiten/v2/inpututil
-github.com/hajimehoshi/ebiten/v2/internal/affine
-github.com/hajimehoshi/ebiten/v2/internal/atlas
-github.com/hajimehoshi/ebiten/v2/internal/buffered
-github.com/hajimehoshi/ebiten/v2/internal/builtinshader
-github.com/hajimehoshi/ebiten/v2/internal/clock
-github.com/hajimehoshi/ebiten/v2/internal/cocoa
-github.com/hajimehoshi/ebiten/v2/internal/debug
-github.com/hajimehoshi/ebiten/v2/internal/file
-github.com/hajimehoshi/ebiten/v2/internal/gamepad
-github.com/hajimehoshi/ebiten/v2/internal/gamepaddb
-github.com/hajimehoshi/ebiten/v2/internal/glfw
-github.com/hajimehoshi/ebiten/v2/internal/graphics
-github.com/hajimehoshi/ebiten/v2/internal/graphicscommand
-github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver
-github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/directx
-github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/metal
-github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/metal/ca
-github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/metal/mtl
-github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/opengl
-github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/opengl/gl
-github.com/hajimehoshi/ebiten/v2/internal/graphicsdriver/playstation5
-github.com/hajimehoshi/ebiten/v2/internal/hook
-github.com/hajimehoshi/ebiten/v2/internal/inputstate
-github.com/hajimehoshi/ebiten/v2/internal/microsoftgdk
-github.com/hajimehoshi/ebiten/v2/internal/mipmap
-github.com/hajimehoshi/ebiten/v2/internal/packing
-github.com/hajimehoshi/ebiten/v2/internal/png
-github.com/hajimehoshi/ebiten/v2/internal/restorable
-github.com/hajimehoshi/ebiten/v2/internal/shader
-github.com/hajimehoshi/ebiten/v2/internal/shaderir
-github.com/hajimehoshi/ebiten/v2/internal/shaderir/glsl
-github.com/hajimehoshi/ebiten/v2/internal/shaderir/hlsl
-github.com/hajimehoshi/ebiten/v2/internal/shaderir/msl
-github.com/hajimehoshi/ebiten/v2/internal/thread
-github.com/hajimehoshi/ebiten/v2/internal/ui
-github.com/hajimehoshi/ebiten/v2/internal/vibrate
-github.com/hajimehoshi/ebiten/v2/internal/winver
-github.com/hajimehoshi/ebiten/v2/vector
 # github.com/hashicorp/go-version v1.8.0
 ## explicit
 github.com/hashicorp/go-version
@@ -754,12 +689,6 @@ github.com/jaypipes/pcidb/types
 # github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade
 ## explicit; go 1.18
 github.com/jeandeaual/go-locale
-# github.com/jezek/xgb v1.1.1
-## explicit; go 1.11
-github.com/jezek/xgb
-github.com/jezek/xgb/randr
-github.com/jezek/xgb/render
-github.com/jezek/xgb/xproto
 # github.com/jinzhu/copier v0.4.0
 ## explicit; go 1.13
 github.com/jinzhu/copier
