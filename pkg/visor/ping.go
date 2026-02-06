@@ -9,8 +9,7 @@ import (
 )
 
 type ping struct {
-	conn    net.Conn
-	latency chan time.Duration
+	conn net.Conn
 }
 
 // PingMsg is used to calculate the ping to a remote visor

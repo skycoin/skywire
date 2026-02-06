@@ -684,6 +684,20 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	return err
 }
 
+// SetExistingTPOnly sets whether to only use existing transports for routing
+func (r *RPC) SetExistingTPOnly(enabled *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetExistingTPOnly", *enabled)(nil, &err)
+	err = r.visor.SetExistingTPOnly(*enabled)
+	return err
+}
+
+// SetForceLocalRoutes sets whether to skip the route finder and use local route calculation
+func (r *RPC) SetForceLocalRoutes(enabled *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetForceLocalRoutes", *enabled)(nil, &err)
+	err = r.visor.SetForceLocalRoutes(*enabled)
+	return err
+}
+
 // FilterServersIn is input for VPNServers and ProxyServers
 type FilterServersIn struct {
 	Version string
@@ -820,9 +834,47 @@ func (r *RPC) TestVisor(conf PingConfig, out *[]TestResult) (err error) {
 	return err
 }
 
+// TestProxy tests proxy servers by connecting through them.
+func (r *RPC) TestProxy(conf ProxyTestConfig, out *[]ProxyTestResult) (err error) {
+	defer rpcutil.LogCall(r.log, "TestProxy", conf)(out, &err)
+
+	*out, err = r.visor.TestProxy(conf)
+	return err
+}
+
 // ReinitiateModule reinitiate/restart modules
 func (r *RPC) ReinitiateModule(module string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "ReinitiateModule", module)(nil, &err)
 
 	return r.visor.ReinitiateModule(module)
+}
+
+// StartUIServer starts the embedded UI server.
+func (r *RPC) StartUIServer(addr *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StartUIServer", addr)(nil, &err)
+
+	addrStr := ""
+	if addr != nil {
+		addrStr = *addr
+	}
+	return r.visor.StartUIServer(addrStr)
+}
+
+// StopUIServer stops the embedded UI server.
+func (r *RPC) StopUIServer(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopUIServer", nil)(nil, &err)
+
+	return r.visor.StopUIServer()
+}
+
+// UIServerStatus returns the status of the UI server.
+func (r *RPC) UIServerStatus(_ *struct{}, out *UIServerStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "UIServerStatus", nil)(out, &err)
+
+	status, err := r.visor.UIServerStatus()
+	if err != nil {
+		return err
+	}
+	*out = *status
+	return nil
 }

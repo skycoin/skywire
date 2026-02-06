@@ -189,15 +189,19 @@ func server(e error) {
 		tpvizCfg.CacheFile = filepath.Join(wd, "tpd.json")
 		tpvizCfg.CacheFileUT = filepath.Join(wd, "ut.json")
 		tpvizCfg.CacheFileSD = filepath.Join(wd, "sd.json")
+		tpvizCfg.SurveyDir = filepath.Join(wd, "log_backups") // Survey data for IP grouping
 		tpvizServer := tpviz.NewServer(tpvizCfg)
 		tpvizServer.Start() // Initialize cache and start auto-refresh
 
 		// Delegate /api/* to tpviz server (uses file caching to avoid rate limits)
 		// Note: /health is already registered above with system health info
+		// /api/health provides tpviz cache info for auto-refresh
 		tpvizHandler := tpvizServer.Handler()
 		r1.GET("/api/transports", gin.WrapH(tpvizHandler))
 		r1.GET("/api/uptimes", gin.WrapH(tpvizHandler))
 		r1.GET("/api/services", gin.WrapH(tpvizHandler))
+		r1.GET("/api/health", gin.WrapH(tpvizHandler))
+		r1.GET("/api/ip-groups", gin.WrapH(tpvizHandler))
 
 		r1.GET("/transport-graph", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")

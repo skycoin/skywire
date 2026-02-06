@@ -19,12 +19,13 @@ import (
 	clilog "github.com/skycoin/skywire/cmd/skywire-cli/commands/log"
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
 	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/proxy"
+	clipv "github.com/skycoin/skywire/cmd/skywire-cli/commands/pv"
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
 	clirewards "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards"
 	cliroute "github.com/skycoin/skywire/cmd/skywire-cli/commands/route"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	clisd "github.com/skycoin/skywire/cmd/skywire-cli/commands/sd"
-	cliskyfwd "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyfwd"
-	cliskyrev "github.com/skycoin/skywire/cmd/skywire-cli/commands/skyrev"
+	cliskynet "github.com/skycoin/skywire/cmd/skywire-cli/commands/skynet"
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
 	clitp "github.com/skycoin/skywire/cmd/skywire-cli/commands/tp"
 	cliut "github.com/skycoin/skywire/cmd/skywire-cli/commands/ut"
@@ -42,8 +43,7 @@ func init() {
 		clivisor.RootCmd,
 		clivpn.RootCmd,
 		cliut.RootCmd,
-		cliskyfwd.RootCmd,
-		cliskyrev.RootCmd,
+		cliskynet.RootCmd,
 		clireward.RootCmd,
 		clirewards.RootCmd,
 		clisurvey.RootCmd,
@@ -54,12 +54,15 @@ func init() {
 		clicompletion.RootCmd,
 		clilog.RootCmd,
 		cliskysocksc.RootCmd,
+		clipv.RootCmd,
 		treeCmd,
 		docCmd,
 	)
 	var jsonOutput bool
 	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
 	RootCmd.PersistentFlags().MarkHidden(internal.JSONString) //nolint:errcheck,gosec
+	RootCmd.PersistentFlags().IntVar(&clirpc.Timeout, "timeout", 30, "RPC timeout in seconds (0 = unlimited)")
+	RootCmd.PersistentFlags().MarkHidden("timeout") //nolint:errcheck,gosec
 }
 
 // RootCmd is the root command for skywire-cli
