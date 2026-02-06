@@ -740,7 +740,7 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 	case <-tpsDmsgC.Ready():
 		log.Info("Embedded TPS dmsg client connected")
 	case <-ctx.Done():
-		return fmt.Errorf("context cancelled waiting for TPS dmsg client")
+		return fmt.Errorf("context canceled waiting for TPS dmsg client")
 	}
 
 	v.initLock.Lock()
