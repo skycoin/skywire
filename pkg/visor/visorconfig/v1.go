@@ -23,6 +23,7 @@ type V1 struct {
 
 	Dmsg          *dmsgc.DmsgConfig   `json:"dmsg"`
 	Dmsgpty       *Dmsgpty            `json:"dmsgpty,omitempty"`
+	UIServer      *UIServer           `json:"ui_server,omitempty"`
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *Transport          `json:"transport"`
 	Routing       *Routing            `json:"routing"`
@@ -54,15 +55,36 @@ type Dmsgpty struct {
 	Whitelist []cipher.PubKey `json:"whitelist"`
 }
 
+// UIServer configures the visor UI server (serves tp-viz and other UIs).
+type UIServer struct {
+	Enable        bool            `json:"enable"`         // Enable the UI server
+	LocalAddr     string          `json:"local_addr"`     // Local HTTP address (default: localhost:8081)
+	DmsgPort      uint16          `json:"dmsg_port"`      // DMSG port to serve on (default: 81, 0 to disable)
+	DmsgWhitelist []cipher.PubKey `json:"dmsg_whitelist"` // Keys allowed to access via DMSG
+	SurveyDir     string          `json:"survey_dir"`     // Directory with visor surveys for IP-based grouping
+}
+
 // Transport defines a transport config.
 type Transport struct {
 	Discovery         string          `json:"discovery"`
 	AddressResolver   string          `json:"address_resolver"`
 	PublicAutoconnect bool            `json:"public_autoconnect"`
 	TransportSetupPKs []cipher.PubKey `json:"transport_setup"`
+	TPSetupSK         *cipher.SecKey  `json:"tps_sk,omitempty"`
+	TPSDmsg           *TPSDmsgConfig  `json:"tps_dmsg,omitempty"`
 	LogStore          *LogStore       `json:"log_store"`
 	StcprPort         int             `json:"stcpr_port"`
 	SudphPort         int             `json:"sudph_port"`
+}
+
+// TPSDmsgConfig configures the embedded Transport Setup Node's dmsg client.
+// If nil, defaults are used: MinSessions=0 (connect to all servers), ServerType="" (all types).
+type TPSDmsgConfig struct {
+	// MinSessions is the minimum number of dmsg server sessions.
+	// 0 means connect to ALL available servers (recommended for TPS).
+	MinSessions int `json:"min_sessions"`
+	// ServerType filters which dmsg servers to connect to: "official", "community", or "" for all.
+	ServerType string `json:"server_type"`
 }
 
 // LogStore configures a LogStore.
