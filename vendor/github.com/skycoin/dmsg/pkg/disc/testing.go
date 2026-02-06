@@ -166,3 +166,36 @@ func (m *mockClient) AllEntries(_ context.Context) ([]string, error) {
 	}
 	return list, nil
 }
+
+// AllClientsByServer returns all client entries grouped by server public key
+func (m *mockClient) AllClientsByServer(_ context.Context) (map[string][]*Entry, error) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+	result := make(map[string][]*Entry)
+	for _, e := range m.entries {
+		if e := e; e.Client != nil {
+			for _, serverPK := range e.Client.DelegatedServers {
+				result[serverPK.Hex()] = append(result[serverPK.Hex()], &e)
+			}
+		}
+	}
+	return result, nil
+}
+
+// ClientsByServer returns all client entries delegated to a specific server
+func (m *mockClient) ClientsByServer(_ context.Context, serverPK cipher.PubKey) ([]*Entry, error) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+	var list []*Entry
+	for _, e := range m.entries {
+		if e := e; e.Client != nil {
+			for _, delegatedPK := range e.Client.DelegatedServers {
+				if delegatedPK == serverPK {
+					list = append(list, &e)
+					break
+				}
+			}
+		}
+	}
+	return list, nil
+}

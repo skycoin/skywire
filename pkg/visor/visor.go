@@ -126,6 +126,9 @@ type Visor struct {
 	uiServer        *http.Server
 	uiServerAddr    string
 	uiServerRunning bool
+
+	// Embedded Transport Setup Node (nil if tps_sk not configured)
+	embeddedTPS *embeddedTPS
 }
 
 // todo: consider moving module closing to the module system

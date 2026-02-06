@@ -48,8 +48,8 @@
         input[type="checkbox"] { margin-right: 6px; }
         input[type="text"], select { width: 100%; padding: 6px 8px; background: #1a1a2e; border: 1px solid #0f3460; color: #eee; border-radius: 4px; font-size: 0.85em; }
         input[type="text"]:focus, select:focus { outline: none; border-color: #e94560; }
-        button { width: 100%; padding: 8px; margin-top: 8px; background: #e94560; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
-        button:hover { background: #ff6b6b; }
+        #btn-fit { width: 100%; padding: 8px; margin-top: 8px; background: #e94560; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
+        #btn-fit:hover { background: #ff6b6b; }
         button:disabled { background: #555; cursor: not-allowed; }
 
         /* Visor list */
@@ -89,6 +89,24 @@
         .conn-type.stcpr { background: rgba(0, 217, 165, 0.3); color: #00d9a5; }
         .conn-type.sudph { background: rgba(0, 180, 216, 0.3); color: #00b4d8; }
         .conn-type.dmsg { background: rgba(255, 209, 102, 0.3); color: #ffd166; }
+
+        /* TPS (Transport Setup) controls */
+        .tps-input { width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid #ff6b35;color:#eee;border-radius:4px;font-size:0.8em;font-family:monospace; }
+        .tps-input:focus { outline:none;border-color:#ffc800;box-shadow:0 0 4px rgba(255,107,53,0.3); }
+        .tps-pick-btn { padding:2px 8px;font-size:0.7em;background:#ff6b35;color:#fff;border:none;border-radius:3px;cursor:pointer;width:auto;margin:0; }
+        .tps-pick-btn:hover { background:#e05a2a; }
+        .tps-btn { padding:6px 10px;font-size:0.8em;border:none;border-radius:4px;cursor:pointer;font-weight:600;width:auto;margin:0; }
+        .tps-btn-primary { background:#ff6b35;color:#fff; }
+        .tps-btn-primary:hover { background:#e05a2a; }
+        .tps-btn-primary:disabled { background:#555;cursor:not-allowed; }
+        .tps-btn-secondary { background:#0f3460;color:#ff6b35;border:1px solid #ff6b35; }
+        .tps-btn-secondary:hover { background:#1a3a5c; }
+        .tps-btn-secondary:disabled { background:#555;color:#888;border-color:#555;cursor:not-allowed; }
+        .tps-success { color:#00d9a5;padding:6px 8px;background:rgba(0,217,165,0.1);border-radius:4px;word-break:break-all; }
+        .tps-error { color:#e94560;padding:6px 8px;background:rgba(233,69,96,0.1);border-radius:4px;word-break:break-all; }
+        .tps-warning { color:#ffa500;padding:6px 8px;background:rgba(255,165,0,0.1);border-radius:4px;word-break:break-all; }
+        .tps-loading { color:#ffd166;padding:6px 8px;background:rgba(255,209,102,0.1);border-radius:4px; }
+        .tps-overlay-edge { }
 
         #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
         .spinner { width: 50px; height: 50px; border: 3px solid #0f3460; border-top-color: #e94560; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
@@ -189,6 +207,83 @@
                 </div>
             </div>
 
+            <!-- Transport Setup Node - shown only when embedded TPS is running -->
+            <div class="section" id="tps-section" style="display:none;border-color:#ff6b35;border-width:2px;">
+                <div class="section-header" onclick="toggleSection('tps-section')" style="background:linear-gradient(135deg,rgba(255,107,53,0.15),rgba(255,200,0,0.1));">
+                    <span class="section-title" style="color:#ff6b35;">Transport Setup</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content" id="tps-content">
+                    <!-- Target -->
+                    <div style="margin-bottom:4px;">
+                        <div style="display:flex;align-items:center;gap:2px;margin-bottom:2px;">
+                            <label style="color:#ff6b35;font-size:10px;min-width:38px;">Target</label>
+                            <select id="tps-target-mode" style="padding:0 2px;font-size:9px;background:#1a1a2e;border:1px solid #ff6b35;color:#ff6b35;border-radius:1px;height:14px;">
+                                <option value="pk">Visor</option>
+                                <option value="ip">IP Group</option>
+                                <option value="country">Country</option>
+                            </select>
+                        </div>
+                        <div id="tps-target-pk-row" style="display:flex;gap:2px;align-items:stretch;">
+                            <input type="text" id="tps-target-pk" placeholder="Target PK" spellcheck="false" style="flex:1;min-width:0;padding:6px 10px;font-size:13px;background:#1a1a2e;border:1px solid #ff6b35;color:#eee;border-radius:3px;font-family:monospace;">
+                            <button id="tps-pick-target-btn" style="padding:0 4px;font-size:9px;background:#ff6b35;color:#fff;border:none;border-radius:2px;cursor:pointer;">⊕</button>
+                        </div>
+                        <div id="tps-target-group-row" style="display:none;gap:2px;align-items:stretch;">
+                            <select id="tps-target-group" style="flex:1;min-width:0;padding:6px 10px;font-size:13px;background:#1a1a2e;border:1px solid #ff6b35;color:#eee;border-radius:3px;">
+                                <option value="">Select...</option>
+                            </select>
+                            <button id="tps-pick-target-group-btn" style="padding:0 4px;font-size:9px;background:#ff6b35;color:#fff;border:none;border-radius:2px;cursor:pointer;" title="Pick from graph">⊕</button>
+                        </div>
+                    </div>
+                    <!-- Remote -->
+                    <div style="margin-bottom:4px;">
+                        <div style="display:flex;align-items:center;gap:2px;margin-bottom:2px;">
+                            <label style="color:#ff6b35;font-size:10px;min-width:38px;">Remote</label>
+                            <select id="tps-remote-mode" style="padding:0 2px;font-size:9px;background:#1a1a2e;border:1px solid #ff6b35;color:#ff6b35;border-radius:1px;height:14px;">
+                                <option value="pk">Visor</option>
+                                <option value="ip">IP Group</option>
+                                <option value="country">Country</option>
+                            </select>
+                        </div>
+                        <div id="tps-remote-pk-row" style="display:flex;gap:2px;align-items:stretch;">
+                            <input type="text" id="tps-remote-pk" placeholder="Remote PK" spellcheck="false" style="flex:1;min-width:0;padding:6px 10px;font-size:13px;background:#1a1a2e;border:1px solid #ff6b35;color:#eee;border-radius:3px;font-family:monospace;">
+                            <button id="tps-pick-remote-btn" style="padding:0 4px;font-size:9px;background:#ff6b35;color:#fff;border:none;border-radius:2px;cursor:pointer;">⊕</button>
+                        </div>
+                        <div id="tps-remote-group-row" style="display:none;gap:2px;align-items:stretch;">
+                            <select id="tps-remote-group" style="flex:1;min-width:0;padding:6px 10px;font-size:13px;background:#1a1a2e;border:1px solid #ff6b35;color:#eee;border-radius:3px;">
+                                <option value="">Select...</option>
+                            </select>
+                            <button id="tps-pick-remote-group-btn" style="padding:0 4px;font-size:9px;background:#ff6b35;color:#fff;border:none;border-radius:2px;cursor:pointer;" title="Pick from graph">⊕</button>
+                        </div>
+                    </div>
+                    <!-- Multi-hop container -->
+                    <div id="mh-hops-container" style="display:none;margin-bottom:4px;padding:3px;background:rgba(255,200,0,0.1);border-radius:2px;">
+                        <div id="mh-hops-list" style="max-height:50px;overflow-y:auto;"></div>
+                        <div style="display:flex;justify-content:flex-end;gap:2px;margin-top:2px;">
+                            <button id="mh-build-btn" style="padding:1px 4px;font-size:8px;background:#ffc800;color:#000;border:none;border-radius:2px;cursor:pointer;font-weight:600;">Build</button>
+                            <button id="mh-clear-btn" style="padding:1px 3px;font-size:8px;background:#333;color:#888;border:1px solid #555;border-radius:2px;cursor:pointer;">✕</button>
+                        </div>
+                    </div>
+                    <!-- Type + Buttons row -->
+                    <div style="display:flex;gap:3px;align-items:center;">
+                        <button id="mh-add-hop-btn" style="padding:0 3px;font-size:8px;background:#ffc800;color:#000;border:none;border-radius:2px;cursor:pointer;font-weight:bold;" title="Add hop">+</button>
+                        <select id="tps-type" style="padding:2px 4px;font-size:11px;background:#1a1a2e;border:1px solid #0f3460;color:#eee;border-radius:2px;">
+                            <option value="sudph">SUDPH</option>
+                            <option value="stcpr">STCPR</option>
+                        </select>
+                        <button id="tps-add-btn" style="padding:2px 5px;font-size:9px;background:#ff6b35;color:#fff;border:none;border-radius:2px;cursor:pointer;font-weight:600;">Create</button>
+                        <button id="tps-refresh-btn" style="padding:1px 3px;font-size:8px;background:#333;color:#ff6b35;border:1px solid #ff6b35;border-radius:2px;cursor:pointer;" title="Query target's transports">↻</button>
+                        <span id="mh-hop-count" style="font-size:9px;color:#ffc800;margin-left:auto;"></span>
+                    </div>
+                    <!-- Info -->
+                    <div id="tps-info" style="font-size:9px;color:#888;margin-top:2px;text-align:right;"></div>
+                    <!-- Results -->
+                    <div id="tps-result" style="display:none;font-size:10px;margin-top:3px;"></div>
+                    <div id="mh-progress" style="display:none;font-size:9px;margin-top:3px;"></div>
+                    <div id="tps-pk-info" style="margin-top:3px;font-size:8px;color:#555;word-break:break-all;"></div>
+                </div>
+            </div>
+
             <!-- TPD Statistics - expanded by default -->
             <div class="section" id="section-tpd">
                 <div class="section-header" onclick="toggleSection('section-tpd')">
@@ -216,8 +311,36 @@
                     <div class="stat"><span class="stat-label">Online</span><span class="stat-value" id="count-online" style="color:#00d9a5">-</span></div>
                     <div class="stat"><span class="stat-label">Offline</span><span class="stat-value" id="count-offline" style="color:#e94560">-</span></div>
                     <div class="stat"><span class="stat-label">Not in UT</span><span class="stat-value" id="count-unknown" style="color:#ffd166">-</span></div>
+                    <div class="stat"><span class="stat-label">Not in DMSG</span><span class="stat-value" id="count-not-in-dmsg" style="color:#ff6b35">-</span></div>
                     <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;font-size:0.8em;color:#888;">Versions</div>
                     <div id="version-stats"></div>
+                </div>
+            </div>
+
+            <!-- DMSG Discovery - collapsed by default -->
+            <div class="section collapsed" id="section-dmsg">
+                <div class="section-header" onclick="toggleSection('section-dmsg')" style="background:linear-gradient(135deg,rgba(159,110,252,0.15),rgba(100,100,255,0.1));">
+                    <span class="section-title" style="color:#9f6efc;">DMSG Discovery</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="stat"><span class="stat-label">Servers</span><span class="stat-value" id="dmsg-server-count" style="color:#9f6efc">-</span></div>
+                    <div class="stat"><span class="stat-label">Total Sessions</span><span class="stat-value" id="dmsg-total-sessions" style="color:#9f6efc">-</span></div>
+                    <div class="stat"><span class="stat-label">Entries</span><span class="stat-value" id="dmsg-entry-count" style="color:#9f6efc">-</span></div>
+                    <div class="stat"><span class="stat-label">Connected Clients</span><span class="stat-value" id="dmsg-total-clients" style="color:#6ec8ff">-</span></div>
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;">
+                        <div style="font-size:0.8em;color:#888;margin-bottom:4px;">Servers</div>
+                        <div id="dmsg-server-list" style="max-height:150px;overflow-y:auto;font-size:0.75em;"></div>
+                    </div>
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;">
+                        <div style="font-size:0.8em;color:#888;margin-bottom:4px;">Health Check</div>
+                        <div style="display:flex;gap:2px;align-items:stretch;">
+                            <input type="text" id="dmsg-health-pk" placeholder="Visor PK" style="flex:1;min-width:0;padding:5px 8px;background:#1a1a2e;border:1px solid #9f6efc;color:#eee;border-radius:2px;font-size:11px;font-family:monospace;">
+                            <button id="dmsg-health-pick-btn" style="padding:0 4px;background:#9f6efc;color:#fff;border:none;border-radius:2px;cursor:pointer;font-size:9px;">⊕</button>
+                            <button id="dmsg-health-btn" style="padding:2px 6px;background:#9f6efc;color:#fff;border:none;border-radius:2px;cursor:pointer;font-size:9px;">Check</button>
+                        </div>
+                        <div id="dmsg-health-result" style="display:none;margin-top:4px;font-size:10px;padding:4px;border-radius:2px;"></div>
+                    </div>
                 </div>
             </div>
 
@@ -245,6 +368,10 @@
                     <div class="control-group anim-controls">
                         <label><input type="checkbox" id="show-dataflow" checked> Data Flow Animation</label>
                         <label><input type="checkbox" id="show-routes" checked> Show Routes</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="toggle-tooltips"> Show Tooltips on Hover</label>
+                        <label><input type="checkbox" id="toggle-physics" checked> Enable Physics</label>
                     </div>
                     <div class="control-group">
                         <label><input type="checkbox" id="cluster-country" checked> Cluster by Country</label>
@@ -308,6 +435,8 @@
         let onlineVisors = new Set(), offlineVisors = new Set(), visorServices = {}, visorVersions = {};
         let nextRefreshTime = null, countdownInterval = null, serverCacheAge = null;
         let ipGroupsData = null, ipGroupsEnabled = false;
+        let dmsgData = null; // DMSG discovery data (servers, entries)
+        let dmsgEntries = new Set(); // Set of PKs that are in DMSG discovery
         let localVisorData = null; // Local visor data from RPC
         let localVisorWS = null; // WebSocket connection for local visor data
         let wsReconnectAttempts = 0;
@@ -325,6 +454,39 @@
         let routeDestinations = new Set();
         // Track which node IDs were newly added in the last updateGraph cycle
         let lastNewNodeIds = new Set();
+
+        // Feature 1: Cluster-level click selection
+        let selectedClusterId = null;        // Currently selected boundary groupKey
+        let groupNodeMap = new Map();        // Map: groupKey -> Set<nodeId>
+
+        // Feature 3: Physics toggle
+        let userPhysicsDisabled = false;     // True when user manually disabled physics
+
+        // Feature 4: Orbiting satellite nodes
+        let satelliteNodeIds = new Set();
+        let satelliteOrbitAnimId = null;
+        let satelliteOrbits = new Map();     // nodeId -> {angle, lane, emoji, isDragged}
+        let orbitCenter = { x: 0, y: 0 };
+        let orbitBaseRadius = 500;
+        const SATELLITE_EMOJI = '🛰️';
+        const ORBIT_LANES = 3;
+        const ORBIT_LANE_SPACING = 60;
+        const ORBIT_ANGULAR_VELOCITY = 0.0008;
+
+        // TPS (Transport Setup) state
+        let tpsRunning = false;
+        let tpsPK = '';
+        let tpsPickMode = null; // 'target' or 'remote' when picking visor PK from graph
+        let tpsGroupPickMode = null; // 'target' or 'remote' when picking group from graph (by clicking a visor)
+        let tpsOverlayEdges = new Map(); // edgeId -> edge data (from TPS responses, not yet in TPD)
+        let dmsgHealthPickMode = false; // true when picking a visor PK for DMSG health check
+
+        // Local visor transport creation state
+        let localTpPickMode = false;
+
+        // Multi-hop route builder state
+        let mhHops = []; // Array of PKs for multi-hop route
+        let mhPickMode = false; // True when picking a hop from graph
 
         // Generate distinct colors for IP groups using golden ratio distribution
         const ipGroupColors = {};
@@ -510,18 +672,17 @@
             const sorted = Object.entries(versionCounts)
                 .sort((a, b) => compareVersions(b[0], a[0]));
 
-            // Display top versions as table
+            // Display ALL versions in a scrollable table
             const total = Object.values(versionCounts).reduce((a, b) => a + b, 0);
-            let html = '<table style="width:100%;font-size:0.85em;border-collapse:collapse;">';
-            html += '<tr style="color:#888;font-size:0.9em;"><td>Version</td><td style="text-align:right;">Count</td><td style="text-align:right;">%</td></tr>';
-            sorted.slice(0, 5).forEach(([ver, count]) => {
+            let html = '<div style="max-height:200px;overflow-y:auto;">';
+            html += '<table style="width:100%;font-size:0.85em;border-collapse:collapse;">';
+            html += '<tr style="color:#888;font-size:0.9em;position:sticky;top:0;background:#1a1a2e;"><td>Version</td><td style="text-align:right;">Count</td><td style="text-align:right;">%</td></tr>';
+            sorted.forEach(([ver, count]) => {
                 const pct = ((count / total) * 100).toFixed(1);
                 html += '<tr><td style="color:#0f9b8e;">' + ver + '</td><td style="text-align:right;">' + count + '</td><td style="text-align:right;color:#888;">' + pct + '%</td></tr>';
             });
-            html += '</table>';
-            if (sorted.length > 5) {
-                html += '<div style="color:#666;font-size:0.8em;margin-top:4px;">+ ' + (sorted.length - 5) + ' more versions</div>';
-            }
+            html += '</table></div>';
+            html += '<div style="color:#888;font-size:0.75em;margin-top:4px;">' + sorted.length + ' versions total</div>';
             statsEl.innerHTML = html;
         }
 
@@ -561,12 +722,13 @@
                 allData = await tpResp.json();
                 console.log('Transport data loaded:', allData.length, 'transports');
 
-                // Fetch uptime, services, IP groups, and local visor data in parallel (non-blocking)
-                const [utResp, sdResp, ipResp, lvResp] = await Promise.all([
+                // Fetch uptime, services, IP groups, local visor, and DMSG data in parallel (non-blocking)
+                const [utResp, sdResp, ipResp, lvResp, dmsgResp] = await Promise.all([
                     fetchWithTimeout(API_BASE + '/api/uptimes').catch(e => { console.log('UT fetch error:', e.message); return null; }),
                     fetchWithTimeout(API_BASE + '/api/services').catch(e => { console.log('SD fetch error:', e.message); return null; }),
                     fetchWithTimeout(API_BASE + '/api/ip-groups').catch(e => { console.log('IP groups fetch error:', e.message); return null; }),
-                    fetchWithTimeout(API_BASE + '/api/local-visor').catch(e => { console.log('Local visor fetch error:', e.message); return null; })
+                    fetchWithTimeout(API_BASE + '/api/local-visor').catch(e => { console.log('Local visor fetch error:', e.message); return null; }),
+                    fetchWithTimeout(API_BASE + '/api/dmsg/servers').catch(e => { console.log('DMSG fetch error:', e.message); return null; })
                 ]);
 
                 // Parse uptime data
@@ -642,8 +804,29 @@
                     }
                 }
 
+                // Parse DMSG discovery data
+                if (dmsgResp && dmsgResp.ok) {
+                    dmsgData = await dmsgResp.json();
+                    processDMSGData();
+                    console.log('DMSG data loaded:', dmsgData.servers?.length || 0, 'servers,', dmsgData.entries_count || 0, 'entries');
+                }
+
                 processData();
                 console.log('Data processing complete');
+
+                // Reconcile TPS overlay edges with fresh TPD data
+                reconcileTPSOverlays();
+
+                // Re-add any remaining TPS overlay edges that processData may have removed
+                tpsOverlayEdges.forEach((edge, edgeId) => {
+                    const current = edgesDataset.get(edgeId);
+                    if (!current) {
+                        edgesDataset.add(edge);
+                    } else if (!current.isTpsOverlay) {
+                        // TPD now has this edge — remove from overlay tracking
+                        tpsOverlayEdges.delete(edgeId);
+                    }
+                });
 
                 // Update local transport edge styling after data is processed
                 updateLocalTransportStyles();
@@ -651,6 +834,9 @@
                 // Apply grouping based on checkbox state (both may be checked)
                 // Pass isRefresh so grouping functions preserve zoom/pan on auto-refresh
                 applyGrouping(isRefresh);
+
+                // Refresh group interconnection dropdowns
+                if (typeof giRefreshGroups === 'function') giRefreshGroups();
 
                 return true; // Indicate success
             } catch (err) {
@@ -692,6 +878,74 @@
                     country: info.country || ''
                 };
             }
+        }
+
+        function processDMSGData() {
+            dmsgEntries.clear();
+            if (!dmsgData) return;
+
+            // Build set of all DMSG entries for quick lookup
+            if (dmsgData.entries) {
+                dmsgData.entries.forEach(pk => dmsgEntries.add(pk));
+            }
+
+            // Update stats
+            const serverCountEl = document.getElementById('dmsg-server-count');
+            const totalSessionsEl = document.getElementById('dmsg-total-sessions');
+            const entryCountEl = document.getElementById('dmsg-entry-count');
+
+            if (serverCountEl) serverCountEl.textContent = dmsgData.servers?.length || 0;
+            if (entryCountEl) entryCountEl.textContent = dmsgData.entries_count || 0;
+
+            // Calculate total available sessions
+            let totalSessions = 0;
+            if (dmsgData.servers) {
+                dmsgData.servers.forEach(srv => {
+                    totalSessions += srv.available_sessions || 0;
+                });
+            }
+            if (totalSessionsEl) totalSessionsEl.textContent = totalSessions;
+
+            // Populate server list
+            const serverListEl = document.getElementById('dmsg-server-list');
+            if (serverListEl && dmsgData.servers) {
+                let html = '';
+                let totalClients = 0;
+                dmsgData.servers.forEach(srv => {
+                    const flag = srv.country ? countryToFlag(srv.country) : '';
+                    const shortPK = srv.pk ? srv.pk.substring(0, 8) + '...' : '';
+                    const sessions = srv.available_sessions || 0;
+                    const clients = srv.clients?.length || 0;
+                    totalClients += clients;
+                    const sessionColor = sessions > 50 ? '#00d9a5' : sessions > 10 ? '#ffd166' : '#e94560';
+                    const clientsInfo = clients > 0 ? ' <span style="color:#6ec8ff;">' + clients + ' cl</span>' : '';
+                    html += '<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #0f3460;">';
+                    html += '<span title="' + srv.pk + '" style="cursor:pointer;color:#9f6efc;" onclick="copyToClipboard(\'' + srv.pk + '\')">' + flag + ' ' + shortPK + '</span>';
+                    html += '<span><span style="color:' + sessionColor + ';">' + sessions + ' sess</span>' + clientsInfo + '</span>';
+                    html += '</div>';
+                });
+                serverListEl.innerHTML = html || '<div style="color:#666;">No servers</div>';
+                // Update total connected clients stat if the endpoint is available
+                const totalClientsEl = document.getElementById('dmsg-total-clients');
+                if (totalClientsEl) totalClientsEl.textContent = totalClients;
+            }
+
+            // Update "Not in DMSG" count in Uptime Tracker section
+            updateNotInDMSGCount();
+        }
+
+        function updateNotInDMSGCount() {
+            const notInDmsgEl = document.getElementById('count-not-in-dmsg');
+            if (!notInDmsgEl) return;
+
+            // Count visors that are online (in UT) but NOT in DMSG entries
+            let notInDmsg = 0;
+            onlineVisors.forEach(pk => {
+                if (!dmsgEntries.has(pk)) {
+                    notInDmsg++;
+                }
+            });
+            notInDmsgEl.textContent = notInDmsg;
         }
 
         // Convert ISO country code to flag emoji (e.g., "US" -> "🇺🇸")
@@ -1355,8 +1609,10 @@
                 const existingEdgeIds = new Set(edgesDataset.getIds());
                 const newEdgeIds = new Set(edges.map(e => e.id));
 
-                // Edges to remove
-                const edgesToRemove = [...existingEdgeIds].filter(id => !newEdgeIds.has(id));
+                // Edges to remove (preserve TPS overlay edges)
+                const edgesToRemove = [...existingEdgeIds].filter(id =>
+                    !newEdgeIds.has(id) && !tpsOverlayEdges.has(id)
+                );
 
                 if (edgesToRemove.length > 0) {
                     edgesDataset.remove(edgesToRemove);
@@ -1367,7 +1623,7 @@
                 applyFilters();
 
                 // Only enable physics briefly for new nodes, then disable to prevent jumping
-                if (newNodesCount > 0) {
+                if (newNodesCount > 0 && !userPhysicsDisabled) {
                     // New nodes need positioning - run brief stabilization
                     network.setOptions({
                         physics: {
@@ -1405,26 +1661,117 @@
                 edges: { smooth: { type: 'continuous', roundness: 0.5 } },
                 layout: { improvedLayout: false },
                 physics: { stabilization: { iterations: 100, fit: true }, barnesHut: { gravitationalConstant: -3000, springConstant: 0.001, springLength: 200 } },
-                interaction: { hover: true, tooltipDelay: 100, selectConnectedEdges: false }
+                interaction: { hover: true, tooltipDelay: 999999999, selectConnectedEdges: false }
             };
             network = new vis.Network(container, data, options);
             network.on('click', params => {
                 if (params.nodes.length > 0) {
                     const nodeId = params.nodes[0];
+                    // TPS pick mode: populate target/remote PK fields
+                    if (tpsPickMode && !network.isCluster(nodeId)) {
+                        if (tpsPickMode === 'target') {
+                            document.getElementById('tps-target-pk').value = nodeId;
+                        } else if (tpsPickMode === 'remote') {
+                            document.getElementById('tps-remote-pk').value = nodeId;
+                        }
+                        tpsPickMode = null;
+                        document.body.style.cursor = 'default';
+                        tpsUpdateInfo();
+                        return;
+                    }
+                    // TPS group pick mode: get group from clicked visor
+                    if (tpsGroupPickMode && !network.isCluster(nodeId)) {
+                        const mode = tpsGroupPickMode === 'target'
+                            ? document.getElementById('tps-target-mode').value
+                            : document.getElementById('tps-remote-mode').value;
+                        let groupValue = null;
+                        if (mode === 'ip' && ipGroupsData && ipGroupsData.groups) {
+                            groupValue = ipGroupsData.groups[nodeId];
+                        } else if (mode === 'country' && visorServices[nodeId]) {
+                            groupValue = visorServices[nodeId].country;
+                        }
+                        if (groupValue !== null && groupValue !== undefined) {
+                            const selectEl = document.getElementById(tpsGroupPickMode === 'target' ? 'tps-target-group' : 'tps-remote-group');
+                            // Ensure dropdown is populated first
+                            tpsPopulateGroupSelect(selectEl, mode);
+                            selectEl.value = String(groupValue);
+                            tpsUpdateInfo();
+                        }
+                        tpsGroupPickMode = null;
+                        document.body.style.cursor = 'default';
+                        return;
+                    }
+                    // Local visor transport pick mode
+                    if (localTpPickMode && !network.isCluster(nodeId)) {
+                        const input = document.getElementById('local-tp-remote-pk');
+                        if (input) input.value = nodeId;
+                        localTpPickMode = false;
+                        document.body.style.cursor = 'default';
+                        return;
+                    }
+                    // Multi-hop pick mode
+                    if (mhPickMode && !network.isCluster(nodeId)) {
+                        mhAddHop(nodeId);
+                        mhPickMode = false;
+                        document.body.style.cursor = 'default';
+                        return;
+                    }
+                    // DMSG health check pick mode
+                    if (dmsgHealthPickMode && !network.isCluster(nodeId)) {
+                        document.getElementById('dmsg-health-pk').value = nodeId;
+                        dmsgHealthPickMode = false;
+                        document.body.style.cursor = 'default';
+                        return;
+                    }
                     // Don't show info for cluster nodes
                     if (!network.isCluster(nodeId)) {
+                        selectedClusterId = null;
                         showNodeInfo(nodeId);
                     }
                 } else {
-                    hideNodeInfo();
+                    // No node clicked - check for cluster boundary border/label click
+                    const hitBoundary = hitTestClusterBoundary(params);
+                    if (hitBoundary) {
+                        selectedClusterId = hitBoundary.groupKey;
+                        selectedNodeId = null;
+                        hideNodeInfo();
+                        showClusterEdgesOnly(hitBoundary.groupKey);
+                        network.redraw(); // Trigger redraw for selection highlight
+                    } else {
+                        selectedClusterId = null;
+                        hideNodeInfo();
+                        network.redraw();
+                    }
                 }
             });
-            network.on('hoverNode', params => { if (!selectedNodeId) showNodeEdgesOnly(params.node); });
-            network.on('blurNode', params => { if (!selectedNodeId) showAllEdges(); });
+            network.on('hoverNode', params => {
+                if (!selectedNodeId && !selectedClusterId) showNodeEdgesOnly(params.node);
+            });
+            network.on('blurNode', params => {
+                if (!selectedNodeId && !selectedClusterId) showAllEdges();
+                else if (selectedClusterId) showClusterEdgesOnly(selectedClusterId);
+            });
             // After initial stabilization, fit view and disable physics to prevent jumping
             network.once('stabilizationIterationsDone', () => {
                 network.fit();
                 network.setOptions({ physics: { enabled: false } });
+            });
+            // Satellite drag handlers
+            network.on('dragStart', params => {
+                if (params.nodes.length === 1 && satelliteOrbits.has(params.nodes[0])) {
+                    const orbit = satelliteOrbits.get(params.nodes[0]);
+                    orbit.isDragged = true;
+                }
+            });
+            network.on('dragEnd', params => {
+                if (params.nodes.length === 1 && satelliteOrbits.has(params.nodes[0])) {
+                    const nodeId = params.nodes[0];
+                    // Return to orbit after 5 seconds
+                    setTimeout(() => {
+                        const orbit = satelliteOrbits.get(nodeId);
+                        if (orbit) orbit.isDragged = false;
+                    }, 5000);
+                }
             });
             // Setup visual group boundary drawing
             setupGroupDrawing();
@@ -1489,7 +1836,7 @@
         function hideNodeInfo() {
             document.getElementById('selected-info').classList.remove('visible');
             selectedNodeId = null;
-            showAllEdges();
+            if (!selectedClusterId) showAllEdges();
         }
 
         // Show only edges connected to a specific node, hide others
@@ -1519,6 +1866,52 @@
         // Show all edges (respecting current filters)
         function showAllEdges() {
             applyFilters();
+        }
+
+        // Hit-test cluster boundary borders and labels for click selection
+        function hitTestClusterBoundary(params) {
+            if (!groupBoundaries.length || !network) return null;
+            const canvasCoords = network.DOMtoCanvas(params.pointer.DOM);
+
+            // Check inner boundaries first (more specific), then outer
+            const sorted = [...groupBoundaries].sort((a, b) => {
+                if (a.level === 'inner' && b.level === 'outer') return -1;
+                if (a.level === 'outer' && b.level === 'inner') return 1;
+                return a.radius - b.radius; // smaller first
+            });
+
+            for (const boundary of sorted) {
+                // Check label rect hit
+                if (boundary.labelRect) {
+                    const r = boundary.labelRect;
+                    if (canvasCoords.x >= r.x && canvasCoords.x <= r.x + r.w &&
+                        canvasCoords.y >= r.y && canvasCoords.y <= r.y + r.h) {
+                        return boundary;
+                    }
+                }
+
+                // Check border ring hit (15px tolerance around the stroke)
+                const dx = canvasCoords.x - boundary.centroid.x;
+                const dy = canvasCoords.y - boundary.centroid.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (Math.abs(dist - boundary.radius) <= 15) {
+                    return boundary;
+                }
+            }
+            return null;
+        }
+
+        // Show only edges connected to nodes in the given cluster group
+        function showClusterEdgesOnly(groupKey) {
+            const nodeSet = groupNodeMap.get(groupKey);
+            if (!nodeSet || !edgesDataset) return;
+
+            const edgeUpdates = [];
+            edgesDataset.forEach(edge => {
+                const connected = nodeSet.has(edge.from) || nodeSet.has(edge.to);
+                edgeUpdates.push({ id: edge.id, hidden: !connected });
+            });
+            edgesDataset.update(edgeUpdates);
         }
 
         // Update edge styling for local transports (called after local visor data loads)
@@ -1597,12 +1990,16 @@
                 const flag = countryToFlag(country);
                 const useFlag = showFlags && flag;
 
+                // Preserve satellite emoji appearance for orbiting nodes
+                const isSatellite = satelliteOrbits.has(node.id);
+                const orbit = isSatellite ? satelliteOrbits.get(node.id) : null;
+
                 nodeUpdates.push({
                     id: node.id,
                     hidden: !visible,
-                    label: useFlag ? flag : node.id.substring(0, 8),
-                    shape: useFlag ? 'text' : 'dot',
-                    font: useFlag ? { size: Math.max(16, node.size * 1.2), color: '#fff' } : { size: 10, color: '#aaa' },
+                    label: isSatellite ? orbit.emoji : (useFlag ? flag : node.id.substring(0, 8)),
+                    shape: isSatellite ? 'text' : (useFlag ? 'text' : 'dot'),
+                    font: isSatellite ? { size: 20, color: '#ffffff' } : (useFlag ? { size: Math.max(16, node.size * 1.2), color: '#fff' } : { size: 10, color: '#aaa' }),
                     color: { background: color.background, border: color.border, highlight: { background: '#e94560', border: '#ff6b6b' } }
                 });
             });
@@ -2115,6 +2512,12 @@
                 groups.get(groupKey).nodeIds.push(node.id);
             });
 
+            // Persist group-to-node mapping for cluster click selection
+            groupNodeMap.clear();
+            groups.forEach((group, key) => {
+                groupNodeMap.set(key, new Set(group.nodeIds));
+            });
+
             // Build circular boundaries for each group (inner boundaries)
             groups.forEach((group, key) => {
                 const points = group.nodeIds
@@ -2140,7 +2543,9 @@
                     label: group.label,
                     flag: group.flag,
                     count: group.nodeIds.length,
-                    level: 'inner'
+                    level: 'inner',
+                    groupKey: key,
+                    labelRect: null // populated during draw for click hit-testing
                 });
             });
 
@@ -2176,6 +2581,8 @@
 
                     const countryColor = getCountryColor(country);
 
+                    const outerKey = '_outer_' + country;
+                    groupNodeMap.set(outerKey, new Set(nodeIds));
                     groupBoundaries.push({
                         centroid: { x: cx, y: cy },
                         radius: Math.max(radius, 100),
@@ -2183,7 +2590,9 @@
                         label: country,
                         flag: countryToFlag(country),
                         count: nodeIds.length,
-                        level: 'outer'
+                        level: 'outer',
+                        groupKey: outerKey,
+                        labelRect: null
                     });
                 });
             }
@@ -2192,6 +2601,20 @@
         // Draw circular group boundaries on canvas
         function drawGroupBoundaries(ctx) {
             if (!groupBoundaries.length) return;
+
+            // Draw satellite orbit rings first (behind everything)
+            if (satelliteNodeIds.size > 0 && groupingMode === 'dual') {
+                for (let lane = 0; lane < ORBIT_LANES; lane++) {
+                    const r = orbitBaseRadius + lane * ORBIT_LANE_SPACING;
+                    ctx.beginPath();
+                    ctx.arc(orbitCenter.x, orbitCenter.y, r, 0, 2 * Math.PI);
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([4, 8]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
 
             // Draw outer boundaries first (behind inner ones) in dual mode
             const outerBoundaries = groupBoundaries.filter(b => b.level === 'outer');
@@ -2217,8 +2640,13 @@
                 const labelY = boundary.centroid.y - boundary.radius - 18;
 
                 const metrics = ctx.measureText(labelText);
+                const lx = boundary.centroid.x - metrics.width/2 - 8;
+                const ly = labelY - 14;
+                const lw = metrics.width + 16;
+                const lh = 28;
+                boundary.labelRect = { x: lx, y: ly, w: lw, h: lh };
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-                ctx.fillRect(boundary.centroid.x - metrics.width/2 - 8, labelY - 14, metrics.width + 16, 28);
+                ctx.fillRect(lx, ly, lw, lh);
                 ctx.fillStyle = '#fff';
                 ctx.fillText(labelText, boundary.centroid.x, labelY);
             }
@@ -2241,11 +2669,143 @@
                 const labelY = boundary.centroid.y - boundary.radius - 15;
 
                 const metrics = ctx.measureText(labelText);
+                const lx = boundary.centroid.x - metrics.width/2 - 6;
+                const ly = labelY - 12;
+                const lw = metrics.width + 12;
+                const lh = 24;
+                boundary.labelRect = { x: lx, y: ly, w: lw, h: lh };
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-                ctx.fillRect(boundary.centroid.x - metrics.width/2 - 6, labelY - 12, metrics.width + 12, 24);
+                ctx.fillRect(lx, ly, lw, lh);
                 ctx.fillStyle = '#fff';
                 ctx.fillText(labelText, boundary.centroid.x, labelY);
             }
+
+            // Draw selection highlight ring around selected cluster
+            if (selectedClusterId) {
+                const selected = groupBoundaries.find(b => b.groupKey === selectedClusterId);
+                if (selected) {
+                    ctx.beginPath();
+                    ctx.arc(selected.centroid.x, selected.centroid.y, selected.radius + 6, 0, 2 * Math.PI);
+                    ctx.strokeStyle = '#e94560';
+                    ctx.lineWidth = 4;
+                    ctx.setLineDash([12, 6]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+        }
+
+        // --- Feature 4: Satellite orbit functions ---
+
+        // Calculate orbit parameters based on placed country circles
+        function calculateOrbitParams(placedCountries) {
+            if (placedCountries.length === 0) {
+                orbitCenter = { x: 0, y: 0 };
+                orbitBaseRadius = 500;
+                return;
+            }
+            // Centroid of all placed country circles
+            let cx = 0, cy = 0;
+            for (const c of placedCountries) { cx += c.x; cy += c.y; }
+            cx /= placedCountries.length;
+            cy /= placedCountries.length;
+            orbitCenter = { x: cx, y: cy };
+
+            // Max extent from centroid to edge of any country circle
+            let maxExtent = 0;
+            for (const c of placedCountries) {
+                const dist = Math.sqrt((c.x - cx) ** 2 + (c.y - cy) ** 2) + c.radius;
+                if (dist > maxExtent) maxExtent = dist;
+            }
+            orbitBaseRadius = maxExtent + 150;
+        }
+
+        // Initialize satellite orbits for unknown-country nodes
+        function initializeSatelliteOrbits(nodeIds) {
+            satelliteOrbits.clear();
+            satelliteNodeIds = new Set(nodeIds);
+            if (nodeIds.length === 0) return;
+
+            const angleStep = (2 * Math.PI) / nodeIds.length;
+            nodeIds.forEach((id, i) => {
+                const lane = i % ORBIT_LANES;
+                satelliteOrbits.set(id, {
+                    angle: i * angleStep,
+                    lane: lane,
+                    emoji: SATELLITE_EMOJI,
+                    isDragged: false
+                });
+            });
+        }
+
+        // Apply satellite visual styles to nodes (emoji appearance)
+        function applySatelliteStyles() {
+            const updates = [];
+            satelliteOrbits.forEach((orbit, id) => {
+                updates.push({
+                    id: id,
+                    shape: 'text',
+                    label: orbit.emoji,
+                    font: { size: 20, color: '#ffffff' }
+                });
+            });
+            if (updates.length > 0) nodesDataset.update(updates);
+        }
+
+        // Animation loop for satellite orbits
+        function animateSatelliteOrbit() {
+            if (satelliteNodeIds.size === 0) return;
+
+            const updates = [];
+            satelliteOrbits.forEach((orbit, id) => {
+                if (orbit.isDragged) return; // Skip dragged satellites
+                orbit.angle += ORBIT_ANGULAR_VELOCITY;
+                const r = orbitBaseRadius + orbit.lane * ORBIT_LANE_SPACING;
+                const x = orbitCenter.x + r * Math.cos(orbit.angle);
+                const y = orbitCenter.y + r * Math.sin(orbit.angle);
+                updates.push({ id: id, x: x, y: y });
+            });
+            if (updates.length > 0) nodesDataset.update(updates);
+
+            satelliteOrbitAnimId = requestAnimationFrame(animateSatelliteOrbit);
+        }
+
+        function startSatelliteOrbit() {
+            stopSatelliteOrbit();
+            if (satelliteNodeIds.size > 0) {
+                satelliteOrbitAnimId = requestAnimationFrame(animateSatelliteOrbit);
+            }
+        }
+
+        function stopSatelliteOrbit() {
+            if (satelliteOrbitAnimId !== null) {
+                cancelAnimationFrame(satelliteOrbitAnimId);
+                satelliteOrbitAnimId = null;
+            }
+        }
+
+        // Restore satellite nodes to normal appearance
+        function clearSatelliteNodes() {
+            if (satelliteNodeIds.size === 0) return;
+            stopSatelliteOrbit();
+
+            // Restore normal node appearance
+            const updates = [];
+            satelliteNodeIds.forEach(id => {
+                const node = nodesDataset.get(id);
+                if (!node) return;
+                // Restore to default dot shape
+                updates.push({
+                    id: id,
+                    shape: 'dot',
+                    label: id.substring(0, 8),
+                    font: { size: 10, color: '#aaa' }
+                });
+            });
+            if (updates.length > 0) nodesDataset.update(updates);
+
+            satelliteNodeIds.clear();
+            satelliteOrbits.clear();
         }
 
         // Store original positions to restore when disabling grouping
@@ -2391,19 +2951,21 @@
             }
 
             // Enable physics with extremely weak edge forces (so edges don't pull nodes across boundaries)
-            network.setOptions({
-                physics: {
-                    enabled: true,
-                    barnesHut: {
-                        gravitationalConstant: -300,
-                        springConstant: 0.00002,
-                        springLength: 30,
-                        damping: 0.98
-                    },
-                    maxVelocity: 20,
-                    stabilization: false
-                }
-            });
+            if (!userPhysicsDisabled) {
+                network.setOptions({
+                    physics: {
+                        enabled: true,
+                        barnesHut: {
+                            gravitationalConstant: -300,
+                            springConstant: 0.00002,
+                            springLength: 30,
+                            damping: 0.98
+                        },
+                        maxVelocity: 20,
+                        stabilization: false
+                    }
+                });
+            }
 
             // Start group boundary enforcement (keeps nodes inside their circles)
             startGroupBoundaryEnforcement(getGroupKey, groupCentroids);
@@ -2419,6 +2981,7 @@
 
         // Enable country grouping
         function enableCountryGrouping(isRefresh) {
+            clearSatelliteNodes();
             groupingMode = 'country';
 
             arrangeNodesIntoGroups(
@@ -2441,6 +3004,7 @@
         // Enable IP grouping
         function enableIPGrouping(isRefresh) {
             if (!ipGroupsEnabled || !ipGroupsData) return;
+            clearSatelliteNodes();
             groupingMode = 'ip';
 
             arrangeNodesIntoGroups(
@@ -2479,6 +3043,13 @@
             groupBoundaries = [];
             dualCountryCentroids = null;
 
+            // Clear cluster selection state
+            groupNodeMap.clear();
+            selectedClusterId = null;
+
+            // Clear satellite orbits
+            clearSatelliteNodes();
+
             if (network && originalPositions) {
                 // Restore original positions
                 const updates = [];
@@ -2489,21 +3060,23 @@
                 originalPositions = null;
 
                 // Re-enable normal physics (keeps nodes interactive)
-                network.setOptions({
-                    physics: {
-                        enabled: true,
-                        barnesHut: {
-                            gravitationalConstant: -3000,
-                            springConstant: 0.001,
-                            springLength: 200
+                if (!userPhysicsDisabled) {
+                    network.setOptions({
+                        physics: {
+                            enabled: true,
+                            barnesHut: {
+                                gravitationalConstant: -3000,
+                                springConstant: 0.001,
+                                springLength: 200
+                            }
                         }
-                    }
-                });
-                network.stabilize(50);
-                network.once('stabilizationIterationsDone', () => {
-                    // Only fit viewport on initial disable, not on data refresh
-                    if (!isRefresh) network.fit();
-                });
+                    });
+                    network.stabilize(50);
+                    network.once('stabilizationIterationsDone', () => {
+                        // Only fit viewport on initial disable, not on data refresh
+                        if (!isRefresh) network.fit();
+                    });
+                }
             }
 
             if (network) network.redraw();
@@ -2570,23 +3143,24 @@
                     radius = calculateGroupRadius(totalNodes);
                 } else {
                     // Multiple IP groups: calculate radius based on actual sub-circle sizes
-                    // Calculate total area needed for all IP sub-circles with generous padding
+                    // Fibonacci spiral packing is more efficient than grid/ring packing,
+                    // so we can use tighter sizing parameters
                     let totalSubCircleArea = 0;
                     for (const [, nodeIds] of actualIPEntries) {
                         const subRadius = calculateGroupRadius(nodeIds.length);
-                        totalSubCircleArea += Math.PI * Math.pow(subRadius + 60, 2); // +60 for padding between circles
+                        totalSubCircleArea += Math.PI * Math.pow(subRadius + 25, 2); // +25 for padding between circles
                     }
                     // Add extra space for _no_ip nodes if present
                     const noIpNodes = ipMap.get('_no_ip') || [];
                     if (noIpNodes.length > 0) {
-                        totalSubCircleArea *= 1.3; // 30% more space for scattered nodes
+                        totalSubCircleArea *= 1.2; // 20% more space for scattered nodes
                     }
                     // Country radius = sqrt(totalArea / pi) + margin
-                    // Use packing efficiency of ~0.6 (circles don't pack perfectly)
-                    const requiredRadius = Math.sqrt(totalSubCircleArea / (Math.PI * 0.55)) + 100;
+                    // Fibonacci spiral achieves ~0.7 packing efficiency
+                    const requiredRadius = Math.sqrt(totalSubCircleArea / (Math.PI * 0.65)) + 60;
                     // Also ensure it's at least as big as the largest sub-circle
                     const maxSubRadius = Math.max(...actualIPEntries.map(([, ids]) => calculateGroupRadius(ids.length)));
-                    radius = Math.max(requiredRadius, maxSubRadius * 2.2);
+                    radius = Math.max(requiredRadius, maxSubRadius * 1.8);
                 }
                 countries.push({ country, totalNodes, radius, ipMap, actualIPGroups });
             });
@@ -2627,6 +3201,7 @@
                     placeNodesInCircle(nodeIds, cc, nodeUpdates);
                 } else {
                     // Multiple IP groups or mix of IP groups + _no_ip: pack sub-circles within country circle
+                    // Uses Fibonacci/Vogel spiral (sunflower pattern) for natural, space-efficient packing
                     const ipGroups = actualIPEntries
                         .map(([ipKey, nodeIds]) => ({
                             ipKey, nodeIds,
@@ -2634,28 +3209,15 @@
                         }))
                         .sort((a, b) => b.radius - a.radius);
 
-                    // Country radius is now calculated to have enough space, so minimal/no scaling needed
-                    const placedSubs = [];
-                    const subCirclePadding = 60; // Padding between sub-circles
+                    const placedSubs = placeFibonacciSpiral(ipGroups, cc);
 
-                    for (const ig of ipGroups) {
-                        const subRadius = ig.radius;
-                        let pos;
-                        if (placedSubs.length === 0) {
-                            // First circle goes at center
-                            pos = { x: cc.x, y: cc.y };
-                        } else {
-                            // Find non-overlapping position for subsequent circles
-                            pos = findNonOverlappingPositionWithin(
-                                subRadius, placedSubs, subCirclePadding,
-                                cc.x, cc.y, cc.radius - subRadius - 40
-                            );
-                        }
-                        placedSubs.push({ x: pos.x, y: pos.y, radius: subRadius });
+                    for (let i = 0; i < ipGroups.length; i++) {
+                        const ig = ipGroups[i];
+                        const pos = placedSubs[i];
 
                         const key = `${c.country}|${ig.ipKey}`;
-                        compositeGroups.set(key, { x: pos.x, y: pos.y, radius: subRadius, count: ig.nodeIds.length });
-                        placeNodesInCircle(ig.nodeIds, { x: pos.x, y: pos.y, radius: subRadius }, nodeUpdates);
+                        compositeGroups.set(key, { x: pos.x, y: pos.y, radius: ig.radius, count: ig.nodeIds.length });
+                        placeNodesInCircle(ig.nodeIds, { x: pos.x, y: pos.y, radius: ig.radius }, nodeUpdates);
                     }
 
                     // Place _no_ip nodes freely inside country (use country boundary)
@@ -2668,10 +3230,19 @@
                 }
             }
 
-            // Place unknown country nodes outside all country bubbles (no boundary)
+            // Place unknown country nodes as orbiting satellites
             if (unknownCountryNodes.length > 0) {
-                placeNodesOutside(unknownCountryNodes, placedCountries, nodeUpdates);
-                // These nodes have no boundary enforcement - they float freely
+                calculateOrbitParams(placedCountries);
+                initializeSatelliteOrbits(unknownCountryNodes);
+                // Place satellites at initial orbit positions
+                satelliteOrbits.forEach((orbit, id) => {
+                    const r = orbitBaseRadius + orbit.lane * ORBIT_LANE_SPACING;
+                    const x = orbitCenter.x + r * Math.cos(orbit.angle);
+                    const y = orbitCenter.y + r * Math.sin(orbit.angle);
+                    nodeUpdates.push({ id: id, x: x, y: y });
+                });
+            } else {
+                clearSatelliteNodes();
             }
 
             // On refresh, only position genuinely new nodes; existing nodes keep their positions
@@ -2683,14 +3254,16 @@
             }
 
             // Enable weak physics
-            network.setOptions({
-                physics: {
-                    enabled: true,
-                    barnesHut: { gravitationalConstant: -300, springConstant: 0.00002, springLength: 30, damping: 0.98 },
-                    maxVelocity: 20,
-                    stabilization: false
-                }
-            });
+            if (!userPhysicsDisabled) {
+                network.setOptions({
+                    physics: {
+                        enabled: true,
+                        barnesHut: { gravitationalConstant: -300, springConstant: 0.00002, springLength: 30, damping: 0.98 },
+                        maxVelocity: 20,
+                        stabilization: false
+                    }
+                });
+            }
 
             // Start boundary enforcement with composite keys
             // Nodes with unknown country or _no_ip use special handling
@@ -2711,10 +3284,119 @@
 
             setTimeout(() => {
                 updateGroupBoundaries();
+                // Apply satellite styles and start orbit animation
+                if (satelliteNodeIds.size > 0) {
+                    applySatelliteStyles();
+                    startSatelliteOrbit();
+                }
                 // Only fit viewport on initial grouping, not on data refresh
                 if (!isRefresh) network.fit();
                 network.redraw();
             }, 100);
+        }
+
+        // Place IP sub-circles within a country circle using Fibonacci/Vogel spiral
+        // (sunflower seed pattern). Largest circle goes at center, remaining circles
+        // spiral outward following the golden angle for natural space-efficient packing.
+        // Returns array of {x, y, radius} positions matching the input ipGroups order.
+        function placeFibonacciSpiral(ipGroups, cc) {
+            const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5)); // ~137.508 degrees
+            const subPadding = 20; // padding between sub-circles
+
+            if (ipGroups.length === 0) return [];
+
+            const positions = [];
+
+            // First (largest) circle goes at center
+            positions.push({ x: cc.x, y: cc.y, radius: ipGroups[0].radius });
+
+            if (ipGroups.length === 1) return positions;
+
+            // For Vogel spiral: point n is at angle n*golden_angle, distance c*sqrt(n)
+            // We need to find scaling factor c that accounts for variable circle sizes.
+            // Approach: place circles one at a time along the spiral, advancing the
+            // spiral index until we find a non-overlapping spot.
+
+            // Estimate initial scaling factor based on average sub-circle size
+            const avgRadius = ipGroups.reduce((s, g) => s + g.radius, 0) / ipGroups.length;
+            let scaleFactor = (avgRadius + subPadding) * 0.85;
+
+            for (let i = 1; i < ipGroups.length; i++) {
+                const subRadius = ipGroups[i].radius;
+                let placed = false;
+
+                // Walk along the Vogel spiral testing candidate positions
+                // Start from spiral index i (natural position) and search outward
+                for (let n = i; n < i + 200; n++) {
+                    const angle = n * GOLDEN_ANGLE;
+                    const dist = scaleFactor * Math.sqrt(n);
+                    const x = cc.x + dist * Math.cos(angle);
+                    const y = cc.y + dist * Math.sin(angle);
+
+                    // Check within country boundary
+                    const distFromCenter = Math.sqrt((x - cc.x) ** 2 + (y - cc.y) ** 2);
+                    if (distFromCenter + subRadius > cc.radius - 30) continue;
+
+                    // Check overlap with already-placed sub-circles
+                    let overlaps = false;
+                    for (const p of positions) {
+                        const d = Math.sqrt((x - p.x) ** 2 + (y - p.y) ** 2);
+                        if (d < subRadius + p.radius + subPadding) {
+                            overlaps = true;
+                            break;
+                        }
+                    }
+
+                    if (!overlaps) {
+                        positions.push({ x, y, radius: subRadius });
+                        placed = true;
+                        break;
+                    }
+                }
+
+                // Fallback: if spiral couldn't place it, try with increased scale
+                if (!placed) {
+                    scaleFactor *= 1.15;
+                    // Retry with the larger scale
+                    for (let n = 1; n < 500; n++) {
+                        const angle = n * GOLDEN_ANGLE;
+                        const dist = scaleFactor * Math.sqrt(n);
+                        const x = cc.x + dist * Math.cos(angle);
+                        const y = cc.y + dist * Math.sin(angle);
+
+                        const distFromCenter = Math.sqrt((x - cc.x) ** 2 + (y - cc.y) ** 2);
+                        if (distFromCenter + subRadius > cc.radius - 20) continue;
+
+                        let overlaps = false;
+                        for (const p of positions) {
+                            const d = Math.sqrt((x - p.x) ** 2 + (y - p.y) ** 2);
+                            if (d < subRadius + p.radius + subPadding) {
+                                overlaps = true;
+                                break;
+                            }
+                        }
+
+                        if (!overlaps) {
+                            positions.push({ x, y, radius: subRadius });
+                            placed = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Ultimate fallback: place at best-effort position
+                if (!placed) {
+                    const angle = i * GOLDEN_ANGLE;
+                    const dist = Math.min(scaleFactor * Math.sqrt(i), cc.radius - subRadius - 20);
+                    positions.push({
+                        x: cc.x + dist * Math.cos(angle),
+                        y: cc.y + dist * Math.sin(angle),
+                        radius: subRadius
+                    });
+                }
+            }
+
+            return positions;
         }
 
         // Helper: scatter nodes within a circle, avoiding placed sub-circles
@@ -3136,30 +3818,13 @@
                     </button>
                 </div>
 
-                <!-- Stats Grid -->
-                <div class="local-visor-stats">
-                    <div class="local-stat">
-                        <div class="local-stat-label">Transports</div>
-                        <div class="local-stat-value">${tps.length}</div>
-                        <div style="font-size:0.65em;color:#666;margin-top:2px;">
-                            ${tpByType.stcpr > 0 ? `<span style="color:#00d9a5;">${tpByType.stcpr} STCPR</span> ` : ''}
-                            ${tpByType.sudph > 0 ? `<span style="color:#00b4d8;">${tpByType.sudph} SUDPH</span> ` : ''}
-                            ${tpByType.dmsg > 0 ? `<span style="color:#ffd166;">${tpByType.dmsg} DMSG</span>` : ''}
-                        </div>
-                    </div>
-                    <div class="local-stat routes">
-                        <div class="local-stat-label">Routes</div>
-                        <div class="local-stat-value">${routesCount}</div>
-                        <div style="font-size:0.65em;color:#666;margin-top:2px;">
-                            ${routes.filter(r => r.type === 'consume').length > 0 ? `<span style="color:#00ffc8;">${routes.filter(r => r.type === 'consume').length} consume</span> ` : ''}
-                            ${routes.filter(r => r.type === 'forward').length > 0 ? `<span style="color:#ffa500;">${routes.filter(r => r.type === 'forward').length} forward</span>` : ''}
-                        </div>
-                    </div>
-                    <div class="local-stat">
+                <!-- Stats Grid (Sent/Received only) -->
+                <div style="display:flex;gap:8px;margin:8px 0;">
+                    <div class="local-stat" style="flex:1;">
                         <div class="local-stat-label">↑ Sent</div>
                         <div class="local-stat-value">${formatBytes(totalSent)}${totalSentDelta > 0 ? `<span class="local-stat-delta">+${formatBytes(totalSentDelta)}/s</span>` : ''}</div>
                     </div>
-                    <div class="local-stat">
+                    <div class="local-stat" style="flex:1;">
                         <div class="local-stat-label">↓ Received</div>
                         <div class="local-stat-value">${formatBytes(totalRecv)}${totalRecvDelta > 0 ? `<span class="local-stat-delta">+${formatBytes(totalRecvDelta)}/s</span>` : ''}</div>
                     </div>
@@ -3210,7 +3875,31 @@
                 </div>
                 <div style="color:#555;font-size:0.8em;padding:8px;text-align:center;">No active routes</div>
                 `}
+
+                <!-- Create Transport (Local → Remote) -->
+                <div class="section-label" style="margin-top:6px;border-top:1px solid #0f3460;padding-top:4px;">
+                    <span style="color:#00ffff;">Create Transport</span>
+                </div>
+                <div style="display:flex;gap:2px;margin-top:3px;align-items:stretch;">
+                    <input type="text" id="local-tp-remote-pk" placeholder="Remote PK" style="flex:1;min-width:0;padding:6px 10px;background:#1a1a2e;border:1px solid #00ffff;color:#eee;border-radius:3px;font-size:13px;font-family:monospace;">
+                    <button id="local-tp-pick-btn" title="Pick from graph" style="padding:0 4px;background:#00ffff;color:#000;border:none;border-radius:2px;cursor:pointer;font-size:9px;">⊕</button>
+                </div>
+                <div style="display:flex;gap:3px;margin-top:3px;align-items:center;">
+                    <select id="local-tp-type" style="padding:3px 6px;background:#1a1a2e;border:1px solid #0f3460;color:#eee;border-radius:2px;font-size:11px;">
+                        <option value="sudph">SUDPH</option>
+                        <option value="stcpr">STCPR</option>
+                    </select>
+                    <button id="local-tp-create-btn" style="padding:3px 8px;background:linear-gradient(135deg,#00ffff,#00d9a5);color:#000;border:none;border-radius:2px;cursor:pointer;font-size:10px;font-weight:600;">Create</button>
+                </div>
+                <div id="local-tp-result" style="display:none;margin-top:3px;font-size:10px;padding:3px;border-radius:2px;"></div>
             `;
+
+            // Wire up the local transport create button
+            document.getElementById('local-tp-create-btn').addEventListener('click', localCreateTransport);
+            document.getElementById('local-tp-pick-btn').addEventListener('click', () => {
+                localTpPickMode = true;
+                document.body.style.cursor = 'crosshair';
+            });
         }
 
         // Highlight route by index (called from route list click)
@@ -3562,8 +4251,687 @@
             }
         });
 
+        // ── TPS (Transport Setup) Functions ──
+
+        async function checkTPSStatus() {
+            try {
+                const resp = await fetch('/api/tps/status');
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                tpsRunning = data.running;
+                tpsPK = data.tps_pk || '';
+                const section = document.getElementById('tps-section');
+                if (tpsRunning) {
+                    section.style.display = '';
+                    document.getElementById('tps-pk-info').textContent = 'TPS PK: ' + tpsPK;
+                } else {
+                    section.style.display = 'none';
+                }
+            } catch (e) {
+                // TPS not available (e.g. running in standalone mode)
+                document.getElementById('tps-section').style.display = 'none';
+            }
+        }
+
+        async function tpsAddTransport() {
+            const targetMode = document.getElementById('tps-target-mode').value;
+            const remoteMode = document.getElementById('tps-remote-mode').value;
+            const tpType = document.getElementById('tps-type').value;
+            const resultEl = document.getElementById('tps-result');
+            const addBtn = document.getElementById('tps-add-btn');
+
+            // Get target visors
+            let targetVisors = [];
+            if (targetMode === 'pk') {
+                const pk = document.getElementById('tps-target-pk').value.trim();
+                if (pk) targetVisors = [pk];
+            } else {
+                const group = document.getElementById('tps-target-group').value;
+                if (group) targetVisors = tpsGetVisorsInGroup(group, targetMode);
+            }
+
+            // Get remote visors
+            let remoteVisors = [];
+            if (remoteMode === 'pk') {
+                const pk = document.getElementById('tps-remote-pk').value.trim();
+                if (pk) remoteVisors = [pk];
+            } else {
+                const group = document.getElementById('tps-remote-group').value;
+                if (group) remoteVisors = tpsGetVisorsInGroup(group, remoteMode);
+            }
+
+            if (targetVisors.length === 0 || remoteVisors.length === 0) {
+                resultEl.style.display = 'block';
+                resultEl.className = 'tps-error';
+                resultEl.textContent = 'Both Target and Remote are required';
+                return;
+            }
+
+            // Single PK to PK case
+            if (targetVisors.length === 1 && remoteVisors.length === 1) {
+                if (targetVisors[0] === remoteVisors[0]) {
+                    resultEl.style.display = 'block';
+                    resultEl.className = 'tps-error';
+                    resultEl.textContent = 'Target and Remote must be different';
+                    return;
+                }
+
+                addBtn.disabled = true;
+                resultEl.style.display = 'block';
+                resultEl.className = 'tps-loading';
+                resultEl.textContent = 'Dialing via dmsg...';
+
+                try {
+                    const resp = await fetch('/api/tps/add-transport', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ target_pk: targetVisors[0], remote_pk: remoteVisors[0], type: tpType })
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok) throw new Error(data.error || 'Request failed');
+
+                    resultEl.className = 'tps-success';
+                    resultEl.innerHTML = 'Created ' + data.type.toUpperCase() + '<br>' +
+                        data.local_pk.substring(0, 12) + '... ↔ ' + data.remote_pk.substring(0, 12) + '...';
+                    addTPSOverlayEdge(data);
+                } catch (e) {
+                    resultEl.className = 'tps-error';
+                    resultEl.textContent = 'Error: ' + e.message;
+                } finally {
+                    addBtn.disabled = false;
+                }
+                return;
+            }
+
+            // Group mode: connect each remote to some target, with retry logic
+            // Goal: create one transport to each visor in the smaller group
+            // If a target fails, try the next available target for that remote
+            const shuffledTargets = [...targetVisors].sort(() => Math.random() - 0.5);
+            const shuffledRemotes = [...remoteVisors].sort(() => Math.random() - 0.5);
+            const goalCount = Math.min(shuffledTargets.length, shuffledRemotes.length);
+
+            addBtn.disabled = true;
+            resultEl.style.display = 'block';
+            resultEl.className = 'tps-loading';
+            resultEl.innerHTML = `<div>Connecting ${goalCount} transport(s)...</div><div id="tps-group-log" style="margin-top:4px;max-height:100px;overflow-y:auto;font-size:9px;"></div>`;
+
+            const logEl = document.getElementById('tps-group-log');
+            const log = (msg, color) => {
+                logEl.innerHTML += `<div style="color:${color || '#aaa'};">${msg}</div>`;
+                logEl.scrollTop = logEl.scrollHeight;
+            };
+
+            let successCount = 0;
+            const errors = [];
+            const usedTargets = new Set();
+            const connectedRemotes = new Set();
+
+            // For each remote, try to find a working target
+            for (const remote of shuffledRemotes) {
+                if (connectedRemotes.size >= goalCount) break;
+
+                let connected = false;
+                for (const target of shuffledTargets) {
+                    if (usedTargets.has(target)) continue;
+                    if (target === remote) continue;
+
+                    log(`${target.substring(0,8)}→${remote.substring(0,8)}...`, '#ffd166');
+
+                    try {
+                        const resp = await fetch('/api/tps/add-transport', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ target_pk: target, remote_pk: remote, type: tpType })
+                        });
+                        const data = await resp.json();
+                        if (!resp.ok) throw new Error(data.error || 'Failed');
+
+                        addTPSOverlayEdge(data);
+                        usedTargets.add(target);
+                        connectedRemotes.add(remote);
+                        successCount++;
+                        connected = true;
+                        log(`  ✓ ${data.type.toUpperCase()}`, '#00d9a5');
+                        break; // Move to next remote
+                    } catch (e) {
+                        log(`  ✗ ${e.message}`, '#e94560');
+                        errors.push({ target: target.substring(0,8), remote: remote.substring(0,8), error: e.message });
+                        // Don't mark target as used - it might work for a different remote
+                        // Continue trying next target for this remote
+                    }
+                }
+
+                if (!connected) {
+                    log(`  No working target for ${remote.substring(0,12)}`, '#e94560');
+                }
+            }
+
+            resultEl.className = successCount === goalCount ? 'tps-success' : (successCount > 0 ? 'tps-warning' : 'tps-error');
+            const summaryHtml = `<div style="margin-bottom:4px;font-weight:600;">${successCount}/${goalCount} transport(s) created</div>`;
+            logEl.insertAdjacentHTML('afterbegin', summaryHtml);
+            addBtn.disabled = false;
+        }
+
+        async function tpsRefreshTransports() {
+            const targetPK = document.getElementById('tps-target-pk').value.trim();
+            const resultEl = document.getElementById('tps-result');
+            const refreshBtn = document.getElementById('tps-refresh-btn');
+
+            if (!targetPK) {
+                resultEl.style.display = 'block';
+                resultEl.className = 'tps-error';
+                resultEl.textContent = 'Target PK is required to refresh transports';
+                return;
+            }
+
+            refreshBtn.disabled = true;
+            resultEl.style.display = 'block';
+            resultEl.className = 'tps-loading';
+            resultEl.textContent = 'Querying remote visor via dmsg...';
+
+            try {
+                const resp = await fetch('/api/tps/refresh-transports?pk=' + encodeURIComponent(targetPK));
+                const data = await resp.json();
+                if (!resp.ok) {
+                    throw new Error(data.error || 'Request failed');
+                }
+                if (!Array.isArray(data) || data.length === 0) {
+                    resultEl.className = 'tps-success';
+                    resultEl.textContent = 'Remote visor reports 0 transports';
+                } else {
+                    resultEl.className = 'tps-success';
+                    // Store targetPK for remove operations
+                    resultEl.dataset.targetPk = targetPK;
+                    resultEl.innerHTML = 'Remote visor reports ' + data.length + ' transport(s):<div style="margin-top:6px;">' +
+                        data.map(t =>
+                            '<div style="margin:4px 0;padding:5px;background:rgba(0,0,0,0.2);border-radius:3px;position:relative;" data-tp-id="' + t.id + '">' +
+                            '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                            '<span style="color:' + (colors[t.type] || '#aaa') + ';font-weight:600;font-size:0.8em;">' + t.type.toUpperCase() + '</span>' +
+                            '<button onclick="tpsRemoveTransport(\'' + targetPK + '\', \'' + t.id + '\', \'' + t.local_pk + '\', \'' + t.remote_pk + '\', \'' + t.type + '\', this)" ' +
+                            'style="padding:1px 5px;font-size:0.65em;background:#e94560;color:#fff;border:none;border-radius:2px;cursor:pointer;line-height:1;">✕</button>' +
+                            '</div>' +
+                            '<div style="font-size:0.7em;color:#aaa;margin-top:2px;word-break:break-all;">' +
+                            t.remote_pk.substring(0, 20) + '...' +
+                            '</div></div>'
+                        ).join('') + '</div>';
+
+                    // Overlay these edges on the graph
+                    data.forEach(t => addTPSOverlayEdge(t));
+                }
+            } catch (e) {
+                resultEl.className = 'tps-error';
+                resultEl.textContent = 'Error: ' + e.message;
+            } finally {
+                refreshBtn.disabled = false;
+            }
+        }
+
+        // Remove a transport from a remote visor via TPS
+        async function tpsRemoveTransport(targetPK, tpID, localPK, remotePK, tpType, btnElement) {
+            btnElement.disabled = true;
+            btnElement.textContent = '...';
+
+            try {
+                const resp = await fetch('/api/tps/remove-transport', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_pk: targetPK, id: tpID })
+                });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    throw new Error(data.error || 'Request failed');
+                }
+                // Remove the row from UI
+                const row = btnElement.closest('[data-tp-id]');
+                if (row) row.remove();
+
+                // Remove the edge from the graph
+                // Edge ID format: pk1-pk2-type (sorted alphabetically)
+                const edgeId = localPK < remotePK
+                    ? localPK + '-' + remotePK + '-' + tpType
+                    : remotePK + '-' + localPK + '-' + tpType;
+
+                if (edgesDataset.get(edgeId)) {
+                    edgesDataset.remove(edgeId);
+                }
+                tpsOverlayEdges.delete(edgeId);
+
+                if (network) network.redraw();
+            } catch (e) {
+                alert('Failed to remove transport: ' + e.message);
+                btnElement.disabled = false;
+                btnElement.textContent = '✕';
+            }
+        }
+        // Expose to window for inline onclick handlers
+        window.tpsRemoveTransport = tpsRemoveTransport;
+
+        // Add an overlay edge from TPS response to the vis.js graph
+        function addTPSOverlayEdge(tp) {
+            if (!edgesDataset || !nodesDataset) return;
+
+            const pk1 = tp.local_pk;
+            const pk2 = tp.remote_pk;
+            const type = tp.type || 'stcpr';
+
+            // Create deterministic edge ID
+            const edgeId = pk1 < pk2
+                ? pk1 + '-' + pk2 + '-' + type
+                : pk2 + '-' + pk1 + '-' + type;
+
+            // Check if this edge already exists in the graph
+            const existing = edgesDataset.get(edgeId);
+            if (existing && !existing.isTpsOverlay) {
+                // Edge already exists from TPD data, no overlay needed
+                return;
+            }
+
+            // Ensure both nodes exist in the graph
+            [pk1, pk2].forEach(pk => {
+                if (!nodesDataset.get(pk)) {
+                    nodesDataset.add({
+                        id: pk,
+                        label: pk.substring(0, 8),
+                        title: pk + '\n(added via TPS)',
+                        size: 8,
+                        shape: 'dot',
+                        color: { background: '#ff6b35', border: '#ffc800' },
+                        font: { size: 10, color: '#aaa' },
+                        borderWidth: 2
+                    });
+                }
+            });
+
+            const overlayEdge = {
+                id: edgeId,
+                from: pk1,
+                to: pk2,
+                color: { color: '#ff6b35', opacity: 0.9 },
+                type: type,
+                width: 3,
+                dashes: [6, 3],
+                smooth: { type: 'continuous' },
+                title: type.toUpperCase() + ' (via TPS — not yet in TPD)',
+                isTpsOverlay: true,
+                shadow: { enabled: true, color: '#ff6b35', size: 8, x: 0, y: 0 }
+            };
+
+            tpsOverlayEdges.set(edgeId, overlayEdge);
+
+            if (existing) {
+                edgesDataset.update(overlayEdge);
+            } else {
+                edgesDataset.add(overlayEdge);
+            }
+
+            if (network) network.redraw();
+        }
+
+        // Reconcile TPS overlay edges after a TPD cache refresh
+        // Edges that now exist in fresh TPD data are removed from overlay
+        function reconcileTPSOverlays() {
+            if (tpsOverlayEdges.size === 0) return;
+
+            const toRemove = [];
+            tpsOverlayEdges.forEach((edge, edgeId) => {
+                const current = edgesDataset.get(edgeId);
+                // If the edge was replaced by real TPD data (no longer marked as overlay), remove from tracking
+                if (current && !current.isTpsOverlay) {
+                    toRemove.push(edgeId);
+                }
+            });
+            toRemove.forEach(id => tpsOverlayEdges.delete(id));
+        }
+
+        // ── Local Visor Transport Functions ──
+
+        async function localCreateTransport() {
+            const remoteInput = document.getElementById('local-tp-remote-pk');
+            const typeSelect = document.getElementById('local-tp-type');
+            const createBtn = document.getElementById('local-tp-create-btn');
+            const resultEl = document.getElementById('local-tp-result');
+
+            if (!remoteInput || !typeSelect || !createBtn || !resultEl) return;
+
+            const remotePK = remoteInput.value.trim();
+            const tpType = typeSelect.value;
+
+            if (!remotePK) {
+                resultEl.style.display = 'block';
+                resultEl.style.background = 'rgba(233,69,96,0.2)';
+                resultEl.style.color = '#e94560';
+                resultEl.textContent = 'Remote PK required';
+                return;
+            }
+
+            createBtn.disabled = true;
+            createBtn.textContent = '...';
+            resultEl.style.display = 'block';
+            resultEl.style.background = 'rgba(255,209,102,0.2)';
+            resultEl.style.color = '#ffd166';
+            resultEl.textContent = 'Creating transport...';
+
+            try {
+                const resp = await fetch('/api/local/add-transport', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ remote_pk: remotePK, type: tpType })
+                });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    throw new Error(data.error || 'Failed');
+                }
+                resultEl.style.background = 'rgba(0,217,165,0.2)';
+                resultEl.style.color = '#00d9a5';
+                resultEl.textContent = 'Created: ' + data.type.toUpperCase() + ' → ' + data.remote_pk.substring(0, 16) + '...';
+                remoteInput.value = '';
+
+                // Add to graph as overlay
+                addTPSOverlayEdge(data);
+            } catch (e) {
+                resultEl.style.background = 'rgba(233,69,96,0.2)';
+                resultEl.style.color = '#e94560';
+                resultEl.textContent = 'Error: ' + e.message;
+            } finally {
+                createBtn.disabled = false;
+                createBtn.textContent = 'Create';
+            }
+        }
+
+        // ── Multi-Hop Route Builder Functions ──
+
+        function mhAddHop(pk) {
+            if (!pk || mhHops.includes(pk)) return;
+            mhHops.push(pk);
+            mhRenderHops();
+        }
+
+        function mhRemoveHop(index) {
+            mhHops.splice(index, 1);
+            mhRenderHops();
+        }
+
+        function mhClearHops() {
+            mhHops = [];
+            mhRenderHops();
+            document.getElementById('mh-progress').style.display = 'none';
+        }
+
+        function mhRenderHops() {
+            const wrapper = document.getElementById('mh-hops-container');
+            const container = document.getElementById('mh-hops-list');
+            const countEl = document.getElementById('mh-hop-count');
+            if (!container || !wrapper) return;
+
+            if (mhHops.length === 0) {
+                wrapper.style.display = 'none';
+                if (countEl) countEl.textContent = '';
+                return;
+            }
+
+            wrapper.style.display = 'block';
+            if (countEl) countEl.textContent = `${mhHops.length} hop${mhHops.length > 1 ? 's' : ''}`;
+
+            container.innerHTML = mhHops.map((pk, i) => `
+                <div style="display:flex;align-items:center;gap:4px;margin:2px 0;padding:3px 5px;background:rgba(0,0,0,0.2);border-radius:2px;border-left:2px solid ${i === 0 ? '#00ffff' : '#ffc800'};">
+                    <span style="color:#888;font-size:0.65em;min-width:14px;">${i + 1}.</span>
+                    <span style="flex:1;font-size:0.7em;font-family:monospace;color:#eee;">${pk.substring(0, 16)}...</span>
+                    <button onclick="mhRemoveHop(${i})" style="padding:0 4px;font-size:0.55em;background:#e94560;color:#fff;border:none;border-radius:2px;cursor:pointer;line-height:1.2;">✕</button>
+                </div>
+            `).join('');
+        }
+        window.mhRemoveHop = mhRemoveHop; // Expose for inline onclick
+
+        async function mhBuildRoute() {
+            if (mhHops.length < 2) {
+                alert('Need at least 2 hops to build a route');
+                return;
+            }
+
+            const tpType = document.getElementById('tps-type').value;
+            const progressEl = document.getElementById('mh-progress');
+            const buildBtn = document.getElementById('mh-build-btn');
+
+            buildBtn.disabled = true;
+            progressEl.style.display = 'block';
+            progressEl.innerHTML = '<div style="color:#ffd166;">Building route...</div>';
+
+            const results = [];
+            let failed = false;
+
+            // Build transports sequentially: hop[0]→hop[1], hop[1]→hop[2], etc.
+            for (let i = 0; i < mhHops.length - 1; i++) {
+                const targetPK = mhHops[i];
+                const remotePK = mhHops[i + 1];
+
+                progressEl.innerHTML += `<div style="color:#aaa;font-size:0.9em;">Hop ${i + 1}: ${targetPK.substring(0, 8)}... → ${remotePK.substring(0, 8)}... <span id="mh-status-${i}" style="color:#ffd166;">⏳</span></div>`;
+
+                try {
+                    const resp = await fetch('/api/tps/add-transport', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ target_pk: targetPK, remote_pk: remotePK, type: tpType })
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok) throw new Error(data.error || 'Failed');
+
+                    document.getElementById(`mh-status-${i}`).innerHTML = '<span style="color:#00d9a5;">✓</span>';
+                    results.push({ success: true, data });
+                    addTPSOverlayEdge(data);
+                } catch (e) {
+                    document.getElementById(`mh-status-${i}`).innerHTML = `<span style="color:#e94560;">✗ ${e.message}</span>`;
+                    results.push({ success: false, error: e.message });
+                    failed = true;
+                    // Continue trying remaining hops even if one fails
+                }
+            }
+
+            const successCount = results.filter(r => r.success).length;
+            progressEl.innerHTML += `<div style="margin-top:6px;padding:4px;background:${failed ? 'rgba(233,69,96,0.2)' : 'rgba(0,217,165,0.2)'};border-radius:3px;color:${failed ? '#e94560' : '#00d9a5'};">
+                ${failed ? `Partial: ${successCount}/${mhHops.length - 1} transports created` : `Success: ${successCount} transport(s) created`}
+            </div>`;
+
+            buildBtn.disabled = false;
+        }
+
+        // ── TPS Mode Selector Functions ──
+
+        function tpsUpdateTargetMode() {
+            const mode = document.getElementById('tps-target-mode').value;
+            const pkRow = document.getElementById('tps-target-pk-row');
+            const groupRow = document.getElementById('tps-target-group-row');
+            const groupSelect = document.getElementById('tps-target-group');
+
+            if (mode === 'pk') {
+                pkRow.style.display = 'flex';
+                groupRow.style.display = 'none';
+            } else {
+                pkRow.style.display = 'none';
+                groupRow.style.display = 'flex';
+                tpsPopulateGroupSelect(groupSelect, mode);
+            }
+            tpsUpdateInfo();
+        }
+
+        function tpsUpdateRemoteMode() {
+            const mode = document.getElementById('tps-remote-mode').value;
+            const pkRow = document.getElementById('tps-remote-pk-row');
+            const groupRow = document.getElementById('tps-remote-group-row');
+            const groupSelect = document.getElementById('tps-remote-group');
+
+            if (mode === 'pk') {
+                pkRow.style.display = 'flex';
+                groupRow.style.display = 'none';
+            } else {
+                pkRow.style.display = 'none';
+                groupRow.style.display = 'flex';
+                tpsPopulateGroupSelect(groupSelect, mode);
+            }
+            tpsUpdateInfo();
+        }
+
+        function tpsPopulateGroupSelect(selectEl, mode) {
+            selectEl.innerHTML = '<option value="">Select...</option>';
+            let groups = [];
+
+            if (mode === 'ip' && ipGroupsData && ipGroupsData.groups) {
+                const ipGroups = new Set();
+                Object.values(ipGroupsData.groups).forEach(g => ipGroups.add(g));
+                groups = Array.from(ipGroups).sort((a, b) => a - b);
+            } else if (mode === 'country') {
+                const countries = new Set();
+                Object.values(visorServices).forEach(s => {
+                    if (s.country) countries.add(s.country);
+                });
+                groups = Array.from(countries).sort();
+            }
+
+            groups.forEach(g => {
+                const count = tpsGetVisorsInGroup(g, mode).length;
+                const label = mode === 'ip' ? `IP Group ${g}` : g;
+                selectEl.innerHTML += `<option value="${g}">${label} (${count})</option>`;
+            });
+        }
+
+        function tpsGetVisorsInGroup(groupId, mode) {
+            const visors = [];
+            if (mode === 'ip' && ipGroupsData && ipGroupsData.groups) {
+                Object.entries(ipGroupsData.groups).forEach(([pk, g]) => {
+                    if (g == groupId) visors.push(pk);
+                });
+            } else if (mode === 'country') {
+                Object.entries(visorServices).forEach(([pk, s]) => {
+                    if (s.country === groupId) visors.push(pk);
+                });
+            }
+            return visors;
+        }
+
+        function tpsUpdateInfo() {
+            const infoEl = document.getElementById('tps-info');
+            const targetMode = document.getElementById('tps-target-mode').value;
+            const remoteMode = document.getElementById('tps-remote-mode').value;
+
+            let targetCount = 0, remoteCount = 0;
+
+            if (targetMode === 'pk') {
+                const pk = document.getElementById('tps-target-pk').value.trim();
+                targetCount = pk ? 1 : 0;
+            } else {
+                const group = document.getElementById('tps-target-group').value;
+                if (group) targetCount = tpsGetVisorsInGroup(group, targetMode).length;
+            }
+
+            if (remoteMode === 'pk') {
+                const pk = document.getElementById('tps-remote-pk').value.trim();
+                remoteCount = pk ? 1 : 0;
+            } else {
+                const group = document.getElementById('tps-remote-group').value;
+                if (group) remoteCount = tpsGetVisorsInGroup(group, remoteMode).length;
+            }
+
+            if (targetCount === 0 || remoteCount === 0) {
+                infoEl.textContent = '';
+                return;
+            }
+
+            const pairCount = Math.min(targetCount, remoteCount);
+            if (targetCount === 1 && remoteCount === 1) {
+                infoEl.textContent = '1 transport to create';
+            } else {
+                infoEl.innerHTML = `<span style="color:#ff6b35;">${targetCount}</span> ↔ <span style="color:#ff6b35;">${remoteCount}</span> → <span style="color:#ffc800;">${pairCount}</span> transport(s)`;
+            }
+        }
+
+        // Wire TPS button event listeners
+        document.getElementById('tps-pick-target-btn').addEventListener('click', () => {
+            tpsPickMode = 'target';
+            document.body.style.cursor = 'crosshair';
+        });
+        document.getElementById('tps-pick-remote-btn').addEventListener('click', () => {
+            tpsPickMode = 'remote';
+            document.body.style.cursor = 'crosshair';
+        });
+        document.getElementById('tps-pick-target-group-btn').addEventListener('click', () => {
+            tpsGroupPickMode = 'target';
+            document.body.style.cursor = 'crosshair';
+        });
+        document.getElementById('tps-pick-remote-group-btn').addEventListener('click', () => {
+            tpsGroupPickMode = 'remote';
+            document.body.style.cursor = 'crosshair';
+        });
+        document.getElementById('tps-add-btn').addEventListener('click', tpsAddTransport);
+        document.getElementById('tps-refresh-btn').addEventListener('click', tpsRefreshTransports);
+
+        // Wire mode selector listeners
+        document.getElementById('tps-target-mode').addEventListener('change', tpsUpdateTargetMode);
+        document.getElementById('tps-remote-mode').addEventListener('change', tpsUpdateRemoteMode);
+        document.getElementById('tps-target-group').addEventListener('change', tpsUpdateInfo);
+        document.getElementById('tps-remote-group').addEventListener('change', tpsUpdateInfo);
+        document.getElementById('tps-target-pk').addEventListener('input', tpsUpdateInfo);
+        document.getElementById('tps-remote-pk').addEventListener('input', tpsUpdateInfo);
+
+        // Wire multi-hop route builder listeners
+        document.getElementById('mh-add-hop-btn').addEventListener('click', () => {
+            mhPickMode = true;
+            document.body.style.cursor = 'crosshair';
+        });
+        document.getElementById('mh-build-btn').addEventListener('click', mhBuildRoute);
+        document.getElementById('mh-clear-btn').addEventListener('click', mhClearHops);
+        mhRenderHops(); // Initial render
+
         checkServer();
         fetchAllData();
+        checkTPSStatus();
+
+        // DMSG Health Check event handlers
+        document.getElementById('dmsg-health-pick-btn').addEventListener('click', () => {
+            dmsgHealthPickMode = true;
+            document.body.style.cursor = 'crosshair';
+        });
+        document.getElementById('dmsg-health-btn').addEventListener('click', dmsgHealthCheck);
+
+        async function dmsgHealthCheck() {
+            const pkInput = document.getElementById('dmsg-health-pk');
+            const resultEl = document.getElementById('dmsg-health-result');
+            const pk = pkInput.value.trim();
+
+            if (!pk || pk.length !== 66) {
+                resultEl.style.display = 'block';
+                resultEl.style.background = '#e94560';
+                resultEl.style.color = '#fff';
+                resultEl.textContent = 'Invalid PK (must be 66 chars)';
+                return;
+            }
+
+            resultEl.style.display = 'block';
+            resultEl.style.background = '#0f3460';
+            resultEl.style.color = '#9f6efc';
+            resultEl.textContent = 'Checking health via DMSG...';
+
+            try {
+                const resp = await fetchWithTimeout(API_BASE + '/api/dmsg/health?pk=' + encodeURIComponent(pk), 30000);
+                const data = await resp.json();
+
+                if (data.error) {
+                    resultEl.style.background = '#e94560';
+                    resultEl.style.color = '#fff';
+                    resultEl.textContent = 'Error: ' + data.error;
+                } else if (data.status === 'healthy') {
+                    resultEl.style.background = '#00d9a5';
+                    resultEl.style.color = '#000';
+                    resultEl.textContent = 'Healthy: ' + (data.build_info || data.message || 'OK');
+                } else {
+                    resultEl.style.background = '#ffd166';
+                    resultEl.style.color = '#000';
+                    resultEl.textContent = 'Response: ' + JSON.stringify(data);
+                }
+            } catch (err) {
+                resultEl.style.background = '#e94560';
+                resultEl.style.color = '#fff';
+                resultEl.textContent = 'Failed: ' + err.message;
+            }
+        }
 
         // Start data flow animation after a short delay
         setTimeout(() => {
@@ -3578,6 +4946,49 @@
             }
         });
         document.getElementById('show-routes').addEventListener('change', () => { applyFilters(); updateLegend(); });
+
+        // Feature 2: Tooltip toggle
+        document.getElementById('toggle-tooltips').addEventListener('change', function() {
+            if (network) {
+                network.setOptions({ interaction: { tooltipDelay: this.checked ? 100 : 999999999 } });
+            }
+        });
+
+        // Feature 3: Physics toggle
+        document.getElementById('toggle-physics').addEventListener('change', function() {
+            if (!network) return;
+            if (this.checked) {
+                userPhysicsDisabled = false;
+                // Restore physics appropriate to current mode
+                if (groupingMode) {
+                    network.setOptions({
+                        physics: {
+                            enabled: true,
+                            barnesHut: {
+                                gravitationalConstant: -500,
+                                springConstant: 0.0001,
+                                springLength: 50,
+                                damping: 0.5
+                            }
+                        }
+                    });
+                } else {
+                    network.setOptions({
+                        physics: {
+                            enabled: true,
+                            barnesHut: {
+                                gravitationalConstant: -3000,
+                                springConstant: 0.001,
+                                springLength: 200
+                            }
+                        }
+                    });
+                }
+            } else {
+                userPhysicsDisabled = true;
+                network.setOptions({ physics: { enabled: false } });
+            }
+        });
     </script>
 </body>
 </html>

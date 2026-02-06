@@ -70,9 +70,21 @@ type Transport struct {
 	AddressResolver   string          `json:"address_resolver"`
 	PublicAutoconnect bool            `json:"public_autoconnect"`
 	TransportSetupPKs []cipher.PubKey `json:"transport_setup"`
+	TPSetupSK         cipher.SecKey   `json:"tps_sk,omitempty"`
+	TPSDmsg           *TPSDmsgConfig  `json:"tps_dmsg,omitempty"`
 	LogStore          *LogStore       `json:"log_store"`
 	StcprPort         int             `json:"stcpr_port"`
 	SudphPort         int             `json:"sudph_port"`
+}
+
+// TPSDmsgConfig configures the embedded Transport Setup Node's dmsg client.
+// If nil, defaults are used: MinSessions=0 (connect to all servers), ServerType="" (all types).
+type TPSDmsgConfig struct {
+	// MinSessions is the minimum number of dmsg server sessions.
+	// 0 means connect to ALL available servers (recommended for TPS).
+	MinSessions int `json:"min_sessions"`
+	// ServerType filters which dmsg servers to connect to: "official", "community", or "" for all.
+	ServerType string `json:"server_type"`
 }
 
 // LogStore configures a LogStore.
