@@ -89,6 +89,39 @@ func (c *Canvas) Line(x1, y1, x2, y2, lineWidth float64, color string) {
 	c.ctx.Call("stroke")
 }
 
+// QuadraticCurve draws a curved line between two points (matching vis-network 'continuous' smooth)
+// Uses a control point perpendicular to the line midpoint with roundness factor
+func (c *Canvas) QuadraticCurve(x1, y1, x2, y2, lineWidth float64, color string) {
+	// Calculate midpoint
+	midX := (x1 + x2) / 2
+	midY := (y1 + y2) / 2
+
+	// Calculate perpendicular offset for curve (roundness 0.5 like JS)
+	dx := x2 - x1
+	dy := y2 - y1
+	dist := dx*dx + dy*dy
+	if dist < 100 { // For very short edges, just draw a line
+		c.Line(x1, y1, x2, y2, lineWidth, color)
+		return
+	}
+
+	// Perpendicular direction with roundness factor (0.5)
+	roundness := 0.5
+	perpX := -dy * roundness * 0.15
+	perpY := dx * roundness * 0.15
+
+	// Control point
+	ctrlX := midX + perpX
+	ctrlY := midY + perpY
+
+	c.ctx.Call("beginPath")
+	c.ctx.Call("moveTo", x1, y1)
+	c.ctx.Call("quadraticCurveTo", ctrlX, ctrlY, x2, y2)
+	c.ctx.Set("strokeStyle", color)
+	c.ctx.Set("lineWidth", lineWidth)
+	c.ctx.Call("stroke")
+}
+
 // Text draws text at the given position
 func (c *Canvas) Text(text string, x, y float64, color string, font string) {
 	if font != "" {

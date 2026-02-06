@@ -10,9 +10,9 @@ import (
 
 // TransportData represents a transport from the API
 type TransportData struct {
-	TID    string `json:"t_id"`
-	Edges  []string `json:"edges"` // [from_pk, to_pk]
-	Type   string `json:"type"`
+	TID   string   `json:"t_id"`
+	Edges []string `json:"edges"` // [from_pk, to_pk]
+	Type  string   `json:"type"`
 }
 
 // UptimeEntry represents an uptime tracker entry
@@ -29,22 +29,16 @@ type ServiceInfo struct {
 }
 
 // DataFetcher fetches data from the API
-type DataFetcher struct {
-	client  *http.Client
-	baseURL string
-}
+type DataFetcher struct{}
 
 // NewDataFetcher creates a new data fetcher
 func NewDataFetcher() *DataFetcher {
-	return &DataFetcher{
-		client:  &http.Client{},
-		baseURL: "", // Empty means relative to current origin
-	}
+	return &DataFetcher{}
 }
 
 // FetchTransports fetches transport data from the API
 func (f *DataFetcher) FetchTransports() ([]TransportData, error) {
-	resp, err := f.client.Get(f.baseURL + "/api/transports")
+	resp, err := http.Get("/api/transports")
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +59,7 @@ func (f *DataFetcher) FetchTransports() ([]TransportData, error) {
 
 // FetchUptimes fetches uptime data from the API
 func (f *DataFetcher) FetchUptimes() ([]UptimeEntry, error) {
-	resp, err := f.client.Get(f.baseURL + "/api/uptimes")
+	resp, err := http.Get("/api/uptimes")
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +80,7 @@ func (f *DataFetcher) FetchUptimes() ([]UptimeEntry, error) {
 
 // FetchServices fetches service discovery data from the API
 func (f *DataFetcher) FetchServices() (map[string]ServiceInfo, error) {
-	resp, err := f.client.Get(f.baseURL + "/api/services")
+	resp, err := http.Get("/api/services")
 	if err != nil {
 		return nil, err
 	}
@@ -115,6 +109,24 @@ func ProcessTransports(transports []TransportData, uptimes []UptimeEntry, servic
 		uptimeLookup[uptimes[i].PK] = &uptimes[i]
 	}
 
+	// First pass: count connections for each node (matching JS)
+	connectionCount := make(map[string]int)
+	for _, tp := range transports {
+		if len(tp.Edges) != 2 {
+			continue
+		}
+		connectionCount[tp.Edges[0]]++
+		connectionCount[tp.Edges[1]]++
+	}
+
+	// Find max connections for sizing
+	maxConn := 1
+	for _, count := range connectionCount {
+		if count > maxConn {
+			maxConn = count
+		}
+	}
+
 	// Track nodes we've seen
 	seenNodes := make(map[string]bool)
 
@@ -132,9 +144,13 @@ func ProcessTransports(transports []TransportData, uptimes []UptimeEntry, servic
 			if !seenNodes[pk] {
 				seenNodes[pk] = true
 
+				// Calculate node size like JS: 5 + (connections / maxConn) * 25
+				connections := connectionCount[pk]
+				size := 5.0 + (float64(connections)/float64(maxConn))*25.0
+
 				node := &Node{
 					ID:     pk,
-					Size:   8,
+					Size:   size,
 					Status: StatusUnknown,
 					Label:  shortPK(pk),
 				}

@@ -7,21 +7,32 @@ import (
 	"syscall/js"
 )
 
-// Colors
+// Colors - matching vis-network JavaScript UI
 const (
-	ColorBackground  = "#0a0a1e"
-	ColorOnline      = "#00d9a5"
-	ColorOffline     = "#e94560"
-	ColorUnknown     = "#ffd166"
-	ColorLocalVisor  = "#ffc800"
-	ColorSelected    = "#ffffff"
-	ColorHovered     = "#ffc800"
-	ColorSTCPR       = "rgba(0, 217, 165, 0.8)"
-	ColorSUDPH       = "rgba(233, 69, 96, 0.8)"
-	ColorDMSG        = "rgba(100, 149, 237, 0.8)"
-	ColorEdgeDim     = "rgba(100, 100, 100, 0.3)"
-	ColorText        = "#ffffff"
-	ColorTextDim     = "#888888"
+	ColorBackground = "#1a1a2e"
+	// Node colors (same as JS getNodeColor)
+	ColorOnlineBg     = "#00d9a5"
+	ColorOnlineBorder = "#00b386"
+	ColorOfflineBg    = "#e94560"
+	ColorOfflineBorder = "#ffffff"
+	ColorUnknownBg    = "#ffd166"
+	ColorUnknownBorder = "#ccaa52"
+	// Local visor (cyan with magenta border)
+	ColorLocalVisorBg     = "#00ffff"
+	ColorLocalVisorBorder = "#ff00ff"
+	// Selection/hover
+	ColorSelected = "#e94560"
+	ColorHovered  = "#ff6b6b"
+	// Transport edge colors (from JS colors object)
+	ColorSTCPR = "#00d9a5" // stcpr
+	ColorSUDPH = "#00b4d8" // sudph
+	ColorDMSG  = "#ffd166" // dmsg
+	// Local edge color (cyan, from LOCAL_EDGE_COLOR)
+	ColorLocalEdge = "#00ffff"
+	// Dim colors
+	ColorEdgeDim = "rgba(100, 100, 100, 0.3)"
+	ColorText    = "#ffffff"
+	ColorTextDim = "#aaaaaa"
 )
 
 // App is the main application
@@ -46,8 +57,12 @@ type App struct {
 	dataLoaded bool
 	loadError  string
 
-	// Physics
-	physicsEnabled bool
+	// Physics - runs briefly then stops
+	physicsEnabled    bool
+	stabilizationLeft int // iterations remaining
+
+	// Rendering
+	needsRedraw bool
 
 	// Animation frame callback
 	frameCallback js.Func
@@ -77,9 +92,14 @@ func NewApp(canvasID string) *App {
 
 // Run starts the main loop
 func (a *App) Run() {
+	a.needsRedraw = true
+
 	a.frameCallback = js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		a.update()
-		a.draw()
+		if a.needsRedraw {
+			a.draw()
+			a.needsRedraw = false
+		}
 		a.input.Update()
 		js.Global().Call("requestAnimationFrame", a.frameCallback)
 		return nil
@@ -99,6 +119,7 @@ func (a *App) update() {
 				a.canvas.Resize(newWidth, newHeight)
 				a.view.Width = float64(newWidth)
 				a.view.Height = float64(newHeight)
+				a.needsRedraw = true
 			}
 		}
 	}
@@ -106,20 +127,27 @@ func (a *App) update() {
 	// Handle keyboard
 	if a.input.IsKeyJustPressed("f") || a.input.IsKeyJustPressed("F") {
 		a.FitToScreen()
+		a.needsRedraw = true
 	}
 	if a.input.IsKeyJustPressed("r") || a.input.IsKeyJustPressed("R") {
 		go a.LoadData()
 	}
 	if a.input.IsKeyJustPressed("p") || a.input.IsKeyJustPressed("P") {
 		a.physicsEnabled = !a.physicsEnabled
+		if a.physicsEnabled {
+			a.stabilizationLeft = 100
+		}
+		a.needsRedraw = true
 	}
 	if a.input.IsKeyJustPressed("l") || a.input.IsKeyJustPressed("L") {
 		a.opts.ShowLabels = !a.opts.ShowLabels
+		a.needsRedraw = true
 	}
 
 	// Handle mouse wheel zoom
 	if a.input.WheelDelta != 0 {
 		a.view.Zoom(a.input.WheelDelta, a.input.MouseX, a.input.MouseY)
+		a.needsRedraw = true
 	}
 
 	// Convert mouse to world coordinates
@@ -136,6 +164,7 @@ func (a *App) update() {
 		}
 		a.hoveredNode = newHovered
 		a.opts.HoveredNode = newHovered
+		a.needsRedraw = true
 	}
 
 	// Handle mouse click
@@ -149,6 +178,7 @@ func (a *App) update() {
 			node.IsSelected = true
 			a.selectedNode = node
 			a.opts.SelectedNode = node
+			a.needsRedraw = true
 		} else {
 			// Start dragging
 			a.dragging = true
@@ -163,6 +193,7 @@ func (a *App) update() {
 	if a.input.MouseDown && a.dragging {
 		a.view.OffsetX = a.dragOffsetX + (a.input.MouseX - a.dragStartX)
 		a.view.OffsetY = a.dragOffsetY + (a.input.MouseY - a.dragStartY)
+		a.needsRedraw = true
 	}
 
 	// Handle mouse up
@@ -170,9 +201,16 @@ func (a *App) update() {
 		a.dragging = false
 	}
 
-	// Run physics
-	if a.physicsEnabled && a.dataLoaded {
+	// Run physics only during stabilization
+	if a.physicsEnabled && a.dataLoaded && a.stabilizationLeft > 0 {
 		a.runPhysics()
+		a.stabilizationLeft--
+		a.needsRedraw = true
+
+		// Fit to graph after stabilization completes
+		if a.stabilizationLeft == 0 {
+			a.view.FitToGraph(a.graph, 50)
+		}
 	}
 }
 
@@ -236,17 +274,30 @@ func (a *App) drawEdges() {
 
 		edgeColor := a.edgeColor(edge.Type)
 		lineWidth := 1.0
+		opacity := 0.6 // Default edge opacity (matching JS)
+
+		// Check if this edge connects to local visor
+		isLocalEdge := fromNode.IsLocalVisor || toNode.IsLocalVisor
+		if isLocalEdge {
+			edgeColor = ColorLocalEdge
+			lineWidth = 4.0
+			opacity = 1.0
+		}
 
 		// Highlight edges connected to selected node
 		if a.selectedNode != nil {
 			if edge.From == a.selectedNode.ID || edge.To == a.selectedNode.ID {
 				lineWidth = 2.0
-			} else {
+				opacity = 1.0
+			} else if !isLocalEdge {
 				edgeColor = ColorEdgeDim
+				opacity = 0.3
 			}
 		}
 
-		a.canvas.Line(x1, y1, x2, y2, lineWidth, edgeColor)
+		a.canvas.SetGlobalAlpha(opacity)
+		a.canvas.QuadraticCurve(x1, y1, x2, y2, lineWidth, edgeColor)
+		a.canvas.ResetGlobalAlpha()
 	}
 }
 
@@ -270,32 +321,43 @@ func (a *App) drawNodes() {
 			size = 3
 		}
 
-		nodeColor := a.nodeColor(node)
+		bgColor, borderColor := a.nodeColors(node)
 
-		// Draw glow for local visor
+		// Border width: local=4, offline=3, others=2 (matching JS)
+		borderWidth := 2.0
 		if node.IsLocalVisor {
-			a.canvas.SetGlobalAlpha(0.3)
-			a.canvas.FillCircle(sx, sy, size*2, ColorLocalVisor)
+			borderWidth = 4.0
+		} else if node.Status == StatusOffline {
+			borderWidth = 3.0
+		}
+
+		// Draw glow for local visor (matching JS shadow effect)
+		if node.IsLocalVisor {
+			a.canvas.SetGlobalAlpha(0.4)
+			a.canvas.FillCircle(sx, sy, size*1.8, ColorLocalVisorBg)
 			a.canvas.ResetGlobalAlpha()
 		}
 
-		// Draw node
-		a.canvas.FillCircle(sx, sy, size, nodeColor)
+		// Draw node fill
+		a.canvas.FillCircle(sx, sy, size, bgColor)
+
+		// Draw border
+		a.canvas.StrokeCircle(sx, sy, size, borderWidth, borderColor)
 
 		// Draw selection/hover ring
 		if node.IsSelected {
-			a.canvas.StrokeCircle(sx, sy, size+3, 2, ColorSelected)
+			a.canvas.StrokeCircle(sx, sy, size+4, 2, ColorSelected)
 		} else if node.IsHovered {
-			a.canvas.StrokeCircle(sx, sy, size+2, 1, ColorHovered)
+			a.canvas.StrokeCircle(sx, sy, size+3, 1, ColorHovered)
 		}
 
-		// Draw label if zoomed in
+		// Draw label if zoomed in (matching JS font settings)
 		if a.opts.ShowLabels && a.view.Scale > 0.5 {
 			label := node.Label
 			if label == "" {
 				label = shortPK(node.ID)
 			}
-			a.canvas.Text(label, sx+size+4, sy+4, ColorText, "11px monospace")
+			a.canvas.Text(label, sx+size+4, sy+4, ColorTextDim, "10px sans-serif")
 		}
 	}
 }
@@ -310,11 +372,11 @@ func (a *App) drawUI() {
 	y += 16
 	a.canvas.Text("Edges: "+itoa(a.graph.VisibleEdgeCount()), x, y, ColorText, "12px sans-serif")
 	y += 16
-	a.canvas.Text("Online: "+itoa(online), x, y, ColorOnline, "12px sans-serif")
+	a.canvas.Text("Online: "+itoa(online), x, y, ColorOnlineBg, "12px sans-serif")
 	y += 16
-	a.canvas.Text("Offline: "+itoa(offline), x, y, ColorOffline, "12px sans-serif")
+	a.canvas.Text("Offline: "+itoa(offline), x, y, ColorOfflineBg, "12px sans-serif")
 	y += 16
-	a.canvas.Text("Unknown: "+itoa(unknown), x, y, ColorUnknown, "12px sans-serif")
+	a.canvas.Text("Unknown: "+itoa(unknown), x, y, ColorUnknownBg, "12px sans-serif")
 
 	y += 24
 	a.canvas.Text("Zoom: "+ftoa(a.view.Scale)+"x", x, y, ColorTextDim, "11px sans-serif")
@@ -347,24 +409,19 @@ func (a *App) drawUI() {
 	}
 }
 
-func (a *App) nodeColor(node *Node) string {
-	if node.IsSelected {
-		return ColorSelected
-	}
-	if node.IsHovered {
-		return ColorHovered
-	}
+// nodeColors returns background and border color for a node (matching JS getNodeColor)
+func (a *App) nodeColors(node *Node) (bg, border string) {
 	if node.IsLocalVisor {
-		return ColorLocalVisor
+		return ColorLocalVisorBg, ColorLocalVisorBorder
 	}
 
 	switch node.Status {
 	case StatusOnline:
-		return ColorOnline
+		return ColorOnlineBg, ColorOnlineBorder
 	case StatusOffline:
-		return ColorOffline
+		return ColorOfflineBg, ColorOfflineBorder
 	default:
-		return ColorUnknown
+		return ColorUnknownBg, ColorUnknownBorder
 	}
 }
 
@@ -377,7 +434,7 @@ func (a *App) edgeColor(t TransportType) string {
 	case TransportDMSG:
 		return ColorDMSG
 	default:
-		return ColorUnknown
+		return ColorUnknownBg
 	}
 }
 
@@ -386,6 +443,7 @@ func (a *App) LoadData() {
 	transports, err := a.fetcher.FetchTransports()
 	if err != nil {
 		a.loadError = err.Error()
+		a.needsRedraw = true
 		return
 	}
 
@@ -398,6 +456,11 @@ func (a *App) LoadData() {
 	a.graph = graph
 	a.dataLoaded = true
 	a.loadError = ""
+	a.needsRedraw = true
+
+	// Run physics for 100 iterations to stabilize, then stop
+	a.stabilizationLeft = 100
+	a.physicsEnabled = true
 
 	a.view.FitToGraph(a.graph, 50)
 }
@@ -407,15 +470,21 @@ func (a *App) FitToScreen() {
 	a.view.FitToGraph(a.graph, 50)
 }
 
-// Simple force-directed physics
+// Force-directed physics matching vis-network Barnes-Hut parameters
+// gravitationalConstant: -3000, springConstant: 0.001, springLength: 200
 func (a *App) runPhysics() {
 	const (
-		repulsion   = 3000.0
-		attraction  = 0.005
-		damping     = 0.85
-		minVelocity = 0.1
+		// Barnes-Hut parameters from vis-network
+		gravitationalConstant = -3000.0 // Repulsion between nodes
+		springConstant        = 0.001   // Edge spring strength
+		springLength          = 200.0   // Ideal edge length
+		damping               = 0.9     // Velocity damping
+		minVelocity           = 0.1     // Minimum velocity threshold
+		maxVelocity           = 50.0    // Maximum velocity
+		centralGravity        = 0.01    // Pull towards center
 	)
 
+	// Calculate forces for each node
 	for _, node := range a.graph.Nodes {
 		if node.IsPinned {
 			continue
@@ -423,7 +492,8 @@ func (a *App) runPhysics() {
 
 		fx, fy := 0.0, 0.0
 
-		// Repulsion from other nodes
+		// Repulsion from other nodes (Barnes-Hut approximation simplified to O(n^2))
+		// In real Barnes-Hut, this would use a quad-tree for O(n log n)
 		for _, other := range a.graph.Nodes {
 			if other.ID == node.ID {
 				continue
@@ -431,17 +501,24 @@ func (a *App) runPhysics() {
 
 			dx := node.X - other.X
 			dy := node.Y - other.Y
-			dist := dx*dx + dy*dy
+			distSq := dx*dx + dy*dy
+			if distSq < 1 {
+				distSq = 1
+			}
+
+			dist := math.Sqrt(distSq)
 			if dist < 1 {
 				dist = 1
 			}
 
-			force := repulsion / dist
-			fx += dx * force
-			fy += dy * force
+			// Barnes-Hut repulsion: F = gravitationalConstant / distance^2
+			// gravitationalConstant is negative, so this pushes nodes apart
+			force := -gravitationalConstant / distSq
+			fx += (dx / dist) * force
+			fy += (dy / dist) * force
 		}
 
-		// Attraction along edges
+		// Spring forces along edges (Hooke's law)
 		for _, edge := range a.graph.GetEdgesForNode(node.ID) {
 			var other *Node
 			if edge.From == node.ID {
@@ -455,20 +532,37 @@ func (a *App) runPhysics() {
 
 			dx := other.X - node.X
 			dy := other.Y - node.Y
+			dist := math.Sqrt(dx*dx + dy*dy)
 
-			fx += dx * attraction
-			fy += dy * attraction
+			if dist > 0 {
+				// Spring force: F = springConstant * (distance - springLength)
+				displacement := dist - springLength
+				force := springConstant * displacement
+				fx += (dx / dist) * force
+				fy += (dy / dist) * force
+			}
 		}
 
-		// Center gravity (weak)
-		fx -= node.X * 0.0001
-		fy -= node.Y * 0.0001
+		// Central gravity - pull towards origin
+		dist := math.Sqrt(node.X*node.X + node.Y*node.Y)
+		if dist > 0 {
+			fx -= (node.X / dist) * centralGravity * dist
+			fy -= (node.Y / dist) * centralGravity * dist
+		}
 
-		// Apply forces
+		// Apply forces with damping
 		node.VX = (node.VX + fx) * damping
 		node.VY = (node.VY + fy) * damping
 
-		// Update position
+		// Clamp velocity
+		speed := math.Sqrt(node.VX*node.VX + node.VY*node.VY)
+		if speed > maxVelocity {
+			scale := maxVelocity / speed
+			node.VX *= scale
+			node.VY *= scale
+		}
+
+		// Update position if velocity is significant
 		if math.Abs(node.VX) > minVelocity || math.Abs(node.VY) > minVelocity {
 			node.X += node.VX
 			node.Y += node.VY

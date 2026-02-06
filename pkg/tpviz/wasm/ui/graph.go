@@ -288,14 +288,16 @@ type RenderOptions struct {
 	HoveredNode       *Node
 }
 
-// NewRenderOptions creates default render options
+// NewRenderOptions creates default render options (all visible like JS version)
 func NewRenderOptions() *RenderOptions {
 	return &RenderOptions{
-		ShowSTCPR:  true,
-		ShowSUDPH:  true,
-		ShowDMSG:   true,
-		ShowOnline: true,
-		ShowLabels: true,
+		ShowSTCPR:   true,
+		ShowSUDPH:   true,
+		ShowDMSG:    true,
+		ShowOnline:  true,
+		ShowOffline: true,
+		ShowUnknown: true,
+		ShowLabels:  false, // Labels off by default like JS (need to zoom in or toggle)
 	}
 }
 
