@@ -443,9 +443,10 @@ func (a *API) getAllServers() http.HandlerFunc {
 	}
 }
 
-// allClientsByServer returns all client entries grouped by the server they are delegated to
+// allClientsByServer returns all client PKs grouped by the server they are delegated to
 // URI: /dmsg-discovery/servers/clients
 // Method: GET
+// Response: { "server_pk": ["client_pk1", "client_pk2", ...], ... }
 func (a *API) allClientsByServer() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		entries, err := a.db.AllClientEntries(r.Context())
@@ -454,13 +455,14 @@ func (a *API) allClientsByServer() http.HandlerFunc {
 			return
 		}
 
-		result := make(map[string][]*disc.Entry)
+		result := make(map[string][]string)
 		for _, entry := range entries {
 			if entry.Client == nil {
 				continue
 			}
+			clientPK := entry.Static.Hex()
 			for _, serverPK := range entry.Client.DelegatedServers {
-				result[serverPK.Hex()] = append(result[serverPK.Hex()], entry)
+				result[serverPK.Hex()] = append(result[serverPK.Hex()], clientPK)
 			}
 		}
 
@@ -468,9 +470,10 @@ func (a *API) allClientsByServer() http.HandlerFunc {
 	}
 }
 
-// clientsByServer returns all client entries delegated to a specific server
+// clientsByServer returns all client PKs delegated to a specific server
 // URI: /dmsg-discovery/server/{pk}/clients
 // Method: GET
+// Response: ["client_pk1", "client_pk2", ...]
 func (a *API) clientsByServer() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		serverPK := cipher.PubKey{}
@@ -485,14 +488,14 @@ func (a *API) clientsByServer() http.HandlerFunc {
 			return
 		}
 
-		var result []*disc.Entry
+		var result []string
 		for _, entry := range entries {
 			if entry.Client == nil {
 				continue
 			}
 			for _, delegatedPK := range entry.Client.DelegatedServers {
 				if delegatedPK == serverPK {
-					result = append(result, entry)
+					result = append(result, entry.Static.Hex())
 					break
 				}
 			}
