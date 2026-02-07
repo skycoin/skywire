@@ -88,6 +88,11 @@ export function updateLocalVisorDisplayEnhanced(): void {
         return;
     }
 
+    // Preserve input field value before rebuilding UI
+    const existingInput = document.getElementById('local-tp-remote-pk') as HTMLInputElement;
+    const preservedPK = existingInput ? existingInput.value : '';
+    const inputHadFocus = existingInput && document.activeElement === existingInput;
+
     section.style.display = 'block';
     const pk = S.localVisorData.pub_key;
     const tps = S.localVisorData.transports || [];
@@ -205,6 +210,15 @@ export function updateLocalVisorDisplayEnhanced(): void {
         S.setLocalTpPickMode(true);
         document.body.style.cursor = 'crosshair';
     });
+
+    // Restore preserved input value
+    const newInput = document.getElementById('local-tp-remote-pk') as HTMLInputElement;
+    if (newInput && preservedPK) {
+        newInput.value = preservedPK;
+        if (inputHadFocus) {
+            newInput.focus();
+        }
+    }
 }
 
 export function detectAndHighlightNewRoutes(routes: any[]): void {
