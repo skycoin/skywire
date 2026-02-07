@@ -115,8 +115,13 @@ func (c *sudphClient) makeBindHandshake() func(in net.Conn) (net.Conn, error) {
 // visor to us. Dialing visor contacts address resolver and gives the address to
 // it, address resolver in turn sends us this address.
 func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrresolver.RemoteVisor) {
-	// Track which PKs we've already logged same-LAN detection for to reduce log spam
-	sameLANLogged := make(map[cipher.PubKey]bool)
+	// Cache resolved LAN addresses to avoid repeated Resolve calls which may
+	// trigger additional notifications from the address resolver
+	type lanCache struct {
+		addresses []string
+		port      string
+	}
+	sameLANCache := make(map[cipher.PubKey]*lanCache)
 
 	for addr := range addrCh {
 		// Check if the remote visor shares our public IP (same LAN)
@@ -128,38 +133,41 @@ func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrres
 		}
 
 		if localPublicIP != "" && remoteIP == localPublicIP {
-			// Same public IP - try to resolve their LAN addresses
-			if !sameLANLogged[addr.PK] {
-				c.log.Debugf("Remote visor %s shares same public IP, using LAN addresses for hole punch", addr.PK.String()[:8])
-				sameLANLogged[addr.PK] = true
+			// Same public IP - check cache first, then resolve if needed
+			cached, ok := sameLANCache[addr.PK]
+			if !ok {
+				c.log.Debugf("Remote visor %s shares same public IP, resolving LAN addresses", addr.PK.String()[:8])
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				visorData, err := c.ar.Resolve(ctx, string(c.netType), addr.PK)
+				cancel()
+				if err == nil && len(visorData.Addresses) > 0 {
+					// Filter to usable LAN addresses
+					var lanAddrs []string
+					for _, lanHost := range visorData.Addresses {
+						if lanHost == "127.0.0.1" || lanHost == "::1" || lanHost == localPublicIP {
+							continue
+						}
+						lanAddrs = append(lanAddrs, lanHost)
+					}
+					cached = &lanCache{addresses: lanAddrs, port: visorData.Port}
+				} else {
+					cached = &lanCache{} // Empty cache to avoid retrying
+					c.log.WithError(err).Debug("Failed to resolve LAN addresses, falling back to public IP")
+				}
+				sameLANCache[addr.PK] = cached
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			visorData, err := c.ar.Resolve(ctx, string(c.netType), addr.PK)
-			cancel()
-			if err == nil && len(visorData.Addresses) > 0 {
-				// Send hole punch to all LAN addresses
-				for _, lanHost := range visorData.Addresses {
-					// Skip loopback
-					if lanHost == "127.0.0.1" || lanHost == "::1" {
-						continue
-					}
-					// Skip the public IP itself
-					if lanHost == localPublicIP {
-						continue
-					}
-					lanAddr := net.JoinHostPort(lanHost, visorData.Port)
+
+			if len(cached.addresses) > 0 {
+				// Send hole punch to cached LAN addresses
+				for _, lanHost := range cached.addresses {
+					lanAddr := net.JoinHostPort(lanHost, cached.port)
 					udpAddr, err := net.ResolveUDPAddr("udp", lanAddr)
 					if err != nil {
 						continue
 					}
-					if _, err := conn.WriteTo([]byte(holePunchMessage), udpAddr); err != nil {
-						c.log.WithError(err).Warnf("Failed to send hole punch to LAN %v", udpAddr)
-					}
+					conn.WriteTo([]byte(holePunchMessage), udpAddr) //nolint:errcheck
 				}
 				continue // Skip the public IP hole punch
-			}
-			if !sameLANLogged[addr.PK] {
-				c.log.WithError(err).Debug("Failed to resolve LAN addresses, falling back to public IP")
 			}
 		}
 
@@ -169,9 +177,7 @@ func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrres
 			continue
 		}
 
-		if _, err := conn.WriteTo([]byte(holePunchMessage), udpAddr); err != nil {
-			c.log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
-		}
+		conn.WriteTo([]byte(holePunchMessage), udpAddr) //nolint:errcheck
 	}
 }
 
