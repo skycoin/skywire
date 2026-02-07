@@ -174,7 +174,15 @@ function animateFlow(): void {
 
 export function startFlowAnimation(): void {
     flowCanvas = document.getElementById('flow-canvas') as HTMLCanvasElement;
-    flowCtx = flowCanvas.getContext('2d')!;
+    if (!flowCanvas) {
+        console.warn('Flow canvas element not found');
+        return;
+    }
+    flowCtx = flowCanvas.getContext('2d');
+    if (!flowCtx) {
+        console.warn('Failed to get 2D context for flow canvas');
+        return;
+    }
 
     resizeFlowCanvas();
     if (!S.flowAnimationId) {
