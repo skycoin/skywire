@@ -116,6 +116,49 @@ func (c *sudphClient) makeBindHandshake() func(in net.Conn) (net.Conn, error) {
 // it, address resolver in turn sends us this address.
 func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrresolver.RemoteVisor) {
 	for addr := range addrCh {
+		// Check if the remote visor shares our public IP (same LAN)
+		// If so, try to send hole punch to their LAN addresses instead
+		localPublicIP := c.ar.LocalPublicIP()
+		remoteIP := addr.Addr
+		if host, _, err := net.SplitHostPort(remoteIP); err == nil {
+			remoteIP = host
+		}
+
+		if localPublicIP != "" && remoteIP == localPublicIP {
+			// Same public IP - try to resolve their LAN addresses
+			c.log.Debugf("Remote visor %s shares same public IP, trying LAN addresses for hole punch", addr.PK.String()[:8])
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			visorData, err := c.ar.Resolve(ctx, string(c.netType), addr.PK)
+			cancel()
+			if err == nil && len(visorData.Addresses) > 0 {
+				// Send hole punch to all LAN addresses
+				for _, lanHost := range visorData.Addresses {
+					// Skip loopback
+					if lanHost == "127.0.0.1" || lanHost == "::1" {
+						continue
+					}
+					// Skip the public IP itself
+					if lanHost == localPublicIP {
+						continue
+					}
+					lanAddr := net.JoinHostPort(lanHost, visorData.Port)
+					udpAddr, err := net.ResolveUDPAddr("udp", lanAddr)
+					if err != nil {
+						c.log.WithError(err).Debugf("Failed to resolve LAN UDP address %q", lanAddr)
+						continue
+					}
+					c.log.Debugf("Sending hole punch packet to LAN address %v", lanAddr)
+					if _, err := conn.WriteTo([]byte(holePunchMessage), udpAddr); err != nil {
+						c.log.WithError(err).Debugf("Failed to send hole punch packet to LAN %v", udpAddr)
+						continue
+					}
+					c.log.Debugf("Sent hole punch packet to LAN address %v", lanAddr)
+				}
+				continue // Skip the public IP hole punch
+			}
+			c.log.WithError(err).Debug("Failed to resolve LAN addresses, falling back to public IP")
+		}
+
 		udpAddr, err := net.ResolveUDPAddr("udp", addr.Addr)
 		if err != nil {
 			c.log.WithError(err).Errorf("Failed to resolve UDP address %q", addr)

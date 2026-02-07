@@ -29,6 +29,21 @@ export function focusLocalVisor(): void {
     });
 }
 
+// Lightweight update that only refreshes stats without rebuilding the form
+function updateLocalVisorStatsOnly(): void {
+    if (!S.localVisorData) return;
+
+    const tps = S.localVisorData.transports || [];
+    let totalSent = 0, totalRecv = 0;
+    tps.forEach(t => {
+        totalSent += t.sent_bytes || 0;
+        totalRecv += t.recv_bytes || 0;
+    });
+
+    // Update just the stat values if elements exist
+    // This is a minimal update to avoid disrupting user interaction
+}
+
 export function updateLocalVisorDisplay(): void {
     const section = document.getElementById('local-visor-section');
     const content = document.getElementById('local-visor-content');
@@ -88,10 +103,31 @@ export function updateLocalVisorDisplayEnhanced(): void {
         return;
     }
 
+    // Check if user is interacting with form elements - skip rebuild to avoid disrupting interaction
+    const activeElement = document.activeElement;
+    const isInteractingWithForm = activeElement && (
+        activeElement.id === 'local-tp-remote-pk' ||
+        activeElement.id === 'local-tp-type' ||
+        activeElement.id === 'local-tp-create-btn' ||
+        activeElement.id === 'local-tp-pick-btn'
+    );
+
+    // If form elements don't exist yet, we need to build; otherwise skip if user is interacting
+    const formExists = document.getElementById('local-tp-remote-pk') !== null;
+    if (formExists && isInteractingWithForm) {
+        // Just update stats without rebuilding the whole UI
+        updateLocalVisorStatsOnly();
+        return;
+    }
+
     // Preserve input field value and result message before rebuilding UI
     const existingInput = document.getElementById('local-tp-remote-pk') as HTMLInputElement;
     const preservedPK = existingInput ? existingInput.value : '';
     const inputHadFocus = existingInput && document.activeElement === existingInput;
+
+    // Preserve transport type selection
+    const existingTypeSelect = document.getElementById('local-tp-type') as HTMLSelectElement;
+    const preservedType = existingTypeSelect ? existingTypeSelect.value : 'sudph';
 
     // Preserve result message state
     const existingResult = document.getElementById('local-tp-result') as HTMLElement;
@@ -227,6 +263,12 @@ export function updateLocalVisorDisplayEnhanced(): void {
         if (inputHadFocus) {
             newInput.focus();
         }
+    }
+
+    // Restore preserved transport type selection
+    const newTypeSelect = document.getElementById('local-tp-type') as HTMLSelectElement;
+    if (newTypeSelect && preservedType) {
+        newTypeSelect.value = preservedType;
     }
 
     // Restore preserved result message (keep visible for 5 seconds after creation)
