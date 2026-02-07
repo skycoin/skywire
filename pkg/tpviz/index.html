@@ -112,10 +112,6 @@
         .spinner { width: 50px; height: 50px; border: 3px solid #0f3460; border-top-color: #e94560; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
         #error { color: #e94560; padding: 20px; text-align: center; display: none; }
-        #zoom-controls { position: absolute; bottom: 16px; right: 16px; display: flex; flex-direction: column; gap: 4px; z-index: 20; }
-        #zoom-controls button { width: 32px; height: 32px; border: 1px solid #0f3460; background: rgba(22, 33, 62, 0.85); color: #ccc; font-size: 16px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; transition: background 0.15s; }
-        #zoom-controls button:hover { background: rgba(15, 52, 96, 0.95); color: #fff; border-color: #00d9a5; }
-        #zoom-controls button:active { background: #0f3460; }
         #cache-info { margin-top: 8px; font-size: 0.75em; color: #888; }
         .service-badge { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 0.7em; margin: 1px; }
         .service-badge.proxy { background: rgba(255, 165, 0, 0.3); color: #ffa500; }
@@ -359,7 +355,6 @@
                         <label><input type="checkbox" id="show-stcpr" checked> Show STCPR</label>
                         <label><input type="checkbox" id="show-sudph" checked> Show SUDPH</label>
                         <label><input type="checkbox" id="show-dmsg" checked> Show DMSG</label>
-                        <label><input type="checkbox" id="show-dmsg-servers" checked> DMSG Servers</label>
                     </div>
                     <div class="control-group">
                         <label><input type="checkbox" id="show-online" checked> Show Online</label>
@@ -398,7 +393,6 @@
                         <div class="legend-item"><div class="legend-color stcpr"></div><span>STCPR (TCP)</span></div>
                         <div class="legend-item"><div class="legend-color sudph"></div><span>SUDPH (UDP)</span></div>
                         <div class="legend-item"><div class="legend-color dmsg"></div><span>DMSG</span></div>
-                        <div class="legend-item"><div class="legend-color" style="background:#9f6efc;"></div><span>DMSG Server</span></div>
                         <div id="node-legend">
                             <div class="status-item"><div class="status-dot status-online"></div><span>Online (in UT)</span></div>
                             <div class="status-item"><div class="status-dot status-offline"></div><span>Offline (in UT)</span></div>
@@ -428,11 +422,6 @@
             <canvas id="flow-canvas"></canvas>
             <div id="loading"><div class="spinner"></div><div>Loading transport data...</div></div>
             <div id="error"></div>
-            <div id="zoom-controls">
-                <button id="zoom-in" title="Zoom in">+</button>
-                <button id="zoom-out" title="Zoom out">&minus;</button>
-                <button id="zoom-fit" title="Fit to screen" style="font-size:13px;">&#8962;</button>
-            </div>
         </div>
     </div>
     <script>
@@ -623,12 +612,6 @@
                 localLegend += '<div style="font-size:0.7em;color:#00ffff;margin:4px 0;">━━ Local Transport</div>';
             }
 
-            // DMSG server legend item (shown when DMSG data is available)
-            let dmsgServerLegend = '';
-            if (dmsgData && dmsgData.servers && dmsgData.servers.length > 0) {
-                dmsgServerLegend = '<div class="status-item"><div class="status-dot" style="background:#9f6efc;border:2px solid #7c3aed;"></div><span>DMSG Server</span></div>';
-            }
-
             if (groupCountry && groupIP && ipGroupsEnabled && ipGroupsData) {
                 // Dual grouping mode
                 const countries = new Set();
@@ -638,7 +621,6 @@
                 let html = localLegend;
                 html += '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">Country Groups (' + countries.size + ') + IP Groups (' + ipGroupsData.total_groups + ')</div>';
                 html += '<div style="font-size:0.75em;color:#aaa;">Dashed outer: country &bull; Solid inner: IP group</div>';
-                html += dmsgServerLegend;
                 legendEl.innerHTML = html;
             } else if (groupCountry) {
                 // Country grouping mode
@@ -648,13 +630,11 @@
                 });
                 let html = localLegend + '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">Country Groups (' + countries.size + ')</div>';
                 html += '<div style="font-size:0.75em;color:#aaa;">Colored boundaries show country groups</div>';
-                html += dmsgServerLegend;
                 legendEl.innerHTML = html;
             } else if (groupIP && ipGroupsEnabled && ipGroupsData) {
                 // IP group mode
                 let html = localLegend + '<div style="font-size:0.75em;color:#888;margin-bottom:4px;">IP Groups (' + ipGroupsData.total_groups + ')</div>';
                 html += '<div style="font-size:0.75em;color:#aaa;">Colored boundaries show IP groups</div>';
-                html += dmsgServerLegend;
                 legendEl.innerHTML = html;
             } else if (showServices) {
                 legendEl.innerHTML = localLegend +
@@ -662,14 +642,12 @@
                     '<div class="status-item"><div class="status-dot status-proxy"></div><span>Proxy</span></div>' +
                     '<div class="status-item"><div class="status-dot status-online"></div><span>Online (no service)</span></div>' +
                     '<div class="status-item"><div class="status-dot status-offline"></div><span>Offline</span></div>' +
-                    '<div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>' +
-                    dmsgServerLegend;
+                    '<div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>';
             } else {
                 legendEl.innerHTML = localLegend +
                     '<div class="status-item"><div class="status-dot status-online"></div><span>Online (in UT)</span></div>' +
                     '<div class="status-item"><div class="status-dot status-offline"></div><span>Offline (in UT)</span></div>' +
-                    '<div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>' +
-                    dmsgServerLegend;
+                    '<div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>';
             }
         }
 
@@ -836,9 +814,6 @@
                 processData();
                 console.log('Data processing complete');
 
-                // Add DMSG server nodes and server→client edges to the graph
-                addDMSGGraphElements();
-
                 // Reconcile TPS overlay edges with fresh TPD data
                 reconcileTPSOverlays();
 
@@ -971,131 +946,6 @@
                 }
             });
             notInDmsgEl.textContent = notInDmsg;
-        }
-
-        // Add DMSG server nodes and server→client edges to the graph.
-        // Server nodes are placed in country clusters via visorServices registration.
-        // Edges are updated incrementally (only add new / remove stale) to avoid lag.
-        function addDMSGGraphElements() {
-            if (!dmsgData || !dmsgData.servers || !nodesDataset || !edgesDataset) return;
-
-            // Suspend physics while adding potentially thousands of edges
-            if (network) network.setOptions({ physics: { enabled: false } });
-
-            const showDMSGServers = document.getElementById('show-dmsg-servers').checked;
-
-            // Find max client count for size scaling
-            let maxClients = 1;
-            dmsgData.servers.forEach(srv => {
-                const count = srv.clients ? srv.clients.length : 0;
-                if (count > maxClients) maxClients = count;
-            });
-
-            // Build fast lookup of all visor node IDs for edge target checks
-            const visorNodeIds = new Set(nodesDataset.getIds());
-
-            // Collect existing DMSG server node IDs and edge IDs for incremental update
-            const existingDMSGServerIds = new Set();
-            nodesDataset.forEach(node => {
-                if (node.isDMSGServer) existingDMSGServerIds.add(node.id);
-            });
-            const existingDMSGEdgeIds = new Set(
-                edgesDataset.getIds().filter(id => {
-                    const e = edgesDataset.get(id);
-                    return e && e.isDMSGConnection;
-                })
-            );
-
-            const newDMSGServerIds = new Set();
-            const desiredEdgeIds = new Set();
-            const dmsgNodes = [];
-            const dmsgEdges = [];
-
-            dmsgData.servers.forEach(srv => {
-                if (!srv.pk) return;
-                const nodeId = 'dmsg-srv-' + srv.pk;
-                newDMSGServerIds.add(nodeId);
-
-                const clientCount = srv.clients ? srv.clients.length : 0;
-                const sessions = srv.available_sessions || 0;
-                const country = srv.country || '';
-                const flag = country ? countryToFlag(country) : '';
-                const shortPK = srv.pk.substring(0, 8);
-
-                // Register in visorServices so country grouping picks it up
-                visorServices[nodeId] = { services: ['dmsg-server'], country: country };
-
-                let title = 'DMSG Server: ' + srv.pk +
-                    '\nAddress: ' + (srv.address || '') +
-                    '\nCountry: ' + (country || 'unknown') +
-                    '\nAvailable Sessions: ' + sessions +
-                    '\nConnected Clients: ' + clientCount;
-
-                // Size: scale by client count (8 to 28)
-                const size = 8 + (clientCount / maxClients) * 20;
-
-                dmsgNodes.push({
-                    id: nodeId,
-                    label: flag ? flag + ' ' + shortPK + ' (' + clientCount + ')' : shortPK + ' (' + clientCount + ')',
-                    title: title,
-                    size: size,
-                    shape: 'diamond',
-                    font: { size: 10, color: '#c9a8ff' },
-                    color: { background: '#9f6efc', border: '#7c3aed', highlight: { background: '#b388ff', border: '#9f6efc' } },
-                    mass: 8,
-                    borderWidth: 2,
-                    isDMSGServer: true,
-                    country: country,
-                    hidden: !showDMSGServers
-                });
-
-                // Build edges to connected clients that exist in the graph
-                if (srv.clients) {
-                    srv.clients.forEach(clientPK => {
-                        if (visorNodeIds.has(clientPK)) {
-                            const edgeId = 'dmsg-conn-' + srv.pk.substring(0, 8) + '-' + clientPK.substring(0, 8);
-                            desiredEdgeIds.add(edgeId);
-                            // Only create edge object if it doesn't already exist (incremental)
-                            if (!existingDMSGEdgeIds.has(edgeId)) {
-                                dmsgEdges.push({
-                                    id: edgeId,
-                                    from: nodeId,
-                                    to: clientPK,
-                                    color: { color: '#9f6efc', opacity: 0.3 },
-                                    width: 0.3,
-                                    smooth: false,
-                                    title: 'DMSG connection',
-                                    isDMSGConnection: true,
-                                    type: 'dmsg-connection',
-                                    hidden: !showDMSGServers
-                                });
-                            }
-                        }
-                    });
-                }
-            });
-
-            // Remove stale DMSG server nodes (no longer in data)
-            const staleDMSGIds = [...existingDMSGServerIds].filter(id => !newDMSGServerIds.has(id));
-            if (staleDMSGIds.length > 0) {
-                nodesDataset.remove(staleDMSGIds);
-            }
-
-            // Remove only stale DMSG edges (no longer in desired set) — NOT all of them
-            const staleEdgeIds = [...existingDMSGEdgeIds].filter(id => !desiredEdgeIds.has(id));
-            if (staleEdgeIds.length > 0) {
-                edgesDataset.remove(staleEdgeIds);
-            }
-
-            // Add/update DMSG server nodes and new edges
-            if (dmsgNodes.length > 0) {
-                nodesDataset.update(dmsgNodes);
-            }
-            if (dmsgEdges.length > 0) {
-                edgesDataset.update(dmsgEdges);
-            }
-
-            console.log('DMSG graph:', dmsgNodes.length, 'server nodes,', dmsgEdges.length, 'new edges,', staleEdgeIds.length, 'removed edges');
         }
 
         // Convert ISO country code to flag emoji (e.g., "US" -> "🇺🇸")
@@ -1734,13 +1584,7 @@
                 const newNodeIds = new Set(nodes.map(n => n.id));
 
                 // Nodes to remove (exist in dataset but not in new data)
-                // Preserve DMSG server nodes — they are managed by addDMSGGraphElements()
-                const nodesToRemove = [...existingNodeIds].filter(id => {
-                    if (newNodeIds.has(id)) return false;
-                    const existingNode = nodesDataset.get(id);
-                    if (existingNode && existingNode.isDMSGServer) return false;
-                    return true;
-                });
+                const nodesToRemove = [...existingNodeIds].filter(id => !newNodeIds.has(id));
 
                 // Track new nodes (don't exist yet) for grouping functions
                 lastNewNodeIds = new Set([...newNodeIds].filter(id => !existingNodeIds.has(id)));
@@ -1765,14 +1609,10 @@
                 const existingEdgeIds = new Set(edgesDataset.getIds());
                 const newEdgeIds = new Set(edges.map(e => e.id));
 
-                // Edges to remove (preserve TPS overlay edges and DMSG connection edges)
-                const edgesToRemove = [...existingEdgeIds].filter(id => {
-                    if (newEdgeIds.has(id)) return false;
-                    if (tpsOverlayEdges.has(id)) return false;
-                    const existingEdge = edgesDataset.get(id);
-                    if (existingEdge && existingEdge.isDMSGConnection) return false;
-                    return true;
-                });
+                // Edges to remove (preserve TPS overlay edges)
+                const edgesToRemove = [...existingEdgeIds].filter(id =>
+                    !newEdgeIds.has(id) && !tpsOverlayEdges.has(id)
+                );
 
                 if (edgesToRemove.length > 0) {
                     edgesDataset.remove(edgesToRemove);
@@ -1939,51 +1779,6 @@
 
         function showNodeInfo(nodeId) {
             const info = document.getElementById('selected-info');
-            const node = nodesDataset.get(nodeId);
-
-            // Handle DMSG server nodes specially
-            if (node && node.isDMSGServer) {
-                // Extract server PK from node ID (dmsg-srv-<pk>)
-                const serverPK = nodeId.replace('dmsg-srv-', '');
-                const srv = dmsgData && dmsgData.servers ? dmsgData.servers.find(s => s.pk === serverPK) : null;
-
-                document.getElementById('selected-pk').textContent = serverPK;
-                document.getElementById('selected-conn-count').textContent = srv ? (srv.clients ? srv.clients.length : 0) : 0;
-
-                const statusEl = document.getElementById('selected-status');
-                statusEl.innerHTML = '<span class="status-dot" style="display:inline-block;vertical-align:middle;margin-right:5px;background:#9f6efc;border:2px solid #7c3aed;"></span>DMSG Server';
-
-                const versionEl = document.getElementById('selected-version');
-                if (srv) {
-                    versionEl.textContent = 'Sessions: ' + (srv.available_sessions || 0) + ' | Type: ' + (srv.server_type || 'unknown');
-                    versionEl.style.display = 'block';
-                } else {
-                    versionEl.style.display = 'none';
-                }
-
-                const countryEl = document.getElementById('selected-country');
-                if (srv && srv.country) {
-                    countryEl.textContent = 'Country: ' + srv.country;
-                    countryEl.style.display = 'block';
-                } else {
-                    countryEl.style.display = 'none';
-                }
-
-                document.getElementById('selected-services').style.display = 'none';
-
-                // List connected clients
-                const clients = srv && srv.clients ? srv.clients : [];
-                document.getElementById('conn-list').innerHTML = clients.map(clientPK => {
-                    const cStatus = getVisorStatus(clientPK);
-                    return '<div class="conn-item"><span class="conn-type" style="background:rgba(159,110,252,0.3);color:#9f6efc;">CLIENT</span><span class="status-dot status-' + cStatus + '" style="display:inline-block;width:8px;height:8px;margin-right:5px;"></span>' + clientPK.substring(0, 16) + '...</div>';
-                }).join('');
-
-                info.classList.add('visible');
-                selectedNodeId = nodeId;
-                showNodeEdgesOnly(nodeId);
-                return;
-            }
-
             const connections = visorConnections[nodeId] || [];
             const status = getVisorStatus(nodeId);
             const svcInfo = visorServices[nodeId];
@@ -2046,12 +1841,7 @@
 
         // Show only edges connected to a specific node, hide others
         // For the local visor, also show route path edges (hop -> destination)
-        // For visor nodes, also show their DMSG server connection edges
         function showNodeEdgesOnly(nodeId) {
-            // Check if this is a DMSG server node
-            const node = nodesDataset.get(nodeId);
-            const isDMSGServer = node && node.isDMSGServer;
-
             // Build set of route-related PKs if this is the local visor
             const isLocal = isLocalVisor(nodeId);
             const routeRelatedPKs = new Set();
@@ -2068,10 +1858,7 @@
                 // Also show route path edges when local visor is selected
                 const isRouteEdge = isLocal && edge.isRoutePath &&
                     (routeRelatedPKs.has(edge.from) || routeRelatedPKs.has(edge.to));
-                // For visor nodes: also show DMSG connection edges to/from this visor
-                const isDMSGConn = !isDMSGServer && edge.isDMSGConnection &&
-                    (edge.from === nodeId || edge.to === nodeId);
-                edgeUpdates.push({ id: edge.id, hidden: !(isConnected || isRouteEdge || isDMSGConn) });
+                edgeUpdates.push({ id: edge.id, hidden: !(isConnected || isRouteEdge) });
             });
             edgesDataset.update(edgeUpdates);
         }
@@ -2169,7 +1956,6 @@
             const showStcpr = document.getElementById('show-stcpr').checked;
             const showSudph = document.getElementById('show-sudph').checked;
             const showDmsg = document.getElementById('show-dmsg').checked;
-            const showDMSGServers = document.getElementById('show-dmsg-servers').checked;
             const showOnline = document.getElementById('show-online').checked;
             const showOffline = document.getElementById('show-offline').checked;
             const showUnknown = document.getElementById('show-unknown').checked;
@@ -2182,13 +1968,6 @@
             const nodeUpdates = [];
             const hiddenNodes = new Set();
             nodesDataset.forEach(node => {
-                // DMSG server nodes have their own toggle
-                if (node.isDMSGServer) {
-                    if (!showDMSGServers) hiddenNodes.add(node.id);
-                    nodeUpdates.push({ id: node.id, hidden: !showDMSGServers });
-                    return;
-                }
-
                 const status = getVisorStatus(node.id);
                 let visible = true;
 
@@ -2233,9 +2012,6 @@
                 if (edge.type === 'stcpr' && !showStcpr) visible = false;
                 if (edge.type === 'sudph' && !showSudph) visible = false;
                 if (edge.type === 'dmsg' && !showDmsg) visible = false;
-
-                // DMSG connection edges controlled by DMSG Servers toggle
-                if (edge.isDMSGConnection && !showDMSGServers) visible = false;
 
                 // Also hide edge if either connected node is hidden
                 if (hiddenNodes.has(edge.from) || hiddenNodes.has(edge.to)) {
@@ -4427,7 +4203,6 @@
         document.getElementById('show-stcpr').addEventListener('change', applyFilters);
         document.getElementById('show-sudph').addEventListener('change', applyFilters);
         document.getElementById('show-dmsg').addEventListener('change', applyFilters);
-        document.getElementById('show-dmsg-servers').addEventListener('change', () => { applyFilters(); updateLegend(); });
         document.getElementById('show-online').addEventListener('change', applyFilters);
         document.getElementById('show-offline').addEventListener('change', applyFilters);
         document.getElementById('show-unknown').addEventListener('change', applyFilters);
@@ -4444,19 +4219,6 @@
         document.getElementById('version-filter').addEventListener('change', applyFilters);
         document.getElementById('search').addEventListener('input', applyFilters);
         document.getElementById('btn-fit').addEventListener('click', () => network && network.fit());
-        document.getElementById('zoom-in').addEventListener('click', () => {
-            if (!network) return;
-            const scale = network.getScale();
-            network.moveTo({ scale: scale * 1.3 });
-        });
-        document.getElementById('zoom-out').addEventListener('click', () => {
-            if (!network) return;
-            const scale = network.getScale();
-            network.moveTo({ scale: scale / 1.3 });
-        });
-        document.getElementById('zoom-fit').addEventListener('click', () => {
-            if (network) network.fit();
-        });
 
         // Resizable sidebar
         const resizeHandle = document.getElementById('resize-handle');
