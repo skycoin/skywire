@@ -60,8 +60,21 @@ export function addDMSGGraphElements(): void {
             '\nAvailable Sessions: ' + sessions +
             '\nConnected Clients: ' + clientCount;
 
-        const size = 8 + (clientCount / maxClients) * 20;
+        // Size formula matching visor nodes: 5 + (connections / maxConn) * 25
+        const size = 5 + (clientCount / maxClients) * 25;
         const useFlag = showFlags && !!flag;
+
+        // Use visor-like status-based coloring (DMSG servers are typically "unknown" in uptime tracker)
+        // Colors match getNodeColor: online=#00d9a5, offline=#e94560, unknown=#ffd166
+        const status = getVisorStatus(srv.pk);
+        let nodeColor: { background: string; border: string; highlight?: { background: string; border: string } };
+        if (status === 'online') {
+            nodeColor = { background: '#00d9a5', border: '#00b386', highlight: { background: '#00ffcc', border: '#00d9a5' } };
+        } else if (status === 'offline') {
+            nodeColor = { background: '#e94560', border: '#ffffff', highlight: { background: '#ff6b6b', border: '#e94560' } };
+        } else {
+            nodeColor = { background: '#ffd166', border: '#ccaa52', highlight: { background: '#ffe066', border: '#ffd166' } };
+        }
 
         dmsgNodes.push({
             id: nodeId,
@@ -70,10 +83,10 @@ export function addDMSGGraphElements(): void {
             size: showDMSGServers ? size : 0.5,
             shape: (showDMSGServers && useFlag) ? 'text' : 'dot',
             font: showDMSGServers
-                ? (useFlag ? { size: Math.max(16, size * 1.2), color: '#fff' } : { size: 10, color: '#c9a8ff' })
+                ? (useFlag ? { size: Math.max(16, size * 1.2), color: '#fff' } : { size: 10, color: '#aaa' })
                 : { size: 0, color: 'transparent' },
             color: showDMSGServers
-                ? { background: '#9f6efc', border: '#7c3aed', highlight: { background: '#b388ff', border: '#9f6efc' } }
+                ? nodeColor
                 : { background: 'transparent', border: 'transparent' },
             mass: 2,
             borderWidth: showDMSGServers ? 2 : 0,
@@ -93,8 +106,8 @@ export function addDMSGGraphElements(): void {
                             id: edgeId,
                             from: nodeId,
                             to: clientPK,
-                            color: { color: '#9f6efc', opacity: 0.3 },
-                            width: 0.3,
+                            color: { color: '#e94560', opacity: 0.4 },  // Red for DMSG connections
+                            width: 0.5,
                             smooth: false,
                             title: 'DMSG connection',
                             isDMSGConnection: true,
