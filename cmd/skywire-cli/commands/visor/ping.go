@@ -4,6 +4,7 @@ package clivisor
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -40,14 +41,20 @@ var pingCmd = &cobra.Command{
 		if err != nil {
 			os.Exit(1)
 		}
+
+		// Time the route setup separately
+		setupStart := time.Now()
 		err = rpcClient.DialPing(pingConfig)
+		setupTime := time.Since(setupStart)
 		internal.Catch(cmd.Flags(), err)
+
+		fmt.Printf("Route setup: %0.2f ms\n", 1000*setupTime.Seconds())
 
 		latencies, err := rpcClient.Ping(pingConfig)
 		internal.Catch(cmd.Flags(), err)
 
-		for _, latency := range latencies {
-			internal.PrintOutput(cmd.Flags(), latency, fmt.Sprintf("Latency: %0.2f ms | Speed: %0.3f KB/s\n", 1000*latency.Seconds(), float64(pcktSize)/float64(latency.Seconds())))
+		for i, latency := range latencies {
+			internal.PrintOutput(cmd.Flags(), latency, fmt.Sprintf("Ping %d: %0.2f ms | Speed: %0.3f KB/s\n", i+1, 1000*latency.Seconds(), float64(pcktSize)/float64(latency.Seconds())))
 		}
 		err = rpcClient.StopPing(pk)
 		internal.Catch(cmd.Flags(), err)
