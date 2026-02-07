@@ -552,76 +552,60 @@ func (s *Server) handleIPGroups(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(cache) //nolint:errcheck,gosec
 }
 
-// refreshIPGroupsCache reads survey files and updates the cached IP groups data.
-// This is called periodically along with other cache refreshes.
+// refreshIPGroupsCache reads survey files, DMSG server data, and local visor data
+// to build IP-based groupings. This is called periodically along with other cache refreshes.
 func (s *Server) refreshIPGroupsCache() {
-	// If no survey dir configured, mark as disabled
-	if s.config.SurveyDir == "" {
-		s.ipGroupsMu.Lock()
-		s.ipGroupsCache = &ipGroupsResponse{
-			Enabled: false,
-			Groups:  map[string]int{},
-		}
-		s.ipGroupsMu.Unlock()
-		return
-	}
-
 	// Map from IP address to group ID
 	ipToGroup := make(map[string]int)
-	// Map from public key to group ID
+	// Map from public key (or node ID) to group ID
 	pkToGroup := make(map[string]int)
 	nextGroupID := 1
 
 	// Walk the survey directory looking for node-info.json files
 	// Expected structure: SurveyDir/<pk>/node-info.json
-	entries, err := os.ReadDir(s.config.SurveyDir)
-	if err != nil {
-		s.log.WithError(err).Warn("Failed to read survey directory")
-		s.ipGroupsMu.Lock()
-		s.ipGroupsCache = &ipGroupsResponse{
-			Enabled: false,
-			Groups:  map[string]int{},
-		}
-		s.ipGroupsMu.Unlock()
-		return
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		surveyFile := filepath.Join(s.config.SurveyDir, entry.Name(), "node-info.json")
-		data, err := os.ReadFile(surveyFile) //nolint:gosec
+	if s.config.SurveyDir != "" {
+		entries, err := os.ReadDir(s.config.SurveyDir)
 		if err != nil {
-			continue // Skip if no survey file for this PK
-		}
+			s.log.WithError(err).Warn("Failed to read survey directory")
+		} else {
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
 
-		var survey surveyData
-		if err := json.Unmarshal(data, &survey); err != nil {
-			continue // Skip malformed files
-		}
+				surveyFile := filepath.Join(s.config.SurveyDir, entry.Name(), "node-info.json")
+				data, err := os.ReadFile(surveyFile) //nolint:gosec
+				if err != nil {
+					continue // Skip if no survey file for this PK
+				}
 
-		// Skip entries without IP address
-		if survey.IPAddr == "" {
-			continue
-		}
+				var survey surveyData
+				if err := json.Unmarshal(data, &survey); err != nil {
+					continue // Skip malformed files
+				}
 
-		// Use the public key from the survey if available, otherwise use directory name
-		pk := survey.PubKey
-		if pk == "" {
-			pk = entry.Name()
-		}
+				// Skip entries without IP address
+				if survey.IPAddr == "" {
+					continue
+				}
 
-		// Get or create group ID for this IP
-		groupID, exists := ipToGroup[survey.IPAddr]
-		if !exists {
-			groupID = nextGroupID
-			ipToGroup[survey.IPAddr] = groupID
-			nextGroupID++
-		}
+				// Use the public key from the survey if available, otherwise use directory name
+				pk := survey.PubKey
+				if pk == "" {
+					pk = entry.Name()
+				}
 
-		pkToGroup[pk] = groupID
+				// Get or create group ID for this IP
+				groupID, exists := ipToGroup[survey.IPAddr]
+				if !exists {
+					groupID = nextGroupID
+					ipToGroup[survey.IPAddr] = groupID
+					nextGroupID++
+				}
+
+				pkToGroup[pk] = groupID
+			}
+		}
 	}
 
 	// Add local visor to the correct IP group based on its geoip IP
@@ -652,6 +636,28 @@ func (s *Server) refreshIPGroupsCache() {
 			pkToGroup[localPK] = groupID
 			s.log.WithField("pk", localPK[:16]).WithField("group", groupID).WithField("ip", localIP).
 				Info("Local visor added to new IP group")
+		}
+	}
+
+	// Add DMSG servers to IP groups using their known IP addresses.
+	// Node IDs use the "dmsg-srv-" prefix to match the JS client.
+	s.dmsgMu.RLock()
+	dmsgCache := s.dmsgCache
+	s.dmsgMu.RUnlock()
+
+	if dmsgCache != nil {
+		for _, srv := range dmsgCache.Servers {
+			if srv.IP == "" || srv.PK == "" {
+				continue
+			}
+			nodeID := "dmsg-srv-" + srv.PK
+			groupID, exists := ipToGroup[srv.IP]
+			if !exists {
+				groupID = nextGroupID
+				ipToGroup[srv.IP] = groupID
+				nextGroupID++
+			}
+			pkToGroup[nodeID] = groupID
 		}
 	}
 
