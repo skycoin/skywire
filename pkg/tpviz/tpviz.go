@@ -46,8 +46,12 @@ type Config struct {
 	CacheFileUT string
 	// CacheFileSD is the location for the service discovery cache file
 	CacheFileSD string
-	// CacheFileDMSG is the location for the DMSG discovery cache file
-	CacheFileDMSG string
+	// CacheFileDMSGServers is the location for the DMSG servers cache file
+	CacheFileDMSGServers string
+	// CacheFileDMSGEntries is the location for the DMSG entries cache file
+	CacheFileDMSGEntries string
+	// CacheFileDMSGClients is the location for the DMSG server/clients cache file
+	CacheFileDMSGClients string
 	// CacheMaxAge is the cache max age in minutes (default: 5)
 	CacheMaxAge int
 	// TPDURL is the transport discovery URL
@@ -77,7 +81,9 @@ func DefaultConfig() Config {
 		CacheFile:     filepath.Join(os.TempDir(), "tpd.json"),
 		CacheFileUT:   filepath.Join(os.TempDir(), "ut.json"),
 		CacheFileSD:   filepath.Join(os.TempDir(), "sd.json"),
-		CacheFileDMSG: filepath.Join(os.TempDir(), "dmsg.json"),
+		CacheFileDMSGServers: filepath.Join(os.TempDir(), "dmsg-servers.json"),
+		CacheFileDMSGEntries: filepath.Join(os.TempDir(), "dmsg-entries.json"),
+		CacheFileDMSGClients: filepath.Join(os.TempDir(), "dmsg-clients.json"),
 		CacheMaxAge:   5,
 		TPDURL:        deployment.Prod.TransportDiscovery,
 		UTURL:         deployment.Prod.UptimeTracker,
@@ -333,11 +339,11 @@ func (s *Server) SetTPSAPI(api TPSAPI) {
 }
 
 func (s *Server) setupRoutes() {
-	// Serve WASM assets from embedded dist directory
+	// Serve legacy JavaScript UI at / (primary)
 	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if path == "/" || path == "/index.html" {
-			content, err := wasmDistFS.ReadFile("dist/index.html")
+			content, err := legacyIndexHTML.ReadFile("index.html")
 			if err != nil {
 				http.Error(w, "Failed to read index.html", http.StatusInternalServerError)
 				return
@@ -347,6 +353,17 @@ func (s *Server) setupRoutes() {
 			return
 		}
 		http.NotFound(w, r)
+	})
+
+	// WASM UI at /wasm
+	s.mux.HandleFunc("/wasm", func(w http.ResponseWriter, r *http.Request) {
+		content, err := wasmDistFS.ReadFile("dist/index.html")
+		if err != nil {
+			http.Error(w, "Failed to read WASM index.html", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(content) //nolint:errcheck,gosec
 	})
 
 	s.mux.HandleFunc("/main.wasm", func(w http.ResponseWriter, r *http.Request) {
@@ -367,17 +384,6 @@ func (s *Server) setupRoutes() {
 			return
 		}
 		w.Header().Set("Content-Type", "application/javascript")
-		w.Write(content) //nolint:errcheck,gosec
-	})
-
-	// Legacy JavaScript UI at /legacy for fallback
-	s.mux.HandleFunc("/legacy", func(w http.ResponseWriter, r *http.Request) {
-		content, err := legacyIndexHTML.ReadFile("index.html")
-		if err != nil {
-			http.Error(w, "Failed to read legacy index.html", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(content) //nolint:errcheck,gosec
 	})
 
@@ -839,6 +845,9 @@ func (s *Server) refreshCache() {
 	// Refresh service discovery cache (combined from multiple service types)
 	s.refreshSDCache()
 
+	// Refresh DMSG discovery cache (servers, entries, clients + geoip)
+	s.refreshDMSGCache()
+
 	// Refresh IP groups cache (from survey files)
 	s.refreshIPGroupsCache()
 }
@@ -889,6 +898,42 @@ func (s *Server) refreshSDCache() {
 	}
 	s.cacheMu.Unlock()
 	s.log.WithField("file", s.config.CacheFileSD).Debug("Auto-refreshed cache")
+}
+
+// refreshDMSGCache refreshes the DMSG discovery cache by calling getDMSGData
+// which handles all three sub-fetches (servers, entries, clients) with disk caching and geoip.
+func (s *Server) refreshDMSGCache() {
+	if s.config.DMSGURL == "" {
+		return
+	}
+
+	// Check if any DMSG cache file needs refresh
+	needsRefresh := false
+	for _, f := range []string{s.config.CacheFileDMSGServers, s.config.CacheFileDMSGEntries, s.config.CacheFileDMSGClients} {
+		if f == "" {
+			continue
+		}
+		info, err := os.Stat(f)
+		if err != nil || time.Since(info.ModTime()).Minutes() > float64(s.config.CacheMaxAge) {
+			needsRefresh = true
+			break
+		}
+	}
+
+	if !needsRefresh {
+		return
+	}
+
+	// Clear the in-memory cache to force getDMSGData to re-fetch
+	s.dmsgMu.Lock()
+	s.dmsgCache = nil
+	s.dmsgMu.Unlock()
+
+	if _, err := s.getDMSGData(); err != nil {
+		s.log.WithError(err).Warn("Auto-refresh DMSG failed")
+	} else {
+		s.log.Debug("Auto-refreshed DMSG cache")
+	}
 }
 
 // startAutoRefresh starts the auto-refresh goroutine
@@ -1723,7 +1768,9 @@ func (s *Server) handleDMSGHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 }
 
-// getDMSGData fetches and caches DMSG discovery data
+// getDMSGData fetches and caches DMSG discovery data.
+// Uses disk caching for each sub-fetch (servers, entries, clients) and in-memory caching
+// for the combined DMSGData result.
 func (s *Server) getDMSGData() (*DMSGData, error) {
 	s.dmsgMu.RLock()
 	if s.dmsgCache != nil && time.Since(s.dmsgCache.LastUpdated) < time.Duration(s.config.CacheMaxAge)*time.Minute {
@@ -1745,14 +1792,11 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 		LastUpdated: time.Now(),
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-
-	// Fetch all servers
-	serversResp, err := client.Get(s.config.DMSGURL + "/dmsg-discovery/all_servers")
+	// Fetch servers (with disk caching)
+	serversJSON, err := s.getDMSGSubData(s.config.CacheFileDMSGServers, s.config.DMSGURL+"/dmsg-discovery/all_servers")
 	if err != nil {
 		return nil, fmt.Errorf("fetch servers: %w", err)
 	}
-	defer serversResp.Body.Close() //nolint:errcheck
 
 	var serverEntries []struct {
 		Static string `json:"static"`
@@ -1762,7 +1806,7 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 			ServerType        string `json:"serverType"`
 		} `json:"server"`
 	}
-	if err := json.NewDecoder(serversResp.Body).Decode(&serverEntries); err != nil {
+	if err := json.Unmarshal([]byte(serversJSON), &serverEntries); err != nil {
 		return nil, fmt.Errorf("decode servers: %w", err)
 	}
 
@@ -1790,48 +1834,77 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 		dmsgData.Servers = append(dmsgData.Servers, srv)
 	}
 
-	// Fetch entries count
-	entriesResp, err := client.Get(s.config.DMSGURL + "/dmsg-discovery/entries")
+	// Fetch entries (with disk caching)
+	entriesJSON, err := s.getDMSGSubData(s.config.CacheFileDMSGEntries, s.config.DMSGURL+"/dmsg-discovery/entries")
 	if err != nil {
 		s.log.WithError(err).Warn("Failed to fetch DMSG entries")
 	} else {
-		defer entriesResp.Body.Close() //nolint:errcheck
 		var entries []string
-		if err := json.NewDecoder(entriesResp.Body).Decode(&entries); err == nil {
+		if err := json.Unmarshal([]byte(entriesJSON), &entries); err == nil {
 			dmsgData.Entries = entries
 			dmsgData.EntriesCount = len(entries)
 		}
 	}
 
-	// Fetch clients by server (fault-tolerant - endpoint may not be deployed yet)
-	clientsByServerResp, err := client.Get(s.config.DMSGURL + "/dmsg-discovery/servers/clients")
+	// Fetch clients by server (with disk caching, fault-tolerant)
+	clientsJSON, err := s.getDMSGSubData(s.config.CacheFileDMSGClients, s.config.DMSGURL+"/dmsg-discovery/servers/clients")
 	if err != nil {
 		s.log.WithError(err).Debug("Failed to fetch clients by server (endpoint may not be available)")
 	} else {
-		defer clientsByServerResp.Body.Close() //nolint:errcheck
-		if clientsByServerResp.StatusCode == http.StatusOK {
-			var clientsByServer map[string][]struct {
-				Static string `json:"static"`
-			}
-			if err := json.NewDecoder(clientsByServerResp.Body).Decode(&clientsByServer); err == nil {
-				// Map clients to their servers
-				for i := range dmsgData.Servers {
-					serverPK := dmsgData.Servers[i].PK
-					if clients, ok := clientsByServer[serverPK]; ok {
-						for _, c := range clients {
-							dmsgData.Servers[i].Clients = append(dmsgData.Servers[i].Clients, c.Static)
-						}
-					}
+		var clientsByServer map[string][]string
+		if err := json.Unmarshal([]byte(clientsJSON), &clientsByServer); err == nil {
+			// Map clients to their servers
+			for i := range dmsgData.Servers {
+				serverPK := dmsgData.Servers[i].PK
+				if clients, ok := clientsByServer[serverPK]; ok {
+					dmsgData.Servers[i].Clients = append(dmsgData.Servers[i].Clients, clients...)
 				}
-				s.log.WithField("servers_with_clients", len(clientsByServer)).Debug("Loaded DMSG clients by server")
 			}
-		} else {
-			s.log.WithField("status", clientsByServerResp.StatusCode).Debug("Clients by server endpoint not available")
+			s.log.WithField("servers_with_clients", len(clientsByServer)).Debug("Loaded DMSG clients by server")
 		}
 	}
 
 	s.dmsgCache = dmsgData
 	return dmsgData, nil
+}
+
+// getDMSGSubData fetches a DMSG sub-endpoint with disk caching.
+// Mirrors the getData() pattern: fresh cache → return cached; stale → return stale + background refresh; missing → fetch synchronously.
+func (s *Server) getDMSGSubData(cacheFile, url string) (string, error) {
+	if s.config.NoCache || cacheFile == "" {
+		return fetchURL(url)
+	}
+
+	s.cacheMu.RLock()
+	info, err := os.Stat(cacheFile)
+	if err != nil {
+		s.cacheMu.RUnlock()
+		// Cache file doesn't exist, fetch synchronously
+		data, err := fetchURL(url)
+		if err != nil {
+			return "", err
+		}
+		s.cacheMu.Lock()
+		defer s.cacheMu.Unlock()
+		if err := os.WriteFile(cacheFile, []byte(data), 0644); err != nil { //nolint:gosec
+			s.log.WithError(err).Warn("Failed to write DMSG cache file")
+		}
+		s.log.WithField("file", cacheFile).Debug("Wrote DMSG cache file")
+		return data, nil
+	}
+
+	// Check if cache is too old
+	if time.Since(info.ModTime()).Minutes() > float64(s.config.CacheMaxAge) {
+		s.cacheMu.RUnlock()
+		// Trigger refresh in background, return stale data
+		go s.refreshCacheFile(cacheFile, url)
+	} else {
+		s.cacheMu.RUnlock()
+	}
+
+	s.cacheMu.RLock()
+	defer s.cacheMu.RUnlock()
+	return readFile(cacheFile)
 }
 
 // fetchGeoForIP fetches country code for an IP address
