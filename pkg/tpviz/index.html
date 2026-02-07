@@ -973,10 +973,9 @@
             notInDmsgEl.textContent = notInDmsg;
         }
 
-        // Add DMSG server nodes to the graph (no individual client edges — they caused
-        // severe lag with hundreds of smooth-curve edges per server).
-        // Client counts are shown in server node tooltips and the sidebar list.
-        // Clicking a DMSG server node will dynamically show edges to its clients.
+        // Add DMSG server nodes and server→client edges to the graph.
+        // Server nodes are placed in country clusters via visorServices registration.
+        // Edges are updated incrementally (only add new / remove stale) to avoid lag.
         function addDMSGGraphElements() {
             if (!dmsgData || !dmsgData.servers || !nodesDataset || !edgesDataset) return;
 
@@ -989,14 +988,20 @@
                 if (count > maxClients) maxClients = count;
             });
 
-            // Collect existing DMSG server node IDs for stale removal on refresh
+            // Collect existing DMSG server node IDs and edge IDs for incremental update
             const existingDMSGServerIds = new Set();
             nodesDataset.forEach(node => {
                 if (node.isDMSGServer) existingDMSGServerIds.add(node.id);
             });
+            const existingDMSGEdgeIds = new Set();
+            edgesDataset.forEach(edge => {
+                if (edge.isDMSGConnection) existingDMSGEdgeIds.add(edge.id);
+            });
 
             const newDMSGServerIds = new Set();
+            const desiredEdgeIds = new Set();
             const dmsgNodes = [];
+            const dmsgEdges = [];
 
             dmsgData.servers.forEach(srv => {
                 if (!srv.pk) return;
@@ -1005,15 +1010,18 @@
 
                 const clientCount = srv.clients ? srv.clients.length : 0;
                 const sessions = srv.available_sessions || 0;
-                const flag = srv.country ? countryToFlag(srv.country) : '';
+                const country = srv.country || '';
+                const flag = country ? countryToFlag(country) : '';
                 const shortPK = srv.pk.substring(0, 8);
+
+                // Register in visorServices so country grouping picks it up
+                visorServices[nodeId] = { services: ['dmsg-server'], country: country };
 
                 let title = 'DMSG Server: ' + srv.pk +
                     '\nAddress: ' + (srv.address || '') +
-                    '\nCountry: ' + (srv.country || 'unknown') +
+                    '\nCountry: ' + (country || 'unknown') +
                     '\nAvailable Sessions: ' + sessions +
-                    '\nConnected Clients: ' + clientCount +
-                    '\n\nClick to show client connections';
+                    '\nConnected Clients: ' + clientCount;
 
                 // Size: scale by client count (8 to 28)
                 const size = 8 + (clientCount / maxClients) * 20;
@@ -1029,8 +1037,35 @@
                     mass: 8,
                     borderWidth: 2,
                     isDMSGServer: true,
+                    country: country,
                     hidden: !showDMSGServers
                 });
+
+                // Build edges to connected clients that exist in the graph
+                if (srv.clients) {
+                    srv.clients.forEach(clientPK => {
+                        if (nodesDataset.get(clientPK)) {
+                            const edgeId = 'dmsg-conn-' + srv.pk.substring(0, 8) + '-' + clientPK.substring(0, 8);
+                            desiredEdgeIds.add(edgeId);
+                            // Only create edge object if it doesn't already exist (incremental)
+                            if (!existingDMSGEdgeIds.has(edgeId)) {
+                                dmsgEdges.push({
+                                    id: edgeId,
+                                    from: nodeId,
+                                    to: clientPK,
+                                    color: { color: '#9f6efc', opacity: 0.4 },
+                                    width: 0.5,
+                                    dashes: [4, 4],
+                                    smooth: { type: 'continuous' },
+                                    title: 'DMSG connection',
+                                    isDMSGConnection: true,
+                                    type: 'dmsg-connection',
+                                    hidden: !showDMSGServers
+                                });
+                            }
+                        }
+                    });
+                }
             });
 
             // Remove stale DMSG server nodes (no longer in data)
@@ -1039,23 +1074,21 @@
                 nodesDataset.remove(staleDMSGIds);
             }
 
-            // Remove any leftover DMSG connection edges (from previous version or click-to-show)
-            const staleEdgeIds = [];
-            edgesDataset.forEach(edge => {
-                if (edge.isDMSGConnection) {
-                    staleEdgeIds.push(edge.id);
-                }
-            });
+            // Remove only stale DMSG edges (no longer in desired set) — NOT all of them
+            const staleEdgeIds = [...existingDMSGEdgeIds].filter(id => !desiredEdgeIds.has(id));
             if (staleEdgeIds.length > 0) {
                 edgesDataset.remove(staleEdgeIds);
             }
 
-            // Add/update DMSG server nodes
+            // Add/update DMSG server nodes and new edges
             if (dmsgNodes.length > 0) {
                 nodesDataset.update(dmsgNodes);
             }
+            if (dmsgEdges.length > 0) {
+                edgesDataset.update(dmsgEdges);
+            }
 
-            console.log('DMSG graph: added', dmsgNodes.length, 'server nodes');
+            console.log('DMSG graph:', dmsgNodes.length, 'server nodes,', dmsgEdges.length, 'new edges,', staleEdgeIds.length, 'removed edges');
         }
 
         // Convert ISO country code to flag emoji (e.g., "US" -> "🇺🇸")
@@ -1725,10 +1758,12 @@
                 const existingEdgeIds = new Set(edgesDataset.getIds());
                 const newEdgeIds = new Set(edges.map(e => e.id));
 
-                // Edges to remove (preserve TPS overlay edges, remove stale DMSG connection edges)
+                // Edges to remove (preserve TPS overlay edges and DMSG connection edges)
                 const edgesToRemove = [...existingEdgeIds].filter(id => {
                     if (newEdgeIds.has(id)) return false;
                     if (tpsOverlayEdges.has(id)) return false;
+                    const existingEdge = edgesDataset.get(id);
+                    if (existingEdge && existingEdge.isDMSGConnection) return false;
                     return true;
                 });
 
@@ -2004,44 +2039,11 @@
 
         // Show only edges connected to a specific node, hide others
         // For the local visor, also show route path edges (hop -> destination)
-        // For DMSG server nodes, dynamically create edges to connected clients
+        // For visor nodes, also show their DMSG server connection edges
         function showNodeEdgesOnly(nodeId) {
-            // First remove any temporary DMSG connection edges from a previous click
-            const staleDMSGEdges = [];
-            edgesDataset.forEach(edge => {
-                if (edge.isDMSGConnection) staleDMSGEdges.push(edge.id);
-            });
-            if (staleDMSGEdges.length > 0) edgesDataset.remove(staleDMSGEdges);
-
             // Check if this is a DMSG server node
             const node = nodesDataset.get(nodeId);
             const isDMSGServer = node && node.isDMSGServer;
-
-            // If clicking a DMSG server, create temporary edges to its clients
-            if (isDMSGServer && dmsgData && dmsgData.servers) {
-                const serverPK = nodeId.replace('dmsg-srv-', '');
-                const srv = dmsgData.servers.find(s => s.pk === serverPK);
-                if (srv && srv.clients) {
-                    const tmpEdges = [];
-                    srv.clients.forEach(clientPK => {
-                        if (nodesDataset.get(clientPK)) {
-                            tmpEdges.push({
-                                id: 'dmsg-conn-' + serverPK.substring(0, 8) + '-' + clientPK.substring(0, 8),
-                                from: nodeId,
-                                to: clientPK,
-                                color: { color: '#9f6efc', opacity: 0.4 },
-                                width: 0.5,
-                                dashes: [4, 4],
-                                smooth: false,
-                                title: 'DMSG connection',
-                                isDMSGConnection: true,
-                                type: 'dmsg-connection'
-                            });
-                        }
-                    });
-                    if (tmpEdges.length > 0) edgesDataset.update(tmpEdges);
-                }
-            }
 
             // Build set of route-related PKs if this is the local visor
             const isLocal = isLocalVisor(nodeId);
@@ -2059,19 +2061,16 @@
                 // Also show route path edges when local visor is selected
                 const isRouteEdge = isLocal && edge.isRoutePath &&
                     (routeRelatedPKs.has(edge.from) || routeRelatedPKs.has(edge.to));
-                edgeUpdates.push({ id: edge.id, hidden: !(isConnected || isRouteEdge) });
+                // For visor nodes: also show DMSG connection edges to/from this visor
+                const isDMSGConn = !isDMSGServer && edge.isDMSGConnection &&
+                    (edge.from === nodeId || edge.to === nodeId);
+                edgeUpdates.push({ id: edge.id, hidden: !(isConnected || isRouteEdge || isDMSGConn) });
             });
             edgesDataset.update(edgeUpdates);
         }
 
         // Show all edges (respecting current filters)
         function showAllEdges() {
-            // Remove temporary DMSG connection edges created by click-to-show
-            const dmsgEdgeIds = [];
-            edgesDataset.forEach(edge => {
-                if (edge.isDMSGConnection) dmsgEdgeIds.push(edge.id);
-            });
-            if (dmsgEdgeIds.length > 0) edgesDataset.remove(dmsgEdgeIds);
             applyFilters();
         }
 
