@@ -979,6 +979,9 @@
         function addDMSGGraphElements() {
             if (!dmsgData || !dmsgData.servers || !nodesDataset || !edgesDataset) return;
 
+            // Suspend physics while adding potentially thousands of edges
+            if (network) network.setOptions({ physics: { enabled: false } });
+
             const showDMSGServers = document.getElementById('show-dmsg-servers').checked;
 
             // Find max client count for size scaling
@@ -988,15 +991,20 @@
                 if (count > maxClients) maxClients = count;
             });
 
+            // Build fast lookup of all visor node IDs for edge target checks
+            const visorNodeIds = new Set(nodesDataset.getIds());
+
             // Collect existing DMSG server node IDs and edge IDs for incremental update
             const existingDMSGServerIds = new Set();
             nodesDataset.forEach(node => {
                 if (node.isDMSGServer) existingDMSGServerIds.add(node.id);
             });
-            const existingDMSGEdgeIds = new Set();
-            edgesDataset.forEach(edge => {
-                if (edge.isDMSGConnection) existingDMSGEdgeIds.add(edge.id);
-            });
+            const existingDMSGEdgeIds = new Set(
+                edgesDataset.getIds().filter(id => {
+                    const e = edgesDataset.get(id);
+                    return e && e.isDMSGConnection;
+                })
+            );
 
             const newDMSGServerIds = new Set();
             const desiredEdgeIds = new Set();
@@ -1044,7 +1052,7 @@
                 // Build edges to connected clients that exist in the graph
                 if (srv.clients) {
                     srv.clients.forEach(clientPK => {
-                        if (nodesDataset.get(clientPK)) {
+                        if (visorNodeIds.has(clientPK)) {
                             const edgeId = 'dmsg-conn-' + srv.pk.substring(0, 8) + '-' + clientPK.substring(0, 8);
                             desiredEdgeIds.add(edgeId);
                             // Only create edge object if it doesn't already exist (incremental)
@@ -1053,10 +1061,9 @@
                                     id: edgeId,
                                     from: nodeId,
                                     to: clientPK,
-                                    color: { color: '#9f6efc', opacity: 0.4 },
-                                    width: 0.5,
-                                    dashes: [4, 4],
-                                    smooth: { type: 'continuous' },
+                                    color: { color: '#9f6efc', opacity: 0.3 },
+                                    width: 0.3,
+                                    smooth: false,
                                     title: 'DMSG connection',
                                     isDMSGConnection: true,
                                     type: 'dmsg-connection',
