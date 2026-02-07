@@ -229,7 +229,7 @@ PG_USER="postgres" PG_DATABASE="sd" PG_PASSWORD="" service-discovery --sk $(tail
 			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, log)
 
 			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, sk, sdAPI, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, log); err != nil {
+				if err := dmsghttp.ListenAndServe(ctx, sk, sdAPI, dClient, dmsgPort, dmsgDC, log); err != nil {
 					log.Errorf("dmsghttp.ListenAndServe: %v", err)
 					cancel()
 				}
