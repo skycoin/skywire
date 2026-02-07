@@ -351,31 +351,42 @@ export function reconcileTPSOverlays(): void {
 
 // ── Local Visor Transport Functions ──
 
+// Helper to update result element (re-fetches from DOM to handle refreshes)
+function updateLocalTPResult(style: 'error' | 'warning' | 'success', message: string): void {
+    const el = document.getElementById('local-tp-result') as HTMLElement | null;
+    if (!el) return;
+    el.style.display = 'block';
+    if (style === 'error') {
+        el.style.background = 'rgba(233,69,96,0.2)';
+        el.style.color = '#e94560';
+    } else if (style === 'warning') {
+        el.style.background = 'rgba(255,209,102,0.2)';
+        el.style.color = '#ffd166';
+    } else {
+        el.style.background = 'rgba(0,217,165,0.2)';
+        el.style.color = '#00d9a5';
+    }
+    el.textContent = message;
+}
+
 export async function localCreateTransport(): Promise<void> {
     const remoteInput = document.getElementById('local-tp-remote-pk') as HTMLInputElement | null;
     const typeSelect = document.getElementById('local-tp-type') as HTMLSelectElement | null;
     const createBtn = document.getElementById('local-tp-create-btn') as HTMLButtonElement | null;
-    const resultEl = document.getElementById('local-tp-result') as HTMLElement | null;
 
-    if (!remoteInput || !typeSelect || !createBtn || !resultEl) return;
+    if (!remoteInput || !typeSelect || !createBtn) return;
 
     const remotePK = remoteInput.value.trim();
     const tpType = typeSelect.value;
 
     if (!remotePK) {
-        resultEl.style.display = 'block';
-        resultEl.style.background = 'rgba(233,69,96,0.2)';
-        resultEl.style.color = '#e94560';
-        resultEl.textContent = 'Remote PK required';
+        updateLocalTPResult('error', 'Remote PK required');
         return;
     }
 
     createBtn.disabled = true;
     createBtn.textContent = '...';
-    resultEl.style.display = 'block';
-    resultEl.style.background = 'rgba(255,209,102,0.2)';
-    resultEl.style.color = '#ffd166';
-    resultEl.textContent = 'Creating transport...';
+    updateLocalTPResult('warning', 'Creating transport...');
 
     try {
         const resp = await fetch('/api/local/add-transport', {
@@ -387,20 +398,22 @@ export async function localCreateTransport(): Promise<void> {
         if (!resp.ok) {
             throw new Error(data.error || 'Failed');
         }
-        resultEl.style.background = 'rgba(0,217,165,0.2)';
-        resultEl.style.color = '#00d9a5';
-        resultEl.textContent = 'Created: ' + data.type.toUpperCase() + ' \u2192 ' + data.remote_pk.substring(0, 16) + '...';
-        remoteInput.value = '';
+        updateLocalTPResult('success', 'Created: ' + data.type.toUpperCase() + ' → ' + data.remote_pk.substring(0, 16) + '...');
+
+        // Clear input after success
+        const input = document.getElementById('local-tp-remote-pk') as HTMLInputElement | null;
+        if (input) input.value = '';
 
         // Add to graph as overlay
         addTPSOverlayEdge(data);
     } catch (e: any) {
-        resultEl.style.background = 'rgba(233,69,96,0.2)';
-        resultEl.style.color = '#e94560';
-        resultEl.textContent = 'Error: ' + e.message;
+        updateLocalTPResult('error', 'Error: ' + e.message);
     } finally {
-        createBtn.disabled = false;
-        createBtn.textContent = 'Create';
+        const btn = document.getElementById('local-tp-create-btn') as HTMLButtonElement | null;
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Create';
+        }
     }
 }
 
