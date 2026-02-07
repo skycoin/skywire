@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/rpc"
+	"time"
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
@@ -47,12 +48,24 @@ func NewSetupClient(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client
 	return client, nil
 }
 
+// perNodeDialTimeout is the maximum time to wait for each individual setup node
+const perNodeDialTimeout = 10 * time.Second
+
 func (c *SetupClient) dial(ctx context.Context, dmsgC *dmsg.Client) (net.Conn, error) {
 	for _, sPK := range c.setupNodes {
 		addr := dmsg.Addr{PK: sPK, Port: skyenv.DmsgSetupPort}
-		conn, err := dmsgC.Dial(ctx, addr)
+
+		// Use per-node timeout to prevent one slow/dead node from blocking others
+		dialCtx, cancel := context.WithTimeout(ctx, perNodeDialTimeout)
+		conn, err := dmsgC.Dial(dialCtx, addr)
+		cancel() // Always cancel to avoid context leak
+
 		if err != nil {
 			c.log.WithError(err).Warnf("failed to dial to setup node: setupPK(%s)", sPK)
+			// Check if parent context was cancelled
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			continue
 		}
 
