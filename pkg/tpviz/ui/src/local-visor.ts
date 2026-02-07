@@ -88,10 +88,19 @@ export function updateLocalVisorDisplayEnhanced(): void {
         return;
     }
 
-    // Preserve input field value before rebuilding UI
+    // Preserve input field value and result message before rebuilding UI
     const existingInput = document.getElementById('local-tp-remote-pk') as HTMLInputElement;
     const preservedPK = existingInput ? existingInput.value : '';
     const inputHadFocus = existingInput && document.activeElement === existingInput;
+
+    // Preserve result message state
+    const existingResult = document.getElementById('local-tp-result') as HTMLElement;
+    const preservedResult = existingResult ? {
+        display: existingResult.style.display,
+        background: existingResult.style.background,
+        color: existingResult.style.color,
+        text: existingResult.textContent
+    } : null;
 
     section.style.display = 'block';
     const pk = S.localVisorData.pub_key;
@@ -218,6 +227,15 @@ export function updateLocalVisorDisplayEnhanced(): void {
         if (inputHadFocus) {
             newInput.focus();
         }
+    }
+
+    // Restore preserved result message (keep visible for 5 seconds after creation)
+    const newResult = document.getElementById('local-tp-result') as HTMLElement;
+    if (newResult && preservedResult && preservedResult.display !== 'none') {
+        newResult.style.display = preservedResult.display;
+        newResult.style.background = preservedResult.background;
+        newResult.style.color = preservedResult.color;
+        newResult.textContent = preservedResult.text;
     }
 }
 
