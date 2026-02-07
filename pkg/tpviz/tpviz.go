@@ -28,8 +28,8 @@ import (
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-//go:embed index.html
-var legacyIndexHTML embed.FS
+//go:embed legacy/*
+var legacyFS embed.FS
 
 //go:embed dist/*
 var wasmDistFS embed.FS
@@ -76,22 +76,22 @@ type Config struct {
 // DefaultConfig returns a Config with default values
 func DefaultConfig() Config {
 	return Config{
-		Addr:          "127.0.0.1",
-		Port:          8080,
-		CacheFile:     filepath.Join(os.TempDir(), "tpd.json"),
-		CacheFileUT:   filepath.Join(os.TempDir(), "ut.json"),
-		CacheFileSD:   filepath.Join(os.TempDir(), "sd.json"),
+		Addr:                 "127.0.0.1",
+		Port:                 8080,
+		CacheFile:            filepath.Join(os.TempDir(), "tpd.json"),
+		CacheFileUT:          filepath.Join(os.TempDir(), "ut.json"),
+		CacheFileSD:          filepath.Join(os.TempDir(), "sd.json"),
 		CacheFileDMSGServers: filepath.Join(os.TempDir(), "dmsg-servers.json"),
 		CacheFileDMSGEntries: filepath.Join(os.TempDir(), "dmsg-entries.json"),
 		CacheFileDMSGClients: filepath.Join(os.TempDir(), "dmsg-clients.json"),
-		CacheMaxAge:   5,
-		TPDURL:        deployment.Prod.TransportDiscovery,
-		UTURL:         deployment.Prod.UptimeTracker,
-		SDURL:         deployment.Prod.ServiceDiscovery,
-		DMSGURL:       deployment.Prod.DmsgDiscovery,
-		NoCache:       false,
-		AutoRefresh:   true,
-		GeoIPURL:      "http://ip.skycoin.com",
+		CacheMaxAge:          5,
+		TPDURL:               deployment.Prod.TransportDiscovery,
+		UTURL:                deployment.Prod.UptimeTracker,
+		SDURL:                deployment.Prod.ServiceDiscovery,
+		DMSGURL:              deployment.Prod.DmsgDiscovery,
+		NoCache:              false,
+		AutoRefresh:          true,
+		GeoIPURL:             "http://ip.skycoin.com",
 	}
 }
 
@@ -343,7 +343,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if path == "/" || path == "/index.html" {
-			content, err := legacyIndexHTML.ReadFile("index.html")
+			content, err := legacyFS.ReadFile("legacy/index.html")
 			if err != nil {
 				http.Error(w, "Failed to read index.html", http.StatusInternalServerError)
 				return
@@ -353,6 +353,17 @@ func (s *Server) setupRoutes() {
 			return
 		}
 		http.NotFound(w, r)
+	})
+
+	// Serve bundled JavaScript for legacy UI
+	s.mux.HandleFunc("/bundle.js", func(w http.ResponseWriter, r *http.Request) {
+		content, err := legacyFS.ReadFile("legacy/bundle.js")
+		if err != nil {
+			http.Error(w, "Failed to read bundle.js", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Write(content) //nolint:errcheck,gosec
 	})
 
 	// WASM UI at /wasm
@@ -1944,7 +1955,7 @@ type NavLink struct {
 // GetEmbeddedIndexWithNavLinks returns the full embedded legacy index.html with navigation links.
 // This is for the legacy JavaScript UI.
 func GetEmbeddedIndexWithNavLinks(navLinks []NavLink) (string, error) {
-	content, err := legacyIndexHTML.ReadFile("index.html")
+	content, err := legacyFS.ReadFile("legacy/index.html")
 	if err != nil {
 		return "", err
 	}

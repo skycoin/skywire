@@ -187,6 +187,9 @@ tpviz-wasm-tinygo: ## Build transport visualizer WASM binary with tinygo (smalle
 	tinygo build -o ./pkg/tpviz/dist/main.wasm -target wasm -no-debug -opt=z -panic=trap ./pkg/tpviz/wasm
 	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./pkg/tpviz/dist/
 
+tpviz-ui: ## Build transport visualizer TypeScript UI into pkg/tpviz/legacy for embedding
+	cd ./pkg/tpviz/ui && npm install && npm run build
+
 clean-windows: ## Clean project: remove created binaries and apps
 	powershell -Command "If (Test-Path ./local) { Remove-Item -Path ./local -Force -Recurse }"
 	powershell -Command "If (Test-Path ./build) { Remove-Item -Path ./build -Force -Recurse }"
