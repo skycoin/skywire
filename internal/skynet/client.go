@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -46,6 +47,11 @@ func (c *Client) Connect(remoteConn net.Conn) error {
 	c.mu.Lock()
 	c.remoteConn = remoteConn
 	c.mu.Unlock()
+
+	// Wait briefly for the connection to fully establish
+	// This is a workaround for the noise handshake race condition in route groups
+	// TODO: Fix the underlying timing issue in route group setup
+	time.Sleep(500 * time.Millisecond)
 
 	// Send connection request
 	msg := clientMsg{
