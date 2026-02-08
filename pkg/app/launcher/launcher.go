@@ -345,9 +345,20 @@ func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string)
 		LogDBLoc:    filepath.Join(lc.LocalPath, ac.Name+"_log.db"),
 	}
 
+	// Try to find internal app function:
+	// 1. If Binary is empty, look up by Name (e.g., "skynet")
+	// 2. If Binary is set, look up by Binary name (e.g., "skynet-3435" with Binary="skynet")
+	// This allows multiple instances (skynet-3435, skynet-8080) to use the same internal function.
 	if ac.Binary == "" {
 		if runFunc, found := GetApp(ac.Name); found {
 			procConf.RunFunc = runFunc
+		}
+	} else {
+		// Binary is set - try to find internal app by binary name first
+		if runFunc, found := GetApp(ac.Binary); found {
+			procConf.RunFunc = runFunc
+			// Clear BinaryLoc since we're using internal function
+			procConf.BinaryLoc = ""
 		}
 	}
 
