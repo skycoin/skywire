@@ -108,6 +108,8 @@ export function updateLocalVisorDisplayEnhanced(): void {
 
     if (!S.localVisorData || !S.localVisorData.connected) {
         section.style.display = 'none';
+        showAppsSection(false);
+        showPingSection(false);
         return;
     }
 
@@ -147,6 +149,8 @@ export function updateLocalVisorDisplayEnhanced(): void {
     } : null;
 
     section.style.display = 'block';
+    showAppsSection(true);
+    showPingSection(true);
     const pk = S.localVisorData.pub_key;
     const tps = S.localVisorData.transports || [];
     const routes = S.localVisorData.routes || [];
