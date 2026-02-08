@@ -148,17 +148,11 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		}
 	}
 
-	remoteConn, err := appnet.WrapConn(conn)
-	if err != nil {
-		setAppError(appCl, fmt.Errorf("failed to wrap connection: %w", err))
-		return fmt.Errorf("failed to wrap connection: %w", err)
-	}
-
 	// Create client
 	client := skynet.NewClient(appCl.Log(), remotePK, remotePort, localPort, rawTCP)
 
 	// Connect (send request to server)
-	if err := client.Connect(remoteConn); err != nil {
+	if err := client.Connect(conn); err != nil {
 		setAppError(appCl, err)
 		appCl.Log().WithError(err).Error("Failed to connect to remote server")
 		return err
