@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	skynetAppName = "skynet"
+	skynetBinaryName = "skynet"
 )
 
 var (
@@ -26,6 +26,7 @@ var (
 	srvAppPort     uint16
 	srvUseInternal bool
 	srvUseExternal bool
+	srvName        string // optional custom name for the server instance
 )
 
 func init() {
@@ -39,7 +40,10 @@ func init() {
 	srvStartCmd.Flags().Uint16Var(&srvAppPort, "port", 0, "routing port for communication between app and visor")
 	srvStartCmd.Flags().BoolVar(&srvUseInternal, "internal", false, "force internal launcher")
 	srvStartCmd.Flags().BoolVar(&srvUseExternal, "external", false, "force external launcher")
+	srvStartCmd.Flags().StringVarP(&srvName, "name", "n", "", "custom name for this server instance (default: skynet-<first-port>)")
 	srvStartCmd.MarkFlagsMutuallyExclusive("internal", "external")
+
+	srvStopCmd.Flags().StringVarP(&srvName, "name", "n", "", "name of the server instance to stop")
 }
 
 var srvCmd = &cobra.Command{
@@ -50,12 +54,15 @@ var srvCmd = &cobra.Command{
 The skynet server exposes local TCP ports over the Skywire network.
 Other visors can connect to these ports using the skynet client.
 
+Multiple server instances can run simultaneously with different ports.
+Each instance gets a unique name (e.g., skynet-3435, skynet-8080).
+
 With whitelist support, you can restrict access to specific public keys.`,
 }
 
 var srvStartCmd = &cobra.Command{
 	Use:   "start",
-	Short: "Start the skynet server",
+	Short: "Start a skynet server instance",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -63,18 +70,13 @@ var srvStartCmd = &cobra.Command{
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 
-		// Check if app exists
-		_, err = rpcClient.App(skynetAppName)
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("skynet app not found in visor config: %w", err))
-		}
-
-		// Validate and configure the app
+		// Validate ports flag
 		if srvPorts == "" {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--ports flag is required"))
 		}
 
-		// Validate ports
+		// Validate and get first port for naming
+		var firstPort int
 		for _, portStr := range strings.Split(srvPorts, ",") {
 			portStr = strings.TrimSpace(portStr)
 			if portStr == "" {
@@ -87,10 +89,30 @@ var srvStartCmd = &cobra.Command{
 			if port <= 0 || port > 65535 {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("port out of range: %d", port))
 			}
+			if firstPort == 0 {
+				firstPort = port
+			}
 		}
 
+		// Generate app name: custom name or skynet-<first-port>
+		appName := srvName
+		if appName == "" {
+			appName = fmt.Sprintf("skynet-%d", firstPort)
+		}
+
+		// Check if app exists, add it if not
+		_, err = rpcClient.App(appName)
+		if err != nil {
+			// App not in config - add it automatically
+			// appName is unique, binaryName is always "skynet"
+			if addErr := rpcClient.AddApp(appName, skynetBinaryName); addErr != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to add %s app to config: %w", appName, addErr))
+			}
+		}
+
+		// Configure the app
 		arguments := map[string]any{
-			"app":     "skynet",
+			"app":     skynetBinaryName,
 			"--ports": srvPorts,
 		}
 
@@ -102,9 +124,9 @@ var srvStartCmd = &cobra.Command{
 			arguments["appPort"] = srvAppPort
 		}
 
-		err = rpcClient.DoCustomSetting(skynetAppName, arguments)
+		err = rpcClient.DoCustomSetting(appName, arguments)
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to configure skynet: %w", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to configure %s: %w", appName, err))
 		}
 
 		// Determine launcher mode
@@ -117,41 +139,88 @@ var srvStartCmd = &cobra.Command{
 
 		// Start the app
 		if launcherMode != "" {
-			err = rpcClient.StartAppWithMode(skynetAppName, launcherMode)
+			err = rpcClient.StartAppWithMode(appName, launcherMode)
 		} else {
-			err = rpcClient.StartApp(skynetAppName)
+			err = rpcClient.StartApp(appName)
 		}
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to start skynet: %w", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to start %s: %w", appName, err))
 		}
 
-		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintf("Skynet server started, exposing ports: %s\n", srvPorts))
+		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintf("Skynet server '%s' started, exposing ports: %s\n", appName, srvPorts))
 	},
 }
 
 var srvStopCmd = &cobra.Command{
-	Use:   "stop",
-	Short: "Stop the skynet server",
-	Run: func(cmd *cobra.Command, _ []string) {
+	Use:   "stop [name]",
+	Short: "Stop a skynet server instance",
+	Long: `Stop a skynet server instance by name.
+
+If no name is provided, stops all running skynet server instances.
+
+Examples:
+  skywire cli skynet srv stop skynet-3435
+  skywire cli skynet srv stop --name skynet-8080
+  skywire cli skynet srv stop  # stops all skynet-* servers`,
+	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 
-		err = rpcClient.StopApp(skynetAppName)
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to stop skynet: %w", err))
+		// Get name from args or flag
+		appName := srvName
+		if appName == "" && len(args) > 0 {
+			appName = args[0]
 		}
 
-		internal.PrintOutput(cmd.Flags(), "OK", "Skynet server stopped\n")
+		if appName != "" {
+			// Stop specific instance
+			err = rpcClient.StopApp(appName)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to stop %s: %w", appName, err))
+			}
+			internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintf("Skynet server '%s' stopped\n", appName))
+		} else {
+			// Stop all skynet-* servers
+			states, err := rpcClient.Apps()
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get apps: %w", err))
+			}
+
+			stopped := 0
+			for _, state := range states {
+				if strings.HasPrefix(state.Name, "skynet-") && state.Status == appserver.AppStatusRunning {
+					if err := rpcClient.StopApp(state.Name); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to stop %s: %v\n", state.Name, err)
+					} else {
+						stopped++
+						fmt.Printf("Stopped %s\n", state.Name)
+					}
+				}
+			}
+
+			if stopped == 0 {
+				internal.PrintOutput(cmd.Flags(), "OK", "No running skynet servers found\n")
+			} else {
+				internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintf("Stopped %d skynet server(s)\n", stopped))
+			}
+		}
 	},
 }
 
 var srvStatusCmd = &cobra.Command{
-	Use:   "status",
+	Use:   "status [name]",
 	Short: "Show skynet server status",
-	Run: func(cmd *cobra.Command, _ []string) {
+	Long: `Show status of skynet server instances.
+
+If no name is provided, shows all skynet server instances.
+
+Examples:
+  skywire cli skynet srv status
+  skywire cli skynet srv status skynet-3435`,
+	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
@@ -160,6 +229,12 @@ var srvStatusCmd = &cobra.Command{
 
 		states, err := rpcClient.Apps()
 		internal.Catch(cmd.Flags(), err)
+
+		// Filter name from args
+		filterName := ""
+		if len(args) > 0 {
+			filterName = args[0]
+		}
 
 		var b bytes.Buffer
 		w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
@@ -173,11 +248,15 @@ var srvStatusCmd = &cobra.Command{
 			Details   string       `json:"details,omitempty"`
 		}
 
-		var jsonStatus serverStatus
+		var allStatus []serverStatus
 		found := false
 
 		for _, state := range states {
-			if state.Name == skynetAppName {
+			// Match skynet-* apps or exact filter match
+			isSkynetServer := strings.HasPrefix(state.Name, "skynet-") || state.Name == "skynet"
+			matchesFilter := filterName == "" || state.Name == filterName
+
+			if isSkynetServer && matchesFilter {
 				found = true
 				status := "stopped"
 				if state.Status == appserver.AppStatusRunning {
@@ -187,7 +266,7 @@ var srvStatusCmd = &cobra.Command{
 					status = "errored"
 				}
 
-				jsonStatus = serverStatus{
+				jsonStatus := serverStatus{
 					Name:      state.Name,
 					Status:    status,
 					AutoStart: state.AutoStart,
@@ -195,6 +274,7 @@ var srvStatusCmd = &cobra.Command{
 					Args:      state.Args,
 					Details:   state.DetailedStatus,
 				}
+				allStatus = append(allStatus, jsonStatus)
 
 				_, err = fmt.Fprintf(w, "Name:\t%s\n", state.Name)
 				internal.Catch(cmd.Flags(), err)
@@ -221,16 +301,20 @@ var srvStatusCmd = &cobra.Command{
 					_, err = fmt.Fprintf(w, "Details:\t%s\n", state.DetailedStatus)
 					internal.Catch(cmd.Flags(), err)
 				}
-				break
+				_, _ = fmt.Fprintln(w, "---")
 			}
 		}
 
 		if !found {
-			internal.PrintOutput(cmd.Flags(), nil, "Skynet server not configured\n")
+			if filterName != "" {
+				internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("Skynet server '%s' not found\n", filterName))
+			} else {
+				internal.PrintOutput(cmd.Flags(), nil, "No skynet servers configured\n")
+			}
 			return
 		}
 
 		internal.Catch(cmd.Flags(), w.Flush())
-		internal.PrintOutput(cmd.Flags(), jsonStatus, b.String())
+		internal.PrintOutput(cmd.Flags(), allStatus, b.String())
 	},
 }
