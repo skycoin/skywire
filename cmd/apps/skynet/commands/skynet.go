@@ -5,25 +5,21 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/skycoin/skywire/internal/skynet"
 	"github.com/skycoin/skywire/pkg/app"
-	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-)
-
-const (
-	netType = appnet.TypeSkynet
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 var (
@@ -31,22 +27,22 @@ var (
 	localPorts string
 	// whitelist is a comma-separated list of public keys allowed to connect
 	whitelist string
-	// appPort is the routing port for the app
-	appPort uint16
+	// rpcAddr is the visor RPC address
+	rpcAddr string
 )
 
 func init() {
 	launcher.RegisterApp("skynet", RunSkynet)
 	RootCmd.Flags().StringVar(&localPorts, "ports", "", "comma-separated list of local ports to expose (e.g., '8080,9000')")
-	RootCmd.Flags().StringVar(&whitelist, "whitelist", "", "comma-separated list of public keys allowed to connect (empty = allow all)")
-	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
+	RootCmd.Flags().StringVar(&whitelist, "whitelist", "", "comma-separated list of public keys allowed to connect (not currently supported)")
+	RootCmd.Flags().StringVar(&rpcAddr, "rpc", "localhost:3435", "visor RPC address")
 }
 
 // RootCmd is the root command for skynet
 var RootCmd = &cobra.Command{
 	Use:                   "skynet",
 	Short:                 "skywire port forwarding server application",
-	Long:                  "Skynet exposes local TCP ports over skywire network with optional whitelist access control",
+	Long:                  "Skynet exposes local TCP ports over skywire network via the built-in sky_forwarding service",
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -66,8 +62,8 @@ func RunSkynet(ctx context.Context, args []string) error {
 	if len(args) > 0 {
 		fs := pflag.NewFlagSet("skynet", pflag.ContinueOnError)
 		fs.StringVar(&localPorts, "ports", "", "comma-separated list of local ports to expose")
-		fs.StringVar(&whitelist, "whitelist", "", "comma-separated list of allowed public keys")
-		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		fs.StringVar(&whitelist, "whitelist", "", "comma-separated list of allowed public keys (not currently supported)")
+		fs.StringVar(&rpcAddr, "rpc", "localhost:3435", "visor RPC address")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -105,86 +101,74 @@ func RunSkynet(ctx context.Context, args []string) error {
 		return err
 	}
 
-	// Parse whitelist
-	var allowedPKs []cipher.PubKey
+	// Warn about whitelist
 	if whitelist != "" {
-		for _, pkStr := range strings.Split(whitelist, ",") {
-			pkStr = strings.TrimSpace(pkStr)
-			if pkStr == "" {
-				continue
-			}
-			var pk cipher.PubKey
-			if err := pk.Set(pkStr); err != nil {
-				setAppError(appCl, fmt.Errorf("invalid public key in whitelist: %s", pkStr))
-				return fmt.Errorf("invalid public key in whitelist: %s", pkStr)
-			}
-			allowedPKs = append(allowedPKs, pk)
-		}
+		appCl.Log().Warn("Whitelist is not currently supported with the built-in sky_forwarding service")
 	}
 
-	appCl.Log().Infof("Exposing ports: %v", ports)
-	if len(allowedPKs) > 0 {
-		appCl.Log().Infof("Whitelist enabled with %d public keys", len(allowedPKs))
-	} else {
-		appCl.Log().Info("Whitelist disabled - allowing all connections")
-	}
-
-	// Create server
-	srv := skynet.NewServer(appCl.Log(), ports, allowedPKs)
-
-	// Get routing port
-	port := appCl.Config().RoutingPort
-	if appPort != 0 {
-		port = routing.Port(appPort)
-		setAppPort(appCl, port)
-	}
+	appCl.Log().Infof("Exposing ports: %v via built-in sky_forwarding", ports)
 
 	setAppStatus(appCl, appserver.AppDetailedStatusStarting)
 
-	// Listen on skynet
-	l, err := appCl.Listen(netType, port)
+	// Create RPC client to visor
+	rpcClient, err := createRPCClient(rpcAddr)
 	if err != nil {
-		setAppError(appCl, err)
-		appCl.Log().Errorf("Error listening network %v on port %d: %v", netType, port, err)
-		return err
+		setAppError(appCl, fmt.Errorf("failed to connect to visor RPC: %w", err))
+		return fmt.Errorf("failed to connect to visor RPC: %w", err)
 	}
 
-	appCl.Log().Infof("Listening on skynet port %d", port)
+	// Register all ports with the visor
+	registeredPorts := []int{}
+	for _, port := range ports {
+		if err := rpcClient.RegisterHTTPPort(port); err != nil {
+			appCl.Log().Errorf("Failed to register port %d: %v", port, err)
+			// Deregister any ports we already registered
+			for _, p := range registeredPorts {
+				_ = rpcClient.DeregisterHTTPPort(p)
+			}
+			setAppError(appCl, fmt.Errorf("failed to register port %d: %w", port, err))
+			return fmt.Errorf("failed to register port %d: %w", port, err)
+		}
+		appCl.Log().Infof("Registered port %d with visor", port)
+		registeredPorts = append(registeredPorts, port)
+	}
+
+	appCl.Log().Infof("All %d ports registered, server ready", len(ports))
 	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 
 	// Handle shutdown
 	termCh := make(chan os.Signal, 1)
 	signal.Notify(termCh, os.Interrupt)
 
-	go func() {
-		<-termCh
-		appCl.Log().Info("Received interrupt, shutting down...")
-		if err := srv.Close(); err != nil {
-			appCl.Log().Errorf("Error closing server: %v", err)
-		}
-	}()
-
-	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
-
-	// Serve
-	serveCh := make(chan error, 1)
-	go func() {
-		serveCh <- srv.Serve(l)
-	}()
-
+	// Wait for shutdown or context cancellation
 	select {
-	case err := <-serveCh:
-		if err != nil {
-			appCl.Log().Errorf("Serve error: %v", err)
-			return err
-		}
+	case <-termCh:
+		appCl.Log().Info("Received interrupt, shutting down...")
 	case <-ctx.Done():
-		if err := srv.Close(); err != nil {
-			return err
+		appCl.Log().Info("Context cancelled, shutting down...")
+	}
+
+	// Deregister all ports
+	for _, port := range registeredPorts {
+		if err := rpcClient.DeregisterHTTPPort(port); err != nil {
+			appCl.Log().Errorf("Failed to deregister port %d: %v", port, err)
+		} else {
+			appCl.Log().Infof("Deregistered port %d", port)
 		}
 	}
 
+	setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 	return nil
+}
+
+func createRPCClient(addr string) (visor.API, error) {
+	const rpcDialTimeout = time.Second * 5
+	conn, err := net.DialTimeout("tcp", addr, rpcDialTimeout)
+	if err != nil {
+		return nil, err
+	}
+	logger := logging.MustGetLogger("visor-rpc")
+	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, 0), nil
 }
 
 func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
@@ -203,11 +187,5 @@ func setAppError(appCl *app.Client, appErr error) {
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
-	}
-}
-
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if err := appCl.SetAppPort(port); err != nil {
-		appCl.Log().Errorf("Failed to set port %v: %v", port, err)
 	}
 }
