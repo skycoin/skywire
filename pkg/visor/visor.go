@@ -113,9 +113,11 @@ type Visor struct {
 	allowedPorts         map[int]bool
 	allowedMX            *sync.RWMutex
 
-	pingConns    map[cipher.PubKey]ping
-	pingConnMx   *sync.Mutex
-	pingPcktSize int
+	pingConns     map[cipher.PubKey]ping
+	pingConnMx    *sync.Mutex
+	pingPcktSize  int
+	dmsgPingConns map[cipher.PubKey]ping
+	dmsgPingMx    *sync.Mutex
 	logStorePath string
 
 	survey     visorconfig.Survey
@@ -265,6 +267,8 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		connectedHypervisors: make(map[cipher.PubKey]bool),
 		pingConns:            make(map[cipher.PubKey]ping),
 		pingConnMx:           new(sync.Mutex),
+		dmsgPingConns:        make(map[cipher.PubKey]ping),
+		dmsgPingMx:           new(sync.Mutex),
 		allowedPorts:         make(map[int]bool),
 		survey:               visorconfig.Survey{},
 		surveyLock:           new(sync.RWMutex),

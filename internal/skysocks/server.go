@@ -13,34 +13,40 @@ import (
 	ipc "github.com/james-barrow/golang-ipc"
 
 	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // Server implements multiplexing proxy server using yamux.
 type Server struct {
-	appCl    *app.Client
-	sMu      sync.Mutex
-	socks    *socks5.Server
-	listener net.Listener
-	closed   uint32
+	appCl     *app.Client
+	sMu       sync.Mutex
+	socks     *socks5.Server
+	listener  net.Listener
+	closed    uint32
+	whitelist map[cipher.PubKey]struct{}
+	useWL     bool
 }
 
 // NewServer constructs a new Server.
-func NewServer(passcode string, appCl *app.Client) (*Server, error) {
-	var credentials socks5.CredentialStore
-	if passcode != "" {
-		credentials = passcodeCredentials(passcode)
-	}
-
-	s, err := socks5.New(&socks5.Config{Credentials: credentials})
+func NewServer(whitelist []cipher.PubKey, appCl *app.Client) (*Server, error) {
+	s, err := socks5.New(&socks5.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("socks5: %w", err)
 	}
 
+	wlMap := make(map[cipher.PubKey]struct{})
+	for _, pk := range whitelist {
+		wlMap[pk] = struct{}{}
+	}
+
 	server := &Server{
-		appCl: appCl,
-		socks: s,
+		appCl:     appCl,
+		socks:     s,
+		whitelist: wlMap,
+		useWL:     len(whitelist) > 0,
 	}
 
 	return server, nil
@@ -82,6 +88,30 @@ func (s *Server) Serve(l net.Listener) error {
 			s.appCl.Log().Debug("Accepted new skysocks connection")
 		}
 
+		// Check whitelist if enabled
+		if s.useWL {
+			remotePK, err := s.getRemotePK(conn)
+			if err != nil {
+				if s.appCl != nil {
+					s.appCl.Log().WithError(err).Warn("Failed to get remote PK, rejecting connection")
+				}
+				conn.Close()
+				continue
+			}
+
+			if _, allowed := s.whitelist[remotePK]; !allowed {
+				if s.appCl != nil {
+					s.appCl.Log().WithField("remote_pk", remotePK.Hex()).Warn("Connection rejected: not in whitelist")
+				}
+				conn.Close()
+				continue
+			}
+
+			if s.appCl != nil {
+				s.appCl.Log().WithField("remote_pk", remotePK.Hex()).Debug("Whitelisted connection accepted")
+			}
+		}
+
 		sessionCfg := yamux.DefaultConfig()
 		sessionCfg.EnableKeepAlive = false
 		session, err := yamux.Server(conn, sessionCfg)
@@ -97,6 +127,21 @@ func (s *Server) Serve(l net.Listener) error {
 			}
 		}()
 	}
+}
+
+// getRemotePK extracts the remote public key from the connection
+func (s *Server) getRemotePK(conn net.Conn) (cipher.PubKey, error) {
+	wrappedConn, err := appnet.WrapConn(conn)
+	if err != nil {
+		return cipher.PubKey{}, fmt.Errorf("failed to wrap connection: %w", err)
+	}
+
+	rAddr, ok := wrappedConn.RemoteAddr().(appnet.Addr)
+	if !ok {
+		return cipher.PubKey{}, fmt.Errorf("failed to get remote address")
+	}
+
+	return rAddr.PubKey, nil
 }
 
 // ListenIPC starts named-pipe based connection server for windows or unix socket in Linux/Mac
@@ -140,12 +185,7 @@ func (s *Server) isClosed() bool {
 	return atomic.LoadUint32(&s.closed) != 0
 }
 
-type passcodeCredentials string
-
-func (s passcodeCredentials) Valid(user, password string) bool {
-	if len(s) == 0 {
-		return true
-	}
-
-	return user == string(s) || password == string(s)
+// IsPublic returns true if whitelist is not enabled (server is public)
+func (s *Server) IsPublic() bool {
+	return !s.useWL
 }

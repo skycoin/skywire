@@ -138,8 +138,10 @@ var (
 	dmsgTrackers vinit.Module
 	// Skywire Forwarding conn module
 	skyFwd vinit.Module
-	// Ping module
+	// Ping module (skywire routes)
 	pi vinit.Module
+	// Dmsg ping module (dmsg direct connection)
+	dmsgPi vinit.Module
 	// Embedded Transport Setup Node (separate dmsg client with TPS identity)
 	embTPS vinit.Module
 	// UI server module (serves tp-viz)
@@ -187,12 +189,13 @@ func registerModules(logger *logging.MasterLogger) {
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
+	dmsgPi = maker("dmsg_ping", initDmsgPing, &dmsgC)
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm, &stcprC)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
 	embTPS = maker("embedded_tps", initEmbeddedTPS, &dmsgC)
 	uiServer = maker("ui_server", initUIServer, &dmsgC, &tr, &embTPS)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc, &tpdco, &embTPS, &uiServer)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &systemSurvey, &tc, &tpdco, &embTPS, &uiServer)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -848,18 +851,63 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 		return
 	}
 
-	log.Debugf("Forwarding %s", lHost)
+	log.Debugf("Forwarding %s (raw_tcp=%v)", lHost, cMsg.RawTCP)
 
 	// send nil error to indicate to the remote connection that everything is ok
 	sendError(log, remoteConn, nil)
 
-	go forward(log, remoteConn, lHost)
+	go forward(log, remoteConn, lHost, cMsg.RawTCP)
 }
 
-// forward reads a http.Request from the remote conn of the requesting visor forwards that request
-// to the requested local server and forwards the http.Response from the local server to the requesting
-// visor via the remote conn
-func forward(log *logging.Logger, remoteConn net.Conn, lHost string) {
+// forward proxies data between remoteConn (the skywire connection) and a local server.
+// When rawTCP is true, it uses bidirectional io.Copy for raw TCP proxying.
+// When rawTCP is false, it reads HTTP requests and forwards them to the local server.
+func forward(log *logging.Logger, remoteConn net.Conn, lHost string, rawTCP bool) {
+	if rawTCP {
+		forwardRawTCP(log, remoteConn, lHost)
+		return
+	}
+	forwardHTTP(log, remoteConn, lHost)
+}
+
+// forwardRawTCP does bidirectional raw TCP proxying using io.Copy
+func forwardRawTCP(log *logging.Logger, remoteConn net.Conn, lHost string) {
+	localConn, err := net.Dial("tcp", lHost)
+	if err != nil {
+		log.WithError(err).Error("Failed to dial local server")
+		closeConn(log, remoteConn)
+		return
+	}
+
+	done := make(chan struct{}, 2)
+
+	// remote -> local
+	go func() {
+		_, err := io.Copy(localConn, remoteConn)
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+			log.WithError(err).Debug("remote->local copy ended")
+		}
+		done <- struct{}{}
+	}()
+
+	// local -> remote
+	go func() {
+		_, err := io.Copy(remoteConn, localConn)
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+			log.WithError(err).Debug("local->remote copy ended")
+		}
+		done <- struct{}{}
+	}()
+
+	// Wait for one direction to finish, then close both
+	<-done
+	closeConn(log, remoteConn)
+	closeConn(log, localConn)
+	<-done
+}
+
+// forwardHTTP reads HTTP requests from remoteConn and forwards them to the local server
+func forwardHTTP(log *logging.Logger, remoteConn net.Conn, lHost string) {
 	for {
 		buf := make([]byte, 32*1024)
 		n, err := remoteConn.Read(buf)
@@ -926,7 +974,8 @@ func closeConn(log *logging.Logger, conn net.Conn) {
 }
 
 type clientMsg struct {
-	Port int `json:"port"`
+	Port   int  `json:"port"`
+	RawTCP bool `json:"raw_tcp,omitempty"`
 }
 
 type serverReply struct {
@@ -1034,6 +1083,99 @@ func handlePingConn(log *logging.Logger, remoteConn net.Conn, _ *Visor) {
 		}
 
 		log.Debug("Echoed ping response")
+	}
+}
+
+func initDmsgPing(ctx context.Context, v *Visor, log *logging.Logger) error {
+	dmsgC := v.dmsgC
+	if dmsgC == nil {
+		return nil
+	}
+
+	// Wait for dmsg client to be ready
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-dmsgC.Ready():
+	}
+
+	lis, err := dmsgC.Listen(visorconfig.DmsgPingPort)
+	if err != nil {
+		return err
+	}
+
+	v.pushCloseStack("dmsg_ping", lis.Close)
+
+	go func() {
+		for {
+			conn, err := lis.Accept()
+			if err != nil {
+				if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+					log.WithError(err).Error("Failed to accept dmsg ping conn")
+				}
+				return
+			}
+			log.Debugf("Accepted dmsg ping conn from %s", conn.RemoteAddr())
+			go handleDmsgPingConn(log, conn)
+		}
+	}()
+
+	log.WithField("port", visorconfig.DmsgPingPort).Info("Dmsg ping listener started")
+	return nil
+}
+
+func handleDmsgPingConn(log *logging.Logger, conn net.Conn) {
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.WithError(err).Debug("Error closing dmsg ping conn")
+		}
+	}()
+
+	for {
+		buf := make([]byte, 32*1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				log.WithError(err).Error("Failed to read dmsg ping packet")
+			}
+			return
+		}
+
+		var size PingSizeMsg
+		err = json.Unmarshal(buf[:n], &size)
+		if err != nil {
+			log.WithError(err).Error("Failed to unmarshal dmsg ping size")
+			return
+		}
+
+		// Ack the size message
+		_, err = conn.Write([]byte("ok"))
+		if err != nil {
+			log.WithError(err).Error("Failed to write dmsg ping ack")
+			return
+		}
+
+		// Read the full ping payload
+		var ping []byte
+		for len(ping) < size.Size {
+			n, err = conn.Read(buf)
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					log.WithError(err).Error("Failed to read dmsg ping data")
+				}
+				return
+			}
+			ping = append(ping, buf[:n]...)
+		}
+
+		// Echo back for RTT measurement
+		_, err = conn.Write([]byte("pong"))
+		if err != nil {
+			log.WithError(err).Error("Failed to write dmsg ping echo")
+			return
+		}
+
+		log.Debug("Echoed dmsg ping response")
 	}
 }
 

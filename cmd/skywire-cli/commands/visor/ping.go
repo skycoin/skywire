@@ -14,12 +14,13 @@ import (
 )
 
 var (
-	tries      int
-	pcktSize   int
+	tries       int
+	pcktSize    int
 	pubVisCount int
-	localRoute bool
-	createTp   bool
-	tpType     string
+	localRoute  bool
+	createTp    bool
+	tpType      string
+	useDmsg     bool
 )
 
 func init() {
@@ -29,6 +30,7 @@ func init() {
 	pingCmd.Flags().BoolVar(&localRoute, "local-route", false, "Calculate routes locally using cached TPD data instead of querying route finder")
 	pingCmd.Flags().BoolVar(&createTp, "create-tp", false, "Create a direct transport to the target if none exists")
 	pingCmd.Flags().StringVar(&tpType, "tp-type", "stcpr", "Transport type to create when using --create-tp (stcpr or sudph)")
+	pingCmd.Flags().BoolVar(&useDmsg, "dmsg", false, "Ping over dmsg connection instead of skywire route")
 	RootCmd.AddCommand(testCmd)
 	testCmd.Flags().IntVarP(&tries, "tries", "t", 1, "Number of tries per public visors")
 	testCmd.Flags().IntVarP(&pcktSize, "size", "s", 2, "Size of packet, in KB, default is 2KB")
@@ -41,7 +43,10 @@ var pingCmd = &cobra.Command{
 	Long: `
   Creates a route to the visor with the provided public key and measures
   round-trip latency. Requires an existing transport to the target visor
-  unless --create-tp is specified.`,
+  unless --create-tp is specified.
+
+  Use --dmsg to ping over a dmsg connection instead of a skywire route.
+  This is useful for testing dmsg connectivity without transports.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		pk := internal.ParsePK(cmd.Flags(), "pk", args[0])
@@ -51,6 +56,28 @@ var pingCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		if useDmsg {
+			// Dmsg ping mode
+			fmt.Printf("Dialing dmsg ping to %s...\n", pk)
+			setupStart := time.Now()
+			err = rpcClient.DialDmsgPing(pk)
+			setupTime := time.Since(setupStart)
+			internal.Catch(cmd.Flags(), err)
+
+			fmt.Printf("Dmsg dial: %0.2f ms\n", 1000*setupTime.Seconds())
+
+			latencies, err := rpcClient.DmsgPing(pingConfig)
+			internal.Catch(cmd.Flags(), err)
+
+			for i, latency := range latencies {
+				internal.PrintOutput(cmd.Flags(), latency, fmt.Sprintf("Dmsg Ping %d: %0.2f ms | Speed: %0.3f KB/s\n", i+1, 1000*latency.Seconds(), float64(pcktSize)/float64(latency.Seconds())))
+			}
+			err = rpcClient.StopDmsgPing(pk)
+			internal.Catch(cmd.Flags(), err)
+			return
+		}
+
+		// Skywire route ping mode (default)
 		// Create transport if requested
 		if createTp {
 			fmt.Printf("Creating %s transport to %s...\n", tpType, pk)

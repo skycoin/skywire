@@ -1,11 +1,10 @@
-// Package skynet srv.go
-package skynet
+// Package skysocksc cmd/skywire-cli/commands/proxy/server.go
+package skysocksc
 
 import (
 	"bytes"
 	"fmt"
 	"os"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -17,11 +16,10 @@ import (
 )
 
 const (
-	skynetAppName = "skynet"
+	serverAppName = "skysocks"
 )
 
 var (
-	srvPorts       string
 	srvWhitelist   string
 	srvAppPort     uint16
 	srvUseInternal bool
@@ -29,12 +27,12 @@ var (
 )
 
 func init() {
-	srvCmd.AddCommand(
+	RootCmd.AddCommand(serverCmd)
+	serverCmd.AddCommand(
 		srvStartCmd,
 		srvStopCmd,
 		srvStatusCmd,
 	)
-	srvStartCmd.Flags().StringVarP(&srvPorts, "ports", "p", "", "comma-separated list of local ports to expose (e.g., '8080,9000')")
 	srvStartCmd.Flags().StringVarP(&srvWhitelist, "whitelist", "w", "", "comma-separated list of public keys allowed to connect (empty = allow all)")
 	srvStartCmd.Flags().Uint16Var(&srvAppPort, "port", 0, "routing port for communication between app and visor")
 	srvStartCmd.Flags().BoolVar(&srvUseInternal, "internal", false, "force internal launcher")
@@ -42,20 +40,18 @@ func init() {
 	srvStartCmd.MarkFlagsMutuallyExclusive("internal", "external")
 }
 
-var srvCmd = &cobra.Command{
-	Use:   "srv",
-	Short: "Skynet port forwarding server",
-	Long: `Control the skynet server application.
+var serverCmd = &cobra.Command{
+	Use:   "server",
+	Short: "Skysocks server (SOCKS5 proxy server)",
+	Long: `Control the skysocks server application.
 
-The skynet server exposes local TCP ports over the Skywire network.
-Other visors can connect to these ports using the skynet client.
-
-With whitelist support, you can restrict access to specific public keys.`,
+The skysocks server provides a SOCKS5 proxy over the Skywire network.
+Other visors can connect to this proxy using skysocks-client.`,
 }
 
 var srvStartCmd = &cobra.Command{
 	Use:   "start",
-	Short: "Start the skynet server",
+	Short: "Start the skysocks server",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -64,47 +60,26 @@ var srvStartCmd = &cobra.Command{
 		defer rpcClient.Close() //nolint:errcheck,gosec
 
 		// Check if app exists
-		_, err = rpcClient.App(skynetAppName)
+		_, err = rpcClient.App(serverAppName)
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("skynet app not found in visor config: %w", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("skysocks app not found in visor config: %w", err))
 		}
 
-		// Validate and configure the app
-		if srvPorts == "" {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--ports flag is required"))
-		}
-
-		// Validate ports
-		for _, portStr := range strings.Split(srvPorts, ",") {
-			portStr = strings.TrimSpace(portStr)
-			if portStr == "" {
-				continue
+		// Configure the app with custom settings if provided
+		if srvWhitelist != "" || srvAppPort != 0 {
+			arguments := map[string]any{
+				"app": "skysocks",
 			}
-			var port int
-			if _, err := fmt.Sscanf(portStr, "%d", &port); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid port: %s", portStr))
+			if srvWhitelist != "" {
+				arguments["--whitelist"] = srvWhitelist
 			}
-			if port <= 0 || port > 65535 {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("port out of range: %d", port))
+			if srvAppPort != 0 {
+				arguments["appPort"] = srvAppPort
 			}
-		}
-
-		arguments := map[string]any{
-			"app":     "skynet",
-			"--ports": srvPorts,
-		}
-
-		if srvWhitelist != "" {
-			arguments["--whitelist"] = srvWhitelist
-		}
-
-		if srvAppPort != 0 {
-			arguments["appPort"] = srvAppPort
-		}
-
-		err = rpcClient.DoCustomSetting(skynetAppName, arguments)
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to configure skynet: %w", err))
+			err = rpcClient.DoCustomSetting(serverAppName, arguments)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to configure skysocks: %w", err))
+			}
 		}
 
 		// Determine launcher mode
@@ -117,21 +92,21 @@ var srvStartCmd = &cobra.Command{
 
 		// Start the app
 		if launcherMode != "" {
-			err = rpcClient.StartAppWithMode(skynetAppName, launcherMode)
+			err = rpcClient.StartAppWithMode(serverAppName, launcherMode)
 		} else {
-			err = rpcClient.StartApp(skynetAppName)
+			err = rpcClient.StartApp(serverAppName)
 		}
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to start skynet: %w", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to start skysocks: %w", err))
 		}
 
-		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintf("Skynet server started, exposing ports: %s\n", srvPorts))
+		internal.PrintOutput(cmd.Flags(), "OK", "Skysocks server started\n")
 	},
 }
 
 var srvStopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "Stop the skynet server",
+	Short: "Stop the skysocks server",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -139,18 +114,18 @@ var srvStopCmd = &cobra.Command{
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 
-		err = rpcClient.StopApp(skynetAppName)
+		err = rpcClient.StopApp(serverAppName)
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to stop skynet: %w", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to stop skysocks: %w", err))
 		}
 
-		internal.PrintOutput(cmd.Flags(), "OK", "Skynet server stopped\n")
+		internal.PrintOutput(cmd.Flags(), "OK", "Skysocks server stopped\n")
 	},
 }
 
 var srvStatusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show skynet server status",
+	Short: "Show skysocks server status",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -169,7 +144,6 @@ var srvStatusCmd = &cobra.Command{
 			Status    string       `json:"status"`
 			AutoStart bool         `json:"autostart"`
 			Port      routing.Port `json:"port"`
-			Args      []string     `json:"args,omitempty"`
 			Details   string       `json:"details,omitempty"`
 		}
 
@@ -177,7 +151,7 @@ var srvStatusCmd = &cobra.Command{
 		found := false
 
 		for _, state := range states {
-			if state.Name == skynetAppName {
+			if state.Name == serverAppName {
 				found = true
 				status := "stopped"
 				if state.Status == appserver.AppStatusRunning {
@@ -192,7 +166,6 @@ var srvStatusCmd = &cobra.Command{
 					Status:    status,
 					AutoStart: state.AutoStart,
 					Port:      state.Port,
-					Args:      state.Args,
 					Details:   state.DetailedStatus,
 				}
 
@@ -204,19 +177,6 @@ var srvStatusCmd = &cobra.Command{
 				internal.Catch(cmd.Flags(), err)
 				_, err = fmt.Fprintf(w, "Port:\t%d\n", state.Port)
 				internal.Catch(cmd.Flags(), err)
-
-				// Show configured ports and whitelist from args
-				for i, arg := range state.Args {
-					if arg == "--ports" && i+1 < len(state.Args) {
-						_, err = fmt.Fprintf(w, "Exposing:\t%s\n", state.Args[i+1])
-						internal.Catch(cmd.Flags(), err)
-					}
-					if arg == "--whitelist" && i+1 < len(state.Args) {
-						_, err = fmt.Fprintf(w, "Whitelist:\t%s\n", state.Args[i+1])
-						internal.Catch(cmd.Flags(), err)
-					}
-				}
-
 				if state.DetailedStatus != "" {
 					_, err = fmt.Fprintf(w, "Details:\t%s\n", state.DetailedStatus)
 					internal.Catch(cmd.Flags(), err)
@@ -226,7 +186,7 @@ var srvStatusCmd = &cobra.Command{
 		}
 
 		if !found {
-			internal.PrintOutput(cmd.Flags(), nil, "Skynet server not configured\n")
+			internal.PrintOutput(cmd.Flags(), nil, "Skysocks server not configured\n")
 			return
 		}
 

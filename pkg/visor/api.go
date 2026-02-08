@@ -21,6 +21,7 @@ import (
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/pkg/dmsg"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
@@ -130,11 +131,17 @@ type API interface {
 	DeregisterHTTPPort(localPort int) error
 	ListHTTPPorts() ([]int, error)
 	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
+	ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	Disconnect(id uuid.UUID) error
+	DisconnectRawTCP(id uuid.UUID) error
 	List() (map[uuid.UUID]*appnet.ForwardConn, error)
+	ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error)
 	DialPing(config PingConfig) error
 	Ping(config PingConfig) ([]time.Duration, error)
 	StopPing(pk cipher.PubKey) error
+	DialDmsgPing(pk cipher.PubKey) error
+	DmsgPing(conf PingConfig) ([]time.Duration, error)
+	StopDmsgPing(pk cipher.PubKey) error
 
 	TestVisor(config PingConfig) ([]TestResult, error)
 
@@ -1457,6 +1464,118 @@ func (v *Visor) StopPing(pk cipher.PubKey) error {
 	return nil
 }
 
+// DialDmsgPing implements API. Dials a remote visor over dmsg for ping.
+func (v *Visor) DialDmsgPing(pk cipher.PubKey) error {
+	if v.dmsgC == nil {
+		return fmt.Errorf("dmsg client not available")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Wait for dmsg client to be ready
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-v.dmsgC.Ready():
+	}
+
+	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: visorconfig.DmsgPingPort})
+	if err != nil {
+		return fmt.Errorf("failed to dial dmsg ping: %w", err)
+	}
+
+	v.dmsgPingMx.Lock()
+	v.dmsgPingConns[pk] = ping{conn: conn}
+	v.dmsgPingMx.Unlock()
+
+	return nil
+}
+
+// DmsgPing implements API. Measures round-trip time over dmsg connection.
+func (v *Visor) DmsgPing(conf PingConfig) ([]time.Duration, error) {
+	v.dmsgPingMx.Lock()
+	defer v.dmsgPingMx.Unlock()
+
+	pingEntry, ok := v.dmsgPingConns[conf.PK]
+	if !ok {
+		return nil, fmt.Errorf("no dmsg ping connection for %s, call DialDmsgPing first", conf.PK)
+	}
+
+	latencies := []time.Duration{}
+	data := make([]byte, conf.PcktSize*1024)
+
+	for i := 1; i <= conf.Tries; i++ {
+		conn := pingEntry.conn
+		msg := PingMsg{
+			Timestamp: time.Now(),
+			PingPk:    conf.PK,
+			Data:      data,
+		}
+		pingData, err := json.Marshal(msg)
+		if err != nil {
+			return latencies, err
+		}
+		pingSizeMsg := PingSizeMsg{
+			Size: len(pingData),
+		}
+		size, err := json.Marshal(pingSizeMsg)
+		if err != nil {
+			return latencies, err
+		}
+
+		start := time.Now()
+
+		// Send size message
+		if _, err = conn.Write(size); err != nil {
+			return latencies, fmt.Errorf("write size: %w", err)
+		}
+
+		// Read "ok" ack with timeout
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+		buf := make([]byte, 32*1024)
+		if _, err = conn.Read(buf); err != nil {
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+			return latencies, fmt.Errorf("read ack: %w", err)
+		}
+
+		// Send ping data
+		if _, err = conn.Write(pingData); err != nil {
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+			return latencies, fmt.Errorf("write ping: %w", err)
+		}
+
+		// Read echo response with timeout
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+		if _, err = conn.Read(buf); err != nil {
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+			return latencies, fmt.Errorf("read echo: %w", err)
+		}
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+
+		rtt := time.Since(start)
+		latencies = append(latencies, rtt)
+	}
+	return latencies, nil
+}
+
+// StopDmsgPing implements API.
+func (v *Visor) StopDmsgPing(pk cipher.PubKey) error {
+	v.dmsgPingMx.Lock()
+	defer v.dmsgPingMx.Unlock()
+
+	dmsgConn, ok := v.dmsgPingConns[pk]
+	if !ok {
+		return fmt.Errorf("no dmsg ping connection for %s", pk)
+	}
+	err := dmsgConn.conn.Close()
+	if err != nil {
+		return err
+	}
+	delete(v.dmsgPingConns, pk)
+	return nil
+}
+
 // TestResult type of test result
 type TestResult struct {
 	PK     string
@@ -1900,6 +2019,82 @@ func (v *Visor) Disconnect(id uuid.UUID) error {
 // List implements API.
 func (v *Visor) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
 	return appnet.GetAllForwardConns(), nil
+}
+
+// ConnectRawTCP implements API. Establishes a raw TCP port forwarding connection over skywire.
+func (v *Visor) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	ok := isPortAvailable(v.log, localPort)
+	if !ok {
+		return uuid.UUID{}, fmt.Errorf(":%v local port already in use", localPort)
+	}
+	connApp := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: remotePK,
+		Port:   routing.Port(skyenv.SkyForwardingServerPort),
+	}
+	conn, err := appnet.Dial(connApp)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	remoteConn, err := appnet.WrapConn(conn)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+
+	cMsg := clientMsg{
+		Port:   remotePort,
+		RawTCP: true,
+	}
+
+	clientMsgBytes, err := json.Marshal(cMsg)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	_, err = remoteConn.Write(clientMsgBytes)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	v.log.Debugf("Raw TCP msg sent %s", clientMsgBytes)
+
+	buf := make([]byte, 32*1024)
+	n, err := remoteConn.Read(buf)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	var sReply serverReply
+	err = json.Unmarshal(buf[:n], &sReply)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	v.log.Debugf("Received: %v", sReply)
+
+	if sReply.Error != nil {
+		sErr := *sReply.Error
+		v.log.WithError(fmt.Errorf("%s", sErr)).Error("Server closed with error")
+		return uuid.UUID{}, fmt.Errorf("%s", sErr)
+	}
+
+	forwardConn, err := appnet.NewRawTCPForwardConn(v.log, remoteConn, remotePort, localPort)
+	if err != nil {
+		remoteConn.Close()
+		return uuid.UUID{}, err
+	}
+	forwardConn.Serve()
+	return forwardConn.ID, nil
+}
+
+// DisconnectRawTCP implements API.
+func (v *Visor) DisconnectRawTCP(id uuid.UUID) error {
+	forwardConn := appnet.GetRawTCPForwardConn(id)
+	if forwardConn == nil {
+		return fmt.Errorf("raw TCP forward connection not found: %s", id)
+	}
+	return forwardConn.Close()
+}
+
+// ListRawTCP implements API.
+func (v *Visor) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error) {
+	return appnet.GetAllRawTCPForwardConns(), nil
 }
 
 func isPortAvailable(log *logging.Logger, port int) bool {

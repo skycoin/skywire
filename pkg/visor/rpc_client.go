@@ -618,6 +618,30 @@ func (rc *rpcClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
 	return out, err
 }
 
+// ConnectRawTCP calls ConnectRawTCP.
+func (rc *rpcClient) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	var out uuid.UUID
+	err := rc.Call("ConnectRawTCP", &ConnectIn{
+		RemotePK:   remotePK,
+		RemotePort: remotePort,
+		LocalPort:  localPort,
+	}, &out)
+	return out, err
+}
+
+// DisconnectRawTCP calls DisconnectRawTCP.
+func (rc *rpcClient) DisconnectRawTCP(id uuid.UUID) error {
+	err := rc.Call("DisconnectRawTCP", &id, &struct{}{})
+	return err
+}
+
+// ListRawTCP calls ListRawTCP.
+func (rc *rpcClient) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error) {
+	var out map[uuid.UUID]*appnet.RawTCPForwardConn
+	err := rc.Call("ListRawTCP", &struct{}{}, &out)
+	return out, err
+}
+
 // RegisterHTTPPort calls RegisterHTTPPort.
 func (rc *rpcClient) RegisterHTTPPort(localPort int) error {
 	return rc.Call("RegisterHTTPPort", &localPort, &struct{}{})
@@ -651,6 +675,23 @@ func (rc *rpcClient) Ping(conf PingConfig) ([]time.Duration, error) {
 // StopPing calls StopPing.
 func (rc *rpcClient) StopPing(pk cipher.PubKey) error {
 	return rc.Call("StopPing", &pk, &struct{}{})
+}
+
+// DialDmsgPing calls DialDmsgPing.
+func (rc *rpcClient) DialDmsgPing(pk cipher.PubKey) error {
+	return rc.Call("DialDmsgPing", &pk, &struct{}{})
+}
+
+// DmsgPing calls DmsgPing.
+func (rc *rpcClient) DmsgPing(conf PingConfig) ([]time.Duration, error) {
+	var latencies []time.Duration
+	err := rc.Call("DmsgPing", &conf, &latencies)
+	return latencies, err
+}
+
+// StopDmsgPing calls StopDmsgPing.
+func (rc *rpcClient) StopDmsgPing(pk cipher.PubKey) error {
+	return rc.Call("StopDmsgPing", &pk, &struct{}{})
 }
 
 // TestVisor calls TestVisor.
@@ -1411,6 +1452,21 @@ func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
 	return nil, nil
 }
 
+// ConnectRawTCP implements API.
+func (mc *mockRPCClient) ConnectRawTCP(_ cipher.PubKey, _, _ int) (uuid.UUID, error) {
+	return uuid.UUID{}, nil
+}
+
+// DisconnectRawTCP implements API.
+func (mc *mockRPCClient) DisconnectRawTCP(_ uuid.UUID) error {
+	return nil
+}
+
+// ListRawTCP implements API.
+func (mc *mockRPCClient) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error) {
+	return nil, nil
+}
+
 // RegisterHTTPPort implements API.
 func (mc *mockRPCClient) RegisterHTTPPort(_ int) error {
 	return nil
@@ -1438,6 +1494,21 @@ func (mc *mockRPCClient) Ping(_ PingConfig) ([]time.Duration, error) {
 
 // StopPing implements API.
 func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
+	return nil
+}
+
+// DialDmsgPing implements API.
+func (mc *mockRPCClient) DialDmsgPing(_ cipher.PubKey) error {
+	return nil
+}
+
+// DmsgPing implements API.
+func (mc *mockRPCClient) DmsgPing(_ PingConfig) ([]time.Duration, error) {
+	return []time.Duration{}, nil
+}
+
+// StopDmsgPing implements API.
+func (mc *mockRPCClient) StopDmsgPing(_ cipher.PubKey) error {
 	return nil
 }
 

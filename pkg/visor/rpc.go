@@ -804,6 +804,30 @@ func (r *RPC) List(_ *struct{}, out *map[uuid.UUID]*appnet.ForwardConn) (err err
 	return err
 }
 
+// ConnectRawTCP creates a raw TCP connection with the remote visor
+func (r *RPC) ConnectRawTCP(in *ConnectIn, out *uuid.UUID) (err error) {
+	defer rpcutil.LogCall(r.log, "ConnectRawTCP", in)(out, &err)
+
+	id, err := r.visor.ConnectRawTCP(in.RemotePK, in.RemotePort, in.LocalPort)
+	*out = id
+	return err
+}
+
+// DisconnectRawTCP breaks the raw TCP connection with the given id
+func (r *RPC) DisconnectRawTCP(id *uuid.UUID, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DisconnectRawTCP", id)(nil, &err)
+	err = r.visor.DisconnectRawTCP(*id)
+	return err
+}
+
+// ListRawTCP returns all the ongoing raw TCP skyforwarding connections
+func (r *RPC) ListRawTCP(_ *struct{}, out *map[uuid.UUID]*appnet.RawTCPForwardConn) (err error) {
+	defer rpcutil.LogCall(r.log, "ListRawTCP", nil)(out, &err)
+	proxies, err := r.visor.ListRawTCP()
+	*out = proxies
+	return err
+}
+
 // DialPing dials to the ping module using the provided pk as a hop.
 func (r *RPC) DialPing(conf PingConfig, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DialPing", conf)(nil, &err)
@@ -824,6 +848,28 @@ func (r *RPC) StopPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopPing", pk)(nil, &err)
 
 	return r.visor.StopPing(*pk)
+}
+
+// DialDmsgPing dials to a remote visor over dmsg for ping.
+func (r *RPC) DialDmsgPing(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DialDmsgPing", pk)(nil, &err)
+
+	return r.visor.DialDmsgPing(*pk)
+}
+
+// DmsgPing pings over dmsg connection.
+func (r *RPC) DmsgPing(conf PingConfig, out *[]time.Duration) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgPing", conf)(out, &err)
+
+	*out, err = r.visor.DmsgPing(conf)
+	return err
+}
+
+// StopDmsgPing stops the dmsg ping conn.
+func (r *RPC) StopDmsgPing(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopDmsgPing", pk)(nil, &err)
+
+	return r.visor.StopDmsgPing(*pk)
 }
 
 // TestVisor trying to test viosr by pinging to public visor.

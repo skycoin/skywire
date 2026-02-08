@@ -187,20 +187,15 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "startproxyclient")
 	genConfigCmd.Flags().BoolVar(&disableProxyServerAutostart, "noproxyserver", scriptExecBool("${NOPROXYSERVER:-false}"), "disable autostart of proxy server")
 	gHiddenFlags = append(gHiddenFlags, "noproxyserver")
-	genConfigCmd.Flags().StringVar(&proxyServerPass, "proxyserverpass", scriptExecString("${PROXYSEVERPASS}"), "set proxy server password")
-	gHiddenFlags = append(gHiddenFlags, "proxyserverpass")
-	genConfigCmd.Flags().StringVar(&proxyClientPass, "proxyclientpass", scriptExecString("${PROXYCLIENTPASS}"), "password for the proxy client to access the server (if needed)")
-	gHiddenFlags = append(gHiddenFlags, "proxyclientpass")
-	// TODO: Password for accessing proxy client
+	genConfigCmd.Flags().StringVar(&proxyServerWhitelist, "proxywl", scriptExecString("${PROXYSERVERWL}"), "comma-separated list of public keys allowed to connect to proxy server (empty = allow all)")
+	gHiddenFlags = append(gHiddenFlags, "proxywl")
 	// TODO: VPN client killswitch should be handled as boolean, not string
 	genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", scriptExecString("${VPNKS}"), "vpn client killswitch")
 	gHiddenFlags = append(gHiddenFlags, "killsw")
 	genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", scriptExecString("${ADDVPNPK}"), "set vpn server public key for vpn client")
 	gHiddenFlags = append(gHiddenFlags, "addvpn")
-	genConfigCmd.Flags().StringVar(&addVPNClientPasscode, "vpnpass", scriptExecString("${VPNCLIENTPASS}"), "password for vpn client to access the vpn server (if needed)")
-	gHiddenFlags = append(gHiddenFlags, "vpnpass")
-	genConfigCmd.Flags().StringVar(&addVPNServerPasscode, "vpnserverpass", scriptExecString("${VPNSEVERPASS}"), "set password to the vpn server")
-	gHiddenFlags = append(gHiddenFlags, "vpnserverpass")
+	genConfigCmd.Flags().StringVar(&addVPNServerWhitelist, "vpnwl", scriptExecString("${VPNSERVERWL}"), "comma-separated list of public keys allowed to connect to vpn server (empty = allow all)")
+	gHiddenFlags = append(gHiddenFlags, "vpnwl")
 	genConfigCmd.Flags().StringVar(&setVPNServerSecure, "secure", scriptExecString("${VPNSEVERSECURE}"), "change secure mode status of vpn server")
 	gHiddenFlags = append(gHiddenFlags, "secure")
 	genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", scriptExecString("${VPNSEVERNETIFC}"), "VPN Server network interface (detected: "+getInterfaceNames()+")")
@@ -865,8 +860,8 @@ var genConfigCmd = &cobra.Command{
 			conf.Launcher.Apps = newConfLauncherApps
 		}
 
-		if addVPNServerPasscode != "" {
-			changeAppsConfig(conf, "vpn-server", "--passcode", addVPNServerPasscode)
+		if addVPNServerWhitelist != "" {
+			changeAppsConfig(conf, "vpn-server", "--whitelist", addVPNServerWhitelist)
 		}
 		if setVPNServerNetIfc != "" {
 			changeAppsConfig(conf, "vpn-server", "--netifc", setVPNServerNetIfc)
@@ -905,10 +900,6 @@ var genConfigCmd = &cobra.Command{
 			}
 			changeAppsConfig(conf, "vpn-client", "--srv", keyParsed.Hex())
 		}
-
-		if addVPNClientPasscode != "" {
-			changeAppsConfig(conf, "vpn-client", "--passcode", addVPNClientPasscode)
-		}
 		if addSkysocksClientSrv != "" {
 			keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(addSkysocksClientSrv))
 			if err != nil {
@@ -916,11 +907,8 @@ var genConfigCmd = &cobra.Command{
 			}
 			changeAppsConfig(conf, "skysocks-client", "--srv", keyParsed.Hex())
 		}
-		if proxyServerPass != "" {
-			changeAppsConfig(conf, "skysocks", "--passcode", proxyServerPass)
-		}
-		if proxyClientPass != "" {
-			changeAppsConfig(conf, "skysocks-client", "--passcode", proxyClientPass)
+		if proxyServerWhitelist != "" {
+			changeAppsConfig(conf, "skysocks", "--whitelist", proxyServerWhitelist)
 		}
 
 		if disableProxyServerAutostart {

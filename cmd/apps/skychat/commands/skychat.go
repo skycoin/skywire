@@ -32,21 +32,18 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-const (
-	netType = appnet.TypeSkynet
-)
-
-// var addr = flag.String("addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
 var r = netutil.NewRetrier(nil, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
 
 var (
-	addr     string
-	appCl    *app.Client
-	appLog   func(format string, args ...interface{}) // App logger function
-	clientCh chan string
-	conns    map[cipher.PubKey]net.Conn // Chat connections
-	connsMu  sync.Mutex
-	appPort  uint16
+	addr       string
+	appCl      *app.Client
+	appLog     func(format string, args ...interface{}) // App logger function
+	clientCh   chan string
+	conns      map[cipher.PubKey]net.Conn // Chat connections
+	connsMu    sync.Mutex
+	appPort    uint16
+	useSkynet  bool
+	useDmsg    bool
 )
 
 // the go embed static points to skywire/cmd/apps/skychat/static
@@ -58,6 +55,8 @@ func init() {
 	launcher.RegisterApp("skychat", RunSkychat)
 	RootCmd.Flags().StringVar(&addr, "addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
+	RootCmd.Flags().BoolVar(&useSkynet, "skynet", true, "listen on skynet network")
+	RootCmd.Flags().BoolVar(&useDmsg, "dmsg", true, "listen on dmsg network")
 }
 
 // RootCmd is the root command for skywire-cli
@@ -94,6 +93,8 @@ func RunSkychat(ctx context.Context, args []string) error {
 		fs := pflag.NewFlagSet("skychat", pflag.ContinueOnError)
 		fs.StringVar(&addr, "addr", ":8001", "address to bind")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		fs.BoolVar(&useSkynet, "skynet", true, "listen on skynet")
+		fs.BoolVar(&useDmsg, "dmsg", true, "listen on dmsg")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -124,7 +125,16 @@ func RunSkychat(ctx context.Context, args []string) error {
 	}
 
 	conns = make(map[cipher.PubKey]net.Conn)
-	go listenLoop(port)
+
+	if useSkynet {
+		go listenLoop(appnet.TypeSkynet, port)
+	}
+	if useDmsg {
+		go listenLoop(appnet.TypeDmsg, port)
+	}
+	if !useSkynet && !useDmsg {
+		appLog("Warning: no network types enabled, skychat will not accept connections")
+	}
 
 	if runtime.GOOS == "windows" {
 		ipcClient, err := ipc.StartClient(visorconfig.SkychatName, nil)
@@ -199,7 +209,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	return nil
 }
 
-func listenLoop(appPort routing.Port) {
+func listenLoop(netType appnet.Type, appPort routing.Port) {
 	l, err := appCl.Listen(netType, appPort)
 	if err != nil {
 		appLog("Error listening network %v on port %d: %v", netType, appPort, err)
@@ -207,20 +217,22 @@ func listenLoop(appPort routing.Port) {
 		return
 	}
 
+	appLog("Listening on %s network, port %d", netType, appPort)
+
 	for {
-		appCl.Log().Debug("Accepting skychat conn...")
+		appCl.Log().Debugf("Accepting skychat conn on %s...", netType)
 		conn, err := l.Accept()
 		if err != nil {
-			appLog("Failed to accept conn: %v", err)
+			appLog("Failed to accept conn on %s: %v", netType, err)
 			return
 		}
-		appCl.Log().Debug("Accepted skychat conn")
+		appCl.Log().Debugf("Accepted skychat conn on %s", netType)
 
 		raddr := conn.RemoteAddr().(appnet.Addr)
 		connsMu.Lock()
 		conns[raddr.PubKey] = conn
 		connsMu.Unlock()
-		appLog("Accepted skychat conn on %s from %s", conn.LocalAddr(), raddr.PubKey)
+		appLog("Accepted skychat conn on %s from %s via %s", conn.LocalAddr(), raddr.PubKey, netType)
 
 		go handleConn(conn)
 	}
@@ -266,6 +278,20 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		if err := pk.UnmarshalText([]byte(data["recipient"])); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
+		}
+
+		// Determine network type - default to skynet, allow dmsg
+		netType := appnet.TypeSkynet
+		if network, ok := data["network"]; ok {
+			switch network {
+			case "dmsg":
+				netType = appnet.TypeDmsg
+			case "skynet":
+				netType = appnet.TypeSkynet
+			default:
+				http.Error(w, "invalid network type: use 'skynet' or 'dmsg'", http.StatusBadRequest)
+				return
+			}
 		}
 
 		addr := appnet.Addr{

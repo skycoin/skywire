@@ -273,6 +273,20 @@ func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
 			Port:      routing.Port(skyenv.VPNServerPort),
 			Args:      []string{"app", "vpn-server"},
 		},
+		{
+			Name:      SkynetAppName,
+			Binary:    "skywire",
+			AutoStart: false,
+			Port:      routing.Port(skyenv.SkynetAppPort),
+			Args:      []string{"app", "skynet"},
+		},
+		{
+			Name:      SkynetClientName,
+			Binary:    "skywire",
+			AutoStart: false,
+			Port:      routing.Port(skyenv.SkynetClientPort),
+			Args:      []string{"app", "skynet-client"},
+		},
 	}
 	return defaultConfig
 }
