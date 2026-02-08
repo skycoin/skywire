@@ -385,6 +385,13 @@ dep-github-release:
 	./ci_scripts/build-secp256k1-musl.sh armhf arm-linux-musleabihf ./musl-data/arm-linux-musleabihf-cross
 	./ci_scripts/build-secp256k1-musl.sh 386 i686-linux-musl ./musl-data/i686-linux-musl-cross
 	#./ci_scripts/build-secp256k1-musl.sh riscv64 riscv64-linux-musl ./musl-data/riscv64-linux-musl-cross
+	# Build libusb static libraries for each musl target (for hardware wallet support)
+	./ci_scripts/build-libusb-musl.sh amd64 x86_64-linux-musl ./musl-data/x86_64-linux-musl-cross
+	./ci_scripts/build-libusb-musl.sh arm64 aarch64-linux-musl ./musl-data/aarch64-linux-musl-cross
+	./ci_scripts/build-libusb-musl.sh arm arm-linux-musleabi ./musl-data/arm-linux-musleabi-cross
+	./ci_scripts/build-libusb-musl.sh armhf arm-linux-musleabihf ./musl-data/arm-linux-musleabihf-cross
+	#./ci_scripts/build-libusb-musl.sh 386 i686-linux-musl ./musl-data/i686-linux-musl-cross  # 386 uses stub, no libusb needed
+	./ci_scripts/build-libusb-musl.sh riscv64 riscv64-linux-musl ./musl-data/riscv64-linux-musl-cross
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
