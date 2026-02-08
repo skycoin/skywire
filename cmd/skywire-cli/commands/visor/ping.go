@@ -14,15 +14,17 @@ import (
 )
 
 var (
-	tries       int
-	pcktSize    int
+	tries      int
+	pcktSize   int
 	pubVisCount int
+	localRoute bool
 )
 
 func init() {
 	RootCmd.AddCommand(pingCmd)
 	pingCmd.Flags().IntVarP(&tries, "tries", "t", 1, "Number of tries")
 	pingCmd.Flags().IntVarP(&pcktSize, "size", "s", 2, "Size of packet, in KB, default is 2KB")
+	pingCmd.Flags().BoolVar(&localRoute, "local-route", false, "Calculate routes locally using cached TPD data instead of querying route finder")
 	RootCmd.AddCommand(testCmd)
 	testCmd.Flags().IntVarP(&tries, "tries", "t", 1, "Number of tries per public visors")
 	testCmd.Flags().IntVarP(&pcktSize, "size", "s", 2, "Size of packet, in KB, default is 2KB")
@@ -36,7 +38,7 @@ var pingCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		pk := internal.ParsePK(cmd.Flags(), "pk", args[0])
-		pingConfig := visor.PingConfig{PK: pk, Tries: tries, PcktSize: pcktSize}
+		pingConfig := visor.PingConfig{PK: pk, Tries: tries, PcktSize: pcktSize, LocalRoute: localRoute}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)

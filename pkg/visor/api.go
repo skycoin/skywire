@@ -1325,6 +1325,7 @@ type PingConfig struct {
 	Tries       int
 	PcktSize    int
 	PubVisCount int
+	LocalRoute  bool // Skip route finder and use local route calculation
 }
 
 // DialPing implements API.
@@ -1332,6 +1333,19 @@ func (v *Visor) DialPing(conf PingConfig) error {
 	v.pingPcktSize = conf.PcktSize
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
+
+	// Set local route calculation if requested
+	if conf.LocalRoute {
+		if err := v.SetForceLocalRoutes(true); err != nil {
+			v.log.WithError(err).Warn("Failed to enable local route calculation")
+		} else {
+			defer func() {
+				if err := v.SetForceLocalRoutes(false); err != nil {
+					v.log.WithError(err).Warn("Failed to disable local route calculation")
+				}
+			}()
+		}
+	}
 
 	addr := appnet.Addr{
 		Net:    appnet.TypeSkynet,
