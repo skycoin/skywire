@@ -2648,6 +2648,51 @@ func (a *visorAPIAdapter) Ping(ctx context.Context, pk string, useDMSG, localRou
 	}, nil
 }
 
+// Apps implements tpviz.VisorAPI - returns the list of all apps and their status.
+func (a *visorAPIAdapter) Apps() ([]*tpviz.AppState, error) {
+	apps, err := a.v.Apps()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*tpviz.AppState, 0, len(apps))
+	for _, app := range apps {
+		result = append(result, &tpviz.AppState{
+			Name:           app.Name,
+			Status:         int(app.Status),
+			DetailedStatus: app.DetailedStatus,
+			AutoStart:      app.AutoStart,
+			Port:           uint16(app.Port),
+			Args:           app.Args,
+		})
+	}
+	return result, nil
+}
+
+// StartApp implements tpviz.VisorAPI - starts an application.
+func (a *visorAPIAdapter) StartApp(appName string) error {
+	return a.v.StartApp(appName)
+}
+
+// StopApp implements tpviz.VisorAPI - stops an application.
+func (a *visorAPIAdapter) StopApp(appName string) error {
+	return a.v.StopApp(appName)
+}
+
+// SetAutoStart implements tpviz.VisorAPI - sets the auto-start flag for an app.
+func (a *visorAPIAdapter) SetAutoStart(appName string, autoStart bool) error {
+	return a.v.SetAutoStart(appName, autoStart)
+}
+
+// SetAppPK implements tpviz.VisorAPI - sets the server public key for an app.
+func (a *visorAPIAdapter) SetAppPK(appName, pk string) error {
+	var pubKey cipher.PubKey
+	if err := pubKey.UnmarshalText([]byte(pk)); err != nil {
+		return fmt.Errorf("invalid public key: %w", err)
+	}
+	return a.v.SetAppPK(appName, pubKey)
+}
+
 // tpsAPIAdapter adapts *Visor's embeddedTPS to the tpviz.TPSAPI interface.
 type tpsAPIAdapter struct {
 	v *Visor

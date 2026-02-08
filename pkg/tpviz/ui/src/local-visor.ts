@@ -9,6 +9,7 @@ import { formatBytes, fetchWithTimeout } from './utils';
 import { colors, API_BASE, WS_MAX_RECONNECT_DELAY } from './constants';
 import { highlightRoute } from './node-info';
 import { localCreateTransport } from './tps';
+import { showAppsSection } from './apps';
 
 export function focusLocalVisor(): void {
     if (!S.localVisorData || !S.localVisorData.connected || !S.network) return;
@@ -49,12 +50,16 @@ export function updateLocalVisorDisplay(): void {
     const content = document.getElementById('local-visor-content');
     if (!section || !content) return;
 
-    if (!S.localVisorData || !S.localVisorData.connected) {
+    const isConnected = S.localVisorData && S.localVisorData.connected;
+
+    if (!isConnected) {
         section.style.display = 'none';
+        showAppsSection(false);
         return;
     }
 
     section.style.display = 'block';
+    showAppsSection(true);
     const pk = S.localVisorData.pub_key;
     const tps = S.localVisorData.transports || [];
     const routes = S.localVisorData.routes_count || 0;

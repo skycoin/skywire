@@ -85,9 +85,9 @@ export function getLocalTransportStats(remotePK: string) {
     return S.localVisorData.transports.find(t => t.remote_pk === remotePK) || null;
 }
 
-export function fetchWithTimeout(url: string, timeoutMs = 25000): Promise<Response> {
+export function fetchWithTimeout(url: string, timeoutMs = 25000, options?: RequestInit): Promise<Response> {
     return Promise.race([
-        fetch(url),
+        fetch(url, options),
         new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
         ),

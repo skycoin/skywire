@@ -104,6 +104,12 @@ type VisorAPI interface {
 	RemoveTransport(ctx context.Context, tpID string) error
 	DMSGHealth(ctx context.Context, pk string) (*DMSGHealthResponse, error)
 	Ping(ctx context.Context, pk string, useDMSG, localRoute bool, tries, sizeKB int) (*PingResponse, error)
+	// App management
+	Apps() ([]*AppState, error)
+	StartApp(appName string) error
+	StopApp(appName string) error
+	SetAutoStart(appName string, autoStart bool) error
+	SetAppPK(appName, pk string) error
 	Close() error
 }
 
@@ -126,6 +132,16 @@ type PingResponse struct {
 	PacketLoss float64 `json:"packet_loss,omitempty"`
 	Error      string  `json:"error,omitempty"`
 	Mode       string  `json:"mode"` // "route" or "dmsg"
+}
+
+// AppState represents the state of an application running on the visor.
+type AppState struct {
+	Name           string `json:"name"`
+	Status         int    `json:"status"`          // 0=stopped, 1=running, 2=errored, 3=starting
+	DetailedStatus string `json:"detailed_status"` // Human-readable status
+	AutoStart      bool   `json:"auto_start"`
+	Port           uint16 `json:"port"`
+	Args           []string `json:"args,omitempty"`
 }
 
 // VisorOverview contains visor overview data.
@@ -488,6 +504,13 @@ func (s *Server) setupRoutes() {
 
 	// Network ping endpoint
 	s.mux.HandleFunc("/api/ping", s.handlePing)
+
+	// App management endpoints
+	s.mux.HandleFunc("/api/apps", s.handleApps)
+	s.mux.HandleFunc("/api/apps/start", s.handleAppStart)
+	s.mux.HandleFunc("/api/apps/stop", s.handleAppStop)
+	s.mux.HandleFunc("/api/apps/autostart", s.handleAppAutoStart)
+	s.mux.HandleFunc("/api/apps/set-pk", s.handleAppSetPK)
 }
 
 func (s *Server) handleTransports(w http.ResponseWriter, r *http.Request) {
@@ -1872,6 +1895,225 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
+}
+
+// handleApps returns the list of all apps and their status.
+func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	s.visorMu.RLock()
+	visorAPI := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if visorAPI == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "visor not connected",
+		})
+		return
+	}
+
+	apps, err := visorAPI.Apps()
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(apps) //nolint:errcheck,gosec
+}
+
+// handleAppStart starts an application.
+// POST with JSON body: {"name": "app-name"}
+func (s *Server) handleAppStart(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method != http.MethodPost {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "POST required",
+		})
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	s.visorMu.RLock()
+	visorAPI := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if visorAPI == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "visor not connected",
+		})
+		return
+	}
+
+	if err := visorAPI.StartApp(req.Name); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		"status": "started",
+		"app":    req.Name,
+	})
+}
+
+// handleAppStop stops an application.
+// POST with JSON body: {"name": "app-name"}
+func (s *Server) handleAppStop(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method != http.MethodPost {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "POST required",
+		})
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	s.visorMu.RLock()
+	visorAPI := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if visorAPI == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "visor not connected",
+		})
+		return
+	}
+
+	if err := visorAPI.StopApp(req.Name); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		"status": "stopped",
+		"app":    req.Name,
+	})
+}
+
+// handleAppAutoStart sets the auto-start flag for an app.
+// POST with JSON body: {"name": "app-name", "auto_start": true}
+func (s *Server) handleAppAutoStart(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method != http.MethodPost {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "POST required",
+		})
+		return
+	}
+
+	var req struct {
+		Name      string `json:"name"`
+		AutoStart bool   `json:"auto_start"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	s.visorMu.RLock()
+	visorAPI := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if visorAPI == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "visor not connected",
+		})
+		return
+	}
+
+	if err := visorAPI.SetAutoStart(req.Name, req.AutoStart); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		"status":     "updated",
+		"app":        req.Name,
+		"auto_start": req.AutoStart,
+	})
+}
+
+// handleAppSetPK sets the server public key for an app (vpn-client, skysocks-client).
+// POST with JSON body: {"name": "app-name", "pk": "public-key"}
+func (s *Server) handleAppSetPK(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method != http.MethodPost {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "POST required",
+		})
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+		PK   string `json:"pk"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	s.visorMu.RLock()
+	visorAPI := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if visorAPI == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "visor not connected",
+		})
+		return
+	}
+
+	if err := visorAPI.SetAppPK(req.Name, req.PK); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		"status": "updated",
+		"app":    req.Name,
+		"pk":     req.PK,
+	})
 }
 
 // getDMSGData fetches and caches DMSG discovery data.

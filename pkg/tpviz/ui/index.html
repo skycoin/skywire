@@ -193,6 +193,23 @@
         .live-indicator { display: inline-flex; align-items: center; gap: 4px; font-size: 0.7em; color: #00ff88; }
         .live-dot { width: 6px; height: 6px; background: #00ff88; border-radius: 50%; animation: live-pulse 1.5s ease-in-out infinite; }
         @keyframes live-pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,136,0.7); } 50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(0,255,136,0); } }
+
+        /* App management styles */
+        .app-item { background: rgba(0,0,0,0.2); border-radius: 4px; padding: 8px; margin-bottom: 6px; border-left: 3px solid #9f6efc; }
+        .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .app-name { font-weight: 600; font-size: 12px; color: #eee; }
+        .app-status { font-size: 9px; padding: 2px 6px; border-radius: 3px; font-weight: 500; }
+        .app-details { display: flex; gap: 12px; align-items: center; font-size: 10px; color: #888; margin-bottom: 4px; }
+        .app-port { }
+        .app-autostart { display: flex; align-items: center; gap: 3px; cursor: pointer; }
+        .app-autostart input { margin: 0; }
+        .app-pk-row { display: flex; gap: 4px; margin-bottom: 4px; }
+        .app-actions { display: flex; gap: 4px; }
+        .app-btn { padding: 3px 10px; font-size: 10px; border: none; border-radius: 3px; cursor: pointer; font-weight: 500; }
+        .app-btn-start { background: #00d9a5; color: #000; }
+        .app-btn-start:hover { background: #00ffcc; }
+        .app-btn-stop { background: #e94560; color: #fff; }
+        .app-btn-stop:hover { background: #ff6b6b; }
     </style>
 </head>
 <body>
@@ -208,6 +225,18 @@
                 </div>
                 <div class="section-content" id="local-visor-content">
                     <!-- Populated by updateLocalVisorDisplay() -->
+                </div>
+            </div>
+
+            <!-- Apps Management - shown when connected via RPC -->
+            <div class="section collapsed" id="section-apps" style="display:none;border-color:#9f6efc;border-width:2px;">
+                <div class="section-header" onclick="toggleSection('section-apps')" style="background:linear-gradient(135deg,rgba(159,110,252,0.2),rgba(100,100,255,0.1));">
+                    <span class="section-title" style="color:#9f6efc;">Apps</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div id="apps-message" style="display:none;font-size:10px;padding:4px 8px;margin-bottom:6px;border-radius:3px;"></div>
+                    <div id="apps-list"></div>
                 </div>
             </div>
 

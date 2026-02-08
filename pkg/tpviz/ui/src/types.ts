@@ -102,6 +102,15 @@ export interface PingResponse {
   mode: string;
 }
 
+export interface AppState {
+  name: string;
+  status: number;          // 0=stopped, 1=running, 2=errored, 3=starting
+  detailed_status: string;
+  auto_start: boolean;
+  port: number;
+  args?: string[];
+}
+
 export interface HealthResponse {
   cache_max_age: number;
   auto_refresh: boolean;
