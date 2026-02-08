@@ -124,28 +124,20 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	setAppStatus(appCl, appserver.AppDetailedStatusStarting)
 
 	// Connect to remote skynet server
-	// The server listens on SkynetAppPort (49) for the new app-based server
-	// or SkyForwardingServerPort (47) for the built-in server
-	// Try the new port first, fall back to the old one
-	var dialErr error
-
-	// Try new skynet app port first
+	// Use SkyForwardingServerPort (47) which is the built-in visor service
+	// This avoids noise handshake race conditions that occur with app-layer connections
 	connApp := appnet.Addr{
 		Net:    netType,
 		PubKey: remotePK,
-		Port:   routing.Port(skyenv.SkynetAppPort),
+		Port:   routing.Port(skyenv.SkyForwardingServerPort),
 	}
+
+	appCl.Log().Infof("Dialing %s on port %d", remotePK.Hex()[:16], skyenv.SkyForwardingServerPort)
 
 	conn, err := appCl.Dial(connApp)
 	if err != nil {
-		appCl.Log().Debugf("Failed to dial skynet app port %d, trying legacy port", skyenv.SkynetAppPort)
-		// Fall back to legacy port
-		connApp.Port = routing.Port(skyenv.SkyForwardingServerPort)
-		conn, dialErr = appCl.Dial(connApp)
-		if dialErr != nil {
-			setAppError(appCl, fmt.Errorf("failed to connect to server: %w (also tried port %d: %v)", dialErr, skyenv.SkynetAppPort, err))
-			return fmt.Errorf("failed to connect to server: %w", dialErr)
-		}
+		setAppError(appCl, fmt.Errorf("failed to connect to server: %w", err))
+		return fmt.Errorf("failed to connect to server: %w", err)
 	}
 
 	// Create client
