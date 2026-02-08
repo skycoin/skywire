@@ -598,6 +598,10 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 			if err := rg.Close(); err != nil {
 				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}
+			// Clean up rgsRaw on failure to prevent blocking future connections
+			r.mx.Lock()
+			delete(r.rgsRaw, rules.Desc)
+			r.mx.Unlock()
 
 			return nil, fmt.Errorf("sendHandshake (%s): %w", &rules.Desc, err)
 		}
@@ -625,6 +629,10 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 			if err := rg.Close(); err != nil {
 				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}
+			// Clean up rgsRaw on failure to prevent blocking future connections
+			r.mx.Lock()
+			delete(r.rgsRaw, rules.Desc)
+			r.mx.Unlock()
 
 			return nil, fmt.Errorf("sendHandshake (%s): %w", &rules.Desc, err)
 		}
@@ -649,6 +657,10 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 			if err := rg.Close(); err != nil {
 				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}
+			// Clean up rgsRaw on failure to prevent blocking future connections
+			r.mx.Lock()
+			delete(r.rgsRaw, rules.Desc)
+			r.mx.Unlock()
 
 			return nil, fmt.Errorf("WrapConn (%s): %w", &rules.Desc, err)
 		}

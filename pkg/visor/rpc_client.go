@@ -450,6 +450,23 @@ func (rc *rpcClient) SetPublicAutoconnect(pAc bool) error {
 	return rc.Call("SetPublicAutoconnect", &pAc, &struct{}{})
 }
 
+// StartPublicAutoconnect implements API.
+func (rc *rpcClient) StartPublicAutoconnect() error {
+	return rc.Call("StartPublicAutoconnect", &struct{}{}, &struct{}{})
+}
+
+// StopPublicAutoconnect implements API.
+func (rc *rpcClient) StopPublicAutoconnect() error {
+	return rc.Call("StopPublicAutoconnect", &struct{}{}, &struct{}{})
+}
+
+// PublicAutoconnectStatus implements API.
+func (rc *rpcClient) PublicAutoconnectStatus() (bool, error) {
+	var status bool
+	err := rc.Call("PublicAutoconnectStatus", &struct{}{}, &status)
+	return status, err
+}
+
 // SetExistingTPOnly sets whether to only use existing transports for routing.
 func (rc *rpcClient) SetExistingTPOnly(enabled bool) error {
 	return rc.Call("SetExistingTPOnly", &enabled, &struct{}{})
@@ -1311,6 +1328,21 @@ func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.Entry, err
 // SetPublicAutoconnect implements API.
 func (mc *mockRPCClient) SetPublicAutoconnect(_ bool) error {
 	return nil
+}
+
+// StartPublicAutoconnect implements API.
+func (mc *mockRPCClient) StartPublicAutoconnect() error {
+	return nil
+}
+
+// StopPublicAutoconnect implements API.
+func (mc *mockRPCClient) StopPublicAutoconnect() error {
+	return nil
+}
+
+// PublicAutoconnectStatus implements API.
+func (mc *mockRPCClient) PublicAutoconnectStatus() (bool, error) {
+	return false, nil
 }
 
 func (mc *mockRPCClient) SetExistingTPOnly(_ bool) error {

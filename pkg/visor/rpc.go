@@ -684,6 +684,26 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	return err
 }
 
+// StartPublicAutoconnect starts the public autoconnect routine
+func (r *RPC) StartPublicAutoconnect(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StartPublicAutoconnect", nil)(nil, &err)
+	return r.visor.StartPublicAutoconnect()
+}
+
+// StopPublicAutoconnect stops the public autoconnect routine
+func (r *RPC) StopPublicAutoconnect(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopPublicAutoconnect", nil)(nil, &err)
+	return r.visor.StopPublicAutoconnect()
+}
+
+// PublicAutoconnectStatus returns whether public autoconnect is running
+func (r *RPC) PublicAutoconnectStatus(_ *struct{}, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "PublicAutoconnectStatus", nil)(out, &err)
+	status, err := r.visor.PublicAutoconnectStatus()
+	*out = status
+	return err
+}
+
 // SetExistingTPOnly sets whether to only use existing transports for routing
 func (r *RPC) SetExistingTPOnly(enabled *bool, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetExistingTPOnly", *enabled)(nil, &err)

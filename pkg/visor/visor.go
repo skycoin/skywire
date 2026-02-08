@@ -131,6 +131,11 @@ type Visor struct {
 
 	// Embedded Transport Setup Node (nil if tps_sk not configured)
 	embeddedTPS *embeddedTPS
+
+	// Public autoconnect runtime control
+	autoconnectMu      sync.Mutex
+	autoconnectCancel  context.CancelFunc
+	autoconnectRunning bool
 }
 
 // todo: consider moving module closing to the module system

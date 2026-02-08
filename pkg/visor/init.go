@@ -2090,6 +2090,19 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	if !v.conf.Transport.PublicAutoconnect {
 		return nil
 	}
+	return v.startPublicAutoconnectInternal(ctx, log)
+}
+
+// startPublicAutoconnectInternal starts the public autoconnect goroutine.
+// Called both at init time and when starting via API.
+func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging.Logger) error {
+	v.autoconnectMu.Lock()
+	defer v.autoconnectMu.Unlock()
+
+	if v.autoconnectRunning {
+		return nil // already running
+	}
+
 	serviceDisc := v.conf.Launcher.ServiceDisc
 	if serviceDisc == "" { //it might be intentionally blank ; consider revising.
 		serviceDisc = deployment.Prod.ServiceDiscovery
@@ -2115,14 +2128,53 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	connector := MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
 
 	cctx, cancel := context.WithCancel(ctx)
+	v.autoconnectCancel = cancel
+	v.autoconnectRunning = true
+
 	v.pushCloseStack("public_autoconnect", func() error {
-		cancel()
-		return err
+		v.autoconnectMu.Lock()
+		defer v.autoconnectMu.Unlock()
+		if v.autoconnectCancel != nil {
+			v.autoconnectCancel()
+			v.autoconnectCancel = nil
+		}
+		v.autoconnectRunning = false
+		return nil
 	})
 
 	go connector.Run(cctx, v) //nolint:errcheck
 
 	return nil
+}
+
+// StartPublicAutoconnect starts public autoconnect if not already running.
+func (v *Visor) StartPublicAutoconnect() error {
+	log := v.MasterLogger().PackageLogger("public_autoconnect")
+	return v.startPublicAutoconnectInternal(context.Background(), log)
+}
+
+// StopPublicAutoconnect stops public autoconnect if running.
+func (v *Visor) StopPublicAutoconnect() error {
+	v.autoconnectMu.Lock()
+	defer v.autoconnectMu.Unlock()
+
+	if !v.autoconnectRunning {
+		return nil // not running
+	}
+
+	if v.autoconnectCancel != nil {
+		v.autoconnectCancel()
+		v.autoconnectCancel = nil
+	}
+	v.autoconnectRunning = false
+	return nil
+}
+
+// IsPublicAutoconnectRunning returns whether public autoconnect is running.
+func (v *Visor) IsPublicAutoconnectRunning() bool {
+	v.autoconnectMu.Lock()
+	defer v.autoconnectMu.Unlock()
+	return v.autoconnectRunning
 }
 
 func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {

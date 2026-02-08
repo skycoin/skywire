@@ -113,6 +113,9 @@ type API interface {
 	RemoveTransport(tid uuid.UUID) error
 	RemoveAllTransports() error
 	SetPublicAutoconnect(pAc bool) error
+	StartPublicAutoconnect() error
+	StopPublicAutoconnect() error
+	PublicAutoconnectStatus() (bool, error)
 	GetPersistentTransports() ([]transport.PersistentTransports, error)
 	SetPersistentTransports([]transport.PersistentTransports) error
 	//transport discovery
@@ -1875,6 +1878,11 @@ func (v *Visor) GetLogRotationInterval() (visorconfig.Duration, error) {
 // SetPublicAutoconnect sets public_autoconnect config of visor
 func (v *Visor) SetPublicAutoconnect(pAc bool) error {
 	return v.conf.UpdatePublicAutoconnect(pAc)
+}
+
+// PublicAutoconnectStatus returns whether public autoconnect is currently running
+func (v *Visor) PublicAutoconnectStatus() (bool, error) {
+	return v.IsPublicAutoconnectRunning(), nil
 }
 
 // GetVPNClientAddress get PK address of server set on vpn-client
