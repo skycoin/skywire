@@ -47,6 +47,13 @@ func (c *Client) Connect(remoteConn net.Conn) error {
 	c.remoteConn = remoteConn
 	c.mu.Unlock()
 
+	// Wait for ready signal from server to ensure noise handshake is complete
+	readyBuf := make([]byte, 1)
+	if _, err := remoteConn.Read(readyBuf); err != nil {
+		return fmt.Errorf("failed to read ready signal: %w", err)
+	}
+	c.log.Debug("Received ready signal from server")
+
 	// Send connection request
 	msg := clientMsg{
 		Port:   c.remotePort,

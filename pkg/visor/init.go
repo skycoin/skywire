@@ -820,6 +820,14 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 }
 
 func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
+	// Send ready signal to synchronize with client after noise handshake
+	// This ensures the noise handshake is complete before data exchange
+	if _, err := remoteConn.Write([]byte{0x00}); err != nil {
+		log.WithError(err).Error("Failed to send ready signal")
+		return
+	}
+	log.Debug("Sent ready signal to client")
+
 	buf := make([]byte, 32*1024)
 	n, err := remoteConn.Read(buf)
 	if err != nil {
