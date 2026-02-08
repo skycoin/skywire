@@ -22,6 +22,7 @@ const STATUS_INFO: Record<number, { label: string; color: string; bg: string }> 
 
 let appsData: AppState[] = [];
 let appsRefreshInterval: ReturnType<typeof setInterval> | null = null;
+let appsInitialized = false;
 
 /**
  * Fetches the list of apps from the visor.
@@ -230,6 +231,12 @@ export function renderAppsUI(apps: AppState[]): void {
  * Initializes apps management - sets up global handlers and starts refresh interval.
  */
 export function initApps(): void {
+    // Only initialize once
+    if (appsInitialized) {
+        return;
+    }
+    appsInitialized = true;
+
     // Expose functions globally for onclick handlers
     (window as any).appStart = startApp;
     (window as any).appStop = stopApp;
@@ -260,9 +267,12 @@ export function showAppsSection(show: boolean): void {
         section.style.display = show ? 'block' : 'none';
         if (show) {
             initApps();
-        } else if (appsRefreshInterval) {
-            clearInterval(appsRefreshInterval);
-            appsRefreshInterval = null;
+        } else {
+            if (appsRefreshInterval) {
+                clearInterval(appsRefreshInterval);
+                appsRefreshInterval = null;
+            }
+            appsInitialized = false; // Reset so it can be initialized again on reconnect
         }
     }
 }
