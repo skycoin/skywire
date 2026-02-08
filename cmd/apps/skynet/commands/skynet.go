@@ -140,12 +140,22 @@ func RunSkynet(ctx context.Context, args []string) error {
 	termCh := make(chan os.Signal, 1)
 	signal.Notify(termCh, os.Interrupt)
 
+	// Check if context is already done
+	select {
+	case <-ctx.Done():
+		appCl.Log().Warnf("Context already cancelled before wait: %v", ctx.Err())
+		setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+		return nil
+	default:
+		appCl.Log().Info("Context is valid, waiting for shutdown signal...")
+	}
+
 	// Wait for shutdown or context cancellation
 	select {
 	case <-termCh:
 		appCl.Log().Info("Received interrupt, shutting down...")
 	case <-ctx.Done():
-		appCl.Log().Info("Context cancelled, shutting down...")
+		appCl.Log().Infof("Context cancelled, shutting down: %v", ctx.Err())
 	}
 
 	// Deregister all ports
