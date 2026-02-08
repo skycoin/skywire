@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -147,7 +148,40 @@ var srvStartCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to start %s: %w", appName, err))
 		}
 
-		internal.PrintOutput(cmd.Flags(), "OK", fmt.Sprintf("Skynet server '%s' started, exposing ports: %s\n", appName, srvPorts))
+		fmt.Printf("Starting %s (exposing ports: %s) ", appName, srvPorts)
+
+		// Poll for app status until running, errored, or stopped
+		for {
+			time.Sleep(time.Second)
+			fmt.Print(".")
+
+			states, err := rpcClient.Apps()
+			if err != nil {
+				fmt.Println()
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get app status: %w", err))
+			}
+
+			for _, state := range states {
+				if state.Name == appName {
+					switch state.Status {
+					case appserver.AppStatusRunning:
+						fmt.Println("\nRunning!")
+						return
+					case appserver.AppStatusErrored:
+						fmt.Printf("\nError: %s\n", state.DetailedStatus)
+						os.Exit(1)
+					case appserver.AppStatusStopped:
+						if state.DetailedStatus != "" {
+							fmt.Printf("\nStopped: %s\n", state.DetailedStatus)
+						} else {
+							fmt.Println("\nStopped unexpectedly")
+						}
+						os.Exit(1)
+					}
+					break
+				}
+			}
+		}
 	},
 }
 
