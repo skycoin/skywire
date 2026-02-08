@@ -127,3 +127,13 @@ export function updateLocalRouteVisibility(): void {
         localRouteRow.style.display = useDmsgCheckbox.checked ? 'none' : 'block';
     }
 }
+
+/**
+ * Shows or hides the ping section based on visor connection.
+ */
+export function showPingSection(show: boolean): void {
+    const section = document.getElementById('section-ping');
+    if (section) {
+        section.style.display = show ? 'block' : 'none';
+    }
+}
