@@ -179,10 +179,10 @@ func (l *AppLauncher) AppState(name string) (*appserver.AppState, bool) {
 		if connSummary != nil {
 			state.Status = appserver.AppStatusRunning
 		}
-		// for a edge case where app has given the start status but we are unable to retrieve the conn info
-		if connSummary == nil && state.DetailedStatus == appserver.AppDetailedStatusRunning {
-			state.DetailedStatus = appserver.AppDetailedStatusStarting
-			state.Status = appserver.AppStatusStarting
+		// Check if the proc is actually running - this handles apps that don't use connections
+		// (like skynet server which only registers ports via RPC)
+		if proc.IsRunning() && state.DetailedStatus == appserver.AppDetailedStatusRunning {
+			state.Status = appserver.AppStatusRunning
 		}
 		switch state.DetailedStatus {
 		case appserver.AppDetailedStatusVPNConnecting, appserver.AppDetailedStatusStarting, appserver.AppDetailedStatusReconnecting:
