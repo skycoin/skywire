@@ -139,6 +139,8 @@ func RunSkynet(ctx context.Context, args []string) error {
 		setAppPort(appCl, port)
 	}
 
+	setAppStatus(appCl, appserver.AppDetailedStatusStarting)
+
 	// Listen on skynet
 	l, err := appCl.Listen(netType, port)
 	if err != nil {
@@ -148,6 +150,7 @@ func RunSkynet(ctx context.Context, args []string) error {
 	}
 
 	appCl.Log().Infof("Listening on skynet port %d", port)
+	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 
 	// Handle shutdown
 	termCh := make(chan os.Signal, 1)

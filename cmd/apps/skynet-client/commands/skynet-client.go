@@ -121,6 +121,8 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		setAppPort(appCl, port)
 	}
 
+	setAppStatus(appCl, appserver.AppDetailedStatusStarting)
+
 	// Connect to remote skynet server
 	// The server listens on SkynetAppPort (49) for the new app-based server
 	// or SkyForwardingServerPort (47) for the built-in server
@@ -163,6 +165,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	}
 
 	appCl.Log().Info("Connected to remote skynet server")
+	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 
 	// Handle shutdown
 	termCh := make(chan os.Signal, 1)
