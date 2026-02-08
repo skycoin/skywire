@@ -90,6 +90,18 @@ export interface DMSGHealthResponse {
   message?: string;
 }
 
+export interface PingResponse {
+  status: string;
+  latency_ms?: number;
+  latencies?: number[];
+  min_ms?: number;
+  max_ms?: number;
+  avg_ms?: number;
+  packet_loss?: number;
+  error?: string;
+  mode: string;
+}
+
 export interface HealthResponse {
   cache_max_age: number;
   auto_refresh: boolean;

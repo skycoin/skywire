@@ -492,6 +492,14 @@ export function createNetwork(): void {
                 document.body.style.cursor = 'default';
                 return;
             }
+            if (S.pingPickMode && !net.isCluster(nodeId)) {
+                // Strip dmsg-srv- prefix if clicking a DMSG server node
+                const pk = nodeId.startsWith('dmsg-srv-') ? nodeId.substring(9) : nodeId;
+                (document.getElementById('ping-pk') as HTMLInputElement).value = pk;
+                S.setPingPickMode(false);
+                document.body.style.cursor = 'default';
+                return;
+            }
             if (!net.isCluster(nodeId)) {
                 setSelectedClusterId(null);
                 showNodeInfo(nodeId);

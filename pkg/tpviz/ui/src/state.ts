@@ -109,6 +109,7 @@ export let tpsGroupPickMode: string | null = null;
 export let tpsOverlayEdges = new Map<string, any>();
 export let dmsgHealthPickMode = false;
 export let localTpPickMode = false;
+export let pingPickMode = false;
 
 export function setTpsRunning(r: boolean) { tpsRunning = r; }
 export function setTpsPK(pk: string) { tpsPK = pk; }
@@ -116,6 +117,7 @@ export function setTpsPickMode(m: string | null) { tpsPickMode = m; }
 export function setTpsGroupPickMode(m: string | null) { tpsGroupPickMode = m; }
 export function setDmsgHealthPickMode(m: boolean) { dmsgHealthPickMode = m; }
 export function setLocalTpPickMode(m: boolean) { localTpPickMode = m; }
+export function setPingPickMode(m: boolean) { pingPickMode = m; }
 
 // Multi-hop
 export let mhHops: string[] = [];

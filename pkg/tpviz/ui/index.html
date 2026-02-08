@@ -347,6 +347,39 @@
                 </div>
             </div>
 
+            <!-- Network Ping - collapsed by default -->
+            <div class="section collapsed" id="section-ping">
+                <div class="section-header" onclick="toggleSection('section-ping')" style="background:linear-gradient(135deg,rgba(0,217,165,0.15),rgba(0,180,216,0.1));">
+                    <span class="section-title" style="color:#00d9a5;">Network Ping</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div style="font-size:0.75em;color:#888;margin-bottom:6px;">Ping a remote visor via routes or DMSG</div>
+                    <div style="display:flex;gap:2px;align-items:stretch;margin-bottom:4px;">
+                        <input type="text" id="ping-pk" placeholder="Target Visor PK" style="flex:1;min-width:0;padding:5px 8px;background:#1a1a2e;border:1px solid #00d9a5;color:#eee;border-radius:2px;font-size:11px;font-family:monospace;">
+                        <button id="ping-pick-btn" style="padding:0 4px;background:#00d9a5;color:#000;border:none;border-radius:2px;cursor:pointer;font-size:9px;" title="Pick from graph">⊕</button>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap;">
+                        <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#aaa;cursor:pointer;">
+                            <input type="checkbox" id="ping-use-dmsg" checked style="margin:0;">
+                            <span>DMSG</span>
+                        </label>
+                        <div id="ping-local-route-row" style="display:none;">
+                            <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#aaa;cursor:pointer;">
+                                <input type="checkbox" id="ping-local-route" style="margin:0;">
+                                <span>Local route calc</span>
+                            </label>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:2px;margin-left:auto;">
+                            <label style="font-size:10px;color:#666;">Tries:</label>
+                            <input type="number" id="ping-tries" value="3" min="1" max="10" style="width:36px;padding:2px 4px;background:#1a1a2e;border:1px solid #0f3460;color:#eee;border-radius:2px;font-size:10px;text-align:center;">
+                        </div>
+                        <button id="ping-btn" style="padding:3px 8px;background:#00d9a5;color:#000;border:none;border-radius:2px;cursor:pointer;font-size:10px;font-weight:600;">Ping</button>
+                    </div>
+                    <div id="ping-result" style="display:none;margin-top:4px;font-size:10px;padding:4px;border-radius:2px;"></div>
+                </div>
+            </div>
+
             <!-- Filters & Legend - collapsed by default -->
             <div class="section collapsed" id="section-filters">
                 <div class="section-header" onclick="toggleSection('section-filters')">

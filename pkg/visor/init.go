@@ -2543,6 +2543,111 @@ func (a *visorAPIAdapter) DMSGHealth(ctx context.Context, pk string) (*tpviz.DMS
 	}, nil
 }
 
+// Ping implements tpviz.VisorAPI - performs a ping to a remote visor via routes or DMSG.
+// It handles dial, ping, and cleanup in a single call for UI convenience.
+// localRoute: when true and using routes, use cached TPD data instead of querying route finder.
+func (a *visorAPIAdapter) Ping(ctx context.Context, pk string, useDMSG, localRoute bool, tries, sizeKB int) (*tpviz.PingResponse, error) {
+	var targetPK cipher.PubKey
+	if err := targetPK.UnmarshalText([]byte(pk)); err != nil {
+		return nil, fmt.Errorf("invalid PK: %w", err)
+	}
+
+	mode := "route"
+	if useDMSG {
+		mode = "dmsg"
+	}
+	if localRoute && !useDMSG {
+		mode = "route (local)"
+	}
+
+	conf := PingConfig{
+		PK:         targetPK,
+		Tries:      tries,
+		PcktSize:   sizeKB,
+		LocalRoute: localRoute,
+	}
+
+	var latencies []time.Duration
+	var err error
+
+	if useDMSG {
+		// DMSG ping: dial → ping → stop
+		if err = a.v.DialDmsgPing(targetPK); err != nil {
+			return &tpviz.PingResponse{
+				Status: "error",
+				Error:  fmt.Sprintf("dmsg dial failed: %v", err),
+				Mode:   mode,
+			}, nil
+		}
+		defer func() {
+			_ = a.v.StopDmsgPing(targetPK)
+		}()
+
+		latencies, err = a.v.DmsgPing(conf)
+	} else {
+		// Route ping: dial → ping → stop
+		if err = a.v.DialPing(conf); err != nil {
+			return &tpviz.PingResponse{
+				Status: "error",
+				Error:  fmt.Sprintf("route dial failed: %v", err),
+				Mode:   mode,
+			}, nil
+		}
+		defer func() {
+			_ = a.v.StopPing(targetPK)
+		}()
+
+		latencies, err = a.v.Ping(conf)
+	}
+
+	if err != nil {
+		return &tpviz.PingResponse{
+			Status: "error",
+			Error:  fmt.Sprintf("ping failed: %v", err),
+			Mode:   mode,
+		}, nil
+	}
+
+	// Calculate statistics
+	if len(latencies) == 0 {
+		return &tpviz.PingResponse{
+			Status:     "timeout",
+			PacketLoss: 100.0,
+			Mode:       mode,
+		}, nil
+	}
+
+	var sum, minVal, maxVal time.Duration
+	latencyMs := make([]int64, 0, len(latencies))
+	minVal = latencies[0]
+	maxVal = latencies[0]
+
+	for _, lat := range latencies {
+		sum += lat
+		if lat < minVal {
+			minVal = lat
+		}
+		if lat > maxVal {
+			maxVal = lat
+		}
+		latencyMs = append(latencyMs, lat.Milliseconds())
+	}
+
+	avg := sum / time.Duration(len(latencies))
+	packetLoss := float64(tries-len(latencies)) / float64(tries) * 100.0
+
+	return &tpviz.PingResponse{
+		Status:     "success",
+		LatencyMs:  avg.Seconds() * 1000,
+		Latencies:  latencyMs,
+		MinMs:      minVal.Seconds() * 1000,
+		MaxMs:      maxVal.Seconds() * 1000,
+		AvgMs:      avg.Seconds() * 1000,
+		PacketLoss: packetLoss,
+		Mode:       mode,
+	}, nil
+}
+
 // tpsAPIAdapter adapts *Visor's embeddedTPS to the tpviz.TPSAPI interface.
 type tpsAPIAdapter struct {
 	v *Visor

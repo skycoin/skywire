@@ -103,6 +103,7 @@ type VisorAPI interface {
 	AddTransport(ctx context.Context, remotePK, tpType string) (*TransportSummary, error)
 	RemoveTransport(ctx context.Context, tpID string) error
 	DMSGHealth(ctx context.Context, pk string) (*DMSGHealthResponse, error)
+	Ping(ctx context.Context, pk string, useDMSG, localRoute bool, tries, sizeKB int) (*PingResponse, error)
 	Close() error
 }
 
@@ -112,6 +113,19 @@ type DMSGHealthResponse struct {
 	BuildInfo string `json:"build_info,omitempty"`
 	Message   string `json:"message,omitempty"`
 	Error     string `json:"error,omitempty"`
+}
+
+// PingResponse contains the response from a ping operation.
+type PingResponse struct {
+	Status     string  `json:"status"`
+	LatencyMs  float64 `json:"latency_ms,omitempty"`
+	Latencies  []int64 `json:"latencies,omitempty"` // Individual latencies in ms
+	MinMs      float64 `json:"min_ms,omitempty"`
+	MaxMs      float64 `json:"max_ms,omitempty"`
+	AvgMs      float64 `json:"avg_ms,omitempty"`
+	PacketLoss float64 `json:"packet_loss,omitempty"`
+	Error      string  `json:"error,omitempty"`
+	Mode       string  `json:"mode"` // "route" or "dmsg"
 }
 
 // VisorOverview contains visor overview data.
@@ -471,6 +485,9 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/dmsg/servers", s.handleDMSGServers)
 	s.mux.HandleFunc("/api/dmsg/entries", s.handleDMSGEntries)
 	s.mux.HandleFunc("/api/dmsg/health", s.handleDMSGHealth)
+
+	// Network ping endpoint
+	s.mux.HandleFunc("/api/ping", s.handlePing)
 }
 
 func (s *Server) handleTransports(w http.ResponseWriter, r *http.Request) {
@@ -1778,6 +1795,78 @@ func (s *Server) handleDMSGHealth(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
 			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
+}
+
+// handlePing performs a network ping to a remote visor via routes or DMSG.
+// Query params: pk (required), mode (route/dmsg, default: dmsg), tries (default: 3), size (KB, default: 2), local (bool, default: false)
+func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	pk := r.URL.Query().Get("pk")
+	if pk == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"status": "error",
+			"error":  "pk parameter required",
+		})
+		return
+	}
+
+	mode := r.URL.Query().Get("mode")
+	if mode == "" {
+		mode = "dmsg"
+	}
+	useDMSG := mode == "dmsg"
+
+	// localRoute: use cached TPD data for route calculation instead of route finder
+	localRoute := r.URL.Query().Get("local") == "true"
+
+	tries := 3
+	if t := r.URL.Query().Get("tries"); t != "" {
+		if parsed, err := fmt.Sscanf(t, "%d", &tries); err != nil || parsed != 1 || tries < 1 {
+			tries = 3
+		}
+		if tries > 10 {
+			tries = 10
+		}
+	}
+
+	sizeKB := 2
+	if sz := r.URL.Query().Get("size"); sz != "" {
+		if parsed, err := fmt.Sscanf(sz, "%d", &sizeKB); err != nil || parsed != 1 || sizeKB < 1 {
+			sizeKB = 2
+		}
+		if sizeKB > 32 {
+			sizeKB = 32
+		}
+	}
+
+	s.visorMu.RLock()
+	visorAPI := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if visorAPI == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"status": "error",
+			"error":  "visor not connected - ping requires visor API",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+
+	resp, err := visorAPI.Ping(ctx, pk, useDMSG, localRoute, tries, sizeKB)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"status": "error",
+			"error":  err.Error(),
+			"mode":   mode,
 		})
 		return
 	}

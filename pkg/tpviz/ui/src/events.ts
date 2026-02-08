@@ -12,6 +12,7 @@ import {
     mhBuildRoute, mhClearHops, mhRenderHops,
 } from './tps';
 import { dmsgHealthCheck } from './dmsg';
+import { performPing, updateLocalRouteVisibility } from './ping';
 import { checkServer, fetchAllData } from './api';
 import { startFlowAnimation } from './flow-animation';
 
@@ -126,6 +127,14 @@ export function wireEventListeners(): void {
         document.body.style.cursor = 'crosshair';
     });
     document.getElementById('dmsg-health-btn')!.addEventListener('click', dmsgHealthCheck);
+
+    // Ping event handlers
+    document.getElementById('ping-pick-btn')!.addEventListener('click', () => {
+        S.setPingPickMode(true);
+        document.body.style.cursor = 'crosshair';
+    });
+    document.getElementById('ping-btn')!.addEventListener('click', performPing);
+    document.getElementById('ping-use-dmsg')!.addEventListener('change', updateLocalRouteVisibility);
 
     // Animation controls
     document.getElementById('show-dataflow')!.addEventListener('change', () => {
