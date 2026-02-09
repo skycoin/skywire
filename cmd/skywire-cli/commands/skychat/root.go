@@ -32,8 +32,8 @@ func init() {
 	sendCmd.Flags().StringVarP(&recipient, "to", "t", "", "recipient public key (required)")
 	sendCmd.Flags().StringVarP(&message, "msg", "m", "", "message to send (required)")
 	sendCmd.Flags().StringVarP(&networkType, "net", "n", "skynet", "network type: skynet or dmsg")
-	sendCmd.MarkFlagRequired("to")    //nolint:errcheck
-	sendCmd.MarkFlagRequired("msg")   //nolint:errcheck
+	sendCmd.MarkFlagRequired("to")  //nolint:errcheck,gosec
+	sendCmd.MarkFlagRequired("msg") //nolint:errcheck,gosec
 
 	listenCmd.Flags().StringVarP(&networkType, "net", "n", "", "filter by network type (optional)")
 }
@@ -76,7 +76,7 @@ var sendCmd = &cobra.Command{
 
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 			var errBody bytes.Buffer
-			errBody.ReadFrom(resp.Body) //nolint:errcheck
+			errBody.ReadFrom(resp.Body) //nolint:errcheck,gosec
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("server error (%d): %s", resp.StatusCode, errBody.String()))
 		}
 

@@ -2084,7 +2084,7 @@ func (v *Visor) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int)
 
 	forwardConn, err := appnet.NewRawTCPForwardConn(v.log, remoteConn, remotePort, localPort)
 	if err != nil {
-		remoteConn.Close()
+		_ = remoteConn.Close() //nolint:errcheck
 		return uuid.UUID{}, err
 	}
 	forwardConn.Serve()

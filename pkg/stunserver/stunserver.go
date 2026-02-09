@@ -55,7 +55,7 @@ type Server struct {
 	conn22 *net.UDPConn // secondary IP, alt port
 }
 
-// Start binds 4 UDP sockets and serves STUN requests until ctx is cancelled.
+// Start binds 4 UDP sockets and serves STUN requests until ctx is canceled.
 func (s *Server) Start(ctx context.Context) error {
 	type sockDef struct {
 		ip   string
@@ -102,7 +102,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Close all connections to unblock reads.
 	for _, sd := range sockets {
-		(*sd.conn).Close()
+		_ = (*sd.conn).Close() //nolint:errcheck
 	}
 	wg.Wait()
 	return nil
@@ -279,13 +279,13 @@ func buildResponse(transID []byte, clientAddr *net.UDPAddr, sourceIP string, sou
 	copy(msg[stunHeaderSize:], attrs)
 
 	// FINGERPRINT: compute over message with length field including the 8-byte fingerprint attr.
-	fpLen := len(attrs) + 8 // 4 bytes attr header + 4 bytes CRC value
-	binary.BigEndian.PutUint16(msg[2:4], uint16(fpLen))
+	fpLen := len(attrs) + 8                             // 4 bytes attr header + 4 bytes CRC value
+	binary.BigEndian.PutUint16(msg[2:4], uint16(fpLen)) //nolint:gosec // STUN attr lengths are always < 65535
 	fp := computeFingerprint(msg)
 	fpAttr := encodeAttr(attrFingerprint, fp)
 
 	// Set final length (attrs + fingerprint attr).
-	binary.BigEndian.PutUint16(msg[2:4], uint16(len(attrs)+len(fpAttr)))
+	binary.BigEndian.PutUint16(msg[2:4], uint16(len(attrs)+len(fpAttr))) //nolint:gosec // STUN attr lengths are always < 65535
 	msg = append(msg, fpAttr...)
 
 	return msg
@@ -295,7 +295,7 @@ func encodeAttr(attrType uint16, value []byte) []byte {
 	padded := (len(value) + 3) & ^3
 	buf := make([]byte, 4+padded)
 	binary.BigEndian.PutUint16(buf[0:2], attrType)
-	binary.BigEndian.PutUint16(buf[2:4], uint16(len(value)))
+	binary.BigEndian.PutUint16(buf[2:4], uint16(len(value))) //nolint:gosec // STUN attr values are always < 65535
 	copy(buf[4:], value)
 	return buf
 }
@@ -305,7 +305,7 @@ func encodeAddress(ip string, port int) []byte {
 	buf := make([]byte, 8)
 	buf[0] = 0x00 // reserved
 	buf[1] = familyIPv4
-	binary.BigEndian.PutUint16(buf[2:4], uint16(port))
+	binary.BigEndian.PutUint16(buf[2:4], uint16(port)) //nolint:gosec // port is always valid UDP port < 65535
 	copy(buf[4:8], parsed)
 	return buf
 }
@@ -316,7 +316,7 @@ func encodeXorAddress(ip string, port int, transID []byte) []byte {
 	buf[0] = 0x00 // reserved
 	buf[1] = familyIPv4
 	// XOR port with first 2 bytes of transaction ID (which is the magic cookie high bytes).
-	binary.BigEndian.PutUint16(buf[2:4], uint16(port)^binary.BigEndian.Uint16(transID[0:2]))
+	binary.BigEndian.PutUint16(buf[2:4], uint16(port)^binary.BigEndian.Uint16(transID[0:2])) //nolint:gosec // port is always valid UDP port < 65535
 	// XOR address with first 4 bytes of transaction ID (magic cookie).
 	for i := 0; i < 4; i++ {
 		buf[4+i] = parsed[i] ^ transID[i]

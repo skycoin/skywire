@@ -124,7 +124,7 @@ func RunSkynet(ctx context.Context, args []string) error {
 			appCl.Log().Errorf("Failed to register port %d: %v", port, err)
 			// Deregister any ports we already registered
 			for _, p := range registeredPorts {
-				_ = rpcClient.DeregisterHTTPPort(p)
+				_ = rpcClient.DeregisterHTTPPort(p) //nolint:errcheck
 			}
 			setAppError(appCl, fmt.Errorf("failed to register port %d: %w", port, err))
 			return fmt.Errorf("failed to register port %d: %w", port, err)
@@ -143,7 +143,7 @@ func RunSkynet(ctx context.Context, args []string) error {
 	// Check if context is already done
 	select {
 	case <-ctx.Done():
-		appCl.Log().Warnf("Context already cancelled before wait: %v", ctx.Err())
+		appCl.Log().Warnf("Context already canceled before wait: %v", ctx.Err())
 		setAppStatus(appCl, appserver.AppDetailedStatusStopped)
 		return nil
 	default:
@@ -155,7 +155,7 @@ func RunSkynet(ctx context.Context, args []string) error {
 	case <-termCh:
 		appCl.Log().Info("Received interrupt, shutting down...")
 	case <-ctx.Done():
-		appCl.Log().Infof("Context cancelled, shutting down: %v", ctx.Err())
+		appCl.Log().Infof("Context canceled, shutting down: %v", ctx.Err())
 	}
 
 	// Deregister all ports

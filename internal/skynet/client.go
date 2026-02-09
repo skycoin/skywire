@@ -16,17 +16,17 @@ import (
 
 // Client connects to a remote skynet server and forwards traffic to a local port
 type Client struct {
-	log          logrus.FieldLogger
-	remotePK     cipher.PubKey
-	remotePort   int
-	localPort    int
-	rawTCP       bool
-	remoteConn   net.Conn
-	localLis     net.Listener
-	mu           sync.RWMutex
-	closeCh      chan struct{}
-	closeOnce    sync.Once
-	activeConns  sync.WaitGroup
+	log         logrus.FieldLogger
+	remotePK    cipher.PubKey
+	remotePort  int
+	localPort   int
+	rawTCP      bool
+	remoteConn  net.Conn
+	localLis    net.Listener
+	mu          sync.RWMutex
+	closeCh     chan struct{}
+	closeOnce   sync.Once
+	activeConns sync.WaitGroup
 }
 
 // NewClient creates a new skynet client
@@ -151,7 +151,7 @@ func (c *Client) forwardRawTCP() error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() //nolint:errcheck
 
 	done := make(chan struct{}, 2)
 
@@ -184,7 +184,7 @@ func (c *Client) forwardRawTCP() error {
 }
 
 func (c *Client) handleLocalConn(localConn net.Conn) {
-	defer localConn.Close()
+	defer func() { _ = localConn.Close() }() //nolint:errcheck
 
 	c.mu.RLock()
 	remoteConn := c.remoteConn
@@ -210,7 +210,7 @@ func (c *Client) handleLocalConn(localConn net.Conn) {
 	respBuf := make([]byte, 64*1024)
 	total := 0
 	for {
-		remoteConn.SetReadDeadline(timeoutAfter(5)) //nolint:errcheck
+		remoteConn.SetReadDeadline(timeoutAfter(5)) //nolint:errcheck,gosec
 		rn, err := remoteConn.Read(respBuf[total:])
 		if err != nil {
 			if !errors.Is(err, io.EOF) && !isTimeout(err) {

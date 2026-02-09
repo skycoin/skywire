@@ -14,8 +14,8 @@ import (
 	"github.com/spf13/cobra"
 
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
-	sn "github.com/skycoin/skywire/cmd/apps/skynet/commands"
 	snc "github.com/skycoin/skywire/cmd/apps/skynet-client/commands"
+	sn "github.com/skycoin/skywire/cmd/apps/skynet/commands"
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
 	ss "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"

@@ -2640,7 +2640,7 @@ func (a *visorAPIAdapter) Ping(ctx context.Context, pk string, useDMSG, localRou
 			}, nil
 		}
 		defer func() {
-			_ = a.v.StopDmsgPing(targetPK)
+			_ = a.v.StopDmsgPing(targetPK) //nolint:errcheck
 		}()
 
 		latencies, err = a.v.DmsgPing(conf)
@@ -2654,7 +2654,7 @@ func (a *visorAPIAdapter) Ping(ctx context.Context, pk string, useDMSG, localRou
 			}, nil
 		}
 		defer func() {
-			_ = a.v.StopPing(targetPK)
+			_ = a.v.StopPing(targetPK) //nolint:errcheck
 		}()
 
 		latencies, err = a.v.Ping(conf)

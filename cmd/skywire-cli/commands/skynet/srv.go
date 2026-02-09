@@ -301,7 +301,7 @@ Examples:
 					_, err = fmt.Fprintf(w, "Details:\t%s\n", state.DetailedStatus)
 					internal.Catch(cmd.Flags(), err)
 				}
-				_, _ = fmt.Fprintln(w, "---")
+				_, _ = fmt.Fprintln(w, "---") //nolint:errcheck
 			}
 		}
 

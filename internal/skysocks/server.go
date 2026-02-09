@@ -95,7 +95,7 @@ func (s *Server) Serve(l net.Listener) error {
 				if s.appCl != nil {
 					s.appCl.Log().WithError(err).Warn("Failed to get remote PK, rejecting connection")
 				}
-				conn.Close()
+				_ = conn.Close() //nolint:errcheck
 				continue
 			}
 
@@ -103,7 +103,7 @@ func (s *Server) Serve(l net.Listener) error {
 				if s.appCl != nil {
 					s.appCl.Log().WithField("remote_pk", remotePK.Hex()).Warn("Connection rejected: not in whitelist")
 				}
-				conn.Close()
+				_ = conn.Close() //nolint:errcheck
 				continue
 			}
 

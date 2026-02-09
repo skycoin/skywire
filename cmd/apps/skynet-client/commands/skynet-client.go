@@ -114,11 +114,9 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	appCl.Log().Infof("Connecting to %s:%d, forwarding to localhost:%d (raw_tcp=%v)",
 		remotePK.Hex()[:16], remotePort, localPort, rawTCP)
 
-	// Get routing port
-	port := appCl.Config().RoutingPort
+	// Set routing port if specified
 	if appPort != 0 {
-		port = routing.Port(appPort)
-		setAppPort(appCl, port)
+		setAppPort(appCl, routing.Port(appPort))
 	}
 
 	setAppStatus(appCl, appserver.AppDetailedStatusStarting)

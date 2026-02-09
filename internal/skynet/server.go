@@ -175,7 +175,7 @@ func (s *Server) handleConn(conn net.Conn) {
 		s.sendError(wrappedConn, fmt.Errorf("local port %d not available", msg.Port))
 		return
 	}
-	testConn.Close()
+	_ = testConn.Close() //nolint:errcheck
 
 	// Send success reply
 	s.sendError(wrappedConn, nil)
@@ -237,7 +237,7 @@ func (s *Server) forwardRawTCP(remoteConn net.Conn, localAddr string) {
 	<-done
 
 	// Close both connections
-	localConn.Close()
+	_ = localConn.Close() //nolint:errcheck
 	// remoteConn will be closed by the caller
 
 	<-done
@@ -273,7 +273,7 @@ func (s *Server) forwardHTTP(remoteConn net.Conn, localAddr string) {
 		// Send data to local
 		if _, err := localConn.Write(buf[:n]); err != nil {
 			s.log.WithError(err).Error("Failed to write to local")
-			localConn.Close()
+			_ = localConn.Close() //nolint:errcheck
 			return
 		}
 
@@ -281,7 +281,7 @@ func (s *Server) forwardHTTP(remoteConn net.Conn, localAddr string) {
 		respBuf := make([]byte, 64*1024)
 		total := 0
 		for {
-			localConn.SetReadDeadline(timeoutAfter(5)) //nolint:errcheck
+			localConn.SetReadDeadline(timeoutAfter(5)) //nolint:errcheck,gosec
 			rn, err := localConn.Read(respBuf[total:])
 			if err != nil {
 				if !errors.Is(err, io.EOF) && !isTimeout(err) {
@@ -294,7 +294,7 @@ func (s *Server) forwardHTTP(remoteConn net.Conn, localAddr string) {
 				break
 			}
 		}
-		localConn.Close()
+		_ = localConn.Close() //nolint:errcheck
 
 		if total > 0 {
 			if _, err := remoteConn.Write(respBuf[:total]); err != nil {

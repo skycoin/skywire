@@ -35,15 +35,15 @@ import (
 var r = netutil.NewRetrier(nil, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
 
 var (
-	addr       string
-	appCl      *app.Client
-	appLog     func(format string, args ...interface{}) // App logger function
-	clientCh   chan string
-	conns      map[cipher.PubKey]net.Conn // Chat connections
-	connsMu    sync.Mutex
-	appPort    uint16
-	useSkynet  bool
-	useDmsg    bool
+	addr      string
+	appCl     *app.Client
+	appLog    func(format string, args ...interface{}) // App logger function
+	clientCh  chan string
+	conns     map[cipher.PubKey]net.Conn // Chat connections
+	connsMu   sync.Mutex
+	appPort   uint16
+	useSkynet bool
+	useDmsg   bool
 )
 
 // the go embed static points to skywire/cmd/apps/skychat/static

@@ -136,11 +136,11 @@ type PingResponse struct {
 
 // AppState represents the state of an application running on the visor.
 type AppState struct {
-	Name           string `json:"name"`
-	Status         int    `json:"status"`          // 0=stopped, 1=running, 2=errored, 3=starting
-	DetailedStatus string `json:"detailed_status"` // Human-readable status
-	AutoStart      bool   `json:"auto_start"`
-	Port           uint16 `json:"port"`
+	Name           string   `json:"name"`
+	Status         int      `json:"status"`          // 0=stopped, 1=running, 2=errored, 3=starting
+	DetailedStatus string   `json:"detailed_status"` // Human-readable status
+	AutoStart      bool     `json:"auto_start"`
+	Port           uint16   `json:"port"`
 	Args           []string `json:"args,omitempty"`
 }
 
