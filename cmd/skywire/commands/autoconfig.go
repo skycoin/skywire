@@ -86,16 +86,16 @@ var autoconfigCmd = &cobra.Command{
 		isSkybian := os.Getenv("SKYBIAN") == "true"
 		if isSkybian {
 			msg3("Enabling skywire service and starting...")
-			//nolint:gosec
-			_ = exec.Command("systemctl", "enable", "--now", "skywire.service").Run()
+			//nolint:errcheck,gosec
+			exec.Command("systemctl", "enable", "--now", "skywire.service").Run()
 		}
 
 		// Restart service if already running
 		checkActive := exec.Command("systemctl", "is-active", "--quiet", "skywire")
 		if checkActive.Run() == nil {
 			msg3("Restarting skywire.service...")
-			//nolint:gosec
-			_ = exec.Command("systemctl", "restart", "skywire").Run()
+			//nolint:errcheck,gosec
+			exec.Command("systemctl", "restart", "skywire").Run()
 		} else {
 			msg2(fmt.Sprintf("Start the skywire service with:\n\t%ssystemctl start skywire%s", colorRed, colorReset))
 		}
@@ -116,10 +116,7 @@ var autoconfigCmd = &cobra.Command{
 
 		// Load config to check hypervisor status
 		conf, err := visorconfig.ReadFile("/opt/skywire/skywire.json")
-		isHypervisor := false
-		if err == nil && conf != nil && conf.Hypervisor != nil {
-			isHypervisor = true
-		}
+		isHypervisor := err == nil && conf != nil && conf.Hypervisor != nil
 
 		// Show hypervisor URLs if applicable
 		if isHypervisor {
