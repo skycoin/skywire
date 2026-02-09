@@ -165,7 +165,7 @@ func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrres
 					if err != nil {
 						continue
 					}
-					conn.WriteTo([]byte(holePunchMessage), udpAddr) //nolint:errcheck
+					conn.WriteTo([]byte(holePunchMessage), udpAddr) //nolint:errcheck,gosec
 				}
 				continue // Skip the public IP hole punch
 			}
@@ -177,7 +177,7 @@ func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrres
 			continue
 		}
 
-		conn.WriteTo([]byte(holePunchMessage), udpAddr) //nolint:errcheck
+		conn.WriteTo([]byte(holePunchMessage), udpAddr) //nolint:errcheck,gosec
 	}
 }
 

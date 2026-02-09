@@ -118,7 +118,7 @@ type Visor struct {
 	pingPcktSize  int
 	dmsgPingConns map[cipher.PubKey]ping
 	dmsgPingMx    *sync.Mutex
-	logStorePath string
+	logStorePath  string
 
 	survey     visorconfig.Survey
 	surveyLock *sync.RWMutex

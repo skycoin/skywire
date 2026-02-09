@@ -62,7 +62,7 @@ func (c *SetupClient) dial(ctx context.Context, dmsgC *dmsg.Client) (net.Conn, e
 
 		if err != nil {
 			c.log.WithError(err).Warnf("failed to dial to setup node: setupPK(%s)", sPK)
-			// Check if parent context was cancelled
+			// Check if parent context was canceled
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
