@@ -165,7 +165,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "sk")
 	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
-	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${VPNSERVER:-false}"), "enable vpn server")
+	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${VPNSERVER:-true}"), "autostart vpn server (default: true)")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
 	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal :: show errors with -n flag")
 	gHiddenFlags = append(gHiddenFlags, "hide")
@@ -1143,8 +1143,8 @@ const envfileLinux = `#
 #	for any public services this visor is running
 #DISPLAYNODEIP=true
 
-#--	Autostart vpn server for this visor
-#VPNSERVER=true
+#--	Disable vpn server autostart for this visor
+#VPNSERVER=false
 
 #--	Set server public key for proxy client to connect to
 #PROXYCLIENTPK=''
@@ -1291,8 +1291,8 @@ const envfileWindows = `#
 #	for any public services this visor is running
 #$DISPLAYNODEIP=$true
 
-#--	Autostart VPN server for this visor
-#$VPNSERVER=$true
+#--	Disable VPN server autostart for this visor
+#$VPNSERVER=$false
 
 #--	Set server public key for proxy client to connect to
 #$PROXYCLIENTPK=''
