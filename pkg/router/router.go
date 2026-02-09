@@ -1210,7 +1210,7 @@ fetchRoutesAgain:
 
 // calculateLocalRoutes attempts to calculate routes locally using the transport manager
 // and transport discovery data, without relying on the route finder service.
-// It supports 1-hop (direct) and 2-hop routes.
+// It supports 1-hop (direct), 2-hop routes, and self-ping (src == dst).
 func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKey) (fwd, rev []routing.Hop, err error) {
 	if r.tm == nil {
 		return nil, nil, errors.New("transport manager not available")
@@ -1221,12 +1221,14 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 		return nil, nil, errors.New("discovery client not available")
 	}
 
-	r.logger.Debugf("Calculating local routes from %s to %s", src, dst)
+	isSelfPing := src == dst
+	r.logger.Debugf("Calculating local routes from %s to %s (self-ping=%v)", src, dst, isSelfPing)
 
 	// Collect local transports
 	type localTp struct {
 		id       uuid.UUID
 		remotePK cipher.PubKey
+		tpType   string
 	}
 	var localTps []localTp
 
@@ -1237,6 +1239,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 		localTps = append(localTps, localTp{
 			id:       tp.Entry.ID,
 			remotePK: tp.Entry.RemoteEdge(src),
+			tpType:   string(tp.Entry.Type),
 		})
 		return true
 	})
@@ -1250,11 +1253,53 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 	// Check for direct (1-hop) route first
 	for _, tp := range localTps {
 		if tp.remotePK == dst {
-			r.logger.Debugf("Found direct transport to destination: %s", tp.id)
+			r.logger.Debugf("Found direct transport to destination: %s (type=%s)", tp.id, tp.tpType)
 			fwdHop := routing.Hop{TpID: tp.id, From: src, To: dst}
 			revHop := routing.Hop{TpID: tp.id, From: dst, To: src}
 			return []routing.Hop{fwdHop}, []routing.Hop{revHop}, nil
 		}
+	}
+
+	// For self-ping, try 2-hop route through any available transport partner
+	// This allows testing the full route setup even without a direct self-transport
+	if isSelfPing {
+		r.logger.Debug("Self-ping: looking for 2-hop loopback route through transport partner")
+		for _, tp := range localTps {
+			intermediatePK := tp.remotePK
+			if intermediatePK == src {
+				// Skip actual self-transports (already checked above)
+				continue
+			}
+
+			// For self-ping via 2-hop: src -> intermediate -> src
+			// We need the intermediate to have a transport back to us
+			intermediateEntries, err := dc.GetTransportsByEdge(ctx, intermediatePK)
+			if err != nil {
+				r.logger.WithError(err).Debugf("Failed to get transports for intermediate visor %s", intermediatePK)
+				continue
+			}
+
+			for _, entry := range intermediateEntries {
+				if entry == nil {
+					continue
+				}
+				remotePK := entry.RemoteEdge(intermediatePK)
+				if remotePK == src {
+					r.logger.Debugf("Found 2-hop self-ping route via %s (tp1=%s, tp2=%s)", intermediatePK, tp.id, entry.ID)
+
+					// Build loopback route: src -> intermediate -> src
+					fwdHop1 := routing.Hop{TpID: tp.id, From: src, To: intermediatePK}
+					fwdHop2 := routing.Hop{TpID: entry.ID, From: intermediatePK, To: src}
+
+					// Reverse is the same for self-ping
+					revHop1 := routing.Hop{TpID: entry.ID, From: src, To: intermediatePK}
+					revHop2 := routing.Hop{TpID: tp.id, From: intermediatePK, To: src}
+
+					return []routing.Hop{fwdHop1, fwdHop2}, []routing.Hop{revHop1, revHop2}, nil
+				}
+			}
+		}
+		return nil, nil, errors.New("self-ping: no 2-hop loopback route found through transport partners")
 	}
 
 	// Try 2-hop routes through intermediate visors
