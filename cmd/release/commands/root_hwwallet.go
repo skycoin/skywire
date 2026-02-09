@@ -1,6 +1,9 @@
-// Package commands implements the skywire release commands.
+// Package commands implements the skywire release commands with hardware wallet support.
 //
-//go:build !hwwallet
+// Build with: go build -tags hwwallet
+// Requires: libusb-1.0-dev (apt) or libusb (brew)
+//
+//go:build hwwallet
 
 package commands
 
@@ -15,6 +18,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 
+	skyhw "github.com/skycoin/skycoin/cmd/hardware-wallet/commands"
 	cli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	visor "github.com/skycoin/skywire/pkg/visor"
 )
@@ -28,11 +32,14 @@ func init() {
 	RootCmd.AddCommand(
 		visor.RootCmd,
 		cli.RootCmd,
+		skyhw.RootCmd,
 	)
 	visor.RootCmd.Use = "visor"
 	visor.RootCmd.Short = "skywire visor"
 	cli.RootCmd.Use = "cli"
 	cli.RootCmd.Short = "skywire command line interface"
+	skyhw.RootCmd.Use = "skyhw"
+	skyhw.RootCmd.Short = "skycoin hardware wallet utilities"
 
 	if fmt.Sprintf("%v", buildinfo.DebugBuildInfo()) != "" {
 		RootCmd.Flags().BoolVarP(&di, "info", "d", false, "print runtime/debug.BuildInfo")
@@ -42,7 +49,7 @@ func init() {
 	}
 }
 
-// RootCmd contains visor and cli utilities
+// RootCmd contains visor, cli, and hardware wallet utilities
 var RootCmd = &cobra.Command{
 	Use: func() string {
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
