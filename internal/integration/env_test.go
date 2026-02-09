@@ -532,6 +532,9 @@ func (env *TestEnv) visorTpExec(cmd string) ([]*skyvisor.TransportSummary, error
 	if cliOutput.Err != nil {
 		return nil, errors.New(*cliOutput.Err)
 	}
+	if len(cliOutput.Output) == 0 {
+		return nil, errors.New("transport command returned empty output")
+	}
 	return cliOutput.Output, nil
 }
 
