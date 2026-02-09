@@ -59,8 +59,6 @@ SkyNet is the Skywire counterpart to DmsgWeb — facilitating port forwarding ov
 * **Access control**: Whitelist specific public keys to restrict who can connect to your server
 * **Multiple instances**: Run multiple server and client instances simultaneously with unique names
 
-SkyNet uses the visor's built-in transport forwarding service on port 47, enabling efficient peer-to-peer connections over STCPR, SUDPH, or DMSG transports.
-
 ## Skywire Deployment Services
 
 Skywire enables users to create their own network if desired. The implementation is fully open source. [Documentation for making a custom Skywire deployment is here.](https://github.com/skycoin/skywire-deployment)
@@ -91,6 +89,7 @@ Table of Contents
   * [Skywire Configuration in\-depth](#skywire-configuration-in-depth)
     * [Hypervisor web UI](#hypervisor-web-ui)
     * [Add remote hypervisor](#add-remote-hypervisor)
+    * [Network Visualization UI](#network-visualization-ui)
   * [Files and folders created by skywire at runtime](#files-and-folders-created-by-skywire-at-runtime)
   * [Run skywire visor](#run-skywire-visor)
     * [Process control](#process-control)
@@ -439,6 +438,32 @@ OR:
 ```
 skywire cli config gen --hvpk <public-key>
 ```
+
+### Network Visualization UI
+
+Skywire includes a network visualization and visor control interface that can run in two modes:
+
+**Visor-embedded mode** (recommended when visor is running):
+```
+skywire cli tp viz --visor
+```
+This starts the UI as part of the visor, with direct access to local transport and route data.
+
+**Standalone mode** (network visualization only):
+```
+skywire cli tp viz
+```
+This runs a standalone visualization server using transport discovery data.
+
+The web UI (default `localhost:8080`) provides:
+
+* **Real-time network graph**: Visual representation of visors and their connections in the Skywire network
+* **Transport information**: View active transports with details on type (STCPR, SUDPH, DMSG), remote public keys, and connection status
+* **Geographic clustering**: Visors are grouped by country and IP subnet for easier network topology understanding
+* **Click-to-copy**: Easily copy public keys by clicking on nodes in the graph
+* **Visor control** (visor mode): Direct interface for managing the local visor
+
+Note: This is a separate UI from the hypervisor interface and caches transport data locally.
 
 ## Files and folders created by skywire at runtime
 _Note: not all of these files will be created by default._
