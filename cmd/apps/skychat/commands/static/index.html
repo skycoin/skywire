@@ -910,7 +910,8 @@
       }
 
       sendMessage(el) {
-        const msg = el[0].value.trim();
+        const msgField = document.getElementById('msgField');
+        const msg = msgField.value.trim();
         if (!msg) return;
 
         const destination = this.recipient;
@@ -925,7 +926,7 @@
             if (res.ok) {
               const message = { ts: new Date(), from: 'me', text: msg };
               this.addMsgToList(destination, message);
-              el[0].value = '';
+              msgField.value = '';
 
               const msgArea = document.getElementById('messages');
               msgArea.scrollTop = msgArea.scrollHeight;
