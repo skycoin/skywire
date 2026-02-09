@@ -129,3 +129,16 @@ export function formatCountdown(seconds: number): string {
     const secs = seconds % 60;
     return mins + ':' + (secs < 10 ? '0' : '') + secs;
 }
+
+export function copyToClipboard(text: string, event?: Event): void {
+    if (event) event.stopPropagation();
+    navigator.clipboard.writeText(text).then(() => {
+        const toast = document.createElement('div');
+        toast.className = 'copy-toast';
+        toast.textContent = 'Copied: ' + text.substring(0, 20) + '...';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2000);
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+    });
+}

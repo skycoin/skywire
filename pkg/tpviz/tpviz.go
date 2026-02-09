@@ -1064,7 +1064,7 @@ func (s *Server) Start() {
 // ListenAndServe starts the HTTP server
 func (s *Server) ListenAndServe() error {
 	listenAddr := fmt.Sprintf("%s:%d", s.config.Addr, s.config.Port)
-	s.log.WithField("addr", "http://"+listenAddr).Info("Starting TPD Visualizer server")
+	s.log.WithField("addr", "http://"+listenAddr).Info("Starting Skywire Network UI server")
 	s.log.WithField("tpd", s.config.CacheFile).WithField("ut", s.config.CacheFileUT).
 		WithField("sd", s.config.CacheFileSD).Info("Cache files")
 	s.log.WithField("max_age_min", s.config.CacheMaxAge).Debug("Cache max age")
@@ -2302,7 +2302,7 @@ func GetEmbeddedIndexWithNavLinks(navLinks []NavLink) (string, error) {
 		navLinksHTML += `</div>`
 
 		// Insert before the <h1> tag
-		html = strings.Replace(html, `<h1>TPD Visualizer</h1>`, navLinksHTML+`<h1>TPD Visualizer</h1>`, 1)
+		html = strings.Replace(html, `<h1>Skywire Network</h1>`, navLinksHTML+`<h1>Skywire Network</h1>`, 1)
 	}
 
 	return html, nil

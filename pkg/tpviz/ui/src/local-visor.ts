@@ -5,7 +5,7 @@ import {
     setLocalVisorData, setLocalVisorWS, setWSReconnectAttempts,
     setLocalVisorRefreshInterval, setPreviousRouteIds,
 } from './state';
-import { formatBytes, fetchWithTimeout } from './utils';
+import { formatBytes, fetchWithTimeout, copyToClipboard } from './utils';
 import { colors, API_BASE, WS_MAX_RECONNECT_DELAY } from './constants';
 import { highlightRoute } from './node-info';
 import { localCreateTransport } from './tps';
@@ -178,7 +178,7 @@ export function updateLocalVisorDisplayEnhanced(): void {
                     <span class="local-visor-title">Local Visor</span>
                     ${isActive ? '<span class="live-indicator"><span class="live-dot"></span>LIVE</span>' : '<span style="color:#555;font-size:0.7em;">idle</span>'}
                 </div>
-                <div class="local-visor-pk">${pk.substring(0, 20)}...</div>
+                <div class="local-visor-pk" onclick="copyToClipboard('${pk}', event)" title="Click to copy full public key">${pk.substring(0, 20)}...</div>
             </div>
             <button onclick="focusLocalVisor()" style="background:linear-gradient(135deg,#00ffff,#ff00ff);color:#000;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.75em;font-weight:bold;box-shadow:0 2px 8px rgba(0,255,255,0.3);">
                 ◎ FOCUS
@@ -209,7 +209,7 @@ export function updateLocalVisorDisplayEnhanced(): void {
                 return `
                 <div class="local-transport ${t.type} ${tpActive ? 'active' : ''}" onclick="focusNode('${t.remote_pk}')">
                     <span class="tp-type-badge ${t.type}">${t.type}</span>
-                    <span class="tp-remote">${t.remote_pk.substring(0, 12)}...</span>
+                    <span class="tp-remote clickable-pk" onclick="copyToClipboard('${t.remote_pk}', event)" title="Click to copy">${t.remote_pk.substring(0, 12)}...</span>
                     <div class="tp-traffic">
                         <span class="up">↑${formatBytes(t.sent_bytes)}</span>
                         <span class="down">↓${formatBytes(t.recv_bytes)}</span>
@@ -229,7 +229,7 @@ export function updateLocalVisorDisplayEnhanced(): void {
                 <div class="local-route clickable" onclick="highlightRouteByIndex(${idx})" title="Click to highlight route path">
                     <span class="route-type-badge ${r.type}">${r.type}</span>
                     <span class="route-id">#${r.route_id || '?'}</span>
-                    ${r.dst_pk ? `<span class="route-dest">${r.dst_pk.substring(0,10)}...</span>` : '<span style="color:#555;">—</span>'}
+                    ${r.dst_pk ? `<span class="route-dest clickable-pk" onclick="copyToClipboard('${r.dst_pk}', event)" title="Click to copy">${r.dst_pk.substring(0,10)}...</span>` : '<span style="color:#555;">—</span>'}
                     ${r.transport_id ? `<span class="route-via">via tp:${r.transport_id.substring(0,6)}</span>` : ''}
                 </div>
             `).join('')}

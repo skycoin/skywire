@@ -1,7 +1,7 @@
 // Node info panel: selection, edge highlighting, cluster boundaries
 
 import * as S from './state';
-import { getVisorStatus, isLocalVisor } from './utils';
+import { getVisorStatus, isLocalVisor, copyToClipboard } from './utils';
 import { LOCAL_EDGE_COLOR } from './constants';
 import { applyFilters } from './filters';
 
@@ -14,7 +14,10 @@ export function showNodeInfo(nodeId: string): void {
         const serverPK = nodeId.replace('dmsg-srv-', '');
         const srv = S.dmsgData && S.dmsgData.servers ? S.dmsgData.servers.find(s => s.pk === serverPK) : null;
 
-        document.getElementById('selected-pk')!.textContent = serverPK;
+        const selectedPkEl1 = document.getElementById('selected-pk')!;
+        selectedPkEl1.textContent = serverPK;
+        selectedPkEl1.onclick = (e) => copyToClipboard(serverPK, e);
+        selectedPkEl1.title = 'Click to copy full public key';
         document.getElementById('selected-conn-count')!.textContent = String(srv ? (srv.clients ? srv.clients.length : 0) : 0);
 
         const statusEl = document.getElementById('selected-status')!;
@@ -41,7 +44,7 @@ export function showNodeInfo(nodeId: string): void {
         const clients = srv && srv.clients ? srv.clients : [];
         document.getElementById('conn-list')!.innerHTML = clients.map((clientPK: string) => {
             const cStatus = getVisorStatus(clientPK);
-            return '<div class="conn-item"><span class="conn-type" style="background:rgba(159,110,252,0.3);color:#9f6efc;">CLIENT</span><span class="status-dot status-' + cStatus + '" style="display:inline-block;width:8px;height:8px;margin-right:5px;"></span>' + clientPK.substring(0, 16) + '...</div>';
+            return '<div class="conn-item"><span class="conn-type" style="background:rgba(159,110,252,0.3);color:#9f6efc;">CLIENT</span><span class="status-dot status-' + cStatus + '" style="display:inline-block;width:8px;height:8px;margin-right:5px;"></span><span class="clickable-pk" onclick="copyToClipboard(\'' + clientPK + '\', event)" title="Click to copy">' + clientPK.substring(0, 16) + '...</span></div>';
         }).join('');
 
         info!.classList.add('visible');
@@ -55,7 +58,10 @@ export function showNodeInfo(nodeId: string): void {
     const svcInfo = S.visorServices[nodeId];
     const version = S.visorVersions[nodeId];
 
-    document.getElementById('selected-pk')!.textContent = nodeId;
+    const selectedPkEl = document.getElementById('selected-pk')!;
+    selectedPkEl.textContent = nodeId;
+    selectedPkEl.onclick = (e) => copyToClipboard(nodeId, e);
+    selectedPkEl.title = 'Click to copy full public key';
     document.getElementById('selected-conn-count')!.textContent = String(connections.length);
 
     const statusEl = document.getElementById('selected-status')!;
@@ -90,7 +96,7 @@ export function showNodeInfo(nodeId: string): void {
             const cStatus = getVisorStatus(c.pk);
             const cVersion = S.visorVersions[c.pk];
             const versionTag = cVersion ? ' <span style="color:#0f9b8e;font-size:0.8em;">' + cVersion + '</span>' : '';
-            return '<div class="conn-item"><span class="conn-type ' + c.type + '">' + c.type.toUpperCase() + '</span><span class="status-dot status-' + cStatus + '" style="display:inline-block;width:8px;height:8px;margin-right:5px;"></span>' + c.pk.substring(0, 16) + '...' + versionTag + '</div>';
+            return '<div class="conn-item"><span class="conn-type ' + c.type + '">' + c.type.toUpperCase() + '</span><span class="status-dot status-' + cStatus + '" style="display:inline-block;width:8px;height:8px;margin-right:5px;"></span><span class="clickable-pk" onclick="copyToClipboard(\'' + c.pk + '\', event)" title="Click to copy">' + c.pk.substring(0, 16) + '...</span>' + versionTag + '</div>';
         }).join('');
 
     info!.classList.add('visible');
@@ -302,6 +308,7 @@ export function highlightRoute(route: any, autoZoom = false): void {
 // Expose for inline onclick handlers
 (window as any).focusNode = focusNode;
 (window as any).highlightRouteByIndex = highlightRouteByIndex;
+(window as any).copyToClipboard = copyToClipboard;
 
 export function highlightRouteByIndex(idx: number): void {
     if (!S.localVisorData || !S.localVisorData.routes || !S.localVisorData.routes[idx]) return;
