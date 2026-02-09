@@ -1166,6 +1166,14 @@ fetchRoutesAgain:
 		&rfclient.RouteOptions{MinHops: r.conf.MinHops, MaxHops: r.conf.MaxHops})
 
 	if err == rfclient.ErrTransportNotFound {
+		// Try local route calculation - may find a local transport that's not yet in TPD
+		r.logger.Info("Route finder returned transport not found, attempting local route calculation...")
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst)
+		if localErr == nil {
+			r.logger.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
+			return localFwd, localRev, nil
+		}
+		r.logger.WithError(localErr).Debug("Local route calculation also failed")
 		return nil, nil, err
 	}
 	// simple retries condition
