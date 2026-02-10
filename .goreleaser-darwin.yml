@@ -1,5 +1,5 @@
-# GoReleaser configuration for Darwin builds
-# Documentation at http://goreleaser.com
+# GoReleaser configuration for macOS builds
+# Builds skywire binary with hardware wallet utilities for macOS
 
 version: 2
 
@@ -11,6 +11,8 @@ release:
 before:
   hooks:
     - go mod tidy
+    - go mod vendor
+
 builds:
   - id: skywire
     binary: skywire
@@ -21,22 +23,42 @@ builds:
       - arm64
     env:
       - CGO_ENABLED=1
-    main: ./
+      - CGO_CFLAGS=-I/usr/local/include
+      - CGO_LDFLAGS=-L/usr/local/lib
+    main: ./cmd/release/
     ldflags: -s -w -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}
 
 archives:
   - id: archive
-    formats:
-      - tar.gz
+    format: tar.gz
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    ids:
+    builds:
       - skywire
-    allow_different_binary_count: true
     files:
       - none*
 
+nfpms:
+  - id: skywire-pkg
+    package_name: skywire
+    builds:
+      - skywire
+    vendor: Skycoin
+    homepage: https://skycoin.com
+    maintainer: Skycoin Team
+    description: Skywire mesh network visor
+    license: MIT
+    formats:
+      - pkg
+    file_name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    contents:
+      - src: ./dist/skywire_{{ .Os }}_{{ .Arch }}*/skywire
+        dst: /usr/local/bin/skywire
+
 checksum:
   name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ .Tag }}-next"
 
 changelog:
   sort: asc

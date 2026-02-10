@@ -76,16 +76,15 @@ var (
 	isResetHypervisor           bool
 	setVPNClientKillswitch      string
 	addVPNClientSrv             string
-	addVPNClientPasscode        string
 	isResetVPNclient            bool
-	addVPNServerPasscode        string
+	addVPNServerWhitelist       string
 	setVPNServerSecure          string
 	setVPNServerAutostart       string
 	setVPNServerNetIfc          string
 	isResetVPNServer            bool
 	addSkysocksClientSrv        string
 	isResetSkysocksClient       bool
-	skysocksPasscode            string
+	skysocksWhitelist           string
 	isResetSkysocks             bool
 	setPublicAutoconnect        string
 	minHops                     int
@@ -96,8 +95,7 @@ var (
 	addExampleApps              bool
 	enableProxyClientAutostart  bool
 	disableProxyServerAutostart bool
-	proxyServerPass             string
-	proxyClientPass             string
+	proxyServerWhitelist        string
 	configServicePath           string
 	dmsgHTTPPath                string
 	snConfig                    bool

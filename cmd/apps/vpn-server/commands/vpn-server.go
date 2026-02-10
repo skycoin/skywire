@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 
 	"github.com/sirupsen/logrus"
@@ -33,7 +34,7 @@ const (
 var (
 	localPKStr string
 	localSKStr string
-	passcode   string
+	whitelist  string
 	networkIfc string
 	secure     bool
 	appPort    uint16
@@ -43,7 +44,7 @@ func init() {
 	launcher.RegisterApp("vpn-server", RunVPNServer)
 	RootCmd.Flags().StringVar(&localPKStr, "pk", "", "local pubkey")
 	RootCmd.Flags().StringVar(&localSKStr, "sk", "", "local seckey")
-	RootCmd.Flags().StringVar(&passcode, "passcode", "", "passcode to authenticate connecting users")
+	RootCmd.Flags().StringVar(&whitelist, "whitelist", "", "comma-separated list of public keys allowed to connect (empty = allow all)")
 	RootCmd.Flags().StringVar(&networkIfc, "netifc", "", "Default network interface for multiple available interfaces")
 	RootCmd.Flags().BoolVar(&secure, "secure", true, "Forbid connections from clients to server local network")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
@@ -74,7 +75,7 @@ func RunVPNServer(ctx context.Context, args []string) error {
 		fs := pflag.NewFlagSet("vpn-server", pflag.ContinueOnError)
 		fs.StringVar(&localPKStr, "pk", "", "local pubkey")
 		fs.StringVar(&localSKStr, "sk", "", "local seckey")
-		fs.StringVar(&passcode, "passcode", "", "passcode")
+		fs.StringVar(&whitelist, "whitelist", "", "comma-separated public keys")
 		fs.StringVar(&networkIfc, "netifc", "", "network interface")
 		fs.BoolVar(&secure, "secure", true, "secure mode")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
@@ -135,8 +136,26 @@ func RunVPNServer(ctx context.Context, args []string) error {
 		return err
 	}
 
+	// Parse whitelist
+	var whitelistPKs []cipher.PubKey
+	if whitelist != "" {
+		for _, pkStr := range strings.Split(whitelist, ",") {
+			pkStr = strings.TrimSpace(pkStr)
+			if pkStr == "" {
+				continue
+			}
+			var pk cipher.PubKey
+			if err := pk.UnmarshalText([]byte(pkStr)); err != nil {
+				logger.WithError(err).WithField("pk", pkStr).Error("Invalid whitelist public key")
+				setAppErr(appCl, logger, err)
+				return err
+			}
+			whitelistPKs = append(whitelistPKs, pk)
+		}
+	}
+
 	srvCfg := vpn.ServerConfig{
-		Passcode:         passcode,
+		Whitelist:        whitelistPKs,
 		Secure:           secure,
 		NetworkInterface: networkIfc,
 	}

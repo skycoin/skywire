@@ -9,11 +9,12 @@
 package usb
 
 import (
+	"context"
 	"runtime"
 
 	"errors"
 )
 
-func (i *Info) load() error {
+func (i *Info) load(ctx context.Context) error {
 	return errors.New("usb load not implemented on " + runtime.GOOS)
 }

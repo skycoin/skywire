@@ -8,19 +8,19 @@ package usb
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/jaypipes/ghw/pkg/context"
 	"github.com/jaypipes/ghw/pkg/linuxpath"
 )
 
-func (i *Info) load() error {
+func (i *Info) load(ctx context.Context) error {
 	var errs []error
 
-	i.Devices, errs = usbs(i.ctx)
+	i.Devices, errs = usbs(ctx)
 
 	if len(errs) == 0 {
 		return nil
@@ -76,18 +76,19 @@ func slurp(path string) string {
 	return string(bytes.TrimSpace(bs))
 }
 
-func usbs(ctx *context.Context) ([]*Device, []error) {
+func usbs(ctx context.Context) ([]*Device, []error) {
+	paths := linuxpath.New(ctx)
 	devs := make([]*Device, 0)
 	errs := []error{}
 
-	paths := linuxpath.New(ctx)
 	usbDevicesDirs, err := os.ReadDir(paths.SysBusUsbDevices)
 	if err != nil {
 		return devs, []error{err}
 	}
 
 	for _, dir := range usbDevicesDirs {
-		fullDir, err := os.Readlink(filepath.Join(paths.SysBusUsbDevices, dir.Name()))
+		linkPath := filepath.Join(paths.SysBusUsbDevices, dir.Name())
+		fullDir, err := os.Readlink(linkPath)
 		if err != nil {
 			continue
 		}

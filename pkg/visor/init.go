@@ -138,8 +138,10 @@ var (
 	dmsgTrackers vinit.Module
 	// Skywire Forwarding conn module
 	skyFwd vinit.Module
-	// Ping module
+	// Ping module (skywire routes)
 	pi vinit.Module
+	// Dmsg ping module (dmsg direct connection)
+	dmsgPi vinit.Module
 	// Embedded Transport Setup Node (separate dmsg client with TPS identity)
 	embTPS vinit.Module
 	// UI server module (serves tp-viz)
@@ -187,12 +189,13 @@ func registerModules(logger *logging.MasterLogger) {
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
+	dmsgPi = maker("dmsg_ping", initDmsgPing, &dmsgC)
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm, &stcprC)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
 	embTPS = maker("embedded_tps", initEmbeddedTPS, &dmsgC)
 	uiServer = maker("ui_server", initUIServer, &dmsgC, &tr, &embTPS)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &systemSurvey, &tc, &tpdco, &embTPS, &uiServer)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &systemSurvey, &tc, &tpdco, &embTPS, &uiServer)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -817,6 +820,14 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 }
 
 func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
+	// Send ready signal to synchronize with client after noise handshake
+	// This ensures the noise handshake is complete before data exchange
+	if _, err := remoteConn.Write([]byte{0x00}); err != nil {
+		log.WithError(err).Error("Failed to send ready signal")
+		return
+	}
+	log.Debug("Sent ready signal to client")
+
 	buf := make([]byte, 32*1024)
 	n, err := remoteConn.Read(buf)
 	if err != nil {
@@ -848,18 +859,63 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 		return
 	}
 
-	log.Debugf("Forwarding %s", lHost)
+	log.Debugf("Forwarding %s (raw_tcp=%v)", lHost, cMsg.RawTCP)
 
 	// send nil error to indicate to the remote connection that everything is ok
 	sendError(log, remoteConn, nil)
 
-	go forward(log, remoteConn, lHost)
+	go forward(log, remoteConn, lHost, cMsg.RawTCP)
 }
 
-// forward reads a http.Request from the remote conn of the requesting visor forwards that request
-// to the requested local server and forwards the http.Response from the local server to the requesting
-// visor via the remote conn
-func forward(log *logging.Logger, remoteConn net.Conn, lHost string) {
+// forward proxies data between remoteConn (the skywire connection) and a local server.
+// When rawTCP is true, it uses bidirectional io.Copy for raw TCP proxying.
+// When rawTCP is false, it reads HTTP requests and forwards them to the local server.
+func forward(log *logging.Logger, remoteConn net.Conn, lHost string, rawTCP bool) {
+	if rawTCP {
+		forwardRawTCP(log, remoteConn, lHost)
+		return
+	}
+	forwardHTTP(log, remoteConn, lHost)
+}
+
+// forwardRawTCP does bidirectional raw TCP proxying using io.Copy
+func forwardRawTCP(log *logging.Logger, remoteConn net.Conn, lHost string) {
+	localConn, err := net.Dial("tcp", lHost)
+	if err != nil {
+		log.WithError(err).Error("Failed to dial local server")
+		closeConn(log, remoteConn)
+		return
+	}
+
+	done := make(chan struct{}, 2)
+
+	// remote -> local
+	go func() {
+		_, err := io.Copy(localConn, remoteConn)
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+			log.WithError(err).Debug("remote->local copy ended")
+		}
+		done <- struct{}{}
+	}()
+
+	// local -> remote
+	go func() {
+		_, err := io.Copy(remoteConn, localConn)
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+			log.WithError(err).Debug("local->remote copy ended")
+		}
+		done <- struct{}{}
+	}()
+
+	// Wait for one direction to finish, then close both
+	<-done
+	closeConn(log, remoteConn)
+	closeConn(log, localConn)
+	<-done
+}
+
+// forwardHTTP reads HTTP requests from remoteConn and forwards them to the local server
+func forwardHTTP(log *logging.Logger, remoteConn net.Conn, lHost string) {
 	for {
 		buf := make([]byte, 32*1024)
 		n, err := remoteConn.Read(buf)
@@ -926,7 +982,8 @@ func closeConn(log *logging.Logger, conn net.Conn) {
 }
 
 type clientMsg struct {
-	Port int `json:"port"`
+	Port   int  `json:"port"`
+	RawTCP bool `json:"raw_tcp,omitempty"`
 }
 
 type serverReply struct {
@@ -1034,6 +1091,99 @@ func handlePingConn(log *logging.Logger, remoteConn net.Conn, _ *Visor) {
 		}
 
 		log.Debug("Echoed ping response")
+	}
+}
+
+func initDmsgPing(ctx context.Context, v *Visor, log *logging.Logger) error {
+	dmsgC := v.dmsgC
+	if dmsgC == nil {
+		return nil
+	}
+
+	// Wait for dmsg client to be ready
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-dmsgC.Ready():
+	}
+
+	lis, err := dmsgC.Listen(visorconfig.DmsgPingPort)
+	if err != nil {
+		return err
+	}
+
+	v.pushCloseStack("dmsg_ping", lis.Close)
+
+	go func() {
+		for {
+			conn, err := lis.Accept()
+			if err != nil {
+				if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+					log.WithError(err).Error("Failed to accept dmsg ping conn")
+				}
+				return
+			}
+			log.Debugf("Accepted dmsg ping conn from %s", conn.RemoteAddr())
+			go handleDmsgPingConn(log, conn)
+		}
+	}()
+
+	log.WithField("port", visorconfig.DmsgPingPort).Info("Dmsg ping listener started")
+	return nil
+}
+
+func handleDmsgPingConn(log *logging.Logger, conn net.Conn) {
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.WithError(err).Debug("Error closing dmsg ping conn")
+		}
+	}()
+
+	for {
+		buf := make([]byte, 32*1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				log.WithError(err).Error("Failed to read dmsg ping packet")
+			}
+			return
+		}
+
+		var size PingSizeMsg
+		err = json.Unmarshal(buf[:n], &size)
+		if err != nil {
+			log.WithError(err).Error("Failed to unmarshal dmsg ping size")
+			return
+		}
+
+		// Ack the size message
+		_, err = conn.Write([]byte("ok"))
+		if err != nil {
+			log.WithError(err).Error("Failed to write dmsg ping ack")
+			return
+		}
+
+		// Read the full ping payload
+		var ping []byte
+		for len(ping) < size.Size {
+			n, err = conn.Read(buf)
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					log.WithError(err).Error("Failed to read dmsg ping data")
+				}
+				return
+			}
+			ping = append(ping, buf[:n]...)
+		}
+
+		// Echo back for RTT measurement
+		_, err = conn.Write([]byte("pong"))
+		if err != nil {
+			log.WithError(err).Error("Failed to write dmsg ping echo")
+			return
+		}
+
+		log.Debug("Echoed dmsg ping response")
 	}
 }
 
@@ -1948,6 +2098,19 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	if !v.conf.Transport.PublicAutoconnect {
 		return nil
 	}
+	return v.startPublicAutoconnectInternal(ctx, log)
+}
+
+// startPublicAutoconnectInternal starts the public autoconnect goroutine.
+// Called both at init time and when starting via API.
+func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging.Logger) error {
+	v.autoconnectMu.Lock()
+	defer v.autoconnectMu.Unlock()
+
+	if v.autoconnectRunning {
+		return nil // already running
+	}
+
 	serviceDisc := v.conf.Launcher.ServiceDisc
 	if serviceDisc == "" { //it might be intentionally blank ; consider revising.
 		serviceDisc = deployment.Prod.ServiceDiscovery
@@ -1973,14 +2136,53 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 	connector := MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
 
 	cctx, cancel := context.WithCancel(ctx)
+	v.autoconnectCancel = cancel
+	v.autoconnectRunning = true
+
 	v.pushCloseStack("public_autoconnect", func() error {
-		cancel()
-		return err
+		v.autoconnectMu.Lock()
+		defer v.autoconnectMu.Unlock()
+		if v.autoconnectCancel != nil {
+			v.autoconnectCancel()
+			v.autoconnectCancel = nil
+		}
+		v.autoconnectRunning = false
+		return nil
 	})
 
 	go connector.Run(cctx, v) //nolint:errcheck
 
 	return nil
+}
+
+// StartPublicAutoconnect starts public autoconnect if not already running.
+func (v *Visor) StartPublicAutoconnect() error {
+	log := v.MasterLogger().PackageLogger("public_autoconnect")
+	return v.startPublicAutoconnectInternal(context.Background(), log)
+}
+
+// StopPublicAutoconnect stops public autoconnect if running.
+func (v *Visor) StopPublicAutoconnect() error {
+	v.autoconnectMu.Lock()
+	defer v.autoconnectMu.Unlock()
+
+	if !v.autoconnectRunning {
+		return nil // not running
+	}
+
+	if v.autoconnectCancel != nil {
+		v.autoconnectCancel()
+		v.autoconnectCancel = nil
+	}
+	v.autoconnectRunning = false
+	return nil
+}
+
+// IsPublicAutoconnectRunning returns whether public autoconnect is running.
+func (v *Visor) IsPublicAutoconnectRunning() bool {
+	v.autoconnectMu.Lock()
+	defer v.autoconnectMu.Unlock()
+	return v.autoconnectRunning
 }
 
 func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
@@ -2399,6 +2601,156 @@ func (a *visorAPIAdapter) DMSGHealth(ctx context.Context, pk string) (*tpviz.DMS
 		Status:  "healthy",
 		Message: string(body),
 	}, nil
+}
+
+// Ping implements tpviz.VisorAPI - performs a ping to a remote visor via routes or DMSG.
+// It handles dial, ping, and cleanup in a single call for UI convenience.
+// localRoute: when true and using routes, use cached TPD data instead of querying route finder.
+func (a *visorAPIAdapter) Ping(ctx context.Context, pk string, useDMSG, localRoute bool, tries, sizeKB int) (*tpviz.PingResponse, error) {
+	var targetPK cipher.PubKey
+	if err := targetPK.UnmarshalText([]byte(pk)); err != nil {
+		return nil, fmt.Errorf("invalid PK: %w", err)
+	}
+
+	mode := "route"
+	if useDMSG {
+		mode = "dmsg"
+	}
+	if localRoute && !useDMSG {
+		mode = "route (local)"
+	}
+
+	conf := PingConfig{
+		PK:         targetPK,
+		Tries:      tries,
+		PcktSize:   sizeKB,
+		LocalRoute: localRoute,
+	}
+
+	var latencies []time.Duration
+	var err error
+
+	if useDMSG {
+		// DMSG ping: dial → ping → stop
+		if err = a.v.DialDmsgPing(targetPK); err != nil {
+			return &tpviz.PingResponse{
+				Status: "error",
+				Error:  fmt.Sprintf("dmsg dial failed: %v", err),
+				Mode:   mode,
+			}, nil
+		}
+		defer func() {
+			_ = a.v.StopDmsgPing(targetPK) //nolint:errcheck
+		}()
+
+		latencies, err = a.v.DmsgPing(conf)
+	} else {
+		// Route ping: dial → ping → stop
+		if err = a.v.DialPing(conf); err != nil {
+			return &tpviz.PingResponse{
+				Status: "error",
+				Error:  fmt.Sprintf("route dial failed: %v", err),
+				Mode:   mode,
+			}, nil
+		}
+		defer func() {
+			_ = a.v.StopPing(targetPK) //nolint:errcheck
+		}()
+
+		latencies, err = a.v.Ping(conf)
+	}
+
+	if err != nil {
+		return &tpviz.PingResponse{
+			Status: "error",
+			Error:  fmt.Sprintf("ping failed: %v", err),
+			Mode:   mode,
+		}, nil
+	}
+
+	// Calculate statistics
+	if len(latencies) == 0 {
+		return &tpviz.PingResponse{
+			Status:     "timeout",
+			PacketLoss: 100.0,
+			Mode:       mode,
+		}, nil
+	}
+
+	var sum, minVal, maxVal time.Duration
+	latencyMs := make([]int64, 0, len(latencies))
+	minVal = latencies[0]
+	maxVal = latencies[0]
+
+	for _, lat := range latencies {
+		sum += lat
+		if lat < minVal {
+			minVal = lat
+		}
+		if lat > maxVal {
+			maxVal = lat
+		}
+		latencyMs = append(latencyMs, lat.Milliseconds())
+	}
+
+	avg := sum / time.Duration(len(latencies))
+	packetLoss := float64(tries-len(latencies)) / float64(tries) * 100.0
+
+	return &tpviz.PingResponse{
+		Status:     "success",
+		LatencyMs:  avg.Seconds() * 1000,
+		Latencies:  latencyMs,
+		MinMs:      minVal.Seconds() * 1000,
+		MaxMs:      maxVal.Seconds() * 1000,
+		AvgMs:      avg.Seconds() * 1000,
+		PacketLoss: packetLoss,
+		Mode:       mode,
+	}, nil
+}
+
+// Apps implements tpviz.VisorAPI - returns the list of all apps and their status.
+func (a *visorAPIAdapter) Apps() ([]*tpviz.AppState, error) {
+	apps, err := a.v.Apps()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*tpviz.AppState, 0, len(apps))
+	for _, app := range apps {
+		result = append(result, &tpviz.AppState{
+			Name:           app.Name,
+			Status:         int(app.Status),
+			DetailedStatus: app.DetailedStatus,
+			AutoStart:      app.AutoStart,
+			Port:           uint16(app.Port),
+			Args:           app.Args,
+		})
+	}
+	return result, nil
+}
+
+// StartApp implements tpviz.VisorAPI - starts an application.
+func (a *visorAPIAdapter) StartApp(appName string) error {
+	return a.v.StartApp(appName)
+}
+
+// StopApp implements tpviz.VisorAPI - stops an application.
+func (a *visorAPIAdapter) StopApp(appName string) error {
+	return a.v.StopApp(appName)
+}
+
+// SetAutoStart implements tpviz.VisorAPI - sets the auto-start flag for an app.
+func (a *visorAPIAdapter) SetAutoStart(appName string, autoStart bool) error {
+	return a.v.SetAutoStart(appName, autoStart)
+}
+
+// SetAppPK implements tpviz.VisorAPI - sets the server public key for an app.
+func (a *visorAPIAdapter) SetAppPK(appName, pk string) error {
+	var pubKey cipher.PubKey
+	if err := pubKey.UnmarshalText([]byte(pk)); err != nil {
+		return fmt.Errorf("invalid public key: %w", err)
+	}
+	return a.v.SetAppPK(appName, pubKey)
 }
 
 // tpsAPIAdapter adapts *Visor's embeddedTPS to the tpviz.TPSAPI interface.

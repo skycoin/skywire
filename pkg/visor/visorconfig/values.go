@@ -39,6 +39,9 @@ var (
 	// DmsgCtrlPort Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
 	DmsgCtrlPort = skyenv.DmsgCtrlPort
 
+	// DmsgPingPort Listening port for dmsg ping protocol.
+	DmsgPingPort = skyenv.DmsgPingPort
+
 	// DmsgSetupPort Listening port of a setup node.
 	DmsgSetupPort = skyenv.DmsgSetupPort
 
@@ -138,6 +141,18 @@ var (
 
 	// SkyForwardingServerPort ...
 	SkyForwardingServerPort = skyenv.SkyForwardingServerPort
+
+	// SkynetAppName ...
+	SkynetAppName = skyenv.SkynetAppName
+
+	// SkynetAppPort ...
+	SkynetAppPort = skyenv.SkynetAppPort
+
+	// SkynetClientName ...
+	SkynetClientName = skyenv.SkynetClientName
+
+	// SkynetClientPort ...
+	SkynetClientPort = skyenv.SkynetClientPort
 
 	// SkyPingName ...
 	SkyPingName = skyenv.SkyPingName
