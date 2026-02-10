@@ -30,8 +30,7 @@ builds:
       - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
       - PKG_CONFIG_PATH=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/x86_64-linux-musl/lib/pkgconfig
     main: ./cmd/release/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid=
   - id: skywire-386
     binary: skywire
     goos:
@@ -46,8 +45,7 @@ builds:
       - CC=/home/runner/work/skywire/skywire/musl-data/i686-linux-musl-cross/bin/i686-linux-musl-gcc
       - PKG_CONFIG_PATH=/home/runner/work/skywire/skywire/musl-data/i686-linux-musl-cross/i686-linux-musl/lib/pkgconfig
     main: ./cmd/release/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid=
   - id: skywire-arm64
     binary: skywire
     goos:
@@ -62,8 +60,7 @@ builds:
       - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
       - PKG_CONFIG_PATH=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/aarch64-linux-musl/lib/pkgconfig
     main: ./cmd/release/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid=
   - id: skywire-arm
     binary: skywire
     goos:
@@ -80,8 +77,7 @@ builds:
       - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
       - PKG_CONFIG_PATH=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/arm-linux-musleabi/lib/pkgconfig
     main: ./cmd/release/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid=
   - id: skywire-armhf
     binary: skywire
     goos:
@@ -98,8 +94,7 @@ builds:
       - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
       - PKG_CONFIG_PATH=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/arm-linux-musleabihf/lib/pkgconfig
     main: ./cmd/release/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid=
   - id: skywire-riscv64
     binary: skywire
     goos:
@@ -114,8 +109,7 @@ builds:
       - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
       - PKG_CONFIG_PATH=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/riscv64-linux-musl/lib/pkgconfig
     main: ./cmd/release/
-    ldflags: -s -w -linkmode external -extldflags '-static' -buildid= -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}_{{.Arch}}
-
+    ldflags: -s -w -linkmode external -extldflags '-static' -buildid=
 archives:
   - id: amd64
     formats:

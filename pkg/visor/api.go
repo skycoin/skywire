@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -277,9 +278,6 @@ type Summary struct {
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 }
 
-// BuildTag variable that will set when building binary
-var BuildTag string
-
 // Summary implements API.
 func (v *Visor) Summary() (*Summary, error) {
 	overview, err := v.Overview()
@@ -337,7 +335,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
 		SkybianBuildVersion:  skybianBuildVersion,
-		BuildTag:             BuildTag,
+		BuildTag:             runtime.GOOS + "_" + runtime.GOARCH,
 		RewardAddress:        rewardAddress,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
 		DmsgStats:            dmsgStatValue,
