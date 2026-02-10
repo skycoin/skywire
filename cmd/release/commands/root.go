@@ -79,8 +79,10 @@ func init() {
 	snc.RootCmd.Use = "skynet-client"
 	skycoin.RootCmd.Use = "skycoin"
 	skycoin.RootCmd.Short = "skycoin daemon & cli"
+	skycoin.RootCmd.Version = buildinfo.DepVersion("github.com/skycoin/skycoin")
 	skyhw.RootCmd.Use = "skyhw"
 	skyhw.RootCmd.Short = "skycoin hardware wallet utilities"
+	skyhw.RootCmd.Version = buildinfo.DepVersion("github.com/skycoin/skycoin")
 
 	if fmt.Sprintf("%v", buildinfo.DebugBuildInfo()) != "" {
 		RootCmd.Flags().BoolVarP(&di, "info", "d", false, "print runtime/debug.BuildInfo")
