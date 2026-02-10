@@ -23,9 +23,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make github-release
 
-  darwin:
+  darwin-amd64:
     needs: linux
-    runs-on: macos-latest
+    runs-on: macos-13  # Intel runner
     steps:
       - uses: actions/setup-go@v5
         with:
@@ -39,20 +39,48 @@ jobs:
           brew install --quiet wget || brew upgrade --quiet wget
           brew install --quiet hidapi || brew upgrade --quiet hidapi
           brew install --quiet libusb || brew upgrade --quiet libusb
-          BREW_PREFIX=$(brew --prefix)
-          HIDAPI_PREFIX=$(brew --prefix hidapi)
-          LIBUSB_PREFIX=$(brew --prefix libusb)
-          echo "CGO_CFLAGS=-I${BREW_PREFIX}/include -I${HIDAPI_PREFIX}/include -I${LIBUSB_PREFIX}/include" >> $GITHUB_ENV
-          echo "CGO_LDFLAGS=-L${BREW_PREFIX}/lib -L${HIDAPI_PREFIX}/lib -L${LIBUSB_PREFIX}/lib" >> $GITHUB_ENV
       - name: Releasing
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: make github-release-darwin-amd64
+
+  darwin-arm64:
+    needs: linux
+    runs-on: macos-latest  # ARM64 runner
+    steps:
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.6
+          cache: true
+          cache-dependency-path: go.sum
+      - uses: actions/checkout@v4
+      - name: Install Requirements
         run: |
-          make github-release-darwin
-          make mac-installer-release
+          brew install --quiet jq || brew upgrade --quiet jq
+          brew install --quiet wget || brew upgrade --quiet wget
+          brew install --quiet hidapi || brew upgrade --quiet hidapi
+          brew install --quiet libusb || brew upgrade --quiet libusb
+      - name: Releasing
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: make github-release-darwin-arm64
+
+  darwin-installer:
+    needs: [darwin-amd64, darwin-arm64]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Requirements
+        run: |
+          brew install --quiet jq || brew upgrade --quiet jq
+          brew install --quiet wget || brew upgrade --quiet wget
+      - name: Create and Upload macOS Installers
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: make mac-installer-release
 
   windows:
-    needs: darwin
+    needs: darwin-installer
     runs-on: windows-latest
     steps:
       - uses: actions/setup-go@v5
