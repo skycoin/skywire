@@ -25,7 +25,7 @@ jobs:
 
   darwin-amd64:
     needs: linux
-    runs-on: macos-13  # Intel runner
+    runs-on: macos-15-intel  # Intel runner
     steps:
       - uses: actions/setup-go@v5
         with:
