@@ -1,5 +1,5 @@
 # GoReleaser configuration for macOS Intel builds
-# Builds skywire binary from repo root (no hardware wallet)
+# Builds skywire binary with hardware wallet utilities for macOS amd64
 
 version: 2
 
@@ -21,8 +21,10 @@ builds:
     goarch:
       - amd64
     env:
-      - CGO_ENABLED=0
-    main: .
+      - CGO_ENABLED=1
+      - CGO_CFLAGS=-I/usr/local/include
+      - CGO_LDFLAGS=-L/usr/local/lib
+    main: ./cmd/release/
     ldflags: -s -w
 
 archives:
