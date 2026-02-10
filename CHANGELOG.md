@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.33
+
+-   SkyNet P2P port forwarding, tp-viz network visualization UI, and various improvements  [#2156](https://github.com/skycoin/skywire/pull/2156)
+-   Update dmsg to include servers/clients endpoint fix  [#2155](https://github.com/skycoin/skywire/pull/2155)
+-   Various improvements  [#2149](https://github.com/skycoin/skywire/pull/2149)
+-   Fix duplicate /health endpoint registration in reward server  [#2147](https://github.com/skycoin/skywire/pull/2147)
+-   Fix tp-viz integration in reward system UI  [#2146](https://github.com/skycoin/skywire/pull/2146)
+-   Fix internal apps logging cross-contamination  [#2145](https://github.com/skycoin/skywire/pull/2145)
+-   Add /all-transports/per-key-stats endpoint  [#2143](https://github.com/skycoin/skywire/pull/2143)
+-   Resolve e2e test failures  [#2142](https://github.com/skycoin/skywire/pull/2142)
+-   fix internal apps  [#2140](https://github.com/skycoin/skywire/pull/2140)
+-   update hardcoded dmsg-server IPs  [#2139](https://github.com/skycoin/skywire/pull/2139)
+-   Fix release issues  [#2138](https://github.com/skycoin/skywire/pull/2138)
+-   remove stcpr heartbeat  [#2137](https://github.com/skycoin/skywire/pull/2137)
+-   add alpha and beta to tag detection on winget for skip winget request  [#2135](https://github.com/skycoin/skywire/pull/2135)
+
 ## 1.3.32
 
 -   Fix release pipeline  [#2134](https://github.com/skycoin/skywire/pull/2134)

@@ -195,6 +195,14 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			}
 
 			for _, pk := range append(shufflePubKeys(absent1), shufflePubKeys(absent2)...) {
+				// Check for context cancellation before each transport attempt
+				select {
+				case <-ctx.Done():
+					a.log.Debug("Context canceled, stopping public autoconnect loop")
+					return context.Canceled
+				default:
+				}
+
 				if time.Now().After(attemptDeadline) {
 					a.log.Debugln("Refreshing list of keys for public autoconnect")
 					break

@@ -186,7 +186,13 @@ var startCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client. error: %s", err))
 				}
 			} else {
-				err = rpcClient.AddApp(clientName, "skywire")
+				// Use "skysocks-client" binary for internal launch (default),
+				// "skywire" binary for external launch (--external flag)
+				binaryName := "skysocks-client"
+				if useExternal {
+					binaryName = "skywire"
+				}
+				err = rpcClient.AddApp(clientName, binaryName)
 				if err != nil {
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error during add new app. error: %s", err))
 				}
@@ -1046,7 +1052,13 @@ Results show which proxies are reachable and their response latency.`,
 				// Check if app exists, if not add it
 				_, err := rpcClient.App(clientName)
 				if err != nil {
-					err = rpcClient.AddApp(clientName, "skywire")
+					// Use "skysocks-client" binary for internal launch (default),
+					// "skywire" binary for external launch (--external flag)
+					binaryName := "skysocks-client"
+					if useExternal {
+						binaryName = "skywire"
+					}
+					err = rpcClient.AddApp(clientName, binaryName)
 					if err != nil {
 						fmt.Printf("Warning: failed to add test client %s: %v\n", clientName, err)
 						continue

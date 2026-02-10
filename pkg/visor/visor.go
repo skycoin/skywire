@@ -113,10 +113,12 @@ type Visor struct {
 	allowedPorts         map[int]bool
 	allowedMX            *sync.RWMutex
 
-	pingConns    map[cipher.PubKey]ping
-	pingConnMx   *sync.Mutex
-	pingPcktSize int
-	logStorePath string
+	pingConns     map[cipher.PubKey]ping
+	pingConnMx    *sync.Mutex
+	pingPcktSize  int
+	dmsgPingConns map[cipher.PubKey]ping
+	dmsgPingMx    *sync.Mutex
+	logStorePath  string
 
 	survey     visorconfig.Survey
 	surveyLock *sync.RWMutex
@@ -129,6 +131,11 @@ type Visor struct {
 
 	// Embedded Transport Setup Node (nil if tps_sk not configured)
 	embeddedTPS *embeddedTPS
+
+	// Public autoconnect runtime control
+	autoconnectMu      sync.Mutex
+	autoconnectCancel  context.CancelFunc
+	autoconnectRunning bool
 }
 
 // todo: consider moving module closing to the module system
@@ -265,6 +272,8 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		connectedHypervisors: make(map[cipher.PubKey]bool),
 		pingConns:            make(map[cipher.PubKey]ping),
 		pingConnMx:           new(sync.Mutex),
+		dmsgPingConns:        make(map[cipher.PubKey]ping),
+		dmsgPingMx:           new(sync.Mutex),
 		allowedPorts:         make(map[int]bool),
 		survey:               visorconfig.Survey{},
 		surveyLock:           new(sync.RWMutex),

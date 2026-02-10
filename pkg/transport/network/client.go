@@ -340,14 +340,46 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 	// For self-connections (rPK == local PK), always try local addresses first
 	// to avoid NAT hairpinning issues when connecting via public IP
 	isSelfConnection := rPK == c.lPK
-	if visorData.IsLocal || isSelfConnection {
+
+	// Check if the remote visor shares our public IP (same NAT)
+	// In this case, we should try LAN addresses first to avoid NAT hairpinning issues
+	samePublicIP := false
+	localPublicIP := c.ar.LocalPublicIP()
+	if localPublicIP != "" && visorData.RemoteAddr != "" {
+		remoteIP := visorData.RemoteAddr
+		// Extract just the IP if RemoteAddr includes a port
+		if host, _, err := net.SplitHostPort(remoteIP); err == nil {
+			remoteIP = host
+		}
+		samePublicIP = localPublicIP == remoteIP
+		if samePublicIP {
+			c.log.Debugf("Remote visor shares same public IP (%s), trying LAN addresses first", localPublicIP)
+		}
+	}
+
+	if visorData.IsLocal || isSelfConnection || samePublicIP {
 		if isSelfConnection {
 			c.log.Debug("Detected self-connection, trying local addresses to avoid NAT issues")
 		}
+		// Get the public IP to filter it out from LAN addresses
+		remotePublicIP := visorData.RemoteAddr
+		if host, _, err := net.SplitHostPort(remotePublicIP); err == nil {
+			remotePublicIP = host
+		}
 		for _, host := range visorData.Addresses {
+			// Skip loopback addresses unless it's a self-connection
+			if !isSelfConnection && (host == "127.0.0.1" || host == "::1") {
+				continue
+			}
+			// Skip the public IP - we'll fall back to it anyway
+			if host == remotePublicIP {
+				continue
+			}
 			addr := net.JoinHostPort(host, visorData.Port)
+			c.log.Debugf("Trying LAN address: %s", addr)
 			conn, err := dial(ctx, addr)
 			if err == nil {
+				c.log.Debugf("Successfully connected via LAN address: %s", addr)
 				return conn, nil
 			}
 			c.log.WithError(err).Debugf("Failed to dial %s, trying next address", addr)
@@ -358,5 +390,6 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 	if _, _, err := net.SplitHostPort(addr); err != nil {
 		addr = net.JoinHostPort(addr, visorData.Port)
 	}
+	c.log.Debugf("Dialing public address: %s", addr)
 	return dial(ctx, addr)
 }

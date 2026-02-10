@@ -21,6 +21,9 @@ const (
 	// DmsgCtrlPort Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
 	DmsgCtrlPort uint16 = 7
 
+	// DmsgPingPort Listening port for dmsg ping protocol.
+	DmsgPingPort uint16 = 8
+
 	// DmsgSetupPort Listening port of a setup node.
 	DmsgSetupPort uint16 = 36
 
@@ -112,11 +115,23 @@ const (
 	// ExampleClientPort dmsg port of example client app
 	ExampleClientPort uint16 = 46
 
-	// SkyForwardingServerName name of sky forwarding server app
+	// SkyForwardingServerName name of sky forwarding server app (built-in)
 	SkyForwardingServerName = "sky-forwarding"
 
-	// SkyForwardingServerPort dmsg port of skyfwd server app
+	// SkyForwardingServerPort skynet port of skyfwd server app (built-in)
 	SkyForwardingServerPort uint16 = 47
+
+	// SkynetAppName name of skynet app (port forwarding server)
+	SkynetAppName = "skynet"
+
+	// SkynetAppPort skynet port for skynet app
+	SkynetAppPort uint16 = 49
+
+	// SkynetClientName name of skynet-client app (port forwarding client)
+	SkynetClientName = "skynet-client"
+
+	// SkynetClientPort skynet port for skynet-client app
+	SkynetClientPort uint16 = 50
 
 	// SkyPingName is the name of the sky ping
 	SkyPingName = "sky-ping"
