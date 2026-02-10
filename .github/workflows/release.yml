@@ -37,6 +37,13 @@ jobs:
         run: |
           brew install --quiet jq || brew upgrade --quiet jq
           brew install --quiet wget || brew upgrade --quiet wget
+          brew install --quiet hidapi || brew upgrade --quiet hidapi
+          brew install --quiet libusb || brew upgrade --quiet libusb
+          BREW_PREFIX=$(brew --prefix)
+          HIDAPI_PREFIX=$(brew --prefix hidapi)
+          LIBUSB_PREFIX=$(brew --prefix libusb)
+          echo "CGO_CFLAGS=-I${BREW_PREFIX}/include -I${HIDAPI_PREFIX}/include -I${LIBUSB_PREFIX}/include" >> $GITHUB_ENV
+          echo "CGO_LDFLAGS=-L${BREW_PREFIX}/lib -L${HIDAPI_PREFIX}/lib -L${LIBUSB_PREFIX}/lib" >> $GITHUB_ENV
       - name: Releasing
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
