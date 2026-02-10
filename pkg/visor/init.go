@@ -285,6 +285,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	// 2. GeoIP service
 	// 3. STUN servers
 	var pIP string
+	var geoData *GeoData
 
 	// Try dmsg LookupIP first (with timeout to avoid blocking init if dmsg isn't ready)
 	lookupCtx, lookupCancel := context.WithTimeout(ctx, 10*time.Second)
@@ -293,10 +294,10 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	if err != nil {
 		log.WithError(err).Debug("Failed to get public IP from dmsg server, trying GeoIP")
 
-		// Fall back to GeoIP
-		pIP, err = GetIP(v.conf.GeoIP)
-		if err != nil {
-			log.WithError(err).Debug("Failed to get public IP from GeoIP, trying STUN")
+		// Fall back to GeoIP - also get geolocation data
+		pIP, geoData = GetIPWithGeo(v.conf.GeoIP)
+		if pIP == "" {
+			log.Debug("Failed to get public IP from GeoIP, trying STUN")
 
 			// Fall back to STUN
 			<-v.stunReady
@@ -309,10 +310,25 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 			}
 		} else {
 			log.WithField("public_ip", pIP).Debug("Got public IP from GeoIP")
+			if geoData != nil {
+				log.WithField("country", geoData.CountryCode).Debug("Got geolocation from GeoIP")
+			}
 		}
 	} else {
 		pIP = ipAddr.String()
 		log.WithField("public_ip", pIP).Debug("Got public IP from dmsg server")
+		// When we get IP from dmsg, still try to get geo data separately
+		_, geoData = GetIPWithGeo(v.conf.GeoIP)
+		if geoData != nil {
+			log.WithField("country", geoData.CountryCode).Debug("Got geolocation from GeoIP")
+		}
+	}
+
+	// Store geolocation data if we got it
+	if geoData != nil {
+		v.geoDataMu.Lock()
+		v.geoData = geoData
+		v.geoDataMu.Unlock()
 	}
 
 	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
@@ -2408,34 +2424,72 @@ func getPublicIP(v *Visor, service string) (string, error) {
 	return pIP, nil
 }
 
-type ipAPI struct {
-	PublicIP string `json:"ip_address"`
+// GeoData holds geolocation information from the geoIP service.
+type GeoData struct {
+	CountryCode string  `json:"country_code,omitempty"`
+	CountryName string  `json:"country_name,omitempty"`
+	RegionCode  string  `json:"region_code,omitempty"`
+	RegionName  string  `json:"region_name,omitempty"`
+	CityName    string  `json:"city_name,omitempty"`
+	Latitude    float64 `json:"latitude,omitempty"`
+	Longitude   float64 `json:"longitude,omitempty"`
+}
+
+type geoIPResponse struct {
+	IP          string   `json:"ip_address"`
+	CountryCode string   `json:"country_code"`
+	CountryName string   `json:"country_name"`
+	RegionCode  string   `json:"region_code"`
+	RegionName  string   `json:"region_name"`
+	CityName    string   `json:"city_name"`
+	Latitude    *float64 `json:"latitude"`
+	Longitude   *float64 `json:"longitude"`
 }
 
 // GetIP used for getting current IP of visor
 func GetIP(geoipURL string) (string, error) {
+	ip, _ := GetIPWithGeo(geoipURL)
+	return ip, nil
+}
+
+// GetIPWithGeo fetches public IP and geolocation data from the geoIP service.
+func GetIPWithGeo(geoipURL string) (string, *GeoData) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 
 	resp, err := client.Get(geoipURL)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
 
-	var ip ipAPI
-	err = json.Unmarshal(body, &ip)
+	var geoResp geoIPResponse
+	err = json.Unmarshal(body, &geoResp)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
 
-	return ip.PublicIP, nil
+	geo := &GeoData{
+		CountryCode: geoResp.CountryCode,
+		CountryName: geoResp.CountryName,
+		RegionCode:  geoResp.RegionCode,
+		RegionName:  geoResp.RegionName,
+		CityName:    geoResp.CityName,
+	}
+	if geoResp.Latitude != nil {
+		geo.Latitude = *geoResp.Latitude
+	}
+	if geoResp.Longitude != nil {
+		geo.Longitude = *geoResp.Longitude
+	}
+
+	return geoResp.IP, geo
 }
 
 // visorAPIAdapter adapts *Visor to the tpviz.VisorAPI interface.
