@@ -1,5 +1,5 @@
 # GoReleaser configuration for macOS ARM builds
-# Builds skywire binary with hardware wallet utilities for macOS arm64
+# Builds skywire binary from repo root (no hardware wallet)
 
 version: 2
 
@@ -21,10 +21,8 @@ builds:
     goarch:
       - arm64
     env:
-      - CGO_ENABLED=1
-      - CGO_CFLAGS=-I/opt/homebrew/include
-      - CGO_LDFLAGS=-L/opt/homebrew/lib
-    main: ./cmd/release/
+      - CGO_ENABLED=0
+    main: .
     ldflags: -s -w
 
 archives:

@@ -188,6 +188,11 @@ type Overview struct {
 	LocalIP             string                `json:"local_ip"`
 	PublicIP            string                `json:"public_ip"`
 	IsSymmetricNAT      bool                  `json:"is_symmetic_nat"`
+	CountryCode         string                `json:"country_code,omitempty"`
+	RegionName          string                `json:"region_name,omitempty"`
+	CityName            string                `json:"city_name,omitempty"`
+	Latitude            float64               `json:"latitude,omitempty"`
+	Longitude           float64               `json:"longitude,omitempty"`
 	Hypervisors         []cipher.PubKey       `json:"hypervisors"`
 	ConnectedHypervisor []cipher.PubKey       `json:"connected_hypervisor"`
 }
@@ -240,6 +245,17 @@ func (v *Visor) Overview() (*Overview, error) {
 		PublicIP:        publicIP,
 		IsSymmetricNAT:  isSymmetricNAT,
 	}
+
+	// Add geolocation data if available
+	v.geoDataMu.RLock()
+	if v.geoData != nil {
+		overview.CountryCode = v.geoData.CountryCode
+		overview.RegionName = v.geoData.RegionName
+		overview.CityName = v.geoData.CityName
+		overview.Latitude = v.geoData.Latitude
+		overview.Longitude = v.geoData.Longitude
+	}
+	v.geoDataMu.RUnlock()
 
 	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
 	if err != nil {

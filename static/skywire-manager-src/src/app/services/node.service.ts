@@ -70,6 +70,33 @@ export class NodeService {
             node.ip = null;
           }
 
+          // Public IP.
+          if (response.overview && response.overview.public_ip && (response.overview.public_ip as string).trim()) {
+            node.publicIp = response.overview.public_ip;
+          } else {
+            node.publicIp = null;
+          }
+
+          // Symmetric NAT status.
+          node.isSymmeticNat = response.overview.is_symmetic_nat;
+
+          // Geolocation data.
+          if (response.overview.country_code) {
+            node.countryCode = response.overview.country_code;
+          }
+          if (response.overview.region_name) {
+            node.regionName = response.overview.region_name;
+          }
+          if (response.overview.city_name) {
+            node.cityName = response.overview.city_name;
+          }
+          if (response.overview.latitude) {
+            node.latitude = response.overview.latitude;
+          }
+          if (response.overview.longitude) {
+            node.longitude = response.overview.longitude;
+          }
+
           // Label.
           const labelInfo = this.storageService.getLabelInfo(node.localPk);
           node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
@@ -180,6 +207,23 @@ export class NodeService {
         node.publicIp = response.overview.public_ip;
         node.autoconnectTransports = response.public_autoconnect;
         node.rewardsAddress = response.reward_address;
+
+        // Geolocation data.
+        if (response.overview.country_code) {
+          node.countryCode = response.overview.country_code;
+        }
+        if (response.overview.region_name) {
+          node.regionName = response.overview.region_name;
+        }
+        if (response.overview.city_name) {
+          node.cityName = response.overview.city_name;
+        }
+        if (response.overview.latitude) {
+          node.latitude = response.overview.latitude;
+        }
+        if (response.overview.longitude) {
+          node.longitude = response.overview.longitude;
+        }
 
         // Ip.
         if (response.overview.local_ip && (response.overview.local_ip as string).trim()) {
