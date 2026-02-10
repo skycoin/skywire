@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	skyhw "github.com/skycoin/skycoin/cmd/hardware-wallet/commands"
+	skycoin "github.com/skycoin/skycoin/cmd/skycoin-wallet/commands"
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	snc "github.com/skycoin/skywire/cmd/apps/skynet-client/commands"
 	sn "github.com/skycoin/skywire/cmd/apps/skynet/commands"
@@ -45,8 +46,8 @@ func init() {
 		snc.RootCmd,
 	)
 
-	// Skycoin subcommand with hardware wallet
-	skycoinCmd.AddCommand(
+	// Add hardware wallet to skycoin commands
+	skycoin.RootCmd.AddCommand(
 		skyhw.RootCmd,
 	)
 
@@ -57,7 +58,7 @@ func init() {
 		services.RootCmd,
 		dmsg.RootCmd,
 		appsCmd,
-		skycoinCmd,
+		skycoin.RootCmd,
 	)
 
 	// Set command names
@@ -76,6 +77,8 @@ func init() {
 	sc.RootCmd.Use = "skychat"
 	sn.RootCmd.Use = "skynet-srv"
 	snc.RootCmd.Use = "skynet-client"
+	skycoin.RootCmd.Use = "skycoin"
+	skycoin.RootCmd.Short = "skycoin daemon & cli"
 	skyhw.RootCmd.Use = "skyhw"
 	skyhw.RootCmd.Short = "skycoin hardware wallet utilities"
 
@@ -130,11 +133,6 @@ var RootCmd = &cobra.Command{
 var appsCmd = &cobra.Command{
 	Use:   "app",
 	Short: "skywire native applications",
-}
-
-var skycoinCmd = &cobra.Command{
-	Use:   "skycoin",
-	Short: "skycoin utilities",
 }
 
 // Execute executes root CLI command.
