@@ -74,8 +74,10 @@ func (r *Retrier) Do(ctx context.Context, f RetryFunc) error {
 	t := time.NewTimer(bo)
 	defer t.Stop()
 
+	var lastErr error
 	for i := int64(0); r.tries == 0 || i < r.tries; i++ {
 		if err := f(); err != nil {
+			lastErr = err
 			if _, ok := r.errWl[err]; ok {
 				return err
 			}
@@ -96,6 +98,9 @@ func (r *Retrier) Do(ctx context.Context, f RetryFunc) error {
 			}
 		}
 		return nil
+	}
+	if lastErr != nil {
+		return fmt.Errorf("%w: %v", ErrMaximumRetriesReached, lastErr)
 	}
 	return ErrMaximumRetriesReached
 }

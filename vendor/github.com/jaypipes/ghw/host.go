@@ -9,9 +9,7 @@ package ghw
 import (
 	"fmt"
 
-	"github.com/jaypipes/ghw/pkg/context"
-	"github.com/jaypipes/ghw/pkg/usb"
-
+	"github.com/jaypipes/ghw/internal/config"
 	"github.com/jaypipes/ghw/pkg/accelerator"
 	"github.com/jaypipes/ghw/pkg/baseboard"
 	"github.com/jaypipes/ghw/pkg/bios"
@@ -25,12 +23,12 @@ import (
 	"github.com/jaypipes/ghw/pkg/pci"
 	"github.com/jaypipes/ghw/pkg/product"
 	"github.com/jaypipes/ghw/pkg/topology"
+	"github.com/jaypipes/ghw/pkg/usb"
 )
 
 // HostInfo is a wrapper struct containing information about the host system's
 // memory, block storage, CPU, etc
 type HostInfo struct {
-	ctx         *context.Context
 	Memory      *memory.Info      `json:"memory"`
 	Block       *block.Info       `json:"block"`
 	CPU         *cpu.Info         `json:"cpu"`
@@ -48,64 +46,62 @@ type HostInfo struct {
 
 // Host returns a pointer to a HostInfo struct that contains fields with
 // information about the host system's CPU, memory, network devices, etc
-func Host(opts ...*WithOption) (*HostInfo, error) {
-	ctx := context.New(opts...)
-
-	memInfo, err := memory.New(opts...)
+func Host(args ...any) (*HostInfo, error) {
+	ctx := config.ContextFromArgs(args...)
+	memInfo, err := memory.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	blockInfo, err := block.New(opts...)
+	blockInfo, err := block.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	cpuInfo, err := cpu.New(opts...)
+	cpuInfo, err := cpu.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	topologyInfo, err := topology.New(opts...)
+	topologyInfo, err := topology.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	netInfo, err := net.New(opts...)
+	netInfo, err := net.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	gpuInfo, err := gpu.New(opts...)
+	gpuInfo, err := gpu.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	acceleratorInfo, err := accelerator.New(opts...)
+	acceleratorInfo, err := accelerator.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	chassisInfo, err := chassis.New(opts...)
+	chassisInfo, err := chassis.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	biosInfo, err := bios.New(opts...)
+	biosInfo, err := bios.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	baseboardInfo, err := baseboard.New(opts...)
+	baseboardInfo, err := baseboard.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	productInfo, err := product.New(opts...)
+	productInfo, err := product.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	pciInfo, err := pci.New(opts...)
+	pciInfo, err := pci.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	usbInfo, err := usb.New(opts...)
+	usbInfo, err := usb.New(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	return &HostInfo{
-		ctx:         ctx,
 		CPU:         cpuInfo,
 		Memory:      memInfo,
 		Block:       blockInfo,
@@ -146,11 +142,11 @@ func (info *HostInfo) String() string {
 // YAMLString returns a string with the host information formatted as YAML
 // under a top-level "host:" key
 func (i *HostInfo) YAMLString() string {
-	return marshal.SafeYAML(i.ctx, i)
+	return marshal.SafeYAML(i)
 }
 
 // JSONString returns a string with the host information formatted as JSON
 // under a top-level "host:" key
 func (i *HostInfo) JSONString(indent bool) string {
-	return marshal.SafeJSON(i.ctx, i, indent)
+	return marshal.SafeJSON(i, indent)
 }

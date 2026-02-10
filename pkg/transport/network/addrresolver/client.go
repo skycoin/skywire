@@ -62,6 +62,7 @@ type APIClient interface {
 	Transports(ctx context.Context) (map[cipher.PubKey][]string, error)
 	TransportsType(ctx context.Context, tpType types.Type) (map[cipher.PubKey][]string, error)
 	Addresses(ctx context.Context) string
+	LocalPublicIP() string
 	Close() error
 }
 
@@ -217,6 +218,20 @@ func (c *httpClient) Addresses(_ context.Context) string {
 		return strings.Split(c.sudphConn.LocalAddr().String(), ":")[3]
 	}
 	return ""
+}
+
+// LocalPublicIP returns the local visor's public IP address.
+// This can be used to detect when a remote visor shares the same public IP
+// (i.e., is behind the same NAT), allowing LAN addresses to be tried first.
+func (c *httpClient) LocalPublicIP() string {
+	if c.clientPublicIP == "" {
+		return ""
+	}
+	// Extract just the IP (without port) from clientPublicIP
+	if host, _, err := net.SplitHostPort(c.clientPublicIP); err == nil {
+		return host
+	}
+	return c.clientPublicIP
 }
 
 // BindSTCPR binds client PK to IP:port on address resolver.

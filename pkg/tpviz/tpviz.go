@@ -28,8 +28,11 @@ import (
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-//go:embed index.html
-var embeddedFS embed.FS
+//go:embed legacy/*
+var legacyFS embed.FS
+
+//go:embed dist/*
+var wasmDistFS embed.FS
 
 // Config holds the configuration for the visualizer server
 type Config struct {
@@ -43,8 +46,12 @@ type Config struct {
 	CacheFileUT string
 	// CacheFileSD is the location for the service discovery cache file
 	CacheFileSD string
-	// CacheFileDMSG is the location for the DMSG discovery cache file
-	CacheFileDMSG string
+	// CacheFileDMSGServers is the location for the DMSG servers cache file
+	CacheFileDMSGServers string
+	// CacheFileDMSGEntries is the location for the DMSG entries cache file
+	CacheFileDMSGEntries string
+	// CacheFileDMSGClients is the location for the DMSG server/clients cache file
+	CacheFileDMSGClients string
 	// CacheMaxAge is the cache max age in minutes (default: 5)
 	CacheMaxAge int
 	// TPDURL is the transport discovery URL
@@ -69,20 +76,22 @@ type Config struct {
 // DefaultConfig returns a Config with default values
 func DefaultConfig() Config {
 	return Config{
-		Addr:          "127.0.0.1",
-		Port:          8080,
-		CacheFile:     filepath.Join(os.TempDir(), "tpd.json"),
-		CacheFileUT:   filepath.Join(os.TempDir(), "ut.json"),
-		CacheFileSD:   filepath.Join(os.TempDir(), "sd.json"),
-		CacheFileDMSG: filepath.Join(os.TempDir(), "dmsg.json"),
-		CacheMaxAge:   5,
-		TPDURL:        deployment.Prod.TransportDiscovery,
-		UTURL:         deployment.Prod.UptimeTracker,
-		SDURL:         deployment.Prod.ServiceDiscovery,
-		DMSGURL:       deployment.Prod.DmsgDiscovery,
-		NoCache:       false,
-		AutoRefresh:   true,
-		GeoIPURL:      "http://ip.skycoin.com",
+		Addr:                 "127.0.0.1",
+		Port:                 8080,
+		CacheFile:            filepath.Join(os.TempDir(), "tpd.json"),
+		CacheFileUT:          filepath.Join(os.TempDir(), "ut.json"),
+		CacheFileSD:          filepath.Join(os.TempDir(), "sd.json"),
+		CacheFileDMSGServers: filepath.Join(os.TempDir(), "dmsg-servers.json"),
+		CacheFileDMSGEntries: filepath.Join(os.TempDir(), "dmsg-entries.json"),
+		CacheFileDMSGClients: filepath.Join(os.TempDir(), "dmsg-clients.json"),
+		CacheMaxAge:          5,
+		TPDURL:               deployment.Prod.TransportDiscovery,
+		UTURL:                deployment.Prod.UptimeTracker,
+		SDURL:                deployment.Prod.ServiceDiscovery,
+		DMSGURL:              deployment.Prod.DmsgDiscovery,
+		NoCache:              false,
+		AutoRefresh:          true,
+		GeoIPURL:             "http://ip.skycoin.com",
 	}
 }
 
@@ -94,6 +103,13 @@ type VisorAPI interface {
 	AddTransport(ctx context.Context, remotePK, tpType string) (*TransportSummary, error)
 	RemoveTransport(ctx context.Context, tpID string) error
 	DMSGHealth(ctx context.Context, pk string) (*DMSGHealthResponse, error)
+	Ping(ctx context.Context, pk string, useDMSG, localRoute bool, tries, sizeKB int) (*PingResponse, error)
+	// App management
+	Apps() ([]*AppState, error)
+	StartApp(appName string) error
+	StopApp(appName string) error
+	SetAutoStart(appName string, autoStart bool) error
+	SetAppPK(appName, pk string) error
 	Close() error
 }
 
@@ -103,6 +119,29 @@ type DMSGHealthResponse struct {
 	BuildInfo string `json:"build_info,omitempty"`
 	Message   string `json:"message,omitempty"`
 	Error     string `json:"error,omitempty"`
+}
+
+// PingResponse contains the response from a ping operation.
+type PingResponse struct {
+	Status     string  `json:"status"`
+	LatencyMs  float64 `json:"latency_ms,omitempty"`
+	Latencies  []int64 `json:"latencies,omitempty"` // Individual latencies in ms
+	MinMs      float64 `json:"min_ms,omitempty"`
+	MaxMs      float64 `json:"max_ms,omitempty"`
+	AvgMs      float64 `json:"avg_ms,omitempty"`
+	PacketLoss float64 `json:"packet_loss,omitempty"`
+	Error      string  `json:"error,omitempty"`
+	Mode       string  `json:"mode"` // "route" or "dmsg"
+}
+
+// AppState represents the state of an application running on the visor.
+type AppState struct {
+	Name           string   `json:"name"`
+	Status         int      `json:"status"`          // 0=stopped, 1=running, 2=errored, 3=starting
+	DetailedStatus string   `json:"detailed_status"` // Human-readable status
+	AutoStart      bool     `json:"auto_start"`
+	Port           uint16   `json:"port"`
+	Args           []string `json:"args,omitempty"`
 }
 
 // VisorOverview contains visor overview data.
@@ -330,18 +369,62 @@ func (s *Server) SetTPSAPI(api TPSAPI) {
 }
 
 func (s *Server) setupRoutes() {
-	// Serve the embedded index.html at root
+	// Serve legacy JavaScript UI at / (primary)
 	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" && r.URL.Path != "/index.html" {
-			http.NotFound(w, r)
+		path := r.URL.Path
+		if path == "/" || path == "/index.html" {
+			content, err := legacyFS.ReadFile("legacy/index.html")
+			if err != nil {
+				http.Error(w, "Failed to read index.html", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write(content) //nolint:errcheck,gosec
 			return
 		}
-		content, err := embeddedFS.ReadFile("index.html")
+		http.NotFound(w, r)
+	})
+
+	// Serve bundled JavaScript for legacy UI
+	s.mux.HandleFunc("/bundle.js", func(w http.ResponseWriter, r *http.Request) {
+		content, err := legacyFS.ReadFile("legacy/bundle.js")
 		if err != nil {
-			http.Error(w, "Failed to read index.html", http.StatusInternalServerError)
+			http.Error(w, "Failed to read bundle.js", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Write(content) //nolint:errcheck,gosec
+	})
+
+	// WASM UI at /wasm
+	s.mux.HandleFunc("/wasm", func(w http.ResponseWriter, r *http.Request) {
+		content, err := wasmDistFS.ReadFile("dist/index.html")
+		if err != nil {
+			http.Error(w, "Failed to read WASM index.html", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(content) //nolint:errcheck,gosec
+	})
+
+	s.mux.HandleFunc("/main.wasm", func(w http.ResponseWriter, r *http.Request) {
+		content, err := wasmDistFS.ReadFile("dist/main.wasm")
+		if err != nil {
+			http.Error(w, "Failed to read main.wasm", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/wasm")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Write(content) //nolint:errcheck,gosec
+	})
+
+	s.mux.HandleFunc("/wasm_exec.js", func(w http.ResponseWriter, r *http.Request) {
+		content, err := wasmDistFS.ReadFile("dist/wasm_exec.js")
+		if err != nil {
+			http.Error(w, "Failed to read wasm_exec.js", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript")
 		w.Write(content) //nolint:errcheck,gosec
 	})
 
@@ -418,6 +501,16 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/dmsg/servers", s.handleDMSGServers)
 	s.mux.HandleFunc("/api/dmsg/entries", s.handleDMSGEntries)
 	s.mux.HandleFunc("/api/dmsg/health", s.handleDMSGHealth)
+
+	// Network ping endpoint
+	s.mux.HandleFunc("/api/ping", s.handlePing)
+
+	// App management endpoints
+	s.mux.HandleFunc("/api/apps", s.handleApps)
+	s.mux.HandleFunc("/api/apps/start", s.handleAppStart)
+	s.mux.HandleFunc("/api/apps/stop", s.handleAppStop)
+	s.mux.HandleFunc("/api/apps/autostart", s.handleAppAutoStart)
+	s.mux.HandleFunc("/api/apps/set-pk", s.handleAppSetPK)
 }
 
 func (s *Server) handleTransports(w http.ResponseWriter, r *http.Request) {
@@ -510,76 +603,60 @@ func (s *Server) handleIPGroups(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(cache) //nolint:errcheck,gosec
 }
 
-// refreshIPGroupsCache reads survey files and updates the cached IP groups data.
-// This is called periodically along with other cache refreshes.
+// refreshIPGroupsCache reads survey files, DMSG server data, and local visor data
+// to build IP-based groupings. This is called periodically along with other cache refreshes.
 func (s *Server) refreshIPGroupsCache() {
-	// If no survey dir configured, mark as disabled
-	if s.config.SurveyDir == "" {
-		s.ipGroupsMu.Lock()
-		s.ipGroupsCache = &ipGroupsResponse{
-			Enabled: false,
-			Groups:  map[string]int{},
-		}
-		s.ipGroupsMu.Unlock()
-		return
-	}
-
 	// Map from IP address to group ID
 	ipToGroup := make(map[string]int)
-	// Map from public key to group ID
+	// Map from public key (or node ID) to group ID
 	pkToGroup := make(map[string]int)
 	nextGroupID := 1
 
 	// Walk the survey directory looking for node-info.json files
 	// Expected structure: SurveyDir/<pk>/node-info.json
-	entries, err := os.ReadDir(s.config.SurveyDir)
-	if err != nil {
-		s.log.WithError(err).Warn("Failed to read survey directory")
-		s.ipGroupsMu.Lock()
-		s.ipGroupsCache = &ipGroupsResponse{
-			Enabled: false,
-			Groups:  map[string]int{},
-		}
-		s.ipGroupsMu.Unlock()
-		return
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		surveyFile := filepath.Join(s.config.SurveyDir, entry.Name(), "node-info.json")
-		data, err := os.ReadFile(surveyFile) //nolint:gosec
+	if s.config.SurveyDir != "" {
+		entries, err := os.ReadDir(s.config.SurveyDir)
 		if err != nil {
-			continue // Skip if no survey file for this PK
-		}
+			s.log.WithError(err).Warn("Failed to read survey directory")
+		} else {
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
 
-		var survey surveyData
-		if err := json.Unmarshal(data, &survey); err != nil {
-			continue // Skip malformed files
-		}
+				surveyFile := filepath.Join(s.config.SurveyDir, entry.Name(), "node-info.json")
+				data, err := os.ReadFile(surveyFile) //nolint:gosec
+				if err != nil {
+					continue // Skip if no survey file for this PK
+				}
 
-		// Skip entries without IP address
-		if survey.IPAddr == "" {
-			continue
-		}
+				var survey surveyData
+				if err := json.Unmarshal(data, &survey); err != nil {
+					continue // Skip malformed files
+				}
 
-		// Use the public key from the survey if available, otherwise use directory name
-		pk := survey.PubKey
-		if pk == "" {
-			pk = entry.Name()
-		}
+				// Skip entries without IP address
+				if survey.IPAddr == "" {
+					continue
+				}
 
-		// Get or create group ID for this IP
-		groupID, exists := ipToGroup[survey.IPAddr]
-		if !exists {
-			groupID = nextGroupID
-			ipToGroup[survey.IPAddr] = groupID
-			nextGroupID++
-		}
+				// Use the public key from the survey if available, otherwise use directory name
+				pk := survey.PubKey
+				if pk == "" {
+					pk = entry.Name()
+				}
 
-		pkToGroup[pk] = groupID
+				// Get or create group ID for this IP
+				groupID, exists := ipToGroup[survey.IPAddr]
+				if !exists {
+					groupID = nextGroupID
+					ipToGroup[survey.IPAddr] = groupID
+					nextGroupID++
+				}
+
+				pkToGroup[pk] = groupID
+			}
+		}
 	}
 
 	// Add local visor to the correct IP group based on its geoip IP
@@ -610,6 +687,28 @@ func (s *Server) refreshIPGroupsCache() {
 			pkToGroup[localPK] = groupID
 			s.log.WithField("pk", localPK[:16]).WithField("group", groupID).WithField("ip", localIP).
 				Info("Local visor added to new IP group")
+		}
+	}
+
+	// Add DMSG servers to IP groups using their known IP addresses.
+	// Node IDs use the "dmsg-srv-" prefix to match the JS client.
+	s.dmsgMu.RLock()
+	dmsgCache := s.dmsgCache
+	s.dmsgMu.RUnlock()
+
+	if dmsgCache != nil {
+		for _, srv := range dmsgCache.Servers {
+			if srv.IP == "" || srv.PK == "" {
+				continue
+			}
+			nodeID := "dmsg-srv-" + srv.PK
+			groupID, exists := ipToGroup[srv.IP]
+			if !exists {
+				groupID = nextGroupID
+				ipToGroup[srv.IP] = groupID
+				nextGroupID++
+			}
+			pkToGroup[nodeID] = groupID
 		}
 	}
 
@@ -803,6 +902,9 @@ func (s *Server) refreshCache() {
 	// Refresh service discovery cache (combined from multiple service types)
 	s.refreshSDCache()
 
+	// Refresh DMSG discovery cache (servers, entries, clients + geoip)
+	s.refreshDMSGCache()
+
 	// Refresh IP groups cache (from survey files)
 	s.refreshIPGroupsCache()
 }
@@ -853,6 +955,42 @@ func (s *Server) refreshSDCache() {
 	}
 	s.cacheMu.Unlock()
 	s.log.WithField("file", s.config.CacheFileSD).Debug("Auto-refreshed cache")
+}
+
+// refreshDMSGCache refreshes the DMSG discovery cache by calling getDMSGData
+// which handles all three sub-fetches (servers, entries, clients) with disk caching and geoip.
+func (s *Server) refreshDMSGCache() {
+	if s.config.DMSGURL == "" {
+		return
+	}
+
+	// Check if any DMSG cache file needs refresh
+	needsRefresh := false
+	for _, f := range []string{s.config.CacheFileDMSGServers, s.config.CacheFileDMSGEntries, s.config.CacheFileDMSGClients} {
+		if f == "" {
+			continue
+		}
+		info, err := os.Stat(f)
+		if err != nil || time.Since(info.ModTime()).Minutes() > float64(s.config.CacheMaxAge) {
+			needsRefresh = true
+			break
+		}
+	}
+
+	if !needsRefresh {
+		return
+	}
+
+	// Clear the in-memory cache to force getDMSGData to re-fetch
+	s.dmsgMu.Lock()
+	s.dmsgCache = nil
+	s.dmsgMu.Unlock()
+
+	if _, err := s.getDMSGData(); err != nil {
+		s.log.WithError(err).Warn("Auto-refresh DMSG failed")
+	} else {
+		s.log.Debug("Auto-refreshed DMSG cache")
+	}
 }
 
 // startAutoRefresh starts the auto-refresh goroutine
@@ -926,7 +1064,7 @@ func (s *Server) Start() {
 // ListenAndServe starts the HTTP server
 func (s *Server) ListenAndServe() error {
 	listenAddr := fmt.Sprintf("%s:%d", s.config.Addr, s.config.Port)
-	s.log.WithField("addr", "http://"+listenAddr).Info("Starting TPD Visualizer server")
+	s.log.WithField("addr", "http://"+listenAddr).Info("Starting Skywire Network UI server")
 	s.log.WithField("tpd", s.config.CacheFile).WithField("ut", s.config.CacheFileUT).
 		WithField("sd", s.config.CacheFileSD).Info("Cache files")
 	s.log.WithField("max_age_min", s.config.CacheMaxAge).Debug("Cache max age")
@@ -1687,7 +1825,300 @@ func (s *Server) handleDMSGHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 }
 
-// getDMSGData fetches and caches DMSG discovery data
+// handlePing performs a network ping to a remote visor via routes or DMSG.
+// Query params: pk (required), mode (route/dmsg, default: dmsg), tries (default: 3), size (KB, default: 2), local (bool, default: false)
+func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	pk := r.URL.Query().Get("pk")
+	if pk == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"status": "error",
+			"error":  "pk parameter required",
+		})
+		return
+	}
+
+	mode := r.URL.Query().Get("mode")
+	if mode == "" {
+		mode = "dmsg"
+	}
+	useDMSG := mode == "dmsg"
+
+	// localRoute: use cached TPD data for route calculation instead of route finder
+	localRoute := r.URL.Query().Get("local") == "true"
+
+	tries := 3
+	if t := r.URL.Query().Get("tries"); t != "" {
+		if parsed, err := fmt.Sscanf(t, "%d", &tries); err != nil || parsed != 1 || tries < 1 {
+			tries = 3
+		}
+		if tries > 10 {
+			tries = 10
+		}
+	}
+
+	sizeKB := 2
+	if sz := r.URL.Query().Get("size"); sz != "" {
+		if parsed, err := fmt.Sscanf(sz, "%d", &sizeKB); err != nil || parsed != 1 || sizeKB < 1 {
+			sizeKB = 2
+		}
+		if sizeKB > 32 {
+			sizeKB = 32
+		}
+	}
+
+	s.visorMu.RLock()
+	visorAPI := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if visorAPI == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"status": "error",
+			"error":  "visor not connected - ping requires visor API",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+
+	resp, err := visorAPI.Ping(ctx, pk, useDMSG, localRoute, tries, sizeKB)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"status": "error",
+			"error":  err.Error(),
+			"mode":   mode,
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
+}
+
+// handleApps returns the list of all apps and their status.
+func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	s.visorMu.RLock()
+	visorAPI := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if visorAPI == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "visor not connected",
+		})
+		return
+	}
+
+	apps, err := visorAPI.Apps()
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(apps) //nolint:errcheck,gosec
+}
+
+// handleAppStart starts an application.
+// POST with JSON body: {"name": "app-name"}
+func (s *Server) handleAppStart(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method != http.MethodPost {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "POST required",
+		})
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	s.visorMu.RLock()
+	visorAPI := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if visorAPI == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "visor not connected",
+		})
+		return
+	}
+
+	if err := visorAPI.StartApp(req.Name); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		"status": "started",
+		"app":    req.Name,
+	})
+}
+
+// handleAppStop stops an application.
+// POST with JSON body: {"name": "app-name"}
+func (s *Server) handleAppStop(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method != http.MethodPost {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "POST required",
+		})
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	s.visorMu.RLock()
+	visorAPI := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if visorAPI == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "visor not connected",
+		})
+		return
+	}
+
+	if err := visorAPI.StopApp(req.Name); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		"status": "stopped",
+		"app":    req.Name,
+	})
+}
+
+// handleAppAutoStart sets the auto-start flag for an app.
+// POST with JSON body: {"name": "app-name", "auto_start": true}
+func (s *Server) handleAppAutoStart(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method != http.MethodPost {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "POST required",
+		})
+		return
+	}
+
+	var req struct {
+		Name      string `json:"name"`
+		AutoStart bool   `json:"auto_start"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	s.visorMu.RLock()
+	visorAPI := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if visorAPI == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "visor not connected",
+		})
+		return
+	}
+
+	if err := visorAPI.SetAutoStart(req.Name, req.AutoStart); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		"status":     "updated",
+		"app":        req.Name,
+		"auto_start": req.AutoStart,
+	})
+}
+
+// handleAppSetPK sets the server public key for an app (vpn-client, skysocks-client).
+// POST with JSON body: {"name": "app-name", "pk": "public-key"}
+func (s *Server) handleAppSetPK(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method != http.MethodPost {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "POST required",
+		})
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+		PK   string `json:"pk"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	s.visorMu.RLock()
+	visorAPI := s.visorAPI
+	s.visorMu.RUnlock()
+
+	if visorAPI == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": "visor not connected",
+		})
+		return
+	}
+
+	if err := visorAPI.SetAppPK(req.Name, req.PK); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		"status": "updated",
+		"app":    req.Name,
+		"pk":     req.PK,
+	})
+}
+
+// getDMSGData fetches and caches DMSG discovery data.
+// Uses disk caching for each sub-fetch (servers, entries, clients) and in-memory caching
+// for the combined DMSGData result.
 func (s *Server) getDMSGData() (*DMSGData, error) {
 	s.dmsgMu.RLock()
 	if s.dmsgCache != nil && time.Since(s.dmsgCache.LastUpdated) < time.Duration(s.config.CacheMaxAge)*time.Minute {
@@ -1709,14 +2140,11 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 		LastUpdated: time.Now(),
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-
-	// Fetch all servers
-	serversResp, err := client.Get(s.config.DMSGURL + "/dmsg-discovery/all_servers")
+	// Fetch servers (with disk caching)
+	serversJSON, err := s.getDMSGSubData(s.config.CacheFileDMSGServers, s.config.DMSGURL+"/dmsg-discovery/all_servers")
 	if err != nil {
 		return nil, fmt.Errorf("fetch servers: %w", err)
 	}
-	defer serversResp.Body.Close() //nolint:errcheck
 
 	var serverEntries []struct {
 		Static string `json:"static"`
@@ -1726,7 +2154,7 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 			ServerType        string `json:"serverType"`
 		} `json:"server"`
 	}
-	if err := json.NewDecoder(serversResp.Body).Decode(&serverEntries); err != nil {
+	if err := json.Unmarshal([]byte(serversJSON), &serverEntries); err != nil {
 		return nil, fmt.Errorf("decode servers: %w", err)
 	}
 
@@ -1754,48 +2182,77 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 		dmsgData.Servers = append(dmsgData.Servers, srv)
 	}
 
-	// Fetch entries count
-	entriesResp, err := client.Get(s.config.DMSGURL + "/dmsg-discovery/entries")
+	// Fetch entries (with disk caching)
+	entriesJSON, err := s.getDMSGSubData(s.config.CacheFileDMSGEntries, s.config.DMSGURL+"/dmsg-discovery/entries")
 	if err != nil {
 		s.log.WithError(err).Warn("Failed to fetch DMSG entries")
 	} else {
-		defer entriesResp.Body.Close() //nolint:errcheck
 		var entries []string
-		if err := json.NewDecoder(entriesResp.Body).Decode(&entries); err == nil {
+		if err := json.Unmarshal([]byte(entriesJSON), &entries); err == nil {
 			dmsgData.Entries = entries
 			dmsgData.EntriesCount = len(entries)
 		}
 	}
 
-	// Fetch clients by server (fault-tolerant - endpoint may not be deployed yet)
-	clientsByServerResp, err := client.Get(s.config.DMSGURL + "/dmsg-discovery/servers/clients")
+	// Fetch clients by server (with disk caching, fault-tolerant)
+	clientsJSON, err := s.getDMSGSubData(s.config.CacheFileDMSGClients, s.config.DMSGURL+"/dmsg-discovery/servers/clients")
 	if err != nil {
 		s.log.WithError(err).Debug("Failed to fetch clients by server (endpoint may not be available)")
 	} else {
-		defer clientsByServerResp.Body.Close() //nolint:errcheck
-		if clientsByServerResp.StatusCode == http.StatusOK {
-			var clientsByServer map[string][]struct {
-				Static string `json:"static"`
-			}
-			if err := json.NewDecoder(clientsByServerResp.Body).Decode(&clientsByServer); err == nil {
-				// Map clients to their servers
-				for i := range dmsgData.Servers {
-					serverPK := dmsgData.Servers[i].PK
-					if clients, ok := clientsByServer[serverPK]; ok {
-						for _, c := range clients {
-							dmsgData.Servers[i].Clients = append(dmsgData.Servers[i].Clients, c.Static)
-						}
-					}
+		var clientsByServer map[string][]string
+		if err := json.Unmarshal([]byte(clientsJSON), &clientsByServer); err == nil {
+			// Map clients to their servers
+			for i := range dmsgData.Servers {
+				serverPK := dmsgData.Servers[i].PK
+				if clients, ok := clientsByServer[serverPK]; ok {
+					dmsgData.Servers[i].Clients = append(dmsgData.Servers[i].Clients, clients...)
 				}
-				s.log.WithField("servers_with_clients", len(clientsByServer)).Debug("Loaded DMSG clients by server")
 			}
-		} else {
-			s.log.WithField("status", clientsByServerResp.StatusCode).Debug("Clients by server endpoint not available")
+			s.log.WithField("servers_with_clients", len(clientsByServer)).Debug("Loaded DMSG clients by server")
 		}
 	}
 
 	s.dmsgCache = dmsgData
 	return dmsgData, nil
+}
+
+// getDMSGSubData fetches a DMSG sub-endpoint with disk caching.
+// Mirrors the getData() pattern: fresh cache → return cached; stale → return stale + background refresh; missing → fetch synchronously.
+func (s *Server) getDMSGSubData(cacheFile, url string) (string, error) {
+	if s.config.NoCache || cacheFile == "" {
+		return fetchURL(url)
+	}
+
+	s.cacheMu.RLock()
+	info, err := os.Stat(cacheFile)
+	if err != nil {
+		s.cacheMu.RUnlock()
+		// Cache file doesn't exist, fetch synchronously
+		data, err := fetchURL(url)
+		if err != nil {
+			return "", err
+		}
+		s.cacheMu.Lock()
+		defer s.cacheMu.Unlock()
+		if err := os.WriteFile(cacheFile, []byte(data), 0644); err != nil { //nolint:gosec
+			s.log.WithError(err).Warn("Failed to write DMSG cache file")
+		}
+		s.log.WithField("file", cacheFile).Debug("Wrote DMSG cache file")
+		return data, nil
+	}
+
+	// Check if cache is too old
+	if time.Since(info.ModTime()).Minutes() > float64(s.config.CacheMaxAge) {
+		s.cacheMu.RUnlock()
+		// Trigger refresh in background, return stale data
+		go s.refreshCacheFile(cacheFile, url)
+	} else {
+		s.cacheMu.RUnlock()
+	}
+
+	s.cacheMu.RLock()
+	defer s.cacheMu.RUnlock()
+	return readFile(cacheFile)
 }
 
 // fetchGeoForIP fetches country code for an IP address
@@ -1826,10 +2283,10 @@ type NavLink struct {
 	Label string
 }
 
-// GetEmbeddedIndexWithNavLinks returns the full embedded index.html with navigation links.
-// This is the single source of truth for the transport graph HTML - no duplicate templates.
+// GetEmbeddedIndexWithNavLinks returns the full embedded legacy index.html with navigation links.
+// This is for the legacy JavaScript UI.
 func GetEmbeddedIndexWithNavLinks(navLinks []NavLink) (string, error) {
-	content, err := embeddedFS.ReadFile("index.html")
+	content, err := legacyFS.ReadFile("legacy/index.html")
 	if err != nil {
 		return "", err
 	}
@@ -1845,7 +2302,7 @@ func GetEmbeddedIndexWithNavLinks(navLinks []NavLink) (string, error) {
 		navLinksHTML += `</div>`
 
 		// Insert before the <h1> tag
-		html = strings.Replace(html, `<h1>TPD Visualizer</h1>`, navLinksHTML+`<h1>TPD Visualizer</h1>`, 1)
+		html = strings.Replace(html, `<h1>Skywire Network</h1>`, navLinksHTML+`<h1>Skywire Network</h1>`, 1)
 	}
 
 	return html, nil

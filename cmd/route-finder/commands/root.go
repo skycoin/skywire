@@ -212,7 +212,7 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, logger)
 
 			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, sk, rfAPI, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, logger); err != nil {
+				if err := dmsghttp.ListenAndServe(ctx, sk, rfAPI, dClient, dmsgPort, dmsgDC, logger); err != nil {
 					logger.Errorf("dmsghttp.ListenAndServe: %v", err)
 					cancel()
 				}

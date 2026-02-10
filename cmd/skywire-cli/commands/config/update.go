@@ -67,19 +67,18 @@ func init() {
 
 	updateCmd.AddCommand(skySocksServerUpdateCmd)
 	skySocksServerUpdateCmd.Flags().SortFlags = false
-	skySocksServerUpdateCmd.Flags().StringVarP(&skysocksPasscode, "passwd", "s", "", "add passcode to skysocks server")
+	skySocksServerUpdateCmd.Flags().StringVarP(&skysocksWhitelist, "whitelist", "w", "", "comma-separated public keys allowed to connect (empty = allow all)")
 	skySocksServerUpdateCmd.Flags().BoolVarP(&isResetSkysocks, "reset", "r", false, "reset skysocks configuration")
 
 	updateCmd.AddCommand(vpnClientUpdateCmd)
 	vpnClientUpdateCmd.Flags().SortFlags = false
 	vpnClientUpdateCmd.Flags().StringVarP(&setVPNClientKillswitch, "killsw", "x", "", "change killswitch status of vpn-client")
 	vpnClientUpdateCmd.Flags().StringVar(&addVPNClientSrv, "add-server", "", "add server address to vpn-client")
-	vpnClientUpdateCmd.Flags().StringVarP(&addVPNClientPasscode, "pass", "s", "", "add passcode of server if needed")
 	vpnClientUpdateCmd.Flags().BoolVarP(&isResetVPNclient, "reset", "r", false, "reset vpn-client configurations")
 
 	updateCmd.AddCommand(vpnServerUpdateCmd)
 	vpnServerUpdateCmd.Flags().SortFlags = false
-	vpnServerUpdateCmd.Flags().StringVarP(&addVPNServerPasscode, "passwd", "s", "", "add passcode to vpn-server")
+	vpnServerUpdateCmd.Flags().StringVarP(&addVPNServerWhitelist, "whitelist", "w", "", "comma-separated public keys allowed to connect (empty = allow all)")
 	vpnServerUpdateCmd.Flags().StringVar(&setVPNServerSecure, "secure", "", "change secure mode status of vpn-server")
 	vpnServerUpdateCmd.Flags().StringVar(&setVPNServerAutostart, "autostart", "", "change autostart of vpn-server")
 	vpnServerUpdateCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", "", "set default network interface")
@@ -311,8 +310,8 @@ var skySocksServerUpdateCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 
 		conf = initUpdate()
-		if skysocksPasscode != "" {
-			changeAppsConfig(conf, "skysocks", "--passcode", skysocksPasscode)
+		if skysocksWhitelist != "" {
+			changeAppsConfig(conf, "skysocks", "--whitelist", skysocksWhitelist)
 		}
 		if isResetSkysocks {
 			resetAppsConfig(conf, "skysocks")
@@ -347,10 +346,6 @@ var vpnClientUpdateCmd = &cobra.Command{
 			}
 			changeAppsConfig(conf, "vpn-client", "--srv", keyParsed.Hex())
 		}
-
-		if addVPNClientPasscode != "" {
-			changeAppsConfig(conf, "vpn-client", "--passcode", addVPNClientPasscode)
-		}
 		if isResetVPNclient {
 			resetAppsConfig(conf, "vpn-client")
 		}
@@ -367,8 +362,8 @@ var vpnServerUpdateCmd = &cobra.Command{
 	},
 	Run: func(_ *cobra.Command, _ []string) {
 		conf = initUpdate()
-		if addVPNServerPasscode != "" {
-			changeAppsConfig(conf, "vpn-server", "--passcode", addVPNServerPasscode)
+		if addVPNServerWhitelist != "" {
+			changeAppsConfig(conf, "vpn-server", "--whitelist", addVPNServerWhitelist)
 		}
 		if setVPNServerNetIfc != "" {
 			changeAppsConfig(conf, "vpn-server", "--netifc", setVPNServerNetIfc)

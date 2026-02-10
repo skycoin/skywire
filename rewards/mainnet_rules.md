@@ -42,27 +42,27 @@ The two reward pools are differentiated by architecture ; one pool for ARM / RIS
 To receive Skycoin rewards for running skywire, the following requirements must be met:
 
 
-* [1)](#Version) **Minimum skywire [version](#Version) v1.3.30** - Cutoff August 1st 2024
+* [1)](#Version) **Minimum skywire [version](#Version) v1.3.34** - Cutoff February 1st 2026
 
 * [2)](#Uptime) **75% [uptime](#Uptime) per day** minimum is required to be eligible to receive rewards
 
-* [3)](#Architercture) ~The visor must be an **ARM or RISC architecture SBC** running on approved [hardware](#hardware)~
+* [3)](#Deployment) Visors must be running on **[the skywire production deployment](#Deployment)** with a config that is updated on every version. No default keys or addresses of this configuration may be removed - but you can add keys where applicable.
 
-* [4)](#Deployment) Visors must be running on **[the skywire production deployment](#Deployment)** with a config that is updated on every version. No default keys or addresses of this configuration may be removed - but you can add keys where applicable.
+* [4)](#Per-Machine-Limit) **Only 1 (one) visor per machine** - virtual machines are ineligible
 
-* [5)](#Per-Machine-Limit) **Only 1 (one) visor per machine** - virtual machines are ineligible
+* [5)](#Per-IP-Limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime.
 
-* [6)](#Per-IP-Limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime.
+* [6)](#Skycoin-Address) **A valid [skycoin address](#Skycoin-Address)** must be set for the visor
 
-* [7)](#Skycoin-Address) **A valid [skycoin address](#Skycoin-Address)** must be set for the visor
+* [7)](#Connection-To-DMSG-Network) The visor must be **[connected to the DMSG network](#Connection-To-DMSG-Network)**
 
-* [8)](#Connection-To-DMSG-Network) The visor must be **[connected to the DMSG network](#Connection-To-DMSG-Network)**
+* [8)](#Transportable) **[Transports](#Transportable) can be established to the visor**
 
-* [9)](#Transportability) **[Transports](#Transportability) can be established to the visor**
+* [9)](#Transports) **The visor has at least 2 [Transports](#Transports)** observed at some point during the same period as uptime (checked hourly)
 
 * [10)](#Transport-Setup-Node) **The visor responds to [Transport Setup-Node requests](#Transport-Setup-Node)**
 
-* [11)](#Ping-Latency-Metric) **The visor responds to [pings](#Ping-Latency-Metric)** - needed for latency-based rewards
+* [11)](#Routability-Ping-Latency-Metric) **The visor can have routes established to it & responds to [pings](#Ping-Latency-Metric) over routes**
 
 * [12)](#Transport-Bandwidth-Logs) **The visor produces [transport bandwidth logs](#Transport-Bandwidth-Logs)** - needed for bandwidth-based rewards
 
@@ -103,22 +103,24 @@ skywire cli -v
 skywire visor -v
 ```
 
-NOTE: the uptime tracker and other services consider the visor's config version - not the actual binary version. It is expected that the visor's config is re-generated on every update in order to include any config changes which may have been introduced
+NOTE: the uptime tracker and other services consider the visor's config version - not the actual binary version.
+
+It is expected that the visor's config is re-generated on every update in order to include any config changes which may have been introduced
 
 The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
 
 
-**Reward eligibility after 08-01-2025 requires Skywire v1.3.30**
+**Reward eligibility after 02-01-2026 requires Skywire v1.3.33**
 
-Requirement established 07-15-2025
+Requirement established 01-04-2026
 
-Rewards Cutoff date for updating 08-01-2025
+Rewards Cutoff date for updating 02-01-2026
 
-**Reward eligibility after 10-03-2025 requires Skywire v1.3.31**
+**Reward eligibility after 02-25-2026 requires Skywire v1.3.34**
 
-Requirement established 10-03-2025
+Requirement established 02-10-2026
 
-Rewards Cutoff date for updating 10-18-2025
+Rewards Cutoff date for updating 02-25-2026
 
 ### Uptime
 
@@ -207,7 +209,7 @@ Flags:
 
 ### Architecture
 
-We are pleased to state as of November 1, 2024 Rewards are open to all architectures, with a reward pool added for non-ARM architectures (amd64 & i386)
+We are pleased to state as of November 1, 2024 Skywire Rewards are open to all architectures, with a reward pool added for non-ARM architectures (amd64 & i386)
 
 ### Deployment
 
@@ -219,7 +221,7 @@ cat /opt/skywire/skywire.json
 
 The service configuration will be automatically updated any time a config is generated or regenerated.
 
-For those visors in china or those running a dmsghttp-config, compare the dmsghttp-config of your current installation with the dmsghttp-config on the develop branch of [github.com/skycoin/skywire](https://github.com/skycoin/skywire)
+For those visors in China or those running a dmsghttp-config, compare the dmsghttp-config of your current installation with the dmsghttp-config on the develop branch of [github.com/skycoin/skywire](https://github.com/skycoin/skywire)
 
 The same data in a different format should be displayed in the [dmsg-discovery all_servers](https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers) page. Ensure that the dmsghttp-config.json in your installation has the same ip addresses and ports for the dmsg server keys.
 
@@ -359,13 +361,26 @@ Note: the system survey (node-info.json) will only exist if the reward address i
 
 If your visor is not generating such logging or errors are indicated, please reach out to us on telegram [@skywire](https://t.me/skywire) for assistance
 
-### Transportability
+### Transportable
 
 It is not required that a visor run any service, such as a vpn or socks5 proxy server, which permits direct access to the internet from your ip address.
 However, it is required that the visor is able to act as a hop along a route.
 A module is active at runtime which checks that transports may be established to that visor - the visor creates a dmsg transport to itself every few minutes to ensure transportability.
 If it's not possible to create a dmsg transport to the same visor after three attempts,the visor will shut down automatically.
-**It is expected that the visor will be restarted by a process control mechanism if the visor shuts down for any reason.** In the officially supported linux packages, systemd will restart the visor if it stops; regardless of the exit status of the process.
+**It is expected that the visor will be restarted by a process control mechanism if the visor shuts down for any reason.**
+In the officially supported linux packages, systemd will restart the visor if it stops; regardless of the exit status of the process.
+
+### Transports
+
+To be useful for routing traffic, a visor must have a minimum of 2 transports, observed at some point during which the uptime is being considered.
+
+Note that this requirement depends on at least 2 public visors being online on the network at all times, and that your visor is running with public autoconnect logic enabled (which is the default).
+
+in the instance that the visor does not have transports, it is recommended to manually create transports to the two public visors with the most transports, which can be observed with:
+
+```
+skywire cli pv -t
+```
 
 ### Transport Setup Node
 
@@ -374,9 +389,9 @@ However, there were intermittent issues with reliability of the results ; becaus
 
 Currently, the transport setup-nodes which are configured for the visor are included in the survey and verified as an eligibility requirement for rewards by the reward system.
 
-### Ping Latency metric
+### Routability Ping Latency metric
 
-Not yet implemented
+New on v1.3.34: the visor must be route-able (over existing transports) and respond to pings. There is no minimum latency requirement as the measurement is relative to where it is being measured from.
 
 ### Transport Bandwidth Logs
 
@@ -403,15 +418,17 @@ We respect your privacy.
 
 ### Verifying Other Requirements
 
-If the visor is not able to meet the [eligibility requirements](#rules--requirements) numbers 8 through 13, that is usually not the fault of the user - nor is it something the user is expected to troubleshoot on their own at this time. Please ask for assistance on telegram [@skywire](https://t.me/skywire)
+If the visor is not able to meet the [eligibility requirements](#rules--requirements) numbers 8 through 13, that is usually not the fault of the user
+nor is it something the user is expected to troubleshoot on their own at this time. Please ask for assistance on telegram [@skywire](https://t.me/skywire)
 
 ## Reward System Overview
 
-The skycoin reward address may be set for each visor using `skywire cli` or for all visors connected to a hypervisor from the hypervisor UI
+The skycoin reward address may be set for each visor.
 
 The skycoin reward address is in a text file contained in the "local" folder (local_path in the skywire config file) i.e `local/reward.txt`.
 
-The skycoin reward address is also included with the [system hardware survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire/README.md#survey) and served, along with transport logs, via dmsghttp.
+The skycoin reward address is also included with the [system hardware survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire/README.md#survey) and served,
+along with transport logs, via dmsghttp.
 
 The system survey ('local/node-info.json') is fetched hourly by the reward system via
 ```
