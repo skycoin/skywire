@@ -173,6 +173,23 @@ generate: ## Generate mocks and config README's
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./build ./local
 
+tpviz-wasm: ## Build transport visualizer WASM binary into pkg/tpviz/dist for embedding
+	GOOS=js GOARCH=wasm go build -o ./pkg/tpviz/dist/main.wasm ./pkg/tpviz/wasm
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./pkg/tpviz/dist/
+
+tpviz-wasm-standalone: ## Build transport visualizer WASM binary to build/tpviz (standalone)
+	mkdir -p ./build/tpviz
+	GOOS=js GOARCH=wasm go build -o ./build/tpviz/main.wasm ./pkg/tpviz/wasm
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/tpviz/
+	cp ./pkg/tpviz/dist/index.html ./build/tpviz/
+
+tpviz-wasm-tinygo: ## Build transport visualizer WASM binary with tinygo (smaller, ~750KB)
+	tinygo build -o ./pkg/tpviz/dist/main.wasm -target wasm -no-debug -opt=z -panic=trap ./pkg/tpviz/wasm
+	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./pkg/tpviz/dist/
+
+tpviz-ui: ## Build transport visualizer TypeScript UI into pkg/tpviz/legacy for embedding
+	cd ./pkg/tpviz/ui && npm install && npm run build
+
 clean-windows: ## Clean project: remove created binaries and apps
 	powershell -Command "If (Test-Path ./local) { Remove-Item -Path ./local -Force -Recurse }"
 	powershell -Command "If (Test-Path ./build) { Remove-Item -Path ./build -Force -Recurse }"
@@ -368,6 +385,13 @@ dep-github-release:
 	./ci_scripts/build-secp256k1-musl.sh armhf arm-linux-musleabihf ./musl-data/arm-linux-musleabihf-cross
 	./ci_scripts/build-secp256k1-musl.sh 386 i686-linux-musl ./musl-data/i686-linux-musl-cross
 	#./ci_scripts/build-secp256k1-musl.sh riscv64 riscv64-linux-musl ./musl-data/riscv64-linux-musl-cross
+	# Build libusb static libraries for each musl target (for hardware wallet support)
+	./ci_scripts/build-libusb-musl.sh amd64 x86_64-linux-musl ./musl-data/x86_64-linux-musl-cross
+	./ci_scripts/build-libusb-musl.sh arm64 aarch64-linux-musl ./musl-data/aarch64-linux-musl-cross
+	./ci_scripts/build-libusb-musl.sh arm arm-linux-musleabi ./musl-data/arm-linux-musleabi-cross
+	./ci_scripts/build-libusb-musl.sh armhf arm-linux-musleabihf ./musl-data/arm-linux-musleabihf-cross
+	#./ci_scripts/build-libusb-musl.sh 386 i686-linux-musl ./musl-data/i686-linux-musl-cross  # 386 uses stub, no libusb needed
+	./ci_scripts/build-libusb-musl.sh riscv64 riscv64-linux-musl ./musl-data/riscv64-linux-musl-cross
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
