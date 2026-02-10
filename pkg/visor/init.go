@@ -2424,10 +2424,6 @@ func getPublicIP(v *Visor, service string) (string, error) {
 	return pIP, nil
 }
 
-type ipAPI struct {
-	PublicIP string `json:"ip_address"`
-}
-
 // GeoData holds geolocation information from the geoIP service.
 type GeoData struct {
 	CountryCode string  `json:"country_code,omitempty"`
