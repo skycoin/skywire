@@ -123,6 +123,10 @@ type Visor struct {
 	survey     visorconfig.Survey
 	surveyLock *sync.RWMutex
 
+	// Cached geolocation data from geoIP service
+	geoData   *GeoData
+	geoDataMu sync.RWMutex
+
 	// UI server state (dynamically started/stopped via RPC)
 	uiServerMu      sync.Mutex
 	uiServer        *http.Server
