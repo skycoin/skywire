@@ -99,6 +99,9 @@
           <th>
             {{ 'nodes.ip' | translate }}
           </th>
+          <th>
+            {{ 'nodes.location' | translate }}
+          </th>
           <th *ngIf="showDmsgInfo" class="sortable-column" (click)="dataSorter.changeSortingOrder(dmsgServerSortData)">
             {{ 'nodes.dmsg-server' | translate }}
             <ng-container *ngIf="dataSorter.currentSortingColumn === dmsgServerSortData">
@@ -137,6 +140,10 @@
             <span *ngIf="node.publicIp"> / </span>
             <span *ngIf="node.publicIp" [matTooltip]="'nodes.public-ip' | translate">{{ node.publicIp }}</span>
             <span *ngIf="!node.ip && !node.publicIp">-</span>
+          </td>
+          <td>
+            <span *ngIf="node.countryCode" [matTooltip]="node.cityName ? (node.cityName + (node.regionName ? ', ' + node.regionName : '')) : ''">{{ node.countryCode }}</span>
+            <span *ngIf="!node.countryCode">-</span>
           </td>
           <td *ngIf="showDmsgInfo">
             <app-labeled-element-text
@@ -237,6 +244,10 @@
                 <span *ngIf="node.ip">{{ node.ip }}</span>
                 <span *ngIf="node.ip && node.publicIp"> / </span>
                 <span *ngIf="node.publicIp">{{ node.publicIp }}</span>
+              </div>
+              <div class="list-row" *ngIf="node.countryCode">
+                <span class="title">{{ 'nodes.location' | translate }}</span>:
+                {{ node.countryCode }}<span *ngIf="node.cityName">, {{ node.cityName }}</span><span *ngIf="node.regionName">, {{ node.regionName }}</span>
               </div>
               <div class="list-row long-content" *ngIf="showDmsgInfo">
                 <span class="title">{{ 'nodes.dmsg-server' | translate }}</span>:

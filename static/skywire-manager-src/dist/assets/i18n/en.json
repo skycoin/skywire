@@ -222,6 +222,7 @@
     "ip": "IP",
     "lan-ip": "LAN IP",
     "public-ip": "Public IP",
+    "location": "Location",
     "dmsg-server": "DMSG server",
     "ping": "Ping",
     "hypervisor-info": "This visor is the current Hypervisor.",

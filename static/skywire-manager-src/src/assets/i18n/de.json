@@ -141,6 +141,7 @@
     "ip": "IP",
     "lan-ip": "LAN-IP",
     "public-ip": "Öffentliche IP",
+    "location": "Standort",
     "dmsg-server": "DMSG Server",
     "ping": "Ping",
     "hypervisor-info": "Dieser Visor ist der aktuelle Hypervisor.",

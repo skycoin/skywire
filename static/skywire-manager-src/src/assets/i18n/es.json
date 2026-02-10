@@ -226,6 +226,7 @@
     "ip": "IP",
     "lan-ip": "IP Local",
     "public-ip": "IP Pública",
+    "location": "Ubicación",
     "dmsg-server": "Servidor DMSG",
     "ping": "Ping",
     "hypervisor-info": "Este visor es el Hypervisor actual.",

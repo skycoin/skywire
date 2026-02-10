@@ -134,6 +134,7 @@
     "ip": "IP",
     "lan-ip": "IP Local",
     "public-ip": "IP Público",
+    "location": "Localização",
     "dmsg-server": "Servidor DMSG",
     "ping": "Ping",
     "hypervisor-info": "Este visor é o hipervisor atual.",
