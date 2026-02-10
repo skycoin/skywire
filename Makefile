@@ -344,10 +344,17 @@ github-prepare-release:
 github-release: github-prepare-release
 	go run github.com/goreleaser/goreleaser/v2@main --clean --config .goreleaser-linux.yml --release-notes releaseChangelog.md
 
-github-release-darwin:
-	go run github.com/goreleaser/goreleaser/v2@main --clean --config .goreleaser-darwin.yml --skip=publish
+github-release-darwin-amd64:
+	go run github.com/goreleaser/goreleaser/v2@main --clean --config .goreleaser-darwin-amd64.yml --skip=publish
 	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-amd64.tar.gz
+	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
+	cat ./dist/checksums.txt >> ./checksums.txt
+	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
+
+github-release-darwin-arm64:
+	go run github.com/goreleaser/goreleaser/v2@main --clean --config .goreleaser-darwin-arm64.yml --skip=publish
+	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-arm64.tar.gz
 	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
 	cat ./dist/checksums.txt >> ./checksums.txt
