@@ -69,10 +69,6 @@ jobs:
     needs: [darwin-amd64, darwin-arm64]
     runs-on: macos-latest
     steps:
-      - uses: actions/setup-go@v5
-        with:
-          go-version: 1.25.6
-          cache: false
       - uses: actions/checkout@v4
       - name: Install Requirements
         run: |
