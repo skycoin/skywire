@@ -13,7 +13,7 @@
     "vis-network": "^9.1.9"
   },
   "devDependencies": {
-    "esbuild": "^0.19.12",
+    "esbuild": "^0.25.0",
     "typescript": "~5.0.4"
   }
 }
