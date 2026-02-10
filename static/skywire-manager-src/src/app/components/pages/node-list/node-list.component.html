@@ -96,6 +96,9 @@
             {{ 'nodes.key' | translate }}
             <mat-icon *ngIf="dataSorter.currentSortingColumn === keySortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           </th>
+          <th>
+            {{ 'nodes.ip' | translate }}
+          </th>
           <th *ngIf="showDmsgInfo" class="sortable-column" (click)="dataSorter.changeSortingOrder(dmsgServerSortData)">
             {{ 'nodes.dmsg-server' | translate }}
             <ng-container *ngIf="dataSorter.currentSortingColumn === dmsgServerSortData">
@@ -128,6 +131,12 @@
           </td>
           <td>
             {{ node.localPk }}
+          </td>
+          <td>
+            <span *ngIf="node.ip" [matTooltip]="'nodes.lan-ip' | translate">{{ node.ip }}</span>
+            <span *ngIf="node.publicIp"> / </span>
+            <span *ngIf="node.publicIp" [matTooltip]="'nodes.public-ip' | translate">{{ node.publicIp }}</span>
+            <span *ngIf="!node.ip && !node.publicIp">-</span>
           </td>
           <td *ngIf="showDmsgInfo">
             <app-labeled-element-text
@@ -222,6 +231,12 @@
               <div class="list-row long-content">
                 <span class="title">{{ 'nodes.key' | translate }}</span>:
                 {{ node.localPk }}
+              </div>
+              <div class="list-row" *ngIf="node.ip || node.publicIp">
+                <span class="title">{{ 'nodes.ip' | translate }}</span>:
+                <span *ngIf="node.ip">{{ node.ip }}</span>
+                <span *ngIf="node.ip && node.publicIp"> / </span>
+                <span *ngIf="node.publicIp">{{ node.publicIp }}</span>
               </div>
               <div class="list-row long-content" *ngIf="showDmsgInfo">
                 <span class="title">{{ 'nodes.dmsg-server' | translate }}</span>:

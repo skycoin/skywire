@@ -70,6 +70,16 @@ export class NodeService {
             node.ip = null;
           }
 
+          // Public IP.
+          if (response.overview && response.overview.public_ip && (response.overview.public_ip as string).trim()) {
+            node.publicIp = response.overview.public_ip;
+          } else {
+            node.publicIp = null;
+          }
+
+          // Symmetric NAT status.
+          node.isSymmeticNat = response.overview.is_symmetic_nat;
+
           // Label.
           const labelInfo = this.storageService.getLabelInfo(node.localPk);
           node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
