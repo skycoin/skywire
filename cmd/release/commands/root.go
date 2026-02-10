@@ -11,12 +11,20 @@ import (
 	"path/filepath"
 	"strings"
 
+	dmsg "github.com/skycoin/dmsg/cmd/dmsg/commands"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-
 	skyhw "github.com/skycoin/skycoin/cmd/hardware-wallet/commands"
+	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
+	snc "github.com/skycoin/skywire/cmd/apps/skynet-client/commands"
+	sn "github.com/skycoin/skywire/cmd/apps/skynet/commands"
+	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
+	ss "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
+	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
+	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
 	cli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
+	services "github.com/skycoin/skywire/cmd/skywire-services/commands"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	visor "github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -26,15 +34,48 @@ var (
 )
 
 func init() {
+	// Apps subcommand
+	appsCmd.AddCommand(
+		vpns.RootCmd,
+		vpnc.RootCmd,
+		ssc.RootCmd,
+		ss.RootCmd,
+		sc.RootCmd,
+		sn.RootCmd,
+		snc.RootCmd,
+	)
+
+	// Skycoin subcommand with hardware wallet
+	skycoinCmd.AddCommand(
+		skyhw.RootCmd,
+	)
+
+	// Root command
 	RootCmd.AddCommand(
 		visor.RootCmd,
 		cli.RootCmd,
-		skyhw.RootCmd,
+		services.RootCmd,
+		dmsg.RootCmd,
+		appsCmd,
+		skycoinCmd,
 	)
+
+	// Set command names
 	visor.RootCmd.Use = "visor"
 	visor.RootCmd.Short = "skywire visor"
 	cli.RootCmd.Use = "cli"
 	cli.RootCmd.Short = "skywire command line interface"
+	services.RootCmd.Use = "svc"
+	services.RootCmd.Short = "skywire services"
+	dmsg.RootCmd.Use = "dmsg"
+	dmsg.RootCmd.Short = "dmsg services & utilities"
+	vpns.RootCmd.Use = "vpn-server"
+	vpnc.RootCmd.Use = "vpn-client"
+	ssc.RootCmd.Use = "skysocks-client"
+	ss.RootCmd.Use = "skysocks"
+	sc.RootCmd.Use = "skychat"
+	sn.RootCmd.Use = "skynet-srv"
+	snc.RootCmd.Use = "skynet-client"
 	skyhw.RootCmd.Use = "skyhw"
 	skyhw.RootCmd.Short = "skycoin hardware wallet utilities"
 
@@ -46,16 +87,16 @@ func init() {
 	}
 }
 
-// RootCmd contains visor, cli, and hardware wallet utilities
+// RootCmd contains visor, cli, services, dmsg, apps, and skycoin utilities
 var RootCmd = &cobra.Command{
 	Use: func() string {
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
 	Long: func() (ret string) {
 		ret = `
-	┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
-	└─┐├┴┐└┬┘││││├┬┘├┤
-	└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘`
+    ┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
+    └─┐├┴┐└┬┘││││├┬┘├┤
+    └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘`
 		if buildinfo.DBIVersion() != "" {
 			ret += fmt.Sprintf("\n%v", buildinfo.DBIVersion())
 		} else {
@@ -84,6 +125,16 @@ var RootCmd = &cobra.Command{
 			log.Printf("Failed to print help: %v", err)
 		}
 	},
+}
+
+var appsCmd = &cobra.Command{
+	Use:   "app",
+	Short: "skywire native applications",
+}
+
+var skycoinCmd = &cobra.Command{
+	Use:   "skycoin",
+	Short: "skycoin utilities",
 }
 
 // Execute executes root CLI command.
