@@ -80,7 +80,7 @@ jobs:
         run: make mac-installer-release
 
   windows:
-    needs: darwin-installer
+    needs: linux
     runs-on: windows-latest
     steps:
       - uses: actions/setup-go@v5
