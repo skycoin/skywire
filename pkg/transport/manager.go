@@ -294,9 +294,17 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 	if !ok {
 		tm.Logger.Debugln("No TP found, creating new one")
 
+		// Use no-op discovery client for self-transports
+		// Self-transports don't need TPD registration and would cause deadlock
+		dc := tm.Conf.DiscoveryClient
+		if transport.RemotePK() == client.PK() {
+			dc = NewNoopDiscoveryClient()
+			tm.Logger.Debug("Using no-op discovery client for self-transport (accept)")
+		}
+
 		mTp = NewManagedTransport(ManagedTransportConfig{
 			client:         client,
-			DC:             tm.Conf.DiscoveryClient,
+			DC:             dc,
 			LS:             tm.Conf.LogStore,
 			RemotePK:       transport.RemotePK(),
 			TransportLabel: LabelUser,

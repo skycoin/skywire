@@ -33,7 +33,6 @@ var (
 	serverPKStr string
 	localPKStr  string
 	localSKStr  string
-	passcode    string
 	killswitch  bool
 	dnsAddr     string
 	appPort     uint16
@@ -44,7 +43,6 @@ func init() {
 	RootCmd.Flags().StringVar(&serverPKStr, "srv", "", "PubKey of the server to connect to")
 	RootCmd.Flags().StringVar(&localPKStr, "pk", "", "local pubkey")
 	RootCmd.Flags().StringVar(&localSKStr, "sk", "", "local seckey")
-	RootCmd.Flags().StringVar(&passcode, "passcode", "", "passcode to authenticate connection")
 	RootCmd.Flags().BoolVar(&killswitch, "killswitch", false, "If set, the Internet won't be restored during reconnection attempts")
 	RootCmd.Flags().StringVar(&dnsAddr, "dns", "", "address of DNS want set to tun")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
@@ -76,7 +74,6 @@ func RunVPNClient(ctx context.Context, args []string) error {
 		fs.StringVar(&serverPKStr, "srv", "", "PubKey of server")
 		fs.StringVar(&localPKStr, "pk", "", "local pubkey")
 		fs.StringVar(&localSKStr, "sk", "", "local seckey")
-		fs.StringVar(&passcode, "passcode", "", "passcode")
 		fs.BoolVar(&killswitch, "killswitch", false, "killswitch")
 		fs.StringVar(&dnsAddr, "dns", "", "DNS address")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
@@ -186,7 +183,6 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	logger.Infof("Connecting to VPN server %s", serverPK.String())
 
 	vpnClientCfg := vpn.ClientConfig{
-		Passcode:   passcode,
 		Killswitch: killswitch,
 		ServerPK:   serverPK,
 		DNSAddr:    dnsAddress,
