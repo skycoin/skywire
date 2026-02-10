@@ -676,7 +676,6 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 
 	cHello := ClientHello{
 		UnavailablePrivateIPs: unavailableIPs,
-		Passcode:              c.cfg.Passcode,
 	}
 
 	const handshakeTimeout = 5 * time.Second

@@ -39,6 +39,7 @@ const (
 
 var (
 	addr            string
+	udpAddr         string
 	metricsAddr     string
 	redisURL        string
 	redisPoolSize   int
@@ -56,6 +57,7 @@ var (
 
 func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9093", "address to bind to")
+	RootCmd.Flags().StringVar(&udpAddr, "udp-addr", ":30178", "UDP address to bind to for SUDPH")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
 	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store")
@@ -192,7 +194,7 @@ skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 a
 		enableMetrics := metricsAddr != ""
 		arAPI := api.New(logger, transportStore, nonceStore, enableMetrics, m, dmsgAddr)
 
-		udpListener, err := kcp.Listen(addr)
+		udpListener, err := kcp.Listen(udpAddr)
 		if err != nil {
 			log.Fatal("Failed to open UDP listener: ", err)
 		}
@@ -200,7 +202,7 @@ skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 a
 		go arAPI.ListenUDP(udpListener)
 
 		if logger != nil {
-			logger.Infof("Listening on %s", addr)
+			logger.Infof("Listening on %s (HTTP), %s (UDP)", addr, udpAddr)
 		}
 
 		go func() {
@@ -239,7 +241,7 @@ skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 a
 			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, logger)
 
 			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, sk, arAPI, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, logger); err != nil {
+				if err := dmsghttp.ListenAndServe(ctx, sk, arAPI, dClient, dmsgPort, dmsgDC, logger); err != nil {
 					logger.Errorf("dmsghttp.ListenAndServe: %v", err)
 					cancel()
 				}
