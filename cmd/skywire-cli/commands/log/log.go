@@ -138,17 +138,20 @@ var logCmd = &cobra.Command{
 			//only attempt to fetch from online visors
 			if v.Online {
 				if fetchFile == "" {
-					visorVersion, err := version.NewVersion(v.Version)
 					if v.Version == "" {
 						log.Warnf("The version for visor %s is blank", v.PubKey)
 						continue
 					}
 					includeV := contains(incVerList, v.Version)
-					if err != nil && !includeV {
-						log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
-						continue //nolint:errcheck
-					}
-					if !allVisors && visorVersion.LessThan(minimumVersion) && !includeV {
+					visorVersion, err := version.NewVersion(v.Version)
+					if err != nil {
+						if !includeV {
+							log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
+							continue
+						}
+						// Version in include list but can't be parsed - skip version comparison
+						log.Debugf("Including visor %s with unparseable version %s", v.PubKey, v.Version)
+					} else if !allVisors && visorVersion.LessThan(minimumVersion) && !includeV {
 						log.Warnf("The version %s for visor %s does not satisfy our minimum version condition", v.Version, v.PubKey)
 						continue
 					}
