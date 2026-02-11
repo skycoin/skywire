@@ -156,7 +156,7 @@ var logCmd = &cobra.Command{
 						continue
 					}
 					wg.Add(1)
-					go func(key string, wg *sync.WaitGroup) {
+					go func(key string, wg *sync.WaitGroup, vver *version.Version) {
 						httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
 						defer httpC.CloseIdleConnections()
 						defer wg.Done()
@@ -181,7 +181,9 @@ var logCmd = &cobra.Command{
 							}
 						}
 						if !logOnly {
-							if visorVersion.LessThan(fver) {
+							// vver may be nil for unparseable versions included via --include-versions flag
+							// In that case, skip version-based API selection and use the current API
+							if vver != nil && vver.LessThan(fver) {
 								download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
 							} else {
 								download(ctx, log, httpC, "node-info", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
@@ -193,7 +195,7 @@ var logCmd = &cobra.Command{
 								download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize) //nolint:errcheck,gosec
 							}
 						}
-					}(v.PubKey, &wg)
+					}(v.PubKey, &wg, visorVersion)
 					batchSize--
 					if batchSize == 0 {
 						time.Sleep(15 * time.Second)
