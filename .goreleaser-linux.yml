@@ -13,7 +13,6 @@ before:
   hooks:
     - go mod tidy
     - go mod vendor
-    - sed -i '/go conn.handleCall(msg)/c\conn.handleCall(msg)' ./vendor/github.com/godbus/dbus/v5/conn.go
 
 builds:
   - id: skywire-amd64
