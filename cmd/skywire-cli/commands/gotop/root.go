@@ -168,7 +168,9 @@ func run() error {
 			http.HandleFunc("/metrics", func(w http.ResponseWriter, req *http.Request) {
 				metrics.WritePrometheus(w, true)
 			})
-			_ = http.ListenAndServe(conf.ExportPort, nil) //nolint:gosec
+			if err := http.ListenAndServe(conf.ExportPort, nil); err != nil { //nolint:gosec
+				stderrLogger.Printf("metrics server error: %v", err)
+			}
 		}()
 	}
 
