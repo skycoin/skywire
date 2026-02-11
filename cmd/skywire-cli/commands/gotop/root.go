@@ -35,20 +35,20 @@ const (
 )
 
 var (
-	layoutFlag     string
-	colorFlag      string
-	rateFlag       string
-	fahrenheit     bool
-	percpu         bool
-	averagecpu     bool
-	statusbar      bool
-	exportPort     string
-	mbps           bool
-	conf           gotop.Config
-	help           *w.HelpMenu
-	bar            *w.StatusBar
-	stderrLogger   = log.New(os.Stderr, "", 0)
-	tr             lingo.Translations
+	layoutFlag   string
+	colorFlag    string
+	rateFlag     string
+	fahrenheit   bool
+	percpu       bool
+	averagecpu   bool
+	statusbar    bool
+	exportPort   string
+	mbps         bool
+	conf         gotop.Config
+	help         *w.HelpMenu
+	bar          *w.StatusBar
+	stderrLogger = log.New(os.Stderr, "", 0)
+	tr           lingo.Translations
 )
 
 func init() {
@@ -128,10 +128,7 @@ func run() error {
 	}
 
 	// Get layout
-	lstream, err := getLayout(conf)
-	if err != nil {
-		return err
-	}
+	lstream := getLayout(conf)
 	ly := layout.ParseLayout(lstream)
 
 	// Initialize UI
@@ -171,7 +168,7 @@ func run() error {
 			http.HandleFunc("/metrics", func(w http.ResponseWriter, req *http.Request) {
 				metrics.WritePrometheus(w, true)
 			})
-			http.ListenAndServe(conf.ExportPort, nil) //nolint:errcheck
+			_ = http.ListenAndServe(conf.ExportPort, nil) //nolint:gosec
 		}()
 	}
 
@@ -185,20 +182,20 @@ func setDefaultTermuiColors(c gotop.Config) {
 	ui.Theme.Block.Border = ui.NewStyle(ui.Color(c.Colorscheme.BorderLine), ui.Color(c.Colorscheme.Bg))
 }
 
-func getLayout(conf gotop.Config) (io.Reader, error) {
+func getLayout(conf gotop.Config) io.Reader {
 	switch conf.Layout {
 	case "default":
-		return strings.NewReader(defaultUI), nil
+		return strings.NewReader(defaultUI)
 	case "minimal":
-		return strings.NewReader(minimalUI), nil
+		return strings.NewReader(minimalUI)
 	case "battery":
-		return strings.NewReader(batteryUI), nil
+		return strings.NewReader(batteryUI)
 	case "procs":
-		return strings.NewReader(procsUI), nil
+		return strings.NewReader(procsUI)
 	case "kitchensink":
-		return strings.NewReader(kitchensink), nil
+		return strings.NewReader(kitchensink)
 	default:
-		return strings.NewReader(defaultUI), nil
+		return strings.NewReader(defaultUI)
 	}
 }
 
