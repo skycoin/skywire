@@ -16,6 +16,7 @@ import (
 	clicompletion "github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
 	clidmsgpty "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgpty"
+	cligotop "github.com/skycoin/skywire/cmd/skywire-cli/commands/gotop"
 	clilog "github.com/skycoin/skywire/cmd/skywire-cli/commands/log"
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
 	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/proxy"
@@ -41,6 +42,7 @@ func init() {
 	RootCmd.AddCommand(
 		cliconfig.RootCmd,
 		clidmsgpty.RootCmd,
+		cligotop.RootCmd,
 		clivisor.RootCmd,
 		clivpn.RootCmd,
 		cliut.RootCmd,
