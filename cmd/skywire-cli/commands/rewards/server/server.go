@@ -202,6 +202,7 @@ func server(e error) {
 		r1.GET("/api/services", gin.WrapH(tpvizHandler))
 		r1.GET("/api/health", gin.WrapH(tpvizHandler))
 		r1.GET("/api/ip-groups", gin.WrapH(tpvizHandler))
+		r1.GET("/bundle.js", gin.WrapH(tpvizHandler))
 
 		r1.GET("/transport-graph", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")
