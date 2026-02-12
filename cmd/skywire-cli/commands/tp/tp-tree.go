@@ -21,8 +21,8 @@ import (
 
 // transportEntry represents a transport from TPD
 type transportEntry struct {
-	ID    string   `json:"t_id"`
-	Type  string   `json:"type"`
+	ID    string    `json:"t_id"`
+	Type  string    `json:"type"`
 	Edges [2]string `json:"edges"`
 }
 
@@ -144,9 +144,9 @@ var treeCmd = &cobra.Command{
 		}
 
 		// Fetch and parse uptime data
-		onlineSet := make(map[string]bool)    // pk -> true if online
-		offlineSet := make(map[string]bool)   // pk -> true if offline (in UT but not online)
-		versionMap := make(map[string]string) // pk -> version
+		onlineSet := make(map[string]bool)          // pk -> true if online
+		offlineSet := make(map[string]bool)         // pk -> true if offline (in UT but not online)
+		versionMap := make(map[string]string)       // pk -> version
 		versionFilteredSet := make(map[string]bool) // pk -> true if passes version filter
 
 		if !noFilterOnline || filterByVersion {
@@ -167,12 +167,28 @@ var treeCmd = &cobra.Command{
 				// Check version filter
 				if filterByVersion && ut.Version != "" {
 					vStr := strings.TrimPrefix(ut.Version, "v")
-					// Handle dirty versions (e.g., "1.3.34+dirty" or "1.3.34-dirty")
+					// Handle various dirty version formats:
+					// "1.3.34 dirty", "1.3.34+dirty", "1.3.34-dirty"
+					// "1.3.34-0.20260207214945-9c1313404321 dirty" (pseudo-versions)
+					// First split by space to remove " dirty" suffix
+					vStr = strings.Fields(vStr)[0]
+					// Remove +suffix
 					vStr = strings.Split(vStr, "+")[0]
-					vStr = strings.Split(vStr, "-")[0]
+					// For pseudo-versions like "1.3.34-0.20260207...", extract base version
+					// Try to parse, if fails try extracting major.minor.patch
 					if v, err := semver.Parse(vStr); err == nil {
 						if v.GTE(minSemver) {
 							versionFilteredSet[ut.PK] = true
+						}
+					} else {
+						// Try extracting just major.minor.patch from beginning
+						parts := strings.SplitN(vStr, "-", 2)
+						if len(parts) > 0 {
+							if v, err := semver.Parse(parts[0]); err == nil {
+								if v.GTE(minSemver) {
+									versionFilteredSet[ut.PK] = true
+								}
+							}
 						}
 					}
 				}
@@ -372,13 +388,13 @@ var treeCmd = &cobra.Command{
 		// Build and render trees
 		usedKeys := make(map[string]bool)
 
-		var buildTree func(rootPK string)
+		var buildTree func(rootPK string) //nolint:staticcheck
 		buildTree = func(rootPK string) {
 			leveledList := pterm.LeveledList{}
 			leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: formatNode(rootPK)})
 			usedKeys[rootPK] = true
 
-			var traverse func(pk string, level int)
+			var traverse func(pk string, level int) //nolint:staticcheck
 			traverse = func(pk string, level int) {
 				neighbors := adjacency[pk]
 				for _, n := range neighbors {
@@ -415,7 +431,7 @@ var treeCmd = &cobra.Command{
 			traverse(rootPK, 1)
 
 			if len(leveledList) > 1 {
-				pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint:errcheck
+				pterm.DefaultTree.WithRoot(putils.TreeFromLeveledList(leveledList)).Render() //nolint:errcheck,gosec
 			}
 		}
 
@@ -449,8 +465,10 @@ var treeCmd = &cobra.Command{
 					for _, tp := range transports {
 						if (tp.Edges[0] == rootPK && tp.Edges[1] == lastPK) ||
 							(tp.Edges[0] == lastPK && tp.Edges[1] == rootPK) {
-							b, _ := json.MarshalIndent(tp, "", "  ")
-							fmt.Println(string(pretty.Color(b, nil)))
+							b, err := json.MarshalIndent(tp, "", "  ")
+							if err == nil {
+								fmt.Println(string(pretty.Color(b, nil)))
+							}
 						}
 					}
 					return

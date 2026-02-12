@@ -18,7 +18,6 @@ import (
 )
 
 var (
-	sortedEdgeKeys   []string
 	tpdURL           string
 	rootNode         string
 	lastNode         string
