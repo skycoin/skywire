@@ -863,6 +863,14 @@ func (r *RPC) Ping(conf PingConfig, out *[]time.Duration) (err error) {
 	return err
 }
 
+// PingOnce performs a single ping on the connected route.
+func (r *RPC) PingOnce(conf PingConfig, out *time.Duration) (err error) {
+	defer rpcutil.LogCall(r.log, "PingOnce", conf)(out, &err)
+
+	*out, err = r.visor.PingOnce(conf)
+	return err
+}
+
 // StopPing stops the ping conn.
 func (r *RPC) StopPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopPing", pk)(nil, &err)
@@ -882,6 +890,14 @@ func (r *RPC) DmsgPing(conf PingConfig, out *[]time.Duration) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgPing", conf)(out, &err)
 
 	*out, err = r.visor.DmsgPing(conf)
+	return err
+}
+
+// DmsgPingOnce performs a single ping over dmsg connection.
+func (r *RPC) DmsgPingOnce(conf PingConfig, out *time.Duration) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgPingOnce", conf)(out, &err)
+
+	*out, err = r.visor.DmsgPingOnce(conf)
 	return err
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/ioutil"
 
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/deadline"
@@ -84,6 +85,10 @@ type RouteGroup struct {
 	handshakeProcessed     chan struct{}
 	handshakeProcessedOnce sync.Once
 	encrypt                bool
+
+	// forwardHops stores the complete route path as originally calculated.
+	// This is the full multi-hop route, not just local transports.
+	forwardHops []routing.Hop
 
 	// 'tps' is transports used for writing/forward rules.
 	// It should have the same number of elements as 'fwd'
@@ -425,6 +430,86 @@ func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
 	}
 
 	return tp, nil
+}
+
+// RouteHops returns the list of visor public keys that form the route path.
+// The first element is the first hop from the source, and the last element
+// is the destination visor.
+func (rg *RouteGroup) RouteHops() []cipher.PubKey {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	hops := make([]cipher.PubKey, 0, len(rg.tps)+1)
+	for _, tp := range rg.tps {
+		if tp != nil {
+			hops = append(hops, tp.Remote())
+		}
+	}
+	// Add destination from the route descriptor
+	hops = append(hops, rg.desc.DstPK())
+	return hops
+}
+
+// RouteHopInfo contains detailed information about a single hop in a route.
+type RouteHopInfo struct {
+	TpID   string `json:"tp_id"`   // Transport ID
+	From   string `json:"from"`    // Source public key
+	To     string `json:"to"`      // Destination public key
+	TpType string `json:"tp_type"` // Transport type (stcpr, sudph, dmsg)
+}
+
+// SetForwardHops sets the complete forward route hops.
+// This should be called after route setup to store the full route path.
+func (rg *RouteGroup) SetForwardHops(hops []routing.Hop) {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	rg.forwardHops = hops
+}
+
+// RouteHopDetails returns detailed information about each hop in the route,
+// including transport IDs and types.
+func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	// Use stored forward hops if available (preferred - has complete route)
+	if len(rg.forwardHops) > 0 {
+		hops := make([]RouteHopInfo, len(rg.forwardHops))
+		for i, hop := range rg.forwardHops {
+			// Derive transport type from the transport ID
+			// The ID is deterministically generated from (keyA, keyB, type)
+			tpType := transport.TypeFromTransportID(hop.TpID, hop.From, hop.To)
+			hops[i] = RouteHopInfo{
+				TpID:   hop.TpID.String(),
+				From:   hop.From.String(),
+				To:     hop.To.String(),
+				TpType: string(tpType),
+			}
+		}
+		return hops
+	}
+
+	// Fallback: reconstruct from local transports (may be incomplete for multi-hop)
+	srcPK := rg.desc.SrcPK()
+	hops := make([]RouteHopInfo, 0, len(rg.tps))
+	for i, tp := range rg.tps {
+		if tp == nil {
+			continue
+		}
+		var fromPK cipher.PubKey
+		if i == 0 {
+			fromPK = srcPK
+		} else if i > 0 && rg.tps[i-1] != nil {
+			fromPK = rg.tps[i-1].Remote()
+		}
+		hops = append(hops, RouteHopInfo{
+			TpID:   tp.Entry.ID.String(),
+			From:   fromPK.String(),
+			To:     tp.Remote().String(),
+			TpType: string(tp.Type()),
+		})
+	}
+	return hops
 }
 
 func (rg *RouteGroup) startOffServiceLoops() {

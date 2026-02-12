@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // SkywireConn is a connection wrapper for skynet.
@@ -56,6 +58,21 @@ func (c *SkywireConn) SetError(err error) {
 // GetError gets the close error.
 func (c *SkywireConn) GetError() error {
 	return c.nrg.GetError()
+}
+
+// RouteHops returns the list of visor public keys that form the route path.
+func (c *SkywireConn) RouteHops() []cipher.PubKey {
+	return c.nrg.RouteHops()
+}
+
+// RouteHopDetails returns detailed information about each hop in the route.
+func (c *SkywireConn) RouteHopDetails() []router.RouteHopInfo {
+	return c.nrg.RouteHopDetails()
+}
+
+// SetForwardHops sets the complete forward route hops.
+func (c *SkywireConn) SetForwardHops(hops []routing.Hop) {
+	c.nrg.SetForwardHops(hops)
 }
 
 // Close closes connection.

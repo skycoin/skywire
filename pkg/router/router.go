@@ -352,6 +352,9 @@ func (r *router) DialRoutes(
 			return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 		}
 
+		// Store the complete forward route hops for later retrieval
+		nrg.SetForwardHops(forwardPath)
+
 		nrg.rg.startOffServiceLoops()
 
 		r.logger.Debugf("Created new routes to %s on port %d", rPK, lPort)
@@ -442,6 +445,9 @@ func (r *router) PingRoute(
 			}
 			return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 		}
+
+		// Store the complete forward route hops for later retrieval
+		nrg.SetForwardHops(forwardPath)
 
 		nrg.rg.startOffServiceLoops()
 
@@ -1142,8 +1148,12 @@ func (r *router) fetchBestRoutes(ctx context.Context, src, dst cipher.PubKey, op
 	r.forceLocalRoutesMu.Unlock()
 
 	if forceLocal {
-		r.logger.Info("Force local routes enabled, using local route calculation")
-		return r.calculateLocalRoutes(ctx, src, dst)
+		r.logger.Info("Calculating route locally (--local-route enabled)")
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst)
+		if localErr == nil {
+			r.logger.Infof("Local route calculated: Forward=%v, Reverse=%v", localFwd, localRev)
+		}
+		return localFwd, localRev, localErr
 	}
 
 	retries := opts.Retries
@@ -1230,7 +1240,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 	}
 
 	isSelfPing := src == dst
-	r.logger.Debugf("Calculating local routes from %s to %s (self-ping=%v)", src, dst, isSelfPing)
+	r.logger.Debugf("Calculating route locally from %s to %s (self-ping=%v)", src, dst, isSelfPing)
 
 	// Collect local transports
 	type localTp struct {

@@ -4,9 +4,11 @@ package visor
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"math/big"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -288,7 +290,16 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 				logger := a.log.WithField("pk", pk).WithField("type", string(netType))
 				if err = a.tryEstablishTransport(ctx, pk, netType, logger); err != nil {
-					logger.WithError(err).Warnln("Failed to add transport to visor")
+					// Check if this is due to context cancellation (shutdown)
+					// These should be DEBUG level, not WARN
+					if errors.Is(err, context.Canceled) ||
+						errors.Is(err, context.DeadlineExceeded) ||
+						strings.Contains(err.Error(), "operation was canceled") ||
+						strings.Contains(err.Error(), "context canceled") {
+						logger.WithError(err).Debugln("Transport creation canceled (shutdown)")
+					} else {
+						logger.WithError(err).Warnln("Failed to add transport to visor")
+					}
 					continue
 				}
 

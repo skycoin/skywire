@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -130,7 +131,17 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 	for {
 		p, err := mt.readPacket()
 		if err != nil {
-			log.WithError(err).Warn("Failed to read packet, closing transport")
+			// Check if this is an expected shutdown error (closed pipe/connection)
+			// These occur during normal shutdown and should not be logged as warnings
+			errStr := err.Error()
+			if strings.Contains(errStr, "closed pipe") ||
+				strings.Contains(errStr, "closed network connection") ||
+				errors.Is(err, io.EOF) ||
+				errors.Is(err, net.ErrClosed) {
+				log.WithError(err).Debug("Transport closed, stopping read loop")
+			} else {
+				log.WithError(err).Warn("Failed to read packet, closing transport")
+			}
 			mt.close()
 			return
 		}

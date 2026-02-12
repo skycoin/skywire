@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -142,9 +143,11 @@ type API interface {
 	ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error)
 	DialPing(config PingConfig) error
 	Ping(config PingConfig) ([]time.Duration, error)
+	PingOnce(config PingConfig) (time.Duration, error)
 	StopPing(pk cipher.PubKey) error
 	DialDmsgPing(pk cipher.PubKey) error
 	DmsgPing(conf PingConfig) ([]time.Duration, error)
+	DmsgPingOnce(conf PingConfig) (time.Duration, error)
 	StopDmsgPing(pk cipher.PubKey) error
 
 	TestVisor(config PingConfig) ([]TestResult, error)
@@ -1391,9 +1394,19 @@ func (v *Visor) DialPing(conf PingConfig) error {
 		return err
 	}
 
+	// Extract route hops from the connection if available
+	var hops []cipher.PubKey
+	var hopInfos []router.RouteHopInfo
+	if skyConn, ok := conn.(*appnet.SkywireConn); ok {
+		hops = skyConn.RouteHops()
+		hopInfos = skyConn.RouteHopDetails()
+	}
+
 	v.pingConnMx.Lock()
 	v.pingConns[conf.PK] = ping{
-		conn: conn,
+		conn:     conn,
+		hops:     hops,
+		hopInfos: hopInfos,
 	}
 	v.pingConnMx.Unlock()
 	return nil
@@ -1467,6 +1480,68 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 	return latencies, nil
 }
 
+// PingOnce implements API.
+// Performs a single ping and returns the round-trip time.
+func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
+
+	pingEntry, ok := v.pingConns[conf.PK]
+	if !ok {
+		return 0, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
+	}
+
+	data := make([]byte, conf.PcktSize*1024)
+	conn := pingEntry.conn
+	msg := PingMsg{
+		Timestamp: time.Now(),
+		PingPk:    conf.PK,
+		Data:      data,
+	}
+	ping, err := json.Marshal(msg)
+	if err != nil {
+		return 0, err
+	}
+	pingSizeMsg := PingSizeMsg{
+		Size: len(ping),
+	}
+	size, err := json.Marshal(pingSizeMsg)
+	if err != nil {
+		return 0, err
+	}
+
+	start := time.Now()
+
+	// Send size message
+	if _, err = conn.Write(size); err != nil {
+		return 0, fmt.Errorf("write size: %w", err)
+	}
+
+	// Read "ok" ack with timeout
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+	buf := make([]byte, 32*1024)
+	if _, err = conn.Read(buf); err != nil {
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+		return 0, fmt.Errorf("read ack: %w", err)
+	}
+
+	// Send ping data
+	if _, err = conn.Write(ping); err != nil {
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+		return 0, fmt.Errorf("write ping: %w", err)
+	}
+
+	// Read echo response with timeout
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+	if _, err = conn.Read(buf); err != nil {
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+		return 0, fmt.Errorf("read echo: %w", err)
+	}
+	conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+
+	return time.Since(start), nil
+}
+
 // StopPing implements API.
 func (v *Visor) StopPing(pk cipher.PubKey) error {
 	v.pingConnMx.Lock()
@@ -1478,6 +1553,30 @@ func (v *Visor) StopPing(pk cipher.PubKey) error {
 		return err
 	}
 	delete(v.pingConns, pk)
+	return nil
+}
+
+// GetPingRoute returns the route hops for an established ping connection.
+// Returns nil if no ping connection exists for the given public key.
+func (v *Visor) GetPingRoute(pk cipher.PubKey) []cipher.PubKey {
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
+
+	if pingEntry, ok := v.pingConns[pk]; ok {
+		return pingEntry.hops
+	}
+	return nil
+}
+
+// GetPingRouteDetails returns detailed route information for a ping connection,
+// including transport IDs and types for each hop.
+func (v *Visor) GetPingRouteDetails(pk cipher.PubKey) []router.RouteHopInfo {
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
+
+	if pingEntry, ok := v.pingConns[pk]; ok {
+		return pingEntry.hopInfos
+	}
 	return nil
 }
 
@@ -1574,6 +1673,67 @@ func (v *Visor) DmsgPing(conf PingConfig) ([]time.Duration, error) {
 		latencies = append(latencies, rtt)
 	}
 	return latencies, nil
+}
+
+// DmsgPingOnce implements API. Performs a single ping over dmsg connection.
+func (v *Visor) DmsgPingOnce(conf PingConfig) (time.Duration, error) {
+	v.dmsgPingMx.Lock()
+	defer v.dmsgPingMx.Unlock()
+
+	pingEntry, ok := v.dmsgPingConns[conf.PK]
+	if !ok {
+		return 0, fmt.Errorf("no dmsg ping connection for %s, call DialDmsgPing first", conf.PK)
+	}
+
+	data := make([]byte, conf.PcktSize*1024)
+	conn := pingEntry.conn
+	msg := PingMsg{
+		Timestamp: time.Now(),
+		PingPk:    conf.PK,
+		Data:      data,
+	}
+	pingData, err := json.Marshal(msg)
+	if err != nil {
+		return 0, err
+	}
+	pingSizeMsg := PingSizeMsg{
+		Size: len(pingData),
+	}
+	size, err := json.Marshal(pingSizeMsg)
+	if err != nil {
+		return 0, err
+	}
+
+	start := time.Now()
+
+	// Send size message
+	if _, err = conn.Write(size); err != nil {
+		return 0, fmt.Errorf("write size: %w", err)
+	}
+
+	// Read "ok" ack with timeout
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+	buf := make([]byte, 32*1024)
+	if _, err = conn.Read(buf); err != nil {
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+		return 0, fmt.Errorf("read ack: %w", err)
+	}
+
+	// Send ping data
+	if _, err = conn.Write(pingData); err != nil {
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+		return 0, fmt.Errorf("write ping: %w", err)
+	}
+
+	// Read echo response with timeout
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+	if _, err = conn.Read(buf); err != nil {
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+		return 0, fmt.Errorf("read echo: %w", err)
+	}
+	conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+
+	return time.Since(start), nil
 }
 
 // StopDmsgPing implements API.

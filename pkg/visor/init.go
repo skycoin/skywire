@@ -32,6 +32,8 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsgcurl"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	"github.com/soheilhy/cmux"
+	"google.golang.org/grpc"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/internal/vpn"
@@ -62,6 +64,7 @@ import (
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
 )
@@ -1506,6 +1509,71 @@ func (s *cliRPCStats) snapshot() (active int32, total uint64, errors uint64, pea
 	return s.activeConns, s.totalConns, s.totalErrors, s.peakConns, s.lastError, s.lastErrorTime
 }
 
+// visorPingAdapter wraps a Visor to implement rpcgrpc.VisorAPI
+type visorPingAdapter struct {
+	v *Visor
+}
+
+func (a *visorPingAdapter) DialPing(conf rpcgrpc.PingConf) error {
+	return a.v.DialPing(PingConfig{
+		PK:         conf.PK,
+		Tries:      conf.Tries,
+		PcktSize:   conf.PcktSize,
+		LocalRoute: conf.LocalRoute,
+	})
+}
+
+func (a *visorPingAdapter) PingOnce(conf rpcgrpc.PingConf) (time.Duration, error) {
+	return a.v.PingOnce(PingConfig{
+		PK:         conf.PK,
+		Tries:      conf.Tries,
+		PcktSize:   conf.PcktSize,
+		LocalRoute: conf.LocalRoute,
+	})
+}
+
+func (a *visorPingAdapter) StopPing(pk cipher.PubKey) error {
+	return a.v.StopPing(pk)
+}
+
+func (a *visorPingAdapter) GetPingRoute(pk cipher.PubKey) []cipher.PubKey {
+	return a.v.GetPingRoute(pk)
+}
+
+func (a *visorPingAdapter) GetPingRouteDetails(pk cipher.PubKey) []rpcgrpc.RouteHopInfo {
+	details := a.v.GetPingRouteDetails(pk)
+	if details == nil {
+		return nil
+	}
+	// Convert router.RouteHopInfo to rpcgrpc.RouteHopInfo
+	result := make([]rpcgrpc.RouteHopInfo, len(details))
+	for i, d := range details {
+		result[i] = rpcgrpc.RouteHopInfo{
+			TpID:   d.TpID,
+			From:   d.From,
+			To:     d.To,
+			TpType: d.TpType,
+		}
+	}
+	return result
+}
+
+func (a *visorPingAdapter) DialDmsgPing(pk cipher.PubKey) error {
+	return a.v.DialDmsgPing(pk)
+}
+
+func (a *visorPingAdapter) DmsgPingOnce(conf rpcgrpc.PingConf) (time.Duration, error) {
+	return a.v.DmsgPingOnce(PingConfig{
+		PK:       conf.PK,
+		Tries:    conf.Tries,
+		PcktSize: conf.PcktSize,
+	})
+}
+
+func (a *visorPingAdapter) StopDmsgPing(pk cipher.PubKey) error {
+	return a.v.StopDmsgPing(pk)
+}
+
 func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.CLIAddr == "" {
 		v.log.Debug("'cli_addr' is not configured, skipping.")
@@ -1525,17 +1593,45 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	// Connection limiting and stats
+	// Create gRPC server for streaming operations
+	grpcLog := v.MasterLogger().PackageLogger("cli_grpc")
+	grpcServer := grpc.NewServer()
+	pingAdapter := &visorPingAdapter{v: v}
+	pingServer := rpcgrpc.NewPingServer(pingAdapter, grpcLog)
+	rpcgrpc.RegisterPingServiceServer(grpcServer, pingServer)
+
+	v.pushCloseStack("cli.grpc", func() error {
+		grpcServer.GracefulStop()
+		return nil
+	})
+
+	// Use cmux to multiplex gRPC and standard RPC on same port
+	mux := cmux.New(cliL)
+	grpcL := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
+	rpcL := mux.Match(cmux.Any()) // All other connections go to standard RPC
+
+	// Connection limiting and stats for standard RPC
 	const maxConcurrentConns = 50
 	stats := &cliRPCStats{
 		connSemaphore: make(chan struct{}, maxConcurrentConns),
 		maxConns:      maxConcurrentConns,
 	}
 
-	// Run RPC accept loop with panic recovery, connection limiting, and logging
+	// Start gRPC server
+	go func() {
+		grpcLog.Infof("CLI gRPC server listening on %s (multiplexed)", v.conf.CLIAddr)
+		if err := grpcServer.Serve(grpcL); err != nil {
+			if !strings.Contains(err.Error(), "use of closed network connection") &&
+				!strings.Contains(err.Error(), "mux: listener closed") {
+				grpcLog.WithError(err).Error("gRPC server error")
+			}
+		}
+	}()
+
+	// Run standard RPC accept loop with panic recovery, connection limiting, and logging
 	go func() {
 		rpcLog := v.MasterLogger().PackageLogger("cli_rpc")
-		rpcLog.Infof("CLI RPC server listening on %s (max %d concurrent connections)", v.conf.CLIAddr, maxConcurrentConns)
+		rpcLog.Infof("CLI RPC server listening on %s (max %d concurrent connections, multiplexed)", v.conf.CLIAddr, maxConcurrentConns)
 
 		// Periodic stats logging
 		go func() {
@@ -1554,10 +1650,11 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 
 		var connID uint64
 		for {
-			conn, err := cliL.Accept()
+			conn, err := rpcL.Accept()
 			if err != nil {
 				// Check if listener was closed (normal shutdown)
-				if strings.Contains(err.Error(), "use of closed network connection") {
+				if strings.Contains(err.Error(), "use of closed network connection") ||
+					strings.Contains(err.Error(), "mux: listener closed") {
 					rpcLog.Debug("CLI RPC listener closed")
 					return
 				}
@@ -1601,6 +1698,16 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 
 				rpcS.ServeConn(c)
 			}(conn, thisConnID)
+		}
+	}()
+
+	// Start cmux - this must be called after setting up all listeners
+	go func() {
+		if err := mux.Serve(); err != nil {
+			if !strings.Contains(err.Error(), "use of closed network connection") &&
+				!strings.Contains(err.Error(), "mux: listener closed") {
+				v.log.WithError(err).Error("cmux serve error")
+			}
 		}
 	}()
 

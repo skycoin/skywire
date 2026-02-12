@@ -689,6 +689,13 @@ func (rc *rpcClient) Ping(conf PingConfig) ([]time.Duration, error) {
 	return latencies, err
 }
 
+// PingOnce calls PingOnce.
+func (rc *rpcClient) PingOnce(conf PingConfig) (time.Duration, error) {
+	var latency time.Duration
+	err := rc.Call("PingOnce", &conf, &latency)
+	return latency, err
+}
+
 // StopPing calls StopPing.
 func (rc *rpcClient) StopPing(pk cipher.PubKey) error {
 	return rc.Call("StopPing", &pk, &struct{}{})
@@ -704,6 +711,13 @@ func (rc *rpcClient) DmsgPing(conf PingConfig) ([]time.Duration, error) {
 	var latencies []time.Duration
 	err := rc.Call("DmsgPing", &conf, &latencies)
 	return latencies, err
+}
+
+// DmsgPingOnce calls DmsgPingOnce.
+func (rc *rpcClient) DmsgPingOnce(conf PingConfig) (time.Duration, error) {
+	var latency time.Duration
+	err := rc.Call("DmsgPingOnce", &conf, &latency)
+	return latency, err
 }
 
 // StopDmsgPing calls StopDmsgPing.
@@ -1524,6 +1538,11 @@ func (mc *mockRPCClient) Ping(_ PingConfig) ([]time.Duration, error) {
 	return []time.Duration{}, nil
 }
 
+// PingOnce implements API.
+func (mc *mockRPCClient) PingOnce(_ PingConfig) (time.Duration, error) {
+	return 0, nil
+}
+
 // StopPing implements API.
 func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
 	return nil
@@ -1537,6 +1556,11 @@ func (mc *mockRPCClient) DialDmsgPing(_ cipher.PubKey) error {
 // DmsgPing implements API.
 func (mc *mockRPCClient) DmsgPing(_ PingConfig) ([]time.Duration, error) {
 	return []time.Duration{}, nil
+}
+
+// DmsgPingOnce implements API.
+func (mc *mockRPCClient) DmsgPingOnce(_ PingConfig) (time.Duration, error) {
+	return 0, nil
 }
 
 // StopDmsgPing implements API.

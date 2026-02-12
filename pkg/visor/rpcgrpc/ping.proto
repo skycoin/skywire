@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package rpcgrpc;
+
+option go_package = "github.com/skycoin/skywire/pkg/visor/rpcgrpc";
+
+// PingService provides streaming ping functionality
+service PingService {
+  // StreamPing performs multiple pings and streams results back one at a time
+  rpc StreamPing(PingRequest) returns (stream PingResult);
+
+  // StreamDmsgPing performs multiple pings over dmsg and streams results
+  rpc StreamDmsgPing(PingRequest) returns (stream PingResult);
+}
+
+message PingRequest {
+  string public_key = 1;    // Target visor public key
+  int32 tries = 2;          // Number of ping attempts
+  int32 packet_size_kb = 3; // Packet size in KB
+  bool local_route = 4;     // Use local route calculation
+  int64 ping_timeout_ns = 5; // Timeout for ping phase only (after route setup), 0 = no timeout
+}
+
+message PingResult {
+  int32 sequence = 1;       // Ping sequence number (1-indexed)
+  int64 latency_ns = 2;     // Round-trip time in nanoseconds
+  string error = 3;         // Error message if ping failed
+  bool is_setup = 4;        // True if this is the route setup time, not a ping
+  repeated string route_hops = 5; // Route hops (public keys), only set for setup message (deprecated)
+  repeated RouteHop route_hop_details = 6; // Detailed route hops with transport info
+}
+
+message RouteHop {
+  string tp_id = 1;    // Transport ID (UUID)
+  string from = 2;     // Source public key
+  string to = 3;       // Destination public key
+  string tp_type = 4;  // Transport type (stcpr, sudph, dmsg)
+}
