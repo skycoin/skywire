@@ -189,6 +189,9 @@ func server(e error) {
 		tpvizCfg.CacheFile = filepath.Join(wd, "tpd.json")
 		tpvizCfg.CacheFileUT = filepath.Join(wd, "ut.json")
 		tpvizCfg.CacheFileSD = filepath.Join(wd, "sd.json")
+		tpvizCfg.CacheFileDMSGServers = filepath.Join(wd, "dmsg-servers.json")
+		tpvizCfg.CacheFileDMSGEntries = filepath.Join(wd, "dmsg-entries.json")
+		tpvizCfg.CacheFileDMSGClients = filepath.Join(wd, "dmsg-clients.json")
 		tpvizCfg.SurveyDir = filepath.Join(wd, "log_backups") // Survey data for IP grouping
 		tpvizServer := tpviz.NewServer(tpvizCfg)
 		tpvizServer.Start() // Initialize cache and start auto-refresh
@@ -202,6 +205,9 @@ func server(e error) {
 		r1.GET("/api/services", gin.WrapH(tpvizHandler))
 		r1.GET("/api/health", gin.WrapH(tpvizHandler))
 		r1.GET("/api/ip-groups", gin.WrapH(tpvizHandler))
+		r1.GET("/api/dmsg/servers", gin.WrapH(tpvizHandler))
+		r1.GET("/api/dmsg/entries", gin.WrapH(tpvizHandler))
+		r1.GET("/api/dmsg/health", gin.WrapH(tpvizHandler))
 		r1.GET("/bundle.js", gin.WrapH(tpvizHandler))
 
 		r1.GET("/transport-graph", func(c *gin.Context) {
