@@ -1268,6 +1268,26 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 		}
 	}
 
+	// Build transport cache from single GetAllTransports() call
+	// This replaces N individual GetTransportsByEdge API calls with one bulk fetch
+	allEntries, err := dc.GetAllTransports(ctx)
+	if err != nil {
+		r.logger.WithError(err).Warn("Failed to fetch all transports for route calculation")
+		return nil, nil, fmt.Errorf("failed to fetch transport discovery data: %w", err)
+	}
+
+	// Build lookup map: pubkey -> transports involving that pubkey
+	transportsByEdge := make(map[cipher.PubKey][]*transport.Entry)
+	for _, entry := range allEntries {
+		if entry == nil {
+			continue
+		}
+		for _, edge := range entry.Edges {
+			transportsByEdge[edge] = append(transportsByEdge[edge], entry)
+		}
+	}
+	r.logger.Debugf("Built transport cache with %d entries covering %d visors", len(allEntries), len(transportsByEdge))
+
 	// For self-ping, try 2-hop route through any available transport partner
 	// This allows testing the full route setup even without a direct self-transport
 	if isSelfPing {
@@ -1281,9 +1301,8 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 
 			// For self-ping via 2-hop: src -> intermediate -> src
 			// We need the intermediate to have a transport back to us
-			intermediateEntries, err := dc.GetTransportsByEdge(ctx, intermediatePK)
-			if err != nil {
-				r.logger.WithError(err).Debugf("Failed to get transports for intermediate visor %s", intermediatePK)
+			intermediateEntries := transportsByEdge[intermediatePK]
+			if len(intermediateEntries) == 0 {
 				continue
 			}
 
@@ -1313,12 +1332,10 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 	// Try 2-hop routes through intermediate visors
 	for _, tp := range localTps {
 		intermediatePK := tp.remotePK
-		r.logger.Debugf("Checking intermediate visor %s for routes to %s", intermediatePK, dst)
 
-		// Query TPD for transports of the intermediate visor
-		intermediateEntries, err := dc.GetTransportsByEdge(ctx, intermediatePK)
-		if err != nil {
-			r.logger.WithError(err).Debugf("Failed to get transports for intermediate visor %s", intermediatePK)
+		// Look up transports from cache (built from single GetAllTransports call)
+		intermediateEntries := transportsByEdge[intermediatePK]
+		if len(intermediateEntries) == 0 {
 			continue
 		}
 
