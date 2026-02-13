@@ -31,6 +31,16 @@ var (
 	ErrUnknownStoreType = errors.New("unknown store type")
 )
 
+// BandwidthAggregation stores aggregated bandwidth for a time period.
+type BandwidthAggregation struct {
+	TransportID string `json:"transport_id"`
+	Period      string `json:"period"`     // "daily", "weekly", "monthly"
+	PeriodKey   string `json:"period_key"` // e.g., "2026-02-10", "2026-W06", "2026-02"
+	TotalSent   uint64 `json:"total_sent"`
+	TotalRecv   uint64 `json:"total_recv"`
+	UpdatedAt   int64  `json:"updated_at"`
+}
+
 // Store stores Transport metadata and generated nonce values.
 type Store interface {
 	TransportStore
@@ -44,6 +54,9 @@ type TransportStore interface {
 	GetTransportsByEdge(context.Context, cipher.PubKey) ([]*transport.Entry, error)
 	GetNumberOfTransports(context.Context) (map[types.Type]int, error)
 	GetAllTransports(context.Context, bool) ([]*transport.Entry, error)
+	// Bandwidth query methods
+	GetTransportBandwidth(ctx context.Context, tpID uuid.UUID, period string, limit int) ([]BandwidthAggregation, error)
+	GetVisorBandwidth(ctx context.Context, pk cipher.PubKey, period string, limit int) ([]BandwidthAggregation, error)
 	Close()
 }
 
