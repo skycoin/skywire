@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -314,4 +315,72 @@ func (api *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, obje
 
 func (api *API) logger(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
+}
+
+// GET /bandwidth/transport/{id}?period=daily&limit=7
+func (api *API) getTransportBandwidth(w http.ResponseWriter, r *http.Request) {
+	idParam := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idParam)
+	if err != nil {
+		api.writeError(w, r, ErrInvalidTransportID)
+		return
+	}
+
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		period = "daily"
+	}
+
+	limit := 7
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	history, err := api.store.GetTransportBandwidth(r.Context(), id, period, limit)
+	if err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(history); err != nil {
+		api.log(r).WithError(err).Error("Error encoding bandwidth history")
+		api.writeError(w, r, err)
+	}
+}
+
+// GET /bandwidth/visor/{pk}?period=daily&limit=7
+// Aggregates bandwidth from all transports belonging to a visor
+func (api *API) getVisorBandwidth(w http.ResponseWriter, r *http.Request) {
+	pkParam := chi.URLParam(r, "pk")
+	pk := cipher.PubKey{}
+	if err := pk.UnmarshalText([]byte(pkParam)); err != nil {
+		api.log(r).WithError(err).Error("Error parsing PK")
+		api.writeError(w, r, ErrInvalidPubKey)
+		return
+	}
+
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		period = "daily"
+	}
+
+	limit := 7
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	history, err := api.store.GetVisorBandwidth(r.Context(), pk, period, limit)
+	if err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(history); err != nil {
+		api.log(r).WithError(err).Error("Error encoding bandwidth history")
+		api.writeError(w, r, err)
+	}
 }

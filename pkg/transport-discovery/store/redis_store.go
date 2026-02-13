@@ -23,12 +23,15 @@ const (
 
 // TransportData stores transport entry with additional metadata.
 type TransportData struct {
-	ID      string `json:"id"`
-	EdgeA   string `json:"edge_a"`
-	EdgeB   string `json:"edge_b"`
-	Type    string `json:"type"`
-	Label   string `json:"label"`
-	Latency int64  `json:"latency"` // Latency in milliseconds, updated on each re-register
+	ID         string `json:"id"`
+	EdgeA      string `json:"edge_a"`
+	EdgeB      string `json:"edge_b"`
+	Type       string `json:"type"`
+	Label      string `json:"label"`
+	Latency    int64  `json:"latency"`     // Latency in milliseconds, updated on each re-register
+	SentBytes  uint64 `json:"sent_bytes"`  // Cumulative sent bytes
+	RecvBytes  uint64 `json:"recv_bytes"`  // Cumulative recv bytes
+	LastUpdate int64  `json:"last_update"` // Unix timestamp of last update
 }
 
 type redisStore struct {
@@ -83,14 +86,28 @@ func (s *redisStore) RegisterTransportWithLatency(ctx context.Context, sEntry *t
 	}
 
 	sEntry.Registered = time.Now().UnixNano()
+	now := time.Now()
 
 	data := TransportData{
-		ID:      entry.ID.String(),
-		EdgeA:   entry.Edges[0].Hex(),
-		EdgeB:   entry.Edges[1].Hex(),
-		Type:    string(entry.Type),
-		Label:   string(entry.Label),
-		Latency: latency,
+		ID:         entry.ID.String(),
+		EdgeA:      entry.Edges[0].Hex(),
+		EdgeB:      entry.Edges[1].Hex(),
+		Type:       string(entry.Type),
+		Label:      string(entry.Label),
+		Latency:    latency,
+		LastUpdate: now.Unix(),
+	}
+
+	// Handle bandwidth if provided
+	if sEntry.Bandwidth != nil {
+		data.SentBytes = sEntry.Bandwidth.SentBytes
+		data.RecvBytes = sEntry.Bandwidth.RecvBytes
+
+		// Update bandwidth aggregations
+		if err := s.updateBandwidth(ctx, entry.ID.String(),
+			sEntry.Bandwidth.SentBytes, sEntry.Bandwidth.RecvBytes); err != nil {
+			s.log.WithError(err).Warn("Failed to update bandwidth aggregation")
+		}
 	}
 
 	raw, err := json.Marshal(data)
@@ -298,4 +315,207 @@ func (s *redisStore) dataToEntry(data TransportData) (*transport.Entry, error) {
 		Label:   transport.Label(data.Label),
 		Latency: data.Latency,
 	}, nil
+}
+
+// Bandwidth key generators
+func (s *redisStore) bandwidthPrevKey(tpID string) string {
+	return fmt.Sprintf("%s:bw:prev:%s", serviceName, tpID)
+}
+
+func (s *redisStore) bandwidthDailyKey(tpID string, t time.Time) string {
+	return fmt.Sprintf("%s:bw:daily:%s:%s", serviceName, tpID, t.Format("2006-01-02"))
+}
+
+func (s *redisStore) bandwidthWeeklyKey(tpID string, year, week int) string {
+	return fmt.Sprintf("%s:bw:weekly:%s:%d-W%02d", serviceName, tpID, year, week)
+}
+
+func (s *redisStore) bandwidthMonthlyKey(tpID string, year, month int) string {
+	return fmt.Sprintf("%s:bw:monthly:%s:%d-%02d", serviceName, tpID, year, month)
+}
+
+// updateBandwidth calculates deltas and updates bandwidth aggregations.
+func (s *redisStore) updateBandwidth(ctx context.Context, transportID string,
+	currentSent, currentRecv uint64) error {
+
+	now := time.Now().UTC()
+
+	// 1. Get previous snapshot to calculate delta
+	prevKey := s.bandwidthPrevKey(transportID)
+	prevData, err := s.client.Get(ctx, prevKey).Result()
+
+	var deltaSent, deltaRecv uint64
+	if err == nil {
+		var prev struct {
+			Sent uint64 `json:"sent"`
+			Recv uint64 `json:"recv"`
+		}
+		if jsonErr := json.Unmarshal([]byte(prevData), &prev); jsonErr == nil {
+			// Calculate delta (handle counter reset on visor restart)
+			if currentSent >= prev.Sent {
+				deltaSent = currentSent - prev.Sent
+			} else {
+				deltaSent = currentSent // Counter reset, use full value
+			}
+			if currentRecv >= prev.Recv {
+				deltaRecv = currentRecv - prev.Recv
+			} else {
+				deltaRecv = currentRecv
+			}
+		}
+	}
+	// If error (first time or key expired), no delta to add
+
+	// 2. Store current as previous for next calculation
+	prevSnapshot, _ := json.Marshal(map[string]uint64{"sent": currentSent, "recv": currentRecv})
+
+	pipe := s.client.Pipeline()
+	pipe.Set(ctx, prevKey, prevSnapshot, 5*time.Minute)
+
+	// 3. Add deltas to aggregations (only if we have deltas)
+	if deltaSent > 0 || deltaRecv > 0 {
+		// Daily (35 days retention)
+		dailyKey := s.bandwidthDailyKey(transportID, now)
+		pipe.HIncrBy(ctx, dailyKey, "total_sent", int64(deltaSent))
+		pipe.HIncrBy(ctx, dailyKey, "total_recv", int64(deltaRecv))
+		pipe.HSet(ctx, dailyKey, "updated_at", now.Unix())
+		pipe.Expire(ctx, dailyKey, 35*24*time.Hour)
+
+		// Weekly (60 days retention)
+		year, week := now.ISOWeek()
+		weeklyKey := s.bandwidthWeeklyKey(transportID, year, week)
+		pipe.HIncrBy(ctx, weeklyKey, "total_sent", int64(deltaSent))
+		pipe.HIncrBy(ctx, weeklyKey, "total_recv", int64(deltaRecv))
+		pipe.HSet(ctx, weeklyKey, "updated_at", now.Unix())
+		pipe.Expire(ctx, weeklyKey, 60*24*time.Hour)
+
+		// Monthly (400 days retention)
+		monthlyKey := s.bandwidthMonthlyKey(transportID, now.Year(), int(now.Month()))
+		pipe.HIncrBy(ctx, monthlyKey, "total_sent", int64(deltaSent))
+		pipe.HIncrBy(ctx, monthlyKey, "total_recv", int64(deltaRecv))
+		pipe.HSet(ctx, monthlyKey, "updated_at", now.Unix())
+		pipe.Expire(ctx, monthlyKey, 400*24*time.Hour)
+	}
+
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
+// GetTransportBandwidth retrieves bandwidth aggregations for a transport.
+func (s *redisStore) GetTransportBandwidth(ctx context.Context, tpID uuid.UUID,
+	period string, limit int) ([]BandwidthAggregation, error) {
+
+	transportID := tpID.String()
+	now := time.Now().UTC()
+	var results []BandwidthAggregation
+
+	switch period {
+	case "daily":
+		for i := 0; i < limit; i++ {
+			t := now.AddDate(0, 0, -i)
+			key := s.bandwidthDailyKey(transportID, t)
+			agg, err := s.getBandwidthFromHash(ctx, key, transportID, "daily", t.Format("2006-01-02"))
+			if err == nil {
+				results = append(results, agg)
+			}
+		}
+	case "weekly":
+		for i := 0; i < limit; i++ {
+			t := now.AddDate(0, 0, -i*7)
+			year, week := t.ISOWeek()
+			key := s.bandwidthWeeklyKey(transportID, year, week)
+			periodKey := fmt.Sprintf("%d-W%02d", year, week)
+			agg, err := s.getBandwidthFromHash(ctx, key, transportID, "weekly", periodKey)
+			if err == nil {
+				results = append(results, agg)
+			}
+		}
+	case "monthly":
+		for i := 0; i < limit; i++ {
+			t := now.AddDate(0, -i, 0)
+			key := s.bandwidthMonthlyKey(transportID, t.Year(), int(t.Month()))
+			periodKey := fmt.Sprintf("%d-%02d", t.Year(), int(t.Month()))
+			agg, err := s.getBandwidthFromHash(ctx, key, transportID, "monthly", periodKey)
+			if err == nil {
+				results = append(results, agg)
+			}
+		}
+	default:
+		return nil, fmt.Errorf("invalid period: %s", period)
+	}
+
+	return results, nil
+}
+
+// GetVisorBandwidth retrieves aggregated bandwidth for all transports of a visor.
+func (s *redisStore) GetVisorBandwidth(ctx context.Context, pk cipher.PubKey,
+	period string, limit int) ([]BandwidthAggregation, error) {
+
+	// Get all transports for this visor
+	entries, err := s.GetTransportsByEdge(ctx, pk)
+	if err != nil {
+		return nil, err
+	}
+
+	// Aggregate bandwidth from all transports
+	aggregatedByPeriod := make(map[string]*BandwidthAggregation)
+
+	for _, entry := range entries {
+		tpBandwidth, err := s.GetTransportBandwidth(ctx, entry.ID, period, limit)
+		if err != nil {
+			continue
+		}
+
+		for _, bw := range tpBandwidth {
+			if existing, ok := aggregatedByPeriod[bw.PeriodKey]; ok {
+				existing.TotalSent += bw.TotalSent
+				existing.TotalRecv += bw.TotalRecv
+				if bw.UpdatedAt > existing.UpdatedAt {
+					existing.UpdatedAt = bw.UpdatedAt
+				}
+			} else {
+				aggregatedByPeriod[bw.PeriodKey] = &BandwidthAggregation{
+					TransportID: pk.Hex(), // Use visor PK as identifier
+					Period:      period,
+					PeriodKey:   bw.PeriodKey,
+					TotalSent:   bw.TotalSent,
+					TotalRecv:   bw.TotalRecv,
+					UpdatedAt:   bw.UpdatedAt,
+				}
+			}
+		}
+	}
+
+	// Convert map to slice
+	var results []BandwidthAggregation
+	for _, agg := range aggregatedByPeriod {
+		results = append(results, *agg)
+	}
+
+	return results, nil
+}
+
+func (s *redisStore) getBandwidthFromHash(ctx context.Context, key, transportID, period, periodKey string) (BandwidthAggregation, error) {
+	result, err := s.client.HGetAll(ctx, key).Result()
+	if err != nil || len(result) == 0 {
+		return BandwidthAggregation{}, errors.New("not found")
+	}
+
+	agg := BandwidthAggregation{
+		TransportID: transportID,
+		Period:      period,
+		PeriodKey:   periodKey,
+	}
+
+	if val, ok := result["total_sent"]; ok {
+		fmt.Sscanf(val, "%d", &agg.TotalSent)
+	}
+	if val, ok := result["total_recv"]; ok {
+		fmt.Sscanf(val, "%d", &agg.TotalRecv)
+	}
+	if val, ok := result["updated_at"]; ok {
+		fmt.Sscanf(val, "%d", &agg.UpdatedAt)
+	}
+
+	return agg, nil
 }
