@@ -40,6 +40,8 @@ func init() {
 	startCmd.Flags().BoolVar(&useInternal, "internal", false, "force internal launcher")
 	startCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
+	startCmd.Flags().BoolVar(&existingTpOnly, "existing-tp", false, "only use existing transports, don't create new ones")
+	startCmd.Flags().BoolVar(&forceLocalRoutes, "local-route", false, "calculate routes locally instead of using route finder")
 }
 
 var startCmd = &cobra.Command{
@@ -63,6 +65,20 @@ var startCmd = &cobra.Command{
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+
+		// If --existing-tp flag is set, configure router to only use existing transports
+		if existingTpOnly {
+			if err := rpcClient.SetExistingTPOnly(true); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set existing transport only mode: %w", err))
+			}
+		}
+
+		// If --local-route flag is set, skip route finder and use local route calculation
+		if forceLocalRoutes {
+			if err := rpcClient.SetForceLocalRoutes(true); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set force local routes mode: %w", err))
+			}
 		}
 
 		launcherMode := ""

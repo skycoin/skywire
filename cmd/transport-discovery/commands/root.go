@@ -245,7 +245,7 @@ transport-discovery --sk $(tail -n1 tpd-config.json)`,
 			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, logger)
 
 			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, sk, tpdAPI, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, logger); err != nil {
+				if err := dmsghttp.ListenAndServe(ctx, sk, tpdAPI, dClient, dmsgPort, dmsgDC, logger); err != nil {
 					logger.Errorf("dmsghttp.ListenAndServe: %v", err)
 					cancel()
 				}

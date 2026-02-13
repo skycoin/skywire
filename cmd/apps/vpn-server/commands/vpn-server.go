@@ -9,8 +9,10 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -32,7 +34,7 @@ const (
 var (
 	localPKStr string
 	localSKStr string
-	passcode   string
+	whitelist  string
 	networkIfc string
 	secure     bool
 	appPort    uint16
@@ -42,7 +44,7 @@ func init() {
 	launcher.RegisterApp("vpn-server", RunVPNServer)
 	RootCmd.Flags().StringVar(&localPKStr, "pk", "", "local pubkey")
 	RootCmd.Flags().StringVar(&localSKStr, "sk", "", "local seckey")
-	RootCmd.Flags().StringVar(&passcode, "passcode", "", "passcode to authenticate connecting users")
+	RootCmd.Flags().StringVar(&whitelist, "whitelist", "", "comma-separated list of public keys allowed to connect (empty = allow all)")
 	RootCmd.Flags().StringVar(&networkIfc, "netifc", "", "Default network interface for multiple available interfaces")
 	RootCmd.Flags().BoolVar(&secure, "secure", true, "Forbid connections from clients to server local network")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
@@ -73,7 +75,7 @@ func RunVPNServer(ctx context.Context, args []string) error {
 		fs := pflag.NewFlagSet("vpn-server", pflag.ContinueOnError)
 		fs.StringVar(&localPKStr, "pk", "", "local pubkey")
 		fs.StringVar(&localSKStr, "sk", "", "local seckey")
-		fs.StringVar(&passcode, "passcode", "", "passcode")
+		fs.StringVar(&whitelist, "whitelist", "", "comma-separated public keys")
 		fs.StringVar(&networkIfc, "netifc", "", "network interface")
 		fs.BoolVar(&secure, "secure", true, "secure mode")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
@@ -84,29 +86,29 @@ func RunVPNServer(ctx context.Context, args []string) error {
 
 	appCl := app.NewClient(nil)
 	defer appCl.Close()
+	logger := appCl.Log()
 
 	port := appCl.Config().RoutingPort
 	if appPort != 0 {
 		port = routing.Port(appPort)
-		setAppPort(appCl, port)
+		setAppPort(appCl, logger, port)
 	}
 
-	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		print(fmt.Sprintf("Failed to output build info: %v\n", err))
-	}
+	bi := buildinfo.Get()
+	logger.Infof("Version %q built on %q against commit %q", bi.Version, bi.Date, bi.Commit)
 
 	if runtime.GOOS != "linux" {
 		err := errors.New("OS is not supported")
-		print(err)
-		setAppErr(appCl, err)
+		logger.Error(err)
+		setAppErr(appCl, logger, err)
 		return err
 	}
 
 	localPK := cipher.PubKey{}
 	if localPKStr != "" {
 		if err := localPK.UnmarshalText([]byte(localPKStr)); err != nil {
-			print(fmt.Sprintf("Invalid local PK: %v\n", err))
-			setAppErr(appCl, err)
+			logger.WithError(err).Error("Invalid local PK")
+			setAppErr(appCl, logger, err)
 			return err
 		}
 	}
@@ -114,8 +116,8 @@ func RunVPNServer(ctx context.Context, args []string) error {
 	localSK := cipher.SecKey{}
 	if localSKStr != "" {
 		if err := localSK.UnmarshalText([]byte(localSKStr)); err != nil {
-			print(fmt.Sprintf("Invalid local SK: %v\n", err))
-			setAppErr(appCl, err)
+			logger.WithError(err).Error("Invalid local SK")
+			setAppErr(appCl, logger, err)
 			return err
 		}
 	}
@@ -129,25 +131,43 @@ func RunVPNServer(ctx context.Context, args []string) error {
 
 	l, err := appCl.Listen(netType, port)
 	if err != nil {
-		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
-		setAppErr(appCl, err)
+		logger.WithError(err).WithField("port", port).Error("Error listening network")
+		setAppErr(appCl, logger, err)
 		return err
 	}
 
+	// Parse whitelist
+	var whitelistPKs []cipher.PubKey
+	if whitelist != "" {
+		for _, pkStr := range strings.Split(whitelist, ",") {
+			pkStr = strings.TrimSpace(pkStr)
+			if pkStr == "" {
+				continue
+			}
+			var pk cipher.PubKey
+			if err := pk.UnmarshalText([]byte(pkStr)); err != nil {
+				logger.WithError(err).WithField("pk", pkStr).Error("Invalid whitelist public key")
+				setAppErr(appCl, logger, err)
+				return err
+			}
+			whitelistPKs = append(whitelistPKs, pk)
+		}
+	}
+
 	srvCfg := vpn.ServerConfig{
-		Passcode:         passcode,
+		Whitelist:        whitelistPKs,
 		Secure:           secure,
 		NetworkInterface: networkIfc,
 	}
 	srv, err := vpn.NewServer(srvCfg, appCl)
 	if err != nil {
-		print(fmt.Sprintf("Error creating VPN server: %v\n", err))
-		setAppErr(appCl, err)
+		logger.WithError(err).Error("Error creating VPN server")
+		setAppErr(appCl, logger, err)
 		return err
 	}
 	defer func() {
 		if err := srv.Close(); err != nil {
-			print(fmt.Sprintf("Error closing server: %v\n", err))
+			logger.WithError(err).Warn("Error closing server")
 		}
 	}()
 
@@ -160,7 +180,7 @@ func RunVPNServer(ctx context.Context, args []string) error {
 		close(errCh)
 	}()
 
-	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+	defer setAppStatus(appCl, logger, appserver.AppDetailedStatusStopped)
 
 	select {
 	case <-osSigs:
@@ -169,7 +189,7 @@ func RunVPNServer(ctx context.Context, args []string) error {
 		return nil
 	case err := <-errCh:
 		if err != nil {
-			print(fmt.Sprintf("Error serving: %v\n", err))
+			logger.WithError(err).Error("Error serving")
 			return err
 		}
 	}
@@ -177,15 +197,15 @@ func RunVPNServer(ctx context.Context, args []string) error {
 	return nil
 }
 
-func setAppErr(appCl *app.Client, err error) {
+func setAppErr(appCl *app.Client, log logrus.FieldLogger, err error) {
 	if appErr := appCl.SetError(err.Error()); appErr != nil {
-		print(fmt.Sprintf("Failed to set error %v: %v\n", err, appErr))
+		log.WithError(appErr).WithField("original_error", err).Warn("Failed to set error")
 	}
 }
 
-func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
+func setAppStatus(appCl *app.Client, log logrus.FieldLogger, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
-		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
+		log.WithError(err).WithField("status", status).Warn("Failed to set status")
 	}
 }
 
@@ -196,8 +216,8 @@ func Execute() {
 	}
 }
 
-func setAppPort(appCl *app.Client, port routing.Port) {
+func setAppPort(appCl *app.Client, log logrus.FieldLogger, port routing.Port) {
 	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
+		log.WithError(err).WithField("port", port).Warn("Failed to set port")
 	}
 }

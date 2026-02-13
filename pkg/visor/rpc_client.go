@@ -65,6 +65,19 @@ func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string
 	}
 }
 
+// Close closes the RPC client connection.
+func (rc *rpcClient) Close() error {
+	if rc.client != nil {
+		rc.log.Debug("Closing RPC client connection")
+		err := rc.client.Close()
+		if err != nil {
+			rc.log.WithError(err).Debug("Error closing RPC client")
+		}
+		return err
+	}
+	return nil
+}
+
 // Call calls the internal rpc.Client with the serviceMethod arg prefixed.
 func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 	ctx := context.Background()
@@ -437,6 +450,33 @@ func (rc *rpcClient) SetPublicAutoconnect(pAc bool) error {
 	return rc.Call("SetPublicAutoconnect", &pAc, &struct{}{})
 }
 
+// StartPublicAutoconnect implements API.
+func (rc *rpcClient) StartPublicAutoconnect() error {
+	return rc.Call("StartPublicAutoconnect", &struct{}{}, &struct{}{})
+}
+
+// StopPublicAutoconnect implements API.
+func (rc *rpcClient) StopPublicAutoconnect() error {
+	return rc.Call("StopPublicAutoconnect", &struct{}{}, &struct{}{})
+}
+
+// PublicAutoconnectStatus implements API.
+func (rc *rpcClient) PublicAutoconnectStatus() (bool, error) {
+	var status bool
+	err := rc.Call("PublicAutoconnectStatus", &struct{}{}, &status)
+	return status, err
+}
+
+// SetExistingTPOnly sets whether to only use existing transports for routing.
+func (rc *rpcClient) SetExistingTPOnly(enabled bool) error {
+	return rc.Call("SetExistingTPOnly", &enabled, &struct{}{})
+}
+
+// SetForceLocalRoutes sets whether to skip the route finder and use local route calculation.
+func (rc *rpcClient) SetForceLocalRoutes(enabled bool) error {
+	return rc.Call("SetForceLocalRoutes", &enabled, &struct{}{})
+}
+
 // RoutingRules calls RoutingRules.
 func (rc *rpcClient) RoutingRules() ([]routing.Rule, error) {
 	entries := make([]routing.Rule, 0)
@@ -595,6 +635,30 @@ func (rc *rpcClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
 	return out, err
 }
 
+// ConnectRawTCP calls ConnectRawTCP.
+func (rc *rpcClient) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	var out uuid.UUID
+	err := rc.Call("ConnectRawTCP", &ConnectIn{
+		RemotePK:   remotePK,
+		RemotePort: remotePort,
+		LocalPort:  localPort,
+	}, &out)
+	return out, err
+}
+
+// DisconnectRawTCP calls DisconnectRawTCP.
+func (rc *rpcClient) DisconnectRawTCP(id uuid.UUID) error {
+	err := rc.Call("DisconnectRawTCP", &id, &struct{}{})
+	return err
+}
+
+// ListRawTCP calls ListRawTCP.
+func (rc *rpcClient) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error) {
+	var out map[uuid.UUID]*appnet.RawTCPForwardConn
+	err := rc.Call("ListRawTCP", &struct{}{}, &out)
+	return out, err
+}
+
 // RegisterHTTPPort calls RegisterHTTPPort.
 func (rc *rpcClient) RegisterHTTPPort(localPort int) error {
 	return rc.Call("RegisterHTTPPort", &localPort, &struct{}{})
@@ -630,6 +694,23 @@ func (rc *rpcClient) StopPing(pk cipher.PubKey) error {
 	return rc.Call("StopPing", &pk, &struct{}{})
 }
 
+// DialDmsgPing calls DialDmsgPing.
+func (rc *rpcClient) DialDmsgPing(pk cipher.PubKey) error {
+	return rc.Call("DialDmsgPing", &pk, &struct{}{})
+}
+
+// DmsgPing calls DmsgPing.
+func (rc *rpcClient) DmsgPing(conf PingConfig) ([]time.Duration, error) {
+	var latencies []time.Duration
+	err := rc.Call("DmsgPing", &conf, &latencies)
+	return latencies, err
+}
+
+// StopDmsgPing calls StopDmsgPing.
+func (rc *rpcClient) StopDmsgPing(pk cipher.PubKey) error {
+	return rc.Call("StopDmsgPing", &pk, &struct{}{})
+}
+
 // TestVisor calls TestVisor.
 func (rc *rpcClient) TestVisor(conf PingConfig) ([]TestResult, error) {
 	var results []TestResult
@@ -637,9 +718,33 @@ func (rc *rpcClient) TestVisor(conf PingConfig) ([]TestResult, error) {
 	return results, err
 }
 
+// TestProxy calls TestProxy.
+func (rc *rpcClient) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
+	var results []ProxyTestResult
+	err := rc.Call("TestProxy", &conf, &results)
+	return results, err
+}
+
 // ReinitiateModule calls ReinitiateModule.
 func (rc *rpcClient) ReinitiateModule(module string) error {
 	return rc.Call("ReinitiateModule", &module, &struct{}{})
+}
+
+// StartUIServer calls StartUIServer.
+func (rc *rpcClient) StartUIServer(addr string) error {
+	return rc.Call("StartUIServer", &addr, &struct{}{})
+}
+
+// StopUIServer calls StopUIServer.
+func (rc *rpcClient) StopUIServer() error {
+	return rc.Call("StopUIServer", &struct{}{}, &struct{}{})
+}
+
+// UIServerStatus calls UIServerStatus.
+func (rc *rpcClient) UIServerStatus() (*UIServerStatus, error) {
+	var status UIServerStatus
+	err := rc.Call("UIServerStatus", &struct{}{}, &status)
+	return &status, err
 }
 
 // MockRPCClient mocks API.
@@ -1225,6 +1330,29 @@ func (mc *mockRPCClient) SetPublicAutoconnect(_ bool) error {
 	return nil
 }
 
+// StartPublicAutoconnect implements API.
+func (mc *mockRPCClient) StartPublicAutoconnect() error {
+	return nil
+}
+
+// StopPublicAutoconnect implements API.
+func (mc *mockRPCClient) StopPublicAutoconnect() error {
+	return nil
+}
+
+// PublicAutoconnectStatus implements API.
+func (mc *mockRPCClient) PublicAutoconnectStatus() (bool, error) {
+	return false, nil
+}
+
+func (mc *mockRPCClient) SetExistingTPOnly(_ bool) error {
+	return nil
+}
+
+func (mc *mockRPCClient) SetForceLocalRoutes(_ bool) error {
+	return nil
+}
+
 // RoutingRules implements API.
 func (mc *mockRPCClient) RoutingRules() ([]routing.Rule, error) {
 	return mc.rt.AllRules(), nil
@@ -1356,6 +1484,21 @@ func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
 	return nil, nil
 }
 
+// ConnectRawTCP implements API.
+func (mc *mockRPCClient) ConnectRawTCP(_ cipher.PubKey, _, _ int) (uuid.UUID, error) {
+	return uuid.UUID{}, nil
+}
+
+// DisconnectRawTCP implements API.
+func (mc *mockRPCClient) DisconnectRawTCP(_ uuid.UUID) error {
+	return nil
+}
+
+// ListRawTCP implements API.
+func (mc *mockRPCClient) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error) {
+	return nil, nil
+}
+
 // RegisterHTTPPort implements API.
 func (mc *mockRPCClient) RegisterHTTPPort(_ int) error {
 	return nil
@@ -1386,12 +1529,52 @@ func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
 	return nil
 }
 
+// DialDmsgPing implements API.
+func (mc *mockRPCClient) DialDmsgPing(_ cipher.PubKey) error {
+	return nil
+}
+
+// DmsgPing implements API.
+func (mc *mockRPCClient) DmsgPing(_ PingConfig) ([]time.Duration, error) {
+	return []time.Duration{}, nil
+}
+
+// StopDmsgPing implements API.
+func (mc *mockRPCClient) StopDmsgPing(_ cipher.PubKey) error {
+	return nil
+}
+
 // TestVisor implements API.
 func (mc *mockRPCClient) TestVisor(_ PingConfig) ([]TestResult, error) {
 	return []TestResult{}, nil
 }
 
+// TestProxy implements API.
+func (mc *mockRPCClient) TestProxy(_ ProxyTestConfig) ([]ProxyTestResult, error) {
+	return []ProxyTestResult{}, nil
+}
+
 // ReinitiateModule implements API.
 func (mc *mockRPCClient) ReinitiateModule(_ string) error {
+	return nil
+}
+
+// StartUIServer implements API.
+func (mc *mockRPCClient) StartUIServer(_ string) error {
+	return nil
+}
+
+// StopUIServer implements API.
+func (mc *mockRPCClient) StopUIServer() error {
+	return nil
+}
+
+// UIServerStatus implements API.
+func (mc *mockRPCClient) UIServerStatus() (*UIServerStatus, error) {
+	return &UIServerStatus{}, nil
+}
+
+// Close implements API.
+func (mc *mockRPCClient) Close() error {
 	return nil
 }

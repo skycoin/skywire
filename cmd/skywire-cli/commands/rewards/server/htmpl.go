@@ -30,12 +30,14 @@ var (
 func init() {
 	nl = append(nl, "  <a href='/'>fiber</a>")
 	nl = append(nl, "  <a href='/skycoin-rewards'>skycoin rewards</a>")
+	nl = append(nl, "  <a href='/stats'>network stats</a>")
 	nl = append(nl, "  <a href='/log-collection'>log collection</a>")
 	nl = append(nl, "  <a href='/log-collection/tree'>survey index</a>")
 	nl = append(nl, "  <a href='/log-collection/tplogs'>transport logging</a>")
 	nl = append(nl, "  <a href='"+strings.ReplaceAll(deployment.Prod.UptimeTracker, "http://", "https://")+"/uptimes?v=v2'>uptime tracker</a>")
 	nl = append(nl, "  <a href='"+strings.ReplaceAll(deployment.Prod.AddressResolver, "http://", "https://")+"'>address resolver</a>")
 	nl = append(nl, "  <a href='"+strings.ReplaceAll(deployment.Prod.TransportDiscovery, "http://", "https://")+"/all-transports'>transport discovery</a>")
+	nl = append(nl, "  <a href='/transport-graph'>transport graph</a>")
 	nl = append(nl, "  <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/entries'>dmsgd entries</a>")
 	nl = append(nl, "  <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/all_servers'>all dmsg servers</a>")
 	nl = append(nl, "  <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/available_servers'>available dmsg servers</a>")
@@ -96,12 +98,14 @@ var htmlMainPageTemplate = `
   <nav class='absolute' style='white-space: nowrap;'>
   <a href='/'>fiber</a>
   <a href='/skycoin-rewards'>skycoin rewards</a>
+  <a href='/stats'>network stats</a>
   <a href='/log-collection'>log collection</a>
   <a href='/log-collection/tree'>survey index</a>
   <a href='/log-collection/tplogs'>transport logging</a>
   <a href='` + strings.ReplaceAll(deployment.Prod.UptimeTracker, "http://", "https://") + `/uptimes?v=v2'>uptime tracker</a>
   <a href='` + strings.ReplaceAll(deployment.Prod.AddressResolver, "http://", "https://") + `'>address resolver</a>
   <a href='` + strings.ReplaceAll(deployment.Prod.TransportDiscovery, "http://", "https://") + `/all-transports'>transport discovery</a>
+  <a href='/transport-graph'>transport graph</a>
   <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/entries'>dmsgd entries</a>
   <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/all_servers'>all dmsg servers</a>
   <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available dmsg servers</a>

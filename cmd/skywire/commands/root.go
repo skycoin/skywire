@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
+	snc "github.com/skycoin/skywire/cmd/apps/skynet-client/commands"
+	sn "github.com/skycoin/skywire/cmd/apps/skynet/commands"
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
 	ss "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
@@ -37,6 +39,8 @@ func init() {
 		ssc.RootCmd,
 		ss.RootCmd,
 		sc.RootCmd,
+		sn.RootCmd,
+		snc.RootCmd,
 	)
 	RootCmd.AddCommand(
 		visor.RootCmd,
@@ -59,6 +63,8 @@ func init() {
 	ssc.RootCmd.Use = "skysocks-client"
 	ss.RootCmd.Use = "skysocks"
 	sc.RootCmd.Use = "skychat"
+	sn.RootCmd.Use = "skynet-srv"
+	snc.RootCmd.Use = "skynet-client"
 
 	modifySubcommands(RootCmd)
 	if fmt.Sprintf("%v", buildinfo.DebugBuildInfo()) != "" {
@@ -92,6 +98,9 @@ var RootCmd = &cobra.Command{
 		}
 		if buildinfo.Go() != "unknown" && buildinfo.Go() != "" {
 			ret += "\nbuilt with " + buildinfo.Go()
+			if buildinfo.Date() != "unknown" && buildinfo.Date() != "" {
+				ret += " on " + buildinfo.Date()
+			}
 		}
 		return ret
 	}(),

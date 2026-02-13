@@ -25,16 +25,27 @@ const (
 var re = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
 
 // NewProcLogger returns a new proc logger.
-func NewProcLogger(conf ProcConfig, mLog *logging.MasterLogger) (log *logging.MasterLogger, db LogStore) {
+// It creates an isolated MasterLogger for the app to prevent log cross-contamination
+// between multiple apps that would occur if they shared the same logger with multiple hooks.
+func NewProcLogger(conf ProcConfig, mLog *logging.MasterLogger) (appLog *logging.MasterLogger, db LogStore) {
 	db, err := NewBBoltLogStore(conf.LogDBLoc, conf.AppName)
 	if err != nil {
 		panic(err)
 	}
-	log = mLog
 
-	log.Logger.AddHook(db)
+	// Create isolated MasterLogger for this app instead of reusing shared one.
+	// This prevents hooks from one app affecting logs from other apps.
+	// We copy the essential settings (Out, Formatter, Level) from the parent logger
+	// to ensure consistent behavior.
+	appLog = logging.NewMasterLogger()
+	appLog.SetLevel(mLog.GetLevel())
+	appLog.Logger.Out = mLog.Logger.Out
+	if mLog.Logger.Formatter != nil {
+		appLog.Logger.Formatter = mLog.Logger.Formatter
+	}
+	appLog.Logger.AddHook(db)
 
-	return log, db
+	return appLog, db
 }
 
 // TimestampFromLog is an utility function for retrieving the timestamp from a log. This function should be modified

@@ -25,9 +25,9 @@ const (
 	responseInvalidEntry
 )
 
-func makeEntryFromTransport(transport network.Transport) Entry {
+func makeEntryFromTransport(transport network.Transport, label Label) Entry {
 	aPK, bPK := transport.LocalPK(), transport.RemotePK()
-	return MakeEntry(aPK, bPK, transport.Network(), LabelUser)
+	return MakeEntry(aPK, bPK, transport.Network(), label)
 }
 
 func compareEntries(expected, received *Entry) error {
@@ -75,76 +75,82 @@ func receiveAndVerifyEntry(r io.Reader, expected *Entry, remotePK cipher.PubKey)
 
 // SettlementHS represents a settlement handshake.
 // This is the handshake responsible for registering a transport to transport discovery.
-type SettlementHS func(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) error
+// It returns the label from the remote entry (useful for the responder to adopt the initiator's label).
+type SettlementHS func(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (Label, error)
 
 // Do performs the settlement handshake.
-func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (err error) {
+func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (label Label, err error) {
 	done := make(chan struct{})
 	go func() {
-		err = hs(ctx, dc, transport, sk)
+		label, err = hs(ctx, dc, transport, sk)
 		close(done)
 	}()
 	select {
 	case <-done:
-		return err
+		return label, err
 	case <-ctx.Done():
-		return ctx.Err()
+		return "", ctx.Err()
 	}
 }
 
 // MakeSettlementHS creates a settlement handshake.
 // `init` determines whether the local side is initiating or responding.
+// `label` is the transport label to include in the entry (propagated to the remote end).
 // The handshake logic only REGISTERS the transport, and does not update the status of the transport.
-func MakeSettlementHS(init bool, log *logging.Logger) SettlementHS {
+func MakeSettlementHS(init bool, log *logging.Logger, label Label) SettlementHS {
 	// initiating logic.
-	initHS := func(_ context.Context, _ DiscoveryClient, transport network.Transport, sk cipher.SecKey) (err error) {
-		entry := makeEntryFromTransport(transport)
+	initHS := func(_ context.Context, _ DiscoveryClient, transport network.Transport, sk cipher.SecKey) (Label, error) {
+		entry := makeEntryFromTransport(transport, label)
 
 		// create signed entry and send it to responding visor.
 		se, err := NewSignedEntry(&entry, transport.LocalPK(), sk)
 		if err != nil {
-			return fmt.Errorf("failed to sign entry: %w", err)
+			return "", fmt.Errorf("failed to sign entry: %w", err)
 		}
 		if err := json.NewEncoder(transport).Encode(se); err != nil {
-			return fmt.Errorf("failed to write entry: %w", err)
+			return "", fmt.Errorf("failed to write entry: %w", err)
 		}
 
 		// await okay signal.
 		accepted := make([]byte, 1)
 		if _, err := io.ReadFull(transport, accepted); err != nil {
-			return fmt.Errorf("failed to read response: %w", err)
+			return "", fmt.Errorf("failed to read response: %w", err)
 		}
 		switch hsResponse(accepted[0]) {
 		case responseOK:
-			return nil
+			return label, nil
 		case responseFailure:
-			return fmt.Errorf("transport settlement rejected by remote")
+			return "", fmt.Errorf("transport settlement rejected by remote")
 		case responseInvalidEntry:
-			return fmt.Errorf("invalid entry")
+			return "", fmt.Errorf("invalid entry")
 		case responseSignatureErr:
-			return fmt.Errorf("signature error")
+			return "", fmt.Errorf("signature error")
 		default:
-			return fmt.Errorf("invalid remote response")
+			return "", fmt.Errorf("invalid remote response")
 		}
 	}
 
 	// responding logic.
-	respHS := func(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) error {
-		entry := makeEntryFromTransport(transport)
+	respHS := func(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (Label, error) {
+		// Use LabelUser for local comparison entry; compareEntries does not check label,
+		// so this is backward-compatible with older visors that always send LabelUser.
+		entry := makeEntryFromTransport(transport, LabelUser)
 
 		// receive, verify and sign entry.
 		recvSE, err := receiveAndVerifyEntry(transport, &entry, transport.RemotePK())
 		if err != nil {
 			writeHsResponse(transport, responseInvalidEntry) //nolint:errcheck, gosec
-			return err
+			return "", err
 		}
 
 		if err := recvSE.Sign(transport.LocalPK(), sk); err != nil {
 			writeHsResponse(transport, responseSignatureErr) //nolint:errcheck, gosec
-			return fmt.Errorf("failed to sign received entry: %w", err)
+			return "", fmt.Errorf("failed to sign received entry: %w", err)
 		}
 
+		// Adopt the received entry (including the initiator's label).
 		entry = *recvSE.Entry
+		receivedLabel := entry.Label
 
 		// Ensure transport is registered.
 		if err := dc.RegisterTransports(ctx, recvSE); err != nil {
@@ -170,7 +176,7 @@ func MakeSettlementHS(init bool, log *logging.Logger) SettlementHS {
 				}
 			}
 		}
-		return writeHsResponse(transport, responseOK)
+		return receivedLabel, writeHsResponse(transport, responseOK)
 	}
 
 	if init {
