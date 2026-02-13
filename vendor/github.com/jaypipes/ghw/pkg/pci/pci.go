@@ -12,9 +12,9 @@ import (
 
 	"github.com/jaypipes/pcidb"
 
-	"github.com/jaypipes/ghw/pkg/context"
+	"github.com/jaypipes/ghw/internal/config"
+	"github.com/jaypipes/ghw/internal/log"
 	"github.com/jaypipes/ghw/pkg/marshal"
-	"github.com/jaypipes/ghw/pkg/option"
 	"github.com/jaypipes/ghw/pkg/topology"
 	"github.com/jaypipes/ghw/pkg/util"
 )
@@ -127,7 +127,6 @@ func (d *Device) String() string {
 type Info struct {
 	db   *pcidb.PCIDB
 	arch topology.Architecture
-	ctx  *context.Context
 	// All PCI devices on the host system
 	Devices []*Device
 }
@@ -138,39 +137,30 @@ func (i *Info) String() string {
 
 // New returns a pointer to an Info struct that contains information about the
 // PCI devices on the host system
-func New(opts ...*option.Option) (*Info, error) {
-	merged := option.Merge(opts...)
-	ctx := context.New(merged)
+func New(args ...any) (*Info, error) {
+	ctx := config.ContextFromArgs(args...)
 	// by default we don't report NUMA information;
 	// we will only if are sure we are running on NUMA architecture
 	info := &Info{
-		arch: topology.ArchitectureSMP,
-		ctx:  ctx,
+		arch: topology.ArchitectureSMP, // default to SMP
 	}
-
-	// we do this trick because we need to make sure ctx.Setup() gets
-	// a chance to run before any subordinate package is created reusing
-	// our context.
-	loadDetectingTopology := func() error {
-		topo, err := topology.New(context.WithContext(ctx))
-		if err == nil {
-			info.arch = topo.Architecture
-		} else {
-			ctx.Warn("error detecting system topology: %v", err)
-		}
-		if merged.PCIDB != nil {
-			info.db = merged.PCIDB
-		}
-		return info.load()
-	}
-
-	var err error
-	if context.Exists(merged) {
-		err = loadDetectingTopology()
+	// Skip topology detection if requested to reduce memory consumption
+	if !config.TopologyEnabled(ctx) {
+		log.Warn(
+			ctx, "topology detection disabled, assuming SMP architecture",
+		)
 	} else {
-		err = ctx.Do(loadDetectingTopology)
+		topo, err := topology.New(ctx)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to initialize PCI info due to failure to initialize "+
+					"Topology info: %w",
+				err,
+			)
+		}
+		info.arch = topo.Architecture
 	}
-	if err != nil {
+	if err := info.load(ctx); err != nil {
 		return nil, err
 	}
 	return info, nil
@@ -195,11 +185,11 @@ type pciPrinter struct {
 // YAMLString returns a string with the PCI information formatted as YAML
 // under a top-level "pci:" key
 func (i *Info) YAMLString() string {
-	return marshal.SafeYAML(i.ctx, pciPrinter{i})
+	return marshal.SafeYAML(pciPrinter{i})
 }
 
 // JSONString returns a string with the PCI information formatted as JSON
 // under a top-level "pci:" key
 func (i *Info) JSONString(indent bool) string {
-	return marshal.SafeJSON(i.ctx, pciPrinter{i}, indent)
+	return marshal.SafeJSON(pciPrinter{i}, indent)
 }

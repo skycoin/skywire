@@ -33,6 +33,11 @@ func (n *DmsgNetworker) Ping(_ cipher.PubKey, _ Addr) (net.Conn, error) {
 	return nil, fmt.Errorf("Ping not available on dmsg network")
 }
 
+// PingContext dials remote `addr` via dmsg network with context.
+func (n *DmsgNetworker) PingContext(_ context.Context, _ cipher.PubKey, _ Addr) (net.Conn, error) {
+	return nil, fmt.Errorf("Ping not available on dmsg network")
+}
+
 // DialContext dials remote `addr` via dmsg network with context.
 func (n *DmsgNetworker) DialContext(ctx context.Context, addr Addr) (net.Conn, error) {
 	remote := dmsg.Addr{
