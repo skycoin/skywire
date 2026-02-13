@@ -22,7 +22,7 @@ type RouteGroupDialer interface {
 		dmsgC *dmsg.Client,
 		setupNodes []cipher.PubKey,
 		req routing.BidirectionalRoute,
-	) (routing.EdgeRules, error)
+	) (routing.EdgeRules, cipher.PubKey, error) // Returns rules and the connected setup node PK
 }
 
 type setupNodeDialer struct{}
@@ -32,18 +32,20 @@ func NewSetupNodeDialer() RouteGroupDialer {
 	return new(setupNodeDialer)
 }
 
-// Dial dials RouteGroup.
+// Dial dials RouteGroup and returns the connected setup node's public key.
 func (d *setupNodeDialer) Dial(
 	ctx context.Context,
 	log *logging.Logger,
 	dmsgC *dmsg.Client,
 	setupNodes []cipher.PubKey,
 	req routing.BidirectionalRoute,
-) (routing.EdgeRules, error) {
+) (routing.EdgeRules, cipher.PubKey, error) {
 	client, err := NewSetupClient(ctx, log, dmsgC, setupNodes)
 	if err != nil {
-		return routing.EdgeRules{}, err
+		return routing.EdgeRules{}, cipher.PubKey{}, err
 	}
+
+	connectedNode := client.ConnectedNode()
 
 	defer func() {
 		if err := client.Close(); err != nil {
@@ -53,8 +55,8 @@ func (d *setupNodeDialer) Dial(
 
 	resp, err := client.DialRouteGroup(ctx, req)
 	if err != nil {
-		return routing.EdgeRules{}, fmt.Errorf("route setup: %w", err)
+		return routing.EdgeRules{}, cipher.PubKey{}, fmt.Errorf("route setup: %w", err)
 	}
 
-	return resp, nil
+	return resp, connectedNode, nil
 }

@@ -22,14 +22,15 @@ const (
 )
 
 type PingRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PublicKey     string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`                // Target visor public key
-	Tries         int32                  `protobuf:"varint,2,opt,name=tries,proto3" json:"tries,omitempty"`                                        // Number of ping attempts
-	PacketSizeKb  int32                  `protobuf:"varint,3,opt,name=packet_size_kb,json=packetSizeKb,proto3" json:"packet_size_kb,omitempty"`    // Packet size in KB
-	LocalRoute    bool                   `protobuf:"varint,4,opt,name=local_route,json=localRoute,proto3" json:"local_route,omitempty"`            // Use local route calculation
-	PingTimeoutNs int64                  `protobuf:"varint,5,opt,name=ping_timeout_ns,json=pingTimeoutNs,proto3" json:"ping_timeout_ns,omitempty"` // Timeout for ping phase only (after route setup), 0 = no timeout
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	PublicKey      string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`                   // Target visor public key
+	Tries          int32                  `protobuf:"varint,2,opt,name=tries,proto3" json:"tries,omitempty"`                                           // Number of ping attempts
+	PacketSizeKb   int32                  `protobuf:"varint,3,opt,name=packet_size_kb,json=packetSizeKb,proto3" json:"packet_size_kb,omitempty"`       // Packet size in KB
+	LocalRoute     bool                   `protobuf:"varint,4,opt,name=local_route,json=localRoute,proto3" json:"local_route,omitempty"`               // Use local route calculation
+	PingTimeoutNs  int64                  `protobuf:"varint,5,opt,name=ping_timeout_ns,json=pingTimeoutNs,proto3" json:"ping_timeout_ns,omitempty"`    // Timeout for ping phase only (after route setup), 0 = no timeout
+	SetupTimeoutNs int64                  `protobuf:"varint,6,opt,name=setup_timeout_ns,json=setupTimeoutNs,proto3" json:"setup_timeout_ns,omitempty"` // Timeout for route setup phase, 0 = no timeout (default 30s recommended)
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *PingRequest) Reset() {
@@ -93,6 +94,13 @@ func (x *PingRequest) GetLocalRoute() bool {
 func (x *PingRequest) GetPingTimeoutNs() int64 {
 	if x != nil {
 		return x.PingTimeoutNs
+	}
+	return 0
+}
+
+func (x *PingRequest) GetSetupTimeoutNs() int64 {
+	if x != nil {
+		return x.SetupTimeoutNs
 	}
 	return 0
 }
@@ -249,11 +257,171 @@ func (x *RouteHop) GetTpType() string {
 	return ""
 }
 
+type BandwidthRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PublicKey     string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`             // Target visor public key
+	DurationNs    int64                  `protobuf:"varint,2,opt,name=duration_ns,json=durationNs,proto3" json:"duration_ns,omitempty"`         // Duration to run the test in nanoseconds
+	PacketSizeKb  int32                  `protobuf:"varint,3,opt,name=packet_size_kb,json=packetSizeKb,proto3" json:"packet_size_kb,omitempty"` // Packet size in KB (default 32)
+	LocalRoute    bool                   `protobuf:"varint,4,opt,name=local_route,json=localRoute,proto3" json:"local_route,omitempty"`         // Use local route calculation (for skywire route)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BandwidthRequest) Reset() {
+	*x = BandwidthRequest{}
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BandwidthRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BandwidthRequest) ProtoMessage() {}
+
+func (x *BandwidthRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BandwidthRequest.ProtoReflect.Descriptor instead.
+func (*BandwidthRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *BandwidthRequest) GetPublicKey() string {
+	if x != nil {
+		return x.PublicKey
+	}
+	return ""
+}
+
+func (x *BandwidthRequest) GetDurationNs() int64 {
+	if x != nil {
+		return x.DurationNs
+	}
+	return 0
+}
+
+func (x *BandwidthRequest) GetPacketSizeKb() int32 {
+	if x != nil {
+		return x.PacketSizeKb
+	}
+	return 0
+}
+
+func (x *BandwidthRequest) GetLocalRoute() bool {
+	if x != nil {
+		return x.LocalRoute
+	}
+	return false
+}
+
+type BandwidthProgress struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BytesSent     uint64                 `protobuf:"varint,1,opt,name=bytes_sent,json=bytesSent,proto3" json:"bytes_sent,omitempty"`              // Cumulative bytes sent
+	BytesReceived uint64                 `protobuf:"varint,2,opt,name=bytes_received,json=bytesReceived,proto3" json:"bytes_received,omitempty"`  // Cumulative bytes received
+	ElapsedNs     int64                  `protobuf:"varint,3,opt,name=elapsed_ns,json=elapsedNs,proto3" json:"elapsed_ns,omitempty"`              // Elapsed time in nanoseconds
+	UploadSpeed   float64                `protobuf:"fixed64,4,opt,name=upload_speed,json=uploadSpeed,proto3" json:"upload_speed,omitempty"`       // Current upload speed in KB/s
+	DownloadSpeed float64                `protobuf:"fixed64,5,opt,name=download_speed,json=downloadSpeed,proto3" json:"download_speed,omitempty"` // Current download speed in KB/s
+	IsFinal       bool                   `protobuf:"varint,6,opt,name=is_final,json=isFinal,proto3" json:"is_final,omitempty"`                    // True if this is the final result
+	Error         string                 `protobuf:"bytes,7,opt,name=error,proto3" json:"error,omitempty"`                                        // Error message if test failed
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BandwidthProgress) Reset() {
+	*x = BandwidthProgress{}
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BandwidthProgress) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BandwidthProgress) ProtoMessage() {}
+
+func (x *BandwidthProgress) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BandwidthProgress.ProtoReflect.Descriptor instead.
+func (*BandwidthProgress) Descriptor() ([]byte, []int) {
+	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *BandwidthProgress) GetBytesSent() uint64 {
+	if x != nil {
+		return x.BytesSent
+	}
+	return 0
+}
+
+func (x *BandwidthProgress) GetBytesReceived() uint64 {
+	if x != nil {
+		return x.BytesReceived
+	}
+	return 0
+}
+
+func (x *BandwidthProgress) GetElapsedNs() int64 {
+	if x != nil {
+		return x.ElapsedNs
+	}
+	return 0
+}
+
+func (x *BandwidthProgress) GetUploadSpeed() float64 {
+	if x != nil {
+		return x.UploadSpeed
+	}
+	return 0
+}
+
+func (x *BandwidthProgress) GetDownloadSpeed() float64 {
+	if x != nil {
+		return x.DownloadSpeed
+	}
+	return 0
+}
+
+func (x *BandwidthProgress) GetIsFinal() bool {
+	if x != nil {
+		return x.IsFinal
+	}
+	return false
+}
+
+func (x *BandwidthProgress) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_pkg_visor_rpcgrpc_ping_proto protoreflect.FileDescriptor
 
 const file_pkg_visor_rpcgrpc_ping_proto_rawDesc = "" +
 	"\n" +
-	"\x1cpkg/visor/rpcgrpc/ping.proto\x12\arpcgrpc\"\xb1\x01\n" +
+	"\x1cpkg/visor/rpcgrpc/ping.proto\x12\arpcgrpc\"\xdb\x01\n" +
 	"\vPingRequest\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\tR\tpublicKey\x12\x14\n" +
@@ -261,7 +429,8 @@ const file_pkg_visor_rpcgrpc_ping_proto_rawDesc = "" +
 	"\x0epacket_size_kb\x18\x03 \x01(\x05R\fpacketSizeKb\x12\x1f\n" +
 	"\vlocal_route\x18\x04 \x01(\bR\n" +
 	"localRoute\x12&\n" +
-	"\x0fping_timeout_ns\x18\x05 \x01(\x03R\rpingTimeoutNs\"\xd6\x01\n" +
+	"\x0fping_timeout_ns\x18\x05 \x01(\x03R\rpingTimeoutNs\x12(\n" +
+	"\x10setup_timeout_ns\x18\x06 \x01(\x03R\x0esetupTimeoutNs\"\xd6\x01\n" +
 	"\n" +
 	"PingResult\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x05R\bsequence\x12\x1d\n" +
@@ -276,11 +445,31 @@ const file_pkg_visor_rpcgrpc_ping_proto_rawDesc = "" +
 	"\x05tp_id\x18\x01 \x01(\tR\x04tpId\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
 	"\x02to\x18\x03 \x01(\tR\x02to\x12\x17\n" +
-	"\atp_type\x18\x04 \x01(\tR\x06tpType2\x87\x01\n" +
+	"\atp_type\x18\x04 \x01(\tR\x06tpType\"\x99\x01\n" +
+	"\x10BandwidthRequest\x12\x1d\n" +
+	"\n" +
+	"public_key\x18\x01 \x01(\tR\tpublicKey\x12\x1f\n" +
+	"\vduration_ns\x18\x02 \x01(\x03R\n" +
+	"durationNs\x12$\n" +
+	"\x0epacket_size_kb\x18\x03 \x01(\x05R\fpacketSizeKb\x12\x1f\n" +
+	"\vlocal_route\x18\x04 \x01(\bR\n" +
+	"localRoute\"\xf3\x01\n" +
+	"\x11BandwidthProgress\x12\x1d\n" +
+	"\n" +
+	"bytes_sent\x18\x01 \x01(\x04R\tbytesSent\x12%\n" +
+	"\x0ebytes_received\x18\x02 \x01(\x04R\rbytesReceived\x12\x1d\n" +
+	"\n" +
+	"elapsed_ns\x18\x03 \x01(\x03R\telapsedNs\x12!\n" +
+	"\fupload_speed\x18\x04 \x01(\x01R\vuploadSpeed\x12%\n" +
+	"\x0edownload_speed\x18\x05 \x01(\x01R\rdownloadSpeed\x12\x19\n" +
+	"\bis_final\x18\x06 \x01(\bR\aisFinal\x12\x14\n" +
+	"\x05error\x18\a \x01(\tR\x05error2\xab\x02\n" +
 	"\vPingService\x129\n" +
 	"\n" +
 	"StreamPing\x12\x14.rpcgrpc.PingRequest\x1a\x13.rpcgrpc.PingResult0\x01\x12=\n" +
-	"\x0eStreamDmsgPing\x12\x14.rpcgrpc.PingRequest\x1a\x13.rpcgrpc.PingResult0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
+	"\x0eStreamDmsgPing\x12\x14.rpcgrpc.PingRequest\x1a\x13.rpcgrpc.PingResult0\x01\x12N\n" +
+	"\x13StreamBandwidthTest\x12\x19.rpcgrpc.BandwidthRequest\x1a\x1a.rpcgrpc.BandwidthProgress0\x01\x12R\n" +
+	"\x17StreamDmsgBandwidthTest\x12\x19.rpcgrpc.BandwidthRequest\x1a\x1a.rpcgrpc.BandwidthProgress0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
 
 var (
 	file_pkg_visor_rpcgrpc_ping_proto_rawDescOnce sync.Once
@@ -294,20 +483,26 @@ func file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP() []byte {
 	return file_pkg_visor_rpcgrpc_ping_proto_rawDescData
 }
 
-var file_pkg_visor_rpcgrpc_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_pkg_visor_rpcgrpc_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_pkg_visor_rpcgrpc_ping_proto_goTypes = []any{
-	(*PingRequest)(nil), // 0: rpcgrpc.PingRequest
-	(*PingResult)(nil),  // 1: rpcgrpc.PingResult
-	(*RouteHop)(nil),    // 2: rpcgrpc.RouteHop
+	(*PingRequest)(nil),       // 0: rpcgrpc.PingRequest
+	(*PingResult)(nil),        // 1: rpcgrpc.PingResult
+	(*RouteHop)(nil),          // 2: rpcgrpc.RouteHop
+	(*BandwidthRequest)(nil),  // 3: rpcgrpc.BandwidthRequest
+	(*BandwidthProgress)(nil), // 4: rpcgrpc.BandwidthProgress
 }
 var file_pkg_visor_rpcgrpc_ping_proto_depIdxs = []int32{
 	2, // 0: rpcgrpc.PingResult.route_hop_details:type_name -> rpcgrpc.RouteHop
 	0, // 1: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
 	0, // 2: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
-	1, // 3: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
-	1, // 4: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
-	3, // [3:5] is the sub-list for method output_type
-	1, // [1:3] is the sub-list for method input_type
+	3, // 3: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	3, // 4: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	1, // 5: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
+	1, // 6: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
+	4, // 7: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	4, // 8: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	5, // [5:9] is the sub-list for method output_type
+	1, // [1:5] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -324,7 +519,7 @@ func file_pkg_visor_rpcgrpc_ping_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_visor_rpcgrpc_ping_proto_rawDesc), len(file_pkg_visor_rpcgrpc_ping_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

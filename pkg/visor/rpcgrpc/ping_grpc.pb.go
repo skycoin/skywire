@@ -19,8 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PingService_StreamPing_FullMethodName     = "/rpcgrpc.PingService/StreamPing"
-	PingService_StreamDmsgPing_FullMethodName = "/rpcgrpc.PingService/StreamDmsgPing"
+	PingService_StreamPing_FullMethodName              = "/rpcgrpc.PingService/StreamPing"
+	PingService_StreamDmsgPing_FullMethodName          = "/rpcgrpc.PingService/StreamDmsgPing"
+	PingService_StreamBandwidthTest_FullMethodName     = "/rpcgrpc.PingService/StreamBandwidthTest"
+	PingService_StreamDmsgBandwidthTest_FullMethodName = "/rpcgrpc.PingService/StreamDmsgBandwidthTest"
 )
 
 // PingServiceClient is the client API for PingService service.
@@ -33,6 +35,10 @@ type PingServiceClient interface {
 	StreamPing(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PingResult], error)
 	// StreamDmsgPing performs multiple pings over dmsg and streams results
 	StreamDmsgPing(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PingResult], error)
+	// StreamBandwidthTest performs a bandwidth test and streams progress
+	StreamBandwidthTest(ctx context.Context, in *BandwidthRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BandwidthProgress], error)
+	// StreamDmsgBandwidthTest performs a bandwidth test over dmsg and streams progress
+	StreamDmsgBandwidthTest(ctx context.Context, in *BandwidthRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BandwidthProgress], error)
 }
 
 type pingServiceClient struct {
@@ -81,6 +87,44 @@ func (c *pingServiceClient) StreamDmsgPing(ctx context.Context, in *PingRequest,
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamDmsgPingClient = grpc.ServerStreamingClient[PingResult]
 
+func (c *pingServiceClient) StreamBandwidthTest(ctx context.Context, in *BandwidthRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BandwidthProgress], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PingService_ServiceDesc.Streams[2], PingService_StreamBandwidthTest_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[BandwidthRequest, BandwidthProgress]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamBandwidthTestClient = grpc.ServerStreamingClient[BandwidthProgress]
+
+func (c *pingServiceClient) StreamDmsgBandwidthTest(ctx context.Context, in *BandwidthRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BandwidthProgress], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PingService_ServiceDesc.Streams[3], PingService_StreamDmsgBandwidthTest_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[BandwidthRequest, BandwidthProgress]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamDmsgBandwidthTestClient = grpc.ServerStreamingClient[BandwidthProgress]
+
 // PingServiceServer is the server API for PingService service.
 // All implementations must embed UnimplementedPingServiceServer
 // for forward compatibility.
@@ -91,6 +135,10 @@ type PingServiceServer interface {
 	StreamPing(*PingRequest, grpc.ServerStreamingServer[PingResult]) error
 	// StreamDmsgPing performs multiple pings over dmsg and streams results
 	StreamDmsgPing(*PingRequest, grpc.ServerStreamingServer[PingResult]) error
+	// StreamBandwidthTest performs a bandwidth test and streams progress
+	StreamBandwidthTest(*BandwidthRequest, grpc.ServerStreamingServer[BandwidthProgress]) error
+	// StreamDmsgBandwidthTest performs a bandwidth test over dmsg and streams progress
+	StreamDmsgBandwidthTest(*BandwidthRequest, grpc.ServerStreamingServer[BandwidthProgress]) error
 	mustEmbedUnimplementedPingServiceServer()
 }
 
@@ -106,6 +154,12 @@ func (UnimplementedPingServiceServer) StreamPing(*PingRequest, grpc.ServerStream
 }
 func (UnimplementedPingServiceServer) StreamDmsgPing(*PingRequest, grpc.ServerStreamingServer[PingResult]) error {
 	return status.Error(codes.Unimplemented, "method StreamDmsgPing not implemented")
+}
+func (UnimplementedPingServiceServer) StreamBandwidthTest(*BandwidthRequest, grpc.ServerStreamingServer[BandwidthProgress]) error {
+	return status.Error(codes.Unimplemented, "method StreamBandwidthTest not implemented")
+}
+func (UnimplementedPingServiceServer) StreamDmsgBandwidthTest(*BandwidthRequest, grpc.ServerStreamingServer[BandwidthProgress]) error {
+	return status.Error(codes.Unimplemented, "method StreamDmsgBandwidthTest not implemented")
 }
 func (UnimplementedPingServiceServer) mustEmbedUnimplementedPingServiceServer() {}
 func (UnimplementedPingServiceServer) testEmbeddedByValue()                     {}
@@ -150,6 +204,28 @@ func _PingService_StreamDmsgPing_Handler(srv interface{}, stream grpc.ServerStre
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamDmsgPingServer = grpc.ServerStreamingServer[PingResult]
 
+func _PingService_StreamBandwidthTest_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(BandwidthRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PingServiceServer).StreamBandwidthTest(m, &grpc.GenericServerStream[BandwidthRequest, BandwidthProgress]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamBandwidthTestServer = grpc.ServerStreamingServer[BandwidthProgress]
+
+func _PingService_StreamDmsgBandwidthTest_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(BandwidthRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PingServiceServer).StreamDmsgBandwidthTest(m, &grpc.GenericServerStream[BandwidthRequest, BandwidthProgress]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamDmsgBandwidthTestServer = grpc.ServerStreamingServer[BandwidthProgress]
+
 // PingService_ServiceDesc is the grpc.ServiceDesc for PingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -166,6 +242,16 @@ var PingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamDmsgPing",
 			Handler:       _PingService_StreamDmsgPing_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamBandwidthTest",
+			Handler:       _PingService_StreamBandwidthTest_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamDmsgBandwidthTest",
+			Handler:       _PingService_StreamDmsgBandwidthTest_Handler,
 			ServerStreams: true,
 		},
 	},

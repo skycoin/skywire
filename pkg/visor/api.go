@@ -149,6 +149,8 @@ type API interface {
 	DmsgPing(conf PingConfig) ([]time.Duration, error)
 	DmsgPingOnce(conf PingConfig) (time.Duration, error)
 	StopDmsgPing(pk cipher.PubKey) error
+	BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
+	DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 
 	TestVisor(config PingConfig) ([]TestResult, error)
 
@@ -1542,6 +1544,91 @@ func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
 	return time.Since(start), nil
 }
 
+// PingOnceWithEcho performs a single ping with optional full echo.
+// Returns bytes sent, bytes received, latency, and error.
+// If echoFull is true, server echoes full payload (for bandwidth testing).
+func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
+
+	pingEntry, ok := v.pingConns[conf.PK]
+	if !ok {
+		return 0, 0, 0, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
+	}
+
+	data := make([]byte, conf.PcktSize*1024)
+	conn := pingEntry.conn
+	msg := PingMsg{
+		Timestamp: time.Now(),
+		PingPk:    conf.PK,
+		Data:      data,
+	}
+	ping, err := json.Marshal(msg)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	pingSizeMsg := PingSizeMsg{
+		Size:     len(ping),
+		EchoFull: echoFull,
+	}
+	size, err := json.Marshal(pingSizeMsg)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	start := time.Now()
+
+	// Send size message
+	if _, err = conn.Write(size); err != nil {
+		return 0, 0, 0, fmt.Errorf("write size: %w", err)
+	}
+	bytesSent += uint64(len(size))
+
+	// Read "ok" ack with timeout
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+	buf := make([]byte, 32*1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+		return bytesSent, bytesReceived, 0, fmt.Errorf("read ack: %w", err)
+	}
+	bytesReceived += uint64(n)
+
+	// Send ping data
+	if _, err = conn.Write(ping); err != nil {
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+		return bytesSent, bytesReceived, 0, fmt.Errorf("write ping: %w", err)
+	}
+	bytesSent += uint64(len(ping))
+
+	// Read echo response with timeout
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+	if echoFull {
+		// Read full payload echo
+		var received int
+		for received < len(ping) {
+			n, err = conn.Read(buf)
+			if err != nil {
+				conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+				return bytesSent, bytesReceived, 0, fmt.Errorf("read echo: %w", err)
+			}
+			received += n
+			bytesReceived += uint64(n)
+		}
+	} else {
+		// Read simple "pong" response
+		n, err = conn.Read(buf)
+		if err != nil {
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+			return bytesSent, bytesReceived, 0, fmt.Errorf("read echo: %w", err)
+		}
+		bytesReceived += uint64(n)
+	}
+	conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+
+	return bytesSent, bytesReceived, time.Since(start), nil
+}
+
 // StopPing implements API.
 func (v *Visor) StopPing(pk cipher.PubKey) error {
 	v.pingConnMx.Lock()
@@ -1736,6 +1823,91 @@ func (v *Visor) DmsgPingOnce(conf PingConfig) (time.Duration, error) {
 	return time.Since(start), nil
 }
 
+// DmsgPingOnceWithEcho performs a single dmsg ping with optional full echo.
+// Returns bytes sent, bytes received, latency, and error.
+// If echoFull is true, server echoes full payload (for bandwidth testing).
+func (v *Visor) DmsgPingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
+	v.dmsgPingMx.Lock()
+	defer v.dmsgPingMx.Unlock()
+
+	dmsgEntry, ok := v.dmsgPingConns[conf.PK]
+	if !ok {
+		return 0, 0, 0, fmt.Errorf("no dmsg ping connection for %s, call DialDmsgPing first", conf.PK)
+	}
+
+	data := make([]byte, conf.PcktSize*1024)
+	conn := dmsgEntry.conn
+	msg := PingMsg{
+		Timestamp: time.Now(),
+		PingPk:    conf.PK,
+		Data:      data,
+	}
+	pingData, err := json.Marshal(msg)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	pingSizeMsg := PingSizeMsg{
+		Size:     len(pingData),
+		EchoFull: echoFull,
+	}
+	size, err := json.Marshal(pingSizeMsg)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	start := time.Now()
+
+	// Send size message
+	if _, err = conn.Write(size); err != nil {
+		return 0, 0, 0, fmt.Errorf("write size: %w", err)
+	}
+	bytesSent += uint64(len(size))
+
+	// Read "ok" ack with timeout
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+	buf := make([]byte, 32*1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+		return bytesSent, bytesReceived, 0, fmt.Errorf("read ack: %w", err)
+	}
+	bytesReceived += uint64(n)
+
+	// Send ping data
+	if _, err = conn.Write(pingData); err != nil {
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+		return bytesSent, bytesReceived, 0, fmt.Errorf("write ping: %w", err)
+	}
+	bytesSent += uint64(len(pingData))
+
+	// Read echo response with timeout
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+	if echoFull {
+		// Read full payload echo
+		var received int
+		for received < len(pingData) {
+			n, err = conn.Read(buf)
+			if err != nil {
+				conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+				return bytesSent, bytesReceived, 0, fmt.Errorf("read echo: %w", err)
+			}
+			received += n
+			bytesReceived += uint64(n)
+		}
+	} else {
+		// Read simple "pong" response
+		n, err = conn.Read(buf)
+		if err != nil {
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+			return bytesSent, bytesReceived, 0, fmt.Errorf("read echo: %w", err)
+		}
+		bytesReceived += uint64(n)
+	}
+	conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+
+	return bytesSent, bytesReceived, time.Since(start), nil
+}
+
 // StopDmsgPing implements API.
 func (v *Visor) StopDmsgPing(pk cipher.PubKey) error {
 	v.dmsgPingMx.Lock()
@@ -1751,6 +1923,223 @@ func (v *Visor) StopDmsgPing(pk cipher.PubKey) error {
 	}
 	delete(v.dmsgPingConns, pk)
 	return nil
+}
+
+// BandwidthTest implements API.
+// Performs a bandwidth test over a skywire route by sending and receiving data for the specified duration.
+func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error) {
+	// First establish a ping connection if not already connected
+	pingConf := PingConfig{
+		PK:         conf.PK,
+		Tries:      1,
+		PcktSize:   conf.PacketSize,
+		LocalRoute: conf.LocalRoute,
+	}
+
+	v.pingConnMx.Lock()
+	_, exists := v.pingConns[conf.PK]
+	v.pingConnMx.Unlock()
+
+	if !exists {
+		if err := v.DialPing(pingConf); err != nil {
+			return BandwidthResult{}, fmt.Errorf("failed to dial: %w", err)
+		}
+	}
+
+	v.pingConnMx.Lock()
+	pingEntry, ok := v.pingConns[conf.PK]
+	if !ok {
+		v.pingConnMx.Unlock()
+		return BandwidthResult{}, fmt.Errorf("no ping connection for %s", conf.PK)
+	}
+	conn := pingEntry.conn
+	v.pingConnMx.Unlock()
+
+	// Prepare packet with EchoFull flag for download measurement
+	packetSize := conf.PacketSize
+	if packetSize <= 0 {
+		packetSize = 32 // Default 32KB packets for bandwidth test
+	}
+	data := make([]byte, packetSize*1024)
+
+	var bytesSent, bytesReceived uint64
+	start := time.Now()
+	deadline := start.Add(conf.Duration)
+
+	for time.Now().Before(deadline) {
+		msg := PingMsg{
+			Timestamp: time.Now(),
+			PingPk:    conf.PK,
+			Data:      data,
+		}
+		ping, err := json.Marshal(msg)
+		if err != nil {
+			return BandwidthResult{}, err
+		}
+
+		// Request full echo for download measurement
+		pingSizeMsg := PingSizeMsg{
+			Size:     len(ping),
+			EchoFull: true,
+		}
+		size, err := json.Marshal(pingSizeMsg)
+		if err != nil {
+			return BandwidthResult{}, err
+		}
+
+		// Send size message
+		if _, err = conn.Write(size); err != nil {
+			return BandwidthResult{}, fmt.Errorf("write size: %w", err)
+		}
+		bytesSent += uint64(len(size))
+
+		// Read "ok" ack
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+		buf := make([]byte, 32*1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+			return BandwidthResult{}, fmt.Errorf("read ack: %w", err)
+		}
+		bytesReceived += uint64(n)
+
+		// Send ping data
+		if _, err = conn.Write(ping); err != nil {
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+			return BandwidthResult{}, fmt.Errorf("write ping: %w", err)
+		}
+		bytesSent += uint64(len(ping))
+
+		// Read full echo response
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+		var received int
+		for received < len(ping) {
+			n, err = conn.Read(buf)
+			if err != nil {
+				conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+				return BandwidthResult{}, fmt.Errorf("read echo: %w", err)
+			}
+			received += n
+			bytesReceived += uint64(n)
+		}
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+	}
+
+	duration := time.Since(start)
+	durationSec := duration.Seconds()
+
+	return BandwidthResult{
+		BytesSent:     bytesSent,
+		BytesReceived: bytesReceived,
+		Duration:      duration,
+		UploadSpeed:   float64(bytesSent) / 1024 / durationSec,
+		DownloadSpeed: float64(bytesReceived) / 1024 / durationSec,
+	}, nil
+}
+
+// DmsgBandwidthTest implements API.
+// Performs a bandwidth test over dmsg by sending and receiving data for the specified duration.
+func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error) {
+	// First establish a dmsg ping connection if not already connected
+	v.dmsgPingMx.Lock()
+	_, exists := v.dmsgPingConns[conf.PK]
+	v.dmsgPingMx.Unlock()
+
+	if !exists {
+		if err := v.DialDmsgPing(conf.PK); err != nil {
+			return BandwidthResult{}, fmt.Errorf("failed to dial dmsg: %w", err)
+		}
+	}
+
+	v.dmsgPingMx.Lock()
+	dmsgEntry, ok := v.dmsgPingConns[conf.PK]
+	if !ok {
+		v.dmsgPingMx.Unlock()
+		return BandwidthResult{}, fmt.Errorf("no dmsg ping connection for %s", conf.PK)
+	}
+	conn := dmsgEntry.conn
+	v.dmsgPingMx.Unlock()
+
+	// Prepare packet with EchoFull flag for download measurement
+	packetSize := conf.PacketSize
+	if packetSize <= 0 {
+		packetSize = 32 // Default 32KB packets for bandwidth test
+	}
+	data := make([]byte, packetSize*1024)
+
+	var bytesSent, bytesReceived uint64
+	start := time.Now()
+	deadline := start.Add(conf.Duration)
+
+	for time.Now().Before(deadline) {
+		msg := PingMsg{
+			Timestamp: time.Now(),
+			PingPk:    conf.PK,
+			Data:      data,
+		}
+		ping, err := json.Marshal(msg)
+		if err != nil {
+			return BandwidthResult{}, err
+		}
+
+		// Request full echo for download measurement
+		pingSizeMsg := PingSizeMsg{
+			Size:     len(ping),
+			EchoFull: true,
+		}
+		size, err := json.Marshal(pingSizeMsg)
+		if err != nil {
+			return BandwidthResult{}, err
+		}
+
+		// Send size message
+		if _, err = conn.Write(size); err != nil {
+			return BandwidthResult{}, fmt.Errorf("write size: %w", err)
+		}
+		bytesSent += uint64(len(size))
+
+		// Read "ok" ack
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+		buf := make([]byte, 32*1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+			return BandwidthResult{}, fmt.Errorf("read ack: %w", err)
+		}
+		bytesReceived += uint64(n)
+
+		// Send ping data
+		if _, err = conn.Write(ping); err != nil {
+			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+			return BandwidthResult{}, fmt.Errorf("write ping: %w", err)
+		}
+		bytesSent += uint64(len(ping))
+
+		// Read full echo response
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+		var received int
+		for received < len(ping) {
+			n, err = conn.Read(buf)
+			if err != nil {
+				conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+				return BandwidthResult{}, fmt.Errorf("read echo: %w", err)
+			}
+			received += n
+			bytesReceived += uint64(n)
+		}
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+	}
+
+	duration := time.Since(start)
+	durationSec := duration.Seconds()
+
+	return BandwidthResult{
+		BytesSent:     bytesSent,
+		BytesReceived: bytesReceived,
+		Duration:      duration,
+		UploadSpeed:   float64(bytesSent) / 1024 / durationSec,
+		DownloadSpeed: float64(bytesReceived) / 1024 / durationSec,
+	}, nil
 }
 
 // TestResult type of test result

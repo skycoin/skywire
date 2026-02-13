@@ -24,5 +24,23 @@ type PingMsg struct {
 
 // PingSizeMsg contains the size of the PingMsg to be sent
 type PingSizeMsg struct {
-	Size int
+	Size     int  `json:"size"`
+	EchoFull bool `json:"echo_full,omitempty"` // If true, server echoes full payload for bandwidth testing
+}
+
+// BandwidthTestConfig contains parameters for bandwidth testing
+type BandwidthTestConfig struct {
+	PK         cipher.PubKey
+	Duration   time.Duration // How long to run the test
+	PacketSize int           // Size of each packet in KB
+	LocalRoute bool          // Use local route calculation
+}
+
+// BandwidthResult contains the results of a bandwidth test
+type BandwidthResult struct {
+	BytesSent     uint64        `json:"bytes_sent"`
+	BytesReceived uint64        `json:"bytes_received"`
+	Duration      time.Duration `json:"duration"`
+	UploadSpeed   float64       `json:"upload_speed_kbps"`   // KB/s
+	DownloadSpeed float64       `json:"download_speed_kbps"` // KB/s
 }

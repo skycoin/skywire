@@ -725,6 +725,20 @@ func (rc *rpcClient) StopDmsgPing(pk cipher.PubKey) error {
 	return rc.Call("StopDmsgPing", &pk, &struct{}{})
 }
 
+// BandwidthTest calls BandwidthTest.
+func (rc *rpcClient) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error) {
+	var result BandwidthResult
+	err := rc.Call("BandwidthTest", &conf, &result)
+	return result, err
+}
+
+// DmsgBandwidthTest calls DmsgBandwidthTest.
+func (rc *rpcClient) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error) {
+	var result BandwidthResult
+	err := rc.Call("DmsgBandwidthTest", &conf, &result)
+	return result, err
+}
+
 // TestVisor calls TestVisor.
 func (rc *rpcClient) TestVisor(conf PingConfig) ([]TestResult, error) {
 	var results []TestResult
@@ -1566,6 +1580,16 @@ func (mc *mockRPCClient) DmsgPingOnce(_ PingConfig) (time.Duration, error) {
 // StopDmsgPing implements API.
 func (mc *mockRPCClient) StopDmsgPing(_ cipher.PubKey) error {
 	return nil
+}
+
+// BandwidthTest implements API.
+func (mc *mockRPCClient) BandwidthTest(_ BandwidthTestConfig) (BandwidthResult, error) {
+	return BandwidthResult{}, nil
+}
+
+// DmsgBandwidthTest implements API.
+func (mc *mockRPCClient) DmsgBandwidthTest(_ BandwidthTestConfig) (BandwidthResult, error) {
+	return BandwidthResult{}, nil
 }
 
 // TestVisor implements API.

@@ -908,6 +908,22 @@ func (r *RPC) StopDmsgPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 	return r.visor.StopDmsgPing(*pk)
 }
 
+// BandwidthTest performs a bandwidth test over skywire route.
+func (r *RPC) BandwidthTest(conf BandwidthTestConfig, out *BandwidthResult) (err error) {
+	defer rpcutil.LogCall(r.log, "BandwidthTest", conf)(out, &err)
+
+	*out, err = r.visor.BandwidthTest(conf)
+	return err
+}
+
+// DmsgBandwidthTest performs a bandwidth test over dmsg.
+func (r *RPC) DmsgBandwidthTest(conf BandwidthTestConfig, out *BandwidthResult) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgBandwidthTest", conf)(out, &err)
+
+	*out, err = r.visor.DmsgBandwidthTest(conf)
+	return err
+}
+
 // TestVisor trying to test viosr by pinging to public visor.
 func (r *RPC) TestVisor(conf PingConfig, out *[]TestResult) (err error) {
 	defer rpcutil.LogCall(r.log, "TestVisor", conf)(out, &err)

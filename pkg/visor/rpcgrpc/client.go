@@ -47,13 +47,15 @@ func (c *PingClient) Close() error {
 
 // StreamPing performs pings and calls the callback for each result
 // timeout applies only to the ping phase (after route setup), 0 means no timeout
-func (c *PingClient) StreamPing(ctx context.Context, pk string, tries int32, pcktSize int32, localRoute bool, timeout time.Duration, cb PingResultCallback) error {
+// setupTimeout applies to route setup phase, 0 means no timeout
+func (c *PingClient) StreamPing(ctx context.Context, pk string, tries int32, pcktSize int32, localRoute bool, timeout time.Duration, setupTimeout time.Duration, cb PingResultCallback) error {
 	stream, err := c.client.StreamPing(ctx, &PingRequest{
-		PublicKey:     pk,
-		Tries:         tries,
-		PacketSizeKb:  pcktSize,
-		LocalRoute:    localRoute,
-		PingTimeoutNs: timeout.Nanoseconds(),
+		PublicKey:      pk,
+		Tries:          tries,
+		PacketSizeKb:   pcktSize,
+		LocalRoute:     localRoute,
+		PingTimeoutNs:  timeout.Nanoseconds(),
+		SetupTimeoutNs: setupTimeout.Nanoseconds(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start ping stream: %w", err)
@@ -118,5 +120,67 @@ func (c *PingClient) StreamDmsgPing(ctx context.Context, pk string, tries int32,
 		}
 		// DMSG pings don't have route hops
 		cb(result.Sequence, time.Duration(result.LatencyNs), result.IsSetup, nil, pingErr)
+	}
+}
+
+// BandwidthProgressCallback is called for each bandwidth progress update.
+type BandwidthProgressCallback func(bytesSent, bytesReceived uint64, elapsed time.Duration, uploadSpeed, downloadSpeed float64, isFinal bool, err error)
+
+// StreamBandwidthTest performs a bandwidth test over skywire route and calls callback for each progress update
+func (c *PingClient) StreamBandwidthTest(ctx context.Context, pk string, duration time.Duration, pcktSize int32, localRoute bool, cb BandwidthProgressCallback) error {
+	stream, err := c.client.StreamBandwidthTest(ctx, &BandwidthRequest{
+		PublicKey:    pk,
+		DurationNs:   duration.Nanoseconds(),
+		PacketSizeKb: pcktSize,
+		LocalRoute:   localRoute,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to start bandwidth test stream: %w", err)
+	}
+
+	for {
+		result, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("stream error: %w", err)
+		}
+
+		var testErr error
+		if result.Error != "" {
+			testErr = fmt.Errorf("%s", result.Error)
+		}
+		cb(result.BytesSent, result.BytesReceived, time.Duration(result.ElapsedNs),
+			result.UploadSpeed, result.DownloadSpeed, result.IsFinal, testErr)
+	}
+}
+
+// StreamDmsgBandwidthTest performs a bandwidth test over dmsg and calls callback for each progress update
+func (c *PingClient) StreamDmsgBandwidthTest(ctx context.Context, pk string, duration time.Duration, pcktSize int32, cb BandwidthProgressCallback) error {
+	stream, err := c.client.StreamDmsgBandwidthTest(ctx, &BandwidthRequest{
+		PublicKey:    pk,
+		DurationNs:   duration.Nanoseconds(),
+		PacketSizeKb: pcktSize,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to start dmsg bandwidth test stream: %w", err)
+	}
+
+	for {
+		result, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("stream error: %w", err)
+		}
+
+		var testErr error
+		if result.Error != "" {
+			testErr = fmt.Errorf("%s", result.Error)
+		}
+		cb(result.BytesSent, result.BytesReceived, time.Duration(result.ElapsedNs),
+			result.UploadSpeed, result.DownloadSpeed, result.IsFinal, testErr)
 	}
 }

@@ -314,7 +314,7 @@ func (r *router) DialRoutes(
 			Reverse:   reversePath,
 		}
 
-		rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
+		rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
 		if err != nil {
 			if attempt < maxRetries {
 				r.logger.WithError(err).Warnf("Route setup failed (attempt %d/%d), retrying with fresh route...", attempt, maxRetries)
@@ -322,6 +322,11 @@ func (r *router) DialRoutes(
 			}
 			r.logger.WithError(err).Error("Error dialing route group")
 			return nil, err
+		}
+
+		// Reorder setup nodes to prioritize the one that worked
+		if !connectedNode.Null() {
+			r.conf.SetupNodes = ReorderSetupNodes(r.conf.SetupNodes, connectedNode)
 		}
 
 		if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
@@ -409,7 +414,7 @@ func (r *router) PingRoute(
 			Reverse:   reversePath,
 		}
 
-		rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
+		rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
 		if err != nil {
 			if attempt < maxRetries {
 				r.logger.WithError(err).Warnf("Ping route setup failed (attempt %d/%d), retrying...", attempt, maxRetries)
@@ -417,6 +422,11 @@ func (r *router) PingRoute(
 			}
 			r.logger.WithError(err).Error("Error dialing ping route group")
 			return nil, err
+		}
+
+		// Reorder setup nodes to prioritize the one that worked
+		if !connectedNode.Null() {
+			r.conf.SetupNodes = ReorderSetupNodes(r.conf.SetupNodes, connectedNode)
 		}
 
 		if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {

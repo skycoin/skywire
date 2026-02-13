@@ -18,15 +18,16 @@ import (
 )
 
 var (
-	tries       int
-	pcktSize    int
-	pubVisCount int
-	localRoute  bool
-	createTp    bool
-	tpType      string
-	useDmsg     bool
-	showRoute   bool
-	pingTimeout time.Duration
+	tries        int
+	pcktSize     int
+	pubVisCount  int
+	localRoute   bool
+	createTp     bool
+	tpType       string
+	useDmsg      bool
+	showRoute    bool
+	pingTimeout  time.Duration
+	setupTimeout time.Duration
 )
 
 func init() {
@@ -39,6 +40,7 @@ func init() {
 	pingCmd.Flags().BoolVar(&useDmsg, "dmsg", false, "Ping over dmsg connection instead of skywire route")
 	pingCmd.Flags().BoolVar(&showRoute, "show-route", false, "Show the route hops used for the ping")
 	pingCmd.Flags().DurationVarP(&pingTimeout, "timeout", "o", 0, "Timeout per ping attempt; fails if exceeded (e.g., 5s, 30s)")
+	pingCmd.Flags().DurationVar(&setupTimeout, "setup-timeout", 30*time.Second, "Timeout for route setup phase")
 	RootCmd.AddCommand(testCmd)
 	testCmd.Flags().IntVarP(&tries, "tries", "t", 1, "Number of tries per public visors")
 	testCmd.Flags().IntVarP(&pcktSize, "size", "s", 2, "Size of packet, in KB, default is 2KB")
@@ -133,7 +135,7 @@ var pingCmd = &cobra.Command{
 			err = grpcClient.StreamDmsgPing(ctx, pk.String(), int32(tries), int32(pcktSize), pingTimeout, callback)
 		} else {
 			fmt.Printf("Dialing ping to %s...\n", pk)
-			err = grpcClient.StreamPing(ctx, pk.String(), int32(tries), int32(pcktSize), localRoute, pingTimeout, callback)
+			err = grpcClient.StreamPing(ctx, pk.String(), int32(tries), int32(pcktSize), localRoute, pingTimeout, setupTimeout, callback)
 		}
 		// Handle errors appropriately
 		if err != nil {

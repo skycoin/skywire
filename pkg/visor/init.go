@@ -1103,13 +1103,22 @@ func handlePingConn(log *logging.Logger, remoteConn net.Conn, _ *Visor) {
 		}
 
 		// Echo back for RTT measurement
-		_, err = remoteConn.Write([]byte("pong"))
-		if err != nil {
-			log.WithError(err).Error("Failed to write ping echo")
-			return
+		// If EchoFull is set, echo the full payload for bandwidth testing
+		if size.EchoFull {
+			_, err = remoteConn.Write(ping)
+			if err != nil {
+				log.WithError(err).Error("Failed to write full ping echo")
+				return
+			}
+			log.Debugf("Echoed full ping response (%d bytes)", len(ping))
+		} else {
+			_, err = remoteConn.Write([]byte("pong"))
+			if err != nil {
+				log.WithError(err).Error("Failed to write ping echo")
+				return
+			}
+			log.Debug("Echoed ping response")
 		}
-
-		log.Debug("Echoed ping response")
 	}
 }
 
@@ -1196,13 +1205,22 @@ func handleDmsgPingConn(log *logging.Logger, conn net.Conn) {
 		}
 
 		// Echo back for RTT measurement
-		_, err = conn.Write([]byte("pong"))
-		if err != nil {
-			log.WithError(err).Error("Failed to write dmsg ping echo")
-			return
+		// If EchoFull is set, echo the full payload for bandwidth testing
+		if size.EchoFull {
+			_, err = conn.Write(ping)
+			if err != nil {
+				log.WithError(err).Error("Failed to write full dmsg ping echo")
+				return
+			}
+			log.Debugf("Echoed full dmsg ping response (%d bytes)", len(ping))
+		} else {
+			_, err = conn.Write([]byte("pong"))
+			if err != nil {
+				log.WithError(err).Error("Failed to write dmsg ping echo")
+				return
+			}
+			log.Debug("Echoed dmsg ping response")
 		}
-
-		log.Debug("Echoed dmsg ping response")
 	}
 }
 
@@ -1568,6 +1586,23 @@ func (a *visorPingAdapter) DmsgPingOnce(conf rpcgrpc.PingConf) (time.Duration, e
 		Tries:    conf.Tries,
 		PcktSize: conf.PcktSize,
 	})
+}
+
+func (a *visorPingAdapter) PingOnceWithEcho(conf rpcgrpc.PingConf, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
+	return a.v.PingOnceWithEcho(PingConfig{
+		PK:         conf.PK,
+		Tries:      conf.Tries,
+		PcktSize:   conf.PcktSize,
+		LocalRoute: conf.LocalRoute,
+	}, echoFull)
+}
+
+func (a *visorPingAdapter) DmsgPingOnceWithEcho(conf rpcgrpc.PingConf, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
+	return a.v.DmsgPingOnceWithEcho(PingConfig{
+		PK:       conf.PK,
+		Tries:    conf.Tries,
+		PcktSize: conf.PcktSize,
+	}, echoFull)
 }
 
 func (a *visorPingAdapter) StopDmsgPing(pk cipher.PubKey) error {
