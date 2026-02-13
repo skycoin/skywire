@@ -179,10 +179,10 @@ func (l *AppLauncher) AppState(name string) (*appserver.AppState, bool) {
 		if connSummary != nil {
 			state.Status = appserver.AppStatusRunning
 		}
-		// for a edge case where app has given the start status but we are unable to retrieve the conn info
-		if connSummary == nil && state.DetailedStatus == appserver.AppDetailedStatusRunning {
-			state.DetailedStatus = appserver.AppDetailedStatusStarting
-			state.Status = appserver.AppStatusStarting
+		// Check if the proc is actually running - this handles apps that don't use connections
+		// (like skynet server which only registers ports via RPC)
+		if proc.IsRunning() && state.DetailedStatus == appserver.AppDetailedStatusRunning {
+			state.Status = appserver.AppStatusRunning
 		}
 		switch state.DetailedStatus {
 		case appserver.AppDetailedStatusVPNConnecting, appserver.AppDetailedStatusStarting, appserver.AppDetailedStatusReconnecting:
@@ -345,9 +345,20 @@ func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string)
 		LogDBLoc:    filepath.Join(lc.LocalPath, ac.Name+"_log.db"),
 	}
 
+	// Try to find internal app function:
+	// 1. If Binary is empty, look up by Name (e.g., "skynet")
+	// 2. If Binary is set, look up by Binary name (e.g., "skynet-3435" with Binary="skynet")
+	// This allows multiple instances (skynet-3435, skynet-8080) to use the same internal function.
 	if ac.Binary == "" {
 		if runFunc, found := GetApp(ac.Name); found {
 			procConf.RunFunc = runFunc
+		}
+	} else {
+		// Binary is set - try to find internal app by binary name first
+		if runFunc, found := GetApp(ac.Binary); found {
+			procConf.RunFunc = runFunc
+			// Clear BinaryLoc since we're using internal function
+			procConf.BinaryLoc = ""
 		}
 	}
 

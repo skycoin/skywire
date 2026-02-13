@@ -68,6 +68,10 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		GatherContainersInfo().
 		GatherVisorPKs(itc.ParticipatingVisorsHostNames)
 
+	// Dump TPD state BEFORE cleanup to see what exists from previous test
+	t.Log("=== TPD STATE BEFORE RESET ===")
+	env.DumpTPDState(itc.ParticipatingVisorsHostNames...)
+
 	for _, tp := range itc.TransportsToAdd {
 		_ = env.VisorRemoveTransport(tp) //nolint:errcheck
 	}
@@ -124,6 +128,10 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 	const tpdReconciliationWait = 5 * time.Second
 	t.Logf("Waiting %v for TPD reconciliation to clean up stale transport entries...", tpdReconciliationWait)
 	time.Sleep(tpdReconciliationWait)
+
+	// Dump TPD state AFTER reset to verify cleanup happened
+	t.Log("=== TPD STATE AFTER RESET ===")
+	env.DumpTPDState(itc.ParticipatingVisorsHostNames...)
 }
 
 func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {

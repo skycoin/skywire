@@ -21,6 +21,11 @@ export class Node {
   skybianBuildVersion?: string;
   autoconnectTransports: boolean;
   rewardsAddress: string;
+  countryCode?: string;
+  regionName?: string;
+  cityName?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Application {

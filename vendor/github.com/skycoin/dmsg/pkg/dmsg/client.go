@@ -3,6 +3,8 @@ package dmsg
 
 import (
 	"context"
+	crand "crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -209,8 +211,15 @@ func (ce *Client) Serve(ctx context.Context) {
 			ce.log.Warnf("No entries found. Retrying after %s...", ce.bo.String())
 			ce.serveWait()
 		}
-		// randomize dmsg servers list
-		rand.Shuffle(len(entries), func(i, j int) {
+		// randomize dmsg servers list using crypto/rand seed for true randomization
+		// This ensures each client connects to servers in a different order,
+		// preventing load imbalance when multiple clients start simultaneously
+		var seed int64
+		if err := binary.Read(crand.Reader, binary.BigEndian, &seed); err != nil {
+			seed = time.Now().UnixNano() // fallback to time-based seed
+		}
+		rng := rand.New(rand.NewSource(seed)) //nolint:gosec // G404: seed is from crypto/rand, math/rand is fine for shuffling
+		rng.Shuffle(len(entries), func(i, j int) {
 			entries[i], entries[j] = entries[j], entries[i]
 		})
 

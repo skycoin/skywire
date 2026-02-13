@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
@@ -21,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -29,13 +31,13 @@ const (
 )
 
 var (
-	passcode string
-	appPort  uint16
+	whitelist string
+	appPort   uint16
 )
 
 func init() {
 	launcher.RegisterApp("skysocks", RunSkysocks)
-	RootCmd.Flags().StringVar(&passcode, "passcode", "", "passcode to authenticate connecting users")
+	RootCmd.Flags().StringVar(&whitelist, "whitelist", "", "comma-separated list of public keys allowed to connect (empty = allow all)")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
 
@@ -62,7 +64,7 @@ func RunSkysocks(ctx context.Context, args []string) error {
 	// Parse flags when called via internal launcher
 	if len(args) > 0 {
 		fs := pflag.NewFlagSet("skysocks", pflag.ContinueOnError)
-		fs.StringVar(&passcode, "passcode", "", "passcode to authenticate")
+		fs.StringVar(&whitelist, "whitelist", "", "comma-separated public keys")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
@@ -72,14 +74,30 @@ func RunSkysocks(ctx context.Context, args []string) error {
 	appCl := app.NewClient(nil)
 	defer appCl.Close()
 
-	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		print(fmt.Sprintf("Failed to output build info: %v", err))
+	appCl.Log().Infof("Build info: %s", buildinfo.Version())
+
+	// Parse whitelist
+	var whitelistPKs []cipher.PubKey
+	if whitelist != "" {
+		for _, pkStr := range strings.Split(whitelist, ",") {
+			pkStr = strings.TrimSpace(pkStr)
+			if pkStr == "" {
+				continue
+			}
+			var pk cipher.PubKey
+			if err := pk.UnmarshalText([]byte(pkStr)); err != nil {
+				appCl.Log().Errorf("Invalid whitelist public key %s: %v", pkStr, err)
+				setAppError(appCl, err)
+				return err
+			}
+			whitelistPKs = append(whitelistPKs, pk)
+		}
 	}
 
-	srv, err := skysocks.NewServer(passcode, appCl)
+	srv, err := skysocks.NewServer(whitelistPKs, appCl)
 	if err != nil {
 		setAppError(appCl, err)
-		print(fmt.Sprintf("Failed to create a new server: %v\n", err))
+		appCl.Log().Errorf("Failed to create a new server: %v", err)
 		return err
 	}
 
@@ -92,17 +110,17 @@ func RunSkysocks(ctx context.Context, args []string) error {
 	l, err := appCl.Listen(netType, port)
 	if err != nil {
 		setAppError(appCl, err)
-		print(fmt.Sprintf("Error listening network %v on port %d: %v\n", netType, port, err))
+		appCl.Log().Errorf("Error listening network %v on port %d: %v", netType, port, err)
 		return err
 	}
 
-	fmt.Println("Starting serving proxy server")
+	appCl.Log().Info("Starting serving proxy server")
 
 	if runtime.GOOS == "windows" {
 		ipcClient, err := ipc.StartClient(visorconfig.SkysocksName, nil)
 		if err != nil {
 			setAppError(appCl, err)
-			print(fmt.Sprintf("Error creating ipc server for skysocks: %v\n", err))
+			appCl.Log().Errorf("Error creating ipc server for skysocks: %v", err)
 			return err
 		}
 		go srv.ListenIPC(ipcClient)
@@ -114,7 +132,7 @@ func RunSkysocks(ctx context.Context, args []string) error {
 			<-termCh
 
 			if err := srv.Close(); err != nil {
-				print(fmt.Sprintf("%v\n", err))
+				appCl.Log().Errorf("Error closing server: %v", err)
 			}
 		}()
 	}
@@ -128,7 +146,7 @@ func RunSkysocks(ctx context.Context, args []string) error {
 	select {
 	case err := <-serveCh:
 		if err != nil {
-			print(fmt.Sprintf("%v\n", err))
+			appCl.Log().Errorf("Serve error: %v", err)
 			return err
 		}
 	case <-ctx.Done():
@@ -142,13 +160,13 @@ func RunSkysocks(ctx context.Context, args []string) error {
 
 func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
-		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
+		appCl.Log().Errorf("Failed to set status %v: %v", status, err)
 	}
 }
 
 func setAppError(appCl *app.Client, appErr error) {
 	if err := appCl.SetError(appErr.Error()); err != nil {
-		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
+		appCl.Log().Errorf("Failed to set error %v: %v", appErr, err)
 	}
 }
 
@@ -161,6 +179,6 @@ func Execute() {
 
 func setAppPort(appCl *app.Client, port routing.Port) {
 	if err := appCl.SetAppPort(port); err != nil {
-		print(fmt.Sprintf("Failed to set port %v: %v\n", port, err))
+		appCl.Log().Errorf("Failed to set port %v: %v", port, err)
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 // Client is used by skywire apps.
@@ -30,12 +31,24 @@ type Client struct {
 // NewClient creates a new Client, panicking on any error.
 func NewClient(eventSubs *appevent.Subscriber) *Client {
 	log := logrus.New()
+	// Use same formatter as visor for consistent log output
+	log.SetFormatter(&logging.TextFormatter{
+		FullTimestamp:      true,
+		AlwaysQuoteStrings: true,
+		QuoteEmptyFields:   true,
+		ForceFormatting:    true,
+		DisableColors:      false,
+		ForceColors:        true,
+		TimestampFormat:    "2006-01-02T15:04:05.0000Z07:00",
+	})
 
 	conf, err := appcommon.ProcConfigFromEnv()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to obtain proc config.")
 	}
-	client, err := NewClientFromConfig(log, conf, eventSubs)
+	// Add app name to logger for identification (uses _module key for bracket display)
+	appLog := log.WithField("_module", conf.AppName)
+	client, err := NewClientFromConfig(appLog, conf, eventSubs)
 	if err != nil {
 		log.WithError(err).Panic("Failed to create app client.")
 	}
@@ -62,6 +75,11 @@ func NewClientFromConfig(log logrus.FieldLogger, conf appcommon.ProcConfig, subs
 // Config returns the underlying proc config.
 func (c *Client) Config() appcommon.ProcConfig {
 	return c.conf
+}
+
+// Log returns the client's logger for apps to use for logging.
+func (c *Client) Log() logrus.FieldLogger {
+	return c.log
 }
 
 // SetDetailedStatus sets detailed app status within the visor.

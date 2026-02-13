@@ -17,7 +17,7 @@ const (
 	HandshakeNoFreeIPs
 	// HandshakeStatusInternalError is returned in all other cases when some server error occurred.
 	HandshakeStatusInternalError
-	// HandshakeStatusForbidden is returned if client had sent the wrong passcode.
+	// HandshakeStatusForbidden is returned if client is not in the server's whitelist.
 	HandshakeStatusForbidden
 )
 

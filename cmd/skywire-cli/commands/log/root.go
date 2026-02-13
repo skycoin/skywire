@@ -29,6 +29,9 @@ var (
 	hideErr        bool
 	showUT         bool
 	pubKeys        []cipher.PubKey
+	runCleanup     bool
+	backupDir      string
+	maxAgeDays     int
 )
 
 // RootCmd is logCmd

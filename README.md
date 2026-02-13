@@ -32,7 +32,7 @@ A Skywire visor is identified by its public key. Skywire transports are encrypte
 
 ## Skywire Routing
 
-Skywire routes consist of one or more transports. A Skywire route may not transit the same public key twice, in order to prevent data loops. The Skywire routing system is designed with privacy in mind to defeat data snooping efforts. Packets are uniform in size, stripped of identifying headers, and fuzzed to appear as noise. A visor handling transports where data flows is only aware of the public key of the previous hop and the next hop — not the ultimate source or destination of the packet. These measures significantly mitigate the risk of metadata leakage or traffic analysis. When a transport is trafficking data from multiple sources and destinations, it becomes impossible to perform traffic correlation attacks or related exploits. Another planned feature is route multiplexing, which will multiplex multi-hop routes and permit more bandwidth between the source and destination — similar in concept to BitTorrent.
+Skywire routes consist of one or more transports. A Skywire route may not transit the same public key twice, in order to prevent data loops. The Skywire routing system is designed with privacy in mind to defeat data snooping efforts. Packets are encrypted using the Noise Protocol (ChaCha20-Poly1305), making their contents appear as random data to observers. A visor handling transports where data flows is only aware of the public key of the previous hop and the next hop — not the ultimate source or destination of the packet. These measures significantly mitigate the risk of metadata leakage or traffic analysis. When a transport is trafficking data from multiple sources and destinations, it becomes difficult to perform traffic correlation attacks or related exploits. Another planned feature is route multiplexing, which will multiplex multi-hop routes and permit more bandwidth between the source and destination — similar in concept to BitTorrent.
 
 ## Skywire Visor
 
@@ -52,7 +52,12 @@ The `skywire dmsg web` and `skywire dmsg web srv` subcommands allow port forward
 
 ## SkyNet – P2P port forwarding over Skywire
 
-SkyNet is the (planned) Skywire counterpoint to DmsgWeb — facilitating port forwarding over Skywire’s peer-to-peer transport types and advanced routing, without transiting a DMSG server or servers.
+SkyNet is the Skywire counterpart to DmsgWeb — facilitating port forwarding over Skywire's peer-to-peer transport types and advanced routing, without transiting a DMSG server. With SkyNet, you can:
+
+* **Expose local ports**: Run a SkyNet server to make local TCP services accessible to other Skywire visors
+* **Connect to remote services**: Use the SkyNet client to forward remote ports to your localhost
+* **Access control**: Whitelist specific public keys to restrict who can connect to your server
+* **Multiple instances**: Run multiple server and client instances simultaneously with unique names
 
 ## Skywire Deployment Services
 
@@ -72,7 +77,7 @@ Table of Contents
 
   * [Commands and Subcommands](#commands-and-subcommands)
   * [Visor Native Applications](#visor-native-applications)
-  * [go install or go run Skywire (go1\.24\.3)](#go-install-or-go-run-skywire-go1243)
+  * [go install or go run Skywire (go1\.25+)](#go-install-or-go-run-skywire-go125)
   * [Installing Skywire from Release](#installing-skywire-from-release)
   * [Permissions](#permissions)
   * [Dependencies](#dependencies)
@@ -84,6 +89,7 @@ Table of Contents
   * [Skywire Configuration in\-depth](#skywire-configuration-in-depth)
     * [Hypervisor web UI](#hypervisor-web-ui)
     * [Add remote hypervisor](#add-remote-hypervisor)
+    * [Network Visualization UI](#network-visualization-ui)
   * [Files and folders created by skywire at runtime](#files-and-folders-created-by-skywire-at-runtime)
   * [Run skywire visor](#run-skywire-visor)
     * [Process control](#process-control)
@@ -91,6 +97,7 @@ Table of Contents
     * [Routing Rules](#routing-rules)
     * [Using the Skywire VPN](#using-the-skywire-vpn)
     * [Using the Skywire SOCKS5 proxy client](#using-the-skywire-socks5-proxy-client)
+    * [Using SkyNet port forwarding](#using-skynet-port-forwarding)
   * [Skycoin Rewards](#skycoin-rewards)
   * [Linux Packages](#linux-packages)
     * [Debian packages](#debian-packages)
@@ -117,6 +124,8 @@ _Note: Visor apps are not executed directly by the user, but hosted by the visor
 * [skysocks-client](cmd/apps/skysocks-client/README.md)
 * [vpn-client](cmd/apps/vpn-client/README.md)
 * [vpn-server](cmd/apps/vpn-server/README.md)
+* [skynet](cmd/apps/skynet/README.md) - P2P port forwarding server
+* [skynet-client](cmd/apps/skynet-client/README.md) - P2P port forwarding client
 
 ### Example custom applications
 
@@ -125,7 +134,7 @@ _Note: Visor apps are not executed directly by the user, but hosted by the visor
 
 Further documentation can be found in the [skywire wiki](https://github.com/skycoin/skywire/wiki).
 
-## `go install` or `go run` Skywire (go1.24.3)
+## `go install` or `go run` Skywire (go1.25+)
 
 Skywire commands can be executed via `go run`:
 
@@ -134,8 +143,8 @@ $ go run github.com/skycoin/skywire@develop
 ┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 └─┐├┴┐└┬┘││││├┬┘├┤
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
-v1.3.29-rc7.0.20250706003615-ed3fbd3aa76d
-built with go1.24.3
+v1.3.33
+built with go1.25.6
 
 Available Commands:
   visor     Skywire Visor
@@ -429,6 +438,32 @@ OR:
 ```
 skywire cli config gen --hvpk <public-key>
 ```
+
+### Network Visualization UI
+
+Skywire includes a network visualization and visor control interface that can run in two modes:
+
+**Visor-embedded mode** (recommended when visor is running):
+```
+skywire cli tp viz --visor
+```
+This starts the UI as part of the visor, with direct access to local transport and route data.
+
+**Standalone mode** (network visualization only):
+```
+skywire cli tp viz
+```
+This runs a standalone visualization server using transport discovery data.
+
+The web UI (default `localhost:8080`) provides:
+
+* **Real-time network graph**: Visual representation of visors and their connections in the Skywire network
+* **Transport information**: View active transports with details on type (STCPR, SUDPH, DMSG), remote public keys, and connection status
+* **Geographic clustering**: Visors are grouped by country and IP subnet for easier network topology understanding
+* **Click-to-copy**: Easily copy public keys by clicking on nodes in the graph
+* **Visor control** (visor mode): Direct interface for managing the local visor
+
+Note: This is a separate UI from the hypervisor interface and caches transport data locally.
 
 ## Files and folders created by skywire at runtime
 _Note: not all of these files will be created by default._
@@ -854,6 +889,84 @@ ssh user@host -p 22 -o "ProxyCommand=ncat --proxy-type socks5 --proxy 127.0.0.1:
 Stop the socks5 proxy client:
 ```
 skywire cli proxy stop
+```
+
+### Using SkyNet port forwarding
+
+SkyNet enables peer-to-peer port forwarding over Skywire transports. Unlike DmsgWeb which routes through DMSG servers, SkyNet uses direct peer-to-peer connections (STCPR, SUDPH) when available.
+
+#### Running a SkyNet Server
+
+To expose a local port over the Skywire network:
+
+```bash
+# Start a server exposing local port 8080
+skywire cli skynet srv start --port 8080
+
+# Start with a custom name
+skywire cli skynet srv start --port 3000 --name my-web-server
+
+# Restrict access to specific public keys (whitelist)
+skywire cli skynet srv start --port 8080 --wl 02abc...,03def...
+```
+
+Check server status:
+```bash
+skywire cli skynet srv status
+```
+
+Stop a server:
+```bash
+skywire cli skynet srv stop --name skynet-8080
+# Or stop by port
+skywire cli skynet srv stop --port 8080
+```
+
+#### Connecting with SkyNet Client
+
+To forward a remote SkyNet server port to your localhost:
+
+```bash
+# Connect to a remote server and forward to local port
+skywire cli skynet start --pk <server-public-key> --remote 8080 --local 9000
+
+# Use raw TCP mode (for non-HTTP traffic)
+skywire cli skynet start --pk <server-pk> --remote 3306 --local 3306 --raw-tcp
+```
+
+This makes the remote service available at `localhost:9000`.
+
+Check client status:
+```bash
+skywire cli skynet status
+```
+
+Stop a client:
+```bash
+skywire cli skynet stop --name skynet-client-9000
+```
+
+#### Example: Exposing a Web Server
+
+On the server visor:
+```bash
+# Start a local web server (e.g., on port 8080)
+python -m http.server 8080
+
+# Expose it via SkyNet
+skywire cli skynet srv start --port 8080
+```
+
+On the client visor:
+```bash
+# Get the server's public key
+SERVER_PK="02abc..."
+
+# Forward remote port 8080 to local port 9000
+skywire cli skynet start --pk $SERVER_PK --remote 8080 --local 9000
+
+# Access the remote web server locally
+curl http://localhost:9000
 ```
 
 ## Skycoin Rewards

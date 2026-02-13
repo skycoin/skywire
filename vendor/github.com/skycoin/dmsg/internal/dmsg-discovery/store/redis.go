@@ -249,3 +249,40 @@ func (r *redisStore) AllVisorEntries(ctx context.Context) ([]string, error) {
 	}
 	return clients, err
 }
+
+func (r *redisStore) AllClientEntries(ctx context.Context) ([]*disc.Entry, error) {
+	pks, err := r.client.SMembers(ctx, "clients").Result()
+	if err != nil {
+		log.WithError(err).Errorf("Failed to get clients (SMembers) from redis")
+		return nil, disc.ErrUnexpected
+	}
+
+	if len(pks) == 0 {
+		return nil, nil
+	}
+
+	payloads, err := r.client.MGet(ctx, pks...).Result()
+	if err != nil {
+		log.WithError(err).Errorf("Failed to get client entries (MGet) from redis")
+		return nil, disc.ErrUnexpected
+	}
+
+	var entries []*disc.Entry
+	for _, payload := range payloads {
+		if payload == nil {
+			continue
+		}
+
+		var entry *disc.Entry
+		if err := json.Unmarshal([]byte(payload.(string)), &entry); err != nil {
+			log.WithError(err).Warnf("Failed to unmarshal payload %s", payload.(string))
+			continue
+		}
+
+		if entry.Client != nil {
+			entries = append(entries, entry)
+		}
+	}
+
+	return entries, nil
+}

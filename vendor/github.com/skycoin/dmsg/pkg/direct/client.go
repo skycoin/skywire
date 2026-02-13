@@ -101,3 +101,36 @@ func (c *directClient) AllEntries(_ context.Context) (entries []string, err erro
 	}
 	return entries, nil
 }
+
+// AllClientsByServer returns all client entries grouped by server public key
+func (c *directClient) AllClientsByServer(_ context.Context) (map[string][]*disc.Entry, error) {
+	c.mx.RLock()
+	defer c.mx.RUnlock()
+	result := make(map[string][]*disc.Entry)
+	for _, entry := range c.entries {
+		if entry.Client != nil {
+			for _, serverPK := range entry.Client.DelegatedServers {
+				result[serverPK.Hex()] = append(result[serverPK.Hex()], entry)
+			}
+		}
+	}
+	return result, nil
+}
+
+// ClientsByServer returns all client entries delegated to a specific server
+func (c *directClient) ClientsByServer(_ context.Context, serverPK cipher.PubKey) ([]*disc.Entry, error) {
+	c.mx.RLock()
+	defer c.mx.RUnlock()
+	var entries []*disc.Entry
+	for _, entry := range c.entries {
+		if entry.Client != nil {
+			for _, delegatedPK := range entry.Client.DelegatedServers {
+				if delegatedPK == serverPK {
+					entries = append(entries, entry)
+					break
+				}
+			}
+		}
+	}
+	return entries, nil
+}

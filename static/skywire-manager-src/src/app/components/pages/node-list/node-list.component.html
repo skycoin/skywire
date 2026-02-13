@@ -92,6 +92,12 @@
             {{ 'nodes.label' | translate }}
             <mat-icon *ngIf="dataSorter.currentSortingColumn === labelSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           </th>
+          <th>
+            {{ 'nodes.ip' | translate }}
+          </th>
+          <th>
+            {{ 'nodes.location' | translate }}
+          </th>
           <th class="sortable-column" (click)="dataSorter.changeSortingOrder(keySortData)">
             {{ 'nodes.key' | translate }}
             <mat-icon *ngIf="dataSorter.currentSortingColumn === keySortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
@@ -125,6 +131,16 @@
           </td>
           <td>
             {{ node.label }}
+          </td>
+          <td>
+            <span *ngIf="node.ip" [matTooltip]="'nodes.lan-ip' | translate">{{ node.ip }}</span>
+            <span *ngIf="node.publicIp"> / </span>
+            <span *ngIf="node.publicIp" [matTooltip]="'nodes.public-ip' | translate">{{ node.publicIp }}</span>
+            <span *ngIf="!node.ip && !node.publicIp">-</span>
+          </td>
+          <td>
+            <span *ngIf="node.countryCode">{{ node.cityName ? node.cityName + ', ' : '' }}{{ node.regionName ? node.regionName + ', ' : '' }}{{ node.countryCode }}</span>
+            <span *ngIf="!node.countryCode">-</span>
           </td>
           <td>
             {{ node.localPk }}
@@ -218,6 +234,16 @@
               <div class="list-row">
                 <span class="title">{{ 'nodes.label' | translate }}</span>:
                 {{ node.label }}
+              </div>
+              <div class="list-row" *ngIf="node.ip || node.publicIp">
+                <span class="title">{{ 'nodes.ip' | translate }}</span>:
+                <span *ngIf="node.ip">{{ node.ip }}</span>
+                <span *ngIf="node.ip && node.publicIp"> / </span>
+                <span *ngIf="node.publicIp">{{ node.publicIp }}</span>
+              </div>
+              <div class="list-row" *ngIf="node.countryCode">
+                <span class="title">{{ 'nodes.location' | translate }}</span>:
+                <span *ngIf="node.cityName">{{ node.cityName }}, </span><span *ngIf="node.regionName">{{ node.regionName }}, </span>{{ node.countryCode }}
               </div>
               <div class="list-row long-content">
                 <span class="title">{{ 'nodes.key' | translate }}</span>:

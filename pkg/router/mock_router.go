@@ -331,6 +331,16 @@ func (_m *MockRouter) SetupIsTrusted(_a0 cipher.PubKey) bool {
 	return r0
 }
 
+// SetExistingTPOnly provides a mock function with given fields: _a0
+func (_m *MockRouter) SetExistingTPOnly(_a0 bool) {
+	_m.Called(_a0)
+}
+
+// SetForceLocalRoutes provides a mock function with given fields: _a0
+func (_m *MockRouter) SetForceLocalRoutes(_a0 bool) {
+	_m.Called(_a0)
+}
+
 // NewMockRouter creates a new instance of MockRouter. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockRouter(t interface {

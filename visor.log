@@ -1,0 +1,160 @@
+^C[2026-02-01T08:11:36.6418-06:00] INFO []: Closing with received signal. signal=interrupt
+[2026-02-01T08:11:36.6419-06:00] INFO [visor:shutdown]: Begin shutdown.
+[2026-02-01T08:11:36.6420-06:00] DEBUG [19/19] [visor:shutdown:transportable]: Shutting down module...
+[2026-02-01T08:11:36.6422-06:00] DEBUG [19/19] [visor:shutdown:transportable]: Module stopped cleanly. elapsed=225.916µs
+[2026-02-01T08:11:36.6427-06:00] DEBUG [18/19] [visor:shutdown:skywire_ping]: Shutting down module...
+[2026-02-01T08:11:36.6429-06:00] DEBUG [transport_setup]: Dmsg client stopped serving. error="dmsg error 200 - local entity closed"
+[2026-02-01T08:11:36.6431-06:00] DEBUG [18/19] [visor:shutdown:skywire_ping]: Module stopped cleanly. elapsed=401.331µs
+[2026-02-01T08:11:36.6434-06:00] DEBUG [17/19] [visor:shutdown:tpd_concurrency]: Shutting down module...
+[2026-02-01T08:11:36.6435-06:00] DEBUG [17/19] [visor:shutdown:tpd_concurrency]: Module stopped cleanly. elapsed=98.986µs
+[2026-02-01T08:11:36.6435-06:00] DEBUG [16/19] [visor:shutdown:sky_forwarding]: Shutting down module...
+[2026-02-01T08:11:36.6437-06:00] DEBUG [16/19] [visor:shutdown:sky_forwarding]: Module stopped cleanly. elapsed=54.396µs
+[2026-02-01T08:11:36.6437-06:00] DEBUG [15/19] [visor:shutdown:launcher.proc_manager]: Shutting down module...
+[2026-02-01T08:11:36.6438-06:00] ERROR [skychat]: Failed to set status Stopped: unexpected EOF
+[2026-02-01T08:11:36.6438-06:00] INFO [skychat]: Failed to accept conn: unexpected EOF
+[2026-02-01T08:11:36.6438-06:00] ERROR [skychat]: Failed to set status Stopped: io: read/write on closed pipe
+[2026-02-01T08:11:36.6438-06:00] DEBUG [proc_manager]: App stopped successfully. app_name="skychat"
+[2026-02-01T08:11:36.6438-06:00] ERROR [skychat]: Error closing listener. error="connection is shut down"
+[2026-02-01T08:11:36.6424-06:00] INFO [proc:skychat:c7bf0fc01eae4308b2b5dacdcce81b37]: App skychat is Stopped
+[2026-02-01T08:11:36.6439-06:00] ERROR [skysocks]: Failed to set status Stopped: unexpected EOF
+[2026-02-01T08:11:36.6428-06:00] INFO [proc:skysocks:a777958a1b3840bca180dfbf1d54ab1c]: App skysocks is Stopped
+[2026-02-01T08:11:36.6439-06:00] DEBUG [proc:skychat:c7bf0fc01eae4308b2b5dacdcce81b37]: App RunFunc returned normally
+[2026-02-01T08:11:36.6440-06:00] DEBUG [proc:skysocks:a777958a1b3840bca180dfbf1d54ab1c]: App RunFunc returned normally
+[2026-02-01T08:11:36.9541-06:00] DEBUG [app_discovery]: Entry deleted successfully appName="skysocks" entry={"address":"0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:3","geo":{"country":"US","lat":33.15,"lon":-96.83,"region":"TX"},"type":"skysocks","version":"v1.3.34-0.-ceb987a85f79+dirty"}
+[2026-02-01T08:11:36.9544-06:00] DEBUG [proc_manager]: App stopped successfully. app_name="skysocks"
+[2026-02-01T08:11:36.9547-06:00] DEBUG [15/19] [visor:shutdown:launcher.proc_manager]: Module stopped cleanly. elapsed=311.018811ms
+[2026-02-01T08:11:36.9548-06:00] DEBUG [14/19] [visor:shutdown:router.serve]: Shutting down module...
+[2026-02-01T08:11:36.9549-06:00] DEBUG [router]: Closing all App connections and RouteGroups
+[2026-02-01T08:11:36.9551-06:00] DEBUG serveRouteGroup [launcher]: Stopped accepting routes. _=skynet error="accept skynet: use of closed network connection"
+[2026-02-01T08:11:36.9551-06:00] DEBUG [14/19] [visor:shutdown:router.serve]: Module stopped cleanly. elapsed=257.368µs
+[2026-02-01T08:11:36.9554-06:00] DEBUG [13/19] [visor:shutdown:transport_setup.rpc]: Shutting down module...
+[2026-02-01T08:11:36.9551-06:00] DEBUG [router]: Setup client stopped serving. error="dmsg error 200 - local entity closed"
+[2026-02-01T08:11:36.9555-06:00] DEBUG [13/19] [visor:shutdown:transport_setup.rpc]: Module stopped cleanly. elapsed=118.729µs
+[2026-02-01T08:11:36.9556-06:00] DEBUG [12/19] [visor:shutdown:dmsgctrl]: Shutting down module...
+[2026-02-01T08:11:36.9558-06:00] DEBUG [12/19] [visor:shutdown:dmsgctrl]: Module stopped cleanly. elapsed=122.256µs
+[2026-02-01T08:11:36.9558-06:00] DEBUG [11/19] [visor:shutdown:dmsghttp.logserver]: Shutting down module...
+[2026-02-01T08:11:36.9560-06:00] DEBUG [11/19] [visor:shutdown:dmsghttp.logserver]: Module stopped cleanly. elapsed=115.132µs
+[2026-02-01T08:11:36.9560-06:00] DEBUG [10/19] [visor:shutdown:public_autoconnect]: Shutting down module...
+[2026-02-01T08:11:36.9548-06:00] DEBUG (STDOUT) [proc:proxy-test-02041533:84b3b76eb8354b438cf1b648eb139186]: func = retrier, current_backoff = 5s Retrying...
+[2026-02-01T08:11:36.9561-06:00] DEBUG [10/19] [visor:shutdown:public_autoconnect]: Module stopped cleanly. elapsed=112.446µs
+[2026-02-01T08:11:36.9563-06:00] DEBUG [9/19] [visor:shutdown:transport.manager]: Shutting down module...
+[2026-02-01T08:11:40.9574-06:00] ERROR [9/19] [visor:shutdown:transport.manager]: Module timed out. elapsed=4.001144859s
+[2026-02-01T08:11:40.9576-06:00] DEBUG [8/19] [visor:shutdown:address_resolver]: Shutting down module...
+[2026-02-01T08:11:40.9577-06:00] DEBUG [8/19] [visor:shutdown:address_resolver]: Module stopped cleanly. elapsed=166.306µs
+[2026-02-01T08:11:40.9579-06:00] DEBUG [7/19] [visor:shutdown:uptime_tracker]: Shutting down module...
+[2026-02-01T08:11:40.9580-06:00] DEBUG [7/19] [visor:shutdown:uptime_tracker]: Module stopped cleanly. elapsed=151.697µs
+[2026-02-01T08:11:40.9581-06:00] DEBUG [6/19] [visor:shutdown:cli.listener]: Shutting down module...
+2026/02/01 08:11:40 rpc.Serve: accept:accept tcp 127.0.0.1:3435: use of closed network connection
+[2026-02-01T08:11:40.9583-06:00] DEBUG [6/19] [visor:shutdown:cli.listener]: Module stopped cleanly. elapsed=242.11µs
+[2026-02-01T08:11:40.9653-06:00] DEBUG [5/19] [visor:shutdown:router.serve]: Shutting down module...
+[2026-02-01T08:11:40.9655-06:00] DEBUG [dmsg_pty:cli-server]: Cleanly stopped serving.
+[2026-02-01T08:11:40.9658-06:00] DEBUG [5/19] [visor:shutdown:router.serve]: Module stopped cleanly. elapsed=457.411µs
+[2026-02-01T08:11:40.9658-06:00] DEBUG [4/19] [visor:shutdown:router.serve]: Shutting down module...
+[2026-02-01T08:11:40.9659-06:00] DEBUG [dmsg_pty]: Serve() ended. error=<nil>
+[2026-02-01T08:11:40.9659-06:00] DEBUG [dmsg_pty]: Cleanly stopped serving. error="dmsg error 200 - local entity closed"
+[2026-02-01T08:11:40.9661-06:00] DEBUG [4/19] [visor:shutdown:router.serve]: Module stopped cleanly. elapsed=274.201µs
+[2026-02-01T08:11:40.9661-06:00] DEBUG [3/19] [visor:shutdown:dmsg_tracker_manager]: Shutting down module...
+[2026-02-01T08:11:40.9662-06:00] DEBUG [3/19] [visor:shutdown:dmsg_tracker_manager]: Module stopped cleanly. elapsed=65.167µs
+[2026-02-01T08:11:40.9662-06:00] DEBUG [2/19] [visor:shutdown:dmsg]: Shutting down module...
+[2026-02-01T08:11:40.9663-06:00] DEBUG [dmsgC]: Stopped serving client!
+[2026-02-01T08:11:40.9663-06:00] DEBUG [dmsgC]: Session closed. error=<nil>
+[2026-02-01T08:11:40.9663-06:00] WARN [dmsgC]: Stopped accepting streams. error="io: read/write on closed pipe" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+[2026-02-01T08:11:40.9664-06:00] DEBUG [dmsgC]: On (*ClientSession).serve() return, close client session resulted in error. error="io: read/write on closed pipe" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+[2026-02-01T08:11:40.9664-06:00] WARN [dmsgC]: Stopped accepting streams. error="io: read/write on closed pipe" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
+[2026-02-01T08:11:40.9665-06:00] DEBUG [dmsgC]: On (*ClientSession).serve() return, close client session resulted in error. error="io: read/write on closed pipe" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
+[2026-02-01T08:11:40.9665-06:00] DEBUG [dmsgC]: Session closed. error=<nil>
+[2026-02-01T08:11:40.9664-06:00] DEBUG readPacket [tp:024c4d]: Failed to read packet header. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9667-06:00] DEBUG readPacket [tp:029c56]: Failed to read packet header. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9667-06:00] WARN [tp:029c56]: Failed to read packet, closing transport error="io: read/write on closed pipe" src="read_loop"
+[2026-02-01T08:11:40.9667-06:00] WARN [dmsgC]: Stopped accepting streams. error="io: read/write on closed pipe" session=02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0
+[2026-02-01T08:11:40.9668-06:00] DEBUG [dmsgC]: On (*ClientSession).serve() return, close client session resulted in error. error="io: read/write on closed pipe" session=02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0
+[2026-02-01T08:11:40.9667-06:00] WARN [tp:024c4d]: Failed to read packet, closing transport error="io: read/write on closed pipe" src="read_loop"
+[2026-02-01T08:11:40.9670-06:00] WARN [tp:024c4d]: Failed to close underlying transport. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9667-06:00] DEBUG [dmsgC]: Session closed. error=<nil>
+[2026-02-01T08:11:40.9671-06:00] DEBUG [tp:024c4d]: Stopped log loop
+[2026-02-01T08:11:40.9667-06:00] WARN [tp:029c56]: Failed to close underlying transport. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9668-06:00] DEBUG [tp:029c56]: Stopped log loop
+[2026-02-01T08:11:40.9673-06:00] DEBUG [tp:029c56]: Stopped serving. remaining_tps=41 remote_pk=029c567e1a28ae192dd029e7e7f8c166eac5fa9745a15b4cb7a8362519fd7b5b5a tp_id=fe823c00-a6e0-0760-87c3-98e8a1ddac08 tp_index=21
+[2026-02-01T08:11:40.9671-06:00] DEBUG readPacket [tp:023b93]: Failed to read packet header. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9671-06:00] WARN [dmsgC]: Stopped accepting streams. error="io: read/write on closed pipe" session=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb
+[2026-02-01T08:11:40.9674-06:00] DEBUG [dmsgC]: On (*ClientSession).serve() return, close client session resulted in error. error="io: read/write on closed pipe" session=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb
+[2026-02-01T08:11:40.9671-06:00] DEBUG [tp:024c4d]: Stopped serving. remaining_tps=42 remote_pk=024c4dfca2e3e0f7f4e1c0de414d6b0abb0b67cca22e96254c131e8946a92e324f tp_id=a11108e0-267b-0feb-93c2-e57e37cdadf6 tp_index=17
+[2026-02-01T08:11:40.9671-06:00] DEBUG [dmsgC]: Session closed. error=<nil>
+[2026-02-01T08:11:40.9676-06:00] WARN [dmsgC]: Stopped accepting streams. error="io: read/write on closed pipe" session=03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4
+[2026-02-01T08:11:40.9676-06:00] DEBUG readPacket [tp:02b5cd]: Failed to read packet header. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9673-06:00] WARN [tp:023b93]: Failed to read packet, closing transport error="io: read/write on closed pipe" src="read_loop"
+[2026-02-01T08:11:40.9676-06:00] WARN [tp:02b5cd]: Failed to read packet, closing transport error="io: read/write on closed pipe" src="read_loop"
+[2026-02-01T08:11:40.9677-06:00] DEBUG [tp:023b93]: Stopped log loop
+[2026-02-01T08:11:40.9676-06:00] DEBUG [dmsgC]: On (*ClientSession).serve() return, close client session resulted in error. error="io: read/write on closed pipe" session=03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4
+[2026-02-01T08:11:40.9677-06:00] WARN [tp:023b93]: Failed to close underlying transport. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9676-06:00] DEBUG readPacket [tp:028270]: Failed to read packet header. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9678-06:00] WARN [tp:028270]: Failed to read packet, closing transport error="io: read/write on closed pipe" src="read_loop"
+[2026-02-01T08:11:40.9678-06:00] WARN [tp:028270]: Failed to close underlying transport. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9676-06:00] DEBUG [dmsgC]: Session closed. error=<nil>
+[2026-02-01T08:11:40.9678-06:00] DEBUG [dmsgC]: All sessions closed.
+[2026-02-01T08:11:40.9677-06:00] DEBUG [tp:023b93]: Stopped serving. remaining_tps=40 remote_pk=023b93a4d1a2c69859a9290fb5e5b4f776da44d9cfd318d78c6961d8713d1a6593 tp_id=ea18f8c9-60ea-033e-b04d-33995ba77692 tp_index=31
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9677-06:00] DEBUG [tp:02b5cd]: Stopped log loop
+[2026-02-01T08:11:40.9677-06:00] WARN [tp:02b5cd]: Failed to close underlying transport. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9680-06:00] DEBUG [tp:02b5cd]: Stopped serving. remaining_tps=39 remote_pk=02b5cd4eeca280be5c11b4a0daf77d5c7ab3c03e485b0e7da11501eecefef34a53 tp_id=114b1303-6990-0625-8526-e8c8cea36796 tp_index=34
+[2026-02-01T08:11:40.9676-06:00] DEBUG readPacket [tp:0324a0]: Failed to read packet header. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9676-06:00] DEBUG readPacket [tp:039c23]: Failed to read packet header. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9681-06:00] WARN [tp:0324a0]: Failed to read packet, closing transport error="io: read/write on closed pipe" src="read_loop"
+[2026-02-01T08:11:40.9678-06:00] DEBUG [tp:028270]: Stopped log loop
+[2026-02-01T08:11:40.9681-06:00] DEBUG [tp:0324a0]: Stopped log loop
+[2026-02-01T08:11:40.9676-06:00] DEBUG readPacket [tp:02c693]: Failed to read packet header. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9681-06:00] WARN [tp:039c23]: Failed to read packet, closing transport error="io: read/write on closed pipe" src="read_loop"
+[2026-02-01T08:11:40.9682-06:00] DEBUG [tp:028270]: Stopped serving. remaining_tps=38 remote_pk=028270920b4389f04eaaf76d0567b600ab4c29608123399a1a1e7a4adb08e66ca9 tp_id=7623daa0-7f4b-07b8-9777-88c9099684cd tp_index=18
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9682-06:00] DEBUG [tp:039c23]: Stopped log loop
+[2026-02-01T08:11:40.9682-06:00] DEBUG [tp:0324a0]: Stopped serving. remaining_tps=37 remote_pk=0324a06766b358a7bdf237f0b79e5f314e32679fc883b124f68f4a4373404c3049 tp_id=6a071395-6528-0e65-9643-5a9059351a3b tp_index=37
+[2026-02-01T08:11:40.9683-06:00] DEBUG [tp:039c23]: Stopped serving. remaining_tps=36 remote_pk=039c2339fad28ab4cb025414af568cf3532589457b2bb45d2b2c8816aa3385c012 tp_id=4c75e6cd-f8c0-01fe-9c7a-ffedcdc6d68c tp_index=26
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [dmsgC]: On (*netutil.Porter).CloseAll(), closing contained value resulted in error. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9679-06:00] DEBUG [transport_manager]: Dmsg client stopped serving. error="dmsg error 200 - local entity closed"
+[2026-02-01T08:11:40.9681-06:00] WARN [tp:0324a0]: Failed to close underlying transport. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9682-06:00] WARN [tp:02c693]: Failed to read packet, closing transport error="io: read/write on closed pipe" src="read_loop"
+[2026-02-01T08:11:40.9682-06:00] WARN [tp:039c23]: Failed to close underlying transport. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9695-06:00] DEBUG [tp:02c693]: Stopped log loop
+[2026-02-01T08:11:40.9695-06:00] WARN [tp:02c693]: Failed to close underlying transport. error="io: read/write on closed pipe"
+[2026-02-01T08:11:40.9696-06:00] DEBUG [tp:02c693]: Stopped serving. remaining_tps=35 remote_pk=02c6939cc52446fa68f7e9312e268c7f857787373316c8fd45fc84b0f2dd7adcb0 tp_id=7e632c3c-c2c2-0caf-9bff-3aa47ed83e80 tp_index=13
+[2026-02-01T08:11:41.2410-06:00] DEBUG [dmsgC]: Deleting entry.
+ entry=	version: 0.0.1
+	sequence: 11
+	registered at: 1769901993242388294
+	static public key: 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c
+	signature: 6ef6d17841cf2b079cecd90d66cb88d8f692cee363efc1c868c8e2b73bea4a0d7da86b1955ce449dcca9c9e06a16e358d3d0f379c6e3c2cb01e2f853b4f7a28501
+	entry is registered as client. Related info: 
+		delegated servers: 
+			03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4
+			0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+			0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
+			02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0
+			0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb
+
+
+[2026-02-01T08:11:41.2425-06:00] DEBUG [tp:024c4d]: Error deleting transport error=<nil> tp-id=a11108e0-267b-0feb-93c2-e57e37cdadf6
+[2026-02-01T08:11:41.5149-06:00] DEBUG [dmsgC]: Entry Deleted successfully.
+[2026-02-01T08:11:41.5150-06:00] DEBUG [2/19] [visor:shutdown:dmsg]: Module stopped cleanly. elapsed=548.80586ms
+[2026-02-01T08:11:41.5151-06:00] DEBUG [1/19] [visor:shutdown:event_broadcaster]: Shutting down module...
+[2026-02-01T08:11:41.5153-06:00] DEBUG [1/19] [visor:shutdown:event_broadcaster]: Module stopped cleanly. elapsed=165.552µs
+[2026-02-01T08:11:41.5154-06:00] INFO [visor:shutdown]: Shutdown complete. Goodbye!
+^C
+

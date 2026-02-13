@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +50,8 @@ var (
 	ErrTrpMangerNotAvailable = errors.New("no transport manager available")
 	// ErrAppLauncherNotAvailable represents error for unavailable app launcher
 	ErrAppLauncherNotAvailable = errors.New("no app launcher available")
+	// ErrRouterNotReady represents error for router not yet initialized
+	ErrRouterNotReady = errors.New("router not ready")
 )
 
 const (
@@ -110,13 +113,33 @@ type Visor struct {
 	allowedPorts         map[int]bool
 	allowedMX            *sync.RWMutex
 
-	pingConns    map[cipher.PubKey]ping
-	pingConnMx   *sync.Mutex
-	pingPcktSize int
-	logStorePath string
+	pingConns     map[cipher.PubKey]ping
+	pingConnMx    *sync.Mutex
+	pingPcktSize  int
+	dmsgPingConns map[cipher.PubKey]ping
+	dmsgPingMx    *sync.Mutex
+	logStorePath  string
 
 	survey     visorconfig.Survey
 	surveyLock *sync.RWMutex
+
+	// Cached geolocation data from geoIP service
+	geoData   *GeoData
+	geoDataMu sync.RWMutex
+
+	// UI server state (dynamically started/stopped via RPC)
+	uiServerMu      sync.Mutex
+	uiServer        *http.Server
+	uiServerAddr    string
+	uiServerRunning bool
+
+	// Embedded Transport Setup Node (nil if tps_sk not configured)
+	embeddedTPS *embeddedTPS
+
+	// Public autoconnect runtime control
+	autoconnectMu      sync.Mutex
+	autoconnectCancel  context.CancelFunc
+	autoconnectRunning bool
 }
 
 // todo: consider moving module closing to the module system
@@ -253,6 +276,8 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		connectedHypervisors: make(map[cipher.PubKey]bool),
 		pingConns:            make(map[cipher.PubKey]ping),
 		pingConnMx:           new(sync.Mutex),
+		dmsgPingConns:        make(map[cipher.PubKey]ping),
+		dmsgPingMx:           new(sync.Mutex),
 		allowedPorts:         make(map[int]bool),
 		survey:               visorconfig.Survey{},
 		surveyLock:           new(sync.RWMutex),
@@ -487,6 +512,29 @@ func initUI() *fs.FS {
 }
 
 func storeLog(conf *visorconfig.V1) {
+	logPath := conf.LocalPath + "/log"
+	logFile := logPath + "/skywire.log"
+
+	// Create log directory with readable permissions for log access
+	if err := os.MkdirAll(logPath, 0750); err != nil { //nolint:gosec
+		mLog.WithError(err).Warn("Failed to create log directory")
+	}
+
+	// Pre-create or fix permissions on the log file to make it readable
+	// This is important when running as root in a directory not owned by root
+	if _, err := os.Stat(logFile); os.IsNotExist(err) {
+		// Create new file with readable permissions
+		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0644) //nolint:gosec
+		if err == nil {
+			if err := f.Close(); err != nil {
+				mLog.WithError(err).Warn("Failed to close log file")
+			}
+		}
+	} else if err == nil {
+		// Fix permissions on existing file
+		_ = os.Chmod(logFile, 0644) //nolint:gosec,errcheck
+	}
+
 	hook, _ := lumberjackrus.NewHook( //nolint:errcheck
 		&lumberjackrus.LogFile{
 			Filename:   conf.LocalPath + "/log/skywire.log",

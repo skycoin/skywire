@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"math/big"
+	"net"
 	"net/http"
 	"time"
 
@@ -34,45 +35,35 @@ type Autoconnector interface {
 }
 
 type autoconnector struct {
-	client        *servicedisc.HTTPClient
-	maxConns      int
-	log           *logging.Logger
-	tm            *transport.Manager
-	visorIsPublic bool
+	client         *servicedisc.HTTPClient
+	maxConns       int
+	log            *logging.Logger
+	tm             *transport.Manager
+	visorIsPublic  bool
+	clientPublicIP string
 }
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
 // services
 func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager, httpC *http.Client, clientPublicIP string,
 	log *logging.Logger, mLog *logging.MasterLogger) Autoconnector {
+	// Extract just the IP from clientPublicIP (may include port)
+	publicIP := clientPublicIP
+	if host, _, err := net.SplitHostPort(publicIP); err == nil {
+		publicIP = host
+	}
+
 	connector := &autoconnector{}
 	connector.client = servicedisc.NewClient(log, mLog, conf, httpC, clientPublicIP)
 	connector.maxConns = maxConns
 	connector.log = log
 	connector.tm = tm
+	connector.clientPublicIP = publicIP
 	return connector
 }
 
 // Run implements Autoconnector interface
 func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
-	// Wait for a random interval between 0 and 5 minutes before starting public autoconnect
-	const maxDelaySeconds = 5 * 60 // 5 minutes
-
-	var randomDelaySeconds int
-	randomDelaySeconds, err = randInt(0, maxDelaySeconds)
-	if err != nil {
-		a.log.WithError(err).Warn("Failed to generate secure random delay; falling back to 0")
-		randomDelaySeconds = 0
-	}
-	randomDelay := time.Duration(randomDelaySeconds) * time.Second
-	a.log.Debugln("Waiting for a random interval before starting public autoconnect:", randomDelay)
-
-	select {
-	case <-ctx.Done():
-		return context.Canceled
-	case <-time.After(randomDelay):
-	}
-
 	publicServiceTicker := time.NewTicker(PublicServiceDelay)
 
 	for {
@@ -111,38 +102,12 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				continue
 			}
 
-			// Get keys available for SUDPH transport (only if locally supported)
-			var sudphKeys map[cipher.PubKey][]string
-			if localSupportsSUDPH {
-				sudphKeys, err = v.arClient.TransportsType(ctx, tptypes.SUDPH)
-				if err != nil {
-					a.log.WithError(err).Warn("could not fetch keys from address resolver for SUDPH")
-					sudphKeys = map[cipher.PubKey][]string{}
-				}
-			} else {
-				a.log.Debug("SUDPH not supported locally, skipping")
-				sudphKeys = map[cipher.PubKey][]string{}
-			}
-
-			// Get keys available for STCPR transport (only if locally supported)
-			var stcprKeys map[cipher.PubKey][]string
-			if localSupportsSTCPR {
-				stcprKeys, err = v.arClient.TransportsType(ctx, tptypes.STCPR)
-				if err != nil {
-					a.log.WithError(err).Warn("could not fetch keys from address resolver for STCPR")
-					stcprKeys = map[cipher.PubKey][]string{}
-				}
-			} else {
-				a.log.Debugln("STCPR not supported locally, skipping")
-				stcprKeys = map[cipher.PubKey][]string{}
-			}
-
-			// Check if this visor is public by seeing if it's registered in address resolver for STCPR
-			// This is more reliable than checking config/network conditions
-			_, visorIsPublic := stcprKeys[v.conf.PK]
+			// Check if this visor is configured as public
+			// This uses the same config flag that initPublicVisor uses to decide whether to register in SD
+			visorIsPublic := v.conf.IsPublic
 			a.visorIsPublic = visorIsPublic
 			if visorIsPublic {
-				a.log.Debug("This visor is registered as public (found in STCPR address resolver)")
+				a.log.Debug("This visor is configured as public")
 			}
 
 			// Fetch ALL transport discovery data once per cycle to reduce API load
@@ -197,9 +162,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 						if _, seen := absent2Set[newPK]; seen {
 							continue
 						}
-						if _, ok := sudphKeys[newPK]; !ok {
-							continue
-						}
 
 						absent2Set[newPK] = struct{}{}
 						absent2 = append(absent2, newPK)
@@ -233,6 +195,14 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			}
 
 			for _, pk := range append(shufflePubKeys(absent1), shufflePubKeys(absent2)...) {
+				// Check for context cancellation before each transport attempt
+				select {
+				case <-ctx.Done():
+					a.log.Debug("Context canceled, stopping public autoconnect loop")
+					return context.Canceled
+				default:
+				}
+
 				if time.Now().After(attemptDeadline) {
 					a.log.Debugln("Refreshing list of keys for public autoconnect")
 					break
@@ -242,13 +212,17 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					continue
 				}
 
+				// Determine transport type based on visor category:
+				// - Public visors (from service discovery) -> STCPR (they have public IPs)
+				// - Non-public visors (discovered via transport data) -> SUDPH
 				var netType tptypes.Type
-				if _, ok := stcprKeys[pk]; ok {
+				isPublicVisor := a.isInList(pk, absent1)
+				if isPublicVisor && localSupportsSTCPR {
 					netType = tptypes.STCPR
-				} else if _, ok := sudphKeys[pk]; ok {
+				} else if localSupportsSUDPH {
 					netType = tptypes.SUDPH
 				} else {
-					a.log.WithField("pk", pk).Debugln("No supported network type found for visor")
+					a.log.WithField("pk", pk).Debugln("No supported network type available for visor")
 					continue
 				}
 
@@ -262,7 +236,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				// Hybrid approach for connection count checking:
 				// - For STCPR to public visors: get FRESH stats (critical bottleneck)
 				// - For everything else: use cached data (stale is acceptable)
-				isPublicVisor := a.isInList(pk, absent1)
 				var transportCount int
 				if netType == tptypes.STCPR && isPublicVisor {
 					// Fresh check for STCPR to public visors - these are most prone to overload
@@ -291,6 +264,16 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					a.log.WithField("pk", pk).WithField("count", transportCount).
 						Debugln("Remote visor has reached or exceeded max connections, skipping")
 					continue
+				}
+
+				// Skip visors behind the same NAT (same LAN) to avoid unnecessary transports.
+				// Two visors with the same public IP are behind the same router.
+				if a.clientPublicIP != "" {
+					if sameLAN := a.isSameLAN(ctx, pk, netType); sameLAN {
+						a.log.WithField("pk", pk).
+							Debugln("Skipping same-LAN visor (same public IP)")
+						continue
+					}
 				}
 
 				a.log.WithField("pk", pk).WithField("type", netType).
@@ -386,6 +369,27 @@ func (a *autoconnector) filterDuplicates(pks []cipher.PubKey, trs []*transport.M
 	return absent
 }
 
+// isSameLAN checks if the remote visor is behind the same NAT as us by comparing
+// public IPs via the address resolver. Returns false on any error (fail-open).
+func (a *autoconnector) isSameLAN(ctx context.Context, pk cipher.PubKey, netType tptypes.Type) bool {
+	arClient := a.tm.ARClient()
+	if arClient == nil {
+		return false
+	}
+
+	visorData, err := arClient.Resolve(ctx, string(netType), pk)
+	if err != nil {
+		return false
+	}
+
+	remoteIP := visorData.RemoteAddr
+	if host, _, err := net.SplitHostPort(remoteIP); err == nil {
+		remoteIP = host
+	}
+
+	return remoteIP != "" && remoteIP == a.clientPublicIP
+}
+
 // isInList checks if a public key is in the given list
 func (a *autoconnector) isInList(pk cipher.PubKey, list []cipher.PubKey) bool {
 	for _, listPK := range list {
@@ -394,18 +398,6 @@ func (a *autoconnector) isInList(pk cipher.PubKey, list []cipher.PubKey) bool {
 		}
 	}
 	return false
-}
-
-// randInt returns a secure random integer in [min, max).
-func randInt(n, x int) (int, error) {
-	if n >= x {
-		return n, nil
-	}
-	nBig, err := rand.Int(rand.Reader, big.NewInt(int64(x-n)))
-	if err != nil {
-		return 0, err
-	}
-	return int(nBig.Int64()) + n, nil
 }
 
 // transportDiscoveryCache holds cached transport discovery data to reduce API calls

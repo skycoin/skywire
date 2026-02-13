@@ -20,7 +20,7 @@ func ListenAndServe(ctx context.Context, _ cipher.SecKey, a http.Handler, _ disc
 
 	lis, err := dmsgC.Listen(dmsgPort)
 	if err != nil {
-		log.WithError(err).Fatal()
+		return fmt.Errorf("dmsg listen on port %d: %w", dmsgPort, err)
 	}
 	go func() {
 		<-ctx.Done()

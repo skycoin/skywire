@@ -684,6 +684,40 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	return err
 }
 
+// StartPublicAutoconnect starts the public autoconnect routine
+func (r *RPC) StartPublicAutoconnect(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StartPublicAutoconnect", nil)(nil, &err)
+	return r.visor.StartPublicAutoconnect()
+}
+
+// StopPublicAutoconnect stops the public autoconnect routine
+func (r *RPC) StopPublicAutoconnect(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopPublicAutoconnect", nil)(nil, &err)
+	return r.visor.StopPublicAutoconnect()
+}
+
+// PublicAutoconnectStatus returns whether public autoconnect is running
+func (r *RPC) PublicAutoconnectStatus(_ *struct{}, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "PublicAutoconnectStatus", nil)(out, &err)
+	status, err := r.visor.PublicAutoconnectStatus()
+	*out = status
+	return err
+}
+
+// SetExistingTPOnly sets whether to only use existing transports for routing
+func (r *RPC) SetExistingTPOnly(enabled *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetExistingTPOnly", *enabled)(nil, &err)
+	err = r.visor.SetExistingTPOnly(*enabled)
+	return err
+}
+
+// SetForceLocalRoutes sets whether to skip the route finder and use local route calculation
+func (r *RPC) SetForceLocalRoutes(enabled *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetForceLocalRoutes", *enabled)(nil, &err)
+	err = r.visor.SetForceLocalRoutes(*enabled)
+	return err
+}
+
 // FilterServersIn is input for VPNServers and ProxyServers
 type FilterServersIn struct {
 	Version string
@@ -790,6 +824,30 @@ func (r *RPC) List(_ *struct{}, out *map[uuid.UUID]*appnet.ForwardConn) (err err
 	return err
 }
 
+// ConnectRawTCP creates a raw TCP connection with the remote visor
+func (r *RPC) ConnectRawTCP(in *ConnectIn, out *uuid.UUID) (err error) {
+	defer rpcutil.LogCall(r.log, "ConnectRawTCP", in)(out, &err)
+
+	id, err := r.visor.ConnectRawTCP(in.RemotePK, in.RemotePort, in.LocalPort)
+	*out = id
+	return err
+}
+
+// DisconnectRawTCP breaks the raw TCP connection with the given id
+func (r *RPC) DisconnectRawTCP(id *uuid.UUID, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DisconnectRawTCP", id)(nil, &err)
+	err = r.visor.DisconnectRawTCP(*id)
+	return err
+}
+
+// ListRawTCP returns all the ongoing raw TCP skyforwarding connections
+func (r *RPC) ListRawTCP(_ *struct{}, out *map[uuid.UUID]*appnet.RawTCPForwardConn) (err error) {
+	defer rpcutil.LogCall(r.log, "ListRawTCP", nil)(out, &err)
+	proxies, err := r.visor.ListRawTCP()
+	*out = proxies
+	return err
+}
+
 // DialPing dials to the ping module using the provided pk as a hop.
 func (r *RPC) DialPing(conf PingConfig, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DialPing", conf)(nil, &err)
@@ -812,6 +870,28 @@ func (r *RPC) StopPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 	return r.visor.StopPing(*pk)
 }
 
+// DialDmsgPing dials to a remote visor over dmsg for ping.
+func (r *RPC) DialDmsgPing(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DialDmsgPing", pk)(nil, &err)
+
+	return r.visor.DialDmsgPing(*pk)
+}
+
+// DmsgPing pings over dmsg connection.
+func (r *RPC) DmsgPing(conf PingConfig, out *[]time.Duration) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgPing", conf)(out, &err)
+
+	*out, err = r.visor.DmsgPing(conf)
+	return err
+}
+
+// StopDmsgPing stops the dmsg ping conn.
+func (r *RPC) StopDmsgPing(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopDmsgPing", pk)(nil, &err)
+
+	return r.visor.StopDmsgPing(*pk)
+}
+
 // TestVisor trying to test viosr by pinging to public visor.
 func (r *RPC) TestVisor(conf PingConfig, out *[]TestResult) (err error) {
 	defer rpcutil.LogCall(r.log, "TestVisor", conf)(out, &err)
@@ -820,9 +900,47 @@ func (r *RPC) TestVisor(conf PingConfig, out *[]TestResult) (err error) {
 	return err
 }
 
+// TestProxy tests proxy servers by connecting through them.
+func (r *RPC) TestProxy(conf ProxyTestConfig, out *[]ProxyTestResult) (err error) {
+	defer rpcutil.LogCall(r.log, "TestProxy", conf)(out, &err)
+
+	*out, err = r.visor.TestProxy(conf)
+	return err
+}
+
 // ReinitiateModule reinitiate/restart modules
 func (r *RPC) ReinitiateModule(module string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "ReinitiateModule", module)(nil, &err)
 
 	return r.visor.ReinitiateModule(module)
+}
+
+// StartUIServer starts the embedded UI server.
+func (r *RPC) StartUIServer(addr *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StartUIServer", addr)(nil, &err)
+
+	addrStr := ""
+	if addr != nil {
+		addrStr = *addr
+	}
+	return r.visor.StartUIServer(addrStr)
+}
+
+// StopUIServer stops the embedded UI server.
+func (r *RPC) StopUIServer(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopUIServer", nil)(nil, &err)
+
+	return r.visor.StopUIServer()
+}
+
+// UIServerStatus returns the status of the UI server.
+func (r *RPC) UIServerStatus(_ *struct{}, out *UIServerStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "UIServerStatus", nil)(out, &err)
+
+	status, err := r.visor.UIServerStatus()
+	if err != nil {
+		return err
+	}
+	*out = *status
+	return nil
 }
