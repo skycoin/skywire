@@ -128,13 +128,20 @@ func (e *Entry) Signature(secKey cipher.SecKey) (cipher.Sig, error) {
 	return sig, nil
 }
 
+// BandwidthData represents cumulative bandwidth for a transport
+type BandwidthData struct {
+	SentBytes uint64 `json:"sent_bytes"` // Total bytes sent (cumulative)
+	RecvBytes uint64 `json:"recv_bytes"` // Total bytes received (cumulative)
+}
+
 // SignedEntry holds an Entry and it's associated signatures.
 // The signatures should be ordered as the contained 'Entry.Edges'.
 type SignedEntry struct {
-	Entry      *Entry        `json:"entry"`
-	Signatures [2]cipher.Sig `json:"signatures"`
-	Registered int64         `json:"registered,omitempty"`
-	Latency    int64         `json:"latency_ms,omitempty"` // Latency in milliseconds, measured during re-registration
+	Entry      *Entry         `json:"entry"`
+	Signatures [2]cipher.Sig  `json:"signatures"`
+	Registered int64          `json:"registered,omitempty"`
+	Latency    int64          `json:"latency_ms,omitempty"` // Latency in milliseconds, measured during re-registration
+	Bandwidth  *BandwidthData `json:"bandwidth,omitempty"`  // Cumulative bandwidth data
 }
 
 // Sign sets Signature for a given PubKey in correct position

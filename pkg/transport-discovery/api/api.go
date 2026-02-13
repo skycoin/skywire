@@ -108,6 +108,10 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Get("/all-transports/stats", api.getAllTransportsStats)
 	r.Get("/transports/stats/{edge}", api.getTransportStats)
 	r.Delete("/transports/deregister", api.deregisterTransport)
+
+	// Bandwidth endpoints
+	r.Get("/bandwidth/transport/{id}", api.getTransportBandwidth)
+	r.Get("/bandwidth/visor/{pk}", api.getVisorBandwidth)
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})

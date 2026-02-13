@@ -118,6 +118,17 @@ func (mt *ManagedTransport) SetLatency(latencyMs int64) {
 	mt.latency = latencyMs
 }
 
+// GetBandwidth returns the current cumulative bandwidth for this transport.
+func (mt *ManagedTransport) GetBandwidth() *BandwidthData {
+	mt.logMx.Lock()
+	defer mt.logMx.Unlock()
+
+	return &BandwidthData{
+		SentBytes: atomic.LoadUint64(mt.LogEntry.SentBytes),
+		RecvBytes: atomic.LoadUint64(mt.LogEntry.RecvBytes),
+	}
+}
+
 // Serve serves and manages the transport.
 func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	mt.wg.Add(3)

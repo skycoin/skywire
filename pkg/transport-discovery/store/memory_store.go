@@ -134,3 +134,13 @@ func (s *memoryStore) GetAllTransports(_ context.Context, selfTransports bool) (
 func (s *memoryStore) Close() {
 
 }
+
+// GetTransportBandwidth returns empty slice for memory store (no bandwidth tracking).
+func (s *memoryStore) GetTransportBandwidth(_ context.Context, _ uuid.UUID, _ string, _ int) ([]BandwidthAggregation, error) {
+	return []BandwidthAggregation{}, nil
+}
+
+// GetVisorBandwidth returns empty slice for memory store (no bandwidth tracking).
+func (s *memoryStore) GetVisorBandwidth(_ context.Context, _ cipher.PubKey, _ string, _ int) ([]BandwidthAggregation, error) {
+	return []BandwidthAggregation{}, nil
+}
