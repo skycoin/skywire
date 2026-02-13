@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skywire Network</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background: #1a1a2e; color: #eee; }
+        #container { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
+        #sidebar { width: 320px; min-width: 200px; max-width: 600px; background: #16213e; padding: 15px; overflow-y: auto; border-right: 1px solid #0f3460; flex-shrink: 0; }
+        #resize-handle { width: 5px; background: #0f3460; cursor: col-resize; flex-shrink: 0; }
+        #resize-handle:hover { background: #e94560; }
+        #network-wrapper { flex: 1; position: relative; min-width: 0; }
+        #network { width: 100%; height: 100%; background: #1a1a2e; position: relative; overflow: hidden; }
+        h1 { font-size: 1.2em; margin-bottom: 15px; color: #e94560; }
+
+        /* Collapsible sections */
+        .section { margin-bottom: 10px; border: 1px solid #0f3460; border-radius: 4px; overflow: hidden; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #0f3460; cursor: pointer; user-select: none; }
+        .section-header:hover { background: #1a3a5c; }
+        .section-title { font-size: 0.9em; font-weight: 600; color: #0f9b8e; }
+        .section-toggle { color: #888; font-size: 0.8em; transition: transform 0.2s; }
+        .section.collapsed .section-toggle { transform: rotate(-90deg); }
+        .section-content { padding: 10px 0; display: block; }
+        .section.collapsed .section-content { display: none; }
+
+        .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #0f3460; font-size: 0.85em; }
+        .stat:last-child { border-bottom: none; }
+        .stat-label { color: #aaa; }
+        .stat-value { font-weight: bold; }
+
+        .legend-item { display: flex; align-items: center; margin: 6px 0; font-size: 0.85em; }
+        .legend-color { width: 24px; height: 4px; margin-right: 8px; border-radius: 2px; }
+        .stcpr { background: #00d9a5; }
+        .sudph { background: #00b4d8; }
+        .dmsg { background: #ffd166; }
+        .status-item { display: flex; align-items: center; margin: 6px 0; font-size: 0.85em; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+        .status-online { background: #00d9a5; }
+        .status-offline { background: #e94560; border: 2px solid #fff; }
+        .status-unknown { background: #ffd166; }
+        .status-vpn { background: #9f6efc; }
+        .status-proxy { background: #ffa500; }
+
+        .control-group { margin: 8px 0; }
+        label { display: block; margin-bottom: 4px; color: #aaa; font-size: 0.85em; }
+        input[type="checkbox"] { margin-right: 6px; }
+        input[type="text"], select { width: 100%; padding: 6px 8px; background: #1a1a2e; border: 1px solid #0f3460; color: #eee; border-radius: 4px; font-size: 0.85em; }
+        input[type="text"]:focus, select:focus { outline: none; border-color: #e94560; }
+        #btn-fit { width: 100%; padding: 8px; margin-top: 8px; background: #e94560; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
+        #btn-fit:hover { background: #ff6b6b; }
+        button:disabled { background: #555; cursor: not-allowed; }
+
+        /* Visor list */
+        .visor-list { max-height: 300px; overflow-y: auto; margin-top: 8px; overflow-x: hidden; }
+        .visor-item { display: flex; flex-wrap: wrap; align-items: center; padding: 4px 6px; font-size: 0.7em; border-bottom: 1px solid #0f3460; cursor: pointer; gap: 2px; overflow: hidden; }
+        .visor-item:hover { background: #1a3a5c; }
+        .visor-item:last-child { border-bottom: none; }
+        .visor-item .v-flag { flex-shrink: 0; margin-right: 4px; font-size: 1.1em; }
+        .visor-item .v-pk { font-family: monospace; color: #0f9b8e; display: flex; overflow: hidden; min-width: 0; }
+        .visor-item .v-pk.offline { color: #e94560; }
+        .visor-item .v-pk.offline .pk-start, .visor-item .v-pk.offline .pk-end { color: #e94560; }
+        .visor-item .v-pk.unknown { background: rgba(233, 69, 96, 0.3); padding: 0 2px; border-radius: 2px; }
+        .visor-item .v-pk .pk-start { flex-shrink: 0; }
+        .visor-item .v-pk .pk-mid { flex-shrink: 1; overflow: hidden; text-overflow: clip; white-space: nowrap; }
+        .visor-item .v-pk .pk-end { flex-shrink: 0; }
+        .visor-item .v-pk .pk-ellipsis { display: none; flex-shrink: 0; color: #666; }
+        .visor-item .v-ver { color: #888; font-size: 0.9em; flex-shrink: 0; margin-left: auto; }
+        .visor-item .v-row2 { width: 100%; display: flex; align-items: center; margin-top: 2px; padding-left: 22px; font-size: 0.9em; }
+        .visor-item .v-col-ver { width: 42px; flex-shrink: 0; }
+        .visor-item .v-col-svc { width: 24px; flex-shrink: 0; text-align: center; }
+        .visor-item .v-col-tp { width: 32px; flex-shrink: 0; text-align: right; }
+        .visor-item .v-svc { font-size: 0.85em; padding: 0 4px; border-radius: 2px; font-weight: bold; }
+        .visor-item .v-svc.vpn { background: rgba(138, 43, 226, 0.4); color: #c9a8ff; }
+        .visor-item .v-svc.proxy { background: rgba(255, 165, 0, 0.4); color: #ffc966; }
+        .visor-item .v-svc.visor { background: rgba(50, 205, 50, 0.4); color: #7fff7f; }
+        .visor-item .v-tp { font-size: 0.85em; padding: 0 2px; border-radius: 2px; }
+        .visor-item .v-tp.stcpr { background: rgba(0, 217, 165, 0.3); color: #66ffdd; }
+        .visor-item .v-tp.sudph { background: rgba(0, 180, 216, 0.3); color: #66d9ff; }
+
+        #selected-info { margin-top: 10px; padding: 12px; background: #0f3460; border-radius: 4px; display: none; }
+        #selected-info.visible { display: block; }
+        #selected-info h3 { font-size: 0.9em; color: #0f9b8e; margin-bottom: 8px; }
+        #selected-pk { font-family: monospace; font-size: 0.65em; word-break: break-all; color: #e94560; margin: 8px 0; cursor: pointer; }
+        #selected-pk:hover { color: #ff6b8a; text-decoration: underline; }
+        .clickable-pk { cursor: pointer; }
+        .clickable-pk:hover { text-decoration: underline; opacity: 0.8; }
+        .copy-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #00d9a5; color: #000; padding: 8px 16px; border-radius: 4px; font-size: 0.85em; z-index: 10000; animation: toast-fade 2s ease-in-out forwards; }
+        @keyframes toast-fade { 0% { opacity: 0; transform: translateX(-50%) translateY(10px); } 10% { opacity: 1; transform: translateX(-50%) translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; } }
+        .conn-list { max-height: 150px; overflow-y: auto; font-size: 0.8em; }
+        .conn-item { padding: 3px 0; border-bottom: 1px solid #1a1a2e; font-family: monospace; font-size: 0.8em; }
+        .conn-type { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 0.75em; margin-right: 4px; }
+        .conn-type.stcpr { background: rgba(0, 217, 165, 0.3); color: #00d9a5; }
+        .conn-type.sudph { background: rgba(0, 180, 216, 0.3); color: #00b4d8; }
+        .conn-type.dmsg { background: rgba(255, 209, 102, 0.3); color: #ffd166; }
+
+        /* TPS (Transport Setup) controls */
+        .tps-input { width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid #ff6b35;color:#eee;border-radius:4px;font-size:0.8em;font-family:monospace; }
+        .tps-input:focus { outline:none;border-color:#ffc800;box-shadow:0 0 4px rgba(255,107,53,0.3); }
+        .tps-pick-btn { padding:2px 8px;font-size:0.7em;background:#ff6b35;color:#fff;border:none;border-radius:3px;cursor:pointer;width:auto;margin:0; }
+        .tps-pick-btn:hover { background:#e05a2a; }
+        .tps-btn { padding:6px 10px;font-size:0.8em;border:none;border-radius:4px;cursor:pointer;font-weight:600;width:auto;margin:0; }
+        .tps-btn-primary { background:#ff6b35;color:#fff; }
+        .tps-btn-primary:hover { background:#e05a2a; }
+        .tps-btn-primary:disabled { background:#555;cursor:not-allowed; }
+        .tps-btn-secondary { background:#0f3460;color:#ff6b35;border:1px solid #ff6b35; }
+        .tps-btn-secondary:hover { background:#1a3a5c; }
+        .tps-btn-secondary:disabled { background:#555;color:#888;border-color:#555;cursor:not-allowed; }
+        .tps-success { color:#00d9a5;padding:6px 8px;background:rgba(0,217,165,0.1);border-radius:4px;word-break:break-all; }
+        .tps-error { color:#e94560;padding:6px 8px;background:rgba(233,69,96,0.1);border-radius:4px;word-break:break-all; }
+        .tps-warning { color:#ffa500;padding:6px 8px;background:rgba(255,165,0,0.1);border-radius:4px;word-break:break-all; }
+        .tps-loading { color:#ffd166;padding:6px 8px;background:rgba(255,209,102,0.1);border-radius:4px; }
+        .tps-overlay-edge { }
+
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+        .spinner { width: 50px; height: 50px; border: 3px solid #0f3460; border-top-color: #e94560; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #error { color: #e94560; padding: 20px; text-align: center; display: none; }
+        #zoom-controls { position: absolute; bottom: 16px; right: 16px; display: flex; flex-direction: column; gap: 4px; z-index: 9999; pointer-events: auto; }
+        #zoom-controls button { width: 36px; height: 36px; border: 1px solid #00d9a5; background: rgba(22, 33, 62, 0.95); color: #e0e0e0; font-size: 18px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; transition: background 0.15s; pointer-events: auto; }
+        #zoom-controls button:hover { background: rgba(15, 52, 96, 0.95); color: #fff; border-color: #ff6b35; }
+        #zoom-controls button:active { background: #0f3460; }
+        #cache-info { margin-top: 8px; font-size: 0.75em; color: #888; }
+        .service-badge { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 0.7em; margin: 1px; }
+        .service-badge.proxy { background: rgba(255, 165, 0, 0.3); color: #ffa500; }
+        .service-badge.vpn { background: rgba(138, 43, 226, 0.3); color: #9f6efc; }
+        .service-badge.visor { background: rgba(50, 205, 50, 0.3); color: #32cd32; }
+        .selected-services { margin-top: 8px; }
+        .selected-country { color: #888; font-size: 0.85em; margin-top: 4px; }
+        .selected-version { color: #0f9b8e; font-size: 0.85em; margin-top: 4px; font-family: monospace; }
+
+        /* Data flow animation overlay */
+        #flow-canvas { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
+
+        /* Animation controls */
+        .anim-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .anim-controls label { display: inline-flex; align-items: center; color: #aaa; font-size: 0.85em; cursor: pointer; }
+        .anim-controls input[type="checkbox"] { margin-right: 4px; }
+
+        /* Bandwidth indicator */
+        .bandwidth-indicator { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 0.7em; margin-left: 4px; animation: pulse 1s ease-in-out infinite; }
+        .bandwidth-indicator.active { background: rgba(0, 255, 200, 0.3); color: #00ffc8; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        /* Route highlight styling */
+        .route-highlight { background: rgba(0, 255, 200, 0.1); border-left: 3px solid #00ffc8; padding-left: 8px; margin: 4px 0; }
+
+        /* Local visor enhanced styling */
+        .local-visor-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+        .local-visor-icon { font-size: 1.5em; filter: drop-shadow(0 0 8px #00ffff); }
+        .local-visor-title { color: #00ffff; font-weight: bold; text-shadow: 0 0 10px rgba(0,255,255,0.5); }
+        .local-visor-pk { font-family: monospace; font-size: 0.75em; color: #888; background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px; cursor: pointer; }
+        .local-visor-pk:hover { color: #aaa; text-decoration: underline; }
+        .local-visor-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 10px 0; }
+        .local-stat { background: rgba(0,255,255,0.1); padding: 8px; border-radius: 6px; border-left: 3px solid #00ffff; }
+        .local-stat.routes { border-left-color: #ff00ff; background: rgba(255,0,255,0.1); }
+        .local-stat-label { font-size: 0.7em; color: #888; text-transform: uppercase; }
+        .local-stat-value { font-size: 1.1em; font-weight: bold; color: #fff; }
+        .local-stat-delta { font-size: 0.75em; color: #00ff88; margin-left: 4px; }
+
+        /* Transport list styling */
+        .local-transport { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin: 4px 0; background: rgba(0,0,0,0.2); border-radius: 4px; cursor: pointer; transition: all 0.2s; border-left: 3px solid transparent; }
+        .local-transport:hover { background: rgba(0,255,255,0.15); transform: translateX(2px); }
+        .local-transport.active { border-left-color: #00ff88; background: rgba(0,255,136,0.1); }
+        .local-transport.stcpr { border-left-color: #00d9a5; }
+        .local-transport.sudph { border-left-color: #00b4d8; }
+        .local-transport.dmsg { border-left-color: #ffd166; }
+        .tp-type-badge { font-size: 0.65em; padding: 2px 6px; border-radius: 3px; font-weight: bold; text-transform: uppercase; }
+        .tp-type-badge.stcpr { background: rgba(0,217,165,0.3); color: #00d9a5; }
+        .tp-type-badge.sudph { background: rgba(0,180,216,0.3); color: #00b4d8; }
+        .tp-type-badge.dmsg { background: rgba(255,209,102,0.3); color: #ffd166; }
+        .tp-remote { font-family: monospace; font-size: 0.8em; color: #aaa; flex: 1; }
+        .tp-traffic { font-size: 0.7em; color: #666; display: flex; gap: 8px; }
+        .tp-traffic .up { color: #00d9a5; }
+        .tp-traffic .down { color: #00b4d8; }
+
+        /* Route list styling */
+        .local-route { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin: 4px 0; background: rgba(255,0,255,0.05); border-radius: 4px; border-left: 3px solid #ff00ff; transition: all 0.2s; }
+        .local-route.clickable { cursor: pointer; }
+        .local-route.clickable:hover { background: rgba(255,0,255,0.15); transform: translateX(2px); border-left-color: #ff66ff; }
+        .local-route.highlighted { background: rgba(255,0,255,0.25); border-left-color: #ffffff; animation: route-flash 0.5s ease-out; }
+        @keyframes route-flash { 0% { background: rgba(255,0,255,0.5); } 100% { background: rgba(255,0,255,0.25); } }
+        .route-type-badge { font-size: 0.6em; padding: 2px 5px; border-radius: 3px; font-weight: bold; text-transform: uppercase; }
+        .route-type-badge.consume { background: rgba(0,255,200,0.3); color: #00ffc8; }
+        .route-type-badge.forward { background: rgba(255,165,0,0.3); color: #ffa500; }
+        .route-type-badge.intermediary { background: rgba(138,43,226,0.3); color: #9f6efc; }
+        .route-dest { font-family: monospace; font-size: 0.75em; color: #ff00ff; cursor: pointer; text-decoration: underline; }
+        .route-via { font-size: 0.7em; color: #666; }
+        .route-id { font-size: 0.65em; color: #555; font-family: monospace; }
+
+        /* Section labels */
+        .section-label { font-size: 0.75em; color: #888; text-transform: uppercase; letter-spacing: 1px; margin: 12px 0 6px 0; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .section-label .count { background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 10px; font-size: 0.9em; }
+        .section-label.transports { color: #00ffff; border-bottom-color: rgba(0,255,255,0.3); }
+        .section-label.routes { color: #ff00ff; border-bottom-color: rgba(255,0,255,0.3); }
+
+        /* Live indicator */
+        .live-indicator { display: inline-flex; align-items: center; gap: 4px; font-size: 0.7em; color: #00ff88; }
+        .live-dot { width: 6px; height: 6px; background: #00ff88; border-radius: 50%; animation: live-pulse 1.5s ease-in-out infinite; }
+        @keyframes live-pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,136,0.7); } 50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(0,255,136,0); } }
+
+        /* App management styles */
+        .app-item { background: rgba(0,0,0,0.2); border-radius: 4px; padding: 8px; margin-bottom: 6px; border-left: 3px solid #9f6efc; }
+        .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .app-name { font-weight: 600; font-size: 12px; color: #eee; }
+        .app-status { font-size: 9px; padding: 2px 6px; border-radius: 3px; font-weight: 500; }
+        .app-details { display: flex; gap: 12px; align-items: center; font-size: 10px; color: #888; margin-bottom: 4px; }
+        .app-port { }
+        .app-autostart { display: flex; align-items: center; gap: 3px; cursor: pointer; }
+        .app-autostart input { margin: 0; }
+        .app-pk-row { display: flex; gap: 4px; margin-bottom: 4px; }
+        .app-actions { display: flex; gap: 4px; }
+        .app-btn { padding: 3px 10px; font-size: 10px; border: none; border-radius: 3px; cursor: pointer; font-weight: 500; }
+        .app-btn-start { background: #00d9a5; color: #000; }
+        .app-btn-start:hover { background: #00ffcc; }
+        .app-btn-stop { background: #e94560; color: #fff; }
+        .app-btn-stop:hover { background: #ff6b6b; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="sidebar">
+            <h1>Skywire Network</h1>
+
+            <!-- Local Visor - shown when connected via RPC -->
+            <div class="section collapsed" id="local-visor-section" style="display:none;border-color:#00ffff;border-width:2px;">
+                <div class="section-header" onclick="toggleSection('local-visor-section')" style="background:linear-gradient(135deg,rgba(0,255,255,0.2),rgba(255,0,255,0.2));">
+                    <span class="section-title" style="color:#00ffff;">⬢ Local Visor</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content" id="local-visor-content">
+                    <!-- Populated by updateLocalVisorDisplay() -->
+                </div>
+            </div>
+
+            <!-- Apps Management - shown when connected via RPC -->
+            <div class="section collapsed" id="section-apps" style="display:none;border-color:#9f6efc;border-width:2px;">
+                <div class="section-header" onclick="toggleSection('section-apps')" style="background:linear-gradient(135deg,rgba(159,110,252,0.2),rgba(100,100,255,0.1));">
+                    <span class="section-title" style="color:#9f6efc;">Apps</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div id="apps-message" style="display:none;font-size:10px;padding:4px 8px;margin-bottom:6px;border-radius:3px;"></div>
+                    <div id="apps-list"></div>
+                </div>
+            </div>
+
+            <!-- Network Ping - shown when connected via RPC -->
+            <div class="section collapsed" id="section-ping" style="display:none;border-color:#00d9a5;border-width:2px;">
+                <div class="section-header" onclick="toggleSection('section-ping')" style="background:linear-gradient(135deg,rgba(0,217,165,0.15),rgba(0,180,216,0.1));">
+                    <span class="section-title" style="color:#00d9a5;">Network Ping</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div style="font-size:0.75em;color:#888;margin-bottom:6px;">Ping a remote visor via routes or DMSG</div>
+                    <div style="display:flex;gap:2px;align-items:stretch;margin-bottom:4px;">
+                        <input type="text" id="ping-pk" placeholder="Target Visor PK" style="flex:1;min-width:0;padding:5px 8px;background:#1a1a2e;border:1px solid #00d9a5;color:#eee;border-radius:2px;font-size:11px;font-family:monospace;">
+                        <button id="ping-pick-btn" style="padding:0 4px;background:#00d9a5;color:#000;border:none;border-radius:2px;cursor:pointer;font-size:9px;" title="Pick from graph">⊕</button>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap;">
+                        <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#aaa;cursor:pointer;">
+                            <input type="checkbox" id="ping-use-dmsg" checked style="margin:0;">
+                            <span>DMSG</span>
+                        </label>
+                        <div id="ping-local-route-row" style="display:none;">
+                            <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#aaa;cursor:pointer;">
+                                <input type="checkbox" id="ping-local-route" style="margin:0;">
+                                <span>Local route calc</span>
+                            </label>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:2px;margin-left:auto;">
+                            <label style="font-size:10px;color:#666;">Tries:</label>
+                            <input type="number" id="ping-tries" value="3" min="1" max="10" style="width:36px;padding:2px 4px;background:#1a1a2e;border:1px solid #0f3460;color:#eee;border-radius:2px;font-size:10px;text-align:center;">
+                        </div>
+                        <button id="ping-btn" style="padding:3px 8px;background:#00d9a5;color:#000;border:none;border-radius:2px;cursor:pointer;font-size:10px;font-weight:600;">Ping</button>
+                    </div>
+                    <div id="ping-result" style="display:none;margin-top:4px;font-size:10px;padding:4px;border-radius:2px;"></div>
+                </div>
+            </div>
+
+            <!-- Transport Setup Node - shown only when embedded TPS is running -->
+            <div class="section collapsed" id="tps-section" style="display:none;border-color:#ff6b35;border-width:2px;">
+                <div class="section-header" onclick="toggleSection('tps-section')" style="background:linear-gradient(135deg,rgba(255,107,53,0.15),rgba(255,200,0,0.1));">
+                    <span class="section-title" style="color:#ff6b35;">Transport Setup</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content" id="tps-content">
+                    <!-- Target -->
+                    <div style="margin-bottom:4px;">
+                        <div style="display:flex;align-items:center;gap:2px;margin-bottom:2px;">
+                            <label style="color:#ff6b35;font-size:10px;min-width:38px;">Target</label>
+                            <select id="tps-target-mode" style="padding:0 2px;font-size:9px;background:#1a1a2e;border:1px solid #ff6b35;color:#ff6b35;border-radius:1px;height:14px;">
+                                <option value="pk">Visor</option>
+                                <option value="ip">IP Group</option>
+                                <option value="country">Country</option>
+                            </select>
+                        </div>
+                        <div id="tps-target-pk-row" style="display:flex;gap:2px;align-items:stretch;">
+                            <input type="text" id="tps-target-pk" placeholder="Target PK" spellcheck="false" style="flex:1;min-width:0;padding:6px 10px;font-size:13px;background:#1a1a2e;border:1px solid #ff6b35;color:#eee;border-radius:3px;font-family:monospace;">
+                            <button id="tps-pick-target-btn" style="padding:0 4px;font-size:9px;background:#ff6b35;color:#fff;border:none;border-radius:2px;cursor:pointer;">⊕</button>
+                        </div>
+                        <div id="tps-target-group-row" style="display:none;gap:2px;align-items:stretch;">
+                            <select id="tps-target-group" style="flex:1;min-width:0;padding:6px 10px;font-size:13px;background:#1a1a2e;border:1px solid #ff6b35;color:#eee;border-radius:3px;">
+                                <option value="">Select...</option>
+                            </select>
+                            <button id="tps-pick-target-group-btn" style="padding:0 4px;font-size:9px;background:#ff6b35;color:#fff;border:none;border-radius:2px;cursor:pointer;" title="Pick from graph">⊕</button>
+                        </div>
+                    </div>
+                    <!-- Remote -->
+                    <div style="margin-bottom:4px;">
+                        <div style="display:flex;align-items:center;gap:2px;margin-bottom:2px;">
+                            <label style="color:#ff6b35;font-size:10px;min-width:38px;">Remote</label>
+                            <select id="tps-remote-mode" style="padding:0 2px;font-size:9px;background:#1a1a2e;border:1px solid #ff6b35;color:#ff6b35;border-radius:1px;height:14px;">
+                                <option value="pk">Visor</option>
+                                <option value="ip">IP Group</option>
+                                <option value="country">Country</option>
+                            </select>
+                        </div>
+                        <div id="tps-remote-pk-row" style="display:flex;gap:2px;align-items:stretch;">
+                            <input type="text" id="tps-remote-pk" placeholder="Remote PK" spellcheck="false" style="flex:1;min-width:0;padding:6px 10px;font-size:13px;background:#1a1a2e;border:1px solid #ff6b35;color:#eee;border-radius:3px;font-family:monospace;">
+                            <button id="tps-pick-remote-btn" style="padding:0 4px;font-size:9px;background:#ff6b35;color:#fff;border:none;border-radius:2px;cursor:pointer;">⊕</button>
+                        </div>
+                        <div id="tps-remote-group-row" style="display:none;gap:2px;align-items:stretch;">
+                            <select id="tps-remote-group" style="flex:1;min-width:0;padding:6px 10px;font-size:13px;background:#1a1a2e;border:1px solid #ff6b35;color:#eee;border-radius:3px;">
+                                <option value="">Select...</option>
+                            </select>
+                            <button id="tps-pick-remote-group-btn" style="padding:0 4px;font-size:9px;background:#ff6b35;color:#fff;border:none;border-radius:2px;cursor:pointer;" title="Pick from graph">⊕</button>
+                        </div>
+                    </div>
+                    <!-- Multi-hop container -->
+                    <div id="mh-hops-container" style="display:none;margin-bottom:4px;padding:3px;background:rgba(255,200,0,0.1);border-radius:2px;">
+                        <div id="mh-hops-list" style="max-height:50px;overflow-y:auto;"></div>
+                        <div style="display:flex;justify-content:flex-end;gap:2px;margin-top:2px;">
+                            <button id="mh-build-btn" style="padding:1px 4px;font-size:8px;background:#ffc800;color:#000;border:none;border-radius:2px;cursor:pointer;font-weight:600;">Build</button>
+                            <button id="mh-clear-btn" style="padding:1px 3px;font-size:8px;background:#333;color:#888;border:1px solid #555;border-radius:2px;cursor:pointer;">✕</button>
+                        </div>
+                    </div>
+                    <!-- Type + Buttons row -->
+                    <div style="display:flex;gap:3px;align-items:center;">
+                        <button id="mh-add-hop-btn" style="padding:0 3px;font-size:8px;background:#ffc800;color:#000;border:none;border-radius:2px;cursor:pointer;font-weight:bold;" title="Add hop">+</button>
+                        <select id="tps-type" style="padding:2px 4px;font-size:11px;background:#1a1a2e;border:1px solid #0f3460;color:#eee;border-radius:2px;">
+                            <option value="sudph">SUDPH</option>
+                            <option value="stcpr">STCPR</option>
+                        </select>
+                        <button id="tps-add-btn" style="padding:2px 5px;font-size:9px;background:#ff6b35;color:#fff;border:none;border-radius:2px;cursor:pointer;font-weight:600;">Create</button>
+                        <button id="tps-refresh-btn" style="padding:1px 3px;font-size:8px;background:#333;color:#ff6b35;border:1px solid #ff6b35;border-radius:2px;cursor:pointer;" title="Query target's transports">↻</button>
+                        <span id="mh-hop-count" style="font-size:9px;color:#ffc800;margin-left:auto;"></span>
+                    </div>
+                    <!-- Info -->
+                    <div id="tps-info" style="font-size:9px;color:#888;margin-top:2px;text-align:right;"></div>
+                    <!-- Results -->
+                    <div id="tps-result" style="display:none;font-size:10px;margin-top:3px;"></div>
+                    <div id="mh-progress" style="display:none;font-size:9px;margin-top:3px;"></div>
+                    <div id="tps-pk-info" style="margin-top:3px;font-size:8px;color:#555;word-break:break-all;"></div>
+                </div>
+            </div>
+
+            <!-- TPD Statistics -->
+            <div class="section collapsed" id="section-tpd">
+                <div class="section-header" onclick="toggleSection('section-tpd')">
+                    <span class="section-title">Transport Discovery</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="stat"><span class="stat-label">Total Transports</span><span class="stat-value" id="total-transports">-</span></div>
+                    <div class="stat"><span class="stat-label">Unique Visors</span><span class="stat-value" id="total-visors">-</span></div>
+                    <div class="stat" id="unique-ips-stat" style="display:none;"><span class="stat-label">Unique IPs</span><span class="stat-value" id="total-unique-ips">-</span></div>
+                    <div class="stat"><span class="stat-label">STCPR</span><span class="stat-value" id="count-stcpr">-</span></div>
+                    <div class="stat"><span class="stat-label">SUDPH</span><span class="stat-value" id="count-sudph">-</span></div>
+                    <div class="stat"><span class="stat-label">DMSG</span><span class="stat-value" id="count-dmsg">-</span></div>
+                    <div class="visor-list" id="visor-list"></div>
+                </div>
+            </div>
+
+            <!-- Uptime Tracker - collapsed by default -->
+            <div class="section collapsed" id="section-ut">
+                <div class="section-header" onclick="toggleSection('section-ut')">
+                    <span class="section-title">Uptime Tracker</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="stat"><span class="stat-label">Online</span><span class="stat-value" id="count-online" style="color:#00d9a5">-</span></div>
+                    <div class="stat"><span class="stat-label">Offline</span><span class="stat-value" id="count-offline" style="color:#e94560">-</span></div>
+                    <div class="stat"><span class="stat-label">Not in UT</span><span class="stat-value" id="count-unknown" style="color:#ffd166">-</span></div>
+                    <div class="stat"><span class="stat-label">Not in DMSG</span><span class="stat-value" id="count-not-in-dmsg" style="color:#ff6b35">-</span></div>
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;font-size:0.8em;color:#888;">Versions</div>
+                    <div id="version-stats"></div>
+                </div>
+            </div>
+
+            <!-- DMSG Discovery - collapsed by default -->
+            <div class="section collapsed" id="section-dmsg">
+                <div class="section-header" onclick="toggleSection('section-dmsg')" style="background:linear-gradient(135deg,rgba(159,110,252,0.15),rgba(100,100,255,0.1));">
+                    <span class="section-title" style="color:#9f6efc;">DMSG Discovery</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="stat"><span class="stat-label">Servers</span><span class="stat-value" id="dmsg-server-count" style="color:#9f6efc">-</span></div>
+                    <div class="stat"><span class="stat-label">Total Sessions</span><span class="stat-value" id="dmsg-total-sessions" style="color:#9f6efc">-</span></div>
+                    <div class="stat"><span class="stat-label">Entries</span><span class="stat-value" id="dmsg-entry-count" style="color:#9f6efc">-</span></div>
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;">
+                        <div style="font-size:0.8em;color:#888;margin-bottom:4px;">Servers</div>
+                        <div id="dmsg-server-list" style="max-height:150px;overflow-y:auto;font-size:0.75em;"></div>
+                    </div>
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;">
+                        <div style="font-size:0.8em;color:#888;margin-bottom:4px;">Health Check</div>
+                        <div style="display:flex;gap:2px;align-items:stretch;">
+                            <input type="text" id="dmsg-health-pk" placeholder="Visor PK" style="flex:1;min-width:0;padding:5px 8px;background:#1a1a2e;border:1px solid #9f6efc;color:#eee;border-radius:2px;font-size:11px;font-family:monospace;">
+                            <button id="dmsg-health-pick-btn" style="padding:0 4px;background:#9f6efc;color:#fff;border:none;border-radius:2px;cursor:pointer;font-size:9px;">⊕</button>
+                            <button id="dmsg-health-btn" style="padding:2px 6px;background:#9f6efc;color:#fff;border:none;border-radius:2px;cursor:pointer;font-size:9px;">Check</button>
+                        </div>
+                        <div id="dmsg-health-result" style="display:none;margin-top:4px;font-size:10px;padding:4px;border-radius:2px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters & Legend - collapsed by default -->
+            <div class="section collapsed" id="section-filters">
+                <div class="section-header" onclick="toggleSection('section-filters')">
+                    <span class="section-title">Filters & Legend</span>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="control-group">
+                        <label><input type="checkbox" id="show-stcpr" checked> Show STCPR</label>
+                        <label><input type="checkbox" id="show-sudph" checked> Show SUDPH</label>
+                        <label><input type="checkbox" id="show-dmsg" checked> Show DMSG</label>
+                        <label><input type="checkbox" id="show-dmsg-servers" checked> DMSG Servers</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="show-online" checked> Show Online</label>
+                        <label><input type="checkbox" id="show-offline"> Show Offline</label>
+                        <label><input type="checkbox" id="show-unknown"> Show Unknown</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="show-services"> Highlight Services</label>
+                        <label><input type="checkbox" id="show-flags" checked> Show Country Flags</label>
+                    </div>
+                    <div class="control-group anim-controls">
+                        <label><input type="checkbox" id="show-dataflow" checked> Data Flow Animation</label>
+                        <label><input type="checkbox" id="show-routes" checked> Show Routes</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="toggle-tooltips"> Show Tooltips on Hover</label>
+                        <label><input type="checkbox" id="toggle-physics" checked> Enable Physics</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="cluster-country" checked> Cluster by Country</label>
+                        <label id="ip-groups-label" style="display:none;"><input type="checkbox" id="cluster-ip"> Cluster by IP Group</label>
+                    </div>
+                    <div class="control-group">
+                        <label for="version-filter">Version</label>
+                        <select id="version-filter">
+                            <option value="">All Versions</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="search">Search PK</label>
+                        <input type="text" id="search" placeholder="e.g. 027087fe">
+                    </div>
+                    <!-- Dynamic Legend -->
+                    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #0f3460;">
+                        <div style="font-size:0.8em;color:#888;margin-bottom:6px;">Legend</div>
+                        <div class="legend-item"><div class="legend-color stcpr"></div><span>STCPR (TCP)</span></div>
+                        <div class="legend-item"><div class="legend-color sudph"></div><span>SUDPH (UDP)</span></div>
+                        <div class="legend-item"><div class="legend-color dmsg"></div><span>DMSG</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background:#9f6efc;"></div><span>DMSG Server</span></div>
+                        <div id="node-legend">
+                            <div class="status-item"><div class="status-dot status-online"></div><span>Online (in UT)</span></div>
+                            <div class="status-item"><div class="status-dot status-offline"></div><span>Offline (in UT)</span></div>
+                            <div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button id="btn-fit">Fit to Screen</button>
+            <div id="cache-info"></div>
+
+            <div id="selected-info">
+                <h3>Selected Visor</h3>
+                <div id="selected-pk"></div>
+                <div id="selected-status"></div>
+                <div id="selected-version" class="selected-version"></div>
+                <div id="selected-country" class="selected-country"></div>
+                <div id="selected-services" class="selected-services"></div>
+                <div class="stat"><span class="stat-label">Transports</span><span class="stat-value" id="selected-conn-count">-</span></div>
+                <h3 style="margin-top:10px;">Connected To</h3>
+                <div class="conn-list" id="conn-list"></div>
+            </div>
+        </div>
+        <div id="resize-handle"></div>
+        <div id="network-wrapper">
+            <div id="network">
+                <canvas id="flow-canvas"></canvas>
+                <div id="loading"><div class="spinner"></div><div>Loading transport data...</div></div>
+                <div id="error"></div>
+            </div>
+            <div id="zoom-controls">
+                <button id="zoom-in" title="Zoom in">+</button>
+                <button id="zoom-out" title="Zoom out">&minus;</button>
+                <button id="zoom-fit" title="Fit to screen" style="font-size:13px;">&#8962;</button>
+            </div>
+        </div>
+    </div>
+    <script src="bundle.js"></script>
+</body>
+</html>

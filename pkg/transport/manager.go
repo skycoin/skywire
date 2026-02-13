@@ -356,9 +356,17 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 	if !ok {
 		tm.Logger.Debugln("No TP found, creating new one")
 
+		// Use no-op discovery client for self-transports
+		// Self-transports don't need TPD registration and would cause deadlock
+		dc := tm.Conf.DiscoveryClient
+		if transport.RemotePK() == client.PK() {
+			dc = NewNoopDiscoveryClient()
+			tm.Logger.Debug("Using no-op discovery client for self-transport (accept)")
+		}
+
 		mTp = NewManagedTransport(ManagedTransportConfig{
 			client:         client,
-			DC:             tm.Conf.DiscoveryClient,
+			DC:             dc,
 			LS:             tm.Conf.LogStore,
 			RemotePK:       transport.RemotePK(),
 			TransportLabel: LabelUser,
@@ -444,6 +452,27 @@ func (tm *Manager) GetTransportsByLabel(label Label) []*ManagedTransport {
 		}
 	}
 	return trs
+}
+
+// GetTransportsByLabels returns all transports matching any of the given labels
+func (tm *Manager) GetTransportsByLabels(labels ...Label) []*ManagedTransport {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
+	var trs []*ManagedTransport
+	for _, tr := range tm.tps {
+		for _, label := range labels {
+			if tr.Entry.Label == label {
+				trs = append(trs, tr)
+				break
+			}
+		}
+	}
+	return trs
+}
+
+// ARClient returns the address resolver client used by this transport manager.
+func (tm *Manager) ARClient() addrresolver.APIClient {
+	return tm.arClient
 }
 
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.

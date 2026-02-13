@@ -44,12 +44,16 @@ func init() {
 	rmTpCmd.Flags().SortFlags = false
 	discTpCmd.Flags().SortFlags = false
 	treeCmd.Flags().SortFlags = false
+	vizCmd.Flags().SortFlags = false
+	autoCmd.Flags().SortFlags = false
 	tpCmd.AddCommand(
 		addTpCmd,
 		rmTpCmd,
 		discTpCmd,
 		treeCmd,
 		visorListCmd,
+		vizCmd,
+		autoCmd,
 	)
 	tpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated")
 	tpCmd.Flags().StringSliceVarP(&filterPubKeys, "pks", "p", filterPubKeys, "show transport(s) for public key(s) comma-separated")

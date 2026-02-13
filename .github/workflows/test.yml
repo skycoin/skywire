@@ -12,7 +12,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.4'
+          go-version: '1.25.6'
           cache: true
           cache-dependency-path: go.sum
 
@@ -29,6 +29,7 @@ jobs:
             libgl1-mesa-dev \
             xorg-dev \
             libglu1-mesa-dev \
+            libusb-1.0-0-dev \
             shellcheck
 
           make install-shellcheck
@@ -66,7 +67,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.4'
+          go-version: '1.25.6'
           cache: true
           cache-dependency-path: go.sum
 
@@ -74,6 +75,14 @@ jobs:
         run: |
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
           brew install glfw
+          brew install --quiet libusb || brew upgrade --quiet libusb
+          brew install --quiet hidapi || brew upgrade --quiet hidapi
+          # Set CGO flags for both general brew prefix and specific hidapi/libusb paths
+          BREW_PREFIX=$(brew --prefix)
+          HIDAPI_PREFIX=$(brew --prefix hidapi)
+          LIBUSB_PREFIX=$(brew --prefix libusb)
+          echo "CGO_CFLAGS=-I${BREW_PREFIX}/include -I${HIDAPI_PREFIX}/include -I${LIBUSB_PREFIX}/include" >> $GITHUB_ENV
+          echo "CGO_LDFLAGS=-L${BREW_PREFIX}/lib -L${HIDAPI_PREFIX}/lib -L${LIBUSB_PREFIX}/lib" >> $GITHUB_ENV
         shell: bash
 
       - name: Checking Format and Testing
@@ -89,14 +98,21 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.4'
+          go-version: '1.25.6'
           cache: true
           cache-dependency-path: go.sum
 
       - name: Install Requirements
+        shell: pwsh
         run: |
           choco install make
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+          # Install libusb, hidapi, and pkg-config via msys2/mingw for x64
+          C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm mingw-w64-x86_64-libusb mingw-w64-x86_64-hidapi mingw-w64-x86_64-pkg-config"
+          # Add msys2 mingw64 to PATH for finding libraries and pkg-config
+          echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "CGO_CFLAGS=-IC:/msys64/mingw64/include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "CGO_LDFLAGS=-LC:/msys64/mingw64/lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Checking (lint + test)
         run: |

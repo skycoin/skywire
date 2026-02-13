@@ -196,6 +196,43 @@ func (hv *Hypervisor) HTTPHandler() http.Handler {
 	return hv.makeMux()
 }
 
+// logrusLogFormatter implements chi's middleware.LogFormatter using logrus
+type logrusLogFormatter struct {
+	logger *logging.Logger
+}
+
+// logrusLogEntry implements chi's middleware.LogEntry
+type logrusLogEntry struct {
+	logger *logging.Logger
+	method string
+	path   string
+}
+
+// NewLogEntry creates a new log entry for a request
+func (f *logrusLogFormatter) NewLogEntry(r *http.Request) middleware.LogEntry {
+	return &logrusLogEntry{
+		logger: f.logger,
+		method: r.Method,
+		path:   r.URL.Path,
+	}
+}
+
+// Write logs the completed request
+func (e *logrusLogEntry) Write(status, bytes int, header http.Header, elapsed time.Duration, extra interface{}) {
+	e.logger.WithFields(logrus.Fields{
+		"method":  e.method,
+		"path":    e.path,
+		"status":  status,
+		"bytes":   bytes,
+		"elapsed": elapsed.Round(time.Microsecond),
+	}).Debug("HTTP request")
+}
+
+// Panic logs a panic during request handling
+func (e *logrusLogEntry) Panic(v interface{}, stack []byte) {
+	e.logger.WithField("stack", string(stack)).Errorf("HTTP panic: %v", v)
+}
+
 func (hv *Hypervisor) makeMux() chi.Router {
 	r := chi.NewRouter()
 
@@ -204,7 +241,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 	if hv.visor != nil {
 		if hv.visor.MasterLogger().GetLevel() == logrus.DebugLevel || hv.visor.MasterLogger().GetLevel() == logrus.TraceLevel {
-			r.Use(middleware.Logger)
+			r.Use(middleware.RequestLogger(&logrusLogFormatter{logger: hv.logger}))
 			r.Use(middleware.Recoverer)
 		}
 	}

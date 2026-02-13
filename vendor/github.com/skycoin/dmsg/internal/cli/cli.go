@@ -424,6 +424,16 @@ func (c *cachingDiscClient) AllEntries(ctx context.Context) ([]string, error) {
 	return c.base.AllEntries(ctx)
 }
 
+// AllClientsByServer delegates to base client
+func (c *cachingDiscClient) AllClientsByServer(ctx context.Context) (map[string][]*disc.Entry, error) {
+	return c.base.AllClientsByServer(ctx)
+}
+
+// ClientsByServer delegates to base client
+func (c *cachingDiscClient) ClientsByServer(ctx context.Context, serverPK cipher.PubKey) ([]*disc.Entry, error) {
+	return c.base.ClientsByServer(ctx, serverPK)
+}
+
 // fallbackDiscClient tries direct client first, falls back to HTTP discovery for unknown entries
 type fallbackDiscClient struct {
 	direct disc.APIClient
@@ -481,6 +491,16 @@ func (f *fallbackDiscClient) AllServers(ctx context.Context) ([]*disc.Entry, err
 // AllEntries delegates to direct client
 func (f *fallbackDiscClient) AllEntries(ctx context.Context) ([]string, error) {
 	return f.direct.AllEntries(ctx)
+}
+
+// AllClientsByServer delegates to HTTP client
+func (f *fallbackDiscClient) AllClientsByServer(ctx context.Context) (map[string][]*disc.Entry, error) {
+	return f.http.AllClientsByServer(ctx)
+}
+
+// ClientsByServer delegates to HTTP client
+func (f *fallbackDiscClient) ClientsByServer(ctx context.Context, serverPK cipher.PubKey) ([]*disc.Entry, error) {
+	return f.http.ClientsByServer(ctx, serverPK)
 }
 
 // FallbackRoundTripper tries multiple DMSG transports until one succeeds.

@@ -18,6 +18,7 @@ import (
 	rf "github.com/skycoin/skywire/cmd/route-finder/commands"
 	sd "github.com/skycoin/skywire/cmd/service-discovery/commands"
 	sn "github.com/skycoin/skywire/cmd/setup-node/commands"
+	stunsvr "github.com/skycoin/skywire/cmd/stun-server/commands"
 	se "github.com/skycoin/skywire/cmd/sw-env/commands"
 	tpd "github.com/skycoin/skywire/cmd/transport-discovery/commands"
 	tps "github.com/skycoin/skywire/cmd/transport-setup/commands"
@@ -43,6 +44,7 @@ func init() {
 		sn.RootCmd,
 		nm.RootCmd,
 		geoip.RootCmd,
+		stunsvr.RootCmd,
 	)
 	tpd.RootCmd.Use = "tpd"
 	tps.RootCmd.Use = "tps"
@@ -58,6 +60,7 @@ func init() {
 	conf.DmsghttpConfCmd.Use = "dmsghttp"
 	conf.ServicesConfCmd.Use = "conf"
 	geoip.RootCmd.Use = "ip"
+	stunsvr.RootCmd.Use = "stun"
 }
 
 // RootCmd contains all subcommands

@@ -37,6 +37,11 @@ services:
       - "6385:6379"
     container_name: "dmsgd-redis"
     hostname: dmsgd-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   ar-redis:
     image: "redis:alpine"
@@ -49,6 +54,11 @@ services:
       - "6380:6379"
     container_name: "ar-redis"
     hostname: ar-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   sd-redis:
     image: "redis:alpine"
@@ -73,6 +83,11 @@ services:
       - "6382:6379"
     container_name: "tpd-redis"
     hostname: tpd-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   ut-redis:
     image: "redis:alpine"
@@ -96,13 +111,18 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DATABASE=postgres
+      - POSTGRES_DB=postgres
     # ports:
     #   - '5432:5432'
-    volumes: 
-      - db:/var/lib/postgresql/data
+    shm_size: 256mb
     container_name: "postgres-db"
     hostname: postgres-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
 
   transport-discovery:
     privileged: true
@@ -158,8 +178,10 @@ services:
       - "9090:9090"
     restart: always
     depends_on:
-      - dmsgd-redis
-      - transport-discovery
+      dmsgd-redis:
+        condition: service_healthy
+      transport-discovery:
+        condition: service_started
     entrypoint: "/release/skywire dmsg disc --addr :9090 --redis redis://dmsgd-redis:6379 --sk b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714 -t"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
@@ -483,7 +505,7 @@ services:
     tty: true        # docker run -t
   
   e2e-test:
-    image: golang:1.25.4-alpine
+    image: golang:1.25.6-alpine
     container_name: e2e-test
     networks:
       - visors
@@ -507,8 +529,3 @@ services:
 volumes:
   go-test-cache:
   go-mod-cache:
-  db:
-    driver: local
-    driver_opts:
-      type: tmpfs
-      device: tmpfs
