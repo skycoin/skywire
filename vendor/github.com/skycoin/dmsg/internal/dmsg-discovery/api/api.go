@@ -93,6 +93,8 @@ func New(log logrus.FieldLogger, db store.Storer, m discmetrics.Metrics, testMod
 	r.Delete("/dmsg-discovery/deregister", api.deregisterEntry())
 	r.Get("/dmsg-discovery/available_servers", api.getAvailableServers())
 	r.Get("/dmsg-discovery/all_servers", api.getAllServers())
+	r.Get("/dmsg-discovery/servers/clients", api.allClientsByServer())
+	r.Get("/dmsg-discovery/server/{pk}/clients", api.clientsByServer())
 	r.Get("/health", api.serviceHealth)
 
 	return api
@@ -438,6 +440,68 @@ func (a *API) getAllServers() http.HandlerFunc {
 		}
 
 		a.writeJSON(w, r, http.StatusOK, entries)
+	}
+}
+
+// allClientsByServer returns all client PKs grouped by the server they are delegated to
+// URI: /dmsg-discovery/servers/clients
+// Method: GET
+// Response: { "server_pk": ["client_pk1", "client_pk2", ...], ... }
+func (a *API) allClientsByServer() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		entries, err := a.db.AllClientEntries(r.Context())
+		if err != nil {
+			a.handleError(w, r, err)
+			return
+		}
+
+		result := make(map[string][]string)
+		for _, entry := range entries {
+			if entry.Client == nil {
+				continue
+			}
+			clientPK := entry.Static.Hex()
+			for _, serverPK := range entry.Client.DelegatedServers {
+				result[serverPK.Hex()] = append(result[serverPK.Hex()], clientPK)
+			}
+		}
+
+		a.writeJSON(w, r, http.StatusOK, result)
+	}
+}
+
+// clientsByServer returns all client PKs delegated to a specific server
+// URI: /dmsg-discovery/server/{pk}/clients
+// Method: GET
+// Response: ["client_pk1", "client_pk2", ...]
+func (a *API) clientsByServer() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		serverPK := cipher.PubKey{}
+		if err := serverPK.UnmarshalText([]byte(chi.URLParam(r, "pk"))); err != nil {
+			a.handleError(w, r, disc.ErrBadInput)
+			return
+		}
+
+		entries, err := a.db.AllClientEntries(r.Context())
+		if err != nil {
+			a.handleError(w, r, err)
+			return
+		}
+
+		var result []string
+		for _, entry := range entries {
+			if entry.Client == nil {
+				continue
+			}
+			for _, delegatedPK := range entry.Client.DelegatedServers {
+				if delegatedPK == serverPK {
+					result = append(result, entry.Static.Hex())
+					break
+				}
+			}
+		}
+
+		a.writeJSON(w, r, http.StatusOK, result)
 	}
 }
 

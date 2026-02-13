@@ -26,6 +26,7 @@ import (
 	"container/heap"
 	"container/list"
 	"sync"
+	"sync/atomic"
 )
 
 // _itimediff returns the time difference between two uint32 values.
@@ -64,11 +65,19 @@ func (h *shaperHeap) Pop() any {
 
 // shaperQueue manages multiple streams of writeRequests using a round-robin scheduling algorithm.
 type shaperQueue struct {
+	count   int64 // atomic counter for fast Len() and IsEmpty()
 	streams map[uint32]*shaperHeap
 	rrList  *list.List    // list of sid (RR queue)
 	next    *list.Element // next node to pop
-	count   int
 	mu      sync.Mutex
+}
+
+// shaperHeapPool reduces allocation of shaperHeap objects
+var shaperHeapPool = sync.Pool{
+	New: func() any {
+		h := make(shaperHeap, 0, 16) // pre-allocate capacity
+		return &h
+	},
 }
 
 func NewShaperQueue() *shaperQueue {
@@ -86,7 +95,10 @@ func (sq *shaperQueue) Push(req writeRequest) {
 	// create heap for the stream if not exists.
 	sid := req.frame.sid
 	if _, ok := sq.streams[sid]; !ok {
-		sq.streams[sid] = new(shaperHeap)
+		// get heap from pool
+		h := shaperHeapPool.Get().(*shaperHeap)
+		*h = (*h)[:0] // reset while keeping capacity
+		sq.streams[sid] = h
 		elem := sq.rrList.PushBack(sid)
 		if sq.next == nil {
 			sq.next = elem
@@ -96,7 +108,7 @@ func (sq *shaperQueue) Push(req writeRequest) {
 	// push the request into the corresponding stream heap.
 	h := sq.streams[sid]
 	heap.Push(h, req)
-	sq.count++
+	atomic.AddInt64(&sq.count, 1)
 }
 
 // Pop uses Round Robin to pop writeRequests from the shaperQueue.
@@ -105,7 +117,7 @@ func (sq *shaperQueue) Pop() (req writeRequest, ok bool) {
 	defer sq.mu.Unlock()
 
 	// if there are no streams, return false
-	if sq.next == nil || sq.count == 0 {
+	if sq.next == nil || atomic.LoadInt64(&sq.count) == 0 {
 		return writeRequest{}, false
 	}
 
@@ -121,7 +133,7 @@ func (sq *shaperQueue) Pop() (req writeRequest, ok bool) {
 		if h.Len() > 0 {
 			// pop the top request from the heap
 			req := heap.Pop(h).(writeRequest)
-			sq.count--
+			atomic.AddInt64(&sq.count, -1)
 
 			// update next pointer for round-robin
 			next := current.Next()
@@ -134,6 +146,8 @@ func (sq *shaperQueue) Pop() (req writeRequest, ok bool) {
 			if h.Len() == 0 {
 				delete(sq.streams, sid)
 				sq.rrList.Remove(current)
+				// return heap to pool
+				shaperHeapPool.Put(h)
 				// if a list has only one element, then current->next will point to itself,
 				// so after removing current, we need to set next to nil.
 				if sq.rrList.Len() == 0 {
@@ -159,14 +173,10 @@ func (sq *shaperQueue) Pop() (req writeRequest, ok bool) {
 
 // IsEmpty checks if the shaperQueue is empty.
 func (sq *shaperQueue) IsEmpty() bool {
-	sq.mu.Lock()
-	defer sq.mu.Unlock()
-	return sq.count == 0
+	return atomic.LoadInt64(&sq.count) == 0
 }
 
 // Len returns the total number of writeRequests in the shaperQueue.
 func (sq *shaperQueue) Len() int {
-	sq.mu.Lock()
-	defer sq.mu.Unlock()
-	return sq.count
+	return int(atomic.LoadInt64(&sq.count))
 }

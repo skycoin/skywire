@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/noise"
 
@@ -35,7 +36,7 @@ const (
 	DefaultRulesGCInterval = 5 * time.Second
 	acceptSize             = 1024
 
-	handshakeAwaitTimeout = 2 * time.Second
+	handshakeAwaitTimeout = 10 * time.Second
 
 	maxHops       = 1000
 	retryDuration = 2 * time.Second
@@ -96,11 +97,12 @@ func (c *Config) SetDefaults() {
 
 // DialOptions describes dial options.
 type DialOptions struct {
-	MinForwardRts int
-	MaxForwardRts int
-	MinConsumeRts int
-	MaxConsumeRts int
-	Retries       int
+	MinForwardRts     int
+	MaxForwardRts     int
+	MinConsumeRts     int
+	MaxConsumeRts     int
+	Retries           int
+	UseExistingTpOnly bool // If true, only use routes through existing transports, don't create new ones
 }
 
 // DefaultDialOptions returns default dial options.
@@ -143,6 +145,8 @@ type Router interface {
 	Serve(context.Context) error
 	SetupIsTrusted(cipher.PubKey) bool
 	SetMinHop(uint16)
+	SetExistingTPOnly(bool)
+	SetForceLocalRoutes(bool)
 
 	// Routing table related methods
 	RoutesCount() int
@@ -156,23 +160,27 @@ type Router interface {
 // communicating with setup nodes, forward packets according to local
 // rules and manages route groups for apps.
 type router struct {
-	mx               sync.Mutex
-	conf             *Config
-	logger           *logging.Logger
-	mLogger          *logging.MasterLogger
-	sl               *dmsg.Listener
-	dmsgC            *dmsg.Client
-	trustedVisors    map[cipher.PubKey]struct{}
-	tm               *transport.Manager
-	rt               routing.Table
-	rgsNs            map[routing.RouteDescriptor]*NoiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
-	rgsRaw           map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
-	rpcSrv           *rpc.Server
-	accept           chan routing.EdgeRules
-	done             chan struct{}
-	once             sync.Once
-	routeSetupHookMu sync.Mutex
-	routeSetupHooks  []RouteSetupHook // see RouteSetupHook description
+	mx                 sync.Mutex
+	conf               *Config
+	logger             *logging.Logger
+	mLogger            *logging.MasterLogger
+	sl                 *dmsg.Listener
+	dmsgC              *dmsg.Client
+	trustedVisors      map[cipher.PubKey]struct{}
+	tm                 *transport.Manager
+	rt                 routing.Table
+	rgsNs              map[routing.RouteDescriptor]*NoiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
+	rgsRaw             map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
+	rpcSrv             *rpc.Server
+	accept             chan routing.EdgeRules
+	done               chan struct{}
+	once               sync.Once
+	routeSetupHookMu   sync.Mutex
+	routeSetupHooks    []RouteSetupHook // see RouteSetupHook description
+	existingTpOnly     bool             // when true, don't create new transports for routing
+	existingTpOnlyMu   sync.Mutex       // protects existingTpOnly
+	forceLocalRoutes   bool             // when true, skip route finder and use local route calculation
+	forceLocalRoutesMu sync.Mutex       // protects forceLocalRoutes
 }
 
 // New constructs a new Router.
@@ -262,7 +270,15 @@ func (r *router) DialRoutes(
 		r.conf.MinHops = 1
 	}
 
-	if r.conf.MinHops == 1 {
+	// Check if existing transport only mode is set on the router
+	r.existingTpOnlyMu.Lock()
+	routerExistingTpOnly := r.existingTpOnly
+	r.existingTpOnlyMu.Unlock()
+
+	// Only run route setup hooks (which may create new transports) if UseExistingTpOnly is false
+	// on both the router level and the dial options level
+	useExistingOnly := routerExistingTpOnly || (opts != nil && opts.UseExistingTpOnly)
+	if r.conf.MinHops == 1 && !useExistingOnly {
 		r.routeSetupHookMu.Lock()
 		if len(r.routeSetupHooks) != 0 {
 			for _, rsf := range r.routeSetupHooks {
@@ -273,6 +289,8 @@ func (r *router) DialRoutes(
 			}
 		}
 		r.routeSetupHookMu.Unlock()
+	} else if useExistingOnly {
+		r.logger.Debug("UseExistingTpOnly is set, skipping transport creation hooks")
 	}
 
 	// Retry route setup with fresh routes if it fails due to stale TPD data.
@@ -280,7 +298,7 @@ func (r *router) DialRoutes(
 	// so we query for fresh routes on each retry instead of retrying the same bad route.
 	const maxRetries = 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		forwardPath, reversePath, err := r.fetchBestRoutes(lPK, rPK, opts)
+		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, lPK, rPK, opts)
 		if err != nil {
 			if attempt < maxRetries {
 				r.logger.WithError(err).Warnf("Route finder failed (attempt %d/%d), retrying with fresh query...", attempt, maxRetries)
@@ -350,14 +368,10 @@ func (r *router) DialRoutes(
 	return nil, fmt.Errorf("failed to establish route after %d attempts", maxRetries)
 }
 
-// PingRoute dials to a given visor of 'rPK'.
-// 'lPort'/'rPort' specifies the local/remote ports respectively.
-// A nil 'opts' input results in a value of '1' for all DialOptions fields.
-// A single call to DialRoutes should perform the following:
-// - Find routes via RouteFinder (in one call).
-// - Setup routes via SetupNode (in one call).
-// - Save to routing.Table and internal RouteGroup map.
-// - Return RouteGroup if successful.
+// PingRoute dials to a given visor of 'rPK' to establish a ping route.
+// Uses the same route-finding and setup machinery as DialRoutes but
+// without route setup hooks (transport creation). This tests the routing
+// infrastructure directly.
 func (r *router) PingRoute(
 	ctx context.Context,
 	rPK cipher.PubKey,
@@ -367,53 +381,76 @@ func (r *router) PingRoute(
 
 	if rPK.Null() {
 		err := ErrRemoteEmptyPK
-		r.logger.WithError(err).Error("Failed to dial routes.")
-		return nil, fmt.Errorf("failed to dial routes: %w", err)
+		r.logger.WithError(err).Error("Failed to dial ping route.")
+		return nil, fmt.Errorf("failed to dial ping route: %w", err)
 	}
 
 	lPK := r.conf.PubKey
-	forwardDesc := routing.NewRouteDescriptor(lPK, lPK, lPort, rPort)
+	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
-	forwardPath, reversePath, err := r.fetchPingRoute(lPK, rPK, opts)
-	if err != nil {
-		return nil, fmt.Errorf("route finder: %w", err)
+	const maxRetries = 3
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, lPK, rPK, opts)
+		if err != nil {
+			if attempt < maxRetries {
+				r.logger.WithError(err).Warnf("Ping route finder failed (attempt %d/%d), retrying...", attempt, maxRetries)
+				continue
+			}
+			return nil, fmt.Errorf("route finder: %w", err)
+		}
+
+		req := routing.BidirectionalRoute{
+			Desc:      forwardDesc,
+			KeepAlive: DefaultRouteKeepAlive,
+			Forward:   forwardPath,
+			Reverse:   reversePath,
+		}
+
+		rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
+		if err != nil {
+			if attempt < maxRetries {
+				r.logger.WithError(err).Warnf("Ping route setup failed (attempt %d/%d), retrying...", attempt, maxRetries)
+				continue
+			}
+			r.logger.WithError(err).Error("Error dialing ping route group")
+			return nil, err
+		}
+
+		if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+			if attempt < maxRetries {
+				r.logger.WithError(err).Warnf("Saving ping routing rules failed (attempt %d/%d), retrying...", attempt, maxRetries)
+				continue
+			}
+			r.logger.WithError(err).Error("Error saving ping routing rules")
+			return nil, err
+		}
+
+		nsConf := noise.Config{
+			LocalPK:   r.conf.PubKey,
+			LocalSK:   r.conf.SecKey,
+			RemotePK:  rPK,
+			Initiator: true,
+		}
+
+		nrg, err := r.saveRouteGroupRules(rules, nsConf)
+		if err != nil {
+			if strings.Contains(err.Error(), "no suitable transport") || strings.Contains(err.Error(), "transport") {
+				if attempt < maxRetries {
+					r.logger.WithError(err).Warnf("Ping route handshake failed (attempt %d/%d), retrying...", attempt, maxRetries)
+					continue
+				}
+			}
+			return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
+		}
+
+		nrg.rg.startOffServiceLoops()
+
+		r.logger.Debugf("Created new ping route to %s on port %d", rPK, lPort)
+
+		return nrg, nil
 	}
 
-	req := routing.BidirectionalRoute{
-		Desc:      forwardDesc,
-		KeepAlive: DefaultRouteKeepAlive,
-		Forward:   forwardPath,
-		Reverse:   reversePath,
-	}
-
-	rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
-	if err != nil {
-		r.logger.WithError(err).Error("Error dialing route group")
-		return nil, err
-	}
-
-	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
-		r.logger.WithError(err).Error("Error saving routing rules")
-		return nil, err
-	}
-
-	nsConf := noise.Config{
-		LocalPK:   r.conf.PubKey,
-		LocalSK:   r.conf.SecKey,
-		RemotePK:  r.conf.PubKey,
-		Initiator: true,
-	}
-
-	nrg, err := r.saveRouteGroupRules(rules, nsConf)
-	if err != nil {
-		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
-	}
-
-	nrg.rg.startOffServiceLoops()
-
-	r.logger.Debugf("Created new routes to %s on port %d", lPK, lPort)
-
-	return nrg, nil
+	return nil, fmt.Errorf("failed to establish ping route after %d attempts", maxRetries)
 }
 
 // AcceptRoutes should block until we receive an AddRules packet from SetupNode
@@ -561,6 +598,10 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 			if err := rg.Close(); err != nil {
 				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}
+			// Clean up rgsRaw on failure to prevent blocking future connections
+			r.mx.Lock()
+			delete(r.rgsRaw, rules.Desc)
+			r.mx.Unlock()
 
 			return nil, fmt.Errorf("sendHandshake (%s): %w", &rules.Desc, err)
 		}
@@ -588,6 +629,10 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 			if err := rg.Close(); err != nil {
 				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}
+			// Clean up rgsRaw on failure to prevent blocking future connections
+			r.mx.Lock()
+			delete(r.rgsRaw, rules.Desc)
+			r.mx.Unlock()
 
 			return nil, fmt.Errorf("sendHandshake (%s): %w", &rules.Desc, err)
 		}
@@ -612,6 +657,10 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 			if err := rg.Close(); err != nil {
 				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}
+			// Clean up rgsRaw on failure to prevent blocking future connections
+			r.mx.Lock()
+			delete(r.rgsRaw, rules.Desc)
+			r.mx.Unlock()
 
 			return nil, fmt.Errorf("WrapConn (%s): %w", &rules.Desc, err)
 		}
@@ -1081,10 +1130,20 @@ func (r *router) RemoveRouteDescriptor(desc routing.RouteDescriptor) {
 	}
 }
 
-func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
+func (r *router) fetchBestRoutes(ctx context.Context, src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
 	// TODO: use opts
 	if opts == nil {
 		opts = DefaultDialOptions() // nolint
+	}
+
+	// Check if force local routes is enabled
+	r.forceLocalRoutesMu.Lock()
+	forceLocal := r.forceLocalRoutes
+	r.forceLocalRoutesMu.Unlock()
+
+	if forceLocal {
+		r.logger.Info("Force local routes enabled, using local route calculation")
+		return r.calculateLocalRoutes(ctx, src, dst)
 	}
 
 	retries := opts.Retries
@@ -1098,16 +1157,35 @@ func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd
 	backward := [2]cipher.PubKey{dst, src}
 
 fetchRoutesAgain:
-	ctx := context.Background()
+	// Check context before making network calls
+	if err := ctx.Err(); err != nil {
+		return nil, nil, fmt.Errorf("context canceled before route fetch: %w", err)
+	}
 
 	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
 		&rfclient.RouteOptions{MinHops: r.conf.MinHops, MaxHops: r.conf.MaxHops})
 
 	if err == rfclient.ErrTransportNotFound {
+		// Try local route calculation - may find a local transport that's not yet in TPD
+		r.logger.Info("Route finder returned transport not found, attempting local route calculation...")
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst)
+		if localErr == nil {
+			r.logger.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
+			return localFwd, localRev, nil
+		}
+		r.logger.WithError(localErr).Debug("Local route calculation also failed")
 		return nil, nil, err
 	}
 	// simple retries condition
 	if retries == 0 {
+		// Try local route calculation as fallback before giving up
+		r.logger.Info("Route finder exhausted retries, attempting local route calculation...")
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst)
+		if localErr == nil {
+			r.logger.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
+			return localFwd, localRev, nil
+		}
+		r.logger.WithError(localErr).Warn("Local route calculation also failed")
 		r.logger.Errorf(ErrNoRouteFound.Error())
 		return nil, nil, ErrNoRouteFound
 	}
@@ -1118,6 +1196,14 @@ fetchRoutesAgain:
 	if err != nil {
 		select {
 		case <-timer.C:
+			// Try local route calculation as fallback
+			r.logger.Info("Route finder timed out, attempting local route calculation...")
+			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst)
+			if localErr == nil {
+				r.logger.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
+				return localFwd, localRev, nil
+			}
+			r.logger.WithError(localErr).Warn("Local route calculation also failed")
 			return nil, nil, err
 		default:
 			time.Sleep(retryInterval)
@@ -1130,68 +1216,136 @@ fetchRoutesAgain:
 	return paths[forward][0], paths[backward][0], nil
 }
 
-func (r *router) fetchPingRoute(src, pingKey cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
-	// TODO: use opts
-	if opts == nil {
-		opts = DefaultDialOptions() // nolint
+// calculateLocalRoutes attempts to calculate routes locally using the transport manager
+// and transport discovery data, without relying on the route finder service.
+// It supports 1-hop (direct), 2-hop routes, and self-ping (src == dst).
+func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKey) (fwd, rev []routing.Hop, err error) {
+	if r.tm == nil {
+		return nil, nil, errors.New("transport manager not available")
 	}
 
-	r.logger.Debugf("Requesting new routes from %s to %s", src, src)
-
-	timer := time.NewTimer(retryDuration)
-	defer timer.Stop()
-
-	forward := [2]cipher.PubKey{src, src}
-	backward := [2]cipher.PubKey{src, src}
-
-fetchRoutesAgain:
-	ctx := context.Background()
-
-	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
-		&rfclient.RouteOptions{MinHops: 0, MaxHops: 2})
-	if err == rfclient.ErrTransportNotFound {
-		return nil, nil, err
+	dc := r.tm.Conf.DiscoveryClient
+	if dc == nil {
+		return nil, nil, errors.New("discovery client not available")
 	}
 
-	if err != nil {
-		select {
-		case <-timer.C:
-			return nil, nil, err
-		default:
-			time.Sleep(retryInterval)
-			goto fetchRoutesAgain
+	isSelfPing := src == dst
+	r.logger.Debugf("Calculating local routes from %s to %s (self-ping=%v)", src, dst, isSelfPing)
+
+	// Collect local transports
+	type localTp struct {
+		id       uuid.UUID
+		remotePK cipher.PubKey
+		tpType   string
+	}
+	var localTps []localTp
+
+	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if tp == nil {
+			return true
+		}
+		localTps = append(localTps, localTp{
+			id:       tp.Entry.ID,
+			remotePK: tp.Entry.RemoteEdge(src),
+			tpType:   string(tp.Entry.Type),
+		})
+		return true
+	})
+
+	if len(localTps) == 0 {
+		return nil, nil, errors.New("no local transports available")
+	}
+
+	r.logger.Debugf("Found %d local transports", len(localTps))
+
+	// Check for direct (1-hop) route first
+	for _, tp := range localTps {
+		if tp.remotePK == dst {
+			r.logger.Debugf("Found direct transport to destination: %s (type=%s)", tp.id, tp.tpType)
+			fwdHop := routing.Hop{TpID: tp.id, From: src, To: dst}
+			revHop := routing.Hop{TpID: tp.id, From: dst, To: src}
+			return []routing.Hop{fwdHop}, []routing.Hop{revHop}, nil
 		}
 	}
 
-	var hopTo, hopFrom bool
-	// check if the remote pk is present in both the hops
-	// [
-	// 	{
-	// 		"TpID":"<tp-id>",
-	// 		"From":"<local-pk>",
-	// 		"To":"<remote-pk>"
-	// 	},
-	// 	{
-	// 		"TpID":"<tp-id>",
-	// 		"From":"<remote-pk>",
-	// 		"To":"<local-pk>"
-	// 	}
-	// ]
-	for _, hop := range paths[forward][0] {
-		if hop.To == pingKey {
-			hopTo = true
+	// For self-ping, try 2-hop route through any available transport partner
+	// This allows testing the full route setup even without a direct self-transport
+	if isSelfPing {
+		r.logger.Debug("Self-ping: looking for 2-hop loopback route through transport partner")
+		for _, tp := range localTps {
+			intermediatePK := tp.remotePK
+			if intermediatePK == src {
+				// Skip actual self-transports (already checked above)
+				continue
+			}
+
+			// For self-ping via 2-hop: src -> intermediate -> src
+			// We need the intermediate to have a transport back to us
+			intermediateEntries, err := dc.GetTransportsByEdge(ctx, intermediatePK)
+			if err != nil {
+				r.logger.WithError(err).Debugf("Failed to get transports for intermediate visor %s", intermediatePK)
+				continue
+			}
+
+			for _, entry := range intermediateEntries {
+				if entry == nil {
+					continue
+				}
+				remotePK := entry.RemoteEdge(intermediatePK)
+				if remotePK == src {
+					r.logger.Debugf("Found 2-hop self-ping route via %s (tp1=%s, tp2=%s)", intermediatePK, tp.id, entry.ID)
+
+					// Build loopback route: src -> intermediate -> src
+					fwdHop1 := routing.Hop{TpID: tp.id, From: src, To: intermediatePK}
+					fwdHop2 := routing.Hop{TpID: entry.ID, From: intermediatePK, To: src}
+
+					// Reverse is the same for self-ping
+					revHop1 := routing.Hop{TpID: entry.ID, From: src, To: intermediatePK}
+					revHop2 := routing.Hop{TpID: tp.id, From: intermediatePK, To: src}
+
+					return []routing.Hop{fwdHop1, fwdHop2}, []routing.Hop{revHop1, revHop2}, nil
+				}
+			}
 		}
-		if hop.From == pingKey {
-			hopFrom = true
-		}
-	}
-	if !hopTo && hopFrom {
-		return nil, nil, fmt.Errorf("Unable to fetch route with a hop from %v", pingKey)
+		return nil, nil, errors.New("self-ping: no 2-hop loopback route found through transport partners")
 	}
 
-	r.logger.Debugf("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])
+	// Try 2-hop routes through intermediate visors
+	for _, tp := range localTps {
+		intermediatePK := tp.remotePK
+		r.logger.Debugf("Checking intermediate visor %s for routes to %s", intermediatePK, dst)
 
-	return paths[forward][0], paths[backward][0], nil
+		// Query TPD for transports of the intermediate visor
+		intermediateEntries, err := dc.GetTransportsByEdge(ctx, intermediatePK)
+		if err != nil {
+			r.logger.WithError(err).Debugf("Failed to get transports for intermediate visor %s", intermediatePK)
+			continue
+		}
+
+		// Check if any of the intermediate visor's transports connect to our destination
+		for _, entry := range intermediateEntries {
+			if entry == nil {
+				continue
+			}
+			// Check if this transport connects to our destination
+			remotePK := entry.RemoteEdge(intermediatePK)
+			if remotePK == dst {
+				r.logger.Debugf("Found 2-hop route via %s (tp1=%s, tp2=%s)", intermediatePK, tp.id, entry.ID)
+
+				// Build forward route: src -> intermediate -> dst
+				fwdHop1 := routing.Hop{TpID: tp.id, From: src, To: intermediatePK}
+				fwdHop2 := routing.Hop{TpID: entry.ID, From: intermediatePK, To: dst}
+
+				// Build reverse route: dst -> intermediate -> src
+				revHop1 := routing.Hop{TpID: entry.ID, From: dst, To: intermediatePK}
+				revHop2 := routing.Hop{TpID: tp.id, From: intermediatePK, To: src}
+
+				return []routing.Hop{fwdHop1, fwdHop2}, []routing.Hop{revHop1, revHop2}, nil
+			}
+		}
+	}
+
+	return nil, nil, errors.New("no route found through local transports")
 }
 
 // SetupIsTrusted checks if setup node is trusted.
@@ -1203,6 +1357,24 @@ func (r *router) SetupIsTrusted(sPK cipher.PubKey) bool {
 // SetMinHop set minhop when visor running
 func (r *router) SetMinHop(minhop uint16) {
 	r.conf.MinHops = minhop
+}
+
+// SetExistingTPOnly sets whether to only use existing transports for routing.
+// When true, no new transports will be created when dialing routes.
+func (r *router) SetExistingTPOnly(enabled bool) {
+	r.existingTpOnlyMu.Lock()
+	defer r.existingTpOnlyMu.Unlock()
+	r.existingTpOnly = enabled
+	r.logger.Infof("SetExistingTPOnly: %v", enabled)
+}
+
+// SetForceLocalRoutes sets whether to skip the route finder and use local route calculation.
+// When true, routes are calculated locally using transport manager and TPD data.
+func (r *router) SetForceLocalRoutes(enabled bool) {
+	r.forceLocalRoutesMu.Lock()
+	defer r.forceLocalRoutesMu.Unlock()
+	r.forceLocalRoutes = enabled
+	r.logger.Infof("SetForceLocalRoutes: %v", enabled)
 }
 
 // Saves `rules` to the routing table.
