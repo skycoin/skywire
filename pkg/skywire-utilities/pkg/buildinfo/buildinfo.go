@@ -146,6 +146,20 @@ func Get() *Info {
 	}
 }
 
+// DepVersion returns the version of a specific dependency module.
+// modulePath should be something like "github.com/skycoin/skycoin"
+func DepVersion(modulePath string) string {
+	if bi == nil {
+		return ""
+	}
+	for _, dep := range bi.Deps {
+		if dep.Path == modulePath {
+			return dep.Version
+		}
+	}
+	return ""
+}
+
 // Info represents build metadata.
 type Info struct {
 	Go      string `json:"go,omitempty"`

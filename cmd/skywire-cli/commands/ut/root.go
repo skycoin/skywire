@@ -32,10 +32,10 @@ func init() {
 	utCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
 	utCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
 	utCmd.Flags().BoolVarP(&isMoreStats, "stats2", "t", false, "count of versions")
-	utCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime percentage\033[0m\n\r")
-	utCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location\033[0m\n\r")
-	utCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes\033[0m\n\r")
-	utCmd.Flags().StringVarP(&utURL, "url", "u", utURL, "specify alternative uptime tracker url\033[0m\n\r")
+	utCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime percentage\n\r")
+	utCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location\n\r")
+	utCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes\n\r")
+	utCmd.Flags().StringVarP(&utURL, "url", "u", utURL, "specify alternative uptime tracker url\n\r")
 }
 
 var utCmd = &cobra.Command{

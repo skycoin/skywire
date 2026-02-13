@@ -41,18 +41,18 @@ var (
 )
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9080", "address to bind to.\033[0m")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m")
-	RootCmd.Flags().StringVar(&sdURL, "sd-url", "http://sd.skycoin.com", "url to service discovery\033[0m")
-	RootCmd.Flags().StringVar(&arURL, "ar-url", "http://ar.skywire.skycoin.com", "url to address resolver\033[0m")
-	RootCmd.Flags().StringVar(&utURL, "ut-url", "http://ut.skywire.skycoin.com", "url to uptime tracker visor data.\033[0m")
-	RootCmd.Flags().StringVar(&tpdURL, "tpd-url", "http://tpd.skywire.skycoin.com", "url to transport discovery\033[0m")
-	RootCmd.Flags().StringVar(&dmsgdURL, "dmsgd-url", "http://dmsgd.skywire.skycoin.com", "url to dmsg discovery\033[0m")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9080", "address to bind to.")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
+	RootCmd.Flags().StringVar(&sdURL, "sd-url", "http://sd.skycoin.com", "url to service discovery")
+	RootCmd.Flags().StringVar(&arURL, "ar-url", "http://ar.skywire.skycoin.com", "url to address resolver")
+	RootCmd.Flags().StringVar(&utURL, "ut-url", "http://ut.skywire.skycoin.com", "url to uptime tracker visor data.")
+	RootCmd.Flags().StringVar(&tpdURL, "tpd-url", "http://tpd.skywire.skycoin.com", "url to transport discovery")
+	RootCmd.Flags().StringVar(&dmsgdURL, "dmsgd-url", "http://dmsgd.skywire.skycoin.com", "url to dmsg discovery")
 	RootCmd.Flags().IntVarP(&cleaningDelay, "cleaning-delay", "d", 75, "time for delay between each service cleaning routine")
-	RootCmd.Flags().StringVar(&pk, "pk", "", "pk of network monitor\033[0m")
-	RootCmd.Flags().StringVar(&sk, "sk", "", "sk of network monitor\033[0m")
-	RootCmd.Flags().StringVar(&tag, "tag", "network_monitor", "logging tag\033[0m")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\033[0m")
+	RootCmd.Flags().StringVar(&pk, "pk", "", "pk of network monitor")
+	RootCmd.Flags().StringVar(&sk, "sk", "", "sk of network monitor")
+	RootCmd.Flags().StringVar(&tag, "tag", "network_monitor", "logging tag")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]")
 }
 
 // RootCmd contains the root command

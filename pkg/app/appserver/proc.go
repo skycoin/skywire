@@ -32,9 +32,6 @@ import (
 var (
 	errProcAlreadyRunning = errors.New("process already running")
 	errProcNotStarted     = errors.New("process is not started")
-
-	// stdoutMutex serializes stdout/stderr replacement for in-process apps
-	stdoutMutex sync.Mutex
 )
 
 // Proc is an instance of a skywire app. It encapsulates the running process itself and the RPC server for app/visor
@@ -232,6 +229,10 @@ func (p *Proc) startInProcess() error {
 	appConn, serverConn := net.Pipe()
 	appcommon.RegisterInProcessConn(p.conf.ProcKey, appConn)
 
+	// Acquire lock to serialize env var access for internal apps
+	// This prevents race conditions where multiple apps overwrite each other's PROC_CONFIG
+	configReadDone := appcommon.AcquireInternalAppStart(p.conf.ProcKey)
+
 	envs := p.conf.Envs()
 	for _, env := range envs {
 		parts := strings.SplitN(env, "=", 2)
@@ -241,57 +242,11 @@ func (p *Proc) startInProcess() error {
 	}
 
 	go func() {
-		// Redirect stdout/stderr for this app using pipes
-		var origStdout, origStderr *os.File
-		var stdoutR, stdoutW, stderrR, stderrW *os.File
-
-		if p.masterLog != nil {
-			moduleName := fmt.Sprintf("proc:%s:%s", p.conf.AppName, p.conf.ProcKey)
-			stdoutLogger := p.masterLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
-			stderrLogger := p.masterLog.WithField("_module", moduleName).WithField("func", "(STDERR)").WriterLevel(logrus.ErrorLevel)
-
-			// Create pipes for stdout/stderr
-			var pipeErr error
-			stdoutR, stdoutW, pipeErr = os.Pipe()
-			if pipeErr != nil {
-				p.log.WithError(pipeErr).Warn("Failed to create stdout pipe")
-				return
-			}
-			stderrR, stderrW, pipeErr = os.Pipe()
-			if pipeErr != nil {
-				p.log.WithError(pipeErr).Warn("Failed to create stderr pipe")
-				_ = stdoutR.Close() //nolint:errcheck
-				_ = stdoutW.Close() //nolint:errcheck
-				return
-			}
-
-			// Start goroutines to copy from pipes to loggers
-			go func() { _, _ = io.Copy(stdoutLogger, stdoutR) }() //nolint:errcheck
-			go func() { _, _ = io.Copy(stderrLogger, stderrR) }() //nolint:errcheck
-
-			// Replace stdout/stderr
-			stdoutMutex.Lock()
-			origStdout = os.Stdout
-			origStderr = os.Stderr
-			os.Stdout = stdoutW
-			os.Stderr = stderrW
-			stdoutMutex.Unlock()
-		}
+		// Internal apps use their isolated logger directly via p.log
+		// Do NOT replace global os.Stdout/os.Stderr as it causes race conditions
+		// when multiple internal apps run concurrently
 
 		defer func() {
-			// Restore original stdout/stderr and close pipes
-			if origStdout != nil {
-				stdoutMutex.Lock()
-				os.Stdout = origStdout
-				os.Stderr = origStderr
-				stdoutMutex.Unlock()
-
-				_ = stdoutW.Close() //nolint:errcheck
-				_ = stderrW.Close() //nolint:errcheck
-				_ = stdoutR.Close() //nolint:errcheck
-				_ = stderrR.Close() //nolint:errcheck
-			}
-
 			if r := recover(); r != nil {
 				p.errMx.Lock()
 				p.err = fmt.Sprintf("app panic: %v", r)
@@ -318,6 +273,15 @@ func (p *Proc) startInProcess() error {
 			p.log.Debug("App RunFunc returned normally")
 		}
 	}()
+
+	// Wait for app to read config (with timeout to prevent deadlock)
+	select {
+	case <-configReadDone:
+		// App has read its config, safe to release lock
+	case <-time.After(30 * time.Second):
+		p.log.Warn("Timeout waiting for app to read config, releasing lock anyway")
+	}
+	appcommon.ReleaseInternalAppStart(p.conf.ProcKey)
 
 	go func() {
 		defer func() {

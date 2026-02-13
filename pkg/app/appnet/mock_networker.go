@@ -167,6 +167,36 @@ func (_m *MockNetworker) Ping(pk cipher.PubKey, addr Addr) (net.Conn, error) {
 	return r0, r1
 }
 
+// PingContext provides a mock function with given fields: ctx, pk, addr
+func (_m *MockNetworker) PingContext(ctx context.Context, pk cipher.PubKey, addr Addr) (net.Conn, error) {
+	ret := _m.Called(ctx, pk, addr)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PingContext")
+	}
+
+	var r0 net.Conn
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, cipher.PubKey, Addr) (net.Conn, error)); ok {
+		return rf(ctx, pk, addr)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, cipher.PubKey, Addr) net.Conn); ok {
+		r0 = rf(ctx, pk, addr)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(net.Conn)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, cipher.PubKey, Addr) error); ok {
+		r1 = rf(ctx, pk, addr)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // NewMockNetworker creates a new instance of MockNetworker. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockNetworker(t interface {

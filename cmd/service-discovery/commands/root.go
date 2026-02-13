@@ -221,7 +221,7 @@ service-discovery --sk $(tail -n1 sd-config.json)`,
 			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, log)
 
 			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, sk, sdAPI, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, log); err != nil {
+				if err := dmsghttp.ListenAndServe(ctx, sk, sdAPI, dClient, dmsgPort, dmsgDC, log); err != nil {
 					log.Errorf("dmsghttp.ListenAndServe: %v", err)
 					cancel()
 				}

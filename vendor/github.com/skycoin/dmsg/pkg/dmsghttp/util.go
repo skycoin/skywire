@@ -20,7 +20,13 @@ func GetServers(ctx context.Context, dmsgDisc string, dmsgServerType string, log
 	for {
 		servers, err := dmsgclient.AllServers(ctx)
 		if err != nil {
-			log.WithError(err).Fatal("Error getting dmsg-servers.")
+			log.WithError(err).Error("Error getting dmsg-servers, retrying...")
+			select {
+			case <-ctx.Done():
+				return []*disc.Entry{}
+			case <-ticker.C:
+				continue
+			}
 		}
 		if dmsgServerType != "" {
 			var filteredServers []*disc.Entry
@@ -34,12 +40,12 @@ func GetServers(ctx context.Context, dmsgDisc string, dmsgServerType string, log
 		if len(servers) > 0 {
 			return servers
 		}
-		log.Warn("No dmsg-servers found, trying again in 1 minute.")
+		log.Warn("No dmsg-servers found, retrying...")
 		select {
 		case <-ctx.Done():
 			return []*disc.Entry{}
 		case <-ticker.C:
-			GetServers(ctx, dmsgDisc, dmsgServerType, log)
+			continue
 		}
 	}
 }

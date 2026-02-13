@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/tpviz"
 )
 
 // TODO: fix gocyclo error.
@@ -183,6 +184,49 @@ func server(e error) {
 			c.Writer.Flush()
 		})
 
+		// Create tpviz server with file caching (same as standalone skywire cli tp viz)
+		tpvizCfg := tpviz.DefaultConfig()
+		tpvizCfg.CacheFile = filepath.Join(wd, "tpd.json")
+		tpvizCfg.CacheFileUT = filepath.Join(wd, "ut.json")
+		tpvizCfg.CacheFileSD = filepath.Join(wd, "sd.json")
+		tpvizCfg.CacheFileDMSGServers = filepath.Join(wd, "dmsg-servers.json")
+		tpvizCfg.CacheFileDMSGEntries = filepath.Join(wd, "dmsg-entries.json")
+		tpvizCfg.CacheFileDMSGClients = filepath.Join(wd, "dmsg-clients.json")
+		tpvizCfg.SurveyDir = filepath.Join(wd, "log_backups") // Survey data for IP grouping
+		tpvizServer := tpviz.NewServer(tpvizCfg)
+		tpvizServer.Start() // Initialize cache and start auto-refresh
+
+		// Delegate /api/* to tpviz server (uses file caching to avoid rate limits)
+		// Note: /health is already registered above with system health info
+		// /api/health provides tpviz cache info for auto-refresh
+		tpvizHandler := tpvizServer.Handler()
+		r1.GET("/api/transports", gin.WrapH(tpvizHandler))
+		r1.GET("/api/uptimes", gin.WrapH(tpvizHandler))
+		r1.GET("/api/services", gin.WrapH(tpvizHandler))
+		r1.GET("/api/health", gin.WrapH(tpvizHandler))
+		r1.GET("/api/ip-groups", gin.WrapH(tpvizHandler))
+		r1.GET("/api/dmsg/servers", gin.WrapH(tpvizHandler))
+		r1.GET("/api/dmsg/entries", gin.WrapH(tpvizHandler))
+		r1.GET("/api/dmsg/health", gin.WrapH(tpvizHandler))
+		r1.GET("/bundle.js", gin.WrapH(tpvizHandler))
+
+		r1.GET("/transport-graph", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
+			c.Writer.WriteHeader(http.StatusOK)
+			// Use full embedded index.html with nav links
+			navLinks := []tpviz.NavLink{
+				{URL: "/", Label: "fiber"},
+				{URL: "/skycoin-rewards", Label: "rewards"},
+				{URL: "/stats", Label: "stats"},
+			}
+			html, err := tpviz.GetEmbeddedIndexWithNavLinks(navLinks)
+			if err != nil {
+				c.Writer.Write([]byte("Error loading transport graph: " + err.Error())) //nolint:errcheck,gosec
+				return
+			}
+			c.Writer.Write([]byte(html)) //nolint:errcheck,gosec
+		})
 		r1.GET("/log-collection", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
@@ -347,6 +391,118 @@ func server(e error) {
 		r1.StaticFile("/stats/cpu", tempStatsPath+"/cpu.txt")
 		r1.StaticFile("/stats/mem", tempStatsPath+"/mem.txt")
 		r1.StaticFile("/stats/ram", tempStatsPath+"/ram.txt")
+		r1.StaticFile("/stats/country/unique", tempStatsPath+"/country_unique.txt")
+		r1.StaticFile("/stats/country/unique/json", tempStatsPath+"/country_unique.json")
+		r1.StaticFile("/stats/country/full", tempStatsPath+"/country_full.txt")
+		r1.StaticFile("/stats/country/full/json", tempStatsPath+"/country_full.json")
+
+		// Aggregated stats page
+		r1.GET("/stats", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+			c.Writer.WriteHeader(http.StatusOK)
+
+			l := "<html><head><title>Network Statistics</title></head>"
+			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
+			l += "<a id='top'></a>"
+			l += navlinks
+			l += "<h1>Skywire Network Statistics</h1>"
+
+			// Uptime Tracker Version Stats
+			l += "<h2><a href='/stats/ut'>Uptime Tracker Version Statistics</a></h2>"
+			l += "<pre>"
+			utstats, err := script.Exec(`skywire cli ut -t`).String()
+			if err == nil {
+				l += utstats
+			} else {
+				l += "Error fetching uptime tracker stats"
+			}
+			l += "</pre>"
+
+			// Architecture Stats
+			l += "<h2><a href='/stats/arch'>Architecture Statistics</a></h2>"
+			l += "<pre>"
+			archStats, err := script.File(tempStatsPath + "/arch.txt").String()
+			if err == nil {
+				l += archStats
+			} else {
+				l += "Error loading architecture stats"
+			}
+			l += "</pre>"
+
+			// OS Stats
+			l += "<h2><a href='/stats/os'>Operating System Statistics</a></h2>"
+			l += "<pre>"
+			osStats, err := script.File(tempStatsPath + "/os.txt").String()
+			if err == nil {
+				l += osStats
+			} else {
+				l += "Error loading OS stats"
+			}
+			l += "</pre>"
+
+			// CPU Stats
+			l += "<h2><a href='/stats/cpu'>CPU Statistics</a></h2>"
+			l += "<pre>"
+			cpuStats, err := script.File(tempStatsPath + "/cpu.txt").String()
+			if err == nil {
+				l += cpuStats
+			} else {
+				l += "Error loading CPU stats"
+			}
+			l += "</pre>"
+
+			// Memory (Disk) Stats
+			l += "<h2><a href='/stats/mem'>Storage Statistics</a></h2>"
+			l += "<pre>"
+			memStats, err := script.File(tempStatsPath + "/mem.txt").String()
+			if err == nil {
+				l += memStats
+			} else {
+				l += "Error loading storage stats"
+			}
+			l += "</pre>"
+
+			// RAM Stats
+			l += "<h2><a href='/stats/ram'>RAM Statistics</a></h2>"
+			l += "<pre>"
+			ramStats, err := script.File(tempStatsPath + "/ram.txt").String()
+			if err == nil {
+				l += ramStats
+			} else {
+				l += "Error loading RAM stats"
+			}
+			l += "</pre>"
+
+			// Country Stats - Unique IPs
+			l += "<h2><a href='/stats/country/unique'>Country Statistics (Unique IPs)</a></h2>"
+			l += "<pre>"
+			countryUniqueStats, err := script.File(tempStatsPath + "/country_unique.txt").String()
+			if err == nil {
+				l += countryUniqueStats
+			} else {
+				l += "Error loading country stats (unique)"
+			}
+			l += "</pre>"
+			l += "<p><a href='/stats/country/unique/json'>View as JSON</a></p>"
+
+			// Country Stats - Full Visor Count
+			l += "<h2><a href='/stats/country/full'>Country Statistics (All Visors)</a></h2>"
+			l += "<pre>"
+			countryFullStats, err := script.File(tempStatsPath + "/country_full.txt").String()
+			if err == nil {
+				l += countryFullStats
+			} else {
+				l += "Error loading country stats (full)"
+			}
+			l += "</pre>"
+			l += "<p><a href='/stats/country/full/json'>View as JSON</a></p>"
+
+			l += "<br>" + htmltoplink
+			l += "</body></html>"
+
+			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+		})
 
 		r1.GET("/skycoin-rewards", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")

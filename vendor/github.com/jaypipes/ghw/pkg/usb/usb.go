@@ -9,9 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jaypipes/ghw/pkg/context"
+	"github.com/jaypipes/ghw/internal/config"
 	"github.com/jaypipes/ghw/pkg/marshal"
-	"github.com/jaypipes/ghw/pkg/option"
 )
 
 type Device struct {
@@ -71,7 +70,6 @@ func (d Device) String() string {
 
 // Info describes all network interface controllers (NICs) in the host system.
 type Info struct {
-	ctx     *context.Context
 	Devices []*Device `json:"devices"`
 }
 
@@ -86,13 +84,12 @@ func (i *Info) String() string {
 
 // New returns a pointer to an Info struct that contains information about the
 // network interface controllers (NICs) on the host system
-func New(opts ...*option.Option) (*Info, error) {
-	ctx := context.New(opts...)
-	info := &Info{ctx: ctx}
-	if err := ctx.Do(info.load); err != nil {
+func New(args ...any) (*Info, error) {
+	ctx := config.ContextFromArgs(args...)
+	info := &Info{}
+	if err := info.load(ctx); err != nil {
 		return nil, err
 	}
-
 	return info, nil
 }
 
@@ -105,11 +102,11 @@ type usbPrinter struct {
 // YAMLString returns a string with the net information formatted as YAML
 // under a top-level "net:" key
 func (i *Info) YAMLString() string {
-	return marshal.SafeYAML(i.ctx, usbPrinter{i})
+	return marshal.SafeYAML(usbPrinter{i})
 }
 
 // JSONString returns a string with the net information formatted as JSON
 // under a top-level "net:" key
 func (i *Info) JSONString(indent bool) string {
-	return marshal.SafeJSON(i.ctx, usbPrinter{i}, indent)
+	return marshal.SafeJSON(usbPrinter{i}, indent)
 }

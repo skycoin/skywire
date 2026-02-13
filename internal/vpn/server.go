@@ -10,7 +10,9 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 )
 
@@ -27,15 +29,25 @@ type Server struct {
 	ipv6ForwardingVal          string
 	iptablesForwardPolicy      string
 	appCl                      *app.Client
+	whitelist                  map[cipher.PubKey]struct{}
+	useWL                      bool
 }
 
 // NewServer creates VPN server instance.
 func NewServer(cfg ServerConfig, appCl *app.Client) (*Server, error) {
 	var defaultNetworkIfc string
+
+	wlMap := make(map[cipher.PubKey]struct{})
+	for _, pk := range cfg.Whitelist {
+		wlMap[pk] = struct{}{}
+	}
+
 	s := &Server{
-		cfg:   cfg,
-		ipGen: NewIPGenerator(),
-		appCl: appCl,
+		cfg:       cfg,
+		ipGen:     NewIPGenerator(),
+		appCl:     appCl,
+		whitelist: wlMap,
+		useWL:     len(cfg.Whitelist) > 0,
 	}
 
 	defaultNetworkIfcs, err := netutil.DefaultNetworkInterface()
@@ -215,6 +227,22 @@ func (s *Server) closeConn(conn net.Conn) {
 func (s *Server) serveConn(conn net.Conn) {
 	defer s.closeConn(conn)
 
+	// Check whitelist if enabled
+	if s.useWL {
+		remotePK, err := s.getRemotePK(conn)
+		if err != nil {
+			print(fmt.Sprintf("Failed to get remote PK, rejecting connection: %v\n", err))
+			return
+		}
+
+		if _, allowed := s.whitelist[remotePK]; !allowed {
+			print(fmt.Sprintf("Connection rejected: %s not in whitelist\n", remotePK.Hex()))
+			return
+		}
+
+		fmt.Printf("Whitelisted connection accepted from %s\n", remotePK.Hex())
+	}
+
 	tunIP, tunGateway, allowTrafficToLocalNet, err := s.shakeHands(conn)
 	if err != nil {
 		print(fmt.Sprintf("Error negotiating with client %s: %v\n", conn.RemoteAddr(), err))
@@ -280,11 +308,6 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 	unsecureVPN = func() {}
 
 	fmt.Printf("Got client hello: %v", cHello)
-
-	if s.cfg.Passcode != "" && cHello.Passcode != s.cfg.Passcode {
-		s.sendServerErrHello(conn, HandshakeStatusForbidden)
-		return nil, nil, nil, errors.New("got wrong passcode from client")
-	}
 
 	for _, ip := range cHello.UnavailablePrivateIPs {
 		if err := s.ipGen.Reserve(ip); err != nil {
@@ -385,4 +408,19 @@ func (s *Server) validateInterface(ifcs []string, selectedIfc string) bool {
 		}
 	}
 	return false
+}
+
+// getRemotePK extracts the remote public key from the connection
+func (s *Server) getRemotePK(conn net.Conn) (cipher.PubKey, error) {
+	wrappedConn, err := appnet.WrapConn(conn)
+	if err != nil {
+		return cipher.PubKey{}, fmt.Errorf("failed to wrap connection: %w", err)
+	}
+
+	rAddr, ok := wrappedConn.RemoteAddr().(appnet.Addr)
+	if !ok {
+		return cipher.PubKey{}, fmt.Errorf("failed to get remote address")
+	}
+
+	return rAddr.PubKey, nil
 }

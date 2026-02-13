@@ -335,9 +335,8 @@ func (wb *WidgetBase) handleWidgetStateFromMouse() {
 		}
 	})
 	wb.On(events.MouseUp, func(e events.Event) {
-		if wb.AbilityIs(abilities.Activatable) {
-			wb.SetState(false, states.Active)
-		}
+		// note: not contingent on Activatable: always clear on up
+		wb.SetState(false, states.Active)
 	})
 	wb.On(events.LongPressStart, func(e events.Event) {
 		if wb.AbilityIs(abilities.LongPressable) {
@@ -574,6 +573,9 @@ func (wb *WidgetBase) SetFocus() {
 func (wb *WidgetBase) focusableInThis() Widget {
 	var foc Widget
 	wb.WidgetWalkDown(func(cw Widget, cwb *WidgetBase) bool {
+		if foc != nil {
+			return tree.Break
+		}
 		if !cwb.AbilityIs(abilities.Focusable) {
 			return tree.Continue
 		}

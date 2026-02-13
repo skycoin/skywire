@@ -72,22 +72,22 @@ func TestRestart(t *testing.T) {
 	}
 
 	checkMessage := func(t *testing.T, sender, receiver string) {
-		// Retry sending message up to 8 times with 10 second delays
-		// to handle transient transport setup delays after restart
+		// Retry sending message up to 4 times with 5 second delays.
+		// With proper waiting for routing rule expiration, fewer retries are needed.
 		var res *http.Response
 		var err error
 		var lastError string
 
-		for attempt := 0; attempt < 8; attempt++ {
+		for attempt := 0; attempt < 4; attempt++ {
 			res, err = env.SendSkyMessage(sender, receiver, t.Name())
 
 			// If HTTP request itself failed (e.g., connection timeout), retry
 			if err != nil {
 				lastError = fmt.Sprintf("HTTP request failed: %v", err)
-				t.Logf("Attempt %d: %s (retrying in 10s)", attempt+1, lastError)
+				t.Logf("Attempt %d: %s (retrying in 5s)", attempt+1, lastError)
 
-				if attempt < 4 { // Don't sleep after last attempt
-					time.Sleep(10 * time.Second)
+				if attempt < 3 { // Don't sleep after last attempt
+					time.Sleep(5 * time.Second)
 				}
 				continue
 			}
@@ -101,11 +101,11 @@ func TestRestart(t *testing.T) {
 			data, readErr := io.ReadAll(res.Body)
 			require.NoError(t, readErr)
 			lastError = string(data)
-			t.Logf("Attempt %d: skychat returned error: %v (retrying in 10s)", attempt+1, lastError)
+			t.Logf("Attempt %d: skychat returned error: %v (retrying in 5s)", attempt+1, lastError)
 			require.NoError(t, res.Body.Close())
 
-			if attempt < 7 { // Don't sleep after last attempt
-				time.Sleep(10 * time.Second)
+			if attempt < 3 { // Don't sleep after last attempt
+				time.Sleep(5 * time.Second)
 			}
 		}
 
@@ -155,8 +155,8 @@ func TestRestart(t *testing.T) {
 			env.AddDefaultTransports(routerVisor, skychatVisors)
 
 			// Wait for skychat apps to be ready on both sender and receiver
-			senderApp := AppToRun{VisorHostName: tc.sender, AppName: "skychat"}
-			receiverApp := AppToRun{VisorHostName: tc.receiver, AppName: "skychat"}
+			senderApp := AppToRun{VisorHostName: tc.sender, AppName: "skychat", LauncherMode: "internal"}
+			receiverApp := AppToRun{VisorHostName: tc.receiver, AppName: "skychat", LauncherMode: "internal"}
 
 			// Wait for apps to be running before attempting to send messages
 			for _, app := range []AppToRun{senderApp, receiverApp} {
@@ -165,8 +165,13 @@ func TestRestart(t *testing.T) {
 				}
 			}
 
-			// Small additional delay for route establishment
-			time.Sleep(5 * time.Second)
+			// Wait for stale routing rules to expire on non-restarted visors.
+			// Routing rules have a 30s keepalive (DefaultRouteKeepAlive), so we need
+			// to ensure enough time has passed since restart for old rules to be GC'd.
+			// This prevents "routing table: rule not found" errors when the sender
+			// tries to use stale routes that reference the old visor state.
+			t.Log("Waiting for stale routing rules to expire (10s)...")
+			time.Sleep(10 * time.Second)
 
 			checkMessage(t, tc.sender, tc.receiver)
 		})

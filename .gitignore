@@ -93,3 +93,5 @@ e2e-test.log
 *.bak
 /help_output/
 /go-files-by-lines.txt
+node_modules/
+static/skywire-manager-src/dist/

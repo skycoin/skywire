@@ -40,6 +40,13 @@ const (
 	openCloseTimeout     = 30 * time.Second // Timeout for opening/closing streams
 )
 
+// resultChanPool reduces allocation of result channels
+var resultChanPool = sync.Pool{
+	New: func() any {
+		return make(chan writeResult, 1)
+	},
+}
+
 // CLASSID represents the class of a frame
 type CLASSID int
 
@@ -99,6 +106,7 @@ type Session struct {
 
 	die     chan struct{} // flag session has died
 	dieOnce sync.Once
+	closed  int32 // atomic flag for fast IsClosed check
 
 	// socket error handling
 	socketReadError      atomic.Value
@@ -252,6 +260,7 @@ func (s *Session) Accept() (io.ReadWriteCloser, error) {
 func (s *Session) Close() error {
 	var once bool
 	s.dieOnce.Do(func() {
+		atomic.StoreInt32(&s.closed, 1)
 		close(s.die)
 		once = true
 	})
@@ -305,12 +314,7 @@ func (s *Session) notifyProtoError(err error) {
 
 // IsClosed does a safe check to see if we have shutdown
 func (s *Session) IsClosed() bool {
-	select {
-	case <-s.die:
-		return true
-	default:
-		return false
-	}
+	return atomic.LoadInt32(&s.closed) != 0
 }
 
 // NumStreams returns the number of currently open streams
@@ -415,7 +419,15 @@ func (s *Session) recvLoop() {
 		sid := hdr.StreamID()
 		switch hdr.Cmd() {
 		case cmdNOP:
+			if hdr.Length() != 0 {
+				s.notifyProtoError(ErrInvalidProtocol)
+				return
+			}
 		case cmdSYN: // stream opening
+			if hdr.Length() != 0 {
+				s.notifyProtoError(ErrInvalidProtocol)
+				return
+			}
 			var accepted *stream
 			s.streamLock.Lock()
 			if _, ok := s.streams[sid]; !ok {
@@ -433,11 +445,16 @@ func (s *Session) recvLoop() {
 			}
 
 		case cmdFIN: // stream closing
-			s.streamLock.Lock()
-			if stream, ok := s.streams[sid]; ok {
-				stream.fin() // fin unblocks the readers and writers
+			if hdr.Length() != 0 {
+				s.notifyProtoError(ErrInvalidProtocol)
+				return
 			}
+			s.streamLock.Lock()
+			st := s.streams[sid]
 			s.streamLock.Unlock()
+			if st != nil {
+				st.fin() // fin unblocks the readers and writers
+			}
 
 		case cmdPSH: // data frame
 			if hdr.Length() == 0 {
@@ -468,7 +485,16 @@ func (s *Session) recvLoop() {
 			}
 			s.streamLock.Unlock()
 
-		case cmdUPD: // a window update signal
+		case cmdUPD: // a window update signal (v2 only)
+			if s.config.Version != 2 {
+				s.notifyProtoError(ErrInvalidProtocol)
+				return
+			}
+			if hdr.Length() != szCmdUPD {
+				s.notifyProtoError(ErrInvalidProtocol)
+				return
+			}
+
 			_, err := io.ReadFull(s.conn, updHdr[:])
 			if err != nil {
 				s.notifyReadError(err)
@@ -477,10 +503,11 @@ func (s *Session) recvLoop() {
 
 			// update the window size for the corresponding stream
 			s.streamLock.Lock()
-			if stream, ok := s.streams[sid]; ok {
-				stream.update(updHdr.Consumed(), updHdr.Window())
-			}
+			st := s.streams[sid]
 			s.streamLock.Unlock()
+			if st != nil {
+				st.update(updHdr.Consumed(), updHdr.Window())
+			}
 
 		default:
 			s.notifyProtoError(ErrInvalidProtocol)
@@ -527,10 +554,16 @@ func (s *Session) shaperLoop() {
 			return
 		case r := <-chShaper:
 			s.sq.Push(r)
-			// notify sendLoop there are pending requests
-			if len(chShaper) == 0 || s.sq.Len() > minShaperNotifySize {
-				s.notifyShaperPending()
+			// batch drain: collect more requests if available
+			for len(chShaper) > 0 && s.sq.Len() < maxShaperSize {
+				select {
+				case r := <-chShaper:
+					s.sq.Push(r)
+				default:
+				}
 			}
+			// notify sendLoop there are pending requests
+			s.notifyShaperPending()
 
 			if s.sq.Len() >= maxShaperSize {
 				// stop accepting new requests temporarily if shaper queue is full
@@ -617,7 +650,6 @@ EVENT_LOOP:
 				}
 
 				request.result <- result
-				close(request.result)
 
 				// store conn error
 				if err != nil {
@@ -640,30 +672,40 @@ func (s *Session) writeControlFrame(f Frame) (n int, err error) {
 
 // internal writeFrame version to support deadline used in keepalive
 func (s *Session) writeFrameInternal(f Frame, deadline <-chan time.Time, class CLASSID) (int, error) {
+	// get result channel from pool
+	resultCh := resultChanPool.Get().(chan writeResult)
+
 	req := writeRequest{
 		class:  class,
 		frame:  f,
 		seq:    atomic.AddUint32(&s.requestID, 1),
-		result: make(chan writeResult, 1),
+		result: resultCh,
 	}
 	select {
 	case s.shaper <- req:
 	case <-s.die:
+		resultChanPool.Put(resultCh)
 		return 0, io.ErrClosedPipe
 	case <-s.chSocketWriteError:
+		resultChanPool.Put(resultCh)
 		return 0, s.socketWriteError.Load().(error)
 	case <-deadline:
+		resultChanPool.Put(resultCh)
 		return 0, ErrTimeout
 	}
 
 	select {
-	case result := <-req.result:
+	case result := <-resultCh:
+		resultChanPool.Put(resultCh)
 		return result.n, result.err
 	case <-s.die:
+		// Cannot recycle channel here - sendLoop may still write to it
 		return 0, io.ErrClosedPipe
 	case <-s.chSocketWriteError:
+		// Cannot recycle channel here - sendLoop may still write to it
 		return 0, s.socketWriteError.Load().(error)
 	case <-deadline:
+		// Cannot recycle channel here - sendLoop may still write to it
 		return 0, ErrTimeout
 	}
 }

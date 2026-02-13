@@ -153,7 +153,7 @@ func (tb *Toolbar) moveToOverflow() {
 	avsz := avail - ovsz
 	sz := &tb.Geom.Size
 	sz.Alloc.Total.SetDim(ma, avail)
-	sz.setContentFromTotal(&sz.Alloc)
+	sz.SetContentFromTotal(&sz.Alloc)
 	n := len(tb.Children)
 	pn := len(tb.allItemsPlan.Children)
 	ovidx := n - 1
@@ -198,7 +198,7 @@ func (tb *Toolbar) setOverflowMenuVisibility() {
 		tb.overflowButton.SetState(true, states.Invisible)
 	} else {
 		tb.overflowButton.SetState(false, states.Invisible)
-		tb.overflowButton.Update()
+		tb.overflowButton.UpdateRender()
 	}
 }
 

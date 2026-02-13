@@ -238,3 +238,21 @@ func (ms *MockStore) AllVisorEntries(_ context.Context) ([]string, error) {
 	}
 	return entries, nil
 }
+
+// AllClientEntries implements Storer AllClientEntries method for MockStore
+func (ms *MockStore) AllClientEntries(_ context.Context) ([]*disc.Entry, error) {
+	ms.mLock.RLock()
+	defer ms.mLock.RUnlock()
+
+	var entries []*disc.Entry
+	for _, payload := range ms.m {
+		var e disc.Entry
+		if err := json.Unmarshal(payload, &e); err != nil {
+			return nil, disc.ErrUnexpected
+		}
+		if e.Client != nil {
+			entries = append(entries, &e)
+		}
+	}
+	return entries, nil
+}

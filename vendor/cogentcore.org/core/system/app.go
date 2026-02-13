@@ -14,6 +14,7 @@ package system
 
 import (
 	"fmt"
+	"os"
 	"runtime/debug"
 
 	"cogentcore.org/core/styles"
@@ -60,6 +61,10 @@ type App interface {
 	// other than [Web], this is the same as [App.Platform]. On [Web], it
 	// returns the platform of the underlying operating system.
 	SystemPlatform() Platforms
+
+	// SystemLocale returns the https://www.rfc-editor.org/rfc/bcp/bcp47.txt standard
+	// language tag, consisting of language and region, e.g., "en-US", "fr-FR", "ja-JP".
+	SystemLocale() Locale
 
 	// SystemInfo returns any additional information about the underlying system
 	// that is not otherwise given. It is used in crash logs.
@@ -278,4 +283,14 @@ func init() {
 			}
 		}
 	}
+}
+
+// GenerateHTMLArg returns true if the first [os.Args] is -generatehtml.
+// Apps that process args should test this first and skip arg processing
+// if true.
+func GenerateHTMLArg() bool {
+	if len(os.Args) < 2 {
+		return false
+	}
+	return os.Args[1] == "-generatehtml"
 }

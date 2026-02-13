@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -224,5 +225,188 @@ func generateAndCacheStats() (err error) {
 		return err
 	}
 
-	return err
+	// Generate country statistics
+	err = generateAndCacheCountryStats()
+	if err != nil {
+		// Log but don't fail the whole stats generation
+		fmt.Println("Warning: failed to generate country stats:", err)
+	}
+
+	return nil
+}
+
+// CountryStat represents visor count for a country
+type CountryStat struct {
+	Count       int    `json:"count"`
+	CountryName string `json:"country_name"`
+	CountryCode string `json:"country_code"`
+	Flag        string `json:"flag"`
+}
+
+// CountryStatsResponse is the JSON response for country statistics
+type CountryStatsResponse struct {
+	Stats      []CountryStat `json:"stats"`
+	TotalNodes int           `json:"total_nodes"`
+	Generated  string        `json:"generated"`
+}
+
+// countryCodeToFlag converts a 2-letter country code to a flag emoji
+func countryCodeToFlag(code string) string {
+	if len(code) != 2 {
+		return ""
+	}
+	code = strings.ToUpper(code)
+	// Regional indicator symbols start at U+1F1E6 (🇦)
+	// Each letter A-Z maps to U+1F1E6 to U+1F1FF
+	r1 := rune(code[0]) - 'A' + 0x1F1E6
+	r2 := rune(code[1]) - 'A' + 0x1F1E6
+	return string([]rune{r1, r2})
+}
+
+// geoIPResult holds cached geoip lookup result
+type geoIPResult struct {
+	CountryCode string
+	CountryName string
+}
+
+func generateAndCacheCountryStats() error {
+	pks, err := script.ListFiles(wd + "/log_backups").Basename().Slice()
+	if err != nil {
+		return err
+	}
+
+	// First pass: collect all IPs and build unique IP set
+	ipToVisors := make(map[string]int) // IP -> count of visors with this IP
+	visorIPs := make([]string, 0)      // all visor IPs (including duplicates)
+
+	for i := range pks {
+		ni := wd + "/log_backups/" + pks[i] + "/node-info.json"
+
+		// Extract IP address from node-info.json
+		ipAddr, err := script.File(ni).JQ(".ip_address").Replace(`"`, "").Replace("\n", "").String()
+		if err != nil || ipAddr == "" || ipAddr == "null" {
+			continue
+		}
+		ipAddr = strings.TrimSpace(ipAddr)
+
+		ipToVisors[ipAddr]++
+		visorIPs = append(visorIPs, ipAddr)
+	}
+
+	// Second pass: query geoip for unique IPs only (cache results)
+	ipCache := make(map[string]geoIPResult)
+
+	for ip := range ipToVisors {
+		// Query geoip for this IP
+		geoResult, err := script.Exec(`skywire svc ip ` + ip).String()
+		if err != nil {
+			continue
+		}
+
+		// Parse JSON response (skip log line if present)
+		lines := strings.Split(geoResult, "\n")
+		var jsonStr string
+		for _, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(line), "{") {
+				idx := strings.Index(geoResult, line)
+				jsonStr = geoResult[idx:]
+				break
+			}
+		}
+
+		var geoData struct {
+			CountryCode string `json:"country_code"`
+			CountryName string `json:"country_name"`
+		}
+		if err := json.Unmarshal([]byte(jsonStr), &geoData); err != nil {
+			continue
+		}
+
+		if geoData.CountryCode != "" {
+			ipCache[ip] = geoIPResult{
+				CountryCode: geoData.CountryCode,
+				CountryName: geoData.CountryName,
+			}
+		}
+	}
+
+	// Build stats for unique IPs (deduplicated)
+	uniqueCountryCount := make(map[string]int)
+	countryNames := make(map[string]string)
+
+	for ip := range ipToVisors {
+		if geo, ok := ipCache[ip]; ok {
+			uniqueCountryCount[geo.CountryCode]++
+			if countryNames[geo.CountryCode] == "" {
+				countryNames[geo.CountryCode] = geo.CountryName
+			}
+		}
+	}
+
+	// Build stats for all visors (full count)
+	fullCountryCount := make(map[string]int)
+
+	for _, ip := range visorIPs {
+		if geo, ok := ipCache[ip]; ok {
+			fullCountryCount[geo.CountryCode]++
+		}
+	}
+
+	// Generate unique IP stats
+	if err := writeCountryStats(uniqueCountryCount, countryNames, "country_unique", "Unique IPs by country"); err != nil {
+		return err
+	}
+
+	// Generate full visor count stats
+	if err := writeCountryStats(fullCountryCount, countryNames, "country_full", "Visor count by country"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func writeCountryStats(countryCount map[string]int, countryNames map[string]string, filePrefix, title string) error {
+	var stats []CountryStat
+	totalNodes := 0
+
+	for code, count := range countryCount {
+		stats = append(stats, CountryStat{
+			Count:       count,
+			CountryCode: code,
+			CountryName: countryNames[code],
+			Flag:        countryCodeToFlag(code),
+		})
+		totalNodes += count
+	}
+
+	// Sort by count descending
+	sort.Slice(stats, func(i, j int) bool {
+		return stats[i].Count > stats[j].Count
+	})
+
+	// Generate plaintext output
+	var plaintext strings.Builder
+	plaintext.WriteString(title + ":\n\n")
+	for _, s := range stats {
+		plaintext.WriteString(fmt.Sprintf("%d %s %s\n", s.Count, s.CountryName, s.Flag))
+	}
+	plaintext.WriteString(fmt.Sprintf("\nTotal: %d\n", totalNodes))
+
+	_, err := script.Echo(plaintext.String()).WriteFile(tempStatsPath + "/" + filePrefix + ".txt")
+	if err != nil {
+		return err
+	}
+
+	// Generate JSON output
+	response := CountryStatsResponse{
+		Stats:      stats,
+		TotalNodes: totalNodes,
+		Generated:  time.Now().Format(time.RFC3339),
+	}
+	jsonData, err := json.MarshalIndent(response, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(tempStatsPath+"/"+filePrefix+".json", jsonData, 0600)
 }

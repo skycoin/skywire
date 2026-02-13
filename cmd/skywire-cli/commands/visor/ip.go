@@ -20,7 +20,7 @@ import (
 var geoipURL string
 
 func init() {
-	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service\033[0m")
+	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service")
 	RootCmd.AddCommand(ipCmd)
 }
 

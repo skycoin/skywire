@@ -6,6 +6,7 @@ import (
 	context "context"
 
 	cipher "github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 
 	mock "github.com/stretchr/testify/mock"
 
@@ -129,6 +130,24 @@ func (_m *MockAPIClient) Resolve(ctx context.Context, netType string, pk cipher.
 	return r0, r1
 }
 
+// LocalPublicIP provides a mock function with no fields
+func (_m *MockAPIClient) LocalPublicIP() string {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for LocalPublicIP")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // Transports provides a mock function with given fields: ctx
 func (_m *MockAPIClient) Transports(ctx context.Context) (map[cipher.PubKey][]string, error) {
 	ret := _m.Called(ctx)
@@ -152,6 +171,36 @@ func (_m *MockAPIClient) Transports(ctx context.Context) (map[cipher.PubKey][]st
 
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// TransportsType provides a mock function with given fields: ctx, tpType
+func (_m *MockAPIClient) TransportsType(ctx context.Context, tpType types.Type) (map[cipher.PubKey][]string, error) {
+	ret := _m.Called(ctx, tpType)
+
+	if len(ret) == 0 {
+		panic("no return value specified for TransportsType")
+	}
+
+	var r0 map[cipher.PubKey][]string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, types.Type) (map[cipher.PubKey][]string, error)); ok {
+		return rf(ctx, tpType)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, types.Type) map[cipher.PubKey][]string); ok {
+		r0 = rf(ctx, tpType)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[cipher.PubKey][]string)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, types.Type) error); ok {
+		r1 = rf(ctx, tpType)
 	} else {
 		r1 = ret.Error(1)
 	}

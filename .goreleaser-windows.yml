@@ -1,5 +1,6 @@
 # GoReleaser configuration for Windows builds
-# Documentation at http://goreleaser.com
+# Builds skywire binaries for Windows
+# amd64 includes hardware wallet utilities, 386 and arm64 do not
 
 version: 2
 
@@ -11,34 +12,78 @@ release:
 before:
   hooks:
     - go mod tidy
+    - go mod vendor
+
 builds:
-  - id: skywire
+  - id: skywire-amd64
     binary: skywire
     goos:
       - windows
     goarch:
       - amd64
-      - 386
-      - arm64
     env:
       - CGO_ENABLED=1
-    main: ./cmd/skywire/
-    ldflags: -s -w -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}} -X github.com/skycoin/skywire/pkg/visor.BuildTag={{.Os}}
+      - PKG_CONFIG_PATH=C:/msys64/mingw64/lib/pkgconfig
+      - CGO_CFLAGS=-IC:/msys64/mingw64/include -IC:/msys64/mingw64/include/libusb-1.0
+      - CGO_LDFLAGS=-LC:/msys64/mingw64/lib
+    main: .
+    ldflags: -s -w
 
+  - id: skywire-386
+    binary: skywire
+    goos:
+      - windows
+    goarch:
+      - 386
+    env:
+      - CGO_ENABLED=0
+    main: .
+    ldflags: -s -w
+
+  - id: skywire-arm64
+    binary: skywire
+    goos:
+      - windows
+    goarch:
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    main: .
+    ldflags: -s -w
 
 archives:
-  - id: archive
+  - id: amd64
     formats:
       - zip
     name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
     ids:
-      - skywire
-    allow_different_binary_count: true
+      - skywire-amd64
+    files:
+      - none*
+
+  - id: 386
+    formats:
+      - zip
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    ids:
+      - skywire-386
+    files:
+      - none*
+
+  - id: arm64
+    formats:
+      - zip
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    ids:
+      - skywire-arm64
     files:
       - none*
 
 checksum:
   name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ .Tag }}-next"
 
 changelog:
   sort: asc
