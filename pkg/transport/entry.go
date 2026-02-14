@@ -46,6 +46,10 @@ type Entry struct {
 
 	// Latency is the round-trip time to TPD in milliseconds, updated on each re-registration
 	Latency int64 `json:"latency_ms,omitempty"`
+
+	// Bandwidth fields (not included in ToBinary/signatures)
+	SentBytes uint64 `json:"sent_bytes,omitempty"` // Cumulative sent bytes
+	RecvBytes uint64 `json:"recv_bytes,omitempty"` // Cumulative received bytes
 }
 
 // MakeEntry creates a new transport entry
