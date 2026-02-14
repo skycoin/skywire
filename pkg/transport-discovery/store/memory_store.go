@@ -145,38 +145,25 @@ func (s *memoryStore) GetVisorBandwidth(_ context.Context, _ cipher.PubKey, _ st
 	return []BandwidthAggregation{}, nil
 }
 
-// GetAllVisorSummaries groups in-memory transports by visor PK, returns summaries with cumulative bandwidth only.
+// GetAllVisorSummaries groups in-memory transports by visor PK, returns summaries with transport count.
 func (s *memoryStore) GetAllVisorSummaries(_ context.Context) ([]VisorSummary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	visorMap := make(map[cipher.PubKey][]TransportSummary)
+	visorCount := make(map[cipher.PubKey]int)
 
 	for _, entry := range s.transports {
-		ts := TransportSummary{
-			ID:    entry.ID,
-			Edges: entry.Edges,
-			Type:  string(entry.Type),
-		}
-		if entry.SentBytes > 0 || entry.RecvBytes > 0 {
-			ts.CurrentBandwidth = &BandwidthSummary{
-				TotalSent: entry.SentBytes,
-				TotalRecv: entry.RecvBytes,
-				PeriodKey: "cumulative",
-			}
-		}
 		for _, edge := range entry.Edges {
-			visorMap[edge] = append(visorMap[edge], ts)
+			visorCount[edge]++
 		}
 	}
 
 	var result []VisorSummary
-	for pk, transports := range visorMap {
+	for pk, count := range visorCount {
 		result = append(result, VisorSummary{
 			PK:             pk,
-			Online:         len(transports) > 0,
-			TransportCount: len(transports),
-			Transports:     transports,
+			Online:         count > 0,
+			TransportCount: count,
 		})
 	}
 
