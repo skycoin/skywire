@@ -104,7 +104,7 @@ func (s *redisStore) RegisterTransportWithLatency(ctx context.Context, sEntry *t
 		data.RecvBytes = sEntry.Bandwidth.RecvBytes
 
 		// Update bandwidth aggregations
-		if err := s.updateBandwidth(ctx, entry.ID.String(),
+		if err := s.updateBandwidth(ctx, entry.ID.String(), entry.Edges,
 			sEntry.Bandwidth.SentBytes, sEntry.Bandwidth.RecvBytes); err != nil {
 			s.log.WithError(err).Warn("Failed to update bandwidth aggregation")
 		}
@@ -336,9 +336,27 @@ func (s *redisStore) bandwidthMonthlyKey(tpID string, year, month int) string {
 	return fmt.Sprintf("%s:bw:monthly:%s:%d-%02d", serviceName, tpID, year, month)
 }
 
-// updateBandwidth calculates deltas and updates bandwidth aggregations.
+// Visor-level bandwidth key generators
+func (s *redisStore) visorBandwidthDailyKey(pkHex string, t time.Time) string {
+	return fmt.Sprintf("%s:bw:visor:daily:%s:%s", serviceName, pkHex, t.Format("2006-01-02"))
+}
+
+func (s *redisStore) visorBandwidthWeeklyKey(pkHex string, year, week int) string {
+	return fmt.Sprintf("%s:bw:visor:weekly:%s:%d-W%02d", serviceName, pkHex, year, week)
+}
+
+func (s *redisStore) visorBandwidthMonthlyKey(pkHex string, year, month int) string {
+	return fmt.Sprintf("%s:bw:visor:monthly:%s:%d-%02d", serviceName, pkHex, year, month)
+}
+
+func (s *redisStore) visorAllKey() string {
+	return fmt.Sprintf("%s:bw:visor:all", serviceName)
+}
+
+// updateBandwidth calculates deltas and updates bandwidth aggregations
+// for both the transport and each visor edge.
 func (s *redisStore) updateBandwidth(ctx context.Context, transportID string,
-	currentSent, currentRecv uint64) error {
+	edges [2]cipher.PubKey, currentSent, currentRecv uint64) error {
 
 	now := time.Now().UTC()
 
@@ -369,13 +387,16 @@ func (s *redisStore) updateBandwidth(ctx context.Context, transportID string,
 	// If error (first time or key expired), no delta to add
 
 	// 2. Store current as previous for next calculation
-	prevSnapshot, _ := json.Marshal(map[string]uint64{"sent": currentSent, "recv": currentRecv})
+	prevSnapshot, _ := json.Marshal(map[string]uint64{"sent": currentSent, "recv": currentRecv}) //nolint:errcheck
 
 	pipe := s.client.Pipeline()
 	pipe.Set(ctx, prevKey, prevSnapshot, 5*time.Minute)
 
 	// 3. Add deltas to aggregations (only if we have deltas)
 	if deltaSent > 0 || deltaRecv > 0 {
+		year, week := now.ISOWeek()
+
+		// Per-transport aggregations
 		// Daily (35 days retention)
 		dailyKey := s.bandwidthDailyKey(transportID, now)
 		pipe.HIncrBy(ctx, dailyKey, "total_sent", int64(deltaSent))
@@ -384,7 +405,6 @@ func (s *redisStore) updateBandwidth(ctx context.Context, transportID string,
 		pipe.Expire(ctx, dailyKey, 35*24*time.Hour)
 
 		// Weekly (60 days retention)
-		year, week := now.ISOWeek()
 		weeklyKey := s.bandwidthWeeklyKey(transportID, year, week)
 		pipe.HIncrBy(ctx, weeklyKey, "total_sent", int64(deltaSent))
 		pipe.HIncrBy(ctx, weeklyKey, "total_recv", int64(deltaRecv))
@@ -397,6 +417,41 @@ func (s *redisStore) updateBandwidth(ctx context.Context, transportID string,
 		pipe.HIncrBy(ctx, monthlyKey, "total_recv", int64(deltaRecv))
 		pipe.HSet(ctx, monthlyKey, "updated_at", now.Unix())
 		pipe.Expire(ctx, monthlyKey, 400*24*time.Hour)
+
+		// Per-visor aggregations — update for each edge
+		seen := make(map[string]bool)
+		for _, edge := range edges {
+			pkHex := edge.Hex()
+			if seen[pkHex] {
+				continue // skip duplicate edge (self-transport)
+			}
+			seen[pkHex] = true
+
+			// Track visor in the global set (400-day TTL)
+			pipe.SAdd(ctx, s.visorAllKey(), pkHex)
+			pipe.Expire(ctx, s.visorAllKey(), 400*24*time.Hour)
+
+			// Visor daily
+			vDaily := s.visorBandwidthDailyKey(pkHex, now)
+			pipe.HIncrBy(ctx, vDaily, "total_sent", int64(deltaSent))
+			pipe.HIncrBy(ctx, vDaily, "total_recv", int64(deltaRecv))
+			pipe.HSet(ctx, vDaily, "updated_at", now.Unix())
+			pipe.Expire(ctx, vDaily, 35*24*time.Hour)
+
+			// Visor weekly
+			vWeekly := s.visorBandwidthWeeklyKey(pkHex, year, week)
+			pipe.HIncrBy(ctx, vWeekly, "total_sent", int64(deltaSent))
+			pipe.HIncrBy(ctx, vWeekly, "total_recv", int64(deltaRecv))
+			pipe.HSet(ctx, vWeekly, "updated_at", now.Unix())
+			pipe.Expire(ctx, vWeekly, 60*24*time.Hour)
+
+			// Visor monthly
+			vMonthly := s.visorBandwidthMonthlyKey(pkHex, now.Year(), int(now.Month()))
+			pipe.HIncrBy(ctx, vMonthly, "total_sent", int64(deltaSent))
+			pipe.HIncrBy(ctx, vMonthly, "total_recv", int64(deltaRecv))
+			pipe.HSet(ctx, vMonthly, "updated_at", now.Unix())
+			pipe.Expire(ctx, vMonthly, 400*24*time.Hour)
+		}
 	}
 
 	_, err = pipe.Exec(ctx)
@@ -497,17 +552,18 @@ func (s *redisStore) GetVisorBandwidth(ctx context.Context, pk cipher.PubKey,
 	return results, nil
 }
 
-// GetAllVisorSummaries scans all transports, groups by visor PK, and fetches
-// daily/weekly/monthly bandwidth via a single Redis pipeline.
+// GetAllVisorSummaries discovers all known visors (including offline ones with
+// historical bandwidth), fetches visor-level aggregated bandwidth, and determines
+// online status by scanning active transports.
 func (s *redisStore) GetAllVisorSummaries(ctx context.Context) ([]VisorSummary, error) {
-	// Phase 1: SCAN all transport keys, parse TransportData, group by visor PK
-	type tpInfo struct {
-		data TransportData
-		id   uuid.UUID
-		edges [2]cipher.PubKey
+	// Phase 1: Get all known visor PKs from the global set
+	allPKHexes, err := s.client.SMembers(ctx, s.visorAllKey()).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return nil, err
 	}
 
-	var allTPs []tpInfo
+	// Phase 2: SCAN active tp:* keys to determine online visors and transport counts
+	onlineVisors := make(map[string]int) // pkHex -> transport count
 	pattern := fmt.Sprintf("%s:tp:*", serviceName)
 	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
 
@@ -523,55 +579,54 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context) ([]VisorSummary, 
 			continue
 		}
 
-		id, err := uuid.Parse(data.ID)
-		if err != nil {
-			continue
+		onlineVisors[data.EdgeA]++
+		if data.EdgeA != data.EdgeB {
+			onlineVisors[data.EdgeB]++
 		}
-
-		var edgeA, edgeB cipher.PubKey
-		if err := edgeA.UnmarshalText([]byte(data.EdgeA)); err != nil {
-			continue
-		}
-		if err := edgeB.UnmarshalText([]byte(data.EdgeB)); err != nil {
-			continue
-		}
-
-		allTPs = append(allTPs, tpInfo{
-			data:  data,
-			id:    id,
-			edges: [2]cipher.PubKey{edgeA, edgeB},
-		})
 	}
 	if err := iter.Err(); err != nil {
 		return nil, err
 	}
 
-	if len(allTPs) == 0 {
+	// Merge online visor PKs into the full set (in case visor:all set is stale)
+	allPKSet := make(map[string]struct{}, len(allPKHexes))
+	for _, pkHex := range allPKHexes {
+		allPKSet[pkHex] = struct{}{}
+	}
+	for pkHex := range onlineVisors {
+		allPKSet[pkHex] = struct{}{}
+	}
+
+	if len(allPKSet) == 0 {
 		return []VisorSummary{}, nil
 	}
 
-	// Phase 2: Pipeline HGetAll for daily/weekly/monthly bandwidth for all transports
+	// Phase 3: Pipeline HGetAll for visor-level daily/weekly/monthly bandwidth
 	now := time.Now().UTC()
 	dailyDate := now.Format("2006-01-02")
 	year, week := now.ISOWeek()
 	weekKey := fmt.Sprintf("%d-W%02d", year, week)
 	monthKey := fmt.Sprintf("%d-%02d", now.Year(), int(now.Month()))
 
-	pipe := s.client.Pipeline()
-
 	type bwCmds struct {
 		daily   *redis.StringStringMapCmd
 		weekly  *redis.StringStringMapCmd
 		monthly *redis.StringStringMapCmd
 	}
-	cmdMap := make([]bwCmds, len(allTPs))
 
-	for i, tp := range allTPs {
-		tpID := tp.data.ID
+	pkList := make([]string, 0, len(allPKSet))
+	for pkHex := range allPKSet {
+		pkList = append(pkList, pkHex)
+	}
+
+	pipe := s.client.Pipeline()
+	cmdMap := make([]bwCmds, len(pkList))
+
+	for i, pkHex := range pkList {
 		cmdMap[i] = bwCmds{
-			daily:   pipe.HGetAll(ctx, s.bandwidthDailyKey(tpID, now)),
-			weekly:  pipe.HGetAll(ctx, s.bandwidthWeeklyKey(tpID, year, week)),
-			monthly: pipe.HGetAll(ctx, s.bandwidthMonthlyKey(tpID, now.Year(), int(now.Month()))),
+			daily:   pipe.HGetAll(ctx, s.visorBandwidthDailyKey(pkHex, now)),
+			weekly:  pipe.HGetAll(ctx, s.visorBandwidthWeeklyKey(pkHex, year, week)),
+			monthly: pipe.HGetAll(ctx, s.visorBandwidthMonthlyKey(pkHex, now.Year(), int(now.Month()))),
 		}
 	}
 
@@ -579,56 +634,36 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context) ([]VisorSummary, 
 		return nil, err
 	}
 
-	// Phase 3: Assemble VisorSummary slices
-	visorMap := make(map[cipher.PubKey][]TransportSummary)
+	// Phase 4: Assemble VisorSummary slices
+	result := make([]VisorSummary, 0, len(pkList))
 
-	for i, tp := range allTPs {
-		ts := TransportSummary{
-			ID:    tp.id,
-			Edges: tp.edges,
-			Type:  tp.data.Type,
+	for i, pkHex := range pkList {
+		var pk cipher.PubKey
+		if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
+			continue
 		}
 
-		// Current (cumulative) bandwidth
-		if tp.data.SentBytes > 0 || tp.data.RecvBytes > 0 {
-			ts.CurrentBandwidth = &BandwidthSummary{
-				TotalSent: tp.data.SentBytes,
-				TotalRecv: tp.data.RecvBytes,
-				PeriodKey: "cumulative",
-			}
+		tpCount := onlineVisors[pkHex]
+		summary := VisorSummary{
+			PK:             pk,
+			Online:         tpCount > 0,
+			TransportCount: tpCount,
 		}
 
-		// Daily bandwidth
 		if bw := parseBW(cmdMap[i].daily); bw != nil {
 			bw.PeriodKey = dailyDate
-			ts.DailyBandwidth = bw
+			summary.DailyBandwidth = bw
 		}
-
-		// Weekly bandwidth
 		if bw := parseBW(cmdMap[i].weekly); bw != nil {
 			bw.PeriodKey = weekKey
-			ts.WeeklyBandwidth = bw
+			summary.WeeklyBandwidth = bw
 		}
-
-		// Monthly bandwidth
 		if bw := parseBW(cmdMap[i].monthly); bw != nil {
 			bw.PeriodKey = monthKey
-			ts.MonthlyBandwidth = bw
+			summary.MonthlyBandwidth = bw
 		}
 
-		for _, edge := range tp.edges {
-			visorMap[edge] = append(visorMap[edge], ts)
-		}
-	}
-
-	result := make([]VisorSummary, 0, len(visorMap))
-	for pk, transports := range visorMap {
-		result = append(result, VisorSummary{
-			PK:             pk,
-			Online:         len(transports) > 0,
-			TransportCount: len(transports),
-			Transports:     transports,
-		})
+		result = append(result, summary)
 	}
 
 	return result, nil
