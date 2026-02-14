@@ -48,23 +48,14 @@ type BandwidthSummary struct {
 	PeriodKey string `json:"period_key"`
 }
 
-// TransportSummary holds a transport with its bandwidth across all periods.
-type TransportSummary struct {
-	ID               uuid.UUID          `json:"t_id"`
-	Edges            [2]cipher.PubKey   `json:"edges"`
-	Type             string             `json:"type"`
-	CurrentBandwidth *BandwidthSummary  `json:"current_bandwidth,omitempty"`
-	DailyBandwidth   *BandwidthSummary  `json:"daily_bandwidth,omitempty"`
-	WeeklyBandwidth  *BandwidthSummary  `json:"weekly_bandwidth,omitempty"`
-	MonthlyBandwidth *BandwidthSummary  `json:"monthly_bandwidth,omitempty"`
-}
-
-// VisorSummary holds a visor's transports and online status.
+// VisorSummary holds a visor's aggregated bandwidth and online status.
 type VisorSummary struct {
-	PK             cipher.PubKey      `json:"pk"`
-	Online         bool               `json:"online"`
-	TransportCount int                `json:"transport_count"`
-	Transports     []TransportSummary `json:"transports"`
+	PK               cipher.PubKey    `json:"pk"`
+	Online           bool             `json:"online"`
+	TransportCount   int              `json:"transport_count"`
+	DailyBandwidth   *BandwidthSummary `json:"daily_bandwidth,omitempty"`
+	WeeklyBandwidth  *BandwidthSummary `json:"weekly_bandwidth,omitempty"`
+	MonthlyBandwidth *BandwidthSummary `json:"monthly_bandwidth,omitempty"`
 }
 
 // Store stores Transport metadata and generated nonce values.
