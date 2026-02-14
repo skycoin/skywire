@@ -440,3 +440,18 @@ func (api *API) getVisorBandwidth(w http.ResponseWriter, r *http.Request) {
 		api.writeError(w, r, err)
 	}
 }
+
+// GET /visor-summaries
+func (api *API) getVisorSummaries(w http.ResponseWriter, r *http.Request) {
+	summaries, err := api.store.GetAllVisorSummaries(r.Context())
+	if err != nil {
+		api.log(r).WithError(err).Error("Error getting visor summaries")
+		api.writeError(w, r, err)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(summaries); err != nil {
+		api.log(r).WithError(err).Error("Error encoding visor summaries")
+		api.writeError(w, r, err)
+	}
+}
