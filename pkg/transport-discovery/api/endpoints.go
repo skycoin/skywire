@@ -443,11 +443,9 @@ func (api *API) getVisorBandwidth(w http.ResponseWriter, r *http.Request) {
 
 // GET /visor-summaries
 func (api *API) getVisorSummaries(w http.ResponseWriter, r *http.Request) {
-	summaries, err := api.store.GetAllVisorSummaries(r.Context())
-	if err != nil {
-		api.log(r).WithError(err).Error("Error getting visor summaries")
-		api.writeError(w, r, err)
-		return
+	summaries := api.getVisorSummariesFromCache()
+	if summaries == nil {
+		summaries = []store.VisorSummary{}
 	}
 
 	if err := json.NewEncoder(w).Encode(summaries); err != nil {
