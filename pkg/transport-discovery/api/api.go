@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -23,7 +24,8 @@ import (
 )
 
 const (
-	transportsNumberDelay = time.Second * 10
+	transportsNumberDelay    = time.Second * 10
+	visorSummariesCacheDelay = 5 * time.Minute
 )
 
 var (
@@ -54,6 +56,9 @@ type API struct {
 	startedAt                   time.Time
 	dmsgAddr                    string
 	DmsgServers                 []string
+
+	visorSummariesCache []store.VisorSummary
+	visorSummariesMu    sync.RWMutex
 }
 
 // HealthCheckResponse is struct of /health endpoint
@@ -129,17 +134,44 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 
 // RunBackgroundTasks is function which runs periodic background tasks of API.
 func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogger) {
-	ticker := time.NewTicker(transportsNumberDelay)
-	defer ticker.Stop()
+	tpTicker := time.NewTicker(transportsNumberDelay)
+	defer tpTicker.Stop()
+
+	visorTicker := time.NewTicker(visorSummariesCacheDelay)
+	defer visorTicker.Stop()
+
 	api.updateTransportsNumber(ctx, logger)
+	api.refreshVisorSummariesCache(ctx, logger)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-tpTicker.C:
 			api.updateTransportsNumber(ctx, logger)
+		case <-visorTicker.C:
+			api.refreshVisorSummariesCache(ctx, logger)
 		}
 	}
+}
+
+// refreshVisorSummariesCache fetches visor summaries from the store and caches them.
+func (api *API) refreshVisorSummariesCache(ctx context.Context, logger logrus.FieldLogger) {
+	summaries, err := api.store.GetAllVisorSummaries(ctx)
+	if err != nil {
+		logger.WithError(err).Error("failed to refresh visor summaries cache")
+		return
+	}
+	api.visorSummariesMu.Lock()
+	api.visorSummariesCache = summaries
+	api.visorSummariesMu.Unlock()
+}
+
+// getVisorSummariesFromCache returns the cached visor summaries.
+func (api *API) getVisorSummariesFromCache() []store.VisorSummary {
+	api.visorSummariesMu.RLock()
+	defer api.visorSummariesMu.RUnlock()
+	return api.visorSummariesCache
 }
 
 func (api *API) log(r *http.Request) logrus.FieldLogger {
