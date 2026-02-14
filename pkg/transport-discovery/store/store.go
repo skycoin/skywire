@@ -36,15 +36,13 @@ type BandwidthAggregation struct {
 	TransportID string `json:"transport_id"`
 	Period      string `json:"period"`     // "daily", "weekly", "monthly"
 	PeriodKey   string `json:"period_key"` // e.g., "2026-02-10", "2026-W06", "2026-02"
-	TotalSent   uint64 `json:"total_sent"`
-	TotalRecv   uint64 `json:"total_recv"`
+	Bandwidth   uint64 `json:"bandwidth"`  // total bytes (sent + recv)
 	UpdatedAt   int64  `json:"updated_at"`
 }
 
-// BandwidthSummary stores bandwidth totals for a single period.
+// BandwidthSummary stores bandwidth total for a single period.
 type BandwidthSummary struct {
-	TotalSent uint64 `json:"total_sent"`
-	TotalRecv uint64 `json:"total_recv"`
+	Bandwidth uint64 `json:"bandwidth"` // total bytes (sent + recv)
 	PeriodKey string `json:"period_key"`
 }
 
