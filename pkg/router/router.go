@@ -355,7 +355,7 @@ func (r *router) DialRoutes(
 		if err != nil {
 			// Clean up saved rules on failure
 			r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
-			// Check if context was cancelled
+			// Check if context was canceled
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
@@ -395,7 +395,7 @@ func (r *router) setupPingRoute(
 	forwardDesc routing.RouteDescriptor,
 	forwardPath, reversePath []routing.Hop,
 	rPK cipher.PubKey,
-	opts *DialOptions,
+	_ *DialOptions,
 ) (net.Conn, error) {
 	req := routing.BidirectionalRoute{
 		Desc:      forwardDesc,
@@ -694,9 +694,9 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	select {
 	case <-rg.handshakeProcessed:
 	case <-hsCtx.Done():
-		// Check if parent context was cancelled (e.g., setup timeout)
+		// Check if parent context was canceled (e.g., setup timeout)
 		if ctx.Err() != nil {
-			r.logger.Debugf("Route group setup cancelled for %s: %v", &rules.Desc, ctx.Err())
+			r.logger.Debugf("Route group setup canceled for %s: %v", &rules.Desc, ctx.Err())
 			// Clean up
 			if err := rg.Close(); err != nil {
 				r.logger.WithError(err).Warnf("Failed to close route group on context cancellation")

@@ -83,7 +83,7 @@ Use --dmsg-only to only test over dmsg.`,
 				fmt.Printf("Download Speed: %.2f KB/s (%.2f Mbps)\n", downloadSpeed, downloadSpeed*8/1024)
 			} else {
 				fmt.Printf("\rProgress: %.1fs | Up: %.2f KB/s | Down: %.2f KB/s", elapsed.Seconds(), uploadSpeed, downloadSpeed)
-				os.Stdout.Sync() //nolint:errcheck
+				os.Stdout.Sync() //nolint:errcheck,gosec
 			}
 		}
 

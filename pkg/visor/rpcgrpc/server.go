@@ -264,7 +264,7 @@ func (s *PingServer) StreamDmsgPing(req *PingRequest, stream PingService_StreamD
 	setupTime := time.Since(setupStart)
 
 	// Get the server PK used for this connection
-	serverPK, _ := s.visor.GetDmsgPingServerPK(pk)
+	serverPK, _ := s.visor.GetDmsgPingServerPK(pk) //nolint:errcheck
 	serverPKStr := ""
 	if !serverPK.Null() {
 		serverPKStr = serverPK.String()

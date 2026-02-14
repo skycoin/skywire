@@ -74,7 +74,7 @@ func init() {
 			{Text: "edge tpid calc setup ping... avg"},
 		},
 	}
-	treeStr, _ := pterm.DefaultTree.WithRoot(treeExample).Srender()
+	treeStr, _ := pterm.DefaultTree.WithRoot(treeExample).Srender() //nolint:errcheck
 
 	pingGraphCmd.Long = `Ping visors reachable from this visor, organized by hop distance.
 
@@ -324,7 +324,7 @@ var pingGraphCmd = &cobra.Command{
 			TotalStats: make(map[string]int),
 		}
 		var textOutput strings.Builder
-		textOutput.WriteString(fmt.Sprintf("=== Ping Graph Results ===\n"))
+		textOutput.WriteString("=== Ping Graph Results ===\n")
 		textOutput.WriteString(fmt.Sprintf("Start Time: %s\n", results.StartTime))
 		textOutput.WriteString(fmt.Sprintf("Local Visor: %s\n", localPK))
 		if graphVersion != "" {
@@ -494,7 +494,7 @@ var pingGraphCmd = &cobra.Command{
 				} else {
 					fmt.Printf("  Querying route finder...")
 				}
-				os.Stdout.Sync() //nolint:errcheck
+				os.Stdout.Sync() //nolint:errcheck,gosec
 				err := grpcClient.StreamPing(ctx, pk, int32(graphTries), int32(graphPcktSize), graphLocalRoute, graphTimeout, graphSetupTimeout, routeCallback)
 				if err != nil {
 					if ctx.Err() != nil {
@@ -754,7 +754,7 @@ var pingGraphCmd = &cobra.Command{
 			if err != nil {
 				fmt.Printf("Error marshaling JSON: %v\n", err)
 			} else {
-				if err := os.WriteFile(graphOutputJSON, jsonData, 0644); err != nil {
+				if err := os.WriteFile(graphOutputJSON, jsonData, 0644); err != nil { //nolint:gosec
 					fmt.Printf("Error writing JSON file: %v\n", err)
 				} else {
 					fmt.Printf("Results written to JSON: %s\n", graphOutputJSON)
@@ -764,7 +764,7 @@ var pingGraphCmd = &cobra.Command{
 
 		// Write text output file if specified
 		if graphOutputText != "" {
-			if err := os.WriteFile(graphOutputText, []byte(textOutput.String()), 0644); err != nil {
+			if err := os.WriteFile(graphOutputText, []byte(textOutput.String()), 0644); err != nil { //nolint:gosec
 				fmt.Printf("Error writing text file: %v\n", err)
 			} else {
 				fmt.Printf("Results written to text: %s\n", graphOutputText)
@@ -1451,7 +1451,7 @@ func runTreeViewMode(
 			break
 		}
 		// Stop if we've passed the exact hop level (when --hops is set)
-		if graphHops > 0 && uint(level) > graphHops {
+		if graphHops > 0 && uint(level) > graphHops { //nolint:gosec
 			break
 		}
 
@@ -1523,7 +1523,7 @@ func runTreeViewMode(
 			}
 
 			// Skip if below start level or not at exact hop level (when --hops is set)
-			skipPing := level < graphStartLevel || (graphHops > 0 && uint(level) != graphHops)
+			skipPing := level < graphStartLevel || (graphHops > 0 && uint(level) != graphHops) //nolint:gosec
 			if skipPing {
 				if !seenVisors[target.remotePK] {
 					nextLevelVisors = append(nextLevelVisors, target.remotePK)

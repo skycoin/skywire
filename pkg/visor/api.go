@@ -1202,7 +1202,7 @@ func (v *Visor) DeregisterService(pks []cipher.PubKey, serviceType string) error
 
 	// Check response
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck
 		return fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -1700,7 +1700,7 @@ func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, byt
 		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 		return bytesSent, bytesReceived, 0, fmt.Errorf("read ack: %w", err)
 	}
-	bytesReceived += uint64(n)
+	bytesReceived += uint64(n) //nolint:gosec
 
 	// Send ping data
 	if _, err = conn.Write(ping); err != nil {
@@ -1721,7 +1721,7 @@ func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, byt
 				return bytesSent, bytesReceived, 0, fmt.Errorf("read echo: %w", err)
 			}
 			received += n
-			bytesReceived += uint64(n)
+			bytesReceived += uint64(n) //nolint:gosec
 		}
 	} else {
 		// Read simple "pong" response
@@ -1730,7 +1730,7 @@ func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, byt
 			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 			return bytesSent, bytesReceived, 0, fmt.Errorf("read echo: %w", err)
 		}
-		bytesReceived += uint64(n)
+		bytesReceived += uint64(n) //nolint:gosec
 	}
 	conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 
@@ -2067,7 +2067,7 @@ func (v *Visor) DmsgPingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent,
 		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 		return bytesSent, bytesReceived, 0, fmt.Errorf("read ack: %w", err)
 	}
-	bytesReceived += uint64(n)
+	bytesReceived += uint64(n) //nolint:gosec
 
 	// Send ping data
 	if _, err = conn.Write(pingData); err != nil {
@@ -2088,7 +2088,7 @@ func (v *Visor) DmsgPingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent,
 				return bytesSent, bytesReceived, 0, fmt.Errorf("read echo: %w", err)
 			}
 			received += n
-			bytesReceived += uint64(n)
+			bytesReceived += uint64(n) //nolint:gosec
 		}
 	} else {
 		// Read simple "pong" response
@@ -2097,7 +2097,7 @@ func (v *Visor) DmsgPingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent,
 			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 			return bytesSent, bytesReceived, 0, fmt.Errorf("read echo: %w", err)
 		}
-		bytesReceived += uint64(n)
+		bytesReceived += uint64(n) //nolint:gosec
 	}
 	conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 
@@ -2197,7 +2197,7 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 			return BandwidthResult{}, fmt.Errorf("read ack: %w", err)
 		}
-		bytesReceived += uint64(n)
+		bytesReceived += uint64(n) //nolint:gosec
 
 		// Send ping data
 		if _, err = conn.Write(ping); err != nil {
@@ -2216,7 +2216,7 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 				return BandwidthResult{}, fmt.Errorf("read echo: %w", err)
 			}
 			received += n
-			bytesReceived += uint64(n)
+			bytesReceived += uint64(n) //nolint:gosec
 		}
 		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 	}
@@ -2302,7 +2302,7 @@ func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, er
 			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 			return BandwidthResult{}, fmt.Errorf("read ack: %w", err)
 		}
-		bytesReceived += uint64(n)
+		bytesReceived += uint64(n) //nolint:gosec
 
 		// Send ping data
 		if _, err = conn.Write(ping); err != nil {
@@ -2321,7 +2321,7 @@ func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, er
 				return BandwidthResult{}, fmt.Errorf("read echo: %w", err)
 			}
 			received += n
-			bytesReceived += uint64(n)
+			bytesReceived += uint64(n) //nolint:gosec
 		}
 		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 	}

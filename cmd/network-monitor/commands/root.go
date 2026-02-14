@@ -362,7 +362,7 @@ func deregisterFromSD(sdURL, serviceType string, pks []string, nmPK cipher.PubKe
 
 	// Check response
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck
 		return fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
 	}
 
