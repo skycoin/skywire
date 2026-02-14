@@ -441,15 +441,15 @@ func (api *API) getVisorBandwidth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GET /visor-summaries
-func (api *API) getVisorSummaries(w http.ResponseWriter, r *http.Request) {
-	summaries := api.getVisorSummariesFromCache()
-	if summaries == nil {
-		summaries = []store.VisorSummary{}
+// GET /visors
+func (api *API) getVisors(w http.ResponseWriter, r *http.Request) {
+	visors := api.getVisorsFromCache()
+	if visors == nil {
+		visors = []store.VisorSummary{}
 	}
 
-	if err := json.NewEncoder(w).Encode(summaries); err != nil {
-		api.log(r).WithError(err).Error("Error encoding visor summaries")
+	if err := json.NewEncoder(w).Encode(visors); err != nil {
+		api.log(r).WithError(err).Error("Error encoding visors")
 		api.writeError(w, r, err)
 	}
 }
