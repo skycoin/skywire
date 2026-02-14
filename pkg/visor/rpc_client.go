@@ -590,6 +590,14 @@ func (rc *rpcClient) ProxyServers(version, country string) ([]servicedisc.Servic
 	return output, err
 }
 
+// DeregisterService calls DeregisterService.
+func (rc *rpcClient) DeregisterService(pks []cipher.PubKey, serviceType string) error {
+	return rc.Call("DeregisterService", &DeregisterServiceIn{
+		PKs:         pks,
+		ServiceType: serviceType,
+	}, &struct{}{})
+}
+
 // RemoteVisors calls RemoteVisors.
 func (rc *rpcClient) RemoteVisors() ([]string, error) {
 	output := []string{}
@@ -723,6 +731,25 @@ func (rc *rpcClient) DmsgPingOnce(conf PingConfig) (time.Duration, error) {
 // StopDmsgPing calls StopDmsgPing.
 func (rc *rpcClient) StopDmsgPing(pk cipher.PubKey) error {
 	return rc.Call("StopDmsgPing", &pk, &struct{}{})
+}
+
+// DialDmsgPingViaServer calls DialDmsgPingViaServer.
+func (rc *rpcClient) DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error {
+	return rc.Call("DialDmsgPingViaServer", &DialDmsgPingViaServerIn{PK: pk, ServerPK: serverPK}, &struct{}{})
+}
+
+// GetDmsgPingServerPK calls GetDmsgPingServerPK.
+func (rc *rpcClient) GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error) {
+	var serverPK cipher.PubKey
+	err := rc.Call("GetDmsgPingServerPK", &pk, &serverPK)
+	return serverPK, err
+}
+
+// GetRemoteDmsgServers calls GetRemoteDmsgServers.
+func (rc *rpcClient) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error) {
+	var servers []cipher.PubKey
+	err := rc.Call("GetRemoteDmsgServers", &pk, &servers)
+	return servers, err
 }
 
 // BandwidthTest calls BandwidthTest.
@@ -1482,6 +1509,11 @@ func (mc *mockRPCClient) ProxyServers(_, _ string) ([]servicedisc.Service, error
 	return []servicedisc.Service{}, nil
 }
 
+// DeregisterService implements API
+func (mc *mockRPCClient) DeregisterService(_ []cipher.PubKey, _ string) error {
+	return nil
+}
+
 // RemoteVisors implements API
 func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
 	return []string{}, nil
@@ -1580,6 +1612,21 @@ func (mc *mockRPCClient) DmsgPingOnce(_ PingConfig) (time.Duration, error) {
 // StopDmsgPing implements API.
 func (mc *mockRPCClient) StopDmsgPing(_ cipher.PubKey) error {
 	return nil
+}
+
+// DialDmsgPingViaServer implements API.
+func (mc *mockRPCClient) DialDmsgPingViaServer(_ cipher.PubKey, _ cipher.PubKey) error {
+	return nil
+}
+
+// GetDmsgPingServerPK implements API.
+func (mc *mockRPCClient) GetDmsgPingServerPK(_ cipher.PubKey) (cipher.PubKey, error) {
+	return cipher.PubKey{}, nil
+}
+
+// GetRemoteDmsgServers implements API.
+func (mc *mockRPCClient) GetRemoteDmsgServers(_ cipher.PubKey) ([]cipher.PubKey, error) {
+	return []cipher.PubKey{}, nil
 }
 
 // BandwidthTest implements API.

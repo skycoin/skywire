@@ -30,16 +30,16 @@ func (g *SetupRPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules
 
 	ctx, cancel := context.WithTimeout(g.Ctx, g.Timeout)
 	defer cancel()
-	go func() {
-		if <-ctx.Done(); ctx.Err() == context.DeadlineExceeded {
-			log.WithError(ctx.Err()).
-				WithField("close_error", g.Conn.Close()).
-				Warn("Closed underlying connection because deadline was exceeded.")
-		}
-	}()
+
+	// Note: We intentionally do NOT close g.Conn on deadline exceeded.
+	// The connection is managed by the RPC server in serveSetup() and closing it
+	// here causes a race condition that corrupts the router state, making all
+	// subsequent route setups fail with "read/write on closed pipe".
+	// Context cancellation will propagate naturally through CreateRouteGroup.
 
 	initRules, err := CreateRouteGroup(ctx, g.Dialer, route, g.Metrics)
 	if err != nil {
+		log.WithError(err).Warn("CreateRouteGroup failed")
 		return err
 	}
 

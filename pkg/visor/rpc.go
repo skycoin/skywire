@@ -744,6 +744,18 @@ func (r *RPC) ProxyServers(vc *FilterServersIn, out *[]servicedisc.Service) (err
 	return err
 }
 
+// DeregisterServiceIn is the input for DeregisterService RPC method
+type DeregisterServiceIn struct {
+	PKs         []cipher.PubKey
+	ServiceType string
+}
+
+// DeregisterService deregisters services from service discovery
+func (r *RPC) DeregisterService(in *DeregisterServiceIn, out *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DeregisterService", in)(out, &err)
+	return r.visor.DeregisterService(in.PKs, in.ServiceType)
+}
+
 // RemoteVisors return connected remote visors
 func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
@@ -906,6 +918,35 @@ func (r *RPC) StopDmsgPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopDmsgPing", pk)(nil, &err)
 
 	return r.visor.StopDmsgPing(*pk)
+}
+
+// DialDmsgPingViaServerIn is the input for DialDmsgPingViaServer.
+type DialDmsgPingViaServerIn struct {
+	PK       cipher.PubKey
+	ServerPK cipher.PubKey
+}
+
+// DialDmsgPingViaServer dials to a remote visor over dmsg via a specific server.
+func (r *RPC) DialDmsgPingViaServer(in *DialDmsgPingViaServerIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DialDmsgPingViaServer", in)(nil, &err)
+
+	return r.visor.DialDmsgPingViaServer(in.PK, in.ServerPK)
+}
+
+// GetDmsgPingServerPK returns the DMSG server PK used for a ping connection.
+func (r *RPC) GetDmsgPingServerPK(pk *cipher.PubKey, out *cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "GetDmsgPingServerPK", pk)(out, &err)
+
+	*out, err = r.visor.GetDmsgPingServerPK(*pk)
+	return err
+}
+
+// GetRemoteDmsgServers returns the DMSG servers a remote visor is connected to.
+func (r *RPC) GetRemoteDmsgServers(pk *cipher.PubKey, out *[]cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "GetRemoteDmsgServers", pk)(out, &err)
+
+	*out, err = r.visor.GetRemoteDmsgServers(*pk)
+	return err
 }
 
 // BandwidthTest performs a bandwidth test over skywire route.

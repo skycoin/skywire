@@ -136,6 +136,9 @@ type Visor struct {
 	// Embedded Transport Setup Node (nil if tps_sk not configured)
 	embeddedTPS *embeddedTPS
 
+	// Embedded Route Setup Node (nil if route_setup_sk not configured)
+	embeddedRouteSetup *EmbeddedRouteSetup
+
 	// Public autoconnect runtime control
 	autoconnectMu      sync.Mutex
 	autoconnectCancel  context.CancelFunc

@@ -13,6 +13,7 @@ type ping struct {
 	conn     net.Conn
 	hops     []cipher.PubKey       // route hops (intermediate visors + destination) - for backwards compat
 	hopInfos []router.RouteHopInfo // detailed hop info with transport IDs and types
+	serverPK cipher.PubKey         // for dmsg pings: the DMSG server used for this connection
 }
 
 // PingMsg is used to calculate the ping to a remote visor

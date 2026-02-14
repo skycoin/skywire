@@ -2,6 +2,7 @@
 package rpcgrpc
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -26,18 +27,25 @@ type VisorAPI interface {
 	StopPing(pk cipher.PubKey) error
 	GetPingRoute(pk cipher.PubKey) []cipher.PubKey
 	GetPingRouteDetails(pk cipher.PubKey) []RouteHopInfo
+	GetLastRouteCalcTime() time.Duration
 	DialDmsgPing(pk cipher.PubKey) error
+	DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error
 	DmsgPingOnce(conf PingConf) (time.Duration, error)
 	DmsgPingOnceWithEcho(conf PingConf, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error)
 	StopDmsgPing(pk cipher.PubKey) error
+	GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error)
+	GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error)
 }
 
 // PingConf mirrors visor.PingConfig to avoid import cycles
 type PingConf struct {
-	PK         cipher.PubKey
-	Tries      int
-	PcktSize   int
-	LocalRoute bool
+	PK          cipher.PubKey
+	Tries       int
+	PcktSize    int
+	LocalRoute  bool
+	TransportID string         // Optional: use specific transport (skips route calculation)
+	ForwardHops []RouteHopInfo // Optional: explicit forward route (skips route calculation)
+	ReverseHops []RouteHopInfo // Optional: explicit reverse route (skips route calculation)
 }
 
 // PingServer implements the gRPC PingService
@@ -62,11 +70,33 @@ func (s *PingServer) StreamPing(req *PingRequest, stream PingService_StreamPingS
 		return fmt.Errorf("invalid public key: %w", err)
 	}
 
+	// Convert proto RouteHop to RouteHopInfo
+	var forwardHops, reverseHops []RouteHopInfo
+	for _, h := range req.ForwardHops {
+		forwardHops = append(forwardHops, RouteHopInfo{
+			TpID:   h.TpId,
+			From:   h.From,
+			To:     h.To,
+			TpType: h.TpType,
+		})
+	}
+	for _, h := range req.ReverseHops {
+		reverseHops = append(reverseHops, RouteHopInfo{
+			TpID:   h.TpId,
+			From:   h.From,
+			To:     h.To,
+			TpType: h.TpType,
+		})
+	}
+
 	conf := PingConf{
-		PK:         pk,
-		Tries:      int(req.Tries),
-		PcktSize:   int(req.PacketSizeKb),
-		LocalRoute: req.LocalRoute,
+		PK:          pk,
+		Tries:       int(req.Tries),
+		PcktSize:    int(req.PacketSizeKb),
+		LocalRoute:  req.LocalRoute,
+		TransportID: req.TransportId,
+		ForwardHops: forwardHops,
+		ReverseHops: reverseHops,
 	}
 
 	// Dial first (with optional setup timeout)
@@ -123,6 +153,9 @@ func (s *PingServer) StreamPing(req *PingRequest, stream PingService_StreamPingS
 		}
 	}
 
+	// Get route calculation time (for local route mode)
+	routeCalcTime := s.visor.GetLastRouteCalcTime()
+
 	// Send setup time as first result
 	if err := stream.Send(&PingResult{
 		Sequence:        0,
@@ -130,6 +163,7 @@ func (s *PingServer) StreamPing(req *PingRequest, stream PingService_StreamPingS
 		IsSetup:         true,
 		RouteHops:       routeHops,
 		RouteHopDetails: routeHopDetails,
+		RouteCalcTimeNs: routeCalcTime.Nanoseconds(),
 	}); err != nil {
 		_ = s.visor.StopPing(pk) //nolint:errcheck
 		return err
@@ -209,19 +243,39 @@ func (s *PingServer) StreamDmsgPing(req *PingRequest, stream PingService_StreamD
 		PcktSize: int(req.PacketSizeKb),
 	}
 
-	// Dial first
+	// Dial first - optionally via specific server
 	s.log.Debugf("gRPC StreamDmsgPing: dialing %s", pk)
 	setupStart := time.Now()
-	if err := s.visor.DialDmsgPing(pk); err != nil {
-		return fmt.Errorf("dial dmsg ping failed: %w", err)
+
+	if req.DmsgServerPk != "" {
+		// Dial via specific server
+		var serverPK cipher.PubKey
+		if err := serverPK.Set(req.DmsgServerPk); err != nil {
+			return fmt.Errorf("invalid dmsg server public key: %w", err)
+		}
+		if err := s.visor.DialDmsgPingViaServer(pk, serverPK); err != nil {
+			return fmt.Errorf("dial dmsg ping via server %s failed: %w", serverPK, err)
+		}
+	} else {
+		if err := s.visor.DialDmsgPing(pk); err != nil {
+			return fmt.Errorf("dial dmsg ping failed: %w", err)
+		}
 	}
 	setupTime := time.Since(setupStart)
 
-	// Send setup time as first result
+	// Get the server PK used for this connection
+	serverPK, _ := s.visor.GetDmsgPingServerPK(pk)
+	serverPKStr := ""
+	if !serverPK.Null() {
+		serverPKStr = serverPK.String()
+	}
+
+	// Send setup time as first result with server PK
 	if err := stream.Send(&PingResult{
-		Sequence:  0,
-		LatencyNs: setupTime.Nanoseconds(),
-		IsSetup:   true,
+		Sequence:     0,
+		LatencyNs:    setupTime.Nanoseconds(),
+		IsSetup:      true,
+		DmsgServerPk: serverPKStr,
 	}); err != nil {
 		_ = s.visor.StopDmsgPing(pk) //nolint:errcheck
 		return err
@@ -467,4 +521,26 @@ func (s *PingServer) StreamDmsgBandwidthTest(req *BandwidthRequest, stream PingS
 	}
 
 	return s.visor.StopDmsgPing(pk)
+}
+
+// GetRemoteDmsgServers returns the DMSG servers a remote visor is connected to
+func (s *PingServer) GetRemoteDmsgServers(_ context.Context, req *DmsgServersRequest) (*DmsgServersResponse, error) {
+	var pk cipher.PubKey
+	if err := pk.Set(req.PublicKey); err != nil {
+		return nil, fmt.Errorf("invalid public key: %w", err)
+	}
+
+	servers, err := s.visor.GetRemoteDmsgServers(pk)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get remote dmsg servers: %w", err)
+	}
+
+	serverPKs := make([]string, len(servers))
+	for i, srv := range servers {
+		serverPKs[i] = srv.String()
+	}
+
+	return &DmsgServersResponse{
+		ServerPks: serverPKs,
+	}, nil
 }

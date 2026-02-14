@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -22,6 +23,7 @@ import (
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"golang.org/x/net/proxy"
 
@@ -146,9 +148,12 @@ type API interface {
 	PingOnce(config PingConfig) (time.Duration, error)
 	StopPing(pk cipher.PubKey) error
 	DialDmsgPing(pk cipher.PubKey) error
+	DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error
 	DmsgPing(conf PingConfig) ([]time.Duration, error)
 	DmsgPingOnce(conf PingConfig) (time.Duration, error)
 	StopDmsgPing(pk cipher.PubKey) error
+	GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error)
+	GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error)
 	BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 	DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 
@@ -158,6 +163,9 @@ type API interface {
 
 	//uptime-tracker tools
 	FetchUptimeTrackerData(pk string) ([]byte, error)
+
+	//service discovery management (network monitor functionality)
+	DeregisterService(pks []cipher.PubKey, serviceType string) error
 
 	//ui server controls
 	StartUIServer(addr string) error
@@ -290,10 +298,11 @@ type Summary struct {
 	Routes               []routingRuleResp                `json:"routes"`
 	IsHypervisor         bool                             `json:"is_hypervisor,omitempty"`
 	DmsgStats            *dmsgtracker.DmsgClientSummary   `json:"dmsg_stats"`
+	ConnectedDmsgServers []string                         `json:"connected_dmsg_servers"`
 	Online               bool                             `json:"online"`
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
-	SkybianBuildVersion  string                           `json:"skybian_build_version"`
+	SkybianBuildVersion  string                           `json:"skybian_build_version,omitempty"` // Deprecated
 	RewardAddress        string                           `json:"reward_address"`
 	BuildTag             string                           `json:"build_tag"`
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
@@ -321,8 +330,6 @@ func (v *Visor) Summary() (*Summary, error) {
 		return nil, fmt.Errorf("routes")
 	}
 
-	skybianBuildVersion := v.SkybianBuildVersion()
-
 	extraRoutes := make([]routingRuleResp, 0, len(routes))
 	for _, route := range routes {
 		extraRoutes = append(extraRoutes, routingRuleResp{
@@ -343,6 +350,12 @@ func (v *Visor) Summary() (*Summary, error) {
 		dmsgStatValue = &dmsgTracker
 	}
 
+	// Get all connected DMSG servers
+	var connectedDmsgServers []string
+	if v.dmsgC != nil {
+		connectedDmsgServers = v.dmsgC.ConnectedServersPK()
+	}
+
 	rewardAddress, err := v.GetRewardAddress()
 	if err != nil {
 		v.log.Warn(err)
@@ -355,11 +368,11 @@ func (v *Visor) Summary() (*Summary, error) {
 		Routes:               extraRoutes,
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
-		SkybianBuildVersion:  skybianBuildVersion,
 		BuildTag:             runtime.GOOS + "_" + runtime.GOARCH,
 		RewardAddress:        rewardAddress,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
 		DmsgStats:            dmsgStatValue,
+		ConnectedDmsgServers: connectedDmsgServers,
 	}
 
 	return summary, nil
@@ -1129,6 +1142,74 @@ func (v *Visor) PublicVisors(version, country string) ([]servicedisc.Service, er
 	return publicVisors, nil
 }
 
+// DeregisterService deregisters the specified public keys from service discovery.
+// This requires the visor's public key to be whitelisted as a network monitor in the service discovery.
+// serviceType must be one of: "vpn", "visor", "skysocks" (or "proxy")
+func (v *Visor) DeregisterService(pks []cipher.PubKey, serviceType string) error {
+	if len(pks) == 0 {
+		return fmt.Errorf("no public keys provided")
+	}
+
+	// Normalize service type
+	sType := serviceType
+	if sType == "proxy" {
+		sType = "skysocks"
+	}
+	if sType != "vpn" && sType != "visor" && sType != "skysocks" {
+		return fmt.Errorf("invalid service type %q: must be vpn, visor, or skysocks (proxy)", serviceType)
+	}
+
+	// Sign the visor's public key with its secret key (network monitor authentication)
+	nmSign, err := cipher.SignPayload([]byte(v.conf.PK.Hex()), v.conf.SK)
+	if err != nil {
+		return fmt.Errorf("failed to sign payload: %w", err)
+	}
+
+	// Build the URL
+	sdURL := v.conf.Launcher.ServiceDisc
+	reqURL := fmt.Sprintf("%s/api/services/deregister/%s", sdURL, sType)
+
+	// Convert public keys to hex strings
+	pkStrings := make([]string, len(pks))
+	for i, pk := range pks {
+		pkStrings[i] = pk.Hex()
+	}
+
+	// Marshal the public keys to JSON
+	jsonData, err := json.Marshal(pkStrings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal public keys: %w", err)
+	}
+
+	// Create the request
+	req, err := http.NewRequest(http.MethodDelete, reqURL, bytes.NewReader(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("NM-PK", v.conf.PK.Hex())
+	req.Header.Set("NM-Sign", nmSign.Hex())
+
+	// Send the request
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	// Check response
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	v.log.Infof("Successfully deregistered %d key(s) from service type %s", len(pks), sType)
+	return nil
+}
+
 // RemoteVisors return list of connected remote visors
 func (v *Visor) RemoteVisors() ([]string, error) {
 	var visors []string
@@ -1348,13 +1429,24 @@ func (v *Visor) RoutingRules() ([]routing.Rule, error) {
 	return v.router.Rules(), nil
 }
 
+// RouteHopInfo contains detailed information about a single hop in a route.
+type RouteHopInfo struct {
+	TpID   string
+	From   string
+	To     string
+	TpType string
+}
+
 // PingConfig use as configuration for ping command
 type PingConfig struct {
 	PK          cipher.PubKey
 	Tries       int
 	PcktSize    int
 	PubVisCount int
-	LocalRoute  bool // Skip route finder and use local route calculation
+	LocalRoute  bool           // Skip route finder and use local route calculation
+	TransportID string         // Optional: use specific transport (skips route calculation)
+	ForwardHops []RouteHopInfo // Optional: explicit forward route (skips route calculation)
+	ReverseHops []RouteHopInfo // Optional: explicit reverse route (skips route calculation)
 }
 
 // DialPing implements API.
@@ -1389,7 +1481,23 @@ func (v *Visor) DialPing(conf PingConfig) error {
 	defer cancel()
 	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 1, 2)
 	err = r.Do(ctx, func() error {
-		conn, err = appnet.PingContext(ctx, conf.PK, addr)
+		if len(conf.ForwardHops) > 0 && len(conf.ReverseHops) > 0 {
+			// Use explicit route (skips route calculation)
+			fwdHops := make([]appnet.RouteHopInfo, len(conf.ForwardHops))
+			for i, h := range conf.ForwardHops {
+				fwdHops[i] = appnet.RouteHopInfo{TpID: h.TpID, From: h.From, To: h.To, TpType: h.TpType}
+			}
+			revHops := make([]appnet.RouteHopInfo, len(conf.ReverseHops))
+			for i, h := range conf.ReverseHops {
+				revHops[i] = appnet.RouteHopInfo{TpID: h.TpID, From: h.From, To: h.To, TpType: h.TpType}
+			}
+			conn, err = appnet.PingContextWithRoute(ctx, conf.PK, addr, fwdHops, revHops)
+		} else if conf.TransportID != "" {
+			// Use specific transport (skips route calculation)
+			conn, err = appnet.PingContextWithTransport(ctx, conf.PK, addr, conf.TransportID)
+		} else {
+			conn, err = appnet.PingContext(ctx, conf.PK, addr)
+		}
 		return err
 	})
 	if err != nil {
@@ -1667,6 +1775,14 @@ func (v *Visor) GetPingRouteDetails(pk cipher.PubKey) []router.RouteHopInfo {
 	return nil
 }
 
+// GetLastRouteCalcTime returns the time spent calculating the last local route.
+func (v *Visor) GetLastRouteCalcTime() time.Duration {
+	if v.router == nil {
+		return 0
+	}
+	return v.router.GetLastRouteCalcTime()
+}
+
 // DialDmsgPing implements API. Dials a remote visor over dmsg for ping.
 func (v *Visor) DialDmsgPing(pk cipher.PubKey) error {
 	if v.dmsgC == nil {
@@ -1688,11 +1804,91 @@ func (v *Visor) DialDmsgPing(pk cipher.PubKey) error {
 		return fmt.Errorf("failed to dial dmsg ping: %w", err)
 	}
 
+	// Extract server PK from the dmsg stream
+	var serverPK cipher.PubKey
+	if stream, ok := conn.(*dmsg.Stream); ok {
+		serverPK = stream.ServerPK()
+	}
+
 	v.dmsgPingMx.Lock()
-	v.dmsgPingConns[pk] = ping{conn: conn}
+	v.dmsgPingConns[pk] = ping{conn: conn, serverPK: serverPK}
 	v.dmsgPingMx.Unlock()
 
 	return nil
+}
+
+// DialDmsgPingViaServer implements API. Dials a remote visor over dmsg via a specific server.
+func (v *Visor) DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error {
+	if v.dmsgC == nil {
+		return fmt.Errorf("dmsg client not available")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Wait for dmsg client to be ready
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-v.dmsgC.Ready():
+	}
+
+	// First ensure we have a session with the specified server
+	_, err := v.dmsgC.EnsureAndObtainSession(ctx, serverPK)
+	if err != nil {
+		return fmt.Errorf("failed to connect to dmsg server %s: %w", serverPK, err)
+	}
+
+	// Get the session and dial through it
+	session, ok := v.dmsgC.Session(serverPK)
+	if !ok {
+		return fmt.Errorf("no session with dmsg server %s", serverPK)
+	}
+
+	stream, err := session.DialStream(dmsg.Addr{PK: pk, Port: visorconfig.DmsgPingPort})
+	if err != nil {
+		return fmt.Errorf("failed to dial dmsg ping via server %s: %w", serverPK, err)
+	}
+
+	v.dmsgPingMx.Lock()
+	v.dmsgPingConns[pk] = ping{conn: stream, serverPK: serverPK}
+	v.dmsgPingMx.Unlock()
+
+	return nil
+}
+
+// GetDmsgPingServerPK implements API. Returns the DMSG server PK used for a ping connection.
+func (v *Visor) GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error) {
+	v.dmsgPingMx.Lock()
+	defer v.dmsgPingMx.Unlock()
+
+	pingEntry, ok := v.dmsgPingConns[pk]
+	if !ok {
+		return cipher.PubKey{}, fmt.Errorf("no dmsg ping connection for %s", pk)
+	}
+
+	return pingEntry.serverPK, nil
+}
+
+// GetRemoteDmsgServers implements API. Gets the DMSG servers a remote visor is connected to.
+func (v *Visor) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Create a dmsg discovery client to query the discovery
+	httpC := &http.Client{Timeout: 10 * time.Second}
+	discClient := dmsgdisc.NewHTTP(v.conf.Dmsg.Discovery, httpC, v.log)
+
+	entry, err := discClient.Entry(ctx, pk)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get discovery entry for %s: %w", pk, err)
+	}
+
+	if entry.Client == nil {
+		return nil, fmt.Errorf("no client entry for %s", pk)
+	}
+
+	return entry.Client.DelegatedServers, nil
 }
 
 // DmsgPing implements API. Measures round-trip time over dmsg connection.

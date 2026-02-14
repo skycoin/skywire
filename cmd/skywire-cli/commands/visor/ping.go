@@ -18,16 +18,18 @@ import (
 )
 
 var (
-	tries        int
-	pcktSize     int
-	pubVisCount  int
-	localRoute   bool
-	createTp     bool
-	tpType       string
-	useDmsg      bool
-	showRoute    bool
-	pingTimeout  time.Duration
-	setupTimeout time.Duration
+	tries          int
+	pcktSize       int
+	pubVisCount    int
+	localRoute     bool
+	createTp       bool
+	tpType         string
+	useDmsg        bool
+	showRoute      bool
+	pingTimeout    time.Duration
+	setupTimeout   time.Duration
+	allDmsgServers bool
+	dmsgServerPK   string
 )
 
 func init() {
@@ -41,6 +43,8 @@ func init() {
 	pingCmd.Flags().BoolVar(&showRoute, "show-route", false, "Show the route hops used for the ping")
 	pingCmd.Flags().DurationVarP(&pingTimeout, "timeout", "o", 0, "Timeout per ping attempt; fails if exceeded (e.g., 5s, 30s)")
 	pingCmd.Flags().DurationVar(&setupTimeout, "setup-timeout", 30*time.Second, "Timeout for route setup phase")
+	pingCmd.Flags().BoolVar(&allDmsgServers, "all-servers", false, "Ping through all DMSG servers the remote visor is connected to (only with --dmsg)")
+	pingCmd.Flags().StringVar(&dmsgServerPK, "via-server", "", "Ping through specific DMSG server (only with --dmsg)")
 	RootCmd.AddCommand(testCmd)
 	testCmd.Flags().IntVarP(&tries, "tries", "t", 1, "Number of tries per public visors")
 	testCmd.Flags().IntVarP(&pcktSize, "size", "s", 2, "Size of packet, in KB, default is 2KB")
@@ -56,7 +60,11 @@ var pingCmd = &cobra.Command{
   unless --create-tp is specified.
 
   Use --dmsg to ping over a dmsg connection instead of a skywire route.
-  This is useful for testing dmsg connectivity without transports.`,
+  This is useful for testing dmsg connectivity without transports.
+
+  Use --all-servers with --dmsg to ping through all DMSG servers the
+  remote visor is connected to. This helps identify which servers have
+  the best connectivity.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		pk := internal.ParsePK(cmd.Flags(), "pk", args[0])
@@ -94,12 +102,24 @@ var pingCmd = &cobra.Command{
 			fmt.Println("\nCanceled.")
 			cancel()
 		}()
-		callback := func(seq int32, latency time.Duration, isSetup bool, routeHops []rpcgrpc.RouteHopDetail, pingErr error) {
+
+		// Callback for ping results
+		callback := func(seq int32, latency time.Duration, isSetup bool, routeHops []rpcgrpc.RouteHopDetail, serverPK string, routeCalcTime time.Duration, pingErr error) {
 			if isSetup {
 				if useDmsg {
-					fmt.Printf("Dmsg dial: %0.2f ms\n", 1000*latency.Seconds())
+					fmt.Printf("Dmsg dial: %0.2f ms", 1000*latency.Seconds())
+					if serverPK != "" {
+						fmt.Printf(" (via server %s)", serverPK)
+					}
+					fmt.Println()
 				} else {
-					fmt.Printf("Route setup: %0.2f ms\n", 1000*latency.Seconds())
+					// Show calculation time separately if local route mode
+					if routeCalcTime > 0 {
+						fmt.Printf("Route calc: %0.2f ms, Setup: %0.2f ms (total: %0.2f ms)\n",
+							1000*routeCalcTime.Seconds(), 1000*(latency-routeCalcTime).Seconds(), 1000*latency.Seconds())
+					} else {
+						fmt.Printf("Route setup: %0.2f ms\n", 1000*latency.Seconds())
+					}
 					// Print route if requested and available
 					if showRoute && len(routeHops) > 0 {
 						// Format matching route finder: [From -> To @ TpID (type) ...]
@@ -131,8 +151,32 @@ var pingCmd = &cobra.Command{
 		}
 
 		if useDmsg {
+			// Handle --all-servers mode: ping through each DMSG server the remote visor is connected to
+			if allDmsgServers {
+				servers, err := grpcClient.GetRemoteDmsgServers(ctx, pk.String())
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get remote DMSG servers: %w", err))
+				}
+				if len(servers) == 0 {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("remote visor not connected to any DMSG servers"))
+				}
+				fmt.Printf("Remote visor is connected to %d DMSG server(s)\n", len(servers))
+				for i, server := range servers {
+					fmt.Printf("\n=== Server %d/%d: %s ===\n", i+1, len(servers), server)
+					err = grpcClient.StreamDmsgPing(ctx, pk.String(), int32(tries), int32(pcktSize), pingTimeout, server, callback)
+					if err != nil {
+						if ctx.Err() != nil {
+							return
+						}
+						fmt.Printf("Error: %v\n", err)
+					}
+				}
+				return
+			}
+
+			// Normal DMSG ping (optionally via specific server)
 			fmt.Printf("Dialing dmsg ping to %s...\n", pk)
-			err = grpcClient.StreamDmsgPing(ctx, pk.String(), int32(tries), int32(pcktSize), pingTimeout, callback)
+			err = grpcClient.StreamDmsgPing(ctx, pk.String(), int32(tries), int32(pcktSize), pingTimeout, dmsgServerPK, callback)
 		} else {
 			fmt.Printf("Dialing ping to %s...\n", pk)
 			err = grpcClient.StreamPing(ctx, pk.String(), int32(tries), int32(pcktSize), localRoute, pingTimeout, setupTimeout, callback)

@@ -147,6 +147,8 @@ var (
 	dmsgPi vinit.Module
 	// Embedded Transport Setup Node (separate dmsg client with TPS identity)
 	embTPS vinit.Module
+	// Embedded Route Setup Node (separate dmsg client with route setup identity)
+	embRouteSetup vinit.Module
 	// UI server module (serves tp-viz)
 	uiServer vinit.Module
 	// visor that groups all modules together
@@ -181,7 +183,8 @@ func registerModules(logger *logging.MasterLogger) {
 	dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &dmsgC)
 
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
-	rt = maker("router", initRouter, &tr, &dmsgC, &dmsgHTTP)
+	embRouteSetup = maker("embedded_route_setup", initEmbeddedRouteSetup, &dmsgC)
+	rt = maker("router", initRouter, &tr, &dmsgC, &dmsgHTTP, &embRouteSetup)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
@@ -198,7 +201,7 @@ func registerModules(logger *logging.MasterLogger) {
 	embTPS = maker("embedded_tps", initEmbeddedTPS, &dmsgC)
 	uiServer = maker("ui_server", initUIServer, &dmsgC, &tr, &embTPS)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &systemSurvey, &tc, &tpdco, &embTPS, &uiServer)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -779,6 +782,54 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
+func initEmbeddedRouteSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
+	routeSetupSK := v.conf.Routing.RouteSetupSK
+	if routeSetupSK == nil || *routeSetupSK == (cipher.SecKey{}) {
+		log.Debug("No embedded route setup-node configured (route_setup_sk empty), skipping")
+		return nil
+	}
+
+	routeSetupPK, err := routeSetupSK.PubKey()
+	if err != nil {
+		return fmt.Errorf("invalid route_setup_sk: %w", err)
+	}
+	log.WithField("route_setup_pk", routeSetupPK).Info("Starting embedded Route Setup Node")
+
+	// Create a separate dmsg client with the route setup-node identity.
+	// Reuses the visor's dmsg discovery URL but with route setup-node keys.
+	dmsgConf := &dmsg.Config{
+		MinSessions: 0, // Connect to all servers for better connectivity
+		Protocol:    v.conf.Dmsg.Protocol,
+	}
+	dmsgConf.ClientType = "route_setup"
+	httpC := &http.Client{}
+	routeSetupDisc := dmsgdisc.NewHTTP(v.conf.Dmsg.Discovery, httpC, v.MasterLogger().PackageLogger("embedded_route_setup:disc"))
+	routeSetupDmsgC := dmsg.NewClient(routeSetupPK, *routeSetupSK, routeSetupDisc, dmsgConf)
+	routeSetupDmsgC.SetLogger(v.MasterLogger().PackageLogger("embedded_route_setup:dmsg"))
+
+	go routeSetupDmsgC.Serve(ctx)
+
+	select {
+	case <-routeSetupDmsgC.Ready():
+		log.Info("Embedded route setup-node dmsg client connected")
+	case <-ctx.Done():
+		return fmt.Errorf("context canceled waiting for route setup-node dmsg client")
+	}
+
+	v.initLock.Lock()
+	v.embeddedRouteSetup = &EmbeddedRouteSetup{
+		dmsgC: routeSetupDmsgC,
+		pk:    routeSetupPK,
+		log:   log,
+	}
+	v.initLock.Unlock()
+
+	v.pushCloseStack("embedded_route_setup", func() error {
+		return routeSetupDmsgC.Close()
+	})
+	return nil
+}
+
 func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
 	// waiting for at least one transport to initialize
@@ -1327,6 +1378,16 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), httpC, v.MasterLogger())
 	logger := v.MasterLogger().PackageLogger("router")
+
+	// Use embedded route setup-node if available, otherwise use remote setup-nodes
+	var rgDialer router.RouteGroupDialer
+	if v.embeddedRouteSetup != nil {
+		log.WithField("route_setup_pk", v.embeddedRouteSetup.PK()).Info("Using embedded route setup-node for routing")
+		rgDialer = router.NewSetupNodeDialerWithEmbedded(v.embeddedRouteSetup)
+	} else {
+		rgDialer = router.NewSetupNodeDialer()
+	}
+
 	rConf := router.Config{
 		Logger:           logger,
 		MasterLogger:     v.MasterLogger(),
@@ -1334,7 +1395,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
 		RouteFinder:      rfClient,
-		RouteGroupDialer: router.NewSetupNodeDialer(),
+		RouteGroupDialer: rgDialer,
 		SetupNodes:       conf.RouteSetupNodes,
 		RulesGCInterval:  0, // TODO
 		MinHops:          v.conf.Routing.MinHops,
@@ -1533,11 +1594,32 @@ type visorPingAdapter struct {
 }
 
 func (a *visorPingAdapter) DialPing(conf rpcgrpc.PingConf) error {
+	// Convert rpcgrpc.RouteHopInfo to RouteHopInfo
+	var forwardHops, reverseHops []RouteHopInfo
+	for _, h := range conf.ForwardHops {
+		forwardHops = append(forwardHops, RouteHopInfo{
+			TpID:   h.TpID,
+			From:   h.From,
+			To:     h.To,
+			TpType: h.TpType,
+		})
+	}
+	for _, h := range conf.ReverseHops {
+		reverseHops = append(reverseHops, RouteHopInfo{
+			TpID:   h.TpID,
+			From:   h.From,
+			To:     h.To,
+			TpType: h.TpType,
+		})
+	}
 	return a.v.DialPing(PingConfig{
-		PK:         conf.PK,
-		Tries:      conf.Tries,
-		PcktSize:   conf.PcktSize,
-		LocalRoute: conf.LocalRoute,
+		PK:          conf.PK,
+		Tries:       conf.Tries,
+		PcktSize:    conf.PcktSize,
+		LocalRoute:  conf.LocalRoute,
+		TransportID: conf.TransportID,
+		ForwardHops: forwardHops,
+		ReverseHops: reverseHops,
 	})
 }
 
@@ -1576,6 +1658,10 @@ func (a *visorPingAdapter) GetPingRouteDetails(pk cipher.PubKey) []rpcgrpc.Route
 	return result
 }
 
+func (a *visorPingAdapter) GetLastRouteCalcTime() time.Duration {
+	return a.v.GetLastRouteCalcTime()
+}
+
 func (a *visorPingAdapter) DialDmsgPing(pk cipher.PubKey) error {
 	return a.v.DialDmsgPing(pk)
 }
@@ -1607,6 +1693,18 @@ func (a *visorPingAdapter) DmsgPingOnceWithEcho(conf rpcgrpc.PingConf, echoFull 
 
 func (a *visorPingAdapter) StopDmsgPing(pk cipher.PubKey) error {
 	return a.v.StopDmsgPing(pk)
+}
+
+func (a *visorPingAdapter) DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error {
+	return a.v.DialDmsgPingViaServer(pk, serverPK)
+}
+
+func (a *visorPingAdapter) GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error) {
+	return a.v.GetDmsgPingServerPK(pk)
+}
+
+func (a *visorPingAdapter) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error) {
+	return a.v.GetRemoteDmsgServers(pk)
 }
 
 func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {

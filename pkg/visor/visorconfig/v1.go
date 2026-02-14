@@ -98,6 +98,7 @@ type LogStore struct {
 // Routing configures routing.
 type Routing struct {
 	RouteSetupNodes    []cipher.PubKey `json:"route_setup_nodes,omitempty"`
+	RouteSetupSK       *cipher.SecKey  `json:"route_setup_sk,omitempty"` // Embedded route setup-node secret key
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 	MinHops            uint16          `json:"min_hops"`

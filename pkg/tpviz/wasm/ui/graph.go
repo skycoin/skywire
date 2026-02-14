@@ -21,7 +21,7 @@ const (
 type ServiceType int
 
 const (
-	ServiceNone  ServiceType = iota
+	ServiceNone ServiceType = iota
 	ServiceVPN
 	ServiceProxy
 )

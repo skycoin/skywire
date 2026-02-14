@@ -102,7 +102,10 @@ type DialOptions struct {
 	MinConsumeRts     int
 	MaxConsumeRts     int
 	Retries           int
-	UseExistingTpOnly bool // If true, only use routes through existing transports, don't create new ones
+	UseExistingTpOnly bool          // If true, only use routes through existing transports, don't create new ones
+	TransportID       uuid.UUID     // If set, use this specific transport (skips route calculation for direct transports)
+	ForwardHops       []routing.Hop // If set, use these hops for forward path (skips route calculation)
+	ReverseHops       []routing.Hop // If set, use these hops for reverse path (skips route calculation)
 }
 
 // DefaultDialOptions returns default dial options.
@@ -147,6 +150,7 @@ type Router interface {
 	SetMinHop(uint16)
 	SetExistingTPOnly(bool)
 	SetForceLocalRoutes(bool)
+	GetLastRouteCalcTime() time.Duration
 
 	// Routing table related methods
 	RoutesCount() int
@@ -181,6 +185,8 @@ type router struct {
 	existingTpOnlyMu   sync.Mutex       // protects existingTpOnly
 	forceLocalRoutes   bool             // when true, skip route finder and use local route calculation
 	forceLocalRoutesMu sync.Mutex       // protects forceLocalRoutes
+	lastRouteCalcTime  time.Duration    // last route calculation time (for local routes)
+	lastRouteCalcMu    sync.Mutex       // protects lastRouteCalcTime
 }
 
 // New constructs a new Router.
@@ -345,8 +351,14 @@ func (r *router) DialRoutes(
 			Initiator: true,
 		}
 
-		nrg, err := r.saveRouteGroupRules(rules, nsConf)
+		nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf)
 		if err != nil {
+			// Clean up saved rules on failure
+			r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+			// Check if context was cancelled
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			// Check if this is a "no suitable transport" error (stale TPD data)
 			if strings.Contains(err.Error(), "no suitable transport") || strings.Contains(err.Error(), "transport") {
 				if attempt < maxRetries {
@@ -376,10 +388,68 @@ func (r *router) DialRoutes(
 	return nil, fmt.Errorf("failed to establish route after %d attempts", maxRetries)
 }
 
+// setupPingRoute sets up a ping route with the given forward and reverse paths.
+// This is the common setup logic used by PingRoute for both calculated and direct transport routes.
+func (r *router) setupPingRoute(
+	ctx context.Context,
+	forwardDesc routing.RouteDescriptor,
+	forwardPath, reversePath []routing.Hop,
+	rPK cipher.PubKey,
+	opts *DialOptions,
+) (net.Conn, error) {
+	req := routing.BidirectionalRoute{
+		Desc:      forwardDesc,
+		KeepAlive: DefaultRouteKeepAlive,
+		Forward:   forwardPath,
+		Reverse:   reversePath,
+	}
+
+	rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
+	if err != nil {
+		r.logger.WithError(err).Error("Error dialing ping route group")
+		return nil, err
+	}
+
+	// Reorder setup nodes to prioritize the one that worked
+	if !connectedNode.Null() {
+		r.conf.SetupNodes = ReorderSetupNodes(r.conf.SetupNodes, connectedNode)
+	}
+
+	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+		r.logger.WithError(err).Error("Error saving ping routing rules")
+		return nil, err
+	}
+
+	nsConf := noise.Config{
+		LocalPK:   r.conf.PubKey,
+		LocalSK:   r.conf.SecKey,
+		RemotePK:  rPK,
+		Initiator: true,
+	}
+
+	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf)
+	if err != nil {
+		// Clean up saved rules if route group setup fails
+		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
+	}
+
+	// Store the complete forward route hops for later retrieval
+	nrg.SetForwardHops(forwardPath)
+
+	nrg.rg.startOffServiceLoops()
+
+	lPort := forwardDesc.SrcPort()
+	r.logger.Debugf("Created new ping route to %s on port %d", rPK, lPort)
+
+	return nrg, nil
+}
+
 // PingRoute dials to a given visor of 'rPK' to establish a ping route.
 // Uses the same route-finding and setup machinery as DialRoutes but
 // without route setup hooks (transport creation). This tests the routing
 // infrastructure directly.
+// If opts.TransportID is set, uses that specific transport directly (skips route calculation).
 func (r *router) PingRoute(
 	ctx context.Context,
 	rPK cipher.PubKey,
@@ -393,80 +463,60 @@ func (r *router) PingRoute(
 		return nil, fmt.Errorf("failed to dial ping route: %w", err)
 	}
 
+	if opts == nil {
+		opts = DefaultDialOptions()
+	}
+
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
+	// If full route is specified, use it directly without route calculation
+	if len(opts.ForwardHops) > 0 && len(opts.ReverseHops) > 0 {
+		r.logger.Debugf("Using specified %d-hop route to %s", len(opts.ForwardHops), rPK)
+		r.lastRouteCalcMu.Lock()
+		r.lastRouteCalcTime = 0 // No calculation needed
+		r.lastRouteCalcMu.Unlock()
+		return r.setupPingRoute(ctx, forwardDesc, opts.ForwardHops, opts.ReverseHops, rPK, opts)
+	}
+
+	// If TransportID is specified, use it directly without route calculation (single hop)
+	if opts.TransportID != (uuid.UUID{}) {
+		r.logger.Debugf("Using specified transport %s for direct route to %s", opts.TransportID, rPK)
+		forwardPath := []routing.Hop{{TpID: opts.TransportID, From: lPK, To: rPK}}
+		reversePath := []routing.Hop{{TpID: opts.TransportID, From: rPK, To: lPK}}
+		r.lastRouteCalcMu.Lock()
+		r.lastRouteCalcTime = 0 // No calculation needed
+		r.lastRouteCalcMu.Unlock()
+		return r.setupPingRoute(ctx, forwardDesc, forwardPath, reversePath, rPK, opts)
+	}
+
 	const maxRetries = 3
+	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, lPK, rPK, opts)
 		if err != nil {
+			lastErr = fmt.Errorf("route finder: %w", err)
 			if attempt < maxRetries {
 				r.logger.WithError(err).Warnf("Ping route finder failed (attempt %d/%d), retrying...", attempt, maxRetries)
 				continue
 			}
-			return nil, fmt.Errorf("route finder: %w", err)
+			return nil, lastErr
 		}
 
-		req := routing.BidirectionalRoute{
-			Desc:      forwardDesc,
-			KeepAlive: DefaultRouteKeepAlive,
-			Forward:   forwardPath,
-			Reverse:   reversePath,
-		}
-
-		rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
+		conn, err := r.setupPingRoute(ctx, forwardDesc, forwardPath, reversePath, rPK, opts)
 		if err != nil {
+			lastErr = err
 			if attempt < maxRetries {
 				r.logger.WithError(err).Warnf("Ping route setup failed (attempt %d/%d), retrying...", attempt, maxRetries)
 				continue
 			}
-			r.logger.WithError(err).Error("Error dialing ping route group")
-			return nil, err
+			return nil, lastErr
 		}
 
-		// Reorder setup nodes to prioritize the one that worked
-		if !connectedNode.Null() {
-			r.conf.SetupNodes = ReorderSetupNodes(r.conf.SetupNodes, connectedNode)
-		}
-
-		if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
-			if attempt < maxRetries {
-				r.logger.WithError(err).Warnf("Saving ping routing rules failed (attempt %d/%d), retrying...", attempt, maxRetries)
-				continue
-			}
-			r.logger.WithError(err).Error("Error saving ping routing rules")
-			return nil, err
-		}
-
-		nsConf := noise.Config{
-			LocalPK:   r.conf.PubKey,
-			LocalSK:   r.conf.SecKey,
-			RemotePK:  rPK,
-			Initiator: true,
-		}
-
-		nrg, err := r.saveRouteGroupRules(rules, nsConf)
-		if err != nil {
-			if strings.Contains(err.Error(), "no suitable transport") || strings.Contains(err.Error(), "transport") {
-				if attempt < maxRetries {
-					r.logger.WithError(err).Warnf("Ping route handshake failed (attempt %d/%d), retrying...", attempt, maxRetries)
-					continue
-				}
-			}
-			return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
-		}
-
-		// Store the complete forward route hops for later retrieval
-		nrg.SetForwardHops(forwardPath)
-
-		nrg.rg.startOffServiceLoops()
-
-		r.logger.Debugf("Created new ping route to %s on port %d", rPK, lPort)
-
-		return nrg, nil
+		return conn, nil
 	}
 
-	return nil, fmt.Errorf("failed to establish ping route after %d attempts", maxRetries)
+	return nil, fmt.Errorf("failed to establish ping route after %d attempts: %w", maxRetries, lastErr)
 }
 
 // AcceptRoutes should block until we receive an AddRules packet from SetupNode
@@ -508,8 +558,10 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 		Initiator: false,
 	}
 
-	nrg, err := r.saveRouteGroupRules(rules, nsConf)
+	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf)
 	if err != nil {
+		// Clean up saved rules if route group setup fails
+		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 	}
 
@@ -581,7 +633,11 @@ func (r *router) serveSetup() {
 // TODO: fix gocyclo error.
 //
 //gocyclo:ignore
-func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*NoiseRouteGroup, error) {
+func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRules, nsConf noise.Config) (*NoiseRouteGroup, error) {
+	// Check context before starting
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	r.logger.Debugf("Saving route group rules with desc: %s", &rules.Desc)
 
 	// When route group is wrapped with noise, it's put into `nrgs`. but before that,
@@ -601,8 +657,16 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	// we need to close currently existing wrapped rg if there's one
 	nrg, ok := r.rgsNs[rules.Desc]
 
+	// Look up the transport for the first hop - fail early if not available
+	nextTpID := rules.Forward.NextTransportID()
+	tp := r.tm.Transport(nextTpID)
+	if tp == nil {
+		r.mx.Unlock()
+		return nil, fmt.Errorf("transport %s not found locally", nextTpID)
+	}
+
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc, r.mLogger)
-	rg.appendRules(rules.Forward, rules.Reverse, r.tm.Transport(rules.Forward.NextTransportID()))
+	rg.appendRules(rules.Forward, rules.Reverse, tp)
 	// we put raw rg so it can be accessible to the router when handshake packets come in
 	r.rgsRaw[rules.Desc] = rg
 	r.mx.Unlock()
@@ -623,12 +687,25 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), handshakeAwaitTimeout)
-	defer cancel()
+	// Use parent context for overall timeout, with handshake-specific timeout as fallback
+	hsCtx, hsCancel := context.WithTimeout(ctx, handshakeAwaitTimeout)
+	defer hsCancel()
 
 	select {
 	case <-rg.handshakeProcessed:
-	case <-ctx.Done():
+	case <-hsCtx.Done():
+		// Check if parent context was cancelled (e.g., setup timeout)
+		if ctx.Err() != nil {
+			r.logger.Debugf("Route group setup cancelled for %s: %v", &rules.Desc, ctx.Err())
+			// Clean up
+			if err := rg.Close(); err != nil {
+				r.logger.WithError(err).Warnf("Failed to close route group on context cancellation")
+			}
+			r.mx.Lock()
+			delete(r.rgsRaw, rules.Desc)
+			r.mx.Unlock()
+			return nil, ctx.Err()
+		}
 		// remote should send handshake packet during initialization,
 		// if no packet received during timeout interval, we're dealing
 		// with the old visor
@@ -1159,9 +1236,14 @@ func (r *router) fetchBestRoutes(ctx context.Context, src, dst cipher.PubKey, op
 
 	if forceLocal {
 		r.logger.Info("Calculating route locally (--local-route enabled)")
+		calcStart := time.Now()
 		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst)
+		calcTime := time.Since(calcStart)
+		r.lastRouteCalcMu.Lock()
+		r.lastRouteCalcTime = calcTime
+		r.lastRouteCalcMu.Unlock()
 		if localErr == nil {
-			r.logger.Infof("Local route calculated: Forward=%v, Reverse=%v", localFwd, localRev)
+			r.logger.Infof("Local route calculated in %v: Forward=%v, Reverse=%v", calcTime, localFwd, localRev)
 		}
 		return localFwd, localRev, localErr
 	}
@@ -1412,6 +1494,13 @@ func (r *router) SetForceLocalRoutes(enabled bool) {
 	defer r.forceLocalRoutesMu.Unlock()
 	r.forceLocalRoutes = enabled
 	r.logger.Infof("SetForceLocalRoutes: %v", enabled)
+}
+
+// GetLastRouteCalcTime returns the time it took to calculate the last local route.
+func (r *router) GetLastRouteCalcTime() time.Duration {
+	r.lastRouteCalcMu.Lock()
+	defer r.lastRouteCalcMu.Unlock()
+	return r.lastRouteCalcTime
 }
 
 // Saves `rules` to the routing table.

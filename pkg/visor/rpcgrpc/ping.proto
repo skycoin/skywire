@@ -17,6 +17,9 @@ service PingService {
 
   // StreamDmsgBandwidthTest performs a bandwidth test over dmsg and streams progress
   rpc StreamDmsgBandwidthTest(BandwidthRequest) returns (stream BandwidthProgress);
+
+  // GetRemoteDmsgServers returns the DMSG servers a remote visor is connected to
+  rpc GetRemoteDmsgServers(DmsgServersRequest) returns (DmsgServersResponse);
 }
 
 message PingRequest {
@@ -26,6 +29,10 @@ message PingRequest {
   bool local_route = 4;     // Use local route calculation
   int64 ping_timeout_ns = 5; // Timeout for ping phase only (after route setup), 0 = no timeout
   int64 setup_timeout_ns = 6; // Timeout for route setup phase, 0 = no timeout (default 30s recommended)
+  string dmsg_server_pk = 7;  // Optional: specific DMSG server to use for DMSG pings
+  string transport_id = 8;    // Optional: use specific transport (skips route calculation)
+  repeated RouteHop forward_hops = 9;  // Optional: explicit forward route (skips route calculation)
+  repeated RouteHop reverse_hops = 10; // Optional: explicit reverse route (skips route calculation)
 }
 
 message PingResult {
@@ -35,6 +42,16 @@ message PingResult {
   bool is_setup = 4;        // True if this is the route setup time, not a ping
   repeated string route_hops = 5; // Route hops (public keys), only set for setup message (deprecated)
   repeated RouteHop route_hop_details = 6; // Detailed route hops with transport info
+  string dmsg_server_pk = 7;  // For DMSG pings: the server PK used for this connection
+  int64 route_calc_time_ns = 8; // Route calculation time in nanoseconds (local route mode only)
+}
+
+message DmsgServersRequest {
+  string public_key = 1;    // Remote visor public key to look up
+}
+
+message DmsgServersResponse {
+  repeated string server_pks = 1; // List of DMSG server public keys
 }
 
 message RouteHop {

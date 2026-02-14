@@ -7,11 +7,12 @@
 package rpcgrpc
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -29,6 +30,10 @@ type PingRequest struct {
 	LocalRoute     bool                   `protobuf:"varint,4,opt,name=local_route,json=localRoute,proto3" json:"local_route,omitempty"`               // Use local route calculation
 	PingTimeoutNs  int64                  `protobuf:"varint,5,opt,name=ping_timeout_ns,json=pingTimeoutNs,proto3" json:"ping_timeout_ns,omitempty"`    // Timeout for ping phase only (after route setup), 0 = no timeout
 	SetupTimeoutNs int64                  `protobuf:"varint,6,opt,name=setup_timeout_ns,json=setupTimeoutNs,proto3" json:"setup_timeout_ns,omitempty"` // Timeout for route setup phase, 0 = no timeout (default 30s recommended)
+	DmsgServerPk   string                 `protobuf:"bytes,7,opt,name=dmsg_server_pk,json=dmsgServerPk,proto3" json:"dmsg_server_pk,omitempty"`        // Optional: specific DMSG server to use for DMSG pings
+	TransportId    string                 `protobuf:"bytes,8,opt,name=transport_id,json=transportId,proto3" json:"transport_id,omitempty"`             // Optional: use specific transport (skips route calculation)
+	ForwardHops    []*RouteHop            `protobuf:"bytes,9,rep,name=forward_hops,json=forwardHops,proto3" json:"forward_hops,omitempty"`             // Optional: explicit forward route (skips route calculation)
+	ReverseHops    []*RouteHop            `protobuf:"bytes,10,rep,name=reverse_hops,json=reverseHops,proto3" json:"reverse_hops,omitempty"`            // Optional: explicit reverse route (skips route calculation)
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -105,14 +110,44 @@ func (x *PingRequest) GetSetupTimeoutNs() int64 {
 	return 0
 }
 
+func (x *PingRequest) GetDmsgServerPk() string {
+	if x != nil {
+		return x.DmsgServerPk
+	}
+	return ""
+}
+
+func (x *PingRequest) GetTransportId() string {
+	if x != nil {
+		return x.TransportId
+	}
+	return ""
+}
+
+func (x *PingRequest) GetForwardHops() []*RouteHop {
+	if x != nil {
+		return x.ForwardHops
+	}
+	return nil
+}
+
+func (x *PingRequest) GetReverseHops() []*RouteHop {
+	if x != nil {
+		return x.ReverseHops
+	}
+	return nil
+}
+
 type PingResult struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	Sequence        int32                  `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`                                       // Ping sequence number (1-indexed)
-	LatencyNs       int64                  `protobuf:"varint,2,opt,name=latency_ns,json=latencyNs,proto3" json:"latency_ns,omitempty"`                    // Round-trip time in nanoseconds
-	Error           string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`                                              // Error message if ping failed
-	IsSetup         bool                   `protobuf:"varint,4,opt,name=is_setup,json=isSetup,proto3" json:"is_setup,omitempty"`                          // True if this is the route setup time, not a ping
-	RouteHops       []string               `protobuf:"bytes,5,rep,name=route_hops,json=routeHops,proto3" json:"route_hops,omitempty"`                     // Route hops (public keys), only set for setup message (deprecated)
-	RouteHopDetails []*RouteHop            `protobuf:"bytes,6,rep,name=route_hop_details,json=routeHopDetails,proto3" json:"route_hop_details,omitempty"` // Detailed route hops with transport info
+	Sequence        int32                  `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`                                          // Ping sequence number (1-indexed)
+	LatencyNs       int64                  `protobuf:"varint,2,opt,name=latency_ns,json=latencyNs,proto3" json:"latency_ns,omitempty"`                       // Round-trip time in nanoseconds
+	Error           string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`                                                 // Error message if ping failed
+	IsSetup         bool                   `protobuf:"varint,4,opt,name=is_setup,json=isSetup,proto3" json:"is_setup,omitempty"`                             // True if this is the route setup time, not a ping
+	RouteHops       []string               `protobuf:"bytes,5,rep,name=route_hops,json=routeHops,proto3" json:"route_hops,omitempty"`                        // Route hops (public keys), only set for setup message (deprecated)
+	RouteHopDetails []*RouteHop            `protobuf:"bytes,6,rep,name=route_hop_details,json=routeHopDetails,proto3" json:"route_hop_details,omitempty"`    // Detailed route hops with transport info
+	DmsgServerPk    string                 `protobuf:"bytes,7,opt,name=dmsg_server_pk,json=dmsgServerPk,proto3" json:"dmsg_server_pk,omitempty"`             // For DMSG pings: the server PK used for this connection
+	RouteCalcTimeNs int64                  `protobuf:"varint,8,opt,name=route_calc_time_ns,json=routeCalcTimeNs,proto3" json:"route_calc_time_ns,omitempty"` // Route calculation time in nanoseconds (local route mode only)
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -189,6 +224,108 @@ func (x *PingResult) GetRouteHopDetails() []*RouteHop {
 	return nil
 }
 
+func (x *PingResult) GetDmsgServerPk() string {
+	if x != nil {
+		return x.DmsgServerPk
+	}
+	return ""
+}
+
+func (x *PingResult) GetRouteCalcTimeNs() int64 {
+	if x != nil {
+		return x.RouteCalcTimeNs
+	}
+	return 0
+}
+
+type DmsgServersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PublicKey     string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"` // Remote visor public key to look up
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DmsgServersRequest) Reset() {
+	*x = DmsgServersRequest{}
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DmsgServersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DmsgServersRequest) ProtoMessage() {}
+
+func (x *DmsgServersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DmsgServersRequest.ProtoReflect.Descriptor instead.
+func (*DmsgServersRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *DmsgServersRequest) GetPublicKey() string {
+	if x != nil {
+		return x.PublicKey
+	}
+	return ""
+}
+
+type DmsgServersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ServerPks     []string               `protobuf:"bytes,1,rep,name=server_pks,json=serverPks,proto3" json:"server_pks,omitempty"` // List of DMSG server public keys
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DmsgServersResponse) Reset() {
+	*x = DmsgServersResponse{}
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DmsgServersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DmsgServersResponse) ProtoMessage() {}
+
+func (x *DmsgServersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DmsgServersResponse.ProtoReflect.Descriptor instead.
+func (*DmsgServersResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *DmsgServersResponse) GetServerPks() []string {
+	if x != nil {
+		return x.ServerPks
+	}
+	return nil
+}
+
 type RouteHop struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TpId          string                 `protobuf:"bytes,1,opt,name=tp_id,json=tpId,proto3" json:"tp_id,omitempty"`       // Transport ID (UUID)
@@ -201,7 +338,7 @@ type RouteHop struct {
 
 func (x *RouteHop) Reset() {
 	*x = RouteHop{}
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[2]
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -213,7 +350,7 @@ func (x *RouteHop) String() string {
 func (*RouteHop) ProtoMessage() {}
 
 func (x *RouteHop) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[2]
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -226,7 +363,7 @@ func (x *RouteHop) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RouteHop.ProtoReflect.Descriptor instead.
 func (*RouteHop) Descriptor() ([]byte, []int) {
-	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{2}
+	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *RouteHop) GetTpId() string {
@@ -269,7 +406,7 @@ type BandwidthRequest struct {
 
 func (x *BandwidthRequest) Reset() {
 	*x = BandwidthRequest{}
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[3]
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -281,7 +418,7 @@ func (x *BandwidthRequest) String() string {
 func (*BandwidthRequest) ProtoMessage() {}
 
 func (x *BandwidthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[3]
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -294,7 +431,7 @@ func (x *BandwidthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BandwidthRequest.ProtoReflect.Descriptor instead.
 func (*BandwidthRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{3}
+	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *BandwidthRequest) GetPublicKey() string {
@@ -340,7 +477,7 @@ type BandwidthProgress struct {
 
 func (x *BandwidthProgress) Reset() {
 	*x = BandwidthProgress{}
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[4]
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -352,7 +489,7 @@ func (x *BandwidthProgress) String() string {
 func (*BandwidthProgress) ProtoMessage() {}
 
 func (x *BandwidthProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[4]
+	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -365,7 +502,7 @@ func (x *BandwidthProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BandwidthProgress.ProtoReflect.Descriptor instead.
 func (*BandwidthProgress) Descriptor() ([]byte, []int) {
-	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{4}
+	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *BandwidthProgress) GetBytesSent() uint64 {
@@ -421,7 +558,7 @@ var File_pkg_visor_rpcgrpc_ping_proto protoreflect.FileDescriptor
 
 const file_pkg_visor_rpcgrpc_ping_proto_rawDesc = "" +
 	"\n" +
-	"\x1cpkg/visor/rpcgrpc/ping.proto\x12\arpcgrpc\"\xdb\x01\n" +
+	"\x1cpkg/visor/rpcgrpc/ping.proto\x12\arpcgrpc\"\x90\x03\n" +
 	"\vPingRequest\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\tR\tpublicKey\x12\x14\n" +
@@ -430,7 +567,12 @@ const file_pkg_visor_rpcgrpc_ping_proto_rawDesc = "" +
 	"\vlocal_route\x18\x04 \x01(\bR\n" +
 	"localRoute\x12&\n" +
 	"\x0fping_timeout_ns\x18\x05 \x01(\x03R\rpingTimeoutNs\x12(\n" +
-	"\x10setup_timeout_ns\x18\x06 \x01(\x03R\x0esetupTimeoutNs\"\xd6\x01\n" +
+	"\x10setup_timeout_ns\x18\x06 \x01(\x03R\x0esetupTimeoutNs\x12$\n" +
+	"\x0edmsg_server_pk\x18\a \x01(\tR\fdmsgServerPk\x12!\n" +
+	"\ftransport_id\x18\b \x01(\tR\vtransportId\x124\n" +
+	"\fforward_hops\x18\t \x03(\v2\x11.rpcgrpc.RouteHopR\vforwardHops\x124\n" +
+	"\freverse_hops\x18\n" +
+	" \x03(\v2\x11.rpcgrpc.RouteHopR\vreverseHops\"\xa9\x02\n" +
 	"\n" +
 	"PingResult\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x05R\bsequence\x12\x1d\n" +
@@ -440,7 +582,15 @@ const file_pkg_visor_rpcgrpc_ping_proto_rawDesc = "" +
 	"\bis_setup\x18\x04 \x01(\bR\aisSetup\x12\x1d\n" +
 	"\n" +
 	"route_hops\x18\x05 \x03(\tR\trouteHops\x12=\n" +
-	"\x11route_hop_details\x18\x06 \x03(\v2\x11.rpcgrpc.RouteHopR\x0frouteHopDetails\"\\\n" +
+	"\x11route_hop_details\x18\x06 \x03(\v2\x11.rpcgrpc.RouteHopR\x0frouteHopDetails\x12$\n" +
+	"\x0edmsg_server_pk\x18\a \x01(\tR\fdmsgServerPk\x12+\n" +
+	"\x12route_calc_time_ns\x18\b \x01(\x03R\x0frouteCalcTimeNs\"3\n" +
+	"\x12DmsgServersRequest\x12\x1d\n" +
+	"\n" +
+	"public_key\x18\x01 \x01(\tR\tpublicKey\"4\n" +
+	"\x13DmsgServersResponse\x12\x1d\n" +
+	"\n" +
+	"server_pks\x18\x01 \x03(\tR\tserverPks\"\\\n" +
 	"\bRouteHop\x12\x13\n" +
 	"\x05tp_id\x18\x01 \x01(\tR\x04tpId\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
@@ -463,13 +613,14 @@ const file_pkg_visor_rpcgrpc_ping_proto_rawDesc = "" +
 	"\fupload_speed\x18\x04 \x01(\x01R\vuploadSpeed\x12%\n" +
 	"\x0edownload_speed\x18\x05 \x01(\x01R\rdownloadSpeed\x12\x19\n" +
 	"\bis_final\x18\x06 \x01(\bR\aisFinal\x12\x14\n" +
-	"\x05error\x18\a \x01(\tR\x05error2\xab\x02\n" +
+	"\x05error\x18\a \x01(\tR\x05error2\xfe\x02\n" +
 	"\vPingService\x129\n" +
 	"\n" +
 	"StreamPing\x12\x14.rpcgrpc.PingRequest\x1a\x13.rpcgrpc.PingResult0\x01\x12=\n" +
 	"\x0eStreamDmsgPing\x12\x14.rpcgrpc.PingRequest\x1a\x13.rpcgrpc.PingResult0\x01\x12N\n" +
 	"\x13StreamBandwidthTest\x12\x19.rpcgrpc.BandwidthRequest\x1a\x1a.rpcgrpc.BandwidthProgress0\x01\x12R\n" +
-	"\x17StreamDmsgBandwidthTest\x12\x19.rpcgrpc.BandwidthRequest\x1a\x1a.rpcgrpc.BandwidthProgress0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
+	"\x17StreamDmsgBandwidthTest\x12\x19.rpcgrpc.BandwidthRequest\x1a\x1a.rpcgrpc.BandwidthProgress0\x01\x12Q\n" +
+	"\x14GetRemoteDmsgServers\x12\x1b.rpcgrpc.DmsgServersRequest\x1a\x1c.rpcgrpc.DmsgServersResponseB.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
 
 var (
 	file_pkg_visor_rpcgrpc_ping_proto_rawDescOnce sync.Once
@@ -483,29 +634,35 @@ func file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP() []byte {
 	return file_pkg_visor_rpcgrpc_ping_proto_rawDescData
 }
 
-var file_pkg_visor_rpcgrpc_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_pkg_visor_rpcgrpc_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_pkg_visor_rpcgrpc_ping_proto_goTypes = []any{
-	(*PingRequest)(nil),       // 0: rpcgrpc.PingRequest
-	(*PingResult)(nil),        // 1: rpcgrpc.PingResult
-	(*RouteHop)(nil),          // 2: rpcgrpc.RouteHop
-	(*BandwidthRequest)(nil),  // 3: rpcgrpc.BandwidthRequest
-	(*BandwidthProgress)(nil), // 4: rpcgrpc.BandwidthProgress
+	(*PingRequest)(nil),         // 0: rpcgrpc.PingRequest
+	(*PingResult)(nil),          // 1: rpcgrpc.PingResult
+	(*DmsgServersRequest)(nil),  // 2: rpcgrpc.DmsgServersRequest
+	(*DmsgServersResponse)(nil), // 3: rpcgrpc.DmsgServersResponse
+	(*RouteHop)(nil),            // 4: rpcgrpc.RouteHop
+	(*BandwidthRequest)(nil),    // 5: rpcgrpc.BandwidthRequest
+	(*BandwidthProgress)(nil),   // 6: rpcgrpc.BandwidthProgress
 }
 var file_pkg_visor_rpcgrpc_ping_proto_depIdxs = []int32{
-	2, // 0: rpcgrpc.PingResult.route_hop_details:type_name -> rpcgrpc.RouteHop
-	0, // 1: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
-	0, // 2: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
-	3, // 3: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	3, // 4: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	1, // 5: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
-	1, // 6: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
-	4, // 7: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	4, // 8: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	5, // [5:9] is the sub-list for method output_type
-	1, // [1:5] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	4, // 0: rpcgrpc.PingRequest.forward_hops:type_name -> rpcgrpc.RouteHop
+	4, // 1: rpcgrpc.PingRequest.reverse_hops:type_name -> rpcgrpc.RouteHop
+	4, // 2: rpcgrpc.PingResult.route_hop_details:type_name -> rpcgrpc.RouteHop
+	0, // 3: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
+	0, // 4: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
+	5, // 5: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	5, // 6: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	2, // 7: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
+	1, // 8: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
+	1, // 9: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
+	6, // 10: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	6, // 11: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	3, // 12: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
+	8, // [8:13] is the sub-list for method output_type
+	3, // [3:8] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_pkg_visor_rpcgrpc_ping_proto_init() }
@@ -519,7 +676,7 @@ func file_pkg_visor_rpcgrpc_ping_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_visor_rpcgrpc_ping_proto_rawDesc), len(file_pkg_visor_rpcgrpc_ping_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

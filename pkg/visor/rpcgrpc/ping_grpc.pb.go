@@ -8,6 +8,7 @@ package rpcgrpc
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -23,6 +24,7 @@ const (
 	PingService_StreamDmsgPing_FullMethodName          = "/rpcgrpc.PingService/StreamDmsgPing"
 	PingService_StreamBandwidthTest_FullMethodName     = "/rpcgrpc.PingService/StreamBandwidthTest"
 	PingService_StreamDmsgBandwidthTest_FullMethodName = "/rpcgrpc.PingService/StreamDmsgBandwidthTest"
+	PingService_GetRemoteDmsgServers_FullMethodName    = "/rpcgrpc.PingService/GetRemoteDmsgServers"
 )
 
 // PingServiceClient is the client API for PingService service.
@@ -39,6 +41,8 @@ type PingServiceClient interface {
 	StreamBandwidthTest(ctx context.Context, in *BandwidthRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BandwidthProgress], error)
 	// StreamDmsgBandwidthTest performs a bandwidth test over dmsg and streams progress
 	StreamDmsgBandwidthTest(ctx context.Context, in *BandwidthRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BandwidthProgress], error)
+	// GetRemoteDmsgServers returns the DMSG servers a remote visor is connected to
+	GetRemoteDmsgServers(ctx context.Context, in *DmsgServersRequest, opts ...grpc.CallOption) (*DmsgServersResponse, error)
 }
 
 type pingServiceClient struct {
@@ -125,6 +129,16 @@ func (c *pingServiceClient) StreamDmsgBandwidthTest(ctx context.Context, in *Ban
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamDmsgBandwidthTestClient = grpc.ServerStreamingClient[BandwidthProgress]
 
+func (c *pingServiceClient) GetRemoteDmsgServers(ctx context.Context, in *DmsgServersRequest, opts ...grpc.CallOption) (*DmsgServersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DmsgServersResponse)
+	err := c.cc.Invoke(ctx, PingService_GetRemoteDmsgServers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PingServiceServer is the server API for PingService service.
 // All implementations must embed UnimplementedPingServiceServer
 // for forward compatibility.
@@ -139,6 +153,8 @@ type PingServiceServer interface {
 	StreamBandwidthTest(*BandwidthRequest, grpc.ServerStreamingServer[BandwidthProgress]) error
 	// StreamDmsgBandwidthTest performs a bandwidth test over dmsg and streams progress
 	StreamDmsgBandwidthTest(*BandwidthRequest, grpc.ServerStreamingServer[BandwidthProgress]) error
+	// GetRemoteDmsgServers returns the DMSG servers a remote visor is connected to
+	GetRemoteDmsgServers(context.Context, *DmsgServersRequest) (*DmsgServersResponse, error)
 	mustEmbedUnimplementedPingServiceServer()
 }
 
@@ -160,6 +176,9 @@ func (UnimplementedPingServiceServer) StreamBandwidthTest(*BandwidthRequest, grp
 }
 func (UnimplementedPingServiceServer) StreamDmsgBandwidthTest(*BandwidthRequest, grpc.ServerStreamingServer[BandwidthProgress]) error {
 	return status.Error(codes.Unimplemented, "method StreamDmsgBandwidthTest not implemented")
+}
+func (UnimplementedPingServiceServer) GetRemoteDmsgServers(context.Context, *DmsgServersRequest) (*DmsgServersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetRemoteDmsgServers not implemented")
 }
 func (UnimplementedPingServiceServer) mustEmbedUnimplementedPingServiceServer() {}
 func (UnimplementedPingServiceServer) testEmbeddedByValue()                     {}
@@ -226,13 +245,36 @@ func _PingService_StreamDmsgBandwidthTest_Handler(srv interface{}, stream grpc.S
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamDmsgBandwidthTestServer = grpc.ServerStreamingServer[BandwidthProgress]
 
+func _PingService_GetRemoteDmsgServers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DmsgServersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PingServiceServer).GetRemoteDmsgServers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PingService_GetRemoteDmsgServers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PingServiceServer).GetRemoteDmsgServers(ctx, req.(*DmsgServersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PingService_ServiceDesc is the grpc.ServiceDesc for PingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var PingService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "rpcgrpc.PingService",
 	HandlerType: (*PingServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetRemoteDmsgServers",
+			Handler:    _PingService_GetRemoteDmsgServers_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "StreamPing",
