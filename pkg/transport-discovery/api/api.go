@@ -113,6 +113,8 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	// Bandwidth endpoints
 	r.Get("/bandwidth/transport/{id}", api.getTransportBandwidth)
 	r.Get("/bandwidth/visor/{pk}", api.getVisorBandwidth)
+
+	r.Get("/visor-summaries", api.getVisorSummaries)
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})

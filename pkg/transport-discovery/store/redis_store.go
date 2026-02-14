@@ -309,11 +309,13 @@ func (s *redisStore) dataToEntry(data TransportData) (*transport.Entry, error) {
 	}
 
 	return &transport.Entry{
-		ID:      id,
-		Edges:   [2]cipher.PubKey{edgeA, edgeB},
-		Type:    types.Type(data.Type),
-		Label:   transport.Label(data.Label),
-		Latency: data.Latency,
+		ID:        id,
+		Edges:     [2]cipher.PubKey{edgeA, edgeB},
+		Type:      types.Type(data.Type),
+		Label:     transport.Label(data.Label),
+		Latency:   data.Latency,
+		SentBytes: data.SentBytes,
+		RecvBytes: data.RecvBytes,
 	}, nil
 }
 
@@ -493,6 +495,165 @@ func (s *redisStore) GetVisorBandwidth(ctx context.Context, pk cipher.PubKey,
 	}
 
 	return results, nil
+}
+
+// GetAllVisorSummaries scans all transports, groups by visor PK, and fetches
+// daily/weekly/monthly bandwidth via a single Redis pipeline.
+func (s *redisStore) GetAllVisorSummaries(ctx context.Context) ([]VisorSummary, error) {
+	// Phase 1: SCAN all transport keys, parse TransportData, group by visor PK
+	type tpInfo struct {
+		data TransportData
+		id   uuid.UUID
+		edges [2]cipher.PubKey
+	}
+
+	var allTPs []tpInfo
+	pattern := fmt.Sprintf("%s:tp:*", serviceName)
+	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
+
+	for iter.Next(ctx) {
+		key := iter.Val()
+		raw, err := s.client.Get(ctx, key).Result()
+		if err != nil {
+			continue
+		}
+
+		var data TransportData
+		if err := json.Unmarshal([]byte(raw), &data); err != nil {
+			continue
+		}
+
+		id, err := uuid.Parse(data.ID)
+		if err != nil {
+			continue
+		}
+
+		var edgeA, edgeB cipher.PubKey
+		if err := edgeA.UnmarshalText([]byte(data.EdgeA)); err != nil {
+			continue
+		}
+		if err := edgeB.UnmarshalText([]byte(data.EdgeB)); err != nil {
+			continue
+		}
+
+		allTPs = append(allTPs, tpInfo{
+			data:  data,
+			id:    id,
+			edges: [2]cipher.PubKey{edgeA, edgeB},
+		})
+	}
+	if err := iter.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(allTPs) == 0 {
+		return []VisorSummary{}, nil
+	}
+
+	// Phase 2: Pipeline HGetAll for daily/weekly/monthly bandwidth for all transports
+	now := time.Now().UTC()
+	dailyDate := now.Format("2006-01-02")
+	year, week := now.ISOWeek()
+	weekKey := fmt.Sprintf("%d-W%02d", year, week)
+	monthKey := fmt.Sprintf("%d-%02d", now.Year(), int(now.Month()))
+
+	pipe := s.client.Pipeline()
+
+	type bwCmds struct {
+		daily   *redis.StringStringMapCmd
+		weekly  *redis.StringStringMapCmd
+		monthly *redis.StringStringMapCmd
+	}
+	cmdMap := make([]bwCmds, len(allTPs))
+
+	for i, tp := range allTPs {
+		tpID := tp.data.ID
+		cmdMap[i] = bwCmds{
+			daily:   pipe.HGetAll(ctx, s.bandwidthDailyKey(tpID, now)),
+			weekly:  pipe.HGetAll(ctx, s.bandwidthWeeklyKey(tpID, year, week)),
+			monthly: pipe.HGetAll(ctx, s.bandwidthMonthlyKey(tpID, now.Year(), int(now.Month()))),
+		}
+	}
+
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
+		return nil, err
+	}
+
+	// Phase 3: Assemble VisorSummary slices
+	visorMap := make(map[cipher.PubKey][]TransportSummary)
+
+	for i, tp := range allTPs {
+		ts := TransportSummary{
+			ID:    tp.id,
+			Edges: tp.edges,
+			Type:  tp.data.Type,
+		}
+
+		// Current (cumulative) bandwidth
+		if tp.data.SentBytes > 0 || tp.data.RecvBytes > 0 {
+			ts.CurrentBandwidth = &BandwidthSummary{
+				TotalSent: tp.data.SentBytes,
+				TotalRecv: tp.data.RecvBytes,
+				PeriodKey: "cumulative",
+			}
+		}
+
+		// Daily bandwidth
+		if bw := parseBW(cmdMap[i].daily); bw != nil {
+			bw.PeriodKey = dailyDate
+			ts.DailyBandwidth = bw
+		}
+
+		// Weekly bandwidth
+		if bw := parseBW(cmdMap[i].weekly); bw != nil {
+			bw.PeriodKey = weekKey
+			ts.WeeklyBandwidth = bw
+		}
+
+		// Monthly bandwidth
+		if bw := parseBW(cmdMap[i].monthly); bw != nil {
+			bw.PeriodKey = monthKey
+			ts.MonthlyBandwidth = bw
+		}
+
+		for _, edge := range tp.edges {
+			visorMap[edge] = append(visorMap[edge], ts)
+		}
+	}
+
+	result := make([]VisorSummary, 0, len(visorMap))
+	for pk, transports := range visorMap {
+		result = append(result, VisorSummary{
+			PK:             pk,
+			Online:         len(transports) > 0,
+			TransportCount: len(transports),
+			Transports:     transports,
+		})
+	}
+
+	return result, nil
+}
+
+// parseBW extracts bandwidth totals from a Redis hash result.
+func parseBW(cmd *redis.StringStringMapCmd) *BandwidthSummary {
+	result, err := cmd.Result()
+	if err != nil || len(result) == 0 {
+		return nil
+	}
+	var sent, recv uint64
+	if val, ok := result["total_sent"]; ok {
+		fmt.Sscanf(val, "%d", &sent) //nolint:errcheck
+	}
+	if val, ok := result["total_recv"]; ok {
+		fmt.Sscanf(val, "%d", &recv) //nolint:errcheck
+	}
+	if sent == 0 && recv == 0 {
+		return nil
+	}
+	return &BandwidthSummary{
+		TotalSent: sent,
+		TotalRecv: recv,
+	}
 }
 
 func (s *redisStore) getBandwidthFromHash(ctx context.Context, key, transportID, period, periodKey string) (BandwidthAggregation, error) {
