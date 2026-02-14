@@ -61,6 +61,10 @@ func (m *mockStore) GetVisorBandwidth(_ context.Context, _ cipher.PubKey, _ stri
 	return []tpdstore.BandwidthAggregation{}, nil
 }
 
+func (m *mockStore) GetAllVisorSummaries(_ context.Context) ([]tpdstore.VisorSummary, error) {
+	return []tpdstore.VisorSummary{}, nil
+}
+
 // SaveEntry is added to the mock to allow saving Entry, without need for SignedEntry
 func (m *mockStore) SaveEntry(source, destiny cipher.PubKey, _ bool) {
 	entry := &transport.Entry{
