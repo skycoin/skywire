@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -103,8 +104,14 @@ func (s *redisStore) RegisterTransportWithLatency(ctx context.Context, sEntry *t
 		data.SentBytes = sEntry.Bandwidth.SentBytes
 		data.RecvBytes = sEntry.Bandwidth.RecvBytes
 
+		// Determine the reporting visor from auth context; fall back to edges[0]
+		reporterPK := httpauth.PKFromCtx(ctx)
+		if reporterPK.Null() {
+			reporterPK = entry.Edges[0]
+		}
+
 		// Update bandwidth aggregations
-		if err := s.updateBandwidth(ctx, entry.ID.String(), entry.Edges,
+		if err := s.updateBandwidth(ctx, entry.ID.String(), reporterPK,
 			sEntry.Bandwidth.SentBytes, sEntry.Bandwidth.RecvBytes); err != nil {
 			s.log.WithError(err).Warn("Failed to update bandwidth aggregation")
 		}
@@ -320,8 +327,8 @@ func (s *redisStore) dataToEntry(data TransportData) (*transport.Entry, error) {
 }
 
 // Bandwidth key generators
-func (s *redisStore) bandwidthPrevKey(tpID string) string {
-	return fmt.Sprintf("%s:bw:prev:%s", serviceName, tpID)
+func (s *redisStore) bandwidthPrevKey(tpID, reporterPKHex string) string {
+	return fmt.Sprintf("%s:bw:prev:%s:%s", serviceName, tpID, reporterPKHex)
 }
 
 func (s *redisStore) bandwidthDailyKey(tpID string, t time.Time) string {
@@ -353,105 +360,74 @@ func (s *redisStore) visorAllKey() string {
 	return fmt.Sprintf("%s:bw:visor:all", serviceName)
 }
 
-// updateBandwidth calculates deltas and updates bandwidth aggregations
-// for both the transport and each visor edge.
+// updateBandwidth calculates the bandwidth delta (sent + recv combined) and
+// updates per-transport and per-visor aggregation hashes in Redis.
+// The prev snapshot is keyed per-reporter to avoid cross-contamination when both
+// edges of a transport register independently.
 func (s *redisStore) updateBandwidth(ctx context.Context, transportID string,
-	edges [2]cipher.PubKey, currentSent, currentRecv uint64) error {
+	reporterPK cipher.PubKey, currentSent, currentRecv uint64) error {
 
 	now := time.Now().UTC()
+	reporterHex := reporterPK.Hex()
+	currentBW := currentSent + currentRecv
 
-	// 1. Get previous snapshot to calculate delta
-	prevKey := s.bandwidthPrevKey(transportID)
-	prevData, err := s.client.Get(ctx, prevKey).Result()
+	// 1. Get previous snapshot (per-reporter) to calculate delta
+	prevKey := s.bandwidthPrevKey(transportID, reporterHex)
+	prevBW, err := s.client.Get(ctx, prevKey).Uint64()
 
-	var deltaSent, deltaRecv uint64
+	var delta uint64
 	if err == nil {
-		var prev struct {
-			Sent uint64 `json:"sent"`
-			Recv uint64 `json:"recv"`
-		}
-		if jsonErr := json.Unmarshal([]byte(prevData), &prev); jsonErr == nil {
-			// Calculate delta (handle counter reset on visor restart)
-			if currentSent >= prev.Sent {
-				deltaSent = currentSent - prev.Sent
-			} else {
-				deltaSent = currentSent // Counter reset, use full value
-			}
-			if currentRecv >= prev.Recv {
-				deltaRecv = currentRecv - prev.Recv
-			} else {
-				deltaRecv = currentRecv
-			}
+		if currentBW >= prevBW {
+			delta = currentBW - prevBW
+		} else {
+			delta = currentBW // Counter reset, use full value
 		}
 	}
 	// If error (first time or key expired), no delta to add
 
 	// 2. Store current as previous for next calculation
-	prevSnapshot, _ := json.Marshal(map[string]uint64{"sent": currentSent, "recv": currentRecv}) //nolint:errcheck
-
 	pipe := s.client.Pipeline()
-	pipe.Set(ctx, prevKey, prevSnapshot, 5*time.Minute)
+	pipe.Set(ctx, prevKey, currentBW, 5*time.Minute)
 
-	// 3. Add deltas to aggregations (only if we have deltas)
-	if deltaSent > 0 || deltaRecv > 0 {
+	// 3. Add delta to aggregations (only if we have a delta)
+	if delta > 0 {
 		year, week := now.ISOWeek()
+		deltaI := int64(delta)
 
 		// Per-transport aggregations
-		// Daily (35 days retention)
 		dailyKey := s.bandwidthDailyKey(transportID, now)
-		pipe.HIncrBy(ctx, dailyKey, "total_sent", int64(deltaSent))
-		pipe.HIncrBy(ctx, dailyKey, "total_recv", int64(deltaRecv))
+		pipe.HIncrBy(ctx, dailyKey, "bandwidth", deltaI)
 		pipe.HSet(ctx, dailyKey, "updated_at", now.Unix())
 		pipe.Expire(ctx, dailyKey, 35*24*time.Hour)
 
-		// Weekly (60 days retention)
 		weeklyKey := s.bandwidthWeeklyKey(transportID, year, week)
-		pipe.HIncrBy(ctx, weeklyKey, "total_sent", int64(deltaSent))
-		pipe.HIncrBy(ctx, weeklyKey, "total_recv", int64(deltaRecv))
+		pipe.HIncrBy(ctx, weeklyKey, "bandwidth", deltaI)
 		pipe.HSet(ctx, weeklyKey, "updated_at", now.Unix())
 		pipe.Expire(ctx, weeklyKey, 60*24*time.Hour)
 
-		// Monthly (400 days retention)
 		monthlyKey := s.bandwidthMonthlyKey(transportID, now.Year(), int(now.Month()))
-		pipe.HIncrBy(ctx, monthlyKey, "total_sent", int64(deltaSent))
-		pipe.HIncrBy(ctx, monthlyKey, "total_recv", int64(deltaRecv))
+		pipe.HIncrBy(ctx, monthlyKey, "bandwidth", deltaI)
 		pipe.HSet(ctx, monthlyKey, "updated_at", now.Unix())
 		pipe.Expire(ctx, monthlyKey, 400*24*time.Hour)
 
-		// Per-visor aggregations — update for each edge
-		seen := make(map[string]bool)
-		for _, edge := range edges {
-			pkHex := edge.Hex()
-			if seen[pkHex] {
-				continue // skip duplicate edge (self-transport)
-			}
-			seen[pkHex] = true
+		// Per-visor aggregation — only for the reporter
+		pipe.SAdd(ctx, s.visorAllKey(), reporterHex)
+		pipe.Expire(ctx, s.visorAllKey(), 400*24*time.Hour)
 
-			// Track visor in the global set (400-day TTL)
-			pipe.SAdd(ctx, s.visorAllKey(), pkHex)
-			pipe.Expire(ctx, s.visorAllKey(), 400*24*time.Hour)
+		vDaily := s.visorBandwidthDailyKey(reporterHex, now)
+		pipe.HIncrBy(ctx, vDaily, "bandwidth", deltaI)
+		pipe.HSet(ctx, vDaily, "updated_at", now.Unix())
+		pipe.Expire(ctx, vDaily, 35*24*time.Hour)
 
-			// Visor daily
-			vDaily := s.visorBandwidthDailyKey(pkHex, now)
-			pipe.HIncrBy(ctx, vDaily, "total_sent", int64(deltaSent))
-			pipe.HIncrBy(ctx, vDaily, "total_recv", int64(deltaRecv))
-			pipe.HSet(ctx, vDaily, "updated_at", now.Unix())
-			pipe.Expire(ctx, vDaily, 35*24*time.Hour)
+		vWeekly := s.visorBandwidthWeeklyKey(reporterHex, year, week)
+		pipe.HIncrBy(ctx, vWeekly, "bandwidth", deltaI)
+		pipe.HSet(ctx, vWeekly, "updated_at", now.Unix())
+		pipe.Expire(ctx, vWeekly, 60*24*time.Hour)
 
-			// Visor weekly
-			vWeekly := s.visorBandwidthWeeklyKey(pkHex, year, week)
-			pipe.HIncrBy(ctx, vWeekly, "total_sent", int64(deltaSent))
-			pipe.HIncrBy(ctx, vWeekly, "total_recv", int64(deltaRecv))
-			pipe.HSet(ctx, vWeekly, "updated_at", now.Unix())
-			pipe.Expire(ctx, vWeekly, 60*24*time.Hour)
-
-			// Visor monthly
-			vMonthly := s.visorBandwidthMonthlyKey(pkHex, now.Year(), int(now.Month()))
-			pipe.HIncrBy(ctx, vMonthly, "total_sent", int64(deltaSent))
-			pipe.HIncrBy(ctx, vMonthly, "total_recv", int64(deltaRecv))
-			pipe.HSet(ctx, vMonthly, "updated_at", now.Unix())
-			pipe.Expire(ctx, vMonthly, 400*24*time.Hour)
-		}
+		vMonthly := s.visorBandwidthMonthlyKey(reporterHex, now.Year(), int(now.Month()))
+		pipe.HIncrBy(ctx, vMonthly, "bandwidth", deltaI)
+		pipe.HSet(ctx, vMonthly, "updated_at", now.Unix())
+		pipe.Expire(ctx, vMonthly, 400*24*time.Hour)
 	}
 
 	_, err = pipe.Exec(ctx)
@@ -525,8 +501,7 @@ func (s *redisStore) GetVisorBandwidth(ctx context.Context, pk cipher.PubKey,
 
 		for _, bw := range tpBandwidth {
 			if existing, ok := aggregatedByPeriod[bw.PeriodKey]; ok {
-				existing.TotalSent += bw.TotalSent
-				existing.TotalRecv += bw.TotalRecv
+				existing.Bandwidth += bw.Bandwidth
 				if bw.UpdatedAt > existing.UpdatedAt {
 					existing.UpdatedAt = bw.UpdatedAt
 				}
@@ -535,8 +510,7 @@ func (s *redisStore) GetVisorBandwidth(ctx context.Context, pk cipher.PubKey,
 					TransportID: pk.Hex(), // Use visor PK as identifier
 					Period:      period,
 					PeriodKey:   bw.PeriodKey,
-					TotalSent:   bw.TotalSent,
-					TotalRecv:   bw.TotalRecv,
+					Bandwidth:   bw.Bandwidth,
 					UpdatedAt:   bw.UpdatedAt,
 				}
 			}
@@ -669,25 +643,21 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context) ([]VisorSummary, 
 	return result, nil
 }
 
-// parseBW extracts bandwidth totals from a Redis hash result.
+// parseBW extracts bandwidth total from a Redis hash result.
 func parseBW(cmd *redis.StringStringMapCmd) *BandwidthSummary {
 	result, err := cmd.Result()
 	if err != nil || len(result) == 0 {
 		return nil
 	}
-	var sent, recv uint64
-	if val, ok := result["total_sent"]; ok {
-		fmt.Sscanf(val, "%d", &sent) //nolint:errcheck
+	var bw uint64
+	if val, ok := result["bandwidth"]; ok {
+		fmt.Sscanf(val, "%d", &bw) //nolint:errcheck
 	}
-	if val, ok := result["total_recv"]; ok {
-		fmt.Sscanf(val, "%d", &recv) //nolint:errcheck
-	}
-	if sent == 0 && recv == 0 {
+	if bw == 0 {
 		return nil
 	}
 	return &BandwidthSummary{
-		TotalSent: sent,
-		TotalRecv: recv,
+		Bandwidth: bw,
 	}
 }
 
@@ -703,14 +673,11 @@ func (s *redisStore) getBandwidthFromHash(ctx context.Context, key, transportID,
 		PeriodKey:   periodKey,
 	}
 
-	if val, ok := result["total_sent"]; ok {
-		fmt.Sscanf(val, "%d", &agg.TotalSent)
-	}
-	if val, ok := result["total_recv"]; ok {
-		fmt.Sscanf(val, "%d", &agg.TotalRecv)
+	if val, ok := result["bandwidth"]; ok {
+		fmt.Sscanf(val, "%d", &agg.Bandwidth) //nolint:errcheck
 	}
 	if val, ok := result["updated_at"]; ok {
-		fmt.Sscanf(val, "%d", &agg.UpdatedAt)
+		fmt.Sscanf(val, "%d", &agg.UpdatedAt) //nolint:errcheck
 	}
 
 	return agg, nil

@@ -25,7 +25,7 @@ import (
 
 const (
 	transportsNumberDelay    = time.Second * 10
-	visorSummariesCacheDelay = 5 * time.Minute
+	visorsCacheDelay = 5 * time.Minute
 )
 
 var (
@@ -57,8 +57,8 @@ type API struct {
 	dmsgAddr                    string
 	DmsgServers                 []string
 
-	visorSummariesCache []store.VisorSummary
-	visorSummariesMu    sync.RWMutex
+	visorsCache []store.VisorSummary
+	visorsMu    sync.RWMutex
 }
 
 // HealthCheckResponse is struct of /health endpoint
@@ -119,7 +119,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Get("/bandwidth/transport/{id}", api.getTransportBandwidth)
 	r.Get("/bandwidth/visor/{pk}", api.getVisorBandwidth)
 
-	r.Get("/visor-summaries", api.getVisorSummaries)
+	r.Get("/visors", api.getVisors)
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})
@@ -137,11 +137,11 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 	tpTicker := time.NewTicker(transportsNumberDelay)
 	defer tpTicker.Stop()
 
-	visorTicker := time.NewTicker(visorSummariesCacheDelay)
+	visorTicker := time.NewTicker(visorsCacheDelay)
 	defer visorTicker.Stop()
 
 	api.updateTransportsNumber(ctx, logger)
-	api.refreshVisorSummariesCache(ctx, logger)
+	api.refreshVisorsCache(ctx, logger)
 
 	for {
 		select {
@@ -150,28 +150,28 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 		case <-tpTicker.C:
 			api.updateTransportsNumber(ctx, logger)
 		case <-visorTicker.C:
-			api.refreshVisorSummariesCache(ctx, logger)
+			api.refreshVisorsCache(ctx, logger)
 		}
 	}
 }
 
-// refreshVisorSummariesCache fetches visor summaries from the store and caches them.
-func (api *API) refreshVisorSummariesCache(ctx context.Context, logger logrus.FieldLogger) {
-	summaries, err := api.store.GetAllVisorSummaries(ctx)
+// refreshVisorsCache fetches visor data from the store and caches it.
+func (api *API) refreshVisorsCache(ctx context.Context, logger logrus.FieldLogger) {
+	visors, err := api.store.GetAllVisorSummaries(ctx)
 	if err != nil {
-		logger.WithError(err).Error("failed to refresh visor summaries cache")
+		logger.WithError(err).Error("failed to refresh visors cache")
 		return
 	}
-	api.visorSummariesMu.Lock()
-	api.visorSummariesCache = summaries
-	api.visorSummariesMu.Unlock()
+	api.visorsMu.Lock()
+	api.visorsCache = visors
+	api.visorsMu.Unlock()
 }
 
-// getVisorSummariesFromCache returns the cached visor summaries.
-func (api *API) getVisorSummariesFromCache() []store.VisorSummary {
-	api.visorSummariesMu.RLock()
-	defer api.visorSummariesMu.RUnlock()
-	return api.visorSummariesCache
+// getVisorsFromCache returns the cached visor data.
+func (api *API) getVisorsFromCache() []store.VisorSummary {
+	api.visorsMu.RLock()
+	defer api.visorsMu.RUnlock()
+	return api.visorsCache
 }
 
 func (api *API) log(r *http.Request) logrus.FieldLogger {
