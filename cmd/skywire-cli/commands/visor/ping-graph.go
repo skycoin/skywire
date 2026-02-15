@@ -811,7 +811,35 @@ type transportLatencyData struct {
 	setupErr string
 	pingErr  string
 	// Overall status
-	phase string // "pending", "calc", "setup", "ping", "done"
+	phase     string    // "pending", "calc", "setup", "ping", "done"
+	timestamp time.Time // When the test completed
+}
+
+// routeSavedState represents the saved state for route tree view resume functionality
+type routeSavedState struct {
+	LocalPK    string                 `json:"local_pk"`
+	StartTime  string                 `json:"start_time"`
+	UpdateTime string                 `json:"update_time"`
+	Entries    []routeSavedEntry      `json:"entries"`
+	Settings   map[string]interface{} `json:"settings"`
+}
+
+// routeSavedEntry represents a single transport ping entry in saved state
+type routeSavedEntry struct {
+	TpID        string    `json:"tp_id"`
+	TpType      string    `json:"tp_type"`
+	RemotePK    string    `json:"remote_pk"`
+	ParentPK    string    `json:"parent_pk"`
+	Level       int       `json:"level"`
+	CalcTimeMs  float64   `json:"calc_time_ms,omitempty"`
+	SetupTimeMs float64   `json:"setup_time_ms,omitempty"`
+	PingSamples []float64 `json:"ping_samples,omitempty"`
+	AvgLatency  float64   `json:"avg_latency_ms,omitempty"`
+	CalcErr     string    `json:"calc_err,omitempty"`
+	SetupErr    string    `json:"setup_err,omitempty"`
+	PingErr     string    `json:"ping_err,omitempty"`
+	Timestamp   string    `json:"timestamp,omitempty"`
+	Phase       string    `json:"phase"`
 }
 
 // runTreeViewMode executes the ping graph in tree view mode
@@ -874,6 +902,110 @@ func runTreeViewMode(
 		parentTpID string
 	}
 	var treeEntries []treeEntry
+
+	// Track which transport IDs have been pinged (for resume)
+	pingedTpIDs := make(map[string]bool)
+
+	// Start time for this scan
+	startTime := time.Now()
+
+	// Load saved state if resuming
+	if graphResume && graphOutput != "" {
+		resumeFile := graphOutput + ".json"
+		savedData, err := os.ReadFile(resumeFile) //nolint:gosec // G304: file path is from user-provided flag
+		if err == nil {
+			var savedState routeSavedState
+			if err := json.Unmarshal(savedData, &savedState); err == nil {
+				fmt.Printf("Resuming from: %s\n", resumeFile)
+				fmt.Printf("  Started: %s, Last update: %s\n", savedState.StartTime, savedState.UpdateTime)
+				fmt.Printf("  Loaded %d entries\n", len(savedState.Entries))
+
+				// Parse original start time
+				if ts, err := time.Parse(time.RFC3339, savedState.StartTime); err == nil {
+					startTime = ts
+				}
+
+				// Restore entries
+				var staleCount int
+				for _, entry := range savedState.Entries {
+					// Parse timestamp
+					var entryTime time.Time
+					if entry.Timestamp != "" {
+						if ts, err := time.Parse(time.RFC3339, entry.Timestamp); err == nil {
+							entryTime = ts
+						}
+					}
+
+					// Check if entry is stale (older than max-age)
+					isStale := false
+					if graphMaxAge > 0 && entry.Phase == "done" && !entryTime.IsZero() {
+						if time.Since(entryTime) > graphMaxAge {
+							isStale = true
+							staleCount++
+						}
+					}
+
+					// Mark transport as already pinged if done and not stale
+					if entry.Phase == "done" && !isStale {
+						pingedTpIDs[entry.TpID] = true
+					}
+
+					// Add to tree entries
+					treeEntries = append(treeEntries, treeEntry{
+						tpID:     entry.TpID,
+						remotePK: entry.RemotePK,
+						level:    entry.Level,
+						parentPK: entry.ParentPK,
+					})
+
+					// Restore latency data (but reset if stale)
+					if isStale {
+						// Reset stale entry - it will be re-pinged
+						transportLatencies[entry.TpID] = &transportLatencyData{
+							tpID:   entry.TpID,
+							tpType: entry.TpType,
+							from:   entry.ParentPK,
+							to:     entry.RemotePK,
+							level:  entry.Level,
+							phase:  "pending",
+						}
+					} else {
+						transportLatencies[entry.TpID] = &transportLatencyData{
+							tpID:        entry.TpID,
+							tpType:      entry.TpType,
+							from:        entry.ParentPK,
+							to:          entry.RemotePK,
+							level:       entry.Level,
+							calcTimeMs:  entry.CalcTimeMs,
+							setupTimeMs: entry.SetupTimeMs,
+							pingSamples: entry.PingSamples,
+							calcErr:     entry.CalcErr,
+							setupErr:    entry.SetupErr,
+							pingErr:     entry.PingErr,
+							phase:       entry.Phase,
+							timestamp:   entryTime,
+						}
+					}
+
+					// Restore visited level
+					if entry.Phase == "done" && !isStale {
+						visitedLevel[entry.RemotePK] = entry.Level
+
+						// Restore cumulative latency
+						if entry.AvgLatency > 0 {
+							if existing, ok := visorCumulativeLatency[entry.RemotePK]; !ok || entry.AvgLatency < existing {
+								visorCumulativeLatency[entry.RemotePK] = entry.AvgLatency
+							}
+						}
+					}
+				}
+				if staleCount > 0 {
+					fmt.Printf("  Found %d stale entries (older than %v) to re-ping\n", staleCount, graphMaxAge)
+				}
+			}
+		}
+		// If file doesn't exist, just start fresh (no error message needed)
+	}
 
 	// Helper to format transport ID with color based on type
 	formatTpID := func(tpID, tpType string) string {
@@ -1259,6 +1391,7 @@ func runTreeViewMode(
 			if pingErr != nil {
 				data.pingErr = pingErr.Error()
 				data.phase = "done"
+				data.timestamp = time.Now()
 				return
 			}
 			// Store each ping sample
@@ -1442,6 +1575,7 @@ func runTreeViewMode(
 
 		if len(data.pingSamples) > 0 {
 			data.phase = "done"
+			data.timestamp = time.Now()
 
 			// Update cumulative latency for this visor (use average ping)
 			var pingSum float64
@@ -1454,6 +1588,7 @@ func runTreeViewMode(
 			}
 		} else {
 			data.phase = "done"
+			data.timestamp = time.Now()
 		}
 
 		// Re-render with results
@@ -1623,8 +1758,7 @@ func runTreeViewMode(
 		}
 	}
 
-	// Track which transport IDs we've already pinged
-	pingedTpIDs := make(map[string]bool)
+	// Add any transport IDs from this session to the pinged set
 	for tpID := range transportLatencies {
 		pingedTpIDs[tpID] = true
 	}
@@ -1790,8 +1924,156 @@ func runTreeViewMode(
 		// Loop back to check for any new level 1 transports that appeared
 	}
 
-	// Final render
+	// Helper to calculate average latency
+	calcAvgLatency := func(samples []float64) float64 {
+		if len(samples) == 0 {
+			return 0
+		}
+		var sum float64
+		for _, p := range samples {
+			sum += p
+		}
+		return sum / float64(len(samples))
+	}
+
+	// Helper to save state to files
+	saveState := func() {
+		if graphOutput == "" {
+			return
+		}
+
+		// Build saved state
+		state := routeSavedState{
+			LocalPK:    localPK,
+			StartTime:  startTime.Format(time.RFC3339),
+			UpdateTime: time.Now().Format(time.RFC3339),
+			Settings: map[string]interface{}{
+				"tries":       graphTries,
+				"timeout":     graphTimeout.String(),
+				"version":     graphVersion,
+				"local_route": graphLocalRoute,
+			},
+		}
+
+		for _, entry := range treeEntries {
+			data := transportLatencies[entry.tpID]
+			if data == nil {
+				continue
+			}
+
+			avgLatency := calcAvgLatency(data.pingSamples)
+
+			savedEntry := routeSavedEntry{
+				TpID:        entry.tpID,
+				TpType:      data.tpType,
+				RemotePK:    entry.remotePK,
+				ParentPK:    entry.parentPK,
+				Level:       entry.level,
+				CalcTimeMs:  data.calcTimeMs,
+				SetupTimeMs: data.setupTimeMs,
+				PingSamples: data.pingSamples,
+				AvgLatency:  avgLatency,
+				CalcErr:     data.calcErr,
+				SetupErr:    data.setupErr,
+				PingErr:     data.pingErr,
+				Phase:       data.phase,
+			}
+			if !data.timestamp.IsZero() {
+				savedEntry.Timestamp = data.timestamp.Format(time.RFC3339)
+			}
+			state.Entries = append(state.Entries, savedEntry)
+		}
+
+		jsonFile := graphOutput + ".json"
+		textFile := graphOutput + ".txt"
+
+		// Save JSON
+		jsonData, err := json.MarshalIndent(state, "", "  ")
+		if err == nil {
+			os.WriteFile(jsonFile, jsonData, 0644) //nolint:errcheck,gosec
+		}
+
+		// Save text output (with ANSI codes for colors)
+		var textOut strings.Builder
+		textOut.WriteString("=== Route Ping Graph (Tree View) ===\n")
+		textOut.WriteString(fmt.Sprintf("Local: %s\n", pterm.Cyan(localPK)))
+		textOut.WriteString(fmt.Sprintf("Started: %s\n", startTime.Format(time.RFC3339)))
+		textOut.WriteString(fmt.Sprintf("Updated: %s\n\n", time.Now().Format(time.RFC3339)))
+
+		// Group entries by level
+		entriesByLevel := make(map[int][]treeEntry)
+		for _, entry := range treeEntries {
+			entriesByLevel[entry.level] = append(entriesByLevel[entry.level], entry)
+		}
+
+		// Find max level
+		maxLevel := 0
+		for lvl := range entriesByLevel {
+			if lvl > maxLevel {
+				maxLevel = lvl
+			}
+		}
+
+		// Write level 1
+		if level1Entries, ok := entriesByLevel[1]; ok && len(level1Entries) > 0 {
+			textOut.WriteString(pterm.Yellow("=== Level 1 (direct transports) ===\n"))
+			for _, entry := range level1Entries {
+				data := transportLatencies[entry.tpID]
+				if data == nil {
+					continue
+				}
+				var latStr string
+				if len(data.pingSamples) > 0 {
+					avg := calcAvgLatency(data.pingSamples)
+					latStr = fmt.Sprintf("%.1fms", avg)
+				} else if data.pingErr != "" {
+					latStr = data.pingErr
+				} else if data.setupErr != "" {
+					latStr = data.setupErr
+				} else if data.calcErr != "" {
+					latStr = data.calcErr
+				} else {
+					latStr = "..."
+				}
+				textOut.WriteString(fmt.Sprintf("  %s %s %s\n", entry.remotePK, entry.tpID, latStr))
+			}
+		}
+
+		// Write level 2+
+		for lvl := 2; lvl <= maxLevel; lvl++ {
+			levelEntries, ok := entriesByLevel[lvl]
+			if !ok || len(levelEntries) == 0 {
+				continue
+			}
+			textOut.WriteString(fmt.Sprintf("\n%s\n", pterm.Yellow(fmt.Sprintf("=== Level %d ===", lvl))))
+			for _, entry := range levelEntries {
+				data := transportLatencies[entry.tpID]
+				if data == nil {
+					continue
+				}
+				var latStr string
+				if len(data.pingSamples) > 0 {
+					avg := calcAvgLatency(data.pingSamples)
+					latStr = fmt.Sprintf("%.1fms", avg)
+				} else if data.pingErr != "" {
+					latStr = data.pingErr
+				} else if data.setupErr != "" {
+					latStr = data.setupErr
+				} else if data.calcErr != "" {
+					latStr = data.calcErr
+				} else {
+					latStr = "..."
+				}
+				textOut.WriteString(fmt.Sprintf("  %s via %s %s %s\n", entry.remotePK, entry.parentPK[:16], entry.tpID, latStr))
+			}
+		}
+
+		os.WriteFile(textFile, []byte(textOut.String()), 0644) //nolint:errcheck,gosec
+	}
+
+	// Final render and save
 	renderTree()
+	saveState()
 	fmt.Println(pterm.Green("Scan complete!"))
 }
 
