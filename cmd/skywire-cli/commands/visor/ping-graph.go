@@ -1117,7 +1117,13 @@ func runTreeViewMode(
 			totalStr = fmt.Sprintf("%9s", "-")
 		}
 
-		// Build the line: remotePK tpID calc setup pings... avg
+		// Timestamp (grayed, at the end)
+		var tsStr string
+		if data.phase == "done" && !data.timestamp.IsZero() {
+			tsStr = pterm.Gray(fmt.Sprintf(" %s", data.timestamp.Format("2006-01-02 15:04:05")))
+		}
+
+		// Build the line: remotePK tpID calc setup pings... avg timestamp
 		tpIDFormatted := formatTpID(data.tpID, data.tpType)
 
 		// Format the entire line based on failure status
@@ -1126,15 +1132,15 @@ func runTreeViewMode(
 			// Red background with white text for early failures
 			line := fmt.Sprintf("%s %s %s %s %s %s",
 				entry.remotePK, data.tpID, calcStr, setupStr, pingsStr, totalStr)
-			text = pterm.BgRed.Sprint(pterm.White(line))
+			text = pterm.BgRed.Sprint(pterm.White(line)) + tsStr
 		} else if pingFailure {
 			// Red text for ping failures
 			text = pterm.Red(fmt.Sprintf("%s %s %s %s %s %s",
-				entry.remotePK, data.tpID, calcStr, setupStr, pingsStr, totalStr))
+				entry.remotePK, data.tpID, calcStr, setupStr, pingsStr, totalStr)) + tsStr
 		} else {
 			// Normal formatting with colored tpID
 			text = fmt.Sprintf("%s %s %s %s %s %s",
-				entry.remotePK, tpIDFormatted, calcStr, setupStr, pingsStr, totalStr)
+				entry.remotePK, tpIDFormatted, calcStr, setupStr, pingsStr, totalStr) + tsStr
 		}
 
 		return text
