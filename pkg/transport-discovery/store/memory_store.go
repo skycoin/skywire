@@ -161,11 +161,17 @@ func (s *memoryStore) GetAllVisorSummaries(_ context.Context) ([]VisorSummary, e
 	var result []VisorSummary
 	for pk, count := range visorCount {
 		result = append(result, VisorSummary{
-			PK:             pk,
-			Online:         count > 0,
-			TransportCount: count,
+			PK:              pk,
+			Online:          count > 0,
+			TransportCount:  count,
+			DailyBandwidths: []DailyBandwidthEntry{},
 		})
 	}
 
 	return result, nil
+}
+
+// BackupAndCleanOldBandwidth is a no-op for memory store.
+func (s *memoryStore) BackupAndCleanOldBandwidth(_ context.Context, _ string) error {
+	return nil
 }
