@@ -44,8 +44,8 @@ type Entry struct {
 
 	Label Label `json:"label"`
 
-	// Latency is the round-trip time to TPD in milliseconds, updated on each re-registration
-	Latency int64 `json:"latency_ms,omitempty"`
+	// Latency is the inter-visor round-trip time in milliseconds, measured via ping/pong
+	Latency float64 `json:"latency_ms,omitempty"`
 
 	// Bandwidth is total bytes (sent + recv), not included in ToBinary/signatures
 	Bandwidth uint64 `json:"bandwidth,omitempty"`
@@ -143,7 +143,7 @@ type SignedEntry struct {
 	Entry      *Entry         `json:"entry"`
 	Signatures [2]cipher.Sig  `json:"signatures"`
 	Registered int64          `json:"registered,omitempty"`
-	Latency    int64          `json:"latency_ms,omitempty"` // Latency in milliseconds, measured during re-registration
+	Latency    float64        `json:"latency_ms,omitempty"` // Inter-visor latency in milliseconds, measured via ping/pong
 	Bandwidth  *BandwidthData `json:"bandwidth,omitempty"`  // Cumulative bandwidth data
 }
 
