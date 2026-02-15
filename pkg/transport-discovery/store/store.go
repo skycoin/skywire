@@ -42,16 +42,16 @@ type BandwidthAggregation struct {
 
 // DailyBandwidthEntry stores bandwidth total for a single day.
 type DailyBandwidthEntry struct {
-	Date      string `json:"date"`      // "2006-01-02"
-	Bandwidth uint64 `json:"bandwidth"` // total bytes (sent + recv)
+	Date      string `json:"date"` // "2006-01-02"
+	Bandwidth uint64 `json:"bw"`   // total bytes (sent + recv)
 }
 
 // VisorSummary holds a visor's aggregated bandwidth and online status.
 type VisorSummary struct {
 	PK              cipher.PubKey         `json:"pk"`
-	Online          bool                  `json:"online"`
-	TransportCount  int                   `json:"transport_count"`
-	DailyBandwidths []DailyBandwidthEntry `json:"daily_bandwidths"`
+	Online          bool                  `json:"on"`
+	TransportCount  int                   `json:"tp_count"`
+	DailyBandwidths []DailyBandwidthEntry `json:"bws"`
 }
 
 // Store stores Transport metadata and generated nonce values.
