@@ -1831,8 +1831,8 @@ func runDmsgTreeViewMode(
 	grpcClient *rpcgrpc.PingClient,
 	rpcClient visor.API,
 	localPK string,
-	onlineSet map[string]bool,
-	versionFilteredSet map[string]bool,
+	_ map[string]bool, // onlineSet - unused, passesFilter is used instead
+	_ map[string]bool, // versionFilteredSet - unused, passesFilter is used instead
 	passesFilter func(string) bool,
 ) {
 	// Mutex for thread-safe access to shared data structures
@@ -1891,7 +1891,7 @@ func runDmsgTreeViewMode(
 	// Load saved state if resuming
 	if graphResume && graphOutput != "" {
 		resumeFile := graphOutput + ".json"
-		savedData, err := os.ReadFile(resumeFile)
+		savedData, err := os.ReadFile(resumeFile) //nolint:gosec // G304: file path is from user-provided flag
 		if err == nil {
 			var savedState dmsgSavedState
 			if err := json.Unmarshal(savedData, &savedState); err == nil {
@@ -2085,7 +2085,7 @@ func runDmsgTreeViewMode(
 
 			// Save text (with ANSI codes)
 			var textOut strings.Builder
-			textOut.WriteString(fmt.Sprintf("=== DMSG Ping Graph ===\n"))
+			textOut.WriteString("=== DMSG Ping Graph ===\n")
 			textOut.WriteString(fmt.Sprintf("Local: %s\n", pterm.Cyan(localPK)))
 			textOut.WriteString(fmt.Sprintf("Started: %s\n", startTime.Format(time.RFC3339)))
 			textOut.WriteString(fmt.Sprintf("Updated: %s\n\n", time.Now().Format(time.RFC3339)))
@@ -2375,7 +2375,7 @@ func runDmsgTreeViewMode(
 		}
 
 		// Perform DMSG ping via specific server
-		err := grpcClient.StreamDmsgPing(ctx, remotePK, int32(graphTries), int32(graphPcktSize), graphTimeout, serverPK, callback)
+		err := grpcClient.StreamDmsgPing(ctx, remotePK, int32(graphTries), int32(graphPcktSize), graphTimeout, serverPK, callback) //nolint:gosec // G115: graphTries/graphPcktSize are bounded by CLI flags
 		if err != nil {
 			if ctx.Err() != nil {
 				return

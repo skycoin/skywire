@@ -3342,13 +3342,13 @@ func (t *dmsgHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	}
 
 	if err = req.Write(stream); err != nil {
-		stream.Close() //nolint:errcheck
+		_ = stream.Close() //nolint:errcheck
 		return nil, err
 	}
 
 	resp, err := http.ReadResponse(bufio.NewReader(stream), req)
 	if err != nil {
-		stream.Close() //nolint:errcheck
+		_ = stream.Close() //nolint:errcheck
 		return nil, err
 	}
 
