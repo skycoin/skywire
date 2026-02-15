@@ -40,20 +40,18 @@ type BandwidthAggregation struct {
 	UpdatedAt   int64  `json:"updated_at"`
 }
 
-// BandwidthSummary stores bandwidth total for a single period.
-type BandwidthSummary struct {
+// DailyBandwidthEntry stores bandwidth total for a single day.
+type DailyBandwidthEntry struct {
+	Date      string `json:"date"`      // "2006-01-02"
 	Bandwidth uint64 `json:"bandwidth"` // total bytes (sent + recv)
-	PeriodKey string `json:"period_key"`
 }
 
 // VisorSummary holds a visor's aggregated bandwidth and online status.
 type VisorSummary struct {
-	PK               cipher.PubKey    `json:"pk"`
-	Online           bool             `json:"online"`
-	TransportCount   int              `json:"transport_count"`
-	DailyBandwidth   *BandwidthSummary `json:"daily_bandwidth,omitempty"`
-	WeeklyBandwidth  *BandwidthSummary `json:"weekly_bandwidth,omitempty"`
-	MonthlyBandwidth *BandwidthSummary `json:"monthly_bandwidth,omitempty"`
+	PK              cipher.PubKey         `json:"pk"`
+	Online          bool                  `json:"online"`
+	TransportCount  int                   `json:"transport_count"`
+	DailyBandwidths []DailyBandwidthEntry `json:"daily_bandwidths"`
 }
 
 // Store stores Transport metadata and generated nonce values.
@@ -73,6 +71,7 @@ type TransportStore interface {
 	GetTransportBandwidth(ctx context.Context, tpID uuid.UUID, period string, limit int) ([]BandwidthAggregation, error)
 	GetVisorBandwidth(ctx context.Context, pk cipher.PubKey, period string, limit int) ([]BandwidthAggregation, error)
 	GetAllVisorSummaries(ctx context.Context) ([]VisorSummary, error)
+	BackupAndCleanOldBandwidth(ctx context.Context, backupPath string) error
 	Close()
 }
 

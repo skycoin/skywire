@@ -24,8 +24,9 @@ import (
 )
 
 const (
-	transportsNumberDelay    = time.Second * 10
-	visorsCacheDelay = 5 * time.Minute
+	transportsNumberDelay = time.Second * 10
+	uptimesCacheDelay     = 5 * time.Minute
+	backupTickerDelay     = 1 * time.Hour
 )
 
 var (
@@ -56,9 +57,10 @@ type API struct {
 	startedAt                   time.Time
 	dmsgAddr                    string
 	DmsgServers                 []string
+	backupPath                  string
 
-	visorsCache []store.VisorSummary
-	visorsMu    sync.RWMutex
+	uptimesCache []store.VisorSummary
+	uptimesMu    sync.RWMutex
 }
 
 // HealthCheckResponse is struct of /health endpoint
@@ -71,7 +73,7 @@ type HealthCheckResponse struct {
 
 // New constructs a new API instance.
 func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
-	enableMetrics bool, m tpdiscmetrics.Metrics, dmsgAddr string) *API {
+	enableMetrics bool, m tpdiscmetrics.Metrics, dmsgAddr string, backupPath string) *API {
 	if log == nil {
 		log = logging.MustGetLogger("tp_disc")
 	}
@@ -84,6 +86,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		startedAt:                   time.Now(),
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
+		backupPath:                  backupPath,
 	}
 
 	r := chi.NewRouter()
@@ -119,7 +122,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Get("/bandwidth/transport/{id}", api.getTransportBandwidth)
 	r.Get("/bandwidth/visor/{pk}", api.getVisorBandwidth)
 
-	r.Get("/visors", api.getVisors)
+	r.Get("/uptimes", api.getUptimes)
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})
@@ -137,11 +140,14 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 	tpTicker := time.NewTicker(transportsNumberDelay)
 	defer tpTicker.Stop()
 
-	visorTicker := time.NewTicker(visorsCacheDelay)
-	defer visorTicker.Stop()
+	uptimesTicker := time.NewTicker(uptimesCacheDelay)
+	defer uptimesTicker.Stop()
+
+	backupTicker := time.NewTicker(backupTickerDelay)
+	defer backupTicker.Stop()
 
 	api.updateTransportsNumber(ctx, logger)
-	api.refreshVisorsCache(ctx, logger)
+	api.refreshUptimesCache(ctx, logger)
 
 	for {
 		select {
@@ -149,29 +155,33 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 			return
 		case <-tpTicker.C:
 			api.updateTransportsNumber(ctx, logger)
-		case <-visorTicker.C:
-			api.refreshVisorsCache(ctx, logger)
+		case <-uptimesTicker.C:
+			api.refreshUptimesCache(ctx, logger)
+		case <-backupTicker.C:
+			if err := api.store.BackupAndCleanOldBandwidth(ctx, api.backupPath); err != nil {
+				logger.WithError(err).Error("failed to backup old bandwidth data")
+			}
 		}
 	}
 }
 
-// refreshVisorsCache fetches visor data from the store and caches it.
-func (api *API) refreshVisorsCache(ctx context.Context, logger logrus.FieldLogger) {
-	visors, err := api.store.GetAllVisorSummaries(ctx)
+// refreshUptimesCache fetches visor data from the store and caches it.
+func (api *API) refreshUptimesCache(ctx context.Context, logger logrus.FieldLogger) {
+	uptimes, err := api.store.GetAllVisorSummaries(ctx)
 	if err != nil {
-		logger.WithError(err).Error("failed to refresh visors cache")
+		logger.WithError(err).Error("failed to refresh uptimes cache")
 		return
 	}
-	api.visorsMu.Lock()
-	api.visorsCache = visors
-	api.visorsMu.Unlock()
+	api.uptimesMu.Lock()
+	api.uptimesCache = uptimes
+	api.uptimesMu.Unlock()
 }
 
-// getVisorsFromCache returns the cached visor data.
-func (api *API) getVisorsFromCache() []store.VisorSummary {
-	api.visorsMu.RLock()
-	defer api.visorsMu.RUnlock()
-	return api.visorsCache
+// getUptimesFromCache returns the cached uptimes data.
+func (api *API) getUptimesFromCache() []store.VisorSummary {
+	api.uptimesMu.RLock()
+	defer api.uptimesMu.RUnlock()
+	return api.uptimesCache
 }
 
 func (api *API) log(r *http.Request) logrus.FieldLogger {

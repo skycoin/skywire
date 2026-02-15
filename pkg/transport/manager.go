@@ -173,23 +173,11 @@ func (tm *Manager) reRegisterTransports(ctx context.Context) {
 
 	tm.Logger.Debugf("Re-registering %d transports with discovery", len(entries))
 
-	// Measure round-trip time to TPD
-	start := time.Now()
 	err := tm.Conf.DiscoveryClient.RegisterTransports(ctx, entries...)
-	latencyMs := time.Since(start).Milliseconds()
-
 	if err != nil {
 		tm.Logger.WithError(err).Warn("Failed to re-register transports with discovery")
 	} else {
-		tm.Logger.Debugf("Successfully re-registered %d transports (latency: %dms)", len(entries), latencyMs)
-		// Update latency for all transports for next re-registration
-		tm.mx.RLock()
-		for _, tp := range tm.tps {
-			if !tp.IsClosed() {
-				tp.SetLatency(latencyMs)
-			}
-		}
-		tm.mx.RUnlock()
+		tm.Logger.Debugf("Successfully re-registered %d transports", len(entries))
 	}
 }
 
