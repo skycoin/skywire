@@ -67,6 +67,7 @@ var (
 	graphHops         uint
 	graphRetries      int
 	graphResume       bool
+	graphMaxAge       time.Duration
 )
 
 func init() {
@@ -130,6 +131,7 @@ Tree view (--tree) output format:
 	pingGraphCmd.Flags().UintVar(&graphHops, "hops", 0, "exact hop level to ping (0 = all levels, 1 = direct transports only, 2 = two hops, etc.)")
 	pingGraphCmd.Flags().IntVar(&graphRetries, "retries", 1, "number of retry attempts if ping fails (tree mode only)")
 	pingGraphCmd.Flags().BoolVarP(&graphResume, "resume", "R", false, "resume from output file if it exists (continues where left off)")
+	pingGraphCmd.Flags().DurationVar(&graphMaxAge, "max-age", 0, "re-ping entries older than this duration (e.g., 1h, 30m); 0 = never re-ping")
 	pingCmd.AddCommand(pingGraphCmd)
 }
 
@@ -1900,9 +1902,27 @@ func runDmsgTreeViewMode(
 				fmt.Printf("  Loaded %d entries\n", len(savedState.Entries))
 
 				// Restore entries
+				var staleCount int
 				for _, entry := range savedState.Entries {
-					// Mark as already pinged if done
-					if entry.Phase == "done" {
+					// Parse timestamp
+					var entryTime time.Time
+					if entry.Timestamp != "" {
+						if ts, err := time.Parse(time.RFC3339, entry.Timestamp); err == nil {
+							entryTime = ts
+						}
+					}
+
+					// Check if entry is stale (older than max-age)
+					isStale := false
+					if graphMaxAge > 0 && entry.Phase == "done" && !entryTime.IsZero() {
+						if time.Since(entryTime) > graphMaxAge {
+							isStale = true
+							staleCount++
+						}
+					}
+
+					// Mark as already pinged if done and not stale
+					if entry.Phase == "done" && !isStale {
 						pingedVisors[entry.RemotePK] = true
 					}
 
@@ -1913,25 +1933,33 @@ func runDmsgTreeViewMode(
 						level:    entry.Level,
 					})
 
-					// Restore latency data
+					// Restore latency data (but reset if stale)
 					key := entry.ServerPK + ":" + entry.RemotePK
-					dmsgLatencies[key] = &dmsgLatencyData{
-						serverPK:    entry.ServerPK,
-						remotePK:    entry.RemotePK,
-						pingSamples: entry.PingSamples,
-						pingErr:     entry.PingErr,
-						phase:       entry.Phase,
-					}
-					if entry.Timestamp != "" {
-						if ts, err := time.Parse(time.RFC3339, entry.Timestamp); err == nil {
-							dmsgLatencies[key].timestamp = ts
+					if isStale {
+						// Reset stale entry - it will be re-pinged
+						dmsgLatencies[key] = &dmsgLatencyData{
+							serverPK: entry.ServerPK,
+							remotePK: entry.RemotePK,
+							phase:    "pending",
+						}
+					} else {
+						dmsgLatencies[key] = &dmsgLatencyData{
+							serverPK:    entry.ServerPK,
+							remotePK:    entry.RemotePK,
+							pingSamples: entry.PingSamples,
+							pingErr:     entry.PingErr,
+							phase:       entry.Phase,
+							timestamp:   entryTime,
 						}
 					}
 
-					// Restore server latencies for level 1
-					if entry.Level == 1 && entry.AvgLatency > 0 {
+					// Restore server latencies for level 1 (only if not stale)
+					if entry.Level == 1 && entry.AvgLatency > 0 && !isStale {
 						serverLatencies[entry.ServerPK] = entry.AvgLatency
 					}
+				}
+				if staleCount > 0 {
+					fmt.Printf("  Found %d stale entries (older than %v) to re-ping\n", staleCount, graphMaxAge)
 				}
 			}
 		}
