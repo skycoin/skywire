@@ -823,6 +823,39 @@ func (rc *rpcClient) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	return &resp, err
 }
 
+// TPSStatus returns the status of the embedded TPS.
+func (rc *rpcClient) TPSStatus() (*TPSStatus, error) {
+	var status TPSStatus
+	err := rc.Call("TPSStatus", &struct{}{}, &status)
+	return &status, err
+}
+
+// TPSAddTransport adds a transport on a target visor using the embedded TPS.
+func (rc *rpcClient) TPSAddTransport(targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error) {
+	var resp TPSTransportResponse
+	err := rc.Call("TPSAddTransport", &TPSAddTransportIn{
+		TargetPK: targetPK,
+		RemotePK: remotePK,
+		TpType:   tpType,
+	}, &resp)
+	return &resp, err
+}
+
+// TPSRemoveTransport removes a transport on a target visor using the embedded TPS.
+func (rc *rpcClient) TPSRemoveTransport(targetPK cipher.PubKey, tpID uuid.UUID) error {
+	return rc.Call("TPSRemoveTransport", &TPSRemoveTransportIn{
+		TargetPK: targetPK,
+		TpID:     tpID,
+	}, &struct{}{})
+}
+
+// TPSGetTransports gets transports from a target visor using the embedded TPS.
+func (rc *rpcClient) TPSGetTransports(targetPK cipher.PubKey) ([]TPSTransportResponse, error) {
+	var resp []TPSTransportResponse
+	err := rc.Call("TPSGetTransports", &targetPK, &resp)
+	return resp, err
+}
+
 // MockRPCClient mocks API.
 type mockRPCClient struct {
 	startedAt time.Time
@@ -1703,6 +1736,26 @@ func (mc *mockRPCClient) UIServerStatus() (*UIServerStatus, error) {
 // DmsgHTTP implements API.
 func (mc *mockRPCClient) DmsgHTTP(_ DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	return &DmsgHTTPResponse{StatusCode: 200, Status: "OK"}, nil
+}
+
+// TPSStatus implements API.
+func (mc *mockRPCClient) TPSStatus() (*TPSStatus, error) {
+	return &TPSStatus{Enabled: false}, nil
+}
+
+// TPSAddTransport implements API.
+func (mc *mockRPCClient) TPSAddTransport(_, _ cipher.PubKey, _ string) (*TPSTransportResponse, error) {
+	return nil, fmt.Errorf("TPS not available in mock")
+}
+
+// TPSRemoveTransport implements API.
+func (mc *mockRPCClient) TPSRemoveTransport(_ cipher.PubKey, _ uuid.UUID) error {
+	return fmt.Errorf("TPS not available in mock")
+}
+
+// TPSGetTransports implements API.
+func (mc *mockRPCClient) TPSGetTransports(_ cipher.PubKey) ([]TPSTransportResponse, error) {
+	return nil, fmt.Errorf("TPS not available in mock")
 }
 
 // Close implements API.

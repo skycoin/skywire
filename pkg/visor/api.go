@@ -178,6 +178,12 @@ type API interface {
 	//dmsg utilities
 	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
 
+	// Embedded Transport Setup Node (TPS) controls
+	TPSStatus() (*TPSStatus, error)
+	TPSAddTransport(targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error)
+	TPSRemoveTransport(targetPK cipher.PubKey, tpID uuid.UUID) error
+	TPSGetTransports(targetPK cipher.PubKey) ([]TPSTransportResponse, error)
+
 	// Close closes the API connection (for RPC clients)
 	Close() error
 }
@@ -187,6 +193,20 @@ type UIServerStatus struct {
 	Running   bool   `json:"running"`
 	LocalAddr string `json:"local_addr,omitempty"`
 	DmsgPort  uint16 `json:"dmsg_port,omitempty"`
+}
+
+// TPSStatus contains the status of the embedded Transport Setup Node.
+type TPSStatus struct {
+	Enabled bool          `json:"enabled"`
+	PubKey  cipher.PubKey `json:"pub_key,omitempty"`
+}
+
+// TPSTransportResponse contains information about a transport managed by TPS.
+type TPSTransportResponse struct {
+	ID     uuid.UUID     `json:"id"`
+	Local  cipher.PubKey `json:"local"`
+	Remote cipher.PubKey `json:"remote"`
+	Type   string        `json:"type"`
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -3319,6 +3339,93 @@ func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	}
 
 	return response, nil
+}
+
+// TPSStatus returns the status of the embedded Transport Setup Node.
+func (v *Visor) TPSStatus() (*TPSStatus, error) {
+	v.initLock.RLock()
+	tps := v.embeddedTPS
+	v.initLock.RUnlock()
+
+	status := &TPSStatus{
+		Enabled: tps != nil,
+	}
+	if tps != nil {
+		status.PubKey = tps.pk
+	}
+	return status, nil
+}
+
+// TPSAddTransport uses the embedded TPS to add a transport on a target visor.
+func (v *Visor) TPSAddTransport(targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error) {
+	v.initLock.RLock()
+	tps := v.embeddedTPS
+	v.initLock.RUnlock()
+
+	if tps == nil {
+		return nil, fmt.Errorf("embedded TPS not configured (tps_sk not set)")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := tps.AddTransport(ctx, targetPK, remotePK, types.Type(tpType))
+	if err != nil {
+		return nil, err
+	}
+
+	return &TPSTransportResponse{
+		ID:     resp.ID,
+		Local:  resp.Local,
+		Remote: resp.Remote,
+		Type:   string(resp.Type),
+	}, nil
+}
+
+// TPSRemoveTransport uses the embedded TPS to remove a transport on a target visor.
+func (v *Visor) TPSRemoveTransport(targetPK cipher.PubKey, tpID uuid.UUID) error {
+	v.initLock.RLock()
+	tps := v.embeddedTPS
+	v.initLock.RUnlock()
+
+	if tps == nil {
+		return fmt.Errorf("embedded TPS not configured (tps_sk not set)")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	return tps.RemoveTransport(ctx, targetPK, tpID)
+}
+
+// TPSGetTransports uses the embedded TPS to get transports from a target visor.
+func (v *Visor) TPSGetTransports(targetPK cipher.PubKey) ([]TPSTransportResponse, error) {
+	v.initLock.RLock()
+	tps := v.embeddedTPS
+	v.initLock.RUnlock()
+
+	if tps == nil {
+		return nil, fmt.Errorf("embedded TPS not configured (tps_sk not set)")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := tps.GetTransports(ctx, targetPK)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]TPSTransportResponse, len(resp))
+	for i, tr := range resp {
+		result[i] = TPSTransportResponse{
+			ID:     tr.ID,
+			Local:  tr.Local,
+			Remote: tr.Remote,
+			Type:   string(tr.Type),
+		}
+	}
+	return result, nil
 }
 
 // dmsgHTTPTransport implements http.RoundTripper using the visor's dmsg client
