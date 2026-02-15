@@ -75,7 +75,7 @@ type ManagedTransport struct {
 
 	timeout time.Duration
 
-	latency   int64 // Last measured latency to TPD in milliseconds
+	latency   float64 // Inter-visor ping latency in milliseconds
 	latencyMx sync.RWMutex
 }
 
@@ -104,15 +104,15 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	return mt
 }
 
-// GetLatency returns the last measured latency to TPD in milliseconds.
-func (mt *ManagedTransport) GetLatency() int64 {
+// GetLatency returns the inter-visor ping latency in milliseconds.
+func (mt *ManagedTransport) GetLatency() float64 {
 	mt.latencyMx.RLock()
 	defer mt.latencyMx.RUnlock()
 	return mt.latency
 }
 
-// SetLatency sets the latency to TPD in milliseconds.
-func (mt *ManagedTransport) SetLatency(latencyMs int64) {
+// SetLatency sets the inter-visor ping latency in milliseconds.
+func (mt *ManagedTransport) SetLatency(latencyMs float64) {
 	mt.latencyMx.Lock()
 	defer mt.latencyMx.Unlock()
 	mt.latency = latencyMs
