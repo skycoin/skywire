@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
+	"github.com/blang/semver/v4"
+	"github.com/pterm/pterm"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
@@ -358,6 +360,9 @@ func init() {
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
 	listCmd.Flags().StringVarP(&country, "country", "c", "", "filter by country code")
 	listCmd.Flags().StringVarP(&version, "version", "v", "", "filter by version")
+	listCmd.Flags().StringVar(&minVersion, "minv", "", "filter by minimum version (>=)")
+	listCmd.Flags().StringVar(&maxVersion, "maxv", "", "filter by maximum version (<=)")
+	listCmd.Flags().BoolVar(&showOffline, "offline", false, "show only offline servers (red)")
 	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
 	listCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
 }
@@ -394,8 +399,174 @@ var listCmd = &cobra.Command{
 			return
 		}
 
+		// Parse minVersion if specified
+		var minVer semver.Version
+		if minVersion != "" {
+			var err error
+			minVer, err = semver.ParseTolerant(minVersion)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid minimum version %q: %w", minVersion, err))
+			}
+		}
+
+		// Parse maxVersion if specified
+		var maxVer semver.Version
+		if maxVersion != "" {
+			var err error
+			maxVer, err = semver.ParseTolerant(maxVersion)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid maximum version %q: %w", maxVersion, err))
+			}
+		}
+
+		// Helper to check if version meets minimum requirement
+		meetsMinVersion := func(ver string) bool {
+			if minVersion == "" {
+				return true
+			}
+			v, err := semver.ParseTolerant(ver)
+			if err != nil {
+				return false
+			}
+			return v.GTE(minVer)
+		}
+
+		// Helper to check if version meets maximum requirement
+		meetsMaxVersion := func(ver string) bool {
+			if maxVersion == "" {
+				return true
+			}
+			v, err := semver.ParseTolerant(ver)
+			if err != nil {
+				return false
+			}
+			return v.LTE(maxVer)
+		}
+
+		// --- Show only offline servers ---
+		if showOffline {
+			uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+
+			// Parse SD and UT data
+			var sdEntries []services.Service
+			json.Unmarshal([]byte(sds), &sdEntries) //nolint:errcheck,gosec
+
+			type utEntry struct {
+				PK string `json:"pk"`
+				On bool   `json:"on"`
+			}
+			var utEntries []utEntry
+			json.Unmarshal([]byte(uts), &utEntries) //nolint:errcheck,gosec
+
+			// Build online set
+			onlinePKs := make(map[string]bool)
+			for _, ut := range utEntries {
+				if ut.On {
+					onlinePKs[ut.PK] = true
+				}
+			}
+
+			// Filter and print offline entries
+			count := 0
+			for _, svc := range sdEntries {
+				addrParts := strings.Split(svc.Addr.String(), ":")
+				if len(addrParts) < 1 {
+					continue
+				}
+				pkStr := addrParts[0]
+
+				// Skip if online
+				if onlinePKs[pkStr] {
+					continue
+				}
+
+				// Apply country filter
+				if country != "" && (svc.Geo == nil || svc.Geo.Country != country) {
+					continue
+				}
+
+				// Apply version filter
+				if version != "" && svc.Version != version {
+					continue
+				}
+
+				// Apply minVersion filter
+				if !meetsMinVersion(svc.Version) {
+					continue
+				}
+
+				// Apply maxVersion filter
+				if !meetsMaxVersion(svc.Version) {
+					continue
+				}
+
+				count++
+				if !isStats {
+					countryCode := ""
+					if svc.Geo != nil {
+						countryCode = svc.Geo.Country
+					}
+					fmt.Println(pterm.Red(fmt.Sprintf("%s %s %s", pkStr, countryCode, svc.Version)))
+				}
+			}
+
+			if isStats {
+				fmt.Printf("%d\n", count)
+			}
+			return
+		}
+
 		// --- No filtering case ---
 		if noFilterOnline {
+			// Parse SD data for minVersion/maxVersion filtering
+			if minVersion != "" || maxVersion != "" {
+				var sdEntries []services.Service
+				json.Unmarshal([]byte(sds), &sdEntries) //nolint:errcheck,gosec
+
+				count := 0
+				for _, svc := range sdEntries {
+					addrParts := strings.Split(svc.Addr.String(), ":")
+					if len(addrParts) < 1 {
+						continue
+					}
+					pkStr := addrParts[0]
+
+					// Apply country filter
+					if country != "" && (svc.Geo == nil || svc.Geo.Country != country) {
+						continue
+					}
+
+					// Apply version filter
+					if version != "" && svc.Version != version {
+						continue
+					}
+
+					// Apply minVersion filter
+					if !meetsMinVersion(svc.Version) {
+						continue
+					}
+
+					// Apply maxVersion filter
+					if !meetsMaxVersion(svc.Version) {
+						continue
+					}
+
+					count++
+					if !isStats {
+						countryCode := ""
+						if svc.Geo != nil {
+							countryCode = svc.Geo.Country
+						}
+						fmt.Printf("%s %s %s\n", pkStr, countryCode, svc.Version)
+					}
+				}
+
+				if isStats {
+					fmt.Printf("%d\n", count)
+				}
+				return
+			}
+
 			sdJQ := `.[]`
 			if country != "" {
 				sdJQ += ` | select(.geo.country == "` + country + `")`
@@ -417,8 +588,78 @@ var listCmd = &cobra.Command{
 			return
 		}
 
-		// --- Filtering by online status via jq join ---
+		// --- Filtering by online status ---
 		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+
+		// Use Go-based filtering when minVersion or maxVersion is specified (jq can't do semver comparison)
+		if minVersion != "" || maxVersion != "" {
+			var sdEntries []services.Service
+			json.Unmarshal([]byte(sds), &sdEntries) //nolint:errcheck,gosec
+
+			type utEntry struct {
+				PK string `json:"pk"`
+				On bool   `json:"on"`
+			}
+			var utEntries []utEntry
+			json.Unmarshal([]byte(uts), &utEntries) //nolint:errcheck,gosec
+
+			// Build online set
+			onlinePKs := make(map[string]bool)
+			for _, ut := range utEntries {
+				if ut.On {
+					onlinePKs[ut.PK] = true
+				}
+			}
+
+			count := 0
+			for _, svc := range sdEntries {
+				addrParts := strings.Split(svc.Addr.String(), ":")
+				if len(addrParts) < 1 {
+					continue
+				}
+				pkStr := addrParts[0]
+
+				// Skip if offline
+				if !onlinePKs[pkStr] {
+					continue
+				}
+
+				// Apply country filter
+				if country != "" && (svc.Geo == nil || svc.Geo.Country != country) {
+					continue
+				}
+
+				// Apply version filter
+				if version != "" && svc.Version != version {
+					continue
+				}
+
+				// Apply minVersion filter
+				if !meetsMinVersion(svc.Version) {
+					continue
+				}
+
+				// Apply maxVersion filter
+				if !meetsMaxVersion(svc.Version) {
+					continue
+				}
+
+				count++
+				if !isStats {
+					countryCode := ""
+					if svc.Geo != nil {
+						countryCode = svc.Geo.Country
+					}
+					fmt.Printf("%s %s %s\n", pkStr, countryCode, svc.Version)
+				}
+			}
+
+			if isStats {
+				fmt.Printf("%d\n", count)
+			}
+			return
+		}
+
 		joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, uts)
 
 		// Build jq filter with optional country and version conditions

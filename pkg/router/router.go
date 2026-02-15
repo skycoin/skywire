@@ -404,6 +404,17 @@ func (r *router) setupPingRoute(
 		Reverse:   reversePath,
 	}
 
+	// Debug: log route details before sending to setup node
+	r.logger.Debugf("setupPingRoute: Desc.SrcPK=%s, Desc.DstPK=%s", forwardDesc.SrcPK(), forwardDesc.DstPK())
+	// Log all forward hops with their transport IDs
+	for i, hop := range forwardPath {
+		r.logger.Debugf("setupPingRoute: Forward[%d] TpID=%s From=%s To=%s", i, hop.TpID, hop.From, hop.To)
+	}
+	// Log all reverse hops with their transport IDs
+	for i, hop := range reversePath {
+		r.logger.Debugf("setupPingRoute: Reverse[%d] TpID=%s From=%s To=%s", i, hop.TpID, hop.From, hop.To)
+	}
+
 	rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
 	if err != nil {
 		r.logger.WithError(err).Error("Error dialing ping route group")
@@ -469,6 +480,9 @@ func (r *router) PingRoute(
 
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
+
+	// Debug: log what options we received
+	r.logger.Debugf("PingRoute opts: TransportID=%s, ForwardHops=%d, ReverseHops=%d", opts.TransportID, len(opts.ForwardHops), len(opts.ReverseHops))
 
 	// If full route is specified, use it directly without route calculation
 	if len(opts.ForwardHops) > 0 && len(opts.ReverseHops) > 0 {
