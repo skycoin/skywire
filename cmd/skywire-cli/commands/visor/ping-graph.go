@@ -1601,335 +1601,6 @@ func runTreeViewMode(
 		renderTree()
 	}
 
-	// Helper to verify transport exists by refreshing local transport list
-	verifyTransportExists := func(tpID string) bool {
-		currentTransports, err := rpcClient.Transports(nil, nil, false)
-		if err != nil {
-			return false
-		}
-		for _, tp := range currentTransports {
-			if tp.ID.String() == tpID {
-				return true
-			}
-		}
-		return false
-	}
-
-	// BFS through the network
-	currentLevel := []string{localPK}
-	level := 0
-
-	for {
-		level++
-		// Stop if we've exceeded max level
-		if graphMaxLevel > 0 && level > graphMaxLevel {
-			break
-		}
-		// Stop if we've passed the exact hop level (when --hops is set)
-		if graphHops > 0 && uint(level) > graphHops { //nolint:gosec
-			break
-		}
-
-		// Find all transports at this level (per-transport, not per-visor)
-		type transportTarget struct {
-			remotePK string
-			parentPK string
-			tpID     string
-			tpType   string
-		}
-		var targets []transportTarget
-
-		// For level 1, use ONLY verified local transports from the visor
-		if level == 1 {
-			for _, tp := range localTransports {
-				remotePK := tp.Remote.String()
-				if !passesFilter(remotePK) {
-					continue
-				}
-				// Verify transport still exists before adding
-				tpID := tp.ID.String()
-				if !verifyTransportExists(tpID) {
-					continue
-				}
-				targets = append(targets, transportTarget{
-					remotePK: remotePK,
-					parentPK: localPK,
-					tpID:     tpID,
-					tpType:   string(tp.Type),
-				})
-			}
-		} else {
-			// For level 2+, use adjacency map from TPD
-			for _, parentPK := range currentLevel {
-				neighbors, ok := adjacency[parentPK]
-				if !ok {
-					continue
-				}
-				for _, n := range neighbors {
-					// Skip if we've already visited this visor at a lower level
-					if prevLevel, visited := visitedLevel[n.pk]; visited && prevLevel < level {
-						continue
-					}
-					if !passesFilter(n.pk) {
-						continue
-					}
-
-					targets = append(targets, transportTarget{
-						remotePK: n.pk,
-						parentPK: parentPK,
-						tpID:     n.tpID,
-						tpType:   n.tpType,
-					})
-				}
-			}
-		}
-
-		if len(targets) == 0 {
-			break
-		}
-
-		// Ping each transport
-		var nextLevelVisors []string
-		seenVisors := make(map[string]bool)
-
-		for _, target := range targets {
-			if ctx.Err() != nil {
-				return
-			}
-
-			// Skip if below start level or not at exact hop level (when --hops is set)
-			skipPing := level < graphStartLevel || (graphHops > 0 && uint(level) != graphHops) //nolint:gosec
-			if skipPing {
-				if !seenVisors[target.remotePK] {
-					nextLevelVisors = append(nextLevelVisors, target.remotePK)
-					seenVisors[target.remotePK] = true
-					visitedLevel[target.remotePK] = level
-				}
-				continue
-			}
-
-			// Add tree entry just before pinging (so we don't populate entries too far ahead)
-			treeEntries = append(treeEntries, treeEntry{
-				tpID:       target.tpID,
-				remotePK:   target.remotePK,
-				level:      level,
-				parentPK:   target.parentPK,
-				parentTpID: "",
-			})
-
-			// Get path to parent (empty for level 1, since parent is local)
-			pathToParent := visorPath[target.parentPK]
-
-			pingTransport(target.remotePK, target.parentPK, target.tpID, target.tpType, level, pathToParent)
-
-			// Add to next level if not seen
-			if !seenVisors[target.remotePK] {
-				data := transportLatencies[target.tpID]
-				hasFailed := data != nil && (data.calcErr != "" || data.setupErr != "" || data.pingErr != "")
-				if data != nil && !hasFailed {
-					nextLevelVisors = append(nextLevelVisors, target.remotePK)
-					// Store path to this visor for future levels
-					newPath := make([]pathHop, len(pathToParent)+1)
-					copy(newPath, pathToParent)
-					newPath[len(pathToParent)] = pathHop{
-						tpID:   target.tpID,
-						tpType: target.tpType,
-						from:   target.parentPK,
-						to:     target.remotePK,
-					}
-					visorPath[target.remotePK] = newPath
-				} else if graphContinue {
-					nextLevelVisors = append(nextLevelVisors, target.remotePK)
-				}
-				seenVisors[target.remotePK] = true
-				visitedLevel[target.remotePK] = level
-			}
-		}
-
-		// Sort nextLevelVisors by cumulative latency (lowest first) for optimal exploration order
-		for i := 0; i < len(nextLevelVisors)-1; i++ {
-			for j := i + 1; j < len(nextLevelVisors); j++ {
-				latI := visorCumulativeLatency[nextLevelVisors[i]]
-				latJ := visorCumulativeLatency[nextLevelVisors[j]]
-				// Lower latency should come first
-				if latJ < latI || (latI == 0 && latJ > 0) {
-					nextLevelVisors[i], nextLevelVisors[j] = nextLevelVisors[j], nextLevelVisors[i]
-				}
-			}
-		}
-
-		currentLevel = nextLevelVisors
-		if len(currentLevel) == 0 {
-			break
-		}
-	}
-
-	// Add any transport IDs from this session to the pinged set
-	for tpID := range transportLatencies {
-		pingedTpIDs[tpID] = true
-	}
-
-	// Continuous monitoring loop - check for new transports after each pass
-	for {
-		if ctx.Err() != nil {
-			break
-		}
-
-		// Re-fetch local transports to detect new ones
-		newLocalTransports, err := rpcClient.Transports(nil, nil, false)
-		if err != nil {
-			break // Can't continue without transport info
-		}
-
-		// Update localTpIDs with current state
-		localTpIDs = make(map[string]bool)
-		for _, tp := range newLocalTransports {
-			localTpIDs[tp.ID.String()] = true
-		}
-
-		// Find new level 1 transports that pass filtering
-		var newLevel1Targets []struct {
-			remotePK string
-			tpID     string
-			tpType   string
-		}
-		for _, tp := range newLocalTransports {
-			tpID := tp.ID.String()
-			if pingedTpIDs[tpID] {
-				continue // Already pinged
-			}
-			remotePK := tp.Remote.String()
-			if !passesFilter(remotePK) {
-				continue // Doesn't pass version/online filter
-			}
-			newLevel1Targets = append(newLevel1Targets, struct {
-				remotePK string
-				tpID     string
-				tpType   string
-			}{
-				remotePK: remotePK,
-				tpID:     tpID,
-				tpType:   string(tp.Type),
-			})
-		}
-
-		if len(newLevel1Targets) == 0 {
-			// No new transports found - scan complete
-			break
-		}
-
-		// Ping new level 1 transports
-		var newLevel1Visors []string
-		for _, target := range newLevel1Targets {
-			if ctx.Err() != nil {
-				break
-			}
-
-			// Add tree entry
-			treeEntries = append(treeEntries, treeEntry{
-				tpID:       target.tpID,
-				remotePK:   target.remotePK,
-				level:      1,
-				parentPK:   localPK,
-				parentTpID: "",
-			})
-
-			// Ping it
-			pingTransport(target.remotePK, localPK, target.tpID, target.tpType, 1, nil)
-			pingedTpIDs[target.tpID] = true
-
-			// Check if ping succeeded
-			data := transportLatencies[target.tpID]
-			hasFailed := data != nil && (data.calcErr != "" || data.setupErr != "" || data.pingErr != "")
-			if data != nil && !hasFailed {
-				newLevel1Visors = append(newLevel1Visors, target.remotePK)
-				// Store path to this visor
-				visorPath[target.remotePK] = []pathHop{{
-					tpID:   target.tpID,
-					tpType: target.tpType,
-					from:   localPK,
-					to:     target.remotePK,
-				}}
-				visitedLevel[target.remotePK] = 1
-			}
-
-			// After each level 1 ping, check for more new transports
-			// This handles transports that appear while we're pinging
-		}
-
-		// Now explore level 2+ for new level 1 visors
-		currentLevel := newLevel1Visors
-		for level := 2; len(currentLevel) > 0; level++ {
-			if ctx.Err() != nil {
-				break
-			}
-
-			var nextLevelVisors []string
-			seenVisors := make(map[string]bool)
-
-			for _, parentPK := range currentLevel {
-				neighbors, ok := adjacency[parentPK]
-				if !ok {
-					continue
-				}
-				for _, n := range neighbors {
-					// Skip if already visited at lower level
-					if prevLevel, visited := visitedLevel[n.pk]; visited && prevLevel < level {
-						continue
-					}
-					if !passesFilter(n.pk) {
-						continue
-					}
-					// Skip if this transport already pinged
-					if pingedTpIDs[n.tpID] {
-						continue
-					}
-
-					// Add tree entry
-					treeEntries = append(treeEntries, treeEntry{
-						tpID:       n.tpID,
-						remotePK:   n.pk,
-						level:      level,
-						parentPK:   parentPK,
-						parentTpID: "",
-					})
-
-					// Get path to parent
-					pathToParent := visorPath[parentPK]
-
-					// Ping it
-					pingTransport(n.pk, parentPK, n.tpID, n.tpType, level, pathToParent)
-					pingedTpIDs[n.tpID] = true
-
-					// Check if ping succeeded and add to next level
-					if !seenVisors[n.pk] {
-						data := transportLatencies[n.tpID]
-						hasFailed := data != nil && (data.calcErr != "" || data.setupErr != "" || data.pingErr != "")
-						if data != nil && !hasFailed {
-							nextLevelVisors = append(nextLevelVisors, n.pk)
-							// Store path to this visor
-							newPath := make([]pathHop, len(pathToParent)+1)
-							copy(newPath, pathToParent)
-							newPath[len(pathToParent)] = pathHop{
-								tpID:   n.tpID,
-								tpType: n.tpType,
-								from:   parentPK,
-								to:     n.pk,
-							}
-							visorPath[n.pk] = newPath
-						}
-						seenVisors[n.pk] = true
-						visitedLevel[n.pk] = level
-					}
-				}
-			}
-
-			currentLevel = nextLevelVisors
-		}
-
-		// Loop back to check for any new level 1 transports that appeared
-	}
-
 	// Helper to calculate average latency
 	calcAvgLatency := func(samples []float64) float64 {
 		if len(samples) == 0 {
@@ -2075,6 +1746,338 @@ func runTreeViewMode(
 		}
 
 		os.WriteFile(textFile, []byte(textOut.String()), 0644) //nolint:errcheck,gosec
+	}
+
+	// Helper to verify transport exists by refreshing local transport list
+	verifyTransportExists := func(tpID string) bool {
+		currentTransports, err := rpcClient.Transports(nil, nil, false)
+		if err != nil {
+			return false
+		}
+		for _, tp := range currentTransports {
+			if tp.ID.String() == tpID {
+				return true
+			}
+		}
+		return false
+	}
+
+	// BFS through the network
+	currentLevel := []string{localPK}
+	level := 0
+
+	for {
+		level++
+		// Stop if we've exceeded max level
+		if graphMaxLevel > 0 && level > graphMaxLevel {
+			break
+		}
+		// Stop if we've passed the exact hop level (when --hops is set)
+		if graphHops > 0 && uint(level) > graphHops { //nolint:gosec
+			break
+		}
+
+		// Find all transports at this level (per-transport, not per-visor)
+		type transportTarget struct {
+			remotePK string
+			parentPK string
+			tpID     string
+			tpType   string
+		}
+		var targets []transportTarget
+
+		// For level 1, use ONLY verified local transports from the visor
+		if level == 1 {
+			for _, tp := range localTransports {
+				remotePK := tp.Remote.String()
+				if !passesFilter(remotePK) {
+					continue
+				}
+				// Verify transport still exists before adding
+				tpID := tp.ID.String()
+				if !verifyTransportExists(tpID) {
+					continue
+				}
+				targets = append(targets, transportTarget{
+					remotePK: remotePK,
+					parentPK: localPK,
+					tpID:     tpID,
+					tpType:   string(tp.Type),
+				})
+			}
+		} else {
+			// For level 2+, use adjacency map from TPD
+			for _, parentPK := range currentLevel {
+				neighbors, ok := adjacency[parentPK]
+				if !ok {
+					continue
+				}
+				for _, n := range neighbors {
+					// Skip if we've already visited this visor at a lower level
+					if prevLevel, visited := visitedLevel[n.pk]; visited && prevLevel < level {
+						continue
+					}
+					if !passesFilter(n.pk) {
+						continue
+					}
+
+					targets = append(targets, transportTarget{
+						remotePK: n.pk,
+						parentPK: parentPK,
+						tpID:     n.tpID,
+						tpType:   n.tpType,
+					})
+				}
+			}
+		}
+
+		if len(targets) == 0 {
+			break
+		}
+
+		// Ping each transport
+		var nextLevelVisors []string
+		seenVisors := make(map[string]bool)
+
+		for _, target := range targets {
+			if ctx.Err() != nil {
+				return
+			}
+
+			// Skip if below start level or not at exact hop level (when --hops is set)
+			skipPing := level < graphStartLevel || (graphHops > 0 && uint(level) != graphHops) //nolint:gosec
+			if skipPing {
+				if !seenVisors[target.remotePK] {
+					nextLevelVisors = append(nextLevelVisors, target.remotePK)
+					seenVisors[target.remotePK] = true
+					visitedLevel[target.remotePK] = level
+				}
+				continue
+			}
+
+			// Add tree entry just before pinging (so we don't populate entries too far ahead)
+			treeEntries = append(treeEntries, treeEntry{
+				tpID:       target.tpID,
+				remotePK:   target.remotePK,
+				level:      level,
+				parentPK:   target.parentPK,
+				parentTpID: "",
+			})
+
+			// Get path to parent (empty for level 1, since parent is local)
+			pathToParent := visorPath[target.parentPK]
+
+			pingTransport(target.remotePK, target.parentPK, target.tpID, target.tpType, level, pathToParent)
+			saveState() // Save after each ping for resume support
+
+			// Add to next level if not seen
+			if !seenVisors[target.remotePK] {
+				data := transportLatencies[target.tpID]
+				hasFailed := data != nil && (data.calcErr != "" || data.setupErr != "" || data.pingErr != "")
+				if data != nil && !hasFailed {
+					nextLevelVisors = append(nextLevelVisors, target.remotePK)
+					// Store path to this visor for future levels
+					newPath := make([]pathHop, len(pathToParent)+1)
+					copy(newPath, pathToParent)
+					newPath[len(pathToParent)] = pathHop{
+						tpID:   target.tpID,
+						tpType: target.tpType,
+						from:   target.parentPK,
+						to:     target.remotePK,
+					}
+					visorPath[target.remotePK] = newPath
+				} else if graphContinue {
+					nextLevelVisors = append(nextLevelVisors, target.remotePK)
+				}
+				seenVisors[target.remotePK] = true
+				visitedLevel[target.remotePK] = level
+			}
+		}
+
+		// Sort nextLevelVisors by cumulative latency (lowest first) for optimal exploration order
+		for i := 0; i < len(nextLevelVisors)-1; i++ {
+			for j := i + 1; j < len(nextLevelVisors); j++ {
+				latI := visorCumulativeLatency[nextLevelVisors[i]]
+				latJ := visorCumulativeLatency[nextLevelVisors[j]]
+				// Lower latency should come first
+				if latJ < latI || (latI == 0 && latJ > 0) {
+					nextLevelVisors[i], nextLevelVisors[j] = nextLevelVisors[j], nextLevelVisors[i]
+				}
+			}
+		}
+
+		currentLevel = nextLevelVisors
+		if len(currentLevel) == 0 {
+			break
+		}
+	}
+
+	// Add any transport IDs from this session to the pinged set
+	for tpID := range transportLatencies {
+		pingedTpIDs[tpID] = true
+	}
+
+	// Continuous monitoring loop - check for new transports after each pass
+	for {
+		if ctx.Err() != nil {
+			break
+		}
+
+		// Re-fetch local transports to detect new ones
+		newLocalTransports, err := rpcClient.Transports(nil, nil, false)
+		if err != nil {
+			break // Can't continue without transport info
+		}
+
+		// Update localTpIDs with current state
+		localTpIDs = make(map[string]bool)
+		for _, tp := range newLocalTransports {
+			localTpIDs[tp.ID.String()] = true
+		}
+
+		// Find new level 1 transports that pass filtering
+		var newLevel1Targets []struct {
+			remotePK string
+			tpID     string
+			tpType   string
+		}
+		for _, tp := range newLocalTransports {
+			tpID := tp.ID.String()
+			if pingedTpIDs[tpID] {
+				continue // Already pinged
+			}
+			remotePK := tp.Remote.String()
+			if !passesFilter(remotePK) {
+				continue // Doesn't pass version/online filter
+			}
+			newLevel1Targets = append(newLevel1Targets, struct {
+				remotePK string
+				tpID     string
+				tpType   string
+			}{
+				remotePK: remotePK,
+				tpID:     tpID,
+				tpType:   string(tp.Type),
+			})
+		}
+
+		if len(newLevel1Targets) == 0 {
+			// No new transports found - scan complete
+			break
+		}
+
+		// Ping new level 1 transports
+		var newLevel1Visors []string
+		for _, target := range newLevel1Targets {
+			if ctx.Err() != nil {
+				break
+			}
+
+			// Add tree entry
+			treeEntries = append(treeEntries, treeEntry{
+				tpID:       target.tpID,
+				remotePK:   target.remotePK,
+				level:      1,
+				parentPK:   localPK,
+				parentTpID: "",
+			})
+
+			// Ping it
+			pingTransport(target.remotePK, localPK, target.tpID, target.tpType, 1, nil)
+			pingedTpIDs[target.tpID] = true
+			saveState() // Save after each ping for resume support
+
+			// Check if ping succeeded
+			data := transportLatencies[target.tpID]
+			hasFailed := data != nil && (data.calcErr != "" || data.setupErr != "" || data.pingErr != "")
+			if data != nil && !hasFailed {
+				newLevel1Visors = append(newLevel1Visors, target.remotePK)
+				// Store path to this visor
+				visorPath[target.remotePK] = []pathHop{{
+					tpID:   target.tpID,
+					tpType: target.tpType,
+					from:   localPK,
+					to:     target.remotePK,
+				}}
+				visitedLevel[target.remotePK] = 1
+			}
+
+			// After each level 1 ping, check for more new transports
+			// This handles transports that appear while we're pinging
+		}
+
+		// Now explore level 2+ for new level 1 visors
+		currentLevel := newLevel1Visors
+		for level := 2; len(currentLevel) > 0; level++ {
+			if ctx.Err() != nil {
+				break
+			}
+
+			var nextLevelVisors []string
+			seenVisors := make(map[string]bool)
+
+			for _, parentPK := range currentLevel {
+				neighbors, ok := adjacency[parentPK]
+				if !ok {
+					continue
+				}
+				for _, n := range neighbors {
+					// Skip if already visited at lower level
+					if prevLevel, visited := visitedLevel[n.pk]; visited && prevLevel < level {
+						continue
+					}
+					if !passesFilter(n.pk) {
+						continue
+					}
+					// Skip if this transport already pinged
+					if pingedTpIDs[n.tpID] {
+						continue
+					}
+
+					// Add tree entry
+					treeEntries = append(treeEntries, treeEntry{
+						tpID:       n.tpID,
+						remotePK:   n.pk,
+						level:      level,
+						parentPK:   parentPK,
+						parentTpID: "",
+					})
+
+					// Get path to parent
+					pathToParent := visorPath[parentPK]
+
+					// Ping it
+					pingTransport(n.pk, parentPK, n.tpID, n.tpType, level, pathToParent)
+					pingedTpIDs[n.tpID] = true
+					saveState() // Save after each ping for resume support
+
+					// Check if ping succeeded and add to next level
+					if !seenVisors[n.pk] {
+						data := transportLatencies[n.tpID]
+						hasFailed := data != nil && (data.calcErr != "" || data.setupErr != "" || data.pingErr != "")
+						if data != nil && !hasFailed {
+							nextLevelVisors = append(nextLevelVisors, n.pk)
+							// Store path to this visor
+							newPath := make([]pathHop, len(pathToParent)+1)
+							copy(newPath, pathToParent)
+							newPath[len(pathToParent)] = pathHop{
+								tpID:   n.tpID,
+								tpType: n.tpType,
+								from:   parentPK,
+								to:     n.pk,
+							}
+							visorPath[n.pk] = newPath
+						}
+						seenVisors[n.pk] = true
+						visitedLevel[n.pk] = level
+					}
+				}
+			}
+
+			currentLevel = nextLevelVisors
+		}
+
+		// Loop back to check for any new level 1 transports that appeared
 	}
 
 	// Final render and save

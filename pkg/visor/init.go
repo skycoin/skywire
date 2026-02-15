@@ -827,6 +827,13 @@ func initEmbeddedRouteSetup(ctx context.Context, v *Visor, log *logging.Logger) 
 	}
 	v.initLock.Unlock()
 
+	// Start the route setup-node listener to accept incoming requests from other visors
+	go func() {
+		if err := v.embeddedRouteSetup.Serve(ctx); err != nil {
+			log.WithError(err).Error("Embedded route setup-node listener failed")
+		}
+	}()
+
 	v.pushCloseStack("embedded_route_setup", func() error {
 		return routeSetupDmsgC.Close()
 	})
