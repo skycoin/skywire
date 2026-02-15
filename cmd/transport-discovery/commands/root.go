@@ -53,6 +53,7 @@ var (
 	entryTimeout    time.Duration
 	dmsgDisc        = deployment.Prod.DmsgDiscovery
 	pprofAddr       string
+	storeDataPath   string
 )
 
 func init() {
@@ -71,6 +72,7 @@ func init() {
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\033[0m\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
+	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire-services/tpd-bandwidth", "path for bandwidth backup files\033[0m")
 }
 
 // RootCmd contains the root command
@@ -202,7 +204,7 @@ transport-discovery --sk $(tail -n1 tpd-config.json)`,
 		}
 
 		enableMetrics := metricsAddr != ""
-		tpdAPI := api.New(logger, s, nonceStore, enableMetrics, m, dmsgAddr)
+		tpdAPI := api.New(logger, s, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
 
 		logger.Infof("Listening on %s", addr)
 		logger.Infof("Transport entry timeout: %v", entryTimeout)

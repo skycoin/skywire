@@ -744,6 +744,14 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 
 	rg.networkStats.SetLatency(uint32(latency)) //nolint: gosec
 
+	// Propagate ping latency to the underlying transport so it gets
+	// reported to TPD during re-registration.
+	rg.mu.Lock()
+	if len(rg.tps) > 0 && rg.tps[0] != nil {
+		rg.tps[0].SetLatency(latency)
+	}
+	rg.mu.Unlock()
+
 	return nil
 }
 

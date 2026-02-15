@@ -65,6 +65,10 @@ func (m *mockStore) GetAllVisorSummaries(_ context.Context) ([]tpdstore.VisorSum
 	return []tpdstore.VisorSummary{}, nil
 }
 
+func (m *mockStore) BackupAndCleanOldBandwidth(_ context.Context, _ string) error {
+	return nil
+}
+
 // SaveEntry is added to the mock to allow saving Entry, without need for SignedEntry
 func (m *mockStore) SaveEntry(source, destiny cipher.PubKey, _ bool) {
 	entry := &transport.Entry{
