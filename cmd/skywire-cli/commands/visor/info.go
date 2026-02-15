@@ -24,6 +24,7 @@ func init() {
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 	RootCmd.AddCommand(portsCmd)
+	RootCmd.AddCommand(dmsgServersCmd)
 }
 
 var pkCmd = &cobra.Command{
@@ -194,5 +195,43 @@ var portsCmd = &cobra.Command{
 		msg += "| DMSG: connection by dmsg service          |\n"
 		msg += "+-------------------------------------------+\n"
 		internal.PrintOutput(cmd.Flags(), ports, msg)
+	},
+}
+
+var dmsgServersCmd = &cobra.Command{
+	Use:   "dmsg-servers",
+	Short: "List connected DMSG servers with latencies",
+	Long:  "\n  List of connected DMSG servers sorted by latency (lowest first)",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		servers, err := rpcClient.DMSGServers()
+		if err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
+
+		if len(servers) == 0 {
+			fmt.Println("No DMSG servers connected")
+			return
+		}
+
+		msg := "+--------------------------------------------------------------------+-------------+\n"
+		msg += fmt.Sprintf("| %-66s | %11s |\n", "Server Public Key", "Latency")
+		msg += "|--------------------------------------------------------------------+-------------|\n"
+
+		for _, server := range servers {
+			latStr := "-"
+			if server.Latency > 0 {
+				latStr = fmt.Sprintf("%.1fms", float64(server.Latency.Milliseconds()))
+			}
+			msg += fmt.Sprintf("| %-66s | %11s |\n", server.PK.String(), latStr)
+		}
+
+		msg += "+--------------------------------------------------------------------+-------------+\n"
+		msg += "Note: Latency is measured via self-ping through each server.\n"
+		msg += "Servers with '-' latency have not been measured yet (wait ~5s after startup).\n"
+		internal.PrintOutput(cmd.Flags(), servers, msg)
 	},
 }

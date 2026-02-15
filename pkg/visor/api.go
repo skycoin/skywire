@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/hex"
@@ -59,6 +60,7 @@ type API interface {
 	GetLogRotationInterval() (visorconfig.Duration, error)
 	SetLogRotationInterval(visorconfig.Duration) error
 	IsDMSGClientReady() (bool, error)
+	DMSGServers() ([]DMSGServerInfo, error)
 	Ports() (map[string]PortDetail, error)
 
 	//reward setting
@@ -154,6 +156,7 @@ type API interface {
 	StopDmsgPing(pk cipher.PubKey) error
 	GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error)
 	GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error)
+	GetPreferredDmsgServer(remotePK cipher.PubKey) (cipher.PubKey, error)
 	BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 	DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 
@@ -171,6 +174,9 @@ type API interface {
 	StartUIServer(addr string) error
 	StopUIServer() error
 	UIServerStatus() (*UIServerStatus, error)
+
+	//dmsg utilities
+	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
 
 	// Close closes the API connection (for RPC clients)
 	Close() error
@@ -1225,6 +1231,12 @@ type PortDetail struct {
 	Type string
 }
 
+// DMSGServerInfo contains information about a connected DMSG server including latency.
+type DMSGServerInfo struct {
+	PK      cipher.PubKey `json:"pk"`
+	Latency time.Duration `json:"latency"` // Round-trip latency via self-ping, 0 if not measured
+}
+
 // Ports return list of all ports used by visor services and apps
 func (v *Visor) Ports() (map[string]PortDetail, error) {
 	ctx := context.Background()
@@ -1784,6 +1796,7 @@ func (v *Visor) GetLastRouteCalcTime() time.Duration {
 }
 
 // DialDmsgPing implements API. Dials a remote visor over dmsg for ping.
+// It prefers to use the lowest-latency DMSG server that both visors share.
 func (v *Visor) DialDmsgPing(pk cipher.PubKey) error {
 	if v.dmsgC == nil {
 		return fmt.Errorf("dmsg client not available")
@@ -1798,6 +1811,20 @@ func (v *Visor) DialDmsgPing(pk cipher.PubKey) error {
 		return ctx.Err()
 	case <-v.dmsgC.Ready():
 	}
+
+	// Try to use the preferred (lowest-latency) server
+	preferredServer, err := v.GetPreferredDmsgServer(pk)
+	if err == nil && !preferredServer.Null() {
+		// Use the preferred server
+		v.log.WithField("server", preferredServer.String()[:16]+"...").
+			WithField("remote", pk.String()[:16]+"...").
+			Debug("Dialing DMSG ping via preferred server")
+		return v.DialDmsgPingViaServer(pk, preferredServer)
+	}
+
+	// Fall back to default dial (dmsg client will pick a server)
+	v.log.WithField("remote", pk.String()[:16]+"...").
+		Debug("Dialing DMSG ping via default server selection")
 
 	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: visorconfig.DmsgPingPort})
 	if err != nil {
@@ -1868,6 +1895,47 @@ func (v *Visor) GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error) {
 	}
 
 	return pingEntry.serverPK, nil
+}
+
+// GetPreferredDmsgServer returns the lowest-latency DMSG server that both the local
+// and remote visor are connected to. Returns empty PK if no common server found.
+func (v *Visor) GetPreferredDmsgServer(remotePK cipher.PubKey) (cipher.PubKey, error) {
+	// Get servers the remote visor is connected to
+	remoteServers, err := v.GetRemoteDmsgServers(remotePK)
+	if err != nil {
+		return cipher.PubKey{}, err
+	}
+	if len(remoteServers) == 0 {
+		return cipher.PubKey{}, fmt.Errorf("remote visor not connected to any DMSG servers")
+	}
+
+	// Get our connected servers with latencies
+	ourServers, err := v.DMSGServers()
+	if err != nil {
+		return cipher.PubKey{}, err
+	}
+	if len(ourServers) == 0 {
+		return cipher.PubKey{}, fmt.Errorf("not connected to any DMSG servers")
+	}
+
+	// Build set of remote servers for O(1) lookup
+	remoteServerSet := make(map[cipher.PubKey]bool)
+	for _, s := range remoteServers {
+		remoteServerSet[s] = true
+	}
+
+	// Find the lowest-latency server we share with the remote visor
+	// ourServers is already sorted by latency (lowest first)
+	for _, server := range ourServers {
+		if remoteServerSet[server.PK] {
+			v.log.WithField("server", server.PK.String()[:16]+"...").
+				WithField("latency", server.Latency).
+				Debug("Selected preferred DMSG server")
+			return server.PK, nil
+		}
+	}
+
+	return cipher.PubKey{}, fmt.Errorf("no common DMSG servers with remote visor")
 }
 
 // GetRemoteDmsgServers implements API. Gets the DMSG servers a remote visor is connected to.
@@ -1955,6 +2023,29 @@ func (v *Visor) DmsgPing(conf PingConfig) ([]time.Duration, error) {
 		rtt := time.Since(start)
 		latencies = append(latencies, rtt)
 	}
+	return latencies, nil
+}
+
+// DmsgPingViaServer implements API. Performs a ping through a specific DMSG server.
+// This is a convenience method that handles dial, ping, and cleanup.
+func (v *Visor) DmsgPingViaServer(conf PingConfig, serverPK cipher.PubKey) ([]time.Duration, error) {
+	// Dial the ping connection via the specific server
+	if err := v.DialDmsgPingViaServer(conf.PK, serverPK); err != nil {
+		return nil, fmt.Errorf("dial via server %s: %w", serverPK.String()[:16]+"...", err)
+	}
+
+	// Perform the ping
+	latencies, err := v.DmsgPing(conf)
+
+	// Always clean up the connection
+	if stopErr := v.StopDmsgPing(conf.PK); stopErr != nil {
+		v.log.WithError(stopErr).Debug("Failed to stop dmsg ping connection")
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("ping via server %s: %w", serverPK.String()[:16]+"...", err)
+	}
+
 	return latencies, nil
 }
 
@@ -2683,6 +2774,51 @@ func (v *Visor) IsDMSGClientReady() (bool, error) {
 	return false, errors.New("dmsg client is not ready")
 }
 
+// DMSGServers returns list of connected DMSG servers with their latencies.
+// Servers are sorted by latency (lowest first). Servers with latency 0 have not been measured yet.
+func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
+	if v.dmsgC == nil {
+		return nil, errors.New("dmsg client not available")
+	}
+
+	// Get connected servers
+	serverPKs := v.dmsgC.ConnectedServersPK()
+	if len(serverPKs) == 0 {
+		return []DMSGServerInfo{}, nil
+	}
+
+	// Build list with latencies
+	servers := make([]DMSGServerInfo, 0, len(serverPKs))
+	v.dmsgServerLatenciesMu.RLock()
+	for _, pkStr := range serverPKs {
+		var pk cipher.PubKey
+		if err := pk.Set(pkStr); err != nil {
+			continue
+		}
+		info := DMSGServerInfo{
+			PK:      pk,
+			Latency: v.dmsgServerLatencies[pk],
+		}
+		servers = append(servers, info)
+	}
+	v.dmsgServerLatenciesMu.RUnlock()
+
+	// Sort by latency (lowest first, 0/unmeasured at end)
+	for i := 0; i < len(servers)-1; i++ {
+		for j := i + 1; j < len(servers); j++ {
+			si, sj := servers[i], servers[j]
+			// 0 latency (unmeasured) goes to the end
+			if si.Latency == 0 && sj.Latency > 0 {
+				servers[i], servers[j] = servers[j], servers[i]
+			} else if si.Latency > 0 && sj.Latency > 0 && sj.Latency < si.Latency {
+				servers[i], servers[j] = servers[j], servers[i]
+			}
+		}
+	}
+
+	return servers, nil
+}
+
 // RegisterHTTPPort implements API.
 func (v *Visor) RegisterHTTPPort(localPort int) error {
 	v.allowedMX.Lock()
@@ -3094,4 +3230,147 @@ func (v *Visor) UIServerStatus() (*UIServerStatus, error) {
 	}
 
 	return status, nil
+}
+
+// DmsgHTTPRequest represents an HTTP request to be made over dmsg
+type DmsgHTTPRequest struct {
+	URL    string            `json:"url"`
+	Method string            `json:"method"`
+	Header map[string]string `json:"header,omitempty"`
+	Body   []byte            `json:"body,omitempty"`
+}
+
+// DmsgHTTPResponse represents an HTTP response received over dmsg
+type DmsgHTTPResponse struct {
+	StatusCode int               `json:"status_code"`
+	Status     string            `json:"status"`
+	Header     map[string]string `json:"header,omitempty"`
+	Body       []byte            `json:"body,omitempty"`
+}
+
+// DmsgHTTP implements API. Performs an HTTP request over dmsg using the visor's dmsg client.
+func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
+	if v.dmsgC == nil {
+		return nil, fmt.Errorf("dmsg client not available")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Wait for dmsg client to be ready
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-v.dmsgC.Ready():
+	}
+
+	// Create HTTP transport using visor's dmsg client
+	transport := dmsgHTTPTransport{
+		ctx:   ctx,
+		dmsgC: v.dmsgC,
+	}
+
+	httpClient := &http.Client{
+		Transport: &transport,
+		Timeout:   55 * time.Second,
+	}
+
+	// Build HTTP request
+	var bodyReader io.Reader
+	if len(req.Body) > 0 {
+		bodyReader = bytes.NewReader(req.Body)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, req.Method, req.URL, bodyReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	for k, v := range req.Header {
+		httpReq.Header.Set(k, v)
+	}
+
+	// Perform request
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Build response
+	response := &DmsgHTTPResponse{
+		StatusCode: resp.StatusCode,
+		Status:     resp.Status,
+		Header:     make(map[string]string),
+		Body:       body,
+	}
+
+	for k, v := range resp.Header {
+		if len(v) > 0 {
+			response.Header[k] = v[0]
+		}
+	}
+
+	return response, nil
+}
+
+// dmsgHTTPTransport implements http.RoundTripper using the visor's dmsg client
+type dmsgHTTPTransport struct {
+	ctx   context.Context
+	dmsgC *dmsg.Client
+}
+
+func (t *dmsgHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	var hostAddr dmsg.Addr
+	if err := hostAddr.Set(req.Host); err != nil {
+		return nil, fmt.Errorf("invalid host address: %w", err)
+	}
+	if hostAddr.Port == 0 {
+		hostAddr.Port = 80
+	}
+
+	stream, err := t.dmsgC.DialStream(req.Context(), hostAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = req.Write(stream); err != nil {
+		stream.Close() //nolint:errcheck
+		return nil, err
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(stream), req)
+	if err != nil {
+		stream.Close() //nolint:errcheck
+		return nil, err
+	}
+
+	// Wrap response body to close stream when done
+	resp.Body = &dmsgStreamBody{
+		ReadCloser: resp.Body,
+		stream:     stream,
+	}
+
+	return resp, nil
+}
+
+type dmsgStreamBody struct {
+	io.ReadCloser
+	stream *dmsg.Stream
+}
+
+func (b *dmsgStreamBody) Close() error {
+	err1 := b.ReadCloser.Close()
+	err2 := b.stream.Close()
+	if err1 != nil {
+		return err1
+	}
+	return err2
 }

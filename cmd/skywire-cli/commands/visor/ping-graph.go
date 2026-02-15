@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -46,9 +47,11 @@ var (
 	graphPcktSize     int
 	graphCacheTPD     string
 	graphCacheUT      string
+	graphCacheDMSG    string
 	graphCacheAge     int
 	graphTPDURL       string
 	graphUTURL        string
+	graphDMSGURL      string
 	graphOnlineOnly   bool
 	graphContinue     bool
 	graphStartLevel   int
@@ -57,13 +60,13 @@ var (
 	graphLocalRoute   bool
 	graphShowRoute    bool
 	graphHopLatency   bool
-	graphOutputJSON   string
-	graphOutputText   string
+	graphOutput       string
 	graphAllServers   bool
 	graphDmsgServerPK string
 	graphTreeView     bool
 	graphHops         uint
 	graphRetries      int
+	graphResume       bool
 )
 
 func init() {
@@ -71,7 +74,7 @@ func init() {
 	treeExample := pterm.TreeNode{
 		Text: "edge",
 		Children: []pterm.TreeNode{
-			{Text: "edge tpid calc setup ping... avg"},
+			{Text: "edge                                                             tpid                                 -     setup     ping  .....ms      avg"},
 		},
 	}
 	treeStr, _ := pterm.DefaultTree.WithRoot(treeExample).Srender() //nolint:errcheck
@@ -91,10 +94,10 @@ Tree view (--tree) output format:
 ` + treeStr + `
   - edge: visor public key
   - tpid: transport ID (green=stcpr, blue=sudph)
-  - calc: route calculation time in ms (--local-route only)
+  - -: separator (calc time shown here with --local-route)
   - setup: route setup time in ms
-  - ping...: ping latencies in ms (one per --tries)
-  - total: calc + setup + avg(ping)
+  - ping: ping latencies in ms (one per --tries)
+  - avg: average ping latency in ms
 
   Failures: red text = ping failed, red background = setup/calc failed`
 
@@ -106,9 +109,11 @@ Tree view (--tree) output format:
 	pingGraphCmd.Flags().IntVarP(&graphPcktSize, "size", "s", 2, "packet size in KB")
 	pingGraphCmd.Flags().StringVar(&graphCacheTPD, "cft", os.TempDir()+"/tpd.json", "TPD cache file location")
 	pingGraphCmd.Flags().StringVar(&graphCacheUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location")
+	pingGraphCmd.Flags().StringVar(&graphCacheDMSG, "cfd", os.TempDir()+"/dmsg-clients.json", "DMSG clients cache file location")
 	pingGraphCmd.Flags().IntVarP(&graphCacheAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	pingGraphCmd.Flags().StringVar(&graphTPDURL, "tpdurl", deployment.Prod.TransportDiscovery, "transport discovery URL")
 	pingGraphCmd.Flags().StringVar(&graphUTURL, "uturl", deployment.Prod.UptimeTracker, "uptime tracker URL")
+	pingGraphCmd.Flags().StringVar(&graphDMSGURL, "dmsgurl", deployment.Prod.DmsgDiscovery, "DMSG discovery URL")
 	pingGraphCmd.Flags().BoolVarP(&graphOnlineOnly, "online", "g", false, "only ping visors marked online in UT")
 	pingGraphCmd.Flags().BoolVarP(&graphContinue, "continue", "c", false, "continue on ping failure (don't stop at failed level)")
 	pingGraphCmd.Flags().IntVar(&graphStartLevel, "start-level", 1, "start pinging from this level (skip earlier levels)")
@@ -120,11 +125,11 @@ Tree view (--tree) output format:
 	pingGraphCmd.Flags().BoolVar(&graphShowRoute, "show-route", false, "show the route hops used for the ping")
 	pingGraphCmd.Flags().BoolVar(&graphHopLatency, "hop-latency", false, "measure per-hop latency for multi-hop routes (requires --show-route)")
 	pingGraphCmd.Flags().DurationVar(&graphSetupTimeout, "setup-timeout", 30*time.Second, "timeout for route setup phase")
-	pingGraphCmd.Flags().StringVar(&graphOutputJSON, "output-json", "", "write results to JSON file (with timestamp)")
-	pingGraphCmd.Flags().StringVar(&graphOutputText, "output-text", "", "write results to text file (with timestamp)")
+	pingGraphCmd.Flags().StringVarP(&graphOutput, "output", "O", "", "output base filename (writes .json and .txt files)")
 	pingGraphCmd.Flags().BoolVar(&graphTreeView, "tree", false, "display results as tree view with per-transport latencies")
 	pingGraphCmd.Flags().UintVar(&graphHops, "hops", 0, "exact hop level to ping (0 = all levels, 1 = direct transports only, 2 = two hops, etc.)")
 	pingGraphCmd.Flags().IntVar(&graphRetries, "retries", 1, "number of retry attempts if ping fails (tree mode only)")
+	pingGraphCmd.Flags().BoolVarP(&graphResume, "resume", "R", false, "resume from output file if it exists (continues where left off)")
 	pingCmd.AddCommand(pingGraphCmd)
 }
 
@@ -133,8 +138,8 @@ var pingGraphCmd = &cobra.Command{
 	Short: "Ping visors across the network by hop level",
 	Run: func(cmd *cobra.Command, _ []string) {
 		// Validate mutually exclusive flags
-		if graphTreeView && (graphUseDmsg || graphDmsgOnly) {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--tree is mutually exclusive with --dmsg and --dmsg-only"))
+		if graphTreeView && graphUseDmsg {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--tree with --dmsg is not supported; use --tree with --dmsg-only for DMSG-only tree mode"))
 		}
 
 		// Get local visor info
@@ -266,9 +271,11 @@ var pingGraphCmd = &cobra.Command{
 			}
 		}
 
-		// Check if local visor has transports
-		if _, exists := adjacency[localPK]; !exists {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("local visor has no transports in TPD"))
+		// Check if local visor has transports (skip for DMSG-only mode)
+		if !graphDmsgOnly {
+			if _, exists := adjacency[localPK]; !exists {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("local visor has no transports in TPD"))
+			}
 		}
 
 		// Setup gRPC client for streaming ping
@@ -362,6 +369,12 @@ var pingGraphCmd = &cobra.Command{
 
 		// Tree view mode: separate execution path
 		if graphTreeView {
+			if graphDmsgOnly {
+				// DMSG tree mode: ping via DMSG servers
+				runDmsgTreeViewMode(ctx, grpcClient, rpcClient, localPK, onlineSet, versionFilteredSet, passesFilter)
+				return
+			}
+			// Route tree mode: ping via transports
 			// Convert adjacency map to use treeNeighbor type
 			treeAdjacency := make(map[string][]treeNeighbor)
 			for pk, neighbors := range adjacency {
@@ -748,26 +761,26 @@ var pingGraphCmd = &cobra.Command{
 		textOutput.WriteString(fmt.Sprintf("Unique visors visited: %d\n", len(visited)-1))
 		textOutput.WriteString(fmt.Sprintf("End Time: %s\n", results.EndTime))
 
-		// Write JSON output file if specified
-		if graphOutputJSON != "" {
+		// Write output files if specified
+		if graphOutput != "" {
+			jsonFile := graphOutput + ".json"
+			textFile := graphOutput + ".txt"
+
 			jsonData, err := json.MarshalIndent(results, "", "  ")
 			if err != nil {
 				fmt.Printf("Error marshaling JSON: %v\n", err)
 			} else {
-				if err := os.WriteFile(graphOutputJSON, jsonData, 0644); err != nil { //nolint:gosec
+				if err := os.WriteFile(jsonFile, jsonData, 0644); err != nil { //nolint:gosec
 					fmt.Printf("Error writing JSON file: %v\n", err)
 				} else {
-					fmt.Printf("Results written to JSON: %s\n", graphOutputJSON)
+					fmt.Printf("Results written to: %s\n", jsonFile)
 				}
 			}
-		}
 
-		// Write text output file if specified
-		if graphOutputText != "" {
-			if err := os.WriteFile(graphOutputText, []byte(textOutput.String()), 0644); err != nil { //nolint:gosec
+			if err := os.WriteFile(textFile, []byte(textOutput.String()), 0644); err != nil { //nolint:gosec
 				fmt.Printf("Error writing text file: %v\n", err)
 			} else {
-				fmt.Printf("Results written to text: %s\n", graphOutputText)
+				fmt.Printf("Results written to: %s\n", textFile)
 			}
 		}
 	},
@@ -1027,11 +1040,30 @@ func runTreeViewMode(
 		// Clear screen and scrollback buffer, move cursor to top-left
 		fmt.Print("\033[H\033[2J\033[3J")
 
+		// Build label row with right-justified column headers that align with data
+		// Column widths match formatEntry: remotePK(64) tpID(36) calc(1) setup(9) pings(8 each) avg(9)
+		// Labels are right-justified so last char aligns with last char of data values
+		var labelParts []string
+		labelParts = append(labelParts, fmt.Sprintf("%-64s", pterm.Gray("edge")))  // remotePK: left-aligned
+		labelParts = append(labelParts, fmt.Sprintf("%-36s", pterm.Green("tpid"))) // tpID: left-aligned
+		labelParts = append(labelParts, pterm.Gray("-"))                           // calc: just hyphen
+		labelParts = append(labelParts, fmt.Sprintf("%9s", pterm.Gray("setup")))   // setup: right-aligned, 'p' aligns with 's'
+		// Ping columns: "ping" in first slot, ".....ms" in rest - each 8 chars right-aligned
+		// 'g' in 'ping' aligns with 's' in values like '1.6ms'
+		labelParts = append(labelParts, fmt.Sprintf("%8s", pterm.Gray("ping")))
+		for i := 1; i < graphTries; i++ {
+			labelParts = append(labelParts, fmt.Sprintf("%8s", pterm.Gray(".....ms")))
+		}
+		// Avg column: 'g' in 'avg' aligns with 's' in values like '1.5ms'
+		labelParts = append(labelParts, fmt.Sprintf("%9s", pterm.Gray("avg")))
+
+		labelRow := strings.Join(labelParts, " ")
+
 		// Print label tree header
 		labelTree := pterm.TreeNode{
 			Text: pterm.Gray("edge"),
 			Children: []pterm.TreeNode{
-				{Text: pterm.Gray("edge") + " " + pterm.Green("tpid") + " " + pterm.Gray("calc setup ping... avg")},
+				{Text: labelRow},
 			},
 		}
 		pterm.DefaultTree.WithRoot(labelTree).Render() //nolint:errcheck,gosec
@@ -1759,4 +1791,770 @@ func runTreeViewMode(
 	// Final render
 	renderTree()
 	fmt.Println(pterm.Green("Scan complete!"))
+}
+
+// dmsgLatencyData tracks timing for DMSG pings (no transport ID, no setup time)
+type dmsgLatencyData struct {
+	serverPK    string    // DMSG server used for this ping
+	remotePK    string    // Remote visor being pinged
+	pingSamples []float64 // Ping samples in ms
+	pingErr     string    // Error message if ping failed
+	phase       string    // "pending", "ping", "done"
+	timestamp   time.Time // When the test completed
+}
+
+// dmsgSavedState represents the saved state for resume functionality
+type dmsgSavedState struct {
+	LocalPK    string                 `json:"local_pk"`
+	StartTime  string                 `json:"start_time"`
+	UpdateTime string                 `json:"update_time"`
+	Entries    []dmsgSavedEntry       `json:"entries"`
+	Servers    []string               `json:"servers"`
+	Settings   map[string]interface{} `json:"settings"`
+}
+
+// dmsgSavedEntry represents a single ping entry in saved state
+type dmsgSavedEntry struct {
+	ServerPK    string    `json:"server_pk"`
+	RemotePK    string    `json:"remote_pk"`
+	Level       int       `json:"level"`
+	PingSamples []float64 `json:"ping_samples,omitempty"`
+	AvgLatency  float64   `json:"avg_latency_ms,omitempty"`
+	PingErr     string    `json:"ping_err,omitempty"`
+	Timestamp   string    `json:"timestamp,omitempty"`
+	Phase       string    `json:"phase"`
+}
+
+// runDmsgTreeViewMode executes the ping graph in DMSG tree view mode
+func runDmsgTreeViewMode(
+	ctx context.Context,
+	grpcClient *rpcgrpc.PingClient,
+	rpcClient visor.API,
+	localPK string,
+	onlineSet map[string]bool,
+	versionFilteredSet map[string]bool,
+	passesFilter func(string) bool,
+) {
+	// Mutex for thread-safe access to shared data structures
+	var mu sync.Mutex
+
+	// Data structure to track DMSG ping latencies
+	// Key: serverPK:remotePK, Value: latency data
+	dmsgLatencies := make(map[string]*dmsgLatencyData)
+
+	// Track server latencies from level 1 (self-ping)
+	serverLatencies := make(map[string]float64) // serverPK -> avg latency to self
+
+	// Start time for this scan
+	startTime := time.Now()
+
+	// Get local visor's connected DMSG servers
+	summary, err := rpcClient.Summary()
+	if err != nil {
+		fmt.Printf("Error getting visor summary: %v\n", err)
+		return
+	}
+	connectedServers := summary.ConnectedDmsgServers
+	if len(connectedServers) == 0 {
+		fmt.Println("No connected DMSG servers found")
+		return
+	}
+	fmt.Printf("Found %d connected DMSG server(s)\n", len(connectedServers))
+
+	// Fetch DMSG clients by server from dmsg-discovery
+	fmt.Printf("Fetching DMSG clients from discovery...\n")
+	dmsgClientsRaw := internal.GetData(graphCacheDMSG, graphDMSGURL+"/dmsg-discovery/servers/clients", graphCacheAge)
+	var clientsByServer map[string][]string
+	if err := json.Unmarshal([]byte(dmsgClientsRaw), &clientsByServer); err != nil {
+		fmt.Printf("Warning: failed to parse DMSG clients data: %v\n", err)
+		clientsByServer = make(map[string][]string)
+	} else {
+		totalClients := 0
+		for _, clients := range clientsByServer {
+			totalClients += len(clients)
+		}
+		fmt.Printf("Loaded %d servers with %d total clients from DMSG discovery\n", len(clientsByServer), totalClients)
+	}
+
+	// Build list of tree entries for display
+	type dmsgTreeEntry struct {
+		serverPK string
+		remotePK string
+		level    int
+	}
+	var treeEntries []dmsgTreeEntry
+
+	// Track which visors we've already pinged (for resume)
+	pingedVisors := make(map[string]bool)
+	pingedVisors[localPK] = true
+
+	// Load saved state if resuming
+	if graphResume && graphOutput != "" {
+		resumeFile := graphOutput + ".json"
+		savedData, err := os.ReadFile(resumeFile)
+		if err == nil {
+			var savedState dmsgSavedState
+			if err := json.Unmarshal(savedData, &savedState); err == nil {
+				fmt.Printf("Resuming from: %s\n", resumeFile)
+				fmt.Printf("  Started: %s, Last update: %s\n", savedState.StartTime, savedState.UpdateTime)
+				fmt.Printf("  Loaded %d entries\n", len(savedState.Entries))
+
+				// Restore entries
+				for _, entry := range savedState.Entries {
+					// Mark as already pinged if done
+					if entry.Phase == "done" {
+						pingedVisors[entry.RemotePK] = true
+					}
+
+					// Add to tree entries
+					treeEntries = append(treeEntries, dmsgTreeEntry{
+						serverPK: entry.ServerPK,
+						remotePK: entry.RemotePK,
+						level:    entry.Level,
+					})
+
+					// Restore latency data
+					key := entry.ServerPK + ":" + entry.RemotePK
+					dmsgLatencies[key] = &dmsgLatencyData{
+						serverPK:    entry.ServerPK,
+						remotePK:    entry.RemotePK,
+						pingSamples: entry.PingSamples,
+						pingErr:     entry.PingErr,
+						phase:       entry.Phase,
+					}
+					if entry.Timestamp != "" {
+						if ts, err := time.Parse(time.RFC3339, entry.Timestamp); err == nil {
+							dmsgLatencies[key].timestamp = ts
+						}
+					}
+
+					// Restore server latencies for level 1
+					if entry.Level == 1 && entry.AvgLatency > 0 {
+						serverLatencies[entry.ServerPK] = entry.AvgLatency
+					}
+				}
+			}
+		}
+		// If file doesn't exist, just start fresh (no error message needed)
+	}
+
+	// Helper to get unique key for latency map
+	latencyKey := func(serverPK, remotePK string) string {
+		return serverPK + ":" + remotePK
+	}
+
+	// Helper to format a DMSG tree entry as text (with optional timestamp)
+	// If lockMu is true, acquires mu.Lock; if false, assumes caller holds the lock
+	formatDmsgEntryInternal := func(entry dmsgTreeEntry, lockMu bool) string {
+		if lockMu {
+			mu.Lock()
+		}
+		key := latencyKey(entry.serverPK, entry.remotePK)
+		data := dmsgLatencies[key]
+		if lockMu {
+			mu.Unlock()
+		}
+
+		// For level 1 (self-ping), display serverPK as the child node
+		// For level 2+, display remotePK (the client being pinged)
+		displayPK := entry.remotePK
+		if entry.level == 1 {
+			displayPK = entry.serverPK
+		}
+
+		if data == nil {
+			return fmt.Sprintf("%s ...", displayPK)
+		}
+
+		// Build ping samples string (each 8 chars)
+		var pingsStr string
+		if data.pingErr != "" {
+			pingsStr = pterm.Red(fmt.Sprintf("%8s", truncateErrDmsg(data.pingErr, 8)))
+		} else if len(data.pingSamples) > 0 {
+			var pingParts []string
+			for _, p := range data.pingSamples {
+				pingParts = append(pingParts, fmt.Sprintf("%8s", fmt.Sprintf("%.1fms", p)))
+			}
+			pingsStr = strings.Join(pingParts, " ")
+		} else if data.phase != "done" {
+			pingsStr = fmt.Sprintf("%8s", "...")
+		} else {
+			pingsStr = fmt.Sprintf("%8s", "-")
+		}
+
+		// Average ping time (9 chars, right-aligned)
+		var avgStr string
+		if data.pingErr == "" && len(data.pingSamples) > 0 {
+			var pingSum float64
+			for _, p := range data.pingSamples {
+				pingSum += p
+			}
+			avgPing := pingSum / float64(len(data.pingSamples))
+			avgStr = fmt.Sprintf("%9s", fmt.Sprintf("%.1fms", avgPing))
+		} else {
+			avgStr = fmt.Sprintf("%9s", "-")
+		}
+
+		// Timestamp (if done)
+		var tsStr string
+		if data.phase == "done" && !data.timestamp.IsZero() {
+			tsStr = pterm.Gray(fmt.Sprintf(" %s", data.timestamp.Format("2006-01-02 15:04:05")))
+		}
+
+		// Format: displayPK pings... avg timestamp
+		if data.pingErr != "" {
+			return pterm.Red(fmt.Sprintf("%s %s %s", displayPK, pingsStr, avgStr)) + tsStr
+		}
+		return fmt.Sprintf("%s %s %s", displayPK, pingsStr, avgStr) + tsStr
+	}
+
+	// Wrapper that always acquires the lock
+	formatDmsgEntry := func(entry dmsgTreeEntry) string {
+		return formatDmsgEntryInternal(entry, true)
+	}
+
+	// Helper to get average latency for a server (from self-ping)
+	getServerLatency := func(serverPK string) float64 {
+		mu.Lock()
+		defer mu.Unlock()
+		if lat, ok := serverLatencies[serverPK]; ok {
+			return lat
+		}
+		return -1
+	}
+
+	// Helper to save state to files
+	saveState := func() {
+		mu.Lock()
+		defer mu.Unlock()
+
+		// Build saved state
+		state := dmsgSavedState{
+			LocalPK:    localPK,
+			StartTime:  startTime.Format(time.RFC3339),
+			UpdateTime: time.Now().Format(time.RFC3339),
+			Servers:    connectedServers,
+			Settings: map[string]interface{}{
+				"tries":   graphTries,
+				"timeout": graphTimeout.String(),
+				"version": graphVersion,
+			},
+		}
+
+		for _, entry := range treeEntries {
+			key := latencyKey(entry.serverPK, entry.remotePK)
+			data := dmsgLatencies[key]
+			if data == nil {
+				continue
+			}
+
+			var avgLatency float64
+			if len(data.pingSamples) > 0 {
+				var sum float64
+				for _, p := range data.pingSamples {
+					sum += p
+				}
+				avgLatency = sum / float64(len(data.pingSamples))
+			}
+
+			savedEntry := dmsgSavedEntry{
+				ServerPK:    entry.serverPK,
+				RemotePK:    entry.remotePK,
+				Level:       entry.level,
+				PingSamples: data.pingSamples,
+				AvgLatency:  avgLatency,
+				PingErr:     data.pingErr,
+				Phase:       data.phase,
+			}
+			if !data.timestamp.IsZero() {
+				savedEntry.Timestamp = data.timestamp.Format(time.RFC3339)
+			}
+			state.Entries = append(state.Entries, savedEntry)
+		}
+
+		// Save files if output specified
+		if graphOutput != "" {
+			jsonFile := graphOutput + ".json"
+			textFile := graphOutput + ".txt"
+
+			// Save JSON
+			jsonData, err := json.MarshalIndent(state, "", "  ")
+			if err == nil {
+				os.WriteFile(jsonFile, jsonData, 0644) //nolint:errcheck,gosec
+			}
+
+			// Save text (with ANSI codes)
+			var textOut strings.Builder
+			textOut.WriteString(fmt.Sprintf("=== DMSG Ping Graph ===\n"))
+			textOut.WriteString(fmt.Sprintf("Local: %s\n", pterm.Cyan(localPK)))
+			textOut.WriteString(fmt.Sprintf("Started: %s\n", startTime.Format(time.RFC3339)))
+			textOut.WriteString(fmt.Sprintf("Updated: %s\n\n", time.Now().Format(time.RFC3339)))
+
+			// Level 1 - sort servers by latency
+			textOut.WriteString(pterm.Yellow("=== Level 1 (DMSG servers) ===\n"))
+			type serverWithLatency struct {
+				pk      string
+				latency float64
+			}
+			var sortedServersForSave []serverWithLatency
+			for _, entry := range treeEntries {
+				if entry.level == 1 {
+					lat, ok := serverLatencies[entry.serverPK]
+					if !ok {
+						lat = -1
+					}
+					sortedServersForSave = append(sortedServersForSave, serverWithLatency{pk: entry.serverPK, latency: lat})
+				}
+			}
+			// Sort servers by latency
+			for i := 0; i < len(sortedServersForSave)-1; i++ {
+				for j := i + 1; j < len(sortedServersForSave); j++ {
+					si, sj := sortedServersForSave[i], sortedServersForSave[j]
+					if si.latency < 0 && sj.latency >= 0 {
+						sortedServersForSave[i], sortedServersForSave[j] = sortedServersForSave[j], sortedServersForSave[i]
+					} else if si.latency >= 0 && sj.latency >= 0 && sj.latency < si.latency {
+						sortedServersForSave[i], sortedServersForSave[j] = sortedServersForSave[j], sortedServersForSave[i]
+					}
+				}
+			}
+			for _, srv := range sortedServersForSave {
+				entry := dmsgTreeEntry{serverPK: srv.pk, remotePK: localPK, level: 1}
+				textOut.WriteString(fmt.Sprintf("  %s\n", formatDmsgEntryInternal(entry, false)))
+			}
+
+			// Level 2 grouped by server
+			entriesByServer := make(map[string][]dmsgTreeEntry)
+			for _, entry := range treeEntries {
+				if entry.level > 1 {
+					entriesByServer[entry.serverPK] = append(entriesByServer[entry.serverPK], entry)
+				}
+			}
+			if len(entriesByServer) > 0 {
+				textOut.WriteString(pterm.Yellow("\n=== Level 2 (visors via DMSG servers) ===\n"))
+				// Iterate over sorted servers
+				for _, srv := range sortedServersForSave {
+					entries, ok := entriesByServer[srv.pk]
+					if !ok || len(entries) == 0 {
+						continue
+					}
+					serverPK := srv.pk
+					lat := serverLatencies[serverPK]
+					latStr := ""
+					if lat > 0 {
+						latStr = pterm.Gray(fmt.Sprintf(" (%.1fms)", lat))
+					}
+					textOut.WriteString(fmt.Sprintf("%s%s\n", pterm.Magenta(serverPK), latStr))
+
+					// Sort entries by average latency (already hold mu.Lock)
+					type entryWithLatency struct {
+						entry   dmsgTreeEntry
+						avgLat  float64
+						hasData bool
+					}
+					var sortableEntries []entryWithLatency
+					for _, entry := range entries {
+						key := latencyKey(entry.serverPK, entry.remotePK)
+						data := dmsgLatencies[key]
+						var avgLat float64
+						var hasData bool
+						if data != nil && len(data.pingSamples) > 0 {
+							var sum float64
+							for _, p := range data.pingSamples {
+								sum += p
+							}
+							avgLat = sum / float64(len(data.pingSamples))
+							hasData = true
+						}
+						sortableEntries = append(sortableEntries, entryWithLatency{entry: entry, avgLat: avgLat, hasData: hasData})
+					}
+					// Sort: entries with data by latency, entries without data at the end
+					for i := 0; i < len(sortableEntries)-1; i++ {
+						for j := i + 1; j < len(sortableEntries); j++ {
+							ei, ej := sortableEntries[i], sortableEntries[j]
+							if !ei.hasData && ej.hasData {
+								sortableEntries[i], sortableEntries[j] = sortableEntries[j], sortableEntries[i]
+							} else if ei.hasData && ej.hasData && ej.avgLat < ei.avgLat {
+								sortableEntries[i], sortableEntries[j] = sortableEntries[j], sortableEntries[i]
+							}
+						}
+					}
+
+					for _, se := range sortableEntries {
+						textOut.WriteString(fmt.Sprintf("  %s\n", formatDmsgEntryInternal(se.entry, false)))
+					}
+				}
+			}
+
+			os.WriteFile(textFile, []byte(textOut.String()), 0644) //nolint:errcheck,gosec
+		}
+	}
+
+	// Helper to render the DMSG tree
+	renderDmsgTree := func() {
+		mu.Lock()
+		localTreeEntries := make([]dmsgTreeEntry, len(treeEntries))
+		copy(localTreeEntries, treeEntries)
+		localConnectedServers := make([]string, len(connectedServers))
+		copy(localConnectedServers, connectedServers)
+		mu.Unlock()
+
+		// Clear screen
+		fmt.Print("\033[H\033[2J\033[3J")
+
+		// Build label row for DMSG mode (no tpid, no setup)
+		var labelParts []string
+		labelParts = append(labelParts, fmt.Sprintf("%-64s", pterm.Gray("edge")))
+		labelParts = append(labelParts, fmt.Sprintf("%8s", pterm.Gray("ping")))
+		for i := 1; i < graphTries; i++ {
+			labelParts = append(labelParts, fmt.Sprintf("%8s", pterm.Gray(".....ms")))
+		}
+		labelParts = append(labelParts, fmt.Sprintf("%9s", pterm.Gray("avg")))
+		labelParts = append(labelParts, fmt.Sprintf("%9s", pterm.Gray("time")))
+		labelRow := strings.Join(labelParts, " ")
+
+		// Print label tree header
+		labelTree := pterm.TreeNode{
+			Text: pterm.Gray("root"),
+			Children: []pterm.TreeNode{
+				{Text: labelRow},
+			},
+		}
+		pterm.DefaultTree.WithRoot(labelTree).Render() //nolint:errcheck,gosec
+		fmt.Println()
+
+		// Level 1: Self-ping via each server
+		fmt.Println(pterm.Yellow("=== Level 1 (DMSG servers) ==="))
+
+		// Sort servers by latency
+		type serverWithLatency struct {
+			pk      string
+			latency float64
+		}
+		var sortedServers []serverWithLatency
+		for _, serverPK := range localConnectedServers {
+			lat := getServerLatency(serverPK)
+			sortedServers = append(sortedServers, serverWithLatency{pk: serverPK, latency: lat})
+		}
+		// Sort: lowest latency first
+		for i := 0; i < len(sortedServers)-1; i++ {
+			for j := i + 1; j < len(sortedServers); j++ {
+				if sortedServers[i].latency < 0 && sortedServers[j].latency >= 0 {
+					sortedServers[i], sortedServers[j] = sortedServers[j], sortedServers[i]
+				} else if sortedServers[i].latency >= 0 && sortedServers[j].latency >= 0 && sortedServers[j].latency < sortedServers[i].latency {
+					sortedServers[i], sortedServers[j] = sortedServers[j], sortedServers[i]
+				}
+			}
+		}
+
+		// Build level 1 tree
+		var level1Children []pterm.TreeNode
+		for _, srv := range sortedServers {
+			entry := dmsgTreeEntry{serverPK: srv.pk, remotePK: localPK, level: 1}
+			level1Children = append(level1Children, pterm.TreeNode{Text: formatDmsgEntry(entry)})
+		}
+		level1Tree := pterm.TreeNode{
+			Text:     pterm.Cyan(localPK) + pterm.Gray(" (local)"),
+			Children: level1Children,
+		}
+		pterm.DefaultTree.WithRoot(level1Tree).Render() //nolint:errcheck,gosec
+
+		// Level 2+: Clients per server
+		entriesByServer := make(map[string][]dmsgTreeEntry)
+		for _, entry := range localTreeEntries {
+			if entry.level > 1 {
+				entriesByServer[entry.serverPK] = append(entriesByServer[entry.serverPK], entry)
+			}
+		}
+
+		if len(entriesByServer) > 0 {
+			fmt.Println()
+			fmt.Println(pterm.Yellow("=== Level 2 (visors via DMSG servers) ==="))
+
+			for _, srv := range sortedServers {
+				entries, ok := entriesByServer[srv.pk]
+				if !ok || len(entries) == 0 {
+					continue
+				}
+
+				// Sort entries by average latency
+				type entryWithLatency struct {
+					entry   dmsgTreeEntry
+					avgLat  float64
+					hasData bool
+				}
+				var sortableEntries []entryWithLatency
+				mu.Lock()
+				for _, entry := range entries {
+					key := latencyKey(entry.serverPK, entry.remotePK)
+					data := dmsgLatencies[key]
+					var avgLat float64
+					var hasData bool
+					if data != nil && len(data.pingSamples) > 0 {
+						var sum float64
+						for _, p := range data.pingSamples {
+							sum += p
+						}
+						avgLat = sum / float64(len(data.pingSamples))
+						hasData = true
+					}
+					sortableEntries = append(sortableEntries, entryWithLatency{entry: entry, avgLat: avgLat, hasData: hasData})
+				}
+				mu.Unlock()
+
+				// Sort: entries with data by latency, entries without data at the end
+				for i := 0; i < len(sortableEntries)-1; i++ {
+					for j := i + 1; j < len(sortableEntries); j++ {
+						ei, ej := sortableEntries[i], sortableEntries[j]
+						// No data goes to the end
+						if !ei.hasData && ej.hasData {
+							sortableEntries[i], sortableEntries[j] = sortableEntries[j], sortableEntries[i]
+						} else if ei.hasData && ej.hasData && ej.avgLat < ei.avgLat {
+							sortableEntries[i], sortableEntries[j] = sortableEntries[j], sortableEntries[i]
+						}
+					}
+				}
+
+				var children []pterm.TreeNode
+				for _, se := range sortableEntries {
+					children = append(children, pterm.TreeNode{Text: formatDmsgEntry(se.entry)})
+				}
+
+				latStr := ""
+				if srv.latency >= 0 {
+					latStr = pterm.Gray(fmt.Sprintf(" (%.1fms)", srv.latency))
+				}
+				serverTree := pterm.TreeNode{
+					Text:     pterm.Magenta(srv.pk) + latStr,
+					Children: children,
+				}
+				pterm.DefaultTree.WithRoot(serverTree).Render() //nolint:errcheck,gosec
+			}
+		}
+
+		fmt.Println()
+		fmt.Println(pterm.Gray("Press Ctrl+C to stop"))
+	}
+
+	// Helper to ping a visor via DMSG
+	pingDmsg := func(serverPK, remotePK string, level int) {
+
+		key := latencyKey(serverPK, remotePK)
+
+		mu.Lock()
+		data := &dmsgLatencyData{
+			serverPK: serverPK,
+			remotePK: remotePK,
+			phase:    "pending",
+		}
+		dmsgLatencies[key] = data
+		mu.Unlock()
+
+		renderDmsgTree()
+
+		mu.Lock()
+		data.phase = "ping"
+		mu.Unlock()
+
+		renderDmsgTree()
+
+		// Callback for DMSG ping results - updates screen after each sample
+		callback := func(_ int32, lat time.Duration, isSetup bool, _ []rpcgrpc.RouteHopDetail, _ string, _ time.Duration, pingErr error) {
+			if isSetup {
+				return
+			}
+			mu.Lock()
+			if pingErr != nil {
+				data.pingErr = pingErr.Error()
+			} else {
+				pingLatencyMs := 1000 * lat.Seconds()
+				data.pingSamples = append(data.pingSamples, pingLatencyMs)
+			}
+			mu.Unlock()
+			// Update screen after each ping sample
+			renderDmsgTree()
+		}
+
+		// Perform DMSG ping via specific server
+		err := grpcClient.StreamDmsgPing(ctx, remotePK, int32(graphTries), int32(graphPcktSize), graphTimeout, serverPK, callback)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			mu.Lock()
+			if data.pingErr == "" {
+				data.pingErr = err.Error()
+			}
+			mu.Unlock()
+		}
+
+		mu.Lock()
+		data.phase = "done"
+		data.timestamp = time.Now()
+
+		// Update server latency for level 1 (self-ping)
+		if level == 1 && len(data.pingSamples) > 0 {
+			var sum float64
+			for _, p := range data.pingSamples {
+				sum += p
+			}
+			serverLatencies[serverPK] = sum / float64(len(data.pingSamples))
+		}
+		mu.Unlock()
+
+		// Save state after each ping
+		saveState()
+
+		renderDmsgTree()
+	}
+
+	// === Level 1: Self-ping via each connected server ===
+	fmt.Println("\n=== Level 1: Self-ping via DMSG servers ===")
+
+	// Check which servers are already done (from resume)
+	var level1ToDo []string
+	for _, serverPK := range connectedServers {
+		key := latencyKey(serverPK, localPK)
+		mu.Lock()
+		data := dmsgLatencies[key]
+		mu.Unlock()
+		if data == nil || data.phase != "done" {
+			level1ToDo = append(level1ToDo, serverPK)
+			// Add entry if not already present
+			found := false
+			for _, e := range treeEntries {
+				if e.serverPK == serverPK && e.remotePK == localPK {
+					found = true
+					break
+				}
+			}
+			if !found {
+				mu.Lock()
+				treeEntries = append(treeEntries, dmsgTreeEntry{
+					serverPK: serverPK,
+					remotePK: localPK,
+					level:    1,
+				})
+				mu.Unlock()
+			}
+		}
+	}
+
+	// Level 1: Self-ping via each DMSG server (sequential)
+	for _, serverPK := range level1ToDo {
+		if ctx.Err() != nil {
+			return
+		}
+		pingDmsg(serverPK, localPK, 1)
+	}
+
+	// === Level 2: Ping clients via each server ===
+	var workingServers []string
+	for _, serverPK := range connectedServers {
+		key := latencyKey(serverPK, localPK)
+		mu.Lock()
+		data := dmsgLatencies[key]
+		mu.Unlock()
+		if data != nil && len(data.pingSamples) > 0 {
+			workingServers = append(workingServers, serverPK)
+		}
+	}
+
+	if len(workingServers) == 0 {
+		fmt.Println("\nNo servers responded to self-ping, cannot proceed to level 2")
+		renderDmsgTree()
+		fmt.Println(pterm.Green("Scan complete!"))
+		return
+	}
+
+	// Sort workingServers by latency
+	mu.Lock()
+	for i := 0; i < len(workingServers)-1; i++ {
+		for j := i + 1; j < len(workingServers); j++ {
+			latI := serverLatencies[workingServers[i]]
+			latJ := serverLatencies[workingServers[j]]
+			if latJ < latI {
+				workingServers[i], workingServers[j] = workingServers[j], workingServers[i]
+			}
+		}
+	}
+	mu.Unlock()
+
+	fmt.Printf("\n=== Level 2: Pinging clients via %d working server(s) ===\n", len(workingServers))
+
+	// Build list of all clients to ping (each client via ONE server - the first working one)
+	type pingJob struct {
+		serverPK string
+		clientPK string
+	}
+	var jobs []pingJob
+
+	for _, serverPK := range workingServers {
+		clients, ok := clientsByServer[serverPK]
+		if !ok || len(clients) == 0 {
+			continue
+		}
+
+		for _, clientPK := range clients {
+			if clientPK == localPK {
+				continue
+			}
+			mu.Lock()
+			alreadyPinged := pingedVisors[clientPK]
+			mu.Unlock()
+			if alreadyPinged {
+				continue
+			}
+			if !passesFilter(clientPK) {
+				continue
+			}
+			jobs = append(jobs, pingJob{serverPK: serverPK, clientPK: clientPK})
+			mu.Lock()
+			pingedVisors[clientPK] = true
+			mu.Unlock()
+		}
+	}
+
+	fmt.Printf("Total clients to ping: %d\n", len(jobs))
+
+	// Run pings sequentially
+	for _, job := range jobs {
+		if ctx.Err() != nil {
+			break
+		}
+
+		mu.Lock()
+		treeEntries = append(treeEntries, dmsgTreeEntry{
+			serverPK: job.serverPK,
+			remotePK: job.clientPK,
+			level:    2,
+		})
+		mu.Unlock()
+
+		pingDmsg(job.serverPK, job.clientPK, 2)
+	}
+
+	// Final render and save
+	renderDmsgTree()
+	saveState()
+	fmt.Println(pterm.Green("DMSG scan complete!"))
+}
+
+// truncateErrDmsg truncates error messages for DMSG tree display
+func truncateErrDmsg(err string, maxLen int) string {
+	if len(err) <= maxLen {
+		return err
+	}
+	if strings.Contains(err, "timeout") {
+		return "timeout"
+	}
+	if strings.Contains(err, "deadline") {
+		return "deadline"
+	}
+	if strings.Contains(err, "refused") {
+		return "refused"
+	}
+	if strings.Contains(err, "EOF") {
+		return "EOF"
+	}
+	return err[:maxLen-2] + ".."
 }

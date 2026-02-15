@@ -145,6 +145,8 @@ var (
 	pi vinit.Module
 	// Dmsg ping module (dmsg direct connection)
 	dmsgPi vinit.Module
+	// Dmsg server latency tracking (self-ping via each server)
+	dmsgServerLatency vinit.Module
 	// Embedded Transport Setup Node (separate dmsg client with TPS identity)
 	embTPS vinit.Module
 	// Embedded Route Setup Node (separate dmsg client with route setup identity)
@@ -196,12 +198,13 @@ func registerModules(logger *logging.MasterLogger) {
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
 	dmsgPi = maker("dmsg_ping", initDmsgPing, &dmsgC)
+	dmsgServerLatency = maker("dmsg_server_latency", initDmsgServerLatency, &dmsgPi)
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm, &stcprC)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
 	embTPS = maker("embedded_tps", initEmbeddedTPS, &dmsgC)
 	uiServer = maker("ui_server", initUIServer, &dmsgC, &tr, &embTPS)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -1273,6 +1276,103 @@ func handleDmsgPingConn(log *logging.Logger, conn net.Conn) {
 			log.Debug("Echoed dmsg ping response")
 		}
 	}
+}
+
+// initDmsgServerLatency initializes DMSG server latency tracking.
+// It self-pings via each connected DMSG server on startup and hourly.
+func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) error {
+	dmsgC := v.dmsgC
+	if dmsgC == nil {
+		return nil
+	}
+
+	// Wait for dmsg client to be ready
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-dmsgC.Ready():
+	}
+
+	// Helper to measure latency to all connected servers
+	measureServerLatencies := func() {
+		servers := dmsgC.ConnectedServersPK()
+		if len(servers) == 0 {
+			log.Debug("No DMSG servers connected, skipping latency measurement")
+			return
+		}
+
+		log.WithField("servers", len(servers)).Info("Measuring DMSG server latencies via self-ping")
+
+		for _, serverPKStr := range servers {
+			var serverPK cipher.PubKey
+			if err := serverPK.Set(serverPKStr); err != nil {
+				log.WithError(err).WithField("server", serverPKStr).Warn("Invalid server PK")
+				continue
+			}
+
+			// Self-ping via this server (ping our own PK through the server)
+			start := time.Now()
+			conf := PingConfig{
+				PK:       v.conf.PK,
+				Tries:    3,
+				PcktSize: 2, // 2KB
+			}
+
+			// Use DmsgPingViaServer to ping ourselves through this specific server
+			latencies, err := v.DmsgPingViaServer(conf, serverPK)
+			if err != nil {
+				log.WithError(err).WithField("server", serverPKStr[:16]+"...").Warn("Failed to measure server latency")
+				continue
+			}
+
+			// Calculate average latency
+			var totalLatency time.Duration
+			for _, lat := range latencies {
+				totalLatency += lat
+			}
+			avgLatency := totalLatency / time.Duration(len(latencies))
+
+			// Store the latency
+			v.dmsgServerLatenciesMu.Lock()
+			v.dmsgServerLatencies[serverPK] = avgLatency
+			v.dmsgServerLatenciesMu.Unlock()
+
+			log.WithFields(logrus.Fields{
+				"server":  serverPKStr[:16] + "...",
+				"latency": avgLatency.Round(time.Millisecond),
+				"elapsed": time.Since(start).Round(time.Millisecond),
+			}).Info("Measured DMSG server latency")
+		}
+	}
+
+	// Initial measurement
+	go func() {
+		// Small delay to allow more servers to connect
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
+		measureServerLatencies()
+	}()
+
+	// Hourly measurement
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				measureServerLatencies()
+			}
+		}
+	}()
+
+	log.Info("DMSG server latency tracking started")
+	return nil
 }
 
 // getRouteSetupHooks aka autotransport

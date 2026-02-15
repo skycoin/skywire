@@ -785,6 +785,15 @@ func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
 	return err
 }
 
+// DMSGServers returns list of connected DMSG servers with latencies
+func (r *RPC) DMSGServers(_ *struct{}, out *[]DMSGServerInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "DMSGServers", nil)(out, &err)
+
+	servers, err := r.visor.DMSGServers()
+	*out = servers
+	return err
+}
+
 // RegisterHTTPPort registers the local port to be accessed by remote visors
 func (r *RPC) RegisterHTTPPort(port *int, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RegisterHTTPPort", port)(nil, &err)
@@ -949,6 +958,14 @@ func (r *RPC) GetRemoteDmsgServers(pk *cipher.PubKey, out *[]cipher.PubKey) (err
 	return err
 }
 
+// GetPreferredDmsgServer returns the lowest-latency DMSG server shared with a remote visor.
+func (r *RPC) GetPreferredDmsgServer(remotePK *cipher.PubKey, out *cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "GetPreferredDmsgServer", remotePK)(out, &err)
+
+	*out, err = r.visor.GetPreferredDmsgServer(*remotePK)
+	return err
+}
+
 // BandwidthTest performs a bandwidth test over skywire route.
 func (r *RPC) BandwidthTest(conf BandwidthTestConfig, out *BandwidthResult) (err error) {
 	defer rpcutil.LogCall(r.log, "BandwidthTest", conf)(out, &err)
@@ -1015,5 +1032,17 @@ func (r *RPC) UIServerStatus(_ *struct{}, out *UIServerStatus) (err error) {
 		return err
 	}
 	*out = *status
+	return nil
+}
+
+// DmsgHTTP performs an HTTP request over dmsg using the visor's dmsg client.
+func (r *RPC) DmsgHTTP(req *DmsgHTTPRequest, out *DmsgHTTPResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgHTTP", req)(out, &err)
+
+	resp, err := r.visor.DmsgHTTP(*req)
+	if err != nil {
+		return err
+	}
+	*out = *resp
 	return nil
 }

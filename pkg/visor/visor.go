@@ -143,6 +143,10 @@ type Visor struct {
 	autoconnectMu      sync.Mutex
 	autoconnectCancel  context.CancelFunc
 	autoconnectRunning bool
+
+	// DMSG server latency tracking (for preferring low-latency servers)
+	dmsgServerLatencies   map[cipher.PubKey]time.Duration
+	dmsgServerLatenciesMu sync.RWMutex
 }
 
 // todo: consider moving module closing to the module system
@@ -284,6 +288,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		allowedPorts:         make(map[int]bool),
 		survey:               visorconfig.Survey{},
 		surveyLock:           new(sync.RWMutex),
+		dmsgServerLatencies:  make(map[cipher.PubKey]time.Duration),
 	}
 	v.isServicesHealthy.init()
 

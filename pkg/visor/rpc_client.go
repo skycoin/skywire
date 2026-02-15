@@ -619,6 +619,13 @@ func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 	return out, err
 }
 
+// DMSGServers returns list of connected DMSG servers with latencies
+func (rc *rpcClient) DMSGServers() ([]DMSGServerInfo, error) {
+	var out []DMSGServerInfo
+	err := rc.Call("DMSGServers", &struct{}{}, &out)
+	return out, err
+}
+
 // Connect calls Connect.
 func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
 	var out uuid.UUID
@@ -752,6 +759,13 @@ func (rc *rpcClient) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, er
 	return servers, err
 }
 
+// GetPreferredDmsgServer calls GetPreferredDmsgServer.
+func (rc *rpcClient) GetPreferredDmsgServer(remotePK cipher.PubKey) (cipher.PubKey, error) {
+	var serverPK cipher.PubKey
+	err := rc.Call("GetPreferredDmsgServer", &remotePK, &serverPK)
+	return serverPK, err
+}
+
 // BandwidthTest calls BandwidthTest.
 func (rc *rpcClient) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error) {
 	var result BandwidthResult
@@ -800,6 +814,13 @@ func (rc *rpcClient) UIServerStatus() (*UIServerStatus, error) {
 	var status UIServerStatus
 	err := rc.Call("UIServerStatus", &struct{}{}, &status)
 	return &status, err
+}
+
+// DmsgHTTP performs an HTTP request over dmsg using the visor's dmsg client.
+func (rc *rpcClient) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
+	var resp DmsgHTTPResponse
+	err := rc.Call("DmsgHTTP", &req, &resp)
+	return &resp, err
 }
 
 // MockRPCClient mocks API.
@@ -1529,6 +1550,11 @@ func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 	return false, nil
 }
 
+// DMSGServers implements API.
+func (mc *mockRPCClient) DMSGServers() ([]DMSGServerInfo, error) {
+	return []DMSGServerInfo{}, nil
+}
+
 // Connect implements API.
 func (mc *mockRPCClient) Connect(_ cipher.PubKey, _, _ int) (uuid.UUID, error) {
 	return uuid.UUID{}, nil
@@ -1629,6 +1655,11 @@ func (mc *mockRPCClient) GetRemoteDmsgServers(_ cipher.PubKey) ([]cipher.PubKey,
 	return []cipher.PubKey{}, nil
 }
 
+// GetPreferredDmsgServer implements API.
+func (mc *mockRPCClient) GetPreferredDmsgServer(_ cipher.PubKey) (cipher.PubKey, error) {
+	return cipher.PubKey{}, nil
+}
+
 // BandwidthTest implements API.
 func (mc *mockRPCClient) BandwidthTest(_ BandwidthTestConfig) (BandwidthResult, error) {
 	return BandwidthResult{}, nil
@@ -1667,6 +1698,11 @@ func (mc *mockRPCClient) StopUIServer() error {
 // UIServerStatus implements API.
 func (mc *mockRPCClient) UIServerStatus() (*UIServerStatus, error) {
 	return &UIServerStatus{}, nil
+}
+
+// DmsgHTTP implements API.
+func (mc *mockRPCClient) DmsgHTTP(_ DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
+	return &DmsgHTTPResponse{StatusCode: 200, Status: "OK"}, nil
 }
 
 // Close implements API.
