@@ -31,7 +31,7 @@ type TransportData struct {
 	EdgeB      string `json:"edge_b"`
 	Type       string `json:"type"`
 	Label      string `json:"label"`
-	Latency    int64  `json:"latency"`     // Latency in milliseconds, updated on each re-register
+	Latency    float64 `json:"latency"`    // Inter-visor ping latency in milliseconds
 	Bandwidth  uint64 `json:"bandwidth"`   // Total bytes (sent + recv)
 	LastUpdate int64  `json:"last_update"` // Unix timestamp of last update
 }
@@ -81,7 +81,7 @@ func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.Si
 }
 
 // RegisterTransportWithLatency registers transport with latency value.
-func (s *redisStore) RegisterTransportWithLatency(ctx context.Context, sEntry *transport.SignedEntry, latency int64) error {
+func (s *redisStore) RegisterTransportWithLatency(ctx context.Context, sEntry *transport.SignedEntry, latency float64) error {
 	entry := sEntry.Entry
 	if entry == nil {
 		return ErrBadEntry
