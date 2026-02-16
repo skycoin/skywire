@@ -126,14 +126,29 @@ func (s *redisStore) RegisterTransportWithLatency(ctx context.Context, sEntry *t
 	edgeAKey := s.edgeKey(entry.Edges[0])
 	edgeBKey := s.edgeKey(entry.Edges[1])
 
+	// Only apply TTL on re-registration (key already exists).
+	// First-time registrations get no TTL for backward compatibility with old visors.
+	exists, _ := s.client.Exists(ctx, tpKey).Result()
+	ttl := time.Duration(0)
+	if exists > 0 {
+		ttl = s.ttl
+	}
+
 	pipe := s.client.Pipeline()
-	pipe.Set(ctx, tpKey, string(raw), s.ttl)
+	pipe.Set(ctx, tpKey, string(raw), ttl)
 	pipe.SAdd(ctx, edgeAKey, entry.ID.String())
-	pipe.Expire(ctx, edgeAKey, s.ttl)
+	pipe.Expire(ctx, edgeAKey, ttl)
 	if entry.Edges[0] != entry.Edges[1] {
 		pipe.SAdd(ctx, edgeBKey, entry.ID.String())
-		pipe.Expire(ctx, edgeBKey, s.ttl)
+		pipe.Expire(ctx, edgeBKey, ttl)
 	}
+
+	// Track visor PKs so they appear in /visors even after transports expire.
+	pipe.SAdd(ctx, s.visorAllKey(), entry.Edges[0].Hex())
+	if entry.Edges[0] != entry.Edges[1] {
+		pipe.SAdd(ctx, s.visorAllKey(), entry.Edges[1].Hex())
+	}
+	pipe.Expire(ctx, s.visorAllKey(), 400*24*time.Hour)
 
 	if _, err := pipe.Exec(ctx); err != nil {
 		return err
