@@ -196,8 +196,16 @@ func (s *redisStore) UpdateService(ctx context.Context, se *servicedisc.Service)
 		return s.processErr(err, http.StatusInternalServerError)
 	}
 
+	// Only apply TTL on re-registration (key already exists).
+	// First-time registrations get no TTL for backward compatibility with old visors.
+	exists, _ := s.client.Exists(ctx, key).Result()
+	ttl := time.Duration(0)
+	if exists > 0 {
+		ttl = s.ttl
+	}
+
 	pipe := s.client.Pipeline()
-	pipe.Set(ctx, key, data, s.ttl)
+	pipe.Set(ctx, key, data, ttl)
 	pipe.SAdd(ctx, setKey, se.Addr.PubKey().String())
 	pipe.SAdd(ctx, serviceTypesSetKey, se.Type)
 
