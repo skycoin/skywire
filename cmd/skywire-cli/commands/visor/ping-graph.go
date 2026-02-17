@@ -2268,45 +2268,111 @@ func runTreeViewMode(
 				dataMu.Unlock()
 				safeRenderTree()
 
+				// Helper to verify a transport exists on both ends using TPS
+				// localVisorPK is the "from" side, remoteVisorPK is the "to" side
+				verifyTransportBothEnds := func(tpIDToVerify string, localVisorPK string, remoteVisorPK string) bool {
+					// Check local visor has this transport
+					// For level 1, localVisorPK is our visor, so check localTpIDs
+					// For level 2+, we need to check via TPS for the "from" visor
+					if localVisorPK == localPK {
+						if !localTpIDs[tpIDToVerify] {
+							return false
+						}
+					} else if graphUseTPS {
+						localSideTps := getRemoteVisorTransports(localVisorPK)
+						if localSideTps != nil && !localSideTps[tpIDToVerify] {
+							fmt.Fprintf(os.Stderr, "Transport %s not found on local-side %s\n", tpIDToVerify[:16], localVisorPK[:16])
+							return false
+						}
+					}
+					// Check remote visor via TPS (if enabled)
+					if graphUseTPS {
+						remoteTps := getRemoteVisorTransports(remoteVisorPK)
+						if remoteTps != nil && !remoteTps[tpIDToVerify] {
+							fmt.Fprintf(os.Stderr, "Transport %s not found on remote %s\n", tpIDToVerify[:16], remoteVisorPK[:16])
+							return false
+						}
+					}
+					return true
+				}
+
 				// Create per-transport timeout context to prevent hanging
 				pingCtx, pingCancel := context.WithTimeout(ctx, perTransportTimeout)
 
 				// Perform ping
 				var err error
 				if level == 1 {
-					// Level 1: direct transport, use transport ID to skip route calculation
-					// First verify the transport still exists locally
-					if !localTpIDs[tpID] {
-						// Transport no longer exists - mark as dead and skip
+					// Level 1: verify transport exists on BOTH local and remote
+					if !verifyTransportBothEnds(tpID, localPK, remotePK) {
+						// Transport missing on one or both ends - mark as dead and skip
 						deadFirstHops[tpID] = true
 						pingCancel()
 						dataMu.Lock()
-						delete(transportLatencies, tpID)
+						data.setupErr = "tp missing"
+						data.phase = "done"
+						data.timestamp = time.Now()
 						dataMu.Unlock()
+						safeRenderTree()
 						return
 					}
 					err = grpcClient.StreamPingWithTransport(pingCtx, remotePK, int32(graphTries), int32(graphPcktSize), graphLocalRoute, graphTimeout, graphSetupTimeout, tpID, callback) //nolint:gosec
 				} else {
-					// Level 2+: use explicit route (path to parent + current hop)
-					// First verify the first hop transport still exists locally
+					// Level 2+: verify ALL transports in the route exist on both ends
+					// First verify the first hop transport
 					if len(pathToParent) > 0 {
 						firstHopTpID := pathToParent[0].tpID
 						// Quick check: is this first-hop already known to be dead?
 						if deadFirstHops[firstHopTpID] {
 							pingCancel()
 							dataMu.Lock()
-							delete(transportLatencies, tpID)
+							data.setupErr = "first-hop dead"
+							data.phase = "done"
+							data.timestamp = time.Now()
 							dataMu.Unlock()
+							safeRenderTree()
 							return
 						}
-						// Check if transport still exists
-						if !localTpIDs[firstHopTpID] {
+						// Verify first hop on both ends
+						firstHopRemote := pathToParent[0].to
+						if !verifyTransportBothEnds(firstHopTpID, localPK, firstHopRemote) {
 							// Mark this first-hop as dead so we skip entire subtree
 							deadFirstHops[firstHopTpID] = true
 							pingCancel()
 							dataMu.Lock()
-							delete(transportLatencies, tpID)
+							data.setupErr = "first-hop tp missing"
+							data.phase = "done"
+							data.timestamp = time.Now()
 							dataMu.Unlock()
+							safeRenderTree()
+							return
+						}
+
+						// Verify ALL intermediate hops in the path
+						for i := 1; i < len(pathToParent); i++ {
+							h := pathToParent[i]
+							if !verifyTransportBothEnds(h.tpID, h.from, h.to) {
+								// Intermediate hop missing - mark first hop as dead (entire subtree is bad)
+								deadFirstHops[firstHopTpID] = true
+								pingCancel()
+								dataMu.Lock()
+								data.setupErr = fmt.Sprintf("hop %d tp missing", i+1)
+								data.phase = "done"
+								data.timestamp = time.Now()
+								dataMu.Unlock()
+								safeRenderTree()
+								return
+							}
+						}
+
+						// Verify current hop (the one we're about to ping through)
+						if !verifyTransportBothEnds(tpID, parentPK, remotePK) {
+							pingCancel()
+							dataMu.Lock()
+							data.setupErr = "current hop tp missing"
+							data.phase = "done"
+							data.timestamp = time.Now()
+							dataMu.Unlock()
+							safeRenderTree()
 							return
 						}
 					}
