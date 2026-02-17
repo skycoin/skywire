@@ -1108,11 +1108,8 @@ func runTreeViewMode(
 		}
 	}
 
-	// Helper to remove a local transport
+	// Helper to remove a local transport (caller decides when to call)
 	removeLocalTransport := func(tpID string) error {
-		if !graphRemoveTp {
-			return nil
-		}
 		tpUUID, err := uuid.Parse(tpID)
 		if err != nil {
 			return fmt.Errorf("invalid transport ID: %w", err)
@@ -1126,11 +1123,8 @@ func runTreeViewMode(
 		return nil
 	}
 
-	// Helper to request remote visor to remove a transport via TPS
+	// Helper to request remote visor to remove a transport via TPS (caller decides when to call)
 	removeRemoteTransport := func(remotePK string, tpID string) error {
-		if !graphRemoveRemoteTp {
-			return nil
-		}
 		var pk cipher.PubKey
 		if err := pk.Set(remotePK); err != nil {
 			return fmt.Errorf("invalid remote PK: %w", err)
@@ -1237,61 +1231,69 @@ func runTreeViewMode(
 		level      int
 		parentPK   string
 		parentTpID string
+		failed     bool   // True if ping failed
 		removed    bool   // True if transport was removed due to failure
 		removeErr  string // Error message if removal failed
 	}
 	var treeEntries []treeEntry
-	var failedEntries []treeEntry // Separate list for failed/removed transports
-	var failedEntriesMu sync.Mutex
+	var treeEntriesMu sync.Mutex
 
-	// Helper to process a failed transport - move to failed list and optionally remove
+	// Helper to process a failed transport - mark as failed and optionally remove
 	processFailedTransport := func(tpID string, remotePK string, parentPK string, level int, isLevel1 bool) {
-		// Find and remove from treeEntries, add to failedEntries
-		failedEntriesMu.Lock()
-		defer failedEntriesMu.Unlock()
+		treeEntriesMu.Lock()
+		defer treeEntriesMu.Unlock()
 
-		var failedEntry *treeEntry
-		newTreeEntries := make([]treeEntry, 0, len(treeEntries))
+		// Find entry in treeEntries and mark as failed
+		entryIdx := -1
 		for i := range treeEntries {
 			if treeEntries[i].tpID == tpID {
-				entry := treeEntries[i]
-				failedEntry = &entry
-			} else {
-				newTreeEntries = append(newTreeEntries, treeEntries[i])
+				entryIdx = i
+				break
 			}
 		}
-		treeEntries = newTreeEntries
 
-		if failedEntry == nil {
-			// Entry not found (shouldn't happen), create one
-			failedEntry = &treeEntry{
+		// If entry not found, add it (shouldn't happen normally)
+		if entryIdx < 0 {
+			treeEntries = append(treeEntries, treeEntry{
 				tpID:     tpID,
 				remotePK: remotePK,
 				parentPK: parentPK,
 				level:    level,
-			}
+				failed:   true,
+			})
+			entryIdx = len(treeEntries) - 1
+		} else {
+			treeEntries[entryIdx].failed = true
 		}
 
 		// Try to remove transports if flags are set
+		// When --remove-tp is set for level 1, remove from both local and remote
 		if isLevel1 && graphRemoveTp {
-			if err := removeLocalTransport(tpID); err != nil {
-				failedEntry.removeErr = err.Error()
-			} else {
-				failedEntry.removed = true
-			}
-		}
-		if graphRemoveRemoteTp {
-			if err := removeRemoteTransport(remotePK, tpID); err != nil {
-				if failedEntry.removeErr != "" {
-					failedEntry.removeErr += "; "
-				}
-				failedEntry.removeErr += err.Error()
-			} else {
-				failedEntry.removed = true
-			}
-		}
+			localErr := removeLocalTransport(tpID)
+			remoteErr := removeRemoteTransport(remotePK, tpID)
 
-		failedEntries = append(failedEntries, *failedEntry)
+			if localErr != nil || remoteErr != nil {
+				var errParts []string
+				if localErr != nil {
+					errParts = append(errParts, "local: "+localErr.Error())
+				}
+				if remoteErr != nil {
+					errParts = append(errParts, "remote: "+remoteErr.Error())
+				}
+				treeEntries[entryIdx].removeErr = strings.Join(errParts, "; ")
+			}
+			// Mark as removed if at least one succeeded
+			if localErr == nil || remoteErr == nil {
+				treeEntries[entryIdx].removed = true
+			}
+		} else if graphRemoveRemoteTp {
+			// Only remove remote (for non-level-1 or when only --remove-remote-tp is set)
+			if err := removeRemoteTransport(remotePK, tpID); err != nil {
+				treeEntries[entryIdx].removeErr = err.Error()
+			} else {
+				treeEntries[entryIdx].removed = true
+			}
+		}
 	}
 
 	// Track which transport IDs have been pinged (for resume)
@@ -1553,7 +1555,15 @@ func runTreeViewMode(
 			tsStr = pterm.Gray(fmt.Sprintf(" %s", data.timestamp.Format("2006-01-02 15:04:05")))
 		}
 
-		// Build the line: remotePK tpID calc setup pings... avg timestamp
+		// Removal status (for failed entries)
+		var removeStr string
+		if entry.removed {
+			removeStr = pterm.Green(" [REMOVED]")
+		} else if entry.removeErr != "" {
+			removeStr = pterm.Yellow(" [rm err: " + truncateErr(entry.removeErr, 20) + "]")
+		}
+
+		// Build the line: remotePK tpID calc setup pings... avg timestamp [removal_status]
 		tpIDFormatted := formatTpID(data.tpID, data.tpType)
 
 		// Format the entire line based on failure status
@@ -1562,15 +1572,15 @@ func runTreeViewMode(
 			// Red background with white text for early failures
 			line := fmt.Sprintf("%s %s %s %s %s %s",
 				entry.remotePK, data.tpID, calcStr, setupStr, pingsStr, totalStr)
-			text = pterm.BgRed.Sprint(pterm.White(line)) + tsStr
+			text = pterm.BgRed.Sprint(pterm.White(line)) + tsStr + removeStr
 		} else if pingFailure {
 			// Red text for ping failures
 			text = pterm.Red(fmt.Sprintf("%s %s %s %s %s %s",
-				entry.remotePK, data.tpID, calcStr, setupStr, pingsStr, totalStr)) + tsStr
+				entry.remotePK, data.tpID, calcStr, setupStr, pingsStr, totalStr)) + tsStr + removeStr
 		} else {
 			// Normal formatting with colored tpID
 			text = fmt.Sprintf("%s %s %s %s %s %s",
-				entry.remotePK, tpIDFormatted, calcStr, setupStr, pingsStr, totalStr) + tsStr
+				entry.remotePK, tpIDFormatted, calcStr, setupStr, pingsStr, totalStr) + tsStr + removeStr
 		}
 
 		return text
@@ -1651,10 +1661,10 @@ func runTreeViewMode(
 	// Helper to get best average latency for a visor (across all its transports)
 	getVisorAvgLatency := func(pk string) float64 {
 		// Find the best (lowest) average ping latency transport to this visor
-		failedEntriesMu.Lock()
+		treeEntriesMu.Lock()
 		localEntries := make([]treeEntry, len(treeEntries))
 		copy(localEntries, treeEntries)
-		failedEntriesMu.Unlock()
+		treeEntriesMu.Unlock()
 
 		bestLatency := float64(-1)
 		for _, entry := range localEntries {
@@ -1675,10 +1685,10 @@ func runTreeViewMode(
 		fmt.Print("\033[H\033[2J\033[3J")
 
 		// Make a copy of treeEntries to avoid race with concurrent writers
-		failedEntriesMu.Lock()
+		treeEntriesMu.Lock()
 		localTreeEntries := make([]treeEntry, len(treeEntries))
 		copy(localTreeEntries, treeEntries)
-		failedEntriesMu.Unlock()
+		treeEntriesMu.Unlock()
 
 		// Build label row with right-justified column headers that align with data
 		// Column widths match formatEntry: remotePK(64) tpID(36) calc(1) setup(9) pings(8 each) avg(9)
@@ -1876,211 +1886,6 @@ func runTreeViewMode(
 				pterm.DefaultTree.WithRoot(parentTree).Render() //nolint:errcheck,gosec
 			}
 		}
-
-		// Render failed/removed transports section
-		failedEntriesMu.Lock()
-		if len(failedEntries) > 0 {
-			fmt.Println()
-			fmt.Println(pterm.Red("=== Failed/Removed Transports ==="))
-
-			// Group failed entries by level
-			failedByLevel := make(map[int][]treeEntry)
-			for _, entry := range failedEntries {
-				failedByLevel[entry.level] = append(failedByLevel[entry.level], entry)
-			}
-
-			// Find max level in failed entries
-			maxFailedLevel := 0
-			for lvl := range failedByLevel {
-				if lvl > maxFailedLevel {
-					maxFailedLevel = lvl
-				}
-			}
-
-			// Render level 1 failed entries
-			if level1Failed, ok := failedByLevel[1]; ok && len(level1Failed) > 0 {
-				fmt.Println(pterm.Red("--- Level 1 (failed direct transports) ---"))
-				var children []pterm.TreeNode
-				for _, entry := range level1Failed {
-					// Format the failed entry
-					data := transportLatencies[entry.tpID]
-					var text string
-					if data != nil {
-						// Build error info
-						var errParts []string
-						if data.calcErr != "" {
-							errParts = append(errParts, "calc: "+data.calcErr)
-						}
-						if data.setupErr != "" {
-							errParts = append(errParts, "setup: "+data.setupErr)
-						}
-						if data.pingErr != "" {
-							errParts = append(errParts, "ping: "+data.pingErr)
-						}
-						errStr := ""
-						if len(errParts) > 0 {
-							errStr = " [" + strings.Join(errParts, "; ") + "]"
-						}
-
-						// Show removal status
-						removeStr := ""
-						if entry.removed {
-							removeStr = pterm.Green(" [REMOVED]")
-						} else if entry.removeErr != "" {
-							removeStr = pterm.Yellow(" [remove failed: " + entry.removeErr + "]")
-						}
-
-						tpIDFormatted := formatTpID(data.tpID, data.tpType)
-						text = pterm.Red(entry.remotePK) + " " + tpIDFormatted + pterm.Red(errStr) + removeStr
-					} else {
-						text = pterm.Red(entry.remotePK + " " + entry.tpID + " (no data)")
-						if entry.removed {
-							text += pterm.Green(" [REMOVED]")
-						} else if entry.removeErr != "" {
-							text += pterm.Yellow(" [remove failed: " + entry.removeErr + "]")
-						}
-					}
-
-					transportNode := pterm.TreeNode{Text: text}
-					// Add DMSG server children if pre-check is enabled
-					if graphDmsgPreCheck && data != nil && len(data.dmsgServers) > 0 {
-						for _, serverData := range data.dmsgServers {
-							transportNode.Children = append(transportNode.Children, pterm.TreeNode{Text: formatDmsgServerEntry(serverData)})
-						}
-					}
-					children = append(children, transportNode)
-				}
-				failedTree := pterm.TreeNode{
-					Text:     pterm.Cyan(localPK) + pterm.Red(" (failed)"),
-					Children: children,
-				}
-				pterm.DefaultTree.WithRoot(failedTree).Render() //nolint:errcheck,gosec
-			}
-
-			// Render level 2+ failed entries
-			for lvl := 2; lvl <= maxFailedLevel; lvl++ {
-				levelFailed, ok := failedByLevel[lvl]
-				if !ok || len(levelFailed) == 0 {
-					continue
-				}
-
-				// Group by parent
-				failedByParent := make(map[string][]treeEntry)
-				for _, entry := range levelFailed {
-					// Use localPK as fallback if parentPK is empty
-					parent := entry.parentPK
-					if parent == "" {
-						parent = localPK
-					}
-					failedByParent[parent] = append(failedByParent[parent], entry)
-				}
-
-				// Only print header if we have entries to show
-				if len(failedByParent) == 0 {
-					continue
-				}
-
-				fmt.Println()
-				fmt.Println(pterm.Red(fmt.Sprintf("--- Level %d (failed) ---", lvl)))
-
-				hasRenderedEntries := false
-				for parentPK, entries := range failedByParent {
-					if len(entries) == 0 {
-						continue
-					}
-					var children []pterm.TreeNode
-					for _, entry := range entries {
-						data := transportLatencies[entry.tpID]
-						var text string
-						if data != nil {
-							var errParts []string
-							if data.calcErr != "" {
-								errParts = append(errParts, "calc: "+data.calcErr)
-							}
-							if data.setupErr != "" {
-								errParts = append(errParts, "setup: "+data.setupErr)
-							}
-							if data.pingErr != "" {
-								errParts = append(errParts, "ping: "+data.pingErr)
-							}
-							errStr := ""
-							if len(errParts) > 0 {
-								errStr = " [" + strings.Join(errParts, "; ") + "]"
-							}
-
-							removeStr := ""
-							if entry.removed {
-								removeStr = pterm.Green(" [REMOVED]")
-							} else if entry.removeErr != "" {
-								removeStr = pterm.Yellow(" [remove failed: " + entry.removeErr + "]")
-							}
-
-							tpIDFormatted := formatTpID(data.tpID, data.tpType)
-							text = pterm.Red(entry.remotePK) + " " + tpIDFormatted + pterm.Red(errStr) + removeStr
-						} else {
-							text = pterm.Red(entry.remotePK + " " + entry.tpID + " (no data)")
-							if entry.removed {
-								text += pterm.Green(" [REMOVED]")
-							} else if entry.removeErr != "" {
-								text += pterm.Yellow(" [remove failed: " + entry.removeErr + "]")
-							}
-						}
-
-						transportNode := pterm.TreeNode{Text: text}
-						if graphDmsgPreCheck && data != nil && len(data.dmsgServers) > 0 {
-							for _, serverData := range data.dmsgServers {
-								transportNode.Children = append(transportNode.Children, pterm.TreeNode{Text: formatDmsgServerEntry(serverData)})
-							}
-						}
-						children = append(children, transportNode)
-					}
-
-					// Skip if no children to render
-					if len(children) == 0 {
-						continue
-					}
-					hasRenderedEntries = true
-
-					// Show parent with path info
-					// Compute latency inline to avoid deadlock (we already hold failedEntriesMu)
-					latStr := ""
-					parentLatency := float64(-1)
-					for _, te := range treeEntries {
-						if te.remotePK == parentPK {
-							avgPing := getTransportAvgLatency(te.tpID)
-							if avgPing >= 0 && (parentLatency < 0 || avgPing < parentLatency) {
-								parentLatency = avgPing
-							}
-						}
-					}
-					if parentLatency >= 0 {
-						latStr = pterm.Gray(fmt.Sprintf(" (%.1fms)", parentLatency))
-					}
-					firstHopStr := ""
-					if path, ok := visorPath[parentPK]; ok && len(path) > 0 {
-						firstHopTpID := path[0].tpID
-						tpType := path[0].tpType
-						if tpType == "stcpr" {
-							firstHopStr = " " + pterm.Green(firstHopTpID)
-						} else if tpType == "sudph" {
-							firstHopStr = " " + pterm.Blue(firstHopTpID)
-						} else {
-							firstHopStr = " " + pterm.Gray(firstHopTpID)
-						}
-					}
-					parentTree := pterm.TreeNode{
-						Text:     pterm.Cyan(parentPK) + firstHopStr + latStr + pterm.Red(" (failed)"),
-						Children: children,
-					}
-					pterm.DefaultTree.WithRoot(parentTree).Render() //nolint:errcheck,gosec
-				}
-				// If we printed the header but no entries, note it
-				if !hasRenderedEntries {
-					fmt.Println(pterm.Gray("  (no failed entries with data)"))
-				}
-			}
-		}
-		failedEntriesMu.Unlock()
 
 		fmt.Println()
 		fmt.Println(pterm.Gray("Press Ctrl+C to stop"))
@@ -2602,10 +2407,10 @@ func runTreeViewMode(
 		}
 
 		// Make a copy of treeEntries to avoid race with concurrent writers
-		failedEntriesMu.Lock()
+		treeEntriesMu.Lock()
 		localTreeEntries := make([]treeEntry, len(treeEntries))
 		copy(localTreeEntries, treeEntries)
-		failedEntriesMu.Unlock()
+		treeEntriesMu.Unlock()
 
 		// Build saved state
 		state := routeSavedState{
@@ -3086,8 +2891,8 @@ func runTreeViewMode(
 
 						pathToParent := visorPath[target.parentPK]
 
-						// Add tree entry (use failedEntriesMu for treeEntries to avoid race with processFailedTransport)
-						failedEntriesMu.Lock()
+						// Add tree entry (use treeEntriesMu for treeEntries to avoid race with processFailedTransport)
+						treeEntriesMu.Lock()
 						treeEntries = append(treeEntries, treeEntry{
 							tpID:       target.tpID,
 							remotePK:   target.remotePK,
@@ -3095,7 +2900,7 @@ func runTreeViewMode(
 							parentPK:   target.parentPK,
 							parentTpID: "",
 						})
-						failedEntriesMu.Unlock()
+						treeEntriesMu.Unlock()
 
 						if skipPing {
 							// Just add to next level without pinging
