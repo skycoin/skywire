@@ -34,6 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorinit"
@@ -147,6 +148,16 @@ type Visor struct {
 	// DMSG server latency tracking (for preferring low-latency servers)
 	dmsgServerLatencies   map[cipher.PubKey]time.Duration
 	dmsgServerLatenciesMu sync.RWMutex
+
+	// Setup node health tracking (TPS and RSN)
+	nodeHealthTracker *NodeHealthTracker
+
+	// Public autocheck: periodic latency checking of transports
+	autochecker       *Autochecker
+	logServerAPI      *logserver.API
+	localLogServerAPI *logserver.API // Localhost log server (optional)
+	autocheckMu       sync.Mutex
+	autocheckStop     context.CancelFunc
 }
 
 // todo: consider moving module closing to the module system

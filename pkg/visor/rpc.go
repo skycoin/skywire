@@ -522,16 +522,18 @@ func (r *RPC) Transport(in *uuid.UUID, out *TransportSummary) (err error) {
 
 // AddTransportIn is input for AddTransport.
 type AddTransportIn struct {
-	RemotePK cipher.PubKey
-	TpType   string
-	Timeout  time.Duration
+	RemotePK   cipher.PubKey
+	TpType     string
+	Timeout    time.Duration
+	Label      string // "user" or "skycoin" (default: "skycoin")
+	NoRegister bool   // skip transport discovery registration (only valid for "user" label)
 }
 
 // AddTransport creates a transport for the visor.
 func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "AddTransport", in)(out, &err)
 
-	tp, err := r.visor.AddTransport(in.RemotePK, in.TpType, in.Timeout)
+	tp, err := r.visor.AddTransport(in.RemotePK, in.TpType, in.Timeout, in.Label, in.NoRegister)
 	if tp != nil {
 		*out = *tp
 	}
@@ -1095,6 +1097,110 @@ func (r *RPC) TPSGetTransports(targetPK *cipher.PubKey, out *[]TPSTransportRespo
 	defer rpcutil.LogCall(r.log, "TPSGetTransports", targetPK)(out, &err)
 
 	resp, err := r.visor.TPSGetTransports(*targetPK)
+	if err != nil {
+		return err
+	}
+	*out = resp
+	return nil
+}
+
+// GetTransportSetupNodes returns the whitelisted transport setup node public keys.
+func (r *RPC) GetTransportSetupNodes(_ *struct{}, out *[]cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "GetTransportSetupNodes", nil)(out, &err)
+
+	nodes, err := r.visor.GetTransportSetupNodes()
+	if err != nil {
+		return err
+	}
+	*out = nodes
+	return nil
+}
+
+// GetTransportSetupNodesSorted returns TPS nodes sorted by health (healthy first).
+func (r *RPC) GetTransportSetupNodesSorted(_ *struct{}, out *[]cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "GetTransportSetupNodesSorted", nil)(out, &err)
+
+	nodes, err := r.visor.GetTransportSetupNodesSorted()
+	if err != nil {
+		return err
+	}
+	*out = nodes
+	return nil
+}
+
+// GetRouteSetupNodesSorted returns RSN nodes sorted by health (healthy first).
+func (r *RPC) GetRouteSetupNodesSorted(_ *struct{}, out *[]cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "GetRouteSetupNodesSorted", nil)(out, &err)
+
+	nodes, err := r.visor.GetRouteSetupNodesSorted()
+	if err != nil {
+		return err
+	}
+	*out = nodes
+	return nil
+}
+
+// GetTPSHealth returns health status for all configured TPS nodes.
+func (r *RPC) GetTPSHealth(_ *struct{}, out *[]NodeHealth) (err error) {
+	defer rpcutil.LogCall(r.log, "GetTPSHealth", nil)(out, &err)
+
+	health, err := r.visor.GetTPSHealth()
+	if err != nil {
+		return err
+	}
+	*out = health
+	return nil
+}
+
+// GetRSNHealth returns health status for all configured RSN nodes.
+func (r *RPC) GetRSNHealth(_ *struct{}, out *[]NodeHealth) (err error) {
+	defer rpcutil.LogCall(r.log, "GetRSNHealth", nil)(out, &err)
+
+	health, err := r.visor.GetRSNHealth()
+	if err != nil {
+		return err
+	}
+	*out = health
+	return nil
+}
+
+// TPSExternalHealthCheck dials an external TPS over dmsg and performs a health check.
+func (r *RPC) TPSExternalHealthCheck(tpsPK *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "TPSExternalHealthCheck", tpsPK)(nil, &err)
+	return r.visor.TPSExternalHealthCheck(*tpsPK)
+}
+
+// TPSExternalAddTransportIn is the input for TPSExternalAddTransport RPC.
+type TPSExternalAddTransportIn struct {
+	TPSPK    cipher.PubKey
+	TargetPK cipher.PubKey
+	RemotePK cipher.PubKey
+	TpType   string
+}
+
+// TPSExternalAddTransport requests transport setup via an external TPS.
+func (r *RPC) TPSExternalAddTransport(in *TPSExternalAddTransportIn, out *TPSTransportResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "TPSExternalAddTransport", in)(out, &err)
+
+	resp, err := r.visor.TPSExternalAddTransport(in.TPSPK, in.TargetPK, in.RemotePK, in.TpType)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
+// TPSExternalGetTransportsIn is the input for TPSExternalGetTransports RPC.
+type TPSExternalGetTransportsIn struct {
+	TPSPK    cipher.PubKey
+	TargetPK cipher.PubKey
+}
+
+// TPSExternalGetTransports gets transports from a target visor via an external TPS.
+func (r *RPC) TPSExternalGetTransports(in *TPSExternalGetTransportsIn, out *[]TPSTransportResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "TPSExternalGetTransports", in)(out, &err)
+
+	resp, err := r.visor.TPSExternalGetTransports(in.TPSPK, in.TargetPK)
 	if err != nil {
 		return err
 	}

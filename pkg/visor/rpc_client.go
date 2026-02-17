@@ -412,12 +412,14 @@ func (rc *rpcClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport calls AddTransport.
-func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error) {
+func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool) (*TransportSummary, error) {
 	var summary TransportSummary
 	err := rc.Call("AddTransport", &AddTransportIn{
-		RemotePK: remote,
-		TpType:   tpType,
-		Timeout:  timeout,
+		RemotePK:   remote,
+		TpType:     tpType,
+		Timeout:    timeout,
+		Label:      label,
+		NoRegister: noRegister,
 	}, &summary)
 
 	return &summary, err
@@ -853,6 +855,68 @@ func (rc *rpcClient) TPSRemoveTransport(targetPK cipher.PubKey, tpID uuid.UUID) 
 func (rc *rpcClient) TPSGetTransports(targetPK cipher.PubKey) ([]TPSTransportResponse, error) {
 	var resp []TPSTransportResponse
 	err := rc.Call("TPSGetTransports", &targetPK, &resp)
+	return resp, err
+}
+
+// GetTransportSetupNodes returns the whitelisted transport setup node public keys.
+func (rc *rpcClient) GetTransportSetupNodes() ([]cipher.PubKey, error) {
+	var resp []cipher.PubKey
+	err := rc.Call("GetTransportSetupNodes", &struct{}{}, &resp)
+	return resp, err
+}
+
+// GetTransportSetupNodesSorted returns TPS nodes sorted by health (healthy first).
+func (rc *rpcClient) GetTransportSetupNodesSorted() ([]cipher.PubKey, error) {
+	var resp []cipher.PubKey
+	err := rc.Call("GetTransportSetupNodesSorted", &struct{}{}, &resp)
+	return resp, err
+}
+
+// GetRouteSetupNodesSorted returns RSN nodes sorted by health (healthy first).
+func (rc *rpcClient) GetRouteSetupNodesSorted() ([]cipher.PubKey, error) {
+	var resp []cipher.PubKey
+	err := rc.Call("GetRouteSetupNodesSorted", &struct{}{}, &resp)
+	return resp, err
+}
+
+// GetTPSHealth returns health status for all configured TPS nodes.
+func (rc *rpcClient) GetTPSHealth() ([]NodeHealth, error) {
+	var resp []NodeHealth
+	err := rc.Call("GetTPSHealth", &struct{}{}, &resp)
+	return resp, err
+}
+
+// GetRSNHealth returns health status for all configured RSN nodes.
+func (rc *rpcClient) GetRSNHealth() ([]NodeHealth, error) {
+	var resp []NodeHealth
+	err := rc.Call("GetRSNHealth", &struct{}{}, &resp)
+	return resp, err
+}
+
+// TPSExternalHealthCheck dials an external TPS over dmsg and performs a health check.
+func (rc *rpcClient) TPSExternalHealthCheck(tpsPK cipher.PubKey) error {
+	return rc.Call("TPSExternalHealthCheck", &tpsPK, &struct{}{})
+}
+
+// TPSExternalAddTransport requests transport setup via an external TPS.
+func (rc *rpcClient) TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error) {
+	var resp TPSTransportResponse
+	err := rc.Call("TPSExternalAddTransport", &TPSExternalAddTransportIn{
+		TPSPK:    tpsPK,
+		TargetPK: targetPK,
+		RemotePK: remotePK,
+		TpType:   tpType,
+	}, &resp)
+	return &resp, err
+}
+
+// TPSExternalGetTransports gets transports from a target visor via an external TPS.
+func (rc *rpcClient) TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]TPSTransportResponse, error) {
+	var resp []TPSTransportResponse
+	err := rc.Call("TPSExternalGetTransports", &TPSExternalGetTransportsIn{
+		TPSPK:    tpsPK,
+		TargetPK: targetPK,
+	}, &resp)
 	return resp, err
 }
 
@@ -1391,7 +1455,7 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ time.Duration) (*TransportSummary, error) {
+func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ time.Duration, _ string, _ bool) (*TransportSummary, error) {
 	summary := &TransportSummary{
 		ID:     transport.MakeTransportID(mc.o.PubKey, remote, types.Type(tpType)),
 		Local:  mc.o.PubKey,
@@ -1756,6 +1820,46 @@ func (mc *mockRPCClient) TPSRemoveTransport(_ cipher.PubKey, _ uuid.UUID) error 
 // TPSGetTransports implements API.
 func (mc *mockRPCClient) TPSGetTransports(_ cipher.PubKey) ([]TPSTransportResponse, error) {
 	return nil, fmt.Errorf("TPS not available in mock")
+}
+
+// GetTransportSetupNodes implements API.
+func (mc *mockRPCClient) GetTransportSetupNodes() ([]cipher.PubKey, error) {
+	return nil, nil
+}
+
+// GetTransportSetupNodesSorted implements API.
+func (mc *mockRPCClient) GetTransportSetupNodesSorted() ([]cipher.PubKey, error) {
+	return nil, nil
+}
+
+// GetRouteSetupNodesSorted implements API.
+func (mc *mockRPCClient) GetRouteSetupNodesSorted() ([]cipher.PubKey, error) {
+	return nil, nil
+}
+
+// GetTPSHealth implements API.
+func (mc *mockRPCClient) GetTPSHealth() ([]NodeHealth, error) {
+	return nil, nil
+}
+
+// GetRSNHealth implements API.
+func (mc *mockRPCClient) GetRSNHealth() ([]NodeHealth, error) {
+	return nil, nil
+}
+
+// TPSExternalHealthCheck implements API.
+func (mc *mockRPCClient) TPSExternalHealthCheck(_ cipher.PubKey) error {
+	return fmt.Errorf("external TPS not available in mock")
+}
+
+// TPSExternalAddTransport implements API.
+func (mc *mockRPCClient) TPSExternalAddTransport(_, _, _ cipher.PubKey, _ string) (*TPSTransportResponse, error) {
+	return nil, fmt.Errorf("external TPS not available in mock")
+}
+
+// TPSExternalGetTransports implements API.
+func (mc *mockRPCClient) TPSExternalGetTransports(_, _ cipher.PubKey) ([]TPSTransportResponse, error) {
+	return nil, fmt.Errorf("external TPS not available in mock")
 }
 
 // Close implements API.

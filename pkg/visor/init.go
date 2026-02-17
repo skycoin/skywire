@@ -153,6 +153,10 @@ var (
 	embRouteSetup vinit.Module
 	// UI server module (serves tp-viz)
 	uiServer vinit.Module
+	// Node health tracking for TPS and RSN
+	nodeHealth vinit.Module
+	// Public autocheck: periodic latency checking of transports
+	pac vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 	// config initialization
@@ -203,8 +207,10 @@ func registerModules(logger *logging.MasterLogger) {
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
 	embTPS = maker("embedded_tps", initEmbeddedTPS, &dmsgC)
 	uiServer = maker("ui_server", initUIServer, &dmsgC, &tr, &embTPS)
+	nodeHealth = maker("node_health", initNodeHealth, &dmsgC)
+	pac = maker("public_autocheck", initPublicAutocheck, &tr, &dmsgHTTPLogServer)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer, &nodeHealth, &pac)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -520,6 +526,11 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 
 	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, &v.survey, printLog)
 
+	// Store the log server API reference for public autocheck to use later
+	v.initLock.Lock()
+	v.logServerAPI = lsAPI
+	v.initLock.Unlock()
+
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
 		return err
@@ -569,6 +580,53 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		wg.Wait()
 		return nil
 	})
+
+	// Optionally serve on localhost as well (no whitelist authentication)
+	if v.conf.LogServer != nil && v.conf.LogServer.LocalAddr != "" {
+		localAddr := v.conf.LogServer.LocalAddr
+		logger.WithField("local_addr", localAddr).Info("Starting localhost log server")
+
+		// Create a separate API without whitelist authentication for localhost
+		localAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, nil, &v.survey, printLog)
+
+		// Store the localhost API so initPublicAutocheck can set the latency provider later
+		v.localLogServerAPI = localAPI
+
+		localLis, err := net.Listen("tcp", localAddr)
+		if err != nil {
+			logger.WithError(err).WithField("local_addr", localAddr).Warn("Failed to start localhost log server")
+		} else {
+			localSrv := &http.Server{
+				ReadTimeout:       5 * time.Second,
+				WriteTimeout:      30 * time.Second,
+				IdleTimeout:       60 * time.Second,
+				ReadHeaderTimeout: 5 * time.Second,
+				Handler:           localAPI,
+			}
+
+			localWg := new(sync.WaitGroup)
+			localWg.Add(1)
+
+			go func() {
+				defer localWg.Done()
+				if err := localSrv.Serve(localLis); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					logger.WithError(err).Error("Localhost logserver exited with error")
+				}
+			}()
+
+			v.pushCloseStack("localhost.logserver", func() error {
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := localSrv.Shutdown(shutdownCtx); err != nil {
+					logger.WithError(err).Warn("Localhost HTTP server shutdown error")
+				}
+				localWg.Wait()
+				return nil
+			})
+
+			logger.WithField("local_addr", localAddr).Info("Localhost log server started")
+		}
+	}
 
 	return nil
 }
@@ -778,6 +836,15 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log:   log,
 	}
 	v.initLock.Unlock()
+
+	// Start the embedded TPS server to accept incoming requests from remote visors
+	go func() {
+		if err := v.embeddedTPS.Serve(ctx); err != nil {
+			if ctx.Err() == nil {
+				log.WithError(err).Error("Embedded TPS server error")
+			}
+		}
+	}()
 
 	v.pushCloseStack("embedded_tps", func() error {
 		return tpsDmsgC.Close()
@@ -1379,6 +1446,32 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 	}()
 
 	log.Info("DMSG server latency tracking started")
+	return nil
+}
+
+// initNodeHealth initializes the node health tracker for TPS and RSN nodes.
+func initNodeHealth(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.dmsgC == nil {
+		log.Warn("Dmsg client not available, skipping node health tracking")
+		return nil
+	}
+
+	// Get configured TPS and RSN nodes
+	tpsNodes := v.conf.Transport.TransportSetupPKs
+	rsnNodes := v.conf.Routing.RouteSetupNodes
+
+	if len(tpsNodes) == 0 && len(rsnNodes) == 0 {
+		log.Info("No TPS or RSN nodes configured, skipping node health tracking")
+		return nil
+	}
+
+	log.WithField("tps_count", len(tpsNodes)).
+		WithField("rsn_count", len(rsnNodes)).
+		Info("Initializing node health tracker")
+
+	v.nodeHealthTracker = NewNodeHealthTracker(v.dmsgC, log)
+	v.nodeHealthTracker.Start(ctx, tpsNodes, rsnNodes)
+
 	return nil
 }
 
@@ -2124,7 +2217,7 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 }
 
 func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
-	tp, err := v.AddTransport(v.conf.PK, tpType, 0)
+	tp, err := v.AddTransport(v.conf.PK, tpType, 0, "", false)
 	if err != nil {
 		log.WithError(err).WithField("type", tpType).Warn("Failed to create self-transport")
 		return false
@@ -2546,6 +2639,62 @@ func (v *Visor) IsPublicAutoconnectRunning() bool {
 	v.autoconnectMu.Lock()
 	defer v.autoconnectMu.Unlock()
 	return v.autoconnectRunning
+}
+
+func initPublicAutocheck(ctx context.Context, v *Visor, log *logging.Logger) error {
+	// Check if public_autocheck is enabled (default to true if not set)
+	if v.conf.Transport != nil && !v.conf.Transport.PublicAutocheck {
+		log.Debug("Public autocheck disabled in config")
+		return nil
+	}
+
+	if v.tpM == nil {
+		log.Debug("Transport manager not available, skipping public autocheck")
+		return nil
+	}
+
+	// Create the autochecker
+	autochecker := NewAutochecker(log, v.tpM, v.conf.LocalPath, v.conf.PK)
+
+	v.autocheckMu.Lock()
+	v.autochecker = autochecker
+	v.autocheckMu.Unlock()
+
+	// Register with log server for /latencies endpoint
+	if v.logServerAPI != nil {
+		v.logServerAPI.SetLatencyProvider(autochecker)
+	}
+	// Also register with localhost log server if enabled
+	if v.localLogServerAPI != nil {
+		v.localLogServerAPI.SetLatencyProvider(autochecker)
+	}
+
+	// Start the autocheck loop
+	cctx, cancel := context.WithCancel(ctx)
+	v.autocheckMu.Lock()
+	v.autocheckStop = cancel
+	v.autocheckMu.Unlock()
+
+	go func() {
+		if err := autochecker.Run(cctx, v); err != nil {
+			if err != context.Canceled {
+				log.WithError(err).Error("Public autocheck exited with error")
+			}
+		}
+	}()
+
+	v.pushCloseStack("public_autocheck", func() error {
+		v.autocheckMu.Lock()
+		defer v.autocheckMu.Unlock()
+		if v.autocheckStop != nil {
+			v.autocheckStop()
+			v.autocheckStop = nil
+		}
+		return nil
+	})
+
+	log.Info("Public autocheck started")
+	return nil
 }
 
 func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {

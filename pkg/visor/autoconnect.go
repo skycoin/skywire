@@ -174,12 +174,16 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			a.log.WithField("total", len(append(absent1, absent2...))).
 				Debugln("Found visors to connect to")
 
-			// Attempt to establish transports to the keys in random order for 5 minutes
-			attemptDeadline := time.Now().Add(5 * time.Minute)
+			// Simplified public autoconnect logic:
+			// Phase 1: Connect to 2 public visors unconditionally via STCPR
+			// Phase 2: Connect to up to 3 more public visors via STCPR if below limit
+			// Phase 3: If SUDPH available, connect to other connected visors
 
-			maxSTCPR := a.maxConns
+			const minSTCPR = 2 // Always connect to at least 2 public visors
+			const maxSTCPR = 5 // Connect to up to 5 if they're not at limit
 			maxSUDPH := a.maxConns * 5
 
+			// Count existing automatic transports
 			countSTCPR := 0
 			countSUDPH := 0
 			for _, autoconnTP := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
@@ -191,129 +195,125 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				}
 			}
 
-			if countSTCPR >= maxSTCPR && countSUDPH >= maxSUDPH {
-				a.log.Debugln("Skipping public autoconnect; max STCPR and SUDPH transports reached")
-				continue
-			}
-
-			for _, pk := range append(shufflePubKeys(absent1), shufflePubKeys(absent2)...) {
-				// Check for context cancellation before each transport attempt
-				select {
-				case <-ctx.Done():
-					a.log.Debug("Context canceled, stopping public autoconnect loop")
-					return context.Canceled
-				default:
-				}
-
-				if time.Now().After(attemptDeadline) {
-					a.log.Debugln("Refreshing list of keys for public autoconnect")
-					break
-				}
-
-				if pk == v.conf.PK {
-					continue
-				}
-
-				// Determine transport type based on visor category:
-				// - Public visors (from service discovery) -> STCPR (they have public IPs)
-				// - Non-public visors (discovered via transport data) -> SUDPH
-				var netType tptypes.Type
-				isPublicVisor := a.isInList(pk, absent1)
-				if isPublicVisor && localSupportsSTCPR {
-					netType = tptypes.STCPR
-				} else if localSupportsSUDPH {
-					netType = tptypes.SUDPH
-				} else {
-					a.log.WithField("pk", pk).Debugln("No supported network type available for visor")
-					continue
-				}
-
-				if netType == tptypes.STCPR && countSTCPR >= maxSTCPR {
-					continue // silently skip
-				}
-				if netType == tptypes.SUDPH && countSUDPH >= maxSUDPH {
-					continue // silently skip
-				}
-
-				// Hybrid approach for connection count checking:
-				// - For STCPR to public visors: get FRESH stats (critical bottleneck)
-				// - For everything else: use cached data (stale is acceptable)
-				var transportCount int
-				if netType == tptypes.STCPR && isPublicVisor {
-					// Fresh check for STCPR to public visors - these are most prone to overload
-					tpD := v.tpDiscClient()
-					freshStats, err := tpD.GetTransportStats(ctx, pk)
-					if err != nil {
-						a.log.WithField("pk", pk).WithError(err).
-							Warn("Failed to get fresh transport stats, using cached count")
-						transportCount = transportCache.transportCounts[pk]
-					} else {
-						transportCount = freshStats.Total
-						a.log.WithField("pk", pk).WithField("fresh_count", freshStats.Total).
-							Debug("Got fresh transport count for public visor")
+			// Phase 1 & 2: STCPR to public visors
+			if localSupportsSTCPR && countSTCPR < maxSTCPR {
+				a.log.Debug("Phase 1&2: Connecting to public visors via STCPR")
+				for _, pk := range shufflePubKeys(absent1) {
+					// Check for context cancellation
+					select {
+					case <-ctx.Done():
+						a.log.Debug("Context canceled, stopping public autoconnect loop")
+						return context.Canceled
+					default:
 					}
-				} else {
-					// Use cached count for SUDPH or non-public visors
-					transportCount = transportCache.transportCounts[pk]
-				}
 
-				// Skip transport limit check for public-to-public connections
-				// Public visors must maintain full mesh connectivity regardless of individual transport limits
-				if a.visorIsPublic && isPublicVisor {
-					a.log.WithField("pk", pk).WithField("count", transportCount).
-						Debug("Public-to-public connection: bypassing transport limit check")
-				} else if transportCount >= a.maxConns*100 {
-					a.log.WithField("pk", pk).WithField("count", transportCount).
-						Debugln("Remote visor has reached or exceeded max connections, skipping")
-					continue
-				}
+					if countSTCPR >= maxSTCPR {
+						break
+					}
 
-				// Skip visors behind the same NAT (same LAN) to avoid unnecessary transports.
-				// Two visors with the same public IP are behind the same router.
-				if a.clientPublicIP != "" {
-					if sameLAN := a.isSameLAN(ctx, pk, netType); sameLAN {
-						a.log.WithField("pk", pk).
-							Debugln("Skipping same-LAN visor (same public IP)")
+					if pk == v.conf.PK {
 						continue
 					}
-				}
 
-				a.log.WithField("pk", pk).WithField("type", netType).
-					Debugln("Trying to add transport to public visor")
-
-				// Double-check that the network type is supported locally before attempting
-				if !a.tm.IsKnownNetwork(netType) {
-					a.log.WithField("pk", pk).WithField("type", netType).
-						Warnln("Network type not supported locally, skipping")
-					continue
-				}
-
-				logger := a.log.WithField("pk", pk).WithField("type", string(netType))
-				if err = a.tryEstablishTransport(ctx, pk, netType, logger); err != nil {
-					// Check if this is due to context cancellation (shutdown)
-					// These should be DEBUG level, not WARN
-					if errors.Is(err, context.Canceled) ||
-						errors.Is(err, context.DeadlineExceeded) ||
-						strings.Contains(err.Error(), "operation was canceled") ||
-						strings.Contains(err.Error(), "context canceled") {
-						logger.WithError(err).Debugln("Transport creation canceled (shutdown)")
-					} else {
-						logger.WithError(err).Warnln("Failed to add transport to visor")
+					// Skip visors behind the same NAT
+					if a.clientPublicIP != "" {
+						if sameLAN := a.isSameLAN(ctx, pk, tptypes.STCPR); sameLAN {
+							a.log.WithField("pk", pk).
+								Debugln("Skipping same-LAN visor (same public IP)")
+							continue
+						}
 					}
-					continue
-				}
 
-				if netType == tptypes.STCPR {
+					// First minSTCPR connections are unconditional
+					// After that, check connection limit
+					if countSTCPR >= minSTCPR {
+						transportCount := transportCache.transportCounts[pk]
+						if transportCount >= a.maxConns*100 {
+							a.log.WithField("pk", pk).WithField("count", transportCount).
+								Debugln("Remote visor at limit, skipping (not in first 2)")
+							continue
+						}
+					}
+
+					logger := a.log.WithField("pk", pk).WithField("type", string(tptypes.STCPR))
+					logger.Debugln("Trying to add STCPR transport to public visor")
+
+					if err = a.tryEstablishTransport(ctx, pk, tptypes.STCPR, logger); err != nil {
+						if errors.Is(err, context.Canceled) ||
+							errors.Is(err, context.DeadlineExceeded) ||
+							strings.Contains(err.Error(), "operation was canceled") ||
+							strings.Contains(err.Error(), "context canceled") {
+							logger.WithError(err).Debugln("Transport creation canceled (shutdown)")
+						} else {
+							logger.WithError(err).Warnln("Failed to add STCPR transport")
+						}
+						continue
+					}
+
 					countSTCPR++
-				} else {
-					countSUDPH++
-				}
-
-				if countSTCPR >= maxSTCPR && countSUDPH >= maxSUDPH {
-					a.log.Debugln("Max STCPR and SUDPH transports reached, stopping loop")
-					break
+					a.log.WithField("count", countSTCPR).Debug("STCPR transport established")
 				}
 			}
+
+			// Phase 3: SUDPH to other connected visors (if supported)
+			if localSupportsSUDPH && countSUDPH < maxSUDPH && len(absent2) > 0 {
+				a.log.Debug("Phase 3: Connecting to other visors via SUDPH")
+				for _, pk := range shufflePubKeys(absent2) {
+					// Check for context cancellation
+					select {
+					case <-ctx.Done():
+						a.log.Debug("Context canceled, stopping SUDPH autoconnect loop")
+						return context.Canceled
+					default:
+					}
+
+					if countSUDPH >= maxSUDPH {
+						break
+					}
+
+					if pk == v.conf.PK {
+						continue
+					}
+
+					// Check connection limit for SUDPH targets
+					transportCount := transportCache.transportCounts[pk]
+					if transportCount >= a.maxConns*100 {
+						a.log.WithField("pk", pk).WithField("count", transportCount).
+							Debugln("Remote visor at limit, skipping SUDPH")
+						continue
+					}
+
+					// Skip visors behind the same NAT
+					if a.clientPublicIP != "" {
+						if sameLAN := a.isSameLAN(ctx, pk, tptypes.SUDPH); sameLAN {
+							a.log.WithField("pk", pk).
+								Debugln("Skipping same-LAN visor (same public IP)")
+							continue
+						}
+					}
+
+					logger := a.log.WithField("pk", pk).WithField("type", string(tptypes.SUDPH))
+					logger.Debugln("Trying to add SUDPH transport")
+
+					if err = a.tryEstablishTransport(ctx, pk, tptypes.SUDPH, logger); err != nil {
+						if errors.Is(err, context.Canceled) ||
+							errors.Is(err, context.DeadlineExceeded) ||
+							strings.Contains(err.Error(), "operation was canceled") ||
+							strings.Contains(err.Error(), "context canceled") {
+							logger.WithError(err).Debugln("Transport creation canceled (shutdown)")
+						} else {
+							logger.WithError(err).Warnln("Failed to add SUDPH transport")
+						}
+						continue
+					}
+
+					countSUDPH++
+					a.log.WithField("count", countSUDPH).Debug("SUDPH transport established")
+				}
+			}
+
+			a.log.WithField("stcpr", countSTCPR).WithField("sudph", countSUDPH).
+				Debug("Public autoconnect cycle completed")
 		}
 	}
 }
@@ -399,16 +399,6 @@ func (a *autoconnector) isSameLAN(ctx context.Context, pk cipher.PubKey, netType
 	}
 
 	return remoteIP != "" && remoteIP == a.clientPublicIP
-}
-
-// isInList checks if a public key is in the given list
-func (a *autoconnector) isInList(pk cipher.PubKey, list []cipher.PubKey) bool {
-	for _, listPK := range list {
-		if listPK == pk {
-			return true
-		}
-	}
-	return false
 }
 
 // transportDiscoveryCache holds cached transport discovery data to reduce API calls

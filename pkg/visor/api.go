@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/rpc"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -115,7 +116,7 @@ type API interface {
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
 	Transport(tid uuid.UUID) (*TransportSummary, error)
-	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error)
+	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
 	RemoveAllTransports() error
 	SetPublicAutoconnect(pAc bool) error
@@ -183,6 +184,16 @@ type API interface {
 	TPSAddTransport(targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error)
 	TPSRemoveTransport(targetPK cipher.PubKey, tpID uuid.UUID) error
 	TPSGetTransports(targetPK cipher.PubKey) ([]TPSTransportResponse, error)
+
+	// External TPS operations (dial external TPS over dmsg)
+	GetTransportSetupNodes() ([]cipher.PubKey, error)
+	GetTransportSetupNodesSorted() ([]cipher.PubKey, error)
+	GetRouteSetupNodesSorted() ([]cipher.PubKey, error)
+	GetTPSHealth() ([]NodeHealth, error)
+	GetRSNHealth() ([]NodeHealth, error)
+	TPSExternalHealthCheck(tpsPK cipher.PubKey) error
+	TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error)
+	TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]TPSTransportResponse, error)
 
 	// Close closes the API connection (for RPC clients)
 	Close() error
@@ -1395,7 +1406,7 @@ func (v *Visor) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error) {
+func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool) (*TransportSummary, error) {
 	if v.tpM == nil {
 		return nil, ErrTrpMangerNotAvailable
 	}
@@ -1408,9 +1419,26 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.D
 		defer cancel()
 	}
 
-	v.log.Debugf("Saving transport to %v via %v", remote, tpType)
+	// Determine label - default to skycoin, use user if explicitly requested
+	tpLabel := transport.LabelSkycoin
+	if label == string(transport.LabelUser) {
+		tpLabel = transport.LabelUser
+	}
 
-	tp, err := v.tpM.SaveTransport(ctx, remote, types.Type(tpType), transport.LabelUser)
+	// noRegister only valid for user-labeled transports
+	if noRegister && tpLabel != transport.LabelUser {
+		return nil, fmt.Errorf("--no-register flag is only valid for user-labeled transports")
+	}
+
+	v.log.Debugf("Saving transport to %v via %v with label %s", remote, tpType, tpLabel)
+
+	var tp *transport.ManagedTransport
+	var err error
+	if noRegister {
+		tp, err = v.tpM.SaveTransportNoRegister(ctx, remote, types.Type(tpType), tpLabel)
+	} else {
+		tp, err = v.tpM.SaveTransport(ctx, remote, types.Type(tpType), tpLabel)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -3426,6 +3454,162 @@ func (v *Visor) TPSGetTransports(targetPK cipher.PubKey) ([]TPSTransportResponse
 		}
 	}
 	return result, nil
+}
+
+// GetTransportSetupNodes returns the whitelisted transport setup node public keys.
+func (v *Visor) GetTransportSetupNodes() ([]cipher.PubKey, error) {
+	return v.conf.Transport.TransportSetupPKs, nil
+}
+
+// GetTransportSetupNodesSorted returns TPS nodes sorted by health (healthy first, then by latency).
+func (v *Visor) GetTransportSetupNodesSorted() ([]cipher.PubKey, error) {
+	if v.nodeHealthTracker == nil {
+		// Fall back to unsorted list if health tracker not initialized
+		return v.conf.Transport.TransportSetupPKs, nil
+	}
+	return v.nodeHealthTracker.GetTPSNodesSorted(), nil
+}
+
+// GetRouteSetupNodesSorted returns RSN nodes sorted by health (healthy first, then by latency).
+func (v *Visor) GetRouteSetupNodesSorted() ([]cipher.PubKey, error) {
+	if v.nodeHealthTracker == nil {
+		// Fall back to unsorted list if health tracker not initialized
+		return v.conf.Routing.RouteSetupNodes, nil
+	}
+	return v.nodeHealthTracker.GetRSNNodesSorted(), nil
+}
+
+// GetTPSHealth returns health status for all configured TPS nodes.
+func (v *Visor) GetTPSHealth() ([]NodeHealth, error) {
+	if v.nodeHealthTracker == nil {
+		return nil, fmt.Errorf("node health tracker not initialized")
+	}
+	return v.nodeHealthTracker.GetTPSHealth(), nil
+}
+
+// GetRSNHealth returns health status for all configured RSN nodes.
+func (v *Visor) GetRSNHealth() ([]NodeHealth, error) {
+	if v.nodeHealthTracker == nil {
+		return nil, fmt.Errorf("node health tracker not initialized")
+	}
+	return v.nodeHealthTracker.GetRSNHealth(), nil
+}
+
+// TPSExternalHealthCheck dials an external TPS over dmsg and performs a health check.
+func (v *Visor) TPSExternalHealthCheck(tpsPK cipher.PubKey) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: tpsPK, Port: skyenv.DmsgTransportSetupServicePort})
+	if err != nil {
+		return fmt.Errorf("failed to dial TPS %s: %w", tpsPK, err)
+	}
+	defer conn.Close() //nolint:errcheck
+
+	client := rpc.NewClient(conn)
+	defer client.Close() //nolint:errcheck
+
+	var reply TPSHealthCheckReply
+	if err := client.Call("SetupRPCGateway.HealthCheck", &TPSHealthCheckArgs{}, &reply); err != nil {
+		return fmt.Errorf("health check failed: %w", err)
+	}
+
+	if reply.Status != "OK" {
+		return fmt.Errorf("health check returned non-OK status: %s", reply.Status)
+	}
+	return nil
+}
+
+// TPSHealthCheckArgs is empty input for health check.
+type TPSHealthCheckArgs struct{}
+
+// TPSHealthCheckReply is the health check response.
+type TPSHealthCheckReply struct {
+	Status string
+}
+
+// TPSExternalAddTransport dials an external TPS over dmsg and requests transport setup.
+func (v *Visor) TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: tpsPK, Port: skyenv.DmsgTransportSetupServicePort})
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial TPS %s: %w", tpsPK, err)
+	}
+	defer conn.Close() //nolint:errcheck
+
+	client := rpc.NewClient(conn)
+	defer client.Close() //nolint:errcheck
+
+	req := &TPSSetupRequest{
+		TargetPK: targetPK,
+		RemotePK: remotePK,
+		Type:     tpType,
+	}
+	var reply TPSSetupResponse
+	if err := client.Call("SetupRPCGateway.AddTransport", req, &reply); err != nil {
+		return nil, fmt.Errorf("AddTransport RPC failed: %w", err)
+	}
+
+	return &TPSTransportResponse{
+		ID:     reply.ID,
+		Local:  reply.Local,
+		Remote: reply.Remote,
+		Type:   reply.Type,
+	}, nil
+}
+
+// TPSSetupRequest is input for AddTransport RPC via external TPS.
+type TPSSetupRequest struct {
+	TargetPK cipher.PubKey
+	RemotePK cipher.PubKey
+	Type     string
+}
+
+// TPSSetupResponse is the response for AddTransport via external TPS.
+type TPSSetupResponse struct {
+	ID     uuid.UUID
+	Local  cipher.PubKey
+	Remote cipher.PubKey
+	Type   string
+}
+
+// TPSExternalGetTransports dials an external TPS over dmsg and requests transport list.
+func (v *Visor) TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]TPSTransportResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: tpsPK, Port: skyenv.DmsgTransportSetupServicePort})
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial TPS %s: %w", tpsPK, err)
+	}
+	defer conn.Close() //nolint:errcheck
+
+	client := rpc.NewClient(conn)
+	defer client.Close() //nolint:errcheck
+
+	req := &TPSGetTransportsRequest{TargetPK: targetPK}
+	var reply TPSGetTransportsResponse
+	if err := client.Call("SetupRPCGateway.GetTransports", req, &reply); err != nil {
+		return nil, fmt.Errorf("GetTransports RPC failed: %w", err)
+	}
+
+	result := make([]TPSTransportResponse, len(reply.Transports))
+	for i, tr := range reply.Transports {
+		result[i] = TPSTransportResponse(tr)
+	}
+	return result, nil
+}
+
+// TPSGetTransportsRequest is input for GetTransports RPC via external TPS.
+type TPSGetTransportsRequest struct {
+	TargetPK cipher.PubKey
+}
+
+// TPSGetTransportsResponse is the response for GetTransports via external TPS.
+type TPSGetTransportsResponse struct {
+	Transports []TPSSetupResponse
 }
 
 // dmsgHTTPTransport implements http.RoundTripper using the visor's dmsg client

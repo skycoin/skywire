@@ -24,6 +24,7 @@ type V1 struct {
 	Dmsg          *dmsgc.DmsgConfig   `json:"dmsg"`
 	Dmsgpty       *Dmsgpty            `json:"dmsgpty,omitempty"`
 	UIServer      *UIServer           `json:"ui_server,omitempty"`
+	LogServer     *LogServer          `json:"log_server,omitempty"`
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *Transport          `json:"transport"`
 	Routing       *Routing            `json:"routing"`
@@ -64,11 +65,20 @@ type UIServer struct {
 	SurveyDir     string          `json:"survey_dir"`     // Directory with visor surveys for IP-based grouping
 }
 
+// LogServer configures the dmsghttp log server's optional localhost endpoint.
+// When LocalAddr is set (non-empty), the log server also serves on localhost without authentication.
+type LogServer struct {
+	// LocalAddr enables serving on localhost (e.g., "localhost:8002" or "127.0.0.1:8002").
+	// If empty, localhost serving is disabled (dmsg-only mode).
+	LocalAddr string `json:"local_addr"`
+}
+
 // Transport defines a transport config.
 type Transport struct {
 	Discovery         string          `json:"discovery"`
 	AddressResolver   string          `json:"address_resolver"`
 	PublicAutoconnect bool            `json:"public_autoconnect"`
+	PublicAutocheck   bool            `json:"public_autocheck"`
 	TransportSetupPKs []cipher.PubKey `json:"transport_setup"`
 	TPSetupSK         *cipher.SecKey  `json:"tps_sk,omitempty"`
 	TPSDmsg           *TPSDmsgConfig  `json:"tps_dmsg,omitempty"`

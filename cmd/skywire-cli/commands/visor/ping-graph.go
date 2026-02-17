@@ -78,6 +78,8 @@ var (
 	graphDmsgAllServers bool
 	graphRemoveTp       bool
 	graphRemoveRemoteTp bool
+	graphRemakeTp       bool
+	graphRemakeRemoteTp bool
 )
 
 func init() {
@@ -146,6 +148,8 @@ Tree view (--tree) output format:
 	pingGraphCmd.Flags().BoolVar(&graphUseTPS, "tps", true, "verify/update transports via TPS (tree mode only)")
 	pingGraphCmd.Flags().BoolVar(&graphRemoveTp, "remove-tp", false, "remove local transport if route ping fails")
 	pingGraphCmd.Flags().BoolVar(&graphRemoveRemoteTp, "remove-remote-tp", false, "request remote visor to remove transport if route ping fails")
+	pingGraphCmd.Flags().BoolVar(&graphRemakeTp, "remake-tp", false, "remake local transport after removing failed one (retry once)")
+	pingGraphCmd.Flags().BoolVar(&graphRemakeRemoteTp, "remake-remote-tp", false, "remake transport on remote side after failure (retry once)")
 	pingCmd.AddCommand(pingGraphCmd)
 }
 
@@ -851,6 +855,7 @@ type transportLatencyData struct {
 	timestamp   time.Time // When the test completed
 	lastSuccess time.Time // Preserved on failure
 	stale       bool      // Needs re-checking
+	remadeOnce  bool      // True if transport was remade once (don't remake again)
 	// DMSG pre-check results (children in tree view)
 	dmsgServers    []*dmsgServerPingData // DMSG ping results per server
 	dmsgReachable  bool                  // True if reachable via any DMSG server
@@ -1227,6 +1232,7 @@ func runTreeViewMode(
 	// Each entry is a transport (not a visor), allowing same visor with different transports
 	type treeEntry struct {
 		tpID       string
+		tpType     string // Transport type (stcpr, sudph, dmsg)
 		remotePK   string
 		level      int
 		parentPK   string
@@ -1234,12 +1240,15 @@ func runTreeViewMode(
 		failed     bool   // True if ping failed
 		removed    bool   // True if transport was removed due to failure
 		removeErr  string // Error message if removal failed
+		remade     bool   // True if transport was remade after failure
+		remadeOnce bool   // True if transport was already remade once (don't remake again)
 	}
 	var treeEntries []treeEntry
 	var treeEntriesMu sync.Mutex
 
-	// Helper to process a failed transport - mark as failed and optionally remove
-	processFailedTransport := func(tpID string, remotePK string, parentPK string, level int, isLevel1 bool) {
+	// Helper to process a failed transport - mark as failed and optionally remove/remake
+	// Returns new tpID and true if transport was remade, empty string and false otherwise
+	processFailedTransport := func(tpID string, tpType string, remotePK string, parentPK string, level int, isLevel1 bool) (string, bool) {
 		treeEntriesMu.Lock()
 		defer treeEntriesMu.Unlock()
 
@@ -1256,6 +1265,7 @@ func runTreeViewMode(
 		if entryIdx < 0 {
 			treeEntries = append(treeEntries, treeEntry{
 				tpID:     tpID,
+				tpType:   tpType,
 				remotePK: remotePK,
 				parentPK: parentPK,
 				level:    level,
@@ -1266,9 +1276,21 @@ func runTreeViewMode(
 			treeEntries[entryIdx].failed = true
 		}
 
+		// Check if this transport was already remade once - don't remake again
+		if treeEntries[entryIdx].remadeOnce {
+			return "", false
+		}
+
+		// Should we attempt to remake this transport?
+		shouldRemake := (graphRemakeTp || graphRemakeRemoteTp) && isLevel1
+
+		// --remake-tp implies --remove-tp (need to remove before we can remake)
+		shouldRemoveLocal := graphRemoveTp || graphRemakeTp
+		shouldRemoveRemote := graphRemoveRemoteTp || graphRemakeRemoteTp
+
 		// Try to remove transports if flags are set
-		// When --remove-tp is set for level 1, remove from both local and remote
-		if isLevel1 && graphRemoveTp {
+		// When removing for level 1, remove from both local and remote
+		if isLevel1 && shouldRemoveLocal {
 			localErr := removeLocalTransport(tpID)
 			remoteErr := removeRemoteTransport(remotePK, tpID)
 
@@ -1286,7 +1308,7 @@ func runTreeViewMode(
 			if localErr == nil || remoteErr == nil {
 				treeEntries[entryIdx].removed = true
 			}
-		} else if graphRemoveRemoteTp {
+		} else if shouldRemoveRemote {
 			// Only remove remote (for non-level-1 or when only --remove-remote-tp is set)
 			if err := removeRemoteTransport(remotePK, tpID); err != nil {
 				treeEntries[entryIdx].removeErr = err.Error()
@@ -1294,6 +1316,40 @@ func runTreeViewMode(
 				treeEntries[entryIdx].removed = true
 			}
 		}
+
+		// Attempt to remake the transport if requested
+		if shouldRemake && treeEntries[entryIdx].removed {
+			// Try to add transport via TPS - need both local and remote PKs
+			var remotePKObj cipher.PubKey
+			var localPKObj cipher.PubKey
+			if err := remotePKObj.Set(remotePK); err == nil {
+				if err := localPKObj.Set(localPK); err == nil {
+					fmt.Printf("  Attempting to remake transport to %s...\n", remotePK[:16])
+					newTp, err := rpcClient.TPSAddTransport(localPKObj, remotePKObj, tpType)
+					if err != nil {
+						fmt.Printf("  Failed to remake transport: %v\n", err)
+						treeEntries[entryIdx].remadeOnce = true // Don't try again
+						return "", false
+					}
+
+					// Transport created successfully
+					newTpID := newTp.ID.String()
+					fmt.Printf("  Transport remade: %s -> %s\n", tpID[:8], newTpID[:8])
+
+					// Update entry with new transport ID
+					treeEntries[entryIdx].tpID = newTpID
+					treeEntries[entryIdx].failed = false
+					treeEntries[entryIdx].removed = false
+					treeEntries[entryIdx].removeErr = ""
+					treeEntries[entryIdx].remade = true
+					treeEntries[entryIdx].remadeOnce = true // Mark so we don't remake again if this fails
+
+					return newTpID, true
+				}
+			}
+		}
+
+		return "", false
 	}
 
 	// Track which transport IDs have been pinged (for resume)
@@ -1346,6 +1402,7 @@ func runTreeViewMode(
 					// Add to tree entries
 					treeEntries = append(treeEntries, treeEntry{
 						tpID:     entry.TpID,
+						tpType:   entry.TpType,
 						remotePK: entry.RemotePK,
 						level:    entry.Level,
 						parentPK: entry.ParentPK,
@@ -2121,79 +2178,13 @@ func runTreeViewMode(
 			}
 		}
 
-		// Channel to signal DMSG pre-check completion
-		dmsgDone := make(chan bool, 1)
-		expectedServerCount := len(dmsgServers)
-		if graphDmsgPreCheck && expectedServerCount > 0 {
-			// Wait for DMSG pre-check in a separate goroutine and signal when done
-			go func() {
-				// Give DMSG pings a head start, then check periodically
-				checkInterval := 500 * time.Millisecond
-				maxWait := graphTimeout + 35*time.Second // Slightly longer than DMSG timeout
-				waited := time.Duration(0)
-				for waited < maxWait {
-					select {
-					case <-ctx.Done():
-						dmsgDone <- false
-						return
-					case <-time.After(checkInterval):
-						waited += checkInterval
-						// Check if all DMSG pings are done
-						dataMu.Lock()
-						allDone := true
-						for _, serverData := range data.dmsgServers {
-							if serverData.phase != "done" {
-								allDone = false
-								break
-							}
-						}
-						// Also check if we have enough servers tracked
-						if len(data.dmsgServers) < expectedServerCount {
-							allDone = false
-						}
-						reachable := data.dmsgReachable
-						dataMu.Unlock()
-						if allDone {
-							dmsgDone <- reachable
-							return
-						}
-					}
-				}
-				// Timed out waiting for DMSG - check final status
-				dataMu.Lock()
-				reachable := data.dmsgReachable
-				dataMu.Unlock()
-				dmsgDone <- reachable
-			}()
-		} else {
-			// No DMSG pre-check - signal immediately
-			dmsgDone <- true
-		}
-
-		// Route ping goroutine (waits for DMSG pre-check if enabled)
+		// Route ping goroutine (runs in parallel with DMSG pings - doesn't wait for DMSG results)
 		pingWg.Add(1)
 		go func() {
 			defer pingWg.Done()
 
-			// Wait for DMSG pre-check result if enabled
-			if graphDmsgPreCheck {
-				select {
-				case <-ctx.Done():
-					return
-				case dmsgReachable := <-dmsgDone:
-					if !dmsgReachable {
-						// DMSG unreachable - skip route ping
-						dataMu.Lock()
-						data.dmsgSkipReason = "DMSG unreachable (all servers timed out)"
-						data.pingErr = "skipped: DMSG unreachable"
-						data.phase = "done"
-						data.timestamp = time.Now()
-						dataMu.Unlock()
-						safeRenderTree()
-						return
-					}
-				}
-			}
+			// Note: DMSG pings run in parallel for diagnostic purposes
+			// Route ping proceeds immediately without waiting for DMSG results
 
 			// Callback for ping results - captures setup and ping phases
 			callback := func(_ int32, lat time.Duration, isSetup bool, _ []rpcgrpc.RouteHopDetail, _ string, routeCalcTime time.Duration, pingErr error) {
@@ -2304,16 +2295,99 @@ func runTreeViewMode(
 				if level == 1 {
 					// Level 1: verify transport exists on BOTH local and remote
 					if !verifyTransportBothEnds(tpID, localPK, remotePK) {
-						// Transport missing on one or both ends - mark as dead and skip
-						deadFirstHops[tpID] = true
-						pingCancel()
-						dataMu.Lock()
-						data.setupErr = "tp missing"
-						data.phase = "done"
-						data.timestamp = time.Now()
-						dataMu.Unlock()
-						safeRenderTree()
-						return
+						// Transport missing on one or both ends
+						// Try to remake if flags are set
+						if (graphRemakeTp || graphRemakeRemoteTp) && !data.remadeOnce {
+							fmt.Printf("  Transport %s missing, attempting remake...\n", tpID[:8])
+
+							// First, remove from both ends (ignore errors - transport may already be gone)
+							_ = removeLocalTransport(tpID)            //nolint:errcheck
+							_ = removeRemoteTransport(remotePK, tpID) //nolint:errcheck
+
+							// Try to recreate via TPS
+							var remotePKObj cipher.PubKey
+							var localPKObj cipher.PubKey
+							if err := remotePKObj.Set(remotePK); err == nil {
+								if err := localPKObj.Set(localPK); err == nil {
+									newTp, err := rpcClient.TPSAddTransport(localPKObj, remotePKObj, tpType)
+									if err == nil && newTp != nil {
+										newTpID := newTp.ID.String()
+										fmt.Printf("  Transport remade: %s -> %s\n", tpID[:8], newTpID[:8])
+
+										// Update tracking
+										pingedTpIDs[tpID] = true
+										delete(localTpIDs, tpID)
+										localTpIDs[newTpID] = true
+
+										// Mark as remade in tree entry
+										treeEntriesMu.Lock()
+										for i := range treeEntries {
+											if treeEntries[i].tpID == tpID {
+												treeEntries[i].tpID = newTpID
+												treeEntries[i].remade = true
+												treeEntries[i].remadeOnce = true
+												break
+											}
+										}
+										treeEntriesMu.Unlock()
+
+										// Update data with new tpID for retry
+										dataMu.Lock()
+										data.tpID = newTpID
+										data.remadeOnce = true
+										// Store in transportLatencies under new ID
+										transportLatencies[newTpID] = data
+										delete(transportLatencies, tpID)
+										dataMu.Unlock()
+
+										// Verify the new transport exists
+										if verifyTransportBothEnds(newTpID, localPK, remotePK) {
+											// Remake succeeded - continue with ping using new transport
+											tpID = newTpID
+											// Don't return, fall through to perform ping
+										} else {
+											// Still missing after remake - mark as dead
+											deadFirstHops[newTpID] = true
+											pingCancel()
+											dataMu.Lock()
+											data.setupErr = "tp missing after remake"
+											data.phase = "done"
+											data.timestamp = time.Now()
+											dataMu.Unlock()
+											safeRenderTree()
+											return
+										}
+									} else {
+										fmt.Printf("  Failed to remake transport: %v\n", err)
+										// Mark as remade so we don't try again
+										dataMu.Lock()
+										data.remadeOnce = true
+										dataMu.Unlock()
+										// Fall through to mark as dead
+										deadFirstHops[tpID] = true
+										pingCancel()
+										dataMu.Lock()
+										data.setupErr = "tp missing (remake failed)"
+										data.phase = "done"
+										data.timestamp = time.Now()
+										dataMu.Unlock()
+										safeRenderTree()
+										return
+									}
+								}
+							}
+						} else {
+							// No remake requested or already remade - mark as dead and skip
+							deadFirstHops[tpID] = true
+							pingCancel()
+							dataMu.Lock()
+							data.setupErr = "tp missing"
+							data.phase = "done"
+							data.timestamp = time.Now()
+							dataMu.Unlock()
+							safeRenderTree()
+							return
+						}
 					}
 					err = grpcClient.StreamPingWithTransport(pingCtx, remotePK, int32(graphTries), int32(graphPcktSize), graphLocalRoute, graphTimeout, graphSetupTimeout, tpID, callback) //nolint:gosec
 				} else {
@@ -2510,6 +2584,9 @@ func runTreeViewMode(
 					transportLatencies[tpID] = previousGoodData
 					previousGoodData.stale = true
 					previousGoodData.phase = "done"
+					// CRITICAL: Update timestamp to prevent infinite re-ping loop in continuous mode
+					// Without this, stale=true causes immediate re-ping every cycle
+					previousGoodData.timestamp = time.Now()
 				} else {
 					// No previous good data - keep the failed attempt
 					data.phase = "done"
@@ -2805,6 +2882,7 @@ func runTreeViewMode(
 				pathToParent := visorPath[target.parentPK]
 				treeEntries = append(treeEntries, treeEntry{
 					tpID:       target.tpID,
+					tpType:     target.tpType,
 					remotePK:   target.remotePK,
 					level:      level,
 					parentPK:   target.parentPK,
@@ -2848,6 +2926,7 @@ func runTreeViewMode(
 		for _, target := range level1Targets {
 			treeEntries = append(treeEntries, treeEntry{
 				tpID:       target.tpID,
+				tpType:     target.tpType,
 				remotePK:   target.remotePK,
 				level:      1,
 				parentPK:   target.parentPK,
@@ -2906,10 +2985,48 @@ func runTreeViewMode(
 				dataMu.Unlock()
 
 				if !success && !skipLevel1 {
-					// First hop failed - move to failed entries and optionally remove transport
-					processFailedTransport(fhTarget.tpID, fhTarget.remotePK, localPK, 1, true)
+					// First hop failed - move to failed entries and optionally remove/remake transport
+					newTpID, remade := processFailedTransport(fhTarget.tpID, fhTarget.tpType, fhTarget.remotePK, localPK, 1, true)
 					saveState()
-					return
+
+					if remade && newTpID != "" {
+						// Transport was remade - update tracking maps
+						oldTpID := fhTarget.tpID
+						pingedTpIDs[oldTpID] = true  // Mark old as processed
+						delete(pingedTpIDs, newTpID) // Remove new from pinged so it gets tested
+						delete(localTpIDs, oldTpID)
+						localTpIDs[newTpID] = true
+
+						// Retry the ping
+						fmt.Printf("  Retrying ping with new transport %s...\n", newTpID[:8])
+						fhTarget.tpID = newTpID
+						pingTransport(fhTarget.remotePK, fhTarget.parentPK, newTpID, fhTarget.tpType, 1, nil)
+
+						// Check if retry succeeded
+						dataMu.Lock()
+						retryData := transportLatencies[newTpID]
+						retrySuccess := retryData != nil && len(retryData.pingSamples) > 0
+						if retrySuccess {
+							visorPath[fhTarget.remotePK] = []pathHop{{
+								tpID:   newTpID,
+								tpType: fhTarget.tpType,
+								from:   localPK,
+								to:     fhTarget.remotePK,
+							}}
+							visitedLevel[fhTarget.remotePK] = 1
+						}
+						dataMu.Unlock()
+
+						if !retrySuccess {
+							// Retry also failed - mark as failed permanently
+							processFailedTransport(newTpID, fhTarget.tpType, fhTarget.remotePK, localPK, 1, true)
+							saveState()
+							return
+						}
+						// Retry succeeded - continue with subtree exploration
+					} else {
+						return
+					}
 				}
 
 				// Now explore level 2, 3, etc. within this subtree (BFS, sequential)
@@ -3033,6 +3150,7 @@ func runTreeViewMode(
 						treeEntriesMu.Lock()
 						treeEntries = append(treeEntries, treeEntry{
 							tpID:       target.tpID,
+							tpType:     target.tpType,
 							remotePK:   target.remotePK,
 							level:      subtreeLevel,
 							parentPK:   target.parentPK,
@@ -3077,7 +3195,8 @@ func runTreeViewMode(
 							dataMu.Unlock()
 
 							// Move to failed entries and optionally remove transport
-							processFailedTransport(target.tpID, target.remotePK, target.parentPK, subtreeLevel, false)
+							// For level 2+, we don't attempt remake (would require remote visor coordination)
+							processFailedTransport(target.tpID, target.tpType, target.remotePK, target.parentPK, subtreeLevel, false)
 						} else {
 							if data != nil && len(data.pingSamples) > 0 {
 								firstHopFailures[firstHopTpID] = 0
@@ -3235,46 +3354,68 @@ func runTreeViewMode(
 				recheckAge = 24 * time.Hour // Default recheck age
 			}
 
-			for tpID, data := range transportLatencies {
-				if data == nil {
-					continue
-				}
-				// Check if entry needs pinging
+			// Iterate over treeEntries to find pending/stale entries
+			// This catches entries that were never pinged (not in transportLatencies)
+			treeEntriesMu.Lock()
+			for _, entry := range treeEntries {
+				tpID := entry.tpID
+				data := transportLatencies[tpID]
+
+				// Determine if entry needs pinging
 				shouldReping := false
-				if data.phase == "pending" {
-					// Never pinged - needs to be pinged
+				var tpType string
+
+				if data == nil || data.phase == "" {
+					// Entry was never pinged (not in transportLatencies or no phase)
 					shouldReping = true
+					tpType = entry.tpType // Use tpType from treeEntry
+				} else if data.phase == "pending" {
+					// Started but never completed
+					shouldReping = true
+					tpType = data.tpType
 				} else if data.phase == "done" {
-					// Check if stale (needs re-ping)
-					if data.stale {
-						shouldReping = true
-					} else if !data.timestamp.IsZero() && time.Since(data.timestamp) > recheckAge {
+					// Check if needs re-ping based on time since last attempt
+					// Both stale (previous failure) and non-stale entries use the same time check
+					// to prevent infinite re-ping loops
+					if !data.timestamp.IsZero() && time.Since(data.timestamp) > recheckAge {
 						shouldReping = true
 					}
+					tpType = data.tpType
+				}
+
+				// Skip entries that were already remade once and failed again
+				if entry.remadeOnce && entry.failed {
+					continue
 				}
 
 				if shouldReping {
-					// Find the tree entry for this transport
-					for _, entry := range treeEntries {
-						if entry.tpID == tpID {
-							staleEntries = append(staleEntries, struct {
-								tpID     string
-								remotePK string
-								parentPK string
-								tpType   string
-								level    int
-							}{
-								tpID:     tpID,
-								remotePK: entry.remotePK,
-								parentPK: entry.parentPK,
-								tpType:   data.tpType,
-								level:    entry.level,
-							})
-							break
+					// Fallback to finding tpType from adjacency if not available
+					if tpType == "" {
+						// Try to get from adjacency
+						for _, n := range adjacency[entry.parentPK] {
+							if n.tpID == tpID {
+								tpType = n.tpType
+								break
+							}
 						}
 					}
+
+					staleEntries = append(staleEntries, struct {
+						tpID     string
+						remotePK string
+						parentPK string
+						tpType   string
+						level    int
+					}{
+						tpID:     tpID,
+						remotePK: entry.remotePK,
+						parentPK: entry.parentPK,
+						tpType:   tpType,
+						level:    entry.level,
+					})
 				}
 			}
+			treeEntriesMu.Unlock()
 
 			if len(staleEntries) == 0 {
 				// No pending or stale entries - wait a bit before next check
@@ -3345,6 +3486,7 @@ func runTreeViewMode(
 			// Add tree entry
 			treeEntries = append(treeEntries, treeEntry{
 				tpID:       target.tpID,
+				tpType:     target.tpType,
 				remotePK:   target.remotePK,
 				level:      1,
 				parentPK:   localPK,
@@ -3440,6 +3582,7 @@ func runTreeViewMode(
 					// Add tree entry
 					treeEntries = append(treeEntries, treeEntry{
 						tpID:       n.tpID,
+						tpType:     n.tpType,
 						remotePK:   n.pk,
 						level:      level,
 						parentPK:   parentPK,

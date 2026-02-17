@@ -42,6 +42,9 @@ var (
 	forceAttempt     bool
 	dmsgdURL         string
 	retries          int
+	userLabel        bool
+	noRegister       bool
+	remoteVisorPK    string
 
 // queryHealth	bool
 )
@@ -58,6 +61,9 @@ func init() {
 	addTpCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	addTpCmd.Flags().IntVarP(&retries, "retries", "n", 1, "number of times to retry per transport type")
 	addTpCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	addTpCmd.Flags().BoolVarP(&userLabel, "user", "u", false, "set transport label to 'user' (default is 'skycoin')")
+	addTpCmd.Flags().BoolVar(&noRegister, "no-register", false, "skip transport discovery registration (implies --user)")
+	addTpCmd.Flags().StringVar(&remoteVisorPK, "remote", "", "request transport via TPS on remote visor (target visor PK)")
 }
 
 var addTpCmd = &cobra.Command{
@@ -74,6 +80,15 @@ var addTpCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if transportType != "dmsg" && transportType != "stcpr" && transportType != "sudph" && transportType != "" {
 			logger.Fatal("Invalid transport type specified:", transportType)
+		}
+		// --no-register implies --user label
+		if noRegister {
+			userLabel = true
+		}
+		// Determine label string
+		label := ""
+		if userLabel {
+			label = "user"
 		}
 		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 		rpcClient, err := clirpc.Client(cmd.Flags())
@@ -95,6 +110,122 @@ var addTpCmd = &cobra.Command{
 
 		if len(pks) == 0 {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("no public keys specified"))
+		}
+
+		// Handle --remote flag: request transport via TPS on remote visor
+		if remoteVisorPK != "" {
+			var targetPK cipher.PubKey
+			internal.Catch(cmd.Flags(), targetPK.Set(remoteVisorPK))
+
+			// Determine transport type (default to dmsg for TPS)
+			tpType := transportType
+			if tpType == "" {
+				tpType = "dmsg"
+			}
+
+			var tpsResults []*visor.TPSTransportResponse
+			successCount := 0
+			failCount := 0
+
+			for i, pk := range pks {
+				if len(pks) > 1 && !isJSON {
+					fmt.Printf("[%d/%d] Requesting transport on %s to %s via TPS...\n", i+1, len(pks), targetPK.String()[:16]+"...", pk.String()[:16]+"...")
+				}
+
+				var tpResp *visor.TPSTransportResponse
+				var tpErr error
+
+				// First try embedded TPS
+				tpResp, tpErr = rpcClient.TPSAddTransport(targetPK, pk, tpType)
+				if tpErr != nil {
+					if !isJSON {
+						logger.WithError(tpErr).Debug("Embedded TPS failed, trying external TPS nodes")
+					}
+
+					// Get TPS nodes sorted by health (healthy first)
+					tpsNodes, err := rpcClient.GetTransportSetupNodesSorted()
+					if err != nil {
+						if !isJSON {
+							logger.WithError(err).Error("Failed to get TPS nodes")
+						}
+						failCount++
+						continue
+					}
+
+					if len(tpsNodes) == 0 {
+						if !isJSON {
+							logger.Error("No TPS nodes configured")
+						}
+						failCount++
+						continue
+					}
+
+					// Try each TPS node (already sorted by health, healthy first)
+					for _, tpsPK := range tpsNodes {
+						if !isJSON {
+							logger.Debugf("Trying TPS node %s", tpsPK.String()[:16])
+						}
+
+						// Health check
+						if err := rpcClient.TPSExternalHealthCheck(tpsPK); err != nil {
+							if !isJSON {
+								logger.WithError(err).Debugf("TPS %s health check failed", tpsPK.String()[:16])
+							}
+							continue
+						}
+
+						// Try to add transport via this TPS
+						tpResp, tpErr = rpcClient.TPSExternalAddTransport(tpsPK, targetPK, pk, tpType)
+						if tpErr == nil {
+							if !isJSON {
+								logger.Infof("Established %v transport on %s to %s via TPS %s", tpType, targetPK.String()[:16], pk.String()[:16], tpsPK.String()[:16])
+							}
+							break
+						}
+						if !isJSON {
+							logger.WithError(tpErr).Debugf("TPS %s failed to add transport", tpsPK.String()[:16])
+						}
+					}
+				} else {
+					if !isJSON {
+						logger.Infof("Established %v transport on %s to %s via embedded TPS", tpType, targetPK.String()[:16], pk.String()[:16])
+					}
+				}
+
+				if tpErr != nil {
+					if !isJSON {
+						logger.WithError(tpErr).Errorf("Failed to establish transport on %s to %s", targetPK.String()[:16], pk.String()[:16])
+					}
+					failCount++
+					continue
+				}
+
+				if tpResp != nil {
+					tpsResults = append(tpsResults, tpResp)
+					successCount++
+				}
+			}
+
+			// Print results
+			if len(pks) > 1 && !isJSON {
+				fmt.Printf("\nSummary: %d/%d transports established via TPS\n", successCount, len(pks))
+			}
+
+			if isJSON {
+				internal.PrintOutput(cmd.Flags(), tpsResults, "")
+			} else {
+				for _, tp := range tpsResults {
+					fmt.Printf("id: %s\n", tp.ID)
+					fmt.Printf("local: %s\n", tp.Local)
+					fmt.Printf("remote: %s\n", tp.Remote)
+					fmt.Printf("type: %s\n", tp.Type)
+				}
+			}
+
+			if failCount > 0 && successCount == 0 {
+				os.Exit(1)
+			}
+			return
 		}
 
 		// Fetch dmsg discovery data once (for all PKs) - only used for dmsg transport checks
@@ -139,7 +270,7 @@ var addTpCmd = &cobra.Command{
 			if transportType != "" {
 				// Specific transport type requested
 				for attempt := 1; attempt <= retries; attempt++ {
-					tp, tpErr = rpcClient.AddTransport(pk, transportType, timeout)
+					tp, tpErr = rpcClient.AddTransport(pk, transportType, timeout, label, noRegister)
 					if tpErr == nil {
 						if !isJSON {
 							logger.Infof("Established %v transport to %v", transportType, pk)
@@ -171,7 +302,7 @@ var addTpCmd = &cobra.Command{
 			typeLoop:
 				for _, tpType := range transportTypes {
 					for attempt := 1; attempt <= retries; attempt++ {
-						tp, tpErr = rpcClient.AddTransport(pk, string(tpType), timeout)
+						tp, tpErr = rpcClient.AddTransport(pk, string(tpType), timeout, label, noRegister)
 						if tpErr == nil {
 							if !isJSON {
 								logger.Infof("Established %v transport to %v", tpType, pk)

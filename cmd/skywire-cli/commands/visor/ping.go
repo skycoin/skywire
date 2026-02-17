@@ -76,7 +76,7 @@ var pingCmd = &cobra.Command{
 				os.Exit(1)
 			}
 			fmt.Printf("Creating %s transport to %s...\n", tpType, pk)
-			_, err = rpcClient.AddTransport(pk, tpType, 30*time.Second)
+			_, err = rpcClient.AddTransport(pk, tpType, 30*time.Second, "", false)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to create transport: %w", err))
 			}
