@@ -30,10 +30,10 @@ type ServiceInfo struct {
 
 // LocalVisorData represents the local visor state from /api/local-visor
 type LocalVisorData struct {
-	Connected  bool              `json:"connected"`
-	PubKey     string            `json:"pub_key"`
-	Transports []LocalTransport  `json:"transports"`
-	Routes     []LocalRoute      `json:"routes"`
+	Connected  bool             `json:"connected"`
+	PubKey     string           `json:"pub_key"`
+	Transports []LocalTransport `json:"transports"`
+	Routes     []LocalRoute     `json:"routes"`
 }
 
 // LocalTransport represents a local visor transport
