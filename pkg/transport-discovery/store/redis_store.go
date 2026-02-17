@@ -26,14 +26,14 @@ const (
 
 // TransportData stores transport entry with additional metadata.
 type TransportData struct {
-	ID         string `json:"id"`
-	EdgeA      string `json:"edge_a"`
-	EdgeB      string `json:"edge_b"`
-	Type       string `json:"type"`
-	Label      string `json:"label"`
-	Latency    float64 `json:"latency"`    // Inter-visor ping latency in milliseconds
-	Bandwidth  uint64 `json:"bandwidth"`   // Total bytes (sent + recv)
-	LastUpdate int64  `json:"last_update"` // Unix timestamp of last update
+	ID         string  `json:"id"`
+	EdgeA      string  `json:"edge_a"`
+	EdgeB      string  `json:"edge_b"`
+	Type       string  `json:"type"`
+	Label      string  `json:"label"`
+	Latency    float64 `json:"latency"`     // Inter-visor ping latency in milliseconds
+	Bandwidth  uint64  `json:"bandwidth"`   // Total bytes (sent + recv)
+	LastUpdate int64   `json:"last_update"` // Unix timestamp of last update
 }
 
 type redisStore struct {
