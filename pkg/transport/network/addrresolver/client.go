@@ -28,11 +28,11 @@ import (
 
 const (
 	// sudphPriority is used to set an order how connection filters apply.
-	sudphPriority              = 1
-	stcprBindPath              = "/bind/stcpr"
-	addrChSize                 = 1024
-	udpKeepHeartbeatInterval   = 10 * time.Second
-	sudphReRegisterInterval    = 90 * time.Second
+	sudphPriority            = 1
+	stcprBindPath            = "/bind/stcpr"
+	addrChSize               = 1024
+	udpKeepHeartbeatInterval = 10 * time.Second
+	sudphReRegisterInterval  = 90 * time.Second
 	// UDPKeepHeartbeatMessage is used as a heartbeat packet to keep connection alive.
 	UDPKeepHeartbeatMessage = "heartbeat"
 	defaultUDPPort          = "30178"
