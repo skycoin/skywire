@@ -59,9 +59,7 @@ type HealthCheckReply struct {
 // HealthCheck to test if the setup node is responsive.
 func (g *SetupRPCGateway) HealthCheck(_ *HealthCheckArgs, reply *HealthCheckReply) error {
 	log := logging.MustGetLogger("health-check")
-	red := "\033[31m"
-	reset := "\033[0m"
-	log.Infof("%s%s%s", red, g.ReqPK.String(), reset)
+	log.WithField("remote_pk", g.ReqPK.String()).Info("Health check received from RSN")
 	reply.Status = "OK"
 	return nil
 }
