@@ -1734,49 +1734,84 @@ func runTreeViewMode(
 		}
 
 		// Render level 1 tree: local visor as root, level 1 entries as children (sorted by latency)
+		// Split into success and failure trees
 		if level1Entries, ok := entriesByLevel[1]; ok && len(level1Entries) > 0 {
 			fmt.Println(pterm.Yellow("=== Level 1 (direct transports) ==="))
-			// Sort level 1 entries by latency (lowest first)
-			for i := 0; i < len(level1Entries)-1; i++ {
-				for j := i + 1; j < len(level1Entries); j++ {
-					latI := getTransportAvgLatency(level1Entries[i].tpID)
-					latJ := getTransportAvgLatency(level1Entries[j].tpID)
+
+			// Split entries into success and failed
+			var successEntries, failedEntries []treeEntry
+			for _, entry := range level1Entries {
+				if entry.failed {
+					failedEntries = append(failedEntries, entry)
+				} else {
+					successEntries = append(successEntries, entry)
+				}
+			}
+
+			// Sort success entries by latency (lowest first)
+			for i := 0; i < len(successEntries)-1; i++ {
+				for j := i + 1; j < len(successEntries); j++ {
+					latI := getTransportAvgLatency(successEntries[i].tpID)
+					latJ := getTransportAvgLatency(successEntries[j].tpID)
 					swap := false
 					if latI < 0 && latJ >= 0 {
-						// i has no latency, j does - j should come first
 						swap = true
 					} else if latI >= 0 && latJ >= 0 && latJ < latI {
-						// Both have latency - lower is better
 						swap = true
 					}
 					if swap {
-						level1Entries[i], level1Entries[j] = level1Entries[j], level1Entries[i]
+						successEntries[i], successEntries[j] = successEntries[j], successEntries[i]
 					}
 				}
 			}
 
-			var children []pterm.TreeNode
-			for _, entry := range level1Entries {
-				transportNode := pterm.TreeNode{Text: formatEntry(entry)}
-				// Add DMSG server children if pre-check is enabled
-				if graphDmsgPreCheck {
-					data := transportLatencies[entry.tpID]
-					if data != nil && len(data.dmsgServers) > 0 {
-						for _, serverData := range data.dmsgServers {
-							transportNode.Children = append(transportNode.Children, pterm.TreeNode{Text: formatDmsgServerEntry(serverData)})
+			// Render success tree
+			if len(successEntries) > 0 {
+				var children []pterm.TreeNode
+				for _, entry := range successEntries {
+					transportNode := pterm.TreeNode{Text: formatEntry(entry)}
+					if graphDmsgPreCheck {
+						data := transportLatencies[entry.tpID]
+						if data != nil && len(data.dmsgServers) > 0 {
+							for _, serverData := range data.dmsgServers {
+								transportNode.Children = append(transportNode.Children, pterm.TreeNode{Text: formatDmsgServerEntry(serverData)})
+							}
 						}
 					}
+					children = append(children, transportNode)
 				}
-				children = append(children, transportNode)
+				rootTree := pterm.TreeNode{
+					Text:     pterm.Cyan(localPK) + pterm.Gray(" (local)"),
+					Children: children,
+				}
+				pterm.DefaultTree.WithRoot(rootTree).Render() //nolint:errcheck,gosec
 			}
-			rootTree := pterm.TreeNode{
-				Text:     pterm.Cyan(localPK) + pterm.Gray(" (local)"),
-				Children: children,
+
+			// Render failure tree immediately after success tree
+			if len(failedEntries) > 0 {
+				var children []pterm.TreeNode
+				for _, entry := range failedEntries {
+					transportNode := pterm.TreeNode{Text: formatEntry(entry)}
+					if graphDmsgPreCheck {
+						data := transportLatencies[entry.tpID]
+						if data != nil && len(data.dmsgServers) > 0 {
+							for _, serverData := range data.dmsgServers {
+								transportNode.Children = append(transportNode.Children, pterm.TreeNode{Text: formatDmsgServerEntry(serverData)})
+							}
+						}
+					}
+					children = append(children, transportNode)
+				}
+				failedTree := pterm.TreeNode{
+					Text:     pterm.Cyan(localPK) + pterm.Red(" (failures)"),
+					Children: children,
+				}
+				pterm.DefaultTree.WithRoot(failedTree).Render() //nolint:errcheck,gosec
 			}
-			pterm.DefaultTree.WithRoot(rootTree).Render() //nolint:errcheck,gosec
 		}
 
 		// Render level 2+ trees: separate tree per parent, ordered by parent's lowest latency
+		// Success tree followed by failure tree for each parent
 		for lvl := 2; lvl <= maxLevel; lvl++ {
 			levelEntries, ok := entriesByLevel[lvl]
 			if !ok || len(levelEntries) == 0 {
@@ -1804,10 +1839,8 @@ func runTreeViewMode(
 				for j := i + 1; j < len(parents); j++ {
 					swap := false
 					if parents[i].latency < 0 && parents[j].latency >= 0 {
-						// i has no latency, j does - j should come first
 						swap = true
 					} else if parents[i].latency >= 0 && parents[j].latency >= 0 {
-						// Both have latency - lower is better
 						if parents[j].latency < parents[i].latency {
 							swap = true
 						}
@@ -1828,11 +1861,21 @@ func runTreeViewMode(
 					continue
 				}
 
-				// Sort entries within this parent by latency
-				for i := 0; i < len(entries)-1; i++ {
-					for j := i + 1; j < len(entries); j++ {
-						latI := getTransportAvgLatency(entries[i].tpID)
-						latJ := getTransportAvgLatency(entries[j].tpID)
+				// Split entries into success and failed
+				var successEntries, failedLevelEntries []treeEntry
+				for _, entry := range entries {
+					if entry.failed {
+						failedLevelEntries = append(failedLevelEntries, entry)
+					} else {
+						successEntries = append(successEntries, entry)
+					}
+				}
+
+				// Sort success entries by latency
+				for i := 0; i < len(successEntries)-1; i++ {
+					for j := i + 1; j < len(successEntries); j++ {
+						latI := getTransportAvgLatency(successEntries[i].tpID)
+						latJ := getTransportAvgLatency(successEntries[j].tpID)
 						swap := false
 						if latI < 0 && latJ >= 0 {
 							swap = true
@@ -1840,50 +1883,79 @@ func runTreeViewMode(
 							swap = true
 						}
 						if swap {
-							entries[i], entries[j] = entries[j], entries[i]
+							successEntries[i], successEntries[j] = successEntries[j], successEntries[i]
 						}
 					}
 				}
 
-				var children []pterm.TreeNode
-				for _, entry := range entries {
-					transportNode := pterm.TreeNode{Text: formatEntry(entry)}
-					// Add DMSG server children if pre-check is enabled
-					if graphDmsgPreCheck {
-						data := transportLatencies[entry.tpID]
-						if data != nil && len(data.dmsgServers) > 0 {
-							for _, serverData := range data.dmsgServers {
-								transportNode.Children = append(transportNode.Children, pterm.TreeNode{Text: formatDmsgServerEntry(serverData)})
+				// Helper to build parent text
+				buildParentText := func(isFailed bool) string {
+					latStr := ""
+					if parent.latency >= 0 {
+						latStr = pterm.Gray(fmt.Sprintf(" (%.1fms)", parent.latency))
+					}
+					firstHopStr := ""
+					if path, ok := visorPath[parent.pk]; ok && len(path) > 0 {
+						firstHopTpID := path[0].tpID
+						tpType := path[0].tpType
+						if tpType == "stcpr" {
+							firstHopStr = " " + pterm.Green(firstHopTpID)
+						} else if tpType == "sudph" {
+							firstHopStr = " " + pterm.Blue(firstHopTpID)
+						} else {
+							firstHopStr = " " + pterm.Gray(firstHopTpID)
+						}
+					}
+					suffix := ""
+					if isFailed {
+						suffix = pterm.Red(" (failures)")
+					}
+					return pterm.Cyan(parent.pk) + firstHopStr + latStr + suffix
+				}
+
+				// Render success tree
+				if len(successEntries) > 0 {
+					var children []pterm.TreeNode
+					for _, entry := range successEntries {
+						transportNode := pterm.TreeNode{Text: formatEntry(entry)}
+						if graphDmsgPreCheck {
+							data := transportLatencies[entry.tpID]
+							if data != nil && len(data.dmsgServers) > 0 {
+								for _, serverData := range data.dmsgServers {
+									transportNode.Children = append(transportNode.Children, pterm.TreeNode{Text: formatDmsgServerEntry(serverData)})
+								}
 							}
 						}
+						children = append(children, transportNode)
 					}
-					children = append(children, transportNode)
+					parentTree := pterm.TreeNode{
+						Text:     buildParentText(false),
+						Children: children,
+					}
+					pterm.DefaultTree.WithRoot(parentTree).Render() //nolint:errcheck,gosec
 				}
 
-				// Root is the parent visor with its latency and first-hop transport ID
-				latStr := ""
-				if parent.latency >= 0 {
-					latStr = pterm.Gray(fmt.Sprintf(" (%.1fms)", parent.latency))
-				}
-				// Show the first-hop transport ID used to reach this parent from local
-				firstHopStr := ""
-				if path, ok := visorPath[parent.pk]; ok && len(path) > 0 {
-					firstHopTpID := path[0].tpID
-					// Color based on transport type
-					tpType := path[0].tpType
-					if tpType == "stcpr" {
-						firstHopStr = " " + pterm.Green(firstHopTpID)
-					} else if tpType == "sudph" {
-						firstHopStr = " " + pterm.Blue(firstHopTpID)
-					} else {
-						firstHopStr = " " + pterm.Gray(firstHopTpID)
+				// Render failure tree immediately after success tree
+				if len(failedLevelEntries) > 0 {
+					var children []pterm.TreeNode
+					for _, entry := range failedLevelEntries {
+						transportNode := pterm.TreeNode{Text: formatEntry(entry)}
+						if graphDmsgPreCheck {
+							data := transportLatencies[entry.tpID]
+							if data != nil && len(data.dmsgServers) > 0 {
+								for _, serverData := range data.dmsgServers {
+									transportNode.Children = append(transportNode.Children, pterm.TreeNode{Text: formatDmsgServerEntry(serverData)})
+								}
+							}
+						}
+						children = append(children, transportNode)
 					}
+					failedTree := pterm.TreeNode{
+						Text:     buildParentText(true),
+						Children: children,
+					}
+					pterm.DefaultTree.WithRoot(failedTree).Render() //nolint:errcheck,gosec
 				}
-				parentTree := pterm.TreeNode{
-					Text:     pterm.Cyan(parent.pk) + firstHopStr + latStr,
-					Children: children,
-				}
-				pterm.DefaultTree.WithRoot(parentTree).Render() //nolint:errcheck,gosec
 			}
 		}
 
@@ -3098,15 +3170,21 @@ func runTreeViewMode(
 			}
 
 			for tpID, data := range transportLatencies {
-				if data == nil || data.phase != "done" {
+				if data == nil {
 					continue
 				}
-				// Check if entry is stale (needs re-ping)
+				// Check if entry needs pinging
 				shouldReping := false
-				if data.stale {
+				if data.phase == "pending" {
+					// Never pinged - needs to be pinged
 					shouldReping = true
-				} else if !data.timestamp.IsZero() && time.Since(data.timestamp) > recheckAge {
-					shouldReping = true
+				} else if data.phase == "done" {
+					// Check if stale (needs re-ping)
+					if data.stale {
+						shouldReping = true
+					} else if !data.timestamp.IsZero() && time.Since(data.timestamp) > recheckAge {
+						shouldReping = true
+					}
 				}
 
 				if shouldReping {
@@ -3133,8 +3211,8 @@ func runTreeViewMode(
 			}
 
 			if len(staleEntries) == 0 {
-				// No stale entries - wait a bit before next check
-				fmt.Printf("No pending work, waiting %v before next check...\n", recheckAge/10)
+				// No pending or stale entries - wait a bit before next check
+				fmt.Printf("No pending or stale entries, waiting %v before next check...\n", recheckAge/10)
 				select {
 				case <-ctx.Done():
 					break
