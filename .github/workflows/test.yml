@@ -74,14 +74,25 @@ jobs:
       - name: Install Requirements
         run: |
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          brew install glfw hidapi libusb pkg-config
-          echo "CGO_CFLAGS=-I$(brew --prefix hidapi)/include" >> $GITHUB_ENV
-          echo "CGO_LDFLAGS=-L$(brew --prefix hidapi)/lib" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=$(brew --prefix libusb)/lib/pkgconfig" >> $GITHUB_ENV
+          brew install hidapi libusb pkg-config
+          HIDAPI_PREFIX=$(brew --prefix hidapi)
+          LIBUSB_PREFIX=$(brew --prefix libusb)
+          echo "CGO_CFLAGS=-I${HIDAPI_PREFIX}/include" >> $GITHUB_ENV
+          echo "CGO_LDFLAGS=-L${HIDAPI_PREFIX}/lib" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=${LIBUSB_PREFIX}/lib/pkgconfig" >> $GITHUB_ENV
         shell: bash
 
-      - name: Checking Format and Testing
-        run: make check
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.6.1
+          args: -c .golangci.yml ./cmd/...
+      
+      - name: check-cg check-help test
+        run: |
+          make check-cg
+          make check-help
+          make test
 
       - name: Build
         run: make build
