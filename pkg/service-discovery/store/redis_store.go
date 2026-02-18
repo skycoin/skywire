@@ -33,6 +33,10 @@ type redisStore struct {
 }
 
 func newRedisStore(ctx context.Context, client *redis.Client, logger *logging.Logger, ttl time.Duration) (*redisStore, error) {
+	if err := client.Ping(ctx).Err(); err != nil {
+		return nil, fmt.Errorf("redis connection check failed: %w", err)
+	}
+
 	s := &redisStore{
 		log:    logger,
 		client: client,
@@ -94,7 +98,7 @@ func (s *redisStore) removeExpiredFromSets(ctx context.Context) {
 		}
 
 		// If set is empty, remove it from service_types
-		count, _ := s.client.SCard(ctx, setKey).Result()
+		count, _ := s.client.SCard(ctx, setKey).Result() //nolint: errcheck
 		if count == 0 {
 			s.client.SRem(ctx, serviceTypesSetKey, sType)
 		}
@@ -198,7 +202,7 @@ func (s *redisStore) UpdateService(ctx context.Context, se *servicedisc.Service)
 
 	// Only apply TTL on re-registration (key already exists).
 	// First-time registrations get no TTL for backward compatibility with old visors.
-	exists, _ := s.client.Exists(ctx, key).Result()
+	exists, _ := s.client.Exists(ctx, key).Result() //nolint: errcheck
 	ttl := time.Duration(0)
 	if exists > 0 {
 		ttl = s.ttl
@@ -238,6 +242,9 @@ func (s *redisStore) CountServiceTypes(ctx context.Context) (uint64, error) {
 		return 0, fmt.Errorf("Redis command returned unexpected error: %w", err)
 	}
 
+	if count < 0 {
+		return 0, nil
+	}
 	return uint64(count), nil
 }
 
@@ -249,6 +256,9 @@ func (s *redisStore) CountServices(ctx context.Context, serviceType string) (uin
 		return 0, fmt.Errorf("Redis command returned unexpected error: %w", err)
 	}
 
+	if count < 0 {
+		return 0, nil
+	}
 	return uint64(count), nil
 }
 
