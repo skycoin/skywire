@@ -128,7 +128,7 @@ func (s *redisStore) RegisterTransportWithLatency(ctx context.Context, sEntry *t
 
 	// Only apply TTL on re-registration (key already exists).
 	// First-time registrations get no TTL for backward compatibility with old visors.
-	exists, _ := s.client.Exists(ctx, tpKey).Result()
+	exists, _ := s.client.Exists(ctx, tpKey).Result() //nolint:errcheck
 	ttl := time.Duration(0)
 	if exists > 0 {
 		ttl = s.ttl
@@ -394,7 +394,7 @@ func (s *redisStore) updateBandwidth(ctx context.Context, transportID string,
 
 	// 3. Add delta to aggregations (only if we have a delta)
 	if delta > 0 {
-		deltaI := int64(delta)
+		deltaI := int64(delta) //nolint:gosec // delta is bounded and will never exceed int64 max
 
 		// Per-transport daily aggregation
 		dailyKey := s.bandwidthDailyKey(transportID, now)
@@ -586,7 +586,9 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context) ([]VisorSummary, 
 			}
 			var bw uint64
 			if val, ok := bwResult["bandwidth"]; ok {
-				fmt.Sscanf(val, "%d", &bw) //nolint:errcheck
+				if _, err := fmt.Sscanf(val, "%d", &bw); err != nil {
+					return nil, fmt.Errorf("failed to parse bandwidth value %q: %w", val, err)
+				}
 			}
 			if bw > 0 {
 				summary.DailyBandwidths = append(summary.DailyBandwidths, DailyBandwidthEntry{
@@ -615,10 +617,14 @@ func (s *redisStore) getBandwidthFromHash(ctx context.Context, key, transportID,
 	}
 
 	if val, ok := result["bandwidth"]; ok {
-		fmt.Sscanf(val, "%d", &agg.Bandwidth) //nolint:errcheck
+		if _, err := fmt.Sscanf(val, "%d", &agg.Bandwidth); err != nil {
+			return BandwidthAggregation{}, fmt.Errorf("failed to parse bandwidth value %q: %w", val, err)
+		}
 	}
 	if val, ok := result["updated_at"]; ok {
-		fmt.Sscanf(val, "%d", &agg.UpdatedAt) //nolint:errcheck
+		if _, err := fmt.Sscanf(val, "%d", &agg.UpdatedAt); err != nil {
+			return BandwidthAggregation{}, fmt.Errorf("failed to parse updated_at value %q: %w", val, err)
+		}
 	}
 
 	return agg, nil
@@ -632,7 +638,7 @@ func (s *redisStore) BackupAndCleanOldBandwidth(ctx context.Context, backupPath 
 		return nil
 	}
 
-	if err := os.MkdirAll(backupPath, 0o755); err != nil {
+	if err := os.MkdirAll(backupPath, 0o750); err != nil {
 		return fmt.Errorf("create backup dir: %w", err)
 	}
 
@@ -664,7 +670,9 @@ func (s *redisStore) BackupAndCleanOldBandwidth(ctx context.Context, backupPath 
 
 		var bw uint64
 		if val, ok := result["bandwidth"]; ok {
-			fmt.Sscanf(val, "%d", &bw) //nolint:errcheck
+			if _, err := fmt.Sscanf(val, "%d", &bw); err != nil {
+				return fmt.Errorf("failed to parse bandwidth value %q: %w", val, err)
+			}
 		}
 		if bw == 0 {
 			// No bandwidth data, just delete the key

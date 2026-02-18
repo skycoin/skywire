@@ -108,7 +108,7 @@ func (s *redisStore) bind(ctx context.Context, key string, visorData addrresolve
 
 	// Only apply TTL on re-registration (key already exists).
 	// First-time registrations get no TTL for backward compatibility with old visors.
-	exists, _ := s.client.Exists(ctx, key).Result()
+	exists, _ := s.client.Exists(ctx, key).Result() //nolint:errcheck
 	ttl := time.Duration(0)
 	if exists > 0 {
 		ttl = s.ttl
