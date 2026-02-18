@@ -19,9 +19,14 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-// LatencyProvider provides latency data for the /latencies endpoint.
-type LatencyProvider interface {
-	GetLatenciesHTML() string
+// HealthStatsProvider provides transport statistics for the /health endpoint.
+type HealthStatsProvider interface {
+	// IsPublicAutoconnectRunning returns true if the public autoconnect module is running.
+	IsPublicAutoconnectRunning() bool
+	// GetTransportCounts returns the count of STCPR and SUDPH transports (excluding "user" labeled).
+	GetTransportCounts() (stcpr, sudph int)
+	// GetNetworkTypes returns the network types used by the visor.
+	GetNetworkTypes() []string
 }
 
 // API register all the API endpoints.
@@ -29,9 +34,9 @@ type LatencyProvider interface {
 type API struct {
 	http.Handler
 
-	logger          *logging.Logger
-	startedAt       time.Time
-	latencyProvider LatencyProvider
+	logger              *logging.Logger
+	startedAt           time.Time
+	healthStatsProvider HealthStatsProvider
 }
 
 // New creates a new API.
@@ -40,20 +45,6 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 		logger:    log,
 		startedAt: time.Now(),
 	}
-	return newWithLatencyProvider(api, log, tpLogPath, localPath, customPath, whitelistedPKs, survey, printLog)
-}
-
-// NewWithLatencyProvider creates a new API with a latency provider for the /latencies endpoint.
-func NewWithLatencyProvider(log *logging.Logger, tpLogPath, localPath, customPath string, whitelistedPKs []cipher.PubKey, survey *visorconfig.Survey, printLog bool, latencyProvider LatencyProvider) *API {
-	api := &API{
-		logger:          log,
-		startedAt:       time.Now(),
-		latencyProvider: latencyProvider,
-	}
-	return newWithLatencyProvider(api, log, tpLogPath, localPath, customPath, whitelistedPKs, survey, printLog)
-}
-
-func newWithLatencyProvider(api *API, _ *logging.Logger, tpLogPath, localPath, customPath string, whitelistedPKs []cipher.PubKey, survey *visorconfig.Survey, printLog bool) *API {
 	// disable gin's debug logging on startup
 	gin.SetMode(gin.ReleaseMode)
 	// Gin router without default logging
@@ -82,11 +73,6 @@ func newWithLatencyProvider(api *API, _ *logging.Logger, tpLogPath, localPath, c
 
 	r.GET("/health", func(c *gin.Context) {
 		api.health(c)
-	})
-
-	// Serve the latencies endpoint with auto-refreshing HTML
-	r.GET("/latencies", func(c *gin.Context) {
-		api.latencies(c)
 	})
 
 	// serve transport log files ; then any files in the custom path
@@ -129,11 +115,19 @@ func newWithLatencyProvider(api *API, _ *logging.Logger, tpLogPath, localPath, c
 }
 
 func (api *API) health(c *gin.Context) {
-	jsonObject, err := json.Marshal(
-		httputil.HealthCheckResponse{
-			BuildInfo: buildinfo.Get(),
-			StartedAt: api.startedAt,
-		})
+	resp := httputil.HealthCheckResponse{
+		BuildInfo: buildinfo.Get(),
+		StartedAt: api.startedAt,
+	}
+
+	// Add transport stats if provider is available
+	if api.healthStatsProvider != nil {
+		resp.PublicAutoconnect = api.healthStatsProvider.IsPublicAutoconnectRunning()
+		resp.StcprCount, resp.SudphCount = api.healthStatsProvider.GetTransportCounts()
+		resp.NetworkTypes = api.healthStatsProvider.GetNetworkTypes()
+	}
+
+	jsonObject, err := json.Marshal(resp)
 	if err != nil {
 		httputil.GetLogger(c.Request).WithError(err).Errorf("failed to encode json response")
 		c.Writer.WriteHeader(http.StatusInternalServerError)
@@ -150,37 +144,9 @@ func (api *API) health(c *gin.Context) {
 	}
 }
 
-// SetLatencyProvider sets the latency provider after initialization.
-func (api *API) SetLatencyProvider(provider LatencyProvider) {
-	api.latencyProvider = provider
-}
-
-//nolint:errcheck,gosec
-func (api *API) latencies(c *gin.Context) {
-	if api.latencyProvider == nil {
-		c.Header("Content-Type", "text/html; charset=utf-8")
-		c.Writer.WriteHeader(http.StatusOK)
-		c.Writer.WriteString(`<!DOCTYPE html>
-<html>
-<head>
-    <title>Transport Latencies</title>
-    <meta http-equiv="refresh" content="60">
-    <style>
-        body { font-family: monospace; margin: 20px; background: #1a1a2e; color: #eee; }
-    </style>
-</head>
-<body>
-    <h1>Transport Latencies</h1>
-    <p>Latency tracking is not enabled. Enable public_autocheck in visor config.</p>
-</body>
-</html>`)
-		return
-	}
-
-	html := api.latencyProvider.GetLatenciesHTML()
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.Writer.WriteHeader(http.StatusOK)
-	c.Writer.WriteString(html)
+// SetHealthStatsProvider sets the health stats provider after initialization.
+func (api *API) SetHealthStatsProvider(provider HealthStatsProvider) {
+	api.healthStatsProvider = provider
 }
 
 func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
