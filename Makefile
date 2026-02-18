@@ -49,6 +49,7 @@ ifeq ($(BUILDTAG),)
 		endif
 	 	ifeq ($(UNAME_S),Darwin)
 			BUILDTAG = Darwin
+			export CGO_CFLAGS := -Wno-deprecated-declarations
 		endif
 	endif
 endif
