@@ -44,7 +44,7 @@ var (
 	retries          int
 	userLabel        bool
 	noRegister       bool
-	remoteVisorPK    string
+	remoteVisorPKs   []string
 
 // queryHealth	bool
 )
@@ -63,7 +63,7 @@ func init() {
 	addTpCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
 	addTpCmd.Flags().BoolVarP(&userLabel, "user", "u", false, "set transport label to 'user' (default is 'skycoin')")
 	addTpCmd.Flags().BoolVar(&noRegister, "no-register", false, "skip transport discovery registration (implies --user)")
-	addTpCmd.Flags().StringVar(&remoteVisorPK, "remote", "", "request transport via TPS on remote visor (target visor PK)")
+	addTpCmd.Flags().StringSliceVar(&remoteVisorPKs, "remote", nil, "request transport via TPS on remote visor(s) (comma-separated PKs)")
 }
 
 var addTpCmd = &cobra.Command{
@@ -112,10 +112,15 @@ var addTpCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("no public keys specified"))
 		}
 
-		// Handle --remote flag: request transport via TPS on remote visor
-		if remoteVisorPK != "" {
-			var targetPK cipher.PubKey
-			internal.Catch(cmd.Flags(), targetPK.Set(remoteVisorPK))
+		// Handle --remote flag: request transport via TPS on remote visor(s)
+		if len(remoteVisorPKs) > 0 {
+			// Parse all remote visor PKs
+			var targetPKs []cipher.PubKey
+			for _, pkStr := range remoteVisorPKs {
+				var pk cipher.PubKey
+				internal.Catch(cmd.Flags(), pk.Set(pkStr))
+				targetPKs = append(targetPKs, pk)
+			}
 
 			// Determine transport type (default to dmsg for TPS)
 			tpType := transportType
@@ -123,92 +128,110 @@ var addTpCmd = &cobra.Command{
 				tpType = "dmsg"
 			}
 
-			var tpsResults []*visor.TPSTransportResponse
-			successCount := 0
-			failCount := 0
+			// Check if embedded TPS is running - if so, use only embedded TPS
+			// If embedded TPS is not running, use external TPS nodes
+			tpsStatus, tpsStatusErr := rpcClient.TPSStatus()
+			useEmbeddedTPS := tpsStatusErr == nil && tpsStatus != nil && tpsStatus.Enabled
 
-			for i, pk := range pks {
-				if len(pks) > 1 && !isJSON {
-					fmt.Printf("[%d/%d] Requesting transport on %s to %s via TPS...\n", i+1, len(pks), targetPK.String()[:16]+"...", pk.String()[:16]+"...")
+			var tpsResults []*visor.TPSTransportResponse
+			totalSuccess := 0
+			totalFail := 0
+
+			// For each remote visor, request transports to all target PKs
+			for ti, targetPK := range targetPKs {
+				if len(targetPKs) > 1 && !isJSON {
+					fmt.Printf("\n=== Remote visor %d/%d: %s ===\n", ti+1, len(targetPKs), targetPK.String())
 				}
 
-				var tpResp *visor.TPSTransportResponse
-				var tpErr error
+				successCount := 0
+				failCount := 0
 
-				// First try embedded TPS
-				tpResp, tpErr = rpcClient.TPSAddTransport(targetPK, pk, tpType)
-				if tpErr != nil {
+				for i, pk := range pks {
 					if !isJSON {
-						logger.WithError(tpErr).Debug("Embedded TPS failed, trying external TPS nodes")
+						fmt.Printf("[%d/%d] Requesting transport on %s to %s via TPS...\n", i+1, len(pks), targetPK.String()[:16]+"...", pk.String()[:16]+"...")
 					}
 
-					// Get TPS nodes sorted by health (healthy first)
-					tpsNodes, err := rpcClient.GetTransportSetupNodesSorted()
-					if err != nil {
-						if !isJSON {
-							logger.WithError(err).Error("Failed to get TPS nodes")
-						}
-						failCount++
-						continue
-					}
+					var tpResp *visor.TPSTransportResponse
+					var tpErr error
 
-					if len(tpsNodes) == 0 {
-						if !isJSON {
-							logger.Error("No TPS nodes configured")
+					if useEmbeddedTPS {
+						// Use embedded TPS only - if it fails, don't try external nodes
+						tpResp, tpErr = rpcClient.TPSAddTransport(targetPK, pk, tpType)
+						if tpErr == nil && !isJSON {
+							logger.Infof("Established %v transport on %s to %s via embedded TPS", tpType, targetPK.String()[:16], pk.String()[:16])
 						}
-						failCount++
-						continue
-					}
-
-					// Try each TPS node (already sorted by health, healthy first)
-					for _, tpsPK := range tpsNodes {
-						if !isJSON {
-							logger.Debugf("Trying TPS node %s", tpsPK.String()[:16])
-						}
-
-						// Health check
-						if err := rpcClient.TPSExternalHealthCheck(tpsPK); err != nil {
+					} else {
+						// Embedded TPS not running - use external TPS nodes
+						tpsNodes, err := rpcClient.GetTransportSetupNodesSorted()
+						if err != nil {
 							if !isJSON {
-								logger.WithError(err).Debugf("TPS %s health check failed", tpsPK.String()[:16])
+								logger.WithError(err).Error("Failed to get TPS nodes")
 							}
+							failCount++
 							continue
 						}
 
-						// Try to add transport via this TPS
-						tpResp, tpErr = rpcClient.TPSExternalAddTransport(tpsPK, targetPK, pk, tpType)
-						if tpErr == nil {
+						if len(tpsNodes) == 0 {
 							if !isJSON {
-								logger.Infof("Established %v transport on %s to %s via TPS %s", tpType, targetPK.String()[:16], pk.String()[:16], tpsPK.String()[:16])
+								logger.Error("No TPS nodes configured")
 							}
-							break
+							failCount++
+							continue
 						}
+
+						// Try each TPS node (already sorted by health, healthy first)
+						for _, tpsPK := range tpsNodes {
+							if !isJSON {
+								logger.Debugf("Trying TPS node %s", tpsPK.String()[:16])
+							}
+
+							// Health check
+							if err := rpcClient.TPSExternalHealthCheck(tpsPK); err != nil {
+								if !isJSON {
+									logger.WithError(err).Debugf("TPS %s health check failed", tpsPK.String()[:16])
+								}
+								continue
+							}
+
+							// Try to add transport via this TPS
+							tpResp, tpErr = rpcClient.TPSExternalAddTransport(tpsPK, targetPK, pk, tpType)
+							if tpErr == nil {
+								if !isJSON {
+									logger.Infof("Established %v transport on %s to %s via TPS %s", tpType, targetPK.String()[:16], pk.String()[:16], tpsPK.String()[:16])
+								}
+								break
+							}
+							if !isJSON {
+								logger.WithError(tpErr).Debugf("TPS %s failed to add transport", tpsPK.String()[:16])
+							}
+						}
+					}
+
+					if tpErr != nil {
 						if !isJSON {
-							logger.WithError(tpErr).Debugf("TPS %s failed to add transport", tpsPK.String()[:16])
+							logger.WithError(tpErr).Errorf("Failed to establish transport on %s to %s", targetPK.String()[:16], pk.String()[:16])
 						}
+						failCount++
+						continue
 					}
-				} else {
-					if !isJSON {
-						logger.Infof("Established %v transport on %s to %s via embedded TPS", tpType, targetPK.String()[:16], pk.String()[:16])
+
+					if tpResp != nil {
+						tpsResults = append(tpsResults, tpResp)
+						successCount++
 					}
 				}
 
-				if tpErr != nil {
-					if !isJSON {
-						logger.WithError(tpErr).Errorf("Failed to establish transport on %s to %s", targetPK.String()[:16], pk.String()[:16])
-					}
-					failCount++
-					continue
-				}
+				totalSuccess += successCount
+				totalFail += failCount
 
-				if tpResp != nil {
-					tpsResults = append(tpsResults, tpResp)
-					successCount++
+				if len(pks) > 1 && !isJSON {
+					fmt.Printf("Visor %s: %d/%d transports established\n", targetPK.String()[:16], successCount, len(pks))
 				}
 			}
 
 			// Print results
-			if len(pks) > 1 && !isJSON {
-				fmt.Printf("\nSummary: %d/%d transports established via TPS\n", successCount, len(pks))
+			if !isJSON {
+				fmt.Printf("\nTotal Summary: %d/%d transports established via TPS\n", totalSuccess, totalSuccess+totalFail)
 			}
 
 			if isJSON {
@@ -222,7 +245,7 @@ var addTpCmd = &cobra.Command{
 				}
 			}
 
-			if failCount > 0 && successCount == 0 {
+			if totalFail > 0 && totalSuccess == 0 {
 				os.Exit(1)
 			}
 			return

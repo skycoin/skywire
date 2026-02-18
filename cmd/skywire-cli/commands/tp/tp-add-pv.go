@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/bitfield/script"
@@ -20,6 +21,27 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor"
 )
+
+// isVisorUnreachableError checks if the error indicates the remote visor is unreachable
+// Only return true for clear "remote visor unreachable" errors, not local connection issues
+func isVisorUnreachableError(err error, remotePK string) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	// Only consider it unreachable if the error specifically mentions the remote PK
+	// and indicates a dial timeout or EOF
+	if strings.Contains(errStr, remotePK[:16]) || strings.Contains(errStr, remotePK) {
+		if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "EOF") {
+			return true
+		}
+	}
+	// Also check for explicit dmsg dial failures to the remote
+	if strings.Contains(errStr, "dmsg dial") && strings.Contains(errStr, "timeout") {
+		return true
+	}
+	return false
+}
 
 var (
 	pvCount          int
@@ -37,7 +59,8 @@ var (
 	pvNoFilterOnline bool
 	pvForceAttempt   bool
 	pvRetries        int
-	pvMinTransports  int
+	pvMinTransports int
+	pvRemoteVisors  []string
 )
 
 func init() {
@@ -58,6 +81,7 @@ func init() {
 	addPvCmd.Flags().IntVar(&pvRetries, "retries", 1, "number of times to retry per transport type")
 	addPvCmd.Flags().IntVar(&pvMinTransports, "min", 0, "minimum transport count for target visors")
 	addPvCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	addPvCmd.Flags().StringSliceVar(&pvRemoteVisors, "remote", nil, "request public visor transports on remote visor(s) via TPS (comma-separated PKs)")
 	addTpCmd.AddCommand(addPvCmd)
 }
 
@@ -156,6 +180,123 @@ var addPvCmd = &cobra.Command{
 		// Limit to requested count
 		if pvCount > 0 && pvCount < len(candidates) {
 			candidates = candidates[:pvCount]
+		}
+
+		// Handle --remote flag: request transports on remote visors via TPS (in parallel)
+		if len(pvRemoteVisors) > 0 {
+			// Parse remote visor PKs
+			var remotePKs []cipher.PubKey
+			for _, pkStr := range pvRemoteVisors {
+				var pk cipher.PubKey
+				if err := pk.Set(pkStr); err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid remote visor PK %s: %w", pkStr, err))
+				}
+				remotePKs = append(remotePKs, pk)
+			}
+
+			// Determine transport type (default to stcpr for public visors)
+			tpType := pvTransportType
+			if tpType == "" {
+				tpType = "stcpr"
+			}
+
+			// Check if embedded TPS is running
+			tpsStatus, tpsStatusErr := rpcClient.TPSStatus()
+			useEmbeddedTPS := tpsStatusErr == nil && tpsStatus != nil && tpsStatus.Enabled
+
+			// Process remote visors sequentially with streaming output
+			var tpsResults []*visor.TPSTransportResponse
+			totalSuccess := 0
+			totalFail := 0
+
+			if !isJSON {
+				fmt.Printf("Requesting transports to %d public visors on %d remote visor(s) via TPS...\n\n", len(candidates), len(remotePKs))
+			}
+
+			for i, remotePK := range remotePKs {
+				successCount := 0
+				failCount := 0
+				skipped := false
+
+				// Request transports to each public visor candidate
+				for _, candidate := range candidates {
+					var targetPK cipher.PubKey
+					if err := targetPK.Set(candidate.pk); err != nil {
+						failCount++
+						continue
+					}
+
+					var tpResp *visor.TPSTransportResponse
+					var tpErr error
+
+					if useEmbeddedTPS {
+						tpResp, tpErr = rpcClient.TPSAddTransport(remotePK, targetPK, tpType)
+					} else {
+						// Use external TPS nodes
+						tpsNodes, err := rpcClient.GetTransportSetupNodesSorted()
+						if err != nil || len(tpsNodes) == 0 {
+							failCount++
+							continue
+						}
+
+						// Try each TPS node
+						for _, tpsPK := range tpsNodes {
+							if err := rpcClient.TPSExternalHealthCheck(tpsPK); err != nil {
+								continue
+							}
+
+							tpResp, tpErr = rpcClient.TPSExternalAddTransport(tpsPK, remotePK, targetPK, tpType)
+							if tpErr == nil {
+								break
+							}
+						}
+					}
+
+					if tpErr != nil {
+						failCount++
+						// If remote visor is unreachable, skip remaining candidates
+						if isVisorUnreachableError(tpErr, remotePK.String()) {
+							skipped = true
+							failCount += len(candidates) - failCount - successCount
+							break
+						}
+						continue
+					}
+
+					if tpResp != nil {
+						tpsResults = append(tpsResults, tpResp)
+						successCount++
+					}
+				}
+
+				totalSuccess += successCount
+				totalFail += failCount
+
+				// Stream output immediately
+				if !isJSON {
+					if skipped {
+						fmt.Printf("[%d/%d] %s: unreachable (skipped)\n", i+1, len(remotePKs), remotePK.String()[:16])
+					} else {
+						fmt.Printf("[%d/%d] %s: %d/%d transports\n", i+1, len(remotePKs), remotePK.String()[:16], successCount, len(candidates))
+					}
+				}
+			}
+
+			// Print final results
+			if !isJSON {
+				fmt.Printf("\nTotal Summary: %d/%d transports established via TPS\n", totalSuccess, totalSuccess+totalFail)
+			}
+
+			if isJSON {
+				internal.PrintOutput(cmd.Flags(), tpsResults, "")
+			} else if len(tpsResults) > 0 {
+				fmt.Printf("\nEstablished %d transports total\n", len(tpsResults))
+			}
+
+			if totalFail > 0 && totalSuccess == 0 {
+				os.Exit(1)
+			}
+			return
 		}
 
 		// Fetch dmsg discovery data if needed

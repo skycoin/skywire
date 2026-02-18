@@ -27,6 +27,9 @@ const (
 	defaultPingInterval                = 3 * time.Second
 	defaultReadChBufSize               = 1024
 	closeRoutineTimeout                = 2 * time.Second
+	// maxConsecutiveWriteFailures is the number of consecutive transport write failures
+	// before the RouteGroup closes itself to stop spamming logs.
+	maxConsecutiveWriteFailures = 5
 )
 
 var (
@@ -74,6 +77,10 @@ func DefaultRouteGroupConfig() *RouteGroupConfig {
 type RouteGroup struct {
 	// atomic requires 64-bit alignment for struct field access
 	lastSent int64
+
+	// consecutiveWriteFailures tracks repeated transport write errors.
+	// After maxConsecutiveWriteFailures, the RouteGroup closes itself.
+	consecutiveWriteFailures int32
 
 	mu sync.Mutex
 
@@ -567,7 +574,15 @@ func (rg *RouteGroup) sendPong(timestamp int64) error {
 
 func (rg *RouteGroup) pingServiceFn(_ time.Duration) {
 	if err := rg.sendPing(); err != nil {
+		failures := atomic.AddInt32(&rg.consecutiveWriteFailures, 1)
+		if failures >= maxConsecutiveWriteFailures {
+			rg.logger.Warnf("Closing RouteGroup after %d consecutive write failures: %v", failures, err)
+			go func() { rg.Close() }() //nolint:errcheck,gosec
+			return
+		}
 		rg.logger.Warnf("Failed to send network probe: %v", err)
+	} else {
+		atomic.StoreInt32(&rg.consecutiveWriteFailures, 0)
 	}
 }
 
@@ -579,6 +594,9 @@ func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f s
 		select {
 		case <-rg.remoteClosed:
 			rg.logger.Debugf("Remote got closed, stopping %s loop", name)
+			return
+		case <-rg.closed:
+			rg.logger.Debugf("RouteGroup closed, stopping %s loop", name)
 			return
 		case <-ticker.C:
 			f(interval)
@@ -594,7 +612,15 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 	}
 
 	if err := rg.sendKeepAlive(); err != nil {
+		failures := atomic.AddInt32(&rg.consecutiveWriteFailures, 1)
+		if failures >= maxConsecutiveWriteFailures {
+			rg.logger.Warnf("Closing RouteGroup after %d consecutive write failures: %v", failures, err)
+			go func() { rg.Close() }() //nolint:errcheck,gosec
+			return
+		}
 		rg.logger.Warnf("Failed to send keepalive: %v", err)
+	} else {
+		atomic.StoreInt32(&rg.consecutiveWriteFailures, 0)
 	}
 }
 

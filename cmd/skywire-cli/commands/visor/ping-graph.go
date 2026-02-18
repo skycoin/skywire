@@ -2627,6 +2627,36 @@ func runTreeViewMode(
 		copy(localTreeEntries, treeEntries)
 		treeEntriesMu.Unlock()
 
+		// Make a copy of transportLatencies to avoid race with concurrent writers
+		dataMu.Lock()
+		localLatencies := make(map[string]*transportLatencyData, len(transportLatencies))
+		for k, v := range transportLatencies {
+			if v != nil {
+				// Make a shallow copy of the struct
+				copied := *v
+				// Deep copy the slices to avoid race if writer modifies them
+				if len(v.pingSamples) > 0 {
+					copied.pingSamples = make([]float64, len(v.pingSamples))
+					copy(copied.pingSamples, v.pingSamples)
+				}
+				if len(v.dmsgServers) > 0 {
+					copied.dmsgServers = make([]*dmsgServerPingData, len(v.dmsgServers))
+					for i, srv := range v.dmsgServers {
+						if srv != nil {
+							srvCopy := *srv
+							if len(srv.pingSamples) > 0 {
+								srvCopy.pingSamples = make([]float64, len(srv.pingSamples))
+								copy(srvCopy.pingSamples, srv.pingSamples)
+							}
+							copied.dmsgServers[i] = &srvCopy
+						}
+					}
+				}
+				localLatencies[k] = &copied
+			}
+		}
+		dataMu.Unlock()
+
 		// Build saved state
 		state := routeSavedState{
 			LocalPK:    localPK,
@@ -2641,7 +2671,7 @@ func runTreeViewMode(
 		}
 
 		for _, entry := range localTreeEntries {
-			data := transportLatencies[entry.tpID]
+			data := localLatencies[entry.tpID]
 			if data == nil {
 				continue
 			}
@@ -2726,7 +2756,7 @@ func runTreeViewMode(
 		if level1Entries, ok := entriesByLevel[1]; ok && len(level1Entries) > 0 {
 			textOut.WriteString(pterm.Yellow("=== Level 1 (direct transports) ===\n"))
 			for _, entry := range level1Entries {
-				data := transportLatencies[entry.tpID]
+				data := localLatencies[entry.tpID]
 				if data == nil {
 					continue
 				}
@@ -2755,7 +2785,7 @@ func runTreeViewMode(
 			}
 			textOut.WriteString(fmt.Sprintf("\n%s\n", pterm.Yellow(fmt.Sprintf("=== Level %d ===", lvl))))
 			for _, entry := range levelEntries {
-				data := transportLatencies[entry.tpID]
+				data := localLatencies[entry.tpID]
 				if data == nil {
 					continue
 				}

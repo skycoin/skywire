@@ -78,7 +78,6 @@ type Transport struct {
 	Discovery         string          `json:"discovery"`
 	AddressResolver   string          `json:"address_resolver"`
 	PublicAutoconnect bool            `json:"public_autoconnect"`
-	PublicAutocheck   bool            `json:"public_autocheck"`
 	TransportSetupPKs []cipher.PubKey `json:"transport_setup"`
 	TPSetupSK         *cipher.SecKey  `json:"tps_sk,omitempty"`
 	TPSDmsg           *TPSDmsgConfig  `json:"tps_dmsg,omitempty"`

@@ -155,8 +155,6 @@ var (
 	uiServer vinit.Module
 	// Node health tracking for TPS and RSN
 	nodeHealth vinit.Module
-	// Public autocheck: periodic latency checking of transports
-	pac vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 	// config initialization
@@ -208,9 +206,8 @@ func registerModules(logger *logging.MasterLogger) {
 	embTPS = maker("embedded_tps", initEmbeddedTPS, &dmsgC)
 	uiServer = maker("ui_server", initUIServer, &dmsgC, &tr, &embTPS)
 	nodeHealth = maker("node_health", initNodeHealth, &dmsgC)
-	pac = maker("public_autocheck", initPublicAutocheck, &tr, &dmsgHTTPLogServer)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer, &nodeHealth, &pac)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer, &nodeHealth)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -526,6 +523,9 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 
 	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, &v.survey, printLog)
 
+	// Set visor as health stats provider for /health endpoint
+	lsAPI.SetHealthStatsProvider(v)
+
 	// Store the log server API reference for public autocheck to use later
 	v.initLock.Lock()
 	v.logServerAPI = lsAPI
@@ -589,7 +589,10 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		// Create a separate API without whitelist authentication for localhost
 		localAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, nil, &v.survey, printLog)
 
-		// Store the localhost API so initPublicAutocheck can set the latency provider later
+		// Set visor as health stats provider for /health endpoint
+		localAPI.SetHealthStatsProvider(v)
+
+		// Store the localhost API for potential future use
 		v.localLogServerAPI = localAPI
 
 		localLis, err := net.Listen("tcp", localAddr)
@@ -2639,62 +2642,6 @@ func (v *Visor) IsPublicAutoconnectRunning() bool {
 	v.autoconnectMu.Lock()
 	defer v.autoconnectMu.Unlock()
 	return v.autoconnectRunning
-}
-
-func initPublicAutocheck(ctx context.Context, v *Visor, log *logging.Logger) error {
-	// Check if public_autocheck is enabled (default to true if not set)
-	if v.conf.Transport != nil && !v.conf.Transport.PublicAutocheck {
-		log.Debug("Public autocheck disabled in config")
-		return nil
-	}
-
-	if v.tpM == nil {
-		log.Debug("Transport manager not available, skipping public autocheck")
-		return nil
-	}
-
-	// Create the autochecker
-	autochecker := NewAutochecker(log, v.tpM, v.conf.LocalPath, v.conf.PK)
-
-	v.autocheckMu.Lock()
-	v.autochecker = autochecker
-	v.autocheckMu.Unlock()
-
-	// Register with log server for /latencies endpoint
-	if v.logServerAPI != nil {
-		v.logServerAPI.SetLatencyProvider(autochecker)
-	}
-	// Also register with localhost log server if enabled
-	if v.localLogServerAPI != nil {
-		v.localLogServerAPI.SetLatencyProvider(autochecker)
-	}
-
-	// Start the autocheck loop
-	cctx, cancel := context.WithCancel(ctx)
-	v.autocheckMu.Lock()
-	v.autocheckStop = cancel
-	v.autocheckMu.Unlock()
-
-	go func() {
-		if err := autochecker.Run(cctx, v); err != nil {
-			if err != context.Canceled {
-				log.WithError(err).Error("Public autocheck exited with error")
-			}
-		}
-	}()
-
-	v.pushCloseStack("public_autocheck", func() error {
-		v.autocheckMu.Lock()
-		defer v.autocheckMu.Unlock()
-		if v.autocheckStop != nil {
-			v.autocheckStop()
-			v.autocheckStop = nil
-		}
-		return nil
-	})
-
-	log.Info("Public autocheck started")
-	return nil
 }
 
 func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {

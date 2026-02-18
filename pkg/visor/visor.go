@@ -31,6 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
@@ -152,12 +153,9 @@ type Visor struct {
 	// Setup node health tracking (TPS and RSN)
 	nodeHealthTracker *NodeHealthTracker
 
-	// Public autocheck: periodic latency checking of transports
-	autochecker       *Autochecker
+	// Log server API references for health stats
 	logServerAPI      *logserver.API
 	localLogServerAPI *logserver.API // Localhost log server (optional)
-	autocheckMu       sync.Mutex
-	autocheckStop     context.CancelFunc
 }
 
 // todo: consider moving module closing to the module system
@@ -642,4 +640,34 @@ func setForceColor(conf *visorconfig.V1) {
 		DisableColors:      false,
 		ForceColors:        true,
 	})
+}
+
+// HealthStatsProvider implementation for logserver
+
+// GetTransportCounts returns the count of STCPR and SUDPH transports (excluding "user" labeled).
+func (v *Visor) GetTransportCounts() (stcpr, sudph int) {
+	if v.tpM == nil {
+		return 0, 0
+	}
+
+	// Get transports that are not user-created (skycoin + automatic labels)
+	tps := v.tpM.GetTransportsByLabels(transport.LabelSkycoin, transport.LabelAutomatic)
+	for _, tp := range tps {
+		switch tp.Type() {
+		case tptypes.STCPR:
+			stcpr++
+		case tptypes.SUDPH:
+			sudph++
+		}
+	}
+	return stcpr, sudph
+}
+
+// GetNetworkTypes returns the network types used by the visor.
+func (v *Visor) GetNetworkTypes() []string {
+	types, err := v.TransportTypes()
+	if err != nil {
+		return nil
+	}
+	return types
 }
