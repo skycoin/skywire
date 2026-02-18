@@ -223,18 +223,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 							continue
 						}
 					}
-
-					// First minSTCPR connections are unconditional
-					// After that, check connection limit
-					if countSTCPR >= minSTCPR {
-						transportCount := transportCache.transportCounts[pk]
-						if transportCount >= a.maxConns*100 {
-							a.log.WithField("pk", pk).WithField("count", transportCount).
-								Debugln("Remote visor at limit, skipping (not in first 2)")
-							continue
-						}
-					}
-
 					logger := a.log.WithField("pk", pk).WithField("type", string(tptypes.STCPR))
 					logger.Debugln("Trying to add STCPR transport to public visor")
 
