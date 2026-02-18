@@ -216,8 +216,8 @@ github.com/alecthomas/chroma/styles
 github.com/alecthomas/chroma/v2
 github.com/alecthomas/chroma/v2/formatters/html
 github.com/alecthomas/chroma/v2/lexers
-# github.com/anatol/smart.go v0.0.0-20220917195147-c0b00d90f8cc
-## explicit; go 1.17
+# github.com/anatol/smart.go v0.0.0-20260213010714-b8c428e1f7f2
+## explicit; go 1.25.0
 github.com/anatol/smart.go
 # github.com/anthonynsimon/bild v0.14.0
 ## explicit; go 1.21

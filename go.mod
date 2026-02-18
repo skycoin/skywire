@@ -90,7 +90,7 @@ require (
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/alecthomas/chroma v0.10.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.23.1 // indirect
-	github.com/anatol/smart.go v0.0.0-20220917195147-c0b00d90f8cc // indirect
+	github.com/anatol/smart.go v0.0.0-20260213010714-b8c428e1f7f2 // indirect
 	github.com/anthonynsimon/bild v0.14.0 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
