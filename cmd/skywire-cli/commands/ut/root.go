@@ -2,6 +2,7 @@
 package cliut
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // RootCmd is utCmd
@@ -21,10 +23,13 @@ var (
 	isStats       bool
 	isMoreStats   bool
 	utURL         = deployment.Prod.UptimeTracker
+	tpdURL        = deployment.Prod.TransportDiscovery
 	cacheFileUT   string
+	cacheFileTPD  string
 	cacheFilesAge int
 	versionFilter string
 	listVersions  bool
+	maxTP         int
 )
 
 var minUT int
@@ -36,10 +41,12 @@ func init() {
 	utCmd.Flags().BoolVarP(&isMoreStats, "stats2", "t", false, "count of versions")
 	utCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime percentage\n\r")
 	utCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location\n\r")
+	utCmd.Flags().StringVar(&cacheFileTPD, "cft", os.TempDir()+"/tpd.json", "TPD cache file location\n\r")
 	utCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes\n\r")
 	utCmd.Flags().StringVarP(&utURL, "url", "u", utURL, "specify alternative uptime tracker url\n\r")
 	utCmd.Flags().StringVarP(&versionFilter, "version", "v", "", "filter visors by version")
 	utCmd.Flags().BoolVarP(&listVersions, "list-versions", "l", false, "list PKs with their versions")
+	utCmd.Flags().IntVar(&maxTP, "max-tp", -1, "filter visors with at most N transports (fetches TPD data)")
 }
 
 var utCmd = &cobra.Command{
@@ -49,29 +56,63 @@ var utCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
 
+		// Build transport count map if --max-tp is specified
+		var tpCount map[string]int
+		if maxTP >= 0 {
+			tpd := internal.GetData(cacheFileTPD, tpdURL+"/all-transports", cacheFilesAge)
+			var entries []*transport.Entry
+			if err := json.Unmarshal([]byte(tpd), &entries); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse TPD data: %w", err))
+			}
+			tpCount = make(map[string]int)
+			for _, entry := range entries {
+				if entry.Edges[0] == entry.Edges[1] {
+					continue
+				}
+				tpCount[entry.Edges[0].String()]++
+				tpCount[entry.Edges[1].String()]++
+			}
+		}
+
 		// Build the base selector based on online flag
 		baseSelector := ".[]"
 		if online {
 			baseSelector = ".[] | select(.on)"
 		}
 
+		// Helper to filter keys by transport count
+		filterByTP := func(keys []string) []string {
+			if maxTP < 0 {
+				return keys
+			}
+			var filtered []string
+			for _, k := range keys {
+				if tpCount[k] <= maxTP {
+					filtered = append(filtered, k)
+				}
+			}
+			return filtered
+		}
+
 		// Handle version filter
 		if versionFilter != "" {
 			versionSelector := baseSelector + " | select(.version == \"" + versionFilter + "\")"
+			keys, _ := script.Echo(uts).JQ(versionSelector+" | .pk").Match(pk).Replace("\"", "").Slice() //nolint:errcheck
+			keys = filterByTP(keys)
 			if isStats {
-				stats, _ := script.Echo(uts).JQ(versionSelector + " | .pk").CountLines() //nolint:errcheck
 				label := "visors"
 				if online {
 					label = "online visors"
 				}
-				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d %s with version %s\n", stats, label, versionFilter), fmt.Sprintf("%d %s with version %s\n", stats, label, versionFilter))
+				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d %s with version %s\n", len(keys), label, versionFilter), fmt.Sprintf("%d %s with version %s\n", len(keys), label, versionFilter))
 				return
 			}
 			if listVersions {
-				script.Echo(uts).JQ(versionSelector+" | \"\\(.pk) \\(.version)\"").Match(pk).Replace("\"", "").Stdout() //nolint:errcheck,gosec
+				for _, k := range keys {
+					fmt.Printf("%s %s\n", k, versionFilter)
+				}
 				return
 			}
-			keys, _ := script.Echo(uts).JQ(versionSelector+" | .pk").Match(pk).Replace("\"", "").Slice() //nolint:errcheck
 			for _, i := range keys {
 				internal.PrintOutput(cmd.Flags(), i+"\n", i+"\n")
 			}
@@ -90,9 +131,9 @@ var utCmd = &cobra.Command{
 
 		if online {
 			utKeysOnline, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Match(pk).Replace("\"", "").Slice() //nolint:errcheck
+			utKeysOnline = filterByTP(utKeysOnline)
 			if isStats {
-				stats, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").CountLines() //nolint:errcheck
-				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", stats), fmt.Sprintf("%d visors online\n", stats))
+				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", len(utKeysOnline)), fmt.Sprintf("%d visors online\n", len(utKeysOnline)))
 				return
 			}
 			if isMoreStats {
@@ -105,8 +146,9 @@ var utCmd = &cobra.Command{
 			return
 		}
 		if isStats {
-			stats, _ := script.Echo(uts).JQ(".[] | .pk").CountLines() //nolint:errcheck
-			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors\n", stats), fmt.Sprintf("%d visors\n", stats))
+			keys, _ := script.Echo(uts).JQ(".[] | .pk").Replace("\"", "").Slice() //nolint:errcheck
+			keys = filterByTP(keys)
+			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors\n", len(keys)), fmt.Sprintf("%d visors\n", len(keys)))
 			return
 		}
 		if isMoreStats {
