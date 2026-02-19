@@ -35,3 +35,16 @@ func SortEdges(keyA, keyB cipher.PubKey) [2]cipher.PubKey {
 	}
 	return [2]cipher.PubKey{keyB, keyA}
 }
+
+// TypeFromTransportID determines the transport type by comparing the given
+// transport ID against computed IDs for known transport types.
+// Returns empty string if no match is found.
+func TypeFromTransportID(tpID uuid.UUID, keyA, keyB cipher.PubKey) types.Type {
+	knownTypes := []types.Type{types.STCPR, types.SUDPH, types.STCP, types.DMSG}
+	for _, t := range knownTypes {
+		if MakeTransportID(keyA, keyB, t) == tpID {
+			return t
+		}
+	}
+	return ""
+}

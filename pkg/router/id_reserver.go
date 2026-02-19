@@ -94,7 +94,13 @@ func (idr *idReserver) ReserveIDs(ctx context.Context) error {
 
 	for pk, n := range idr.rec {
 		go func(pk cipher.PubKey, n uint8) {
-			rtIDs, err := idr.rcM.Client(pk).ReserveIDs(ctx, n)
+			client := idr.rcM.Client(pk)
+			if client == nil {
+				cancel()
+				errCh <- fmt.Errorf("reserve routeID from %s failed: no client available", pk)
+				return
+			}
+			rtIDs, err := client.ReserveIDs(ctx, n)
 			if err != nil {
 				cancel()
 				errCh <- fmt.Errorf("reserve routeID from %s failed: %w", pk, err)

@@ -24,6 +24,7 @@ func init() {
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 	RootCmd.AddCommand(portsCmd)
+	RootCmd.AddCommand(dmsgServersCmd)
 }
 
 var pkCmd = &cobra.Command{
@@ -69,32 +70,75 @@ var summaryCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
-		msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\nSymmetric NAT: %t\nIP: %s\nDMSG Server: %q\nPing: %q\nVisor Version: %s\nSkybian Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
-			summary.Overview.PubKey, summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.DmsgStats.ServerPK, summary.DmsgStats.RoundTrip, summary.Overview.BuildInfo.Version, summary.SkybianBuildVersion,
-			summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
+
+		// Build list of connected DMSG servers
+		dmsgServersStr := ""
+		for i, server := range summary.ConnectedDmsgServers {
+			if i > 0 {
+				dmsgServersStr += "\n              "
+			}
+			dmsgServersStr += server
+		}
+		if dmsgServersStr == "" {
+			dmsgServersStr = "(none)"
+		}
+
+		// Build geo location string
+		geoStr := ""
+		if summary.Overview.CityName != "" || summary.Overview.RegionName != "" || summary.Overview.CountryCode != "" {
+			parts := []string{}
+			if summary.Overview.CityName != "" {
+				parts = append(parts, summary.Overview.CityName)
+			}
+			if summary.Overview.RegionName != "" {
+				parts = append(parts, summary.Overview.RegionName)
+			}
+			if summary.Overview.CountryCode != "" {
+				parts = append(parts, summary.Overview.CountryCode)
+			}
+			geoStr = strings.Join(parts, ", ")
+		}
+
+		msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\nSymmetric NAT: %t\nLocal IP: %s\nPublic IP: %s\n",
+			summary.Overview.PubKey, summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.Overview.PublicIP)
+
+		if geoStr != "" {
+			msg += fmt.Sprintf("Location: %s\n", geoStr)
+		}
+
+		msg += fmt.Sprintf("DMSG Servers (%d connected):\n              %s\n", len(summary.ConnectedDmsgServers), dmsgServersStr)
+		msg += fmt.Sprintf("DMSG Latency: %s\n", summary.DmsgStats.RoundTrip)
+		msg += fmt.Sprintf("Visor Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
+			summary.Overview.BuildInfo.Version, summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
 
 		outputJSON := struct {
-			PublicKey      string  `json:"public_key"`
-			IsSymmetricNAT bool    `json:"symmetric_nat"`
-			IP             string  `json:"ip"`
-			DmsgServer     string  `json:"dmsg_server"`
-			Ping           string  `json:"ping"`
-			VisorVersion   string  `json:"visor_version"`
-			SkybianVersion string  `json:"skybian_version"`
-			UptimeTracker  string  `json:"uptime_tracker"`
-			TimeOnline     float64 `json:"time_online"`
-			BuildTag       string  `json:"build_tag"`
+			PublicKey            string   `json:"public_key"`
+			IsSymmetricNAT       bool     `json:"symmetric_nat"`
+			LocalIP              string   `json:"local_ip"`
+			PublicIP             string   `json:"public_ip"`
+			CountryCode          string   `json:"country_code,omitempty"`
+			RegionName           string   `json:"region_name,omitempty"`
+			CityName             string   `json:"city_name,omitempty"`
+			ConnectedDmsgServers []string `json:"connected_dmsg_servers"`
+			DmsgLatency          string   `json:"dmsg_latency"`
+			VisorVersion         string   `json:"visor_version"`
+			UptimeTracker        string   `json:"uptime_tracker"`
+			TimeOnline           float64  `json:"time_online"`
+			BuildTag             string   `json:"build_tag"`
 		}{
-			PublicKey:      summary.Overview.PubKey.String(),
-			IsSymmetricNAT: summary.Overview.IsSymmetricNAT,
-			IP:             summary.Overview.LocalIP,
-			DmsgServer:     summary.DmsgStats.ServerPK.String(),
-			Ping:           summary.DmsgStats.RoundTrip.String(),
-			VisorVersion:   summary.Overview.BuildInfo.Version,
-			SkybianVersion: summary.SkybianBuildVersion,
-			UptimeTracker:  summary.Health.ServicesHealth,
-			TimeOnline:     summary.Uptime,
-			BuildTag:       summary.BuildTag,
+			PublicKey:            summary.Overview.PubKey.String(),
+			IsSymmetricNAT:       summary.Overview.IsSymmetricNAT,
+			LocalIP:              summary.Overview.LocalIP,
+			PublicIP:             summary.Overview.PublicIP,
+			CountryCode:          summary.Overview.CountryCode,
+			RegionName:           summary.Overview.RegionName,
+			CityName:             summary.Overview.CityName,
+			ConnectedDmsgServers: summary.ConnectedDmsgServers,
+			DmsgLatency:          summary.DmsgStats.RoundTrip.String(),
+			VisorVersion:         summary.Overview.BuildInfo.Version,
+			UptimeTracker:        summary.Health.ServicesHealth,
+			TimeOnline:           summary.Uptime,
+			BuildTag:             summary.BuildTag,
 		}
 		internal.PrintOutput(cmd.Flags(), outputJSON, msg)
 	},
@@ -151,5 +195,43 @@ var portsCmd = &cobra.Command{
 		msg += "| DMSG: connection by dmsg service          |\n"
 		msg += "+-------------------------------------------+\n"
 		internal.PrintOutput(cmd.Flags(), ports, msg)
+	},
+}
+
+var dmsgServersCmd = &cobra.Command{
+	Use:   "dmsg-servers",
+	Short: "List connected DMSG servers with latencies",
+	Long:  "\n  List of connected DMSG servers sorted by latency (lowest first)",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		servers, err := rpcClient.DMSGServers()
+		if err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
+
+		if len(servers) == 0 {
+			fmt.Println("No DMSG servers connected")
+			return
+		}
+
+		msg := "+--------------------------------------------------------------------+-------------+\n"
+		msg += fmt.Sprintf("| %-66s | %11s |\n", "Server Public Key", "Latency")
+		msg += "|--------------------------------------------------------------------+-------------|\n"
+
+		for _, server := range servers {
+			latStr := "-"
+			if server.Latency > 0 {
+				latStr = fmt.Sprintf("%.1fms", float64(server.Latency.Milliseconds()))
+			}
+			msg += fmt.Sprintf("| %-66s | %11s |\n", server.PK.String(), latStr)
+		}
+
+		msg += "+--------------------------------------------------------------------+-------------+\n"
+		msg += "Note: Latency is measured via self-ping through each server.\n"
+		msg += "Servers with '-' latency have not been measured yet (wait ~5s after startup).\n"
+		internal.PrintOutput(cmd.Flags(), servers, msg)
 	},
 }

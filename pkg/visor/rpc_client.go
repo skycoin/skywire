@@ -412,12 +412,14 @@ func (rc *rpcClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport calls AddTransport.
-func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration) (*TransportSummary, error) {
+func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool) (*TransportSummary, error) {
 	var summary TransportSummary
 	err := rc.Call("AddTransport", &AddTransportIn{
-		RemotePK: remote,
-		TpType:   tpType,
-		Timeout:  timeout,
+		RemotePK:   remote,
+		TpType:     tpType,
+		Timeout:    timeout,
+		Label:      label,
+		NoRegister: noRegister,
 	}, &summary)
 
 	return &summary, err
@@ -590,6 +592,14 @@ func (rc *rpcClient) ProxyServers(version, country string) ([]servicedisc.Servic
 	return output, err
 }
 
+// DeregisterService calls DeregisterService.
+func (rc *rpcClient) DeregisterService(pks []cipher.PubKey, serviceType string) error {
+	return rc.Call("DeregisterService", &DeregisterServiceIn{
+		PKs:         pks,
+		ServiceType: serviceType,
+	}, &struct{}{})
+}
+
 // RemoteVisors calls RemoteVisors.
 func (rc *rpcClient) RemoteVisors() ([]string, error) {
 	output := []string{}
@@ -608,6 +618,13 @@ func (rc *rpcClient) Ports() (map[string]PortDetail, error) {
 func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
 	var out bool
 	err := rc.Call("IsDMSGClientReady", &struct{}{}, &out)
+	return out, err
+}
+
+// DMSGServers returns list of connected DMSG servers with latencies
+func (rc *rpcClient) DMSGServers() ([]DMSGServerInfo, error) {
+	var out []DMSGServerInfo
+	err := rc.Call("DMSGServers", &struct{}{}, &out)
 	return out, err
 }
 
@@ -689,6 +706,13 @@ func (rc *rpcClient) Ping(conf PingConfig) ([]time.Duration, error) {
 	return latencies, err
 }
 
+// PingOnce calls PingOnce.
+func (rc *rpcClient) PingOnce(conf PingConfig) (time.Duration, error) {
+	var latency time.Duration
+	err := rc.Call("PingOnce", &conf, &latency)
+	return latency, err
+}
+
 // StopPing calls StopPing.
 func (rc *rpcClient) StopPing(pk cipher.PubKey) error {
 	return rc.Call("StopPing", &pk, &struct{}{})
@@ -706,9 +730,56 @@ func (rc *rpcClient) DmsgPing(conf PingConfig) ([]time.Duration, error) {
 	return latencies, err
 }
 
+// DmsgPingOnce calls DmsgPingOnce.
+func (rc *rpcClient) DmsgPingOnce(conf PingConfig) (time.Duration, error) {
+	var latency time.Duration
+	err := rc.Call("DmsgPingOnce", &conf, &latency)
+	return latency, err
+}
+
 // StopDmsgPing calls StopDmsgPing.
 func (rc *rpcClient) StopDmsgPing(pk cipher.PubKey) error {
 	return rc.Call("StopDmsgPing", &pk, &struct{}{})
+}
+
+// DialDmsgPingViaServer calls DialDmsgPingViaServer.
+func (rc *rpcClient) DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error {
+	return rc.Call("DialDmsgPingViaServer", &DialDmsgPingViaServerIn{PK: pk, ServerPK: serverPK}, &struct{}{})
+}
+
+// GetDmsgPingServerPK calls GetDmsgPingServerPK.
+func (rc *rpcClient) GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error) {
+	var serverPK cipher.PubKey
+	err := rc.Call("GetDmsgPingServerPK", &pk, &serverPK)
+	return serverPK, err
+}
+
+// GetRemoteDmsgServers calls GetRemoteDmsgServers.
+func (rc *rpcClient) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error) {
+	var servers []cipher.PubKey
+	err := rc.Call("GetRemoteDmsgServers", &pk, &servers)
+	return servers, err
+}
+
+// GetPreferredDmsgServer calls GetPreferredDmsgServer.
+func (rc *rpcClient) GetPreferredDmsgServer(remotePK cipher.PubKey) (cipher.PubKey, error) {
+	var serverPK cipher.PubKey
+	err := rc.Call("GetPreferredDmsgServer", &remotePK, &serverPK)
+	return serverPK, err
+}
+
+// BandwidthTest calls BandwidthTest.
+func (rc *rpcClient) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error) {
+	var result BandwidthResult
+	err := rc.Call("BandwidthTest", &conf, &result)
+	return result, err
+}
+
+// DmsgBandwidthTest calls DmsgBandwidthTest.
+func (rc *rpcClient) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error) {
+	var result BandwidthResult
+	err := rc.Call("DmsgBandwidthTest", &conf, &result)
+	return result, err
 }
 
 // TestVisor calls TestVisor.
@@ -745,6 +816,108 @@ func (rc *rpcClient) UIServerStatus() (*UIServerStatus, error) {
 	var status UIServerStatus
 	err := rc.Call("UIServerStatus", &struct{}{}, &status)
 	return &status, err
+}
+
+// DmsgHTTP performs an HTTP request over dmsg using the visor's dmsg client.
+func (rc *rpcClient) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
+	var resp DmsgHTTPResponse
+	err := rc.Call("DmsgHTTP", &req, &resp)
+	return &resp, err
+}
+
+// TPSStatus returns the status of the embedded TPS.
+func (rc *rpcClient) TPSStatus() (*TPSStatus, error) {
+	var status TPSStatus
+	err := rc.Call("TPSStatus", &struct{}{}, &status)
+	return &status, err
+}
+
+// TPSAddTransport adds a transport on a target visor using the embedded TPS.
+func (rc *rpcClient) TPSAddTransport(targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error) {
+	var resp TPSTransportResponse
+	err := rc.Call("TPSAddTransport", &TPSAddTransportIn{
+		TargetPK: targetPK,
+		RemotePK: remotePK,
+		TpType:   tpType,
+	}, &resp)
+	return &resp, err
+}
+
+// TPSRemoveTransport removes a transport on a target visor using the embedded TPS.
+func (rc *rpcClient) TPSRemoveTransport(targetPK cipher.PubKey, tpID uuid.UUID) error {
+	return rc.Call("TPSRemoveTransport", &TPSRemoveTransportIn{
+		TargetPK: targetPK,
+		TpID:     tpID,
+	}, &struct{}{})
+}
+
+// TPSGetTransports gets transports from a target visor using the embedded TPS.
+func (rc *rpcClient) TPSGetTransports(targetPK cipher.PubKey) ([]TPSTransportResponse, error) {
+	var resp []TPSTransportResponse
+	err := rc.Call("TPSGetTransports", &targetPK, &resp)
+	return resp, err
+}
+
+// GetTransportSetupNodes returns the whitelisted transport setup node public keys.
+func (rc *rpcClient) GetTransportSetupNodes() ([]cipher.PubKey, error) {
+	var resp []cipher.PubKey
+	err := rc.Call("GetTransportSetupNodes", &struct{}{}, &resp)
+	return resp, err
+}
+
+// GetTransportSetupNodesSorted returns TPS nodes sorted by health (healthy first).
+func (rc *rpcClient) GetTransportSetupNodesSorted() ([]cipher.PubKey, error) {
+	var resp []cipher.PubKey
+	err := rc.Call("GetTransportSetupNodesSorted", &struct{}{}, &resp)
+	return resp, err
+}
+
+// GetRouteSetupNodesSorted returns RSN nodes sorted by health (healthy first).
+func (rc *rpcClient) GetRouteSetupNodesSorted() ([]cipher.PubKey, error) {
+	var resp []cipher.PubKey
+	err := rc.Call("GetRouteSetupNodesSorted", &struct{}{}, &resp)
+	return resp, err
+}
+
+// GetTPSHealth returns health status for all configured TPS nodes.
+func (rc *rpcClient) GetTPSHealth() ([]NodeHealth, error) {
+	var resp []NodeHealth
+	err := rc.Call("GetTPSHealth", &struct{}{}, &resp)
+	return resp, err
+}
+
+// GetRSNHealth returns health status for all configured RSN nodes.
+func (rc *rpcClient) GetRSNHealth() ([]NodeHealth, error) {
+	var resp []NodeHealth
+	err := rc.Call("GetRSNHealth", &struct{}{}, &resp)
+	return resp, err
+}
+
+// TPSExternalHealthCheck dials an external TPS over dmsg and performs a health check.
+func (rc *rpcClient) TPSExternalHealthCheck(tpsPK cipher.PubKey) error {
+	return rc.Call("TPSExternalHealthCheck", &tpsPK, &struct{}{})
+}
+
+// TPSExternalAddTransport requests transport setup via an external TPS.
+func (rc *rpcClient) TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error) {
+	var resp TPSTransportResponse
+	err := rc.Call("TPSExternalAddTransport", &TPSExternalAddTransportIn{
+		TPSPK:    tpsPK,
+		TargetPK: targetPK,
+		RemotePK: remotePK,
+		TpType:   tpType,
+	}, &resp)
+	return &resp, err
+}
+
+// TPSExternalGetTransports gets transports from a target visor via an external TPS.
+func (rc *rpcClient) TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]TPSTransportResponse, error) {
+	var resp []TPSTransportResponse
+	err := rc.Call("TPSExternalGetTransports", &TPSExternalGetTransportsIn{
+		TPSPK:    tpsPK,
+		TargetPK: targetPK,
+	}, &resp)
+	return resp, err
 }
 
 // MockRPCClient mocks API.
@@ -1282,7 +1455,7 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ time.Duration) (*TransportSummary, error) {
+func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ time.Duration, _ string, _ bool) (*TransportSummary, error) {
 	summary := &TransportSummary{
 		ID:     transport.MakeTransportID(mc.o.PubKey, remote, types.Type(tpType)),
 		Local:  mc.o.PubKey,
@@ -1454,6 +1627,11 @@ func (mc *mockRPCClient) ProxyServers(_, _ string) ([]servicedisc.Service, error
 	return []servicedisc.Service{}, nil
 }
 
+// DeregisterService implements API
+func (mc *mockRPCClient) DeregisterService(_ []cipher.PubKey, _ string) error {
+	return nil
+}
+
 // RemoteVisors implements API
 func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
 	return []string{}, nil
@@ -1467,6 +1645,11 @@ func (mc *mockRPCClient) Ports() (map[string]PortDetail, error) {
 // IsDMSGClientReady implements API.
 func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
 	return false, nil
+}
+
+// DMSGServers implements API.
+func (mc *mockRPCClient) DMSGServers() ([]DMSGServerInfo, error) {
+	return []DMSGServerInfo{}, nil
 }
 
 // Connect implements API.
@@ -1524,6 +1707,11 @@ func (mc *mockRPCClient) Ping(_ PingConfig) ([]time.Duration, error) {
 	return []time.Duration{}, nil
 }
 
+// PingOnce implements API.
+func (mc *mockRPCClient) PingOnce(_ PingConfig) (time.Duration, error) {
+	return 0, nil
+}
+
 // StopPing implements API.
 func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
 	return nil
@@ -1539,9 +1727,44 @@ func (mc *mockRPCClient) DmsgPing(_ PingConfig) ([]time.Duration, error) {
 	return []time.Duration{}, nil
 }
 
+// DmsgPingOnce implements API.
+func (mc *mockRPCClient) DmsgPingOnce(_ PingConfig) (time.Duration, error) {
+	return 0, nil
+}
+
 // StopDmsgPing implements API.
 func (mc *mockRPCClient) StopDmsgPing(_ cipher.PubKey) error {
 	return nil
+}
+
+// DialDmsgPingViaServer implements API.
+func (mc *mockRPCClient) DialDmsgPingViaServer(_ cipher.PubKey, _ cipher.PubKey) error {
+	return nil
+}
+
+// GetDmsgPingServerPK implements API.
+func (mc *mockRPCClient) GetDmsgPingServerPK(_ cipher.PubKey) (cipher.PubKey, error) {
+	return cipher.PubKey{}, nil
+}
+
+// GetRemoteDmsgServers implements API.
+func (mc *mockRPCClient) GetRemoteDmsgServers(_ cipher.PubKey) ([]cipher.PubKey, error) {
+	return []cipher.PubKey{}, nil
+}
+
+// GetPreferredDmsgServer implements API.
+func (mc *mockRPCClient) GetPreferredDmsgServer(_ cipher.PubKey) (cipher.PubKey, error) {
+	return cipher.PubKey{}, nil
+}
+
+// BandwidthTest implements API.
+func (mc *mockRPCClient) BandwidthTest(_ BandwidthTestConfig) (BandwidthResult, error) {
+	return BandwidthResult{}, nil
+}
+
+// DmsgBandwidthTest implements API.
+func (mc *mockRPCClient) DmsgBandwidthTest(_ BandwidthTestConfig) (BandwidthResult, error) {
+	return BandwidthResult{}, nil
 }
 
 // TestVisor implements API.
@@ -1572,6 +1795,71 @@ func (mc *mockRPCClient) StopUIServer() error {
 // UIServerStatus implements API.
 func (mc *mockRPCClient) UIServerStatus() (*UIServerStatus, error) {
 	return &UIServerStatus{}, nil
+}
+
+// DmsgHTTP implements API.
+func (mc *mockRPCClient) DmsgHTTP(_ DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
+	return &DmsgHTTPResponse{StatusCode: 200, Status: "OK"}, nil
+}
+
+// TPSStatus implements API.
+func (mc *mockRPCClient) TPSStatus() (*TPSStatus, error) {
+	return &TPSStatus{Enabled: false}, nil
+}
+
+// TPSAddTransport implements API.
+func (mc *mockRPCClient) TPSAddTransport(_, _ cipher.PubKey, _ string) (*TPSTransportResponse, error) {
+	return nil, fmt.Errorf("TPS not available in mock")
+}
+
+// TPSRemoveTransport implements API.
+func (mc *mockRPCClient) TPSRemoveTransport(_ cipher.PubKey, _ uuid.UUID) error {
+	return fmt.Errorf("TPS not available in mock")
+}
+
+// TPSGetTransports implements API.
+func (mc *mockRPCClient) TPSGetTransports(_ cipher.PubKey) ([]TPSTransportResponse, error) {
+	return nil, fmt.Errorf("TPS not available in mock")
+}
+
+// GetTransportSetupNodes implements API.
+func (mc *mockRPCClient) GetTransportSetupNodes() ([]cipher.PubKey, error) {
+	return nil, nil
+}
+
+// GetTransportSetupNodesSorted implements API.
+func (mc *mockRPCClient) GetTransportSetupNodesSorted() ([]cipher.PubKey, error) {
+	return nil, nil
+}
+
+// GetRouteSetupNodesSorted implements API.
+func (mc *mockRPCClient) GetRouteSetupNodesSorted() ([]cipher.PubKey, error) {
+	return nil, nil
+}
+
+// GetTPSHealth implements API.
+func (mc *mockRPCClient) GetTPSHealth() ([]NodeHealth, error) {
+	return nil, nil
+}
+
+// GetRSNHealth implements API.
+func (mc *mockRPCClient) GetRSNHealth() ([]NodeHealth, error) {
+	return nil, nil
+}
+
+// TPSExternalHealthCheck implements API.
+func (mc *mockRPCClient) TPSExternalHealthCheck(_ cipher.PubKey) error {
+	return fmt.Errorf("external TPS not available in mock")
+}
+
+// TPSExternalAddTransport implements API.
+func (mc *mockRPCClient) TPSExternalAddTransport(_, _, _ cipher.PubKey, _ string) (*TPSTransportResponse, error) {
+	return nil, fmt.Errorf("external TPS not available in mock")
+}
+
+// TPSExternalGetTransports implements API.
+func (mc *mockRPCClient) TPSExternalGetTransports(_, _ cipher.PubKey) ([]TPSTransportResponse, error) {
+	return nil, fmt.Errorf("external TPS not available in mock")
 }
 
 // Close implements API.
