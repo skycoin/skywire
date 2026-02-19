@@ -481,7 +481,30 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netT
 	}
 }
 
+// SaveTransportNoRegister is like SaveTransport but skips transport discovery registration.
+// This is only valid for user-labeled transports.
+func (tm *Manager) SaveTransportNoRegister(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label) (*ManagedTransport, error) {
+	if tm.isClosing() {
+		return nil, io.ErrClosedPipe
+	}
+	for {
+		mTp, err := tm.saveTransportInternal(ctx, remote, netType, label, true)
+
+		if err != nil {
+			if err == ErrNotServing {
+				continue
+			}
+			return nil, fmt.Errorf("save transport: %w", err)
+		}
+		return mTp, nil
+	}
+}
+
 func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label) (*ManagedTransport, error) {
+	return tm.saveTransportInternal(ctx, remote, netType, label, false)
+}
+
+func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label, noRegister bool) (*ManagedTransport, error) {
 	if !tm.IsKnownNetwork(netType) {
 		return nil, ErrUnknownNetwork
 	}
@@ -502,13 +525,16 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 		return nil, fmt.Errorf("client not found for the type %s", netType)
 	}
 
-	// Use no-op discovery client for self-transports
+	// Use no-op discovery client for self-transports or when noRegister is requested
 	// Self-transports can't be used for routing (routes can't go through same key twice)
 	// so they shouldn't be registered in transport discovery
 	dc := tm.Conf.DiscoveryClient
 	if remote == client.PK() {
 		dc = NewNoopDiscoveryClient()
 		tm.Logger.Debug("Using no-op discovery client for self-transport")
+	} else if noRegister {
+		dc = NewNoopDiscoveryClient()
+		tm.Logger.Debug("Using no-op discovery client (noRegister requested)")
 	}
 
 	mTp := NewManagedTransport(ManagedTransportConfig{

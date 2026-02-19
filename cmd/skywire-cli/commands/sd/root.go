@@ -10,6 +10,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
@@ -131,29 +132,32 @@ Shows public keys with their services and transport counts by type.`,
 			}
 		}
 
-		// Filter by online status
+		// Always fetch UT data for status tracking
+		utData := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+
+		type utEntry struct {
+			PK string `json:"pk"`
+			On bool   `json:"on"`
+		}
+
+		var utEntries []utEntry
+		json.Unmarshal([]byte(utData), &utEntries) //nolint:errcheck,gosec
+
+		// Build online/offline status maps
+		// utStatus: "online", "offline", or "" (not in UT)
+		utStatus := make(map[string]string)
+		for _, ut := range utEntries {
+			if ut.On {
+				utStatus[ut.PK] = "online"
+			} else {
+				utStatus[ut.PK] = "offline"
+			}
+		}
+
+		// Filter by online status if requested
 		if !noFilterOnline {
-			utData := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
-
-			type utEntry struct {
-				PK string `json:"pk"`
-				On bool   `json:"on"`
-			}
-
-			var utEntries []utEntry
-			json.Unmarshal([]byte(utData), &utEntries) //nolint:errcheck,gosec
-
-			// Build online keys set
-			onlineKeys := make(map[string]bool)
-			for _, ut := range utEntries {
-				if ut.On {
-					onlineKeys[ut.PK] = true
-				}
-			}
-
-			// Filter serviceMap to only include online keys
 			for pk := range serviceMap {
-				if !onlineKeys[pk] {
+				if utStatus[pk] != "online" {
 					delete(serviceMap, pk)
 				}
 			}
@@ -208,6 +212,7 @@ Shows public keys with their services and transport counts by type.`,
 			DMSG     int    `json:"dmsg"`
 			STCP     int    `json:"stcp"`
 			Total    int    `json:"total"`
+			UTStatus string `json:"ut_status,omitempty"` // "online", "offline", or "" (not in UT)
 		}
 
 		var entries []networkEntry
@@ -246,6 +251,7 @@ Shows public keys with their services and transport counts by type.`,
 				DMSG:     counts.DMSG,
 				STCP:     counts.STCP,
 				Total:    counts.Total,
+				UTStatus: utStatus[pk],
 			})
 		}
 
@@ -255,18 +261,24 @@ Shows public keys with their services and transport counts by type.`,
 				continue // Already added
 			}
 
+			// Filter by online status if requested (for non-SD entries too)
+			if !noFilterOnline && utStatus[pk] != "online" {
+				continue
+			}
+
 			// Apply filters
 			if minTransports > 0 && counts.Total < minTransports {
 				continue
 			}
 
 			entries = append(entries, networkEntry{
-				PK:    pk,
-				STCPR: counts.STCPR,
-				SUDPH: counts.SUDPH,
-				DMSG:  counts.DMSG,
-				STCP:  counts.STCP,
-				Total: counts.Total,
+				PK:       pk,
+				STCPR:    counts.STCPR,
+				SUDPH:    counts.SUDPH,
+				DMSG:     counts.DMSG,
+				STCP:     counts.STCP,
+				Total:    counts.Total,
+				UTStatus: utStatus[pk],
 			})
 		}
 
@@ -281,9 +293,17 @@ Shows public keys with their services and transport counts by type.`,
 			return
 		}
 
+		// Print legend
+		fmt.Printf("Legend: %s %s %s\n\n",
+			pterm.Red("*offline"),
+			pterm.BgRed.Sprint(pterm.White("*not in UT")),
+			pterm.BgRed.Sprint(pterm.Black("*online <2 transports")))
+
+		// Use tabwriter for alignment
 		var b bytes.Buffer
 		w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
 
+		// Write all entries to tabwriter first
 		fmt.Fprintln(w, "pk\tcountry\tversion\tservices\tstcpr\tsudph\tdmsg\tstcp\ttotal") //nolint:errcheck,gosec
 
 		for _, e := range entries {
@@ -293,6 +313,48 @@ Shows public keys with their services and transport counts by type.`,
 		}
 
 		w.Flush() //nolint:errcheck,gosec
-		fmt.Print(b.String())
+
+		// Now print each line with color coding
+		lines := strings.Split(b.String(), "\n")
+		for i, line := range lines {
+			if line == "" {
+				continue
+			}
+
+			// First line is header - print without color
+			if i == 0 {
+				fmt.Println(line)
+				continue
+			}
+
+			// Get the corresponding entry (i-1 because of header)
+			entryIdx := i - 1
+			if entryIdx >= len(entries) {
+				fmt.Println(line)
+				continue
+			}
+
+			e := entries[entryIdx]
+			realTransports := e.STCPR + e.SUDPH // Only count stcpr and sudph, not dmsg
+
+			// Color coding:
+			// - Red text: offline visors
+			// - White text on red background: visors not in UT
+			// - Black text on red background: online but fewer than 2 stcpr+sudph transports
+			switch {
+			case e.UTStatus == "":
+				// Not in UT: white text on red background
+				fmt.Println(pterm.BgRed.Sprint(pterm.White(line)))
+			case e.UTStatus == "offline":
+				// Offline: red text
+				fmt.Println(pterm.Red(line))
+			case e.UTStatus == "online" && realTransports < 2:
+				// Online but fewer than 2 real transports: black text on red background
+				fmt.Println(pterm.BgRed.Sprint(pterm.Black(line)))
+			default:
+				// Normal: no color
+				fmt.Println(line)
+			}
+		}
 	},
 }
