@@ -522,16 +522,18 @@ func (r *RPC) Transport(in *uuid.UUID, out *TransportSummary) (err error) {
 
 // AddTransportIn is input for AddTransport.
 type AddTransportIn struct {
-	RemotePK cipher.PubKey
-	TpType   string
-	Timeout  time.Duration
+	RemotePK   cipher.PubKey
+	TpType     string
+	Timeout    time.Duration
+	Label      string // "user" or "skycoin" (default: "skycoin")
+	NoRegister bool   // skip transport discovery registration (only valid for "user" label)
 }
 
 // AddTransport creates a transport for the visor.
 func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "AddTransport", in)(out, &err)
 
-	tp, err := r.visor.AddTransport(in.RemotePK, in.TpType, in.Timeout)
+	tp, err := r.visor.AddTransport(in.RemotePK, in.TpType, in.Timeout, in.Label, in.NoRegister)
 	if tp != nil {
 		*out = *tp
 	}
@@ -744,6 +746,18 @@ func (r *RPC) ProxyServers(vc *FilterServersIn, out *[]servicedisc.Service) (err
 	return err
 }
 
+// DeregisterServiceIn is the input for DeregisterService RPC method
+type DeregisterServiceIn struct {
+	PKs         []cipher.PubKey
+	ServiceType string
+}
+
+// DeregisterService deregisters services from service discovery
+func (r *RPC) DeregisterService(in *DeregisterServiceIn, out *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DeregisterService", in)(out, &err)
+	return r.visor.DeregisterService(in.PKs, in.ServiceType)
+}
+
 // RemoteVisors return connected remote visors
 func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
@@ -770,6 +784,15 @@ func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
 
 	status, err := r.visor.IsDMSGClientReady()
 	*out = status
+	return err
+}
+
+// DMSGServers returns list of connected DMSG servers with latencies
+func (r *RPC) DMSGServers(_ *struct{}, out *[]DMSGServerInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "DMSGServers", nil)(out, &err)
+
+	servers, err := r.visor.DMSGServers()
+	*out = servers
 	return err
 }
 
@@ -863,6 +886,14 @@ func (r *RPC) Ping(conf PingConfig, out *[]time.Duration) (err error) {
 	return err
 }
 
+// PingOnce performs a single ping on the connected route.
+func (r *RPC) PingOnce(conf PingConfig, out *time.Duration) (err error) {
+	defer rpcutil.LogCall(r.log, "PingOnce", conf)(out, &err)
+
+	*out, err = r.visor.PingOnce(conf)
+	return err
+}
+
 // StopPing stops the ping conn.
 func (r *RPC) StopPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopPing", pk)(nil, &err)
@@ -885,11 +916,72 @@ func (r *RPC) DmsgPing(conf PingConfig, out *[]time.Duration) (err error) {
 	return err
 }
 
+// DmsgPingOnce performs a single ping over dmsg connection.
+func (r *RPC) DmsgPingOnce(conf PingConfig, out *time.Duration) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgPingOnce", conf)(out, &err)
+
+	*out, err = r.visor.DmsgPingOnce(conf)
+	return err
+}
+
 // StopDmsgPing stops the dmsg ping conn.
 func (r *RPC) StopDmsgPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopDmsgPing", pk)(nil, &err)
 
 	return r.visor.StopDmsgPing(*pk)
+}
+
+// DialDmsgPingViaServerIn is the input for DialDmsgPingViaServer.
+type DialDmsgPingViaServerIn struct {
+	PK       cipher.PubKey
+	ServerPK cipher.PubKey
+}
+
+// DialDmsgPingViaServer dials to a remote visor over dmsg via a specific server.
+func (r *RPC) DialDmsgPingViaServer(in *DialDmsgPingViaServerIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DialDmsgPingViaServer", in)(nil, &err)
+
+	return r.visor.DialDmsgPingViaServer(in.PK, in.ServerPK)
+}
+
+// GetDmsgPingServerPK returns the DMSG server PK used for a ping connection.
+func (r *RPC) GetDmsgPingServerPK(pk *cipher.PubKey, out *cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "GetDmsgPingServerPK", pk)(out, &err)
+
+	*out, err = r.visor.GetDmsgPingServerPK(*pk)
+	return err
+}
+
+// GetRemoteDmsgServers returns the DMSG servers a remote visor is connected to.
+func (r *RPC) GetRemoteDmsgServers(pk *cipher.PubKey, out *[]cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "GetRemoteDmsgServers", pk)(out, &err)
+
+	*out, err = r.visor.GetRemoteDmsgServers(*pk)
+	return err
+}
+
+// GetPreferredDmsgServer returns the lowest-latency DMSG server shared with a remote visor.
+func (r *RPC) GetPreferredDmsgServer(remotePK *cipher.PubKey, out *cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "GetPreferredDmsgServer", remotePK)(out, &err)
+
+	*out, err = r.visor.GetPreferredDmsgServer(*remotePK)
+	return err
+}
+
+// BandwidthTest performs a bandwidth test over skywire route.
+func (r *RPC) BandwidthTest(conf BandwidthTestConfig, out *BandwidthResult) (err error) {
+	defer rpcutil.LogCall(r.log, "BandwidthTest", conf)(out, &err)
+
+	*out, err = r.visor.BandwidthTest(conf)
+	return err
+}
+
+// DmsgBandwidthTest performs a bandwidth test over dmsg.
+func (r *RPC) DmsgBandwidthTest(conf BandwidthTestConfig, out *BandwidthResult) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgBandwidthTest", conf)(out, &err)
+
+	*out, err = r.visor.DmsgBandwidthTest(conf)
+	return err
 }
 
 // TestVisor trying to test viosr by pinging to public visor.
@@ -942,5 +1034,176 @@ func (r *RPC) UIServerStatus(_ *struct{}, out *UIServerStatus) (err error) {
 		return err
 	}
 	*out = *status
+	return nil
+}
+
+// DmsgHTTP performs an HTTP request over dmsg using the visor's dmsg client.
+func (r *RPC) DmsgHTTP(req *DmsgHTTPRequest, out *DmsgHTTPResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgHTTP", req)(out, &err)
+
+	resp, err := r.visor.DmsgHTTP(*req)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
+// TPSAddTransportIn is the input for TPSAddTransport RPC.
+type TPSAddTransportIn struct {
+	TargetPK cipher.PubKey
+	RemotePK cipher.PubKey
+	TpType   string
+}
+
+// TPSRemoveTransportIn is the input for TPSRemoveTransport RPC.
+type TPSRemoveTransportIn struct {
+	TargetPK cipher.PubKey
+	TpID     uuid.UUID
+}
+
+// TPSStatus returns the status of the embedded TPS.
+func (r *RPC) TPSStatus(_ *struct{}, out *TPSStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "TPSStatus", nil)(out, &err)
+
+	status, err := r.visor.TPSStatus()
+	if err != nil {
+		return err
+	}
+	*out = *status
+	return nil
+}
+
+// TPSAddTransport adds a transport on a target visor using the embedded TPS.
+func (r *RPC) TPSAddTransport(in *TPSAddTransportIn, out *TPSTransportResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "TPSAddTransport", in)(out, &err)
+
+	resp, err := r.visor.TPSAddTransport(in.TargetPK, in.RemotePK, in.TpType)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
+// TPSRemoveTransport removes a transport on a target visor using the embedded TPS.
+func (r *RPC) TPSRemoveTransport(in *TPSRemoveTransportIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "TPSRemoveTransport", in)(nil, &err)
+	return r.visor.TPSRemoveTransport(in.TargetPK, in.TpID)
+}
+
+// TPSGetTransports gets transports from a target visor using the embedded TPS.
+func (r *RPC) TPSGetTransports(targetPK *cipher.PubKey, out *[]TPSTransportResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "TPSGetTransports", targetPK)(out, &err)
+
+	resp, err := r.visor.TPSGetTransports(*targetPK)
+	if err != nil {
+		return err
+	}
+	*out = resp
+	return nil
+}
+
+// GetTransportSetupNodes returns the whitelisted transport setup node public keys.
+func (r *RPC) GetTransportSetupNodes(_ *struct{}, out *[]cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "GetTransportSetupNodes", nil)(out, &err)
+
+	nodes, err := r.visor.GetTransportSetupNodes()
+	if err != nil {
+		return err
+	}
+	*out = nodes
+	return nil
+}
+
+// GetTransportSetupNodesSorted returns TPS nodes sorted by health (healthy first).
+func (r *RPC) GetTransportSetupNodesSorted(_ *struct{}, out *[]cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "GetTransportSetupNodesSorted", nil)(out, &err)
+
+	nodes, err := r.visor.GetTransportSetupNodesSorted()
+	if err != nil {
+		return err
+	}
+	*out = nodes
+	return nil
+}
+
+// GetRouteSetupNodesSorted returns RSN nodes sorted by health (healthy first).
+func (r *RPC) GetRouteSetupNodesSorted(_ *struct{}, out *[]cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "GetRouteSetupNodesSorted", nil)(out, &err)
+
+	nodes, err := r.visor.GetRouteSetupNodesSorted()
+	if err != nil {
+		return err
+	}
+	*out = nodes
+	return nil
+}
+
+// GetTPSHealth returns health status for all configured TPS nodes.
+func (r *RPC) GetTPSHealth(_ *struct{}, out *[]NodeHealth) (err error) {
+	defer rpcutil.LogCall(r.log, "GetTPSHealth", nil)(out, &err)
+
+	health, err := r.visor.GetTPSHealth()
+	if err != nil {
+		return err
+	}
+	*out = health
+	return nil
+}
+
+// GetRSNHealth returns health status for all configured RSN nodes.
+func (r *RPC) GetRSNHealth(_ *struct{}, out *[]NodeHealth) (err error) {
+	defer rpcutil.LogCall(r.log, "GetRSNHealth", nil)(out, &err)
+
+	health, err := r.visor.GetRSNHealth()
+	if err != nil {
+		return err
+	}
+	*out = health
+	return nil
+}
+
+// TPSExternalHealthCheck dials an external TPS over dmsg and performs a health check.
+func (r *RPC) TPSExternalHealthCheck(tpsPK *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "TPSExternalHealthCheck", tpsPK)(nil, &err)
+	return r.visor.TPSExternalHealthCheck(*tpsPK)
+}
+
+// TPSExternalAddTransportIn is the input for TPSExternalAddTransport RPC.
+type TPSExternalAddTransportIn struct {
+	TPSPK    cipher.PubKey
+	TargetPK cipher.PubKey
+	RemotePK cipher.PubKey
+	TpType   string
+}
+
+// TPSExternalAddTransport requests transport setup via an external TPS.
+func (r *RPC) TPSExternalAddTransport(in *TPSExternalAddTransportIn, out *TPSTransportResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "TPSExternalAddTransport", in)(out, &err)
+
+	resp, err := r.visor.TPSExternalAddTransport(in.TPSPK, in.TargetPK, in.RemotePK, in.TpType)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
+// TPSExternalGetTransportsIn is the input for TPSExternalGetTransports RPC.
+type TPSExternalGetTransportsIn struct {
+	TPSPK    cipher.PubKey
+	TargetPK cipher.PubKey
+}
+
+// TPSExternalGetTransports gets transports from a target visor via an external TPS.
+func (r *RPC) TPSExternalGetTransports(in *TPSExternalGetTransportsIn, out *[]TPSTransportResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "TPSExternalGetTransports", in)(out, &err)
+
+	resp, err := r.visor.TPSExternalGetTransports(in.TPSPK, in.TargetPK)
+	if err != nil {
+		return err
+	}
+	*out = resp
 	return nil
 }

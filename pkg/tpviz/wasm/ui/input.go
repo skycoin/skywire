@@ -11,15 +11,15 @@ type InputHandler struct {
 	canvas js.Value
 
 	// Mouse state
-	MouseX, MouseY       float64
-	MouseDown            bool
-	MouseJustPressed     bool
-	MouseJustUp          bool
-	WheelDelta           float64
+	MouseX, MouseY         float64
+	MouseDown              bool
+	MouseJustPressed       bool
+	MouseJustUp            bool
+	WheelDelta             float64
 	DragStartX, DragStartY float64
 
 	// Keyboard state
-	KeysPressed map[string]bool
+	KeysPressed     map[string]bool
 	KeysJustPressed map[string]bool
 
 	// Callbacks stored for cleanup
