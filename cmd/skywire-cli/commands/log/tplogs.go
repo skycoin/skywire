@@ -44,7 +44,7 @@ _tplogs() {
         while read -r _j; do
             echo "$_date $_j"
         done < "$_i"
-    done | sort | uniq | tac | grep -v "tp_id,recv,sent,time_stamp" | grep -v " .$" | grep -E '^[^,]*,[^,]*,[^,]*,[^,]*$' | awk -F'[ ,]' '  //nolint:errcheck
+    done | sort | uniq | tac | grep -v "tp_id,recv,sent,time_stamp" | grep -v " .$" | grep -E '^[^,]*,[^,]*,[^,]*,[^,]*$' | awk -F'[ ,]' '
         BEGIN { prev_tp_id = ""; print_next = 0 }
         {
             if (prev_tp_id != "" && $2 == prev_tp_id) {

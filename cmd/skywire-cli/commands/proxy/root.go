@@ -26,6 +26,9 @@ var (
 	clientName      string
 	country         string
 	version         string
+	minVersion      string
+	maxVersion      string
+	showOffline     bool
 	addr            string
 	startingTimeout int
 	httpAddr        string

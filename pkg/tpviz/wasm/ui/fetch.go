@@ -30,10 +30,10 @@ type ServiceInfo struct {
 
 // LocalVisorData represents the local visor state from /api/local-visor
 type LocalVisorData struct {
-	Connected  bool              `json:"connected"`
-	PubKey     string            `json:"pub_key"`
-	Transports []LocalTransport  `json:"transports"`
-	Routes     []LocalRoute      `json:"routes"`
+	Connected  bool             `json:"connected"`
+	PubKey     string           `json:"pub_key"`
+	Transports []LocalTransport `json:"transports"`
+	Routes     []LocalRoute     `json:"routes"`
 }
 
 // LocalTransport represents a local visor transport
@@ -65,6 +65,29 @@ type HealthInfo struct {
 type TPSStatus struct {
 	Running bool   `json:"running"`
 	TPSPK   string `json:"tps_pk,omitempty"`
+}
+
+// DMSGData represents the /api/dmsg response
+type DMSGData struct {
+	Servers      []DMSGServer `json:"servers"`
+	Entries      []string     `json:"entries"`
+	EntriesCount int          `json:"entries_count"`
+}
+
+// DMSGServer represents a DMSG server
+type DMSGServer struct {
+	PK                string   `json:"pk"`
+	Address           string   `json:"address"`
+	Country           string   `json:"country"`
+	AvailableSessions int      `json:"available_sessions"`
+	Clients           []string `json:"clients"`
+}
+
+// IPGroupsData represents the /api/ip-groups response
+type IPGroupsData struct {
+	Enabled     bool           `json:"enabled"`
+	TotalGroups int            `json:"total_groups"`
+	Groups      map[string]int `json:"groups"` // pk -> group number
 }
 
 // DataFetcher fetches data from the API
@@ -139,6 +162,26 @@ func (f *DataFetcher) FetchTPSStatus() (*TPSStatus, error) {
 		return nil, err
 	}
 	return &status, nil
+}
+
+// FetchDMSG fetches DMSG server and client data
+func (f *DataFetcher) FetchDMSG() (*DMSGData, error) {
+	var data DMSGData
+	err := fetchJSON("/api/dmsg/servers", &data)
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+// FetchIPGroups fetches IP group data for clustering
+func (f *DataFetcher) FetchIPGroups() (*IPGroupsData, error) {
+	var data IPGroupsData
+	err := fetchJSON("/api/ip-groups", &data)
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
 }
 
 // ProcessTransports converts transport data into graph nodes and edges

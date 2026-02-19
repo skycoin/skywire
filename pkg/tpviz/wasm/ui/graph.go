@@ -21,7 +21,7 @@ const (
 type ServiceType int
 
 const (
-	ServiceNone  ServiceType = iota
+	ServiceNone ServiceType = iota
 	ServiceVPN
 	ServiceProxy
 )
@@ -54,11 +54,21 @@ type Node struct {
 	DMSGCount       int
 
 	// Flags
-	IsLocalVisor bool
-	HasServices  bool
-	IsSelected   bool
-	IsHovered    bool
-	IsPinned     bool // If true, position is fixed
+	IsLocalVisor      bool
+	HasServices       bool
+	IsSelected        bool
+	IsHovered         bool
+	IsPinned          bool // If true, position is fixed
+	IsDMSGServer      bool // DMSG server node
+	IsRouteDestination bool // Route destination node
+	IsRouteHop        bool // Route hop node
+
+	// DMSG server specific
+	DMSGSessions int
+	DMSGClients  int
+
+	// IP Group for clustering
+	IPGroup int
 }
 
 // Edge represents a transport between two visors
@@ -68,6 +78,12 @@ type Edge struct {
 	To     string // Node ID
 	Type   TransportType
 	Hidden bool
+
+	// Special edge types
+	IsDMSGConnection bool // Connection to DMSG server
+	IsRoutePath      bool // Route path edge
+	IsLocalOnly      bool // Local transport not in TPD
+	IsLocalEdge      bool // Edge involving local visor
 }
 
 // Graph holds all nodes and edges

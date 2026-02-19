@@ -122,6 +122,52 @@ func (c *Canvas) QuadraticCurve(x1, y1, x2, y2, lineWidth float64, color string)
 	c.ctx.Call("stroke")
 }
 
+// DashedQuadraticCurve draws a dashed curved line between two points
+func (c *Canvas) DashedQuadraticCurve(x1, y1, x2, y2, lineWidth float64, color string, dashLength, gapLength float64) {
+	// Calculate midpoint
+	midX := (x1 + x2) / 2
+	midY := (y1 + y2) / 2
+
+	// Calculate perpendicular offset for curve
+	dx := x2 - x1
+	dy := y2 - y1
+	dist := dx*dx + dy*dy
+	if dist < 100 {
+		c.DashedLine(x1, y1, x2, y2, lineWidth, color, dashLength, gapLength)
+		return
+	}
+
+	// Perpendicular direction
+	roundness := 0.5
+	perpX := -dy * roundness
+	perpY := dx * roundness
+
+	// Control point
+	ctrlX := midX + perpX
+	ctrlY := midY + perpY
+
+	c.ctx.Call("beginPath")
+	c.ctx.Call("moveTo", x1, y1)
+	c.ctx.Call("quadraticCurveTo", ctrlX, ctrlY, x2, y2)
+	c.ctx.Set("strokeStyle", color)
+	c.ctx.Set("lineWidth", lineWidth)
+	c.ctx.Call("setLineDash", js.ValueOf([]interface{}{dashLength, gapLength}))
+	c.ctx.Call("stroke")
+	c.ctx.Call("setLineDash", js.ValueOf([]interface{}{})) // Reset to solid
+}
+
+// DashedLine draws a dashed line between two points
+func (c *Canvas) DashedLine(x1, y1, x2, y2, lineWidth float64, color string, dashLength, gapLength float64) {
+	c.ctx.Call("beginPath")
+	c.ctx.Call("moveTo", x1, y1)
+	c.ctx.Call("lineTo", x2, y2)
+	c.ctx.Set("strokeStyle", color)
+	c.ctx.Set("lineWidth", lineWidth)
+	c.ctx.Call("setLineDash", js.ValueOf([]interface{}{dashLength, gapLength}))
+	c.ctx.Call("stroke")
+	c.ctx.Call("setLineDash", js.ValueOf([]interface{}{})) // Reset to solid
+}
+
 // Text draws text at the given position
 func (c *Canvas) Text(text string, x, y float64, color string, font string) {
 	if font != "" {
@@ -219,4 +265,67 @@ func (c *Canvas) SetGlobalAlpha(alpha float64) {
 // ResetGlobalAlpha resets alpha to 1.0
 func (c *Canvas) ResetGlobalAlpha() {
 	c.ctx.Set("globalAlpha", 1.0)
+}
+
+// SetShadow sets the shadow properties for subsequent drawing operations
+func (c *Canvas) SetShadow(color string, blur, offsetX, offsetY float64) {
+	c.ctx.Set("shadowColor", color)
+	c.ctx.Set("shadowBlur", blur)
+	c.ctx.Set("shadowOffsetX", offsetX)
+	c.ctx.Set("shadowOffsetY", offsetY)
+}
+
+// ClearShadow resets shadow properties
+func (c *Canvas) ClearShadow() {
+	c.ctx.Set("shadowColor", "transparent")
+	c.ctx.Set("shadowBlur", 0)
+	c.ctx.Set("shadowOffsetX", 0)
+	c.ctx.Set("shadowOffsetY", 0)
+}
+
+// SetLineCap sets the line cap style (butt, round, square)
+func (c *Canvas) SetLineCap(cap string) {
+	c.ctx.Set("lineCap", cap)
+}
+
+// SetLineJoin sets the line join style (round, bevel, miter)
+func (c *Canvas) SetLineJoin(join string) {
+	c.ctx.Set("lineJoin", join)
+}
+
+// FillCircleWithShadow draws a filled circle with shadow/glow effect
+func (c *Canvas) FillCircleWithShadow(x, y, radius float64, fillColor, shadowColor string, shadowBlur float64) {
+	c.SetShadow(shadowColor, shadowBlur, 0, 0)
+	c.FillCircle(x, y, radius, fillColor)
+	c.ClearShadow()
+}
+
+// BezierCurve draws a cubic bezier curve (smoother than quadratic)
+func (c *Canvas) BezierCurve(x1, y1, x2, y2, lineWidth float64, color string) {
+	dx := x2 - x1
+	dy := y2 - y1
+	dist := dx*dx + dy*dy
+	if dist < 100 {
+		c.Line(x1, y1, x2, y2, lineWidth, color)
+		return
+	}
+
+	// Perpendicular offset for smooth curve
+	roundness := 0.3
+	perpX := -dy * roundness
+	perpY := dx * roundness
+
+	// Two control points for cubic bezier (S-curve shape)
+	ctrl1X := x1 + dx*0.25 + perpX*0.5
+	ctrl1Y := y1 + dy*0.25 + perpY*0.5
+	ctrl2X := x1 + dx*0.75 + perpX*0.5
+	ctrl2Y := y1 + dy*0.75 + perpY*0.5
+
+	c.ctx.Call("beginPath")
+	c.ctx.Call("moveTo", x1, y1)
+	c.ctx.Call("bezierCurveTo", ctrl1X, ctrl1Y, ctrl2X, ctrl2Y, x2, y2)
+	c.ctx.Set("strokeStyle", color)
+	c.ctx.Set("lineWidth", lineWidth)
+	c.SetLineCap("round")
+	c.ctx.Call("stroke")
 }
