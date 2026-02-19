@@ -22,7 +22,7 @@ type MockRouteGroupDialer struct {
 }
 
 // Dial provides a mock function with given fields: ctx, log, dmsgC, setupNodes, req
-func (_m *MockRouteGroupDialer) Dial(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, setupNodes []cipher.PubKey, req routing.BidirectionalRoute) (routing.EdgeRules, error) {
+func (_m *MockRouteGroupDialer) Dial(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, setupNodes []cipher.PubKey, req routing.BidirectionalRoute) (routing.EdgeRules, cipher.PubKey, error) {
 	ret := _m.Called(ctx, log, dmsgC, setupNodes, req)
 
 	if len(ret) == 0 {
@@ -30,8 +30,9 @@ func (_m *MockRouteGroupDialer) Dial(ctx context.Context, log *logging.Logger, d
 	}
 
 	var r0 routing.EdgeRules
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *logging.Logger, *dmsg.Client, []cipher.PubKey, routing.BidirectionalRoute) (routing.EdgeRules, error)); ok {
+	var r1 cipher.PubKey
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logging.Logger, *dmsg.Client, []cipher.PubKey, routing.BidirectionalRoute) (routing.EdgeRules, cipher.PubKey, error)); ok {
 		return rf(ctx, log, dmsgC, setupNodes, req)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, *logging.Logger, *dmsg.Client, []cipher.PubKey, routing.BidirectionalRoute) routing.EdgeRules); ok {
@@ -40,13 +41,19 @@ func (_m *MockRouteGroupDialer) Dial(ctx context.Context, log *logging.Logger, d
 		r0 = ret.Get(0).(routing.EdgeRules)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, *logging.Logger, *dmsg.Client, []cipher.PubKey, routing.BidirectionalRoute) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *logging.Logger, *dmsg.Client, []cipher.PubKey, routing.BidirectionalRoute) cipher.PubKey); ok {
 		r1 = rf(ctx, log, dmsgC, setupNodes, req)
 	} else {
-		r1 = ret.Error(1)
+		r1 = ret.Get(1).(cipher.PubKey)
 	}
 
-	return r0, r1
+	if rf, ok := ret.Get(2).(func(context.Context, *logging.Logger, *dmsg.Client, []cipher.PubKey, routing.BidirectionalRoute) error); ok {
+		r2 = rf(ctx, log, dmsgC, setupNodes, req)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
 }
 
 // NewMockRouteGroupDialer creates a new instance of MockRouteGroupDialer. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

@@ -2,13 +2,16 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/bitfield/script"
@@ -91,23 +94,60 @@ Takes config in the following format:
 			log.Fatal("please specify config file")
 		}
 		const loggerTag = "transport_setup"
-		log := logging.MustGetLogger(loggerTag)
+		logger := logging.MustGetLogger(loggerTag)
 		lvl, err := logging.LevelFromString(logLvl)
 		if err != nil {
-			log.Fatal("Invalid loglvl detected")
+			logger.Fatal("Invalid loglvl detected")
 		}
 		logging.SetLevel(lvl)
 
-		conf := config.MustReadConfig(configFile, log)
-		api := api.New(log, conf)
+		conf := config.MustReadConfig(configFile, logger)
+		tpsAPI := api.New(logger, conf)
+
+		// Setup context with signal handling
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		go func() {
+			<-sigCh
+			logger.Info("Received shutdown signal")
+			cancel()
+		}()
+
+		// Start dmsg listener in goroutine
+		go func() {
+			logger.Info("Starting dmsg RPC listener")
+			if err := tpsAPI.ServeDmsg(ctx); err != nil {
+				if ctx.Err() == nil {
+					logger.WithError(err).Error("Dmsg server error")
+				}
+			}
+		}()
+
+		// Start HTTP server
 		srv := &http.Server{
 			Addr:              fmt.Sprintf(":%d", conf.Port),
 			ReadHeaderTimeout: 2 * time.Second,
 			IdleTimeout:       30 * time.Second,
-			Handler:           api,
+			Handler:           tpsAPI,
 		}
-		if err := srv.ListenAndServe(); err != nil {
-			log.Errorf("ListenAndServe: %v", err)
+
+		logger.WithField("addr", srv.Addr).Info("Starting HTTP server")
+
+		// Graceful shutdown
+		go func() {
+			<-ctx.Done()
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+			if err := srv.Shutdown(shutdownCtx); err != nil {
+				logger.WithError(err).Error("HTTP server shutdown error")
+			}
+		}()
+
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Errorf("ListenAndServe: %v", err)
 		}
 	},
 }
