@@ -1802,9 +1802,16 @@ func (v *Visor) StopPing(pk cipher.PubKey) error {
 	v.pingConnMx.Lock()
 	defer v.pingConnMx.Unlock()
 
-	skywireConn := v.pingConns[pk].conn
-	err := skywireConn.Close()
+	pingEntry, ok := v.pingConns[pk]
+	if !ok || pingEntry.conn == nil {
+		// Already stopped or never started
+		delete(v.pingConns, pk)
+		return nil
+	}
+	err := pingEntry.conn.Close()
 	if err != nil {
+		// Still delete the entry even if close fails
+		delete(v.pingConns, pk)
 		return err
 	}
 	delete(v.pingConns, pk)
