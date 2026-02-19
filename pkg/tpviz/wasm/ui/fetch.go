@@ -160,7 +160,7 @@ func (f *DataFetcher) FetchTPSStatus() (*TPSStatus, error) {
 // FetchDMSG fetches DMSG server and client data
 func (f *DataFetcher) FetchDMSG() (*DMSGData, error) {
 	var data DMSGData
-	err := fetchJSON("/api/dmsg", &data)
+	err := fetchJSON("/api/dmsg/servers", &data)
 	if err != nil {
 		return nil, err
 	}
