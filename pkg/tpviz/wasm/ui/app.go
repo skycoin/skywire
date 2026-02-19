@@ -104,6 +104,12 @@ type App struct {
 	dmsgEntries     map[string]bool
 	showDMSGServers bool
 
+	// IP Groups for clustering
+	ipGroupsData    *IPGroupsData
+	ipGroupsEnabled bool
+	clusterByIP     bool
+	clusterColors   []string // Colors for different IP groups
+
 	// Animation frame callback
 	frameCallback js.Func
 
@@ -131,6 +137,13 @@ func NewApp(canvasID string) *App {
 		searchMatches:   make(map[string]bool),
 		dmsgEntries:     make(map[string]bool),
 		showDMSGServers: true,
+		clusterByIP:     false,
+		// Distinct colors for IP group clusters (matching TypeScript palette)
+		clusterColors: []string{
+			"#00d9a5", "#00b4d8", "#ffd166", "#e94560", "#9f6efc",
+			"#ff6b6b", "#4ecdc4", "#ffe66d", "#95e1d3", "#f38181",
+			"#aa96da", "#fcbad3", "#a8d8ea", "#dcedc1", "#ffd3b6",
+		},
 	}
 
 	return app
@@ -214,6 +227,19 @@ func (a *App) setupSidebarCallbacks() {
 			a.needsRedraw = true
 		}))
 	}
+
+	// Cluster by IP checkbox
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("cluster-ip", "change", func() {
+		a.clusterByIP = GetChecked("cluster-ip")
+		a.needsRedraw = true
+	}))
+
+	// Show DMSG servers checkbox
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("show-dmsg-servers", "change", func() {
+		a.showDMSGServers = GetChecked("show-dmsg-servers")
+		a.needsRedraw = true
+	}))
+
 	// Initialize filter state from checkboxes
 	a.syncFilters()
 }
@@ -267,6 +293,17 @@ func (a *App) update() {
 	if a.input.IsKeyJustPressed("Escape") {
 		a.deselectNode()
 		a.needsRedraw = true
+	}
+	// Toggle IP clustering with 'i' key
+	if a.input.IsKeyJustPressed("i") || a.input.IsKeyJustPressed("I") {
+		if a.ipGroupsEnabled {
+			a.clusterByIP = !a.clusterByIP
+			el := getElement("cluster-ip")
+			if !el.IsNull() && !el.IsUndefined() {
+				el.Set("checked", a.clusterByIP)
+			}
+			a.needsRedraw = true
+		}
 	}
 
 	// Mouse wheel zoom
@@ -865,6 +902,13 @@ func (a *App) nodeColors(node *Node) (bg, border string) {
 		return ColorRoutePath, "#ffffff"
 	}
 
+	// IP group clustering - use group color if enabled
+	if a.clusterByIP && a.ipGroupsEnabled && node.IPGroup > 0 {
+		colorIdx := node.IPGroup % len(a.clusterColors)
+		groupColor := a.clusterColors[colorIdx]
+		return groupColor, darkenColor(groupColor)
+	}
+
 	if a.opts.HighlightServices && node.HasServices {
 		switch node.Service {
 		case ServiceVPN:
@@ -881,6 +925,26 @@ func (a *App) nodeColors(node *Node) (bg, border string) {
 		return ColorOfflineBg, ColorOfflineBorder
 	default:
 		return ColorUnknownBg, ColorUnknownBorder
+	}
+}
+
+// darkenColor returns a darker version of a hex color for borders
+func darkenColor(hexColor string) string {
+	// Simple approach: just return a fixed darker version
+	// In practice, you'd parse the hex and reduce RGB values
+	switch hexColor {
+	case "#00d9a5":
+		return "#00b386"
+	case "#00b4d8":
+		return "#0096b4"
+	case "#ffd166":
+		return "#ccaa52"
+	case "#e94560":
+		return "#c13a50"
+	case "#9f6efc":
+		return "#7c3aed"
+	default:
+		return "#666666"
 	}
 }
 
@@ -955,6 +1019,7 @@ func (a *App) LoadData() {
 	a.fetchLocalVisor()
 	a.fetchTPSStatus()
 	a.fetchDMSG()
+	a.fetchIPGroups()
 }
 
 func (a *App) fetchHealthInfo() {
@@ -1339,6 +1404,31 @@ func countryToFlag(country string) string {
 	r1 := rune(country[0]) - 'A' + 0x1F1E6
 	r2 := rune(country[1]) - 'A' + 0x1F1E6
 	return string([]rune{r1, r2})
+}
+
+func (a *App) fetchIPGroups() {
+	ipGroups, err := a.fetcher.FetchIPGroups()
+	if err != nil {
+		return
+	}
+
+	a.ipGroupsData = ipGroups
+	a.ipGroupsEnabled = ipGroups.Enabled && ipGroups.TotalGroups > 1
+
+	// Update sidebar
+	if a.ipGroupsEnabled {
+		SetVisible("section-ip-groups", true)
+		SetText("ip-groups-count", itoa(ipGroups.TotalGroups))
+	}
+
+	// Assign IP groups to nodes
+	for pk, groupNum := range ipGroups.Groups {
+		if node, ok := a.graph.Nodes[pk]; ok {
+			node.IPGroup = groupNum
+		}
+	}
+
+	a.needsRedraw = true
 }
 
 func (a *App) updateSidebarStats() {

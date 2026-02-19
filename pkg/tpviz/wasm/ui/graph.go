@@ -66,6 +66,9 @@ type Node struct {
 	// DMSG server specific
 	DMSGSessions int
 	DMSGClients  int
+
+	// IP Group for clustering
+	IPGroup int
 }
 
 // Edge represents a transport between two visors

@@ -83,6 +83,13 @@ type DMSGServer struct {
 	Clients           []string `json:"clients"`
 }
 
+// IPGroupsData represents the /api/ip-groups response
+type IPGroupsData struct {
+	Enabled     bool           `json:"enabled"`
+	TotalGroups int            `json:"total_groups"`
+	Groups      map[string]int `json:"groups"` // pk -> group number
+}
+
 // DataFetcher fetches data from the API
 type DataFetcher struct{}
 
@@ -161,6 +168,16 @@ func (f *DataFetcher) FetchTPSStatus() (*TPSStatus, error) {
 func (f *DataFetcher) FetchDMSG() (*DMSGData, error) {
 	var data DMSGData
 	err := fetchJSON("/api/dmsg/servers", &data)
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+// FetchIPGroups fetches IP group data for clustering
+func (f *DataFetcher) FetchIPGroups() (*IPGroupsData, error) {
+	var data IPGroupsData
+	err := fetchJSON("/api/ip-groups", &data)
 	if err != nil {
 		return nil, err
 	}
