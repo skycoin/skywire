@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
@@ -28,6 +30,7 @@ var (
 	cacheFileTPD  string
 	cacheFilesAge int
 	versionFilter string
+	minVersion    string
 	listVersions  bool
 	maxTP         int
 )
@@ -44,7 +47,8 @@ func init() {
 	utCmd.Flags().StringVar(&cacheFileTPD, "cft", os.TempDir()+"/tpd.json", "TPD cache file location\n\r")
 	utCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes\n\r")
 	utCmd.Flags().StringVarP(&utURL, "url", "u", utURL, "specify alternative uptime tracker url\n\r")
-	utCmd.Flags().StringVarP(&versionFilter, "version", "v", "", "filter visors by version")
+	utCmd.Flags().StringVarP(&versionFilter, "version", "v", "", "filter visors by exact version")
+	utCmd.Flags().StringVar(&minVersion, "min-version", "", "filter visors with version >= specified (e.g. v1.3.34)")
 	utCmd.Flags().BoolVarP(&listVersions, "list-versions", "l", false, "list PKs with their versions")
 	utCmd.Flags().IntVar(&maxTP, "max-tp", -1, "filter visors with at most N transports (fetches TPD data)")
 }
@@ -94,7 +98,95 @@ var utCmd = &cobra.Command{
 			return filtered
 		}
 
-		// Handle version filter
+		// Helper to parse version string like "v1.3.34" or "v1.3.34 dirty"
+		parseVersion := func(v string) (major, minor, patch int, ok bool) {
+			if v == "" {
+				return 0, 0, 0, false
+			}
+			// Remove "v" prefix and anything after space
+			v = strings.TrimPrefix(v, "v")
+			if idx := strings.Index(v, " "); idx != -1 {
+				v = v[:idx]
+			}
+			parts := strings.Split(v, ".")
+			if len(parts) < 3 {
+				return 0, 0, 0, false
+			}
+			var err error
+			major, err = strconv.Atoi(parts[0])
+			if err != nil {
+				return 0, 0, 0, false
+			}
+			minor, err = strconv.Atoi(parts[1])
+			if err != nil {
+				return 0, 0, 0, false
+			}
+			patch, err = strconv.Atoi(parts[2])
+			if err != nil {
+				return 0, 0, 0, false
+			}
+			return major, minor, patch, true
+		}
+
+		// Helper to check if version a >= version b
+		versionGTE := func(a, b string) bool {
+			aMaj, aMin, aPatch, aOK := parseVersion(a)
+			bMaj, bMin, bPatch, bOK := parseVersion(b)
+			if !aOK || !bOK {
+				return false
+			}
+			if aMaj != bMaj {
+				return aMaj > bMaj
+			}
+			if aMin != bMin {
+				return aMin > bMin
+			}
+			return aPatch >= bPatch
+		}
+
+		// Handle min-version filter
+		if minVersion != "" {
+			// Parse UT data to filter by version
+			type utEntry struct {
+				PK      string `json:"pk"`
+				On      bool   `json:"on"`
+				Version string `json:"version"`
+			}
+			var utEntries []utEntry
+			if err := json.Unmarshal([]byte(uts), &utEntries); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse UT data: %w", err))
+			}
+
+			var keys []string
+			for _, e := range utEntries {
+				if online && !e.On {
+					continue
+				}
+				if !versionGTE(e.Version, minVersion) {
+					continue
+				}
+				if pk != "" && !strings.Contains(e.PK, pk) {
+					continue
+				}
+				keys = append(keys, e.PK)
+			}
+			keys = filterByTP(keys)
+
+			if isStats {
+				label := "visors"
+				if online {
+					label = "online visors"
+				}
+				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d %s with version >= %s\n", len(keys), label, minVersion), fmt.Sprintf("%d %s with version >= %s\n", len(keys), label, minVersion))
+				return
+			}
+			for _, k := range keys {
+				internal.PrintOutput(cmd.Flags(), k+"\n", k+"\n")
+			}
+			return
+		}
+
+		// Handle exact version filter
 		if versionFilter != "" {
 			versionSelector := baseSelector + " | select(.version == \"" + versionFilter + "\")"
 			keys, _ := script.Echo(uts).JQ(versionSelector+" | .pk").Match(pk).Replace("\"", "").Slice() //nolint:errcheck
