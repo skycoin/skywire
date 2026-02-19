@@ -494,6 +494,12 @@ func (env *TestEnv) VisorTpAdd(visor, pk string, tpType tptypes.Type) (*skyvisor
 func (env *TestEnv) VisorTpAddWithRetry(visor, pk string, tpType tptypes.Type, maxRetries int) (*skyvisor.TransportSummary, error) {
 	var lastErr error
 
+	// Use longer delays for SUDPH as UDP hole punching can take time to stabilize
+	baseDelay := 2 * time.Second
+	if tpType == "sudph" {
+		baseDelay = 5 * time.Second
+	}
+
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		env.logger.Infof("Attempting to add %s transport from %s to %s (attempt %d/%d)", tpType, visor, pk, attempt, maxRetries)
 
@@ -507,8 +513,10 @@ func (env *TestEnv) VisorTpAddWithRetry(visor, pk string, tpType tptypes.Type, m
 		env.logger.Warnf("Transport creation attempt %d/%d failed: %v", attempt, maxRetries, err)
 
 		if attempt < maxRetries {
-			// Wait before retrying
-			time.Sleep(2 * time.Second)
+			// Exponential backoff: baseDelay * attempt
+			delay := baseDelay * time.Duration(attempt)
+			env.logger.Infof("Waiting %v before retry...", delay)
+			time.Sleep(delay)
 		}
 	}
 
@@ -734,12 +742,16 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 	toPK, ok := env.visorPKs[tp.ToVisorHostName]
 	require.True(t, ok)
 
-	_, err := env.VisorTpAdd(tp.FromVisorHostName, toPK, tp.Type)
-	if err != nil {
-		// SUDPH transport may not work in Docker E2E environment due to NAT/STUN limitations
-		if tp.Type == "sudph" {
-			t.Skipf("Skipping SUDPH transport test: %v (expected in Docker environment)", err)
+	// Use retry logic for SUDPH transports as they can be flaky due to UDP hole punching timing
+	var err error
+	if tp.Type == "sudph" {
+		const sudphRetries = 3
+		_, err = env.VisorTpAddWithRetry(tp.FromVisorHostName, toPK, tp.Type, sudphRetries)
+		if err != nil {
+			t.Skipf("Skipping SUDPH transport test after %d retries: %v", sudphRetries, err)
 		}
+	} else {
+		_, err = env.VisorTpAdd(tp.FromVisorHostName, toPK, tp.Type)
 		require.NoError(t, err)
 	}
 

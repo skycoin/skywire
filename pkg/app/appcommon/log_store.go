@@ -231,6 +231,14 @@ func (l *bBoltLogStore) Fire(entry *log.Entry) error {
 	t := strings.Split(str[1:1+len(timeLayout)], "]")[0]
 	err = db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket(l.bucket)
+		if b == nil {
+			// Bucket doesn't exist, create it
+			var createErr error
+			b, createErr = tx.CreateBucketIfNotExists(l.bucket)
+			if createErr != nil {
+				return createErr
+			}
+		}
 		return b.Put([]byte(t), []byte(str))
 	})
 

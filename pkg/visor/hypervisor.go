@@ -889,8 +889,10 @@ func (hv *Hypervisor) getTransports() http.HandlerFunc {
 func (hv *Hypervisor) postTransport() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var reqBody struct {
-			TpType string        `json:"transport_type"`
-			Remote cipher.PubKey `json:"remote_pk"`
+			TpType     string        `json:"transport_type"`
+			Remote     cipher.PubKey `json:"remote_pk"`
+			Label      string        `json:"label,omitempty"`       // "user" or "skycoin" (default: "skycoin")
+			NoRegister bool          `json:"no_register,omitempty"` // skip transport discovery (only for "user" label)
 		}
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
@@ -904,7 +906,7 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 		}
 
 		const timeout = 30 * time.Second
-		tSummary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, timeout)
+		tSummary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, timeout, reqBody.Label, reqBody.NoRegister)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
