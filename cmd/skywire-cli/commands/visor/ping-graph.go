@@ -157,6 +157,9 @@ var pingGraphCmd = &cobra.Command{
 	Use:   "graph",
 	Short: "Ping visors across the network by hop level",
 	Run: func(cmd *cobra.Command, _ []string) {
+		// Force pterm styling so tree output works even when redirected to file
+		pterm.EnableStyling()
+
 		// Validate mutually exclusive flags
 		if graphTreeView && graphUseDmsg {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--tree with --dmsg is not supported; use --tree with --dmsg-only for DMSG-only tree mode"))

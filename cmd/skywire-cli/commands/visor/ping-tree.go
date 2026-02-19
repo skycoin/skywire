@@ -123,6 +123,9 @@ var pingTreeCmd = &cobra.Command{
 	Use:   "tree",
 	Short: "Ping visors via transport routes (tree view)",
 	Run: func(cmd *cobra.Command, _ []string) {
+		// Force pterm styling so tree output works even when redirected to file
+		pterm.EnableStyling()
+
 		// Copy flags to the shared graph variables for compatibility with existing code
 		graphVersion = treeVersion
 		graphMaxLevel = treeMaxLevel
