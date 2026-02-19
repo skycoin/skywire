@@ -71,7 +71,7 @@ require (
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/itchyny/gojq v0.12.18
 	github.com/soheilhy/cmux v0.1.5
-	github.com/xxxserxxx/gotop/v4 v4.2.0
+	github.com/xxxserxxx/gotop/v4 v4.2.1-0.20250927202203-54213c890e66
 	github.com/xxxserxxx/lingo/v2 v2.0.1
 	golang.org/x/time v0.14.0
 	google.golang.org/grpc v1.79.1
@@ -115,7 +115,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/disintegration/imaging v1.6.2 // indirect
-	github.com/distatus/battery v0.11.0 // indirect
+	github.com/distatus/battery v0.10.0 // indirect ; pin to v0.10.0 for gotop compatibility (v0.11.0 has breaking API change)
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
@@ -169,6 +169,7 @@ require (
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
+	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.20 // indirect
@@ -186,13 +187,15 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0 // indirect
-	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
+	github.com/shirou/gopsutil/v3 v3.24.5 // indirect
+	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/skycoin/hardware-wallet-protob v0.0.0-20250805154629-410561e1bc2f // indirect
 	github.com/skycoin/hardware-wallet/firmware v0.0.0-20260117000250-43c66b2bf1d2 // indirect

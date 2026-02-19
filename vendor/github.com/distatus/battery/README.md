@@ -1,4 +1,4 @@
-battery [![Build Status](https://github.com/distatus/battery/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/distatus/battery/actions/workflows/tests.yml) [![Go Report Card](https://goreportcard.com/badge/github.com/distatus/battery)](https://goreportcard.com/report/github.com/distatus/battery) [![GoDoc](https://pkg.go.dev/badge/github.com/distatus/battery)](https://pkg.go.dev/github.com/distatus/battery)
+battery [![Build Status](https://travis-ci.org/distatus/battery.svg?branch=master)](https://travis-ci.org/distatus/battery) [![Go Report Card](https://goreportcard.com/badge/github.com/distatus/battery)](https://goreportcard.com/report/github.com/distatus/battery) [![GoDoc](https://godoc.org/github.com/distatus/battery?status.svg)](https://godoc.org/github.com/distatus/battery)
 =======
 
 Cross-platform, normalized battery information library.
@@ -27,8 +27,6 @@ Code Example
 ------------
 
 ```go
-package main
-
 import (
 	"fmt"
 
@@ -43,7 +41,7 @@ func main() {
 	}
 	for i, battery := range batteries {
 		fmt.Printf("Bat%d: ", i)
-		fmt.Printf("state: %s, ", battery.State.String())
+		fmt.Printf("state: %f, ", battery.State)
 		fmt.Printf("current capacity: %f mWh, ", battery.Current)
 		fmt.Printf("last full capacity: %f mWh, ", battery.Full)
 		fmt.Printf("design capacity: %f mWh, ", battery.Design)
@@ -62,7 +60,7 @@ There is also a little utility which - more or less - mimicks the GNU/Linux `acp
 *Installation*
 
 ```bash
-$ go install github.com/distatus/battery/cmd/battery@latest
+$ go get -u github.com/distatus/battery/cmd/battery
 ```
 
 *Usage*
