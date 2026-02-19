@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/rpc"
+	"os"
 
 	"github.com/sirupsen/logrus"
 
@@ -27,7 +28,9 @@ func DoReqHandshake(conf appcommon.ProcConfig, subs *Subscriber) (net.Conn, []io
 			return nil, nil, fmt.Errorf("failed to create listener for RPC egress: %w", err)
 		}
 
-		log := logrus.New().WithField("src", "events_gateway")
+		l := logrus.New()
+		l.SetOutput(os.Stderr)
+		log := l.WithField("src", "events_gateway")
 
 		rpcS := rpc.NewServer()
 		if err := rpcS.RegisterName(conf.ProcKey.String(), NewRPCGateway(log, subs)); err != nil {

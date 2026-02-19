@@ -106,6 +106,7 @@ func (env *TestEnv) ReadLog(service string) (string, error) {
 
 	logOpts := container.LogsOptions{
 		ShowStdout: true,
+		ShowStderr: true, // Also capture stderr as visor logs there too
 	}
 
 	resp, err := env.cli.ContainerLogs(env.ctx, svc.ID, logOpts)

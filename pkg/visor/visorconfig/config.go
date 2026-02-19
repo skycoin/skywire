@@ -98,6 +98,10 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		ListeningAddress: STCPAddr,
 		PKTable:          nil,
 	}
+	// Initialize log server config (disabled by default - set local_addr to enable)
+	conf.LogServer = &LogServer{
+		LocalAddr: "", // Empty = disabled. Set to e.g. "localhost:8002" to enable localhost serving
+	}
 	// Use dmsg urls for services and add dmsg-servers
 	if dmsgHTTP {
 		if dmsgHTTPServersList != nil {

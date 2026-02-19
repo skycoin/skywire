@@ -12,10 +12,10 @@ import (
 	"strings"
 
 	dmsg "github.com/skycoin/dmsg/cmd/dmsg/commands"
-	"github.com/spf13/cobra"
-
 	skyhw "github.com/skycoin/skycoin/cmd/hardware-wallet/commands"
 	skycoin "github.com/skycoin/skycoin/cmd/skycoin-wallet/commands"
+	"github.com/spf13/cobra"
+
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	snc "github.com/skycoin/skywire/cmd/apps/skynet-client/commands"
 	sn "github.com/skycoin/skywire/cmd/apps/skynet/commands"

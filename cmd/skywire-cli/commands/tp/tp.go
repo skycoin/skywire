@@ -26,14 +26,15 @@ import (
 )
 
 var (
-	filterTypes   []string
-	filterPubKeys []string
-	showLogs      bool
-	showMore      bool
-	logger        = logging.MustGetLogger("skywire-cli")
-	tpTypes       bool
-	utURL         string
-	sdURL         string
+	filterTypes      []string
+	filterPubKeys    []string
+	showLogs         bool
+	showMore         bool
+	logger           = logging.MustGetLogger("skywire-cli")
+	tpTypes          bool
+	utURL            string
+	sdURL            string
+	listRemoteVisors []string
 	// RootCmd is tpCmd
 	RootCmd = tpCmd
 )
@@ -68,6 +69,7 @@ func init() {
 	tpCmd.Flags().StringVarP(&tpID, "id", "i", "", "display transport matching ID")
 	tpCmd.Flags().BoolVarP(&tpTypes, "tptypes", "u", false, "display transport types used by the local visor")
 	tpCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	tpCmd.Flags().StringSliceVar(&listRemoteVisors, "remote", nil, "list transports on remote visor(s) via TPS (comma-separated PKs)")
 }
 
 // RootCmd contains commands that interact with the skywire-visor
@@ -90,6 +92,115 @@ var tpCmd = &cobra.Command{
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+
+		// Handle --remote flag: list transports on remote visor(s) via TPS
+		if len(listRemoteVisors) > 0 {
+			isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+
+			// Parse all target PKs
+			var targetPKs []cipher.PubKey
+			for _, pkStr := range listRemoteVisors {
+				var pk cipher.PubKey
+				if err := pk.Set(pkStr); err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid public key %q: %w", pkStr, err))
+				}
+				targetPKs = append(targetPKs, pk)
+			}
+
+			// Check if embedded TPS is running - if so, use only embedded TPS
+			// If embedded TPS is not running, use external TPS nodes
+			tpsStatus, tpsStatusErr := rpcClient.TPSStatus()
+			useEmbeddedTPS := tpsStatusErr == nil && tpsStatus != nil && tpsStatus.Enabled
+
+			// Get TPS nodes once (for external TPS fallback)
+			var tpsNodes []cipher.PubKey
+			var tpsNodesErr error
+
+			// Process and print results with streaming output
+			type remoteResult struct {
+				TargetPK   cipher.PubKey
+				Transports []visor.TPSTransportResponse
+				Error      string
+			}
+			var allResults []remoteResult // for JSON output
+
+			for i, targetPK := range targetPKs {
+				var tpsTransports []visor.TPSTransportResponse
+				var tpErr error
+
+				if useEmbeddedTPS {
+					// Use embedded TPS only - if it fails, don't try external nodes
+					tpsTransports, tpErr = rpcClient.TPSGetTransports(targetPK)
+				} else {
+					// Embedded TPS not running - use external TPS nodes
+					// Lazily get TPS nodes on first use
+					if tpsNodes == nil && tpsNodesErr == nil {
+						tpsNodes, tpsNodesErr = rpcClient.GetTransportSetupNodesSorted()
+					}
+
+					if tpsNodesErr != nil || len(tpsNodes) == 0 {
+						result := remoteResult{TargetPK: targetPK, Error: "no TPS nodes available"}
+						allResults = append(allResults, result)
+						if !isJSON {
+							fmt.Printf("[%d/%d] %s (error: %s)\n", i+1, len(targetPKs), targetPK.String(), result.Error)
+						}
+						continue
+					}
+
+					// Try each TPS node (already sorted by health, healthy first)
+					for _, tpsPK := range tpsNodes {
+						logger.Debugf("Trying TPS node %s for target %s", tpsPK.String()[:16], targetPK.String()[:16])
+
+						// Health check
+						if err := rpcClient.TPSExternalHealthCheck(tpsPK); err != nil {
+							logger.WithError(err).Debugf("TPS %s health check failed", tpsPK.String()[:16])
+							continue
+						}
+
+						// Try to get transports via this TPS
+						tpsTransports, tpErr = rpcClient.TPSExternalGetTransports(tpsPK, targetPK)
+						if tpErr == nil {
+							logger.Debugf("Got transports from %s via TPS %s", targetPK.String()[:16], tpsPK.String()[:16])
+							break
+						}
+						logger.WithError(tpErr).Debugf("TPS %s failed to get transports for %s", tpsPK.String()[:16], targetPK.String()[:16])
+					}
+				}
+
+				var result remoteResult
+				if tpErr != nil {
+					result = remoteResult{TargetPK: targetPK, Error: tpErr.Error()}
+				} else {
+					result = remoteResult{TargetPK: targetPK, Transports: tpsTransports}
+				}
+				allResults = append(allResults, result)
+
+				// Stream output immediately (non-JSON mode)
+				if !isJSON {
+					if result.Error != "" {
+						fmt.Printf("[%d/%d] %s (error: %s)\n", i+1, len(targetPKs), targetPK.String(), result.Error)
+					} else {
+						fmt.Printf("[%d/%d] %s (%d transports)\n", i+1, len(targetPKs), targetPK.String(), len(result.Transports))
+						if len(result.Transports) > 0 {
+							var b bytes.Buffer
+							w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
+							fmt.Fprintln(w, "  type\tid\tlocal\tremote") //nolint:errcheck
+							for _, tp := range result.Transports {
+								fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", tp.Type, tp.ID, tp.Local, tp.Remote) //nolint:errcheck
+							}
+							w.Flush() //nolint:errcheck,gosec
+							fmt.Print(b.String())
+						}
+					}
+				}
+			}
+
+			// Print JSON output at the end if requested
+			if isJSON {
+				internal.PrintOutput(cmd.Flags(), allResults, "")
+			}
+			return
 		}
 
 		if tpTypes {
@@ -118,6 +229,7 @@ var tpCmd = &cobra.Command{
 			utData = internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
 			proxyData = internal.GetData(cacheFileSDProxy, sdURL+"/api/services?type="+servicedisc.ServiceTypeProxy, cacheFilesAge)
 			vpnData = internal.GetData(cacheFileSDVPN, sdURL+"/api/services?type="+servicedisc.ServiceTypeVPN, cacheFilesAge)
+			visorData = internal.GetData(cacheFileSDVisor, sdURL+"/api/services?type="+servicedisc.ServiceTypeVisor, cacheFilesAge)
 		}
 
 		PrintTransports(cmd.Flags(), transports...)

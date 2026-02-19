@@ -69,9 +69,12 @@ require (
 	github.com/cloudfoundry-attic/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21
 	github.com/coder/websocket v1.8.14
 	github.com/gizak/termui/v3 v3.1.0
+	github.com/soheilhy/cmux v0.1.5
 	github.com/xxxserxxx/gotop/v4 v4.2.0
 	github.com/xxxserxxx/lingo/v2 v2.0.1
 	golang.org/x/time v0.14.0
+	google.golang.org/grpc v1.75.0
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -232,8 +235,6 @@ require (
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251111163417-95abcf5c77ba // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251111163417-95abcf5c77ba // indirect
-	google.golang.org/grpc v1.75.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect

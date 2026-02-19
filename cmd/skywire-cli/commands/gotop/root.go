@@ -16,13 +16,12 @@ import (
 	jj "github.com/cloudfoundry-attic/jibber_jabber"
 	ui "github.com/gizak/termui/v3"
 	"github.com/spf13/cobra"
-	"github.com/xxxserxxx/lingo/v2"
-
 	"github.com/xxxserxxx/gotop/v4"
 	"github.com/xxxserxxx/gotop/v4/colorschemes"
 	"github.com/xxxserxxx/gotop/v4/devices"
 	"github.com/xxxserxxx/gotop/v4/layout"
 	w "github.com/xxxserxxx/gotop/v4/widgets"
+	"github.com/xxxserxxx/lingo/v2"
 )
 
 const (

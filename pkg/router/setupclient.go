@@ -23,10 +23,11 @@ var ErrSetupNode = errors.New("failed to dial to a setup node")
 
 // SetupClient is an RPC client for setup node.
 type SetupClient struct {
-	log        *logging.Logger
-	setupNodes []cipher.PubKey
-	conn       net.Conn
-	rpc        *rpc.Client
+	log           *logging.Logger
+	setupNodes    []cipher.PubKey
+	conn          net.Conn
+	rpc           *rpc.Client
+	connectedNode cipher.PubKey // The setup node that successfully connected
 }
 
 // NewSetupClient creates a new SetupClient.
@@ -36,22 +37,28 @@ func NewSetupClient(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client
 		setupNodes: setupNodes,
 	}
 
-	conn, err := client.dial(ctx, dmsgC)
+	conn, connectedPK, err := client.dial(ctx, dmsgC)
 	if err != nil {
 		return nil, err
 	}
 
 	client.conn = conn
+	client.connectedNode = connectedPK
 
 	client.rpc = rpc.NewClient(conn)
 
 	return client, nil
 }
 
+// ConnectedNode returns the public key of the setup node that was successfully connected.
+func (c *SetupClient) ConnectedNode() cipher.PubKey {
+	return c.connectedNode
+}
+
 // perNodeDialTimeout is the maximum time to wait for each individual setup node
 const perNodeDialTimeout = 10 * time.Second
 
-func (c *SetupClient) dial(ctx context.Context, dmsgC *dmsg.Client) (net.Conn, error) {
+func (c *SetupClient) dial(ctx context.Context, dmsgC *dmsg.Client) (net.Conn, cipher.PubKey, error) {
 	for _, sPK := range c.setupNodes {
 		addr := dmsg.Addr{PK: sPK, Port: skyenv.DmsgSetupPort}
 
@@ -64,15 +71,45 @@ func (c *SetupClient) dial(ctx context.Context, dmsgC *dmsg.Client) (net.Conn, e
 			c.log.WithError(err).Warnf("failed to dial to setup node: setupPK(%s)", sPK)
 			// Check if parent context was canceled
 			if ctx.Err() != nil {
-				return nil, ctx.Err()
+				return nil, cipher.PubKey{}, ctx.Err()
 			}
 			continue
 		}
 
-		return conn, nil
+		c.log.Infof("connected to setup node: %s", sPK)
+		return conn, sPK, nil
 	}
 
-	return nil, ErrSetupNode
+	return nil, cipher.PubKey{}, ErrSetupNode
+}
+
+// ReorderSetupNodes moves the given public key to the front of the list.
+// This should be called after a successful connection to prioritize working nodes.
+func ReorderSetupNodes(nodes []cipher.PubKey, successPK cipher.PubKey) []cipher.PubKey {
+	if len(nodes) <= 1 {
+		return nodes
+	}
+
+	// Find the index of the successful node
+	idx := -1
+	for i, pk := range nodes {
+		if pk == successPK {
+			idx = i
+			break
+		}
+	}
+
+	// If not found or already first, no change needed
+	if idx <= 0 {
+		return nodes
+	}
+
+	// Move to front: [a, b, SUCCESS, c] -> [SUCCESS, a, b, c]
+	result := make([]cipher.PubKey, len(nodes))
+	result[0] = successPK
+	copy(result[1:idx+1], nodes[:idx])
+	copy(result[idx+1:], nodes[idx+1:])
+	return result
 }
 
 // Close closes a Client.

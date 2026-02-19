@@ -3,6 +3,7 @@ package router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/rpc"
@@ -74,6 +75,9 @@ func (c *Client) ReserveIDs(ctx context.Context, n uint8) (rtIDs []routing.Route
 }
 
 func (c *Client) call(ctx context.Context, method string, args interface{}, reply interface{}) error {
+	if c == nil || c.rpc == nil {
+		return errors.New("router client not initialized")
+	}
 	call := c.rpc.Go(RPCName+"."+method, args, reply, nil)
 	select {
 	case <-ctx.Done():
