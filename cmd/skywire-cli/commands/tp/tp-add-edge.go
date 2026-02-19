@@ -122,7 +122,7 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 				// Try STCPR first, then SUDPH, then DMSG
 				tpTypes := []string{"stcpr", "sudph", "dmsg"}
 				for _, tpType := range tpTypes {
-					_, err := rpcClient.AddTransport(edgePK, tpType, timeout)
+					_, err := rpcClient.AddTransport(edgePK, tpType, timeout, "", false)
 					if err == nil {
 						res.success = true
 						res.tpType = tpType

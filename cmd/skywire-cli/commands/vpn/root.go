@@ -27,6 +27,9 @@ var (
 	jsonOutput       bool
 	country          string
 	version          string
+	minVersion       string
+	maxVersion       string
+	showOffline      bool
 	geoipURL         string
 	useInternal      bool
 	useExternal      bool
