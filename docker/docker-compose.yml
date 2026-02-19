@@ -505,7 +505,7 @@ services:
     tty: true        # docker run -t
   
   e2e-test:
-    image: golang:1.25.7-alpine
+    image: golang:1.25.6-alpine
     container_name: e2e-test
     networks:
       - visors
