@@ -32,8 +32,10 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorinit"
@@ -136,10 +138,24 @@ type Visor struct {
 	// Embedded Transport Setup Node (nil if tps_sk not configured)
 	embeddedTPS *embeddedTPS
 
+	// Embedded Route Setup Node (nil if route_setup_sk not configured)
+	embeddedRouteSetup *EmbeddedRouteSetup
+
 	// Public autoconnect runtime control
 	autoconnectMu      sync.Mutex
 	autoconnectCancel  context.CancelFunc
 	autoconnectRunning bool
+
+	// DMSG server latency tracking (for preferring low-latency servers)
+	dmsgServerLatencies   map[cipher.PubKey]time.Duration
+	dmsgServerLatenciesMu sync.RWMutex
+
+	// Setup node health tracking (TPS and RSN)
+	nodeHealthTracker *NodeHealthTracker
+
+	// Log server API references for health stats
+	logServerAPI      *logserver.API
+	localLogServerAPI *logserver.API // Localhost log server (optional)
 }
 
 // todo: consider moving module closing to the module system
@@ -281,6 +297,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		allowedPorts:         make(map[int]bool),
 		survey:               visorconfig.Survey{},
 		surveyLock:           new(sync.RWMutex),
+		dmsgServerLatencies:  make(map[cipher.PubKey]time.Duration),
 	}
 	v.isServicesHealthy.init()
 
@@ -623,4 +640,34 @@ func setForceColor(conf *visorconfig.V1) {
 		DisableColors:      false,
 		ForceColors:        true,
 	})
+}
+
+// HealthStatsProvider implementation for logserver
+
+// GetTransportCounts returns the count of STCPR and SUDPH transports (excluding "user" labeled).
+func (v *Visor) GetTransportCounts() (stcpr, sudph int) {
+	if v.tpM == nil {
+		return 0, 0
+	}
+
+	// Get transports that are not user-created (skycoin + automatic labels)
+	tps := v.tpM.GetTransportsByLabels(transport.LabelSkycoin, transport.LabelAutomatic)
+	for _, tp := range tps {
+		switch tp.Type() {
+		case tptypes.STCPR:
+			stcpr++
+		case tptypes.SUDPH:
+			sudph++
+		}
+	}
+	return stcpr, sudph
+}
+
+// GetNetworkTypes returns the network types used by the visor.
+func (v *Visor) GetNetworkTypes() []string {
+	types, err := v.TransportTypes()
+	if err != nil {
+		return nil
+	}
+	return types
 }

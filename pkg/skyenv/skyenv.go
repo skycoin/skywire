@@ -33,6 +33,10 @@ const (
 	// DmsgTransportSetupPort Listening port for transport setup RPC over dmsg.
 	DmsgTransportSetupPort uint16 = 47
 
+	// DmsgTransportSetupServicePort Listening port for transport setup service requests over dmsg.
+	// This is the port where TPS nodes listen for incoming transport setup requests from visors.
+	DmsgTransportSetupServicePort uint16 = 48
+
 	// DmsgAwaitSetupPort Listening port of a visor for setup operations.
 	DmsgAwaitSetupPort uint16 = 136
 

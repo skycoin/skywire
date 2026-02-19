@@ -4,6 +4,7 @@ package netutil
 import (
 	"context"
 	"io"
+	"os"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -177,7 +178,9 @@ func (p *Porter) makeChildFreer(port, subPort uint16) func() {
 // CloseAll closes all contained variables that implement io.Closer
 func (p *Porter) CloseAll(log logrus.FieldLogger) {
 	if log == nil {
-		log = logrus.New()
+		l := logrus.New()
+		l.SetOutput(os.Stderr)
+		log = l
 	}
 
 	wg := new(sync.WaitGroup)
