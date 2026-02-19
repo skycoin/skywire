@@ -19,13 +19,24 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
+// HealthStatsProvider provides transport statistics for the /health endpoint.
+type HealthStatsProvider interface {
+	// IsPublicAutoconnectRunning returns true if the public autoconnect module is running.
+	IsPublicAutoconnectRunning() bool
+	// GetTransportCounts returns the count of STCPR and SUDPH transports (excluding "user" labeled).
+	GetTransportCounts() (stcpr, sudph int)
+	// GetNetworkTypes returns the network types used by the visor.
+	GetNetworkTypes() []string
+}
+
 // API register all the API endpoints.
 // It implements a net/http.Handler.
 type API struct {
 	http.Handler
 
-	logger    *logging.Logger
-	startedAt time.Time
+	logger              *logging.Logger
+	startedAt           time.Time
+	healthStatsProvider HealthStatsProvider
 }
 
 // New creates a new API.
@@ -104,11 +115,19 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 }
 
 func (api *API) health(c *gin.Context) {
-	jsonObject, err := json.Marshal(
-		httputil.HealthCheckResponse{
-			BuildInfo: buildinfo.Get(),
-			StartedAt: api.startedAt,
-		})
+	resp := httputil.HealthCheckResponse{
+		BuildInfo: buildinfo.Get(),
+		StartedAt: api.startedAt,
+	}
+
+	// Add transport stats if provider is available
+	if api.healthStatsProvider != nil {
+		resp.PublicAutoconnect = api.healthStatsProvider.IsPublicAutoconnectRunning()
+		resp.StcprCount, resp.SudphCount = api.healthStatsProvider.GetTransportCounts()
+		resp.NetworkTypes = api.healthStatsProvider.GetNetworkTypes()
+	}
+
+	jsonObject, err := json.Marshal(resp)
 	if err != nil {
 		httputil.GetLogger(c.Request).WithError(err).Errorf("failed to encode json response")
 		c.Writer.WriteHeader(http.StatusInternalServerError)
@@ -123,6 +142,11 @@ func (api *API) health(c *gin.Context) {
 	if err != nil {
 		httputil.GetLogger(c.Request).WithError(err).Errorf("failed to write json response")
 	}
+}
+
+// SetHealthStatsProvider sets the health stats provider after initialization.
+func (api *API) SetHealthStatsProvider(provider HealthStatsProvider) {
+	api.healthStatsProvider = provider
 }
 
 func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {

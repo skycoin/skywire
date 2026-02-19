@@ -12,7 +12,9 @@ import (
 // SignalContext returns a context that cancels on given syscall signals.
 func SignalContext(ctx context.Context, log logrus.FieldLogger) (context.Context, context.CancelFunc) {
 	if log == nil {
-		log = logrus.New()
+		l := logrus.New()
+		l.SetOutput(os.Stderr)
+		log = l
 	}
 
 	ctx, cancel := context.WithCancel(ctx)

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/rpc"
+	"os"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -31,6 +32,7 @@ type Client struct {
 // NewClient creates a new Client, panicking on any error.
 func NewClient(eventSubs *appevent.Subscriber) *Client {
 	log := logrus.New()
+	log.SetOutput(os.Stderr)
 	// Use same formatter as visor for consistent log output
 	log.SetFormatter(&logging.TextFormatter{
 		FullTimestamp:      true,

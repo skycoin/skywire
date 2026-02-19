@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // NoiseRouteGroup is a route group wrapped with noise.
@@ -67,6 +68,21 @@ func (nrg *NoiseRouteGroup) GetError() error {
 
 func (nrg *NoiseRouteGroup) isClosed() bool {
 	return nrg.rg.isClosed()
+}
+
+// RouteHops returns the list of visor public keys that form the route path.
+func (nrg *NoiseRouteGroup) RouteHops() []cipher.PubKey {
+	return nrg.rg.RouteHops()
+}
+
+// SetForwardHops sets the complete forward route hops.
+func (nrg *NoiseRouteGroup) SetForwardHops(hops []routing.Hop) {
+	nrg.rg.SetForwardHops(hops)
+}
+
+// RouteHopDetails returns detailed information about each hop in the route.
+func (nrg *NoiseRouteGroup) RouteHopDetails() []RouteHopInfo {
+	return nrg.rg.RouteHopDetails()
 }
 
 func (nrg *NoiseRouteGroup) handlePacket(packet routing.Packet) error {

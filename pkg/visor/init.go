@@ -32,6 +32,8 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsgcurl"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	"github.com/soheilhy/cmux"
+	"google.golang.org/grpc"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/internal/vpn"
@@ -62,6 +64,7 @@ import (
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
 )
@@ -142,10 +145,16 @@ var (
 	pi vinit.Module
 	// Dmsg ping module (dmsg direct connection)
 	dmsgPi vinit.Module
+	// Dmsg server latency tracking (self-ping via each server)
+	dmsgServerLatency vinit.Module
 	// Embedded Transport Setup Node (separate dmsg client with TPS identity)
 	embTPS vinit.Module
+	// Embedded Route Setup Node (separate dmsg client with route setup identity)
+	embRouteSetup vinit.Module
 	// UI server module (serves tp-viz)
 	uiServer vinit.Module
+	// Node health tracking for TPS and RSN
+	nodeHealth vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 	// config initialization
@@ -178,7 +187,8 @@ func registerModules(logger *logging.MasterLogger) {
 	dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &dmsgC)
 
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
-	rt = maker("router", initRouter, &tr, &dmsgC, &dmsgHTTP)
+	embRouteSetup = maker("embedded_route_setup", initEmbeddedRouteSetup, &dmsgC)
+	rt = maker("router", initRouter, &tr, &dmsgC, &dmsgHTTP, &embRouteSetup)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
@@ -190,12 +200,14 @@ func registerModules(logger *logging.MasterLogger) {
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
 	dmsgPi = maker("dmsg_ping", initDmsgPing, &dmsgC)
+	dmsgServerLatency = maker("dmsg_server_latency", initDmsgServerLatency, &dmsgPi)
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm, &stcprC)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
 	embTPS = maker("embedded_tps", initEmbeddedTPS, &dmsgC)
 	uiServer = maker("ui_server", initUIServer, &dmsgC, &tr, &embTPS)
+	nodeHealth = maker("node_health", initNodeHealth, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &systemSurvey, &tc, &tpdco, &embTPS, &uiServer)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer, &nodeHealth)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -512,6 +524,14 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 
 	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, &v.survey, printLog)
 
+	// Set visor as health stats provider for /health endpoint
+	lsAPI.SetHealthStatsProvider(v)
+
+	// Store the log server API reference for public autocheck to use later
+	v.initLock.Lock()
+	v.logServerAPI = lsAPI
+	v.initLock.Unlock()
+
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
 		return err
@@ -561,6 +581,56 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		wg.Wait()
 		return nil
 	})
+
+	// Optionally serve on localhost as well (no whitelist authentication)
+	if v.conf.LogServer != nil && v.conf.LogServer.LocalAddr != "" {
+		localAddr := v.conf.LogServer.LocalAddr
+		logger.WithField("local_addr", localAddr).Info("Starting localhost log server")
+
+		// Create a separate API without whitelist authentication for localhost
+		localAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, nil, &v.survey, printLog)
+
+		// Set visor as health stats provider for /health endpoint
+		localAPI.SetHealthStatsProvider(v)
+
+		// Store the localhost API for potential future use
+		v.localLogServerAPI = localAPI
+
+		localLis, err := net.Listen("tcp", localAddr)
+		if err != nil {
+			logger.WithError(err).WithField("local_addr", localAddr).Warn("Failed to start localhost log server")
+		} else {
+			localSrv := &http.Server{
+				ReadTimeout:       5 * time.Second,
+				WriteTimeout:      30 * time.Second,
+				IdleTimeout:       60 * time.Second,
+				ReadHeaderTimeout: 5 * time.Second,
+				Handler:           localAPI,
+			}
+
+			localWg := new(sync.WaitGroup)
+			localWg.Add(1)
+
+			go func() {
+				defer localWg.Done()
+				if err := localSrv.Serve(localLis); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					logger.WithError(err).Error("Localhost logserver exited with error")
+				}
+			}()
+
+			v.pushCloseStack("localhost.logserver", func() error {
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := localSrv.Shutdown(shutdownCtx); err != nil {
+					logger.WithError(err).Warn("Localhost HTTP server shutdown error")
+				}
+				localWg.Wait()
+				return nil
+			})
+
+			logger.WithField("local_addr", localAddr).Info("Localhost log server started")
+		}
+	}
 
 	return nil
 }
@@ -771,8 +841,72 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 	v.initLock.Unlock()
 
+	// Start the embedded TPS server to accept incoming requests from remote visors
+	go func() {
+		if err := v.embeddedTPS.Serve(ctx); err != nil {
+			if ctx.Err() == nil {
+				log.WithError(err).Error("Embedded TPS server error")
+			}
+		}
+	}()
+
 	v.pushCloseStack("embedded_tps", func() error {
 		return tpsDmsgC.Close()
+	})
+	return nil
+}
+
+func initEmbeddedRouteSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
+	routeSetupSK := v.conf.Routing.RouteSetupSK
+	if routeSetupSK == nil || *routeSetupSK == (cipher.SecKey{}) {
+		log.Debug("No embedded route setup-node configured (route_setup_sk empty), skipping")
+		return nil
+	}
+
+	routeSetupPK, err := routeSetupSK.PubKey()
+	if err != nil {
+		return fmt.Errorf("invalid route_setup_sk: %w", err)
+	}
+	log.WithField("route_setup_pk", routeSetupPK).Info("Starting embedded Route Setup Node")
+
+	// Create a separate dmsg client with the route setup-node identity.
+	// Reuses the visor's dmsg discovery URL but with route setup-node keys.
+	dmsgConf := &dmsg.Config{
+		MinSessions: 0, // Connect to all servers for better connectivity
+		Protocol:    v.conf.Dmsg.Protocol,
+	}
+	dmsgConf.ClientType = "route_setup"
+	httpC := &http.Client{}
+	routeSetupDisc := dmsgdisc.NewHTTP(v.conf.Dmsg.Discovery, httpC, v.MasterLogger().PackageLogger("embedded_route_setup:disc"))
+	routeSetupDmsgC := dmsg.NewClient(routeSetupPK, *routeSetupSK, routeSetupDisc, dmsgConf)
+	routeSetupDmsgC.SetLogger(v.MasterLogger().PackageLogger("embedded_route_setup:dmsg"))
+
+	go routeSetupDmsgC.Serve(ctx)
+
+	select {
+	case <-routeSetupDmsgC.Ready():
+		log.Info("Embedded route setup-node dmsg client connected")
+	case <-ctx.Done():
+		return fmt.Errorf("context canceled waiting for route setup-node dmsg client")
+	}
+
+	v.initLock.Lock()
+	v.embeddedRouteSetup = &EmbeddedRouteSetup{
+		dmsgC: routeSetupDmsgC,
+		pk:    routeSetupPK,
+		log:   log,
+	}
+	v.initLock.Unlock()
+
+	// Start the route setup-node listener to accept incoming requests from other visors
+	go func() {
+		if err := v.embeddedRouteSetup.Serve(ctx); err != nil {
+			log.WithError(err).Error("Embedded route setup-node listener failed")
+		}
+	}()
+
+	v.pushCloseStack("embedded_route_setup", func() error {
+		return routeSetupDmsgC.Close()
 	})
 	return nil
 }
@@ -1101,13 +1235,22 @@ func handlePingConn(log *logging.Logger, remoteConn net.Conn, _ *Visor) {
 		}
 
 		// Echo back for RTT measurement
-		_, err = remoteConn.Write([]byte("pong"))
-		if err != nil {
-			log.WithError(err).Error("Failed to write ping echo")
-			return
+		// If EchoFull is set, echo the full payload for bandwidth testing
+		if size.EchoFull {
+			_, err = remoteConn.Write(ping)
+			if err != nil {
+				log.WithError(err).Error("Failed to write full ping echo")
+				return
+			}
+			log.Debugf("Echoed full ping response (%d bytes)", len(ping))
+		} else {
+			_, err = remoteConn.Write([]byte("pong"))
+			if err != nil {
+				log.WithError(err).Error("Failed to write ping echo")
+				return
+			}
+			log.Debug("Echoed ping response")
 		}
-
-		log.Debug("Echoed ping response")
 	}
 }
 
@@ -1194,14 +1337,146 @@ func handleDmsgPingConn(log *logging.Logger, conn net.Conn) {
 		}
 
 		// Echo back for RTT measurement
-		_, err = conn.Write([]byte("pong"))
-		if err != nil {
-			log.WithError(err).Error("Failed to write dmsg ping echo")
+		// If EchoFull is set, echo the full payload for bandwidth testing
+		if size.EchoFull {
+			_, err = conn.Write(ping)
+			if err != nil {
+				log.WithError(err).Error("Failed to write full dmsg ping echo")
+				return
+			}
+			log.Debugf("Echoed full dmsg ping response (%d bytes)", len(ping))
+		} else {
+			_, err = conn.Write([]byte("pong"))
+			if err != nil {
+				log.WithError(err).Error("Failed to write dmsg ping echo")
+				return
+			}
+			log.Debug("Echoed dmsg ping response")
+		}
+	}
+}
+
+// initDmsgServerLatency initializes DMSG server latency tracking.
+// It self-pings via each connected DMSG server on startup and hourly.
+func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) error {
+	dmsgC := v.dmsgC
+	if dmsgC == nil {
+		return nil
+	}
+
+	// Wait for dmsg client to be ready
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-dmsgC.Ready():
+	}
+
+	// Helper to measure latency to all connected servers
+	measureServerLatencies := func() {
+		servers := dmsgC.ConnectedServersPK()
+		if len(servers) == 0 {
+			log.Debug("No DMSG servers connected, skipping latency measurement")
 			return
 		}
 
-		log.Debug("Echoed dmsg ping response")
+		log.WithField("servers", len(servers)).Info("Measuring DMSG server latencies via self-ping")
+
+		for _, serverPKStr := range servers {
+			var serverPK cipher.PubKey
+			if err := serverPK.Set(serverPKStr); err != nil {
+				log.WithError(err).WithField("server", serverPKStr).Warn("Invalid server PK")
+				continue
+			}
+
+			// Self-ping via this server (ping our own PK through the server)
+			start := time.Now()
+			conf := PingConfig{
+				PK:       v.conf.PK,
+				Tries:    3,
+				PcktSize: 2, // 2KB
+			}
+
+			// Use DmsgPingViaServer to ping ourselves through this specific server
+			latencies, err := v.DmsgPingViaServer(conf, serverPK)
+			if err != nil {
+				log.WithError(err).WithField("server", serverPKStr[:16]+"...").Warn("Failed to measure server latency")
+				continue
+			}
+
+			// Calculate average latency
+			var totalLatency time.Duration
+			for _, lat := range latencies {
+				totalLatency += lat
+			}
+			avgLatency := totalLatency / time.Duration(len(latencies))
+
+			// Store the latency
+			v.dmsgServerLatenciesMu.Lock()
+			v.dmsgServerLatencies[serverPK] = avgLatency
+			v.dmsgServerLatenciesMu.Unlock()
+
+			log.WithFields(logrus.Fields{
+				"server":  serverPKStr[:16] + "...",
+				"latency": avgLatency.Round(time.Millisecond),
+				"elapsed": time.Since(start).Round(time.Millisecond),
+			}).Info("Measured DMSG server latency")
+		}
 	}
+
+	// Initial measurement
+	go func() {
+		// Small delay to allow more servers to connect
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
+		measureServerLatencies()
+	}()
+
+	// Hourly measurement
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				measureServerLatencies()
+			}
+		}
+	}()
+
+	log.Info("DMSG server latency tracking started")
+	return nil
+}
+
+// initNodeHealth initializes the node health tracker for TPS and RSN nodes.
+func initNodeHealth(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.dmsgC == nil {
+		log.Warn("Dmsg client not available, skipping node health tracking")
+		return nil
+	}
+
+	// Get configured TPS and RSN nodes
+	tpsNodes := v.conf.Transport.TransportSetupPKs
+	rsnNodes := v.conf.Routing.RouteSetupNodes
+
+	if len(tpsNodes) == 0 && len(rsnNodes) == 0 {
+		log.Info("No TPS or RSN nodes configured, skipping node health tracking")
+		return nil
+	}
+
+	log.WithField("tps_count", len(tpsNodes)).
+		WithField("rsn_count", len(rsnNodes)).
+		Info("Initializing node health tracker")
+
+	v.nodeHealthTracker = NewNodeHealthTracker(v.dmsgC, log)
+	v.nodeHealthTracker.Start(ctx, tpsNodes, rsnNodes)
+
+	return nil
 }
 
 // getRouteSetupHooks aka autotransport
@@ -1307,6 +1582,16 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), httpC, v.MasterLogger())
 	logger := v.MasterLogger().PackageLogger("router")
+
+	// Use embedded route setup-node if available, otherwise use remote setup-nodes
+	var rgDialer router.RouteGroupDialer
+	if v.embeddedRouteSetup != nil {
+		log.WithField("route_setup_pk", v.embeddedRouteSetup.PK()).Info("Using embedded route setup-node for routing")
+		rgDialer = router.NewSetupNodeDialerWithEmbedded(v.embeddedRouteSetup)
+	} else {
+		rgDialer = router.NewSetupNodeDialer()
+	}
+
 	rConf := router.Config{
 		Logger:           logger,
 		MasterLogger:     v.MasterLogger(),
@@ -1314,7 +1599,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
 		RouteFinder:      rfClient,
-		RouteGroupDialer: router.NewSetupNodeDialer(),
+		RouteGroupDialer: rgDialer,
 		SetupNodes:       conf.RouteSetupNodes,
 		RulesGCInterval:  0, // TODO
 		MinHops:          v.conf.Routing.MinHops,
@@ -1507,6 +1792,125 @@ func (s *cliRPCStats) snapshot() (active int32, total uint64, errors uint64, pea
 	return s.activeConns, s.totalConns, s.totalErrors, s.peakConns, s.lastError, s.lastErrorTime
 }
 
+// visorPingAdapter wraps a Visor to implement rpcgrpc.VisorAPI
+type visorPingAdapter struct {
+	v *Visor
+}
+
+func (a *visorPingAdapter) DialPing(conf rpcgrpc.PingConf) error {
+	// Convert rpcgrpc.RouteHopInfo to RouteHopInfo
+	var forwardHops, reverseHops []RouteHopInfo
+	for _, h := range conf.ForwardHops {
+		forwardHops = append(forwardHops, RouteHopInfo{
+			TpID:   h.TpID,
+			From:   h.From,
+			To:     h.To,
+			TpType: h.TpType,
+		})
+	}
+	for _, h := range conf.ReverseHops {
+		reverseHops = append(reverseHops, RouteHopInfo{
+			TpID:   h.TpID,
+			From:   h.From,
+			To:     h.To,
+			TpType: h.TpType,
+		})
+	}
+	return a.v.DialPing(PingConfig{
+		PK:          conf.PK,
+		Tries:       conf.Tries,
+		PcktSize:    conf.PcktSize,
+		LocalRoute:  conf.LocalRoute,
+		TransportID: conf.TransportID,
+		ForwardHops: forwardHops,
+		ReverseHops: reverseHops,
+	})
+}
+
+func (a *visorPingAdapter) PingOnce(conf rpcgrpc.PingConf) (time.Duration, error) {
+	return a.v.PingOnce(PingConfig{
+		PK:         conf.PK,
+		Tries:      conf.Tries,
+		PcktSize:   conf.PcktSize,
+		LocalRoute: conf.LocalRoute,
+	})
+}
+
+func (a *visorPingAdapter) StopPing(pk cipher.PubKey) error {
+	return a.v.StopPing(pk)
+}
+
+func (a *visorPingAdapter) GetPingRoute(pk cipher.PubKey) []cipher.PubKey {
+	return a.v.GetPingRoute(pk)
+}
+
+func (a *visorPingAdapter) GetPingRouteDetails(pk cipher.PubKey) []rpcgrpc.RouteHopInfo {
+	details := a.v.GetPingRouteDetails(pk)
+	if details == nil {
+		return nil
+	}
+	// Convert router.RouteHopInfo to rpcgrpc.RouteHopInfo
+	result := make([]rpcgrpc.RouteHopInfo, len(details))
+	for i, d := range details {
+		result[i] = rpcgrpc.RouteHopInfo{
+			TpID:   d.TpID,
+			From:   d.From,
+			To:     d.To,
+			TpType: d.TpType,
+		}
+	}
+	return result
+}
+
+func (a *visorPingAdapter) GetLastRouteCalcTime() time.Duration {
+	return a.v.GetLastRouteCalcTime()
+}
+
+func (a *visorPingAdapter) DialDmsgPing(pk cipher.PubKey) error {
+	return a.v.DialDmsgPing(pk)
+}
+
+func (a *visorPingAdapter) DmsgPingOnce(conf rpcgrpc.PingConf) (time.Duration, error) {
+	return a.v.DmsgPingOnce(PingConfig{
+		PK:       conf.PK,
+		Tries:    conf.Tries,
+		PcktSize: conf.PcktSize,
+	})
+}
+
+func (a *visorPingAdapter) PingOnceWithEcho(conf rpcgrpc.PingConf, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
+	return a.v.PingOnceWithEcho(PingConfig{
+		PK:         conf.PK,
+		Tries:      conf.Tries,
+		PcktSize:   conf.PcktSize,
+		LocalRoute: conf.LocalRoute,
+	}, echoFull)
+}
+
+func (a *visorPingAdapter) DmsgPingOnceWithEcho(conf rpcgrpc.PingConf, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
+	return a.v.DmsgPingOnceWithEcho(PingConfig{
+		PK:       conf.PK,
+		Tries:    conf.Tries,
+		PcktSize: conf.PcktSize,
+	}, echoFull)
+}
+
+func (a *visorPingAdapter) StopDmsgPing(pk cipher.PubKey) error {
+	return a.v.StopDmsgPing(pk)
+}
+
+func (a *visorPingAdapter) DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error {
+	return a.v.DialDmsgPingViaServer(pk, serverPK)
+}
+
+func (a *visorPingAdapter) GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error) {
+	return a.v.GetDmsgPingServerPK(pk)
+}
+
+func (a *visorPingAdapter) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error) {
+	return a.v.GetRemoteDmsgServers(pk)
+}
+
 func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.CLIAddr == "" {
 		v.log.Debug("'cli_addr' is not configured, skipping.")
@@ -1526,17 +1930,45 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	// Connection limiting and stats
+	// Create gRPC server for streaming operations
+	grpcLog := v.MasterLogger().PackageLogger("cli_grpc")
+	grpcServer := grpc.NewServer()
+	pingAdapter := &visorPingAdapter{v: v}
+	pingServer := rpcgrpc.NewPingServer(pingAdapter, grpcLog)
+	rpcgrpc.RegisterPingServiceServer(grpcServer, pingServer)
+
+	v.pushCloseStack("cli.grpc", func() error {
+		grpcServer.GracefulStop()
+		return nil
+	})
+
+	// Use cmux to multiplex gRPC and standard RPC on same port
+	mux := cmux.New(cliL)
+	grpcL := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
+	rpcL := mux.Match(cmux.Any()) // All other connections go to standard RPC
+
+	// Connection limiting and stats for standard RPC
 	const maxConcurrentConns = 50
 	stats := &cliRPCStats{
 		connSemaphore: make(chan struct{}, maxConcurrentConns),
 		maxConns:      maxConcurrentConns,
 	}
 
-	// Run RPC accept loop with panic recovery, connection limiting, and logging
+	// Start gRPC server
+	go func() {
+		grpcLog.Infof("CLI gRPC server listening on %s (multiplexed)", v.conf.CLIAddr)
+		if err := grpcServer.Serve(grpcL); err != nil {
+			if !strings.Contains(err.Error(), "use of closed network connection") &&
+				!strings.Contains(err.Error(), "mux: listener closed") {
+				grpcLog.WithError(err).Error("gRPC server error")
+			}
+		}
+	}()
+
+	// Run standard RPC accept loop with panic recovery, connection limiting, and logging
 	go func() {
 		rpcLog := v.MasterLogger().PackageLogger("cli_rpc")
-		rpcLog.Infof("CLI RPC server listening on %s (max %d concurrent connections)", v.conf.CLIAddr, maxConcurrentConns)
+		rpcLog.Infof("CLI RPC server listening on %s (max %d concurrent connections, multiplexed)", v.conf.CLIAddr, maxConcurrentConns)
 
 		// Periodic stats logging
 		go func() {
@@ -1555,10 +1987,11 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 
 		var connID uint64
 		for {
-			conn, err := cliL.Accept()
+			conn, err := rpcL.Accept()
 			if err != nil {
 				// Check if listener was closed (normal shutdown)
-				if strings.Contains(err.Error(), "use of closed network connection") {
+				if strings.Contains(err.Error(), "use of closed network connection") ||
+					strings.Contains(err.Error(), "mux: listener closed") {
 					rpcLog.Debug("CLI RPC listener closed")
 					return
 				}
@@ -1602,6 +2035,16 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 
 				rpcS.ServeConn(c)
 			}(conn, thisConnID)
+		}
+	}()
+
+	// Start cmux - this must be called after setting up all listeners
+	go func() {
+		if err := mux.Serve(); err != nil {
+			if !strings.Contains(err.Error(), "use of closed network connection") &&
+				!strings.Contains(err.Error(), "mux: listener closed") {
+				v.log.WithError(err).Error("cmux serve error")
+			}
 		}
 	}()
 
@@ -1778,7 +2221,7 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 }
 
 func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
-	tp, err := v.AddTransport(v.conf.PK, tpType, 0)
+	tp, err := v.AddTransport(v.conf.PK, tpType, 0, "", false)
 	if err != nil {
 		log.WithError(err).WithField("type", tpType).Warn("Failed to create self-transport")
 		return false

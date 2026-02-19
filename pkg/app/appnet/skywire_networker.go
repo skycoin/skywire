@@ -89,6 +89,11 @@ func (r *SkywireNetworker) Ping(pk cipher.PubKey, addr Addr) (net.Conn, error) {
 
 // PingContext dials remote `addr` via `skynet` with context.
 func (r *SkywireNetworker) PingContext(ctx context.Context, pk cipher.PubKey, addr Addr) (net.Conn, error) {
+	return r.PingContextWithOpts(ctx, pk, addr, nil)
+}
+
+// PingContextWithOpts dials remote `addr` via `skynet` with context and custom dial options.
+func (r *SkywireNetworker) PingContextWithOpts(ctx context.Context, pk cipher.PubKey, addr Addr, opts *router.DialOptions) (net.Conn, error) {
 	localPort, freePort, err := r.porter.ReserveEphemeral(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -100,7 +105,12 @@ func (r *SkywireNetworker) PingContext(ctx context.Context, pk cipher.PubKey, ad
 			freePort()
 		}
 	}()
-	conn, err := r.r.PingRoute(ctx, pk, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
+
+	if opts == nil {
+		opts = router.DefaultDialOptions()
+	}
+
+	conn, err := r.r.PingRoute(ctx, pk, routing.Port(localPort), addr.Port, opts)
 	if err != nil {
 		return nil, err
 	}

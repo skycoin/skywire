@@ -2,6 +2,7 @@
 package rpcutil
 
 import (
+	"os"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -12,7 +13,9 @@ func LogCall(log logrus.FieldLogger, method string, in interface{}) func(out int
 
 	// Just in case log is not set.
 	if log == nil {
-		log = logrus.New()
+		l := logrus.New()
+		l.SetOutput(os.Stderr)
+		log = l
 	}
 
 	start := time.Now()
