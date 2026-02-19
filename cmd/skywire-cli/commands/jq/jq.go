@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	rawOutput    bool
-	nullInput    bool
-	slurpInput   bool
+	rawOutput     bool
+	nullInput     bool
+	slurpInput    bool
 	compactOutput bool
 )
 
@@ -110,7 +110,7 @@ var RootCmd = &cobra.Command{
 }
 
 func readJSONFile(filename string) ([]any, error) {
-	f, err := os.Open(filename)
+	f, err := os.Open(filename) //nolint:gosec
 	if err != nil {
 		return nil, err
 	}

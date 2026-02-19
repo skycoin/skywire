@@ -68,10 +68,10 @@ var utCmd = &cobra.Command{
 				return
 			}
 			if listVersions {
-				script.Echo(uts).JQ(versionSelector + " | \"\\(.pk) \\(.version)\"").Match(pk).Replace("\"", "").Stdout() //nolint:errcheck,gosec
+				script.Echo(uts).JQ(versionSelector+" | \"\\(.pk) \\(.version)\"").Match(pk).Replace("\"", "").Stdout() //nolint:errcheck,gosec
 				return
 			}
-			keys, _ := script.Echo(uts).JQ(versionSelector + " | .pk").Match(pk).Replace("\"", "").Slice() //nolint:errcheck
+			keys, _ := script.Echo(uts).JQ(versionSelector+" | .pk").Match(pk).Replace("\"", "").Slice() //nolint:errcheck
 			for _, i := range keys {
 				internal.PrintOutput(cmd.Flags(), i+"\n", i+"\n")
 			}
@@ -81,10 +81,10 @@ var utCmd = &cobra.Command{
 		// Handle list-versions flag (without version filter)
 		if listVersions {
 			if isStats {
-				script.Echo(uts).JQ(baseSelector + " | .version").Freq().Replace("\"", "").Stdout() //nolint:errcheck,gosec
+				script.Echo(uts).JQ(baseSelector+" | .version").Freq().Replace("\"", "").Stdout() //nolint:errcheck,gosec
 				return
 			}
-			script.Echo(uts).JQ(baseSelector + " | \"\\(.pk) \\(.version)\"").Match(pk).Replace("\"", "").Stdout() //nolint:errcheck,gosec
+			script.Echo(uts).JQ(baseSelector+" | \"\\(.pk) \\(.version)\"").Match(pk).Replace("\"", "").Stdout() //nolint:errcheck,gosec
 			return
 		}
 

@@ -59,8 +59,8 @@ var (
 	pvNoFilterOnline bool
 	pvForceAttempt   bool
 	pvRetries        int
-	pvMinTransports int
-	pvRemoteVisors  []string
+	pvMinTransports  int
+	pvRemoteVisors   []string
 )
 
 func init() {

@@ -185,11 +185,11 @@ var tpCmd = &cobra.Command{
 						if len(result.Transports) > 0 {
 							var b bytes.Buffer
 							w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
-							fmt.Fprintln(w, "  type\tid\tlocal\tremote")
+							fmt.Fprintln(w, "  type\tid\tlocal\tremote") //nolint:errcheck
 							for _, tp := range result.Transports {
-								fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", tp.Type, tp.ID, tp.Local, tp.Remote)
+								fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", tp.Type, tp.ID, tp.Local, tp.Remote) //nolint:errcheck
 							}
-							w.Flush()
+							w.Flush() //nolint:errcheck,gosec
 							fmt.Print(b.String())
 						}
 					}
