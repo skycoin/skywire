@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -33,9 +34,6 @@ var mTpCount int32
 var (
 	// ErrNotServing is the error returned when a transport is no longer served.
 	ErrNotServing = errors.New("transport is no longer being served")
-
-	// ErrTransportAlreadyExists occurs when an underlying transport already exists.
-	ErrTransportAlreadyExists = errors.New("underlying transport already exists")
 )
 
 // ManagedTransportConfig is a configuration for managed transport.
@@ -158,7 +156,17 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 	for {
 		p, err := mt.readPacket()
 		if err != nil {
-			log.WithError(err).Warn("Failed to read packet, closing transport")
+			// Check if this is an expected shutdown error (closed pipe/connection)
+			// These occur during normal shutdown and should not be logged as warnings
+			errStr := err.Error()
+			if strings.Contains(errStr, "closed pipe") ||
+				strings.Contains(errStr, "closed network connection") ||
+				errors.Is(err, io.EOF) ||
+				errors.Is(err, net.ErrClosed) {
+				log.WithError(err).Debug("Transport closed, stopping read loop")
+			} else {
+				log.WithError(err).Warn("Failed to read packet, closing transport")
+			}
 			mt.close()
 			return
 		}
@@ -285,7 +293,8 @@ func (mt *ManagedTransport) Accept(ctx context.Context, transport network.Transp
 	}
 
 	mt.log.Debug("Setting underlying transport...")
-	return mt.setTransport(transport)
+	mt.setTransport(transport)
+	return nil
 }
 
 // Dial dials a new underlying transport.
@@ -328,16 +337,8 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 		mt.log.Debug("Skipping settlement handshake for self-connection (noop discovery client)")
 	}
 
-	if err := mt.setTransport(transport); err != nil {
-		return fmt.Errorf("setTransport: %w", err)
-	}
-
+	mt.setTransport(transport)
 	return nil
-}
-
-func (mt *ManagedTransport) isLeastSignificantEdge() bool {
-	sorted := SortEdges(mt.Entry.Edges[0], mt.Entry.Edges[1])
-	return sorted[0] == mt.client.PK()
 }
 
 /*
@@ -355,19 +356,12 @@ func (mt *ManagedTransport) getTransport() network.Transport {
 	return transport
 }
 
-// set sets 'mt.transport' (the underlying transport).
-// If 'mt.transport' is already occupied, close the newly introduced transport.
-func (mt *ManagedTransport) setTransport(newTransport network.Transport) error {
+// setTransport sets 'mt.transport' (the underlying transport).
+// If 'mt.transport' is already occupied, close the old one and use the new one.
+// This handles stale/zombie transports where one side thinks it exists but the other doesn't.
+func (mt *ManagedTransport) setTransport(newTransport network.Transport) {
 	if mt.transport != nil {
-		if mt.isLeastSignificantEdge() {
-			mt.log.Debug("Underlying transport already exists, closing new transport.")
-			if err := newTransport.Close(); err != nil {
-				mt.log.WithError(err).Warn("Failed to close new transport.")
-			}
-			return ErrTransportAlreadyExists
-		}
-
-		mt.log.Debug("Underlying transport already exists, closing old transport.")
+		mt.log.Debug("Underlying transport already exists, closing old transport to accept new one.")
 		if err := mt.transport.Close(); err != nil {
 			mt.log.WithError(err).Warn("Failed to close old transport.")
 		}
@@ -381,7 +375,6 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) error {
 		mt.log.Debug("Sent signal to 'mt.transportCh'.")
 	default:
 	}
-	return nil
 }
 
 func (mt *ManagedTransport) deleteFromDiscovery() error {

@@ -15,8 +15,9 @@ import (
 
 	clicompletion "github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
-	clidmsgpty "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsgpty"
+	clidmsg "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsg"
 	cligotop "github.com/skycoin/skywire/cmd/skywire-cli/commands/gotop"
+	clijq "github.com/skycoin/skywire/cmd/skywire-cli/commands/jq"
 	clilog "github.com/skycoin/skywire/cmd/skywire-cli/commands/log"
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
 	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/proxy"
@@ -30,6 +31,7 @@ import (
 	cliskynet "github.com/skycoin/skywire/cmd/skywire-cli/commands/skynet"
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
 	clitp "github.com/skycoin/skywire/cmd/skywire-cli/commands/tp"
+	clitps "github.com/skycoin/skywire/cmd/skywire-cli/commands/tps"
 	cliut "github.com/skycoin/skywire/cmd/skywire-cli/commands/ut"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
@@ -41,7 +43,7 @@ import (
 func init() {
 	RootCmd.AddCommand(
 		cliconfig.RootCmd,
-		clidmsgpty.RootCmd,
+		clidmsg.RootCmd,
 		cligotop.RootCmd,
 		clivisor.RootCmd,
 		clivpn.RootCmd,
@@ -52,6 +54,7 @@ func init() {
 		clisurvey.RootCmd,
 		cliroute.RootCmd,
 		clitp.RootCmd,
+		clitps.RootCmd,
 		climdisc.RootCmd,
 		clisd.RootCmd,
 		cliskychat.RootCmd,
@@ -59,6 +62,7 @@ func init() {
 		clilog.RootCmd,
 		cliskysocksc.RootCmd,
 		clipv.RootCmd,
+		clijq.RootCmd,
 		treeCmd,
 		docCmd,
 	)

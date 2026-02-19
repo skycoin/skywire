@@ -24,9 +24,9 @@ const (
 	// LabelUser signifies a user-created transport entry
 	LabelUser Label = "user"
 	// LabelAutomatic are transports to publically advertised visors
-	LabelAutomatic = "automatic"
+	LabelAutomatic Label = "automatic"
 	// LabelSkycoin are transports created by skycoin system to improve network resiliency
-	LabelSkycoin = "skycoin"
+	LabelSkycoin Label = "skycoin"
 )
 
 // Entry is the unsigned representation of a Transport.

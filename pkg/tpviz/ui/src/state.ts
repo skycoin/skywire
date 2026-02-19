@@ -68,10 +68,12 @@ export function setDmsgEntries(s: Set<string>) { dmsgEntries = s; }
 export let localVisorData: LocalVisorData | null = null;
 export let localVisorWS: WebSocket | null = null;
 export let wsReconnectAttempts = 0;
+export let visorConnected = false;
 
 export function setLocalVisorData(d: LocalVisorData | null) { localVisorData = d; }
 export function setLocalVisorWS(ws: WebSocket | null) { localVisorWS = ws; }
 export function setWSReconnectAttempts(n: number) { wsReconnectAttempts = n; }
+export function setVisorConnected(c: boolean) { visorConnected = c; }
 
 // Selection state
 export let selectedNodeId: string | null = null;
