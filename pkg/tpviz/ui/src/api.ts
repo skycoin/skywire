@@ -5,7 +5,7 @@ import {
     setAllData, setUptimeData, setServicesData,
     setIPGroupsData, setIPGroupsEnabled, setLocalVisorData,
     setDmsgData, setNextRefreshTime, setCountdownInterval,
-    setServerCacheAge, setIsRefreshing,
+    setServerCacheAge, setIsRefreshing, setVisorConnected,
 } from './state';
 import { fetchWithTimeout, formatCountdown } from './utils';
 import { API_BASE } from './constants';
@@ -105,6 +105,7 @@ export async function fetchAllData(): Promise<boolean> {
             }
 
             if (S.localVisorData!.connected) {
+                setVisorConnected(true);
                 console.log('Local visor connected:', S.localVisorData!.pub_key.substring(0, 16) + '...',
                     'Transports:', S.localVisorData!.transports?.length || 0,
                     'Routes:', S.localVisorData!.routes_count,
@@ -118,7 +119,18 @@ export async function fetchAllData(): Promise<boolean> {
                         country: S.localVisorData!.country || S.visorServices[S.localVisorData!.pub_key]?.country || ''
                     };
                 }
+            } else {
+                setVisorConnected(false);
             }
+        } else {
+            // Visor API not available (standalone mode)
+            setVisorConnected(false);
+        }
+
+        // Hide visor-specific UI elements when visor is not connected
+        const dmsgHealthRow = document.getElementById('dmsg-health-row');
+        if (dmsgHealthRow) {
+            dmsgHealthRow.style.display = S.visorConnected ? '' : 'none';
         }
 
         if (dmsgResp && dmsgResp.ok) {

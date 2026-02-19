@@ -4,6 +4,7 @@ package ui
 
 import (
 	"math"
+	"math/rand"
 	"strings"
 	"syscall/js"
 )
@@ -95,7 +96,19 @@ type App struct {
 	lastRefreshFrame int
 
 	// Local visor
-	localVisorPK string
+	localVisorPK   string
+	localVisorData *LocalVisorData
+
+	// DMSG data
+	dmsgData        *DMSGData
+	dmsgEntries     map[string]bool
+	showDMSGServers bool
+
+	// IP Groups for clustering
+	ipGroupsData    *IPGroupsData
+	ipGroupsEnabled bool
+	clusterByIP     bool
+	clusterColors   []string // Colors for different IP groups
 
 	// Animation frame callback
 	frameCallback js.Func
@@ -114,14 +127,23 @@ func NewApp(canvasID string) *App {
 	input := NewInputHandler(canvasID)
 
 	app := &App{
-		canvas:         canvas,
-		input:          input,
-		graph:          NewGraph(),
-		view:           NewView(canvas.Width(), canvas.Height()),
-		opts:           NewRenderOptions(),
-		fetcher:        NewDataFetcher(),
-		physicsEnabled: true,
-		searchMatches:  make(map[string]bool),
+		canvas:          canvas,
+		input:           input,
+		graph:           NewGraph(),
+		view:            NewView(canvas.Width(), canvas.Height()),
+		opts:            NewRenderOptions(),
+		fetcher:         NewDataFetcher(),
+		physicsEnabled:  true,
+		searchMatches:   make(map[string]bool),
+		dmsgEntries:     make(map[string]bool),
+		showDMSGServers: true,
+		clusterByIP:     false,
+		// Distinct colors for IP group clusters (matching TypeScript palette)
+		clusterColors: []string{
+			"#00d9a5", "#00b4d8", "#ffd166", "#e94560", "#9f6efc",
+			"#ff6b6b", "#4ecdc4", "#ffe66d", "#95e1d3", "#f38181",
+			"#aa96da", "#fcbad3", "#a8d8ea", "#dcedc1", "#ffd3b6",
+		},
 	}
 
 	return app
@@ -205,6 +227,19 @@ func (a *App) setupSidebarCallbacks() {
 			a.needsRedraw = true
 		}))
 	}
+
+	// Cluster by IP checkbox
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("cluster-ip", "change", func() {
+		a.clusterByIP = GetChecked("cluster-ip")
+		a.needsRedraw = true
+	}))
+
+	// Show DMSG servers checkbox
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("show-dmsg-servers", "change", func() {
+		a.showDMSGServers = GetChecked("show-dmsg-servers")
+		a.needsRedraw = true
+	}))
+
 	// Initialize filter state from checkboxes
 	a.syncFilters()
 }
@@ -258,6 +293,17 @@ func (a *App) update() {
 	if a.input.IsKeyJustPressed("Escape") {
 		a.deselectNode()
 		a.needsRedraw = true
+	}
+	// Toggle IP clustering with 'i' key
+	if a.input.IsKeyJustPressed("i") || a.input.IsKeyJustPressed("I") {
+		if a.ipGroupsEnabled {
+			a.clusterByIP = !a.clusterByIP
+			el := getElement("cluster-ip")
+			if !el.IsNull() && !el.IsUndefined() {
+				el.Set("checked", a.clusterByIP)
+			}
+			a.needsRedraw = true
+		}
 	}
 
 	// Mouse wheel zoom
@@ -536,6 +582,11 @@ func (a *App) drawEdges() {
 			continue
 		}
 
+		// Hide DMSG connections if DMSG servers are not shown
+		if edge.IsDMSGConnection && !a.showDMSGServers {
+			continue
+		}
+
 		fromNode, ok := a.graph.Nodes[edge.From]
 		if !ok {
 			continue
@@ -545,7 +596,11 @@ func (a *App) drawEdges() {
 			continue
 		}
 
-		if !a.opts.ShowNodeStatus(fromNode.Status) || !a.opts.ShowNodeStatus(toNode.Status) {
+		// Don't filter DMSG server nodes by status
+		if !fromNode.IsDMSGServer && !a.opts.ShowNodeStatus(fromNode.Status) {
+			continue
+		}
+		if !toNode.IsDMSGServer && !a.opts.ShowNodeStatus(toNode.Status) {
 			continue
 		}
 
@@ -569,13 +624,33 @@ func (a *App) drawEdges() {
 		edgeColor := a.edgeColor(edge.Type)
 		lineWidth := 1.0 // world units — gets thinner when zoomed out (matching vis-network)
 		opacity := 0.6
+		dashed := false
+
+		// Route path edges - dashed magenta
+		if edge.IsRoutePath {
+			edgeColor = ColorRoutePath
+			lineWidth = 2.0
+			opacity = 0.7
+			dashed = true
+		}
+
+		// DMSG connection edges - red, thin
+		if edge.IsDMSGConnection {
+			edgeColor = ColorDMSGConnection
+			lineWidth = 0.5
+			opacity = 0.4
+		}
 
 		// Local visor edges
-		isLocalEdge := fromNode.IsLocalVisor || toNode.IsLocalVisor
-		if isLocalEdge {
+		if edge.IsLocalEdge || fromNode.IsLocalVisor || toNode.IsLocalVisor {
 			edgeColor = ColorLocalEdge
 			lineWidth = 3.0
 			opacity = 1.0
+		}
+
+		// Local-only transports (dashed cyan)
+		if edge.IsLocalOnly {
+			dashed = true
 		}
 
 		// Search highlighting
@@ -598,7 +673,19 @@ func (a *App) drawEdges() {
 		}
 
 		a.canvas.SetGlobalAlpha(opacity)
-		a.canvas.QuadraticCurve(x1, y1, x2, y2, lineWidth, edgeColor)
+
+		// Add shadow/glow for local edges
+		if edge.IsLocalEdge || fromNode.IsLocalVisor || toNode.IsLocalVisor {
+			a.canvas.SetShadow(ColorLocalEdge, 8, 0, 0)
+		}
+
+		if dashed {
+			a.canvas.DashedQuadraticCurve(x1, y1, x2, y2, lineWidth, edgeColor, 8, 4)
+		} else {
+			a.canvas.QuadraticCurve(x1, y1, x2, y2, lineWidth, edgeColor)
+		}
+
+		a.canvas.ClearShadow()
 		a.canvas.ResetGlobalAlpha()
 	}
 }
@@ -607,7 +694,13 @@ func (a *App) drawNodeCircles() {
 	hasSearch := len(a.searchMatches) > 0
 
 	for _, node := range a.graph.Nodes {
-		if !a.opts.ShowNodeStatus(node.Status) {
+		// Skip DMSG server nodes based on visibility setting
+		if node.IsDMSGServer && !a.showDMSGServers {
+			continue
+		}
+
+		// Don't filter DMSG server nodes by status
+		if !node.IsDMSGServer && !a.opts.ShowNodeStatus(node.Status) {
 			continue
 		}
 
@@ -631,23 +724,34 @@ func (a *App) drawNodeCircles() {
 		borderWidth := 2.0
 		if node.IsLocalVisor {
 			borderWidth = 4.0
+		} else if node.IsDMSGServer {
+			borderWidth = 2.0
 		} else if node.Status == StatusOffline {
 			borderWidth = 3.0
 		}
 
-		// Glow for local visor
+		// Shadow/glow effects for special nodes
 		if node.IsLocalVisor {
-			a.canvas.SetGlobalAlpha(0.3)
-			a.canvas.FillCircle(x, y, size*1.8, ColorLocalVisorBg)
-			a.canvas.ResetGlobalAlpha()
-			// Re-apply search dim if needed
-			if hasSearch && !a.searchMatches[node.ID] {
-				a.canvas.SetGlobalAlpha(0.15)
-			}
+			// Cyan glow for local visor
+			a.canvas.SetShadow(ColorLocalVisorBg, 15, 0, 0)
+			a.canvas.FillCircle(x, y, size, bgColor)
+			a.canvas.ClearShadow()
+		} else if node.IsSelected || node.IsHovered {
+			// Red glow for selected/hovered
+			a.canvas.SetShadow(ColorSelected, 10, 0, 0)
+			a.canvas.FillCircle(x, y, size, bgColor)
+			a.canvas.ClearShadow()
+		} else if node.IsDMSGServer {
+			// Purple glow for DMSG servers
+			a.canvas.SetShadow(ColorDMSGServerBg, 8, 0, 0)
+			a.canvas.FillCircle(x, y, size, bgColor)
+			a.canvas.ClearShadow()
+		} else {
+			// Normal nodes - slight shadow for depth
+			a.canvas.SetShadow("rgba(0,0,0,0.3)", 3, 1, 1)
+			a.canvas.FillCircle(x, y, size, bgColor)
+			a.canvas.ClearShadow()
 		}
-
-		// Node fill
-		a.canvas.FillCircle(x, y, size, bgColor)
 
 		// Border
 		a.canvas.StrokeCircle(x, y, size, borderWidth, borderColor)
@@ -766,17 +870,43 @@ func (a *App) drawTooltip() {
 
 // --- Node colors ---
 
+// DMSG server colors
+const (
+	ColorDMSGServerBg     = "#9f6efc" // Purple for DMSG servers
+	ColorDMSGServerBorder = "#7c3aed"
+	ColorDMSGConnection   = "#e94560" // Red for DMSG connections
+	ColorRoutePath        = "#ff00ff" // Magenta for route paths
+)
+
 func (a *App) nodeColors(node *Node) (bg, border string) {
 	// Selection/hover highlight changes fill color (matching JS vis-network behavior)
 	if node.IsSelected || node.IsHovered {
 		if node.IsLocalVisor {
 			return ColorLocalVisorBg, "#ffffff"
 		}
+		if node.IsDMSGServer {
+			return ColorDMSGServerBg, "#ffffff"
+		}
 		return ColorSelected, ColorHovered
 	}
 
 	if node.IsLocalVisor {
 		return ColorLocalVisorBg, ColorLocalVisorBorder
+	}
+
+	if node.IsDMSGServer {
+		return ColorDMSGServerBg, ColorDMSGServerBorder
+	}
+
+	if node.IsRouteDestination {
+		return ColorRoutePath, "#ffffff"
+	}
+
+	// IP group clustering - use group color if enabled
+	if a.clusterByIP && a.ipGroupsEnabled && node.IPGroup > 0 {
+		colorIdx := node.IPGroup % len(a.clusterColors)
+		groupColor := a.clusterColors[colorIdx]
+		return groupColor, darkenColor(groupColor)
 	}
 
 	if a.opts.HighlightServices && node.HasServices {
@@ -795,6 +925,26 @@ func (a *App) nodeColors(node *Node) (bg, border string) {
 		return ColorOfflineBg, ColorOfflineBorder
 	default:
 		return ColorUnknownBg, ColorUnknownBorder
+	}
+}
+
+// darkenColor returns a darker version of a hex color for borders
+func darkenColor(hexColor string) string {
+	// Simple approach: just return a fixed darker version
+	// In practice, you'd parse the hex and reduce RGB values
+	switch hexColor {
+	case "#00d9a5":
+		return "#00b386"
+	case "#00b4d8":
+		return "#0096b4"
+	case "#ffd166":
+		return "#ccaa52"
+	case "#e94560":
+		return "#c13a50"
+	case "#9f6efc":
+		return "#7c3aed"
+	default:
+		return "#666666"
 	}
 }
 
@@ -850,12 +1000,13 @@ func (a *App) LoadData() {
 	a.needsRedraw = true
 
 	if isFirstLoad {
-		a.stabilizationLeft = 100
+		// More iterations for initial layout to properly separate nodes
+		a.stabilizationLeft = 200
 		a.physicsEnabled = true
 		a.view.FitToGraph(a.graph, 50)
 	} else {
 		// Short stabilization on refresh to settle new nodes, then disable again
-		a.stabilizationLeft = 30
+		a.stabilizationLeft = 50
 		a.physicsEnabled = true
 	}
 
@@ -867,6 +1018,8 @@ func (a *App) LoadData() {
 	a.fetchHealthInfo()
 	a.fetchLocalVisor()
 	a.fetchTPSStatus()
+	a.fetchDMSG()
+	a.fetchIPGroups()
 }
 
 func (a *App) fetchHealthInfo() {
@@ -890,6 +1043,7 @@ func (a *App) fetchLocalVisor() {
 	}
 
 	a.localVisorPK = lv.PubKey
+	a.localVisorData = lv
 	SetVisible("section-local-visor", true)
 	SetText("local-visor-pk", lv.PubKey)
 
@@ -910,6 +1064,21 @@ func (a *App) fetchLocalVisor() {
 	SetText("local-visor-transports", itoa(len(lv.Transports)))
 	SetText("local-visor-routes", itoa(len(lv.Routes)))
 
+	// Calculate total traffic
+	var totalSent, totalRecv int64
+	for _, tp := range lv.Transports {
+		totalSent += tp.SentBytes
+		totalRecv += tp.RecvBytes
+	}
+	SetText("local-visor-sent", formatBytes(totalSent))
+	SetText("local-visor-recv", formatBytes(totalRecv))
+
+	// Update transport list
+	a.updateLocalTransportList()
+
+	// Add route path edges
+	a.addRoutePathEdges()
+
 	// Mark local visor node in graph
 	if node, ok := a.graph.Nodes[lv.PubKey]; ok {
 		node.IsLocalVisor = true
@@ -918,6 +1087,122 @@ func (a *App) fetchLocalVisor() {
 		}
 		a.needsRedraw = true
 	}
+
+	// Mark local edges
+	a.updateLocalEdgeStyling()
+}
+
+func (a *App) updateLocalTransportList() {
+	if a.localVisorData == nil {
+		return
+	}
+
+	var html strings.Builder
+
+	if len(a.localVisorData.Transports) == 0 {
+		html.WriteString(`<div style="color:#555;font-size:0.8em;padding:8px;text-align:center;">No transports established</div>`)
+	} else {
+		for _, tp := range a.localVisorData.Transports {
+			// Transport type color
+			tpColor := ColorUnknownBg
+			switch tp.Type {
+			case "stcpr":
+				tpColor = ColorSTCPR
+			case "sudph":
+				tpColor = ColorSUDPH
+			case "dmsg":
+				tpColor = ColorDMSG
+			}
+
+			html.WriteString(`<div style="padding:3px 0;border-bottom:1px solid #0f3460;cursor:pointer;font-size:0.75em;" onclick="focusVisor('`)
+			html.WriteString(tp.RemotePK)
+			html.WriteString(`')">`)
+			html.WriteString(`<span style="color:` + tpColor + `;font-weight:bold;">` + tp.Type + `</span>`)
+			html.WriteString(` → ` + shortPK(tp.RemotePK) + `...`)
+			html.WriteString(`<span style="color:#666;float:right;">↑` + formatBytes(tp.SentBytes) + ` ↓` + formatBytes(tp.RecvBytes) + `</span>`)
+			html.WriteString(`</div>`)
+		}
+	}
+
+	SetHTML("local-transport-list", html.String())
+}
+
+func (a *App) addRoutePathEdges() {
+	if a.localVisorData == nil {
+		return
+	}
+
+	for _, route := range a.localVisorData.Routes {
+		if route.NextHopPK != "" && route.DstPK != "" && route.NextHopPK != route.DstPK {
+			// Create route destination node if it doesn't exist
+			if _, exists := a.graph.Nodes[route.DstPK]; !exists {
+				node := &Node{
+					ID:                 route.DstPK,
+					Size:               10,
+					Status:             StatusUnknown,
+					Label:              shortPK(route.DstPK),
+					IsRouteDestination: true,
+				}
+				a.graph.AddNode(node)
+				// Position near the next hop if it exists
+				if hopNode, ok := a.graph.Nodes[route.NextHopPK]; ok {
+					node.X = hopNode.X + (rand.Float64()-0.5)*100
+					node.Y = hopNode.Y + (rand.Float64()-0.5)*100
+				}
+			}
+
+			// Create route path edge
+			edgeID := "route-" + shortPK(route.NextHopPK) + "-" + shortPK(route.DstPK)
+			if _, exists := a.graph.Edges[edgeID]; !exists {
+				edge := &Edge{
+					ID:          edgeID,
+					From:        route.NextHopPK,
+					To:          route.DstPK,
+					Type:        TransportDMSG, // Use DMSG type for route paths
+					IsRoutePath: true,
+				}
+				a.graph.AddEdge(edge)
+			}
+		}
+	}
+
+	a.needsRedraw = true
+}
+
+func (a *App) updateLocalEdgeStyling() {
+	if a.localVisorData == nil || !a.localVisorData.Connected {
+		return
+	}
+
+	localPK := a.localVisorData.PubKey
+	localRemotes := make(map[string]bool)
+	for _, tp := range a.localVisorData.Transports {
+		localRemotes[tp.RemotePK] = true
+	}
+
+	for _, edge := range a.graph.Edges {
+		involvesLocal := edge.From == localPK || edge.To == localPK
+		remotePK := edge.From
+		if edge.From == localPK {
+			remotePK = edge.To
+		}
+
+		if involvesLocal && localRemotes[remotePK] {
+			edge.IsLocalEdge = true
+		}
+	}
+}
+
+// formatBytes formats bytes into human-readable format
+func formatBytes(bytes int64) string {
+	if bytes < 1024 {
+		return itoa(int(bytes)) + "B"
+	} else if bytes < 1024*1024 {
+		return ftoa(float64(bytes)/1024) + "KB"
+	} else if bytes < 1024*1024*1024 {
+		return ftoa(float64(bytes)/(1024*1024)) + "MB"
+	}
+	return ftoa(float64(bytes)/(1024*1024*1024)) + "GB"
 }
 
 func (a *App) fetchTPSStatus() {
@@ -945,6 +1230,205 @@ func (a *App) fetchTPSStatus() {
 			dot.Get("style").Set("background", ColorOfflineBg)
 		}
 	}
+}
+
+func (a *App) fetchDMSG() {
+	dmsg, err := a.fetcher.FetchDMSG()
+	if err != nil {
+		return
+	}
+
+	a.dmsgData = dmsg
+
+	// Build entries lookup
+	a.dmsgEntries = make(map[string]bool)
+	for _, pk := range dmsg.Entries {
+		a.dmsgEntries[pk] = true
+	}
+
+	// Update DMSG section in sidebar
+	SetVisible("section-dmsg", true)
+	SetText("dmsg-server-count", itoa(len(dmsg.Servers)))
+	SetText("dmsg-entry-count", itoa(dmsg.EntriesCount))
+
+	// Calculate total sessions
+	totalSessions := 0
+	for _, srv := range dmsg.Servers {
+		totalSessions += srv.AvailableSessions
+	}
+	SetText("dmsg-total-sessions", itoa(totalSessions))
+
+	// Add DMSG servers to graph
+	a.addDMSGServersToGraph()
+	a.updateDMSGServerList()
+}
+
+func (a *App) addDMSGServersToGraph() {
+	if a.dmsgData == nil || !a.showDMSGServers {
+		return
+	}
+
+	// Find max clients for size scaling
+	maxClients := 1
+	for _, srv := range a.dmsgData.Servers {
+		if len(srv.Clients) > maxClients {
+			maxClients = len(srv.Clients)
+		}
+	}
+
+	// Build set of existing visor node IDs for edge targets
+	visorNodeIDs := make(map[string]bool)
+	for id := range a.graph.Nodes {
+		if !strings.HasPrefix(id, "dmsg-srv-") {
+			visorNodeIDs[id] = true
+		}
+	}
+
+	for _, srv := range a.dmsgData.Servers {
+		if srv.PK == "" {
+			continue
+		}
+
+		nodeID := "dmsg-srv-" + srv.PK
+		clientCount := len(srv.Clients)
+		sessions := srv.AvailableSessions
+
+		// Size formula matching visor nodes
+		size := 5.0 + (float64(clientCount)/float64(maxClients))*25.0
+		if size < 8 {
+			size = 8
+		}
+
+		// Check if node already exists
+		existingNode, exists := a.graph.Nodes[nodeID]
+		if exists {
+			// Update existing node
+			existingNode.DMSGSessions = sessions
+			existingNode.DMSGClients = clientCount
+			existingNode.Size = size
+		} else {
+			// Create new DMSG server node
+			node := &Node{
+				ID:           nodeID,
+				Size:         size,
+				Status:       StatusUnknown,
+				Country:      srv.Country,
+				Label:        shortPK(srv.PK),
+				IsDMSGServer: true,
+				DMSGSessions: sessions,
+				DMSGClients:  clientCount,
+			}
+			a.graph.AddNode(node)
+
+			// Position near center initially
+			node.X = (rand.Float64() - 0.5) * 200
+			node.Y = (rand.Float64() - 0.5) * 200
+		}
+
+		// Add edges to connected clients that exist in graph
+		for _, clientPK := range srv.Clients {
+			if visorNodeIDs[clientPK] {
+				edgeID := "dmsg-conn-" + shortPK(srv.PK) + "-" + shortPK(clientPK)
+				if _, exists := a.graph.Edges[edgeID]; !exists {
+					edge := &Edge{
+						ID:               edgeID,
+						From:             nodeID,
+						To:               clientPK,
+						Type:             TransportDMSG,
+						IsDMSGConnection: true,
+					}
+					a.graph.AddEdge(edge)
+				}
+			}
+		}
+	}
+
+	a.needsRedraw = true
+}
+
+func (a *App) updateDMSGServerList() {
+	if a.dmsgData == nil {
+		return
+	}
+
+	var html strings.Builder
+	html.WriteString(`<table style="width:100%;border-collapse:collapse;">`)
+	html.WriteString(`<tr style="color:#888;font-size:0.9em;border-bottom:1px solid #0f3460;">`)
+	html.WriteString(`<td style="padding:2px 0;">Server</td>`)
+	html.WriteString(`<td style="text-align:right;padding:2px 4px;">Sess</td>`)
+	html.WriteString(`<td style="text-align:right;padding:2px 0;">Clients</td>`)
+	html.WriteString(`</tr>`)
+
+	for _, srv := range a.dmsgData.Servers {
+		sessions := srv.AvailableSessions
+		clients := len(srv.Clients)
+		shortPK := shortPK(srv.PK)
+		nodeID := "dmsg-srv-" + srv.PK
+
+		// Session color based on availability
+		sessionColor := ColorOfflineBg
+		if sessions > 50 {
+			sessionColor = ColorOnlineBg
+		} else if sessions > 10 {
+			sessionColor = ColorUnknownBg
+		}
+
+		// Country flag emoji if available
+		flag := countryToFlag(srv.Country)
+
+		html.WriteString(`<tr style="border-bottom:1px solid #0f3460;">`)
+		html.WriteString(`<td style="padding:2px 0;">`)
+		html.WriteString(`<span title="` + srv.PK + `" style="cursor:pointer;color:#9f6efc;" onclick="focusVisor('` + nodeID + `')">`)
+		html.WriteString(flag + " " + shortPK)
+		html.WriteString(`</span></td>`)
+		html.WriteString(`<td style="text-align:right;padding:2px 4px;color:` + sessionColor + `;">`)
+		html.WriteString(itoa(sessions))
+		html.WriteString(`</td>`)
+		html.WriteString(`<td style="text-align:right;padding:2px 0;color:#6ec8ff;">`)
+		html.WriteString(itoa(clients))
+		html.WriteString(`</td></tr>`)
+	}
+	html.WriteString(`</table>`)
+
+	SetHTML("dmsg-server-list", html.String())
+}
+
+// countryToFlag converts a country code to a flag emoji
+func countryToFlag(country string) string {
+	if len(country) != 2 {
+		return ""
+	}
+	country = strings.ToUpper(country)
+	// Convert country code to regional indicator symbols
+	// A = 🇦, B = 🇧, etc. (Unicode regional indicators start at 0x1F1E6)
+	r1 := rune(country[0]) - 'A' + 0x1F1E6
+	r2 := rune(country[1]) - 'A' + 0x1F1E6
+	return string([]rune{r1, r2})
+}
+
+func (a *App) fetchIPGroups() {
+	ipGroups, err := a.fetcher.FetchIPGroups()
+	if err != nil {
+		return
+	}
+
+	a.ipGroupsData = ipGroups
+	a.ipGroupsEnabled = ipGroups.Enabled && ipGroups.TotalGroups > 1
+
+	// Update sidebar
+	if a.ipGroupsEnabled {
+		SetVisible("section-ip-groups", true)
+		SetText("ip-groups-count", itoa(ipGroups.TotalGroups))
+	}
+
+	// Assign IP groups to nodes
+	for pk, groupNum := range ipGroups.Groups {
+		if node, ok := a.graph.Nodes[pk]; ok {
+			node.IPGroup = groupNum
+		}
+	}
+
+	a.needsRedraw = true
 }
 
 func (a *App) updateSidebarStats() {
@@ -1046,15 +1530,23 @@ func (a *App) FitToScreen() {
 // --- Physics ---
 
 func (a *App) runPhysics() {
+	// Barnes-Hut style physics parameters matching vis-network defaults
+	// Key: stronger repulsion and longer spring length to prevent overlap
 	const (
-		gravitationalConstant = -3000.0
-		springConstant        = 0.001
-		springLength          = 200.0
-		damping               = 0.9
+		gravitationalConstant = -8000.0 // Stronger repulsion (was -3000)
+		springConstant        = 0.0005  // Weaker springs (was 0.001)
+		springLength          = 300.0   // Longer springs (was 200)
+		damping               = 0.85    // More damping for stability
 		minVelocity           = 0.1
-		maxVelocity           = 50.0
-		centralGravity        = 0.3
+		maxVelocity           = 40.0
+		centralGravity        = 0.15    // Weaker central pull (was 0.3)
+		minNodeDistance       = 50.0    // Minimum distance between nodes
 	)
+
+	nodeCount := len(a.graph.Nodes)
+	if nodeCount == 0 {
+		return
+	}
 
 	for _, node := range a.graph.Nodes {
 		if node.IsPinned {
@@ -1063,6 +1555,7 @@ func (a *App) runPhysics() {
 
 		fx, fy := 0.0, 0.0
 
+		// Repulsive force from all other nodes (Barnes-Hut approximation)
 		for _, other := range a.graph.Nodes {
 			if other.ID == node.ID {
 				continue
@@ -1071,8 +1564,13 @@ func (a *App) runPhysics() {
 			dx := node.X - other.X
 			dy := node.Y - other.Y
 			distSq := dx*dx + dy*dy
-			if distSq < 1 {
-				distSq = 1
+
+			// Add minimum distance to prevent extreme overlap forces
+			if distSq < minNodeDistance*minNodeDistance {
+				distSq = minNodeDistance * minNodeDistance
+				// Add extra random jitter to separate overlapping nodes
+				dx += (rand.Float64() - 0.5) * 10
+				dy += (rand.Float64() - 0.5) * 10
 			}
 
 			dist := math.Sqrt(distSq)
@@ -1080,11 +1578,13 @@ func (a *App) runPhysics() {
 				dist = 1
 			}
 
+			// Repulsion force inversely proportional to distance squared
 			force := -gravitationalConstant / distSq
 			fx += (dx / dist) * force
 			fy += (dy / dist) * force
 		}
 
+		// Spring force from connected edges
 		for _, edge := range a.graph.GetEdgesForNode(node.ID) {
 			var other *Node
 			if edge.From == node.ID {
@@ -1101,6 +1601,7 @@ func (a *App) runPhysics() {
 			dist := math.Sqrt(dx*dx + dy*dy)
 
 			if dist > 0 {
+				// Spring force proportional to displacement from rest length
 				displacement := dist - springLength
 				force := springConstant * displacement
 				fx += (dx / dist) * force
@@ -1108,15 +1609,20 @@ func (a *App) runPhysics() {
 			}
 		}
 
+		// Central gravity - pulls nodes toward center
 		dist := math.Sqrt(node.X*node.X + node.Y*node.Y)
 		if dist > 0 {
-			fx -= (node.X / dist) * centralGravity * dist
-			fy -= (node.Y / dist) * centralGravity * dist
+			// Weaker central gravity for more spread
+			gravityForce := centralGravity * math.Log(dist+1)
+			fx -= (node.X / dist) * gravityForce
+			fy -= (node.Y / dist) * gravityForce
 		}
 
+		// Update velocity with damping
 		node.VX = (node.VX + fx) * damping
 		node.VY = (node.VY + fy) * damping
 
+		// Clamp velocity
 		speed := math.Sqrt(node.VX*node.VX + node.VY*node.VY)
 		if speed > maxVelocity {
 			scale := maxVelocity / speed
@@ -1124,6 +1630,7 @@ func (a *App) runPhysics() {
 			node.VY *= scale
 		}
 
+		// Apply velocity if significant
 		if math.Abs(node.VX) > minVelocity || math.Abs(node.VY) > minVelocity {
 			node.X += node.VX
 			node.Y += node.VY
