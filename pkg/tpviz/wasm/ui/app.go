@@ -636,11 +636,19 @@ func (a *App) drawEdges() {
 		}
 
 		a.canvas.SetGlobalAlpha(opacity)
+
+		// Add shadow/glow for local edges
+		if edge.IsLocalEdge || fromNode.IsLocalVisor || toNode.IsLocalVisor {
+			a.canvas.SetShadow(ColorLocalEdge, 8, 0, 0)
+		}
+
 		if dashed {
 			a.canvas.DashedQuadraticCurve(x1, y1, x2, y2, lineWidth, edgeColor, 8, 4)
 		} else {
 			a.canvas.QuadraticCurve(x1, y1, x2, y2, lineWidth, edgeColor)
 		}
+
+		a.canvas.ClearShadow()
 		a.canvas.ResetGlobalAlpha()
 	}
 }
@@ -649,7 +657,13 @@ func (a *App) drawNodeCircles() {
 	hasSearch := len(a.searchMatches) > 0
 
 	for _, node := range a.graph.Nodes {
-		if !a.opts.ShowNodeStatus(node.Status) {
+		// Skip DMSG server nodes based on visibility setting
+		if node.IsDMSGServer && !a.showDMSGServers {
+			continue
+		}
+
+		// Don't filter DMSG server nodes by status
+		if !node.IsDMSGServer && !a.opts.ShowNodeStatus(node.Status) {
 			continue
 		}
 
@@ -673,23 +687,34 @@ func (a *App) drawNodeCircles() {
 		borderWidth := 2.0
 		if node.IsLocalVisor {
 			borderWidth = 4.0
+		} else if node.IsDMSGServer {
+			borderWidth = 2.0
 		} else if node.Status == StatusOffline {
 			borderWidth = 3.0
 		}
 
-		// Glow for local visor
+		// Shadow/glow effects for special nodes
 		if node.IsLocalVisor {
-			a.canvas.SetGlobalAlpha(0.3)
-			a.canvas.FillCircle(x, y, size*1.8, ColorLocalVisorBg)
-			a.canvas.ResetGlobalAlpha()
-			// Re-apply search dim if needed
-			if hasSearch && !a.searchMatches[node.ID] {
-				a.canvas.SetGlobalAlpha(0.15)
-			}
+			// Cyan glow for local visor
+			a.canvas.SetShadow(ColorLocalVisorBg, 15, 0, 0)
+			a.canvas.FillCircle(x, y, size, bgColor)
+			a.canvas.ClearShadow()
+		} else if node.IsSelected || node.IsHovered {
+			// Red glow for selected/hovered
+			a.canvas.SetShadow(ColorSelected, 10, 0, 0)
+			a.canvas.FillCircle(x, y, size, bgColor)
+			a.canvas.ClearShadow()
+		} else if node.IsDMSGServer {
+			// Purple glow for DMSG servers
+			a.canvas.SetShadow(ColorDMSGServerBg, 8, 0, 0)
+			a.canvas.FillCircle(x, y, size, bgColor)
+			a.canvas.ClearShadow()
+		} else {
+			// Normal nodes - slight shadow for depth
+			a.canvas.SetShadow("rgba(0,0,0,0.3)", 3, 1, 1)
+			a.canvas.FillCircle(x, y, size, bgColor)
+			a.canvas.ClearShadow()
 		}
-
-		// Node fill
-		a.canvas.FillCircle(x, y, size, bgColor)
 
 		// Border
 		a.canvas.StrokeCircle(x, y, size, borderWidth, borderColor)
@@ -911,12 +936,13 @@ func (a *App) LoadData() {
 	a.needsRedraw = true
 
 	if isFirstLoad {
-		a.stabilizationLeft = 100
+		// More iterations for initial layout to properly separate nodes
+		a.stabilizationLeft = 200
 		a.physicsEnabled = true
 		a.view.FitToGraph(a.graph, 50)
 	} else {
 		// Short stabilization on refresh to settle new nodes, then disable again
-		a.stabilizationLeft = 30
+		a.stabilizationLeft = 50
 		a.physicsEnabled = true
 	}
 
@@ -1414,15 +1440,23 @@ func (a *App) FitToScreen() {
 // --- Physics ---
 
 func (a *App) runPhysics() {
+	// Barnes-Hut style physics parameters matching vis-network defaults
+	// Key: stronger repulsion and longer spring length to prevent overlap
 	const (
-		gravitationalConstant = -3000.0
-		springConstant        = 0.001
-		springLength          = 200.0
-		damping               = 0.9
+		gravitationalConstant = -8000.0 // Stronger repulsion (was -3000)
+		springConstant        = 0.0005  // Weaker springs (was 0.001)
+		springLength          = 300.0   // Longer springs (was 200)
+		damping               = 0.85    // More damping for stability
 		minVelocity           = 0.1
-		maxVelocity           = 50.0
-		centralGravity        = 0.3
+		maxVelocity           = 40.0
+		centralGravity        = 0.15    // Weaker central pull (was 0.3)
+		minNodeDistance       = 50.0    // Minimum distance between nodes
 	)
+
+	nodeCount := len(a.graph.Nodes)
+	if nodeCount == 0 {
+		return
+	}
 
 	for _, node := range a.graph.Nodes {
 		if node.IsPinned {
@@ -1431,6 +1465,7 @@ func (a *App) runPhysics() {
 
 		fx, fy := 0.0, 0.0
 
+		// Repulsive force from all other nodes (Barnes-Hut approximation)
 		for _, other := range a.graph.Nodes {
 			if other.ID == node.ID {
 				continue
@@ -1439,8 +1474,13 @@ func (a *App) runPhysics() {
 			dx := node.X - other.X
 			dy := node.Y - other.Y
 			distSq := dx*dx + dy*dy
-			if distSq < 1 {
-				distSq = 1
+
+			// Add minimum distance to prevent extreme overlap forces
+			if distSq < minNodeDistance*minNodeDistance {
+				distSq = minNodeDistance * minNodeDistance
+				// Add extra random jitter to separate overlapping nodes
+				dx += (rand.Float64() - 0.5) * 10
+				dy += (rand.Float64() - 0.5) * 10
 			}
 
 			dist := math.Sqrt(distSq)
@@ -1448,11 +1488,13 @@ func (a *App) runPhysics() {
 				dist = 1
 			}
 
+			// Repulsion force inversely proportional to distance squared
 			force := -gravitationalConstant / distSq
 			fx += (dx / dist) * force
 			fy += (dy / dist) * force
 		}
 
+		// Spring force from connected edges
 		for _, edge := range a.graph.GetEdgesForNode(node.ID) {
 			var other *Node
 			if edge.From == node.ID {
@@ -1469,6 +1511,7 @@ func (a *App) runPhysics() {
 			dist := math.Sqrt(dx*dx + dy*dy)
 
 			if dist > 0 {
+				// Spring force proportional to displacement from rest length
 				displacement := dist - springLength
 				force := springConstant * displacement
 				fx += (dx / dist) * force
@@ -1476,15 +1519,20 @@ func (a *App) runPhysics() {
 			}
 		}
 
+		// Central gravity - pulls nodes toward center
 		dist := math.Sqrt(node.X*node.X + node.Y*node.Y)
 		if dist > 0 {
-			fx -= (node.X / dist) * centralGravity * dist
-			fy -= (node.Y / dist) * centralGravity * dist
+			// Weaker central gravity for more spread
+			gravityForce := centralGravity * math.Log(dist+1)
+			fx -= (node.X / dist) * gravityForce
+			fy -= (node.Y / dist) * gravityForce
 		}
 
+		// Update velocity with damping
 		node.VX = (node.VX + fx) * damping
 		node.VY = (node.VY + fy) * damping
 
+		// Clamp velocity
 		speed := math.Sqrt(node.VX*node.VX + node.VY*node.VY)
 		if speed > maxVelocity {
 			scale := maxVelocity / speed
@@ -1492,6 +1540,7 @@ func (a *App) runPhysics() {
 			node.VY *= scale
 		}
 
+		// Apply velocity if significant
 		if math.Abs(node.VX) > minVelocity || math.Abs(node.VY) > minVelocity {
 			node.X += node.VX
 			node.Y += node.VY
