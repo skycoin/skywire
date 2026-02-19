@@ -67,6 +67,22 @@ type TPSStatus struct {
 	TPSPK   string `json:"tps_pk,omitempty"`
 }
 
+// DMSGData represents the /api/dmsg response
+type DMSGData struct {
+	Servers      []DMSGServer `json:"servers"`
+	Entries      []string     `json:"entries"`
+	EntriesCount int          `json:"entries_count"`
+}
+
+// DMSGServer represents a DMSG server
+type DMSGServer struct {
+	PK                string   `json:"pk"`
+	Address           string   `json:"address"`
+	Country           string   `json:"country"`
+	AvailableSessions int      `json:"available_sessions"`
+	Clients           []string `json:"clients"`
+}
+
 // DataFetcher fetches data from the API
 type DataFetcher struct{}
 
@@ -139,6 +155,16 @@ func (f *DataFetcher) FetchTPSStatus() (*TPSStatus, error) {
 		return nil, err
 	}
 	return &status, nil
+}
+
+// FetchDMSG fetches DMSG server and client data
+func (f *DataFetcher) FetchDMSG() (*DMSGData, error) {
+	var data DMSGData
+	err := fetchJSON("/api/dmsg", &data)
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
 }
 
 // ProcessTransports converts transport data into graph nodes and edges

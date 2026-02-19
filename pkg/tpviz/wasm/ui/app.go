@@ -4,6 +4,7 @@ package ui
 
 import (
 	"math"
+	"math/rand"
 	"strings"
 	"syscall/js"
 )
@@ -95,7 +96,13 @@ type App struct {
 	lastRefreshFrame int
 
 	// Local visor
-	localVisorPK string
+	localVisorPK   string
+	localVisorData *LocalVisorData
+
+	// DMSG data
+	dmsgData        *DMSGData
+	dmsgEntries     map[string]bool
+	showDMSGServers bool
 
 	// Animation frame callback
 	frameCallback js.Func
@@ -114,14 +121,16 @@ func NewApp(canvasID string) *App {
 	input := NewInputHandler(canvasID)
 
 	app := &App{
-		canvas:         canvas,
-		input:          input,
-		graph:          NewGraph(),
-		view:           NewView(canvas.Width(), canvas.Height()),
-		opts:           NewRenderOptions(),
-		fetcher:        NewDataFetcher(),
-		physicsEnabled: true,
-		searchMatches:  make(map[string]bool),
+		canvas:          canvas,
+		input:           input,
+		graph:           NewGraph(),
+		view:            NewView(canvas.Width(), canvas.Height()),
+		opts:            NewRenderOptions(),
+		fetcher:         NewDataFetcher(),
+		physicsEnabled:  true,
+		searchMatches:   make(map[string]bool),
+		dmsgEntries:     make(map[string]bool),
+		showDMSGServers: true,
 	}
 
 	return app
@@ -536,6 +545,11 @@ func (a *App) drawEdges() {
 			continue
 		}
 
+		// Hide DMSG connections if DMSG servers are not shown
+		if edge.IsDMSGConnection && !a.showDMSGServers {
+			continue
+		}
+
 		fromNode, ok := a.graph.Nodes[edge.From]
 		if !ok {
 			continue
@@ -545,7 +559,11 @@ func (a *App) drawEdges() {
 			continue
 		}
 
-		if !a.opts.ShowNodeStatus(fromNode.Status) || !a.opts.ShowNodeStatus(toNode.Status) {
+		// Don't filter DMSG server nodes by status
+		if !fromNode.IsDMSGServer && !a.opts.ShowNodeStatus(fromNode.Status) {
+			continue
+		}
+		if !toNode.IsDMSGServer && !a.opts.ShowNodeStatus(toNode.Status) {
 			continue
 		}
 
@@ -569,13 +587,33 @@ func (a *App) drawEdges() {
 		edgeColor := a.edgeColor(edge.Type)
 		lineWidth := 1.0 // world units — gets thinner when zoomed out (matching vis-network)
 		opacity := 0.6
+		dashed := false
+
+		// Route path edges - dashed magenta
+		if edge.IsRoutePath {
+			edgeColor = ColorRoutePath
+			lineWidth = 2.0
+			opacity = 0.7
+			dashed = true
+		}
+
+		// DMSG connection edges - red, thin
+		if edge.IsDMSGConnection {
+			edgeColor = ColorDMSGConnection
+			lineWidth = 0.5
+			opacity = 0.4
+		}
 
 		// Local visor edges
-		isLocalEdge := fromNode.IsLocalVisor || toNode.IsLocalVisor
-		if isLocalEdge {
+		if edge.IsLocalEdge || fromNode.IsLocalVisor || toNode.IsLocalVisor {
 			edgeColor = ColorLocalEdge
 			lineWidth = 3.0
 			opacity = 1.0
+		}
+
+		// Local-only transports (dashed cyan)
+		if edge.IsLocalOnly {
+			dashed = true
 		}
 
 		// Search highlighting
@@ -598,7 +636,11 @@ func (a *App) drawEdges() {
 		}
 
 		a.canvas.SetGlobalAlpha(opacity)
-		a.canvas.QuadraticCurve(x1, y1, x2, y2, lineWidth, edgeColor)
+		if dashed {
+			a.canvas.DashedQuadraticCurve(x1, y1, x2, y2, lineWidth, edgeColor, 8, 4)
+		} else {
+			a.canvas.QuadraticCurve(x1, y1, x2, y2, lineWidth, edgeColor)
+		}
 		a.canvas.ResetGlobalAlpha()
 	}
 }
@@ -766,17 +808,36 @@ func (a *App) drawTooltip() {
 
 // --- Node colors ---
 
+// DMSG server colors
+const (
+	ColorDMSGServerBg     = "#9f6efc" // Purple for DMSG servers
+	ColorDMSGServerBorder = "#7c3aed"
+	ColorDMSGConnection   = "#e94560" // Red for DMSG connections
+	ColorRoutePath        = "#ff00ff" // Magenta for route paths
+)
+
 func (a *App) nodeColors(node *Node) (bg, border string) {
 	// Selection/hover highlight changes fill color (matching JS vis-network behavior)
 	if node.IsSelected || node.IsHovered {
 		if node.IsLocalVisor {
 			return ColorLocalVisorBg, "#ffffff"
 		}
+		if node.IsDMSGServer {
+			return ColorDMSGServerBg, "#ffffff"
+		}
 		return ColorSelected, ColorHovered
 	}
 
 	if node.IsLocalVisor {
 		return ColorLocalVisorBg, ColorLocalVisorBorder
+	}
+
+	if node.IsDMSGServer {
+		return ColorDMSGServerBg, ColorDMSGServerBorder
+	}
+
+	if node.IsRouteDestination {
+		return ColorRoutePath, "#ffffff"
 	}
 
 	if a.opts.HighlightServices && node.HasServices {
@@ -867,6 +928,7 @@ func (a *App) LoadData() {
 	a.fetchHealthInfo()
 	a.fetchLocalVisor()
 	a.fetchTPSStatus()
+	a.fetchDMSG()
 }
 
 func (a *App) fetchHealthInfo() {
@@ -890,6 +952,7 @@ func (a *App) fetchLocalVisor() {
 	}
 
 	a.localVisorPK = lv.PubKey
+	a.localVisorData = lv
 	SetVisible("section-local-visor", true)
 	SetText("local-visor-pk", lv.PubKey)
 
@@ -910,6 +973,21 @@ func (a *App) fetchLocalVisor() {
 	SetText("local-visor-transports", itoa(len(lv.Transports)))
 	SetText("local-visor-routes", itoa(len(lv.Routes)))
 
+	// Calculate total traffic
+	var totalSent, totalRecv int64
+	for _, tp := range lv.Transports {
+		totalSent += tp.SentBytes
+		totalRecv += tp.RecvBytes
+	}
+	SetText("local-visor-sent", formatBytes(totalSent))
+	SetText("local-visor-recv", formatBytes(totalRecv))
+
+	// Update transport list
+	a.updateLocalTransportList()
+
+	// Add route path edges
+	a.addRoutePathEdges()
+
 	// Mark local visor node in graph
 	if node, ok := a.graph.Nodes[lv.PubKey]; ok {
 		node.IsLocalVisor = true
@@ -918,6 +996,122 @@ func (a *App) fetchLocalVisor() {
 		}
 		a.needsRedraw = true
 	}
+
+	// Mark local edges
+	a.updateLocalEdgeStyling()
+}
+
+func (a *App) updateLocalTransportList() {
+	if a.localVisorData == nil {
+		return
+	}
+
+	var html strings.Builder
+
+	if len(a.localVisorData.Transports) == 0 {
+		html.WriteString(`<div style="color:#555;font-size:0.8em;padding:8px;text-align:center;">No transports established</div>`)
+	} else {
+		for _, tp := range a.localVisorData.Transports {
+			// Transport type color
+			tpColor := ColorUnknownBg
+			switch tp.Type {
+			case "stcpr":
+				tpColor = ColorSTCPR
+			case "sudph":
+				tpColor = ColorSUDPH
+			case "dmsg":
+				tpColor = ColorDMSG
+			}
+
+			html.WriteString(`<div style="padding:3px 0;border-bottom:1px solid #0f3460;cursor:pointer;font-size:0.75em;" onclick="focusVisor('`)
+			html.WriteString(tp.RemotePK)
+			html.WriteString(`')">`)
+			html.WriteString(`<span style="color:` + tpColor + `;font-weight:bold;">` + tp.Type + `</span>`)
+			html.WriteString(` → ` + shortPK(tp.RemotePK) + `...`)
+			html.WriteString(`<span style="color:#666;float:right;">↑` + formatBytes(tp.SentBytes) + ` ↓` + formatBytes(tp.RecvBytes) + `</span>`)
+			html.WriteString(`</div>`)
+		}
+	}
+
+	SetHTML("local-transport-list", html.String())
+}
+
+func (a *App) addRoutePathEdges() {
+	if a.localVisorData == nil {
+		return
+	}
+
+	for _, route := range a.localVisorData.Routes {
+		if route.NextHopPK != "" && route.DstPK != "" && route.NextHopPK != route.DstPK {
+			// Create route destination node if it doesn't exist
+			if _, exists := a.graph.Nodes[route.DstPK]; !exists {
+				node := &Node{
+					ID:                 route.DstPK,
+					Size:               10,
+					Status:             StatusUnknown,
+					Label:              shortPK(route.DstPK),
+					IsRouteDestination: true,
+				}
+				a.graph.AddNode(node)
+				// Position near the next hop if it exists
+				if hopNode, ok := a.graph.Nodes[route.NextHopPK]; ok {
+					node.X = hopNode.X + (rand.Float64()-0.5)*100
+					node.Y = hopNode.Y + (rand.Float64()-0.5)*100
+				}
+			}
+
+			// Create route path edge
+			edgeID := "route-" + shortPK(route.NextHopPK) + "-" + shortPK(route.DstPK)
+			if _, exists := a.graph.Edges[edgeID]; !exists {
+				edge := &Edge{
+					ID:          edgeID,
+					From:        route.NextHopPK,
+					To:          route.DstPK,
+					Type:        TransportDMSG, // Use DMSG type for route paths
+					IsRoutePath: true,
+				}
+				a.graph.AddEdge(edge)
+			}
+		}
+	}
+
+	a.needsRedraw = true
+}
+
+func (a *App) updateLocalEdgeStyling() {
+	if a.localVisorData == nil || !a.localVisorData.Connected {
+		return
+	}
+
+	localPK := a.localVisorData.PubKey
+	localRemotes := make(map[string]bool)
+	for _, tp := range a.localVisorData.Transports {
+		localRemotes[tp.RemotePK] = true
+	}
+
+	for _, edge := range a.graph.Edges {
+		involvesLocal := edge.From == localPK || edge.To == localPK
+		remotePK := edge.From
+		if edge.From == localPK {
+			remotePK = edge.To
+		}
+
+		if involvesLocal && localRemotes[remotePK] {
+			edge.IsLocalEdge = true
+		}
+	}
+}
+
+// formatBytes formats bytes into human-readable format
+func formatBytes(bytes int64) string {
+	if bytes < 1024 {
+		return itoa(int(bytes)) + "B"
+	} else if bytes < 1024*1024 {
+		return ftoa(float64(bytes)/1024) + "KB"
+	} else if bytes < 1024*1024*1024 {
+		return ftoa(float64(bytes)/(1024*1024)) + "MB"
+	}
+	return ftoa(float64(bytes)/(1024*1024*1024)) + "GB"
 }
 
 func (a *App) fetchTPSStatus() {
@@ -945,6 +1139,180 @@ func (a *App) fetchTPSStatus() {
 			dot.Get("style").Set("background", ColorOfflineBg)
 		}
 	}
+}
+
+func (a *App) fetchDMSG() {
+	dmsg, err := a.fetcher.FetchDMSG()
+	if err != nil {
+		return
+	}
+
+	a.dmsgData = dmsg
+
+	// Build entries lookup
+	a.dmsgEntries = make(map[string]bool)
+	for _, pk := range dmsg.Entries {
+		a.dmsgEntries[pk] = true
+	}
+
+	// Update DMSG section in sidebar
+	SetVisible("section-dmsg", true)
+	SetText("dmsg-server-count", itoa(len(dmsg.Servers)))
+	SetText("dmsg-entry-count", itoa(dmsg.EntriesCount))
+
+	// Calculate total sessions
+	totalSessions := 0
+	for _, srv := range dmsg.Servers {
+		totalSessions += srv.AvailableSessions
+	}
+	SetText("dmsg-total-sessions", itoa(totalSessions))
+
+	// Add DMSG servers to graph
+	a.addDMSGServersToGraph()
+	a.updateDMSGServerList()
+}
+
+func (a *App) addDMSGServersToGraph() {
+	if a.dmsgData == nil || !a.showDMSGServers {
+		return
+	}
+
+	// Find max clients for size scaling
+	maxClients := 1
+	for _, srv := range a.dmsgData.Servers {
+		if len(srv.Clients) > maxClients {
+			maxClients = len(srv.Clients)
+		}
+	}
+
+	// Build set of existing visor node IDs for edge targets
+	visorNodeIDs := make(map[string]bool)
+	for id := range a.graph.Nodes {
+		if !strings.HasPrefix(id, "dmsg-srv-") {
+			visorNodeIDs[id] = true
+		}
+	}
+
+	for _, srv := range a.dmsgData.Servers {
+		if srv.PK == "" {
+			continue
+		}
+
+		nodeID := "dmsg-srv-" + srv.PK
+		clientCount := len(srv.Clients)
+		sessions := srv.AvailableSessions
+
+		// Size formula matching visor nodes
+		size := 5.0 + (float64(clientCount)/float64(maxClients))*25.0
+		if size < 8 {
+			size = 8
+		}
+
+		// Check if node already exists
+		existingNode, exists := a.graph.Nodes[nodeID]
+		if exists {
+			// Update existing node
+			existingNode.DMSGSessions = sessions
+			existingNode.DMSGClients = clientCount
+			existingNode.Size = size
+		} else {
+			// Create new DMSG server node
+			node := &Node{
+				ID:           nodeID,
+				Size:         size,
+				Status:       StatusUnknown,
+				Country:      srv.Country,
+				Label:        shortPK(srv.PK),
+				IsDMSGServer: true,
+				DMSGSessions: sessions,
+				DMSGClients:  clientCount,
+			}
+			a.graph.AddNode(node)
+
+			// Position near center initially
+			node.X = (rand.Float64() - 0.5) * 200
+			node.Y = (rand.Float64() - 0.5) * 200
+		}
+
+		// Add edges to connected clients that exist in graph
+		for _, clientPK := range srv.Clients {
+			if visorNodeIDs[clientPK] {
+				edgeID := "dmsg-conn-" + shortPK(srv.PK) + "-" + shortPK(clientPK)
+				if _, exists := a.graph.Edges[edgeID]; !exists {
+					edge := &Edge{
+						ID:               edgeID,
+						From:             nodeID,
+						To:               clientPK,
+						Type:             TransportDMSG,
+						IsDMSGConnection: true,
+					}
+					a.graph.AddEdge(edge)
+				}
+			}
+		}
+	}
+
+	a.needsRedraw = true
+}
+
+func (a *App) updateDMSGServerList() {
+	if a.dmsgData == nil {
+		return
+	}
+
+	var html strings.Builder
+	html.WriteString(`<table style="width:100%;border-collapse:collapse;">`)
+	html.WriteString(`<tr style="color:#888;font-size:0.9em;border-bottom:1px solid #0f3460;">`)
+	html.WriteString(`<td style="padding:2px 0;">Server</td>`)
+	html.WriteString(`<td style="text-align:right;padding:2px 4px;">Sess</td>`)
+	html.WriteString(`<td style="text-align:right;padding:2px 0;">Clients</td>`)
+	html.WriteString(`</tr>`)
+
+	for _, srv := range a.dmsgData.Servers {
+		sessions := srv.AvailableSessions
+		clients := len(srv.Clients)
+		shortPK := shortPK(srv.PK)
+		nodeID := "dmsg-srv-" + srv.PK
+
+		// Session color based on availability
+		sessionColor := ColorOfflineBg
+		if sessions > 50 {
+			sessionColor = ColorOnlineBg
+		} else if sessions > 10 {
+			sessionColor = ColorUnknownBg
+		}
+
+		// Country flag emoji if available
+		flag := countryToFlag(srv.Country)
+
+		html.WriteString(`<tr style="border-bottom:1px solid #0f3460;">`)
+		html.WriteString(`<td style="padding:2px 0;">`)
+		html.WriteString(`<span title="` + srv.PK + `" style="cursor:pointer;color:#9f6efc;" onclick="focusVisor('` + nodeID + `')">`)
+		html.WriteString(flag + " " + shortPK)
+		html.WriteString(`</span></td>`)
+		html.WriteString(`<td style="text-align:right;padding:2px 4px;color:` + sessionColor + `;">`)
+		html.WriteString(itoa(sessions))
+		html.WriteString(`</td>`)
+		html.WriteString(`<td style="text-align:right;padding:2px 0;color:#6ec8ff;">`)
+		html.WriteString(itoa(clients))
+		html.WriteString(`</td></tr>`)
+	}
+	html.WriteString(`</table>`)
+
+	SetHTML("dmsg-server-list", html.String())
+}
+
+// countryToFlag converts a country code to a flag emoji
+func countryToFlag(country string) string {
+	if len(country) != 2 {
+		return ""
+	}
+	country = strings.ToUpper(country)
+	// Convert country code to regional indicator symbols
+	// A = 🇦, B = 🇧, etc. (Unicode regional indicators start at 0x1F1E6)
+	r1 := rune(country[0]) - 'A' + 0x1F1E6
+	r2 := rune(country[1]) - 'A' + 0x1F1E6
+	return string([]rune{r1, r2})
 }
 
 func (a *App) updateSidebarStats() {

@@ -122,6 +122,52 @@ func (c *Canvas) QuadraticCurve(x1, y1, x2, y2, lineWidth float64, color string)
 	c.ctx.Call("stroke")
 }
 
+// DashedQuadraticCurve draws a dashed curved line between two points
+func (c *Canvas) DashedQuadraticCurve(x1, y1, x2, y2, lineWidth float64, color string, dashLength, gapLength float64) {
+	// Calculate midpoint
+	midX := (x1 + x2) / 2
+	midY := (y1 + y2) / 2
+
+	// Calculate perpendicular offset for curve
+	dx := x2 - x1
+	dy := y2 - y1
+	dist := dx*dx + dy*dy
+	if dist < 100 {
+		c.DashedLine(x1, y1, x2, y2, lineWidth, color, dashLength, gapLength)
+		return
+	}
+
+	// Perpendicular direction
+	roundness := 0.5
+	perpX := -dy * roundness
+	perpY := dx * roundness
+
+	// Control point
+	ctrlX := midX + perpX
+	ctrlY := midY + perpY
+
+	c.ctx.Call("beginPath")
+	c.ctx.Call("moveTo", x1, y1)
+	c.ctx.Call("quadraticCurveTo", ctrlX, ctrlY, x2, y2)
+	c.ctx.Set("strokeStyle", color)
+	c.ctx.Set("lineWidth", lineWidth)
+	c.ctx.Call("setLineDash", js.ValueOf([]interface{}{dashLength, gapLength}))
+	c.ctx.Call("stroke")
+	c.ctx.Call("setLineDash", js.ValueOf([]interface{}{})) // Reset to solid
+}
+
+// DashedLine draws a dashed line between two points
+func (c *Canvas) DashedLine(x1, y1, x2, y2, lineWidth float64, color string, dashLength, gapLength float64) {
+	c.ctx.Call("beginPath")
+	c.ctx.Call("moveTo", x1, y1)
+	c.ctx.Call("lineTo", x2, y2)
+	c.ctx.Set("strokeStyle", color)
+	c.ctx.Set("lineWidth", lineWidth)
+	c.ctx.Call("setLineDash", js.ValueOf([]interface{}{dashLength, gapLength}))
+	c.ctx.Call("stroke")
+	c.ctx.Call("setLineDash", js.ValueOf([]interface{}{})) // Reset to solid
+}
+
 // Text draws text at the given position
 func (c *Canvas) Text(text string, x, y float64, color string, font string) {
 	if font != "" {
