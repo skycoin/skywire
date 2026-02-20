@@ -135,19 +135,12 @@ services:
         ipv4_address: 175.0.0.2
       intra:
         ipv4_address: 174.0.0.2
-    environment:
-      - PG_USER=postgres
-      - PG_PASSWORD=postgres
-      - PG_DATABASE=postgres
     ports:
       - "9094:9094"
       - "6094:6094"
     depends_on:
-      tpd-redis:
-        condition: service_healthy
-      postgres-db:
-        condition: service_healthy
-    entrypoint: "/release/skywire svc tpd --addr :9094 --pprof :6094 --pg-host postgres-db --pg-port 5432 --redis redis://tpd-redis:6379 --sk 85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8 --dmsg-disc http://dmsg-discovery:9090"
+      - tpd-redis
+    entrypoint: "/release/skywire svc tpd --addr :9094 --pprof :6094 --redis redis://tpd-redis:6379 --entry-timeout 2m --sk 85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8 --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
@@ -162,16 +155,13 @@ services:
         ipv4_address: 175.0.0.3
       intra:
         ipv4_address: 174.0.0.3
-    environment:
-      - PG_USER=postgres
-      - PG_PASSWORD=postgres
-      - PG_DATABASE=postgres
     ports:
       - "9092:9092"
       - "6092:6092"
     depends_on:
       - transport-discovery
-    entrypoint: "/release/skywire svc rf --addr :9092 --pprof :6092 --pg-host postgres-db --pg-port 5432 --sk 640905f9fd60d6bf1ee88519f61035765d65319d9f3bac6c5f2fc14ea5cf15ca --dmsg-disc http://dmsg-discovery:9090"
+      - tpd-redis
+    entrypoint: "/release/skywire svc rf --addr :9092 --pprof :6092 --redis redis://tpd-redis:6379 --sk 640905f9fd60d6bf1ee88519f61035765d65319d9f3bac6c5f2fc14ea5cf15ca --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
@@ -257,15 +247,10 @@ services:
     depends_on:
       - transport-discovery
       - sd-redis
-      - postgres-db
     ports:
       - "9091:9091"
       - "6091:6091"
-    environment:
-      - PG_USER=postgres
-      - PG_PASSWORD=postgres
-      - PG_DATABASE=postgres
-    entrypoint: "/release/skywire svc sd --addr :9091 --pprof :6091 --pg-host postgres-db --pg-port 5432 --redis redis://sd-redis:6379 --sk ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f --dmsg-disc http://dmsg-discovery:9090"
+    entrypoint: "/release/skywire svc sd --addr :9091 --pprof :6091 --redis redis://sd-redis:6379 --entry-timeout 2m --sk ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
@@ -310,7 +295,7 @@ services:
     depends_on:
       - ar-redis
     restart: always
-    entrypoint: "/release/skywire svc ar --addr :9093 --pprof :6093 --redis redis://ar-redis:6379 --sk 1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a --dmsg-disc http://dmsg-discovery:9090"
+    entrypoint: "/release/skywire svc ar --addr :9093 --pprof :6093 --redis redis://ar-redis:6379 --entry-timeout 2m --sk 1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 

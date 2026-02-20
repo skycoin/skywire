@@ -10,6 +10,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
+	tpdstore "github.com/skycoin/skywire/pkg/transport-discovery/store"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -51,6 +52,22 @@ func (m *mockStore) GetAllTransports(context.Context, bool) ([]*transport.Entry,
 	return nil, nil
 }
 func (m *mockStore) Close() {}
+
+func (m *mockStore) GetTransportBandwidth(_ context.Context, _ uuid.UUID, _ string, _ int) ([]tpdstore.BandwidthAggregation, error) {
+	return []tpdstore.BandwidthAggregation{}, nil
+}
+
+func (m *mockStore) GetVisorBandwidth(_ context.Context, _ cipher.PubKey, _ string, _ int) ([]tpdstore.BandwidthAggregation, error) {
+	return []tpdstore.BandwidthAggregation{}, nil
+}
+
+func (m *mockStore) GetAllVisorSummaries(_ context.Context) ([]tpdstore.VisorSummary, error) {
+	return []tpdstore.VisorSummary{}, nil
+}
+
+func (m *mockStore) BackupAndCleanOldBandwidth(_ context.Context, _ string) error {
+	return nil
+}
 
 // SaveEntry is added to the mock to allow saving Entry, without need for SignedEntry
 func (m *mockStore) SaveEntry(source, destiny cipher.PubKey, _ bool) {

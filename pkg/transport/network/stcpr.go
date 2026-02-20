@@ -6,9 +6,16 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+)
+
+const (
+	// stcprReRegisterInterval is the interval for re-registering STCPR with address resolver
+	// to keep the entry alive before it expires. Should be less than the server's entry timeout.
+	stcprReRegisterInterval = 90 * time.Second
 )
 
 type stcprClient struct {
@@ -82,5 +89,30 @@ func (c *stcprClient) serve() {
 		return
 	}
 	c.log.Debugf("Successfully bound stcpr to port %s", port)
+
+	// Start re-registration loop to keep entry alive in address resolver
+	go c.reRegisterLoop(port)
+
 	c.acceptTransports(lis)
+}
+
+// reRegisterLoop periodically re-registers with address resolver to keep the entry alive
+func (c *stcprClient) reRegisterLoop(port string) {
+	ticker := time.NewTicker(stcprReRegisterInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.done:
+			c.log.Debug("Stopping STCPR re-registration loop")
+			return
+		case <-ticker.C:
+			c.log.Debug("Re-registering STCPR with address resolver")
+			if err := c.ar.BindSTCPR(context.Background(), port); err != nil {
+				c.log.WithError(err).Warn("Failed to re-register STCPR with address resolver")
+			} else {
+				c.log.Debug("Successfully re-registered STCPR")
+			}
+		}
+	}
 }

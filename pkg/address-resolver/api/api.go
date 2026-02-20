@@ -603,6 +603,19 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 				a.log.Debugf("Deleted bind %v from %v (SUDPH)", pk, remoteAddr)
 				return
 			}
+			// Handle re-registration: try to unmarshal as LocalAddresses
+			var localAddresses addrresolver.LocalAddresses
+			if err := json.Unmarshal(data, &localAddresses); err == nil && localAddresses.Port != "" {
+				newVisorData := addrresolver.VisorData{
+					RemoteAddr:     fromAddr,
+					LocalAddresses: localAddresses,
+				}
+				if err := a.store.Bind(context.Background(), types.SUDPH, pk, newVisorData); err != nil {
+					a.log.Warnf("Failed to re-bind (SUDPH) for %v: %v", pk, err)
+				} else {
+					a.log.Debugf("Re-bound %v to %v (SUDPH)", pk, fromAddr)
+				}
+			}
 		}
 	}(pk, remoteAddr, conn)
 }
