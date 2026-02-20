@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/stretchr/testify/require"
@@ -47,5 +48,5 @@ func newStore() (Store, error) {
 	}
 	log := logging.MustGetLogger("test")
 	ctx := context.TODO()
-	return New(ctx, storeConfig, log)
+	return New(ctx, storeConfig, 10*time.Minute, log)
 }

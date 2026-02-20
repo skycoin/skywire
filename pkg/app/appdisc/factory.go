@@ -3,6 +3,7 @@ package appdisc
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -14,16 +15,19 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
+// Note: HeartbeatInterval default is skyenv.ServiceDiscUpdateInterval (10 minutes)
+
 // Factory creates appdisc.Updater instances based on the app name.
 type Factory struct {
-	Log            logrus.FieldLogger
-	MLog           *logging.MasterLogger
-	PK             cipher.PubKey
-	SK             cipher.SecKey
-	ServiceDisc    string // Address of service-discovery
-	DisplayNodeIP  bool
-	Client         *http.Client
-	ClientPublicIP string
+	Log               logrus.FieldLogger
+	MLog              *logging.MasterLogger
+	PK                cipher.PubKey
+	SK                cipher.SecKey
+	ServiceDisc       string // Address of service-discovery
+	DisplayNodeIP     bool
+	Client            *http.Client
+	ClientPublicIP    string
+	HeartbeatInterval time.Duration // Interval for service discovery heartbeats
 }
 
 func (f *Factory) setDefaults() {
@@ -32,6 +36,9 @@ func (f *Factory) setDefaults() {
 	}
 	if f.ServiceDisc == "" {
 		f.ServiceDisc = deployment.Prod.ServiceDiscovery
+	}
+	if f.HeartbeatInterval <= 0 {
+		f.HeartbeatInterval = skyenv.ServiceDiscUpdateInterval
 	}
 }
 
@@ -51,9 +58,11 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 		DisplayNodeIP: f.DisplayNodeIP,
 	}
 
-	return &serviceUpdater{
-		client: servicedisc.NewClient(f.Log, f.MLog, conf, f.Client, f.ClientPublicIP),
-	}
+	return newServiceUpdater(
+		f.Log,
+		servicedisc.NewClient(f.Log, f.MLog, conf, f.Client, f.ClientPublicIP),
+		f.HeartbeatInterval,
+	)
 }
 
 // AppUpdater obtains an app updater based on the app name and configuration.
@@ -82,13 +91,17 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 
 	switch conf.AppName {
 	case skyenv.VPNServerName:
-		return &serviceUpdater{
-			client: servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN), f.Client, f.ClientPublicIP),
-		}, true
+		return newServiceUpdater(
+			log,
+			servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN), f.Client, f.ClientPublicIP),
+			f.HeartbeatInterval,
+		), true
 	case skyenv.SkysocksName:
-		return &serviceUpdater{
-			client: servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeSkysocks), f.Client, f.ClientPublicIP),
-		}, true
+		return newServiceUpdater(
+			log,
+			servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeSkysocks), f.Client, f.ClientPublicIP),
+			f.HeartbeatInterval,
+		), true
 	default:
 		return &emptyUpdater{}, false
 	}
