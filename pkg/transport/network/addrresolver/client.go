@@ -32,8 +32,10 @@ const (
 	stcprBindPath            = "/bind/stcpr"
 	addrChSize               = 1024
 	udpKeepHeartbeatInterval = 10 * time.Second
-	udpKeepHeartbeatMessage  = "heartbeat"
-	defaultUDPPort           = "30178"
+	sudphReRegisterInterval  = 90 * time.Second
+	// UDPKeepHeartbeatMessage is used as a heartbeat packet to keep connection alive.
+	UDPKeepHeartbeatMessage = "heartbeat"
+	defaultUDPPort          = "30178"
 	// UDPDelBindMessage is used as a deletebind packet on visor shutdown.
 	UDPDelBindMessage = "delBind"
 )
@@ -83,6 +85,8 @@ type httpClient struct {
 	remoteHTTPAddr string
 	remoteUDPAddr  string
 	sudphConn      net.PacketConn
+	sudphArConn    net.Conn
+	sudphLocalAddr LocalAddresses
 	clientPublicIP string
 	ready          chan struct{}
 	closed         chan struct{}
@@ -373,11 +377,21 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 		return nil, err
 	}
 
+	// Store for re-registration
+	c.sudphArConn = arConn
+	c.sudphLocalAddr = localAddresses
+
 	addrCh := c.readSUDPHMessages(arConn)
 
 	go func() {
 		if err := c.keepSudphHeartbeatLoop(arConn); err != nil {
 			log.WithError(err).Errorf("Failed to send UDP heartbeat packet to address-resolver")
+		}
+	}()
+
+	go func() {
+		if err := c.sudphReRegisterLoop(arConn); err != nil {
+			log.WithError(err).Errorf("Failed to re-register SUDPH with address-resolver")
 		}
 	}()
 
@@ -632,10 +646,35 @@ func (c *httpClient) keepSudphHeartbeatLoop(w io.Writer) error {
 		case <-c.closed:
 			return nil
 		default:
-			if _, err := w.Write([]byte(udpKeepHeartbeatMessage)); err != nil {
+			if _, err := w.Write([]byte(UDPKeepHeartbeatMessage)); err != nil {
 				return err
 			}
 			time.Sleep(udpKeepHeartbeatInterval)
+		}
+	}
+}
+
+// sudphReRegisterLoop periodically re-registers with address resolver to keep the entry alive.
+func (c *httpClient) sudphReRegisterLoop(w io.Writer) error {
+	ticker := time.NewTicker(sudphReRegisterInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.closed:
+			c.log.Debug("Stopping SUDPH re-registration loop")
+			return nil
+		case <-ticker.C:
+			c.log.Debug("Re-registering SUDPH with address resolver")
+			laData, err := json.Marshal(c.sudphLocalAddr)
+			if err != nil {
+				c.log.WithError(err).Warn("Failed to marshal local addresses for SUDPH re-registration")
+				continue
+			}
+			if _, err := w.Write(laData); err != nil {
+				return err
+			}
+			c.log.Debug("Successfully re-registered SUDPH")
 		}
 	}
 }

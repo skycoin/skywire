@@ -16,9 +16,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
-	"gorm.io/gorm"
 
-	"github.com/skycoin/skywire/internal/pg"
 	"github.com/skycoin/skywire/pkg/route-finder/api"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -31,11 +29,15 @@ import (
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
+const (
+	redisScheme = "redis://"
+)
+
 var (
 	addr            string
 	metricsAddr     string
-	pgHost          string
-	pgPort          string
+	redisURL        string
+	redisPoolSize   int
 	logLvl          string
 	tag             string
 	testing         bool
@@ -43,25 +45,23 @@ var (
 	sk              cipher.SecKey
 	dmsgPort        uint16
 	dmsgServerType  string
-	pgMaxOpenConn   int
 	multiplexingLib string
 	pprofAddr       string
 )
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9092", "address to bind to")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&pgHost, "pg-host", "localhost", "host of postgres")
-	RootCmd.Flags().StringVar(&pgPort, "pg-port", "5432", "port of postgres")
-	RootCmd.Flags().IntVar(&pgMaxOpenConn, "pg-max-open-conn", 60, "maximum open connection of db")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]")
-	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag")
-	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscAddr(false), "url of dmsg discovery")
-	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value")
-	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9092", "address to bind to\033[0m")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m")
+	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\033[0m")
+	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\033[0m")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\033[0m")
+	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\033[0m")
+	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscAddr(false), "url of dmsg discovery\033[0m")
+	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\033[0m\n\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
 	RootCmd.Flags().StringVar(&multiplexingLib, "multiplexing-lib", "yamux", "type of multiplexing lib on dmsg network")
 }
 
@@ -72,10 +72,9 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "Route Finder Server for skywire",
 	Long: calvin.AsciiFont("route-finder") + `
------ depends: postgres and initial db setup - shares DB with TPD! -----
-sudo -iu postgres createdb rf
-skywire cli config gen-keys | tee rf-config.json
-PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" --sk $(tail -n1 rf-config.json)`,
+----- depends: redis - shares Redis with TPD! -----
+keys-gen | tee rf-config.json
+route-finder --sk $(tail -n1 rf-config.json)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -86,7 +85,20 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 			log.Printf("Failed to output build info: %v", err)
 		}
 
-		memoryStore := true
+		if !strings.HasPrefix(redisURL, redisScheme) {
+			redisURL = redisScheme + redisURL
+		}
+
+		storeConfig := storeconfig.Config{
+			Type:     storeconfig.Redis,
+			URL:      redisURL,
+			Password: storeconfig.RedisPassword(),
+			PoolSize: redisPoolSize,
+		}
+
+		if testing {
+			storeConfig.Type = storeconfig.Memory
+		}
 
 		logger := logging.MustGetLogger(tag)
 		lvl, err := logging.LevelFromString(logLvl)
@@ -129,29 +141,16 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 			time.Sleep(100 * time.Millisecond)
 		}
 
-		var gormDB *gorm.DB
+		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
+		defer cancel()
 
-		if !testing {
-			pgUser, pgPassword, pgDatabase := storeconfig.PostgresCredential()
-			dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-				pgHost,
-				pgPort,
-				pgUser,
-				pgPassword,
-				pgDatabase)
-
-			gormDB, err = pg.Init(dsn, pgMaxOpenConn)
-			if err != nil {
-				logger.Fatalf("Failed to connect to database %v", err)
-			}
-			logger.Printf("Database connected.")
-			memoryStore = false
-		}
-		onlyPGStore := true
-		transportStore, err := store.New(logger, gormDB, memoryStore, onlyPGStore)
+		// Route finder uses a longer TTL since it only reads transport data
+		// and doesn't need the same expiration as TPD
+		transportStore, err := store.New(ctx, storeConfig, 10*time.Minute, logger)
 		if err != nil {
-			log.Fatal("Failed to initialize redis store: ", err)
+			log.Fatal("Failed to initialize store: ", err)
 		}
+		defer transportStore.Close()
 
 		pk, err := sk.PubKey()
 		if err != nil {
@@ -171,9 +170,6 @@ PG_USER="postgres" PG_DATABASE="rf" PG_PASSWORD="" route-finder  --addr ":9092" 
 		if logger != nil {
 			logger.Infof("Listening on %s", addr)
 		}
-
-		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
-		defer cancel()
 
 		go func() {
 			if err := tcpproxy.ListenAndServe(addr, rfAPI); err != nil {

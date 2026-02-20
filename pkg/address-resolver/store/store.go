@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -34,12 +35,12 @@ var (
 )
 
 // New constructs a new Store of requested type.
-func New(ctx context.Context, config storeconfig.Config, logger *logging.Logger) (Store, error) {
+func New(ctx context.Context, config storeconfig.Config, ttl time.Duration, logger *logging.Logger) (Store, error) {
 	switch config.Type {
 	case storeconfig.Memory:
 		return newMemoryStore(), nil
 	case storeconfig.Redis:
-		return newRedisStore(ctx, config.URL, config.Password, config.PoolSize, logger)
+		return newRedisStore(ctx, config.URL, config.Password, config.PoolSize, ttl, logger)
 	default:
 		return nil, ErrUnknownStoreType
 	}

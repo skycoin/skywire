@@ -43,6 +43,7 @@ var (
 	metricsAddr     string
 	redisURL        string
 	redisPoolSize   int
+	entryTimeout    time.Duration
 	tag             string
 	logLvl          string
 	testing         bool
@@ -56,21 +57,22 @@ var (
 )
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9093", "address to bind to")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9093", "address to bind to\033[0m")
 	RootCmd.Flags().StringVar(&udpAddr, "udp-addr", ":30178", "UDP address to bind to for SUDPH")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store")
-	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]")
-	RootCmd.Flags().StringVar(&tag, "tag", "address_resolver", "logging tag")
-	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscAddr(false), "url of dmsg discovery")
-	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration")
-	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment")
-	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value")
-	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m")
+	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\033[0m")
+	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\033[0m")
+	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for address entry expiration\033[0m")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\033[0m")
+	RootCmd.Flags().StringVar(&tag, "tag", "address_resolver", "logging tag\033[0m")
+	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscAddr(false), "url of dmsg discovery\033[0m")
+	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration\033[0m")
+	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment\033[0m")
+	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\033[0m\n\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
 }
 
 // RootCmd contains the root command
@@ -154,7 +156,7 @@ skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 a
 		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
 		defer cancel()
 
-		transportStore, err := store.New(ctx, storeConfig, logger)
+		transportStore, err := store.New(ctx, storeConfig, entryTimeout, logger)
 		if err != nil {
 			logger.Fatal("Failed to initialize redis store: ", err)
 		}

@@ -72,6 +72,9 @@ type ManagedTransport struct {
 	wg   sync.WaitGroup
 
 	timeout time.Duration
+
+	latency   float64 // Inter-visor ping latency in milliseconds
+	latencyMx sync.RWMutex
 }
 
 // NewManagedTransport creates a new ManagedTransport.
@@ -97,6 +100,31 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		timeout:     conf.InactiveTimeout,
 	}
 	return mt
+}
+
+// GetLatency returns the inter-visor ping latency in milliseconds.
+func (mt *ManagedTransport) GetLatency() float64 {
+	mt.latencyMx.RLock()
+	defer mt.latencyMx.RUnlock()
+	return mt.latency
+}
+
+// SetLatency sets the inter-visor ping latency in milliseconds.
+func (mt *ManagedTransport) SetLatency(latencyMs float64) {
+	mt.latencyMx.Lock()
+	defer mt.latencyMx.Unlock()
+	mt.latency = latencyMs
+}
+
+// GetBandwidth returns the current cumulative bandwidth for this transport.
+func (mt *ManagedTransport) GetBandwidth() *BandwidthData {
+	mt.logMx.Lock()
+	defer mt.logMx.Unlock()
+
+	return &BandwidthData{
+		SentBytes: atomic.LoadUint64(mt.LogEntry.SentBytes),
+		RecvBytes: atomic.LoadUint64(mt.LogEntry.RecvBytes),
+	}
 }
 
 // Serve serves and manages the transport.

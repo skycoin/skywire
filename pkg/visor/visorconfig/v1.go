@@ -120,11 +120,12 @@ type UptimeTracker struct {
 
 // Launcher configures the app
 type Launcher struct {
-	ServiceDisc   string                `json:"service_discovery"`
-	Apps          []appserver.AppConfig `json:"apps"`
-	ServerAddr    string                `json:"server_addr"`
-	BinPath       string                `json:"bin_path"`
-	DisplayNodeIP bool                  `json:"display_node_ip"`
+	ServiceDisc       string                `json:"service_discovery"`
+	Apps              []appserver.AppConfig `json:"apps"`
+	ServerAddr        string                `json:"server_addr"`
+	BinPath           string                `json:"bin_path"`
+	DisplayNodeIP     bool                  `json:"display_node_ip"`
+	HeartbeatInterval Duration              `json:"heartbeat_interval,omitempty"`
 }
 
 // Flush flushes the config to file (if specified).

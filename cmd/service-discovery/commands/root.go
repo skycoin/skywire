@@ -11,13 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
-	"gorm.io/gorm"
 
-	"github.com/skycoin/skywire/internal/pg"
 	"github.com/skycoin/skywire/internal/sdmetrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/api"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
@@ -41,9 +40,6 @@ var (
 	addr           string
 	metricsAddr    string
 	redisURL       string
-	pgHost         string
-	pgPort         string
-	pgMaxOpenConn  int
 	testMode       bool
 	dmsgDisc       string
 	whitelistKeys  string
@@ -52,23 +48,22 @@ var (
 	dmsgServerType string
 	geoipURL       string
 	pprofAddr      string
+	entryTimeout   time.Duration
 )
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVarP(&redisURL, "redis", "r", "redis://localhost:6379", "connections string for a redis store")
-	RootCmd.Flags().StringVarP(&pgHost, "pg-host", "o", "localhost", "host of postgres")
-	RootCmd.Flags().StringVarP(&pgPort, "pg-port", "p", "5432", "port of postgres")
-	RootCmd.Flags().IntVar(&pgMaxOpenConn, "pg-max-open-conn", 60, "maximum open connection of db")
-	RootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration")
-	RootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", dmsg.DiscAddr(false), "url of dmsg-discovery")
-	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service")
-	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
-	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to\033[0m")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m")
+	RootCmd.Flags().StringVarP(&redisURL, "redis", "r", "redis://localhost:6379", "connections string for a redis store\033[0m")
+	RootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration\033[0m")
+	RootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth\033[0m")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", dmsg.DiscAddr(false), "url of dmsg-discovery\033[0m")
+	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service\033[0m")
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
+	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\033[0m\n\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
+	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for service entry expiration\033[0m")
 }
 
 // RootCmd contains the root service-discovery command
@@ -78,10 +73,9 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "Service discovery server",
 	Long: calvin.AsciiFont("service-discovery") + `
------ depends: redis, postgresql and initial DB setup -----
-sudo -iu postgres createdb sd
+----- depends: redis -----
 keys-gen | tee sd-config.json
-PG_USER="postgres" PG_DATABASE="sd" PG_PASSWORD="" service-discovery --sk $(tail -n1 sd-config.json)`,
+service-discovery --sk $(tail -n1 sd-config.json)`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if dmsgDisc == "" {
 			dmsgDisc = dmsg.DiscAddr(false)
@@ -131,26 +125,24 @@ PG_USER="postgres" PG_DATABASE="sd" PG_PASSWORD="" service-discovery --sk $(tail
 			time.Sleep(100 * time.Millisecond)
 		}
 
-		var gormDB *gorm.DB
-
-		pgUser, pgPassword, pgDatabase := storeconfig.PostgresCredential()
-		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-			pgHost,
-			pgPort,
-			pgUser,
-			pgPassword,
-			pgDatabase)
-
-		gormDB, err = pg.Init(dsn, pgMaxOpenConn)
+		redisPassword := storeconfig.RedisPassword()
+		opt, err := redis.ParseURL(redisURL)
 		if err != nil {
-			log.Fatalf("Failed to connect to database %v", err)
+			log.Fatalf("Failed to parse redis URL: %v", err)
 		}
-		log.Printf("Database connected.")
+		opt.Password = redisPassword
 
-		db, err := store.NewStore(gormDB, log)
+		redisClient := redis.NewClient(opt)
+		if _, err := redisClient.Ping(ctx).Result(); err != nil {
+			log.Fatalf("Failed to connect to redis: %v", err)
+		}
+		log.Printf("Redis connected.")
+
+		db, err := store.NewStore(ctx, redisClient, log, entryTimeout)
 		if err != nil {
 			log.Fatal("Failed to initialize redis store: ", err)
 		}
+		log.Printf("Service entry timeout: %v", entryTimeout)
 
 		var nonceDB httpauth.NonceStore
 		if !testMode {

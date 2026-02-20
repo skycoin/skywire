@@ -162,8 +162,8 @@ const (
 	// AppSrvAddr address of app server
 	AppSrvAddr = "localhost:5505"
 
-	// ServiceDiscUpdateInterval update interval for apps in service discovery
-	ServiceDiscUpdateInterval = time.Minute
+	// ServiceDiscUpdateInterval update interval (heartbeat) for apps in service discovery
+	ServiceDiscUpdateInterval = 90 * time.Second
 
 	// AppBinPath is the default path for the apps
 	AppBinPath = "./"

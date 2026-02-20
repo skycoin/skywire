@@ -381,6 +381,7 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		factory.SK = v.conf.SK
 		factory.ServiceDisc = conf.ServiceDisc
 		factory.DisplayNodeIP = conf.DisplayNodeIP
+		factory.HeartbeatInterval = time.Duration(conf.HeartbeatInterval)
 		factory.Client = httpC
 
 		// Get public IP for service discovery (needed for NAT setups)
