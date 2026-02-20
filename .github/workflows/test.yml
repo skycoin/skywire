@@ -86,7 +86,11 @@ jobs:
         shell: bash
 
       - name: Checking Format and Testing
-        run: make check
+        run: |
+          # Run lint excluding cmd/release due to CGO hidapi dependency issues
+          GO111MODULE=on go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml --skip-dirs cmd/release ./cmd/...
+          GO111MODULE=on go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml ./pkg/...
+          make check-cg check-help test
 
       - name: Build
         run: make build
