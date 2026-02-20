@@ -3,8 +3,9 @@ package store
 import (
 	"context"
 	"io"
+	"time"
 
-	"gorm.io/gorm"
+	"github.com/go-redis/redis/v8"
 
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -23,12 +24,9 @@ type Store interface {
 	CountServices(ctx context.Context, serviceType string) (uint64, error)
 }
 
-// NewStore creates a new cached store (recommended for production).
-// The cached store:
-// - Loads entire database into memory at startup
-// - Serves all reads from memory (instant, zero DB queries)
-// - Writes update both database and memory immediately
-// - Memory is always up-to-date (no periodic reload needed)
-func NewStore(db *gorm.DB, logger *logging.Logger) (Store, error) {
-	return NewCachedStore(db, logger)
+// NewStore creates a new Redis store with TTL for service entries.
+// The ttl parameter specifies how long service entries live before expiring.
+// Services must send heartbeats before the TTL expires to stay registered.
+func NewStore(ctx context.Context, client *redis.Client, logger *logging.Logger, ttl time.Duration) (Store, error) {
+	return newRedisStore(ctx, client, logger, ttl)
 }
