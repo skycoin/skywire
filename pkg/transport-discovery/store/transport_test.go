@@ -77,3 +77,8 @@ func (s *TransportSuite) TestRegister() {
 		assert.Equal(t, "transport not found", err.Error())
 	})
 }
+
+func TestMemoryStore(t *testing.T) {
+	s := &TransportSuite{TransportStore: newMemoryStore()}
+	suite.Run(t, s)
+}

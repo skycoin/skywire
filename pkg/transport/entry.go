@@ -43,6 +43,12 @@ type Entry struct {
 	Type types.Type `json:"type"`
 
 	Label Label `json:"label"`
+
+	// Latency is the inter-visor round-trip time in milliseconds, measured via ping/pong
+	Latency float64 `json:"latency_ms,omitempty"`
+
+	// Bandwidth is total bytes (sent + recv), not included in ToBinary/signatures
+	Bandwidth uint64 `json:"bandwidth,omitempty"`
 }
 
 // MakeEntry creates a new transport entry
@@ -125,12 +131,20 @@ func (e *Entry) Signature(secKey cipher.SecKey) (cipher.Sig, error) {
 	return sig, nil
 }
 
+// BandwidthData represents cumulative bandwidth for a transport
+type BandwidthData struct {
+	SentBytes uint64 `json:"sent_bytes"` // Total bytes sent (cumulative)
+	RecvBytes uint64 `json:"recv_bytes"` // Total bytes received (cumulative)
+}
+
 // SignedEntry holds an Entry and it's associated signatures.
 // The signatures should be ordered as the contained 'Entry.Edges'.
 type SignedEntry struct {
-	Entry      *Entry        `json:"entry"`
-	Signatures [2]cipher.Sig `json:"signatures"`
-	Registered int64         `json:"registered,omitempty"`
+	Entry      *Entry         `json:"entry"`
+	Signatures [2]cipher.Sig  `json:"signatures"`
+	Registered int64          `json:"registered,omitempty"`
+	Latency    float64        `json:"latency_ms,omitempty"` // Inter-visor latency in milliseconds, measured via ping/pong
+	Bandwidth  *BandwidthData `json:"bandwidth,omitempty"`  // Cumulative bandwidth data
 }
 
 // Sign sets Signature for a given PubKey in correct position

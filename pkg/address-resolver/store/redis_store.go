@@ -23,9 +23,10 @@ const (
 
 type redisStore struct {
 	client *redis.Client
+	ttl    time.Duration
 }
 
-func newRedisStore(ctx context.Context, addr, password string, poolSize int, logger *logging.Logger) (*redisStore, error) {
+func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl time.Duration, logger *logging.Logger) (*redisStore, error) {
 	opt, err := redis.ParseURL(addr)
 	if err != nil {
 		return nil, fmt.Errorf("addr: %w", err)
@@ -56,7 +57,7 @@ func newRedisStore(ctx context.Context, addr, password string, poolSize int, log
 		return nil, err
 	}
 
-	return &redisStore{redisCl}, nil
+	return &redisStore{client: redisCl, ttl: ttl}, nil
 }
 
 func (s *redisStore) Bind(ctx context.Context, netType types.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
@@ -105,7 +106,15 @@ func (s *redisStore) bind(ctx context.Context, key string, visorData addrresolve
 		return err
 	}
 
-	if _, err := s.client.Set(ctx, key, string(raw), 0).Result(); err != nil {
+	// Only apply TTL on re-registration (key already exists).
+	// First-time registrations get no TTL for backward compatibility with old visors.
+	exists, _ := s.client.Exists(ctx, key).Result() //nolint:errcheck
+	ttl := time.Duration(0)
+	if exists > 0 {
+		ttl = s.ttl
+	}
+
+	if _, err := s.client.Set(ctx, key, string(raw), ttl).Result(); err != nil {
 		return err
 	}
 

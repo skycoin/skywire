@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -19,7 +20,7 @@ func TestMemory(t *testing.T) {
 
 	log := logging.MustGetLogger("test")
 	ctx := context.TODO()
-	s, err := New(ctx, storeConfig, log)
+	s, err := New(ctx, storeConfig, 10*time.Minute, log)
 	require.NoError(t, err)
 
 	suite.Run(t, &AddressSuite{AddressStore: s})

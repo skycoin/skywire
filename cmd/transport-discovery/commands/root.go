@@ -16,10 +16,8 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
-	"gorm.io/gorm"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/internal/pg"
 	"github.com/skycoin/skywire/internal/tpdiscmetrics"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -44,8 +42,6 @@ var (
 	metricsAddr     string
 	redisURL        string
 	redisPoolSize   int
-	pgHost          string
-	pgPort          string
 	logLvl          string
 	tag             string
 	testing         bool
@@ -54,29 +50,29 @@ var (
 	sk              cipher.SecKey
 	dmsgPort        uint16
 	dmsgServerType  string
-	pgMaxOpenConn   int
+	entryTimeout    time.Duration
 	dmsgDisc        = deployment.Prod.DmsgDiscovery
 	pprofAddr       string
+	storeDataPath   string
 )
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9091", "address to bind to")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store")
-	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size")
-	RootCmd.Flags().StringVar(&pgHost, "pg-host", "localhost", "host of postgres")
-	RootCmd.Flags().StringVar(&pgPort, "pg-port", "5432", "port of postgres")
-	RootCmd.Flags().IntVar(&pgMaxOpenConn, "pg-max-open-conn", 60, "maximum open connection of db")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]")
-	RootCmd.Flags().StringVar(&tag, "tag", "transport_discovery", "logging tag")
-	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsgDisc, "url of dmsg-discovery")
-	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration")
-	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment")
-	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value")
-	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9091", "address to bind to\033[0m")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m")
+	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\033[0m")
+	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\033[0m")
+	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for transport entry expiration\033[0m")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\033[0m")
+	RootCmd.Flags().StringVar(&tag, "tag", "transport_discovery", "logging tag\033[0m")
+	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsgDisc, "url of dmsg-discovery\033[0m")
+	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration\033[0m")
+	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment\033[0m")
+	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\033[0m\n\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
+	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire-services/tpd-bandwidth", "path for bandwidth backup files\033[0m")
 }
 
 // RootCmd contains the root command
@@ -86,10 +82,9 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "Transport Discovery Server for skywire",
 	Long: calvin.AsciiFont("transport-discovery") + `
------ depends: redis, postgresql and initial DB setup -----
-sudo -iu postgres createdb tpd
+----- depends: redis -----
 keys-gen | tee tpd-config.json
-PG_USER="postgres" PG_DATABASE="tpd" PG_PASSWORD="" transport-discovery --sk $(tail -n1 tpd-config.json)`,
+transport-discovery --sk $(tail -n1 tpd-config.json)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -104,11 +99,15 @@ PG_USER="postgres" PG_DATABASE="tpd" PG_PASSWORD="" transport-discovery --sk $(t
 			redisURL = redisScheme + redisURL
 		}
 
-		nonceStoreConfig := storeconfig.Config{
-			Type:     storeconfig.Memory,
+		storeConfig := storeconfig.Config{
+			Type:     storeconfig.Redis,
 			URL:      redisURL,
 			Password: storeconfig.RedisPassword(),
 			PoolSize: redisPoolSize,
+		}
+
+		if testing {
+			storeConfig.Type = storeconfig.Memory
 		}
 
 		logger := logging.MustGetLogger(tag)
@@ -160,34 +159,25 @@ PG_USER="postgres" PG_DATABASE="tpd" PG_PASSWORD="" transport-discovery --sk $(t
 			api.WhitelistPKs.Set(v)
 		}
 
-		var gormDB *gorm.DB
+		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
+		defer cancel()
 
-		if !testing {
-			pgUser, pgPassword, pgDatabase := storeconfig.PostgresCredential()
-			dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-				pgHost,
-				pgPort,
-				pgUser,
-				pgPassword,
-				pgDatabase)
-
-			gormDB, err = pg.Init(dsn, pgMaxOpenConn)
-			if err != nil {
-				logger.Fatalf("Failed to connect to database %v", err)
-			}
-			logger.Printf("Database connected.")
-
-			nonceStoreConfig.Type = storeconfig.Redis
-		}
-		onlyPGStore := false
-		s, err := store.New(logger, gormDB, testing, onlyPGStore)
+		s, err := store.New(ctx, storeConfig, entryTimeout, logger)
 		if err != nil {
 			logger.Fatalf("Failed to create store instance: %v", err)
 		}
 		defer s.Close()
 
-		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
-		defer cancel()
+		nonceStoreConfig := storeconfig.Config{
+			Type:     storeconfig.Memory,
+			URL:      redisURL,
+			Password: storeconfig.RedisPassword(),
+			PoolSize: redisPoolSize,
+		}
+
+		if !testing {
+			nonceStoreConfig.Type = storeconfig.Redis
+		}
 
 		nonceStore, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
 		if err != nil {
@@ -214,9 +204,10 @@ PG_USER="postgres" PG_DATABASE="tpd" PG_PASSWORD="" transport-discovery --sk $(t
 		}
 
 		enableMetrics := metricsAddr != ""
-		tpdAPI := api.New(logger, s, nonceStore, enableMetrics, m, dmsgAddr)
+		tpdAPI := api.New(logger, s, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
 
 		logger.Infof("Listening on %s", addr)
+		logger.Infof("Transport entry timeout: %v", entryTimeout)
 
 		go tpdAPI.RunBackgroundTasks(ctx, logger)
 
