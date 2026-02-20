@@ -849,11 +849,20 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 	ms := sentAtMs % 1000
 	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC() //nolint: gosec
 
-	latency := time.Now().UTC().Sub(sentAt).Milliseconds()
+	// Use fractional milliseconds for sub-ms precision (e.g. 1.2 ms)
+	latencyMs := float64(time.Now().UTC().Sub(sentAt).Microseconds()) / 1000.0
 
-	rg.logger.WithField("func", "RouteGroup.handlePongPacket").Tracef("Latency is around %d ms", latency)
+	rg.logger.WithField("func", "RouteGroup.handlePongPacket").Tracef("Latency is around %.1f ms", latencyMs)
 
-	rg.networkStats.SetLatency(uint32(latency)) //nolint: gosec
+	rg.networkStats.SetLatency(uint32(latencyMs)) //nolint: gosec
+
+	// Propagate ping latency to the underlying transport so it gets
+	// reported to TPD during re-registration.
+	rg.mu.Lock()
+	if len(rg.tps) > 0 && rg.tps[0] != nil {
+		rg.tps[0].SetLatency(latencyMs)
+	}
+	rg.mu.Unlock()
 
 	return nil
 }
