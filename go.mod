@@ -12,7 +12,7 @@ require (
 	github.com/bitfield/script v0.24.1
 	github.com/blang/semver/v4 v4.0.0
 	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
-	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937
+	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937 // indirect
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/elazarl/goproxy v1.8.2
 	github.com/fatih/color v1.18.0
