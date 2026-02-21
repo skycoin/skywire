@@ -757,23 +757,22 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		lineNum++
 	}
 
-	// Flush and print table with red coloring for inactive lines
+	// Flush and format table with red coloring for inactive lines
 	internal.Catch(cmdFlags, w.Flush())
+
+	var tableOutput strings.Builder
 	lines := strings.Split(b.String(), "\n")
 	for i, line := range lines {
 		if line == "" {
 			continue
 		}
 		if inactiveLines[i] {
-			fmt.Println(pterm.Red(line))
+			tableOutput.WriteString(pterm.Red(line))
 		} else {
-			fmt.Println(line)
+			tableOutput.WriteString(line)
 		}
+		tableOutput.WriteString("\n")
 	}
 
-	// For JSON output, include all transports
-	isJSON, _ := cmdFlags.GetBool(internal.JSONString) //nolint:errcheck
-	if isJSON {
-		internal.PrintOutput(cmdFlags, outputTPS, "")
-	}
+	internal.PrintOutput(cmdFlags, outputTPS, tableOutput.String())
 }
