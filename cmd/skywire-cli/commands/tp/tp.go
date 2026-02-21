@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/google/uuid"
+	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -30,6 +31,8 @@ var (
 	filterPubKeys    []string
 	showLogs         bool
 	showMore         bool
+	bwDays           int
+	showInactive     bool
 	logger           = logging.MustGetLogger("skywire-cli")
 	tpTypes          bool
 	utURL            string
@@ -60,6 +63,8 @@ func init() {
 	tpCmd.Flags().StringSliceVarP(&filterPubKeys, "pks", "p", filterPubKeys, "show transport(s) for public key(s) comma-separated")
 	tpCmd.Flags().BoolVarP(&showLogs, "logs", "l", true, "show transport logs")
 	tpCmd.Flags().BoolVarP(&showMore, "more", "m", false, "show more info")
+	tpCmd.Flags().IntVarP(&bwDays, "bw", "b", 0, "show bandwidth usage for last N days (0 = disabled)")
+	tpCmd.Flags().BoolVar(&showInactive, "inactive", false, "show bandwidth for inactive transports (requires --bw)")
 	tpCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
 	tpCmd.Flags().StringVar(&cacheFileSDProxy, "cfsp", os.TempDir()+"/proxysd.json", "SD cache file location")
 	tpCmd.Flags().StringVar(&cacheFileSDVPN, "cfsv", os.TempDir()+"/vpnsd.json", "SD cache file location")
@@ -232,8 +237,58 @@ var tpCmd = &cobra.Command{
 			visorData = internal.GetData(cacheFileSDVisor, sdURL+"/api/services?type="+servicedisc.ServiceTypeVisor, cacheFilesAge)
 		}
 
-		PrintTransports(cmd.Flags(), transports...)
+		// Get transport logs for bandwidth display
+		var logEntries []visor.TransportLogEntry
+		bwByTpID := make(map[string]struct{ recv, sent uint64 })
+		if bwDays > 0 {
+			logEntries, err = rpcClient.GetTransportLogs(bwDays)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to get transport logs: %v\n", err)
+			} else if len(logEntries) == 0 {
+				fmt.Fprintf(os.Stderr, "Note: No transport log entries found for the last %d day(s)\n", bwDays)
+			}
+			// Aggregate bandwidth by tpID (sum across all days)
+			for _, entry := range logEntries {
+				existing := bwByTpID[entry.TpID.String()]
+				existing.recv += entry.RecvBytes
+				existing.sent += entry.SentBytes
+				bwByTpID[entry.TpID.String()] = existing
+			}
+		}
+
+		// If showing inactive transports, find those in logs but not in current transports
+		var inactiveTransports []inactiveTransport
+		if showInactive && bwDays > 0 {
+			// Build set of active transport IDs
+			activeIDs := make(map[string]bool)
+			for _, tp := range transports {
+				activeIDs[tp.ID.String()] = true
+			}
+
+			// Find inactive transport IDs from logs
+			for _, entry := range logEntries {
+				tpIDStr := entry.TpID.String()
+				if activeIDs[tpIDStr] {
+					continue
+				}
+				bw := bwByTpID[tpIDStr]
+				inactiveTransports = append(inactiveTransports, inactiveTransport{
+					ID:        entry.TpID,
+					RecvBytes: bw.recv,
+					SentBytes: bw.sent,
+				})
+			}
+		}
+
+		PrintTransportsWithBandwidth(cmd.Flags(), bwByTpID, inactiveTransports, transports...)
 	},
+}
+
+// inactiveTransport represents a transport that is no longer active but has bandwidth history
+type inactiveTransport struct {
+	ID        uuid.UUID
+	RecvBytes uint64
+	SentBytes uint64
 }
 
 var (
@@ -309,8 +364,14 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 	var b bytes.Buffer
 	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
 
-	if showMore {
+	if showMore && bwDays > 0 {
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\trecv\tsent")
+		internal.Catch(cmdFlags, err)
+	} else if showMore {
 		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices")
+		internal.Catch(cmdFlags, err)
+	} else if bwDays > 0 {
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\trecv\tsent")
 		internal.Catch(cmdFlags, err)
 	} else {
 		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel")
@@ -326,6 +387,8 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 		Version  string          `json:"version,omitempty"`
 		Country  string          `json:"country,omitempty"`
 		Services string          `json:"services,omitempty"`
+		RecvBytes uint64         `json:"recv_bytes,omitempty"`
+		SentBytes uint64         `json:"sent_bytes,omitempty"`
 	}
 
 	var outputTPS []outputTP
@@ -336,6 +399,17 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 		tpMode := "regular"
 		if tp.IsSetup {
 			tpMode = "setup"
+		}
+
+		// Extract bandwidth before clearing log
+		var recvBytes, sentBytes uint64
+		if tp.Log != nil {
+			if tp.Log.RecvBytes != nil {
+				recvBytes = *tp.Log.RecvBytes
+			}
+			if tp.Log.SentBytes != nil {
+				sentBytes = *tp.Log.SentBytes
+			}
 		}
 		tp.Log = nil
 
@@ -382,20 +456,32 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 		}
 
 		oTP := outputTP{
-			Type:     tp.Type,
-			ID:       tp.ID,
-			Remote:   tp.Remote,
-			TpMode:   tpMode,
-			Label:    tp.Label,
-			Version:  version,
-			Country:  country,
-			Services: services,
+			Type:      tp.Type,
+			ID:        tp.ID,
+			Remote:    tp.Remote,
+			TpMode:    tpMode,
+			Label:     tp.Label,
+			Version:   version,
+			Country:   country,
+			Services:  services,
+			RecvBytes: recvBytes,
+			SentBytes: sentBytes,
 		}
 		outputTPS = append(outputTPS, oTP)
 
-		if showMore {
+		if showMore && bwDays > 0 {
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services,
+				formatBytes(recvBytes), formatBytes(sentBytes))
+			internal.Catch(cmdFlags, err)
+		} else if showMore {
 			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services)
+			internal.Catch(cmdFlags, err)
+		} else if bwDays > 0 {
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label,
+				formatBytes(recvBytes), formatBytes(sentBytes))
 			internal.Catch(cmdFlags, err)
 		} else {
 			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
@@ -412,4 +498,282 @@ func sortTransports(tps ...*visor.TransportSummary) {
 	sort.Slice(tps, func(i, j int) bool {
 		return tps[i].ID.String() < tps[j].ID.String()
 	})
+}
+
+// formatBytes formats bytes in human-readable format (KB, MB, GB)
+func formatBytes(bytes uint64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+	)
+	switch {
+	case bytes >= GB:
+		return fmt.Sprintf("%.2fGB", float64(bytes)/float64(GB))
+	case bytes >= MB:
+		return fmt.Sprintf("%.2fMB", float64(bytes)/float64(MB))
+	case bytes >= KB:
+		return fmt.Sprintf("%.2fKB", float64(bytes)/float64(KB))
+	default:
+		return fmt.Sprintf("%dB", bytes)
+	}
+}
+
+// PrintTransportsWithBandwidth prints transports with bandwidth data from logs
+func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]struct{ recv, sent uint64 }, inactive []inactiveTransport, tps ...*visor.TransportSummary) {
+	sortTransports(tps...)
+
+	var versionsByPK map[string]string
+	if showMore && len(utData) > 0 {
+		type uptimeEntry struct {
+			PK      string `json:"pk"`
+			Version string `json:"version"`
+		}
+		var utEntries []uptimeEntry
+		err := json.Unmarshal([]byte(utData), &utEntries)
+		internal.Catch(cmdFlags, err)
+
+		versionsByPK = make(map[string]string, len(utEntries))
+		for _, e := range utEntries {
+			versionsByPK[e.PK] = e.Version
+		}
+	}
+
+	type geoInfo struct {
+		Country string `json:"country"`
+	}
+
+	type serviceEntry struct {
+		Address string  `json:"address"`
+		Geo     geoInfo `json:"geo"`
+	}
+
+	proxyByPK := make(map[string]string)
+	vpnByPK := make(map[string]string)
+	visorByPK := make(map[string]string)
+
+	if showMore && len(proxyData) > 0 {
+		var proxyEntries []serviceEntry
+		err := json.Unmarshal([]byte(proxyData), &proxyEntries)
+		internal.Catch(cmdFlags, err)
+		for _, e := range proxyEntries {
+			pk := strings.SplitN(e.Address, ":", 2)[0]
+			proxyByPK[pk] = e.Geo.Country
+		}
+	}
+
+	if showMore && len(vpnData) > 0 {
+		var vpnEntries []serviceEntry
+		err := json.Unmarshal([]byte(vpnData), &vpnEntries)
+		internal.Catch(cmdFlags, err)
+		for _, e := range vpnEntries {
+			pk := strings.SplitN(e.Address, ":", 2)[0]
+			vpnByPK[pk] = e.Geo.Country
+		}
+	}
+
+	if showMore && len(visorData) > 0 {
+		var visorEntries []serviceEntry
+		err := json.Unmarshal([]byte(visorData), &visorEntries)
+		internal.Catch(cmdFlags, err)
+		for _, e := range visorEntries {
+			pk := strings.SplitN(e.Address, ":", 2)[0]
+			visorByPK[pk] = e.Geo.Country
+		}
+	}
+
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
+
+	// Print header
+	if showMore && bwDays > 0 {
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\trecv\tsent")
+		internal.Catch(cmdFlags, err)
+	} else if showMore {
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices")
+		internal.Catch(cmdFlags, err)
+	} else if bwDays > 0 {
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\trecv\tsent")
+		internal.Catch(cmdFlags, err)
+	} else {
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel")
+		internal.Catch(cmdFlags, err)
+	}
+
+	type outputTP struct {
+		Type      types.Type      `json:"type"`
+		ID        uuid.UUID       `json:"id"`
+		Remote    cipher.PubKey   `json:"remote_pk"`
+		TpMode    string          `json:"mode"`
+		Label     transport.Label `json:"label"`
+		Version   string          `json:"version,omitempty"`
+		Country   string          `json:"country,omitempty"`
+		Services  string          `json:"services,omitempty"`
+		RecvBytes uint64          `json:"recv_bytes,omitempty"`
+		SentBytes uint64          `json:"sent_bytes,omitempty"`
+		Inactive  bool            `json:"inactive,omitempty"`
+	}
+
+	var outputTPS []outputTP
+
+	// Track line numbers that are inactive (for red coloring)
+	inactiveLines := make(map[int]bool)
+	lineNum := 1 // Start at 1 (line 0 is header)
+
+	// Add active transports
+	for _, tp := range tps {
+		if tp == nil {
+			continue
+		}
+		tpMode := "regular"
+		if tp.IsSetup {
+			tpMode = "setup"
+		}
+
+		// Use bandwidth from aggregated logs if available, otherwise from current transport
+		var recvBytes, sentBytes uint64
+		if bw, ok := bwByTpID[tp.ID.String()]; ok && bwDays > 0 {
+			recvBytes = bw.recv
+			sentBytes = bw.sent
+		} else if tp.Log != nil {
+			if tp.Log.RecvBytes != nil {
+				recvBytes = *tp.Log.RecvBytes
+			}
+			if tp.Log.SentBytes != nil {
+				sentBytes = *tp.Log.SentBytes
+			}
+		}
+		tp.Log = nil
+
+		version := ""
+		if showMore && versionsByPK != nil {
+			version = versionsByPK[tp.Remote.String()]
+		}
+
+		var country, services string
+		pk := tp.Remote.String()
+		proxyCountry, inProxy := proxyByPK[pk]
+		vpnCountry, inVPN := vpnByPK[pk]
+		visorCountry, inVisor := visorByPK[pk]
+
+		// Build services list
+		var svcList []string
+		var countries []string
+
+		if inProxy {
+			svcList = append(svcList, "proxy")
+			countries = append(countries, proxyCountry)
+		}
+		if inVPN {
+			svcList = append(svcList, "vpn")
+			countries = append(countries, vpnCountry)
+		}
+		if inVisor {
+			svcList = append(svcList, "visor")
+			countries = append(countries, visorCountry)
+		}
+
+		if len(svcList) > 0 {
+			services = strings.Join(svcList, ",")
+			// Deduplicate countries
+			countryMap := make(map[string]bool)
+			var uniqueCountries []string
+			for _, c := range countries {
+				if c != "" && !countryMap[c] {
+					countryMap[c] = true
+					uniqueCountries = append(uniqueCountries, c)
+				}
+			}
+			country = strings.Join(uniqueCountries, "/")
+		}
+
+		oTP := outputTP{
+			Type:      tp.Type,
+			ID:        tp.ID,
+			Remote:    tp.Remote,
+			TpMode:    tpMode,
+			Label:     tp.Label,
+			Version:   version,
+			Country:   country,
+			Services:  services,
+			RecvBytes: recvBytes,
+			SentBytes: sentBytes,
+		}
+		outputTPS = append(outputTPS, oTP)
+
+		if showMore && bwDays > 0 {
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services,
+				formatBytes(recvBytes), formatBytes(sentBytes))
+			internal.Catch(cmdFlags, err)
+		} else if showMore {
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services)
+			internal.Catch(cmdFlags, err)
+		} else if bwDays > 0 {
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label,
+				formatBytes(recvBytes), formatBytes(sentBytes))
+			internal.Catch(cmdFlags, err)
+		} else {
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
+			internal.Catch(cmdFlags, err)
+		}
+		lineNum++
+	}
+
+	// Add inactive transports to the same table (if any)
+	for _, itp := range inactive {
+		oTP := outputTP{
+			ID:        itp.ID,
+			TpMode:    "inactive",
+			RecvBytes: itp.RecvBytes,
+			SentBytes: itp.SentBytes,
+			Inactive:  true,
+		}
+		outputTPS = append(outputTPS, oTP)
+
+		if showMore && bwDays > 0 {
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				"-", itp.ID, "-", "inactive", "-", "-", "-", "-",
+				formatBytes(itp.RecvBytes), formatBytes(itp.SentBytes))
+			internal.Catch(cmdFlags, err)
+		} else if showMore {
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				"-", itp.ID, "-", "inactive", "-", "-", "-", "-")
+			internal.Catch(cmdFlags, err)
+		} else if bwDays > 0 {
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				"-", itp.ID, "-", "inactive", "-",
+				formatBytes(itp.RecvBytes), formatBytes(itp.SentBytes))
+			internal.Catch(cmdFlags, err)
+		} else {
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+				"-", itp.ID, "-", "inactive", "-")
+			internal.Catch(cmdFlags, err)
+		}
+		inactiveLines[lineNum] = true
+		lineNum++
+	}
+
+	// Flush and print table with red coloring for inactive lines
+	internal.Catch(cmdFlags, w.Flush())
+	lines := strings.Split(b.String(), "\n")
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
+		if inactiveLines[i] {
+			fmt.Println(pterm.Red(line))
+		} else {
+			fmt.Println(line)
+		}
+	}
+
+	// For JSON output, include all transports
+	isJSON, _ := cmdFlags.GetBool(internal.JSONString) //nolint:errcheck
+	if isJSON {
+		internal.PrintOutput(cmdFlags, outputTPS, "")
+	}
 }

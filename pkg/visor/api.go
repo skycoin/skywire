@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/ccding/go-stun/stun"
+	"github.com/gocarina/gocsv"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
@@ -125,6 +126,7 @@ type API interface {
 	PublicAutoconnectStatus() (bool, error)
 	GetPersistentTransports() ([]transport.PersistentTransports, error)
 	SetPersistentTransports([]transport.PersistentTransports) error
+	GetTransportLogs(days int) ([]TransportLogEntry, error)
 	//transport discovery
 	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error)
 	DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error)
@@ -150,6 +152,7 @@ type API interface {
 	Ping(config PingConfig) ([]time.Duration, error)
 	PingOnce(config PingConfig) (time.Duration, error)
 	StopPing(pk cipher.PubKey) error
+	StopAllPings() (int, []string, error)
 	DialDmsgPing(pk cipher.PubKey) error
 	DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error
 	DmsgPing(conf PingConfig) ([]time.Duration, error)
@@ -1484,6 +1487,82 @@ func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
 	return entry, nil
 }
 
+// GetTransportLogs implements API.
+// Returns transport log entries from the last N days.
+func (v *Visor) GetTransportLogs(days int) ([]TransportLogEntry, error) {
+	if days <= 0 {
+		return nil, nil
+	}
+
+	logDir := v.conf.Transport.LogStore.Location
+	if logDir == "" {
+		return nil, fmt.Errorf("transport log store location not configured")
+	}
+
+	var allEntries []TransportLogEntry
+	now := time.Now().UTC()
+
+	// Read log files for the specified number of days
+	for i := 0; i < days; i++ {
+		date := now.AddDate(0, 0, -i)
+		filename := filepath.Join(logDir, fmt.Sprintf("%s.csv", date.Format("2006-01-02")))
+
+		entries, err := readTransportLogFile(filename)
+		if err != nil {
+			// Skip files that don't exist or can't be read
+			continue
+		}
+		allEntries = append(allEntries, entries...)
+	}
+
+	return allEntries, nil
+}
+
+// csvEntry matches the transport.CsvEntry struct format for gocsv parsing.
+type csvEntry struct {
+	TpID      uuid.UUID `csv:"tp_id"`
+	RecvBytes *uint64   `csv:"recv"`
+	SentBytes *uint64   `csv:"sent"`
+	TimeStamp int64     `csv:"time_stamp"`
+}
+
+// readTransportLogFile reads transport log entries from a CSV file.
+func readTransportLogFile(filename string) ([]TransportLogEntry, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close() //nolint:errcheck
+
+	var csvEntries []*csvEntry
+	if err := gocsv.UnmarshalFile(f, &csvEntries); err != nil {
+		// Handle empty file case
+		if errors.Is(err, gocsv.ErrEmptyCSVFile) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var entries []TransportLogEntry
+	for _, ce := range csvEntries {
+		var recv, sent uint64
+		if ce.RecvBytes != nil {
+			recv = *ce.RecvBytes
+		}
+		if ce.SentBytes != nil {
+			sent = *ce.SentBytes
+		}
+		entries = append(entries, TransportLogEntry{
+			TpID:      ce.TpID,
+			RecvBytes: recv,
+			SentBytes: sent,
+			Timestamp: ce.TimeStamp,
+		})
+	}
+
+	return entries, nil
+}
+
 // RoutingRules implements API.
 func (v *Visor) RoutingRules() ([]routing.Rule, error) {
 	return v.router.Rules(), nil
@@ -1816,6 +1895,28 @@ func (v *Visor) StopPing(pk cipher.PubKey) error {
 	}
 	delete(v.pingConns, pk)
 	return nil
+}
+
+// StopAllPings stops all active ping connections and cleans up their routes.
+// Returns the number of connections stopped, error messages, and any fatal error.
+func (v *Visor) StopAllPings() (int, []string, error) {
+	v.pingConnMx.Lock()
+	defer v.pingConnMx.Unlock()
+
+	var errs []string
+	count := 0
+
+	for pk, pingEntry := range v.pingConns {
+		if pingEntry.conn != nil {
+			if err := pingEntry.conn.Close(); err != nil {
+				errs = append(errs, fmt.Sprintf("failed to close ping to %s: %v", pk, err))
+			}
+		}
+		delete(v.pingConns, pk)
+		count++
+	}
+
+	return count, errs, nil
 }
 
 // GetPingRoute returns the route hops for an established ping connection.

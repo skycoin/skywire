@@ -2,8 +2,10 @@
 package transport
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -251,10 +253,38 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 		today = tls.fileName
 	}
 
+	filePath := filepath.Join(tls.dir, today)
+
 	//nolint:gosec
-	f, err := os.OpenFile(filepath.Join(tls.dir, today), os.O_RDWR|os.O_CREATE, 0600)
+	f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return err
+	}
+
+	readClients := []*CsvEntry{}
+	writeClients := []*CsvEntry{}
+
+	if err := gocsv.UnmarshalFile(f, &readClients); err != nil && !errors.Is(err, gocsv.ErrEmptyCSVFile) {
+		// Close the file before attempting recovery
+		f.Close() //nolint:errcheck
+
+		// Attempt to recover from corrupted CSV
+		recovered, recoverErr := tls.recoverCSV(filePath)
+		if recoverErr != nil {
+			return fmt.Errorf("CSV parse error and recovery failed: %w (original: %v)", recoverErr, err)
+		}
+		readClients = recovered
+
+		// Repair the file by rewriting it without corrupted lines
+		if repairErr := tls.repairCSVFile(filePath, readClients); repairErr != nil {
+			tls.log.WithError(repairErr).Warn("Failed to repair CSV file")
+		}
+
+		// Reopen the repaired file
+		f, err = os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0600) //nolint:gosec
+		if err != nil {
+			return err
+		}
 	}
 
 	defer func() {
@@ -262,13 +292,6 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 			tls.log.WithError(err).Errorln("Failed to close csv file")
 		}
 	}()
-
-	readClients := []*CsvEntry{}
-	writeClients := []*CsvEntry{}
-
-	if err := gocsv.UnmarshalFile(f, &readClients); err != nil && !errors.Is(err, gocsv.ErrEmptyCSVFile) { // Load clients from file
-		return err
-	}
 
 	var update bool
 	for _, client := range readClients {
@@ -323,6 +346,84 @@ func (tls *fileTransportLogStore) readFromCSV(fileName string) ([]*CsvEntry, err
 		return nil, err
 	}
 	return readClients, nil
+}
+
+// recoverCSV attempts to recover valid entries from a corrupted CSV file.
+// It reads line-by-line, skipping any malformed lines, and returns valid entries.
+func (tls *fileTransportLogStore) recoverCSV(filePath string) ([]*CsvEntry, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close() //nolint:errcheck
+
+	var validLines []string
+	scanner := bufio.NewScanner(f)
+	lineNum := 0
+	skippedLines := 0
+
+	for scanner.Scan() {
+		lineNum++
+		line := scanner.Text()
+
+		// Keep the header line
+		if lineNum == 1 {
+			validLines = append(validLines, line)
+			continue
+		}
+
+		// Validate line has correct number of fields (4: tp_id, recv, sent, time_stamp)
+		reader := csv.NewReader(strings.NewReader(line))
+		fields, err := reader.Read()
+		if err != nil || len(fields) != 4 {
+			tls.log.Debugf("Skipping corrupted CSV line %d: %q", lineNum, line)
+			skippedLines++
+			continue
+		}
+
+		validLines = append(validLines, line)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	if skippedLines > 0 {
+		tls.log.Infof("Recovered CSV: skipped %d corrupted line(s)", skippedLines)
+	}
+
+	// Parse the valid lines
+	if len(validLines) <= 1 {
+		return []*CsvEntry{}, nil
+	}
+
+	csvData := strings.Join(validLines, "\n")
+	var entries []*CsvEntry
+	if err := gocsv.UnmarshalString(csvData, &entries); err != nil {
+		return nil, fmt.Errorf("failed to parse recovered CSV: %w", err)
+	}
+
+	return entries, nil
+}
+
+// repairCSVFile repairs a corrupted CSV file by removing invalid lines.
+func (tls *fileTransportLogStore) repairCSVFile(filePath string, entries []*CsvEntry) error {
+	// Write repaired content to a temp file
+	tmpPath := filePath + ".tmp"
+	tmpFile, err := os.Create(tmpPath)
+	if err != nil {
+		return err
+	}
+
+	if err := gocsv.MarshalFile(&entries, tmpFile); err != nil {
+		tmpFile.Close() //nolint:errcheck
+		os.Remove(tmpPath) //nolint:errcheck
+		return err
+	}
+	tmpFile.Close() //nolint:errcheck
+
+	// Replace original with repaired file
+	return os.Rename(tmpPath, filePath)
 }
 
 // CleanLogs cleans the logs that are older than the given log rotation interval
