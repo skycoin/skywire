@@ -379,16 +379,16 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 	}
 
 	type outputTP struct {
-		Type     types.Type      `json:"type"`
-		ID       uuid.UUID       `json:"id"`
-		Remote   cipher.PubKey   `json:"remote_pk"`
-		TpMode   string          `json:"mode"`
-		Label    transport.Label `json:"label"`
-		Version  string          `json:"version,omitempty"`
-		Country  string          `json:"country,omitempty"`
-		Services string          `json:"services,omitempty"`
-		RecvBytes uint64         `json:"recv_bytes,omitempty"`
-		SentBytes uint64         `json:"sent_bytes,omitempty"`
+		Type      types.Type      `json:"type"`
+		ID        uuid.UUID       `json:"id"`
+		Remote    cipher.PubKey   `json:"remote_pk"`
+		TpMode    string          `json:"mode"`
+		Label     transport.Label `json:"label"`
+		Version   string          `json:"version,omitempty"`
+		Country   string          `json:"country,omitempty"`
+		Services  string          `json:"services,omitempty"`
+		RecvBytes uint64          `json:"recv_bytes,omitempty"`
+		SentBytes uint64          `json:"sent_bytes,omitempty"`
 	}
 
 	var outputTPS []outputTP

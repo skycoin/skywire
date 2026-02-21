@@ -266,7 +266,7 @@ func (tls *fileTransportLogStore) writeToCSV(cEntry *CsvEntry) error {
 
 	if err := gocsv.UnmarshalFile(f, &readClients); err != nil && !errors.Is(err, gocsv.ErrEmptyCSVFile) {
 		// Close the file before attempting recovery
-		f.Close() //nolint:errcheck
+		f.Close() //nolint:errcheck,gosec
 
 		// Attempt to recover from corrupted CSV
 		recovered, recoverErr := tls.recoverCSV(filePath)
@@ -351,7 +351,7 @@ func (tls *fileTransportLogStore) readFromCSV(fileName string) ([]*CsvEntry, err
 // recoverCSV attempts to recover valid entries from a corrupted CSV file.
 // It reads line-by-line, skipping any malformed lines, and returns valid entries.
 func (tls *fileTransportLogStore) recoverCSV(filePath string) ([]*CsvEntry, error) {
-	f, err := os.Open(filePath)
+	f, err := os.Open(filePath) //nolint:gosec // filePath is from internal config
 	if err != nil {
 		return nil, err
 	}
@@ -410,17 +410,17 @@ func (tls *fileTransportLogStore) recoverCSV(filePath string) ([]*CsvEntry, erro
 func (tls *fileTransportLogStore) repairCSVFile(filePath string, entries []*CsvEntry) error {
 	// Write repaired content to a temp file
 	tmpPath := filePath + ".tmp"
-	tmpFile, err := os.Create(tmpPath)
+	tmpFile, err := os.Create(tmpPath) //nolint:gosec // tmpPath is derived from internal config
 	if err != nil {
 		return err
 	}
 
 	if err := gocsv.MarshalFile(&entries, tmpFile); err != nil {
-		tmpFile.Close() //nolint:errcheck
-		os.Remove(tmpPath) //nolint:errcheck
+		tmpFile.Close()    //nolint:errcheck,gosec
+		os.Remove(tmpPath) //nolint:errcheck,gosec
 		return err
 	}
-	tmpFile.Close() //nolint:errcheck
+	tmpFile.Close() //nolint:errcheck,gosec
 
 	// Replace original with repaired file
 	return os.Rename(tmpPath, filePath)

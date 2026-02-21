@@ -235,9 +235,9 @@ type pingTreeModel struct {
 
 	// Data
 	entries     []tuiTreeEntry
-	entriesMu   sync.RWMutex
+	entriesMu   *sync.RWMutex
 	latencies   map[string]*tuiLatencyData
-	latenciesMu sync.RWMutex
+	latenciesMu *sync.RWMutex
 	pingedTpIDs map[string]bool // Already pinged transport IDs
 
 	// Local transport tracking
@@ -251,11 +251,11 @@ type pingTreeModel struct {
 	startTime    time.Time
 
 	// Status messages
-	statusMu  sync.RWMutex
+	statusMu  *sync.RWMutex
 	statusMsg string
 
 	// Goroutine tracking
-	pingWg sync.WaitGroup
+	pingWg *sync.WaitGroup
 }
 
 // Messages for Bubble Tea
@@ -467,7 +467,7 @@ func (m *pingTreeModel) renderTreeContent() string {
 	// Render Level 1 (direct transports)
 	level1Entries, hasLevel1 := entriesByLevel[1]
 	if hasLevel1 && len(level1Entries) > 0 {
-		sb.WriteString(fmt.Sprintf("=== Level 1 (direct transports) ===\n"))
+		sb.WriteString("=== Level 1 (direct transports) ===\n")
 
 		// Sort entries: successful by latency first, then failed
 		m.sortEntriesByLatency(level1Entries)
@@ -535,7 +535,7 @@ func (m *pingTreeModel) renderTreeContent() string {
 
 		// Sort parents by their best child latency
 		type parentInfo struct {
-			pk         string
+			pk          string
 			bestLatency float64
 		}
 		var sortedParents []parentInfo
@@ -1290,13 +1290,17 @@ func runPingTreeTUI(cmd *cobra.Command, _ []string) {
 		passesFilter:     passesFilter,
 		onlineSet:        onlineSet,
 		entries:          []tuiTreeEntry{},
+		entriesMu:        &sync.RWMutex{},
 		latencies:        make(map[string]*tuiLatencyData),
+		latenciesMu:      &sync.RWMutex{},
 		pingedTpIDs:      make(map[string]bool),
 		localTpIDs:       localTpIDs,
 		localTpByRemote:  localTpByRemote,
 		visorDmsgServers: make(map[string][]string),
 		autoScroll:       true,
 		startTime:        time.Now(),
+		statusMu:         &sync.RWMutex{},
+		pingWg:           &sync.WaitGroup{},
 	}
 
 	// Load DMSG clients if needed

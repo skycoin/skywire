@@ -1528,7 +1528,7 @@ type csvEntry struct {
 
 // readTransportLogFile reads transport log entries from a CSV file.
 func readTransportLogFile(filename string) ([]TransportLogEntry, error) {
-	f, err := os.Open(filename)
+	f, err := os.Open(filename) //nolint:gosec // filename is from internal config
 	if err != nil {
 		return nil, err
 	}

@@ -125,6 +125,10 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		}
 	}
 	conf.IsPublic = IsPublic
+	conf.PublicVisorConfig = &PublicVisorConfig{
+		RegistrationTimeout: Duration(PublicVisorRegistrationTimeout),
+		MaxTransports:       PublicVisorMaxTransports,
+	}
 	conf.GeoIP = GeoIP
 	return conf
 }
