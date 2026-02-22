@@ -22,12 +22,9 @@ const (
 	minTransports     = 2
 )
 
-// PerKeyStats represents transport statistics for a single public key
-type PerKeyStats struct {
-	PK     string         `json:"pk"`
-	Total  int            `json:"total"`
-	ByType map[string]int `json:"by_type"`
-}
+// PerKeyStats is a map from PK hex to transport counts by type (includes "total" key)
+// Format: {"pk1": {"total": 15, "stcpr": 1, "sudph": 14}, ...}
+type PerKeyStats map[string]map[string]int
 
 func init() {
 	RootCmd.AddCommand(
@@ -80,9 +77,9 @@ This is designed to be run hourly by the reward service.`,
 
 		// Filter visors with sufficient transports
 		var qualifying []string
-		for _, s := range stats {
-			if s.Total >= minTp {
-				qualifying = append(qualifying, s.PK)
+		for pk, counts := range stats {
+			if total, ok := counts["total"]; ok && total >= minTp {
+				qualifying = append(qualifying, pk)
 			}
 		}
 
@@ -143,7 +140,7 @@ This is designed to be run hourly by the reward service.`,
 }
 
 // fetchTPDData fetches transport per-key stats from TPD, using cache if valid
-func fetchTPDData(tpLog *logging.Logger, bypassCache bool) ([]PerKeyStats, error) {
+func fetchTPDData(tpLog *logging.Logger, bypassCache bool) (PerKeyStats, error) {
 	// Check cache
 	if !bypassCache {
 		if info, err := os.Stat(tpdCacheFile); err == nil {
@@ -151,7 +148,7 @@ func fetchTPDData(tpLog *logging.Logger, bypassCache bool) ([]PerKeyStats, error
 				tpLog.Debug("Using cached TPD data")
 				data, err := os.ReadFile(tpdCacheFile)
 				if err == nil {
-					var stats []PerKeyStats
+					var stats PerKeyStats
 					if err := json.Unmarshal(data, &stats); err == nil {
 						return stats, nil
 					}
@@ -180,7 +177,7 @@ func fetchTPDData(tpLog *logging.Logger, bypassCache bool) ([]PerKeyStats, error
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	var stats []PerKeyStats
+	var stats PerKeyStats
 	if err := json.Unmarshal(body, &stats); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}

@@ -153,6 +153,14 @@ type TransportSummary struct {
 	Label   transport.Label     `json:"label"`
 }
 
+// TransportLogEntry represents a transport log entry with bandwidth data.
+type TransportLogEntry struct {
+	TpID      uuid.UUID `json:"tp_id"`
+	RecvBytes uint64    `json:"recv_bytes"`
+	SentBytes uint64    `json:"sent_bytes"`
+	Timestamp int64     `json:"timestamp"`
+}
+
 func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, isSetup bool) *TransportSummary {
 	summary := &TransportSummary{
 		ID:      tp.Entry.ID,
@@ -679,6 +687,17 @@ func (r *RPC) SetPersistentTransports(pTs *[]transport.PersistentTransports, _ *
 	return err
 }
 
+// GetTransportLogs returns transport log entries from the last N days.
+func (r *RPC) GetTransportLogs(days *int, out *[]TransportLogEntry) (err error) {
+	defer rpcutil.LogCall(r.log, "GetTransportLogs", *days)(out, &err)
+	entries, err := r.visor.GetTransportLogs(*days)
+	if err != nil {
+		return err
+	}
+	*out = entries
+	return nil
+}
+
 // SetPublicAutoconnect sets public_autoconnect in visor's routing config
 func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetPublicAutoconnect", *pAc)(nil, &err)
@@ -899,6 +918,22 @@ func (r *RPC) StopPing(pk *cipher.PubKey, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopPing", pk)(nil, &err)
 
 	return r.visor.StopPing(*pk)
+}
+
+// StopAllPingsOut is the output for StopAllPings RPC.
+type StopAllPingsOut struct {
+	Stopped int
+	Errors  []string
+}
+
+// StopAllPings stops all active ping connections.
+func (r *RPC) StopAllPings(_ *struct{}, out *StopAllPingsOut) (err error) {
+	defer rpcutil.LogCall(r.log, "StopAllPings", nil)(out, &err)
+
+	count, errs, err := r.visor.StopAllPings()
+	out.Stopped = count
+	out.Errors = errs
+	return err
 }
 
 // DialDmsgPing dials to a remote visor over dmsg for ping.

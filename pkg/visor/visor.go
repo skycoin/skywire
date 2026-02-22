@@ -146,6 +146,10 @@ type Visor struct {
 	autoconnectCancel  context.CancelFunc
 	autoconnectRunning bool
 
+	// Public visor registration with validation
+	publicVisorUpdater   *appdisc.PublicVisorUpdater
+	publicVisorUpdaterMu sync.Mutex
+
 	// DMSG server latency tracking (for preferring low-latency servers)
 	dmsgServerLatencies   map[cipher.PubKey]time.Duration
 	dmsgServerLatenciesMu sync.RWMutex

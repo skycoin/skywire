@@ -316,6 +316,13 @@ func (tm *Manager) Stcpr() (network.Client, bool) {
 	return c, ok
 }
 
+// TransportCount returns the number of active transports.
+func (tm *Manager) TransportCount() int {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
+	return len(tm.tps)
+}
+
 func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) error {
 	transport, err := lis.AcceptTransport() // TODO: tcp panic.
 	if err != nil {

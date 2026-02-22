@@ -34,6 +34,7 @@ var (
 	timeout              time.Duration
 	skywireconfig        string
 	rfURL                = deployment.Prod.RouteFinder
+	removeAll            bool
 )
 
 func init() {
@@ -176,8 +177,7 @@ func init() {
 	fwdRuleCmd.Flags().StringVarP(&rPt, "rpt", "q", "", "remote port")
 	routeCmd.Flags().BoolVarP(&showNextRid, "nrid", "n", false, "display the next available route id")
 	routeCmd.Flags().StringVarP(&rID, "rid", "i", "", "show routing rule matching route ID")
-	//TODO
-	//rmRuleCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all routing rules")
+	rmRuleCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all routing rules")
 }
 
 var routeCmd = &cobra.Command{
@@ -206,25 +206,45 @@ var routeCmd = &cobra.Command{
 }
 
 var rmRuleCmd = &cobra.Command{
-	Use:   "rm <route-id>",
+	Use:   "rm [route-id]",
 	Short: "Remove routing rule",
-	Long:  "\n    Remove routing rule",
-	//Args:  cobra.MinimumNArgs(1),
+	Long:  "\n    Remove routing rule\n    Use --all to remove all routing rules",
 	Run: func(cmd *cobra.Command, args []string) {
-		//TODO
-		//if removeAll {
-		//rules, err := clirpc.Client(cmd.Flags()).RoutingRules()
-		//internal.Catch(cmd.Flags(), err)
-		//internal.Catch(cmd.Flags(), clirpc.Client(cmd.Flags()).RemoveRoutingRule(routing.RouteID(rules...)))
-		//} else {
-		id, err := strconv.ParseUint(args[0], 10, 32)
-		internal.Catch(cmd.Flags(), err)
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			internal.PrintFatalError(cmd.Flags(), err)
 		}
+
+		if removeAll {
+			rules, err := rpcClient.RoutingRules()
+			internal.Catch(cmd.Flags(), err)
+
+			if len(rules) == 0 {
+				fmt.Println("No routing rules to remove")
+				return
+			}
+
+			fmt.Printf("Removing %d routing rules...\n", len(rules))
+			removed := 0
+			for _, rule := range rules {
+				routeID := rule.KeyRouteID()
+				if err := rpcClient.RemoveRoutingRule(routeID); err != nil {
+					fmt.Printf("Failed to remove rule %d: %v\n", routeID, err)
+				} else {
+					removed++
+				}
+			}
+			fmt.Printf("Removed %d/%d routing rules\n", removed, len(rules))
+			return
+		}
+
+		if len(args) == 0 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("route-id required (or use --all)"))
+		}
+
+		id, err := strconv.ParseUint(args[0], 10, 32)
+		internal.Catch(cmd.Flags(), err)
 		internal.Catch(cmd.Flags(), rpcClient.RemoveRoutingRule(routing.RouteID(id)))
-		//}
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
