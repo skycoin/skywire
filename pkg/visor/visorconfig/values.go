@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/bitfield/script"
 	"github.com/skycoin/dmsg/pkg/dmsg"
@@ -226,6 +227,12 @@ var (
 
 	// IsPublic advertises the visor in the service discovery
 	IsPublic = skyenv.IsPublic
+
+	// PublicVisorRegistrationTimeout is how long to wait for external STCPR before deregistering
+	PublicVisorRegistrationTimeout = 10 * time.Minute
+
+	// PublicVisorMaxTransports is the max transport count before deregistering
+	PublicVisorMaxTransports = 1000
 
 	// NodeInfo is the name of the survey file
 	NodeInfo = skyenv.NodeInfo

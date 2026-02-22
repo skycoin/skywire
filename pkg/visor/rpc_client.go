@@ -553,6 +553,13 @@ func (rc *rpcClient) GetPersistentTransports() ([]transport.PersistentTransports
 	return tps, err
 }
 
+// GetTransportLogs gets transport log entries from the last N days
+func (rc *rpcClient) GetTransportLogs(days int) ([]TransportLogEntry, error) {
+	var entries []TransportLogEntry
+	err := rc.Call("GetTransportLogs", &days, &entries)
+	return entries, err
+}
+
 // SetLogRotationInterval sets the log_rotation_interval from visor config
 func (rc *rpcClient) SetLogRotationInterval(d visorconfig.Duration) error {
 	err := rc.Call("SetLogRotationInterval", &d, &struct{}{})
@@ -716,6 +723,13 @@ func (rc *rpcClient) PingOnce(conf PingConfig) (time.Duration, error) {
 // StopPing calls StopPing.
 func (rc *rpcClient) StopPing(pk cipher.PubKey) error {
 	return rc.Call("StopPing", &pk, &struct{}{})
+}
+
+// StopAllPings calls StopAllPings.
+func (rc *rpcClient) StopAllPings() (int, []string, error) {
+	var out StopAllPingsOut
+	err := rc.Call("StopAllPings", &struct{}{}, &out)
+	return out.Stopped, out.Errors, err
 }
 
 // DialDmsgPing calls DialDmsgPing.
@@ -1606,6 +1620,11 @@ func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransp
 	return []transport.PersistentTransports{}, nil
 }
 
+// GetTransportLogs implements API
+func (mc *mockRPCClient) GetTransportLogs(_ int) ([]TransportLogEntry, error) {
+	return []TransportLogEntry{}, nil
+}
+
 // SetLogRotationInterval implements API
 func (mc *mockRPCClient) SetLogRotationInterval(_ visorconfig.Duration) error {
 	return nil
@@ -1715,6 +1734,11 @@ func (mc *mockRPCClient) PingOnce(_ PingConfig) (time.Duration, error) {
 // StopPing implements API.
 func (mc *mockRPCClient) StopPing(_ cipher.PubKey) error {
 	return nil
+}
+
+// StopAllPings implements API.
+func (mc *mockRPCClient) StopAllPings() (int, []string, error) {
+	return 0, nil, nil
 }
 
 // DialDmsgPing implements API.
