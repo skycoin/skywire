@@ -18,7 +18,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire/internal/nm"
 	"github.com/skycoin/skywire/pkg/network-monitor/api"
 	"github.com/skycoin/skywire/pkg/network-monitor/store"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
@@ -56,19 +58,70 @@ var (
 	deregRPCAddr  string // Visor RPC address
 )
 
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example responses from actual struct types
+func generateExamples() string {
+	// GET /health - api.HealthCheckResponse
+	healthExample := map[string]interface{}{
+		"build_info": map[string]interface{}{
+			"version": "v1.3.29",
+			"commit":  "abc1234",
+			"date":    "2024-01-15T10:30:00Z",
+		},
+		"started_at": "2024-01-15T10:00:00Z",
+	}
+
+	// GET /status - nm.Status
+	statusExample := nm.Status{
+		LastUpdate:   time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
+		OnlineVisors: 1542,
+		Transports:   3256,
+		VPN:          128,
+		Skysocks:     256,
+		PublicVisor:  512,
+		LastCleaning: &nm.LastCleaningSummary{
+			AllDeadEntriesCleaned: 15,
+			Tpd:                   5,
+			Dmsgd:                 3,
+			VPN:                   2,
+			Skysocks:              3,
+			PublicVisor:           2,
+		},
+	}
+
+	return fmt.Sprintf(`
+Response Examples (from actual struct types):
+
+GET /health - api.HealthCheckResponse
+%s
+
+GET /status - nm.Status
+%s`,
+		exampleJSON(healthExample),
+		exampleJSON(statusExample))
+}
+
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9080", "address to bind to.")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9080", "address to bind to\n\r")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&sdURL, "sd-url", "http://sd.skycoin.com", "url to service discovery")
-	RootCmd.Flags().StringVar(&arURL, "ar-url", "http://ar.skywire.skycoin.com", "url to address resolver")
-	RootCmd.Flags().StringVar(&utURL, "ut-url", "http://ut.skywire.skycoin.com", "url to uptime tracker visor data.")
-	RootCmd.Flags().StringVar(&tpdURL, "tpd-url", "http://tpd.skywire.skycoin.com", "url to transport discovery")
-	RootCmd.Flags().StringVar(&dmsgdURL, "dmsgd-url", "http://dmsgd.skywire.skycoin.com", "url to dmsg discovery")
-	RootCmd.Flags().IntVarP(&cleaningDelay, "cleaning-delay", "d", 75, "time for delay between each service cleaning routine")
+	RootCmd.Flags().StringVar(&sdURL, "sd-url", "http://sd.skycoin.com", "url to service discovery\n\r")
+	RootCmd.Flags().StringVar(&arURL, "ar-url", "http://ar.skywire.skycoin.com", "url to address resolver\n\r")
+	RootCmd.Flags().StringVar(&utURL, "ut-url", "http://ut.skywire.skycoin.com", "url to uptime tracker visor data\n\r")
+	RootCmd.Flags().StringVar(&tpdURL, "tpd-url", "http://tpd.skywire.skycoin.com", "url to transport discovery\n\r")
+	RootCmd.Flags().StringVar(&dmsgdURL, "dmsgd-url", "http://dmsgd.skywire.skycoin.com", "url to dmsg discovery\n\r")
+	RootCmd.Flags().IntVarP(&cleaningDelay, "cleaning-delay", "d", 75, "time for delay between each service cleaning routine\n\r")
 	RootCmd.Flags().StringVar(&pk, "pk", "", "pk of network monitor")
 	RootCmd.Flags().StringVar(&sk, "sk", "", "sk of network monitor")
-	RootCmd.Flags().StringVar(&tag, "tag", "network_monitor", "logging tag")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]")
+	RootCmd.Flags().StringVar(&tag, "tag", "network_monitor", "logging tag\n\r")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
 
 	// Add subcommands
 	RootCmd.AddCommand(deregisterCmd)
@@ -76,10 +129,10 @@ func init() {
 	// Deregister command flags
 	deregisterCmd.Flags().StringVarP(&deregPK, "pk", "p", "", "public key(s) to deregister (comma-separated for multiple)")
 	deregisterCmd.Flags().StringVarP(&deregType, "type", "t", "", "service type: vpn, visor, skysocks (or proxy)")
-	deregisterCmd.Flags().StringVar(&deregSDURL, "sd-url", "http://sd.skycoin.com", "service discovery URL (only used with --sk)")
+	deregisterCmd.Flags().StringVar(&deregSDURL, "sd-url", "http://sd.skycoin.com", "service discovery URL (only used with --sk)\n\r")
 	deregisterCmd.Flags().StringVar(&deregNMSK, "sk", "", "secret key for signing (if not provided, uses visor RPC)")
 	deregisterCmd.Flags().BoolVarP(&deregAllTypes, "all-types", "a", false, "deregister from all service types (vpn, visor, skysocks)")
-	deregisterCmd.Flags().StringVarP(&deregRPCAddr, "rpc", "r", "localhost:3435", "visor RPC address (used when --sk is not provided)")
+	deregisterCmd.Flags().StringVarP(&deregRPCAddr, "rpc", "r", "localhost:3435", "visor RPC address (used when --sk is not provided)\n\r")
 }
 
 // RootCmd contains the root command
@@ -87,8 +140,14 @@ var RootCmd = &cobra.Command{
 	Use: func() string {
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
-	Short:                 "Network monitor for skywire VPN and Visor.",
-	Long:                  calvin.AsciiFont("network-monitor"),
+	Short: "Network monitor for skywire VPN and Visor.",
+	Long: calvin.AsciiFont("network-monitor") + `
+Network Monitor - monitors network health and deregisters stale services.
+
+HTTP Endpoints:
+  GET  /health     Health check
+  GET  /status     Network status
+` + generateExamples(),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

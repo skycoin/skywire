@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 	"gorm.io/gorm"
 
 	"github.com/skycoin/skywire/internal/pg"
@@ -64,25 +66,95 @@ var (
 )
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9096", "address to bind to")
-	RootCmd.Flags().StringVarP(&pAddr, "private-addr", "p", ":9086", "private address to bind to")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", ":2121", "address to bind metrics API to")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9096", "address to bind to\n\r")
+	RootCmd.Flags().StringVarP(&pAddr, "private-addr", "p", ":9086", "private address to bind to\n\r")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", ":2121", "address to bind metrics API to\n\r")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store")
-	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size")
-	RootCmd.Flags().StringVar(&pgHost, "pg-host", "localhost", "host of postgres")
-	RootCmd.Flags().StringVar(&pgPort, "pg-port", "5432", "port of postgres")
-	RootCmd.Flags().IntVar(&pgMaxOpenConn, "pg-max-open-conn", 60, "maximum open connection of db")
-	RootCmd.Flags().IntVar(&storeDataCutoff, "store-data-cutoff", 7, "number of days data store in db")
-	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire-services/daily-data", "path of db daily data store")
-	RootCmd.Flags().BoolVarP(&logEnabled, "log", "l", true, "enable request logging")
-	RootCmd.Flags().StringVar(&tag, "tag", "uptime_tracker", "logging tag")
-	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service")
+	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
+	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
+	RootCmd.Flags().StringVar(&pgHost, "pg-host", "localhost", "host of postgres\n\r")
+	RootCmd.Flags().StringVar(&pgPort, "pg-port", "5432", "port of postgres\n\r")
+	RootCmd.Flags().IntVar(&pgMaxOpenConn, "pg-max-open-conn", 60, "maximum open connection of db\n\r")
+	RootCmd.Flags().IntVar(&storeDataCutoff, "store-data-cutoff", 7, "number of days data store in db\n\r")
+	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire/ut/daily", "path of db daily data store\n\r")
+	RootCmd.Flags().BoolVarP(&logEnabled, "log", "l", true, "enable request logging\n\r")
+	RootCmd.Flags().StringVar(&tag, "tag", "uptime_tracker", "logging tag\n\r")
+	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service\n\r")
 	RootCmd.Flags().BoolVar(&enableLoadTesting, "enable-load-testing", false, "enable load testing")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscAddr(false), "url of dmsg discovery")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscAddr(false), "url of dmsg discovery\n\r")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
+}
+
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example responses from actual struct types
+func generateExamples() string {
+	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+	exPK2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+
+	return fmt.Sprintf(`
+Request/Response Examples:
+
+GET /health
+  %s
+
+GET /v4/update (auth)
+  Response: 200 OK
+
+GET /visors
+  %s
+
+GET /uptimes
+  %s
+
+GET /uptimes?v=v2
+  %s
+
+GET /uptimes?status=on
+  (same as /uptimes, filtered to online visors only)
+
+GET /uptime/{pk}
+  %s
+
+GET /dashboard?length=6
+  Response: HTML bar chart of monthly node counts
+
+GET /visor-ips?month=all (private API)
+  %s
+
+GET /security/nonces/{pk}
+  %s`,
+		exampleJSON(map[string]interface{}{
+			"build_info":   map[string]string{"version": "v1.3.29"},
+			"started_at":   "2024-01-15T10:00:00Z",
+			"dmsg_address": exPK1 + ":80",
+			"dmsg_servers": []string{exPK2},
+		}),
+		exampleJSON([]map[string]interface{}{{
+			"pk": exPK1, "online": true, "version": "v1.3.29",
+			"ip": "192.168.1.1", "country": "US", "city": "New York",
+		}}),
+		exampleJSON(store.UptimeResponse{
+			{Key: exPK1, Online: true, Version: "v1.3.29"},
+			{Key: exPK2, Online: false},
+		}),
+		exampleJSON(store.UptimeResponseV2{{
+			Key: exPK1, Online: true, Version: "v1.3.29",
+			DailyOnlineHistory: map[string]string{"2024-01-15": "95.5", "2024-01-14": "100.0"},
+		}}),
+		exampleJSON(store.UptimeDef{Key: exPK1, Online: true, Version: "v1.3.29"}),
+		exampleJSON(map[string]string{exPK1: "192.168.1.1", exPK2: "10.0.0.1"}),
+		exampleJSON(map[string]interface{}{"nonce": 12345}),
+	)
 }
 
 // RootCmd contains the root cli commanmd
@@ -92,7 +164,20 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "Uptime Tracker Server for skywire",
 	Long: calvin.AsciiFont("uptime-tracker") + `
-	Uptime Tracker Server for skywire`,
+Uptime Tracker Server - tracks visor online status and uptime statistics.
+
+Depends: redis, postgres
+
+HTTP Endpoints:
+  GET  /health                        Health check
+  GET  /v4/update                     Visor heartbeat (auth)
+  GET  /visors                        All registered visors
+  GET  /uptimes                       Visor uptime data (?v=v2 for v2 format)
+  GET  /uptime/{pk}                   Uptime for specific visor
+  GET  /dashboard                     Dashboard chart data
+  GET  /visor-ips                     Visor IP addresses (private API)
+  GET  /security/nonces/{pk}          Get nonce for signing
+` + generateExamples(),
 	Run: func(_ *cobra.Command, _ []string) {
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
