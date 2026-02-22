@@ -64,71 +64,68 @@ func exampleJSON(v interface{}) string {
 
 // generateExamples creates example responses from actual struct types
 func generateExamples() string {
-	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
-	exPK2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+	pk1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+	pk2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
 
-	// GET /health - api.HealthCheckResponse
-	healthExample := map[string]interface{}{
-		"build_info": map[string]interface{}{
-			"version": "v1.3.29",
-			"commit":  "abc1234",
-			"date":    "2024-01-15T10:30:00Z",
-		},
-		"started_at":   "2024-01-15T10:00:00Z",
-		"dmsg_address": exPK1 + ":80",
-		"dmsg_servers": []string{exPK2},
-	}
-
-	// GET /api/services - []servicedisc.Service
-	// Using map to ensure address is properly formatted as string
 	serviceExample := map[string]interface{}{
-		"address": exPK1 + ":3",
-		"type":    "vpn",
-		"version": "v1.3.29",
-		"geo": map[string]interface{}{
-			"country": "United States",
-			"region":  "California",
-			"lat":     37.7749,
-			"lon":     -122.4194,
-		},
-		"info": map[string]interface{}{
-			"latency":     45.2,
-			"uptime":      99.5,
-			"connections": 5,
-		},
+		"address": pk1 + ":3", "type": "vpn", "version": "v1.3.29",
+		"geo": map[string]interface{}{"country": "US", "region": "CA", "lat": 37.77, "lon": -122.41},
 	}
 
 	return fmt.Sprintf(`
-Response Examples (from actual struct types):
+Request/Response Examples:
 
-GET /health - api.HealthCheckResponse
-%s
+GET /health
+  %s
 
-GET /api/services?type=vpn - []servicedisc.Service
-    [
-    %s
-    ]
+GET /api/services?type=vpn&version=v1.3&country=US&quantity=10
+  %s
 
-GET /api/services/{addr} - servicedisc.Service
-%s`,
-		exampleJSON(healthExample),
+GET /api/services/{addr}?type=vpn
+  %s
+
+POST /api/services (auth)
+  Request:  %s
+  Response: (same with geo data added)
+
+DEL /api/services/{addr}?type=vpn (auth)
+  Response: true
+
+DEL /api/services/deregister/{type} (NM auth headers: NM-PK, NM-Sign)
+  Request:  %s
+  Response: true
+
+GET /security/nonces/{pk}
+  %s`,
+		exampleJSON(map[string]interface{}{
+			"build_info":   map[string]string{"version": "v1.3.29"},
+			"started_at":   "2024-01-15T10:00:00Z",
+			"dmsg_address": pk1 + ":80",
+			"dmsg_servers": []string{pk2},
+		}),
+		exampleJSON([]map[string]interface{}{serviceExample}),
 		exampleJSON(serviceExample),
-		exampleJSON(serviceExample))
+		exampleJSON(map[string]interface{}{
+			"address": pk1 + ":3", "type": "vpn", "version": "v1.3.29",
+		}),
+		exampleJSON([]string{pk1, pk2}),
+		exampleJSON(map[string]interface{}{"nonce": 12345}),
+	)
 }
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to\033[0m")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m")
-	RootCmd.Flags().StringVarP(&redisURL, "redis", "r", "redis://localhost:6379", "connections string for a redis store\033[0m")
-	RootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration\033[0m")
-	RootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth\033[0m")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", dmsg.DiscAddr(false), "url of dmsg-discovery\033[0m")
-	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service\033[0m")
-	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
-	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\033[0m\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
-	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for service entry expiration\033[0m")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to\n\r")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
+	RootCmd.Flags().StringVarP(&redisURL, "redis", "r", "redis://localhost:6379", "connections string for a redis store\n\r")
+	RootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration")
+	RootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", dmsg.DiscAddr(false), "url of dmsg-discovery\n\r")
+	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service\n\r")
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
+	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
+	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for service entry expiration\n\r")
 }
 
 // RootCmd contains the root service-discovery command

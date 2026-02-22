@@ -62,68 +62,51 @@ func exampleJSON(v interface{}) string {
 
 // generateExamples creates example responses from actual struct types
 func generateExamples() string {
-	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
-	exPK2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
-
-	// GET /health - api.HealthCheckResponse
-	healthExample := map[string]interface{}{
-		"build_info": map[string]interface{}{
-			"version": "v1.3.29",
-			"commit":  "abc1234",
-			"date":    "2024-01-15T10:30:00Z",
-		},
-		"started_at":   "2024-01-15T10:00:00Z",
-		"dmsg_address": exPK1 + ":80",
-		"dmsg_servers": []string{exPK2},
-	}
-
-	// POST /routes - map[routing.PathEdges][][]routing.Hop
-	routesExample := map[string]interface{}{
-		exPK1 + "-" + exPK2: [][]map[string]interface{}{
-			{
-				{
-					"t_id": "e7a7f1b3-c040-47f8-9e12-a0a1459b3456",
-					"from": exPK1,
-					"to":   exPK2,
-				},
-			},
-		},
-	}
+	pk1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+	pk2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+	tpID := "e7a7f1b3c04047f89e12a0a1459b3456"
 
 	return fmt.Sprintf(`
-Response Examples (from actual struct types):
+Request/Response Examples:
 
-GET /health - api.HealthCheckResponse
-%s
+GET /health
+  %s
 
-POST /routes - map[routing.PathEdges][][]routing.Hop
-    Request:
-    {
-      "edges": [["%s", "%s"]],
-      "opts": {"min_hops": 0, "max_hops": 3}
-    }
-
-    Response:
-%s`,
-		exampleJSON(healthExample),
-		exPK1, exPK2,
-		exampleJSON(routesExample))
+POST /routes
+  Request:  %s
+  Response: %s`,
+		exampleJSON(map[string]interface{}{
+			"build_info":   map[string]string{"version": "v1.3.29"},
+			"started_at":   "2024-01-15T10:00:00Z",
+			"dmsg_address": pk1 + ":80",
+			"dmsg_servers": []string{pk2},
+		}),
+		exampleJSON(map[string]interface{}{
+			"edges": [][]string{{pk1, pk2}},
+			"opts":  map[string]int{"min_hops": 0, "max_hops": 3},
+		}),
+		exampleJSON(map[string]interface{}{
+			pk1 + "-" + pk2: [][]map[string]interface{}{{
+				{"t_id": tpID, "from": pk1, "to": pk2},
+			}},
+		}),
+	)
 }
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9092", "address to bind to\033[0m")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\033[0m")
-	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\033[0m")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\033[0m")
-	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\033[0m")
-	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscAddr(false), "url of dmsg discovery\033[0m")
-	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\033[0m\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
-	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
-	RootCmd.Flags().StringVar(&multiplexingLib, "multiplexing-lib", "yamux", "type of multiplexing lib on dmsg network")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9092", "address to bind to\n\r")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
+	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
+	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
+	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\n\r")
+	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscAddr(false), "url of dmsg discovery\n\r")
+	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
+	RootCmd.Flags().StringVar(&multiplexingLib, "multiplexing-lib", "yamux", "type of multiplexing lib on dmsg network\n\r")
 }
 
 // RootCmd contains the root command

@@ -110,18 +110,18 @@ GET /status - nm.Status
 }
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9080", "address to bind to.")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9080", "address to bind to\n\r")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&sdURL, "sd-url", "http://sd.skycoin.com", "url to service discovery")
-	RootCmd.Flags().StringVar(&arURL, "ar-url", "http://ar.skywire.skycoin.com", "url to address resolver")
-	RootCmd.Flags().StringVar(&utURL, "ut-url", "http://ut.skywire.skycoin.com", "url to uptime tracker visor data.")
-	RootCmd.Flags().StringVar(&tpdURL, "tpd-url", "http://tpd.skywire.skycoin.com", "url to transport discovery")
-	RootCmd.Flags().StringVar(&dmsgdURL, "dmsgd-url", "http://dmsgd.skywire.skycoin.com", "url to dmsg discovery")
-	RootCmd.Flags().IntVarP(&cleaningDelay, "cleaning-delay", "d", 75, "time for delay between each service cleaning routine")
+	RootCmd.Flags().StringVar(&sdURL, "sd-url", "http://sd.skycoin.com", "url to service discovery\n\r")
+	RootCmd.Flags().StringVar(&arURL, "ar-url", "http://ar.skywire.skycoin.com", "url to address resolver\n\r")
+	RootCmd.Flags().StringVar(&utURL, "ut-url", "http://ut.skywire.skycoin.com", "url to uptime tracker visor data\n\r")
+	RootCmd.Flags().StringVar(&tpdURL, "tpd-url", "http://tpd.skywire.skycoin.com", "url to transport discovery\n\r")
+	RootCmd.Flags().StringVar(&dmsgdURL, "dmsgd-url", "http://dmsgd.skywire.skycoin.com", "url to dmsg discovery\n\r")
+	RootCmd.Flags().IntVarP(&cleaningDelay, "cleaning-delay", "d", 75, "time for delay between each service cleaning routine\n\r")
 	RootCmd.Flags().StringVar(&pk, "pk", "", "pk of network monitor")
 	RootCmd.Flags().StringVar(&sk, "sk", "", "sk of network monitor")
-	RootCmd.Flags().StringVar(&tag, "tag", "network_monitor", "logging tag")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]")
+	RootCmd.Flags().StringVar(&tag, "tag", "network_monitor", "logging tag\n\r")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
 
 	// Add subcommands
 	RootCmd.AddCommand(deregisterCmd)
@@ -129,10 +129,10 @@ func init() {
 	// Deregister command flags
 	deregisterCmd.Flags().StringVarP(&deregPK, "pk", "p", "", "public key(s) to deregister (comma-separated for multiple)")
 	deregisterCmd.Flags().StringVarP(&deregType, "type", "t", "", "service type: vpn, visor, skysocks (or proxy)")
-	deregisterCmd.Flags().StringVar(&deregSDURL, "sd-url", "http://sd.skycoin.com", "service discovery URL (only used with --sk)")
+	deregisterCmd.Flags().StringVar(&deregSDURL, "sd-url", "http://sd.skycoin.com", "service discovery URL (only used with --sk)\n\r")
 	deregisterCmd.Flags().StringVar(&deregNMSK, "sk", "", "secret key for signing (if not provided, uses visor RPC)")
 	deregisterCmd.Flags().BoolVarP(&deregAllTypes, "all-types", "a", false, "deregister from all service types (vpn, visor, skysocks)")
-	deregisterCmd.Flags().StringVarP(&deregRPCAddr, "rpc", "r", "localhost:3435", "visor RPC address (used when --sk is not provided)")
+	deregisterCmd.Flags().StringVarP(&deregRPCAddr, "rpc", "r", "localhost:3435", "visor RPC address (used when --sk is not provided)\n\r")
 }
 
 // RootCmd contains the root command

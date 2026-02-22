@@ -92,14 +92,14 @@ GET / - visorconfig.Services
 }
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9082", "address to bind to")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9082", "address to bind to\n\r")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&tag, "tag", "address_resolver", "logging tag")
-	RootCmd.Flags().StringVarP(&stunPath, "config", "c", "./config.json", "stun server list file location")
-	RootCmd.Flags().StringVarP(&domain, "domain", "d", "skywire.skycoin.com", "the domain of the endpoints")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscAddr(false), "url of dmsg-discovery")
+	RootCmd.Flags().StringVar(&tag, "tag", "address_resolver", "logging tag\n\r")
+	RootCmd.Flags().StringVarP(&stunPath, "config", "c", "./config.json", "stun server list file location\n\r")
+	RootCmd.Flags().StringVarP(&domain, "domain", "d", "skywire.skycoin.com", "the domain of the endpoints\n\r")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscAddr(false), "url of dmsg-discovery\n\r")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 }
 

@@ -66,25 +66,25 @@ var (
 )
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9096", "address to bind to")
-	RootCmd.Flags().StringVarP(&pAddr, "private-addr", "p", ":9086", "private address to bind to")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", ":2121", "address to bind metrics API to")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9096", "address to bind to\n\r")
+	RootCmd.Flags().StringVarP(&pAddr, "private-addr", "p", ":9086", "private address to bind to\n\r")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", ":2121", "address to bind metrics API to\n\r")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store")
-	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size")
-	RootCmd.Flags().StringVar(&pgHost, "pg-host", "localhost", "host of postgres")
-	RootCmd.Flags().StringVar(&pgPort, "pg-port", "5432", "port of postgres")
-	RootCmd.Flags().IntVar(&pgMaxOpenConn, "pg-max-open-conn", 60, "maximum open connection of db")
-	RootCmd.Flags().IntVar(&storeDataCutoff, "store-data-cutoff", 7, "number of days data store in db")
-	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire-services/daily-data", "path of db daily data store")
-	RootCmd.Flags().BoolVarP(&logEnabled, "log", "l", true, "enable request logging")
-	RootCmd.Flags().StringVar(&tag, "tag", "uptime_tracker", "logging tag")
-	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service")
+	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
+	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
+	RootCmd.Flags().StringVar(&pgHost, "pg-host", "localhost", "host of postgres\n\r")
+	RootCmd.Flags().StringVar(&pgPort, "pg-port", "5432", "port of postgres\n\r")
+	RootCmd.Flags().IntVar(&pgMaxOpenConn, "pg-max-open-conn", 60, "maximum open connection of db\n\r")
+	RootCmd.Flags().IntVar(&storeDataCutoff, "store-data-cutoff", 7, "number of days data store in db\n\r")
+	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire/ut/daily", "path of db daily data store\n\r")
+	RootCmd.Flags().BoolVarP(&logEnabled, "log", "l", true, "enable request logging\n\r")
+	RootCmd.Flags().StringVar(&tag, "tag", "uptime_tracker", "logging tag\n\r")
+	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service\n\r")
 	RootCmd.Flags().BoolVar(&enableLoadTesting, "enable-load-testing", false, "enable load testing")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscAddr(false), "url of dmsg discovery")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscAddr(false), "url of dmsg discovery\n\r")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 }
 
 // exampleJSON marshals v to indented JSON with color, returning empty string on error
@@ -101,62 +101,60 @@ func generateExamples() string {
 	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
 	exPK2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
 
-	// GET /health - api.HealthCheckResponse
-	healthExample := map[string]interface{}{
-		"build_info": map[string]interface{}{
-			"version": "v1.3.29",
-			"commit":  "abc1234",
-			"date":    "2024-01-15T10:30:00Z",
-		},
-		"started_at":   "2024-01-15T10:00:00Z",
-		"dmsg_address": exPK1 + ":80",
-		"dmsg_servers": []string{exPK2},
-	}
-
-	// GET /uptimes - store.UptimeResponse (v1)
-	uptimeV1 := store.UptimeResponse{
-		{Key: exPK1, Online: true},
-		{Key: exPK2, Online: false},
-	}
-
-	// GET /uptimes?v=v2 - store.UptimeResponseV2
-	uptimeV2 := store.UptimeResponseV2{
-		{
-			Key:     exPK1,
-			Online:  true,
-			Version: "v1.3.29",
-			DailyOnlineHistory: map[string]string{
-				"2024-01-15": "95.5",
-				"2024-01-14": "100.0",
-			},
-		},
-	}
-
-	// GET /uptime/{pk} - single visor uptime
-	singleUptime := map[string]interface{}{
-		"pk":      exPK1,
-		"online":  true,
-		"version": "v1.3.29",
-	}
-
 	return fmt.Sprintf(`
-Response Examples (from actual struct types):
+Request/Response Examples:
 
-GET /health - api.HealthCheckResponse
-%s
+GET /health
+  %s
 
-GET /uptimes - store.UptimeResponse
-%s
+GET /v4/update (auth)
+  Response: 200 OK
 
-GET /uptimes?v=v2 - store.UptimeResponseV2
-%s
+GET /visors
+  %s
+
+GET /uptimes
+  %s
+
+GET /uptimes?v=v2
+  %s
+
+GET /uptimes?status=on
+  (same as /uptimes, filtered to online visors only)
 
 GET /uptime/{pk}
-%s`,
-		exampleJSON(healthExample),
-		exampleJSON(uptimeV1),
-		exampleJSON(uptimeV2),
-		exampleJSON(singleUptime))
+  %s
+
+GET /dashboard?length=6
+  Response: HTML bar chart of monthly node counts
+
+GET /visor-ips?month=all (private API)
+  %s
+
+GET /security/nonces/{pk}
+  %s`,
+		exampleJSON(map[string]interface{}{
+			"build_info":   map[string]string{"version": "v1.3.29"},
+			"started_at":   "2024-01-15T10:00:00Z",
+			"dmsg_address": exPK1 + ":80",
+			"dmsg_servers": []string{exPK2},
+		}),
+		exampleJSON([]map[string]interface{}{{
+			"pk": exPK1, "online": true, "version": "v1.3.29",
+			"ip": "192.168.1.1", "country": "US", "city": "New York",
+		}}),
+		exampleJSON(store.UptimeResponse{
+			{Key: exPK1, Online: true, Version: "v1.3.29"},
+			{Key: exPK2, Online: false},
+		}),
+		exampleJSON(store.UptimeResponseV2{{
+			Key: exPK1, Online: true, Version: "v1.3.29",
+			DailyOnlineHistory: map[string]string{"2024-01-15": "95.5", "2024-01-14": "100.0"},
+		}}),
+		exampleJSON(store.UptimeDef{Key: exPK1, Online: true, Version: "v1.3.29"}),
+		exampleJSON(map[string]string{exPK1: "192.168.1.1", exPK2: "10.0.0.1"}),
+		exampleJSON(map[string]interface{}{"nonce": 12345}),
+	)
 }
 
 // RootCmd contains the root cli commanmd
