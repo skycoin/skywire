@@ -187,13 +187,6 @@ func (api *API) getAllTransportsStats(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// PerKeyStats represents transport statistics for a single public key
-type PerKeyStats struct {
-	PK     string         `json:"pk"`
-	Total  int            `json:"total"`
-	ByType map[string]int `json:"by_type"`
-}
-
 func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Request) {
 	selfTransports := true
 	query := r.URL.Query()
@@ -211,30 +204,19 @@ func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Build per-key statistics
-	perKeyStats := make(map[cipher.PubKey]map[string]int)
+	// Build per-key statistics: map[pkHex]map[typeOrTotal]count
+	// Format: {"pk1": {"total": 15, "stcpr": 1, "sudph": 14}, ...}
+	result := make(map[string]map[string]int)
 
 	for _, entry := range entries {
 		for _, edge := range entry.Edges {
-			if perKeyStats[edge] == nil {
-				perKeyStats[edge] = make(map[string]int)
+			pkHex := edge.Hex()
+			if result[pkHex] == nil {
+				result[pkHex] = make(map[string]int)
 			}
-			perKeyStats[edge][string(entry.Type)]++
+			result[pkHex][string(entry.Type)]++
+			result[pkHex]["total"]++
 		}
-	}
-
-	// Convert to response format
-	var result []PerKeyStats
-	for pk, byType := range perKeyStats {
-		total := 0
-		for _, count := range byType {
-			total += count
-		}
-		result = append(result, PerKeyStats{
-			PK:     pk.String(),
-			Total:  total,
-			ByType: byType,
-		})
 	}
 
 	if err := json.NewEncoder(w).Encode(result); err != nil {

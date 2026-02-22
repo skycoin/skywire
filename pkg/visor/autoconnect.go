@@ -87,8 +87,19 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			v.isServicesHealthy.set()
 
 			if len(addrs) == 0 {
-				a.log.Debugln("no public visors found")
-				continue
+				a.log.Debugln("No public visors in service discovery, trying TPD fallback")
+				// Fallback: query TPD per-key-stats for well-connected visors
+				fallbackAddrs, err := a.fetchFallbackVisors(ctx, v)
+				if err != nil {
+					a.log.WithError(err).Debug("TPD fallback failed")
+					continue
+				}
+				if len(fallbackAddrs) == 0 {
+					a.log.Debugln("No fallback visors found either")
+					continue
+				}
+				a.log.WithField("count", len(fallbackAddrs)).Debug("Using TPD fallback visors")
+				addrs = fallbackAddrs
 			}
 
 			a.log.WithField("public visors", len(addrs)).Debugln("Found")
@@ -462,6 +473,47 @@ func (a *autoconnector) isSameLAN(ctx context.Context, pk cipher.PubKey, netType
 type transportDiscoveryCache struct {
 	entriesByPK     map[cipher.PubKey][]*transport.Entry
 	transportCounts map[cipher.PubKey]int
+}
+
+// fetchFallbackVisors queries TPD per-key-stats to find well-connected visors
+// when service discovery returns no public visors.
+// It returns visors with at least minFallbackTransports transports.
+func (a *autoconnector) fetchFallbackVisors(ctx context.Context, v *Visor) ([]cipher.PubKey, error) {
+	const minFallbackTransports = 5 // Visors with >= 5 transports are considered well-connected
+
+	tpD := v.tpDiscClient()
+	if tpD == nil {
+		return nil, errors.New("transport discovery client not available")
+	}
+
+	perKeyStats, err := tpD.GetAllTransportsPerKeyStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var candidates []cipher.PubKey
+	for pkHex, counts := range perKeyStats {
+		total, ok := counts["total"]
+		if !ok || total < minFallbackTransports {
+			continue
+		}
+
+		// Skip self
+		var pk cipher.PubKey
+		if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
+			continue
+		}
+		if pk == v.conf.PK {
+			continue
+		}
+
+		candidates = append(candidates, pk)
+	}
+
+	a.log.WithField("candidates", len(candidates)).
+		Debug("Found fallback visor candidates from TPD per-key-stats")
+
+	return candidates, nil
 }
 
 // buildTransportCache fetches all transport discovery data once and builds lookup maps.

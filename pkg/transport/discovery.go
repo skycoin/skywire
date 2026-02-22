@@ -20,6 +20,7 @@ type DiscoveryClient interface {
 	GetAllTransports(ctx context.Context) ([]*Entry, error)
 	GetTransportStats(ctx context.Context, pk cipher.PubKey) (*TransportStats, error)
 	GetAllTransportsStats(ctx context.Context) (*NetworkTransportStats, error)
+	GetAllTransportsPerKeyStats(ctx context.Context) (PerKeyStats, error)
 	DeleteTransport(ctx context.Context, id uuid.UUID) error
 }
 
@@ -35,6 +36,10 @@ type NetworkTransportStats struct {
 	ByType          map[string]int `json:"by_type"`
 	UniqueVisors    int            `json:"unique_visors"`
 }
+
+// PerKeyStats is a map from PK hex to transport counts by type (includes "total" key).
+// Format: {"pk1": {"total": 15, "stcpr": 1, "sudph": 14}, ...}
+type PerKeyStats map[string]map[string]int
 
 type mockDiscoveryClient struct {
 	sync.Mutex
@@ -143,6 +148,25 @@ func (td *mockDiscoveryClient) GetAllTransportsStats(_ context.Context) (*Networ
 	}, nil
 }
 
+func (td *mockDiscoveryClient) GetAllTransportsPerKeyStats(_ context.Context) (PerKeyStats, error) {
+	td.Lock()
+	defer td.Unlock()
+
+	result := make(PerKeyStats)
+	for _, entry := range td.entries {
+		for _, edge := range entry.Edges {
+			pkHex := edge.Hex()
+			if result[pkHex] == nil {
+				result[pkHex] = make(map[string]int)
+			}
+			result[pkHex][string(entry.Type)]++
+			result[pkHex]["total"]++
+		}
+	}
+
+	return result, nil
+}
+
 // NOTE that mock implementation doesn't checks whether the transport to be deleted is valid or not, this is, that
 // it can be deleted by the visor who called DeleteTransport
 func (td *mockDiscoveryClient) DeleteTransport(ctx context.Context, id uuid.UUID) error { //nolint:revive
@@ -189,6 +213,10 @@ func (nd *noopDiscoveryClient) GetTransportStats(_ context.Context, _ cipher.Pub
 
 func (nd *noopDiscoveryClient) GetAllTransportsStats(_ context.Context) (*NetworkTransportStats, error) {
 	return &NetworkTransportStats{TotalTransports: 0, ByType: make(map[string]int), UniqueVisors: 0}, nil
+}
+
+func (nd *noopDiscoveryClient) GetAllTransportsPerKeyStats(_ context.Context) (PerKeyStats, error) {
+	return make(PerKeyStats), nil
 }
 
 func (nd *noopDiscoveryClient) DeleteTransport(_ context.Context, _ uuid.UUID) error {
