@@ -75,7 +75,7 @@ var pingCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// If no args provided, show help
 		if len(args) == 0 {
-			cmd.Help() //nolint:errcheck
+			cmd.Help() //nolint:errcheck,gosec
 			return
 		}
 		pk := internal.ParsePK(cmd.Flags(), "pk", args[0])
