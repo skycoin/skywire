@@ -984,6 +984,102 @@ func (m *pingTreeModel) saveResults() {
 
 	jsonFile := tuiOutput + ".json"
 	_ = os.WriteFile(jsonFile, jsonData, 0600) //nolint:errcheck,gosec
+
+	// Also save text output (with ANSI codes for colors) for consistency with tree command
+	textFile := tuiOutput + ".txt"
+	textOut := m.generateTextOutput(entries, latencies)
+	_ = os.WriteFile(textFile, []byte(textOut), 0600) //nolint:errcheck,gosec
+}
+
+// generateTextOutput generates text output similar to tree command
+func (m *pingTreeModel) generateTextOutput(entries []tuiTreeEntry, latencies map[string]*tuiLatencyData) string {
+	var textOut strings.Builder
+	textOut.WriteString("=== Route Ping Graph (Tree View) ===\n")
+	textOut.WriteString(fmt.Sprintf("Local: %s\n", pterm.Cyan(m.localPK)))
+	textOut.WriteString(fmt.Sprintf("Started: %s\n", m.startTime.Format(time.RFC3339)))
+	textOut.WriteString(fmt.Sprintf("Updated: %s\n\n", time.Now().Format(time.RFC3339)))
+
+	// Group entries by level
+	entriesByLevel := make(map[int][]tuiTreeEntry)
+	for _, entry := range entries {
+		entriesByLevel[entry.level] = append(entriesByLevel[entry.level], entry)
+	}
+
+	// Find max level
+	maxLevel := 0
+	for lvl := range entriesByLevel {
+		if lvl > maxLevel {
+			maxLevel = lvl
+		}
+	}
+
+	// Helper to calculate average latency
+	calcAvg := func(samples []float64) float64 {
+		if len(samples) == 0 {
+			return 0
+		}
+		var sum float64
+		for _, s := range samples {
+			sum += s
+		}
+		return sum / float64(len(samples))
+	}
+
+	// Write level 1
+	if level1Entries, ok := entriesByLevel[1]; ok && len(level1Entries) > 0 {
+		textOut.WriteString(pterm.Yellow("=== Level 1 (direct transports) ===\n"))
+		for _, entry := range level1Entries {
+			data := latencies[entry.tpID]
+			if data == nil {
+				continue
+			}
+			var latStr string
+			if len(data.pingSamples) > 0 {
+				avg := calcAvg(data.pingSamples)
+				latStr = fmt.Sprintf("%.1fms", avg)
+			} else if data.pingErr != "" {
+				latStr = data.pingErr
+			} else if data.setupErr != "" {
+				latStr = data.setupErr
+			} else if data.calcErr != "" {
+				latStr = data.calcErr
+			} else {
+				latStr = "..."
+			}
+			textOut.WriteString(fmt.Sprintf("  %s %s %s\n", entry.remotePK, entry.tpID, latStr))
+		}
+	}
+
+	// Write level 2+
+	for lvl := 2; lvl <= maxLevel; lvl++ {
+		levelEntries, ok := entriesByLevel[lvl]
+		if !ok || len(levelEntries) == 0 {
+			continue
+		}
+		textOut.WriteString(fmt.Sprintf("\n%s\n", pterm.Yellow(fmt.Sprintf("=== Level %d ===", lvl))))
+		for _, entry := range levelEntries {
+			data := latencies[entry.tpID]
+			if data == nil {
+				continue
+			}
+			var latStr string
+			if len(data.pingSamples) > 0 {
+				avg := calcAvg(data.pingSamples)
+				latStr = fmt.Sprintf("%.1fms", avg)
+			} else if data.pingErr != "" {
+				latStr = data.pingErr
+			} else if data.setupErr != "" {
+				latStr = data.setupErr
+			} else if data.calcErr != "" {
+				latStr = data.calcErr
+			} else {
+				latStr = "..."
+			}
+			textOut.WriteString(fmt.Sprintf("  %s %s %s\n", entry.remotePK, entry.tpID, latStr))
+		}
+	}
+
+	return textOut.String()
 }
 
 // loadSavedState loads previous state from JSON file for resume

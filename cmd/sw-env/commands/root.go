@@ -55,7 +55,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&publicFlag, "public", "p", false, "Environment with public skywire-services")
 	RootCmd.Flags().BoolVarP(&localFlag, "local", "l", false, "Environment with skywire-services on localhost")
 	RootCmd.Flags().BoolVarP(&dockerFlag, "docker", "d", false, "Environment with dockerized skywire-services")
-	RootCmd.Flags().StringVarP(&dockerNetwork, "network", "n", "SKYNET", "Docker network to use")
+	RootCmd.Flags().StringVarP(&dockerNetwork, "network", "n", "SKYNET", "Docker network to use\n\r")
 }
 
 var visorCmd = &cobra.Command{

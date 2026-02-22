@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/internal/tpdiscmetrics"
@@ -28,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/tcpproxy"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport-discovery/api"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
@@ -57,22 +60,113 @@ var (
 )
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9091", "address to bind to\033[0m")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\033[0m")
-	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\033[0m")
-	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for transport entry expiration\033[0m")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\033[0m")
-	RootCmd.Flags().StringVar(&tag, "tag", "transport_discovery", "logging tag\033[0m")
-	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsgDisc, "url of dmsg-discovery\033[0m")
-	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration\033[0m")
-	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment\033[0m")
-	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\033[0m\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
-	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
-	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire-services/tpd-bandwidth", "path for bandwidth backup files\033[0m")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9091", "address to bind to\n\r")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
+	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
+	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
+	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for transport entry expiration\n\r")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
+	RootCmd.Flags().StringVar(&tag, "tag", "transport_discovery", "logging tag\n\r")
+	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsgDisc, "url of dmsg-discovery\n\r")
+	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration")
+	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment")
+	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
+	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire/tpd/bandwidth", "path for bandwidth backup files\n\r")
+}
+
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example responses from actual struct types
+func generateExamples() string {
+	pk1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+	pk2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+	tpID := "e7a7f1b3c04047f89e12a0a1459b3456"
+	sig := "00000000...00000000"
+
+	return fmt.Sprintf(`
+Request/Response Examples:
+
+GET /health
+  %s
+
+GET /all-transports?selfTransports=hide
+  %s
+
+GET /all-transports/stats
+  %s
+
+GET /all-transports/per-key-stats
+  %s
+
+GET /transports/id:{id} (auth)
+  %s
+
+GET /transports/edge:{pk} (auth)
+  [<signed_entry>, ...]
+
+GET /transports/stats/{edge}
+  %s
+
+POST /transports/ (auth)
+  Request:  %s
+  Response: <same with registered timestamp>
+
+DEL /transports/id:{id} (auth)
+  Response: "transport deleted"
+
+DEL /transports/deregister (NM auth headers: NM-PK, NM-Sign)
+  Request:  %s
+  Response: 200 OK
+
+GET /bandwidth/transport/{id}?period=daily&limit=7
+  %s
+
+GET /bandwidth/visor/{pk}?period=daily&limit=7
+  %s
+
+GET /uptimes
+  %s
+
+GET /security/nonces/{pk}
+  %s`,
+		exampleJSON(map[string]interface{}{
+			"build_info": map[string]string{"version": "v1.3.29"}, "started_at": "2024-01-15T10:00:00Z",
+			"dmsg_address": pk1 + ":80", "dmsg_servers": []string{pk2},
+		}),
+		exampleJSON([]map[string]interface{}{{
+			"entry":      map[string]interface{}{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
+			"signatures": []string{sig, sig}, "registered": 1705312800, "latency_ms": 45.2,
+		}}),
+		exampleJSON(map[string]interface{}{
+			"total_transports": 150, "by_type": map[string]int{"stcpr": 100, "sudph": 50}, "unique_visors": 75,
+		}),
+		exampleJSON(map[string]map[string]int{pk1: {"total": 5, "stcpr": 3, "sudph": 2}}),
+		exampleJSON(map[string]interface{}{
+			"entry":      map[string]interface{}{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
+			"signatures": []string{sig, sig}, "registered": 1705312800,
+		}),
+		exampleJSON(map[string]interface{}{"total": 5, "by_type": map[string]int{"stcpr": 3, "sudph": 2}}),
+		exampleJSON([]map[string]interface{}{{
+			"entry":      map[string]interface{}{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
+			"signatures": []string{sig, sig},
+		}}),
+		exampleJSON([]string{tpID}),
+		exampleJSON([]transport.BandwidthData{{SentBytes: 1073741824, RecvBytes: 2147483648}}),
+		exampleJSON(transport.BandwidthData{SentBytes: 5368709120, RecvBytes: 10737418240}),
+		exampleJSON([]map[string]interface{}{{"pk": pk1, "on": true, "tp_count": 5}}),
+		exampleJSON(map[string]interface{}{"nonce": 12345}),
+	)
 }
 
 // RootCmd contains the root command
@@ -82,9 +176,30 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "Transport Discovery Server for skywire",
 	Long: calvin.AsciiFont("transport-discovery") + `
------ depends: redis -----
-keys-gen | tee tpd-config.json
-transport-discovery --sk $(tail -n1 tpd-config.json)`,
+Transport Discovery Server - registers and tracks transports between visors.
+
+Depends: redis
+
+HTTP Endpoints:
+  GET  /health                        Health check
+  GET  /all-transports                All registered transports
+  GET  /all-transports/stats          Transport statistics
+  GET  /all-transports/per-key-stats  Transport counts per public key
+  GET  /transports/id:{id}            Transport by ID (auth)
+  GET  /transports/edge:{edge}        Transports by edge public key (auth)
+  GET  /transports/stats/{edge}       Transport stats for edge
+  POST /transports/                   Register transport (auth)
+  DEL  /transports/id:{id}            Delete transport (auth)
+  DEL  /transports/deregister         Deregister transport
+  GET  /bandwidth/transport/{id}      Bandwidth for transport
+  GET  /bandwidth/visor/{pk}          Bandwidth for visor
+  GET  /uptimes                       Visor uptimes (proxied from UT)
+  GET  /security/nonces/{pk}          Get nonce for signing
+` + generateExamples() + `
+
+Example:
+  keys-gen | tee tpd-config.json
+  transport-discovery --sk $(tail -n1 tpd-config.json)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

@@ -46,7 +46,7 @@ func init() {
 	rmTPCmd.Flags().SortFlags = false
 	listTPCmd.Flags().SortFlags = false
 	RootCmd.Flags().StringVarP(&configFile, "config", "c", "", "path to config file")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[info|error|warn|debug|trace|panic]")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[info|error|warn|debug|trace|panic]\n\r")
 	RootCmd.AddCommand(addTPCmd, rmTPCmd, listTPCmd)
 	addTPCmd.Flags().StringVarP(&fromPK, "from", "1", "", "PK to request transport setup")
 	addTPCmd.Flags().StringVarP(&toPK, "to", "2", "", "other transport edge PK")
@@ -57,9 +57,9 @@ func init() {
 	addTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result")
 	rmTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result")
 	listTPCmd.Flags().BoolVarP(&nice, "pretty", "p", false, "pretty print result")
-	addTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node")
-	rmTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node")
-	listTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node")
+	addTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node\n\r")
+	rmTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node\n\r")
+	listTPCmd.Flags().StringVarP(&tpsnAddr, "addr", "z", "http://127.0.0.1:8080", "address of the transport setup-node\n\r")
 }
 
 // RootCmd contains the root command
