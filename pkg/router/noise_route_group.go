@@ -70,6 +70,15 @@ func (nrg *NoiseRouteGroup) isClosed() bool {
 	return nrg.rg.isClosed()
 }
 
+// Close closes the connection, which chains through to close the underlying RouteGroup.
+// The close chain properly stops the RouteGroup's keep-alive loop.
+func (nrg *NoiseRouteGroup) Close() error {
+	if nrg.Conn != nil {
+		return nrg.Conn.Close()
+	}
+	return nrg.rg.Close()
+}
+
 // RouteHops returns the list of visor public keys that form the route path.
 func (nrg *NoiseRouteGroup) RouteHops() []cipher.PubKey {
 	return nrg.rg.RouteHops()

@@ -65,6 +65,44 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 	)
 }
 
+// PublicVisorUpdater obtains a public visor updater with validation logic.
+// It wraps a regular service updater and monitors for external STCPR connections
+// and transport count to determine if the visor should stay registered.
+func (f *Factory) PublicVisorUpdater(
+	port uint16,
+	registrationTimeout time.Duration,
+	maxTransports int,
+	getTransportCount func() int,
+) *PublicVisorUpdater {
+	// Always return nil if keys are not set.
+	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
+		return nil
+	}
+
+	conf := servicedisc.Config{
+		Type:          servicedisc.ServiceTypeVisor,
+		PK:            f.PK,
+		SK:            f.SK,
+		Port:          port,
+		DiscAddr:      f.ServiceDisc,
+		DisplayNodeIP: f.DisplayNodeIP,
+	}
+
+	inner := newServiceUpdater(
+		f.Log,
+		servicedisc.NewClient(f.Log, f.MLog, conf, f.Client, f.ClientPublicIP),
+		f.HeartbeatInterval,
+	)
+
+	return NewPublicVisorUpdater(
+		f.Log,
+		inner,
+		registrationTimeout,
+		maxTransports,
+		getTransportCount,
+	)
+}
+
 // AppUpdater obtains an app updater based on the app name and configuration.
 func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 	// Always return empty updater if keys are not set.
