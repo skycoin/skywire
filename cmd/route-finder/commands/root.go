@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/pkg/route-finder/api"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
@@ -49,20 +51,62 @@ var (
 	pprofAddr       string
 )
 
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example responses from actual struct types
+func generateExamples() string {
+	pk1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+	pk2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+	tpID := "e7a7f1b3c04047f89e12a0a1459b3456"
+
+	return fmt.Sprintf(`
+Request/Response Examples:
+
+GET /health
+  %s
+
+POST /routes
+  Request:  %s
+  Response: %s`,
+		exampleJSON(map[string]interface{}{
+			"build_info":   map[string]string{"version": "v1.3.29"},
+			"started_at":   "2024-01-15T10:00:00Z",
+			"dmsg_address": pk1 + ":80",
+			"dmsg_servers": []string{pk2},
+		}),
+		exampleJSON(map[string]interface{}{
+			"edges": [][]string{{pk1, pk2}},
+			"opts":  map[string]int{"min_hops": 0, "max_hops": 3},
+		}),
+		exampleJSON(map[string]interface{}{
+			pk1 + "-" + pk2: [][]map[string]interface{}{{
+				{"t_id": tpID, "from": pk1, "to": pk2},
+			}},
+		}),
+	)
+}
+
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9092", "address to bind to\033[0m")
-	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)\033[0m")
-	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\033[0m")
-	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\033[0m")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\033[0m")
-	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\033[0m")
-	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis\033[0m")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscAddr(false), "url of dmsg discovery\033[0m")
-	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\033[0m\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\033[0m")
-	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler\033[0m")
-	RootCmd.Flags().StringVar(&multiplexingLib, "multiplexing-lib", "yamux", "type of multiplexing lib on dmsg network")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9092", "address to bind to\n\r")
+	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
+	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
+	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
+	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\n\r")
+	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscAddr(false), "url of dmsg discovery\n\r")
+	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
+	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
+	RootCmd.Flags().StringVar(&multiplexingLib, "multiplexing-lib", "yamux", "type of multiplexing lib on dmsg network\n\r")
 }
 
 // RootCmd contains the root command
@@ -72,9 +116,18 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "Route Finder Server for skywire",
 	Long: calvin.AsciiFont("route-finder") + `
------ depends: redis - shares Redis with TPD! -----
-keys-gen | tee rf-config.json
-route-finder --sk $(tail -n1 rf-config.json)`,
+Route Finder Server - finds routes between visors using transport data.
+
+Depends: redis (shares Redis with TPD)
+
+HTTP Endpoints:
+  GET  /health     Health check
+  POST /routes     Find routes between visors
+` + generateExamples() + `
+
+Example:
+  keys-gen | tee rf-config.json
+  route-finder --sk $(tail -n1 rf-config.json)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

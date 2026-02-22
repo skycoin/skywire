@@ -31,10 +31,10 @@ var (
 func init() {
 	RootCmd.Flags().StringVar(&primaryIP, "primary-ip", "", "primary listening IP (required)")
 	RootCmd.Flags().StringVar(&secondaryIP, "secondary-ip", "", "secondary listening IP (required)")
-	RootCmd.Flags().IntVar(&port, "port", 3478, "primary STUN port")
-	RootCmd.Flags().IntVar(&altPort, "alt-port", 3479, "alternate STUN port")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]")
-	RootCmd.Flags().StringVar(&tag, "tag", "stun", "logging tag")
+	RootCmd.Flags().IntVar(&port, "port", 3478, "primary STUN port\n\r")
+	RootCmd.Flags().IntVar(&altPort, "alt-port", 3479, "alternate STUN port\n\r")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
+	RootCmd.Flags().StringVar(&tag, "tag", "stun", "logging tag\n\r")
 }
 
 // RootCmd is the root command for the STUN server.

@@ -54,10 +54,10 @@ var (
 )
 
 func init() {
-	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":8080", "address to bind to")
+	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":8080", "address to bind to\n\r")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]")
-	RootCmd.Flags().StringVar(&tag, "tag", "geoip", "logging tag")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
+	RootCmd.Flags().StringVar(&tag, "tag", "geoip", "logging tag\n\r")
 	RootCmd.Flags().StringVar(&dbPath, "db", "", "Path to GeoLite2-City.mmdb database")
 	RootCmd.Flags().BoolVar(&apiMode, "api", false, "Run as API server")
 }

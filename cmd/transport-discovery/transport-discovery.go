@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	flags.InitFlags(commands.RootCmd, true)
+	flags.InitFlags(commands.RootCmd, false)
 }
 
 func main() {
