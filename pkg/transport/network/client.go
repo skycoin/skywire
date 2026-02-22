@@ -60,6 +60,10 @@ type ClientFactory struct {
 	EB         *appevent.Broadcaster
 	DmsgC      *dmsg.Client
 	MLogger    *logging.MasterLogger
+	// OnExternalSTCPR is called when an incoming STCPR connection is detected
+	// from an external (non-LAN) IP address. This validates that the visor is
+	// reachable from the internet.
+	OnExternalSTCPR func()
 }
 
 // MakeClient creates a new client of specified type
@@ -82,6 +86,7 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 	generic.lPK = f.PK
 	generic.lSK = f.SK
 	generic.listenAddr = f.ListenAddr
+	generic.onExternalSTCPR = f.OnExternalSTCPR
 
 	resolved := &resolvedClient{genericClient: generic, ar: f.ARClient}
 
@@ -116,12 +121,13 @@ type genericClient struct {
 	porter *porter.Porter
 	eb     *appevent.Broadcaster
 
-	connListener  net.Listener
-	listeners     map[uint16]*listener
-	listenStarted chan struct{}
-	mu            sync.RWMutex
-	done          chan struct{}
-	closeOnce     sync.Once
+	connListener    net.Listener
+	listeners       map[uint16]*listener
+	listenStarted   chan struct{}
+	mu              sync.RWMutex
+	done            chan struct{}
+	closeOnce       sync.Once
+	onExternalSTCPR func() // called when external STCPR connection received
 }
 
 // initTransport will initialize skywire transport over opened raw connection to
@@ -200,6 +206,16 @@ func (c *genericClient) acceptTransport() error {
 	}
 	remoteAddr := conn.RemoteAddr()
 	c.log.Debugf("Accepted connection from %v", remoteAddr)
+
+	// Check for external STCPR connection (for public visor validation)
+	if c.netType == types.STCPR && c.onExternalSTCPR != nil {
+		if tcpAddr, ok := remoteAddr.(*net.TCPAddr); ok {
+			if !isPrivateIP(tcpAddr.IP) {
+				c.log.Debugf("Detected external STCPR connection from %v", tcpAddr.IP)
+				c.onExternalSTCPR()
+			}
+		}
+	}
 
 	onClose := func() {}
 	hs := handshake.ResponderHandshake(handshake.MakeF2PortChecker(c.checkListener))
@@ -392,4 +408,33 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 	}
 	c.log.Debugf("Dialing public address: %s", addr)
 	return dial(ctx, addr)
+}
+
+// isPrivateIP checks if an IP address is in a private range
+// (RFC1918 for IPv4, RFC4193 for IPv6, plus loopback and link-local)
+func isPrivateIP(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	// Check for loopback
+	if ip.IsLoopback() {
+		return true
+	}
+	// Check for link-local
+	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+	// IPv4 private ranges (RFC1918)
+	// 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+	if ip4 := ip.To4(); ip4 != nil {
+		return ip4[0] == 10 ||
+			(ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31) ||
+			(ip4[0] == 192 && ip4[1] == 168) ||
+			(ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127) // CGNAT RFC6598
+	}
+	// IPv6 private range (fc00::/7)
+	if len(ip) == net.IPv6len {
+		return ip[0] == 0xfc || ip[0] == 0xfd
+	}
+	return false
 }

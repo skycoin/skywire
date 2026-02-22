@@ -736,6 +736,16 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		ARClient:   v.arClient,
 		EB:         v.ebc,
 		MLogger:    v.MasterLogger(),
+		// OnExternalSTCPR notifies the public visor updater when an external
+		// connection is received, validating that the visor is internet-reachable
+		OnExternalSTCPR: func() {
+			v.publicVisorUpdaterMu.Lock()
+			updater := v.publicVisorUpdater
+			v.publicVisorUpdaterMu.Unlock()
+			if updater != nil {
+				updater.OnExternalSTCPR()
+			}
+		},
 	}
 	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {
@@ -2437,12 +2447,41 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { /
 		logger.Warn("Failed to get STCPR port")
 		return nil
 	}
-	visorUpdater := v.serviceDisc.VisorUpdater(port)
-	visorUpdater.Start()
+
+	// Get public visor config for validation settings
+	var registrationTimeout time.Duration
+	var maxTransports int
+	if pvConf := v.conf.PublicVisorConfig; pvConf != nil {
+		registrationTimeout = time.Duration(pvConf.RegistrationTimeout)
+		maxTransports = pvConf.MaxTransports
+	}
+
+	// Create public visor updater with validation logic
+	publicUpdater := v.serviceDisc.PublicVisorUpdater(
+		port,
+		registrationTimeout,
+		maxTransports,
+		func() int {
+			// Return current transport count from transport manager
+			return v.tpM.TransportCount()
+		},
+	)
+
+	if publicUpdater == nil {
+		logger.Warn("Failed to create public visor updater")
+		return nil
+	}
+
+	// Store the updater so the OnExternalSTCPR callback can access it
+	v.publicVisorUpdaterMu.Lock()
+	v.publicVisorUpdater = publicUpdater
+	v.publicVisorUpdaterMu.Unlock()
+
+	publicUpdater.Start()
 
 	v.log.Debugf("Sent request to register visor as public")
 	v.pushCloseStack("public visor updater", func() error {
-		visorUpdater.Stop()
+		publicUpdater.Stop()
 		return nil
 	})
 	return nil

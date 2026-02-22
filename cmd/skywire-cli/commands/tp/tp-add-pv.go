@@ -275,9 +275,9 @@ var addPvCmd = &cobra.Command{
 				// Stream output immediately
 				if !isJSON {
 					if skipped {
-						fmt.Printf("[%d/%d] %s: unreachable (skipped)\n", i+1, len(remotePKs), remotePK.String()[:16])
+						fmt.Printf("[%d/%d] %s: unreachable (skipped)\n", i+1, len(remotePKs), remotePK.String())
 					} else {
-						fmt.Printf("[%d/%d] %s: %d/%d transports\n", i+1, len(remotePKs), remotePK.String()[:16], successCount, len(candidates))
+						fmt.Printf("[%d/%d] %s: %d/%d transports\n", i+1, len(remotePKs), remotePK.String(), successCount, len(candidates))
 					}
 				}
 			}
@@ -329,14 +329,14 @@ var addPvCmd = &cobra.Command{
 			var cipherPK cipher.PubKey
 			if err := cipherPK.Set(pk); err != nil {
 				if !isJSON {
-					logger.Warnf("[%d/%d] Invalid PK %s: %v", i+1, len(candidates), pk[:16], err)
+					logger.Warnf("[%d/%d] Invalid PK %s: %v", i+1, len(candidates), pk, err)
 				}
 				failCount++
 				continue
 			}
 
 			if !isJSON {
-				fmt.Printf("[%d/%d] %s (%d transports)...\n", i+1, len(candidates), pk[:16]+"...", candidate.count)
+				fmt.Printf("[%d/%d] %s (%d transports)...\n", i+1, len(candidates), pk, candidate.count)
 			}
 
 			// Check dmsg availability if dmsg is explicitly requested
@@ -362,12 +362,12 @@ var addPvCmd = &cobra.Command{
 						break
 					}
 					if !isJSON && attempt < pvRetries {
-						logger.WithError(tpErr).Warnf("  Failed (attempt %d/%d), retrying...", attempt, pvRetries)
+						logger.WithError(tpErr).Warnf("  Failed %v to %s (attempt %d/%d), retrying...", pvTransportType, pk, attempt, pvRetries)
 					}
 				}
 				if tpErr != nil {
 					if !isJSON {
-						logger.WithError(tpErr).Errorf("  Failed to establish %v transport after %d attempts", pvTransportType, pvRetries)
+						logger.WithError(tpErr).Warnf("  Failed %v to %s after %d attempts", pvTransportType, pk, pvRetries)
 					}
 					failCount++
 					continue
@@ -394,9 +394,9 @@ var addPvCmd = &cobra.Command{
 						}
 						if !isJSON {
 							if attempt < pvRetries {
-								logger.WithError(tpErr).Warnf("  Failed %v (attempt %d/%d), retrying...", tpType, attempt, pvRetries)
+								logger.WithError(tpErr).Warnf("  Failed %v to %s (attempt %d/%d), retrying...", tpType, pk, attempt, pvRetries)
 							} else {
-								logger.WithError(tpErr).Warnf("  Failed %v after %d attempts", tpType, pvRetries)
+								logger.WithError(tpErr).Warnf("  Failed %v to %s after %d attempts", tpType, pk, pvRetries)
 							}
 						}
 					}
