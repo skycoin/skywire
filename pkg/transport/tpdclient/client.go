@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -236,6 +237,7 @@ func (c *apiClient) GetAllTransportsStats(ctx context.Context) (*transport.Netwo
 // GetAllTransportsPerKeyStats returns transport counts per public key.
 // Format: {"pk1": {"total": 15, "stcpr": 1, "sudph": 14}, ...}
 // This is useful for finding well-connected visors as fallback when service discovery is empty.
+// Supports fallback to old array format: [{"pk":"...", "total":N, "by_type":{...}}, ...]
 func (c *apiClient) GetAllTransportsPerKeyStats(ctx context.Context) (transport.PerKeyStats, error) {
 	resp, err := c.Get(ctx, "/all-transports/per-key-stats")
 	if err != nil {
@@ -252,9 +254,38 @@ func (c *apiClient) GetAllTransportsPerKeyStats(ctx context.Context) (transport.
 		return nil, err
 	}
 
+	// Read the body once so we can try multiple parse formats
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+
+	// Try new format first: {"pk1": {"total": N, "type": N}, ...}
 	var stats transport.PerKeyStats
-	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
-		return nil, fmt.Errorf("json: %w", err)
+	if err := json.Unmarshal(body, &stats); err == nil {
+		return stats, nil
+	}
+
+	// Fallback to old format: [{"pk":"...", "total":N, "by_type":{...}}, ...]
+	type oldFormatEntry struct {
+		PK     string         `json:"pk"`
+		Total  int            `json:"total"`
+		ByType map[string]int `json:"by_type"`
+	}
+	var oldStats []oldFormatEntry
+	if err := json.Unmarshal(body, &oldStats); err != nil {
+		return nil, fmt.Errorf("json: failed to parse as new or old format: %w", err)
+	}
+
+	// Convert old format to new format
+	stats = make(transport.PerKeyStats, len(oldStats))
+	for _, entry := range oldStats {
+		counts := make(map[string]int, len(entry.ByType)+1)
+		counts["total"] = entry.Total
+		for tpType, count := range entry.ByType {
+			counts[tpType] = count
+		}
+		stats[entry.PK] = counts
 	}
 
 	return stats, nil
