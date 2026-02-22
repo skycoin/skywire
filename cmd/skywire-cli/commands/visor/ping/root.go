@@ -7,10 +7,13 @@ import (
 
 // RootCmd is the ping command that subcommands attach to
 // Subcommands register themselves in their own init() functions
+// When called with a PK argument directly, it delegates to pingCmd
 var RootCmd = &cobra.Command{
-	Use:   "ping",
+	Use:   "ping [pk]",
 	Short: "Ping commands for testing visor connectivity",
 	Long: `Ping commands for testing visor connectivity.
+
+When called with a public key argument, pings that visor directly.
 
 Available subcommands:
   ping <pk>     - Ping a specific visor

@@ -33,18 +33,22 @@ var (
 )
 
 func init() {
-	RootCmd.AddCommand(pingCmd)
-	pingCmd.Flags().IntVarP(&tries, "tries", "t", 1, "Number of tries")
-	pingCmd.Flags().IntVarP(&pcktSize, "size", "s", 2, "Size of packet, in KB, default is 2KB")
-	pingCmd.Flags().BoolVar(&localRoute, "local-route", false, "Calculate routes locally using cached TPD data instead of querying route finder")
-	pingCmd.Flags().BoolVar(&createTp, "create-tp", false, "Create a direct transport to the target if none exists")
-	pingCmd.Flags().StringVar(&tpType, "tp-type", "stcpr", "Transport type to create when using --create-tp (stcpr or sudph)")
-	pingCmd.Flags().BoolVar(&useDmsg, "dmsg", false, "Ping over dmsg connection instead of skywire route")
-	pingCmd.Flags().BoolVar(&showRoute, "show-route", false, "Show the route hops used for the ping")
-	pingCmd.Flags().DurationVarP(&pingTimeout, "timeout", "o", 0, "Timeout per ping attempt; fails if exceeded (e.g., 5s, 30s)")
-	pingCmd.Flags().DurationVar(&setupTimeout, "setup-timeout", 30*time.Second, "Timeout for route setup phase")
-	pingCmd.Flags().BoolVar(&allDmsgServers, "all-servers", false, "Ping through all DMSG servers the remote visor is connected to (only with --dmsg)")
-	pingCmd.Flags().StringVar(&dmsgServerPK, "via-server", "", "Ping through specific DMSG server (only with --dmsg)")
+	// Register flags on RootCmd so they work with `ping <pk> --flags`
+	RootCmd.Flags().IntVarP(&tries, "tries", "t", 1, "Number of tries")
+	RootCmd.Flags().IntVarP(&pcktSize, "size", "s", 2, "Size of packet, in KB, default is 2KB")
+	RootCmd.Flags().BoolVar(&localRoute, "local-route", false, "Calculate routes locally using cached TPD data instead of querying route finder")
+	RootCmd.Flags().BoolVar(&createTp, "create-tp", false, "Create a direct transport to the target if none exists")
+	RootCmd.Flags().StringVar(&tpType, "tp-type", "stcpr", "Transport type to create when using --create-tp (stcpr or sudph)")
+	RootCmd.Flags().BoolVar(&useDmsg, "dmsg", false, "Ping over dmsg connection instead of skywire route")
+	RootCmd.Flags().BoolVar(&showRoute, "show-route", false, "Show the route hops used for the ping")
+	RootCmd.Flags().DurationVarP(&pingTimeout, "timeout", "o", 0, "Timeout per ping attempt; fails if exceeded (e.g., 5s, 30s)")
+	RootCmd.Flags().DurationVar(&setupTimeout, "setup-timeout", 30*time.Second, "Timeout for route setup phase")
+	RootCmd.Flags().BoolVar(&allDmsgServers, "all-servers", false, "Ping through all DMSG servers the remote visor is connected to (only with --dmsg)")
+	RootCmd.Flags().StringVar(&dmsgServerPK, "via-server", "", "Ping through specific DMSG server (only with --dmsg)")
+
+	// Set RootCmd.Run to handle direct PK arguments
+	RootCmd.Run = pingCmd.Run
+	RootCmd.Args = cobra.ArbitraryArgs // Allow args so subcommands or PK can be passed
 
 	RootCmd.AddCommand(testCmd)
 	testCmd.Flags().IntVarP(&tries, "tries", "t", 1, "Number of tries per public visors")
@@ -68,8 +72,12 @@ var pingCmd = &cobra.Command{
   Use --all-servers with --dmsg to ping through all DMSG servers the
   remote visor is connected to. This helps identify which servers have
   the best connectivity.`,
-	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		// If no args provided, show help
+		if len(args) == 0 {
+			cmd.Help() //nolint:errcheck
+			return
+		}
 		pk := internal.ParsePK(cmd.Flags(), "pk", args[0])
 
 		// Create transport if requested (only for skywire route mode)
