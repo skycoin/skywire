@@ -139,6 +139,41 @@ This is designed to be run hourly by the reward service.`,
 	},
 }
 
+// oldFormatEntry represents the old TPD per-key-stats format
+type oldFormatEntry struct {
+	PK     string         `json:"pk"`
+	Total  int            `json:"total"`
+	ByType map[string]int `json:"by_type"`
+}
+
+// parsePerKeyStats tries to parse data as new format, falling back to old format
+func parsePerKeyStats(data []byte) (PerKeyStats, error) {
+	// Try new format first: {"pk1": {"total": N, "type": N}, ...}
+	var stats PerKeyStats
+	if err := json.Unmarshal(data, &stats); err == nil {
+		return stats, nil
+	}
+
+	// Fallback to old format: [{"pk":"...", "total":N, "by_type":{...}}, ...]
+	var oldStats []oldFormatEntry
+	if err := json.Unmarshal(data, &oldStats); err != nil {
+		return nil, fmt.Errorf("failed to parse as new or old format: %w", err)
+	}
+
+	// Convert old format to new format
+	stats = make(PerKeyStats, len(oldStats))
+	for _, entry := range oldStats {
+		counts := make(map[string]int, len(entry.ByType)+1)
+		counts["total"] = entry.Total
+		for tpType, count := range entry.ByType {
+			counts[tpType] = count
+		}
+		stats[entry.PK] = counts
+	}
+
+	return stats, nil
+}
+
 // fetchTPDData fetches transport per-key stats from TPD, using cache if valid
 func fetchTPDData(tpLog *logging.Logger, bypassCache bool) (PerKeyStats, error) {
 	// Check cache
@@ -148,8 +183,8 @@ func fetchTPDData(tpLog *logging.Logger, bypassCache bool) (PerKeyStats, error) 
 				tpLog.Debug("Using cached TPD data")
 				data, err := os.ReadFile(tpdCacheFile)
 				if err == nil {
-					var stats PerKeyStats
-					if err := json.Unmarshal(data, &stats); err == nil {
+					stats, err := parsePerKeyStats(data)
+					if err == nil {
 						return stats, nil
 					}
 					tpLog.WithError(err).Debug("Failed to parse cached data, fetching fresh")
@@ -177,8 +212,8 @@ func fetchTPDData(tpLog *logging.Logger, bypassCache bool) (PerKeyStats, error) 
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	var stats PerKeyStats
-	if err := json.Unmarshal(body, &stats); err != nil {
+	stats, err := parsePerKeyStats(body)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
