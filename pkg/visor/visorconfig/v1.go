@@ -41,6 +41,7 @@ type V1 struct {
 	StunServers                       []string                         `json:"stun_servers"`
 	ShutdownTimeout                   Duration                         `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic                          bool                             `json:"is_public"`
+	PublicVisorConfig                 *PublicVisorConfig               `json:"public_visor,omitempty"`
 	DisableShutdownOnNonTransportable bool                             `json:"disable_shutdown_on_non_transportable,omitempty"`
 	GeoIP                             string                           `json:"geoip"`
 	PersistentTransports              []transport.PersistentTransports `json:"persistent_transports"`
@@ -116,6 +117,23 @@ type Routing struct {
 // UptimeTracker configures uptime tracker.
 type UptimeTracker struct {
 	Addr string `json:"addr"`
+}
+
+// PublicVisorConfig configures public visor behavior and service discovery registration.
+type PublicVisorConfig struct {
+	// RegistrationTimeout is how long to wait for an external STCPR connection
+	// before deregistering from service discovery. This validates the visor is
+	// actually reachable from the internet (has port forwarding configured).
+	// Set to 0 to skip this check (stay registered regardless).
+	// Default: 10m
+	RegistrationTimeout Duration `json:"registration_timeout,omitempty"`
+
+	// MaxTransports is the maximum transport count before deregistering from
+	// service discovery. Once reached, the visor has served its purpose of
+	// bootstrapping other visors and deregisters to make room for others.
+	// Set to 0 to never deregister based on transport count.
+	// Default: 1000
+	MaxTransports int `json:"max_transports,omitempty"`
 }
 
 // Launcher configures the app

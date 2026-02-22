@@ -1572,6 +1572,20 @@ func (r *router) initializingRouteGroup(desc routing.RouteDescriptor) (*RouteGro
 	return rg, ok
 }
 
+func (r *router) popRawRouteGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+
+	rg, ok := r.rgsRaw[desc]
+	if !ok {
+		return nil, false
+	}
+
+	delete(r.rgsRaw, desc)
+
+	return rg, true
+}
+
 func (r *router) removeNoiseRouteGroup(desc routing.RouteDescriptor) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
@@ -1685,22 +1699,39 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 
 	rDesc := rule.RouteDescriptor()
 	log.WithField("rt_desc", rDesc.String()).
-		Debug("Closing noise route group associated with rule...")
+		Debug("Closing route group associated with rule...")
 
+	// First try noise-wrapped route groups (fully initialized)
 	nrg, ok := r.popNoiseRouteGroup(rDesc)
-	if !ok {
-		log.Debug("No noise route group associated with expired rule. Nothing to be done.")
+	if ok {
+		if nrg.isClosed() {
+			log.Debug("Noise route group already closed. Nothing to be done.")
+			return
+		}
+		if err := nrg.Close(); err != nil {
+			log.WithError(err).Error("Failed to close noise route group.")
+			return
+		}
+		log.Debug("Noise route group closed.")
 		return
 	}
-	if nrg.isClosed() {
-		log.Debug("Noise route group already closed. Nothing to be done.")
+
+	// Also check raw route groups (still being initialized, e.g., interrupted during handshake)
+	rg, ok := r.popRawRouteGroup(rDesc)
+	if ok {
+		if rg.isClosed() {
+			log.Debug("Raw route group already closed. Nothing to be done.")
+			return
+		}
+		if err := rg.Close(); err != nil {
+			log.WithError(err).Error("Failed to close raw route group.")
+			return
+		}
+		log.Debug("Raw route group closed.")
 		return
 	}
-	if err := nrg.Close(); err != nil {
-		log.WithError(err).Error("Failed to close noise route group.")
-		return
-	}
-	log.Debug("Noise route group closed.")
+
+	log.Debug("No route group associated with rule. Nothing to be done.")
 }
 
 func (r *router) isTpdExist(rPK cipher.PubKey) bool {
