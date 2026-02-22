@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/internal/tpdiscmetrics"
@@ -28,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/tcpproxy"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport-discovery/api"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
@@ -75,6 +78,80 @@ func init() {
 	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire-services/tpd-bandwidth", "path for bandwidth backup files\033[0m")
 }
 
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example responses from actual struct types
+func generateExamples() string {
+	// Example public key strings (realistic looking)
+	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+	exPK2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+
+	// GET /health - using raw map for flexibility with PK strings
+	healthExample := map[string]interface{}{
+		"build_info": map[string]interface{}{
+			"version": "v1.3.29",
+			"commit":  "abc1234",
+			"date":    "2024-01-15T10:30:00Z",
+		},
+		"started_at":   "2024-01-15T10:00:00Z",
+		"dmsg_address": exPK1 + ":80",
+		"dmsg_servers": []string{exPK2},
+	}
+
+	// GET /all-transports - matches transport.Entry JSON structure
+	transportExample := map[string]interface{}{
+		"t_id":       "e7a7f1b3-c040-47f8-9e12-a0a1459b3456",
+		"edges":      []string{exPK1, exPK2},
+		"type":       "stcpr",
+		"label":      "skycoin",
+		"latency_ms": 45.2,
+		"bandwidth":  1048576,
+	}
+
+	// GET /all-transports/per-key-stats - matches transport.PerKeyStats
+	perKeyStatsExample := map[string]map[string]int{
+		exPK1: {
+			"total": 5,
+			"stcpr": 3,
+			"sudph": 2,
+		},
+	}
+
+	// GET /bandwidth/visor/{pk} - matches transport.BandwidthData
+	bandwidthExample := transport.BandwidthData{
+		SentBytes: 1073741824, // 1 GB
+		RecvBytes: 2147483648, // 2 GB
+	}
+
+	return fmt.Sprintf(`
+Response Examples (from actual struct types):
+
+GET /health - api.HealthCheckResponse
+%s
+
+GET /all-transports - []transport.Entry
+    [
+    %s
+    ]
+
+GET /all-transports/per-key-stats - transport.PerKeyStats
+%s
+
+GET /bandwidth/visor/{pk} - transport.BandwidthData
+%s`,
+		exampleJSON(healthExample),
+		exampleJSON(transportExample),
+		exampleJSON(perKeyStatsExample),
+		exampleJSON(bandwidthExample))
+}
+
 // RootCmd contains the root command
 var RootCmd = &cobra.Command{
 	Use: func() string {
@@ -82,9 +159,30 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "Transport Discovery Server for skywire",
 	Long: calvin.AsciiFont("transport-discovery") + `
------ depends: redis -----
-keys-gen | tee tpd-config.json
-transport-discovery --sk $(tail -n1 tpd-config.json)`,
+Transport Discovery Server - registers and tracks transports between visors.
+
+Depends: redis
+
+HTTP Endpoints:
+  GET  /health                        Health check
+  GET  /all-transports                All registered transports
+  GET  /all-transports/stats          Transport statistics
+  GET  /all-transports/per-key-stats  Transport counts per public key
+  GET  /transports/id:{id}            Transport by ID (auth)
+  GET  /transports/edge:{edge}        Transports by edge public key (auth)
+  GET  /transports/stats/{edge}       Transport stats for edge
+  POST /transports/                   Register transport (auth)
+  DEL  /transports/id:{id}            Delete transport (auth)
+  DEL  /transports/deregister         Deregister transport
+  GET  /bandwidth/transport/{id}      Bandwidth for transport
+  GET  /bandwidth/visor/{pk}          Bandwidth for visor
+  GET  /uptimes                       Visor uptimes (proxied from UT)
+  GET  /security/nonces/{pk}          Get nonce for signing
+` + generateExamples() + `
+
+Example:
+  keys-gen | tee tpd-config.json
+  transport-discovery --sk $(tail -n1 tpd-config.json)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

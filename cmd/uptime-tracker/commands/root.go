@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 	"gorm.io/gorm"
 
 	"github.com/skycoin/skywire/internal/pg"
@@ -85,6 +87,78 @@ func init() {
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value")
 }
 
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example responses from actual struct types
+func generateExamples() string {
+	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+	exPK2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+
+	// GET /health - api.HealthCheckResponse
+	healthExample := map[string]interface{}{
+		"build_info": map[string]interface{}{
+			"version": "v1.3.29",
+			"commit":  "abc1234",
+			"date":    "2024-01-15T10:30:00Z",
+		},
+		"started_at":   "2024-01-15T10:00:00Z",
+		"dmsg_address": exPK1 + ":80",
+		"dmsg_servers": []string{exPK2},
+	}
+
+	// GET /uptimes - store.UptimeResponse (v1)
+	uptimeV1 := store.UptimeResponse{
+		{Key: exPK1, Online: true},
+		{Key: exPK2, Online: false},
+	}
+
+	// GET /uptimes?v=v2 - store.UptimeResponseV2
+	uptimeV2 := store.UptimeResponseV2{
+		{
+			Key:     exPK1,
+			Online:  true,
+			Version: "v1.3.29",
+			DailyOnlineHistory: map[string]string{
+				"2024-01-15": "95.5",
+				"2024-01-14": "100.0",
+			},
+		},
+	}
+
+	// GET /uptime/{pk} - single visor uptime
+	singleUptime := map[string]interface{}{
+		"pk":      exPK1,
+		"online":  true,
+		"version": "v1.3.29",
+	}
+
+	return fmt.Sprintf(`
+Response Examples (from actual struct types):
+
+GET /health - api.HealthCheckResponse
+%s
+
+GET /uptimes - store.UptimeResponse
+%s
+
+GET /uptimes?v=v2 - store.UptimeResponseV2
+%s
+
+GET /uptime/{pk}
+%s`,
+		exampleJSON(healthExample),
+		exampleJSON(uptimeV1),
+		exampleJSON(uptimeV2),
+		exampleJSON(singleUptime))
+}
+
 // RootCmd contains the root cli commanmd
 var RootCmd = &cobra.Command{
 	Use: func() string {
@@ -92,7 +166,20 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "Uptime Tracker Server for skywire",
 	Long: calvin.AsciiFont("uptime-tracker") + `
-	Uptime Tracker Server for skywire`,
+Uptime Tracker Server - tracks visor online status and uptime statistics.
+
+Depends: redis, postgres
+
+HTTP Endpoints:
+  GET  /health                        Health check
+  GET  /v4/update                     Visor heartbeat (auth)
+  GET  /visors                        All registered visors
+  GET  /uptimes                       Visor uptime data (?v=v2 for v2 format)
+  GET  /uptime/{pk}                   Uptime for specific visor
+  GET  /dashboard                     Dashboard chart data
+  GET  /visor-ips                     Visor IP addresses (private API)
+  GET  /security/nonces/{pk}          Get nonce for signing
+` + generateExamples(),
 	Run: func(_ *cobra.Command, _ []string) {
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)

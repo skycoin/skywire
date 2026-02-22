@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 	"github.com/xtaci/kcp-go"
 
 	"github.com/skycoin/skywire/internal/armetrics"
@@ -56,6 +58,59 @@ var (
 	pprofAddr       string
 )
 
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example responses from actual struct types
+func generateExamples() string {
+	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+	exPK2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+
+	// GET /health - api.HealthCheckResponse
+	healthExample := map[string]interface{}{
+		"build_info": map[string]interface{}{
+			"version": "v1.3.29",
+			"commit":  "abc1234",
+			"date":    "2024-01-15T10:30:00Z",
+		},
+		"started_at":   "2024-01-15T10:00:00Z",
+		"dmsg_address": exPK1 + ":80",
+		"dmsg_servers": []string{exPK2},
+	}
+
+	// GET /transports - api.ArData
+	arDataExample := api.ArData{
+		Sudph: []string{exPK1},
+		Stcpr: []string{exPK1, exPK2},
+	}
+
+	// GET /resolve/stcpr/{pk}
+	resolveExample := map[string]interface{}{
+		"addr": "192.168.1.100:30178",
+	}
+
+	return fmt.Sprintf(`
+Response Examples (from actual struct types):
+
+GET /health - api.HealthCheckResponse
+%s
+
+GET /transports - api.ArData
+%s
+
+GET /resolve/stcpr/{pk}
+%s`,
+		exampleJSON(healthExample),
+		exampleJSON(arDataExample),
+		exampleJSON(resolveExample))
+}
+
 func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9093", "address to bind to\033[0m")
 	RootCmd.Flags().StringVar(&udpAddr, "udp-addr", ":30178", "UDP address to bind to for SUDPH")
@@ -82,13 +137,25 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "Address Resolver Server for skywire",
 	Long: calvin.AsciiFont("address-resolver") + `
+Address Resolver Server - resolves visor addresses for STCPR/SUDPH connections.
 
-depends: redis
+Depends: redis
 
-Note: the specified port must be accessible from the internet ip address or port forwarded for udp
-skywire cli config gen-keys > ar-config.json
-skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 ar-config.json)
-`,
+HTTP Endpoints:
+  GET  /health                  Health check
+  POST /bind/stcpr              Bind STCPR address (auth)
+  DEL  /bind/stcpr              Unbind STCPR address (auth)
+  GET  /resolve/{type}/{pk}     Resolve address by type and PK
+  GET  /transports              List transports
+  DEL  /deregister/{network}    Deregister from network
+  GET  /security/nonces/{pk}    Get nonce for signing
+` + generateExamples() + `
+
+Note: the specified UDP port must be accessible from the internet for SUDPH.
+
+Example:
+  skywire cli config gen-keys > ar-config.json
+  skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 ar-config.json)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

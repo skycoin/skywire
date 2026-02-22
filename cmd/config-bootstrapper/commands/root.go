@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/pkg/config-bootstrapper/api"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
@@ -40,6 +41,56 @@ var (
 	pprofAddr      string
 )
 
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example responses from actual struct types
+func generateExamples() string {
+	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+	exPK2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+
+	// GET /health - api.HealthCheckResponse
+	healthExample := map[string]interface{}{
+		"build_info": map[string]interface{}{
+			"version": "v1.3.29",
+			"commit":  "abc1234",
+			"date":    "2024-01-15T10:30:00Z",
+		},
+		"started_at":   "2024-01-15T10:00:00Z",
+		"dmsg_address": exPK1 + ":80",
+	}
+
+	// GET / - visorconfig.Services (partial, key fields shown)
+	servicesExample := map[string]interface{}{
+		"dmsg_discovery":      "http://dmsgd.skywire.skycoin.com",
+		"transport_discovery": "http://tpd.skywire.skycoin.com",
+		"address_resolver":    "http://ar.skywire.skycoin.com",
+		"route_finder":        "http://rf.skywire.skycoin.com",
+		"uptime_tracker":      "http://ut.skywire.skycoin.com",
+		"service_discovery":   "http://sd.skycoin.com",
+		"route_setup_nodes":   []string{exPK1, exPK2},
+		"stun_servers":        []string{"stun.l.google.com:19302"},
+		"transport_setup":     []string{exPK1},
+	}
+
+	return fmt.Sprintf(`
+Response Examples (from actual struct types):
+
+GET /health - api.HealthCheckResponse
+%s
+
+GET / - visorconfig.Services
+%s`,
+		exampleJSON(healthExample),
+		exampleJSON(servicesExample))
+}
+
 func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9082", "address to bind to")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
@@ -57,8 +108,15 @@ var RootCmd = &cobra.Command{
 	Use: func() string {
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
 	}(),
-	Short:                 "Config Bootstrap Server for skywire",
-	Long:                  calvin.AsciiFont("config-bootstrapper"),
+	Short: "Config Bootstrap Server for skywire",
+	Long: calvin.AsciiFont("config-bootstrapper") + `
+Config Bootstrap Server - provides initial configuration for visors.
+
+HTTP Endpoints:
+  GET  /health     Health check
+  GET  /           Bootstrap configuration (services URLs, keys, etc.)
+  GET  /dmsghttp   DMSG HTTP configuration
+` + generateExamples(),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/pprof"
@@ -16,6 +17,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/internal/sdmetrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/api"
@@ -51,6 +53,69 @@ var (
 	entryTimeout   time.Duration
 )
 
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example responses from actual struct types
+func generateExamples() string {
+	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+	exPK2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+
+	// GET /health - api.HealthCheckResponse
+	healthExample := map[string]interface{}{
+		"build_info": map[string]interface{}{
+			"version": "v1.3.29",
+			"commit":  "abc1234",
+			"date":    "2024-01-15T10:30:00Z",
+		},
+		"started_at":   "2024-01-15T10:00:00Z",
+		"dmsg_address": exPK1 + ":80",
+		"dmsg_servers": []string{exPK2},
+	}
+
+	// GET /api/services - []servicedisc.Service
+	// Using map to ensure address is properly formatted as string
+	serviceExample := map[string]interface{}{
+		"address": exPK1 + ":3",
+		"type":    "vpn",
+		"version": "v1.3.29",
+		"geo": map[string]interface{}{
+			"country": "United States",
+			"region":  "California",
+			"lat":     37.7749,
+			"lon":     -122.4194,
+		},
+		"info": map[string]interface{}{
+			"latency":     45.2,
+			"uptime":      99.5,
+			"connections": 5,
+		},
+	}
+
+	return fmt.Sprintf(`
+Response Examples (from actual struct types):
+
+GET /health - api.HealthCheckResponse
+%s
+
+GET /api/services?type=vpn - []servicedisc.Service
+    [
+    %s
+    ]
+
+GET /api/services/{addr} - servicedisc.Service
+%s`,
+		exampleJSON(healthExample),
+		exampleJSON(serviceExample),
+		exampleJSON(serviceExample))
+}
+
 func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to\033[0m")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
@@ -73,9 +138,23 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "Service discovery server",
 	Long: calvin.AsciiFont("service-discovery") + `
------ depends: redis -----
-keys-gen | tee sd-config.json
-service-discovery --sk $(tail -n1 sd-config.json)`,
+Service Discovery Server - registers and discovers services (VPN, proxy, visor).
+
+Depends: redis
+
+HTTP Endpoints:
+  GET  /health                           Health check
+  GET  /api/services                     List services (?type=proxy|vpn|visor)
+  GET  /api/services/{addr}              Get specific service
+  POST /api/services                     Register service (auth)
+  DEL  /api/services/{addr}              Delete service (auth)
+  DEL  /api/services/deregister/{type}   Deregister by type
+  GET  /security/nonces/{pk}             Get nonce for signing
+` + generateExamples() + `
+
+Example:
+  keys-gen | tee sd-config.json
+  service-discovery --sk $(tail -n1 sd-config.json)`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if dmsgDisc == "" {
 			dmsgDisc = dmsg.DiscAddr(false)

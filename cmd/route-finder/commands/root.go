@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/pkg/route-finder/api"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
@@ -49,6 +51,65 @@ var (
 	pprofAddr       string
 )
 
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example responses from actual struct types
+func generateExamples() string {
+	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+	exPK2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+
+	// GET /health - api.HealthCheckResponse
+	healthExample := map[string]interface{}{
+		"build_info": map[string]interface{}{
+			"version": "v1.3.29",
+			"commit":  "abc1234",
+			"date":    "2024-01-15T10:30:00Z",
+		},
+		"started_at":   "2024-01-15T10:00:00Z",
+		"dmsg_address": exPK1 + ":80",
+		"dmsg_servers": []string{exPK2},
+	}
+
+	// POST /routes - map[routing.PathEdges][][]routing.Hop
+	routesExample := map[string]interface{}{
+		exPK1 + "-" + exPK2: [][]map[string]interface{}{
+			{
+				{
+					"t_id": "e7a7f1b3-c040-47f8-9e12-a0a1459b3456",
+					"from": exPK1,
+					"to":   exPK2,
+				},
+			},
+		},
+	}
+
+	return fmt.Sprintf(`
+Response Examples (from actual struct types):
+
+GET /health - api.HealthCheckResponse
+%s
+
+POST /routes - map[routing.PathEdges][][]routing.Hop
+    Request:
+    {
+      "edges": [["%s", "%s"]],
+      "opts": {"min_hops": 0, "max_hops": 3}
+    }
+
+    Response:
+%s`,
+		exampleJSON(healthExample),
+		exPK1, exPK2,
+		exampleJSON(routesExample))
+}
+
 func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9092", "address to bind to\033[0m")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to\033[0m")
@@ -72,9 +133,18 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "Route Finder Server for skywire",
 	Long: calvin.AsciiFont("route-finder") + `
------ depends: redis - shares Redis with TPD! -----
-keys-gen | tee rf-config.json
-route-finder --sk $(tail -n1 rf-config.json)`,
+Route Finder Server - finds routes between visors using transport data.
+
+Depends: redis (shares Redis with TPD)
+
+HTTP Endpoints:
+  GET  /health     Health check
+  POST /routes     Find routes between visors
+` + generateExamples() + `
+
+Example:
+  keys-gen | tee rf-config.json
+  route-finder --sk $(tail -n1 rf-config.json)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
