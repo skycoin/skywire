@@ -6,7 +6,8 @@
     "address_resolver": "http://ar.skywire.dev",
     "route_finder": "http://rf.skywire.dev",
     "route_setup_nodes": [
-      "026c2a3e92d6253c5abd71a42628db6fca9dd9aa037ab6f4e3a31108558dfd87cf"
+      "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557",
+      "024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438"
     ],
     "transport_setup": [
       "03530b786c670fc7f5ab9021478c7ec9cd06a03f3ea1416c50c4a8889ef5bba80e",
