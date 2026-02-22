@@ -158,7 +158,7 @@ GET /security/nonces/{pk}
 		}),
 		exampleJSON(map[string]interface{}{"total": 5, "by_type": map[string]int{"stcpr": 3, "sudph": 2}}),
 		exampleJSON([]map[string]interface{}{{
-			"entry": map[string]interface{}{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
+			"entry":      map[string]interface{}{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
 			"signatures": []string{sig, sig},
 		}}),
 		exampleJSON([]string{tpID}),
