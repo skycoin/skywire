@@ -19,6 +19,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -118,6 +120,10 @@ HTTP Endpoints:
 Example Config:
 ` + exampleJSON(config.Config{
 		Port: 8080,
+		Dmsg: dmsgc.DmsgConfig{
+			Discovery:     deployment.Prod.DmsgDiscovery,
+			SessionsCount: 2,
+		},
 	}) + `
 
 Generate Keys:
