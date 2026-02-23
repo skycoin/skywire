@@ -139,6 +139,9 @@ Service Discovery Server - registers and discovers services (VPN, proxy, visor).
 
 Depends: redis
 
+Production: http://sd.skycoin.com
+Test:       http://sd.skywire.dev
+
 HTTP Endpoints:
   GET  /health                           Health check
   GET  /api/services                     List services (?type=proxy|vpn|visor)

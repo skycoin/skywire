@@ -168,6 +168,9 @@ Uptime Tracker Server - tracks visor online status and uptime statistics.
 
 Depends: redis, postgres
 
+Production: http://ut.skywire.skycoin.com
+Test:       http://ut.skywire.dev
+
 HTTP Endpoints:
   GET  /health                        Health check
   GET  /v4/update                     Visor heartbeat (auth)

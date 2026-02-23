@@ -112,6 +112,9 @@ var RootCmd = &cobra.Command{
 	Long: calvin.AsciiFont("config-bootstrapper") + `
 Config Bootstrap Server - provides initial configuration for visors.
 
+Production: http://conf.skywire.skycoin.com
+Test:       http://conf.skywire.dev
+
 HTTP Endpoints:
   GET  /health     Health check
   GET  /           Bootstrap configuration (services URLs, keys, etc.)

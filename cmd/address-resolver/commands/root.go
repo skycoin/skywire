@@ -148,6 +148,9 @@ Address Resolver Server - resolves visor addresses for STCPR/SUDPH connections.
 
 Depends: redis
 
+Production: http://ar.skywire.skycoin.com
+Test:       http://ar.skywire.dev
+
 HTTP Endpoints:
   GET  /health                  Health check
   POST /bind/stcpr              Bind STCPR address (auth)

@@ -120,6 +120,9 @@ Route Finder Server - finds routes between visors using transport data.
 
 Depends: redis (shares Redis with TPD)
 
+Production: http://rf.skywire.skycoin.com
+Test:       http://rf.skywire.dev
+
 HTTP Endpoints:
   GET  /health     Health check
   POST /routes     Find routes between visors
