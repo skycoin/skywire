@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/router"
@@ -40,6 +41,29 @@ var (
 	pprofAddr    string
 )
 
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example config
+func generateExamples() string {
+	return fmt.Sprintf(`
+Example Config:
+  %s`,
+		exampleJSON(map[string]interface{}{
+			"public_key":       "<generated-pk>",
+			"secret_key":       "<generated-sk>",
+			"dmsg":             map[string]interface{}{"discovery": deployment.Prod.DmsgDiscovery, "sessions_count": 1, "servers": []string{}},
+			"transport_discovery": deployment.Prod.TransportDiscovery,
+		}),
+	)
+}
+
 func init() {
 	RootCmd.AddCommand(checkHealthCmd)
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
@@ -54,7 +78,22 @@ var RootCmd = &cobra.Command{
 		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", ""))+" [config.json]", " ")[0]
 	}(),
 	Short: "Route Setup Node for skywire",
-	Long:  calvin.AsciiFont("route-setup-node"),
+	Long: calvin.AsciiFont("route-setup-node") + `
+Route Setup Node - establishes routes between visors via dmsg RPC.
+
+Listens on dmsg port ` + fmt.Sprintf("%d", skyenv.DmsgSetupPort) + ` for route setup requests from visors.
+
+RPC Methods (via dmsg):
+  SetupRPCGateway.DialRouteGroup    Establish bidirectional route
+  SetupRPCGateway.HealthCheck       Health check
+
+Generate Config:
+  skywire cli config gen --sn -o setup-node.json
+` + generateExamples() + `
+
+Usage:
+  skywire svc sn [config.json]
+  skywire cli config gen --sn | skywire svc sn -i`,
 	Run: func(_ *cobra.Command, args []string) {
 		mLog := logging.NewMasterLogger()
 		log := logging.MustGetLogger(tag)

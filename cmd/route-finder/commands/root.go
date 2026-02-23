@@ -132,8 +132,8 @@ HTTP Endpoints:
 ` + generateExamples() + `
 
 Example:
-  keys-gen | tee rf-config.json
-  route-finder --sk $(tail -n1 rf-config.json)`,
+  skywire cli config gen-keys | tee rf-keys.txt
+  route-finder --sk $(tail -n1 rf-keys.txt)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

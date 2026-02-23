@@ -156,8 +156,8 @@ HTTP Endpoints:
 ` + generateExamples() + `
 
 Example:
-  keys-gen | tee sd-config.json
-  service-discovery --sk $(tail -n1 sd-config.json)`,
+  skywire cli config gen-keys | tee sd-keys.txt
+  service-discovery --sk $(tail -n1 sd-keys.txt)`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if dmsgDisc == "" {
 			dmsgDisc = dmsg.DiscURL(false)
