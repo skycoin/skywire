@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/internal/sdmetrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/api"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
@@ -120,7 +121,7 @@ func init() {
 	RootCmd.Flags().StringVarP(&redisURL, "redis", "r", "redis://localhost:6379", "connections string for a redis store\n\r")
 	RootCmd.Flags().StringVarP(&whitelistKeys, "whitelist-keys", "w", "", "list of whitelisted keys of network monitor used for deregistration")
 	RootCmd.Flags().BoolVarP(&testMode, "test", "t", false, "run in test mode and disable auth")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", dmsg.DiscAddr(false), "url of dmsg-discovery\n\r")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "d", dmsg.DiscURL(false), "url of dmsg-discovery\n\r")
 	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service\n\r")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n\r")
@@ -139,6 +140,11 @@ Service Discovery Server - registers and discovers services (VPN, proxy, visor).
 
 Depends: redis
 
+Production: ` + deployment.Prod.ServiceDiscovery + `
+            ` + dmsg.Prod.ServiceDiscovery + `
+Test:       ` + deployment.Test.ServiceDiscovery + `
+            ` + dmsg.Test.ServiceDiscovery + `
+
 HTTP Endpoints:
   GET  /health                           Health check
   GET  /api/services                     List services (?type=proxy|vpn|visor)
@@ -150,11 +156,11 @@ HTTP Endpoints:
 ` + generateExamples() + `
 
 Example:
-  keys-gen | tee sd-config.json
-  service-discovery --sk $(tail -n1 sd-config.json)`,
+  skywire cli config gen-keys | tee sd-keys.txt
+  service-discovery --sk $(tail -n1 sd-keys.txt)`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if dmsgDisc == "" {
-			dmsgDisc = dmsg.DiscAddr(false)
+			dmsgDisc = dmsg.DiscURL(false)
 		}
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)

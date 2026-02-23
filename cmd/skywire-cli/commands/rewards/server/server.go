@@ -148,7 +148,7 @@ func server(e error) {
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
 			c.Writer.WriteHeader(http.StatusOK)
 			c.Writer.Flush()
-			c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec
+			c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -166,7 +166,7 @@ func server(e error) {
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
 			c.Writer.WriteHeader(http.StatusOK)
 			c.Writer.Flush()
-			c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Map</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec
+			c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Map</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -235,7 +235,7 @@ func server(e error) {
 			c.Writer.Flush()
 			c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Survey and Transport Log Collection</title></head>")) //nolint:errcheck,gosec  //nolint:errcheck,gosec
 			c.Writer.Flush()
-			c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec  //nolint:errcheck,gosec
+			c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec  //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -292,7 +292,7 @@ func server(e error) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
 			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec
+			c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -335,7 +335,7 @@ func server(e error) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
 			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec
+			c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -355,7 +355,7 @@ func server(e error) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.WriteHeader(http.StatusOK)
 			c.Writer.Write([]byte(func() (l string) { //nolint:errcheck,gosec  //nolint:errcheck,gosec
-				l = "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
+				l = "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
 				l += navlinks
 				l += "<p style='color:blue'>Blue = Verified Bandwidth</p>"
 				l += "<p style='color:yellow'>Yellow = Transport bandwidth inconsistent</p>"
@@ -391,6 +391,7 @@ func server(e error) {
 		r1.StaticFile("/stats/cpu", tempStatsPath+"/cpu.txt")
 		r1.StaticFile("/stats/mem", tempStatsPath+"/mem.txt")
 		r1.StaticFile("/stats/ram", tempStatsPath+"/ram.txt")
+		r1.StaticFile("/stats/product", tempStatsPath+"/product.txt")
 		r1.StaticFile("/stats/country/unique", tempStatsPath+"/country_unique.txt")
 		r1.StaticFile("/stats/country/unique/json", tempStatsPath+"/country_unique.json")
 		r1.StaticFile("/stats/country/full", tempStatsPath+"/country_full.txt")
@@ -402,7 +403,9 @@ func server(e error) {
 			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
 
-			l := "<html><head><title>Network Statistics</title></head>"
+			l := "<html><head><title>Network Statistics</title>"
+			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
+			l += "</head>"
 			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
 			l += "<a id='top'></a>"
 			l += navlinks
@@ -421,36 +424,55 @@ func server(e error) {
 
 			// Architecture Stats
 			l += "<h2><a href='/stats/arch'>Architecture Statistics</a></h2>"
-			l += "<pre>"
 			archStats, err := script.File(tempStatsPath + "/arch.txt").String()
 			if err == nil {
+				archItems := ParseFrequencyStats(archStats)
+				l += GeneratePieChartHTML(archItems, 10)
+				l += "<pre>"
 				l += archStats
+				l += "</pre>"
 			} else {
-				l += "Error loading architecture stats"
+				l += "<pre>Error loading architecture stats</pre>"
 			}
-			l += "</pre>"
 
 			// OS Stats
 			l += "<h2><a href='/stats/os'>Operating System Statistics</a></h2>"
-			l += "<pre>"
 			osStats, err := script.File(tempStatsPath + "/os.txt").String()
 			if err == nil {
+				osItems := ParseFrequencyStats(osStats)
+				l += GeneratePieChartHTML(osItems, 10)
+				l += "<pre>"
 				l += osStats
+				l += "</pre>"
 			} else {
-				l += "Error loading OS stats"
+				l += "<pre>Error loading OS stats</pre>"
 			}
-			l += "</pre>"
+
+			// Product/Hardware Stats
+			l += "<h2><a href='/stats/product'>Hardware/Product Statistics</a></h2>"
+			productStats, err := script.File(tempStatsPath + "/product.txt").String()
+			if err == nil {
+				productItems := ParseFrequencyStats(productStats)
+				l += GeneratePieChartHTML(productItems, 15)
+				l += "<pre>"
+				l += productStats
+				l += "</pre>"
+			} else {
+				l += "<pre>Error loading hardware/product stats</pre>"
+			}
 
 			// CPU Stats
 			l += "<h2><a href='/stats/cpu'>CPU Statistics</a></h2>"
-			l += "<pre>"
 			cpuStats, err := script.File(tempStatsPath + "/cpu.txt").String()
 			if err == nil {
+				cpuItems := ParseFrequencyStats(cpuStats)
+				l += GeneratePieChartHTML(cpuItems, 15)
+				l += "<pre>"
 				l += cpuStats
+				l += "</pre>"
 			} else {
-				l += "Error loading CPU stats"
+				l += "<pre>Error loading CPU stats</pre>"
 			}
-			l += "</pre>"
 
 			// Memory (Disk) Stats
 			l += "<h2><a href='/stats/mem'>Storage Statistics</a></h2>"
@@ -476,26 +498,30 @@ func server(e error) {
 
 			// Country Stats - Unique IPs
 			l += "<h2><a href='/stats/country/unique'>Country Statistics (Unique IPs)</a></h2>"
-			l += "<pre>"
 			countryUniqueStats, err := script.File(tempStatsPath + "/country_unique.txt").String()
 			if err == nil {
+				countryUniqueItems := ParseFrequencyStats(countryUniqueStats)
+				l += GeneratePieChartHTML(countryUniqueItems, 15)
+				l += "<pre>"
 				l += countryUniqueStats
+				l += "</pre>"
 			} else {
-				l += "Error loading country stats (unique)"
+				l += "<pre>Error loading country stats (unique)</pre>"
 			}
-			l += "</pre>"
 			l += "<p><a href='/stats/country/unique/json'>View as JSON</a></p>"
 
 			// Country Stats - Full Visor Count
 			l += "<h2><a href='/stats/country/full'>Country Statistics (All Visors)</a></h2>"
-			l += "<pre>"
 			countryFullStats, err := script.File(tempStatsPath + "/country_full.txt").String()
 			if err == nil {
+				countryFullItems := ParseFrequencyStats(countryFullStats)
+				l += GeneratePieChartHTML(countryFullItems, 15)
+				l += "<pre>"
 				l += countryFullStats
+				l += "</pre>"
 			} else {
-				l += "Error loading country stats (full)"
+				l += "<pre>Error loading country stats (full)</pre>"
 			}
-			l += "</pre>"
 			l += "<p><a href='/stats/country/full/json'>View as JSON</a></p>"
 
 			l += "<br>" + htmltoplink
