@@ -19,6 +19,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -39,6 +41,44 @@ var (
 	tpType     string
 	nice       bool
 )
+
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example responses from actual struct types
+func generateExamples() string {
+	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+	exPK2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+	exTPID := "e7a7f1b3-c040-47f8-9e12-a0a1459b3456"
+
+	return fmt.Sprintf(`
+Request/Response Examples:
+
+POST /add
+  Request:  %s
+  Response: {"id": "%s", "type": "stcpr", ...}
+
+POST /remove
+  Request:  %s
+  Response: {"success": true}
+
+GET /{pk}/transports
+  %s`,
+		exampleJSON(api.TransportRequest{Type: "stcpr"}),
+		exTPID,
+		exampleJSON(api.UUIDRequest{}),
+		exampleJSON([]map[string]interface{}{{
+			"id": exTPID, "type": "stcpr",
+			"edges": []string{exPK1, exPK2},
+		}}),
+	)
+}
 
 func init() {
 	RootCmd.Flags().SortFlags = false
@@ -69,21 +109,26 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "Transport setup server for skywire",
 	Long: calvin.AsciiFont("transport-setup") + `
+Transport Setup Node - remotely manages transports on visors via dmsg RPC.
 
-Transport setup server for skywire
-Takes config in the following format:
-{
-    "dmsg": {
-        "discovery": "http://dmsgd.skywire.skycoin.com",
-        "servers": [],
-        "sessions_count": 2
-    },
-    "log_level": "",
-    "port":8080,
-    "public_key": "",
-    "secret_key": "",
-    "transport_discovery": "http://tpd.skywire.skycoin.com"
-}`,
+HTTP Endpoints:
+  POST /{pk}/transports    List transports on visor
+  POST /add                Add transport between two visors
+  POST /remove             Remove transport from visor
+` + generateExamples() + `
+
+Example Config:
+` + exampleJSON(config.Config{
+		Port: 8080,
+		Dmsg: dmsgc.DmsgConfig{
+			Discovery:     deployment.Prod.DmsgDiscovery,
+			SessionsCount: 2,
+		},
+	}) + `
+
+Generate Keys:
+  skywire cli config gen-keys | tee tps-keys.txt
+  # Line 1: public_key, Line 2: secret_key`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

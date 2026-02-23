@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -112,6 +114,7 @@ func generateAndCacheStats() (err error) {
 	var surveyarches string
 	var surveycpus string
 	var surveyOSNames string
+	var surveyProductNames string
 	var totalBytes int64
 	var totalramBytes int64
 	for i := range pks {
@@ -133,6 +136,11 @@ func generateAndCacheStats() (err error) {
 			continue
 		}
 		surveyOSNames += surveyOSName
+
+		surveyProductName, err := script.File(ni).JQ(".zcalusic_sysinfo.product.name").Replace(`"`, "").Reject("null").String()
+		if err == nil && surveyProductName != "" && surveyProductName != "\n" {
+			surveyProductNames += surveyProductName
+		}
 
 		surveytbs, err := script.File(ni).JQ(".ghw_blockinfo.total_size_bytes").Reject("null").Replace(`"`, "").String()
 		if err != nil {
@@ -182,6 +190,15 @@ func generateAndCacheStats() (err error) {
 		return err
 	}
 	_, err = script.Echo(fmt.Sprintf("Survey OS name statistics:\n%s\n", namestats)).WriteFile(tempStatsPath + "/os.txt")
+	if err != nil {
+		return err
+	}
+
+	productstats, err := script.Echo(surveyProductNames).Freq().String()
+	if err != nil {
+		return err
+	}
+	_, err = script.Echo(fmt.Sprintf("Survey hardware/product name statistics:\n%s\n", productstats)).WriteFile(tempStatsPath + "/product.txt")
 	if err != nil {
 		return err
 	}
@@ -409,4 +426,109 @@ func writeCountryStats(countryCount map[string]int, countryNames map[string]stri
 	}
 
 	return os.WriteFile(tempStatsPath+"/"+filePrefix+".json", jsonData, 0600)
+}
+
+// PieChartItem represents a single item in a pie chart
+type PieChartItem struct {
+	Label string
+	Count int
+}
+
+// pieChartColors provides a palette of distinct colors for pie chart slices
+var pieChartColors = []string{
+	"#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF",
+	"#FF9F40", "#E7E9ED", "#8BC34A", "#FF5722", "#607D8B",
+	"#E91E63", "#00BCD4", "#CDDC39", "#795548", "#9C27B0",
+	"#03A9F4", "#FFC107", "#673AB7", "#009688", "#F44336",
+}
+
+// ParseFrequencyStats parses frequency statistics from text format (e.g., "  10 amd64\n   5 arm64")
+func ParseFrequencyStats(statsText string) []PieChartItem {
+	var items []PieChartItem
+	lines := strings.Split(statsText, "\n")
+	// Match lines like "  10 amd64" or "   5 arm64"
+	re := regexp.MustCompile(`^\s*(\d+)\s+(.+)$`)
+
+	for _, line := range lines {
+		matches := re.FindStringSubmatch(line)
+		if len(matches) == 3 {
+			count, err := strconv.Atoi(matches[1])
+			if err != nil {
+				continue
+			}
+			label := strings.TrimSpace(matches[2])
+			if label != "" {
+				items = append(items, PieChartItem{Label: label, Count: count})
+			}
+		}
+	}
+	return items
+}
+
+// GeneratePieChartHTML generates a CSS-based pie chart with legend
+// maxSlices limits how many distinct slices to show (rest grouped as "Other")
+func GeneratePieChartHTML(items []PieChartItem, maxSlices int) string {
+	if len(items) == 0 {
+		return ""
+	}
+
+	// Calculate total
+	total := 0
+	for _, item := range items {
+		total += item.Count
+	}
+	if total == 0 {
+		return ""
+	}
+
+	// Group small items into "Other" if we have too many
+	var displayItems []PieChartItem
+	otherCount := 0
+	for i, item := range items {
+		if i < maxSlices-1 || len(items) <= maxSlices {
+			displayItems = append(displayItems, item)
+		} else {
+			otherCount += item.Count
+		}
+	}
+	if otherCount > 0 {
+		displayItems = append(displayItems, PieChartItem{Label: "Other", Count: otherCount})
+	}
+
+	// Build conic-gradient
+	var gradientParts []string
+	currentDeg := 0.0
+	for i, item := range displayItems {
+		color := pieChartColors[i%len(pieChartColors)]
+		percentage := float64(item.Count) / float64(total) * 360
+		endDeg := currentDeg + percentage
+		gradientParts = append(gradientParts, fmt.Sprintf("%s %.1fdeg %.1fdeg", color, currentDeg, endDeg))
+		currentDeg = endDeg
+	}
+
+	gradient := strings.Join(gradientParts, ", ")
+
+	// Build HTML
+	var sb strings.Builder
+	sb.WriteString("<div style='display: flex; align-items: flex-start; gap: 20px; margin: 10px 0;'>\n")
+
+	// Pie chart
+	sb.WriteString(fmt.Sprintf("<div style='width: 150px; height: 150px; border-radius: 50%%; background: conic-gradient(%s); flex-shrink: 0;'></div>\n", gradient))
+
+	// Legend
+	sb.WriteString("<div style='font-size: 11px; line-height: 1.4;'>\n")
+	for i, item := range displayItems {
+		color := pieChartColors[i%len(pieChartColors)]
+		pct := float64(item.Count) / float64(total) * 100
+		label := html.EscapeString(item.Label)
+		if len(label) > 30 {
+			label = label[:27] + "..."
+		}
+		sb.WriteString(fmt.Sprintf("<div><span style='display: inline-block; width: 12px; height: 12px; background: %s; margin-right: 5px;'></span>%s (%d, %.1f%%)</div>\n", color, label, item.Count, pct))
+	}
+	sb.WriteString(fmt.Sprintf("<div style='margin-top: 5px; font-weight: bold;'>Total: %d</div>\n", total))
+	sb.WriteString("</div>\n")
+
+	sb.WriteString("</div>\n")
+	return sb.String()
 }
