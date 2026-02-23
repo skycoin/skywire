@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/route-finder/api"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -102,7 +103,7 @@ func init() {
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
 	RootCmd.Flags().StringVar(&tag, "tag", "route_finder", "logging tag\n\r")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscAddr(false), "url of dmsg discovery\n\r")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscURL(false), "url of dmsg discovery\n\r")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
@@ -120,8 +121,10 @@ Route Finder Server - finds routes between visors using transport data.
 
 Depends: redis (shares Redis with TPD)
 
-Production: http://rf.skywire.skycoin.com
-Test:       http://rf.skywire.dev
+Production: ` + deployment.Prod.RouteFinder + `
+            ` + dmsg.Prod.RouteFinder + `
+Test:       ` + deployment.Test.RouteFinder + `
+            ` + dmsg.Test.RouteFinder + `
 
 HTTP Endpoints:
   GET  /health     Health check

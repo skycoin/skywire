@@ -180,8 +180,10 @@ Transport Discovery Server - registers and tracks transports between visors.
 
 Depends: redis
 
-Production: http://tpd.skywire.skycoin.com
-Test:       http://tpd.skywire.dev
+Production: ` + deployment.Prod.TransportDiscovery + `
+            ` + dmsg.Prod.TransportDiscovery + `
+Test:       ` + deployment.Test.TransportDiscovery + `
+            ` + dmsg.Test.TransportDiscovery + `
 
 HTTP Endpoints:
   GET  /health                        Health check

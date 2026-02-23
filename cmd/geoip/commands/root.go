@@ -21,6 +21,7 @@ import (
 	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -28,6 +29,41 @@ import (
 
 //go:embed GeoLite2-City.mmdb
 var embeddedGeoIP []byte
+
+// exampleJSON marshals v to indented JSON with color, returning empty string on error
+func exampleJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(pretty.Color(b, nil))
+}
+
+// generateExamples creates example responses from actual struct types
+func generateExamples() string {
+	lat := 37.751
+	lon := -97.822
+
+	return fmt.Sprintf(`
+Request/Response Examples:
+
+GET /?ip=8.8.8.8
+  %s
+
+CLI: skywire svc ip 8.8.8.8
+  (same response as above)`,
+		exampleJSON(lookupResult{
+			IP:            "8.8.8.8",
+			Latitude:      &lat,
+			Longitude:     &lon,
+			CountryCode:   "US",
+			CountryName:   "United States",
+			ContinentCode: "NA",
+			ContinentName: "North America",
+			Timezone:      "America/Chicago",
+		}),
+	)
+}
 
 type lookupResult struct {
 	IP            string   `json:"ip_address"`
@@ -69,12 +105,19 @@ var RootCmd = &cobra.Command{
 	}(),
 	Short: "GeoIP service for skywire",
 	Long: calvin.AsciiFont("geoip") + `
+GeoIP Service - looks up geographic location data for IP addresses.
 
-Note: Embeddeed GeoIP database is used by default
-Path to local GeoIP database can also be specified via the '--db' flag
-skywire svc geoip --db ./GeoLite2-City.mmdb 8.8.8.8
-skywire svc geoip --api --addr ":9093" --db ./GeoLite2-City.mmdb
-`,
+Uses embedded MaxMind GeoLite2-City database by default.
+
+HTTP Endpoints (API mode):
+  GET  /             Lookup IP (from request or ?ip= param)
+  GET  /?ip={ip}     Lookup specific IP address
+` + generateExamples() + `
+
+Usage Examples:
+  skywire svc ip 8.8.8.8                              # CLI lookup
+  skywire svc ip --api --addr ":9093"                 # API server (embedded DB)
+  skywire svc ip --api --db ./GeoLite2-City.mmdb      # API server (external DB)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,

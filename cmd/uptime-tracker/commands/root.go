@@ -20,6 +20,7 @@ import (
 	"github.com/tidwall/pretty"
 	"gorm.io/gorm"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/internal/pg"
 	"github.com/skycoin/skywire/internal/utmetrics"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -82,7 +83,7 @@ func init() {
 	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service\n\r")
 	RootCmd.Flags().BoolVar(&enableLoadTesting, "enable-load-testing", false, "enable load testing")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscAddr(false), "url of dmsg discovery\n\r")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg discovery\n\r")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 }
@@ -168,8 +169,10 @@ Uptime Tracker Server - tracks visor online status and uptime statistics.
 
 Depends: redis, postgres
 
-Production: http://ut.skywire.skycoin.com
-Test:       http://ut.skywire.dev
+Production: ` + deployment.Prod.UptimeTracker + `
+            ` + dmsg.Prod.UptimeTracker + `
+Test:       ` + deployment.Test.UptimeTracker + `
+            ` + dmsg.Test.UptimeTracker + `
 
 HTTP Endpoints:
   GET  /health                        Health check

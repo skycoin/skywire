@@ -20,6 +20,7 @@ import (
 	"github.com/tidwall/pretty"
 	"github.com/xtaci/kcp-go"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/internal/armetrics"
 	"github.com/skycoin/skywire/pkg/address-resolver/api"
 	"github.com/skycoin/skywire/pkg/address-resolver/store"
@@ -129,7 +130,7 @@ func init() {
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
 	RootCmd.Flags().StringVar(&tag, "tag", "address_resolver", "logging tag\n\r")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscAddr(false), "url of dmsg discovery\n\r")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg discovery\n\r")
 	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration")
 	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
@@ -148,8 +149,10 @@ Address Resolver Server - resolves visor addresses for STCPR/SUDPH connections.
 
 Depends: redis
 
-Production: http://ar.skywire.skycoin.com
-Test:       http://ar.skywire.dev
+Production: ` + deployment.Prod.AddressResolver + `
+            ` + dmsg.Prod.AddressResolver + `
+Test:       ` + deployment.Test.AddressResolver + `
+            ` + dmsg.Test.AddressResolver + `
 
 HTTP Endpoints:
   GET  /health                  Health check
