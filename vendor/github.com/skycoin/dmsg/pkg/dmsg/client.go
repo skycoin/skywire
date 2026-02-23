@@ -424,9 +424,10 @@ func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP n
 				return ip, nil
 			}
 
-			// Check if the IP is public
+			// Check if the IP is public, if not try other servers
 			if !netutil.IsPublicIP(ip) {
-				return nil, errors.New("received non-public IP address from dmsg server")
+				ce.log.WithField("server_pk", srvPK).WithField("ip", ip.String()).Warn("Received non-public IP address from dmsg server, trying other servers.")
+				continue
 			}
 			return ip, nil
 		}
@@ -455,9 +456,10 @@ func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP n
 			return ip, nil
 		}
 
-		// Check if the IP is public
+		// Check if the IP is public, if not try other servers
 		if !netutil.IsPublicIP(ip) {
-			return nil, errors.New("received non-public IP address from dmsg server")
+			ce.log.WithField("server_pk", srvPK).WithField("ip", ip.String()).Warn("Received non-public IP address from dmsg server, trying other servers.")
+			continue
 		}
 		return ip, nil
 	}

@@ -33,9 +33,14 @@ var RootCmd = &cobra.Command{
 	┌┬┐┌┬┐┌─┐┌─┐   ┌─┐┌─┐┬─┐┬  ┬┌─┐┬─┐
 	││││││└─┐│ ┬ ─ └─┐├┤ ├┬┘└┐┌┘├┤ ├┬┘
 	─┴┘┴ ┴└─┘└─┘   └─┘└─┘┴└─ └┘ └─┘┴└─
-DMSG Server
-skywire dmsg server config gen -o dmsg-config.json
-skywire dmsg server start dmsg-config.json`,
+DMSG Server - relays DMSG traffic between clients.
+
+HTTP Endpoints:
+  GET  /health     Health check
+
+Example:
+  skywire dmsg server config gen -o dmsg-config.json
+  skywire dmsg server start dmsg-config.json`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
