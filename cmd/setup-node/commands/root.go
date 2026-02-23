@@ -23,6 +23,7 @@ import (
 	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -54,12 +55,17 @@ func exampleJSON(v interface{}) string {
 func generateExamples() string {
 	return fmt.Sprintf(`
 Example Config:
-  %s`,
-		exampleJSON(map[string]interface{}{
-			"public_key":       "<generated-pk>",
-			"secret_key":       "<generated-sk>",
-			"dmsg":             map[string]interface{}{"discovery": deployment.Prod.DmsgDiscovery, "sessions_count": 1, "servers": []string{}},
-			"transport_discovery": deployment.Prod.TransportDiscovery,
+  %s
+
+Generate Keys:
+  skywire cli config gen-keys | tee sn-keys.txt
+  # Line 1: public_key, Line 2: secret_key`,
+		exampleJSON(router.SetupConfig{
+			Dmsg: dmsgc.DmsgConfig{
+				Discovery:     deployment.Prod.DmsgDiscovery,
+				SessionsCount: 1,
+			},
+			TransportDiscovery: deployment.Prod.TransportDiscovery,
 		}),
 	)
 }
@@ -86,13 +92,11 @@ Listens on dmsg port ` + fmt.Sprintf("%d", skyenv.DmsgSetupPort) + ` for route s
 RPC Methods (via dmsg):
   SetupRPCGateway.DialRouteGroup    Establish bidirectional route
   SetupRPCGateway.HealthCheck       Health check
-
-Generate Config:
-  skywire cli config gen --sn -o setup-node.json
 ` + generateExamples() + `
 
 Usage:
   skywire svc sn [config.json]
+  skywire cli config gen --sn -o sn-config.json
   skywire cli config gen --sn | skywire svc sn -i`,
 	Run: func(_ *cobra.Command, args []string) {
 		mLog := logging.NewMasterLogger()
