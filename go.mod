@@ -42,7 +42,7 @@ require (
 	github.com/pterm/pterm v0.12.82
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
-	github.com/skycoin/dmsg v1.3.29-0.20260219155816-358396f06063
+	github.com/skycoin/dmsg v1.3.29-0.20260223201331-540ad4d9146a
 	github.com/skycoin/skycoin v0.28.3
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
@@ -73,7 +73,6 @@ require (
 	github.com/coder/websocket v1.8.14
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/itchyny/gojq v0.12.18
-	github.com/skycoin/skywire-utilities v1.3.25
 	github.com/soheilhy/cmux v0.1.5
 	github.com/xxxserxxx/gotop/v4 v4.2.1-0.20250927202203-54213c890e66
 	github.com/xxxserxxx/lingo/v2 v2.0.1
@@ -256,7 +255,7 @@ require (
 	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260217215200-42d3e9bedb6d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260217215200-42d3e9bedb6d // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

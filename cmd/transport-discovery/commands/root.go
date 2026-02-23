@@ -180,6 +180,11 @@ Transport Discovery Server - registers and tracks transports between visors.
 
 Depends: redis
 
+Production: ` + deployment.Prod.TransportDiscovery + `
+            ` + dmsg.Prod.TransportDiscovery + `
+Test:       ` + deployment.Test.TransportDiscovery + `
+            ` + dmsg.Test.TransportDiscovery + `
+
 HTTP Endpoints:
   GET  /health                        Health check
   GET  /all-transports                All registered transports
@@ -198,8 +203,8 @@ HTTP Endpoints:
 ` + generateExamples() + `
 
 Example:
-  keys-gen | tee tpd-config.json
-  transport-discovery --sk $(tail -n1 tpd-config.json)`,
+  skywire cli config gen-keys | tee tpd-keys.txt
+  transport-discovery --sk $(tail -n1 tpd-keys.txt)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
