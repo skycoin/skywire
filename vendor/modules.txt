@@ -953,7 +953,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20260219155816-358396f06063
+# github.com/skycoin/dmsg v1.3.29-0.20260223005439-f86aa3297c2f
 ## explicit; go 1.25.6
 github.com/skycoin/dmsg/cmd/conf/commands
 github.com/skycoin/dmsg/cmd/dial/commands
@@ -1074,8 +1074,6 @@ github.com/skycoin/skycoin/src/wallet/collection
 github.com/skycoin/skycoin/src/wallet/deterministic
 github.com/skycoin/skycoin/src/wallet/xpubwallet
 github.com/skycoin/skycoin/templates
-# github.com/skycoin/skywire-utilities v1.3.25
-## explicit; go 1.21
 # github.com/soheilhy/cmux v0.1.5
 ## explicit; go 1.11
 github.com/soheilhy/cmux
@@ -1403,8 +1401,8 @@ golang.zx2c4.com/wireguard/conn
 golang.zx2c4.com/wireguard/conn/winrio
 golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
-# google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217
-## explicit; go 1.24.0
+# google.golang.org/genproto/googleapis/api v0.0.0-20260217215200-42d3e9bedb6d
+## explicit; go 1.25.0
 # google.golang.org/genproto/googleapis/rpc v0.0.0-20260217215200-42d3e9bedb6d
 ## explicit; go 1.25.0
 google.golang.org/genproto/googleapis/rpc/status
