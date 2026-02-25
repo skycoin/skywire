@@ -465,6 +465,288 @@ func ParseFrequencyStats(statsText string) []PieChartItem {
 	return items
 }
 
+// VersionHistoryEntry represents version counts for a single day
+type VersionHistoryEntry struct {
+	Date     string         `json:"date"`
+	Versions map[string]int `json:"versions"`
+	Total    int            `json:"total"`
+}
+
+// UptimeVisor represents a visor entry from uptime tracker JSON
+type UptimeVisor struct {
+	PK      string            `json:"pk"`
+	On      bool              `json:"on"`
+	Version string            `json:"version"`
+	Daily   map[string]string `json:"daily"`
+}
+
+// ParseHistoricUptimeData reads all _ut.json files and returns version counts per day
+// Only counts visors that had >= minUptime% uptime on each specific day
+func ParseHistoricUptimeData(histDir string, minUptime float64) ([]VersionHistoryEntry, error) {
+	files, err := filepath.Glob(filepath.Join(histDir, "*_ut.json"))
+	if err != nil {
+		return nil, err
+	}
+
+	// Sort files by date (newest first) so we use most recent data for each visor+date
+	sort.Slice(files, func(i, j int) bool {
+		return files[i] > files[j]
+	})
+
+	// Track which visor+date combinations we've already processed to avoid double-counting
+	// Key: "date|pk", Value: version (already recorded)
+	seen := make(map[string]string)
+
+	// Map of date -> version -> count
+	dateVersionCounts := make(map[string]map[string]int)
+
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+
+		var visors []UptimeVisor
+		if err := json.Unmarshal(data, &visors); err != nil {
+			continue
+		}
+
+		// For each visor, check each day in their daily uptime
+		for _, v := range visors {
+			version := normalizeVersion(v.Version)
+			if version == "" {
+				continue
+			}
+
+			for date, uptimeStr := range v.Daily {
+				uptime, err := strconv.ParseFloat(uptimeStr, 64)
+				if err != nil {
+					continue
+				}
+
+				// Only count if uptime >= minUptime
+				if uptime < minUptime {
+					continue
+				}
+
+				// Check if we've already counted this visor for this date
+				key := date + "|" + v.PK
+				if _, exists := seen[key]; exists {
+					continue
+				}
+				seen[key] = version
+
+				if dateVersionCounts[date] == nil {
+					dateVersionCounts[date] = make(map[string]int)
+				}
+				dateVersionCounts[date][version]++
+			}
+		}
+	}
+
+	// Convert to sorted slice
+	var dates []string
+	for d := range dateVersionCounts {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+
+	var history []VersionHistoryEntry
+	for _, date := range dates {
+		versions := dateVersionCounts[date]
+		total := 0
+		for _, count := range versions {
+			total += count
+		}
+		history = append(history, VersionHistoryEntry{
+			Date:     date,
+			Versions: versions,
+			Total:    total,
+		})
+	}
+
+	return history, nil
+}
+
+// normalizeVersion cleans up version strings for consistent grouping
+func normalizeVersion(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return ""
+	}
+	// Remove "dirty" suffix variations but keep the base version
+	v = strings.ReplaceAll(v, "+dirty", "")
+	v = strings.ReplaceAll(v, " dirty", "")
+	v = strings.ReplaceAll(v, "-dirty", "")
+	v = strings.TrimSpace(v)
+	return v
+}
+
+// getAllVersions extracts all unique versions from history, sorted by first appearance
+func getAllVersions(history []VersionHistoryEntry) []string {
+	versionSet := make(map[string]int) // version -> first seen index
+	for i, entry := range history {
+		for version := range entry.Versions {
+			if _, exists := versionSet[version]; !exists {
+				versionSet[version] = i
+			}
+		}
+	}
+
+	// Sort versions by semantic version (newest first for legend)
+	var versions []string
+	for v := range versionSet {
+		versions = append(versions, v)
+	}
+	sort.Slice(versions, func(i, j int) bool {
+		return compareVersions(versions[i], versions[j]) > 0
+	})
+	return versions
+}
+
+// compareVersions compares two version strings (simple semver comparison)
+func compareVersions(a, b string) int {
+	// Strip 'v' prefix
+	a = strings.TrimPrefix(a, "v")
+	b = strings.TrimPrefix(b, "v")
+
+	partsA := strings.Split(a, ".")
+	partsB := strings.Split(b, ".")
+
+	for i := 0; i < len(partsA) && i < len(partsB); i++ {
+		numA, _ := strconv.Atoi(partsA[i])
+		numB, _ := strconv.Atoi(partsB[i])
+		if numA != numB {
+			return numA - numB
+		}
+	}
+	return len(partsA) - len(partsB)
+}
+
+// GenerateVersionHistoryChartHTML creates a CSS-based stacked area chart
+func GenerateVersionHistoryChartHTML(history []VersionHistoryEntry, chartWidth, chartHeight int) string {
+	if len(history) == 0 {
+		return "<p>No historic data available</p>"
+	}
+
+	versions := getAllVersions(history)
+	if len(versions) == 0 {
+		return "<p>No version data available</p>"
+	}
+
+	// Find max total for scaling
+	maxTotal := 0
+	for _, entry := range history {
+		if entry.Total > maxTotal {
+			maxTotal = entry.Total
+		}
+	}
+	if maxTotal == 0 {
+		return "<p>No data points</p>"
+	}
+
+	// Assign colors to versions
+	versionColors := make(map[string]string)
+	for i, v := range versions {
+		versionColors[v] = pieChartColors[i%len(pieChartColors)]
+	}
+
+	var sb strings.Builder
+
+	// Container with responsive styles
+	sb.WriteString("<div style='margin: 20px 0; max-width: 100%; overflow-x: auto;'>\n")
+	sb.WriteString("<h3>Version Distribution Over Time (≥75% daily uptime)</h3>\n")
+
+	// Chart container with axes
+	sb.WriteString("<div style='display: flex; align-items: flex-end; gap: 5px; min-width: fit-content;'>\n")
+
+	// Y-axis labels
+	sb.WriteString(fmt.Sprintf("<div style='display: flex; flex-direction: column; justify-content: space-between; height: %dpx; font-size: 11px; color: #888; text-align: right; padding-right: 5px; flex-shrink: 0;'>\n", chartHeight))
+	sb.WriteString(fmt.Sprintf("<span>%d</span>\n", maxTotal))
+	sb.WriteString(fmt.Sprintf("<span>%d</span>\n", maxTotal*3/4))
+	sb.WriteString(fmt.Sprintf("<span>%d</span>\n", maxTotal/2))
+	sb.WriteString(fmt.Sprintf("<span>%d</span>\n", maxTotal/4))
+	sb.WriteString("<span>0</span>\n")
+	sb.WriteString("</div>\n")
+
+	// Chart area - use min-width so it can scroll on mobile
+	sb.WriteString(fmt.Sprintf("<div style='position: relative; min-width: %dpx; height: %dpx; border-left: 1px solid #444; border-bottom: 1px solid #444; background: #1a1a1a; flex-shrink: 0;'>\n", chartWidth, chartHeight))
+
+	// Grid lines
+	for i := 1; i <= 4; i++ {
+		y := chartHeight - (chartHeight * i / 4)
+		sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: 0; right: 0; top: %dpx; border-top: 1px dashed #333;'></div>\n", y))
+	}
+
+	// Calculate bar width
+	barWidth := chartWidth / len(history)
+	if barWidth < 2 {
+		barWidth = 2
+	}
+
+	// Draw stacked bars for each day
+	for i, entry := range history {
+		x := i * barWidth
+		currentY := 0
+
+		// Draw each version's segment (stacked)
+		for _, version := range versions {
+			count := entry.Versions[version]
+			if count == 0 {
+				continue
+			}
+
+			segmentHeight := count * chartHeight / maxTotal
+			if segmentHeight < 1 {
+				segmentHeight = 1
+			}
+
+			color := versionColors[version]
+			bottom := currentY
+			currentY += segmentHeight
+
+			sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: %dpx; bottom: %dpx; width: %dpx; height: %dpx; background: %s;' title='%s: %s (%d)'></div>\n",
+				x, bottom, barWidth-1, segmentHeight, color, entry.Date, version, count))
+		}
+	}
+
+	sb.WriteString("</div>\n") // chart area
+	sb.WriteString("</div>\n") // flex container
+
+	// X-axis labels (show every Nth date to avoid crowding)
+	labelInterval := len(history) / 10
+	if labelInterval < 1 {
+		labelInterval = 1
+	}
+
+	sb.WriteString(fmt.Sprintf("<div style='display: flex; margin-left: 40px; font-size: 10px; color: #888; min-width: %dpx;'>\n", chartWidth))
+	for i, entry := range history {
+		if i%labelInterval == 0 || i == len(history)-1 {
+			// Show month-day format
+			dateParts := strings.Split(entry.Date, "-")
+			label := entry.Date
+			if len(dateParts) == 3 {
+				label = dateParts[1] + "-" + dateParts[2]
+			}
+			width := barWidth * labelInterval
+			sb.WriteString(fmt.Sprintf("<span style='width: %dpx; text-align: left;'>%s</span>\n", width, label))
+		}
+	}
+	sb.WriteString("</div>\n")
+
+	// Legend - responsive wrapping
+	sb.WriteString("<div style='margin-top: 15px; display: flex; flex-wrap: wrap; gap: 8px 15px; font-size: 12px;'>\n")
+	for _, version := range versions {
+		color := versionColors[version]
+		sb.WriteString(fmt.Sprintf("<span style='display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;'><span style='display: inline-block; width: 12px; height: 12px; background: %s; flex-shrink: 0;'></span>%s</span>\n", color, html.EscapeString(version)))
+	}
+	sb.WriteString("</div>\n")
+
+	sb.WriteString("</div>\n") // container
+
+	return sb.String()
+}
+
 // GeneratePieChartHTML generates a CSS-based pie chart with legend
 // maxSlices limits how many distinct slices to show (rest grouped as "Other")
 func GeneratePieChartHTML(items []PieChartItem, maxSlices int) string {
@@ -508,25 +790,26 @@ func GeneratePieChartHTML(items []PieChartItem, maxSlices int) string {
 
 	gradient := strings.Join(gradientParts, ", ")
 
-	// Build HTML
+	// Build HTML with responsive layout
+	// Pie chart on right on desktop, stacks vertically on mobile
 	var sb strings.Builder
-	sb.WriteString("<div style='display: flex; align-items: flex-start; gap: 20px; margin: 10px 0;'>\n")
+	sb.WriteString("<div style='display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 20px; margin: 10px 0; flex-wrap: wrap;'>\n")
 
-	// Pie chart
-	sb.WriteString(fmt.Sprintf("<div style='width: 150px; height: 150px; border-radius: 50%%; background: conic-gradient(%s); flex-shrink: 0;'></div>\n", gradient))
+	// Pie chart (larger, on the right)
+	sb.WriteString(fmt.Sprintf("<div style='width: 200px; height: 200px; border-radius: 50%%; background: conic-gradient(%s); flex-shrink: 0;'></div>\n", gradient))
 
 	// Legend
-	sb.WriteString("<div style='font-size: 11px; line-height: 1.4;'>\n")
+	sb.WriteString("<div style='font-size: 12px; line-height: 1.5; flex: 1; min-width: 200px;'>\n")
 	for i, item := range displayItems {
 		color := pieChartColors[i%len(pieChartColors)]
 		pct := float64(item.Count) / float64(total) * 100
 		label := html.EscapeString(item.Label)
-		if len(label) > 30 {
-			label = label[:27] + "..."
+		if len(label) > 35 {
+			label = label[:32] + "..."
 		}
-		sb.WriteString(fmt.Sprintf("<div><span style='display: inline-block; width: 12px; height: 12px; background: %s; margin-right: 5px;'></span>%s (%d, %.1f%%)</div>\n", color, label, item.Count, pct))
+		sb.WriteString(fmt.Sprintf("<div style='margin: 2px 0;'><span style='display: inline-block; width: 14px; height: 14px; background: %s; margin-right: 6px; vertical-align: middle;'></span>%s (%d, %.1f%%)</div>\n", color, label, item.Count, pct))
 	}
-	sb.WriteString(fmt.Sprintf("<div style='margin-top: 5px; font-weight: bold;'>Total: %d</div>\n", total))
+	sb.WriteString(fmt.Sprintf("<div style='margin-top: 8px; font-weight: bold; font-size: 13px;'>Total: %d</div>\n", total))
 	sb.WriteString("</div>\n")
 
 	sb.WriteString("</div>\n")
