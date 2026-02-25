@@ -6,441 +6,105 @@
     <title>Skywire Network</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: #1a1a2e;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            color: #eee;
-        }
-
-        #container {
-            display: flex;
-            width: 100%;
-            height: 100%;
-        }
-
-        #sidebar {
-            width: 300px;
-            min-width: 300px;
-            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
-            border-right: 1px solid #0f3460;
-            overflow-y: auto;
-            padding: 12px;
-            z-index: 10;
-            flex-shrink: 0;
-        }
-
-        /* Scrollbar styling */
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background: #1a1a2e; color: #eee; }
+        #container { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
+        #sidebar { width: 320px; min-width: 200px; max-width: 600px; background: #16213e; padding: 15px; overflow-y: auto; border-right: 1px solid #0f3460; flex-shrink: 0; }
         #sidebar::-webkit-scrollbar { width: 6px; }
         #sidebar::-webkit-scrollbar-track { background: transparent; }
         #sidebar::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 3px; }
-        #sidebar::-webkit-scrollbar-thumb:hover { background: #1a4a7a; }
+        #resize-handle { width: 5px; background: #0f3460; cursor: col-resize; flex-shrink: 0; }
+        #resize-handle:hover { background: #e94560; }
+        #canvas-container { flex: 1; position: relative; min-width: 0; overflow: hidden; }
+        #graph-canvas { display: block; width: 100%; height: 100%; }
+        h1 { font-size: 1.2em; margin-bottom: 15px; color: #e94560; }
 
-        #canvas-container {
-            flex: 1;
-            position: relative;
-            overflow: hidden;
-        }
-
-        #graph-canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-        }
-
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            z-index: 100;
-        }
-
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 3px solid #0f3460;
-            border-top-color: #00d9a5;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        h1 {
-            font-size: 1.1em;
-            color: #e94560;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid #0f3460;
-        }
-
-        /* Sections */
-        .section {
-            margin-bottom: 12px;
-            border: 1px solid #0f3460;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-
-        .section-header {
-            background: #0f3460;
-            padding: 8px 12px;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            user-select: none;
-        }
-
-        .section-header:hover { background: #1a4a7a; }
-
-        .section-title {
-            font-weight: 600;
-            font-size: 0.9em;
-        }
-
-        .section-toggle {
-            font-size: 0.7em;
-            transition: transform 0.2s;
-        }
-
+        /* Collapsible sections */
+        .section { margin-bottom: 10px; border: 1px solid #0f3460; border-radius: 4px; overflow: hidden; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #0f3460; cursor: pointer; user-select: none; }
+        .section-header:hover { background: #1a3a5c; }
+        .section-title { font-size: 0.9em; font-weight: 600; color: #0f9b8e; }
+        .section-toggle { color: #888; font-size: 0.8em; transition: transform 0.2s; }
         .section.collapsed .section-toggle { transform: rotate(-90deg); }
+        .section-content { padding: 10px 12px; display: block; }
         .section.collapsed .section-content { display: none; }
 
-        .section-content {
-            padding: 10px 12px;
-            background: rgba(15, 52, 96, 0.3);
-        }
-
-        /* Stats grid */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-        }
-
-        .stat {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 4px 8px;
-            background: rgba(15, 52, 96, 0.4);
-            border-radius: 3px;
-            font-size: 0.8em;
-        }
-
+        .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #0f3460; font-size: 0.85em; }
+        .stat:last-child { border-bottom: none; }
         .stat-label { color: #aaa; }
-        .stat-value { font-weight: 600; font-family: monospace; }
-        .stat-full { grid-column: 1 / -1; }
+        .stat-value { font-weight: bold; }
 
-        /* Filter checkboxes */
-        .filter-group { margin-top: 6px; }
+        .legend-item { display: flex; align-items: center; margin: 6px 0; font-size: 0.85em; }
+        .legend-color { width: 24px; height: 4px; margin-right: 8px; border-radius: 2px; }
+        .stcpr { background: #00d9a5; }
+        .sudph { background: #00b4d8; }
+        .dmsg { background: #ffd166; }
+        .status-item { display: flex; align-items: center; margin: 6px 0; font-size: 0.85em; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+        .status-online { background: #00d9a5; }
+        .status-offline { background: #e94560; border: 2px solid #fff; }
+        .status-unknown { background: #ffd166; }
 
-        .filter-item {
-            display: flex;
-            align-items: center;
-            padding: 3px 0;
-            font-size: 0.82em;
-            cursor: pointer;
-        }
-
-        .filter-item input[type="checkbox"] {
-            margin-right: 8px;
-            accent-color: #00d9a5;
-            cursor: pointer;
-        }
-
-        .filter-item .color-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 6px;
-            display: inline-block;
-        }
-
-        .filter-item .line-indicator {
-            width: 16px;
-            height: 2px;
-            margin-right: 6px;
-            display: inline-block;
-        }
-
-        /* Search */
-        #search-input {
-            width: 100%;
-            padding: 6px 10px;
-            background: #0a0a1a;
-            border: 1px solid #0f3460;
-            border-radius: 4px;
-            color: #eee;
-            font-size: 0.85em;
-            outline: none;
-        }
-
-        #search-input:focus { border-color: #00d9a5; }
-        #search-input::placeholder { color: #555; }
-
-        /* Node info panel */
-        #node-info-panel {
-            display: none;
-        }
-
-        .node-info-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 3px 0;
-            font-size: 0.82em;
-            border-bottom: 1px solid rgba(15, 52, 96, 0.3);
-        }
-
-        .node-info-row:last-child { border-bottom: none; }
-        .node-info-label { color: #aaa; }
-        .node-info-value { color: #eee; font-family: monospace; text-align: right; }
-
-        #node-info-pk {
-            font-family: monospace;
-            font-size: 0.75em;
-            color: #00d9a5;
-            word-break: break-all;
-            padding: 6px 0;
-            border-bottom: 1px solid rgba(15, 52, 96, 0.3);
-            margin-bottom: 4px;
-        }
-
-        #node-info-status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 4px;
-        }
+        .control-group { margin: 8px 0; }
+        label { display: block; margin-bottom: 4px; color: #aaa; font-size: 0.85em; }
+        input[type="checkbox"] { margin-right: 6px; }
+        input[type="text"], select { width: 100%; padding: 6px 8px; background: #1a1a2e; border: 1px solid #0f3460; color: #eee; border-radius: 4px; font-size: 0.85em; }
+        input[type="text"]:focus, select:focus { outline: none; border-color: #e94560; }
+        #btn-fit { width: 100%; padding: 8px; margin-top: 8px; background: #e94560; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
+        #btn-fit:hover { background: #ff6b6b; }
 
         /* Visor list */
-        #visor-list {
-            max-height: 300px;
-            overflow-y: auto;
-        }
+        .visor-list { max-height: 300px; overflow-y: auto; margin-top: 8px; overflow-x: hidden; }
+        .visor-item { display: flex; flex-wrap: wrap; align-items: center; padding: 4px 6px; font-size: 0.7em; border-bottom: 1px solid #0f3460; cursor: pointer; gap: 2px; overflow: hidden; }
+        .visor-item:hover { background: #1a3a5c; }
+        .visor-item:last-child { border-bottom: none; }
+        .visor-item .v-flag { flex-shrink: 0; margin-right: 4px; font-size: 1.1em; }
+        .visor-item .v-pk { font-family: monospace; color: #0f9b8e; display: flex; overflow: hidden; min-width: 0; }
+        .visor-item .v-pk.offline { color: #e94560; }
+        .visor-item .v-count { font-family: monospace; color: #888; margin-left: auto; }
 
-        #visor-list::-webkit-scrollbar { width: 4px; }
-        #visor-list::-webkit-scrollbar-track { background: transparent; }
-        #visor-list::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 2px; }
+        #selected-info { margin-top: 10px; padding: 12px; background: #0f3460; border-radius: 4px; display: none; }
+        #selected-info.visible { display: block; }
+        #selected-info h3 { font-size: 0.9em; color: #0f9b8e; margin-bottom: 8px; }
+        #selected-pk { font-family: monospace; font-size: 0.65em; word-break: break-all; color: #00d9a5; margin: 8px 0; cursor: pointer; }
+        #selected-pk:hover { color: #00ffcc; text-decoration: underline; }
+        .conn-list { max-height: 150px; overflow-y: auto; font-size: 0.8em; }
+        .conn-item { padding: 3px 0; border-bottom: 1px solid #1a1a2e; font-family: monospace; font-size: 0.8em; }
+        .conn-type { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 0.75em; margin-right: 4px; }
+        .conn-type.stcpr { background: rgba(0, 217, 165, 0.3); color: #00d9a5; }
+        .conn-type.sudph { background: rgba(0, 180, 216, 0.3); color: #00b4d8; }
+        .conn-type.dmsg { background: rgba(255, 209, 102, 0.3); color: #ffd166; }
 
-        .visor-item {
-            display: flex;
-            align-items: center;
-            padding: 4px 6px;
-            cursor: pointer;
-            border-radius: 3px;
-            font-size: 0.78em;
-            gap: 6px;
-        }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 100; }
+        .spinner { width: 50px; height: 50px; border: 3px solid #0f3460; border-top-color: #e94560; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #error { color: #e94560; padding: 20px; text-align: center; display: none; }
+        #zoom-controls { position: absolute; bottom: 16px; right: 16px; display: flex; flex-direction: column; gap: 4px; z-index: 9999; }
+        #zoom-controls button { width: 36px; height: 36px; border: 1px solid #00d9a5; background: rgba(22, 33, 62, 0.95); color: #e0e0e0; font-size: 18px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+        #zoom-controls button:hover { background: rgba(15, 52, 96, 0.95); color: #fff; border-color: #ff6b35; }
+        #cache-info { margin-top: 8px; font-size: 0.75em; color: #888; }
 
-        .visor-item:hover { background: rgba(15, 52, 96, 0.6); }
+        .service-badge { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 0.7em; margin: 1px; }
+        .service-badge.proxy { background: rgba(255, 165, 0, 0.3); color: #ffa500; }
+        .service-badge.vpn { background: rgba(138, 43, 226, 0.3); color: #9f6efc; }
 
-        .visor-status-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
+        /* Local visor styles */
+        .local-visor-pk { font-family: monospace; font-size: 0.75em; color: #00ffff; word-break: break-all; padding: 4px 0; cursor: pointer; }
+        .local-visor-pk:hover { text-decoration: underline; }
+        .local-transport { display: flex; align-items: center; gap: 6px; padding: 4px 6px; margin: 2px 0; background: rgba(0,0,0,0.2); border-radius: 3px; cursor: pointer; font-size: 0.75em; border-left: 3px solid transparent; }
+        .local-transport:hover { background: rgba(0,255,255,0.1); }
+        .local-transport.stcpr { border-left-color: #00d9a5; }
+        .local-transport.sudph { border-left-color: #00b4d8; }
+        .local-transport.dmsg { border-left-color: #ffd166; }
+        .tp-type-badge { font-size: 0.7em; padding: 1px 4px; border-radius: 2px; font-weight: 600; }
+        .tp-type-badge.stcpr { background: rgba(0,217,165,0.3); color: #00d9a5; }
+        .tp-type-badge.sudph { background: rgba(0,180,216,0.3); color: #00b4d8; }
+        .tp-type-badge.dmsg { background: rgba(255,209,102,0.3); color: #ffd166; }
+        .tp-remote { font-family: monospace; color: #aaa; flex: 1; overflow: hidden; text-overflow: ellipsis; }
+        .tp-traffic { font-size: 0.8em; color: #666; }
+        .tp-traffic .up { color: #00d9a5; }
+        .tp-traffic .down { color: #00b4d8; }
 
-        .visor-pk {
-            flex: 1;
-            font-family: monospace;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            color: #ccc;
-        }
-
-        .visor-country {
-            font-size: 0.9em;
-            flex-shrink: 0;
-        }
-
-        .visor-count {
-            font-family: monospace;
-            color: #888;
-            flex-shrink: 0;
-            min-width: 20px;
-            text-align: right;
-        }
-
-        .visor-services {
-            display: flex;
-            gap: 2px;
-            flex-shrink: 0;
-        }
-
-        .service-badge {
-            font-size: 0.7em;
-            font-weight: 700;
-            padding: 0 3px;
-            border-radius: 2px;
-            line-height: 1.4;
-        }
-
-        .service-badge.vpn { background: #9f6efc; color: #fff; }
-        .service-badge.proxy { background: #ffa500; color: #fff; }
-
-        .tp-badge {
-            font-size: 0.65em;
-            font-weight: 600;
-            padding: 0 3px;
-            border-radius: 2px;
-            line-height: 1.4;
-            font-family: monospace;
-        }
-
-        .tp-badge.stcpr { background: rgba(0,217,165,0.25); color: #00d9a5; }
-        .tp-badge.sudph { background: rgba(0,180,216,0.25); color: #00b4d8; }
-        .tp-badge.dmsg { background: rgba(255,209,102,0.25); color: #ffd166; }
-
-        .visor-version {
-            font-size: 0.7em;
-            color: #666;
-            font-family: monospace;
-            flex-shrink: 0;
-        }
-
-        /* Local visor section */
-        .local-visor-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 4px 0;
-            font-size: 0.82em;
-            border-bottom: 1px solid rgba(15, 52, 96, 0.3);
-        }
-        .local-visor-row:last-child { border-bottom: none; }
-        .local-visor-label { color: #aaa; }
-        .local-visor-value { color: #eee; font-family: monospace; text-align: right; }
-        .local-visor-pk {
-            font-family: monospace;
-            font-size: 0.75em;
-            color: #00ffff;
-            word-break: break-all;
-            padding: 4px 0;
-        }
-
-        /* Status indicators */
-        .status-dot-inline {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 4px;
-            vertical-align: middle;
-        }
-
-        /* Auto-refresh bar */
-        #refresh-bar {
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.78em;
-            color: #888;
-        }
-        #refresh-bar button {
-            background: #0f3460;
-            border: 1px solid #1a4a7a;
-            color: #ccc;
-            padding: 2px 8px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 0.9em;
-        }
-        #refresh-bar button:hover { background: #1a4a7a; color: #fff; }
-
-        /* Legend */
-        .legend-item {
-            display: flex;
-            align-items: center;
-            padding: 3px 0;
-            font-size: 0.8em;
-        }
-
-        .legend-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-            flex-shrink: 0;
-        }
-
-        .legend-line {
-            width: 20px;
-            height: 2px;
-            margin-right: 8px;
-            flex-shrink: 0;
-        }
-
-        /* Shortcuts */
-        .shortcut {
-            display: flex;
-            padding: 3px 0;
-            font-size: 0.82em;
-        }
-
-        .shortcut-key {
-            background: #0f3460;
-            padding: 1px 6px;
-            border-radius: 3px;
-            margin-right: 8px;
-            font-family: monospace;
-            min-width: 20px;
-            text-align: center;
-            font-size: 0.9em;
-        }
-
-        #error {
-            color: #e94560;
-            font-size: 0.85em;
-            margin-top: 8px;
-        }
-
-        /* Zoom controls */
-        #zoom-controls {
-            position: absolute;
-            bottom: 16px;
-            right: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            z-index: 20;
-        }
-
-        #zoom-controls button {
-            width: 32px;
-            height: 32px;
-            border: 1px solid #0f3460;
-            background: rgba(22, 33, 62, 0.85);
-            color: #ccc;
-            font-size: 16px;
-            cursor: pointer;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            line-height: 1;
-            transition: background 0.15s;
-        }
-
-        #zoom-controls button:hover {
-            background: rgba(15, 52, 96, 0.95);
-            color: #fff;
-            border-color: #00d9a5;
-        }
-
-        #zoom-controls button:active {
-            background: #0f3460;
-        }
+        .status-dot-inline { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; vertical-align: middle; }
     </style>
 </head>
 <body>
@@ -448,291 +112,249 @@
         <div id="sidebar">
             <h1>Skywire Network</h1>
 
-            <!-- Auto-refresh bar -->
-            <div id="refresh-bar" style="display:none;">
-                <span id="refresh-text">Next refresh in --s</span>
-                <button id="refresh-now">Refresh</button>
+            <!-- Local Visor - shown when connected via RPC -->
+            <div class="section collapsed" id="local-visor-section" style="display:none;border-color:#00ffff;border-width:2px;">
+                <div class="section-header" onclick="toggleSection('local-visor-section')" style="background:linear-gradient(135deg,rgba(0,255,255,0.2),rgba(255,0,255,0.2));">
+                    <span class="section-title" style="color:#00ffff;">&#x2B22; Local Visor</span>
+                    <span class="section-toggle">&#9660;</span>
+                </div>
+                <div class="section-content" id="local-visor-content">
+                    <!-- Header with icon, PK, idle status and FOCUS button -->
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                        <div style="width:32px;height:32px;background:rgba(0,255,255,0.1);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:18px;">&#x2B22;</div>
+                        <div style="flex:1;min-width:0;">
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <span style="color:#00ffff;font-weight:600;font-size:0.9em;">Local Visor</span>
+                                <span id="local-visor-idle-status" style="color:#888;font-size:0.75em;">idle</span>
+                            </div>
+                            <div id="local-visor-pk" class="local-visor-pk" style="font-size:0.65em;padding:0;margin-top:2px;">-</div>
+                        </div>
+                        <button id="local-visor-focus" onclick="focusLocalVisor()" style="padding:4px 10px;background:rgba(0,255,255,0.2);color:#00ffff;border:1px solid #00ffff;border-radius:4px;cursor:pointer;font-size:0.75em;font-weight:600;white-space:nowrap;">&#9678; FOCUS</button>
+                    </div>
+
+                    <!-- SENT / RECEIVED boxes -->
+                    <div style="display:flex;gap:8px;margin-bottom:10px;">
+                        <div style="flex:1;background:rgba(0,217,165,0.1);border:1px solid rgba(0,217,165,0.3);border-radius:4px;padding:8px;">
+                            <div style="color:#888;font-size:0.7em;display:flex;align-items:center;gap:4px;">&#8593; SENT</div>
+                            <div id="local-visor-sent" style="color:#00d9a5;font-size:1.1em;font-weight:600;">0 B</div>
+                        </div>
+                        <div style="flex:1;background:rgba(0,180,216,0.1);border:1px solid rgba(0,180,216,0.3);border-radius:4px;padding:8px;">
+                            <div style="color:#888;font-size:0.7em;display:flex;align-items:center;gap:4px;">&#8595; RECEIVED</div>
+                            <div id="local-visor-recv" style="color:#00b4d8;font-size:1.1em;font-weight:600;">0 B</div>
+                        </div>
+                    </div>
+
+                    <!-- TRANSPORTS section -->
+                    <div style="margin-bottom:10px;">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                            <span style="color:#e94560;font-size:0.85em;font-weight:600;">TRANSPORTS</span>
+                            <span id="local-visor-transports" style="background:#e94560;color:#fff;font-size:0.65em;padding:1px 6px;border-radius:10px;font-weight:600;">0</span>
+                        </div>
+                        <div id="local-transport-list" style="max-height:150px;overflow-y:auto;background:rgba(0,0,0,0.2);border-radius:4px;"></div>
+                    </div>
+
+                    <!-- ROUTES section -->
+                    <div style="margin-bottom:10px;">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                            <span style="color:#e94560;font-size:0.85em;font-weight:600;">ROUTES</span>
+                            <span id="local-visor-routes" style="background:#e94560;color:#fff;font-size:0.65em;padding:1px 6px;border-radius:10px;font-weight:600;">0</span>
+                        </div>
+                        <div id="local-route-list" style="max-height:100px;overflow-y:auto;background:rgba(0,0,0,0.2);border-radius:4px;">
+                            <div style="padding:8px;color:#666;font-size:0.8em;text-align:center;">No active routes</div>
+                        </div>
+                    </div>
+
+                    <!-- CREATE TRANSPORT section -->
+                    <div style="border-top:1px solid #0f3460;padding-top:10px;">
+                        <div style="color:#e94560;font-size:0.85em;font-weight:600;margin-bottom:6px;">CREATE TRANSPORT</div>
+                        <div style="display:flex;gap:4px;align-items:stretch;margin-bottom:6px;">
+                            <input type="text" id="local-tp-remote-pk" placeholder="Remote PK" style="flex:1;min-width:0;padding:6px 8px;background:#1a1a2e;border:1px solid #0f3460;color:#eee;border-radius:4px;font-size:0.75em;font-family:monospace;">
+                            <button id="local-tp-pick-btn" style="padding:0 8px;background:#0f3460;color:#aaa;border:1px solid #0f3460;border-radius:4px;cursor:pointer;font-size:0.8em;" title="Pick from graph">&#8853;</button>
+                        </div>
+                        <div style="display:flex;gap:4px;align-items:center;">
+                            <select id="local-tp-type" style="flex:1;padding:6px;background:#1a1a2e;border:1px solid #0f3460;color:#eee;border-radius:4px;font-size:0.75em;">
+                                <option value="sudph">SUDPH</option>
+                                <option value="stcpr">STCPR</option>
+                            </select>
+                            <button id="local-tp-create-btn" style="padding:6px 12px;background:#00d9a5;color:#000;border:none;border-radius:4px;cursor:pointer;font-size:0.75em;font-weight:600;">Create</button>
+                        </div>
+                        <div id="local-tp-result" style="display:none;margin-top:6px;font-size:0.75em;padding:6px;border-radius:4px;"></div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Search -->
-            <div style="margin-bottom: 12px;">
-                <input type="text" id="search-input" placeholder="Search by public key (4+ chars)...">
-            </div>
-
-            <!-- Stats Section -->
-            <div class="section" id="section-stats">
-                <div class="section-header" onclick="toggleSection('section-stats')">
-                    <span class="section-title">Network Stats</span>
+            <!-- Visor Apps - shown when connected via RPC -->
+            <div class="section collapsed" id="section-apps" style="display:none;border-color:#9f6efc;border-width:2px;">
+                <div class="section-header" onclick="toggleSection('section-apps')" style="background:linear-gradient(135deg,rgba(159,110,252,0.15),rgba(100,100,255,0.1));">
+                    <span class="section-title" style="color:#9f6efc;">Apps</span>
                     <span class="section-toggle">&#9660;</span>
                 </div>
                 <div class="section-content">
-                    <div class="stats-grid">
-                        <div class="stat stat-full">
-                            <span class="stat-label">Transports</span>
-                            <span class="stat-value" id="stat-total-transports">-</span>
-                        </div>
-                        <div class="stat stat-full">
-                            <span class="stat-label">Visors</span>
-                            <span class="stat-value" id="stat-total-visors">-</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label" style="color:#00d9a5">Online</span>
-                            <span class="stat-value" style="color:#00d9a5" id="stat-online">-</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label" style="color:#e94560">Offline</span>
-                            <span class="stat-value" style="color:#e94560" id="stat-offline">-</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label" style="color:#ffd166">Unknown</span>
-                            <span class="stat-value" style="color:#ffd166" id="stat-unknown">-</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">STCPR</span>
-                            <span class="stat-value" style="color:#00d9a5" id="stat-stcpr">-</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">SUDPH</span>
-                            <span class="stat-value" style="color:#00b4d8" id="stat-sudph">-</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">DMSG</span>
-                            <span class="stat-value" style="color:#ffd166" id="stat-dmsg">-</span>
-                        </div>
-                    </div>
+                    <div id="apps-message" style="display:none;font-size:10px;padding:4px;border-radius:2px;margin-bottom:6px;"></div>
+                    <div id="apps-list"></div>
                 </div>
             </div>
 
-            <!-- Selected Node Info -->
-            <div class="section" id="node-info-panel">
-                <div class="section-header">
-                    <span class="section-title">Selected Visor</span>
-                    <span style="cursor:pointer;font-size:0.8em;" id="node-info-close">&#10005;</span>
-                </div>
-                <div class="section-content">
-                    <div id="node-info-pk">-</div>
-                    <div class="node-info-row">
-                        <span class="node-info-label">Status</span>
-                        <span class="node-info-value"><span id="node-info-status-dot"></span><span id="node-info-status">-</span></span>
-                    </div>
-                    <div class="node-info-row">
-                        <span class="node-info-label">Transports</span>
-                        <span class="node-info-value" id="node-info-transports">-</span>
-                    </div>
-                    <div class="node-info-row">
-                        <span class="node-info-label">Country</span>
-                        <span class="node-info-value" id="node-info-country">-</span>
-                    </div>
-                    <div class="node-info-row">
-                        <span class="node-info-label">Version</span>
-                        <span class="node-info-value" id="node-info-version">-</span>
-                    </div>
-                    <div class="node-info-row">
-                        <span class="node-info-label">STCPR</span>
-                        <span class="node-info-value" id="node-info-stcpr">-</span>
-                    </div>
-                    <div class="node-info-row">
-                        <span class="node-info-label">SUDPH</span>
-                        <span class="node-info-value" id="node-info-sudph">-</span>
-                    </div>
-                    <div class="node-info-row">
-                        <span class="node-info-label">DMSG</span>
-                        <span class="node-info-value" id="node-info-dmsg">-</span>
-                    </div>
-                    <div class="node-info-row">
-                        <span class="node-info-label">Services</span>
-                        <span class="node-info-value" id="node-info-services">-</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Local Visor Section -->
-            <div class="section" id="section-local-visor" style="display:none;">
-                <div class="section-header" onclick="toggleSection('section-local-visor')">
-                    <span class="section-title">Local Visor</span>
+            <!-- Network Ping - shown when connected via RPC -->
+            <div class="section collapsed" id="section-ping" style="display:none;border-color:#00d9a5;border-width:2px;">
+                <div class="section-header" onclick="toggleSection('section-ping')" style="background:linear-gradient(135deg,rgba(0,217,165,0.15),rgba(0,180,216,0.1));">
+                    <span class="section-title" style="color:#00d9a5;">Network Ping</span>
                     <span class="section-toggle">&#9660;</span>
                 </div>
                 <div class="section-content">
-                    <div id="local-visor-pk" class="local-visor-pk">-</div>
-                    <div class="local-visor-row">
-                        <span class="local-visor-label">Status</span>
-                        <span class="local-visor-value"><span id="local-visor-status-dot" class="status-dot-inline"></span><span id="local-visor-status">-</span></span>
+                    <div style="font-size:0.75em;color:#888;margin-bottom:6px;">Ping a remote visor via routes or DMSG</div>
+                    <div style="display:flex;gap:2px;align-items:stretch;margin-bottom:4px;">
+                        <input type="text" id="ping-pk" placeholder="Target Visor PK" style="flex:1;min-width:0;padding:5px 8px;background:#1a1a2e;border:1px solid #00d9a5;color:#eee;border-radius:2px;font-size:11px;font-family:monospace;">
+                        <button id="ping-pick-btn" style="padding:0 4px;background:#00d9a5;color:#000;border:none;border-radius:2px;cursor:pointer;font-size:9px;" title="Pick from graph">&#8853;</button>
                     </div>
-                    <div class="local-visor-row">
-                        <span class="local-visor-label">Transports</span>
-                        <span class="local-visor-value" id="local-visor-transports">-</span>
-                    </div>
-                    <div class="local-visor-row">
-                        <span class="local-visor-label">Routes</span>
-                        <span class="local-visor-value" id="local-visor-routes">-</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TPS Status Section -->
-            <div class="section" id="section-tps" style="display:none;">
-                <div class="section-header" onclick="toggleSection('section-tps')">
-                    <span class="section-title">Transport Setup</span>
-                    <span class="section-toggle">&#9660;</span>
-                </div>
-                <div class="section-content">
-                    <div class="local-visor-row">
-                        <span class="local-visor-label">Status</span>
-                        <span class="local-visor-value"><span id="tps-status-dot" class="status-dot-inline"></span><span id="tps-status">-</span></span>
-                    </div>
-                    <div class="local-visor-row" id="tps-pk-row" style="display:none;">
-                        <span class="local-visor-label">PK</span>
-                        <span class="local-visor-value" id="tps-pk" style="font-size:0.7em;word-break:break-all;">-</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Filters Section -->
-            <div class="section" id="section-filters">
-                <div class="section-header" onclick="toggleSection('section-filters')">
-                    <span class="section-title">Filters</span>
-                    <span class="section-toggle">&#9660;</span>
-                </div>
-                <div class="section-content">
-                    <div class="filter-group">
-                        <div style="font-size:0.75em;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Transport Types</div>
-                        <label class="filter-item">
-                            <input type="checkbox" id="filter-stcpr" checked>
-                            <span class="line-indicator" style="background:#00d9a5"></span>
-                            STCPR
-                        </label>
-                        <label class="filter-item">
-                            <input type="checkbox" id="filter-sudph" checked>
-                            <span class="line-indicator" style="background:#00b4d8"></span>
-                            SUDPH
-                        </label>
-                        <label class="filter-item">
-                            <input type="checkbox" id="filter-dmsg" checked>
-                            <span class="line-indicator" style="background:#ffd166"></span>
-                            DMSG
-                        </label>
-                    </div>
-                    <div class="filter-group" style="margin-top:10px;">
-                        <div style="font-size:0.75em;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Node Status</div>
-                        <label class="filter-item">
-                            <input type="checkbox" id="filter-online" checked>
-                            <span class="color-indicator" style="background:#00d9a5"></span>
-                            Online
-                        </label>
-                        <label class="filter-item">
-                            <input type="checkbox" id="filter-offline" checked>
-                            <span class="color-indicator" style="background:#e94560"></span>
-                            Offline
-                        </label>
-                        <label class="filter-item">
-                            <input type="checkbox" id="filter-unknown" checked>
-                            <span class="color-indicator" style="background:#ffd166"></span>
-                            Unknown
-                        </label>
-                    </div>
-                    <div class="filter-group" style="margin-top:10px;">
-                        <div style="font-size:0.75em;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Display</div>
-                        <label class="filter-item">
-                            <input type="checkbox" id="filter-labels">
-                            Show Labels
-                        </label>
-                        <label class="filter-item">
-                            <input type="checkbox" id="filter-services" checked>
-                            Show Services
-                        </label>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Visor List Section -->
-            <div class="section" id="section-visors">
-                <div class="section-header" onclick="toggleSection('section-visors')">
-                    <span class="section-title">Visors <span id="visor-list-count" style="color:#888;font-weight:400;font-size:0.85em"></span></span>
-                    <span class="section-toggle">&#9660;</span>
-                </div>
-                <div class="section-content" style="padding:6px;">
-                    <div id="visor-list"></div>
-                </div>
-            </div>
-
-            <!-- Legend Section -->
-            <div class="section collapsed" id="section-legend">
-                <div class="section-header" onclick="toggleSection('section-legend')">
-                    <span class="section-title">Legend</span>
-                    <span class="section-toggle">&#9660;</span>
-                </div>
-                <div class="section-content">
-                    <div class="legend-item">
-                        <div class="legend-dot" style="background:#00d9a5"></div>
-                        <span>Online</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-dot" style="background:#e94560"></div>
-                        <span>Offline</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-dot" style="background:#ffd166"></div>
-                        <span>Unknown</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-dot" style="background:#00ffff;border:2px solid #ff00ff"></div>
-                        <span>Local Visor</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-dot" style="background:#9f6efc"></div>
-                        <span>VPN Service</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-dot" style="background:#ffa500"></div>
-                        <span>Proxy Service</span>
-                    </div>
-                    <div style="margin-top:6px;">
-                        <div class="legend-item">
-                            <div class="legend-line" style="background:#00d9a5"></div>
-                            <span>STCPR</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-line" style="background:#00b4d8"></div>
-                            <span>SUDPH</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-line" style="background:#ffd166"></div>
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap;">
+                        <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#aaa;cursor:pointer;">
+                            <input type="checkbox" id="ping-use-dmsg" checked style="margin:0;">
                             <span>DMSG</span>
+                        </label>
+                        <div style="display:flex;align-items:center;gap:2px;margin-left:auto;">
+                            <label style="font-size:10px;color:#666;">Tries:</label>
+                            <input type="number" id="ping-tries" value="3" min="1" max="10" style="width:36px;padding:2px 4px;background:#1a1a2e;border:1px solid #0f3460;color:#eee;border-radius:2px;font-size:10px;text-align:center;">
                         </div>
-                        <div class="legend-item">
-                            <div class="legend-line" style="background:#00ffff;height:3px"></div>
-                            <span>Local Transport</span>
+                        <button id="ping-btn" style="padding:3px 8px;background:#00d9a5;color:#000;border:none;border-radius:2px;cursor:pointer;font-size:10px;font-weight:600;">Ping</button>
+                    </div>
+                    <div id="ping-result" style="display:none;margin-top:4px;font-size:10px;padding:4px;border-radius:2px;"></div>
+                </div>
+            </div>
+
+            <!-- Transport Setup Node - shown only when embedded TPS is running -->
+            <div class="section collapsed" id="tps-section" style="display:none;border-color:#ff6b35;border-width:2px;">
+                <div class="section-header" onclick="toggleSection('tps-section')" style="background:linear-gradient(135deg,rgba(255,107,53,0.15),rgba(255,200,0,0.1));">
+                    <span class="section-title" style="color:#ff6b35;">Transport Setup</span>
+                    <span class="section-toggle">&#9660;</span>
+                </div>
+                <div class="section-content" id="tps-content">
+                    <div class="stat"><span class="stat-label">Status</span><span class="stat-value"><span id="tps-status-dot" class="status-dot-inline"></span><span id="tps-status">-</span></span></div>
+                    <div class="stat" id="tps-pk-row" style="display:none;"><span class="stat-label">PK</span><span class="stat-value" id="tps-pk" style="font-size:0.7em;word-break:break-all;">-</span></div>
+                </div>
+            </div>
+
+            <!-- TPD Statistics -->
+            <div class="section collapsed" id="section-tpd">
+                <div class="section-header" onclick="toggleSection('section-tpd')">
+                    <span class="section-title">Transport Discovery</span>
+                    <span class="section-toggle">&#9660;</span>
+                </div>
+                <div class="section-content">
+                    <div class="stat"><span class="stat-label">Total Transports</span><span class="stat-value" id="total-transports">-</span></div>
+                    <div class="stat"><span class="stat-label">Unique Visors</span><span class="stat-value" id="total-visors">-</span></div>
+                    <div class="stat"><span class="stat-label">STCPR</span><span class="stat-value" id="count-stcpr" style="color:#00d9a5">-</span></div>
+                    <div class="stat"><span class="stat-label">SUDPH</span><span class="stat-value" id="count-sudph" style="color:#00b4d8">-</span></div>
+                    <div class="stat"><span class="stat-label">DMSG</span><span class="stat-value" id="count-dmsg" style="color:#ffd166">-</span></div>
+                    <div class="visor-list" id="visor-list"></div>
+                </div>
+            </div>
+
+            <!-- Uptime Tracker - collapsed by default -->
+            <div class="section collapsed" id="section-ut">
+                <div class="section-header" onclick="toggleSection('section-ut')">
+                    <span class="section-title">Uptime Tracker</span>
+                    <span class="section-toggle">&#9660;</span>
+                </div>
+                <div class="section-content">
+                    <div class="stat"><span class="stat-label">Online</span><span class="stat-value" id="ut-count-online" style="color:#00d9a5">-</span></div>
+                    <div class="stat"><span class="stat-label">Offline</span><span class="stat-value" id="ut-count-offline" style="color:#e94560">-</span></div>
+                    <div class="stat"><span class="stat-label">Not in UT</span><span class="stat-value" id="ut-count-unknown" style="color:#ffd166">-</span></div>
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;font-size:0.8em;color:#888;">Versions</div>
+                    <div id="version-stats"></div>
+                </div>
+            </div>
+
+            <!-- DMSG Discovery - collapsed by default -->
+            <div class="section collapsed" id="section-dmsg">
+                <div class="section-header" onclick="toggleSection('section-dmsg')" style="background:linear-gradient(135deg,rgba(159,110,252,0.15),rgba(100,100,255,0.1));">
+                    <span class="section-title" style="color:#9f6efc;">DMSG Discovery</span>
+                    <span class="section-toggle">&#9660;</span>
+                </div>
+                <div class="section-content">
+                    <div class="stat"><span class="stat-label">Servers</span><span class="stat-value" id="dmsg-server-count" style="color:#9f6efc">-</span></div>
+                    <div class="stat"><span class="stat-label">Total Sessions</span><span class="stat-value" id="dmsg-total-sessions" style="color:#9f6efc">-</span></div>
+                    <div class="stat"><span class="stat-label">Entries</span><span class="stat-value" id="dmsg-entry-count" style="color:#9f6efc">-</span></div>
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;">
+                        <div style="font-size:0.8em;color:#888;margin-bottom:4px;">Servers</div>
+                        <div id="dmsg-server-list" style="max-height:150px;overflow-y:auto;font-size:0.75em;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters & Legend - collapsed by default -->
+            <div class="section collapsed" id="section-filters">
+                <div class="section-header" onclick="toggleSection('section-filters')">
+                    <span class="section-title">Filters & Legend</span>
+                    <span class="section-toggle">&#9660;</span>
+                </div>
+                <div class="section-content">
+                    <div class="control-group">
+                        <label><input type="checkbox" id="show-stcpr" checked> Show STCPR</label>
+                        <label><input type="checkbox" id="show-sudph" checked> Show SUDPH</label>
+                        <label><input type="checkbox" id="show-dmsg" checked> Show DMSG</label>
+                        <label><input type="checkbox" id="show-dmsg-servers" checked> DMSG Servers</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="show-online" checked> Show Online</label>
+                        <label><input type="checkbox" id="show-offline"> Show Offline</label>
+                        <label><input type="checkbox" id="show-unknown"> Show Unknown</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="show-services"> Highlight Services</label>
+                        <label><input type="checkbox" id="show-flags" checked> Show Country Flags</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="toggle-physics" checked> Enable Physics</label>
+                    </div>
+                    <div class="control-group">
+                        <label><input type="checkbox" id="cluster-country" checked> Cluster by Country</label>
+                        <label><input type="checkbox" id="cluster-ip" checked> Cluster by IP Group</label>
+                    </div>
+                    <div class="control-group">
+                        <label for="version-filter">Version</label>
+                        <select id="version-filter">
+                            <option value="">All Versions</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="search">Search PK</label>
+                        <input type="text" id="search" placeholder="e.g. 027087fe">
+                    </div>
+                    <!-- Dynamic Legend -->
+                    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #0f3460;">
+                        <div style="font-size:0.8em;color:#888;margin-bottom:6px;">Legend</div>
+                        <div class="legend-item"><div class="legend-color stcpr"></div><span>STCPR (TCP)</span></div>
+                        <div class="legend-item"><div class="legend-color sudph"></div><span>SUDPH (UDP)</span></div>
+                        <div class="legend-item"><div class="legend-color dmsg"></div><span>DMSG</span></div>
+                        <div class="legend-item"><div class="legend-color" style="background:#9f6efc;"></div><span>DMSG Server</span></div>
+                        <div id="node-legend">
+                            <div class="status-item"><div class="status-dot status-online"></div><span>Online (in UT)</span></div>
+                            <div class="status-item"><div class="status-dot status-offline"></div><span>Offline (in UT)</span></div>
+                            <div class="status-item"><div class="status-dot status-unknown"></div><span>Not in UT</span></div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Shortcuts Section -->
-            <div class="section collapsed" id="section-controls">
-                <div class="section-header" onclick="toggleSection('section-controls')">
-                    <span class="section-title">Keyboard Shortcuts</span>
-                    <span class="section-toggle">&#9660;</span>
-                </div>
-                <div class="section-content">
-                    <div class="shortcut"><span class="shortcut-key">F</span><span>Fit to screen</span></div>
-                    <div class="shortcut"><span class="shortcut-key">R</span><span>Refresh data</span></div>
-                    <div class="shortcut"><span class="shortcut-key">P</span><span>Toggle physics</span></div>
-                    <div class="shortcut"><span class="shortcut-key">L</span><span>Toggle labels</span></div>
-                    <div class="shortcut"><span class="shortcut-key">Esc</span><span>Deselect</span></div>
-                    <div class="shortcut"><span class="shortcut-key">Scroll</span><span>Zoom</span></div>
-                    <div class="shortcut"><span class="shortcut-key">Drag</span><span>Pan</span></div>
-                    <div class="shortcut"><span class="shortcut-key">Click</span><span>Select node</span></div>
-                </div>
-            </div>
+            <button id="btn-fit">Fit to Screen</button>
+            <div id="cache-info"></div>
 
-            <div id="error"></div>
+            <div id="selected-info">
+                <h3>Selected Visor</h3>
+                <div id="selected-pk"></div>
+                <div id="selected-status"></div>
+                <div id="selected-version" style="color:#0f9b8e;font-size:0.85em;margin-top:4px;font-family:monospace;"></div>
+                <div id="selected-country" style="color:#888;font-size:0.85em;margin-top:4px;"></div>
+                <div id="selected-services" style="margin-top:8px;"></div>
+                <div class="stat"><span class="stat-label">Transports</span><span class="stat-value" id="selected-conn-count">-</span></div>
+                <h3 style="margin-top:10px;">Connected To</h3>
+                <div class="conn-list" id="conn-list"></div>
+            </div>
         </div>
-
+        <div id="resize-handle"></div>
         <div id="canvas-container">
-            <div id="loading">
-                <div class="spinner"></div>
-                <div>Loading Skywire Network...</div>
-            </div>
+            <div id="loading"><div class="spinner"></div><div>Loading transport data...</div></div>
             <canvas id="graph-canvas"></canvas>
             <div id="zoom-controls">
                 <button id="zoom-in" title="Zoom in">+</button>
@@ -756,6 +378,33 @@
             canvas.width = container.clientWidth;
             canvas.height = container.clientHeight;
         }
+
+        // Sidebar resize handle
+        (function() {
+            const handle = document.getElementById('resize-handle');
+            const sidebar = document.getElementById('sidebar');
+            let isResizing = false;
+
+            handle.addEventListener('mousedown', function(e) {
+                isResizing = true;
+                document.body.style.cursor = 'col-resize';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isResizing) return;
+                const newWidth = e.clientX;
+                if (newWidth >= 200 && newWidth <= 600) {
+                    sidebar.style.width = newWidth + 'px';
+                    resizeCanvas();
+                }
+            });
+
+            document.addEventListener('mouseup', function() {
+                isResizing = false;
+                document.body.style.cursor = '';
+            });
+        })();
 
         // Initialize
         async function init() {
