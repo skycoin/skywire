@@ -81,6 +81,8 @@ func (c *Canvas) StrokeCircle(x, y, radius, lineWidth float64, color string) {
 
 // Line draws a line between two points
 func (c *Canvas) Line(x1, y1, x2, y2, lineWidth float64, color string) {
+	c.ctx.Set("lineCap", "round")
+	c.ctx.Set("lineJoin", "round")
 	c.ctx.Call("beginPath")
 	c.ctx.Call("moveTo", x1, y1)
 	c.ctx.Call("lineTo", x2, y2)
@@ -92,27 +94,39 @@ func (c *Canvas) Line(x1, y1, x2, y2, lineWidth float64, color string) {
 // QuadraticCurve draws a curved line between two points (matching vis-network 'continuous' smooth)
 // Uses a control point perpendicular to the line midpoint with roundness factor
 func (c *Canvas) QuadraticCurve(x1, y1, x2, y2, lineWidth float64, color string) {
-	// Calculate midpoint
-	midX := (x1 + x2) / 2
-	midY := (y1 + y2) / 2
-
-	// Calculate perpendicular offset for curve (roundness 0.5 like JS)
+	// Calculate edge length
 	dx := x2 - x1
 	dy := y2 - y1
 	dist := dx*dx + dy*dy
-	if dist < 100 { // For very short edges, just draw a line
+
+	// For very short edges, just draw a line
+	if dist < 100 {
 		c.Line(x1, y1, x2, y2, lineWidth, color)
 		return
 	}
 
-	// Perpendicular direction matching vis-network 'continuous' smooth (roundness 0.5)
-	roundness := 0.5
-	perpX := -dy * roundness
-	perpY := dx * roundness
+	// Calculate midpoint
+	midX := (x1 + x2) / 2
+	midY := (y1 + y2) / 2
+
+	// vis-network 'continuous' smooth with roundness: 0.5
+	// This creates a gentle curve perpendicular to the line
+	// The actual offset is: perpendicular * length * roundness * 0.2 (internal scaling)
+	length := sqrt(dist)
+	// Match TypeScript vis-network: roundness 0.5 * internal factor ~0.2 = 0.1 effective
+	scaledRoundness := 0.1
+
+	// Normalize the perpendicular direction and scale by edge length and roundness
+	perpX := (-dy / length) * length * scaledRoundness
+	perpY := (dx / length) * length * scaledRoundness
 
 	// Control point
 	ctrlX := midX + perpX
 	ctrlY := midY + perpY
+
+	// Set line rendering properties for smoother appearance
+	c.ctx.Set("lineCap", "round")
+	c.ctx.Set("lineJoin", "round")
 
 	c.ctx.Call("beginPath")
 	c.ctx.Call("moveTo", x1, y1)
@@ -122,29 +136,50 @@ func (c *Canvas) QuadraticCurve(x1, y1, x2, y2, lineWidth float64, color string)
 	c.ctx.Call("stroke")
 }
 
+// sqrt returns the square root (avoiding math import in hot path)
+func sqrt(x float64) float64 {
+	if x <= 0 {
+		return 0
+	}
+	// Newton-Raphson iteration
+	z := x / 2
+	for i := 0; i < 10; i++ {
+		z = (z + x/z) / 2
+	}
+	return z
+}
+
 // DashedQuadraticCurve draws a dashed curved line between two points
 func (c *Canvas) DashedQuadraticCurve(x1, y1, x2, y2, lineWidth float64, color string, dashLength, gapLength float64) {
-	// Calculate midpoint
-	midX := (x1 + x2) / 2
-	midY := (y1 + y2) / 2
-
-	// Calculate perpendicular offset for curve
+	// Calculate edge length
 	dx := x2 - x1
 	dy := y2 - y1
 	dist := dx*dx + dy*dy
+
 	if dist < 100 {
 		c.DashedLine(x1, y1, x2, y2, lineWidth, color, dashLength, gapLength)
 		return
 	}
 
-	// Perpendicular direction
-	roundness := 0.5
-	perpX := -dy * roundness
-	perpY := dx * roundness
+	// Calculate midpoint
+	midX := (x1 + x2) / 2
+	midY := (y1 + y2) / 2
+
+	// Scaled roundness matching solid curves (vis-network roundness: 0.5)
+	length := sqrt(dist)
+	scaledRoundness := 0.1
+
+	// Normalize and scale perpendicular direction
+	perpX := (-dy / length) * length * scaledRoundness
+	perpY := (dx / length) * length * scaledRoundness
 
 	// Control point
 	ctrlX := midX + perpX
 	ctrlY := midY + perpY
+
+	// Set line rendering properties
+	c.ctx.Set("lineCap", "round")
+	c.ctx.Set("lineJoin", "round")
 
 	c.ctx.Call("beginPath")
 	c.ctx.Call("moveTo", x1, y1)
@@ -158,6 +193,8 @@ func (c *Canvas) DashedQuadraticCurve(x1, y1, x2, y2, lineWidth float64, color s
 
 // DashedLine draws a dashed line between two points
 func (c *Canvas) DashedLine(x1, y1, x2, y2, lineWidth float64, color string, dashLength, gapLength float64) {
+	c.ctx.Set("lineCap", "round")
+	c.ctx.Set("lineJoin", "round")
 	c.ctx.Call("beginPath")
 	c.ctx.Call("moveTo", x1, y1)
 	c.ctx.Call("lineTo", x2, y2)
@@ -327,5 +364,36 @@ func (c *Canvas) BezierCurve(x1, y1, x2, y2, lineWidth float64, color string) {
 	c.ctx.Set("strokeStyle", color)
 	c.ctx.Set("lineWidth", lineWidth)
 	c.SetLineCap("round")
+	c.ctx.Call("stroke")
+}
+
+// FillPolygon draws a filled polygon from a slice of points
+func (c *Canvas) FillPolygon(points []Point, color string) {
+	if len(points) < 3 {
+		return
+	}
+	c.ctx.Call("beginPath")
+	c.ctx.Call("moveTo", points[0].X, points[0].Y)
+	for i := 1; i < len(points); i++ {
+		c.ctx.Call("lineTo", points[i].X, points[i].Y)
+	}
+	c.ctx.Call("closePath")
+	c.ctx.Set("fillStyle", color)
+	c.ctx.Call("fill")
+}
+
+// StrokePolygon draws a polygon outline from a slice of points
+func (c *Canvas) StrokePolygon(points []Point, lineWidth float64, color string) {
+	if len(points) < 3 {
+		return
+	}
+	c.ctx.Call("beginPath")
+	c.ctx.Call("moveTo", points[0].X, points[0].Y)
+	for i := 1; i < len(points); i++ {
+		c.ctx.Call("lineTo", points[i].X, points[i].Y)
+	}
+	c.ctx.Call("closePath")
+	c.ctx.Set("strokeStyle", color)
+	c.ctx.Set("lineWidth", lineWidth)
 	c.ctx.Call("stroke")
 }

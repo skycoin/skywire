@@ -54,14 +54,15 @@ type Node struct {
 	DMSGCount       int
 
 	// Flags
-	IsLocalVisor      bool
-	HasServices       bool
-	IsSelected        bool
-	IsHovered         bool
-	IsPinned          bool // If true, position is fixed
-	IsDMSGServer      bool // DMSG server node
+	IsLocalVisor       bool
+	HasServices        bool
+	IsSelected         bool
+	IsHovered          bool
+	IsPinned           bool // If true, position is fixed
+	IsDMSGServer       bool // DMSG server node
 	IsRouteDestination bool // Route destination node
-	IsRouteHop        bool // Route hop node
+	IsRouteHop         bool // Route hop node
+	IsSatellite        bool // Satellite node (unknown country, orbiting)
 
 	// DMSG server specific
 	DMSGSessions int
@@ -69,6 +70,45 @@ type Node struct {
 
 	// IP Group for clustering
 	IPGroup int
+
+	// Mass for physics simulation (default 1)
+	Mass float64
+}
+
+// PhysicsNode interface implementation for Node
+
+// GetID returns the unique identifier for this node
+func (n *Node) GetID() string {
+	return n.ID
+}
+
+// GetPosition returns the current X, Y position
+func (n *Node) GetPosition() (float64, float64) {
+	return n.X, n.Y
+}
+
+// SetPosition sets the X, Y position
+func (n *Node) SetPosition(x, y float64) {
+	n.X = x
+	n.Y = y
+}
+
+// GetMass returns the node's mass (default 1)
+func (n *Node) GetMass() float64 {
+	if n.Mass <= 0 {
+		return 1.0
+	}
+	return n.Mass
+}
+
+// GetSize returns the node's radius/size
+func (n *Node) GetSize() float64 {
+	return n.Size
+}
+
+// IsFixed returns whether the node's position is fixed
+func (n *Node) IsFixed() (fixedX, fixedY bool) {
+	return n.IsPinned, n.IsPinned
 }
 
 // Edge represents a transport between two visors
@@ -84,6 +124,37 @@ type Edge struct {
 	IsRoutePath      bool // Route path edge
 	IsLocalOnly      bool // Local transport not in TPD
 	IsLocalEdge      bool // Edge involving local visor
+
+	// Length for physics spring (0 for default)
+	Length float64
+}
+
+// PhysicsEdge interface implementation for Edge
+
+// GetID returns the unique identifier for this edge
+func (e *Edge) GetID() string {
+	return e.ID
+}
+
+// GetFromID returns the source node ID
+func (e *Edge) GetFromID() string {
+	return e.From
+}
+
+// GetToID returns the target node ID
+func (e *Edge) GetToID() string {
+	return e.To
+}
+
+// GetLength returns the desired edge length
+func (e *Edge) GetLength() float64 {
+	return e.Length
+}
+
+// IsConnected returns whether both endpoints exist
+// Note: requires graph context - this is a simplified version
+func (e *Edge) IsConnected() bool {
+	return e.From != "" && e.To != "" && e.From != e.To
 }
 
 // Graph holds all nodes and edges
@@ -283,9 +354,9 @@ func (v *View) Zoom(delta float64, sx, sy float64) {
 	oldScale := v.Scale
 	v.Scale *= math.Pow(1.1, delta)
 
-	// Clamp scale
-	if v.Scale < 0.1 {
-		v.Scale = 0.1
+	// Clamp scale - allow zooming out very far (matching TypeScript vis-network behavior)
+	if v.Scale < 0.001 {
+		v.Scale = 0.001
 	}
 	if v.Scale > 10.0 {
 		v.Scale = 10.0
@@ -319,9 +390,9 @@ func (v *View) FitToGraph(g *Graph, padding float64) {
 	scaleY := v.Height / graphHeight
 	v.Scale = math.Min(scaleX, scaleY) * 0.9
 
-	// Clamp
-	if v.Scale < 0.1 {
-		v.Scale = 0.1
+	// Clamp - allow very small scale for large graphs
+	if v.Scale < 0.001 {
+		v.Scale = 0.001
 	}
 	if v.Scale > 10.0 {
 		v.Scale = 10.0
@@ -348,16 +419,17 @@ type RenderOptions struct {
 	HoveredNode       *Node
 }
 
-// NewRenderOptions creates default render options (all visible like JS version)
+// NewRenderOptions creates default render options (matching TypeScript version)
 func NewRenderOptions() *RenderOptions {
 	return &RenderOptions{
-		ShowSTCPR:   true,
-		ShowSUDPH:   true,
-		ShowDMSG:    true,
-		ShowOnline:  true,
-		ShowOffline: true,
-		ShowUnknown: true,
-		ShowLabels:  false, // Labels off by default like JS (need to zoom in or toggle)
+		ShowSTCPR:         true,
+		ShowSUDPH:         true,
+		ShowDMSG:          true,
+		ShowOnline:        true,
+		ShowOffline:       false, // Hidden by default like TypeScript
+		ShowUnknown:       false, // Hidden by default like TypeScript
+		ShowLabels:        false, // Labels off by default
+		HighlightServices: false, // Off by default like TypeScript
 	}
 }
 
