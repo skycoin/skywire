@@ -347,3 +347,431 @@ POST /statuses
 - 401 Unauthorized (Invalid signature/nonce).
 - 408 Request Timeout (Timed out).
 - 500 Internal Server Error (Server error).
+
+---
+
+## Extended Endpoints
+
+The following endpoints extend the core Transport Discovery functionality with network visibility, uptime tracking, and quality-of-service metrics.
+
+### GET All Transports
+
+Returns all registered public transports. This endpoint provides the core transport registry data only, without QoS metrics.
+
+**Request:**
+
+```
+GET /all-transports
+GET /all-transports?selfTransports=hide
+```
+
+**Query Parameters:**
+
+- `selfTransports` (optional): Set to `hide` to exclude transports where both edges are the same visor.
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    [
+        {
+            "t_id": "<transport-id>",
+            "edges": [
+                "<public-key-1>",
+                "<public-key-2>"
+            ],
+            "type": "stcpr",
+            "public": true
+        }
+    ]
+    ```
+
+### GET All Transports Stats
+
+Returns aggregate statistics about all transports.
+
+**Request:**
+
+```
+GET /all-transports/stats
+```
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    {
+        "total_transports": 1500,
+        "by_type": {
+            "stcpr": 450,
+            "sudph": 1050
+        },
+        "unique_visors": 320
+    }
+    ```
+
+### GET Per-Key Stats
+
+Returns transport counts per visor public key.
+
+**Request:**
+
+```
+GET /all-transports/per-key-stats
+```
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    {
+        "<public-key-1>": {
+            "total": 15,
+            "stcpr": 2,
+            "sudph": 13
+        },
+        "<public-key-2>": {
+            "total": 8,
+            "stcpr": 1,
+            "sudph": 7
+        }
+    }
+    ```
+
+---
+
+## Uptime Tracking Integration
+
+The Transport Discovery integrates with uptime tracking to provide visor availability information. This endpoint mirrors the Uptime Tracker's data format for consistency.
+
+### GET Uptimes
+
+Returns visor uptime and online status. This endpoint caches and serves uptime tracker data, providing a unified view of visor availability alongside transport data.
+
+**Note:** This endpoint does NOT include QoS metrics (bandwidth/latency). For QoS data, use the `/metrics` endpoints.
+
+**Request:**
+
+```
+GET /uptimes
+```
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    [
+        {
+            "pk": "<public-key>",
+            "on": true,
+            "version": "v1.3.34",
+            "daily": {
+                "2024-02-19": "95.50",
+                "2024-02-20": "100.00",
+                "2024-02-21": "87.25"
+            }
+        }
+    ]
+    ```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pk` | string | Visor public key |
+| `on` | boolean | Current online status |
+| `version` | string | Skywire version running on the visor |
+| `daily` | object | Map of date (YYYY-MM-DD) to uptime percentage |
+
+---
+
+## Quality of Service (QoS) Metrics
+
+QoS metrics (bandwidth and latency) are served from dedicated endpoints, separate from core transport data. This separation ensures that the core transport registry remains lightweight and that QoS data can be queried independently.
+
+### Bandwidth Metrics
+
+Bandwidth is measured in bytes and reported by each transport edge. The Transport Discovery aggregates bandwidth data at both transport and visor levels.
+
+#### GET Transport Bandwidth
+
+Returns historical bandwidth for a specific transport.
+
+**Request:**
+
+```
+GET /bandwidth/transport/{id}
+GET /bandwidth/transport/{id}?period=daily&limit=7
+```
+
+**Query Parameters:**
+
+- `period` (optional): Aggregation period. Values: `daily` (default), `hourly`.
+- `limit` (optional): Number of periods to return. Default: 7.
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    [
+        {
+            "date": "2024-02-21",
+            "bandwidth": 1073741824
+        },
+        {
+            "date": "2024-02-20",
+            "bandwidth": 987654321
+        }
+    ]
+    ```
+
+#### GET Visor Bandwidth
+
+Returns aggregated bandwidth for all transports belonging to a visor.
+
+**Request:**
+
+```
+GET /bandwidth/visor/{pk}
+GET /bandwidth/visor/{pk}?period=daily&limit=7
+```
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    [
+        {
+            "date": "2024-02-21",
+            "bandwidth": 5368709120
+        }
+    ]
+    ```
+
+### Transport Metrics
+
+The `/metrics` endpoint provides detailed QoS metrics (bandwidth and latency) for all transports, organized by reporting visor.
+
+#### GET All Transport Metrics
+
+Returns QoS metrics for all transports, organized by the reporting visor's public key. Each visor reports metrics for its own perspective of each transport.
+
+**Request:**
+
+```
+GET /metrics
+```
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    {
+        "<visor-pk-1>": {
+            "transports": {
+                "<transport-id-1>": {
+                    "bandwidth": {
+                        "sent": 536870912,
+                        "recv": 268435456,
+                        "total": 805306368
+                    },
+                    "latency": {
+                        "avg_ms": 45.2,
+                        "min_ms": 12.0,
+                        "max_ms": 120.5
+                    },
+                    "updated": "2024-02-21T15:30:00Z"
+                },
+                "<transport-id-2>": {
+                    "bandwidth": {
+                        "sent": 134217728,
+                        "recv": 67108864,
+                        "total": 201326592
+                    },
+                    "latency": {
+                        "avg_ms": 28.7,
+                        "min_ms": 8.0,
+                        "max_ms": 85.0
+                    },
+                    "updated": "2024-02-21T15:28:00Z"
+                }
+            }
+        },
+        "<visor-pk-2>": {
+            "transports": {
+                "<transport-id-1>": {
+                    "bandwidth": {
+                        "sent": 268435456,
+                        "recv": 536870912,
+                        "total": 805306368
+                    },
+                    "latency": {
+                        "avg_ms": 44.8,
+                        "min_ms": 11.5,
+                        "max_ms": 118.0
+                    },
+                    "updated": "2024-02-21T15:30:00Z"
+                }
+            }
+        }
+    }
+    ```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `<visor-pk>` | object | Metrics reported by this visor |
+| `transports` | object | Map of transport ID to metrics |
+| `bandwidth.sent` | integer | Bytes sent over this transport |
+| `bandwidth.recv` | integer | Bytes received over this transport |
+| `bandwidth.total` | integer | Total bytes (sent + recv) |
+| `latency.avg_ms` | number | Average round-trip latency in milliseconds |
+| `latency.min_ms` | number | Minimum observed latency |
+| `latency.max_ms` | number | Maximum observed latency |
+| `updated` | string | ISO 8601 timestamp of last metric update |
+
+#### GET Visor Transport Metrics
+
+Returns QoS metrics for all transports belonging to a specific visor.
+
+**Request:**
+
+```
+GET /metrics/visor/{pk}
+```
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    {
+        "pk": "<visor-pk>",
+        "transports": {
+            "<transport-id-1>": {
+                "bandwidth": {
+                    "sent": 536870912,
+                    "recv": 268435456,
+                    "total": 805306368
+                },
+                "latency": {
+                    "avg_ms": 45.2,
+                    "min_ms": 12.0,
+                    "max_ms": 120.5
+                },
+                "updated": "2024-02-21T15:30:00Z"
+            }
+        }
+    }
+    ```
+
+#### POST Report Metrics
+
+Allows a visor to report QoS metrics for its transports. This endpoint is authenticated.
+
+**Request:**
+
+```
+POST /metrics
+```
+
+**Headers:**
+
+```
+SW-Public: <public-key>
+SW-Nonce: <nonce>
+SW-Sig: <signature>
+```
+
+**Body:**
+
+```json
+{
+    "transports": {
+        "<transport-id-1>": {
+            "bandwidth": {
+                "sent": 536870912,
+                "recv": 268435456
+            },
+            "latency": {
+                "avg_ms": 45.2,
+                "samples": 100
+            }
+        }
+    }
+}
+```
+
+**Responses:**
+
+- 200 OK (Success).
+- 400 Bad Request (Malformed request).
+- 401 Unauthorized (Invalid signature/nonce).
+- 500 Internal Server Error (Server error).
+
+---
+
+## Bandwidth Verification (Future)
+
+A future enhancement will add bandwidth verification capabilities. This will allow cross-referencing bandwidth reports from both edges of a transport to detect discrepancies.
+
+### Design Considerations
+
+1. **Dual Reporting**: Both edges of a transport report their bandwidth independently.
+2. **Cross-Validation**: The Transport Discovery can compare reports from both edges.
+3. **Discrepancy Detection**: Significant differences in reported bandwidth may indicate:
+   - Measurement errors
+   - Network issues (packet loss)
+   - Potential manipulation
+
+### Verification Endpoint (Proposed)
+
+```
+GET /metrics/verify/{transport-id}
+```
+
+**Response:**
+
+```json
+{
+    "transport_id": "<transport-id>",
+    "edge_a": {
+        "pk": "<public-key-1>",
+        "reported_sent": 536870912,
+        "reported_recv": 268435456
+    },
+    "edge_b": {
+        "pk": "<public-key-2>",
+        "reported_sent": 268435456,
+        "reported_recv": 536870912
+    },
+    "verification": {
+        "status": "consistent",
+        "discrepancy_percent": 0.5
+    }
+}
+```
+
+---
+
+## Endpoint Summary
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/security/nonces/{pk}` | GET | No | Get next expected nonce |
+| `/transports/id:{id}` | GET | Yes | Get transport by ID |
+| `/transports/edge:{pk}` | GET | Yes | Get transports by edge |
+| `/transports/` | POST | Yes | Register transport(s) |
+| `/transports/id:{id}` | DELETE | Yes | Delete a transport |
+| `/transports/delete-batch` | POST | Yes | Delete multiple transports |
+| `/statuses` | POST | Yes | **Deprecated** - Returns 410 Gone |
+| `/all-transports` | GET | No | Get all transports (no QoS) |
+| `/all-transports/stats` | GET | No | Get aggregate stats |
+| `/all-transports/per-key-stats` | GET | No | Get per-visor stats |
+| `/uptimes` | GET | No | Get visor uptimes (no QoS) |
+| `/bandwidth/transport/{id}` | GET | No | Get transport bandwidth history |
+| `/bandwidth/visor/{pk}` | GET | No | Get visor bandwidth history |
+| `/metrics` | GET | No | Get all QoS metrics |
+| `/metrics` | POST | Yes | Report QoS metrics |
+| `/metrics/visor/{pk}` | GET | No | Get visor QoS metrics |
+| `/health` | GET | No | Health check |
