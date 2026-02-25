@@ -421,6 +421,7 @@ func server(e error) {
 				l += "Error fetching uptime tracker stats"
 			}
 			l += "</pre>"
+			l += "<p><a href='/stats/version-history'>View Version History Graph</a></p>"
 
 			// Architecture Stats
 			l += "<h2><a href='/stats/arch'>Architecture Statistics</a></h2>"
@@ -476,25 +477,29 @@ func server(e error) {
 
 			// Memory (Disk) Stats
 			l += "<h2><a href='/stats/mem'>Storage Statistics</a></h2>"
-			l += "<pre>"
 			memStats, err := script.File(tempStatsPath + "/mem.txt").String()
 			if err == nil {
+				memItems := ParseFrequencyStats(memStats)
+				l += GeneratePieChartHTML(memItems, 15)
+				l += "<pre>"
 				l += memStats
+				l += "</pre>"
 			} else {
-				l += "Error loading storage stats"
+				l += "<pre>Error loading storage stats</pre>"
 			}
-			l += "</pre>"
 
 			// RAM Stats
 			l += "<h2><a href='/stats/ram'>RAM Statistics</a></h2>"
-			l += "<pre>"
 			ramStats, err := script.File(tempStatsPath + "/ram.txt").String()
 			if err == nil {
+				ramItems := ParseFrequencyStats(ramStats)
+				l += GeneratePieChartHTML(ramItems, 15)
+				l += "<pre>"
 				l += ramStats
+				l += "</pre>"
 			} else {
-				l += "Error loading RAM stats"
+				l += "<pre>Error loading RAM stats</pre>"
 			}
-			l += "</pre>"
 
 			// Country Stats - Unique IPs
 			l += "<h2><a href='/stats/country/unique'>Country Statistics (Unique IPs)</a></h2>"
@@ -523,6 +528,46 @@ func server(e error) {
 				l += "<pre>Error loading country stats (full)</pre>"
 			}
 			l += "<p><a href='/stats/country/full/json'>View as JSON</a></p>"
+
+			l += "<br>" + htmltoplink
+			l += "</body></html>"
+
+			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+		})
+
+		// Version history chart route
+		r1.GET("/stats/version-history", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+			c.Writer.WriteHeader(http.StatusOK)
+
+			l := "<html><head><title>Version History</title>"
+			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
+			l += "</head>"
+			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
+			l += "<a id='top'></a>"
+			l += navlinks
+			l += "<h1>Version Distribution History</h1>"
+			l += "<p>Shows the count of visors per version that achieved ≥75% uptime on each day.</p>"
+
+			histDir := filepath.Join(wd, "hist")
+			history, err := ParseHistoricUptimeData(histDir, 75.0)
+			if err != nil {
+				l += fmt.Sprintf("<p>Error loading historic data: %v</p>", err)
+			} else if len(history) == 0 {
+				l += "<p>No historic data available</p>"
+			} else {
+				// Generate chart (responsive width)
+				chartWidth := 800
+				chartHeight := 300
+				l += GenerateVersionHistoryChartHTML(history, chartWidth, chartHeight)
+
+				// Show latest data summary
+				if len(history) > 0 {
+					latest := history[len(history)-1]
+					l += fmt.Sprintf("<h3>Latest: %s (Total: %d visors ≥75%% uptime)</h3>", latest.Date, latest.Total)
+				}
+			}
 
 			l += "<br>" + htmltoplink
 			l += "</body></html>"
