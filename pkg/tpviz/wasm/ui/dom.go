@@ -7,6 +7,20 @@ import (
 )
 
 var doc = js.Global().Get("document")
+var console = js.Global().Get("console")
+
+// consoleLog logs a message to the browser console
+func consoleLog(msg string) {
+	console.Call("log", "[tpviz]", msg)
+}
+
+// boolStr converts a bool to "true" or "false" string
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
 
 // getElement returns a DOM element by ID, or js.Null if not found
 func getElement(id string) js.Value {

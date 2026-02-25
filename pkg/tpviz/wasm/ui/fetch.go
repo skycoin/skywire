@@ -4,8 +4,10 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // TransportData represents a transport from the API
@@ -88,6 +90,60 @@ type IPGroupsData struct {
 	Enabled     bool           `json:"enabled"`
 	TotalGroups int            `json:"total_groups"`
 	Groups      map[string]int `json:"groups"` // pk -> group number
+}
+
+// AppState represents an app from /api/apps
+type AppState struct {
+	Name           string   `json:"name"`
+	Status         int      `json:"status"` // 0=stopped, 1=running, 2=errored, 3=starting
+	DetailedStatus string   `json:"detailed_status"`
+	AutoStart      bool     `json:"auto_start"`
+	Port           int      `json:"port"`
+	Args           []string `json:"args,omitempty"`
+}
+
+// PingResponse represents the /api/ping response (matching TypeScript types.ts PingResponse)
+type PingResponse struct {
+	Status     string    `json:"status"`      // "success", "timeout", "error"
+	Error      string    `json:"error,omitempty"`
+	Mode       string    `json:"mode,omitempty"`
+	Latencies  []float64 `json:"latencies,omitempty"`
+	AvgMs      float64   `json:"avg_ms,omitempty"`
+	MinMs      float64   `json:"min_ms,omitempty"`
+	MaxMs      float64   `json:"max_ms,omitempty"`
+	PacketLoss float64   `json:"packet_loss,omitempty"`
+}
+
+// AddTransportRequest represents a request to add a transport
+type AddTransportRequest struct {
+	RemotePK string `json:"remote_pk"`
+	Type     string `json:"type"`
+}
+
+// AddTransportResponse represents the response from add transport
+type AddTransportResponse struct {
+	ID       string `json:"id,omitempty"`
+	Type     string `json:"type"`
+	LocalPK  string `json:"local_pk"`
+	RemotePK string `json:"remote_pk"`
+	Error    string `json:"error,omitempty"`
+}
+
+// AppControlRequest represents a request to start/stop an app
+type AppControlRequest struct {
+	Name string `json:"name"`
+}
+
+// AppAutoStartRequest represents a request to set auto-start
+type AppAutoStartRequest struct {
+	Name      string `json:"name"`
+	AutoStart bool   `json:"auto_start"`
+}
+
+// AppSetPKRequest represents a request to set server PK for an app
+type AppSetPKRequest struct {
+	Name string `json:"name"`
+	PK   string `json:"pk"`
 }
 
 // DataFetcher fetches data from the API
@@ -182,6 +238,124 @@ func (f *DataFetcher) FetchIPGroups() (*IPGroupsData, error) {
 		return nil, err
 	}
 	return &data, nil
+}
+
+// FetchApps fetches running apps from the local visor
+func (f *DataFetcher) FetchApps() ([]AppState, error) {
+	var apps []AppState
+	err := fetchJSON("/api/apps", &apps)
+	return apps, err
+}
+
+// Ping performs a network ping to a remote visor (matching TypeScript ping.ts performPing)
+func (f *DataFetcher) Ping(pk, mode string, tries int, localRoute bool) (*PingResponse, error) {
+	url := "/api/ping?pk=" + pk + "&mode=" + mode + "&tries=" + itoa(tries)
+	if mode == "route" && localRoute {
+		url += "&local=true"
+	}
+	var resp PingResponse
+	err := fetchJSON(url, &resp)
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// postJSON posts JSON data to a URL and returns the response
+func postJSON(url string, body interface{}, target interface{}) error {
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Post(url, "application/json", strings.NewReader(string(jsonBody)))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(respBody, target)
+}
+
+// LocalAddTransport creates a transport from the local visor (matching TypeScript tps.ts localCreateTransport)
+func (f *DataFetcher) LocalAddTransport(remotePK, tpType string) (*AddTransportResponse, error) {
+	var resp AddTransportResponse
+	err := postJSON("/api/local/add-transport", AddTransportRequest{
+		RemotePK: remotePK,
+		Type:     tpType,
+	}, &resp)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("%s", resp.Error)
+	}
+	return &resp, nil
+}
+
+// StartApp starts an application (matching TypeScript apps.ts startApp)
+func (f *DataFetcher) StartApp(name string) error {
+	var resp struct {
+		Error string `json:"error,omitempty"`
+	}
+	err := postJSON("/api/apps/start", AppControlRequest{Name: name}, &resp)
+	if err != nil {
+		return err
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("%s", resp.Error)
+	}
+	return nil
+}
+
+// StopApp stops an application (matching TypeScript apps.ts stopApp)
+func (f *DataFetcher) StopApp(name string) error {
+	var resp struct {
+		Error string `json:"error,omitempty"`
+	}
+	err := postJSON("/api/apps/stop", AppControlRequest{Name: name}, &resp)
+	if err != nil {
+		return err
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("%s", resp.Error)
+	}
+	return nil
+}
+
+// SetAppAutoStart sets the auto-start flag for an app (matching TypeScript apps.ts toggleAutoStart)
+func (f *DataFetcher) SetAppAutoStart(name string, autoStart bool) error {
+	var resp struct {
+		Error string `json:"error,omitempty"`
+	}
+	err := postJSON("/api/apps/autostart", AppAutoStartRequest{Name: name, AutoStart: autoStart}, &resp)
+	if err != nil {
+		return err
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("%s", resp.Error)
+	}
+	return nil
+}
+
+// SetAppPK sets the server PK for an app (matching TypeScript apps.ts setAppPK)
+func (f *DataFetcher) SetAppPK(name, pk string) error {
+	var resp struct {
+		Error string `json:"error,omitempty"`
+	}
+	err := postJSON("/api/apps/set-pk", AppSetPKRequest{Name: name, PK: pk}, &resp)
+	if err != nil {
+		return err
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("%s", resp.Error)
+	}
+	return nil
 }
 
 // ProcessTransports converts transport data into graph nodes and edges
