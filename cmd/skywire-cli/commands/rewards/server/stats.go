@@ -501,7 +501,7 @@ func ParseHistoricUptimeData(histDir string, minUptime float64) ([]VersionHistor
 	dateVersionCounts := make(map[string]map[string]int)
 
 	for _, file := range files {
-		data, err := os.ReadFile(file)
+		data, err := os.ReadFile(file) //nolint:gosec
 		if err != nil {
 			continue
 		}
@@ -614,8 +614,17 @@ func compareVersions(a, b string) int {
 	partsB := strings.Split(b, ".")
 
 	for i := 0; i < len(partsA) && i < len(partsB); i++ {
-		numA, _ := strconv.Atoi(partsA[i])
-		numB, _ := strconv.Atoi(partsB[i])
+		numA, errA := strconv.Atoi(partsA[i])
+		numB, errB := strconv.Atoi(partsB[i])
+		if errA != nil || errB != nil {
+			// If parsing fails, compare as strings
+			if partsA[i] < partsB[i] {
+				return -1
+			} else if partsA[i] > partsB[i] {
+				return 1
+			}
+			continue
+		}
 		if numA != numB {
 			return numA - numB
 		}
