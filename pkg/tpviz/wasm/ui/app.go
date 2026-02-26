@@ -282,34 +282,59 @@ func (a *App) setupSidebarCallbacks() {
 	a.showDMSGServers = GetChecked("show-dmsg-servers")
 	a.showFlags = GetChecked("show-flags")
 
-	// View toggle buttons (Globe/Flat)
-	a.jsCallbacks = append(a.jsCallbacks, OnEvent("view-globe", "click", func() {
-		a.globeActive = true
-		if a.globeRenderer != nil {
-			a.globeRenderer.SetActive(true)
-		}
+	// View toggle buttons (Voronoi/Globe/Flat)
+	clearViewButtons := func() {
+		viewVoronoiBtn := getElement("view-voronoi")
 		viewGlobeBtn := getElement("view-globe")
 		viewFlatBtn := getElement("view-flat")
+		if !viewVoronoiBtn.IsNull() {
+			viewVoronoiBtn.Get("classList").Call("remove", "active")
+		}
 		if !viewGlobeBtn.IsNull() {
-			viewGlobeBtn.Get("classList").Call("add", "active")
+			viewGlobeBtn.Get("classList").Call("remove", "active")
 		}
 		if !viewFlatBtn.IsNull() {
 			viewFlatBtn.Get("classList").Call("remove", "active")
 		}
+	}
+
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("view-voronoi", "click", func() {
+		clearViewButtons()
+		viewVoronoiBtn := getElement("view-voronoi")
+		if !viewVoronoiBtn.IsNull() {
+			viewVoronoiBtn.Get("classList").Call("add", "active")
+		}
+		a.globeActive = true
+		if a.globeRenderer != nil {
+			a.globeRenderer.SetActive(true)
+			a.globeRenderer.SetVoronoiMode(true)
+		}
 		a.needsRedraw = true
 	}))
-	a.jsCallbacks = append(a.jsCallbacks, OnEvent("view-flat", "click", func() {
-		a.globeActive = false
-		if a.globeRenderer != nil {
-			a.globeRenderer.SetActive(false)
-		}
+
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("view-globe", "click", func() {
+		clearViewButtons()
 		viewGlobeBtn := getElement("view-globe")
+		if !viewGlobeBtn.IsNull() {
+			viewGlobeBtn.Get("classList").Call("add", "active")
+		}
+		a.globeActive = true
+		if a.globeRenderer != nil {
+			a.globeRenderer.SetActive(true)
+			a.globeRenderer.SetVoronoiMode(false)
+		}
+		a.needsRedraw = true
+	}))
+
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("view-flat", "click", func() {
+		clearViewButtons()
 		viewFlatBtn := getElement("view-flat")
 		if !viewFlatBtn.IsNull() {
 			viewFlatBtn.Get("classList").Call("add", "active")
 		}
-		if !viewGlobeBtn.IsNull() {
-			viewGlobeBtn.Get("classList").Call("remove", "active")
+		a.globeActive = false
+		if a.globeRenderer != nil {
+			a.globeRenderer.SetActive(false)
 		}
 		a.needsRedraw = true
 	}))

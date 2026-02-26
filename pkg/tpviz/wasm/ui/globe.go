@@ -17,6 +17,11 @@ type GlobeRenderer struct {
 
 	// Cached node positions on sphere (lat, lon in radians)
 	nodeGeoPos map[string]GeoPosition
+
+	// Voronoi mode: nodes evenly distributed on sphere
+	voronoiMode bool
+	// Node 3D positions (used in Voronoi mode)
+	nodePos3D map[string]Vec3
 }
 
 // GlobeRotation holds the current rotation angles
@@ -31,9 +36,37 @@ type GeoPosition struct {
 	Lat, Lon float64
 }
 
+// Vec3 holds a 3D vector
+type Vec3 struct {
+	X, Y, Z float64
+}
+
+// Normalize normalizes the vector to unit length
+func (v Vec3) Normalize() Vec3 {
+	length := math.Sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
+	if length == 0 {
+		return v
+	}
+	return Vec3{v.X / length, v.Y / length, v.Z / length}
+}
+
+// Scale scales the vector by a scalar
+func (v Vec3) Scale(s float64) Vec3 {
+	return Vec3{v.X * s, v.Y * s, v.Z * s}
+}
+
 // CountryCoord holds approximate country centroid coordinates
 type CountryCoord struct {
 	Lat, Lon float64
+}
+
+// Country colors for Voronoi regions
+var countryColors = map[string]string{
+	"US": "#1e90ff", "CA": "#dc143c", "MX": "#006400", "BR": "#ffd700", "AR": "#87ceeb",
+	"GB": "#4169e1", "DE": "#000000", "FR": "#00008b", "ES": "#ff4500", "IT": "#228b22",
+	"NL": "#ff8c00", "BE": "#8b0000", "CH": "#ff0000", "AT": "#dc143c", "PL": "#ffffff",
+	"RU": "#0000cd", "UA": "#ffd700", "CN": "#ff0000", "JP": "#ff69b4", "KR": "#4169e1",
+	"IN": "#ff8c00", "AU": "#006400", "ZA": "#228b22", "SE": "#ffd700", "NO": "#ff0000",
 }
 
 // Country coordinates (lat, lon in degrees) - approximate centers
@@ -104,56 +137,95 @@ var countryCoords = map[string]CountryCoord{
 	"EE": {58.5953, 25.0136},
 }
 
-// Simplified continent outlines (lon, lat pairs in degrees)
-// These are rough polygons for visual effect
+// Continent outlines (lon, lat pairs in degrees) - more detailed for accuracy
 var continentOutlines = [][]Point{
 	// North America
 	{
-		{-168, 65}, {-140, 70}, {-130, 72}, {-100, 73}, {-85, 70}, {-75, 60},
-		{-55, 50}, {-67, 45}, {-70, 43}, {-75, 35}, {-80, 25}, {-90, 20},
-		{-100, 20}, {-105, 22}, {-117, 32}, {-125, 40}, {-125, 48}, {-135, 55},
-		{-150, 60}, {-165, 65}, {-168, 65},
+		{-168, 66}, {-162, 70}, {-155, 71}, {-140, 70}, {-130, 69}, {-125, 70},
+		{-110, 69}, {-95, 69}, {-85, 67}, {-80, 64}, {-68, 60}, {-66, 50}, {-70, 46},
+		{-70, 43}, {-75, 40}, {-75, 35}, {-82, 29}, {-81, 25}, {-88, 30}, {-97, 26},
+		{-97, 22}, {-106, 23}, {-112, 29}, {-117, 32}, {-120, 34}, {-122, 37},
+		{-124, 40}, {-124, 44}, {-123, 48}, {-130, 55}, {-140, 60}, {-147, 61},
+		{-153, 58}, {-160, 58}, {-165, 62}, {-168, 66},
+	},
+	// Greenland
+	{
+		{-44, 60}, {-42, 65}, {-35, 68}, {-25, 72}, {-18, 76}, {-20, 80},
+		{-35, 83}, {-50, 82}, {-55, 78}, {-60, 75}, {-52, 70}, {-44, 62}, {-44, 60},
 	},
 	// South America
 	{
-		{-80, 10}, {-60, 5}, {-35, -5}, {-35, -20}, {-40, -23}, {-45, -23},
-		{-50, -25}, {-55, -30}, {-58, -38}, {-65, -42}, {-68, -52}, {-75, -50},
-		{-73, -40}, {-70, -30}, {-70, -18}, {-75, -5}, {-80, 0}, {-80, 10},
+		{-80, 9}, {-75, 11}, {-72, 12}, {-62, 10}, {-52, 4}, {-50, 0}, {-50, -3},
+		{-45, -3}, {-41, -3}, {-38, -5}, {-35, -8}, {-35, -15}, {-38, -18}, {-40, -22},
+		{-48, -26}, {-53, -28}, {-55, -32}, {-58, -36}, {-62, -38}, {-65, -42},
+		{-68, -48}, {-74, -52}, {-70, -55}, {-68, -52}, {-72, -46}, {-75, -42},
+		{-72, -35}, {-70, -30}, {-70, -22}, {-75, -15}, {-81, -5}, {-80, 0}, {-80, 9},
 	},
 	// Europe
 	{
-		{-10, 36}, {-10, 44}, {-5, 48}, {0, 50}, {5, 51}, {10, 54}, {15, 55},
-		{25, 55}, {30, 60}, {28, 70}, {20, 70}, {10, 62}, {5, 60}, {-5, 58},
-		{-10, 50}, {-10, 36},
+		{-10, 36}, {-6, 37}, {-6, 43}, {-2, 43}, {3, 43}, {3, 47}, {-4, 48},
+		{-5, 52}, {0, 51}, {5, 52}, {8, 54}, {12, 54}, {14, 55}, {20, 55}, {24, 55},
+		{28, 58}, {30, 60}, {28, 64}, {25, 68}, {20, 70}, {15, 68}, {10, 63},
+		{5, 62}, {0, 58}, {-5, 56}, {-10, 52}, {-10, 46}, {-10, 36},
 	},
 	// Africa
 	{
-		{-17, 15}, {-15, 28}, {-5, 36}, {10, 37}, {25, 32}, {35, 30}, {40, 12},
-		{50, 12}, {50, 0}, {42, -12}, {35, -22}, {28, -33}, {18, -35}, {15, -30},
-		{12, -17}, {10, -5}, {0, 5}, {-5, 5}, {-17, 15},
+		{-17, 21}, {-17, 28}, {-12, 33}, {-5, 36}, {0, 36}, {10, 37}, {20, 32},
+		{25, 32}, {32, 31}, {35, 30}, {38, 22}, {43, 12}, {51, 11}, {51, 3},
+		{42, -1}, {40, -11}, {35, -20}, {32, -26}, {28, -33}, {20, -35}, {18, -32},
+		{15, -27}, {12, -18}, {10, -6}, {5, 4}, {1, 6}, {-5, 5}, {-10, 8},
+		{-15, 11}, {-17, 15}, {-17, 21},
 	},
-	// Asia
+	// Asia (Russia, China - main landmass)
 	{
-		{30, 40}, {40, 42}, {50, 45}, {60, 55}, {70, 55}, {80, 50}, {90, 45},
-		{100, 35}, {110, 35}, {120, 40}, {130, 45}, {140, 45}, {145, 50},
-		{150, 60}, {170, 65}, {180, 65}, {180, 70}, {130, 75}, {100, 75},
-		{70, 70}, {55, 55}, {40, 45}, {30, 40},
+		{30, 42}, {35, 43}, {40, 42}, {50, 45}, {60, 50}, {70, 52}, {75, 55},
+		{85, 55}, {95, 50}, {105, 52}, {110, 45}, {120, 40}, {125, 43}, {130, 43},
+		{135, 45}, {140, 45}, {145, 50}, {155, 55}, {160, 60}, {170, 63}, {180, 65},
+		{180, 72}, {170, 70}, {155, 72}, {140, 72}, {120, 73}, {100, 73}, {80, 72},
+		{70, 70}, {60, 68}, {55, 60}, {45, 50}, {35, 45}, {30, 42},
+	},
+	// India
+	{
+		{68, 24}, {72, 22}, {74, 20}, {78, 15}, {80, 10}, {77, 8}, {74, 10},
+		{72, 15}, {68, 22}, {68, 24},
+	},
+	// Southeast Asia
+	{
+		{95, 22}, {100, 20}, {105, 15}, {104, 10}, {100, 5}, {100, 2},
+		{103, 1}, {100, 0}, {98, 5}, {98, 10}, {95, 16}, {92, 20}, {95, 22},
+	},
+	// Japan
+	{
+		{130, 33}, {132, 34}, {135, 35}, {138, 36}, {140, 38}, {141, 41}, {145, 45},
+		{144, 42}, {140, 36}, {136, 35}, {130, 33},
 	},
 	// Australia
 	{
-		{114, -22}, {120, -18}, {130, -12}, {142, -11}, {150, -15}, {153, -25},
-		{150, -35}, {145, -38}, {135, -35}, {128, -33}, {114, -30}, {114, -22},
+		{114, -22}, {117, -20}, {122, -18}, {127, -14}, {132, -12}, {136, -12},
+		{140, -11}, {142, -11}, {145, -15}, {150, -18}, {153, -24}, {153, -28},
+		{150, -33}, {147, -37}, {143, -39}, {140, -38}, {135, -35}, {130, -32},
+		{125, -32}, {118, -32}, {114, -28}, {113, -24}, {114, -22},
+	},
+	// New Zealand North Island
+	{
+		{173, -37}, {175, -38}, {177, -39}, {178, -42}, {175, -41}, {173, -39}, {173, -37},
+	},
+	// New Zealand South Island
+	{
+		{168, -44}, {170, -43}, {172, -43}, {174, -46}, {170, -47}, {168, -46}, {168, -44},
 	},
 }
 
 // NewGlobeRenderer creates a new globe renderer
 func NewGlobeRenderer(canvas *Canvas, graph *Graph, view *View, opts *RenderOptions) *GlobeRenderer {
 	return &GlobeRenderer{
-		canvas:     canvas,
-		graph:      graph,
-		view:       view,
-		opts:       opts,
-		nodeGeoPos: make(map[string]GeoPosition),
+		canvas:      canvas,
+		graph:       graph,
+		view:        view,
+		opts:        opts,
+		nodeGeoPos:  make(map[string]GeoPosition),
+		nodePos3D:   make(map[string]Vec3),
+		voronoiMode: true, // Default to Voronoi mode
 		rotation: GlobeRotation{
 			X:          -0.3, // Slight tilt
 			Y:          0,
@@ -192,6 +264,35 @@ func (g *GlobeRenderer) Update() {
 	if g.rotation.AutoRotate {
 		g.rotation.Y += g.rotation.Speed
 	}
+}
+
+// SetVoronoiMode enables or disables Voronoi mode
+func (g *GlobeRenderer) SetVoronoiMode(enabled bool) {
+	g.voronoiMode = enabled
+}
+
+// IsVoronoiMode returns whether Voronoi mode is active
+func (g *GlobeRenderer) IsVoronoiMode() bool {
+	return g.voronoiMode
+}
+
+// fibonacciSphere generates n evenly distributed points on a sphere using Fibonacci spiral
+func fibonacciSphere(n int, radius float64) []Vec3 {
+	points := make([]Vec3, n)
+	goldenRatio := (1 + math.Sqrt(5)) / 2
+
+	for i := 0; i < n; i++ {
+		theta := 2 * math.Pi * float64(i) / goldenRatio
+		phi := math.Acos(1 - 2*(float64(i)+0.5)/float64(n))
+
+		x := radius * math.Sin(phi) * math.Cos(theta)
+		y := radius * math.Sin(phi) * math.Sin(theta)
+		z := radius * math.Cos(phi)
+
+		points[i] = Vec3{x, y, z}
+	}
+
+	return points
 }
 
 // degToRad converts degrees to radians
@@ -258,23 +359,30 @@ func (g *GlobeRenderer) Render() {
 	centerY := g.canvas.Height() / 2
 	scale := math.Min(g.canvas.Width(), g.canvas.Height()) * 0.4
 
-	// Draw globe background (ocean)
-	g.canvas.FillCircle(centerX, centerY, scale, "#0a1628")
+	if g.voronoiMode {
+		// VORONOI MODE: Transparent globe, show interior lines
+		// Draw very faint globe outline only
+		g.canvas.StrokeCircle(centerX, centerY, scale, 1, "rgba(0, 217, 165, 0.2)")
+	} else {
+		// GEOGRAPHIC MODE: Normal globe rendering
+		// Draw globe background (ocean)
+		g.canvas.FillCircle(centerX, centerY, scale, "#0a1628")
 
-	// Draw atmosphere glow
-	g.canvas.StrokeCircle(centerX, centerY, scale*1.05, 3, "rgba(0, 150, 200, 0.3)")
-	g.canvas.StrokeCircle(centerX, centerY, scale*1.02, 2, "rgba(0, 180, 220, 0.2)")
+		// Draw atmosphere glow
+		g.canvas.StrokeCircle(centerX, centerY, scale*1.05, 3, "rgba(0, 150, 200, 0.3)")
+		g.canvas.StrokeCircle(centerX, centerY, scale*1.02, 2, "rgba(0, 180, 220, 0.2)")
 
-	// Draw latitude/longitude grid
-	g.drawGrid(radius, scale)
+		// Draw latitude/longitude grid
+		g.drawGrid(radius, scale)
 
-	// Draw continents
-	g.drawContinents(radius, scale)
+		// Draw continents
+		g.drawContinents(radius, scale)
+	}
 
 	// Calculate node positions
 	g.calculateNodePositions()
 
-	// Draw edges (geodesics)
+	// Draw edges (geodesics or interior chords)
 	g.drawEdges(radius, scale)
 
 	// Draw nodes
@@ -369,36 +477,63 @@ func (g *GlobeRenderer) drawPolyline(points []Point, lineWidth float64, color st
 	}
 }
 
-// calculateNodePositions assigns geographic positions to nodes based on country
+// calculateNodePositions assigns geographic positions to nodes based on country or Fibonacci distribution
 func (g *GlobeRenderer) calculateNodePositions() {
-	countryCounts := make(map[string]int)
+	// Clear previous positions
+	g.nodeGeoPos = make(map[string]GeoPosition)
+	g.nodePos3D = make(map[string]Vec3)
 
+	// Get all nodes as a slice for Fibonacci distribution
+	allNodes := make([]*Node, 0, len(g.graph.Nodes))
 	for _, node := range g.graph.Nodes {
-		country := node.Country
-		if country == "" {
-			country = "US" // Default
+		allNodes = append(allNodes, node)
+	}
+
+	if g.voronoiMode && len(allNodes) >= 3 {
+		// VORONOI MODE: Use Fibonacci sphere distribution for ALL nodes
+		fibPoints := fibonacciSphere(len(allNodes), 1.02)
+
+		for i, node := range allNodes {
+			g.nodePos3D[node.ID] = fibPoints[i]
+			// Also set geoPos for compatibility (convert 3D back to lat/lon)
+			lat := math.Asin(fibPoints[i].Y / 1.02)
+			lon := math.Atan2(fibPoints[i].X, fibPoints[i].Z)
+			g.nodeGeoPos[node.ID] = GeoPosition{Lat: lat, Lon: lon}
 		}
+	} else {
+		// GEOGRAPHIC MODE: Position by country
+		countryCounts := make(map[string]int)
 
-		coords, ok := countryCoords[country]
-		if !ok {
-			coords = CountryCoord{0, 0}
-		}
+		for _, node := range g.graph.Nodes {
+			country := node.Country
+			if country == "" {
+				country = "US" // Default
+			}
 
-		// Add jitter for multiple nodes in same country
-		count := countryCounts[country]
-		countryCounts[country]++
+			coords, ok := countryCoords[country]
+			if !ok {
+				coords = CountryCoord{0, 0}
+			}
 
-		jitterLat := float64(count%5-2) * 3
-		jitterLon := float64(count/5-2) * 5
+			// Add jitter for multiple nodes in same country
+			count := countryCounts[country]
+			countryCounts[country]++
 
-		g.nodeGeoPos[node.ID] = GeoPosition{
-			Lat: degToRad(coords.Lat + jitterLat),
-			Lon: degToRad(coords.Lon + jitterLon),
+			jitterLat := float64(count%5-2) * 3
+			jitterLon := float64(count/5-2) * 5
+
+			lat := degToRad(coords.Lat + jitterLat)
+			lon := degToRad(coords.Lon + jitterLon)
+			g.nodeGeoPos[node.ID] = GeoPosition{Lat: lat, Lon: lon}
+
+			// Also compute 3D position
+			x, y, z := latLonTo3D(lat, lon, 1.02)
+			g.nodePos3D[node.ID] = Vec3{x, y, z}
 		}
 	}
 }
 
-// drawEdges draws transport connections as geodesic arcs
+// drawEdges draws transport connections as geodesic arcs or interior chords
 func (g *GlobeRenderer) drawEdges(radius, scale float64) {
 	for _, edge := range g.graph.Edges {
 		if edge.Hidden {
@@ -430,9 +565,57 @@ func (g *GlobeRenderer) drawEdges(radius, scale float64) {
 			color = "#00ffff"
 		}
 
-		// Draw geodesic arc
-		g.drawGeodesic(fromPos, toPos, radius, scale, color, edge.IsLocalEdge)
+		if g.voronoiMode {
+			// VORONOI MODE: Draw interior chord (straight line through sphere)
+			from3D, ok1 := g.nodePos3D[edge.From]
+			to3D, ok2 := g.nodePos3D[edge.To]
+			if !ok1 || !ok2 {
+				continue
+			}
+			g.drawInteriorChord(from3D, to3D, radius, color, edge.IsLocalEdge)
+		} else {
+			// GEOGRAPHIC MODE: Draw geodesic arc
+			g.drawGeodesic(fromPos, toPos, radius, scale, color, edge.IsLocalEdge)
+		}
 	}
+}
+
+// drawInteriorChord draws a straight line (chord) between two 3D points
+func (g *GlobeRenderer) drawInteriorChord(from, to Vec3, radius float64, color string, highlight bool) {
+	// Project both endpoints
+	sx1, sy1, v1 := g.project3Dto2D(from.X, from.Y, from.Z, radius)
+	sx2, sy2, v2 := g.project3Dto2D(to.X, to.Y, to.Z, radius)
+
+	// For interior chord, we draw even if one or both points are on back side
+	// but with reduced opacity
+	lineWidth := 1.0
+	if highlight {
+		lineWidth = 2.0
+	}
+
+	// If both visible, draw solid
+	if v1 && v2 {
+		g.canvas.Line(sx1, sy1, sx2, sy2, lineWidth, color)
+	} else if v1 || v2 {
+		// One point visible - draw with reduced opacity
+		// Re-project to get the screen coords anyway
+		rx1, ry1, _ := rotate3D(from.X, from.Y, from.Z, g.rotation.X, g.rotation.Y)
+		rx2, ry2, _ := rotate3D(to.X, to.Y, to.Z, g.rotation.X, g.rotation.Y)
+
+		centerX := g.canvas.Width() / 2
+		centerY := g.canvas.Height() / 2
+		scale := math.Min(g.canvas.Width(), g.canvas.Height()) * 0.4
+
+		sx1 = centerX + rx1*scale
+		sy1 = centerY - ry1*scale
+		sx2 = centerX + rx2*scale
+		sy2 = centerY - ry2*scale
+
+		// Draw with lower opacity (simulated by using a darker color variant)
+		// Since we can't easily do opacity in simple canvas, just use dashed or lighter appearance
+		g.canvas.Line(sx1, sy1, sx2, sy2, lineWidth*0.5, color)
+	}
+	// If neither visible, skip (chord is entirely on back side)
 }
 
 // drawGeodesic draws a great circle arc between two points
@@ -524,16 +707,37 @@ func (g *GlobeRenderer) drawNodes(radius, scale float64) {
 			continue
 		}
 
-		pos, ok := g.nodeGeoPos[node.ID]
-		if !ok {
-			continue
-		}
+		var sx, sy float64
+		var visible bool
 
-		x, y, z := latLonTo3D(pos.Lat, pos.Lon, radius*1.02)
-		sx, sy, visible := g.project3Dto2D(x, y, z, radius)
+		if g.voronoiMode {
+			// Use 3D position directly in Voronoi mode
+			pos3D, ok := g.nodePos3D[node.ID]
+			if !ok {
+				continue
+			}
+			sx, sy, visible = g.project3Dto2D(pos3D.X, pos3D.Y, pos3D.Z, radius)
+		} else {
+			// Use geo position in geographic mode
+			pos, ok := g.nodeGeoPos[node.ID]
+			if !ok {
+				continue
+			}
+			x, y, z := latLonTo3D(pos.Lat, pos.Lon, radius*1.02)
+			sx, sy, visible = g.project3Dto2D(x, y, z, radius)
+		}
 
 		if !visible {
 			continue
+		}
+
+		// In Voronoi mode, draw country-colored halo first
+		if g.voronoiMode && node.Country != "" {
+			countryColor, ok := countryColors[node.Country]
+			if ok {
+				// Draw larger semi-transparent halo
+				g.canvas.FillCircle(sx, sy, 12, countryColor+"40") // 40 = ~25% opacity in hex
+			}
 		}
 
 		// Determine node color

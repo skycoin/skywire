@@ -15,7 +15,7 @@ import { dmsgHealthCheck } from './dmsg';
 import { performPing, updateLocalRouteVisibility } from './ping';
 import { checkServer, fetchAllData } from './api';
 import { startFlowAnimation } from './flow-animation';
-import { showGlobe, hideGlobe, updateGlobeData, isGlobeViewActive } from './globe';
+import { showGlobe, hideGlobe, updateGlobeData, isGlobeViewActive, setVoronoiMode } from './globe';
 
 export function wireEventListeners(): void {
     // Filter listeners
@@ -187,21 +187,41 @@ export function wireEventListeners(): void {
         }
     });
 
-    // View toggle listeners (Globe vs Flat)
+    // View toggle listeners (Voronoi vs Globe vs Flat)
+    const viewVoronoiBtn = document.getElementById('view-voronoi');
     const viewGlobeBtn = document.getElementById('view-globe');
     const viewFlatBtn = document.getElementById('view-flat');
 
-    if (viewGlobeBtn && viewFlatBtn) {
-        viewGlobeBtn.addEventListener('click', () => {
-            viewGlobeBtn.classList.add('active');
-            viewFlatBtn.classList.remove('active');
+    const clearViewButtons = () => {
+        viewVoronoiBtn?.classList.remove('active');
+        viewGlobeBtn?.classList.remove('active');
+        viewFlatBtn?.classList.remove('active');
+    };
+
+    if (viewVoronoiBtn) {
+        viewVoronoiBtn.addEventListener('click', () => {
+            clearViewButtons();
+            viewVoronoiBtn.classList.add('active');
             S.setGlobeViewActive(true);
+            setVoronoiMode(true);
             showGlobe();
         });
+    }
 
+    if (viewGlobeBtn) {
+        viewGlobeBtn.addEventListener('click', () => {
+            clearViewButtons();
+            viewGlobeBtn.classList.add('active');
+            S.setGlobeViewActive(true);
+            setVoronoiMode(false);
+            showGlobe();
+        });
+    }
+
+    if (viewFlatBtn) {
         viewFlatBtn.addEventListener('click', () => {
+            clearViewButtons();
             viewFlatBtn.classList.add('active');
-            viewGlobeBtn.classList.remove('active');
             S.setGlobeViewActive(false);
             hideGlobe();
         });
@@ -210,11 +230,12 @@ export function wireEventListeners(): void {
     // Data initialization
     checkServer();
     fetchAllData().then(() => {
-        // Show globe view by default after data loads
-        if (viewGlobeBtn && viewFlatBtn) {
-            viewGlobeBtn.classList.add('active');
-            viewFlatBtn.classList.remove('active');
+        // Show Voronoi view by default after data loads
+        if (viewVoronoiBtn) {
+            clearViewButtons();
+            viewVoronoiBtn.classList.add('active');
             S.setGlobeViewActive(true);
+            setVoronoiMode(true);
             showGlobe();
         }
     });
