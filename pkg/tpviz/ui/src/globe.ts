@@ -146,6 +146,92 @@ function fibonacciSphere(numPoints: number, radius: number): THREE.Vector3[] {
     return points;
 }
 
+// Generate points distributed around a center point on sphere surface
+function distributePointsAroundCenter(
+    center: THREE.Vector3,
+    numPoints: number,
+    maxAngle: number,  // Maximum angular distance from center (radians)
+    radius: number
+): THREE.Vector3[] {
+    if (numPoints === 0) return [];
+    if (numPoints === 1) return [center.clone().normalize().multiplyScalar(radius)];
+
+    const points: THREE.Vector3[] = [];
+    const goldenRatio = (1 + Math.sqrt(5)) / 2;
+
+    // Create local coordinate system at center
+    const centerNorm = center.clone().normalize();
+    let tangent1 = new THREE.Vector3(1, 0, 0);
+    if (Math.abs(centerNorm.dot(tangent1)) > 0.9) {
+        tangent1.set(0, 1, 0);
+    }
+    tangent1 = new THREE.Vector3().crossVectors(centerNorm, tangent1).normalize();
+    const tangent2 = new THREE.Vector3().crossVectors(centerNorm, tangent1).normalize();
+
+    for (let i = 0; i < numPoints; i++) {
+        // Use Fibonacci-like distribution within a cone
+        const theta = 2 * Math.PI * i / goldenRatio;
+        // Distribute radially with sqrt for uniform density
+        const r = maxAngle * Math.sqrt((i + 0.5) / numPoints);
+
+        // Convert polar coords in tangent plane to 3D point
+        const offset = tangent1.clone().multiplyScalar(Math.sin(r) * Math.cos(theta))
+            .add(tangent2.clone().multiplyScalar(Math.sin(r) * Math.sin(theta)))
+            .add(centerNorm.clone().multiplyScalar(Math.cos(r)));
+
+        points.push(offset.normalize().multiplyScalar(radius));
+    }
+
+    return points;
+}
+
+// Find closest country centroid to a point (for assigning unknown locations)
+function findClosestCountry(point: THREE.Vector3, countryCentroids: Map<string, THREE.Vector3>): string {
+    let closest = '';
+    let minDist = Infinity;
+
+    for (const [country, centroid] of countryCentroids) {
+        const dist = point.distanceTo(centroid);
+        if (dist < minDist) {
+            minDist = dist;
+            closest = country;
+        }
+    }
+
+    return closest;
+}
+
+// Create a great circle arc on sphere surface
+function createGreatCircleArc(
+    start: THREE.Vector3,
+    end: THREE.Vector3,
+    radius: number,
+    segments: number = 32
+): THREE.Vector3[] {
+    const points: THREE.Vector3[] = [];
+
+    for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        // Spherical linear interpolation
+        const point = new THREE.Vector3();
+        const angle = start.angleTo(end);
+
+        if (angle < 0.001) {
+            point.copy(start);
+        } else {
+            const sinAngle = Math.sin(angle);
+            const a = Math.sin((1 - t) * angle) / sinAngle;
+            const b = Math.sin(t * angle) / sinAngle;
+            point.copy(start).multiplyScalar(a).add(end.clone().multiplyScalar(b));
+        }
+
+        point.normalize().multiplyScalar(radius);
+        points.push(point);
+    }
+
+    return points;
+}
+
 // Calculate spherical Delaunay triangulation using convex hull
 function calculateSphericalDelaunay(points: THREE.Vector3[]): number[][] {
     if (points.length < 4) return [];
@@ -649,13 +735,115 @@ export function updateGlobeData(): void {
     const countryNodeCounts: Record<string, number> = {};
 
     if (voronoiMode && nodes.length >= 3) {
-        // VORONOI MODE: Spread ALL nodes evenly using Fibonacci sphere
-        const fibPoints = fibonacciSphere(nodes.length, 1.02);
+        // VORONOI MODE: Cluster nodes by country with Voronoi-like regions
 
-        nodes.forEach((node: any, index: number) => {
-            const position = fibPoints[index];
-            nodePositions.set(node.id, position);
+        // Step 1: Group nodes by country
+        const nodesByCountry: Map<string, any[]> = new Map();
+        nodes.forEach((node: any) => {
+            const country = node.country || S.visorServices[node.id]?.country || '';
+            if (!nodesByCountry.has(country)) {
+                nodesByCountry.set(country, []);
+            }
+            nodesByCountry.get(country)!.push(node);
         });
+
+        // Step 2: Get centroid positions for countries that have nodes
+        const countryCentroids: Map<string, THREE.Vector3> = new Map();
+        const countryNodeLists: Map<string, any[]> = new Map();
+
+        for (const [country, countryNodes] of nodesByCountry) {
+            if (country && COUNTRY_COORDS[country]) {
+                const [lat, lon] = COUNTRY_COORDS[country];
+                const centroid = latLonToVector3(lat, lon, 1.0);
+                countryCentroids.set(country, centroid);
+                countryNodeLists.set(country, countryNodes);
+            } else {
+                // Unknown country - will assign to "Unknown" region
+                if (!countryNodeLists.has('')) {
+                    countryNodeLists.set('', []);
+                    // Place unknown at a default location (center of Pacific)
+                    countryCentroids.set('', latLonToVector3(0, -150, 1.0));
+                }
+                countryNodeLists.get('')!.push(...countryNodes);
+            }
+        }
+
+        // Step 3: Calculate angular spacing based on node count
+        // Total sphere surface area is 4π, we want to allocate proportionally
+        const totalNodes = nodes.length;
+        const countryAngles: Map<string, number> = new Map();
+
+        for (const [country, countryNodes] of countryNodeLists) {
+            // Angular radius proportional to sqrt of node count (for area proportionality)
+            const proportion = countryNodes.length / totalNodes;
+            // Max angle ~0.8 radians (~45 degrees) for largest country
+            const angle = Math.sqrt(proportion) * 0.8 + 0.1; // Min 0.1 radians
+            countryAngles.set(country, Math.min(angle, 0.6)); // Cap at ~35 degrees
+        }
+
+        // Step 4: Distribute nodes within each country's region
+        for (const [country, countryNodes] of countryNodeLists) {
+            const centroid = countryCentroids.get(country)!;
+            const maxAngle = countryAngles.get(country)!;
+            const positions = distributePointsAroundCenter(centroid, countryNodes.length, maxAngle, 1.02);
+
+            countryNodes.forEach((node: any, index: number) => {
+                nodePositions.set(node.id, positions[index]);
+            });
+        }
+
+        // Step 5: Draw Voronoi boundary lines between countries
+        if (voronoiGroup && countryCentroids.size >= 2) {
+            const centroidArray = Array.from(countryCentroids.entries());
+
+            // Draw boundaries by finding edges between adjacent country regions
+            // Use Delaunay triangulation of centroids to find neighbors
+            const centroidPoints = centroidArray.map(([_, c]) => c);
+            const triangles = calculateSphericalDelaunay(centroidPoints);
+
+            // Track edges we've already drawn
+            const drawnEdges = new Set<string>();
+
+            for (const [i, j, k] of triangles) {
+                const edges = [[i, j], [j, k], [k, i]];
+                for (const [a, b] of edges) {
+                    const edgeKey = a < b ? `${a}-${b}` : `${b}-${a}`;
+                    if (drawnEdges.has(edgeKey)) continue;
+                    drawnEdges.add(edgeKey);
+
+                    // Calculate the midpoint/boundary between two country centroids
+                    // The Voronoi edge is perpendicular to the line between centroids
+                    const c1 = centroidPoints[a];
+                    const c2 = centroidPoints[b];
+
+                    // Find the midpoint on the sphere
+                    const midpoint = new THREE.Vector3().addVectors(c1, c2).normalize();
+
+                    // Get perpendicular direction on sphere surface
+                    const diff = new THREE.Vector3().subVectors(c2, c1);
+                    const perpendicular = new THREE.Vector3().crossVectors(midpoint, diff).normalize();
+
+                    // Create boundary line segment perpendicular to the centroid-centroid line
+                    const boundaryLength = 0.3; // Length of boundary segment
+                    const start = midpoint.clone().add(perpendicular.clone().multiplyScalar(boundaryLength));
+                    start.normalize().multiplyScalar(1.015); // Slightly above surface
+                    const end = midpoint.clone().sub(perpendicular.clone().multiplyScalar(boundaryLength));
+                    end.normalize().multiplyScalar(1.015);
+
+                    // Draw as great circle arc
+                    const arcPoints = createGreatCircleArc(start, end, 1.015, 16);
+                    const geometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
+                    const material = new THREE.LineBasicMaterial({
+                        color: '#00d9a5',
+                        transparent: true,
+                        opacity: 0.4,
+                        linewidth: 1,
+                    });
+                    const line = new THREE.Line(geometry, material);
+                    voronoiGroup.add(line);
+                }
+            }
+        }
     } else {
         // GEOGRAPHIC MODE: Position by country
         nodes.forEach((node: any) => {
