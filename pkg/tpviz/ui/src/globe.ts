@@ -735,7 +735,8 @@ export function updateGlobeData(): void {
     const countryNodeCounts: Record<string, number> = {};
 
     if (voronoiMode && nodes.length >= 3) {
-        // VORONOI MODE: Cluster nodes by country with Voronoi-like regions
+        // VORONOI MODE: Even Fibonacci distribution with country clustering
+        // Nodes are evenly spaced, but same-country nodes are placed adjacent to each other
 
         // Step 1: Group nodes by country
         const nodesByCountry: Map<string, any[]> = new Map();
@@ -747,97 +748,105 @@ export function updateGlobeData(): void {
             nodesByCountry.get(country)!.push(node);
         });
 
-        // Step 2: Get centroid positions for countries that have nodes
-        const countryCentroids: Map<string, THREE.Vector3> = new Map();
-        const countryNodeLists: Map<string, any[]> = new Map();
+        // Step 2: Generate Fibonacci sphere points for ALL nodes
+        const fibPoints = fibonacciSphere(nodes.length, 1.02);
+
+        // Step 3: For each country, find the Fibonacci point closest to its geographic centroid
+        const countryStartIndices: { country: string; startIndex: number; nodes: any[] }[] = [];
 
         for (const [country, countryNodes] of nodesByCountry) {
+            let centroid: THREE.Vector3;
             if (country && COUNTRY_COORDS[country]) {
                 const [lat, lon] = COUNTRY_COORDS[country];
-                const centroid = latLonToVector3(lat, lon, 1.0);
-                countryCentroids.set(country, centroid);
-                countryNodeLists.set(country, countryNodes);
+                centroid = latLonToVector3(lat, lon, 1.02);
             } else {
-                // Unknown country - will assign to "Unknown" region
-                if (!countryNodeLists.has('')) {
-                    countryNodeLists.set('', []);
-                    // Place unknown at a default location (center of Pacific)
-                    countryCentroids.set('', latLonToVector3(0, -150, 1.0));
-                }
-                countryNodeLists.get('')!.push(...countryNodes);
+                // Unknown country - place in Pacific
+                centroid = latLonToVector3(0, -150, 1.02);
             }
-        }
 
-        // Step 3: Calculate angular spacing based on node count
-        // Total sphere surface area is 4π, we want to allocate proportionally
-        const totalNodes = nodes.length;
-        const countryAngles: Map<string, number> = new Map();
+            // Find closest Fibonacci point to this country's centroid
+            let closestIndex = 0;
+            let closestDist = Infinity;
+            for (let i = 0; i < fibPoints.length; i++) {
+                const dist = fibPoints[i].distanceTo(centroid);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestIndex = i;
+                }
+            }
 
-        for (const [country, countryNodes] of countryNodeLists) {
-            // Angular radius proportional to sqrt of node count (for area proportionality)
-            const proportion = countryNodes.length / totalNodes;
-            // Max angle ~0.8 radians (~45 degrees) for largest country
-            const angle = Math.sqrt(proportion) * 0.8 + 0.1; // Min 0.1 radians
-            countryAngles.set(country, Math.min(angle, 0.6)); // Cap at ~35 degrees
-        }
-
-        // Step 4: Distribute nodes within each country's region
-        for (const [country, countryNodes] of countryNodeLists) {
-            const centroid = countryCentroids.get(country)!;
-            const maxAngle = countryAngles.get(country)!;
-            const positions = distributePointsAroundCenter(centroid, countryNodes.length, maxAngle, 1.02);
-
-            countryNodes.forEach((node: any, index: number) => {
-                nodePositions.set(node.id, positions[index]);
+            countryStartIndices.push({
+                country,
+                startIndex: closestIndex,
+                nodes: countryNodes
             });
         }
 
-        // Step 5: Draw Voronoi boundary lines between countries
-        if (voronoiGroup && countryCentroids.size >= 2) {
-            const centroidArray = Array.from(countryCentroids.entries());
+        // Step 4: Sort countries by their starting index to assign contiguous blocks
+        countryStartIndices.sort((a, b) => a.startIndex - b.startIndex);
 
-            // Draw boundaries by finding edges between adjacent country regions
-            // Use Delaunay triangulation of centroids to find neighbors
-            const centroidPoints = centroidArray.map(([_, c]) => c);
-            const triangles = calculateSphericalDelaunay(centroidPoints);
+        // Step 5: Assign contiguous Fibonacci points to each country
+        let currentIndex = 0;
+        const countryRanges: Map<string, { start: number; end: number }> = new Map();
 
-            // Track edges we've already drawn
-            const drawnEdges = new Set<string>();
+        for (const { country, nodes: countryNodes } of countryStartIndices) {
+            const start = currentIndex;
+            const end = currentIndex + countryNodes.length - 1;
+            countryRanges.set(country, { start, end });
 
-            for (const [i, j, k] of triangles) {
-                const edges = [[i, j], [j, k], [k, i]];
-                for (const [a, b] of edges) {
-                    const edgeKey = a < b ? `${a}-${b}` : `${b}-${a}`;
-                    if (drawnEdges.has(edgeKey)) continue;
-                    drawnEdges.add(edgeKey);
+            countryNodes.forEach((node: any, i: number) => {
+                const fibIndex = currentIndex + i;
+                if (fibIndex < fibPoints.length) {
+                    nodePositions.set(node.id, fibPoints[fibIndex]);
+                }
+            });
 
-                    // Calculate the midpoint/boundary between two country centroids
-                    // The Voronoi edge is perpendicular to the line between centroids
-                    const c1 = centroidPoints[a];
-                    const c2 = centroidPoints[b];
+            currentIndex += countryNodes.length;
+        }
 
-                    // Find the midpoint on the sphere
-                    const midpoint = new THREE.Vector3().addVectors(c1, c2).normalize();
+        // Step 6: Draw Voronoi boundary lines between adjacent country regions
+        // Boundary color: orange (not used elsewhere)
+        const boundaryColor = '#ff8800';
 
-                    // Get perpendicular direction on sphere surface
-                    const diff = new THREE.Vector3().subVectors(c2, c1);
+        if (voronoiGroup && countryStartIndices.length >= 2) {
+            for (let i = 0; i < countryStartIndices.length; i++) {
+                const currentCountry = countryStartIndices[i];
+                const nextCountry = countryStartIndices[(i + 1) % countryStartIndices.length];
+
+                const currentRange = countryRanges.get(currentCountry.country)!;
+                const nextRange = countryRanges.get(nextCountry.country)!;
+
+                // Get the boundary point (last point of current country)
+                const boundaryIndex = currentRange.end;
+                const nextIndex = nextRange.start;
+
+                if (boundaryIndex < fibPoints.length && nextIndex < fibPoints.length) {
+                    const p1 = fibPoints[boundaryIndex];
+                    const p2 = fibPoints[nextIndex];
+
+                    // Calculate midpoint between the two boundary nodes
+                    const midpoint = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+                    midpoint.normalize().multiplyScalar(1.02);
+
+                    // Get perpendicular direction for the boundary line
+                    const diff = new THREE.Vector3().subVectors(p2, p1);
                     const perpendicular = new THREE.Vector3().crossVectors(midpoint, diff).normalize();
 
-                    // Create boundary line segment perpendicular to the centroid-centroid line
-                    const boundaryLength = 0.3; // Length of boundary segment
+                    // Create boundary line extending perpendicular to the gap
+                    const boundaryLength = 0.15;
                     const start = midpoint.clone().add(perpendicular.clone().multiplyScalar(boundaryLength));
-                    start.normalize().multiplyScalar(1.015); // Slightly above surface
+                    start.normalize().multiplyScalar(1.025);
                     const end = midpoint.clone().sub(perpendicular.clone().multiplyScalar(boundaryLength));
-                    end.normalize().multiplyScalar(1.015);
+                    end.normalize().multiplyScalar(1.025);
 
-                    // Draw as great circle arc
-                    const arcPoints = createGreatCircleArc(start, end, 1.015, 16);
+                    // Draw boundary line
+                    const arcPoints = createGreatCircleArc(start, end, 1.025, 8);
                     const geometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
                     const material = new THREE.LineBasicMaterial({
-                        color: '#00d9a5',
+                        color: boundaryColor,
                         transparent: true,
-                        opacity: 0.4,
-                        linewidth: 1,
+                        opacity: 0.8,
+                        linewidth: 2,
                     });
                     const line = new THREE.Line(geometry, material);
                     voronoiGroup.add(line);
