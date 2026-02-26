@@ -9,10 +9,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "three": "^0.160.0",
     "vis-data": "^7.1.9",
     "vis-network": "^9.1.9"
   },
   "devDependencies": {
+    "@types/three": "^0.160.0",
     "esbuild": "^0.19.12",
     "typescript": "~5.0.4"
   }

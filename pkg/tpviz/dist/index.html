@@ -83,6 +83,12 @@
         #zoom-controls button:hover { background: rgba(15, 52, 96, 0.95); color: #fff; border-color: #ff6b35; }
         #cache-info { margin-top: 8px; font-size: 0.75em; color: #888; }
 
+        /* View toggle button */
+        #view-toggle { position: absolute; top: 16px; right: 16px; z-index: 9999; display: flex; gap: 2px; background: rgba(22, 33, 62, 0.95); border: 1px solid #00d9a5; border-radius: 4px; padding: 2px; }
+        #view-toggle button { padding: 6px 12px; border: none; background: transparent; color: #888; cursor: pointer; border-radius: 3px; font-size: 12px; transition: all 0.2s; }
+        #view-toggle button.active { background: #00d9a5; color: #000; }
+        #view-toggle button:hover:not(.active) { background: rgba(0, 217, 165, 0.2); color: #00d9a5; }
+
         .service-badge { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 0.7em; margin: 1px; }
         .service-badge.proxy { background: rgba(255, 165, 0, 0.3); color: #ffa500; }
         .service-badge.vpn { background: rgba(138, 43, 226, 0.3); color: #9f6efc; }
@@ -356,6 +362,10 @@
         <div id="canvas-container">
             <div id="loading"><div class="spinner"></div><div>Loading transport data...</div></div>
             <canvas id="graph-canvas"></canvas>
+            <div id="view-toggle">
+                <button id="view-globe" class="active" title="Globe view (3D)">Globe</button>
+                <button id="view-flat" title="Flat view (2D)">Flat</button>
+            </div>
             <div id="zoom-controls">
                 <button id="zoom-in" title="Zoom in">+</button>
                 <button id="zoom-out" title="Zoom out">&minus;</button>

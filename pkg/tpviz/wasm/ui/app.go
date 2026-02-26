@@ -92,6 +92,10 @@ type App struct {
 	showFlags       bool
 	showDMSGServers bool
 
+	// Globe view
+	globeRenderer *GlobeRenderer
+	globeActive   bool
+
 	// Pick modes (matching TypeScript state.ts)
 	pingPickMode     bool
 	localTpPickMode  bool
@@ -113,12 +117,16 @@ func NewApp(canvasID string) *App {
 
 	input := NewInputHandler(canvasID)
 
+	graph := NewGraph()
+	view := NewView(canvas.Width(), canvas.Height())
+	opts := NewRenderOptions()
+
 	app := &App{
 		canvas:            canvas,
 		input:             input,
-		graph:             NewGraph(),
-		view:              NewView(canvas.Width(), canvas.Height()),
-		opts:              NewRenderOptions(),
+		graph:             graph,
+		view:              view,
+		opts:              opts,
 		fetcher:           NewDataFetcher(),
 		physicsEnabled:    true,
 		physicsAdapter:    NewPhysicsAdapter(),
@@ -131,7 +139,12 @@ func NewApp(canvasID string) *App {
 		countryBoundaries: make(map[string]GroupBoundary),
 		ipGroupBoundaries: make(map[int]GroupBoundary),
 		clusterColors:     DefaultClusterColors,
+		globeActive:       true, // Globe is default view
 	}
+
+	// Initialize globe renderer
+	app.globeRenderer = NewGlobeRenderer(canvas, graph, view, opts)
+	app.globeRenderer.SetActive(true)
 
 	return app
 }
@@ -268,6 +281,38 @@ func (a *App) setupSidebarCallbacks() {
 	a.clusterByIP = GetChecked("cluster-ip")
 	a.showDMSGServers = GetChecked("show-dmsg-servers")
 	a.showFlags = GetChecked("show-flags")
+
+	// View toggle buttons (Globe/Flat)
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("view-globe", "click", func() {
+		a.globeActive = true
+		if a.globeRenderer != nil {
+			a.globeRenderer.SetActive(true)
+		}
+		viewGlobeBtn := getElement("view-globe")
+		viewFlatBtn := getElement("view-flat")
+		if !viewGlobeBtn.IsNull() {
+			viewGlobeBtn.Get("classList").Call("add", "active")
+		}
+		if !viewFlatBtn.IsNull() {
+			viewFlatBtn.Get("classList").Call("remove", "active")
+		}
+		a.needsRedraw = true
+	}))
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("view-flat", "click", func() {
+		a.globeActive = false
+		if a.globeRenderer != nil {
+			a.globeRenderer.SetActive(false)
+		}
+		viewGlobeBtn := getElement("view-globe")
+		viewFlatBtn := getElement("view-flat")
+		if !viewFlatBtn.IsNull() {
+			viewFlatBtn.Get("classList").Call("add", "active")
+		}
+		if !viewGlobeBtn.IsNull() {
+			viewGlobeBtn.Get("classList").Call("remove", "active")
+		}
+		a.needsRedraw = true
+	}))
 
 	// Start JavaScript-based intervals for more reliable timing
 	// Local visor polling every 1 second
@@ -476,6 +521,10 @@ func (a *App) update() {
 		}
 		a.needsRedraw = true
 	}
+	if a.input.IsKeyJustPressed("g") || a.input.IsKeyJustPressed("G") {
+		a.toggleGlobeView()
+		a.needsRedraw = true
+	}
 	if a.input.IsKeyJustPressed("Escape") {
 		a.deselectNode()
 		a.needsRedraw = true
@@ -496,6 +545,19 @@ func (a *App) update() {
 	if a.input.WheelDelta != 0 {
 		a.view.Zoom(a.input.WheelDelta, a.input.MouseX, a.input.MouseY)
 		a.needsRedraw = true
+	}
+
+	// Globe view mouse handling
+	if a.globeActive && a.globeRenderer != nil {
+		if a.input.MouseDown && a.dragging {
+			dx := a.input.MouseX - a.dragStartX
+			dy := a.input.MouseY - a.dragStartY
+			a.globeRenderer.Rotate(dx*0.5, dy*0.5)
+			a.dragStartX = a.input.MouseX
+			a.dragStartY = a.input.MouseY
+			a.needsRedraw = true
+		}
+		return // Skip flat view update logic when in globe mode
 	}
 
 	// World coordinates of mouse
@@ -947,6 +1009,28 @@ func (a *App) refreshApps() {
 	}
 	a.appsData = apps
 	a.updateAppsSection()
+}
+
+// toggleGlobeView toggles between globe and flat views
+func (a *App) toggleGlobeView() {
+	a.globeActive = !a.globeActive
+	if a.globeRenderer != nil {
+		a.globeRenderer.SetActive(a.globeActive)
+	}
+
+	// Update UI buttons
+	viewGlobeBtn := getElement("view-globe")
+	viewFlatBtn := getElement("view-flat")
+
+	if !viewGlobeBtn.IsNull() && !viewFlatBtn.IsNull() {
+		if a.globeActive {
+			viewGlobeBtn.Get("classList").Call("add", "active")
+			viewFlatBtn.Get("classList").Call("remove", "active")
+		} else {
+			viewFlatBtn.Get("classList").Call("add", "active")
+			viewGlobeBtn.Get("classList").Call("remove", "active")
+		}
+	}
 }
 
 // parseInt parses an integer from a string
