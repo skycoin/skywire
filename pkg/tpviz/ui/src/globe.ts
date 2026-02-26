@@ -819,10 +819,12 @@ export function updateGlobeData(): void {
         const showSTCPR = (document.getElementById('show-stcpr') as HTMLInputElement)?.checked;
         const showSUDPH = (document.getElementById('show-sudph') as HTMLInputElement)?.checked;
         const showDMSG = (document.getElementById('show-dmsg') as HTMLInputElement)?.checked;
+        const showRoutes = (document.getElementById('show-routes') as HTMLInputElement)?.checked;
 
         if (edge.type === 'stcpr' && !showSTCPR) return;
         if (edge.type === 'sudph' && !showSUDPH) return;
         if (edge.type === 'dmsg' && !showDMSG) return;
+        if (edge.type === 'route' && !showRoutes) return;
 
         // Determine color
         let color = colors[edge.type] || '#ffffff';
