@@ -6,6 +6,7 @@ import * as S from './state';
 import { colors, LOCAL_VISOR_COLOR, LOCAL_EDGE_COLOR } from './constants';
 import { getVisorStatus, countryToFlag } from './utils';
 import { showNodeInfo, hideNodeInfo } from './node-info';
+import { CONTINENTS } from './world-data';
 
 // Country centroid coordinates (lat, lon) - approximate centers
 const COUNTRY_COORDS: Record<string, [number, number]> = {
@@ -343,7 +344,7 @@ function createGeodesicCurve(
     return curve;
 }
 
-// Create Earth texture with country outlines
+// Create Earth texture with country outlines using accurate continental data
 function createEarthTexture(): THREE.Texture {
     const canvas = document.createElement('canvas');
     canvas.width = 2048;
@@ -376,20 +377,15 @@ function createEarthTexture(): THREE.Texture {
         ctx.stroke();
     }
 
-    // Draw simplified continent outlines
-    ctx.strokeStyle = 'rgba(0, 217, 165, 0.6)';
-    ctx.fillStyle = 'rgba(0, 100, 80, 0.15)';
-    ctx.lineWidth = 2;
-
-    // Helper to convert lat/lon to canvas coords
+    // Helper to convert lon/lat to canvas coords
     const toCanvas = (lon: number, lat: number): [number, number] => {
         const x = ((lon + 180) / 360) * canvas.width;
         const y = ((90 - lat) / 180) * canvas.height;
         return [x, y];
     };
 
-    // Draw continent with more detail
-    const drawContinent = (points: [number, number][]) => {
+    // Draw a polygon path
+    const drawPath = (points: [number, number][]) => {
         if (points.length < 3) return;
         ctx.beginPath();
         let [x, y] = toCanvas(points[0][0], points[0][1]);
@@ -403,86 +399,16 @@ function createEarthTexture(): THREE.Texture {
         ctx.stroke();
     };
 
-    // North America (more detailed)
-    drawContinent([
-        [-168, 66], [-162, 70], [-155, 71], [-140, 70], [-130, 69], [-125, 70],
-        [-110, 69], [-95, 69], [-85, 67], [-80, 64], [-68, 60], [-66, 50], [-70, 46],
-        [-70, 43], [-75, 40], [-75, 35], [-82, 29], [-81, 25], [-88, 30], [-97, 26],
-        [-97, 22], [-106, 23], [-112, 29], [-117, 32], [-120, 34], [-122, 37],
-        [-124, 40], [-124, 44], [-123, 48], [-130, 55], [-140, 60], [-147, 61],
-        [-153, 58], [-160, 58], [-165, 62], [-168, 66]
-    ]);
+    // Draw all continents from world data
+    ctx.strokeStyle = 'rgba(0, 217, 165, 0.6)';
+    ctx.fillStyle = 'rgba(0, 100, 80, 0.15)';
+    ctx.lineWidth = 2;
 
-    // Greenland
-    drawContinent([
-        [-44, 60], [-42, 65], [-35, 68], [-25, 72], [-18, 76], [-20, 80],
-        [-35, 83], [-50, 82], [-55, 78], [-60, 75], [-52, 70], [-44, 62], [-44, 60]
-    ]);
-
-    // South America (more detailed)
-    drawContinent([
-        [-80, 9], [-75, 11], [-72, 12], [-62, 10], [-52, 4], [-50, 0], [-50, -3],
-        [-45, -3], [-41, -3], [-38, -5], [-35, -8], [-35, -15], [-38, -18], [-40, -22],
-        [-48, -26], [-53, -28], [-55, -32], [-58, -36], [-62, -38], [-65, -42],
-        [-68, -48], [-74, -52], [-70, -55], [-68, -52], [-72, -46], [-75, -42],
-        [-72, -35], [-70, -30], [-70, -22], [-75, -15], [-81, -5], [-80, 0], [-80, 9]
-    ]);
-
-    // Europe (more detailed)
-    drawContinent([
-        [-10, 36], [-6, 37], [-6, 43], [-2, 43], [3, 43], [3, 47], [-4, 48],
-        [-5, 52], [0, 51], [5, 52], [8, 54], [12, 54], [14, 55], [20, 55], [24, 55],
-        [28, 58], [30, 60], [28, 64], [25, 68], [20, 70], [15, 68], [10, 63],
-        [5, 62], [0, 58], [-5, 56], [-10, 52], [-10, 46], [-10, 36]
-    ]);
-
-    // Africa (more detailed)
-    drawContinent([
-        [-17, 21], [-17, 28], [-12, 33], [-5, 36], [0, 36], [10, 37], [20, 32],
-        [25, 32], [32, 31], [35, 30], [38, 22], [43, 12], [51, 11], [51, 3],
-        [42, -1], [40, -11], [35, -20], [32, -26], [28, -33], [20, -35], [18, -32],
-        [15, -27], [12, -18], [10, -6], [5, 4], [1, 6], [-5, 5], [-10, 8],
-        [-15, 11], [-17, 15], [-17, 21]
-    ]);
-
-    // Asia (Russia, China, India - main landmass)
-    drawContinent([
-        [30, 42], [35, 43], [40, 42], [50, 45], [60, 50], [70, 52], [75, 55],
-        [85, 55], [95, 50], [105, 52], [110, 45], [120, 40], [125, 43], [130, 43],
-        [135, 45], [140, 45], [145, 50], [155, 55], [160, 60], [170, 63], [180, 65],
-        [180, 72], [170, 70], [155, 72], [140, 72], [120, 73], [100, 73], [80, 72],
-        [70, 70], [60, 68], [55, 60], [45, 50], [35, 45], [30, 42]
-    ]);
-
-    // India subcontinent
-    drawContinent([
-        [68, 24], [72, 22], [74, 20], [78, 15], [80, 10], [77, 8], [74, 10],
-        [72, 15], [68, 22], [68, 24]
-    ]);
-
-    // Southeast Asia peninsula
-    drawContinent([
-        [95, 22], [100, 20], [105, 15], [104, 10], [100, 5], [100, 2],
-        [103, 1], [100, 0], [98, 5], [98, 10], [95, 16], [92, 20], [95, 22]
-    ]);
-
-    // Japan
-    drawContinent([
-        [130, 33], [132, 34], [135, 35], [138, 36], [140, 38], [141, 41], [145, 45],
-        [144, 42], [140, 36], [136, 35], [130, 33]
-    ]);
-
-    // Australia (more detailed)
-    drawContinent([
-        [114, -22], [117, -20], [122, -18], [127, -14], [132, -12], [136, -12],
-        [140, -11], [142, -11], [145, -15], [150, -18], [153, -24], [153, -28],
-        [150, -33], [147, -37], [143, -39], [140, -38], [135, -35], [130, -32],
-        [125, -32], [118, -32], [114, -28], [113, -24], [114, -22]
-    ]);
-
-    // New Zealand (North and South Islands)
-    drawContinent([[173, -37], [175, -38], [177, -39], [178, -42], [175, -41], [173, -39], [173, -37]]);
-    drawContinent([[168, -44], [170, -43], [172, -43], [174, -46], [170, -47], [168, -46], [168, -44]]);
+    for (const continent of CONTINENTS) {
+        for (const path of continent.paths) {
+            drawPath(path);
+        }
+    }
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
@@ -819,15 +745,24 @@ export function updateGlobeData(): void {
         const showSTCPR = (document.getElementById('show-stcpr') as HTMLInputElement)?.checked;
         const showSUDPH = (document.getElementById('show-sudph') as HTMLInputElement)?.checked;
         const showDMSG = (document.getElementById('show-dmsg') as HTMLInputElement)?.checked;
+        const showDMSGServers = (document.getElementById('show-dmsg-servers') as HTMLInputElement)?.checked;
         const showRoutes = (document.getElementById('show-routes') as HTMLInputElement)?.checked;
 
         if (edge.type === 'stcpr' && !showSTCPR) return;
         if (edge.type === 'sudph' && !showSUDPH) return;
         if (edge.type === 'dmsg' && !showDMSG) return;
+        if (edge.type === 'dmsg-connection' && !showDMSGServers) return;
         if (edge.type === 'route' && !showRoutes) return;
 
-        // Determine color
-        let color = colors[edge.type] || '#ffffff';
+        // Determine color - check edge's own color first, then fallback to type-based colors
+        let color: string;
+        if (edge.color && typeof edge.color === 'object' && edge.color.color) {
+            color = edge.color.color;
+        } else if (edge.color && typeof edge.color === 'string') {
+            color = edge.color;
+        } else {
+            color = colors[edge.type] || '#888888';  // Gray fallback for unknown types
+        }
         if (edge.isLocal || edge.isLocalOnly) color = LOCAL_EDGE_COLOR;
 
         if (voronoiMode && interiorLinesGroup) {
