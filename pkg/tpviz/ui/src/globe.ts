@@ -620,11 +620,9 @@ function onMouseMove(event: MouseEvent): void {
     const deltaX = event.clientX - previousMousePosition.x;
     const deltaY = event.clientY - previousMousePosition.y;
 
+    // Free rotation in all directions (no clamping)
     globe.rotation.y += deltaX * 0.005;
     globe.rotation.x += deltaY * 0.005;
-
-    // Clamp vertical rotation
-    globe.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, globe.rotation.x));
 
     nodeGroup.rotation.y = globe.rotation.y;
     nodeGroup.rotation.x = globe.rotation.x;
