@@ -2,7 +2,7 @@
 
 The Transport Discovery is a service that exposes a RESTful interface and interacts with a database on the back-end.
 
-The database stores *Transport Entries* that can be queried using their *Transport ID* or via a given *Transport Edge*. 
+The database stores *Transport Entries* that can be queried using their *Transport ID* or via a given *Transport Edge*.
 
 The process of submitting a *Transport Entry* is called *Registration* and a Transport cannot be deregistered. However, nodes that are an *Edge* of a *Transport*, can update their *Transport Status*, and specify whether the *Transport* is up or down.
 
@@ -433,10 +433,6 @@ POST /transports/
 - 409 Conflict (Transport with same edges already exists).
 - 500 Internal Server Error (Server error).
 
-### POST Status(es) *(Deprecated)*
-
-> **⚠️ DEPRECATED:** This endpoint returns `410 Gone`. Transport status is now determined automatically by the re-registration mechanism. Transports that are not re-registered within the 2-minute TTL are considered down and expire from the registry. See "Transport Status via Re-registration" in the procedures section above.
-
 ### DELETE Transport
 
 Deletes a transport by ID. Only an edge of the transport can delete it.
@@ -715,9 +711,9 @@ The response is a map where each key is a visor public key (hex-encoded), and th
 
 ---
 
-## Quality of Service (QoS) Metrics
+## Bandwidth Statistics
 
-QoS metrics (bandwidth and latency) are served from dedicated endpoints, separate from core transport data. This separation ensures that the core transport registry remains lightweight and that QoS data can be queried independently.
+Bandwidth data is collected during transport re-registration and stored separately from core transport data. This section describes the bandwidth query endpoints.
 
 ### Reporting Configuration
 
@@ -725,426 +721,259 @@ QoS metrics (bandwidth and latency) are served from dedicated endpoints, separat
 |-----------|---------------|-------------|
 | Transport re-registration interval | 90 seconds | How often visors re-register their transports |
 | Transport entry TTL | 2 minutes | Time before an unrefreshed transport is considered stale |
-| Uptime cache refresh | 5 minutes | How often the uptime data cache is refreshed |
-| Daily bandwidth retention | 35 days | How long daily bandwidth aggregates are kept in Redis |
-| Verified metrics retention | 7 days | How long daily verified metrics (bandwidth + latency) are kept |
-| Visor PK set TTL | 400 days | TTL for the set of known visor public keys (for `/visors` endpoint) |
-
-**Note on Data Retention:**
-- The Uptime Tracker keeps data in the database for **7 days** (configurable via `--store-data-cutoff`)
-- Older uptime data is archived to JSON files (`{date}-uptime-data.json`)
-- The `/uptimes` endpoint returns the last 7 days of daily uptime percentages
-- Verified metrics (`/metrics/verified`) are retained for **7 days** to match uptime data retention
+| Daily bandwidth retention | 35 days | How long daily bandwidth aggregates are kept |
+| Verified bandwidth retention | 7 days | How long verified bandwidth data is kept |
 
 ### Bandwidth Semantics
 
-Bandwidth values are **cumulative** - they represent total bytes sent/received since the transport was established, not per-interval deltas. Each transport edge reports its own perspective:
+Bandwidth values are **cumulative** - they represent total bytes sent/received since the transport was established. Each transport edge reports its own perspective during re-registration.
 
-```go
-type BandwidthData struct {
-    SentBytes uint64 // Total bytes sent (cumulative)
-    RecvBytes uint64 // Total bytes received (cumulative)
-}
-```
+**Verified bandwidth:** When both edges report bandwidth that agrees within an acceptable margin (e.g., 5% discrepancy), the bandwidth is considered "verified."
 
-### Bandwidth Metrics
+---
 
-Bandwidth is measured in bytes and reported by each transport edge. The Transport Discovery stores bandwidth data from both edges independently.
+### GET /bandwidth
 
-#### GET Transport Bandwidth
-
-Returns historical bandwidth for a specific transport, showing reports from both edges.
+Returns network-wide bandwidth statistics.
 
 **Request:**
 
 ```
-GET /bandwidth/transport/{id}
-GET /bandwidth/transport/{id}?period=daily&limit=7
+GET /bandwidth
+GET /bandwidth?days=7
 ```
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | string | Transport UUID |
 
 **Query Parameters:**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `period` | string | `daily` | Aggregation period: `daily` or `hourly` |
-| `limit` | integer | 7 | Number of periods to return |
+| `days` | integer | 1 | Number of days of history (1-35) |
 
 **Response:**
 
-- 200 OK (Success).
-    ```json
-    [
+```json
+{
+    "daily": [
         {
             "date": "2024-02-21",
+            "total": 53687091200,
+            "verified": 48318382080
+        }
+    ],
+    "cumulative": {
+        "total": 1879948193280,
+        "verified": 1691953373952
+    }
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `daily` | array | Per-day bandwidth totals |
+| `daily[].date` | string | Date (YYYY-MM-DD) |
+| `daily[].total` | integer | Total bytes reported by all edges |
+| `daily[].verified` | integer | Total verified bytes (where edges agree) |
+| `cumulative.total` | integer | Sum of all daily totals in response |
+| `cumulative.verified` | integer | Sum of all daily verified totals |
+
+---
+
+### GET /bandwidth/verified
+
+Returns network-wide verified bandwidth only (lighter computation).
+
+**Request:**
+
+```
+GET /bandwidth/verified
+GET /bandwidth/verified?days=7
+```
+
+**Response:**
+
+```json
+{
+    "daily": [
+        {
+            "date": "2024-02-21",
+            "verified": 48318382080
+        }
+    ],
+    "cumulative": 1691953373952
+}
+```
+
+---
+
+### GET /bandwidths
+
+Returns bandwidth for all transports, with both edges' reports.
+
+**Request:**
+
+```
+GET /bandwidths
+GET /bandwidths?days=7
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | integer | 1 | Number of days of history (1-35) |
+
+**Response:**
+
+```json
+{
+    "date": "2024-02-21",
+    "transports": [
+        {
+            "id": "<transport-id>",
             "edge_a": {
-                "pk": "<public-key-1>",
                 "sent": 536870912,
                 "recv": 268435456
             },
             "edge_b": {
-                "pk": "<public-key-2>",
                 "sent": 268435456,
                 "recv": 536870912
             }
         }
     ]
-    ```
+}
+```
 
 **Response Fields:**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `date` | string | Date/time for this period (YYYY-MM-DD for daily, ISO 8601 for hourly) |
-| `edge_a` | object | Bandwidth reported by the first edge (sorted by PK) |
-| `edge_a.pk` | string | Public key of this edge |
-| `edge_a.sent` | integer | Cumulative bytes sent as reported by this edge |
-| `edge_a.recv` | integer | Cumulative bytes received as reported by this edge |
-| `edge_b` | object | Bandwidth reported by the second edge |
-| `edge_b.pk` | string | Public key of this edge |
-| `edge_b.sent` | integer | Cumulative bytes sent as reported by this edge |
-| `edge_b.recv` | integer | Cumulative bytes received as reported by this edge |
+| `id` | string | Transport UUID |
+| `edge_a` | object | Bandwidth reported by first edge (lower PK) |
+| `edge_b` | object | Bandwidth reported by second edge (higher PK) |
+| `sent` | integer | Cumulative bytes sent |
+| `recv` | integer | Cumulative bytes received |
 
-**Note:** Edge A's `sent` should approximately equal Edge B's `recv` and vice versa. Significant discrepancies may indicate measurement issues or network problems.
+**Note:** Edges are ordered by public key (lower first). Edge A's `sent` should approximately equal Edge B's `recv`.
 
-**Error Responses:**
+---
 
-- 400 Bad Request (Invalid transport ID format).
-- 404 Not Found (Transport not found or no bandwidth data).
-- 500 Internal Server Error (Server error).
+### GET /bandwidths/verified
 
-#### GET Visor Bandwidth
-
-Returns aggregated bandwidth for all transports belonging to a visor.
+Returns verified bandwidth for all transports (single number per transport).
 
 **Request:**
 
 ```
-GET /bandwidth/visor/{pk}
-GET /bandwidth/visor/{pk}?period=daily&limit=7
+GET /bandwidths/verified
+GET /bandwidths/verified?days=7
+```
+
+**Response:**
+
+```json
+{
+    "date": "2024-02-21",
+    "transports": [
+        {
+            "id": "<transport-id>",
+            "bandwidth": 805306368
+        }
+    ]
+}
+```
+
+Only transports where both edges' reports agree are included.
+
+---
+
+### GET /bandwidth/{ids}
+
+Returns bandwidth for specific transport(s). Accepts comma-separated IDs.
+
+**Request:**
+
+```
+GET /bandwidth/{id}
+GET /bandwidth/{id1},{id2},{id3}
+GET /bandwidth/{ids}?days=7
 ```
 
 **Path Parameters:**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `pk` | string | Visor public key (hex-encoded) |
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `period` | string | `daily` | Aggregation period: `daily` or `hourly` |
-| `limit` | integer | 7 | Number of periods to return |
+| `ids` | string | One or more transport UUIDs, comma-separated |
 
 **Response:**
 
-- 200 OK (Success).
-    ```json
-    [
-        {
-            "date": "2024-02-21",
-            "bandwidth": 5368709120
-        }
-    ]
-    ```
-
-**Response Fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `date` | string | Date/time for this period (YYYY-MM-DD for daily) |
-| `bandwidth` | integer | Total bytes (sent + received) across all transports for this visor |
-
-**Error Responses:**
-
-- 400 Bad Request (Invalid public key format).
-- 404 Not Found (Visor not found or no bandwidth data).
-- 500 Internal Server Error (Server error).
-
-### Transport Metrics *(Proposed)*
-
-> **Note:** The `/metrics` endpoints described in this section are **proposed** and not yet implemented. Currently, only the `/bandwidth/*` endpoints above are available for QoS data.
-
-The `/metrics` endpoint will provide detailed QoS metrics (bandwidth and latency) for all transports, organized by reporting visor.
-
-#### GET All Transport Metrics *(Proposed)*
-
-Returns QoS metrics for all transports, organized by the reporting visor's public key. Each visor reports metrics for its own perspective of each transport.
-
-**Request:**
-
-```
-GET /metrics
-```
-
-**Response:**
-
-- 200 OK (Success).
-    ```json
+```json
+[
     {
-        "<visor-pk-1>": {
-            "transports": {
-                "<transport-id-1>": {
-                    "bandwidth": {
-                        "sent": 536870912,
-                        "recv": 268435456,
-                        "total": 805306368
-                    },
-                    "latency": {
-                        "avg_ms": 45.2,
-                        "min_ms": 12.0,
-                        "max_ms": 120.5
-                    },
-                    "updated": "2024-02-21T15:30:00Z"
-                },
-                "<transport-id-2>": {
-                    "bandwidth": {
-                        "sent": 134217728,
-                        "recv": 67108864,
-                        "total": 201326592
-                    },
-                    "latency": {
-                        "avg_ms": 28.7,
-                        "min_ms": 8.0,
-                        "max_ms": 85.0
-                    },
-                    "updated": "2024-02-21T15:28:00Z"
-                }
-            }
-        },
-        "<visor-pk-2>": {
-            "transports": {
-                "<transport-id-1>": {
-                    "bandwidth": {
-                        "sent": 268435456,
-                        "recv": 536870912,
-                        "total": 805306368
-                    },
-                    "latency": {
-                        "avg_ms": 44.8,
-                        "min_ms": 11.5,
-                        "max_ms": 118.0
-                    },
-                    "updated": "2024-02-21T15:30:00Z"
-                }
-            }
-        }
-    }
-    ```
-
-**Response Fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `<visor-pk>` | object | Metrics reported by this visor |
-| `transports` | object | Map of transport ID to metrics |
-| `bandwidth.sent` | integer | Bytes sent over this transport |
-| `bandwidth.recv` | integer | Bytes received over this transport |
-| `bandwidth.total` | integer | Total bytes (sent + recv) |
-| `latency.avg_ms` | number | Average round-trip latency in milliseconds |
-| `latency.min_ms` | number | Minimum observed latency |
-| `latency.max_ms` | number | Maximum observed latency |
-| `updated` | string | ISO 8601 timestamp of last metric update |
-
-#### GET Visor Transport Metrics *(Proposed)*
-
-Returns QoS metrics for all transports belonging to a specific visor.
-
-**Request:**
-
-```
-GET /metrics/visor/{pk}
-```
-
-**Response:**
-
-- 200 OK (Success).
-    ```json
-    {
-        "pk": "<visor-pk>",
-        "transports": {
-            "<transport-id-1>": {
-                "bandwidth": {
+        "id": "<transport-id-1>",
+        "daily": [
+            {
+                "date": "2024-02-21",
+                "edge_a": {
                     "sent": 536870912,
-                    "recv": 268435456,
-                    "total": 805306368
+                    "recv": 268435456
                 },
-                "latency": {
-                    "avg_ms": 45.2,
-                    "min_ms": 12.0,
-                    "max_ms": 120.5
-                },
-                "updated": "2024-02-21T15:30:00Z"
+                "edge_b": {
+                    "sent": 268435456,
+                    "recv": 536870912
+                }
             }
-        }
+        ]
     }
-    ```
+]
+```
 
-#### POST Report Metrics *(Proposed)*
+---
 
-Allows a visor to report QoS metrics for its transports. This endpoint is authenticated.
+### GET /bandwidth/visor/{pk}
+
+Returns bandwidth totals for a specific visor.
 
 **Request:**
 
 ```
-POST /metrics
+GET /bandwidth/visor/{pk}
+GET /bandwidth/visor/{pk}?days=7
 ```
 
-**Headers:**
-
-```
-SW-Public: <public-key>
-SW-Nonce: <nonce>
-SW-Sig: <signature>
-```
-
-**Body:**
+**Response:**
 
 ```json
 {
-    "transports": {
-        "<transport-id-1>": {
-            "bandwidth": {
-                "sent": 536870912,
-                "recv": 268435456
-            },
-            "latency": {
-                "avg_ms": 45.2,
-                "samples": 100
-            }
+    "pk": "<visor-pk>",
+    "daily": [
+        {
+            "date": "2024-02-21",
+            "sent": 1073741824,
+            "recv": 536870912,
+            "total": 1610612736,
+            "verified": 1449551462
         }
+    ],
+    "cumulative": {
+        "sent": 37580963840,
+        "recv": 18790481920,
+        "total": 56371445760,
+        "verified": 50734301184
     }
 }
 ```
 
-**Responses:**
-
-- 200 OK (Success).
-- 400 Bad Request (Malformed request).
-- 401 Unauthorized (Invalid signature/nonce).
-- 500 Internal Server Error (Server error).
-
-#### GET Verified Metrics *(Proposed)*
-
-Returns daily verified QoS metrics for transports where both edges have reported consistent bandwidth data. This endpoint only includes transports where both edges' reports agree within an acceptable margin (e.g., 5% discrepancy). History is retained for 7 days (same as uptime data).
-
-**Request:**
-
-```
-GET /metrics/verified
-GET /metrics/verified?limit=7&discrepancy_threshold=0.05
-```
-
-**Query Parameters:**
-
-- `limit` (optional): Number of days of history to return. Default: 7.
-- `discrepancy_threshold` (optional): Maximum allowed discrepancy between edges (0.0-1.0). Default: 0.05 (5%).
-
-**Response:**
-
-- 200 OK (Success).
-    ```json
-    [
-        {
-            "date": "2024-02-21",
-            "transports": [
-                {
-                    "transport_id": "<transport-id>",
-                    "edges": ["<public-key-1>", "<public-key-2>"],
-                    "bandwidth": {
-                        "sent": 536870912,
-                        "recv": 268435456,
-                        "total": 805306368
-                    },
-                    "latency": {
-                        "avg_ms": 45.0,
-                        "min_ms": 12.0,
-                        "max_ms": 120.5
-                    }
-                }
-            ]
-        },
-        {
-            "date": "2024-02-20",
-            "transports": [
-                {
-                    "transport_id": "<transport-id>",
-                    "edges": ["<public-key-1>", "<public-key-2>"],
-                    "bandwidth": {
-                        "sent": 400000000,
-                        "recv": 200000000,
-                        "total": 600000000
-                    },
-                    "latency": {
-                        "avg_ms": 42.3,
-                        "min_ms": 10.5,
-                        "max_ms": 115.0
-                    }
-                }
-            ]
-        }
-    ]
-    ```
-
 **Response Fields:**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `date` | string | Date for this daily aggregate (YYYY-MM-DD) |
-| `transports` | array | Transports with verified metrics for this day |
-| `transport_id` | string | Transport UUID |
-| `edges` | array | Public keys of both transport edges |
-| `bandwidth.sent` | integer | Verified bytes sent (average of both edges' reports) |
-| `bandwidth.recv` | integer | Verified bytes received |
-| `bandwidth.total` | integer | Total verified bandwidth |
-| `latency.avg_ms` | number | Average latency (average of both edges) |
-| `latency.min_ms` | number | Minimum observed latency for the day |
-| `latency.max_ms` | number | Maximum observed latency for the day |
-
-#### GET Transport Latency *(Proposed)*
-
-Returns latency history for a specific transport, showing measurements from both edges.
-
-**Request:**
-
-```
-GET /latency/transport/{id}
-GET /latency/transport/{id}?period=daily&limit=7
-```
-
-**Query Parameters:**
-
-- `period` (optional): Aggregation period. Values: `daily` (default), `hourly`.
-- `limit` (optional): Number of periods to return. Default: 7.
-
-**Response:**
-
-- 200 OK (Success).
-    ```json
-    [
-        {
-            "date": "2024-02-21",
-            "edge_a": {
-                "pk": "<public-key-1>",
-                "avg_ms": 45.2,
-                "min_ms": 12.0,
-                "max_ms": 120.5
-            },
-            "edge_b": {
-                "pk": "<public-key-2>",
-                "avg_ms": 44.8,
-                "min_ms": 11.5,
-                "max_ms": 118.0
-            }
-        }
-    ]
-    ```
+| `pk` | string | Visor public key |
+| `sent` | integer | Total bytes sent by this visor |
+| `recv` | integer | Total bytes received by this visor |
+| `total` | integer | Total bandwidth (sent + recv) |
+| `verified` | integer | Verified bandwidth for this visor's transports |
 
 ---
 
@@ -1192,8 +1021,6 @@ GET /health
 
 ## Endpoint Summary
 
-### Implemented Endpoints
-
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/security/nonces/{pk}` | GET | No | Get next expected nonce |
@@ -1203,21 +1030,14 @@ GET /health
 | `/transports/` | POST | Yes | Register transport(s) |
 | `/transports/id:{id}` | DELETE | Yes | Delete a transport |
 | `/transports/delete-batch` | POST | Yes | Delete multiple transports |
-| `/statuses` | POST | Yes | **Deprecated** - Returns 410 Gone |
-| `/all-transports` | GET | No | Get all transports (no QoS) |
+| `/all-transports` | GET | No | Get all transports |
 | `/all-transports/stats` | GET | No | Get aggregate stats |
 | `/all-transports/per-key-stats` | GET | No | Get per-visor stats |
-| `/uptimes` | GET | No | Get visor uptimes (no QoS) |
-| `/bandwidth/transport/{id}` | GET | No | Get transport bandwidth history (both edges) |
-| `/bandwidth/visor/{pk}` | GET | No | Get visor bandwidth history |
+| `/uptimes` | GET | No | Get visor uptimes |
+| `/bandwidth` | GET | No | Network-wide bandwidth stats |
+| `/bandwidth/verified` | GET | No | Network-wide verified bandwidth |
+| `/bandwidths` | GET | No | All transports with both edges |
+| `/bandwidths/verified` | GET | No | All transports verified bandwidth |
+| `/bandwidth/{ids}` | GET | No | Specific transport(s) bandwidth |
+| `/bandwidth/visor/{pk}` | GET | No | Visor bandwidth totals |
 | `/health` | GET | No | Health check |
-
-### Proposed Endpoints (Not Yet Implemented)
-
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/metrics` | GET | No | Get all QoS metrics by visor |
-| `/metrics` | POST | Yes | Report QoS metrics |
-| `/metrics/visor/{pk}` | GET | No | Get visor QoS metrics |
-| `/metrics/verified` | GET | No | Get verified metrics (consistent edge reports) |
-| `/latency/transport/{id}` | GET | No | Get transport latency history (both edges) |
