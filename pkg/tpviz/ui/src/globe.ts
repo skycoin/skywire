@@ -806,14 +806,13 @@ export function updateGlobeData(): void {
             }
         }
 
-        // Step 5: Calculate Voronoi cells per IP GROUP (not per node) for fewer boundaries
-        // Only draw if showVoronoiOverlay is true
+        // Step 5: Draw Voronoi BOUNDARIES ONLY (no filled cells)
+        // Thick lines between countries, thin lines between IP groups within same country
         if (voronoiGroup && showVoronoiOverlay && sortedGroups.length >= 3) {
             // Calculate centroid for each IP group
-            const groupCentroids: { country: string; ipGroup: number | string; centroid: THREE.Vector3 }[] = [];
+            const groupCentroids: { country: string; ipGroup: number | string; centroid: THREE.Vector3; lon: number; lat: number }[] = [];
 
             for (const { country, ipGroup, nodes: groupNodes } of sortedGroups) {
-                // Calculate average position (centroid) of all nodes in this group
                 let sumX = 0, sumY = 0, sumZ = 0;
                 let count = 0;
                 for (const node of groupNodes) {
@@ -828,27 +827,26 @@ export function updateGlobeData(): void {
                 if (count > 0) {
                     const centroid = new THREE.Vector3(sumX / count, sumY / count, sumZ / count);
                     centroid.normalize().multiplyScalar(1.02);
-                    groupCentroids.push({ country, ipGroup, centroid });
+                    const r = centroid.length();
+                    const lat = 90 - Math.acos(centroid.y / r) * (180 / Math.PI);
+                    const lon = Math.atan2(centroid.z, -centroid.x) * (180 / Math.PI);
+                    groupCentroids.push({ country, ipGroup, centroid, lon, lat });
                 }
             }
 
-            // Convert group centroids to [lon, lat] for d3-geo-voronoi
-            const geoPoints: [number, number][] = [];
-            for (const { centroid } of groupCentroids) {
-                const r = centroid.length();
-                const lat = 90 - Math.acos(centroid.y / r) * (180 / Math.PI);
-                const lon = Math.atan2(centroid.z, -centroid.x) * (180 / Math.PI);
-                geoPoints.push([lon, lat]);
-            }
+            // Convert to geo points for d3-geo-voronoi
+            const geoPoints: [number, number][] = groupCentroids.map(g => [g.lon, g.lat]);
 
             if (geoPoints.length >= 3) {
                 try {
-                    // Compute spherical Voronoi diagram for group centroids
                     const voronoi = geoVoronoi(geoPoints);
                     const polygons = voronoi.polygons();
 
-                    // Draw each Voronoi cell (one per IP group)
                     if (polygons && polygons.features) {
+                        // Track which edges we've drawn to avoid duplicates
+                        const drawnEdges = new Set<string>();
+
+                        // For each cell, look at its edges and determine if it's a country or IP boundary
                         for (let i = 0; i < polygons.features.length; i++) {
                             const feature = polygons.features[i];
                             const groupData = groupCentroids[i];
@@ -857,79 +855,68 @@ export function updateGlobeData(): void {
                             const coords = feature.geometry.coordinates;
                             if (!coords || coords.length === 0) continue;
 
-                            // Get color based on IP group or country
-                            let color: string;
-                            if (groupData.ipGroup !== '_no_ip' && typeof groupData.ipGroup === 'number') {
-                                color = getIPGroupColor(groupData.ipGroup);
-                            } else {
-                                color = COUNTRY_COLORS[groupData.country];
-                                if (!color) {
-                                    const hash = (groupData.country || '').split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
-                                    const hue = (hash * 137) % 360;
-                                    color = `hsl(${hue}, 60%, 50%)`;
-                                }
-                            }
-
                             const ring = coords[0];
                             if (!ring || ring.length < 3) continue;
 
-                            // Create filled polygon mesh
-                            const cellGeometry = new THREE.BufferGeometry();
-                            const vertices: number[] = [];
-                            const indices: number[] = [];
-
-                            // Center vertex
-                            let centerLat = 0, centerLon = 0;
-                            for (const pt of ring) {
-                                centerLon += pt[0];
-                                centerLat += pt[1];
-                            }
-                            centerLon /= ring.length;
-                            centerLat /= ring.length;
-                            const centerPos = latLonToVector3(centerLat, centerLon, 1.008);
-                            vertices.push(centerPos.x, centerPos.y, centerPos.z);
-
+                            // For each edge of this cell's polygon
                             for (let j = 0; j < ring.length; j++) {
-                                const pt = ring[j];
-                                const pos = latLonToVector3(pt[1], pt[0], 1.008);
-                                vertices.push(pos.x, pos.y, pos.z);
-                                const nextJ = (j + 1) % ring.length;
-                                indices.push(0, j + 1, nextJ + 1);
+                                const pt1 = ring[j];
+                                const pt2 = ring[(j + 1) % ring.length];
+
+                                // Create edge key to avoid drawing twice
+                                const edgeKey = [
+                                    `${pt1[0].toFixed(4)},${pt1[1].toFixed(4)}`,
+                                    `${pt2[0].toFixed(4)},${pt2[1].toFixed(4)}`
+                                ].sort().join('|');
+
+                                if (drawnEdges.has(edgeKey)) continue;
+                                drawnEdges.add(edgeKey);
+
+                                // Find which other cell shares this edge (neighbor)
+                                let neighborCountry: string | null = null;
+                                for (let k = 0; k < polygons.features.length; k++) {
+                                    if (k === i) continue;
+                                    const otherRing = polygons.features[k]?.geometry?.coordinates?.[0];
+                                    if (!otherRing) continue;
+
+                                    // Check if this edge exists in the other polygon
+                                    for (let m = 0; m < otherRing.length; m++) {
+                                        const oPt1 = otherRing[m];
+                                        const oPt2 = otherRing[(m + 1) % otherRing.length];
+                                        const otherEdgeKey = [
+                                            `${oPt1[0].toFixed(4)},${oPt1[1].toFixed(4)}`,
+                                            `${oPt2[0].toFixed(4)},${oPt2[1].toFixed(4)}`
+                                        ].sort().join('|');
+
+                                        if (otherEdgeKey === edgeKey) {
+                                            neighborCountry = groupCentroids[k]?.country || null;
+                                            break;
+                                        }
+                                    }
+                                    if (neighborCountry !== null) break;
+                                }
+
+                                // Determine line style based on whether it's a country or IP boundary
+                                const isCountryBoundary = neighborCountry !== null && neighborCountry !== groupData.country;
+
+                                // Draw the edge as a great circle arc
+                                const arcPoints = createGreatCircleArc(
+                                    latLonToVector3(pt1[1], pt1[0], 1.015),
+                                    latLonToVector3(pt2[1], pt2[0], 1.015),
+                                    1.015,
+                                    16
+                                );
+
+                                const edgeGeometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
+                                const edgeMaterial = new THREE.LineBasicMaterial({
+                                    color: isCountryBoundary ? 0xffffff : 0x00d9a5,
+                                    transparent: true,
+                                    opacity: isCountryBoundary ? 0.9 : 0.5,
+                                    linewidth: isCountryBoundary ? 3 : 1,
+                                });
+                                const edgeLine = new THREE.Line(edgeGeometry, edgeMaterial);
+                                voronoiGroup.add(edgeLine);
                             }
-
-                            cellGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-                            cellGeometry.setIndex(indices);
-                            cellGeometry.computeVertexNormals();
-
-                            const cellMaterial = new THREE.MeshBasicMaterial({
-                                color: color,
-                                transparent: true,
-                                opacity: 0.15,
-                                side: THREE.DoubleSide,
-                                depthWrite: false,
-                            });
-
-                            const cellMesh = new THREE.Mesh(cellGeometry, cellMaterial);
-                            voronoiGroup.add(cellMesh);
-
-                            // Draw cell boundary
-                            const boundaryPoints: THREE.Vector3[] = [];
-                            for (const pt of ring) {
-                                boundaryPoints.push(latLonToVector3(pt[1], pt[0], 1.01));
-                            }
-                            if (ring.length > 0) {
-                                boundaryPoints.push(latLonToVector3(ring[0][1], ring[0][0], 1.01));
-                            }
-
-                            const boundaryGeometry = new THREE.BufferGeometry().setFromPoints(boundaryPoints);
-                            const boundaryMaterial = new THREE.LineBasicMaterial({
-                                color: 0x00d9a5,
-                                transparent: true,
-                                opacity: 0.4,
-                                linewidth: 1,
-                            });
-                            const boundaryLine = new THREE.Line(boundaryGeometry, boundaryMaterial);
-                            voronoiGroup.add(boundaryLine);
                         }
                     }
                 } catch (e) {
