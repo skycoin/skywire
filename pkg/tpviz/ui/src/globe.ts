@@ -735,7 +735,7 @@ export function updateGlobeData(): void {
     const countryNodeCounts: Record<string, number> = {};
 
     if (voronoiMode && nodes.length >= 3) {
-        // VORONOI MODE: Even distribution with same-country AND same-IP nodes adjacent
+        // VORONOI MODE: Even Fibonacci distribution with geographic country clustering
 
         // Step 1: Generate Fibonacci positions for ALL nodes (even distribution)
         const fibPositions = fibonacciSphere(nodes.length, 1.02);
@@ -756,52 +756,88 @@ export function updateGlobeData(): void {
             countryMap.get(ipGroup)!.push(node);
         });
 
-        // Step 3: Sort countries by longitude, then IP groups by ID within each country
+        // Step 3: Calculate country centroids and total node counts
+        interface CountryData {
+            country: string;
+            centroid: THREE.Vector3;
+            nodeCount: number;
+            ipGroups: Map<number | string, any[]>;
+        }
+        const countryDataList: CountryData[] = [];
+
+        for (const [country, ipMap] of nodesByCountry) {
+            const coords = COUNTRY_COORDS[country];
+            const centroid = coords
+                ? latLonToVector3(coords[0], coords[1], 1.02)
+                : latLonToVector3(0, 0, 1.02); // Default to 0,0 for unknown
+
+            let nodeCount = 0;
+            ipMap.forEach(nodes => nodeCount += nodes.length);
+
+            countryDataList.push({ country, centroid, nodeCount, ipGroups: ipMap });
+        }
+
+        // Step 4: For each country, find the Fibonacci position closest to its centroid
+        // Then assign a contiguous block of Fibonacci positions to that country
+        interface CountryAssignment {
+            country: string;
+            bestFibIndex: number;
+            nodeCount: number;
+            ipGroups: Map<number | string, any[]>;
+        }
+        const countryAssignments: CountryAssignment[] = countryDataList.map(cd => {
+            // Find Fibonacci position closest to country centroid
+            let bestIndex = 0;
+            let bestDist = Infinity;
+            for (let i = 0; i < fibPositions.length; i++) {
+                const dist = fibPositions[i].distanceTo(cd.centroid);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestIndex = i;
+                }
+            }
+            return {
+                country: cd.country,
+                bestFibIndex: bestIndex,
+                nodeCount: cd.nodeCount,
+                ipGroups: cd.ipGroups
+            };
+        });
+
+        // Sort countries by their best Fibonacci index (spiral order)
+        countryAssignments.sort((a, b) => a.bestFibIndex - b.bestFibIndex);
+
+        // Step 5: Assign contiguous Fibonacci positions to each country's nodes
+        // Countries get positions in spiral order, maintaining geographic clustering
+        let positionIndex = 0;
+        const nodeToCountry: Map<string, string> = new Map();
+        const nodeToIPGroup: Map<string, number | string> = new Map();
+
         interface CountryIPGroup {
             country: string;
             ipGroup: number | string;
             nodes: any[];
-            lon: number;
         }
         const sortedGroups: CountryIPGroup[] = [];
 
-        for (const [country, ipMap] of nodesByCountry) {
-            const coords = COUNTRY_COORDS[country];
-            const lon = coords ? coords[1] : 0;
-
-            // Sort IP groups numerically within each country
-            const sortedIPGroups = Array.from(ipMap.entries()).sort((a, b) => {
+        for (const ca of countryAssignments) {
+            // Sort IP groups within this country
+            const sortedIPGroups = Array.from(ca.ipGroups.entries()).sort((a, b) => {
                 if (a[0] === '_no_ip') return 1;
                 if (b[0] === '_no_ip') return -1;
                 return (a[0] as number) - (b[0] as number);
             });
 
             for (const [ipGroup, groupNodes] of sortedIPGroups) {
-                sortedGroups.push({ country, ipGroup, nodes: groupNodes, lon });
-            }
-        }
+                sortedGroups.push({ country: ca.country, ipGroup, nodes: groupNodes });
 
-        // Sort all groups: first by country longitude, IP groups stay together within country
-        sortedGroups.sort((a, b) => {
-            if (a.lon !== b.lon) return a.lon - b.lon;
-            // Same country - keep IP group order
-            if (a.ipGroup === '_no_ip') return 1;
-            if (b.ipGroup === '_no_ip') return -1;
-            return (a.ipGroup as number) - (b.ipGroup as number);
-        });
-
-        // Step 4: Assign contiguous Fibonacci positions to each group
-        let positionIndex = 0;
-        const nodeToCountry: Map<string, string> = new Map();
-        const nodeToIPGroup: Map<string, number | string> = new Map();
-
-        for (const { country, ipGroup, nodes: groupNodes } of sortedGroups) {
-            for (const node of groupNodes) {
-                if (positionIndex < fibPositions.length) {
-                    nodePositions.set(node.id, fibPositions[positionIndex]);
-                    nodeToCountry.set(node.id, country);
-                    nodeToIPGroup.set(node.id, ipGroup);
-                    positionIndex++;
+                for (const node of groupNodes) {
+                    if (positionIndex < fibPositions.length) {
+                        nodePositions.set(node.id, fibPositions[positionIndex]);
+                        nodeToCountry.set(node.id, ca.country);
+                        nodeToIPGroup.set(node.id, ipGroup);
+                        positionIndex++;
+                    }
                 }
             }
         }
