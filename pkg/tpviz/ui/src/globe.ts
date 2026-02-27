@@ -906,8 +906,8 @@ export function updateGlobeData(): void {
             }
         }
 
-        // Step 5: Draw Voronoi BOUNDARIES between cells
-        // Use Delaunay edges to find adjacent cells, then draw the boundary between them
+        // Step 5: Draw proper spherical Voronoi boundaries using d3-geo-voronoi
+        // d3-geo-voronoi computes mathematically correct spherical Voronoi cells
         if (voronoiGroup && showVoronoiOverlay && sortedGroups.length >= 3) {
             // Calculate centroid for each IP group
             const groupCentroids: { country: string; ipGroup: number | string; centroid: THREE.Vector3; lon: number; lat: number }[] = [];
@@ -941,84 +941,112 @@ export function updateGlobeData(): void {
                 try {
                     const voronoi = geoVoronoi(geoPoints);
 
-                    // Get Delaunay links - these connect adjacent Voronoi cells
+                    // Build adjacency map from Delaunay triangles
+                    const adjacency: Map<number, Set<number>> = new Map();
                     const delaunay = voronoi.delaunay;
                     const triangles = delaunay.triangles;
 
-                    // Build adjacency from triangles
-                    const drawnEdges = new Set<string>();
+                    for (let i = 0; i < groupCentroids.length; i++) {
+                        adjacency.set(i, new Set());
+                    }
 
-                    // For each triangle, we have 3 edges connecting cells
                     for (let t = 0; t < triangles.length; t += 3) {
-                        const cellIndices = [triangles[t], triangles[t + 1], triangles[t + 2]];
+                        const a = triangles[t], b = triangles[t + 1], c = triangles[t + 2];
+                        adjacency.get(a)?.add(b);
+                        adjacency.get(a)?.add(c);
+                        adjacency.get(b)?.add(a);
+                        adjacency.get(b)?.add(c);
+                        adjacency.get(c)?.add(a);
+                        adjacency.get(c)?.add(b);
+                    }
 
-                        // Each pair of cells in the triangle are adjacent
-                        for (let e = 0; e < 3; e++) {
-                            const i = cellIndices[e];
-                            const j = cellIndices[(e + 1) % 3];
+                    // Get the actual spherical Voronoi polygons
+                    const polygons = voronoi.polygons();
 
-                            // Create unique edge key
-                            const edgeKey = i < j ? `${i}-${j}` : `${j}-${i}`;
-                            if (drawnEdges.has(edgeKey)) continue;
-                            drawnEdges.add(edgeKey);
+                    if (polygons && polygons.features) {
+                        const drawnEdges = new Set<string>();
 
-                            const groupA = groupCentroids[i];
-                            const groupB = groupCentroids[j];
-                            if (!groupA || !groupB) continue;
+                        for (let i = 0; i < polygons.features.length; i++) {
+                            const feature = polygons.features[i];
+                            const groupData = groupCentroids[i];
+                            if (!feature || !feature.geometry || !groupData) continue;
 
-                            // Determine if this is a country or IP boundary
-                            const isCountryBoundary = groupA.country !== groupB.country;
+                            const coords = feature.geometry.coordinates;
+                            if (!coords || coords.length === 0) continue;
 
-                            // Calculate the Voronoi edge between these two cells
-                            // The edge is the perpendicular bisector of the line connecting the two centroids
-                            const midpoint = new THREE.Vector3()
-                                .addVectors(groupA.centroid, groupB.centroid)
-                                .multiplyScalar(0.5)
-                                .normalize()
-                                .multiplyScalar(1.015);
+                            const ring = coords[0];
+                            if (!ring || ring.length < 3) continue;
 
-                            // Direction along the edge (perpendicular to the line between centroids)
-                            const diff = new THREE.Vector3().subVectors(groupB.centroid, groupA.centroid);
-                            const normal = midpoint.clone().normalize();
-                            const edgeDir = new THREE.Vector3().crossVectors(normal, diff).normalize();
+                            // Check if this cell borders any different-country cells
+                            const neighbors = adjacency.get(i) || new Set();
+                            const hasDifferentCountryNeighbor = Array.from(neighbors).some(
+                                j => groupCentroids[j]?.country !== groupData.country
+                            );
+                            const hasOnlySameCountryNeighbors = !hasDifferentCountryNeighbor;
 
-                            // Calculate edge length based on distance (shorter for closer cells)
-                            const dist = groupA.centroid.distanceTo(groupB.centroid);
-                            const edgeHalfLength = Math.min(0.3, dist * 0.4);
+                            // Draw each edge of the polygon
+                            for (let j = 0; j < ring.length; j++) {
+                                const pt1 = ring[j];
+                                const pt2 = ring[(j + 1) % ring.length];
 
-                            // Edge endpoints
-                            const pt1 = midpoint.clone().add(edgeDir.clone().multiplyScalar(edgeHalfLength));
-                            const pt2 = midpoint.clone().sub(edgeDir.clone().multiplyScalar(edgeHalfLength));
+                                // Round coordinates for edge key (avoid precision issues)
+                                const key1 = `${pt1[0].toFixed(6)},${pt1[1].toFixed(6)}`;
+                                const key2 = `${pt2[0].toFixed(6)},${pt2[1].toFixed(6)}`;
+                                const edgeKey = [key1, key2].sort().join('|');
 
-                            // Draw the edge
-                            const arcPoints = createGreatCircleArc(pt1, pt2, 1.015, 16);
+                                if (drawnEdges.has(edgeKey)) continue;
+                                drawnEdges.add(edgeKey);
 
-                            // For country boundaries, draw multiple lines for thickness effect
-                            if (isCountryBoundary) {
-                                // Draw 3 parallel lines for thick effect
-                                for (let offset = -1; offset <= 1; offset++) {
-                                    const offsetVec = normal.clone().multiplyScalar(offset * 0.003);
-                                    const offsetPoints = arcPoints.map(p => p.clone().add(offsetVec));
+                                // Find if this edge is shared with a different-country neighbor
+                                // by checking midpoint proximity to neighbor centroids
+                                const midLon = (pt1[0] + pt2[0]) / 2;
+                                const midLat = (pt1[1] + pt2[1]) / 2;
+                                const midPoint3D = latLonToVector3(midLat, midLon, 1.02);
 
-                                    const edgeGeometry = new THREE.BufferGeometry().setFromPoints(offsetPoints);
-                                    const edgeMaterial = new THREE.LineBasicMaterial({
-                                        color: 0xffffff,
-                                        transparent: true,
-                                        opacity: 0.9,
-                                    });
-                                    const edgeLine = new THREE.Line(edgeGeometry, edgeMaterial);
-                                    voronoiGroup.add(edgeLine);
+                                let isCountryBoundary = false;
+                                for (const neighborIdx of neighbors) {
+                                    const neighbor = groupCentroids[neighborIdx];
+                                    if (neighbor && neighbor.country !== groupData.country) {
+                                        // Check if this edge is closer to this neighbor than others
+                                        const distToNeighbor = midPoint3D.distanceTo(neighbor.centroid);
+                                        const distToSelf = midPoint3D.distanceTo(groupData.centroid);
+                                        if (distToNeighbor < distToSelf * 1.5) {
+                                            isCountryBoundary = true;
+                                            break;
+                                        }
+                                    }
                                 }
-                            } else {
-                                // IP boundary - single thin line
-                                const edgeGeometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
-                                const edgeMaterial = new THREE.LineBasicMaterial({
-                                    color: 0x00d9a5,
-                                    transparent: true,
-                                    opacity: 0.4,
-                                });
-                                const edgeLine = new THREE.Line(edgeGeometry, edgeMaterial);
-                                voronoiGroup.add(edgeLine);
+
+                                // Convert to 3D and draw
+                                const start3D = latLonToVector3(pt1[1], pt1[0], 1.015);
+                                const end3D = latLonToVector3(pt2[1], pt2[0], 1.015);
+                                const arcPoints = createGreatCircleArc(start3D, end3D, 1.015, 16);
+
+                                if (isCountryBoundary) {
+                                    // Country boundary: thick white line (draw multiple for thickness)
+                                    const normal = start3D.clone().add(end3D).normalize();
+                                    for (let offset = -1; offset <= 1; offset++) {
+                                        const offsetVec = normal.clone().multiplyScalar(offset * 0.002);
+                                        const offsetPoints = arcPoints.map(p => p.clone().add(offsetVec).normalize().multiplyScalar(1.015));
+
+                                        const geom = new THREE.BufferGeometry().setFromPoints(offsetPoints);
+                                        const mat = new THREE.LineBasicMaterial({
+                                            color: 0xffffff,
+                                            transparent: true,
+                                            opacity: 0.85,
+                                        });
+                                        voronoiGroup.add(new THREE.Line(geom, mat));
+                                    }
+                                } else {
+                                    // IP boundary or internal: thin teal line
+                                    const geom = new THREE.BufferGeometry().setFromPoints(arcPoints);
+                                    const mat = new THREE.LineBasicMaterial({
+                                        color: 0x00d9a5,
+                                        transparent: true,
+                                        opacity: 0.35,
+                                    });
+                                    voronoiGroup.add(new THREE.Line(geom, mat));
+                                }
                             }
                         }
                     }
