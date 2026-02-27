@@ -62,6 +62,25 @@ Each edge reports its own perspective. The Transport Discovery stores both repor
 
 There are two ways to obtain transports; either via the assigned *Transport ID*, or via one of the *Transport Edges*. There is no restriction as who can access this information and results can be sorted by a given meta.
 
+## Transport Types
+
+The Transport Discovery supports the following transport types:
+
+| Type | Name | Description |
+|------|------|-------------|
+| `stcpr` | STCP Relay | TCP connection via a relay server. Most reliable but adds latency. |
+| `sudph` | SUDP Hole-punch | UDP hole-punching for direct peer-to-peer connections. Lower latency but requires NAT traversal. |
+| `stcp` | STCP | Direct TCP connection (typically used in local networks). |
+| `dmsg` | DMSG | Connection over the DMSG network overlay. |
+
+**Transport Type Selection:**
+
+- `stcpr` is used when direct connections are not possible (e.g., behind restrictive NATs)
+- `sudph` is preferred for direct connections when UDP hole-punching succeeds
+- `dmsg` provides an alternative routing path through the DMSG network
+
+---
+
 ## Security Procedures
 
 **Incrementing Security Nonce:**
@@ -105,25 +124,42 @@ The *Transport Discovery* should work with a variety of databases and the follow
 
 ## Endpoint Definitions
 
-The following is a summary of all the *Transport Discovery* endpoints.
+The following endpoints are implemented in the Transport Discovery service. See the Endpoint Summary at the end of this document for a complete reference table.
 
-- `GET /security/nonces/edge:<public-key>`
-- `GET /transports/id:<transport-id>`
-- `GET /transports/edge:<public-key>`
-- `POST /transports`
-- `POST /statuses`
+**Core Endpoints (Authenticated):**
+- `GET /security/nonces/{pk}` - Get security nonce
+- `GET /transports/id:{id}` - Get transport by ID
+- `GET /transports/edge:{pk}` - Get transports by edge
+- `POST /transports/` - Register transport(s)
+- `DELETE /transports/id:{id}` - Delete transport
+- `POST /transports/delete-batch` - Delete multiple transports
 
-All endpoints should include an `Accept: application/json` field and the response header should include an `Content-Type: application/json` field.
+**Public Endpoints:**
+- `GET /transports/stats/{pk}` - Get transport stats for edge
+- `GET /all-transports` - Get all transports
+- `GET /all-transports/stats` - Get aggregate statistics
+- `GET /all-transports/per-key-stats` - Get per-visor statistics
+- `GET /uptimes` - Get visor uptime data
+- `GET /bandwidth/transport/{id}` - Get transport bandwidth history
+- `GET /bandwidth/visor/{pk}` - Get visor bandwidth history
+- `GET /health` - Health check
 
-All requests (except for obtaining the next expected incrementing nonce) should include the following fields.
+**Request Headers:**
+
+All responses include `Content-Type: application/json`. Authenticated endpoints require the following headers:
 
 ```
-Accept: application/json
 Content-Type: application/json
 SW-Public: <public-key>
 SW-Nonce: <nonce>
 SW-Sig: <signature>
 ```
+
+| Header | Description |
+|--------|-------------|
+| `SW-Public` | The visor's public key (hex-encoded, 66 characters) |
+| `SW-Nonce` | The incrementing security nonce for this request |
+| `SW-Sig` | Hex-encoded signature of SHA256(nonce + request body) using the visor's secret key |
 
 ### GET Incrementing Security Nonce
 
@@ -132,10 +168,16 @@ Obtains the next expected incrementing nonce for a given edge's public key.
 **Request:**
 
 ```
-GET /security/nonces/<public-key>
+GET /security/nonces/{pk}
 ```
 
-**Responses:**
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `pk` | string | The visor's public key (hex-encoded, 66 characters) |
+
+**Response:**
 
 - 200 OK (Success).
     ```json
@@ -144,179 +186,334 @@ GET /security/nonces/<public-key>
         "next_nonce": 0
     }
     ```
-- 400 Bad Request (Malformed request).
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `edge` | string | The public key that was queried |
+| `next_nonce` | integer | The next expected nonce value for this public key. Starts at 0 for new keys. |
+
+**Error Responses:**
+
+- 400 Bad Request (Invalid public key format).
 - 500 Internal Server Error (Server error).
 
 ### GET Transport Entry via Transport ID
 
-Obtains a *Transport* via a given *Transport ID*.
-
-Should only return a single `"transport"` result.
+Obtains a *Transport* via a given *Transport ID*. Returns a single transport entry.
 
 **Request:**
 
 ```
-GET /transports/id:<transport-id>
+GET /transports/id:{id}
 ```
 
-**Responses:**
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | string | Transport UUID (36 characters, e.g., `550e8400-e29b-41d4-a716-446655440000`) |
+
+**Response:**
 
 - 200 OK (Success).
     ```json
     {
-        "entry": {
-            "id": "<transport-id>",
-            "edges": [
-                "<public-key-1>",
-                "<public-key-2>"
-            ],
-            "type": "<transport-type>"
-        },
-        "is_up": true,
-        "registered": 0
+        "t_id": "<transport-id>",
+        "edges": [
+            "<public-key-1>",
+            "<public-key-2>"
+        ],
+        "type": "stcpr",
+        "public": true
     }
     ```
-- 400 Bad Request (Malformed request).
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `t_id` | string | Transport UUID (see "Transport ID Generation" below) |
+| `edges` | array | Array of two public keys representing the transport endpoints (visors), sorted by numeric value (least-significant first) |
+| `type` | string | Transport type: `stcpr` (STCP Relay), `sudph` (SUDP Hole-punch), or `dmsg` |
+| `public` | boolean | Whether this transport is publicly visible in the registry |
+
+**Transport ID Generation:**
+
+The transport ID is deterministically generated from a SHA-256 hash of the transport's defining properties:
+
+```
+ID = UUID(SHA256(sorted_edge_1 || sorted_edge_2 || transport_type))
+```
+
+Where:
+- `sorted_edge_1`, `sorted_edge_2`: The two public keys (33 bytes each), sorted by numeric value (least-significant first)
+- `transport_type`: The transport type string (`stcpr`, `sudph`, `stcp`, or `dmsg`)
+
+**Properties:**
+- The same two visors with the same transport type will always produce the same transport ID
+- The order of edges doesn't matter: `MakeTransportID(A, B, type) == MakeTransportID(B, A, type)`
+- Different transport types between the same visors produce different IDs
+- Given a transport ID and both edge public keys, the transport type can be determined by computing IDs for each known type and comparing
+
+**Error Responses:**
+
+- 400 Bad Request (Invalid transport ID format).
+- 404 Not Found (Transport does not exist).
 - 500 Internal Server Error (Server error).
 
 ### GET Transport(s) via Edge Public Key
 
-Obtains *Transport(s)* via a given *Transport Edge* public key.
+Obtains all *Transports* where the given public key is one of the edges.
 
 **Request:**
 
 ```
-GET /transports/edge:<public-key>
+GET /transports/edge:{pk}
 ```
 
-**Responses:**
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `pk` | string | Visor public key (hex-encoded, 66 characters) |
+
+**Response:**
 
 - 200 OK (Success).
     ```json
     [
         {
-            "entry": {
-                "t_id": "<transport-id-1>",
-                "edges": [
-                    "<public-key-1>",
-                    "<public-key-2>"
-                ],
-                "type": "<transport-type>",
-                "public": true
-            },
-            "is_up": true,
-            "registered": 0
+            "t_id": "<transport-id-1>",
+            "edges": [
+                "<public-key-1>",
+                "<public-key-2>"
+            ],
+            "type": "stcpr",
+            "public": true
         },
         {
-            "entry": {
-                "t_id": "<transport-id-2>",
-                "edges": [
-                    "<public-key-1>",
-                    "<public-key-2>"
-                ],
-                "type": "<transport-type>",
-                "public": true
-            },
-            "is_up": false,
-            "registered": 0
+            "t_id": "<transport-id-2>",
+            "edges": [
+                "<public-key-1>",
+                "<public-key-3>"
+            ],
+            "type": "sudph",
+            "public": true
         }
     ]
     ```
-- 400 Bad Request (Malformed request).
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `t_id` | string | Transport UUID - unique identifier for this transport |
+| `edges` | array | Array of two public keys representing the transport endpoints |
+| `type` | string | Transport type: `stcpr`, `sudph`, or `dmsg` |
+| `public` | boolean | Whether this transport is publicly visible |
+
+**Error Responses:**
+
+- 400 Bad Request (Invalid public key format).
+- 404 Not Found (No transports found for this edge).
 - 500 Internal Server Error (Server error).
 
-### POST Register Transport(s)
+### GET Transport Stats by Edge
 
-Registers one or multiple Transports.
+Returns transport statistics for a specific edge (visor). This provides a count breakdown without returning full transport entries.
 
 **Request:**
 
 ```
-POST /transports
+GET /transports/stats/{pk}
 ```
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    {
+        "total": 15,
+        "by_type": {
+            "stcpr": 2,
+            "sudph": 13
+        }
+    }
+    ```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total` | integer | Total number of transports for this edge |
+| `by_type` | object | Map of transport type to count |
+
+- 400 Bad Request (Invalid public key).
+- 404 Not Found (No transports found).
+- 500 Internal Server Error (Server error).
+
+### POST Register Transport(s)
+
+Registers one or multiple Transports. This endpoint is also used for re-registration, which updates the transport's TTL and bandwidth data.
+
+**Request:**
+
+```
+POST /transports/
+```
+
+**Request Body:**
 
 ```json
 [
     {
         "entry": {
-            "id": "<transport-id-1>",
-            "edges": [
-                "<public-key-1>",
-                "<public-key-2>"
-            ],
-            "type": "<transport-type-1>",
+            "t_id": "<transport-id>",
+            "edges": ["<public-key-1>", "<public-key-2>"],
+            "type": "stcpr",
             "public": true
         },
-        "signatures": [
-            "<signature-1>",
-            "<signature-2>"
-        ]
-    },
-    {
-        "entry": {
-            "id": "<transport-id-2>",
-            "edges": [
-                "<public-key-1>",
-                "<public-key-3>"
-            ],
-            "type": "<transport-type-2>",
-            "public": true
-        },
-        "signatures": [
-            "<signature-1>",
-            "<signature-3>"
-        ]
+        "signatures": ["<signature-1>", "<signature-2>"],
+        "bandwidth": {
+            "sent_bytes": 1048576,
+            "recv_bytes": 2097152
+        }
     }
-]    
+]
 ```
 
-**Responses:**
+**Request Fields:**
 
-- 200 OK (Success).
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `entry` | object | Yes | The transport entry to register |
+| `entry.t_id` | string | Yes | Transport UUID (generated by the initiating visor) |
+| `entry.edges` | array | Yes | Ordered array of two public keys [initiator, responder] |
+| `entry.type` | string | Yes | Transport type: `stcpr`, `sudph`, or `dmsg` |
+| `entry.public` | boolean | Yes | Whether this transport should be publicly visible |
+| `signatures` | array | Yes | Array of two signatures, one from each edge, in same order as edges |
+| `bandwidth` | object | No | Cumulative bandwidth data reported by this edge |
+| `bandwidth.sent_bytes` | integer | No | Total bytes sent over this transport (cumulative) |
+| `bandwidth.recv_bytes` | integer | No | Total bytes received over this transport (cumulative) |
+
+**Response:**
+
+- 201 Created (Success).
     ```json
     [
         {
             "entry": {
-                "id": "<transport-id-1>",
-                "edges": [
-                    "<public-key-1>",
-                    "<public-key-2>"
-                ],
-                "type": "<transport-type-1>",
+                "t_id": "<transport-id>",
+                "edges": ["<public-key-1>", "<public-key-2>"],
+                "type": "stcpr",
                 "public": true
             },
-            "signatures": [
-                "<signature-1>",
-                "<signature-2>"
-            ],
-            "registered": 0
-        },
-        {
-            "entry": {
-                "id": "<transport-id-2>",
-                "edges": [
-                    "<public-key-1>",
-                    "<public-key-3>"
-                ],
-                "type": "<transport-type-2>",
-                "public": true
-            },
-            "signatures": [
-                "<signature-1>",
-                "<signature-3>"
-            ],
-            "registered": 0
+            "signatures": ["<signature-1>", "<signature-2>"],
+            "registered": 1708531200
         }
     ]
     ```
-- 400 Bad Request (Malformed request).
-- 401 Unauthorized (Invalid signature/nonce).
-- 408 Request Timeout (Timed out).
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `entry` | object | The registered transport entry |
+| `signatures` | array | The signatures provided during registration |
+| `registered` | integer | Unix timestamp when the transport was first registered |
+
+**Error Responses:**
+
+- 400 Bad Request (Malformed request, invalid entry format).
+- 401 Unauthorized (Invalid signature or nonce).
+- 408 Request Timeout (Request took too long).
+- 409 Conflict (Transport with same edges already exists).
 - 500 Internal Server Error (Server error).
 
 ### POST Status(es) *(Deprecated)*
 
 > **⚠️ DEPRECATED:** This endpoint returns `410 Gone`. Transport status is now determined automatically by the re-registration mechanism. Transports that are not re-registered within the 2-minute TTL are considered down and expire from the registry. See "Transport Status via Re-registration" in the procedures section above.
+
+### DELETE Transport
+
+Deletes a transport by ID. Only an edge of the transport can delete it.
+
+**Request:**
+
+```
+DELETE /transports/id:{id}
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | string | Transport UUID to delete |
+
+**Response:**
+
+- 200 OK (Success).
+    ```
+    transport deleted
+    ```
+
+**Error Responses:**
+
+- 400 Bad Request (Invalid transport ID format).
+- 401 Unauthorized (Caller is not an edge of this transport, or invalid signature/nonce).
+- 404 Not Found (Transport does not exist).
+- 500 Internal Server Error (Server error).
+
+### POST Delete Transports (Batch)
+
+Deletes multiple transports in a single request. Only transports where the caller is an edge will be deleted; others are silently skipped.
+
+**Request:**
+
+```
+POST /transports/delete-batch
+```
+
+**Request Body:**
+
+```json
+[
+    "<transport-id-1>",
+    "<transport-id-2>",
+    "<transport-id-3>"
+]
+```
+
+**Request Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| (array) | array of strings | List of transport UUIDs to delete |
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    {
+        "deleted": 2,
+        "skipped": 1
+    }
+    ```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `deleted` | integer | Number of transports successfully deleted |
+| `skipped` | integer | Number of transports skipped (not found, not an edge, or invalid ID) |
+
+**Error Responses:**
+
+- 400 Bad Request (Request body is not a valid JSON array).
+- 401 Unauthorized (Invalid signature/nonce).
+- 500 Internal Server Error (Server error).
 
 ---
 
@@ -382,7 +579,9 @@ GET /all-transports?selfTransports=hide
 
 **Query Parameters:**
 
-- `selfTransports` (optional): Set to `hide` to exclude transports where both edges are the same visor.
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `selfTransports` | string | (show all) | Set to `hide` to exclude self-transports (where both edges are the same visor) |
 
 **Response:**
 
@@ -401,15 +600,36 @@ GET /all-transports?selfTransports=hide
     ]
     ```
 
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `t_id` | string | Transport UUID |
+| `edges` | array | Array of two public keys (the transport endpoints) |
+| `type` | string | Transport type: `stcpr`, `sudph`, or `dmsg` |
+| `public` | boolean | Whether this transport is publicly visible |
+
+**Error Responses:**
+
+- 404 Not Found (No transports registered).
+- 500 Internal Server Error (Server error).
+
 ### GET All Transports Stats
 
-Returns aggregate statistics about all transports.
+Returns aggregate statistics about all transports in the network.
 
 **Request:**
 
 ```
 GET /all-transports/stats
+GET /all-transports/stats?selfTransports=hide
 ```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `selfTransports` | string | (show all) | Set to `hide` to exclude self-transports from counts |
 
 **Response:**
 
@@ -425,15 +645,37 @@ GET /all-transports/stats
     }
     ```
 
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_transports` | integer | Total number of registered transports |
+| `by_type` | object | Map of transport type to count |
+| `by_type.stcpr` | integer | Number of STCP Relay transports |
+| `by_type.sudph` | integer | Number of SUDP Hole-punch transports |
+| `by_type.dmsg` | integer | Number of DMSG transports (if any) |
+| `unique_visors` | integer | Number of unique visor public keys across all transports |
+
+**Error Responses:**
+
+- 500 Internal Server Error (Server error).
+
 ### GET Per-Key Stats
 
-Returns transport counts per visor public key.
+Returns transport counts per visor public key. Useful for finding well-connected visors.
 
 **Request:**
 
 ```
 GET /all-transports/per-key-stats
+GET /all-transports/per-key-stats?selfTransports=hide
 ```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `selfTransports` | string | (show all) | Set to `hide` to exclude self-transports from counts |
 
 **Response:**
 
@@ -452,6 +694,23 @@ GET /all-transports/per-key-stats
         }
     }
     ```
+
+**Response Fields:**
+
+The response is a map where each key is a visor public key (hex-encoded), and the value is an object containing:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total` | integer | Total number of transports for this visor |
+| `stcpr` | integer | Number of STCP Relay transports (if any) |
+| `sudph` | integer | Number of SUDP Hole-punch transports (if any) |
+| `dmsg` | integer | Number of DMSG transports (if any) |
+
+**Note:** Only transport types that have a count > 0 are included in the response for each visor.
+
+**Error Responses:**
+
+- 500 Internal Server Error (Server error).
 
 ---
 
@@ -502,10 +761,18 @@ GET /bandwidth/transport/{id}
 GET /bandwidth/transport/{id}?period=daily&limit=7
 ```
 
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | string | Transport UUID |
+
 **Query Parameters:**
 
-- `period` (optional): Aggregation period. Values: `daily` (default), `hourly`.
-- `limit` (optional): Number of periods to return. Default: 7.
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `period` | string | `daily` | Aggregation period: `daily` or `hourly` |
+| `limit` | integer | 7 | Number of periods to return |
 
 **Response:**
 
@@ -524,24 +791,31 @@ GET /bandwidth/transport/{id}?period=daily&limit=7
                 "sent": 268435456,
                 "recv": 536870912
             }
-        },
-        {
-            "date": "2024-02-20",
-            "edge_a": {
-                "pk": "<public-key-1>",
-                "sent": 400000000,
-                "recv": 200000000
-            },
-            "edge_b": {
-                "pk": "<public-key-2>",
-                "sent": 200000000,
-                "recv": 400000000
-            }
         }
     ]
     ```
 
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `date` | string | Date/time for this period (YYYY-MM-DD for daily, ISO 8601 for hourly) |
+| `edge_a` | object | Bandwidth reported by the first edge (sorted by PK) |
+| `edge_a.pk` | string | Public key of this edge |
+| `edge_a.sent` | integer | Cumulative bytes sent as reported by this edge |
+| `edge_a.recv` | integer | Cumulative bytes received as reported by this edge |
+| `edge_b` | object | Bandwidth reported by the second edge |
+| `edge_b.pk` | string | Public key of this edge |
+| `edge_b.sent` | integer | Cumulative bytes sent as reported by this edge |
+| `edge_b.recv` | integer | Cumulative bytes received as reported by this edge |
+
 **Note:** Edge A's `sent` should approximately equal Edge B's `recv` and vice versa. Significant discrepancies may indicate measurement issues or network problems.
+
+**Error Responses:**
+
+- 400 Bad Request (Invalid transport ID format).
+- 404 Not Found (Transport not found or no bandwidth data).
+- 500 Internal Server Error (Server error).
 
 #### GET Visor Bandwidth
 
@@ -553,6 +827,19 @@ Returns aggregated bandwidth for all transports belonging to a visor.
 GET /bandwidth/visor/{pk}
 GET /bandwidth/visor/{pk}?period=daily&limit=7
 ```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `pk` | string | Visor public key (hex-encoded) |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `period` | string | `daily` | Aggregation period: `daily` or `hourly` |
+| `limit` | integer | 7 | Number of periods to return |
 
 **Response:**
 
@@ -566,11 +853,26 @@ GET /bandwidth/visor/{pk}?period=daily&limit=7
     ]
     ```
 
-### Transport Metrics
+**Response Fields:**
 
-The `/metrics` endpoint provides detailed QoS metrics (bandwidth and latency) for all transports, organized by reporting visor.
+| Field | Type | Description |
+|-------|------|-------------|
+| `date` | string | Date/time for this period (YYYY-MM-DD for daily) |
+| `bandwidth` | integer | Total bytes (sent + received) across all transports for this visor |
 
-#### GET All Transport Metrics
+**Error Responses:**
+
+- 400 Bad Request (Invalid public key format).
+- 404 Not Found (Visor not found or no bandwidth data).
+- 500 Internal Server Error (Server error).
+
+### Transport Metrics *(Proposed)*
+
+> **Note:** The `/metrics` endpoints described in this section are **proposed** and not yet implemented. Currently, only the `/bandwidth/*` endpoints above are available for QoS data.
+
+The `/metrics` endpoint will provide detailed QoS metrics (bandwidth and latency) for all transports, organized by reporting visor.
+
+#### GET All Transport Metrics *(Proposed)*
 
 Returns QoS metrics for all transports, organized by the reporting visor's public key. Each visor reports metrics for its own perspective of each transport.
 
@@ -649,7 +951,7 @@ GET /metrics
 | `latency.max_ms` | number | Maximum observed latency |
 | `updated` | string | ISO 8601 timestamp of last metric update |
 
-#### GET Visor Transport Metrics
+#### GET Visor Transport Metrics *(Proposed)*
 
 Returns QoS metrics for all transports belonging to a specific visor.
 
@@ -683,7 +985,7 @@ GET /metrics/visor/{pk}
     }
     ```
 
-#### POST Report Metrics
+#### POST Report Metrics *(Proposed)*
 
 Allows a visor to report QoS metrics for its transports. This endpoint is authenticated.
 
@@ -727,7 +1029,7 @@ SW-Sig: <signature>
 - 401 Unauthorized (Invalid signature/nonce).
 - 500 Internal Server Error (Server error).
 
-#### GET Verified Metrics
+#### GET Verified Metrics *(Proposed)*
 
 Returns daily verified QoS metrics for transports where both edges have reported consistent bandwidth data. This endpoint only includes transports where both edges' reports agree within an acceptable margin (e.g., 5% discrepancy). History is retained for 7 days (same as uptime data).
 
@@ -804,7 +1106,7 @@ GET /metrics/verified?limit=7&discrepancy_threshold=0.05
 | `latency.min_ms` | number | Minimum observed latency for the day |
 | `latency.max_ms` | number | Maximum observed latency for the day |
 
-#### GET Transport Latency
+#### GET Transport Latency *(Proposed)*
 
 Returns latency history for a specific transport, showing measurements from both edges.
 
@@ -845,13 +1147,58 @@ GET /latency/transport/{id}?period=daily&limit=7
 
 ---
 
+## Health Check
+
+### GET Health
+
+Returns the health status and build information of the Transport Discovery service.
+
+**Request:**
+
+```
+GET /health
+```
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    {
+        "build_info": {
+            "version": "v1.3.34",
+            "commit": "abc123def",
+            "date": "2024-02-21T10:00:00Z"
+        },
+        "started_at": "2024-02-21T08:00:00Z",
+        "dmsg_address": "dmsg://...",
+        "dmsg_servers": ["dmsg://server1...", "dmsg://server2..."]
+    }
+    ```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `build_info` | object | Build information for the running service |
+| `build_info.version` | string | Skywire version |
+| `build_info.commit` | string | Git commit hash |
+| `build_info.date` | string | Build timestamp |
+| `started_at` | string | ISO 8601 timestamp when the service started |
+| `dmsg_address` | string | DMSG address of this TPD instance (if configured) |
+| `dmsg_servers` | array | List of DMSG server addresses (if configured) |
+
+---
+
 ## Endpoint Summary
+
+### Implemented Endpoints
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/security/nonces/{pk}` | GET | No | Get next expected nonce |
 | `/transports/id:{id}` | GET | Yes | Get transport by ID |
 | `/transports/edge:{pk}` | GET | Yes | Get transports by edge |
+| `/transports/stats/{pk}` | GET | No | Get transport stats for edge |
 | `/transports/` | POST | Yes | Register transport(s) |
 | `/transports/id:{id}` | DELETE | Yes | Delete a transport |
 | `/transports/delete-batch` | POST | Yes | Delete multiple transports |
@@ -862,9 +1209,14 @@ GET /latency/transport/{id}?period=daily&limit=7
 | `/uptimes` | GET | No | Get visor uptimes (no QoS) |
 | `/bandwidth/transport/{id}` | GET | No | Get transport bandwidth history (both edges) |
 | `/bandwidth/visor/{pk}` | GET | No | Get visor bandwidth history |
-| `/latency/transport/{id}` | GET | No | Get transport latency history (both edges) |
+| `/health` | GET | No | Health check |
+
+### Proposed Endpoints (Not Yet Implemented)
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
 | `/metrics` | GET | No | Get all QoS metrics by visor |
 | `/metrics` | POST | Yes | Report QoS metrics |
 | `/metrics/visor/{pk}` | GET | No | Get visor QoS metrics |
 | `/metrics/verified` | GET | No | Get verified metrics (consistent edge reports) |
-| `/health` | GET | No | Health check |
+| `/latency/transport/{id}` | GET | No | Get transport latency history (both edges) |
