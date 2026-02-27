@@ -136,46 +136,6 @@ After TCP connection is established:
 }
 ```
 
-### Private Network Deployment
-
-```json
-{
-    "skywire-tcp": {
-        "pk_table": {
-            "02server1abc123...": "10.0.0.2:7777",
-            "02server2def456...": "10.0.0.3:7777",
-            "02server3ghi789...": "10.0.0.4:7777"
-        },
-        "listening_address": "10.0.0.1:7777"
-    }
-}
-```
-
-## Advantages
-
-- **No external dependencies**: Works without address-resolver service
-- **Predictable**: Static configuration means deterministic behavior
-- **Simple**: Easy to understand and debug
-- **Low latency**: Direct TCP with no lookup overhead
-- **Offline capable**: Works in isolated networks
-
-## Limitations
-
-- **Static configuration**: Requires manual updates when addresses change
-- **No NAT traversal**: Both visors must be directly reachable
-- **Scalability**: PK table must be maintained across all visors
-- **No dynamic discovery**: New visors require configuration updates
-
-## Comparison with STCPR
-
-| Feature | STCP | STCPR |
-|---------|------|-------|
-| Address resolution | Local PK table | Address-resolver service |
-| Dynamic IPs | Not supported | Supported (re-registration) |
-| External dependencies | None | Requires address-resolver |
-| Configuration | Per-visor PK table | Address-resolver URL only |
-| Best for | Static/private networks | Dynamic/public networks |
-
 ## Code References
 
 - Implementation: `pkg/transport/network/stcp.go`

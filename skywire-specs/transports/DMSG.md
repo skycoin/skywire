@@ -29,7 +29,7 @@ type dmsgClientAdapter struct {
 | `Start` | No-op (DMSG client is already serving) |
 | `Close` | No-op (DMSG client may be shared with other components) |
 
-The adapter does **not** close the underlying `dmsg.Client` because it's shared with other Skywire components (dmsghttp, hypervisor communication, etc.).
+The adapter does **not** close the underlying `dmsg.Client` because it's shared with other Skywire components.
 
 ### Stream to Transport Mapping
 
@@ -67,41 +67,6 @@ DMSG configuration in visor config:
 | `sessions_count` | integer | Number of DMSG server sessions to maintain |
 | `servers` | array | Specific servers to connect to (empty = auto-discover) |
 | `servers_type` | string | `"all"`, `"public"`, or `"private"` |
-
-### Session Count
-
-Higher `sessions_count` increases the probability of sharing a server with other visors:
-
-| Value | Trade-off |
-|-------|-----------|
-| 1 | Minimal resources, lower connectivity |
-| 2-3 | Balanced |
-| 5+ | Better connectivity, more resources |
-
-## Transport Registration
-
-DMSG transports are registered with the Transport Discovery like other transport types:
-
-- Transport type: `dmsg`
-- Transport ID: Deterministic hash of sorted edges + type (see [04-Transport_Discovery.md](../specifications/04-Transport_Discovery.md))
-
-## Usage in Skywire
-
-### As Fallback Transport
-
-DMSG is typically used when direct transports fail:
-
-1. Try SUDPH (UDP hole-punch)
-2. Try STCPR (TCP via address-resolver)
-3. Fall back to DMSG
-
-### For Service Communication
-
-DMSG is also used internally for:
-- Hypervisor to visor management
-- Transport setup protocol
-- Route setup communication
-- dmsghttp (HTTP over DMSG)
 
 ## Code References
 
