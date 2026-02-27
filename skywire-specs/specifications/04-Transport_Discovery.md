@@ -734,7 +734,7 @@ Bandwidth values are **cumulative** - they represent total bytes sent/received s
 
 ### GET /bandwidth
 
-Returns network-wide bandwidth statistics.
+Returns network-wide bandwidth statistics, broken down by transport type.
 
 **Request:**
 
@@ -757,12 +757,18 @@ GET /bandwidth?days=7
         {
             "date": "2024-02-21",
             "total": 53687091200,
-            "verified": 48318382080
+            "by_type": {
+                "stcpr": 32212254720,
+                "sudph": 21474836480
+            }
         }
     ],
     "cumulative": {
         "total": 1879948193280,
-        "verified": 1691953373952
+        "by_type": {
+            "stcpr": 1127968915968,
+            "sudph": 751979277312
+        }
     }
 }
 ```
@@ -774,15 +780,15 @@ GET /bandwidth?days=7
 | `daily` | array | Per-day bandwidth totals |
 | `daily[].date` | string | Date (YYYY-MM-DD) |
 | `daily[].total` | integer | Total bytes reported by all edges |
-| `daily[].verified` | integer | Total verified bytes (where edges agree) |
+| `daily[].by_type` | object | Breakdown by transport type |
 | `cumulative.total` | integer | Sum of all daily totals in response |
-| `cumulative.verified` | integer | Sum of all daily verified totals |
+| `cumulative.by_type` | object | Cumulative breakdown by transport type |
 
 ---
 
 ### GET /bandwidth/verified
 
-Returns network-wide verified bandwidth only (lighter computation).
+Returns network-wide verified bandwidth (where both edges agree).
 
 **Request:**
 
@@ -798,10 +804,20 @@ GET /bandwidth/verified?days=7
     "daily": [
         {
             "date": "2024-02-21",
-            "verified": 48318382080
+            "total": 48318382080,
+            "by_type": {
+                "stcpr": 28991029248,
+                "sudph": 19327352832
+            }
         }
     ],
-    "cumulative": 1691953373952
+    "cumulative": {
+        "total": 1691953373952,
+        "by_type": {
+            "stcpr": 1015172024371,
+            "sudph": 676781349581
+        }
+    }
 }
 ```
 
@@ -816,6 +832,7 @@ Returns bandwidth for all transports, with both edges' reports.
 ```
 GET /bandwidths
 GET /bandwidths?days=7
+GET /bandwidths?type=stcpr
 ```
 
 **Query Parameters:**
@@ -823,26 +840,24 @@ GET /bandwidths?days=7
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `days` | integer | 1 | Number of days of history (1-35) |
+| `type` | string | (all) | Filter by transport type: `stcpr`, `sudph`, `dmsg`, `stcp` |
 
 **Response:**
 
 ```json
-{
-    "date": "2024-02-21",
-    "transports": [
-        {
-            "id": "<transport-id>",
-            "edge_a": {
-                "sent": 536870912,
-                "recv": 268435456
-            },
-            "edge_b": {
-                "sent": 268435456,
-                "recv": 536870912
+[
+    {
+        "id": "<transport-id>",
+        "type": "stcpr",
+        "daily": [
+            {
+                "date": "2024-02-21",
+                "a": { "sent": 536870912, "recv": 268435456 },
+                "b": { "sent": 268435456, "recv": 536870912 }
             }
-        }
-    ]
-}
+        ]
+    }
+]
 ```
 
 **Response Fields:**
@@ -850,12 +865,15 @@ GET /bandwidths?days=7
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | string | Transport UUID |
-| `edge_a` | object | Bandwidth reported by first edge (lower PK) |
-| `edge_b` | object | Bandwidth reported by second edge (higher PK) |
+| `type` | string | Transport type (`stcpr`, `sudph`, `dmsg`, `stcp`) |
+| `daily` | array | Per-day bandwidth data |
+| `daily[].date` | string | Date (YYYY-MM-DD) |
+| `a` | object | Bandwidth reported by first edge (lower PK) |
+| `b` | object | Bandwidth reported by second edge (higher PK) |
 | `sent` | integer | Cumulative bytes sent |
 | `recv` | integer | Cumulative bytes received |
 
-**Note:** Edges are ordered by public key (lower first). Edge A's `sent` should approximately equal Edge B's `recv`.
+**Note:** Edges are ordered by public key (lower first). `a.sent` should approximately equal `b.recv`.
 
 ---
 
@@ -868,20 +886,28 @@ Returns verified bandwidth for all transports (single number per transport).
 ```
 GET /bandwidths/verified
 GET /bandwidths/verified?days=7
+GET /bandwidths/verified?type=stcpr
 ```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | integer | 1 | Number of days of history (1-35) |
+| `type` | string | (all) | Filter by transport type: `stcpr`, `sudph`, `dmsg`, `stcp` |
 
 **Response:**
 
 ```json
-{
-    "date": "2024-02-21",
-    "transports": [
-        {
-            "id": "<transport-id>",
-            "bandwidth": 805306368
-        }
-    ]
-}
+[
+    {
+        "id": "<transport-id>",
+        "type": "stcpr",
+        "daily": [
+            { "date": "2024-02-21", "bandwidth": 805306368 }
+        ]
+    }
+]
 ```
 
 Only transports where both edges' reports agree are included.
@@ -915,11 +941,11 @@ GET /bandwidth/{ids}?days=7
         "daily": [
             {
                 "date": "2024-02-21",
-                "edge_a": {
+                "a": {
                     "sent": 536870912,
                     "recv": 268435456
                 },
-                "edge_b": {
+                "b": {
                     "sent": 268435456,
                     "recv": 536870912
                 }
@@ -952,15 +978,13 @@ GET /bandwidth/visor/{pk}?days=7
             "date": "2024-02-21",
             "sent": 1073741824,
             "recv": 536870912,
-            "total": 1610612736,
-            "verified": 1449551462
+            "total": 1610612736
         }
     ],
     "cumulative": {
         "sent": 37580963840,
         "recv": 18790481920,
-        "total": 56371445760,
-        "verified": 50734301184
+        "total": 56371445760
     }
 }
 ```
@@ -973,7 +997,630 @@ GET /bandwidth/visor/{pk}?days=7
 | `sent` | integer | Total bytes sent by this visor |
 | `recv` | integer | Total bytes received by this visor |
 | `total` | integer | Total bandwidth (sent + recv) |
-| `verified` | integer | Verified bandwidth for this visor's transports |
+
+---
+
+### GET /bandwidths/visor/{pk}
+
+Returns bandwidth for all individual transports belonging to a specific visor.
+
+**Request:**
+
+```
+GET /bandwidths/visor/{pk}
+GET /bandwidths/visor/{pk}?days=7
+GET /bandwidths/visor/{pk}?type=stcpr
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `pk` | string | Visor public key (hex-encoded) |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | integer | 1 | Number of days of history (1-35) |
+| `type` | string | (all) | Filter by transport type: `stcpr`, `sudph`, `dmsg`, `stcp` |
+
+**Response:**
+
+```json
+[
+    {
+        "id": "<transport-id>",
+        "type": "stcpr",
+        "daily": [
+            {
+                "date": "2024-02-21",
+                "a": { "sent": 536870912, "recv": 268435456 },
+                "b": { "sent": 268435456, "recv": 536870912 }
+            }
+        ]
+    }
+]
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Transport UUID |
+| `type` | string | Transport type |
+| `daily` | array | Per-day bandwidth data |
+| `a` | object | Bandwidth reported by first edge (lower PK) |
+| `b` | object | Bandwidth reported by second edge (higher PK) |
+
+---
+
+## Latency Statistics
+
+Latency data is collected during transport re-registration. Each edge reports round-trip latency measurements to its peer.
+
+### Latency Semantics
+
+Latency values are in **milliseconds**. Each transport edge reports its own measured latency to the peer. Unlike bandwidth (cumulative), latency is reported as averages over the reporting period.
+
+**Verified latency:** When both edges report latency measurements, the verified latency is the average of both edges' reports.
+
+---
+
+### GET /latency
+
+Returns network-wide average latency statistics, broken down by transport type.
+
+**Request:**
+
+```
+GET /latency
+GET /latency?days=7
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | integer | 1 | Number of days of history (1-35) |
+
+**Response:**
+
+```json
+{
+    "daily": [
+        {
+            "date": "2024-02-21",
+            "avg_ms": 45.2,
+            "by_type": {
+                "stcpr": {
+                    "avg_ms": 42.1
+                },
+                "sudph": {
+                    "avg_ms": 48.3
+                }
+            }
+        }
+    ],
+    "overall": {
+        "avg_ms": 42.8,
+        "by_type": {
+            "stcpr": {
+                "avg_ms": 40.5
+            },
+            "sudph": {
+                "avg_ms": 45.1
+            }
+        }
+    }
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `daily` | array | Per-day latency statistics |
+| `daily[].date` | string | Date (YYYY-MM-DD) |
+| `daily[].avg_ms` | number | Network-wide average latency in milliseconds |
+| `daily[].by_type` | object | Breakdown by transport type |
+| `by_type.{type}.avg_ms` | number | Average latency for this transport type |
+| `overall.avg_ms` | number | Average across all days in response |
+| `overall.by_type` | object | Overall breakdown by transport type |
+
+---
+
+### GET /latencies
+
+Returns latency for all transports, with both edges' reports.
+
+**Request:**
+
+```
+GET /latencies
+GET /latencies?days=7
+GET /latencies?type=stcpr
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | integer | 1 | Number of days of history (1-35) |
+| `type` | string | (all) | Filter by transport type: `stcpr`, `sudph`, `dmsg`, `stcp` |
+
+**Response:**
+
+```json
+[
+    {
+        "id": "<transport-id>",
+        "type": "stcpr",
+        "daily": [
+            {
+                "date": "2024-02-21",
+                "a": { "avg_ms": 45.2, "min_ms": 12.0, "max_ms": 120.5 },
+                "b": { "avg_ms": 44.8, "min_ms": 11.5, "max_ms": 118.0 }
+            }
+        ]
+    }
+]
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Transport UUID |
+| `type` | string | Transport type (`stcpr`, `sudph`, `dmsg`, `stcp`) |
+| `daily` | array | Per-day latency data |
+| `daily[].date` | string | Date (YYYY-MM-DD) |
+| `a` | object | Latency reported by first edge (lower PK) |
+| `b` | object | Latency reported by second edge (higher PK) |
+| `avg_ms` | number | Average latency in milliseconds |
+| `min_ms` | number | Minimum observed latency |
+| `max_ms` | number | Maximum observed latency |
+
+---
+
+### GET /latencies/verified
+
+Returns verified latency for all transports (averaged between edges).
+
+**Request:**
+
+```
+GET /latencies/verified
+GET /latencies/verified?days=7
+GET /latencies/verified?type=stcpr
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | integer | 1 | Number of days of history (1-35) |
+| `type` | string | (all) | Filter by transport type: `stcpr`, `sudph`, `dmsg`, `stcp` |
+
+**Response:**
+
+```json
+[
+    {
+        "id": "<transport-id>",
+        "type": "stcpr",
+        "daily": [
+            { "date": "2024-02-21", "avg_ms": 45.0, "min_ms": 11.75, "max_ms": 119.25 }
+        ]
+    }
+]
+```
+
+Only transports where both edges have reported latency are included.
+
+---
+
+### GET /latency/{ids}
+
+Returns latency for specific transport(s). Accepts comma-separated IDs.
+
+**Request:**
+
+```
+GET /latency/{id}
+GET /latency/{id1},{id2},{id3}
+GET /latency/{ids}?days=7
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `ids` | string | One or more transport UUIDs, comma-separated |
+
+**Response:**
+
+```json
+[
+    {
+        "id": "<transport-id-1>",
+        "daily": [
+            {
+                "date": "2024-02-21",
+                "a": {
+                    "avg_ms": 45.2,
+                    "min_ms": 12.0,
+                    "max_ms": 120.5
+                },
+                "b": {
+                    "avg_ms": 44.8,
+                    "min_ms": 11.5,
+                    "max_ms": 118.0
+                }
+            }
+        ]
+    }
+]
+```
+
+---
+
+### GET /latency/visor/{pk}
+
+Returns average latency for a specific visor across all their transports.
+
+**Request:**
+
+```
+GET /latency/visor/{pk}
+GET /latency/visor/{pk}?days=7
+```
+
+**Response:**
+
+```json
+{
+    "pk": "<visor-pk>",
+    "daily": [
+        {
+            "date": "2024-02-21",
+            "avg_ms": 42.5
+        }
+    ],
+    "overall": {
+        "avg_ms": 41.2
+    }
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pk` | string | Visor public key |
+| `avg_ms` | number | Average latency across all this visor's transports |
+
+---
+
+### GET /latencies/visor/{pk}
+
+Returns latency for all individual transports belonging to a specific visor.
+
+**Request:**
+
+```
+GET /latencies/visor/{pk}
+GET /latencies/visor/{pk}?days=7
+GET /latencies/visor/{pk}?type=stcpr
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `pk` | string | Visor public key (hex-encoded) |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | integer | 1 | Number of days of history (1-35) |
+| `type` | string | (all) | Filter by transport type: `stcpr`, `sudph`, `dmsg`, `stcp` |
+
+**Response:**
+
+```json
+[
+    {
+        "id": "<transport-id>",
+        "type": "stcpr",
+        "daily": [
+            {
+                "date": "2024-02-21",
+                "a": { "avg_ms": 45.2, "min_ms": 12.0, "max_ms": 120.5 },
+                "b": { "avg_ms": 44.8, "min_ms": 11.5, "max_ms": 118.0 }
+            }
+        ]
+    }
+]
+```
+
+---
+
+## Combined Metrics
+
+The `/metric` and `/metrics` endpoints provide a combined view of bandwidth and latency data.
+
+---
+
+### GET /metric
+
+Returns network-wide combined statistics (cumulative bandwidth + average latency), broken down by transport type.
+
+**Request:**
+
+```
+GET /metric
+GET /metric?days=7
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | integer | 1 | Number of days of history (1-35) |
+
+**Response:**
+
+```json
+{
+    "daily": [
+        {
+            "date": "2024-02-21",
+            "bandwidth": 53687091200,
+            "latency": 45.2,
+            "by_type": {
+                "stcpr": { "bandwidth": 32212254720, "latency": 42.1 },
+                "sudph": { "bandwidth": 21474836480, "latency": 48.3 }
+            }
+        }
+    ],
+    "cumulative": {
+        "bandwidth": 1879948193280,
+        "latency": 42.8,
+        "by_type": {
+            "stcpr": { "bandwidth": 1127968915968, "latency": 40.5 },
+            "sudph": { "bandwidth": 751979277312, "latency": 45.1 }
+        }
+    }
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `bandwidth` | integer | Total bytes |
+| `latency` | number | Average latency in milliseconds |
+| `by_type` | object | Breakdown by transport type |
+
+---
+
+### GET /metrics
+
+Returns combined bandwidth and latency for all transports, with both edges' reports.
+
+**Request:**
+
+```
+GET /metrics
+GET /metrics?days=7
+GET /metrics?type=stcpr
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | integer | 1 | Number of days of history (1-35) |
+| `type` | string | (all) | Filter by transport type: `stcpr`, `sudph`, `dmsg`, `stcp` |
+
+**Response:**
+
+```json
+[
+    {
+        "id": "<transport-id>",
+        "type": "stcpr",
+        "daily": [
+            {
+                "date": "2024-02-21",
+                "a": {
+                    "bandwidth": { "sent": 536870912, "recv": 268435456 },
+                    "latency": { "avg_ms": 45.2, "min_ms": 12.0, "max_ms": 120.5 }
+                },
+                "b": {
+                    "bandwidth": { "sent": 268435456, "recv": 536870912 },
+                    "latency": { "avg_ms": 44.8, "min_ms": 11.5, "max_ms": 118.0 }
+                }
+            }
+        ]
+    }
+]
+```
+
+---
+
+### GET /metrics/verified
+
+Returns verified metrics for all transports (where both edges agree).
+
+**Request:**
+
+```
+GET /metrics/verified
+GET /metrics/verified?days=7
+GET /metrics/verified?type=stcpr
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | integer | 1 | Number of days of history (1-35) |
+| `type` | string | (all) | Filter by transport type: `stcpr`, `sudph`, `dmsg`, `stcp` |
+
+**Response:**
+
+```json
+[
+    {
+        "id": "<transport-id>",
+        "type": "stcpr",
+        "daily": [
+            {
+                "date": "2024-02-21",
+                "bandwidth": 805306368,
+                "latency": { "avg_ms": 45.0, "min_ms": 11.75, "max_ms": 119.25 }
+            }
+        ]
+    }
+]
+```
+
+---
+
+### GET /metric/{ids}
+
+Returns combined metrics for specific transport(s). Accepts comma-separated IDs.
+
+**Request:**
+
+```
+GET /metric/{id}
+GET /metric/{id1},{id2},{id3}
+GET /metric/{ids}?days=7
+```
+
+**Response:**
+
+```json
+[
+    {
+        "id": "<transport-id-1>",
+        "daily": [
+            {
+                "date": "2024-02-21",
+                "a": {
+                    "bandwidth": {
+                        "sent": 536870912,
+                        "recv": 268435456
+                    },
+                    "latency": {
+                        "avg_ms": 45.2,
+                        "min_ms": 12.0,
+                        "max_ms": 120.5
+                    }
+                },
+                "b": {
+                    "bandwidth": {
+                        "sent": 268435456,
+                        "recv": 536870912
+                    },
+                    "latency": {
+                        "avg_ms": 44.8,
+                        "min_ms": 11.5,
+                        "max_ms": 118.0
+                    }
+                }
+            }
+        ]
+    }
+]
+```
+
+---
+
+### GET /metric/visor/{pk}
+
+Returns combined aggregate metrics for a specific visor.
+
+**Request:**
+
+```
+GET /metric/visor/{pk}
+GET /metric/visor/{pk}?days=7
+```
+
+**Response:**
+
+```json
+{
+    "pk": "<visor-pk>",
+    "daily": [
+        {
+            "date": "2024-02-21",
+            "bandwidth": { "sent": 1073741824, "recv": 536870912, "total": 1610612736 },
+            "latency": 42.5
+        }
+    ],
+    "cumulative": {
+        "bandwidth": { "sent": 37580963840, "recv": 18790481920, "total": 56371445760 },
+        "latency": 41.2
+    }
+}
+```
+
+---
+
+### GET /metrics/visor/{pk}
+
+Returns combined metrics for all individual transports belonging to a specific visor.
+
+**Request:**
+
+```
+GET /metrics/visor/{pk}
+GET /metrics/visor/{pk}?days=7
+GET /metrics/visor/{pk}?type=stcpr
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `pk` | string | Visor public key (hex-encoded) |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | integer | 1 | Number of days of history (1-35) |
+| `type` | string | (all) | Filter by transport type: `stcpr`, `sudph`, `dmsg`, `stcp` |
+
+**Response:**
+
+```json
+[
+    {
+        "id": "<transport-id>",
+        "type": "stcpr",
+        "daily": [
+            {
+                "date": "2024-02-21",
+                "a": {
+                    "bandwidth": { "sent": 536870912, "recv": 268435456 },
+                    "latency": { "avg_ms": 45.2, "min_ms": 12.0, "max_ms": 120.5 }
+                },
+                "b": {
+                    "bandwidth": { "sent": 268435456, "recv": 536870912 },
+                    "latency": { "avg_ms": 44.8, "min_ms": 11.5, "max_ms": 118.0 }
+                }
+            }
+        ]
+    }
+]
+```
 
 ---
 
@@ -1000,8 +1647,8 @@ GET /health
             "date": "2024-02-21T10:00:00Z"
         },
         "started_at": "2024-02-21T08:00:00Z",
-        "dmsg_address": "dmsg://...",
-        "dmsg_servers": ["dmsg://server1...", "dmsg://server2..."]
+        "dmsg_address": "<public-key>",
+        "dmsg_servers": ["<server-pk-1>", "<server-pk-2>"]
     }
     ```
 
@@ -1014,12 +1661,14 @@ GET /health
 | `build_info.commit` | string | Git commit hash |
 | `build_info.date` | string | Build timestamp |
 | `started_at` | string | ISO 8601 timestamp when the service started |
-| `dmsg_address` | string | DMSG address of this TPD instance (if configured) |
-| `dmsg_servers` | array | List of DMSG server addresses (if configured) |
+| `dmsg_address` | string | DMSG public key of this TPD instance (if configured) |
+| `dmsg_servers` | array | List of DMSG server public keys (if configured) |
 
 ---
 
 ## Endpoint Summary
+
+### Core Endpoints
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
@@ -1034,10 +1683,38 @@ GET /health
 | `/all-transports/stats` | GET | No | Get aggregate stats |
 | `/all-transports/per-key-stats` | GET | No | Get per-visor stats |
 | `/uptimes` | GET | No | Get visor uptimes |
-| `/bandwidth` | GET | No | Network-wide bandwidth stats |
-| `/bandwidth/verified` | GET | No | Network-wide verified bandwidth |
-| `/bandwidths` | GET | No | All transports with both edges |
-| `/bandwidths/verified` | GET | No | All transports verified bandwidth |
-| `/bandwidth/{ids}` | GET | No | Specific transport(s) bandwidth |
-| `/bandwidth/visor/{pk}` | GET | No | Visor bandwidth totals |
 | `/health` | GET | No | Health check |
+
+### Bandwidth Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/bandwidth` | GET | No | Network-wide cumulative bandwidth |
+| `/bandwidth/verified` | GET | No | Network-wide verified bandwidth |
+| `/bandwidths` | GET | No | All transports (both edges) |
+| `/bandwidths/verified` | GET | No | All transports verified |
+| `/bandwidth/{ids}` | GET | No | Specific transport(s) |
+| `/bandwidth/visor/{pk}` | GET | No | Visor aggregate |
+| `/bandwidths/visor/{pk}` | GET | No | All transports for visor |
+
+### Latency Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/latency` | GET | No | Network-wide average latency |
+| `/latencies` | GET | No | All transports (both edges) |
+| `/latencies/verified` | GET | No | All transports verified |
+| `/latency/{ids}` | GET | No | Specific transport(s) |
+| `/latency/visor/{pk}` | GET | No | Visor average |
+| `/latencies/visor/{pk}` | GET | No | All transports for visor |
+
+### Combined Metrics Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/metric` | GET | No | Network-wide combined (bandwidth + latency) |
+| `/metrics` | GET | No | All transports (both edges) |
+| `/metrics/verified` | GET | No | All transports verified |
+| `/metric/{ids}` | GET | No | Specific transport(s) |
+| `/metric/visor/{pk}` | GET | No | Visor aggregate |
+| `/metrics/visor/{pk}` | GET | No | All transports for visor |
