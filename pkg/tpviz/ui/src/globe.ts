@@ -7,6 +7,7 @@ import { colors, LOCAL_VISOR_COLOR, LOCAL_EDGE_COLOR } from './constants';
 import { getVisorStatus, countryToFlag } from './utils';
 import { showNodeInfo, hideNodeInfo } from './node-info';
 import { CONTINENTS } from './world-data';
+import { geoVoronoi } from 'd3-geo-voronoi';
 
 // Country centroid coordinates (lat, lon) - approximate centers
 const COUNTRY_COORDS: Record<string, [number, number]> = {
@@ -772,56 +773,121 @@ export function updateGlobeData(): void {
             }
         }
 
-        // Step 5: Draw country region boundaries between adjacent countries
-        // (Skip expensive O(n⁴) Voronoi calculation - just draw dividers between country groups)
+        // Step 5: Calculate and draw proper spherical Voronoi cells using d3-geo-voronoi
         if (voronoiGroup && nodes.length >= 3) {
-            // Find boundaries between countries (where country changes in the Fibonacci sequence)
-            let prevCountry = '';
-            let prevPos: THREE.Vector3 | null = null;
-
-            // Track country start/end positions for drawing region arcs
-            const countryBoundaries: { pos: THREE.Vector3; country: string }[] = [];
+            // Convert node positions to [lon, lat] format for d3-geo-voronoi
+            const geoPoints: [number, number][] = [];
+            const nodeOrder: { id: string; country: string }[] = [];
 
             for (const { country, nodes: countryNodes } of countriesWithCentroids) {
-                if (countryNodes.length === 0) continue;
-
-                // Get first and last position for this country
-                const firstNode = countryNodes[0];
-                const lastNode = countryNodes[countryNodes.length - 1];
-                const firstPos = nodePositions.get(firstNode.id);
-                const lastPos = nodePositions.get(lastNode.id);
-
-                if (firstPos) {
-                    countryBoundaries.push({ pos: firstPos, country });
+                for (const node of countryNodes) {
+                    const pos = nodePositions.get(node.id);
+                    if (pos) {
+                        // Convert 3D position back to lat/lon
+                        const r = pos.length();
+                        const lat = 90 - Math.acos(pos.y / r) * (180 / Math.PI);
+                        const lon = Math.atan2(pos.z, -pos.x) * (180 / Math.PI);
+                        geoPoints.push([lon, lat]);
+                        nodeOrder.push({ id: node.id, country });
+                    }
                 }
+            }
 
-                // Draw divider line at country boundary
-                if (prevPos && firstPos && prevCountry !== country) {
-                    // Calculate midpoint between last node of prev country and first of current
-                    const midpoint = prevPos.clone().add(firstPos).normalize().multiplyScalar(1.02);
+            if (geoPoints.length >= 3) {
+                try {
+                    // Compute spherical Voronoi diagram
+                    const voronoi = geoVoronoi(geoPoints);
+                    const polygons = voronoi.polygons();
 
-                    // Draw a small arc perpendicular to the boundary
-                    const direction = new THREE.Vector3().subVectors(firstPos, prevPos).normalize();
-                    const up = midpoint.clone().normalize();
-                    const perpendicular = new THREE.Vector3().crossVectors(direction, up).normalize();
+                    // Draw each Voronoi cell
+                    if (polygons && polygons.features) {
+                        for (let i = 0; i < polygons.features.length; i++) {
+                            const feature = polygons.features[i];
+                            const nodeData = nodeOrder[i];
+                            if (!feature || !feature.geometry || !nodeData) continue;
 
-                    const arcStart = midpoint.clone().add(perpendicular.clone().multiplyScalar(0.08));
-                    const arcEnd = midpoint.clone().sub(perpendicular.clone().multiplyScalar(0.08));
+                            const coords = feature.geometry.coordinates;
+                            if (!coords || coords.length === 0) continue;
 
-                    const arcPoints = createGreatCircleArc(arcStart, arcEnd, 1.018, 8);
-                    const arcGeometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
-                    const arcMaterial = new THREE.LineBasicMaterial({
-                        color: 0x00d9a5,
-                        transparent: true,
-                        opacity: 0.5,
-                        linewidth: 1,
-                    });
-                    const arcLine = new THREE.Line(arcGeometry, arcMaterial);
-                    voronoiGroup.add(arcLine);
+                            // Get color for this node's country
+                            let color = COUNTRY_COLORS[nodeData.country];
+                            if (!color) {
+                                const hash = (nodeData.country || '').split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
+                                const hue = (hash * 137) % 360;
+                                color = `hsl(${hue}, 60%, 50%)`;
+                            }
+
+                            // The polygon coordinates are in [lon, lat] format
+                            // coords[0] is the outer ring
+                            const ring = coords[0];
+                            if (!ring || ring.length < 3) continue;
+
+                            // Create filled polygon mesh
+                            const cellGeometry = new THREE.BufferGeometry();
+                            const vertices: number[] = [];
+                            const indices: number[] = [];
+
+                            // Center vertex (centroid of the cell)
+                            let centerLat = 0, centerLon = 0;
+                            for (const pt of ring) {
+                                centerLon += pt[0];
+                                centerLat += pt[1];
+                            }
+                            centerLon /= ring.length;
+                            centerLat /= ring.length;
+                            const centerPos = latLonToVector3(centerLat, centerLon, 1.012);
+                            vertices.push(centerPos.x, centerPos.y, centerPos.z);
+
+                            // Add ring vertices
+                            for (let j = 0; j < ring.length; j++) {
+                                const pt = ring[j];
+                                const pos = latLonToVector3(pt[1], pt[0], 1.012);
+                                vertices.push(pos.x, pos.y, pos.z);
+
+                                // Create triangle fan from center
+                                const nextJ = (j + 1) % ring.length;
+                                indices.push(0, j + 1, nextJ + 1);
+                            }
+
+                            cellGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                            cellGeometry.setIndex(indices);
+                            cellGeometry.computeVertexNormals();
+
+                            const cellMaterial = new THREE.MeshBasicMaterial({
+                                color: color,
+                                transparent: true,
+                                opacity: 0.2,
+                                side: THREE.DoubleSide,
+                                depthWrite: false,
+                            });
+
+                            const cellMesh = new THREE.Mesh(cellGeometry, cellMaterial);
+                            voronoiGroup.add(cellMesh);
+
+                            // Draw cell boundary
+                            const boundaryPoints: THREE.Vector3[] = [];
+                            for (const pt of ring) {
+                                boundaryPoints.push(latLonToVector3(pt[1], pt[0], 1.015));
+                            }
+                            // Close the loop
+                            if (ring.length > 0) {
+                                boundaryPoints.push(latLonToVector3(ring[0][1], ring[0][0], 1.015));
+                            }
+
+                            const boundaryGeometry = new THREE.BufferGeometry().setFromPoints(boundaryPoints);
+                            const boundaryMaterial = new THREE.LineBasicMaterial({
+                                color: 0x00d9a5,
+                                transparent: true,
+                                opacity: 0.5,
+                                linewidth: 1,
+                            });
+                            const boundaryLine = new THREE.Line(boundaryGeometry, boundaryMaterial);
+                            voronoiGroup.add(boundaryLine);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Voronoi calculation failed:', e);
                 }
-
-                prevCountry = country;
-                prevPos = lastPos || null;
             }
         }
     } else {
