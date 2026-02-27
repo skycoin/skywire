@@ -497,12 +497,14 @@ QoS metrics (bandwidth and latency) are served from dedicated endpoints, separat
 | Transport entry TTL | 2 minutes | Time before an unrefreshed transport is considered stale |
 | Uptime cache refresh | 5 minutes | How often the uptime data cache is refreshed |
 | Daily bandwidth retention | 35 days | How long daily bandwidth aggregates are kept in Redis |
+| Verified metrics retention | 7 days | How long daily verified metrics (bandwidth + latency) are kept |
 | Visor PK set TTL | 400 days | TTL for the set of known visor public keys (for `/visors` endpoint) |
 
-**Note on Uptime Data:**
+**Note on Data Retention:**
 - The Uptime Tracker keeps data in the database for **7 days** (configurable via `--store-data-cutoff`)
 - Older uptime data is archived to JSON files (`{date}-uptime-data.json`)
 - The `/uptimes` endpoint returns the last 7 days of daily uptime percentages
+- Verified metrics (`/metrics/verified`) are retained for **7 days** to match uptime data retention
 
 ### Bandwidth Semantics
 
@@ -757,17 +759,18 @@ SW-Sig: <signature>
 
 #### GET Verified Metrics
 
-Returns verified QoS metrics for transports where both edges have reported consistent bandwidth data. This endpoint only includes transports where both edges' reports agree within an acceptable margin (e.g., 5% discrepancy).
+Returns daily verified QoS metrics for transports where both edges have reported consistent bandwidth data. This endpoint only includes transports where both edges' reports agree within an acceptable margin (e.g., 5% discrepancy). History is retained for 7 days (same as uptime data).
 
 **Request:**
 
 ```
 GET /metrics/verified
-GET /metrics/verified?discrepancy_threshold=0.05
+GET /metrics/verified?limit=7&discrepancy_threshold=0.05
 ```
 
 **Query Parameters:**
 
+- `limit` (optional): Number of days of history to return. Default: 7.
 - `discrepancy_threshold` (optional): Maximum allowed discrepancy between edges (0.0-1.0). Default: 0.05 (5%).
 
 **Response:**
@@ -776,15 +779,42 @@ GET /metrics/verified?discrepancy_threshold=0.05
     ```json
     [
         {
-            "transport_id": "<transport-id>",
-            "edges": ["<public-key-1>", "<public-key-2>"],
-            "bandwidth": {
-                "sent": 536870912,
-                "recv": 268435456,
-                "total": 805306368
-            },
-            "latency_ms": 45.0,
-            "verified_at": "2024-02-21T15:30:00Z"
+            "date": "2024-02-21",
+            "transports": [
+                {
+                    "transport_id": "<transport-id>",
+                    "edges": ["<public-key-1>", "<public-key-2>"],
+                    "bandwidth": {
+                        "sent": 536870912,
+                        "recv": 268435456,
+                        "total": 805306368
+                    },
+                    "latency": {
+                        "avg_ms": 45.0,
+                        "min_ms": 12.0,
+                        "max_ms": 120.5
+                    }
+                }
+            ]
+        },
+        {
+            "date": "2024-02-20",
+            "transports": [
+                {
+                    "transport_id": "<transport-id>",
+                    "edges": ["<public-key-1>", "<public-key-2>"],
+                    "bandwidth": {
+                        "sent": 400000000,
+                        "recv": 200000000,
+                        "total": 600000000
+                    },
+                    "latency": {
+                        "avg_ms": 42.3,
+                        "min_ms": 10.5,
+                        "max_ms": 115.0
+                    }
+                }
+            ]
         }
     ]
     ```
@@ -793,13 +823,16 @@ GET /metrics/verified?discrepancy_threshold=0.05
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `date` | string | Date for this daily aggregate (YYYY-MM-DD) |
+| `transports` | array | Transports with verified metrics for this day |
 | `transport_id` | string | Transport UUID |
 | `edges` | array | Public keys of both transport edges |
 | `bandwidth.sent` | integer | Verified bytes sent (average of both edges' reports) |
 | `bandwidth.recv` | integer | Verified bytes received |
 | `bandwidth.total` | integer | Total verified bandwidth |
-| `latency_ms` | number | Average latency from both edges |
-| `verified_at` | string | Timestamp when metrics were last verified |
+| `latency.avg_ms` | number | Average latency (average of both edges) |
+| `latency.min_ms` | number | Minimum observed latency for the day |
+| `latency.max_ms` | number | Maximum observed latency for the day |
 
 #### GET Transport Latency
 
