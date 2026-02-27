@@ -22,6 +22,9 @@ type DiscoveryClient interface {
 	GetAllTransportsStats(ctx context.Context) (*NetworkTransportStats, error)
 	GetAllTransportsPerKeyStats(ctx context.Context) (PerKeyStats, error)
 	DeleteTransport(ctx context.Context, id uuid.UUID) error
+	// DeleteTransports deletes multiple transports in a single request.
+	// Returns (deleted count, error). Falls back to sequential deletion if batch endpoint unavailable.
+	DeleteTransports(ctx context.Context, ids []uuid.UUID) (int, error)
 }
 
 // TransportStats contains statistics about transports for a given public key.
@@ -182,6 +185,20 @@ func (td *mockDiscoveryClient) DeleteTransport(ctx context.Context, id uuid.UUID
 	return nil
 }
 
+func (td *mockDiscoveryClient) DeleteTransports(ctx context.Context, ids []uuid.UUID) (int, error) {
+	td.Lock()
+	defer td.Unlock()
+
+	deleted := 0
+	for _, id := range ids {
+		if _, ok := td.entries[id]; ok {
+			delete(td.entries, id)
+			deleted++
+		}
+	}
+	return deleted, nil
+}
+
 // noopDiscoveryClient is a no-op transport discovery client that doesn't register transports.
 // Used for self-transports which cannot be used for routing and shouldn't clutter TPD.
 type noopDiscoveryClient struct{}
@@ -221,4 +238,8 @@ func (nd *noopDiscoveryClient) GetAllTransportsPerKeyStats(_ context.Context) (P
 
 func (nd *noopDiscoveryClient) DeleteTransport(_ context.Context, _ uuid.UUID) error {
 	return nil
+}
+
+func (nd *noopDiscoveryClient) DeleteTransports(_ context.Context, ids []uuid.UUID) (int, error) {
+	return len(ids), nil
 }
