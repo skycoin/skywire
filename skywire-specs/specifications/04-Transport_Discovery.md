@@ -68,16 +68,17 @@ The Transport Discovery supports the following transport types:
 
 | Type | Name | Description |
 |------|------|-------------|
-| `stcpr` | STCP Relay | TCP connection via a relay server. Most reliable but adds latency. |
-| `sudph` | SUDP Hole-punch | UDP hole-punching for direct peer-to-peer connections. Lower latency but requires NAT traversal. |
-| `stcp` | STCP | Direct TCP connection (typically used in local networks). |
-| `dmsg` | DMSG | Connection over the DMSG network overlay. |
+| `stcpr` | STCP Resolved | TCP transport that resolves addresses using the address-resolver service. Used for connections where the remote visor's IP is not directly known. |
+| `sudph` | SUDP Hole-punch | UDP transport that resolves addresses using address-resolver and establishes connections via UDP hole-punching. Enables direct peer-to-peer connections through NAT. |
+| `stcp` | STCP | Direct TCP transport that resolves addresses using a local PK table. Typically used in local/private networks where IPs are known. |
+| `dmsg` | DMSG | Transport that works through the DMSG intermediary network. Provides connectivity when direct connections are not possible. |
 
 **Transport Type Selection:**
 
-- `stcpr` is used when direct connections are not possible (e.g., behind restrictive NATs)
-- `sudph` is preferred for direct connections when UDP hole-punching succeeds
-- `dmsg` provides an alternative routing path through the DMSG network
+- `stcpr` is used for TCP connections where the address-resolver provides the remote visor's address
+- `sudph` is preferred when UDP hole-punching can establish a direct connection (lower latency)
+- `stcp` is used in local networks with a configured PK-to-IP table
+- `dmsg` provides an alternative routing path through the DMSG overlay network
 
 ---
 
@@ -236,7 +237,7 @@ GET /transports/id:{id}
 |-------|------|-------------|
 | `t_id` | string | Transport UUID (see "Transport ID Generation" below) |
 | `edges` | array | Array of two public keys representing the transport endpoints (visors), sorted by numeric value (least-significant first) |
-| `type` | string | Transport type: `stcpr` (STCP Relay), `sudph` (SUDP Hole-punch), or `dmsg` |
+| `type` | string | Transport type: `stcpr` (STCP Resolved), `sudph` (SUDP Hole-punch), or `dmsg` |
 | `public` | boolean | Whether this transport is publicly visible in the registry |
 
 **Transport ID Generation:**
@@ -651,7 +652,7 @@ GET /all-transports/stats?selfTransports=hide
 |-------|------|-------------|
 | `total_transports` | integer | Total number of registered transports |
 | `by_type` | object | Map of transport type to count |
-| `by_type.stcpr` | integer | Number of STCP Relay transports |
+| `by_type.stcpr` | integer | Number of STCP Resolved transports |
 | `by_type.sudph` | integer | Number of SUDP Hole-punch transports |
 | `by_type.dmsg` | integer | Number of DMSG transports (if any) |
 | `unique_visors` | integer | Number of unique visor public keys across all transports |
@@ -702,7 +703,7 @@ The response is a map where each key is a visor public key (hex-encoded), and th
 | Field | Type | Description |
 |-------|------|-------------|
 | `total` | integer | Total number of transports for this visor |
-| `stcpr` | integer | Number of STCP Relay transports (if any) |
+| `stcpr` | integer | Number of STCP Resolved transports (if any) |
 | `sudph` | integer | Number of SUDP Hole-punch transports (if any) |
 | `dmsg` | integer | Number of DMSG transports (if any) |
 
