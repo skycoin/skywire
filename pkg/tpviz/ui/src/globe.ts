@@ -733,9 +733,12 @@ export function updateGlobeData(): void {
     const countryNodeCounts: Record<string, number> = {};
 
     if (voronoiMode && nodes.length >= 3) {
-        // VORONOI MODE: Cluster same-country nodes together around their geographic centroid
+        // VORONOI MODE: Even distribution with same-country nodes adjacent
 
-        // Step 1: Group nodes by country
+        // Step 1: Generate Fibonacci positions for ALL nodes (even distribution)
+        const fibPositions = fibonacciSphere(nodes.length, 1.02);
+
+        // Step 2: Group nodes by country
         const nodesByCountry: Map<string, any[]> = new Map();
         nodes.forEach((node: any) => {
             const country = node.country || S.visorServices[node.id]?.country || '';
@@ -745,123 +748,123 @@ export function updateGlobeData(): void {
             nodesByCountry.get(country)!.push(node);
         });
 
-        // Step 2: Calculate angular size for each country based on node count
-        const totalNodes = nodes.length;
-        const countryData: { country: string; centroid: THREE.Vector3; nodes: any[]; angularSize: number }[] = [];
-
+        // Step 3: Sort countries by their geographic position (longitude) for coherent placement
+        const countriesWithCentroids: { country: string; nodes: any[]; lon: number }[] = [];
         for (const [country, countryNodes] of nodesByCountry) {
-            let centroid: THREE.Vector3;
-            if (country && COUNTRY_COORDS[country]) {
-                const [lat, lon] = COUNTRY_COORDS[country];
-                centroid = latLonToVector3(lat, lon, 1.02);
-            } else {
-                // Unknown country - place in Pacific
-                centroid = latLonToVector3(0, -150, 1.02);
+            const coords = COUNTRY_COORDS[country];
+            const lon = coords ? coords[1] : 0; // Default to 0 for unknown
+            countriesWithCentroids.push({ country, nodes: countryNodes, lon });
+        }
+        // Sort by longitude to place countries in geographic order around the globe
+        countriesWithCentroids.sort((a, b) => a.lon - b.lon);
+
+        // Step 4: Assign contiguous Fibonacci positions to each country's nodes
+        let positionIndex = 0;
+        const nodeToCountry: Map<string, string> = new Map();
+
+        for (const { country, nodes: countryNodes } of countriesWithCentroids) {
+            for (const node of countryNodes) {
+                if (positionIndex < fibPositions.length) {
+                    nodePositions.set(node.id, fibPositions[positionIndex]);
+                    nodeToCountry.set(node.id, country);
+                    positionIndex++;
+                }
+            }
+        }
+
+        // Step 5: Calculate spherical Voronoi cells and draw boundaries
+        if (voronoiGroup && nodes.length >= 4) {
+            // Get all positioned nodes as points array
+            const positionedNodes: { id: string; country: string; position: THREE.Vector3 }[] = [];
+            for (const node of nodes) {
+                const pos = nodePositions.get(node.id);
+                const country = nodeToCountry.get(node.id) || '';
+                if (pos) {
+                    positionedNodes.push({ id: node.id, country, position: pos });
+                }
             }
 
-            // Angular size proportional to sqrt of node count (for area)
-            // Base angle ~0.15 radians (~8.5 degrees), scales with node count
-            const baseAngle = 0.12;
-            const angularSize = baseAngle + 0.08 * Math.sqrt(countryNodes.length);
+            const points = positionedNodes.map(n => n.position);
 
-            countryData.push({ country, centroid, nodes: countryNodes, angularSize });
-        }
+            // Calculate Delaunay triangulation (convex hull on sphere = Delaunay)
+            const triangles = calculateSphericalDelaunay(points);
 
-        // Step 3: Position each country's nodes around its centroid
-        for (const { country, centroid, nodes: countryNodes, angularSize } of countryData) {
-            const positions = distributePointsAroundCenter(centroid, countryNodes.length, angularSize, 1.02);
+            // Calculate Voronoi cells from Delaunay
+            const voronoiCells = calculateSphericalVoronoi(points, triangles);
 
-            countryNodes.forEach((node: any, i: number) => {
-                if (i < positions.length) {
-                    nodePositions.set(node.id, positions[i]);
-                }
-            });
-        }
+            // Draw Voronoi cell boundaries
+            const drawnEdges = new Set<string>();
 
-        // Step 4: Draw filled Voronoi-like regions for each country
-        if (voronoiGroup) {
-            for (const { country, centroid, nodes: countryNodes, angularSize } of countryData) {
-                if (countryNodes.length === 0) continue;
+            for (let i = 0; i < positionedNodes.length; i++) {
+                const nodeData = positionedNodes[i];
+                const cellVertices = voronoiCells.get(i);
 
-                // Get country color or generate one
-                let color = COUNTRY_COLORS[country];
+                if (!cellVertices || cellVertices.length < 3) continue;
+
+                // Get color for this node's country
+                let color = COUNTRY_COLORS[nodeData.country];
                 if (!color) {
-                    // Generate a color based on country code hash
-                    const hash = country.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+                    const hash = nodeData.country.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
                     const hue = (hash * 137) % 360;
                     color = `hsl(${hue}, 60%, 50%)`;
                 }
 
-                // Create a spherical cap (filled circle on sphere) for this country
-                const capRadius = angularSize * 1.2; // Slightly larger than node distribution
-                const segments = 32;
-                const capGeometry = new THREE.BufferGeometry();
-
-                // Create vertices for the spherical cap
+                // Draw filled Voronoi cell
+                const cellGeometry = new THREE.BufferGeometry();
                 const vertices: number[] = [];
                 const indices: number[] = [];
 
-                // Center vertex
-                const capCenter = centroid.clone().normalize().multiplyScalar(1.015);
-                vertices.push(capCenter.x, capCenter.y, capCenter.z);
+                // Center vertex (the node position)
+                const center = nodeData.position.clone().normalize().multiplyScalar(1.012);
+                vertices.push(center.x, center.y, center.z);
 
-                // Create local coordinate system at centroid
-                const centerNorm = centroid.clone().normalize();
-                let tangent1 = new THREE.Vector3(1, 0, 0);
-                if (Math.abs(centerNorm.dot(tangent1)) > 0.9) {
-                    tangent1.set(0, 1, 0);
-                }
-                tangent1 = new THREE.Vector3().crossVectors(centerNorm, tangent1).normalize();
-                const tangent2 = new THREE.Vector3().crossVectors(centerNorm, tangent1).normalize();
+                // Add cell vertices
+                for (let j = 0; j < cellVertices.length; j++) {
+                    const v = cellVertices[j].clone().normalize().multiplyScalar(1.012);
+                    vertices.push(v.x, v.y, v.z);
 
-                // Create ring of vertices around the cap
-                for (let i = 0; i < segments; i++) {
-                    const theta = (2 * Math.PI * i) / segments;
-                    const offset = tangent1.clone().multiplyScalar(Math.sin(capRadius) * Math.cos(theta))
-                        .add(tangent2.clone().multiplyScalar(Math.sin(capRadius) * Math.sin(theta)))
-                        .add(centerNorm.clone().multiplyScalar(Math.cos(capRadius)));
-                    const point = offset.normalize().multiplyScalar(1.015);
-                    vertices.push(point.x, point.y, point.z);
-
-                    // Create triangle from center to this vertex and next
-                    const nextI = (i + 1) % segments;
-                    indices.push(0, i + 1, nextI + 1);
+                    // Create triangle fan from center
+                    const nextJ = (j + 1) % cellVertices.length;
+                    indices.push(0, j + 1, nextJ + 1);
                 }
 
-                capGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-                capGeometry.setIndex(indices);
-                capGeometry.computeVertexNormals();
+                cellGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                cellGeometry.setIndex(indices);
+                cellGeometry.computeVertexNormals();
 
-                const capMaterial = new THREE.MeshBasicMaterial({
+                const cellMaterial = new THREE.MeshBasicMaterial({
                     color: color,
                     transparent: true,
-                    opacity: 0.25,
+                    opacity: 0.2,
                     side: THREE.DoubleSide,
                     depthWrite: false,
                 });
 
-                const capMesh = new THREE.Mesh(capGeometry, capMaterial);
-                voronoiGroup.add(capMesh);
+                const cellMesh = new THREE.Mesh(cellGeometry, cellMaterial);
+                voronoiGroup.add(cellMesh);
 
-                // Draw border around the cap
-                const borderPoints: THREE.Vector3[] = [];
-                for (let i = 0; i <= segments; i++) {
-                    const theta = (2 * Math.PI * i) / segments;
-                    const offset = tangent1.clone().multiplyScalar(Math.sin(capRadius) * Math.cos(theta))
-                        .add(tangent2.clone().multiplyScalar(Math.sin(capRadius) * Math.sin(theta)))
-                        .add(centerNorm.clone().multiplyScalar(Math.cos(capRadius)));
-                    borderPoints.push(offset.normalize().multiplyScalar(1.018));
+                // Draw cell boundary edges
+                for (let j = 0; j < cellVertices.length; j++) {
+                    const v1 = cellVertices[j];
+                    const v2 = cellVertices[(j + 1) % cellVertices.length];
+
+                    // Create unique edge key to avoid drawing same edge twice
+                    const edgeKey = [v1.toArray().join(','), v2.toArray().join(',')].sort().join('|');
+                    if (drawnEdges.has(edgeKey)) continue;
+                    drawnEdges.add(edgeKey);
+
+                    // Draw great circle arc for cell edge
+                    const arcPoints = createGreatCircleArc(v1, v2, 1.015, 16);
+                    const edgeGeometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
+                    const edgeMaterial = new THREE.LineBasicMaterial({
+                        color: 0x00d9a5,
+                        transparent: true,
+                        opacity: 0.6,
+                        linewidth: 1,
+                    });
+                    const edgeLine = new THREE.Line(edgeGeometry, edgeMaterial);
+                    voronoiGroup.add(edgeLine);
                 }
-
-                const borderGeometry = new THREE.BufferGeometry().setFromPoints(borderPoints);
-                const borderMaterial = new THREE.LineBasicMaterial({
-                    color: color,
-                    transparent: true,
-                    opacity: 0.6,
-                    linewidth: 2,
-                });
-                const borderLine = new THREE.Line(borderGeometry, borderMaterial);
-                voronoiGroup.add(borderLine);
             }
         }
     } else {
