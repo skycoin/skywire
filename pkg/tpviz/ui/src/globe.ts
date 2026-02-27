@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import * as S from './state';
 import { colors, LOCAL_VISOR_COLOR, LOCAL_EDGE_COLOR } from './constants';
-import { getVisorStatus, countryToFlag } from './utils';
+import { getVisorStatus, countryToFlag, getIPGroupColor } from './utils';
 import { showNodeInfo, hideNodeInfo } from './node-info';
 import { CONTINENTS } from './world-data';
 import { geoVoronoi } from 'd3-geo-voronoi';
@@ -734,40 +734,72 @@ export function updateGlobeData(): void {
     const countryNodeCounts: Record<string, number> = {};
 
     if (voronoiMode && nodes.length >= 3) {
-        // VORONOI MODE: Even distribution with same-country nodes adjacent
+        // VORONOI MODE: Even distribution with same-country AND same-IP nodes adjacent
 
         // Step 1: Generate Fibonacci positions for ALL nodes (even distribution)
         const fibPositions = fibonacciSphere(nodes.length, 1.02);
 
-        // Step 2: Group nodes by country
-        const nodesByCountry: Map<string, any[]> = new Map();
+        // Step 2: Group nodes by country, then by IP group within each country
+        const nodesByCountry: Map<string, Map<number | string, any[]>> = new Map();
         nodes.forEach((node: any) => {
             const country = node.country || S.visorServices[node.id]?.country || '';
+            const ipGroup = S.ipGroupsData?.groups?.[node.id] ?? '_no_ip';
+
             if (!nodesByCountry.has(country)) {
-                nodesByCountry.set(country, []);
+                nodesByCountry.set(country, new Map());
             }
-            nodesByCountry.get(country)!.push(node);
+            const countryMap = nodesByCountry.get(country)!;
+            if (!countryMap.has(ipGroup)) {
+                countryMap.set(ipGroup, []);
+            }
+            countryMap.get(ipGroup)!.push(node);
         });
 
-        // Step 3: Sort countries by their geographic position (longitude) for coherent placement
-        const countriesWithCentroids: { country: string; nodes: any[]; lon: number }[] = [];
-        for (const [country, countryNodes] of nodesByCountry) {
-            const coords = COUNTRY_COORDS[country];
-            const lon = coords ? coords[1] : 0; // Default to 0 for unknown
-            countriesWithCentroids.push({ country, nodes: countryNodes, lon });
+        // Step 3: Sort countries by longitude, then IP groups by ID within each country
+        interface CountryIPGroup {
+            country: string;
+            ipGroup: number | string;
+            nodes: any[];
+            lon: number;
         }
-        // Sort by longitude to place countries in geographic order around the globe
-        countriesWithCentroids.sort((a, b) => a.lon - b.lon);
+        const sortedGroups: CountryIPGroup[] = [];
 
-        // Step 4: Assign contiguous Fibonacci positions to each country's nodes
+        for (const [country, ipMap] of nodesByCountry) {
+            const coords = COUNTRY_COORDS[country];
+            const lon = coords ? coords[1] : 0;
+
+            // Sort IP groups numerically within each country
+            const sortedIPGroups = Array.from(ipMap.entries()).sort((a, b) => {
+                if (a[0] === '_no_ip') return 1;
+                if (b[0] === '_no_ip') return -1;
+                return (a[0] as number) - (b[0] as number);
+            });
+
+            for (const [ipGroup, groupNodes] of sortedIPGroups) {
+                sortedGroups.push({ country, ipGroup, nodes: groupNodes, lon });
+            }
+        }
+
+        // Sort all groups: first by country longitude, IP groups stay together within country
+        sortedGroups.sort((a, b) => {
+            if (a.lon !== b.lon) return a.lon - b.lon;
+            // Same country - keep IP group order
+            if (a.ipGroup === '_no_ip') return 1;
+            if (b.ipGroup === '_no_ip') return -1;
+            return (a.ipGroup as number) - (b.ipGroup as number);
+        });
+
+        // Step 4: Assign contiguous Fibonacci positions to each group
         let positionIndex = 0;
         const nodeToCountry: Map<string, string> = new Map();
+        const nodeToIPGroup: Map<string, number | string> = new Map();
 
-        for (const { country, nodes: countryNodes } of countriesWithCentroids) {
-            for (const node of countryNodes) {
+        for (const { country, ipGroup, nodes: groupNodes } of sortedGroups) {
+            for (const node of groupNodes) {
                 if (positionIndex < fibPositions.length) {
                     nodePositions.set(node.id, fibPositions[positionIndex]);
                     nodeToCountry.set(node.id, country);
+                    nodeToIPGroup.set(node.id, ipGroup);
                     positionIndex++;
                 }
             }
@@ -777,10 +809,10 @@ export function updateGlobeData(): void {
         if (voronoiGroup && nodes.length >= 3) {
             // Convert node positions to [lon, lat] format for d3-geo-voronoi
             const geoPoints: [number, number][] = [];
-            const nodeOrder: { id: string; country: string }[] = [];
+            const nodeOrder: { id: string; country: string; ipGroup: number | string }[] = [];
 
-            for (const { country, nodes: countryNodes } of countriesWithCentroids) {
-                for (const node of countryNodes) {
+            for (const { country, ipGroup, nodes: groupNodes } of sortedGroups) {
+                for (const node of groupNodes) {
                     const pos = nodePositions.get(node.id);
                     if (pos) {
                         // Convert 3D position back to lat/lon
@@ -788,7 +820,7 @@ export function updateGlobeData(): void {
                         const lat = 90 - Math.acos(pos.y / r) * (180 / Math.PI);
                         const lon = Math.atan2(pos.z, -pos.x) * (180 / Math.PI);
                         geoPoints.push([lon, lat]);
-                        nodeOrder.push({ id: node.id, country });
+                        nodeOrder.push({ id: node.id, country, ipGroup });
                     }
                 }
             }
@@ -809,12 +841,19 @@ export function updateGlobeData(): void {
                             const coords = feature.geometry.coordinates;
                             if (!coords || coords.length === 0) continue;
 
-                            // Get color for this node's country
-                            let color = COUNTRY_COLORS[nodeData.country];
-                            if (!color) {
-                                const hash = (nodeData.country || '').split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
-                                const hue = (hash * 137) % 360;
-                                color = `hsl(${hue}, 60%, 50%)`;
+                            // Get color based on IP group (sub-regions) or country (fallback)
+                            let color: string;
+                            if (nodeData.ipGroup !== '_no_ip' && typeof nodeData.ipGroup === 'number') {
+                                // Color by IP group for sub-region visualization
+                                color = getIPGroupColor(nodeData.ipGroup);
+                            } else {
+                                // Fallback to country color for nodes without IP data
+                                color = COUNTRY_COLORS[nodeData.country];
+                                if (!color) {
+                                    const hash = (nodeData.country || '').split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
+                                    const hue = (hash * 137) % 360;
+                                    color = `hsl(${hue}, 60%, 50%)`;
+                                }
                             }
 
                             // The polygon coordinates are in [lon, lat] format
