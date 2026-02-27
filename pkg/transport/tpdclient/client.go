@@ -306,3 +306,68 @@ func (c *apiClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
 
 	return httputil.ErrorFromResp(resp)
 }
+
+// DeleteTransports deletes multiple transports in a single request.
+// Falls back to sequential deletion if the batch endpoint is unavailable (404).
+func (c *apiClient) DeleteTransports(ctx context.Context, ids []uuid.UUID) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	// Convert UUIDs to strings
+	idStrings := make([]string, len(ids))
+	for i, id := range ids {
+		idStrings[i] = id.String()
+	}
+
+	// Try batch endpoint first
+	resp, err := c.Post(ctx, "/transports/delete-batch", idStrings)
+	if err != nil {
+		// Network error - fall back to sequential
+		c.log.WithError(err).Debug("Batch delete failed, falling back to sequential")
+		return c.deleteTransportsSequential(ctx, ids)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
+
+	// If 404, TPD doesn't support batch delete - fall back to sequential
+	if resp.StatusCode == 404 {
+		c.log.Debug("TPD does not support batch delete, falling back to sequential")
+		return c.deleteTransportsSequential(ctx, ids)
+	}
+
+	if err := httputil.ErrorFromResp(resp); err != nil {
+		c.log.WithError(err).Debug("Batch delete error, falling back to sequential")
+		return c.deleteTransportsSequential(ctx, ids)
+	}
+
+	// Parse response
+	var result struct {
+		Deleted int `json:"deleted"`
+		Skipped int `json:"skipped"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		c.log.WithError(err).Warn("Failed to decode batch delete response")
+		return result.Deleted, nil
+	}
+
+	return result.Deleted, nil
+}
+
+// deleteTransportsSequential deletes transports one by one as fallback
+func (c *apiClient) deleteTransportsSequential(ctx context.Context, ids []uuid.UUID) (int, error) {
+	deleted := 0
+	var lastErr error
+	for _, id := range ids {
+		if err := c.DeleteTransport(ctx, id); err != nil {
+			lastErr = err
+			c.log.WithError(err).WithField("id", id).Debug("Failed to delete transport")
+		} else {
+			deleted++
+		}
+	}
+	return deleted, lastErr
+}
