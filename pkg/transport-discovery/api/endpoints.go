@@ -263,6 +263,58 @@ func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// deleteTransportsBatch deletes multiple transports in a single request.
+// The caller must be an edge on each transport. Only transports where the caller
+// is an edge will be deleted; others are silently skipped.
+func (api *API) deleteTransportsBatch(w http.ResponseWriter, r *http.Request) {
+	pk, ok := r.Context().Value(httpauth.ContextAuthKey).(cipher.PubKey)
+	if !ok {
+		api.writeError(w, r, errors.New("invalid auth, no public key provided"))
+		return
+	}
+
+	var ids []string
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		api.writeError(w, r, ErrBadInput)
+		return
+	}
+	if err := json.Unmarshal(body, &ids); err != nil {
+		api.writeError(w, r, ErrBadInput)
+		return
+	}
+
+	deleted := 0
+	skipped := 0
+	for _, idParam := range ids {
+		id, err := uuid.Parse(idParam)
+		if err != nil {
+			skipped++
+			continue
+		}
+
+		entry, err := api.store.GetTransportByID(r.Context(), id)
+		if err != nil {
+			skipped++
+			continue
+		}
+
+		// Only allow deletion if caller is an edge on this transport
+		if entry.EdgeIndex(pk) < 0 {
+			skipped++
+			continue
+		}
+
+		if err := api.store.DeregisterTransport(r.Context(), id); err != nil {
+			skipped++
+			continue
+		}
+		deleted++
+	}
+
+	api.writeJSON(w, r, http.StatusOK, map[string]int{"deleted": deleted, "skipped": skipped})
+}
+
 func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 	api.log(r).Info("Deregistration process started.")
 
