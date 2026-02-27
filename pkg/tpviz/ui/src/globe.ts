@@ -735,7 +735,7 @@ export function updateGlobeData(): void {
     const countryNodeCounts: Record<string, number> = {};
 
     if (voronoiMode && nodes.length >= 3) {
-        // VORONOI MODE: Even Fibonacci distribution with geographic country clustering
+        // VORONOI MODE: Assign Fibonacci positions to countries based on spatial proximity
 
         // Step 1: Generate Fibonacci positions for ALL nodes (even distribution)
         const fibPositions = fibonacciSphere(nodes.length, 1.02);
@@ -756,60 +756,115 @@ export function updateGlobeData(): void {
             countryMap.get(ipGroup)!.push(node);
         });
 
-        // Step 3: Calculate country centroids and total node counts
+        // Step 3: Calculate country centroids
         interface CountryData {
             country: string;
             centroid: THREE.Vector3;
             nodeCount: number;
             ipGroups: Map<number | string, any[]>;
+            assignedPositions: THREE.Vector3[];
         }
-        const countryDataList: CountryData[] = [];
+        const countryDataMap: Map<string, CountryData> = new Map();
 
         for (const [country, ipMap] of nodesByCountry) {
             const coords = COUNTRY_COORDS[country];
             const centroid = coords
                 ? latLonToVector3(coords[0], coords[1], 1.02)
-                : latLonToVector3(0, 0, 1.02); // Default to 0,0 for unknown
+                : latLonToVector3(0, 0, 1.02);
 
             let nodeCount = 0;
             ipMap.forEach(nodes => nodeCount += nodes.length);
 
-            countryDataList.push({ country, centroid, nodeCount, ipGroups: ipMap });
+            countryDataMap.set(country, {
+                country,
+                centroid,
+                nodeCount,
+                ipGroups: ipMap,
+                assignedPositions: []
+            });
         }
 
-        // Step 4: For each country, find the Fibonacci position closest to its centroid
-        // Then assign a contiguous block of Fibonacci positions to that country
-        interface CountryAssignment {
-            country: string;
-            bestFibIndex: number;
-            nodeCount: number;
-            ipGroups: Map<number | string, any[]>;
+        // Step 4: Assign each Fibonacci position to the country whose centroid is closest
+        // This creates a Voronoi-like partition of positions by country
+        const positionToCountry: Map<number, string> = new Map();
+        const countryPositionCounts: Map<string, number> = new Map();
+
+        // Initialize counts
+        for (const country of countryDataMap.keys()) {
+            countryPositionCounts.set(country, 0);
         }
-        const countryAssignments: CountryAssignment[] = countryDataList.map(cd => {
-            // Find Fibonacci position closest to country centroid
-            let bestIndex = 0;
-            let bestDist = Infinity;
-            for (let i = 0; i < fibPositions.length; i++) {
-                const dist = fibPositions[i].distanceTo(cd.centroid);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    bestIndex = i;
+
+        // First pass: assign positions to closest country (greedy)
+        for (let i = 0; i < fibPositions.length; i++) {
+            const pos = fibPositions[i];
+            let closestCountry = '';
+            let closestDist = Infinity;
+
+            for (const [country, data] of countryDataMap) {
+                const dist = pos.distanceTo(data.centroid);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestCountry = country;
                 }
             }
-            return {
-                country: cd.country,
-                bestFibIndex: bestIndex,
-                nodeCount: cd.nodeCount,
-                ipGroups: cd.ipGroups
-            };
-        });
 
-        // Sort countries by their best Fibonacci index (spiral order)
-        countryAssignments.sort((a, b) => a.bestFibIndex - b.bestFibIndex);
+            positionToCountry.set(i, closestCountry);
+            countryPositionCounts.set(closestCountry, (countryPositionCounts.get(closestCountry) || 0) + 1);
+        }
 
-        // Step 5: Assign contiguous Fibonacci positions to each country's nodes
-        // Countries get positions in spiral order, maintaining geographic clustering
-        let positionIndex = 0;
+        // Step 5: Rebalance - ensure each country gets exactly as many positions as it has nodes
+        // Sort positions by distance to their assigned country's centroid
+        const positionsByCountry: Map<string, { index: number; dist: number }[]> = new Map();
+        for (const country of countryDataMap.keys()) {
+            positionsByCountry.set(country, []);
+        }
+
+        for (let i = 0; i < fibPositions.length; i++) {
+            const country = positionToCountry.get(i)!;
+            const data = countryDataMap.get(country)!;
+            const dist = fibPositions[i].distanceTo(data.centroid);
+            positionsByCountry.get(country)!.push({ index: i, dist });
+        }
+
+        // Sort each country's positions by distance (closest first)
+        for (const positions of positionsByCountry.values()) {
+            positions.sort((a, b) => a.dist - b.dist);
+        }
+
+        // Keep only the needed number of positions per country
+        const finalPositionToCountry: Map<number, string> = new Map();
+        const usedPositions = new Set<number>();
+
+        for (const [country, data] of countryDataMap) {
+            const positions = positionsByCountry.get(country)!;
+            let assigned = 0;
+            for (const { index } of positions) {
+                if (assigned >= data.nodeCount) break;
+                if (!usedPositions.has(index)) {
+                    finalPositionToCountry.set(index, country);
+                    usedPositions.add(index);
+                    data.assignedPositions.push(fibPositions[index]);
+                    assigned++;
+                }
+            }
+        }
+
+        // Handle any unassigned positions (give to countries that need more)
+        for (let i = 0; i < fibPositions.length; i++) {
+            if (!usedPositions.has(i)) {
+                // Find country that still needs positions
+                for (const [country, data] of countryDataMap) {
+                    if (data.assignedPositions.length < data.nodeCount) {
+                        finalPositionToCountry.set(i, country);
+                        usedPositions.add(i);
+                        data.assignedPositions.push(fibPositions[i]);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Step 6: Within each country, sort positions spatially and assign to IP groups
         const nodeToCountry: Map<string, string> = new Map();
         const nodeToIPGroup: Map<string, number | string> = new Map();
 
@@ -820,23 +875,32 @@ export function updateGlobeData(): void {
         }
         const sortedGroups: CountryIPGroup[] = [];
 
-        for (const ca of countryAssignments) {
+        for (const [country, data] of countryDataMap) {
+            // Sort assigned positions by angle around centroid for consistent ordering
+            const sortedPositions = [...data.assignedPositions].sort((a, b) => {
+                const angleA = Math.atan2(a.z - data.centroid.z, a.x - data.centroid.x);
+                const angleB = Math.atan2(b.z - data.centroid.z, b.x - data.centroid.x);
+                return angleA - angleB;
+            });
+
             // Sort IP groups within this country
-            const sortedIPGroups = Array.from(ca.ipGroups.entries()).sort((a, b) => {
+            const sortedIPGroups = Array.from(data.ipGroups.entries()).sort((a, b) => {
                 if (a[0] === '_no_ip') return 1;
                 if (b[0] === '_no_ip') return -1;
                 return (a[0] as number) - (b[0] as number);
             });
 
+            // Assign positions to nodes, grouped by IP
+            let posIdx = 0;
             for (const [ipGroup, groupNodes] of sortedIPGroups) {
-                sortedGroups.push({ country: ca.country, ipGroup, nodes: groupNodes });
+                sortedGroups.push({ country, ipGroup, nodes: groupNodes });
 
                 for (const node of groupNodes) {
-                    if (positionIndex < fibPositions.length) {
-                        nodePositions.set(node.id, fibPositions[positionIndex]);
-                        nodeToCountry.set(node.id, ca.country);
+                    if (posIdx < sortedPositions.length) {
+                        nodePositions.set(node.id, sortedPositions[posIdx]);
+                        nodeToCountry.set(node.id, country);
                         nodeToIPGroup.set(node.id, ipGroup);
-                        positionIndex++;
+                        posIdx++;
                     }
                 }
             }
