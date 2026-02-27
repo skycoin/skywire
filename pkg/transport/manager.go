@@ -712,9 +712,32 @@ func (tm *Manager) Close() {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 
+	// Collect transport IDs for batch deregistration (skip noop clients)
+	var tpIDs []uuid.UUID
 	for _, tr := range tm.tps {
-		tr.close()
+		// Skip transports with noop discovery client (self-transports)
+		if _, isNoop := tr.dc.(*noopDiscoveryClient); !isNoop {
+			tpIDs = append(tpIDs, tr.Entry.ID)
+		}
 	}
+
+	// Batch deregister from TPD (with fallback to sequential)
+	if len(tpIDs) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		deleted, err := tm.Conf.DiscoveryClient.DeleteTransports(ctx, tpIDs)
+		cancel()
+		if err != nil {
+			tm.Logger.WithError(err).Warnf("Batch deregister completed with error: %d/%d deleted", deleted, len(tpIDs))
+		} else {
+			tm.Logger.Debugf("Batch deregistered %d/%d transports from TPD", deleted, len(tpIDs))
+		}
+	}
+
+	// Close underlying transports (skip TPD deregistration since we already did it)
+	for _, tr := range tm.tps {
+		tr.closeWithoutDeregister()
+	}
+
 	for _, client := range tm.netClients {
 		err := client.Close()
 		if err != nil {

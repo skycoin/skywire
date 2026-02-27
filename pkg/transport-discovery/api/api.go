@@ -109,6 +109,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		r.Get("/transports/edge:{edge}", api.getTransportByEdge)
 		r.Post("/transports/", api.registerTransport)
 		r.Delete("/transports/id:{id}", api.deleteTransport)
+		r.Post("/transports/delete-batch", api.deleteTransportsBatch)
 	})
 
 	r.Get("/health", api.health)
