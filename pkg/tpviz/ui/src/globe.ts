@@ -772,99 +772,56 @@ export function updateGlobeData(): void {
             }
         }
 
-        // Step 5: Calculate spherical Voronoi cells and draw boundaries
-        if (voronoiGroup && nodes.length >= 4) {
-            // Get all positioned nodes as points array
-            const positionedNodes: { id: string; country: string; position: THREE.Vector3 }[] = [];
-            for (const node of nodes) {
-                const pos = nodePositions.get(node.id);
-                const country = nodeToCountry.get(node.id) || '';
-                if (pos) {
-                    positionedNodes.push({ id: node.id, country, position: pos });
-                }
-            }
+        // Step 5: Draw country region boundaries between adjacent countries
+        // (Skip expensive O(n⁴) Voronoi calculation - just draw dividers between country groups)
+        if (voronoiGroup && nodes.length >= 3) {
+            // Find boundaries between countries (where country changes in the Fibonacci sequence)
+            let prevCountry = '';
+            let prevPos: THREE.Vector3 | null = null;
 
-            const points = positionedNodes.map(n => n.position);
+            // Track country start/end positions for drawing region arcs
+            const countryBoundaries: { pos: THREE.Vector3; country: string }[] = [];
 
-            // Calculate Delaunay triangulation (convex hull on sphere = Delaunay)
-            const triangles = calculateSphericalDelaunay(points);
+            for (const { country, nodes: countryNodes } of countriesWithCentroids) {
+                if (countryNodes.length === 0) continue;
 
-            // Calculate Voronoi cells from Delaunay
-            const voronoiCells = calculateSphericalVoronoi(points, triangles);
+                // Get first and last position for this country
+                const firstNode = countryNodes[0];
+                const lastNode = countryNodes[countryNodes.length - 1];
+                const firstPos = nodePositions.get(firstNode.id);
+                const lastPos = nodePositions.get(lastNode.id);
 
-            // Draw Voronoi cell boundaries
-            const drawnEdges = new Set<string>();
-
-            for (let i = 0; i < positionedNodes.length; i++) {
-                const nodeData = positionedNodes[i];
-                const cellVertices = voronoiCells.get(i);
-
-                if (!cellVertices || cellVertices.length < 3) continue;
-
-                // Get color for this node's country
-                let color = COUNTRY_COLORS[nodeData.country];
-                if (!color) {
-                    const hash = nodeData.country.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-                    const hue = (hash * 137) % 360;
-                    color = `hsl(${hue}, 60%, 50%)`;
+                if (firstPos) {
+                    countryBoundaries.push({ pos: firstPos, country });
                 }
 
-                // Draw filled Voronoi cell
-                const cellGeometry = new THREE.BufferGeometry();
-                const vertices: number[] = [];
-                const indices: number[] = [];
+                // Draw divider line at country boundary
+                if (prevPos && firstPos && prevCountry !== country) {
+                    // Calculate midpoint between last node of prev country and first of current
+                    const midpoint = prevPos.clone().add(firstPos).normalize().multiplyScalar(1.02);
 
-                // Center vertex (the node position)
-                const center = nodeData.position.clone().normalize().multiplyScalar(1.012);
-                vertices.push(center.x, center.y, center.z);
+                    // Draw a small arc perpendicular to the boundary
+                    const direction = new THREE.Vector3().subVectors(firstPos, prevPos).normalize();
+                    const up = midpoint.clone().normalize();
+                    const perpendicular = new THREE.Vector3().crossVectors(direction, up).normalize();
 
-                // Add cell vertices
-                for (let j = 0; j < cellVertices.length; j++) {
-                    const v = cellVertices[j].clone().normalize().multiplyScalar(1.012);
-                    vertices.push(v.x, v.y, v.z);
+                    const arcStart = midpoint.clone().add(perpendicular.clone().multiplyScalar(0.08));
+                    const arcEnd = midpoint.clone().sub(perpendicular.clone().multiplyScalar(0.08));
 
-                    // Create triangle fan from center
-                    const nextJ = (j + 1) % cellVertices.length;
-                    indices.push(0, j + 1, nextJ + 1);
-                }
-
-                cellGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-                cellGeometry.setIndex(indices);
-                cellGeometry.computeVertexNormals();
-
-                const cellMaterial = new THREE.MeshBasicMaterial({
-                    color: color,
-                    transparent: true,
-                    opacity: 0.2,
-                    side: THREE.DoubleSide,
-                    depthWrite: false,
-                });
-
-                const cellMesh = new THREE.Mesh(cellGeometry, cellMaterial);
-                voronoiGroup.add(cellMesh);
-
-                // Draw cell boundary edges
-                for (let j = 0; j < cellVertices.length; j++) {
-                    const v1 = cellVertices[j];
-                    const v2 = cellVertices[(j + 1) % cellVertices.length];
-
-                    // Create unique edge key to avoid drawing same edge twice
-                    const edgeKey = [v1.toArray().join(','), v2.toArray().join(',')].sort().join('|');
-                    if (drawnEdges.has(edgeKey)) continue;
-                    drawnEdges.add(edgeKey);
-
-                    // Draw great circle arc for cell edge
-                    const arcPoints = createGreatCircleArc(v1, v2, 1.015, 16);
-                    const edgeGeometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
-                    const edgeMaterial = new THREE.LineBasicMaterial({
+                    const arcPoints = createGreatCircleArc(arcStart, arcEnd, 1.018, 8);
+                    const arcGeometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
+                    const arcMaterial = new THREE.LineBasicMaterial({
                         color: 0x00d9a5,
                         transparent: true,
-                        opacity: 0.6,
+                        opacity: 0.5,
                         linewidth: 1,
                     });
-                    const edgeLine = new THREE.Line(edgeGeometry, edgeMaterial);
-                    voronoiGroup.add(edgeLine);
+                    const arcLine = new THREE.Line(arcGeometry, arcMaterial);
+                    voronoiGroup.add(arcLine);
                 }
+
+                prevCountry = country;
+                prevPos = lastPos || null;
             }
         }
     } else {
