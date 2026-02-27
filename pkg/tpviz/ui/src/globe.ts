@@ -908,6 +908,13 @@ export function updateGlobeData(): void {
 
         // Step 5: Draw proper spherical Voronoi boundaries using d3-geo-voronoi
         // d3-geo-voronoi computes mathematically correct spherical Voronoi cells
+        console.log('Voronoi debug:', {
+            voronoiGroup: !!voronoiGroup,
+            showVoronoiOverlay,
+            sortedGroupsLength: sortedGroups.length,
+            voronoiMode
+        });
+
         if (voronoiGroup && showVoronoiOverlay && sortedGroups.length >= 3) {
             // Calculate centroid for each IP group
             const groupCentroids: { country: string; ipGroup: number | string; centroid: THREE.Vector3; lon: number; lat: number }[] = [];
@@ -937,9 +944,12 @@ export function updateGlobeData(): void {
             // Convert to geo points for d3-geo-voronoi
             const geoPoints: [number, number][] = groupCentroids.map(g => [g.lon, g.lat]);
 
+            console.log('Voronoi geoPoints:', geoPoints.length, geoPoints.slice(0, 3));
+
             if (geoPoints.length >= 3) {
                 try {
                     const voronoi = geoVoronoi(geoPoints);
+                    console.log('Voronoi computed, getting polygons...');
 
                     // Build adjacency map from Delaunay triangles
                     const adjacency: Map<number, Set<number>> = new Map();
@@ -962,9 +972,11 @@ export function updateGlobeData(): void {
 
                     // Get the actual spherical Voronoi polygons
                     const polygons = voronoi.polygons();
+                    console.log('Voronoi polygons:', polygons?.features?.length);
 
                     if (polygons && polygons.features) {
                         const drawnEdges = new Set<string>();
+                        let edgesDrawn = 0;
 
                         for (let i = 0; i < polygons.features.length; i++) {
                             const feature = polygons.features[i];
@@ -1037,6 +1049,7 @@ export function updateGlobeData(): void {
                                         });
                                         voronoiGroup.add(new THREE.Line(geom, mat));
                                     }
+                                    edgesDrawn++;
                                 } else {
                                     // IP boundary or internal: thin teal line
                                     const geom = new THREE.BufferGeometry().setFromPoints(arcPoints);
@@ -1046,9 +1059,11 @@ export function updateGlobeData(): void {
                                         opacity: 0.35,
                                     });
                                     voronoiGroup.add(new THREE.Line(geom, mat));
+                                    edgesDrawn++;
                                 }
                             }
                         }
+                        console.log('Voronoi edges drawn:', edgesDrawn, 'voronoiGroup children:', voronoiGroup.children.length);
                     }
                 } catch (e) {
                     console.error('Voronoi calculation failed:', e);
