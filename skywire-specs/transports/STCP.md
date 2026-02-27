@@ -65,23 +65,25 @@ If the public key is not found in the table, the dial fails with `ErrStcpEntryNo
 
 ## Configuration
 
+In the visor config file, STCP is configured under the `"skywire-tcp"` key:
+
 ```json
 {
-    "stcp": {
-        "listening_address": ":7777",
+    "skywire-tcp": {
         "pk_table": {
-            "02abc123...": "192.168.1.100:7777",
-            "03def456...": "192.168.1.101:7777",
-            "04ghi789...": "10.0.0.50:8888"
-        }
+            "02abc123def456...": "192.168.1.100:7777",
+            "03def456abc123...": "192.168.1.101:7777",
+            "04789ghi012jkl...": "10.0.0.50:8888"
+        },
+        "listening_address": ":7777"
     }
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `pk_table` | object | Map of public key (66-char hex) to IP:port address |
 | `listening_address` | string | Local address to listen on (e.g., `:7777` or `0.0.0.0:7777`) |
-| `pk_table` | object | Map of public key (hex) to IP:port address |
 
 ### PK Table Format
 
@@ -96,8 +98,8 @@ Each entry in the PK table maps a visor's public key to its network address:
 **Example:**
 ```json
 {
-    "02a1b2c3d4e5f6...": "192.168.1.100:7777",
-    "03f6e5d4c3b2a1...": "10.0.0.50:7777"
+    "02a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2": "192.168.1.100:7777",
+    "03f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5": "10.0.0.50:7777"
 }
 ```
 
@@ -124,12 +126,12 @@ After TCP connection is established:
 
 ```json
 {
-    "stcp": {
-        "listening_address": ":7777",
+    "skywire-tcp": {
         "pk_table": {
-            "02dev1...": "127.0.0.1:7778",
-            "02dev2...": "127.0.0.1:7779"
-        }
+            "02dev1a2b3c4d5e6f...": "127.0.0.1:7778",
+            "02dev2f6e5d4c3b2a...": "127.0.0.1:7779"
+        },
+        "listening_address": ":7777"
     }
 }
 ```
@@ -138,13 +140,13 @@ After TCP connection is established:
 
 ```json
 {
-    "stcp": {
-        "listening_address": "10.0.0.1:7777",
+    "skywire-tcp": {
         "pk_table": {
-            "02server1...": "10.0.0.2:7777",
-            "02server2...": "10.0.0.3:7777",
-            "02server3...": "10.0.0.4:7777"
-        }
+            "02server1abc123...": "10.0.0.2:7777",
+            "02server2def456...": "10.0.0.3:7777",
+            "02server3ghi789...": "10.0.0.4:7777"
+        },
+        "listening_address": "10.0.0.1:7777"
     }
 }
 ```
