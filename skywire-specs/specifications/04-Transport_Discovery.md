@@ -489,13 +489,34 @@ GET /uptimes
 
 QoS metrics (bandwidth and latency) are served from dedicated endpoints, separate from core transport data. This separation ensures that the core transport registry remains lightweight and that QoS data can be queried independently.
 
+### Reporting Configuration
+
+| Parameter | Default Value | Description |
+|-----------|---------------|-------------|
+| Transport re-registration interval | 90 seconds | How often visors re-register their transports |
+| Transport entry TTL | 2 minutes | Time before an unrefreshed transport is considered stale |
+| Uptime cache refresh | 5 minutes | How often uptime data is refreshed from cache |
+| Daily bandwidth retention | 35 days | How long daily bandwidth aggregates are kept |
+| Visor tracking retention | 400 days | How long visor records are kept |
+
+### Bandwidth Semantics
+
+Bandwidth values are **cumulative** - they represent total bytes sent/received since the transport was established, not per-interval deltas. Each transport edge reports its own perspective:
+
+```go
+type BandwidthData struct {
+    SentBytes uint64 // Total bytes sent (cumulative)
+    RecvBytes uint64 // Total bytes received (cumulative)
+}
+```
+
 ### Bandwidth Metrics
 
-Bandwidth is measured in bytes and reported by each transport edge. The Transport Discovery aggregates bandwidth data at both transport and visor levels.
+Bandwidth is measured in bytes and reported by each transport edge. The Transport Discovery stores bandwidth data from both edges independently.
 
 #### GET Transport Bandwidth
 
-Returns historical bandwidth for a specific transport.
+Returns historical bandwidth for a specific transport, showing reports from both edges.
 
 **Request:**
 
@@ -516,14 +537,34 @@ GET /bandwidth/transport/{id}?period=daily&limit=7
     [
         {
             "date": "2024-02-21",
-            "bandwidth": 1073741824
+            "edge_a": {
+                "pk": "<public-key-1>",
+                "sent": 536870912,
+                "recv": 268435456
+            },
+            "edge_b": {
+                "pk": "<public-key-2>",
+                "sent": 268435456,
+                "recv": 536870912
+            }
         },
         {
             "date": "2024-02-20",
-            "bandwidth": 987654321
+            "edge_a": {
+                "pk": "<public-key-1>",
+                "sent": 400000000,
+                "recv": 200000000
+            },
+            "edge_b": {
+                "pk": "<public-key-2>",
+                "sent": 200000000,
+                "recv": 400000000
+            }
         }
     ]
     ```
+
+**Note:** Edge A's `sent` should approximately equal Edge B's `recv` and vice versa. Significant discrepancies may indicate measurement issues or network problems.
 
 #### GET Visor Bandwidth
 
@@ -709,48 +750,90 @@ SW-Sig: <signature>
 - 401 Unauthorized (Invalid signature/nonce).
 - 500 Internal Server Error (Server error).
 
----
+#### GET Verified Metrics
 
-## Bandwidth Verification (Future)
+Returns verified QoS metrics for transports where both edges have reported consistent bandwidth data. This endpoint only includes transports where both edges' reports agree within an acceptable margin (e.g., 5% discrepancy).
 
-A future enhancement will add bandwidth verification capabilities. This will allow cross-referencing bandwidth reports from both edges of a transport to detect discrepancies.
-
-### Design Considerations
-
-1. **Dual Reporting**: Both edges of a transport report their bandwidth independently.
-2. **Cross-Validation**: The Transport Discovery can compare reports from both edges.
-3. **Discrepancy Detection**: Significant differences in reported bandwidth may indicate:
-   - Measurement errors
-   - Network issues (packet loss)
-   - Potential manipulation
-
-### Verification Endpoint (Proposed)
+**Request:**
 
 ```
-GET /metrics/verify/{transport-id}
+GET /metrics/verified
+GET /metrics/verified?discrepancy_threshold=0.05
 ```
+
+**Query Parameters:**
+
+- `discrepancy_threshold` (optional): Maximum allowed discrepancy between edges (0.0-1.0). Default: 0.05 (5%).
 
 **Response:**
 
-```json
-{
-    "transport_id": "<transport-id>",
-    "edge_a": {
-        "pk": "<public-key-1>",
-        "reported_sent": 536870912,
-        "reported_recv": 268435456
-    },
-    "edge_b": {
-        "pk": "<public-key-2>",
-        "reported_sent": 268435456,
-        "reported_recv": 536870912
-    },
-    "verification": {
-        "status": "consistent",
-        "discrepancy_percent": 0.5
-    }
-}
+- 200 OK (Success).
+    ```json
+    [
+        {
+            "transport_id": "<transport-id>",
+            "edges": ["<public-key-1>", "<public-key-2>"],
+            "bandwidth": {
+                "sent": 536870912,
+                "recv": 268435456,
+                "total": 805306368
+            },
+            "latency_ms": 45.0,
+            "verified_at": "2024-02-21T15:30:00Z"
+        }
+    ]
+    ```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `transport_id` | string | Transport UUID |
+| `edges` | array | Public keys of both transport edges |
+| `bandwidth.sent` | integer | Verified bytes sent (average of both edges' reports) |
+| `bandwidth.recv` | integer | Verified bytes received |
+| `bandwidth.total` | integer | Total verified bandwidth |
+| `latency_ms` | number | Average latency from both edges |
+| `verified_at` | string | Timestamp when metrics were last verified |
+
+#### GET Transport Latency
+
+Returns latency history for a specific transport, showing measurements from both edges.
+
+**Request:**
+
 ```
+GET /latency/transport/{id}
+GET /latency/transport/{id}?period=daily&limit=7
+```
+
+**Query Parameters:**
+
+- `period` (optional): Aggregation period. Values: `daily` (default), `hourly`.
+- `limit` (optional): Number of periods to return. Default: 7.
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    [
+        {
+            "date": "2024-02-21",
+            "edge_a": {
+                "pk": "<public-key-1>",
+                "avg_ms": 45.2,
+                "min_ms": 12.0,
+                "max_ms": 120.5
+            },
+            "edge_b": {
+                "pk": "<public-key-2>",
+                "avg_ms": 44.8,
+                "min_ms": 11.5,
+                "max_ms": 118.0
+            }
+        }
+    ]
+    ```
 
 ---
 
@@ -769,9 +852,11 @@ GET /metrics/verify/{transport-id}
 | `/all-transports/stats` | GET | No | Get aggregate stats |
 | `/all-transports/per-key-stats` | GET | No | Get per-visor stats |
 | `/uptimes` | GET | No | Get visor uptimes (no QoS) |
-| `/bandwidth/transport/{id}` | GET | No | Get transport bandwidth history |
+| `/bandwidth/transport/{id}` | GET | No | Get transport bandwidth history (both edges) |
 | `/bandwidth/visor/{pk}` | GET | No | Get visor bandwidth history |
-| `/metrics` | GET | No | Get all QoS metrics |
+| `/latency/transport/{id}` | GET | No | Get transport latency history (both edges) |
+| `/metrics` | GET | No | Get all QoS metrics by visor |
 | `/metrics` | POST | Yes | Report QoS metrics |
 | `/metrics/visor/{pk}` | GET | No | Get visor QoS metrics |
+| `/metrics/verified` | GET | No | Get verified metrics (consistent edge reports) |
 | `/health` | GET | No | Health check |
