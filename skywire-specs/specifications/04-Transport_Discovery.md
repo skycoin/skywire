@@ -34,12 +34,29 @@ If two nodes; **A** and **B** establish a *Transport* between them (where **A** 
 
 4. **B** then informs **A** on the success/failure of the registration, or just that the `transport.SignedEntry` is accepted by itself (depending on whether the Transport is to be public or not).
 
-**Submitting Transport Statuses:**
+**Transport Status via Re-registration:**
 
-If a given *Transport* is public, the associated *Transport Edges* is responsible for submitting their individual *Transport Statuses* to the *Transport Discovery* whenever the follow events occur;
+Transport status is determined by the re-registration mechanism rather than explicit status updates:
 
-- Directly after a *Transport* is first successfully registered in the *Transport Discovery*.
-- Whenever the *Transport* comes online/offline (connected/disconnected).
+- Visors re-register their transports every **90 seconds**
+- Transport entries have a TTL of **2 minutes**
+- A transport that is not re-registered within the TTL is considered *down* and expires from the registry
+- Re-registration includes updated bandwidth data (cumulative bytes sent/received)
+
+This approach simplifies the protocol and ensures transport status accurately reflects actual connectivity.
+
+**Reporting Transport Bandwidth:**
+
+Bandwidth data is reported automatically during transport re-registration. The `SignedEntry` includes:
+
+```go
+type BandwidthData struct {
+    SentBytes uint64 // Total bytes sent (cumulative)
+    RecvBytes uint64 // Total bytes received (cumulative)
+}
+```
+
+Each edge reports its own perspective. The Transport Discovery stores both reports and can verify consistency between edges.
 
 **Obtaining Transports:**
 
@@ -297,62 +314,60 @@ POST /transports
 - 408 Request Timeout (Timed out).
 - 500 Internal Server Error (Server error).
 
-### POST Status(es)
+### POST Status(es) *(Deprecated)*
 
-Submits one or multiple *Transport Status(es)* from the perspective of the submitting node. The returned result is the final *Transport Status(es)* determined by the *Transport Discovery* that is generated using the submitted *Transport Status(es)* of the two edges.
+> **⚠️ DEPRECATED:** This endpoint returns `410 Gone`. Transport status is now determined automatically by the re-registration mechanism. Transports that are not re-registered within the 2-minute TTL are considered down and expire from the registry. See "Transport Status via Re-registration" in the procedures section above.
 
-When a Transport is registered, it is considered to be *up*. Then after, every time a node's *Status* is submitted, the *Transport Discovery* alters the final state *Status* with the following rules:
+---
 
-- If there is only one edge's *Status* submitted, the final status is of that of the submitted *Status*.
-- If there are two *Status*es submitted and they both agree, final *Status* will also be the same.
-- If the two submitted *Status*es disagree, then the final *Status* is always *Down*.
+## Uptime Tracking Integration
+
+The Transport Discovery integrates with uptime tracking to provide visor availability information. This endpoint mirrors the Uptime Tracker's data format for consistency.
+
+### GET Uptimes
+
+Returns visor uptime and online status. This endpoint caches and serves uptime tracker data, providing a unified view of visor availability alongside transport data.
+
+**Note:** This endpoint does NOT include QoS metrics (bandwidth/latency). For QoS data, use the `/metrics` endpoints.
 
 **Request:**
 
 ```
-POST /statuses
+GET /uptimes
 ```
 
-```json
-[
-    {
-        "id": "<transport-id-1>",
-        "is_up": true
-    },
-    {
-        "id": "<transport-id-2>",
-        "is_up": true
-    }
-]
-```
-
-**Responses:**
+**Response:**
 
 - 200 OK (Success).
     ```json
     [
         {
-            "id": "<transport-id-1>",
-            "is_up": true,
-            "updated": 0
-        },
-        {
-            "id": "<transport-id-2>",
-            "is_up": false,
-            "updated": 0
+            "pk": "<public-key>",
+            "on": true,
+            "version": "v1.3.34",
+            "daily": {
+                "2024-02-19": "95.50",
+                "2024-02-20": "100.00",
+                "2024-02-21": "87.25"
+            }
         }
     ]
     ```
-- 400 Bad Request (Malformed request).
-- 401 Unauthorized (Invalid signature/nonce).
-- 408 Request Timeout (Timed out).
-- 500 Internal Server Error (Server error).
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pk` | string | Visor public key |
+| `on` | boolean | Current online status |
+| `version` | string | Skywire version running on the visor |
+| `daily` | object | Map of date (YYYY-MM-DD) to uptime percentage |
 
 ---
 
 ## Extended Endpoints
 
-The following endpoints extend the core Transport Discovery functionality with network visibility, uptime tracking, and quality-of-service metrics.
+The following endpoints extend the core Transport Discovery functionality with network visibility and quality-of-service metrics.
 
 ### GET All Transports
 
@@ -437,51 +452,6 @@ GET /all-transports/per-key-stats
         }
     }
     ```
-
----
-
-## Uptime Tracking Integration
-
-The Transport Discovery integrates with uptime tracking to provide visor availability information. This endpoint mirrors the Uptime Tracker's data format for consistency.
-
-### GET Uptimes
-
-Returns visor uptime and online status. This endpoint caches and serves uptime tracker data, providing a unified view of visor availability alongside transport data.
-
-**Note:** This endpoint does NOT include QoS metrics (bandwidth/latency). For QoS data, use the `/metrics` endpoints.
-
-**Request:**
-
-```
-GET /uptimes
-```
-
-**Response:**
-
-- 200 OK (Success).
-    ```json
-    [
-        {
-            "pk": "<public-key>",
-            "on": true,
-            "version": "v1.3.34",
-            "daily": {
-                "2024-02-19": "95.50",
-                "2024-02-20": "100.00",
-                "2024-02-21": "87.25"
-            }
-        }
-    ]
-    ```
-
-**Response Fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `pk` | string | Visor public key |
-| `on` | boolean | Current online status |
-| `version` | string | Skywire version running on the visor |
-| `daily` | object | Map of date (YYYY-MM-DD) to uptime percentage |
 
 ---
 
