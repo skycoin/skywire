@@ -495,9 +495,14 @@ QoS metrics (bandwidth and latency) are served from dedicated endpoints, separat
 |-----------|---------------|-------------|
 | Transport re-registration interval | 90 seconds | How often visors re-register their transports |
 | Transport entry TTL | 2 minutes | Time before an unrefreshed transport is considered stale |
-| Uptime cache refresh | 5 minutes | How often uptime data is refreshed from cache |
-| Daily bandwidth retention | 35 days | How long daily bandwidth aggregates are kept |
-| Visor tracking retention | 400 days | How long visor records are kept |
+| Uptime cache refresh | 5 minutes | How often the uptime data cache is refreshed |
+| Daily bandwidth retention | 35 days | How long daily bandwidth aggregates are kept in Redis |
+| Visor PK set TTL | 400 days | TTL for the set of known visor public keys (for `/visors` endpoint) |
+
+**Note on Uptime Data:**
+- The Uptime Tracker keeps data in the database for **7 days** (configurable via `--store-data-cutoff`)
+- Older uptime data is archived to JSON files (`{date}-uptime-data.json`)
+- The `/uptimes` endpoint returns the last 7 days of daily uptime percentages
 
 ### Bandwidth Semantics
 
