@@ -111,6 +111,7 @@ let isGlobeActive = false;
 
 // Voronoi mode state
 let voronoiMode = true; // Default to Voronoi mode
+let showVoronoiOverlay = true; // Toggle for Voronoi region overlay visibility
 let nodePositions: Map<string, THREE.Vector3> = new Map();
 
 // Interaction state
@@ -805,59 +806,70 @@ export function updateGlobeData(): void {
             }
         }
 
-        // Step 5: Calculate and draw proper spherical Voronoi cells using d3-geo-voronoi
-        if (voronoiGroup && nodes.length >= 3) {
-            // Convert node positions to [lon, lat] format for d3-geo-voronoi
-            const geoPoints: [number, number][] = [];
-            const nodeOrder: { id: string; country: string; ipGroup: number | string }[] = [];
+        // Step 5: Calculate Voronoi cells per IP GROUP (not per node) for fewer boundaries
+        // Only draw if showVoronoiOverlay is true
+        if (voronoiGroup && showVoronoiOverlay && sortedGroups.length >= 3) {
+            // Calculate centroid for each IP group
+            const groupCentroids: { country: string; ipGroup: number | string; centroid: THREE.Vector3 }[] = [];
 
             for (const { country, ipGroup, nodes: groupNodes } of sortedGroups) {
+                // Calculate average position (centroid) of all nodes in this group
+                let sumX = 0, sumY = 0, sumZ = 0;
+                let count = 0;
                 for (const node of groupNodes) {
                     const pos = nodePositions.get(node.id);
                     if (pos) {
-                        // Convert 3D position back to lat/lon
-                        const r = pos.length();
-                        const lat = 90 - Math.acos(pos.y / r) * (180 / Math.PI);
-                        const lon = Math.atan2(pos.z, -pos.x) * (180 / Math.PI);
-                        geoPoints.push([lon, lat]);
-                        nodeOrder.push({ id: node.id, country, ipGroup });
+                        sumX += pos.x;
+                        sumY += pos.y;
+                        sumZ += pos.z;
+                        count++;
                     }
                 }
+                if (count > 0) {
+                    const centroid = new THREE.Vector3(sumX / count, sumY / count, sumZ / count);
+                    centroid.normalize().multiplyScalar(1.02);
+                    groupCentroids.push({ country, ipGroup, centroid });
+                }
+            }
+
+            // Convert group centroids to [lon, lat] for d3-geo-voronoi
+            const geoPoints: [number, number][] = [];
+            for (const { centroid } of groupCentroids) {
+                const r = centroid.length();
+                const lat = 90 - Math.acos(centroid.y / r) * (180 / Math.PI);
+                const lon = Math.atan2(centroid.z, -centroid.x) * (180 / Math.PI);
+                geoPoints.push([lon, lat]);
             }
 
             if (geoPoints.length >= 3) {
                 try {
-                    // Compute spherical Voronoi diagram
+                    // Compute spherical Voronoi diagram for group centroids
                     const voronoi = geoVoronoi(geoPoints);
                     const polygons = voronoi.polygons();
 
-                    // Draw each Voronoi cell
+                    // Draw each Voronoi cell (one per IP group)
                     if (polygons && polygons.features) {
                         for (let i = 0; i < polygons.features.length; i++) {
                             const feature = polygons.features[i];
-                            const nodeData = nodeOrder[i];
-                            if (!feature || !feature.geometry || !nodeData) continue;
+                            const groupData = groupCentroids[i];
+                            if (!feature || !feature.geometry || !groupData) continue;
 
                             const coords = feature.geometry.coordinates;
                             if (!coords || coords.length === 0) continue;
 
-                            // Get color based on IP group (sub-regions) or country (fallback)
+                            // Get color based on IP group or country
                             let color: string;
-                            if (nodeData.ipGroup !== '_no_ip' && typeof nodeData.ipGroup === 'number') {
-                                // Color by IP group for sub-region visualization
-                                color = getIPGroupColor(nodeData.ipGroup);
+                            if (groupData.ipGroup !== '_no_ip' && typeof groupData.ipGroup === 'number') {
+                                color = getIPGroupColor(groupData.ipGroup);
                             } else {
-                                // Fallback to country color for nodes without IP data
-                                color = COUNTRY_COLORS[nodeData.country];
+                                color = COUNTRY_COLORS[groupData.country];
                                 if (!color) {
-                                    const hash = (nodeData.country || '').split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
+                                    const hash = (groupData.country || '').split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
                                     const hue = (hash * 137) % 360;
                                     color = `hsl(${hue}, 60%, 50%)`;
                                 }
                             }
 
-                            // The polygon coordinates are in [lon, lat] format
-                            // coords[0] is the outer ring
                             const ring = coords[0];
                             if (!ring || ring.length < 3) continue;
 
@@ -866,7 +878,7 @@ export function updateGlobeData(): void {
                             const vertices: number[] = [];
                             const indices: number[] = [];
 
-                            // Center vertex (centroid of the cell)
+                            // Center vertex
                             let centerLat = 0, centerLon = 0;
                             for (const pt of ring) {
                                 centerLon += pt[0];
@@ -874,16 +886,13 @@ export function updateGlobeData(): void {
                             }
                             centerLon /= ring.length;
                             centerLat /= ring.length;
-                            const centerPos = latLonToVector3(centerLat, centerLon, 1.012);
+                            const centerPos = latLonToVector3(centerLat, centerLon, 1.008);
                             vertices.push(centerPos.x, centerPos.y, centerPos.z);
 
-                            // Add ring vertices
                             for (let j = 0; j < ring.length; j++) {
                                 const pt = ring[j];
-                                const pos = latLonToVector3(pt[1], pt[0], 1.012);
+                                const pos = latLonToVector3(pt[1], pt[0], 1.008);
                                 vertices.push(pos.x, pos.y, pos.z);
-
-                                // Create triangle fan from center
                                 const nextJ = (j + 1) % ring.length;
                                 indices.push(0, j + 1, nextJ + 1);
                             }
@@ -895,7 +904,7 @@ export function updateGlobeData(): void {
                             const cellMaterial = new THREE.MeshBasicMaterial({
                                 color: color,
                                 transparent: true,
-                                opacity: 0.2,
+                                opacity: 0.15,
                                 side: THREE.DoubleSide,
                                 depthWrite: false,
                             });
@@ -906,18 +915,17 @@ export function updateGlobeData(): void {
                             // Draw cell boundary
                             const boundaryPoints: THREE.Vector3[] = [];
                             for (const pt of ring) {
-                                boundaryPoints.push(latLonToVector3(pt[1], pt[0], 1.015));
+                                boundaryPoints.push(latLonToVector3(pt[1], pt[0], 1.01));
                             }
-                            // Close the loop
                             if (ring.length > 0) {
-                                boundaryPoints.push(latLonToVector3(ring[0][1], ring[0][0], 1.015));
+                                boundaryPoints.push(latLonToVector3(ring[0][1], ring[0][0], 1.01));
                             }
 
                             const boundaryGeometry = new THREE.BufferGeometry().setFromPoints(boundaryPoints);
                             const boundaryMaterial = new THREE.LineBasicMaterial({
                                 color: 0x00d9a5,
                                 transparent: true,
-                                opacity: 0.5,
+                                opacity: 0.4,
                                 linewidth: 1,
                             });
                             const boundaryLine = new THREE.Line(boundaryGeometry, boundaryMaterial);
@@ -1132,6 +1140,26 @@ export function setVoronoiMode(enabled: boolean): void {
 // Check if Voronoi mode is active
 export function isVoronoiModeActive(): boolean {
     return voronoiMode;
+}
+
+// Toggle Voronoi overlay visibility (show/hide region coloring)
+export function setVoronoiOverlay(visible: boolean): void {
+    showVoronoiOverlay = visible;
+
+    // Update voronoiGroup visibility
+    if (voronoiGroup) {
+        voronoiGroup.visible = visible;
+    }
+
+    // No need to recalculate - just toggle visibility
+    if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+    }
+}
+
+// Check if Voronoi overlay is visible
+export function isVoronoiOverlayVisible(): boolean {
+    return showVoronoiOverlay;
 }
 
 // Dispose of globe resources

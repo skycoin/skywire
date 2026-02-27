@@ -15,7 +15,7 @@ import { dmsgHealthCheck } from './dmsg';
 import { performPing, updateLocalRouteVisibility } from './ping';
 import { checkServer, fetchAllData } from './api';
 import { startFlowAnimation } from './flow-animation';
-import { showGlobe, hideGlobe, updateGlobeData, isGlobeViewActive, setVoronoiMode } from './globe';
+import { showGlobe, hideGlobe, updateGlobeData, isGlobeViewActive, setVoronoiMode, setVoronoiOverlay } from './globe';
 
 export function wireEventListeners(): void {
     // Filter listeners
@@ -252,6 +252,14 @@ export function wireEventListeners(): void {
             updateGlobeData();
         }
     };
+
+    // Voronoi overlay toggle
+    const voronoiOverlayCheckbox = document.getElementById('show-voronoi-overlay') as HTMLInputElement;
+    if (voronoiOverlayCheckbox) {
+        voronoiOverlayCheckbox.addEventListener('change', () => {
+            setVoronoiOverlay(voronoiOverlayCheckbox.checked);
+        });
+    }
 
     // Add globe update to filter changes
     document.getElementById('show-stcpr')!.addEventListener('change', filterChangeHandler);
