@@ -253,6 +253,26 @@ func (mt *ManagedTransport) close() {
 	_ = mt.deleteFromDiscovery() //nolint:errcheck
 }
 
+// closeWithoutDeregister closes the transport without deregistering from TPD.
+// Used when batch deregistration is done at the manager level.
+func (mt *ManagedTransport) closeWithoutDeregister() {
+	select {
+	case <-mt.done:
+		return
+	default:
+		close(mt.done)
+	}
+	mt.transportMx.Lock()
+	close(mt.transportCh)
+	if mt.transport != nil {
+		if err := mt.transport.Close(); err != nil {
+			mt.log.WithError(err).Warn("Failed to close underlying transport.")
+		}
+		mt.transport = nil
+	}
+	mt.transportMx.Unlock()
+}
+
 // Accept accepts a new underlying transport.
 func (mt *ManagedTransport) Accept(ctx context.Context, transport network.Transport) error {
 	mt.transportMx.Lock()
