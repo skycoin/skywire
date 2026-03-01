@@ -19,10 +19,10 @@ type PhysicsEngine struct {
 	gravitySolver *CentralGravitySolver
 
 	// State tracking
-	timestep                 float64
-	stabilized               bool
-	stabilizationIterations  int
-	previousStates           map[string]*nodeState
+	timestep                float64
+	stabilized              bool
+	stabilizationIterations int
+	previousStates          map[string]*nodeState
 
 	// Adaptive timestep
 	adaptiveTimestep        bool

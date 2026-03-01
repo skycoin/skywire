@@ -57,7 +57,7 @@ type BarnesHutSolver struct {
 	physicsBody *PhysicsBody
 	options     BarnesHutOptions
 
-	thetaInversed         float64
+	thetaInversed          float64
 	overlapAvoidanceFactor float64
 
 	// For debugging
@@ -171,7 +171,7 @@ func (s *BarnesHutSolver) calculateForces(distance, dx, dy float64, node Physics
 	// F = G * M * m / d^2
 	// fx = dx/d * F = dx * G * M * m / d^3
 	gravityForce := (s.options.GravitationalConstant * branch.Mass * node.GetMass()) /
-		math.Pow(distance, 3)
+		(distance * distance * distance)
 
 	fx := dx * gravityForce
 	fy := dy * gravityForce
@@ -331,6 +331,7 @@ func (s *BarnesHutSolver) placeInRegion(branch *Branch, node PhysicsNode, region
 
 		if existingX == nodeX && existingY == nodeY {
 			// Nodes exactly overlap - jitter the new one slightly
+			// #nosec G404 -- math/rand is fine for visual jitter, not security
 			node.SetPosition(nodeX+rand.Float64()*0.1, nodeY+rand.Float64()*0.1)
 		} else {
 			// Split this region and re-insert both nodes
