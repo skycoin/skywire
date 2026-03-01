@@ -67,6 +67,10 @@ type App struct {
 	dmsgData    *DMSGData
 	dmsgEntries map[string]bool
 
+	// Uptime tracker totals (from UT data, not filtered to graph)
+	uptimeOnlineCount  int
+	uptimeOfflineCount int
+
 	// Apps data
 	appsData []AppState
 
@@ -97,9 +101,19 @@ type App struct {
 	globeActive   bool
 
 	// Pick modes (matching TypeScript state.ts)
-	pingPickMode     bool
-	localTpPickMode  bool
-	tpsPickMode      string // "target" or "remote"
+	pingPickMode        bool
+	localTpPickMode     bool
+	tpsPickMode         string // "target" or "remote"
+	tpsGroupPickMode    string // "target" or "remote" for group mode
+	dmsgHealthPickMode  bool
+	mhPickMode          bool
+
+	// TPS state
+	tpsTargetPK string
+	tpsRemotePK string
+
+	// Multi-hop state
+	mhHops []string
 
 	// Animation frame callback
 	frameCallback js.Func
@@ -139,12 +153,12 @@ func NewApp(canvasID string) *App {
 		countryBoundaries: make(map[string]GroupBoundary),
 		ipGroupBoundaries: make(map[int]GroupBoundary),
 		clusterColors:     DefaultClusterColors,
-		globeActive:       true, // Globe is default view
+		globeActive:       false, // Flat is default view
 	}
 
-	// Initialize globe renderer
+	// Initialize globe renderer (starts inactive)
 	app.globeRenderer = NewGlobeRenderer(canvas, graph, view, opts)
-	app.globeRenderer.SetActive(true)
+	app.globeRenderer.SetActive(false)
 
 	return app
 }
@@ -282,14 +296,10 @@ func (a *App) setupSidebarCallbacks() {
 	a.showDMSGServers = GetChecked("show-dmsg-servers")
 	a.showFlags = GetChecked("show-flags")
 
-	// View toggle buttons (Voronoi/Globe/Flat)
+	// View toggle buttons (Flat/Globe)
 	clearViewButtons := func() {
-		viewVoronoiBtn := getElement("view-voronoi")
 		viewGlobeBtn := getElement("view-globe")
 		viewFlatBtn := getElement("view-flat")
-		if !viewVoronoiBtn.IsNull() {
-			viewVoronoiBtn.Get("classList").Call("remove", "active")
-		}
 		if !viewGlobeBtn.IsNull() {
 			viewGlobeBtn.Get("classList").Call("remove", "active")
 		}
@@ -297,20 +307,6 @@ func (a *App) setupSidebarCallbacks() {
 			viewFlatBtn.Get("classList").Call("remove", "active")
 		}
 	}
-
-	a.jsCallbacks = append(a.jsCallbacks, OnEvent("view-voronoi", "click", func() {
-		clearViewButtons()
-		viewVoronoiBtn := getElement("view-voronoi")
-		if !viewVoronoiBtn.IsNull() {
-			viewVoronoiBtn.Get("classList").Call("add", "active")
-		}
-		a.globeActive = true
-		if a.globeRenderer != nil {
-			a.globeRenderer.SetActive(true)
-			a.globeRenderer.SetVoronoiMode(true)
-		}
-		a.needsRedraw = true
-	}))
 
 	a.jsCallbacks = append(a.jsCallbacks, OnEvent("view-globe", "click", func() {
 		clearViewButtons()
@@ -321,7 +317,6 @@ func (a *App) setupSidebarCallbacks() {
 		a.globeActive = true
 		if a.globeRenderer != nil {
 			a.globeRenderer.SetActive(true)
-			a.globeRenderer.SetVoronoiMode(false)
 		}
 		a.needsRedraw = true
 	}))
@@ -498,6 +493,74 @@ func (a *App) setupSidebarCallbacks() {
 			js.Global().Get("document").Get("body").Get("style").Set("cursor", "")
 		}
 	}))
+
+	// ── TPS (Transport Setup) functions (matching TypeScript tps.ts) ──
+
+	// TPS pick target button
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("tps-pick-target-btn", "click", func() {
+		a.tpsPickMode = "target"
+		js.Global().Get("document").Get("body").Get("style").Set("cursor", "crosshair")
+	}))
+
+	// TPS pick remote button
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("tps-pick-remote-btn", "click", func() {
+		a.tpsPickMode = "remote"
+		js.Global().Get("document").Get("body").Get("style").Set("cursor", "crosshair")
+	}))
+
+	// TPS add transport button
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("tps-add-btn", "click", func() {
+		go a.tpsAddTransport()
+	}))
+
+	// TPS refresh transports button
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("tps-refresh-btn", "click", func() {
+		go a.tpsRefreshTransports()
+	}))
+
+	// ── DMSG Health Check functions (matching TypeScript dmsg.ts) ──
+
+	// DMSG health pick button
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("dmsg-health-pick-btn", "click", func() {
+		a.dmsgHealthPickMode = !a.dmsgHealthPickMode
+		if a.dmsgHealthPickMode {
+			js.Global().Get("document").Get("body").Get("style").Set("cursor", "crosshair")
+		} else {
+			js.Global().Get("document").Get("body").Get("style").Set("cursor", "")
+		}
+	}))
+
+	// DMSG health check button
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("dmsg-health-btn", "click", func() {
+		go a.dmsgHealthCheck()
+	}))
+
+	// ── Multi-hop route builder functions (matching TypeScript tps.ts mh*) ──
+
+	// Multi-hop add hop button
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("mh-add-hop-btn", "click", func() {
+		a.mhPickMode = true
+		js.Global().Get("document").Get("body").Get("style").Set("cursor", "crosshair")
+	}))
+
+	// Multi-hop build route button
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("mh-build-btn", "click", func() {
+		go a.mhBuildRoute()
+	}))
+
+	// Multi-hop clear button
+	a.jsCallbacks = append(a.jsCallbacks, OnEvent("mh-clear-btn", "click", func() {
+		a.mhClearHops()
+	}))
+
+	// Register global function for removing TPS transports
+	a.jsCallbacks = append(a.jsCallbacks, RegisterGlobalFunc("tpsRemoveTransport", func(args []js.Value) {
+		if len(args) >= 2 {
+			targetPK := args[0].String()
+			tpID := args[1].String()
+			go a.tpsRemoveTransport(targetPK, tpID)
+		}
+	}))
 }
 
 func (a *App) update() {
@@ -657,6 +720,15 @@ func (a *App) update() {
 					// Ping pick mode handled the click
 				} else if a.handleLocalTpNodeClick(a.dragNode.ID) {
 					// Local transport pick mode handled the click
+				} else if a.handleTPSNodeClick(a.dragNode.ID) {
+					// TPS pick mode handled the click
+				} else if a.handleDMSGHealthNodeClick(a.dragNode.ID) {
+					// DMSG health pick mode handled the click
+				} else if a.mhPickMode {
+					// Multi-hop pick mode
+					a.mhAddHop(a.dragNode.ID)
+					a.mhPickMode = false
+					js.Global().Get("document").Get("body").Get("style").Set("cursor", "")
 				} else if a.selectedNode == a.dragNode {
 					a.deselectNode()
 				} else {
@@ -1068,4 +1140,362 @@ func parseInt(s string) (int, error) {
 		n = n*10 + int(c-'0')
 	}
 	return n, nil
+}
+
+// ── TPS (Transport Setup) functions (matching TypeScript tps.ts) ──
+
+// tpsAddTransport adds a transport between two remote visors
+func (a *App) tpsAddTransport() {
+	targetPK := strings.TrimSpace(GetValue("tps-target-pk"))
+	remotePK := strings.TrimSpace(GetValue("tps-remote-pk"))
+	tpType := GetValue("tps-type")
+	if tpType == "" {
+		tpType = "stcpr"
+	}
+
+	resultEl := getElement("tps-result")
+	if resultEl.IsNull() {
+		return
+	}
+
+	if targetPK == "" || remotePK == "" {
+		resultEl.Get("style").Set("display", "block")
+		resultEl.Get("classList").Call("remove", "tps-success", "tps-warning", "tps-loading")
+		resultEl.Get("classList").Call("add", "tps-error")
+		resultEl.Set("textContent", "Both Target and Remote are required")
+		return
+	}
+
+	// Show loading state
+	resultEl.Get("style").Set("display", "block")
+	resultEl.Get("classList").Call("remove", "tps-success", "tps-error", "tps-warning")
+	resultEl.Get("classList").Call("add", "tps-loading")
+	resultEl.Set("textContent", "Creating transport...")
+
+	// Disable button
+	addBtn := getElement("tps-add-btn")
+	if !addBtn.IsNull() {
+		addBtn.Set("disabled", true)
+	}
+
+	resp, err := a.fetcher.TPSAddTransport(targetPK, remotePK, tpType)
+
+	// Re-enable button
+	if !addBtn.IsNull() {
+		addBtn.Set("disabled", false)
+	}
+
+	if err != nil {
+		resultEl.Get("classList").Call("remove", "tps-loading")
+		resultEl.Get("classList").Call("add", "tps-error")
+		resultEl.Set("textContent", "Error: "+err.Error())
+		return
+	}
+
+	resultEl.Get("classList").Call("remove", "tps-loading")
+	resultEl.Get("classList").Call("add", "tps-success")
+	resultEl.Set("innerHTML", "Created "+strings.ToUpper(resp.Type)+"<br>"+
+		resp.LocalPK[:12]+"... ↔ "+resp.RemotePK[:12]+"...")
+
+	// TODO: Add overlay edge to graph
+}
+
+// tpsRefreshTransports gets transports from the target visor
+func (a *App) tpsRefreshTransports() {
+	targetPK := strings.TrimSpace(GetValue("tps-target-pk"))
+	resultEl := getElement("tps-result")
+	if resultEl.IsNull() {
+		return
+	}
+
+	if targetPK == "" {
+		resultEl.Get("style").Set("display", "block")
+		resultEl.Get("classList").Call("remove", "tps-success", "tps-warning", "tps-loading")
+		resultEl.Get("classList").Call("add", "tps-error")
+		resultEl.Set("textContent", "Target PK required")
+		return
+	}
+
+	resultEl.Get("style").Set("display", "block")
+	resultEl.Get("classList").Call("remove", "tps-success", "tps-error", "tps-warning")
+	resultEl.Get("classList").Call("add", "tps-loading")
+	resultEl.Set("textContent", "Fetching transports...")
+
+	transports, err := a.fetcher.TPSRefreshTransports(targetPK)
+	if err != nil {
+		resultEl.Get("classList").Call("remove", "tps-loading")
+		resultEl.Get("classList").Call("add", "tps-error")
+		resultEl.Set("textContent", "Error: "+err.Error())
+		return
+	}
+
+	resultEl.Get("classList").Call("remove", "tps-loading")
+	resultEl.Get("classList").Call("add", "tps-success")
+
+	if len(transports) == 0 {
+		resultEl.Set("textContent", "Remote visor reports 0 transports")
+		return
+	}
+
+	// Build transport list HTML
+	var html strings.Builder
+	html.WriteString("Remote visor reports ")
+	html.WriteString(itoa(len(transports)))
+	html.WriteString(" transport(s):<div style=\"margin-top:6px;\">")
+
+	colors := map[string]string{
+		"stcpr": "#00d9a5",
+		"sudph": "#00b4d8",
+		"dmsg":  "#ffd166",
+	}
+
+	for _, t := range transports {
+		color := colors[t.Type]
+		if color == "" {
+			color = "#aaa"
+		}
+		html.WriteString("<div style=\"margin:4px 0;padding:5px;background:rgba(0,0,0,0.2);border-radius:3px;\">")
+		html.WriteString("<div style=\"display:flex;justify-content:space-between;align-items:center;\">")
+		html.WriteString("<span style=\"color:" + color + ";font-weight:600;font-size:0.8em;\">" + strings.ToUpper(t.Type) + "</span>")
+		html.WriteString("<button onclick=\"tpsRemoveTransport('" + targetPK + "', '" + t.ID + "')\" ")
+		html.WriteString("style=\"padding:1px 5px;font-size:0.65em;background:#e94560;color:#fff;border:none;border-radius:2px;cursor:pointer;\">✕</button>")
+		html.WriteString("</div>")
+		html.WriteString("<div style=\"font-size:0.7em;color:#aaa;margin-top:2px;word-break:break-all;\">")
+		html.WriteString(t.RemotePK[:20] + "...")
+		html.WriteString("</div></div>")
+	}
+	html.WriteString("</div>")
+
+	resultEl.Set("innerHTML", html.String())
+}
+
+// tpsRemoveTransport removes a transport from a remote visor
+func (a *App) tpsRemoveTransport(targetPK, tpID string) {
+	err := a.fetcher.TPSRemoveTransport(targetPK, tpID)
+	if err != nil {
+		js.Global().Call("alert", "Failed to remove transport: "+err.Error())
+		return
+	}
+	// Refresh the transport list
+	go a.tpsRefreshTransports()
+}
+
+// handleTPSNodeClick handles node click when in TPS pick mode
+func (a *App) handleTPSNodeClick(nodeID string) bool {
+	if a.tpsPickMode == "" {
+		return false
+	}
+
+	// Strip dmsg-srv- prefix if clicking a DMSG server node
+	pk := nodeID
+	if strings.HasPrefix(nodeID, "dmsg-srv-") {
+		pk = nodeID[9:]
+	}
+
+	if a.tpsPickMode == "target" {
+		SetValue("tps-target-pk", pk)
+	} else if a.tpsPickMode == "remote" {
+		SetValue("tps-remote-pk", pk)
+	}
+
+	a.tpsPickMode = ""
+	js.Global().Get("document").Get("body").Get("style").Set("cursor", "")
+	return true
+}
+
+// ── DMSG Health Check functions (matching TypeScript dmsg.ts) ──
+
+// dmsgHealthCheck performs a DMSG health check on a remote visor
+func (a *App) dmsgHealthCheck() {
+	pk := strings.TrimSpace(GetValue("dmsg-health-pk"))
+	resultEl := getElement("dmsg-health-result")
+	if resultEl.IsNull() {
+		return
+	}
+
+	if pk == "" || len(pk) != 66 {
+		resultEl.Get("style").Set("display", "block")
+		resultEl.Get("style").Set("background", "#e94560")
+		resultEl.Get("style").Set("color", "#fff")
+		resultEl.Set("textContent", "Invalid PK (must be 66 chars)")
+		return
+	}
+
+	resultEl.Get("style").Set("display", "block")
+	resultEl.Get("style").Set("background", "#0f3460")
+	resultEl.Get("style").Set("color", "#9f6efc")
+	resultEl.Set("textContent", "Checking health via DMSG...")
+
+	resp, err := a.fetcher.DMSGHealthCheck(pk)
+	if err != nil {
+		resultEl.Get("style").Set("background", "#e94560")
+		resultEl.Get("style").Set("color", "#fff")
+		resultEl.Set("textContent", "Failed: "+err.Error())
+		return
+	}
+
+	if resp.Error != "" {
+		resultEl.Get("style").Set("background", "#e94560")
+		resultEl.Get("style").Set("color", "#fff")
+		resultEl.Set("textContent", "Error: "+resp.Error)
+	} else if resp.Status == "healthy" {
+		resultEl.Get("style").Set("background", "#00d9a5")
+		resultEl.Get("style").Set("color", "#000")
+		msg := "Healthy"
+		if resp.BuildInfo != "" {
+			msg += ": " + resp.BuildInfo
+		} else if resp.Message != "" {
+			msg += ": " + resp.Message
+		}
+		resultEl.Set("textContent", msg)
+	} else {
+		resultEl.Get("style").Set("background", "#ffd166")
+		resultEl.Get("style").Set("color", "#000")
+		resultEl.Set("textContent", "Response: "+resp.Status)
+	}
+}
+
+// handleDMSGHealthNodeClick handles node click when in DMSG health pick mode
+func (a *App) handleDMSGHealthNodeClick(nodeID string) bool {
+	if !a.dmsgHealthPickMode {
+		return false
+	}
+
+	// Strip dmsg-srv- prefix if clicking a DMSG server node
+	pk := nodeID
+	if strings.HasPrefix(nodeID, "dmsg-srv-") {
+		pk = nodeID[9:]
+	}
+
+	SetValue("dmsg-health-pk", pk)
+	a.dmsgHealthPickMode = false
+	js.Global().Get("document").Get("body").Get("style").Set("cursor", "")
+	return true
+}
+
+// ── Multi-hop route builder functions (matching TypeScript tps.ts mh*) ──
+
+// mhAddHop adds a hop to the multi-hop route
+func (a *App) mhAddHop(nodeID string) {
+	// Strip dmsg-srv- prefix if clicking a DMSG server node
+	pk := nodeID
+	if strings.HasPrefix(nodeID, "dmsg-srv-") {
+		pk = nodeID[9:]
+	}
+
+	// Don't add duplicates
+	for _, h := range a.mhHops {
+		if h == pk {
+			return
+		}
+	}
+
+	a.mhHops = append(a.mhHops, pk)
+	a.mhRenderHops()
+}
+
+// mhClearHops clears all hops
+func (a *App) mhClearHops() {
+	a.mhHops = nil
+	a.mhRenderHops()
+}
+
+// mhRenderHops renders the current hop list
+func (a *App) mhRenderHops() {
+	hopsEl := getElement("mh-hops")
+	if hopsEl.IsNull() {
+		return
+	}
+
+	if len(a.mhHops) == 0 {
+		hopsEl.Set("innerHTML", "<div style=\"color:#666;font-size:0.8em;padding:4px;\">No hops added. Click 'Add Hop' then select visors.</div>")
+		return
+	}
+
+	var html strings.Builder
+	for i, pk := range a.mhHops {
+		html.WriteString("<div style=\"display:flex;align-items:center;padding:4px;background:rgba(0,0,0,0.2);border-radius:3px;margin:2px 0;\">")
+		html.WriteString("<span style=\"color:#00d9a5;font-weight:600;margin-right:6px;\">" + itoa(i+1) + ".</span>")
+		html.WriteString("<span style=\"flex:1;font-family:monospace;font-size:0.8em;color:#aaa;\">" + shortPK(pk) + "...</span>")
+		html.WriteString("<span id=\"mh-status-" + itoa(i) + "\"></span>")
+		html.WriteString("</div>")
+	}
+
+	hopsEl.Set("innerHTML", html.String())
+}
+
+// mhBuildRoute builds the multi-hop route by creating transports between consecutive hops
+func (a *App) mhBuildRoute() {
+	if len(a.mhHops) < 2 {
+		resultEl := getElement("mh-progress")
+		if !resultEl.IsNull() {
+			resultEl.Set("innerHTML", "<div style=\"color:#e94560;\">Need at least 2 hops to build a route</div>")
+		}
+		return
+	}
+
+	tpType := GetValue("mh-type")
+	if tpType == "" {
+		tpType = "stcpr"
+	}
+
+	progressEl := getElement("mh-progress")
+	if progressEl.IsNull() {
+		return
+	}
+
+	progressEl.Set("innerHTML", "<div style=\"color:#ffd166;\">Building route...</div>")
+
+	// Disable build button
+	buildBtn := getElement("mh-build-btn")
+	if !buildBtn.IsNull() {
+		buildBtn.Set("disabled", true)
+	}
+
+	successCount := 0
+	failed := false
+
+	for i := 0; i < len(a.mhHops)-1; i++ {
+		targetPK := a.mhHops[i]
+		remotePK := a.mhHops[i+1]
+
+		statusEl := getElement("mh-status-" + itoa(i))
+		if !statusEl.IsNull() {
+			statusEl.Set("innerHTML", "<span style=\"color:#ffd166;\">⏳</span>")
+		}
+
+		resp, err := a.fetcher.TPSAddTransport(targetPK, remotePK, tpType)
+		if err != nil {
+			if !statusEl.IsNull() {
+				statusEl.Set("innerHTML", "<span style=\"color:#e94560;\">✗ "+err.Error()+"</span>")
+			}
+			failed = true
+		} else {
+			if !statusEl.IsNull() {
+				statusEl.Set("innerHTML", "<span style=\"color:#00d9a5;\">✓ "+strings.ToUpper(resp.Type)+"</span>")
+			}
+			successCount++
+		}
+	}
+
+	// Re-enable button
+	if !buildBtn.IsNull() {
+		buildBtn.Set("disabled", false)
+	}
+
+	// Show summary
+	totalNeeded := len(a.mhHops) - 1
+	var summaryColor string
+	if failed {
+		if successCount > 0 {
+			summaryColor = "#ffd166"
+		} else {
+			summaryColor = "#e94560"
+		}
+	} else {
+		summaryColor = "#00d9a5"
+	}
+
+	progressEl.Set("innerHTML", "<div style=\"margin-top:6px;padding:4px;background:rgba(0,0,0,0.2);border-radius:3px;color:"+summaryColor+";\">"+
+		itoa(successCount)+"/"+itoa(totalNeeded)+" transport(s) created</div>")
 }

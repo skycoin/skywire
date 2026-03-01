@@ -4,6 +4,7 @@ package ui
 
 import (
 	"math"
+	"syscall/js"
 )
 
 // GlobeRenderer renders a 3D globe with orthographic projection using Canvas 2D
@@ -22,6 +23,12 @@ type GlobeRenderer struct {
 	voronoiMode bool
 	// Node 3D positions (used in Voronoi mode)
 	nodePos3D map[string]Vec3
+
+	// Earth texture
+	earthImage   js.Value
+	earthLoaded  bool
+	earthCanvas  js.Value // Offscreen canvas for texture rendering
+	earthCtx     js.Value
 }
 
 // GlobeRotation holds the current rotation angles
@@ -80,6 +87,22 @@ var countryCoords = map[string]CountryCoord{
 	"CO": {4.5709, -74.2973},
 	"PE": {-9.1900, -75.0152},
 	"VE": {6.4238, -66.5897},
+	"UY": {-32.5228, -55.7658},  // Uruguay
+	"PY": {-23.4425, -58.4438},  // Paraguay
+	"BO": {-16.2902, -63.5887},  // Bolivia
+	"EC": {-1.8312, -78.1834},   // Ecuador
+	"PA": {8.5380, -80.7821},    // Panama
+	"CR": {9.7489, -83.7534},    // Costa Rica
+	"NI": {12.8654, -85.2072},   // Nicaragua
+	"HN": {15.2, -86.2419},      // Honduras
+	"SV": {13.7942, -88.8965},   // El Salvador
+	"GT": {15.7835, -90.2308},   // Guatemala
+	"BZ": {17.1899, -88.4976},   // Belize
+	"CU": {21.5218, -77.7812},   // Cuba
+	"DO": {18.7357, -70.1627},   // Dominican Republic
+	"JM": {18.1096, -77.2975},   // Jamaica
+	"PR": {18.2208, -66.5901},   // Puerto Rico
+	"TT": {10.6918, -61.2225},   // Trinidad and Tobago
 	"GB": {55.3781, -3.4360},
 	"DE": {51.1657, 10.4515},
 	"FR": {46.2276, 2.2137},
@@ -102,6 +125,17 @@ var countryCoords = map[string]CountryCoord{
 	"HU": {47.1625, 19.5033},
 	"GR": {39.0742, 21.8243},
 	"TR": {38.9637, 35.2433},
+	"BY": {53.7098, 27.9534},  // Belarus
+	"MD": {47.4116, 28.3699},  // Moldova
+	"AL": {41.1533, 20.1683},  // Albania
+	"MK": {41.5124, 21.7453},  // North Macedonia
+	"BA": {43.9159, 17.6791},  // Bosnia and Herzegovina
+	"ME": {42.7087, 19.3744},  // Montenegro
+	"XK": {42.6026, 20.9030},  // Kosovo
+	"CY": {35.1264, 33.4299},  // Cyprus
+	"LU": {49.8153, 6.1296},   // Luxembourg
+	"MT": {35.9375, 14.3754},  // Malta
+	"IS": {64.9631, -19.0208}, // Iceland
 	"CN": {35.8617, 104.1954},
 	"JP": {36.2048, 138.2529},
 	"KR": {35.9078, 127.7669},
@@ -112,16 +146,34 @@ var countryCoords = map[string]CountryCoord{
 	"MY": {4.2105, 101.9758},
 	"SG": {1.3521, 103.8198},
 	"PH": {12.8797, 121.7740},
+	"MM": {21.9162, 95.9560},  // Myanmar
+	"KH": {12.5657, 104.9910}, // Cambodia
+	"LA": {19.8563, 102.4955}, // Laos
+	"NP": {28.3949, 84.1240},  // Nepal
+	"LK": {7.8731, 80.7718},   // Sri Lanka
 	"AU": {-25.2744, 133.7751},
 	"NZ": {-40.9006, 174.8860},
 	"ZA": {-30.5595, 22.9375},
 	"EG": {26.8206, 30.8025},
 	"NG": {9.0820, 8.6753},
 	"KE": {-0.0236, 37.9062},
+	"MA": {31.7917, -7.0926},  // Morocco
+	"DZ": {28.0339, 1.6596},   // Algeria
+	"TN": {33.8869, 9.5375},   // Tunisia
+	"GH": {7.9465, -1.0232},   // Ghana
+	"TZ": {-6.3690, 34.8888},  // Tanzania
+	"ET": {9.1450, 40.4897},   // Ethiopia
 	"IL": {31.0461, 34.8516},
 	"AE": {23.4241, 53.8478},
 	"SA": {23.8859, 45.0792},
 	"IR": {32.4279, 53.6880},
+	"IQ": {33.2232, 43.6793},  // Iraq
+	"JO": {30.5852, 36.2384},  // Jordan
+	"LB": {33.8547, 35.8623},  // Lebanon
+	"KW": {29.3117, 47.4818},  // Kuwait
+	"QA": {25.3548, 51.1839},  // Qatar
+	"OM": {21.4735, 55.9754},  // Oman
+	"BH": {26.0667, 50.5577},  // Bahrain
 	"PK": {30.3753, 69.3451},
 	"BD": {23.6850, 90.3563},
 	"HK": {22.3193, 114.1694},
@@ -218,27 +270,68 @@ var continentOutlines = [][]Point{
 
 // NewGlobeRenderer creates a new globe renderer
 func NewGlobeRenderer(canvas *Canvas, graph *Graph, view *View, opts *RenderOptions) *GlobeRenderer {
-	return &GlobeRenderer{
+	g := &GlobeRenderer{
 		canvas:      canvas,
 		graph:       graph,
 		view:        view,
 		opts:        opts,
 		nodeGeoPos:  make(map[string]GeoPosition),
 		nodePos3D:   make(map[string]Vec3),
-		voronoiMode: true, // Default to Voronoi mode
+		voronoiMode: false, // Geographic mode by default
 		rotation: GlobeRotation{
 			X:          -0.3, // Slight tilt
 			Y:          0,
 			AutoRotate: true,
 			Speed:      0.002,
 		},
-		active: false,
+		active:      false,
+		earthLoaded: false,
 	}
+
+	// Load earth texture image
+	g.loadEarthTexture()
+
+	return g
+}
+
+// loadEarthTexture loads the earth.jpg texture
+func (g *GlobeRenderer) loadEarthTexture() {
+	doc := js.Global().Get("document")
+	img := doc.Call("createElement", "img")
+
+	// Set up load handler
+	img.Set("onload", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		g.earthImage = img
+		g.earthLoaded = true
+		consoleLog("Earth texture loaded: " + itoa(img.Get("width").Int()) + "x" + itoa(img.Get("height").Int()))
+
+		// Create offscreen canvas for spherical projection
+		g.earthCanvas = doc.Call("createElement", "canvas")
+		g.earthCanvas.Set("width", 512)
+		g.earthCanvas.Set("height", 512)
+		g.earthCtx = g.earthCanvas.Call("getContext", "2d")
+
+		return nil
+	}))
+
+	img.Set("onerror", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		consoleLog("Failed to load earth texture, using fallback")
+		g.earthLoaded = false
+		return nil
+	}))
+
+	// Try to load the texture
+	img.Set("src", "textures/earth.jpg")
 }
 
 // SetActive enables or disables the globe view
 func (g *GlobeRenderer) SetActive(active bool) {
 	g.active = active
+}
+
+// SetGraph updates the graph reference (called when data is loaded)
+func (g *GlobeRenderer) SetGraph(graph *Graph) {
+	g.graph = graph
 }
 
 // IsActive returns whether the globe view is active
@@ -364,19 +457,20 @@ func (g *GlobeRenderer) Render() {
 		// Draw very faint globe outline only
 		g.canvas.StrokeCircle(centerX, centerY, scale, 1, "rgba(0, 217, 165, 0.2)")
 	} else {
-		// GEOGRAPHIC MODE: Normal globe rendering
-		// Draw globe background (ocean)
-		g.canvas.FillCircle(centerX, centerY, scale, "#0a1628")
-
-		// Draw atmosphere glow
+		// GEOGRAPHIC MODE: Render earth texture or fallback
+		// Draw atmosphere glow first (behind globe)
 		g.canvas.StrokeCircle(centerX, centerY, scale*1.05, 3, "rgba(0, 150, 200, 0.3)")
 		g.canvas.StrokeCircle(centerX, centerY, scale*1.02, 2, "rgba(0, 180, 220, 0.2)")
 
-		// Draw latitude/longitude grid
-		g.drawGrid(radius, scale)
+		// Try to render earth texture
+		rendered := g.renderEarthTexture(centerX, centerY, scale)
 
-		// Draw continents
-		g.drawContinents(radius, scale)
+		if !rendered {
+			// Fallback: Draw globe background (ocean) and continents
+			g.canvas.FillCircle(centerX, centerY, scale, "#0a1628")
+			g.drawGrid(radius, scale)
+			g.drawContinents(radius, scale)
+		}
 	}
 
 	// Calculate node positions
@@ -390,6 +484,17 @@ func (g *GlobeRenderer) Render() {
 
 	// Draw globe outline
 	g.canvas.StrokeCircle(centerX, centerY, scale, 2, "#00d9a5")
+}
+
+// renderEarthTexture renders the earth texture using JavaScript
+func (g *GlobeRenderer) renderEarthTexture(centerX, centerY, scale float64) bool {
+	renderFn := js.Global().Get("renderEarthTexture")
+	if renderFn.IsUndefined() || renderFn.IsNull() {
+		return false
+	}
+
+	result := renderFn.Invoke(g.canvas.ctx, g.rotation.X, g.rotation.Y, centerX, centerY, scale)
+	return result.Bool()
 }
 
 // drawGrid draws latitude/longitude grid lines
@@ -438,12 +543,16 @@ func (g *GlobeRenderer) drawGrid(radius, scale float64) {
 	}
 }
 
-// drawContinents draws continent outlines
+// drawContinents draws filled continent shapes
 func (g *GlobeRenderer) drawContinents(radius, scale float64) {
+	landColor := "rgba(34, 85, 51, 0.8)"      // Dark green for land
+	outlineColor := "rgba(0, 217, 165, 0.6)"  // Teal outline
+
 	for _, outline := range continentOutlines {
 		points := make([]Point, 0, len(outline))
-		lastVisible := false
+		allVisible := true
 
+		// Collect all visible points
 		for _, p := range outline {
 			latRad := degToRad(p.Y) // Y is latitude
 			lonRad := degToRad(p.X) // X is longitude
@@ -452,17 +561,23 @@ func (g *GlobeRenderer) drawContinents(radius, scale float64) {
 
 			if visible {
 				points = append(points, Point{sx, sy})
-				lastVisible = true
-			} else if lastVisible && len(points) > 1 {
-				// Draw accumulated visible segment
-				g.drawPolyline(points, 2, "rgba(0, 217, 165, 0.6)")
-				points = points[:0]
-				lastVisible = false
+			} else {
+				allVisible = false
 			}
 		}
 
+		// If we have enough visible points, fill the polygon
+		if len(points) >= 3 {
+			g.canvas.FillPolygon(points, landColor)
+		}
+
+		// Draw outline for visible segments
 		if len(points) > 1 {
-			g.drawPolyline(points, 2, "rgba(0, 217, 165, 0.6)")
+			// Close the polygon for outline
+			if allVisible && len(points) >= 3 {
+				points = append(points, points[0])
+			}
+			g.drawPolyline(points, 1.5, outlineColor)
 		}
 	}
 }
@@ -503,16 +618,28 @@ func (g *GlobeRenderer) calculateNodePositions() {
 	} else {
 		// GEOGRAPHIC MODE: Position by country
 		countryCounts := make(map[string]int)
+		satelliteIndex := 0
 
 		for _, node := range g.graph.Nodes {
 			country := node.Country
-			if country == "" {
-				country = "US" // Default
-			}
 
+			// Check if node has valid country code
 			coords, ok := countryCoords[country]
-			if !ok {
-				coords = CountryCoord{0, 0}
+			if !ok || country == "" {
+				// Position as orbiting satellite
+				orbitRadius := 1.4 + float64(satelliteIndex%3)*0.1
+				angle := float64(satelliteIndex) * 0.618 * 2 * math.Pi // Golden angle spread
+
+				// Position in XZ plane (Y=0) - flat circle around globe
+				x := math.Cos(angle) * orbitRadius
+				z := math.Sin(angle) * orbitRadius
+				g.nodePos3D[node.ID] = Vec3{x, 0, z}
+
+				// Convert to geo position for compatibility (though not really geographic)
+				g.nodeGeoPos[node.ID] = GeoPosition{Lat: 0, Lon: angle}
+
+				satelliteIndex++
+				continue
 			}
 
 			// Add jitter for multiple nodes in same country
@@ -701,6 +828,9 @@ func slerp(lat1, lon1, lat2, lon2, t float64) (lat, lon float64) {
 
 // drawNodes draws visor nodes on the globe
 func (g *GlobeRenderer) drawNodes(radius, scale float64) {
+	centerX := g.canvas.Width() / 2
+	centerY := g.canvas.Height() / 2
+
 	for _, node := range g.graph.Nodes {
 		// Check status filters
 		if !g.opts.ShowNodeStatus(node.Status) {
@@ -709,6 +839,13 @@ func (g *GlobeRenderer) drawNodes(radius, scale float64) {
 
 		var sx, sy float64
 		var visible bool
+		isSatellite := false
+
+		// Check if this is a satellite (no valid country)
+		_, hasCountry := countryCoords[node.Country]
+		if !hasCountry || node.Country == "" {
+			isSatellite = true
+		}
 
 		if g.voronoiMode {
 			// Use 3D position directly in Voronoi mode
@@ -717,6 +854,16 @@ func (g *GlobeRenderer) drawNodes(radius, scale float64) {
 				continue
 			}
 			sx, sy, visible = g.project3Dto2D(pos3D.X, pos3D.Y, pos3D.Z, radius)
+		} else if isSatellite {
+			// Satellite: render in fixed ring (no rotation applied)
+			pos3D, ok := g.nodePos3D[node.ID]
+			if !ok {
+				continue
+			}
+			// Project directly to screen without rotation (XZ plane, Y=0)
+			sx = centerX + pos3D.X*scale
+			sy = centerY - pos3D.Z*scale // Z becomes Y on screen
+			visible = true                // Satellites are always visible
 		} else {
 			// Use geo position in geographic mode
 			pos, ok := g.nodeGeoPos[node.ID]

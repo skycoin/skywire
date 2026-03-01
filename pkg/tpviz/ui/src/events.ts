@@ -187,26 +187,14 @@ export function wireEventListeners(): void {
         }
     });
 
-    // View toggle listeners (Voronoi vs Globe vs Flat)
-    const viewVoronoiBtn = document.getElementById('view-voronoi');
+    // View toggle listeners (Globe vs Flat)
     const viewGlobeBtn = document.getElementById('view-globe');
     const viewFlatBtn = document.getElementById('view-flat');
 
     const clearViewButtons = () => {
-        viewVoronoiBtn?.classList.remove('active');
         viewGlobeBtn?.classList.remove('active');
         viewFlatBtn?.classList.remove('active');
     };
-
-    if (viewVoronoiBtn) {
-        viewVoronoiBtn.addEventListener('click', () => {
-            clearViewButtons();
-            viewVoronoiBtn.classList.add('active');
-            S.setGlobeViewActive(true);
-            setVoronoiMode(true);
-            showGlobe();
-        });
-    }
 
     if (viewGlobeBtn) {
         viewGlobeBtn.addEventListener('click', () => {
@@ -227,18 +215,9 @@ export function wireEventListeners(): void {
         });
     }
 
-    // Data initialization
+    // Data initialization - flat view is default
     checkServer();
-    fetchAllData().then(() => {
-        // Show Voronoi view by default after data loads
-        if (viewVoronoiBtn) {
-            clearViewButtons();
-            viewVoronoiBtn.classList.add('active');
-            S.setGlobeViewActive(true);
-            setVoronoiMode(true);
-            showGlobe();
-        }
-    });
+    fetchAllData();
     checkTPSStatus();
 
     // Start data flow animation after a short delay (for flat view)

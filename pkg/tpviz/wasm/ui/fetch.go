@@ -358,6 +358,100 @@ func (f *DataFetcher) SetAppPK(name, pk string) error {
 	return nil
 }
 
+// ── TPS (Transport Setup) API methods (matching TypeScript tps.ts) ──
+
+// TPSAddTransportRequest represents a request to add a transport via TPS
+type TPSAddTransportRequest struct {
+	TargetPK string `json:"target_pk"`
+	RemotePK string `json:"remote_pk"`
+	Type     string `json:"type"`
+}
+
+// TPSAddTransportResponse represents the response from TPS add transport
+type TPSAddTransportResponse struct {
+	ID       string `json:"id,omitempty"`
+	Type     string `json:"type"`
+	LocalPK  string `json:"local_pk"`
+	RemotePK string `json:"remote_pk"`
+	Error    string `json:"error,omitempty"`
+}
+
+// TPSTransport represents a transport from the remote visor
+type TPSTransport struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	LocalPK  string `json:"local_pk"`
+	RemotePK string `json:"remote_pk"`
+}
+
+// TPSAddTransport adds a transport between two remote visors via TPS
+func (f *DataFetcher) TPSAddTransport(targetPK, remotePK, tpType string) (*TPSAddTransportResponse, error) {
+	var resp TPSAddTransportResponse
+	err := postJSON("/api/tps/add-transport", TPSAddTransportRequest{
+		TargetPK: targetPK,
+		RemotePK: remotePK,
+		Type:     tpType,
+	}, &resp)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("%s", resp.Error)
+	}
+	return &resp, nil
+}
+
+// TPSRefreshTransports gets the current transports from a remote visor
+func (f *DataFetcher) TPSRefreshTransports(pk string) ([]TPSTransport, error) {
+	var transports []TPSTransport
+	err := fetchJSON("/api/tps/refresh-transports?pk="+pk, &transports)
+	return transports, err
+}
+
+// TPSRemoveTransportRequest represents a request to remove a transport via TPS
+type TPSRemoveTransportRequest struct {
+	TargetPK string `json:"target_pk"`
+	ID       string `json:"id"`
+}
+
+// TPSRemoveTransport removes a transport from a remote visor via TPS
+func (f *DataFetcher) TPSRemoveTransport(targetPK, tpID string) error {
+	var resp struct {
+		Error string `json:"error,omitempty"`
+	}
+	err := postJSON("/api/tps/remove-transport", TPSRemoveTransportRequest{
+		TargetPK: targetPK,
+		ID:       tpID,
+	}, &resp)
+	if err != nil {
+		return err
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("%s", resp.Error)
+	}
+	return nil
+}
+
+// ── DMSG Health Check API (matching TypeScript dmsg.ts) ──
+
+// DMSGHealthResponse represents the response from DMSG health check
+type DMSGHealthResponse struct {
+	Status    string `json:"status"`
+	BuildInfo string `json:"build_info,omitempty"`
+	Message   string `json:"message,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// DMSGHealthCheck checks DMSG connectivity to a remote visor
+func (f *DataFetcher) DMSGHealthCheck(pk string) (*DMSGHealthResponse, error) {
+	var resp DMSGHealthResponse
+	err := fetchJSON("/api/dmsg/health?pk="+pk, &resp)
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // ProcessTransports converts transport data into graph nodes and edges
 func ProcessTransports(transports []TransportData, uptimes []UptimeEntry, services map[string]ServiceInfo) *Graph {
 	g := NewGraph()

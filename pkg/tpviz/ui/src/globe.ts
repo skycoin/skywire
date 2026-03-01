@@ -85,6 +85,40 @@ const COUNTRY_COORDS: Record<string, [number, number]> = {
     'LU': [49.8153, 6.1296],
     'MT': [35.9375, 14.3754],
     'IS': [64.9631, -19.0208],
+    'UY': [-32.5228, -55.7658],  // Uruguay
+    'PY': [-23.4425, -58.4438],  // Paraguay
+    'BO': [-16.2902, -63.5887],  // Bolivia
+    'EC': [-1.8312, -78.1834],   // Ecuador
+    'PA': [8.5380, -80.7821],    // Panama
+    'CR': [9.7489, -83.7534],    // Costa Rica
+    'GT': [15.7835, -90.2308],   // Guatemala
+    'CU': [21.5218, -77.7812],   // Cuba
+    'DO': [18.7357, -70.1627],   // Dominican Republic
+    'JM': [18.1096, -77.2975],   // Jamaica
+    'PR': [18.2208, -66.5901],   // Puerto Rico
+    'MA': [31.7917, -7.0926],    // Morocco
+    'DZ': [28.0339, 1.6596],     // Algeria
+    'TN': [33.8869, 9.5375],     // Tunisia
+    'LY': [26.3351, 17.2283],    // Libya
+    'GH': [7.9465, -1.0232],     // Ghana
+    'CI': [7.5400, -5.5471],     // Ivory Coast
+    'SN': [14.4974, -14.4524],   // Senegal
+    'CM': [7.3697, 12.3547],     // Cameroon
+    'ET': [9.1450, 40.4897],     // Ethiopia
+    'TZ': [-6.3690, 34.8888],    // Tanzania
+    'UG': [1.3733, 32.2903],     // Uganda
+    'MU': [-20.3484, 57.5522],   // Mauritius
+    'LK': [7.8731, 80.7718],     // Sri Lanka
+    'NP': [28.3949, 84.1240],    // Nepal
+    'MM': [21.9162, 95.9560],    // Myanmar
+    'KH': [12.5657, 104.9910],   // Cambodia
+    'LA': [19.8563, 102.4955],   // Laos
+    'MN': [46.8625, 103.8467],   // Mongolia
+    'KZ': [48.0196, 66.9237],    // Kazakhstan
+    'UZ': [41.3775, 64.5853],    // Uzbekistan
+    'AZ': [40.1431, 47.5769],    // Azerbaijan
+    'GE': [42.3154, 43.3569],    // Georgia
+    'AM': [40.0691, 45.0382],    // Armenia
 };
 
 // Country colors for Voronoi regions
@@ -106,6 +140,7 @@ let nodeGroup: THREE.Group | null = null;
 let edgeGroup: THREE.Group | null = null;
 let voronoiGroup: THREE.Group | null = null;
 let interiorLinesGroup: THREE.Group | null = null;
+let orbitGroup: THREE.Group | null = null; // Separate group for satellites - doesn't rotate
 let animationId: number | null = null;
 let isGlobeActive = false;
 
@@ -119,6 +154,13 @@ let isDragging = false;
 let previousMousePosition = { x: 0, y: 0 };
 let autoRotate = true;
 let rotationSpeed = 0.001;
+
+// Quaternion for trackball rotation
+let globeQuaternion = new THREE.Quaternion();
+
+// Orbiting satellites (nodes without geolocation)
+let orbitingNodes: { sprite: THREE.Sprite; angle: number; speed: number; height: number }[] = [];
+let orbitTime = 0;
 
 // Raycaster for node selection
 const raycaster = new THREE.Raycaster();
@@ -432,8 +474,28 @@ function createGeodesicCurve(
     return curve;
 }
 
-// Create Earth texture with country outlines using accurate continental data
-function createEarthTexture(): THREE.Texture {
+// Load Earth texture from file or create fallback
+function loadEarthTexture(): THREE.Texture {
+    const loader = new THREE.TextureLoader();
+
+    // Try to load the real Earth texture
+    const texture = loader.load(
+        'textures/earth.jpg',
+        (tex) => {
+            console.log('Earth texture loaded successfully');
+            tex.needsUpdate = true;
+        },
+        undefined,
+        (err) => {
+            console.warn('Failed to load Earth texture, using fallback:', err);
+        }
+    );
+
+    return texture;
+}
+
+// Create fallback Earth texture if image fails to load
+function createFallbackEarthTexture(): THREE.Texture {
     const canvas = document.createElement('canvas');
     canvas.width = 2048;
     canvas.height = 1024;
@@ -523,14 +585,15 @@ export function initGlobe(): void {
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
 
-    // Create globe
+    // Create globe with real Earth texture
     const geometry = new THREE.SphereGeometry(1, 64, 64);
-    const texture = createEarthTexture();
+    const texture = loadEarthTexture();
     const material = new THREE.MeshPhongMaterial({
         map: texture,
         transparent: true,
         opacity: voronoiMode ? 0.15 : 1.0,
-        shininess: 5,
+        shininess: 10,
+        depthWrite: !voronoiMode,
     });
     globe = new THREE.Mesh(geometry, material);
     scene.add(globe);
@@ -565,10 +628,21 @@ export function initGlobe(): void {
     edgeGroup = new THREE.Group();
     voronoiGroup = new THREE.Group();
     interiorLinesGroup = new THREE.Group();
+    orbitGroup = new THREE.Group(); // Separate group for satellites - stays fixed (doesn't rotate with globe)
+
+    // Set render order to ensure Voronoi lines are visible above globe
+    globe.renderOrder = 0;
+    voronoiGroup.renderOrder = 1;
+    nodeGroup.renderOrder = 2;
+    interiorLinesGroup.renderOrder = 3;
+    edgeGroup.renderOrder = 4;
+    orbitGroup.renderOrder = 5; // Satellites render on top
+
     scene.add(voronoiGroup);
     scene.add(interiorLinesGroup);
     scene.add(nodeGroup);
     scene.add(edgeGroup);
+    scene.add(orbitGroup);
 
     // Add lights
     const ambientLight = new THREE.AmbientLight(0x404040, 2);
@@ -596,12 +670,29 @@ function animate(): void {
 
     animationId = requestAnimationFrame(animate);
 
+    // Auto-rotate using quaternion
     if (globe && autoRotate && !isDragging) {
-        globe.rotation.y += rotationSpeed;
-        if (nodeGroup) nodeGroup.rotation.y += rotationSpeed;
-        if (edgeGroup) edgeGroup.rotation.y += rotationSpeed;
-        if (voronoiGroup) voronoiGroup.rotation.y += rotationSpeed;
-        if (interiorLinesGroup) interiorLinesGroup.rotation.y += rotationSpeed;
+        const autoRotateQuat = new THREE.Quaternion().setFromAxisAngle(
+            new THREE.Vector3(0, 1, 0),
+            rotationSpeed
+        );
+        globeQuaternion.multiply(autoRotateQuat);
+
+        globe.quaternion.copy(globeQuaternion);
+        if (nodeGroup) nodeGroup.quaternion.copy(globeQuaternion);
+        if (edgeGroup) edgeGroup.quaternion.copy(globeQuaternion);
+        if (voronoiGroup) voronoiGroup.quaternion.copy(globeQuaternion);
+        if (interiorLinesGroup) interiorLinesGroup.quaternion.copy(globeQuaternion);
+    }
+
+    // Animate orbiting satellites (nodes without geolocation)
+    // Satellites orbit in XY plane (camera's view plane) so they're always visible around the globe
+    orbitTime += 0.01;
+    for (const sat of orbitingNodes) {
+        sat.angle += sat.speed;
+        const x = Math.cos(sat.angle) * sat.height;
+        const y = Math.sin(sat.angle) * sat.height;
+        sat.sprite.position.set(x, y, 0); // Z=0 keeps them in camera's view plane
     }
 
     if (renderer && scene && camera) {
@@ -617,26 +708,50 @@ function onMouseDown(event: MouseEvent): void {
 }
 
 function onMouseMove(event: MouseEvent): void {
-    if (!isDragging || !globe || !nodeGroup || !edgeGroup) return;
+    if (!isDragging || !globe || !nodeGroup || !edgeGroup || !camera) return;
 
-    const deltaX = event.clientX - previousMousePosition.x;
-    const deltaY = event.clientY - previousMousePosition.y;
+    const container = document.getElementById('globe-container');
+    if (!container) return;
 
-    // Free rotation in all directions (no clamping)
-    globe.rotation.y += deltaX * 0.005;
-    globe.rotation.x += deltaY * 0.005;
+    const rect = container.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
 
-    nodeGroup.rotation.y = globe.rotation.y;
-    nodeGroup.rotation.x = globe.rotation.x;
-    edgeGroup.rotation.y = globe.rotation.y;
-    edgeGroup.rotation.x = globe.rotation.x;
-    if (voronoiGroup) {
-        voronoiGroup.rotation.y = globe.rotation.y;
-        voronoiGroup.rotation.x = globe.rotation.x;
-    }
-    if (interiorLinesGroup) {
-        interiorLinesGroup.rotation.y = globe.rotation.y;
-        interiorLinesGroup.rotation.x = globe.rotation.x;
+    // Current and previous positions relative to center, normalized
+    const prevX = (previousMousePosition.x - rect.left - centerX) / centerX;
+    const prevY = (previousMousePosition.y - rect.top - centerY) / centerY;
+    const currX = (event.clientX - rect.left - centerX) / centerX;
+    const currY = (event.clientY - rect.top - centerY) / centerY;
+
+    // Project onto virtual trackball sphere
+    const projectToSphere = (x: number, y: number): THREE.Vector3 => {
+        const r = Math.sqrt(x * x + y * y);
+        const z = r < 1 ? Math.sqrt(1 - r * r) : 0;
+        return new THREE.Vector3(x, -y, z).normalize();
+    };
+
+    const p1 = projectToSphere(prevX, prevY);
+    const p2 = projectToSphere(currX, currY);
+
+    // Calculate rotation axis and angle
+    const axis = new THREE.Vector3().crossVectors(p1, p2).normalize();
+    const angle = p1.angleTo(p2) * 2; // Scale for responsiveness
+
+    if (angle > 0.0001 && axis.length() > 0.0001) {
+        // Create rotation quaternion
+        const deltaQuat = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+        globeQuaternion.premultiply(deltaQuat);
+
+        // Apply quaternion to all groups
+        globe.quaternion.copy(globeQuaternion);
+        nodeGroup.quaternion.copy(globeQuaternion);
+        edgeGroup.quaternion.copy(globeQuaternion);
+        if (voronoiGroup) {
+            voronoiGroup.quaternion.copy(globeQuaternion);
+        }
+        if (interiorLinesGroup) {
+            interiorLinesGroup.quaternion.copy(globeQuaternion);
+        }
     }
 
     previousMousePosition = { x: event.clientX, y: event.clientY };
@@ -656,7 +771,7 @@ function onWheel(event: WheelEvent): void {
     event.preventDefault();
 
     const delta = event.deltaY > 0 ? 0.1 : -0.1;
-    camera.position.z = Math.max(1.5, Math.min(10, camera.position.z + delta));
+    camera.position.z = Math.max(1.15, Math.min(10, camera.position.z + delta));
 }
 
 function onWindowResize(): void {
@@ -734,15 +849,32 @@ export function updateGlobeData(): void {
     const nodes = S.nodesDataset.get();
     const countryNodeCounts: Record<string, number> = {};
 
+    // Clear orbiting nodes from previous render
+    orbitingNodes = [];
+
     if (voronoiMode && nodes.length >= 3) {
-        // VORONOI MODE: Assign Fibonacci positions to countries based on spatial proximity
+        // VORONOI MODE: Use Fibonacci sphere for even distribution
+        // Group nodes by country and IP for Voronoi boundary calculation
 
-        // Step 1: Generate Fibonacci positions for ALL nodes (even distribution)
-        const fibPositions = fibonacciSphere(nodes.length, 1.02);
+        // Step 1: Separate nodes with and without geolocation
+        const geoNodes: any[] = [];
+        const noGeoNodes: any[] = [];
 
-        // Step 2: Group nodes by country, then by IP group within each country
-        const nodesByCountry: Map<string, Map<number | string, any[]>> = new Map();
         nodes.forEach((node: any) => {
+            const country = node.country || S.visorServices[node.id]?.country || '';
+            if (country && COUNTRY_COORDS[country]) {
+                geoNodes.push(node);
+            } else {
+                noGeoNodes.push(node);
+            }
+        });
+
+        // Step 2: Generate Fibonacci positions for nodes WITH geolocation (even distribution)
+        const fibPositions = fibonacciSphere(geoNodes.length, 1.02);
+
+        // Step 3: Group geo nodes by country and IP
+        const nodesByCountry: Map<string, Map<number | string, any[]>> = new Map();
+        geoNodes.forEach((node: any) => {
             const country = node.country || S.visorServices[node.id]?.country || '';
             const ipGroup = S.ipGroupsData?.groups?.[node.id] ?? '_no_ip';
 
@@ -756,118 +888,7 @@ export function updateGlobeData(): void {
             countryMap.get(ipGroup)!.push(node);
         });
 
-        // Step 3: Calculate country centroids
-        interface CountryData {
-            country: string;
-            centroid: THREE.Vector3;
-            nodeCount: number;
-            ipGroups: Map<number | string, any[]>;
-            assignedPositions: THREE.Vector3[];
-        }
-        const countryDataMap: Map<string, CountryData> = new Map();
-
-        for (const [country, ipMap] of nodesByCountry) {
-            const coords = COUNTRY_COORDS[country];
-            const centroid = coords
-                ? latLonToVector3(coords[0], coords[1], 1.02)
-                : latLonToVector3(0, 0, 1.02);
-
-            let nodeCount = 0;
-            ipMap.forEach(nodes => nodeCount += nodes.length);
-
-            countryDataMap.set(country, {
-                country,
-                centroid,
-                nodeCount,
-                ipGroups: ipMap,
-                assignedPositions: []
-            });
-        }
-
-        // Step 4: Assign each Fibonacci position to the country whose centroid is closest
-        // This creates a Voronoi-like partition of positions by country
-        const positionToCountry: Map<number, string> = new Map();
-        const countryPositionCounts: Map<string, number> = new Map();
-
-        // Initialize counts
-        for (const country of countryDataMap.keys()) {
-            countryPositionCounts.set(country, 0);
-        }
-
-        // First pass: assign positions to closest country (greedy)
-        for (let i = 0; i < fibPositions.length; i++) {
-            const pos = fibPositions[i];
-            let closestCountry = '';
-            let closestDist = Infinity;
-
-            for (const [country, data] of countryDataMap) {
-                const dist = pos.distanceTo(data.centroid);
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closestCountry = country;
-                }
-            }
-
-            positionToCountry.set(i, closestCountry);
-            countryPositionCounts.set(closestCountry, (countryPositionCounts.get(closestCountry) || 0) + 1);
-        }
-
-        // Step 5: Rebalance - ensure each country gets exactly as many positions as it has nodes
-        // Sort positions by distance to their assigned country's centroid
-        const positionsByCountry: Map<string, { index: number; dist: number }[]> = new Map();
-        for (const country of countryDataMap.keys()) {
-            positionsByCountry.set(country, []);
-        }
-
-        for (let i = 0; i < fibPositions.length; i++) {
-            const country = positionToCountry.get(i)!;
-            const data = countryDataMap.get(country)!;
-            const dist = fibPositions[i].distanceTo(data.centroid);
-            positionsByCountry.get(country)!.push({ index: i, dist });
-        }
-
-        // Sort each country's positions by distance (closest first)
-        for (const positions of positionsByCountry.values()) {
-            positions.sort((a, b) => a.dist - b.dist);
-        }
-
-        // Keep only the needed number of positions per country
-        const finalPositionToCountry: Map<number, string> = new Map();
-        const usedPositions = new Set<number>();
-
-        for (const [country, data] of countryDataMap) {
-            const positions = positionsByCountry.get(country)!;
-            let assigned = 0;
-            for (const { index } of positions) {
-                if (assigned >= data.nodeCount) break;
-                if (!usedPositions.has(index)) {
-                    finalPositionToCountry.set(index, country);
-                    usedPositions.add(index);
-                    data.assignedPositions.push(fibPositions[index]);
-                    assigned++;
-                }
-            }
-        }
-
-        // Handle any unassigned positions (give to countries that need more)
-        for (let i = 0; i < fibPositions.length; i++) {
-            if (!usedPositions.has(i)) {
-                // Find country that still needs positions
-                for (const [country, data] of countryDataMap) {
-                    if (data.assignedPositions.length < data.nodeCount) {
-                        finalPositionToCountry.set(i, country);
-                        usedPositions.add(i);
-                        data.assignedPositions.push(fibPositions[i]);
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Step 6: Within each country, sort positions spatially and assign to IP groups
-        const nodeToCountry: Map<string, string> = new Map();
-        const nodeToIPGroup: Map<string, number | string> = new Map();
-
+        // Step 4: Assign Fibonacci positions to nodes, keeping same country/IP adjacent
         interface CountryIPGroup {
             country: string;
             ipGroup: number | string;
@@ -875,36 +896,38 @@ export function updateGlobeData(): void {
         }
         const sortedGroups: CountryIPGroup[] = [];
 
-        for (const [country, data] of countryDataMap) {
-            // Sort assigned positions by angle around centroid for consistent ordering
-            const sortedPositions = [...data.assignedPositions].sort((a, b) => {
-                const angleA = Math.atan2(a.z - data.centroid.z, a.x - data.centroid.x);
-                const angleB = Math.atan2(b.z - data.centroid.z, b.x - data.centroid.x);
-                return angleA - angleB;
-            });
+        // Sort countries by their centroid longitude for spatial coherence
+        const countriesSorted = Array.from(nodesByCountry.entries()).sort((a, b) => {
+            const coordsA = COUNTRY_COORDS[a[0]] || [0, 0];
+            const coordsB = COUNTRY_COORDS[b[0]] || [0, 0];
+            return coordsA[1] - coordsB[1]; // Sort by longitude
+        });
 
-            // Sort IP groups within this country
-            const sortedIPGroups = Array.from(data.ipGroups.entries()).sort((a, b) => {
+        // Build sorted list of all IP groups
+        for (const [country, ipMap] of countriesSorted) {
+            const sortedIPGroups = Array.from(ipMap.entries()).sort((a, b) => {
                 if (a[0] === '_no_ip') return 1;
                 if (b[0] === '_no_ip') return -1;
                 return (a[0] as number) - (b[0] as number);
             });
-
-            // Assign positions to nodes, grouped by IP
-            let posIdx = 0;
             for (const [ipGroup, groupNodes] of sortedIPGroups) {
                 sortedGroups.push({ country, ipGroup, nodes: groupNodes });
+            }
+        }
 
-                for (const node of groupNodes) {
-                    if (posIdx < sortedPositions.length) {
-                        nodePositions.set(node.id, sortedPositions[posIdx]);
-                        nodeToCountry.set(node.id, country);
-                        nodeToIPGroup.set(node.id, ipGroup);
-                        posIdx++;
-                    }
+        // Assign Fibonacci positions sequentially to keep groups adjacent
+        let posIdx = 0;
+        for (const { nodes: groupNodes } of sortedGroups) {
+            for (const node of groupNodes) {
+                if (posIdx < fibPositions.length) {
+                    nodePositions.set(node.id, fibPositions[posIdx]);
+                    posIdx++;
                 }
             }
         }
+
+        // Step 5: Handle nodes without geolocation - they will orbit
+        // (positions set later when creating sprites)
 
         // Step 5: Draw proper spherical Voronoi boundaries using d3-geo-voronoi
         // d3-geo-voronoi computes mathematically correct spherical Voronoi cells
@@ -945,6 +968,21 @@ export function updateGlobeData(): void {
             const geoPoints: [number, number][] = groupCentroids.map(g => [g.lon, g.lat]);
 
             console.log('Voronoi geoPoints:', geoPoints.length, geoPoints.slice(0, 3));
+            // Debug: show country distribution
+            const countryCount: Record<string, number> = {};
+            groupCentroids.forEach(g => {
+                countryCount[g.country] = (countryCount[g.country] || 0) + 1;
+            });
+            console.log('IP groups per country:', countryCount);
+
+            // Check for countries that might be getting mixed
+            const sampleGroups = groupCentroids.slice(0, 10).map(g => ({
+                country: g.country,
+                ipGroup: g.ipGroup,
+                lat: g.lat.toFixed(1),
+                lon: g.lon.toFixed(1)
+            }));
+            console.log('Sample IP groups (first 10):', sampleGroups);
 
             if (geoPoints.length >= 3) {
                 try {
@@ -1029,34 +1067,43 @@ export function updateGlobeData(): void {
                                     }
                                 }
 
-                                // Convert to 3D and draw
-                                const start3D = latLonToVector3(pt1[1], pt1[0], 1.015);
-                                const end3D = latLonToVector3(pt2[1], pt2[0], 1.015);
-                                const arcPoints = createGreatCircleArc(start3D, end3D, 1.015, 16);
+                                // Validate coordinates
+                                if (!isFinite(pt1[0]) || !isFinite(pt1[1]) || !isFinite(pt2[0]) || !isFinite(pt2[1])) {
+                                    continue;
+                                }
+
+                                // Convert to 3D and draw - use radius 1.06 to be well above nodes (1.02)
+                                const voronoiRadius = 1.06;
+                                const start3D = latLonToVector3(pt1[1], pt1[0], voronoiRadius);
+                                const end3D = latLonToVector3(pt2[1], pt2[0], voronoiRadius);
+                                const arcPoints = createGreatCircleArc(start3D, end3D, voronoiRadius, 16);
 
                                 if (isCountryBoundary) {
-                                    // Country boundary: thick white line (draw multiple for thickness)
-                                    const normal = start3D.clone().add(end3D).normalize();
+                                    // Country boundary: thick yellow line
+                                    const midDir = start3D.clone().add(end3D).normalize();
+                                    const edgeDir = end3D.clone().sub(start3D).normalize();
+                                    const perpDir = new THREE.Vector3().crossVectors(midDir, edgeDir).normalize();
+
                                     for (let offset = -1; offset <= 1; offset++) {
-                                        const offsetVec = normal.clone().multiplyScalar(offset * 0.002);
-                                        const offsetPoints = arcPoints.map(p => p.clone().add(offsetVec).normalize().multiplyScalar(1.015));
+                                        const offsetVec = perpDir.clone().multiplyScalar(offset * 0.004);
+                                        const offsetPoints = arcPoints.map(p => p.clone().add(offsetVec).normalize().multiplyScalar(voronoiRadius));
 
                                         const geom = new THREE.BufferGeometry().setFromPoints(offsetPoints);
                                         const mat = new THREE.LineBasicMaterial({
-                                            color: 0xffffff,
-                                            transparent: true,
-                                            opacity: 0.85,
+                                            color: 0xffff00,  // Yellow for country boundaries
+                                            transparent: false,
+                                            depthTest: false,
                                         });
                                         voronoiGroup.add(new THREE.Line(geom, mat));
                                     }
                                     edgesDrawn++;
                                 } else {
-                                    // IP boundary or internal: thin teal line
+                                    // IP boundary: purple line
                                     const geom = new THREE.BufferGeometry().setFromPoints(arcPoints);
                                     const mat = new THREE.LineBasicMaterial({
-                                        color: 0x00d9a5,
-                                        transparent: true,
-                                        opacity: 0.35,
+                                        color: 0x9933ff,  // Purple for IP boundaries
+                                        transparent: false,
+                                        depthTest: false,
                                     });
                                     voronoiGroup.add(new THREE.Line(geom, mat));
                                     edgesDrawn++;
@@ -1064,6 +1111,16 @@ export function updateGlobeData(): void {
                             }
                         }
                         console.log('Voronoi edges drawn:', edgesDrawn, 'voronoiGroup children:', voronoiGroup.children.length);
+                        console.log('Voronoi group visible:', voronoiGroup.visible, 'in scene:', scene?.children.includes(voronoiGroup));
+
+                        // Log sample edge data for debugging
+                        if (voronoiGroup.children.length > 0) {
+                            const sampleLine = voronoiGroup.children[0] as THREE.Line;
+                            const positions = sampleLine.geometry.getAttribute('position');
+                            if (positions) {
+                                console.log('Sample edge first point:', positions.getX(0), positions.getY(0), positions.getZ(0));
+                            }
+                        }
                     }
                 } catch (e) {
                     console.error('Voronoi calculation failed:', e);
@@ -1071,14 +1128,91 @@ export function updateGlobeData(): void {
             }
         }
     } else {
-        // GEOGRAPHIC MODE: Position by country
+        // GEOGRAPHIC MODE: Position by country with optional IP grouping
+        const clusterByIP = (document.getElementById('cluster-ip') as HTMLInputElement)?.checked && S.ipGroupsEnabled && S.ipGroupsData;
+
+        // Track positions per country-IP combination for clustering
+        const groupPositions: Map<string, { lat: number; lon: number; count: number }> = new Map();
+
+        // Debug: track country assignment issues
+        const countryStats: Record<string, number> = {};
+        const missingCountries: string[] = [];
+        const unknownCountryCodes: Set<string> = new Set();
+
         nodes.forEach((node: any) => {
             const country = node.country || S.visorServices[node.id]?.country || '';
-            if (!countryNodeCounts[country]) countryNodeCounts[country] = 0;
-            const [lat, lon] = getCountryPosition(country, countryNodeCounts[country]++);
+
+            // Debug tracking
+            if (!country) {
+                missingCountries.push(node.id.substring(0, 8));
+            } else if (!COUNTRY_COORDS[country]) {
+                unknownCountryCodes.add(country);
+            } else {
+                countryStats[country] = (countryStats[country] || 0) + 1;
+            }
+
+            // Only position nodes with valid country codes
+            if (!country || !COUNTRY_COORDS[country]) {
+                // Node will be an orbiting satellite (no position set)
+                return;
+            }
+
+            // Get base country coordinates
+            const baseCoords = COUNTRY_COORDS[country];
+            let lat = baseCoords[0];
+            let lon = baseCoords[1];
+
+            if (clusterByIP) {
+                // Group nodes by country + IP group
+                const ipGroup = S.ipGroupsData?.groups?.[node.id] ?? -1;
+                const groupKey = `${country}_${ipGroup}`;
+
+                if (!groupPositions.has(groupKey)) {
+                    // First node in this group - calculate a position offset based on group ID
+                    const groupIndex = groupPositions.size;
+                    // Distribute groups in a spiral pattern around the country center
+                    const angle = groupIndex * 0.8; // Golden angle-ish for spread
+                    const radius = 1.5 + (groupIndex * 0.3); // Increasing radius
+                    const offsetLat = Math.sin(angle) * radius;
+                    const offsetLon = Math.cos(angle) * radius * 1.5; // Wider longitude spread
+
+                    groupPositions.set(groupKey, {
+                        lat: baseCoords[0] + offsetLat,
+                        lon: baseCoords[1] + offsetLon,
+                        count: 0
+                    });
+                }
+
+                const groupPos = groupPositions.get(groupKey)!;
+                // Add small jitter within the group
+                const jitterLat = (Math.random() - 0.5) * 1.5;
+                const jitterLon = (Math.random() - 0.5) * 2;
+                lat = groupPos.lat + jitterLat;
+                lon = groupPos.lon + jitterLon;
+                groupPos.count++;
+            } else {
+                // No IP grouping - just add jitter around country center
+                const jitterLat = (Math.random() - 0.5) * 5;
+                const jitterLon = (Math.random() - 0.5) * 8;
+                lat += jitterLat;
+                lon += jitterLon;
+            }
+
             const position = latLonToVector3(lat, lon, 1.02);
             nodePositions.set(node.id, position);
         });
+
+        // Log debug info
+        console.log('Globe node positioning stats:', {
+            totalNodes: nodes.length,
+            positionedNodes: nodePositions.size,
+            countryDistribution: countryStats,
+            nodesWithoutCountry: missingCountries.length,
+            unknownCountryCodes: Array.from(unknownCountryCodes)
+        });
+        if (unknownCountryCodes.size > 0) {
+            console.warn('Unknown country codes (need to add to COUNTRY_COORDS):', Array.from(unknownCountryCodes));
+        }
     }
 
     // Now filter for visible nodes when rendering sprites
@@ -1087,6 +1221,7 @@ export function updateGlobeData(): void {
     const showUnknown = (document.getElementById('show-unknown') as HTMLInputElement)?.checked ?? false;
 
     // Create node sprites (filtered by visibility)
+    let orbitIndex = 0;
     nodes.forEach((node: any) => {
         const country = node.country || S.visorServices[node.id]?.country || '';
         const status = getVisorStatus(node.id);
@@ -1097,7 +1232,7 @@ export function updateGlobeData(): void {
         if (status === 'unknown' && !showUnknown) return;
 
         const position = nodePositions.get(node.id);
-        if (!position) return;
+        const hasGeoLocation = position !== undefined;
 
         // Create sprite
         const canvas = document.createElement('canvas');
@@ -1111,9 +1246,10 @@ export function updateGlobeData(): void {
         else if (status === 'offline') fillColor = '#e94560';
         if (node.isLocal) fillColor = LOCAL_VISOR_COLOR.background;
 
-        // Draw node
+        // Draw node - smaller circle for non-local, larger for local
+        const nodeRadius = node.isLocal ? 24 : 16;
         ctx.beginPath();
-        ctx.arc(32, 32, 20, 0, Math.PI * 2);
+        ctx.arc(32, 32, nodeRadius, 0, Math.PI * 2);
         ctx.fillStyle = fillColor;
         ctx.fill();
 
@@ -1123,13 +1259,22 @@ export function updateGlobeData(): void {
             ctx.stroke();
         }
 
-        // Draw flag if available
-        const flag = countryToFlag(country);
-        if (flag) {
-            ctx.font = '20px Arial';
+        // Draw flag if available (only for nodes with geolocation)
+        if (hasGeoLocation) {
+            const flag = countryToFlag(country);
+            if (flag) {
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(flag, 32, 32);
+            }
+        } else {
+            // Draw satellite icon for orbiting nodes
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '12px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(flag, 32, 32);
+            ctx.fillText('🛰', 32, 32);
         }
 
         const texture = new THREE.CanvasTexture(canvas);
@@ -1138,12 +1283,44 @@ export function updateGlobeData(): void {
             transparent: true,
         });
         const sprite = new THREE.Sprite(spriteMaterial);
-        sprite.position.copy(position);
-        sprite.scale.set(0.045, 0.045, 1); // Smaller nodes relative to globe
+
+        // Node size - much smaller
+        const nodeScale = node.isLocal ? 0.025 : 0.018;
+        sprite.scale.set(nodeScale, nodeScale, 1);
         sprite.userData.nodeId = node.id;
         sprite.userData.country = country;
 
-        nodeGroup!.add(sprite);
+        if (hasGeoLocation) {
+            // Position on globe surface
+            sprite.position.copy(position);
+            nodeGroup!.add(sprite);
+        } else if (!voronoiMode) {
+            // Orbiting satellite (globe mode only) - orbit in fixed 2D plane around globe
+            const orbitRadius = 1.4 + (orbitIndex % 3) * 0.1; // Vary orbit radii slightly
+            const initialAngle = (orbitIndex / Math.max(1, orbitIndex)) * Math.PI * 2 * (orbitIndex / 10); // Spread evenly
+            const orbitSpeed = 0.003 + (orbitIndex % 5) * 0.001; // Vary speeds
+
+            // Position in XY plane (Z=0) - visible circle around globe from camera
+            sprite.position.set(
+                Math.cos(initialAngle) * orbitRadius,
+                Math.sin(initialAngle) * orbitRadius,
+                0 // Z=0 keeps satellites in camera's view plane (always visible)
+            );
+
+            orbitingNodes.push({
+                sprite,
+                angle: initialAngle,
+                speed: orbitSpeed,
+                height: orbitRadius
+            });
+            orbitIndex++;
+
+            // Add to orbitGroup (doesn't rotate with globe)
+            orbitGroup!.add(sprite);
+        } else {
+            // Voronoi mode - skip nodes without geolocation
+            return;
+        }
         nodeSprites.set(node.id, sprite);
     });
 
@@ -1254,10 +1431,12 @@ export function isGlobeViewActive(): boolean {
 export function setVoronoiMode(enabled: boolean): void {
     voronoiMode = enabled;
 
-    // Update globe transparency
+    // Update globe transparency and depth write
     if (globe) {
         const material = globe.material as THREE.MeshPhongMaterial;
         material.opacity = enabled ? 0.15 : 1.0;
+        material.depthWrite = !enabled; // Disable depth write in Voronoi mode to allow lines to show
+        material.needsUpdate = true;
     }
 
     // Update atmosphere visibility
@@ -1317,6 +1496,8 @@ export function disposeGlobe(): void {
     edgeGroup = null;
     voronoiGroup = null;
     interiorLinesGroup = null;
+    orbitGroup = null;
     nodePositions.clear();
+    orbitingNodes = [];
     isGlobeActive = false;
 }
