@@ -133,6 +133,16 @@
         /* Data flow animation overlay */
         #flow-canvas { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
 
+        /* Globe container */
+        #globe-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; background: #1a1a2e; }
+        #globe-container canvas { width: 100%; height: 100%; }
+
+        /* View toggle button */
+        #view-toggle { position: absolute; top: 16px; right: 16px; z-index: 9999; display: flex; gap: 2px; background: rgba(22, 33, 62, 0.95); border: 1px solid #00d9a5; border-radius: 4px; padding: 2px; }
+        #view-toggle button { padding: 6px 12px; border: none; background: transparent; color: #888; cursor: pointer; border-radius: 3px; font-size: 12px; transition: all 0.2s; }
+        #view-toggle button.active { background: #00d9a5; color: #000; }
+        #view-toggle button:hover:not(.active) { background: rgba(0, 217, 165, 0.2); color: #00d9a5; }
+
         /* Animation controls */
         .anim-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
         .anim-controls label { display: inline-flex; align-items: center; color: #aaa; font-size: 0.85em; cursor: pointer; }
@@ -364,11 +374,12 @@
                 </div>
                 <div class="section-content">
                     <div class="stat"><span class="stat-label">Total Transports</span><span class="stat-value" id="total-transports">-</span></div>
-                    <div class="stat"><span class="stat-label">Unique Visors</span><span class="stat-value" id="total-visors">-</span></div>
+                    <div class="stat"><span class="stat-label">Visors</span><span class="stat-value" id="total-visors">-</span></div>
                     <div class="stat" id="unique-ips-stat" style="display:none;"><span class="stat-label">Unique IPs</span><span class="stat-value" id="total-unique-ips">-</span></div>
                     <div class="stat"><span class="stat-label">STCPR</span><span class="stat-value" id="count-stcpr">-</span></div>
                     <div class="stat"><span class="stat-label">SUDPH</span><span class="stat-value" id="count-sudph">-</span></div>
                     <div class="stat"><span class="stat-label">DMSG</span><span class="stat-value" id="count-dmsg">-</span></div>
+                    <div class="stat"><span class="stat-label">Not in UT</span><span class="stat-value" id="count-unknown" style="color:#ffd166">-</span></div>
                     <div class="visor-list" id="visor-list"></div>
                 </div>
             </div>
@@ -382,7 +393,6 @@
                 <div class="section-content">
                     <div class="stat"><span class="stat-label">Online</span><span class="stat-value" id="count-online" style="color:#00d9a5">-</span></div>
                     <div class="stat"><span class="stat-label">Offline</span><span class="stat-value" id="count-offline" style="color:#e94560">-</span></div>
-                    <div class="stat"><span class="stat-label">Not in UT</span><span class="stat-value" id="count-unknown" style="color:#ffd166">-</span></div>
                     <div class="stat"><span class="stat-label">Not in DMSG</span><span class="stat-value" id="count-not-in-dmsg" style="color:#ff6b35">-</span></div>
                     <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;font-size:0.8em;color:#888;">Versions</div>
                     <div id="version-stats"></div>
@@ -496,6 +506,18 @@
                 <canvas id="flow-canvas"></canvas>
                 <div id="loading"><div class="spinner"></div><div>Loading transport data...</div></div>
                 <div id="error"></div>
+            </div>
+            <div id="globe-container"></div>
+            <div id="view-toggle">
+                <button id="view-globe" title="Globe view (geographic)">Globe</button>
+                <button id="view-flat" class="active" title="Flat view (2D)">Flat</button>
+            </div>
+            <!-- Voronoi overlay toggle - hidden, only shown in Voronoi mode -->
+            <div id="voronoi-overlay-toggle" style="display: none; position: absolute; top: 50px; right: 16px; z-index: 9999; background: rgba(22, 33, 62, 0.95); border: 1px solid #00d9a5; border-radius: 4px; padding: 6px 10px;">
+                <label style="display: flex; align-items: center; color: #aaa; font-size: 12px; cursor: pointer;">
+                    <input type="checkbox" id="show-voronoi-overlay" checked style="margin-right: 6px;">
+                    Show regions
+                </label>
             </div>
             <div id="zoom-controls">
                 <button id="zoom-in" title="Zoom in">+</button>

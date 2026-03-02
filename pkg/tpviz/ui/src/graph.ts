@@ -226,18 +226,18 @@ export function processData(): void {
         }
     }
 
-    let countOnline = 0, countOffline = 0, countUnknown = 0;
+    // Count graph visors not in uptime tracker
+    let countUnknown = 0;
     visors.forEach(v => {
         const status = getVisorStatus(v.id);
-        if (status === 'online') countOnline++;
-        else if (status === 'offline') countOffline++;
-        else countUnknown++;
+        if (status === 'unknown') countUnknown++;
     });
 
     document.getElementById('total-transports')!.textContent = String(totalTransports);
     document.getElementById('total-visors')!.textContent = String(visors.size);
-    document.getElementById('count-online')!.textContent = String(countOnline);
-    document.getElementById('count-offline')!.textContent = String(countOffline);
+    // Show uptime tracker totals (not filtered to graph visors)
+    document.getElementById('count-online')!.textContent = String(S.onlineVisors.size);
+    document.getElementById('count-offline')!.textContent = String(S.offlineVisors.size);
     document.getElementById('count-unknown')!.textContent = String(countUnknown);
     document.getElementById('count-stcpr')!.textContent = String(countStcpr);
     document.getElementById('count-sudph')!.textContent = String(countSudph);
