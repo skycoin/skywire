@@ -6,9 +6,8 @@ import "strings"
 
 // draw renders the entire scene
 func (a *App) draw() {
-	a.canvas.Clear(ColorBackground)
-
 	if !a.dataLoaded {
+		a.canvas.Clear(ColorBackground)
 		msg := "Loading transport data..."
 		if a.loadError != "" {
 			msg = "Error: " + a.loadError
@@ -16,6 +15,16 @@ func (a *App) draw() {
 		a.canvas.Text(msg, a.canvas.Width()/2-100, a.canvas.Height()/2, ColorText, "14px sans-serif")
 		return
 	}
+
+	// Globe view rendering
+	if a.globeActive && a.globeRenderer != nil {
+		a.globeRenderer.Update()
+		a.globeRenderer.Render()
+		return
+	}
+
+	// Flat view rendering
+	a.canvas.Clear(ColorBackground)
 
 	// Calculate visible world bounds for culling
 	pad := 50.0 / a.view.Scale
