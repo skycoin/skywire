@@ -10,6 +10,7 @@ export const colors: Record<string, string> = {
     stcpr: '#00d9a5',
     sudph: '#00b4d8',
     dmsg: '#ffd166',
+    route: '#ff00ff',
 };
 
 export const LOCAL_VISOR_COLOR = {
