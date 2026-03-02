@@ -164,3 +164,7 @@ export function setLocalVisorRefreshInterval(i: ReturnType<typeof setInterval> |
 
 // IP group color cache
 export const ipGroupColors: Record<number, string> = {};
+
+// Globe view state
+export let globeViewActive = false;
+export function setGlobeViewActive(active: boolean) { globeViewActive = active; }
