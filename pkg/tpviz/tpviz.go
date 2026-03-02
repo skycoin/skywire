@@ -396,6 +396,28 @@ func (s *Server) setupRoutes() {
 		w.Write(content) //nolint:errcheck,gosec
 	})
 
+	// Serve textures for globe visualization
+	s.mux.HandleFunc("/textures/", func(w http.ResponseWriter, r *http.Request) {
+		// Extract filename from path
+		filename := strings.TrimPrefix(r.URL.Path, "/textures/")
+		if filename == "" {
+			http.NotFound(w, r)
+			return
+		}
+		content, err := legacyFS.ReadFile("legacy/textures/" + filename)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		// Set content type based on extension
+		if strings.HasSuffix(filename, ".jpg") || strings.HasSuffix(filename, ".jpeg") {
+			w.Header().Set("Content-Type", "image/jpeg")
+		} else if strings.HasSuffix(filename, ".png") {
+			w.Header().Set("Content-Type", "image/png")
+		}
+		w.Write(content) //nolint:errcheck,gosec
+	})
+
 	// WASM UI at /wasm
 	s.mux.HandleFunc("/wasm", func(w http.ResponseWriter, r *http.Request) {
 		content, err := wasmDistFS.ReadFile("dist/index.html")

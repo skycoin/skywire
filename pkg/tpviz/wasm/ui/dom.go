@@ -75,6 +75,14 @@ func GetValue(id string) string {
 	return el.Get("value").String()
 }
 
+// SetValue sets the value of an input element
+func SetValue(id, value string) {
+	el := getElement(id)
+	if !el.IsNull() && !el.IsUndefined() {
+		el.Set("value", value)
+	}
+}
+
 // OnEvent registers an event listener on an element by ID
 func OnEvent(id, event string, callback func()) js.Func {
 	el := getElement(id)
