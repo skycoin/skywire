@@ -112,20 +112,20 @@ func (a *App) updateNodeInfo(node *Node) {
 
 // updateSidebarStats updates transport and uptime statistics in the sidebar
 func (a *App) updateSidebarStats() {
-	online, offline, unknown := a.graph.CountByStatus()
+	_, _, unknown := a.graph.CountByStatus()
 	stcpr, sudph, dmsg := a.graph.CountByType()
 
-	// Transport Discovery section (TypeScript IDs)
+	// Transport Discovery section
 	SetText("total-transports", itoa(a.graph.EdgeCount()))
 	SetText("total-visors", itoa(a.graph.NodeCount()))
 	SetText("count-stcpr", itoa(stcpr))
 	SetText("count-sudph", itoa(sudph))
 	SetText("count-dmsg", itoa(dmsg))
+	SetText("count-unknown", itoa(unknown)) // Graph visors not in UT
 
-	// Uptime Tracker section
-	SetText("ut-count-online", itoa(online))
-	SetText("ut-count-offline", itoa(offline))
-	SetText("ut-count-unknown", itoa(unknown))
+	// Uptime Tracker section - show totals from uptime data
+	SetText("count-online", itoa(a.uptimeOnlineCount))
+	SetText("count-offline", itoa(a.uptimeOfflineCount))
 
 	// Update version stats
 	a.updateVersionStats()

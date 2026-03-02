@@ -15,6 +15,7 @@ import { dmsgHealthCheck } from './dmsg';
 import { performPing, updateLocalRouteVisibility } from './ping';
 import { checkServer, fetchAllData } from './api';
 import { startFlowAnimation } from './flow-animation';
+import { showGlobe, hideGlobe, updateGlobeData, isGlobeViewActive, setVoronoiMode, setVoronoiOverlay } from './globe';
 
 export function wireEventListeners(): void {
     // Filter listeners
@@ -186,13 +187,64 @@ export function wireEventListeners(): void {
         }
     });
 
-    // Data initialization
+    // View toggle listeners (Globe vs Flat)
+    const viewGlobeBtn = document.getElementById('view-globe');
+    const viewFlatBtn = document.getElementById('view-flat');
+
+    const clearViewButtons = () => {
+        viewGlobeBtn?.classList.remove('active');
+        viewFlatBtn?.classList.remove('active');
+    };
+
+    if (viewGlobeBtn) {
+        viewGlobeBtn.addEventListener('click', () => {
+            clearViewButtons();
+            viewGlobeBtn.classList.add('active');
+            S.setGlobeViewActive(true);
+            setVoronoiMode(false);
+            showGlobe();
+        });
+    }
+
+    if (viewFlatBtn) {
+        viewFlatBtn.addEventListener('click', () => {
+            clearViewButtons();
+            viewFlatBtn.classList.add('active');
+            S.setGlobeViewActive(false);
+            hideGlobe();
+        });
+    }
+
+    // Data initialization - flat view is default
     checkServer();
     fetchAllData();
     checkTPSStatus();
 
-    // Start data flow animation after a short delay
+    // Start data flow animation after a short delay (for flat view)
     setTimeout(() => {
         startFlowAnimation();
     }, 1000);
+
+    // Update globe when filters change
+    const filterChangeHandler = () => {
+        if (isGlobeViewActive()) {
+            updateGlobeData();
+        }
+    };
+
+    // Voronoi overlay toggle
+    const voronoiOverlayCheckbox = document.getElementById('show-voronoi-overlay') as HTMLInputElement;
+    if (voronoiOverlayCheckbox) {
+        voronoiOverlayCheckbox.addEventListener('change', () => {
+            setVoronoiOverlay(voronoiOverlayCheckbox.checked);
+        });
+    }
+
+    // Add globe update to filter changes
+    document.getElementById('show-stcpr')!.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-sudph')!.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-dmsg')!.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-online')!.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-offline')!.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-unknown')!.addEventListener('change', filterChangeHandler);
 }
