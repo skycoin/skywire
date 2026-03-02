@@ -19,6 +19,17 @@ func (a *App) LoadData() {
 	uptimes, _ := a.fetcher.FetchUptimes()
 	services, _ := a.fetcher.FetchServices()
 
+	// Count uptime totals (from UT data, not filtered to graph)
+	a.uptimeOnlineCount = 0
+	a.uptimeOfflineCount = 0
+	for _, ut := range uptimes {
+		if ut.Online {
+			a.uptimeOnlineCount++
+		} else {
+			a.uptimeOfflineCount++
+		}
+	}
+
 	isFirstLoad := !a.dataLoaded
 
 	graph := ProcessTransports(transports, uptimes, services)
@@ -51,6 +62,11 @@ func (a *App) LoadData() {
 	a.dataLoaded = true
 	a.loadError = ""
 	a.needsRedraw = true
+
+	// Update globe renderer's graph reference
+	if a.globeRenderer != nil {
+		a.globeRenderer.SetGraph(graph)
+	}
 
 	// Update sidebar
 	a.updateSidebarStats()
