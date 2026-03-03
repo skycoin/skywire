@@ -43,7 +43,7 @@ type proxyTestClient interface {
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
 	DoCustomSetting(appName string, customSetting map[string]any) error
-	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool) (*visor.TransportSummary, error)
+	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, skipLatencyProbe bool) (*visor.TransportSummary, error)
 }
 
 // isRPCConnectionError returns true if the error indicates a dead RPC connection
@@ -1402,9 +1402,9 @@ Results show which proxies are reachable and their response latency.`,
 						start := time.Now()
 						rpcMu.Lock()
 						currentClient := getRPCClient()
-						_, err := currentClient.AddTransport(pxy.pk, "stcpr", time.Duration(testTimeout)*time.Second, "", false)
+						_, err := currentClient.AddTransport(pxy.pk, "stcpr", time.Duration(testTimeout)*time.Second, "", false, false)
 						if err != nil {
-							_, err = currentClient.AddTransport(pxy.pk, "sudph", time.Duration(testTimeout)*time.Second, "", false)
+							_, err = currentClient.AddTransport(pxy.pk, "sudph", time.Duration(testTimeout)*time.Second, "", false, false)
 						}
 						rpcMu.Unlock()
 						if err != nil {

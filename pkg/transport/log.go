@@ -455,3 +455,229 @@ func (tls *fileTransportLogStore) cleanLogs(rInterval time.Duration) {
 func (tls *fileTransportLogStore) todayFileName() string {
 	return fmt.Sprintf("%s.csv", time.Now().UTC().Format(dateFormat))
 }
+
+// LatencyCsvEntry represents a logging entry for csv for transport latency.
+type LatencyCsvEntry struct {
+	TpID      uuid.UUID `csv:"tp_id"`
+	MinMs     float64   `csv:"min_ms"`
+	MaxMs     float64   `csv:"max_ms"`
+	AvgMs     float64   `csv:"avg_ms"`
+	TimeStamp int64     `csv:"time_stamp"`
+}
+
+// LatencyLogStore stores transport latency log entries.
+type LatencyLogStore interface {
+	Entry(id uuid.UUID) (*LatencyCsvEntry, error)
+	Record(id uuid.UUID, min, max, avg float64) error
+}
+
+type inMemoryLatencyLogStore struct {
+	entries map[uuid.UUID]*LatencyCsvEntry
+	mu      sync.Mutex
+}
+
+// InMemoryLatencyLogStore implements in-memory LatencyLogStore.
+func InMemoryLatencyLogStore() LatencyLogStore {
+	return &inMemoryLatencyLogStore{
+		entries: make(map[uuid.UUID]*LatencyCsvEntry),
+	}
+}
+
+func (ls *inMemoryLatencyLogStore) Entry(id uuid.UUID) (*LatencyCsvEntry, error) {
+	ls.mu.Lock()
+	entry, ok := ls.entries[id]
+	ls.mu.Unlock()
+	if !ok {
+		return nil, errors.New("latency log entry not found")
+	}
+	return entry, nil
+}
+
+func (ls *inMemoryLatencyLogStore) Record(id uuid.UUID, min, max, avg float64) error {
+	ls.mu.Lock()
+	if ls.entries == nil {
+		ls.entries = make(map[uuid.UUID]*LatencyCsvEntry)
+	}
+	ls.entries[id] = &LatencyCsvEntry{
+		TpID:      id,
+		MinMs:     min,
+		MaxMs:     max,
+		AvgMs:     avg,
+		TimeStamp: time.Now().UTC().Unix(),
+	}
+	ls.mu.Unlock()
+	return nil
+}
+
+type fileLatencyLogStore struct {
+	dir      string
+	log      *logging.Logger
+	mu       sync.Mutex
+	fileName string
+}
+
+// FileLatencyLogStore implements file LatencyLogStore.
+func FileLatencyLogStore(ctx context.Context, dir string, rInterval time.Duration, log *logging.Logger) (LatencyLogStore, error) {
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		return nil, err
+	}
+
+	fLogStore := &fileLatencyLogStore{
+		dir: dir,
+		log: log,
+	}
+
+	go func() {
+		ticker := time.NewTicker(time.Hour * 5)
+		defer ticker.Stop()
+		fLogStore.cleanLogs(rInterval)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				fLogStore.cleanLogs(rInterval)
+			}
+		}
+	}()
+
+	return fLogStore, nil
+}
+
+func (ls *fileLatencyLogStore) Entry(tpID uuid.UUID) (*LatencyCsvEntry, error) {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+
+	entries, err := ls.readFromCSV(ls.todayFileName())
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		if entry.TpID == tpID {
+			return entry, nil
+		}
+	}
+	return nil, nil
+}
+
+func (ls *fileLatencyLogStore) Record(tpID uuid.UUID, min, max, avg float64) error {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+
+	entry := &LatencyCsvEntry{
+		TpID:      tpID,
+		MinMs:     min,
+		MaxMs:     max,
+		AvgMs:     avg,
+		TimeStamp: time.Now().UTC().Unix(),
+	}
+
+	return ls.writeToCSV(entry)
+}
+
+func (ls *fileLatencyLogStore) writeToCSV(entry *LatencyCsvEntry) error {
+	today := ls.todayFileName()
+	if ls.fileName != "" && ls.fileName != ls.todayFileName() {
+		today = ls.fileName
+	}
+
+	filePath := filepath.Join(ls.dir, today)
+
+	//nolint:gosec
+	f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err := f.Close(); err != nil {
+			ls.log.WithError(err).Errorln("Failed to close latency csv file")
+		}
+	}()
+
+	readEntries := []*LatencyCsvEntry{}
+	writeEntries := []*LatencyCsvEntry{}
+
+	if err := gocsv.UnmarshalFile(f, &readEntries); err != nil && !errors.Is(err, gocsv.ErrEmptyCSVFile) {
+		ls.log.WithError(err).Warn("Failed to parse latency CSV, starting fresh")
+		readEntries = []*LatencyCsvEntry{}
+	}
+
+	var update bool
+	for _, existing := range readEntries {
+		if existing.TpID == entry.TpID {
+			writeEntries = append(writeEntries, entry)
+			update = true
+			continue
+		}
+		writeEntries = append(writeEntries, existing)
+	}
+
+	if !update {
+		writeEntries = append(writeEntries, entry)
+	}
+
+	if _, err := f.Seek(0, 0); err != nil {
+		return err
+	}
+
+	if err := f.Truncate(0); err != nil {
+		return err
+	}
+
+	if err := gocsv.MarshalFile(&writeEntries, f); err != nil {
+		return err
+	}
+
+	ls.fileName = ls.todayFileName()
+	return nil
+}
+
+func (ls *fileLatencyLogStore) readFromCSV(fileName string) ([]*LatencyCsvEntry, error) {
+	f, err := os.OpenFile(filepath.Join(ls.dir, fileName), os.O_RDWR|os.O_CREATE, 0600) //nolint:gosec
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err := f.Close(); err != nil {
+			ls.log.WithError(err).Errorln("Failed to close latency csv file")
+		}
+	}()
+
+	entries := []*LatencyCsvEntry{}
+	if err := gocsv.UnmarshalFile(f, &entries); err != nil && !errors.Is(err, gocsv.ErrEmptyCSVFile) {
+		return nil, err
+	}
+	return entries, nil
+}
+
+func (ls *fileLatencyLogStore) cleanLogs(rInterval time.Duration) {
+	files, err := os.ReadDir(ls.dir)
+	if err != nil {
+		ls.log.Warn(err)
+		return
+	}
+
+	for _, file := range files {
+		if !file.IsDir() {
+			interval := time.Now().UTC().Add(-rInterval)
+			date, err := time.Parse(dateFormat, strings.ReplaceAll(file.Name(), ".csv", ""))
+			if err != nil {
+				ls.log.Warn(err)
+				continue
+			}
+			if date.Before(interval) {
+				err = os.Remove(filepath.Join(ls.dir, file.Name()))
+				if err != nil {
+					ls.log.Warn(err)
+				}
+				ls.log.Debugf("latency log file cleaned: %v", file.Name())
+			}
+		}
+	}
+}
+
+func (ls *fileLatencyLogStore) todayFileName() string {
+	return fmt.Sprintf("%s.csv", time.Now().UTC().Format(dateFormat))
+}

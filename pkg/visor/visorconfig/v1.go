@@ -85,6 +85,10 @@ type Transport struct {
 	LogStore          *LogStore       `json:"log_store"`
 	StcprPort         int             `json:"stcpr_port"`
 	SudphPort         int             `json:"sudph_port"`
+	// SyncTPDData enables syncing all transport discovery data on transport re-registration.
+	// When enabled, the visor receives the full TPD dataset in the registration response
+	// for use in local route calculation.
+	SyncTPDData bool `json:"sync_tpd_data,omitempty"`
 }
 
 // TPSDmsgConfig configures the embedded Transport Setup Node's dmsg client.
@@ -112,6 +116,10 @@ type Routing struct {
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 	MinHops            uint16          `json:"min_hops"`
+	// CalculateRoutes enables local route calculation instead of using the route finder service.
+	// When enabled, routes are calculated locally using cached TPD data.
+	// Can be overridden at runtime with --use-rf flag.
+	CalculateRoutes bool `json:"calculate_routes,omitempty"`
 }
 
 // UptimeTracker configures uptime tracker.
@@ -358,6 +366,38 @@ func (v1 *V1) UpdatePublicAutoconnect(pAc bool) error {
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
+}
+
+// UpdateCalculateRoutes updates calculate_routes in routing config
+func (v1 *V1) UpdateCalculateRoutes(enabled bool) error {
+	v1.mu.Lock()
+	v1.Routing.CalculateRoutes = enabled
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
+// GetCalculateRoutes gets calculate_routes from routing config
+func (v1 *V1) GetCalculateRoutes() bool {
+	v1.mu.RLock()
+	defer v1.mu.RUnlock()
+	return v1.Routing.CalculateRoutes
+}
+
+// UpdateSyncTPDData updates sync_tpd_data in transport config
+func (v1 *V1) UpdateSyncTPDData(enabled bool) error {
+	v1.mu.Lock()
+	v1.Transport.SyncTPDData = enabled
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
+// GetSyncTPDData gets sync_tpd_data from transport config
+func (v1 *V1) GetSyncTPDData() bool {
+	v1.mu.RLock()
+	defer v1.mu.RUnlock()
+	return v1.Transport.SyncTPDData
 }
 
 // AddAppConfig add new config to apps if name was not same

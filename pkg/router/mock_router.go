@@ -7,6 +7,7 @@ import (
 	net "net"
 	"time"
 
+	"github.com/google/uuid"
 	mock "github.com/stretchr/testify/mock"
 
 	routing "github.com/skycoin/skywire/pkg/routing"
@@ -352,6 +353,26 @@ func (_m *MockRouter) GetLastRouteCalcTime() time.Duration {
 	}
 
 	return r0
+}
+
+// MeasureTransportLatency provides a mock function with given fields: ctx, remote, tpID
+func (_m *MockRouter) MeasureTransportLatency(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (float64, error) {
+	ret := _m.Called(ctx, remote, tpID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MeasureTransportLatency")
+	}
+
+	var r0 float64
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, cipher.PubKey, uuid.UUID) (float64, error)); ok {
+		r0, r1 = rf(ctx, remote, tpID)
+	} else {
+		r0 = ret.Get(0).(float64)
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // NewMockRouter creates a new instance of MockRouter. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

@@ -106,6 +106,38 @@ func (c *apiClient) RegisterTransports(ctx context.Context, entries ...*transpor
 	return httputil.ErrorFromResp(resp)
 }
 
+// RegisterTransportsWithSync registers new Transports and returns all TPD entries.
+// This endpoint is used when sync_tpd_data is enabled for local route calculation.
+func (c *apiClient) RegisterTransportsWithSync(ctx context.Context, entries ...*transport.SignedEntry) ([]*transport.Entry, error) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+
+	// Use sync=true query param to request all transports in response
+	resp, err := c.Post(ctx, "/transports/?sync=true", entries)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
+
+	if err := httputil.ErrorFromResp(resp); err != nil {
+		return nil, err
+	}
+
+	var allEntries []*transport.Entry
+	if err := json.NewDecoder(resp.Body).Decode(&allEntries); err != nil {
+		return nil, fmt.Errorf("failed to decode TPD sync response: %w", err)
+	}
+
+	c.log.Debugf("TPD sync: received %d transport entries", len(allEntries))
+	return allEntries, nil
+}
+
 // GetTransportByID returns Transport for corresponding ID.
 func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transport.Entry, error) {
 	resp, err := c.Get(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
