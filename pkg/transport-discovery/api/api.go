@@ -119,9 +119,16 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Get("/transports/stats/{edge}", api.getTransportStats)
 	r.Delete("/transports/deregister", api.deregisterTransport)
 
-	// Bandwidth endpoints
+	// Bandwidth endpoints (legacy)
 	r.Get("/bandwidth/transport/{id}", api.getTransportBandwidth)
 	r.Get("/bandwidth/visor/{pk}", api.getVisorBandwidth)
+
+	// Metrics endpoints (new consolidated API)
+	r.Get("/metric", api.getNetworkMetric)
+	r.Get("/metric/visor/{pks}", api.getVisorAggregateMetric)
+	r.Get("/metrics", api.getAllTransportMetrics)
+	r.Get("/metrics/{ids}", api.getTransportMetricsByIDs)
+	r.Get("/metrics/visor/{pks}", api.getTransportMetricsByVisors)
 
 	r.Get("/uptimes", api.getUptimes)
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {

@@ -293,7 +293,7 @@ var addTpCmd = &cobra.Command{
 			if transportType != "" {
 				// Specific transport type requested
 				for attempt := 1; attempt <= retries; attempt++ {
-					tp, tpErr = rpcClient.AddTransport(pk, transportType, timeout, label, noRegister)
+					tp, tpErr = rpcClient.AddTransport(pk, transportType, timeout, label, noRegister, false)
 					if tpErr == nil {
 						if !isJSON {
 							logger.Infof("Established %v transport to %v", transportType, pk)
@@ -325,7 +325,7 @@ var addTpCmd = &cobra.Command{
 			typeLoop:
 				for _, tpType := range transportTypes {
 					for attempt := 1; attempt <= retries; attempt++ {
-						tp, tpErr = rpcClient.AddTransport(pk, string(tpType), timeout, label, noRegister)
+						tp, tpErr = rpcClient.AddTransport(pk, string(tpType), timeout, label, noRegister, false)
 						if tpErr == nil {
 							if !isJSON {
 								logger.Infof("Established %v transport to %v", tpType, pk)
