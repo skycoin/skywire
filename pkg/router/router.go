@@ -400,7 +400,7 @@ func (r *router) setupPingRoute(
 	forwardDesc routing.RouteDescriptor,
 	forwardPath, reversePath []routing.Hop,
 	rPK cipher.PubKey,
-	opts *DialOptions,
+	_ *DialOptions,
 ) (net.Conn, error) {
 	req := routing.BidirectionalRoute{
 		Desc:      forwardDesc,

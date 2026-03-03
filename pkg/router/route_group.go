@@ -573,20 +573,6 @@ func (rg *RouteGroup) sendPong(timestamp int64) error {
 	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 }
 
-func (rg *RouteGroup) pingServiceFn(_ time.Duration) {
-	if err := rg.sendPing(); err != nil {
-		failures := atomic.AddInt32(&rg.consecutiveWriteFailures, 1)
-		if failures >= maxConsecutiveWriteFailures {
-			rg.logger.Warnf("Closing RouteGroup after %d consecutive write failures: %v", failures, err)
-			go func() { rg.Close() }() //nolint:errcheck,gosec
-			return
-		}
-		rg.logger.Warnf("Failed to send network probe: %v", err)
-	} else {
-		atomic.StoreInt32(&rg.consecutiveWriteFailures, 0)
-	}
-}
-
 func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f sendServicePacketFn) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
