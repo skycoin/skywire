@@ -158,6 +158,11 @@ type Router interface {
 	Rule(routing.RouteID) (routing.Rule, error)
 	SaveRule(routing.Rule) error
 	DelRules([]routing.RouteID)
+
+	// MeasureTransportLatency measures the latency of a specific transport by
+	// creating a temporary direct route over that transport, sending a ping,
+	// and measuring the round-trip time. Returns latency in milliseconds.
+	MeasureTransportLatency(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (float64, error)
 }
 
 // Router implements visor.PacketRouter. It manages routing table by
@@ -531,6 +536,70 @@ func (r *router) PingRoute(
 	}
 
 	return nil, fmt.Errorf("failed to establish ping route after %d attempts: %w", maxRetries, lastErr)
+}
+
+// MeasureTransportLatency measures the latency of a specific transport by creating
+// a temporary direct route over that transport, performing multiple ping/pong measurements,
+// and returning latency statistics (min/max/avg). The route is closed after measurement.
+func (r *router) MeasureTransportLatency(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (float64, error) {
+	r.logger.Debugf("Measuring latency for transport %s to %s", tpID, remote)
+
+	// Create ping route using the specific transport (skips route finder)
+	opts := &DialOptions{
+		TransportID: tpID,
+	}
+
+	// Use ephemeral ports for the ping route
+	lPort := routing.Port(skyenv.LatencyProbePort)
+	rPort := routing.Port(skyenv.LatencyProbePort)
+
+	conn, err := r.PingRoute(ctx, remote, lPort, rPort, opts)
+	if err != nil {
+		r.logger.WithError(err).Debugf("Failed to establish ping route for latency measurement on transport %s", tpID)
+		return 0, fmt.Errorf("failed to establish ping route: %w", err)
+	}
+
+	// Ensure we close the route when done
+	defer func() {
+		if err := conn.Close(); err != nil {
+			r.logger.WithError(err).Debug("Failed to close ping route after latency measurement")
+		}
+	}()
+
+	// Get the RouteGroup to perform actual ping/pong measurements
+	rg, ok := conn.(*RouteGroup)
+	if !ok {
+		// Try NoiseRouteGroup
+		if nrg, ok := conn.(*NoiseRouteGroup); ok {
+			rg = nrg.rg
+		} else {
+			return 0, errors.New("unexpected connection type, cannot measure latency")
+		}
+	}
+
+	// Perform multiple ping measurements (5 pings for good statistics)
+	const pingCount = 5
+	min, max, avg, err := rg.MeasureLatency(ctx, pingCount)
+	if err != nil {
+		r.logger.WithError(err).Debugf("Failed to measure latency for transport %s", tpID)
+		return 0, fmt.Errorf("failed to measure latency: %w", err)
+	}
+
+	r.logger.Debugf("Transport %s latency: min=%.2f ms, max=%.2f ms, avg=%.2f ms", tpID, min, max, avg)
+
+	// Set full stats on the transport if accessible
+	r.mx.Lock()
+	if tp := r.tm.Transport(tpID); tp != nil {
+		tp.SetLatencyStats(transport.LatencyStats{
+			Min: min,
+			Max: max,
+			Avg: avg,
+		})
+	}
+	r.mx.Unlock()
+
+	// Return average for backwards compatibility
+	return avg, nil
 }
 
 // AcceptRoutes should block until we receive an AddRules packet from SetupNode

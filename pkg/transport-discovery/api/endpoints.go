@@ -40,6 +40,22 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Check if sync=true query param is set - return all transports for local route calculation
+	syncParam := r.URL.Query().Get("sync")
+	if syncParam == "true" {
+		allEntries, err := api.store.GetAllTransports(r.Context(), false)
+		if err != nil {
+			api.log(r).WithError(err).Error("Error getting all transports for sync")
+			api.writeError(w, r, err)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(allEntries); err != nil {
+			api.writeError(w, r, err)
+		}
+		return
+	}
+
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(entries); err != nil {
 		api.writeError(w, r, err)

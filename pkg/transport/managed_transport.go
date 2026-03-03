@@ -73,8 +73,15 @@ type ManagedTransport struct {
 
 	timeout time.Duration
 
-	latency   float64 // Inter-visor ping latency in milliseconds
-	latencyMx sync.RWMutex
+	latencyStats LatencyStats
+	latencyMx    sync.RWMutex
+}
+
+// LatencyStats holds latency measurement statistics for a transport.
+type LatencyStats struct {
+	Min float64 `json:"min_ms"` // Minimum observed latency in milliseconds
+	Max float64 `json:"max_ms"` // Maximum observed latency in milliseconds
+	Avg float64 `json:"avg_ms"` // Average latency in milliseconds
 }
 
 // NewManagedTransport creates a new ManagedTransport.
@@ -102,18 +109,41 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	return mt
 }
 
-// GetLatency returns the inter-visor ping latency in milliseconds.
+// GetLatency returns the average inter-visor ping latency in milliseconds.
+// For backwards compatibility, returns the average latency.
 func (mt *ManagedTransport) GetLatency() float64 {
 	mt.latencyMx.RLock()
 	defer mt.latencyMx.RUnlock()
-	return mt.latency
+	return mt.latencyStats.Avg
 }
 
-// SetLatency sets the inter-visor ping latency in milliseconds.
+// GetLatencyStats returns the full latency statistics (min/max/avg).
+func (mt *ManagedTransport) GetLatencyStats() LatencyStats {
+	mt.latencyMx.RLock()
+	defer mt.latencyMx.RUnlock()
+	return mt.latencyStats
+}
+
+// SetLatency sets the average inter-visor ping latency in milliseconds.
+// For backwards compatibility; prefer SetLatencyStats for full statistics.
 func (mt *ManagedTransport) SetLatency(latencyMs float64) {
 	mt.latencyMx.Lock()
 	defer mt.latencyMx.Unlock()
-	mt.latency = latencyMs
+	mt.latencyStats.Avg = latencyMs
+	// If min/max not set, initialize them
+	if mt.latencyStats.Min == 0 || latencyMs < mt.latencyStats.Min {
+		mt.latencyStats.Min = latencyMs
+	}
+	if latencyMs > mt.latencyStats.Max {
+		mt.latencyStats.Max = latencyMs
+	}
+}
+
+// SetLatencyStats sets the full latency statistics.
+func (mt *ManagedTransport) SetLatencyStats(stats LatencyStats) {
+	mt.latencyMx.Lock()
+	defer mt.latencyMx.Unlock()
+	mt.latencyStats = stats
 }
 
 // GetBandwidth returns the current cumulative bandwidth for this transport.

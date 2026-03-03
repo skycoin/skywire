@@ -412,14 +412,15 @@ func (rc *rpcClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport calls AddTransport.
-func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool) (*TransportSummary, error) {
+func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, skipLatencyProbe bool) (*TransportSummary, error) {
 	var summary TransportSummary
 	err := rc.Call("AddTransport", &AddTransportIn{
-		RemotePK:   remote,
-		TpType:     tpType,
-		Timeout:    timeout,
-		Label:      label,
-		NoRegister: noRegister,
+		RemotePK:         remote,
+		TpType:           tpType,
+		Timeout:          timeout,
+		Label:            label,
+		NoRegister:       noRegister,
+		SkipLatencyProbe: skipLatencyProbe,
 	}, &summary)
 
 	return &summary, err
@@ -538,6 +539,32 @@ func (rc *rpcClient) RuntimeLogs() (string, error) {
 func (rc *rpcClient) SetMinHops(hops uint16) error {
 	err := rc.Call("SetMinHops", &hops, &struct{}{})
 	return err
+}
+
+// SetCalculateRoutes sets the calculate_routes from visor routing config
+func (rc *rpcClient) SetCalculateRoutes(enabled bool) error {
+	err := rc.Call("SetCalculateRoutes", &enabled, &struct{}{})
+	return err
+}
+
+// GetCalculateRoutes gets the calculate_routes from visor routing config
+func (rc *rpcClient) GetCalculateRoutes() (bool, error) {
+	var enabled bool
+	err := rc.Call("GetCalculateRoutes", &struct{}{}, &enabled)
+	return enabled, err
+}
+
+// SetSyncTPDData sets the sync_tpd_data from visor transport config
+func (rc *rpcClient) SetSyncTPDData(enabled bool) error {
+	err := rc.Call("SetSyncTPDData", &enabled, &struct{}{})
+	return err
+}
+
+// GetSyncTPDData gets the sync_tpd_data from visor transport config
+func (rc *rpcClient) GetSyncTPDData() (bool, error) {
+	var enabled bool
+	err := rc.Call("GetSyncTPDData", &struct{}{}, &enabled)
+	return enabled, err
 }
 
 // SetPersistentTransports sets the persistent_transports from visor routing config
@@ -1469,7 +1496,7 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ time.Duration, _ string, _ bool) (*TransportSummary, error) {
+func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ time.Duration, _ string, _ bool, _ bool) (*TransportSummary, error) {
 	summary := &TransportSummary{
 		ID:     transport.MakeTransportID(mc.o.PubKey, remote, types.Type(tpType)),
 		Local:  mc.o.PubKey,
@@ -1608,6 +1635,26 @@ func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 // SetMinHops implements API
 func (mc *mockRPCClient) SetMinHops(_ uint16) error {
 	return nil
+}
+
+// SetCalculateRoutes implements API
+func (mc *mockRPCClient) SetCalculateRoutes(_ bool) error {
+	return nil
+}
+
+// GetCalculateRoutes implements API
+func (mc *mockRPCClient) GetCalculateRoutes() (bool, error) {
+	return false, nil
+}
+
+// SetSyncTPDData implements API
+func (mc *mockRPCClient) SetSyncTPDData(_ bool) error {
+	return nil
+}
+
+// GetSyncTPDData implements API
+func (mc *mockRPCClient) GetSyncTPDData() (bool, error) {
+	return false, nil
 }
 
 // SetPersistentTransports implements API

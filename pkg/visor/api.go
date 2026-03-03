@@ -117,7 +117,7 @@ type API interface {
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
 	Transport(tid uuid.UUID) (*TransportSummary, error)
-	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool) (*TransportSummary, error)
+	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, skipLatencyProbe bool) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
 	RemoveAllTransports() error
 	SetPublicAutoconnect(pAc bool) error
@@ -138,6 +138,10 @@ type API interface {
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
 	SetMinHops(uint16) error
+	SetCalculateRoutes(enabled bool) error
+	GetCalculateRoutes() (bool, error)
+	SetSyncTPDData(enabled bool) error
+	GetSyncTPDData() (bool, error)
 
 	RegisterHTTPPort(localPort int) error
 	DeregisterHTTPPort(localPort int) error
@@ -1409,7 +1413,7 @@ func (v *Visor) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool) (*TransportSummary, error) {
+func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, skipLatencyProbe bool) (*TransportSummary, error) {
 	if v.tpM == nil {
 		return nil, ErrTrpMangerNotAvailable
 	}
@@ -1433,15 +1437,14 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.D
 		return nil, fmt.Errorf("--no-register flag is only valid for user-labeled transports")
 	}
 
-	v.log.Debugf("Saving transport to %v via %v with label %s", remote, tpType, tpLabel)
+	v.log.Debugf("Saving transport to %v via %v with label %s (skipLatencyProbe=%v)", remote, tpType, tpLabel, skipLatencyProbe)
 
-	var tp *transport.ManagedTransport
-	var err error
-	if noRegister {
-		tp, err = v.tpM.SaveTransportNoRegister(ctx, remote, types.Type(tpType), tpLabel)
-	} else {
-		tp, err = v.tpM.SaveTransport(ctx, remote, types.Type(tpType), tpLabel)
+	opts := transport.SaveTransportOptions{
+		NoRegister:       noRegister,
+		SkipLatencyProbe: skipLatencyProbe,
 	}
+
+	tp, err := v.tpM.SaveTransportWithOptions(ctx, remote, types.Type(tpType), tpLabel, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -2858,6 +2861,30 @@ func (v *Visor) RuntimeLogs() (string, error) {
 func (v *Visor) SetMinHops(in uint16) error {
 	v.router.SetMinHop(in)
 	return v.conf.UpdateMinHops(in)
+}
+
+// SetCalculateRoutes sets calculate_routes routing config of visor
+func (v *Visor) SetCalculateRoutes(enabled bool) error {
+	// Update router's local route calculation setting
+	v.router.SetForceLocalRoutes(enabled)
+	return v.conf.UpdateCalculateRoutes(enabled)
+}
+
+// GetCalculateRoutes gets calculate_routes routing config of visor
+func (v *Visor) GetCalculateRoutes() (bool, error) {
+	return v.conf.GetCalculateRoutes(), nil
+}
+
+// SetSyncTPDData sets sync_tpd_data transport config of visor
+func (v *Visor) SetSyncTPDData(enabled bool) error {
+	// Update transport manager's TPD sync setting
+	v.tpM.SetSyncTPDData(enabled)
+	return v.conf.UpdateSyncTPDData(enabled)
+}
+
+// GetSyncTPDData gets sync_tpd_data transport config of visor
+func (v *Visor) GetSyncTPDData() (bool, error) {
+	return v.conf.GetSyncTPDData(), nil
 }
 
 // SetPersistentTransports sets min_hops routing config of visor
