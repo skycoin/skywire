@@ -155,7 +155,7 @@ func (env *TestEnv) waitForHTTPEndpoint(t *testing.T, host string, port int, tim
 	for time.Now().Before(deadline) {
 		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 		if err == nil {
-			conn.Close()
+			_ = conn.Close()
 			env.logger.Infof("HTTP endpoint %s is ready", addr)
 			return
 		}
