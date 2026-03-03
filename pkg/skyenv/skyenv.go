@@ -45,6 +45,9 @@ const (
 	// TransportPort Listening port of a visor for incoming transports.
 	TransportPort uint16 = 45
 
+	// LatencyProbePort is the port used for transport latency measurement probes.
+	LatencyProbePort uint16 = 46
+
 	// PublicAutoconnect determines if the visor automatically creates stcpr transports to public visors
 	PublicAutoconnect = true
 
@@ -175,6 +178,9 @@ const (
 
 	// TpLogStore is where tp logs are stored
 	TpLogStore = "transport_logs"
+
+	// LatencyLogStore is where transport latency logs are stored
+	LatencyLogStore = "latency_logs"
 
 	// Custom path to serve files from dmsghttp log server over dmsg
 	Custom = "custom"

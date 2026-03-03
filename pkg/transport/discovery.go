@@ -15,6 +15,9 @@ import (
 // DiscoveryClient performs Transport discovery operations.
 type DiscoveryClient interface {
 	RegisterTransports(ctx context.Context, entries ...*SignedEntry) error
+	// RegisterTransportsWithSync registers transports and returns all TPD entries in the response.
+	// Used when sync_tpd_data is enabled for local route calculation.
+	RegisterTransportsWithSync(ctx context.Context, entries ...*SignedEntry) ([]*Entry, error)
 	GetTransportByID(ctx context.Context, id uuid.UUID) (*Entry, error)
 	GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*Entry, error)
 	GetAllTransports(ctx context.Context) ([]*Entry, error)
@@ -62,6 +65,13 @@ func (td *mockDiscoveryClient) RegisterTransports(_ context.Context, entries ...
 	td.Unlock()
 
 	return nil
+}
+
+func (td *mockDiscoveryClient) RegisterTransportsWithSync(ctx context.Context, entries ...*SignedEntry) ([]*Entry, error) {
+	if err := td.RegisterTransports(ctx, entries...); err != nil {
+		return nil, err
+	}
+	return td.GetAllTransports(ctx)
 }
 
 func (td *mockDiscoveryClient) GetTransportByID(_ context.Context, id uuid.UUID) (*Entry, error) {
@@ -210,6 +220,10 @@ func NewNoopDiscoveryClient() DiscoveryClient {
 
 func (nd *noopDiscoveryClient) RegisterTransports(_ context.Context, _ ...*SignedEntry) error {
 	return nil
+}
+
+func (nd *noopDiscoveryClient) RegisterTransportsWithSync(_ context.Context, _ ...*SignedEntry) ([]*Entry, error) {
+	return nil, nil
 }
 
 func (nd *noopDiscoveryClient) GetTransportByID(_ context.Context, _ uuid.UUID) (*Entry, error) {

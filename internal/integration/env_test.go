@@ -122,19 +122,48 @@ func (env *TestEnv) VisorAppLs(visor string) ([]AppState, error) {
 	return cliOutput.Output, nil
 }
 
-// VerifyAppRunning checks if an app is running and fails the test if not
+// VerifyAppRunning checks if an app is running and fails the test if not.
+// For apps with HTTP endpoints (like skychat), it also verifies the endpoint is ready.
 func (env *TestEnv) VerifyAppRunning(t *testing.T, visor, appName string) {
 	apps, err := env.VisorAppLs(visor)
 	require.NoError(t, err, "Failed to list apps on %s", visor)
 
+	found := false
 	for _, app := range apps {
 		if app.App == appName {
 			require.Equal(t, "running", app.Status, "App %s on %s is not running (status: %s)", appName, visor, app.Status)
-			return
+			found = true
+			break
 		}
 	}
 
-	t.Fatalf("App %s not found on %s", appName, visor)
+	if !found {
+		t.Fatalf("App %s not found on %s", appName, visor)
+	}
+
+	// For skychat, verify the HTTP endpoint is actually ready to accept connections
+	if appName == "skychat" {
+		env.waitForHTTPEndpoint(t, visor, 8001, 10*time.Second)
+	}
+}
+
+// waitForHTTPEndpoint waits for an HTTP endpoint to be ready to accept connections
+func (env *TestEnv) waitForHTTPEndpoint(t *testing.T, host string, port int, timeout time.Duration) {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+		if err == nil {
+			_ = conn.Close()
+			env.logger.Infof("HTTP endpoint %s is ready", addr)
+			return
+		}
+		env.logger.Debugf("Waiting for HTTP endpoint %s: %v", addr, err)
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	t.Fatalf("HTTP endpoint %s not ready after %v", addr, timeout)
 }
 
 func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
@@ -1159,15 +1188,32 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(data))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("content-type", "application/json")
 	hc := http.Client{
 		Timeout: 30 * time.Second,
 	}
-	return hc.Do(req)
+
+	// Retry with backoff to handle race conditions where the app is starting
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Add("content-type", "application/json")
+
+		resp, err = hc.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+
+		// Check if this is a connection error worth retrying
+		if i < maxRetries-1 {
+			env.logger.Warnf("SendSkyMessage attempt %d/%d failed: %v, retrying...", i+1, maxRetries, err)
+			time.Sleep(time.Duration(i+1) * 500 * time.Millisecond)
+		}
+	}
+
+	return nil, err
 }
 
 func (env *TestEnv) NewProxyClient(clientNode, user, password string) (*http.Client, error) {

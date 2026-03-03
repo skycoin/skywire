@@ -354,7 +354,7 @@ var addPvCmd = &cobra.Command{
 			if pvTransportType != "" {
 				// Specific transport type requested
 				for attempt := 1; attempt <= pvRetries; attempt++ {
-					tp, tpErr = rpcClient.AddTransport(cipherPK, pvTransportType, pvTimeout, "", false)
+					tp, tpErr = rpcClient.AddTransport(cipherPK, pvTransportType, pvTimeout, "", false, false)
 					if tpErr == nil {
 						if !isJSON {
 							logger.Infof("  Established %v transport", pvTransportType)
@@ -385,7 +385,7 @@ var addPvCmd = &cobra.Command{
 			typeLoop:
 				for _, tpType := range transportTypes {
 					for attempt := 1; attempt <= pvRetries; attempt++ {
-						tp, tpErr = rpcClient.AddTransport(cipherPK, string(tpType), pvTimeout, "", false)
+						tp, tpErr = rpcClient.AddTransport(cipherPK, string(tpType), pvTimeout, "", false, false)
 						if tpErr == nil {
 							if !isJSON {
 								logger.Infof("  Established %v transport", tpType)
