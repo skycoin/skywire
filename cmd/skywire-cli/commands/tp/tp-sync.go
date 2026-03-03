@@ -3,7 +3,6 @@ package clitp
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -24,30 +23,11 @@ func init() {
 var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Control transport discovery data sync",
-	Long: func() string {
-		long := `Control transport discovery data sync (bandwidth/latency)
+	Long: `Control transport discovery data sync (bandwidth/latency)
 
 	skywire cli tp sync           - show status
 	skywire cli tp sync --enable  - enable sync
-	skywire cli tp sync --disable - disable sync
-`
-		// Try to get current status from running visor
-		rpcClient, err := clirpc.Client(nil)
-		if err != nil {
-			return long
-		}
-		status, err := rpcClient.GetSyncTPDData()
-		if err != nil {
-			if strings.Contains(err.Error(), "method") {
-				return long + fmt.Sprintf("\n\tError: %v\n", err)
-			}
-			return long
-		}
-		if status {
-			return long + "\n\tCurrent status: enabled\n"
-		}
-		return long + "\n\tCurrent status: disabled\n"
-	}(),
+	skywire cli tp sync --disable - disable sync`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		if syncEnable && syncDisable {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot use both --enable and --disable"))

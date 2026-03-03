@@ -47,30 +47,12 @@ func init() {
 var calcCmd = &cobra.Command{
 	Use:   "calc [<src-pk>] <dst-pk>",
 	Short: "Calculate routes locally or control visor's local route calculation",
-	Long: func() string {
-		long := `Calculate routes locally using transport discovery data
+	Long: `Calculate routes locally using transport discovery data
 
 	skywire cli route calc <dst-pk>           - calculate route to destination
 	skywire cli route calc <src-pk> <dst-pk>  - calculate route between two visors
 	skywire cli route calc --enable           - enable local route calculation in visor
-	skywire cli route calc --disable          - disable local route calculation in visor
-`
-		rpcClient, err := clirpc.Client(nil)
-		if err != nil {
-			return long
-		}
-		status, err := rpcClient.GetCalculateRoutes()
-		if err != nil {
-			if strings.Contains(err.Error(), "method") {
-				return long + fmt.Sprintf("\n\tError: %v\n", err)
-			}
-			return long
-		}
-		if status {
-			return long + "\n\tVisor local route calculation: enabled\n"
-		}
-		return long + "\n\tVisor local route calculation: disabled\n"
-	}(),
+	skywire cli route calc --disable          - disable local route calculation in visor`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if calcEnable && calcDisable {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot use both --enable and --disable"))
