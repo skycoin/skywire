@@ -69,6 +69,26 @@ func (m *mockStore) BackupAndCleanOldBandwidth(_ context.Context, _ string) erro
 	return nil
 }
 
+func (m *mockStore) GetNetworkMetrics(_ context.Context, _ tpdstore.MetricsQuery) (*tpdstore.NetworkMetricResponse, error) {
+	return &tpdstore.NetworkMetricResponse{}, nil
+}
+
+func (m *mockStore) GetVisorAggregateMetrics(_ context.Context, _ []cipher.PubKey, _ tpdstore.MetricsQuery) (map[string]*tpdstore.VisorMetricResponse, error) {
+	return make(map[string]*tpdstore.VisorMetricResponse), nil
+}
+
+func (m *mockStore) GetAllTransportMetrics(_ context.Context, _ tpdstore.MetricsQuery) ([]tpdstore.TransportMetric, error) {
+	return []tpdstore.TransportMetric{}, nil
+}
+
+func (m *mockStore) GetTransportMetricsByIDs(_ context.Context, _ []uuid.UUID, _ tpdstore.MetricsQuery) ([]tpdstore.TransportMetric, error) {
+	return []tpdstore.TransportMetric{}, nil
+}
+
+func (m *mockStore) GetTransportMetricsByVisors(_ context.Context, _ []cipher.PubKey, _ tpdstore.MetricsQuery) ([]tpdstore.TransportMetric, error) {
+	return []tpdstore.TransportMetric{}, nil
+}
+
 // SaveEntry is added to the mock to allow saving Entry, without need for SignedEntry
 func (m *mockStore) SaveEntry(source, destiny cipher.PubKey, _ bool) {
 	entry := &transport.Entry{

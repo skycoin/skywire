@@ -24,7 +24,6 @@ import (
 
 const (
 	defaultRouteGroupKeepAliveInterval = DefaultRouteKeepAlive / 2
-	defaultPingInterval                = 3 * time.Second
 	defaultReadChBufSize               = 1024
 	closeRoutineTimeout                = 2 * time.Second
 	// maxConsecutiveWriteFailures is the number of consecutive transport write failures
@@ -59,7 +58,6 @@ type sendServicePacketFn func(interval time.Duration)
 type RouteGroupConfig struct {
 	ReadChBufSize     int
 	KeepAliveInterval time.Duration
-	PingInterval      time.Duration
 }
 
 // DefaultRouteGroupConfig returns default RouteGroup config.
@@ -67,7 +65,6 @@ type RouteGroupConfig struct {
 func DefaultRouteGroupConfig() *RouteGroupConfig {
 	return &RouteGroupConfig{
 		KeepAliveInterval: defaultRouteGroupKeepAliveInterval,
-		PingInterval:      defaultPingInterval,
 		ReadChBufSize:     defaultReadChBufSize,
 	}
 }
@@ -131,6 +128,10 @@ type RouteGroup struct {
 
 	errorMu    sync.RWMutex
 	closeError error
+
+	// For synchronous latency measurement
+	pendingPongCh chan float64 // Receives measured latency when pong arrives
+	pendingPongMu sync.Mutex
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -521,7 +522,7 @@ func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
 
 func (rg *RouteGroup) startOffServiceLoops() {
 	go rg.servicePacketLoop("keep-alive", rg.cfg.KeepAliveInterval, rg.keepAliveServiceFn)
-	go rg.servicePacketLoop("ping", rg.cfg.PingInterval, rg.pingServiceFn)
+	// Note: Automatic ping loop removed. Latency is now measured once at transport creation.
 }
 
 func (rg *RouteGroup) sendPing() error {
@@ -570,20 +571,6 @@ func (rg *RouteGroup) sendPong(timestamp int64) error {
 	packet := routing.MakePongPacket(rule.NextRouteID(), timestamp)
 
 	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
-}
-
-func (rg *RouteGroup) pingServiceFn(_ time.Duration) {
-	if err := rg.sendPing(); err != nil {
-		failures := atomic.AddInt32(&rg.consecutiveWriteFailures, 1)
-		if failures >= maxConsecutiveWriteFailures {
-			rg.logger.Warnf("Closing RouteGroup after %d consecutive write failures: %v", failures, err)
-			go func() { rg.Close() }() //nolint:errcheck,gosec
-			return
-		}
-		rg.logger.Warnf("Failed to send network probe: %v", err)
-	} else {
-		atomic.StoreInt32(&rg.consecutiveWriteFailures, 0)
-	}
 }
 
 func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f sendServicePacketFn) {
@@ -856,6 +843,17 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 
 	rg.networkStats.SetLatency(uint32(latencyMs)) //nolint: gosec
 
+	// If there's a pending synchronous measurement, send the result
+	rg.pendingPongMu.Lock()
+	if rg.pendingPongCh != nil {
+		select {
+		case rg.pendingPongCh <- latencyMs:
+		default:
+			// Channel full or closed, ignore
+		}
+	}
+	rg.pendingPongMu.Unlock()
+
 	// Propagate ping latency to the underlying transport so it gets
 	// reported to TPD during re-registration.
 	rg.mu.Lock()
@@ -865,6 +863,78 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 	rg.mu.Unlock()
 
 	return nil
+}
+
+// MeasureLatency performs multiple ping/pong measurements and returns statistics.
+// It sends 'count' pings, waits for pongs, and calculates min/max/avg latency.
+// Returns the stats and any error. Partial results are returned if some pings fail.
+func (rg *RouteGroup) MeasureLatency(ctx context.Context, count int) (min, max, avg float64, err error) {
+	if count <= 0 {
+		count = 5 // Default to 5 measurements
+	}
+
+	// Set up channel for receiving pong responses
+	pongCh := make(chan float64, count)
+	rg.pendingPongMu.Lock()
+	rg.pendingPongCh = pongCh
+	rg.pendingPongMu.Unlock()
+
+	defer func() {
+		rg.pendingPongMu.Lock()
+		rg.pendingPongCh = nil
+		rg.pendingPongMu.Unlock()
+		close(pongCh)
+	}()
+
+	var measurements []float64
+	timeout := 5 * time.Second // Timeout per ping
+
+	for i := 0; i < count; i++ {
+		// Send ping
+		if err := rg.sendPing(); err != nil {
+			rg.logger.WithError(err).Debugf("Failed to send ping %d/%d", i+1, count)
+			continue
+		}
+
+		// Wait for pong with timeout
+		select {
+		case latencyMs := <-pongCh:
+			measurements = append(measurements, latencyMs)
+			rg.logger.Debugf("Ping %d/%d: %.2f ms", i+1, count, latencyMs)
+		case <-time.After(timeout):
+			rg.logger.Debugf("Ping %d/%d timed out", i+1, count)
+		case <-ctx.Done():
+			return 0, 0, 0, ctx.Err()
+		case <-rg.closed:
+			return 0, 0, 0, errors.New("route group closed")
+		}
+
+		// Small delay between pings to avoid overwhelming the connection
+		if i < count-1 {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	if len(measurements) == 0 {
+		return 0, 0, 0, errors.New("no successful ping measurements")
+	}
+
+	// Calculate statistics
+	min = measurements[0]
+	max = measurements[0]
+	var sum float64
+	for _, m := range measurements {
+		if m < min {
+			min = m
+		}
+		if m > max {
+			max = m
+		}
+		sum += m
+	}
+	avg = sum / float64(len(measurements))
+
+	return min, max, avg, nil
 }
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {

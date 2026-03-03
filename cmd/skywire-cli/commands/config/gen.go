@@ -211,6 +211,10 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "sn")
 	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override")
 	gHiddenFlags = append(gHiddenFlags, "version")
+	genConfigCmd.Flags().BoolVar(&enableCalculateRoutes, "calculate-routes", scriptExecBool("${CALCULATEROUTES:-false}"), "enable local route calculation")
+	gHiddenFlags = append(gHiddenFlags, "calculate-routes")
+	genConfigCmd.Flags().BoolVar(&enableSyncTPDData, "sync-tpd-data", scriptExecBool("${SYNCTPDDATA:-false}"), "enable transport discovery data sync (bandwidth/latency)")
+	gHiddenFlags = append(gHiddenFlags, "sync-tpd-data")
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 
 	//show all flags on help
@@ -607,14 +611,16 @@ var genConfigCmd = &cobra.Command{
 				Location:         visorconfig.LocalPath + "/" + visorconfig.TpLogStore,
 				RotationInterval: visorconfig.DefaultLogRotationInterval,
 			},
-			SudphPort: sudphPort,
-			StcprPort: stcprPort,
+			SudphPort:   sudphPort,
+			StcprPort:   stcprPort,
+			SyncTPDData: enableSyncTPDData,
 		}
 		conf.Routing = &visorconfig.Routing{
 			RouteFinder:        services.RouteFinder,     //utilenv.RouteFinderAddr,
 			RouteSetupNodes:    services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
 			RouteFinderTimeout: visorconfig.DefaultTimeout,
 			MinHops:            1,
+			CalculateRoutes:    enableCalculateRoutes,
 		}
 
 		if oldConf.Routing != nil {
@@ -1112,6 +1118,9 @@ const envfileLinux = `#
 #-- Add transport setup public keys
 #TPSETUPPKS('')
 
+#--	Enable transport discovery data sync (bandwidth/latency)
+#SYNCTPDDATA=true
+
 ### Ports ###############################################################
 
 #- set port for UDP connections / SUDPH transports
@@ -1124,6 +1133,9 @@ const envfileLinux = `#
 
 #-- Add route setup-node public keys
 #ROUTESETUPPKS('')
+
+#--	Enable local route calculation (instead of using route finder)
+#CALCULATEROUTES=true
 
 ### Remote Access #######################################################
 
@@ -1260,6 +1272,9 @@ const envfileWindows = `#
 #--	Add transport setup public keys
 #$TPSETUPPKS=@('')
 
+#--	Enable transport discovery data sync (bandwidth/latency)
+#$SYNCTPDDATA=$true
+
 ### Ports ###############################################################
 
 #- set port for UDP connections / SUDPH transports
@@ -1272,6 +1287,9 @@ const envfileWindows = `#
 
 #--	Add route setup-node public keys
 #$ROUTESETUPPKS=@('')
+
+#--	Enable local route calculation (instead of using route finder)
+#$CALCULATEROUTES=$true
 
 ### Remote Access #######################################################
 

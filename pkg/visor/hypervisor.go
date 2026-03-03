@@ -906,7 +906,7 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 		}
 
 		const timeout = 30 * time.Second
-		tSummary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, timeout, reqBody.Label, reqBody.NoRegister)
+		tSummary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, timeout, reqBody.Label, reqBody.NoRegister, false)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
