@@ -366,7 +366,24 @@ Registers one or multiple Transports. This endpoint is also used for re-registra
 
 ```
 POST /transports/
+POST /transports/?sync=true
 ```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `sync` | boolean | false | When `true`, the response contains all registered transports instead of just the submitted entries. Used for local route calculation. |
+
+**TPD Data Sync:**
+
+When `sync=true` is specified, the Transport Discovery returns all registered transports in the response instead of echoing back the submitted entries. This enables visors to cache the full transport graph locally for:
+
+- **Local route calculation** - Computing routes without querying the Route Finder service
+- **Reduced API calls** - Obtaining transport data as a side-effect of periodic re-registration
+- **Offline route planning** - Building routes when external services are unavailable
+
+Visors with `sync_tpd_data` enabled in their configuration automatically use this parameter during the 90-second re-registration cycle.
 
 **Request Body:**
 
@@ -402,7 +419,7 @@ POST /transports/
 | `bandwidth.sent_bytes` | integer | No | Total bytes sent over this transport (cumulative) |
 | `bandwidth.recv_bytes` | integer | No | Total bytes received over this transport (cumulative) |
 
-**Response:**
+**Response (default):**
 
 - 201 Created (Success).
     ```json
@@ -420,13 +437,44 @@ POST /transports/
     ]
     ```
 
-**Response Fields:**
+**Response (with `sync=true`):**
+
+- 201 Created (Success).
+    ```json
+    [
+        {
+            "t_id": "<transport-id-1>",
+            "edges": ["<public-key-1>", "<public-key-2>"],
+            "type": "stcpr",
+            "public": true
+        },
+        {
+            "t_id": "<transport-id-2>",
+            "edges": ["<public-key-3>", "<public-key-4>"],
+            "type": "sudph",
+            "public": true
+        }
+    ]
+    ```
+
+**Response Fields (default):**
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `entry` | object | The registered transport entry |
 | `signatures` | array | The signatures provided during registration |
 | `registered` | integer | Unix timestamp when the transport was first registered |
+
+**Response Fields (with `sync=true`):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `t_id` | string | Transport UUID |
+| `edges` | array | Array of two public keys (the transport endpoints) |
+| `type` | string | Transport type: `stcpr`, `sudph`, or `dmsg` |
+| `public` | boolean | Whether this transport is publicly visible |
+
+**Note:** When `sync=true`, the response format matches the `/all-transports` endpoint, returning simplified transport entries without signatures or registration timestamps.
 
 **Error Responses:**
 
@@ -1185,7 +1233,7 @@ GET /health
 | `/transports/id:{id}` | GET | Yes | Get transport by ID |
 | `/transports/edge:{pk}` | GET | Yes | Get transports by edge |
 | `/transports/stats/{pk}` | GET | No | Get transport stats for edge |
-| `/transports/` | POST | Yes | Register transport(s) |
+| `/transports/` | POST | Yes | Register transport(s) (supports `sync` param for TPD data sync) |
 | `/transports/id:{id}` | DELETE | Yes | Delete a transport |
 | `/transports/delete-batch` | POST | Yes | Delete multiple transports |
 | `/all-transports` | GET | No | Get all transports |

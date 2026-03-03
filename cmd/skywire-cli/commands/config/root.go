@@ -100,6 +100,8 @@ var (
 	dmsgHTTPPath                string
 	snConfig                    bool
 	externalApps                bool
+	enableCalculateRoutes       bool
+	enableSyncTPDData           bool
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor

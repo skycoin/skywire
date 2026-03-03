@@ -55,6 +55,7 @@ var (
 	dmsgServer     string
 	isStoreLog     bool
 	isForceColor   bool
+	useRouteFinder bool // override local route calculation to use route finder
 )
 
 // TODO: fix gocyclo error.
@@ -135,6 +136,8 @@ func init() {
 	RootCmd.Flags().BoolVar(&isForceColor, "forcecolor", false, "force color logging when out is not STDOUT")
 	hiddenflags = append(hiddenflags, "forcecolor")
 	RootCmd.Flags().BoolVar(&useCsrf, "csrf", true, "Request a CSRF token for sensitive hypervisor API requests")
+	RootCmd.Flags().BoolVar(&useRouteFinder, "use-rf", false, "force use of route finder (disable local route calculation)")
+	hiddenflags = append(hiddenflags, "use-rf")
 	RootCmd.Flags().BoolVar(&all, "all", false, "show all flags") //newline here is important
 	hiddenflags = append(hiddenflags, "csrf")
 	for _, j := range hiddenflags {
@@ -315,6 +318,12 @@ func initConfig() *visorconfig.V1 {
 	}
 	if noHypervisorUI {
 		conf.Hypervisor = nil
+	}
+
+	// Override local route calculation if --use-rf flag is set
+	if useRouteFinder {
+		conf.Routing.CalculateRoutes = false
+		log.Info("Local route calculation disabled by --use-rf flag, using route finder")
 	}
 
 	visorconfig.VisorConfigFile = confPath

@@ -38,9 +38,15 @@ type ManagerConfig struct {
 	SecKey                    cipher.SecKey
 	DiscoveryClient           DiscoveryClient
 	LogStore                  LogStore
+	LatencyLogStore           LatencyLogStore
 	PersistentTransportsCache []PersistentTransports
 	PTpsCacheMu               sync.RWMutex
 }
+
+// TransportCreatedCallback is called after a transport is successfully created.
+// It receives the remote public key and transport ID, and can return a latency measurement.
+// If latency > 0, it will be set on the transport.
+type TransportCreatedCallback func(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (latencyMs float64)
 
 // Manager manages Transports.
 type Manager struct {
@@ -60,6 +66,19 @@ type Manager struct {
 
 	factory    network.ClientFactory
 	netClients map[types.Type]network.Client
+
+	// onTransportCreated is called after a transport is successfully established.
+	// Used by the visor to measure transport latency via the router.
+	onTransportCreated   TransportCreatedCallback
+	onTransportCreatedMu sync.RWMutex
+
+	// syncTPDData enables syncing all TPD data on transport re-registration
+	syncTPDData   bool
+	syncTPDDataMu sync.RWMutex
+
+	// tpdCache stores the cached transport discovery data for local route calculation
+	tpdCache   []*Entry
+	tpdCacheMu sync.RWMutex
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -122,7 +141,7 @@ func (tm *Manager) reconnectPersistent(ctx context.Context) {
 	for _, remote := range tm.getPTpsCache() {
 		tm.Logger.Debugf("Reconnecting to persistent transport to %s, type %s", remote.PK, remote.NetType)
 		deadlined, cancel := context.WithTimeout(ctx, reconnectRemoteTimeout)
-		_, err := tm.saveTransport(deadlined, remote.PK, remote.NetType, LabelUser)
+		_, err := tm.saveTransportInternal(deadlined, remote.PK, remote.NetType, LabelUser, SaveTransportOptions{})
 		if err != nil {
 			tm.Logger.WithError(err).
 				WithField("remote_pk", remote.PK).
@@ -173,6 +192,18 @@ func (tm *Manager) reRegisterTransports(ctx context.Context) {
 
 	tm.Logger.Debugf("Re-registering %d transports with discovery", len(entries))
 
+	// Check if TPD sync is enabled
+	if tm.GetSyncTPDData() {
+		allEntries, err := tm.Conf.DiscoveryClient.RegisterTransportsWithSync(ctx, entries...)
+		if err != nil {
+			tm.Logger.WithError(err).Warn("Failed to re-register transports with sync")
+		} else {
+			tm.Logger.Debugf("Successfully re-registered %d transports, synced %d TPD entries", len(entries), len(allEntries))
+			tm.SetTPDCache(allEntries)
+		}
+		return
+	}
+
 	err := tm.Conf.DiscoveryClient.RegisterTransports(ctx, entries...)
 	if err != nil {
 		tm.Logger.WithError(err).Warn("Failed to re-register transports with discovery")
@@ -194,6 +225,82 @@ func (tm *Manager) SetPTpsCache(pTps []PersistentTransports) {
 	defer tm.Conf.PTpsCacheMu.Unlock()
 
 	tm.Conf.PersistentTransportsCache = pTps
+}
+
+// SetOnTransportCreated sets the callback that's invoked after a transport is created.
+// The callback can measure latency and return it; if > 0, it's set on the transport.
+func (tm *Manager) SetOnTransportCreated(cb TransportCreatedCallback) {
+	tm.onTransportCreatedMu.Lock()
+	defer tm.onTransportCreatedMu.Unlock()
+	tm.onTransportCreated = cb
+}
+
+// SetSyncTPDData enables or disables syncing TPD data on transport re-registration.
+func (tm *Manager) SetSyncTPDData(enabled bool) {
+	tm.syncTPDDataMu.Lock()
+	defer tm.syncTPDDataMu.Unlock()
+	tm.syncTPDData = enabled
+	tm.Logger.Infof("SetSyncTPDData: %v", enabled)
+}
+
+// GetSyncTPDData returns whether TPD sync is enabled.
+func (tm *Manager) GetSyncTPDData() bool {
+	tm.syncTPDDataMu.RLock()
+	defer tm.syncTPDDataMu.RUnlock()
+	return tm.syncTPDData
+}
+
+// SetTPDCache updates the cached TPD data for local route calculation.
+func (tm *Manager) SetTPDCache(entries []*Entry) {
+	tm.tpdCacheMu.Lock()
+	defer tm.tpdCacheMu.Unlock()
+	tm.tpdCache = entries
+	tm.Logger.Debugf("TPD cache updated with %d entries", len(entries))
+}
+
+// GetTPDCache returns the cached TPD data.
+func (tm *Manager) GetTPDCache() []*Entry {
+	tm.tpdCacheMu.RLock()
+	defer tm.tpdCacheMu.RUnlock()
+	return tm.tpdCache
+}
+
+// invokeTransportCreatedCallback calls the registered callback after transport creation.
+// It runs asynchronously to not block transport setup.
+// Skips latency measurement for user-created transports.
+func (tm *Manager) invokeTransportCreatedCallback(remote cipher.PubKey, tp *ManagedTransport) {
+	// Skip latency measurement for user-created transports
+	if tp.Entry.Label == LabelUser {
+		return
+	}
+
+	tm.onTransportCreatedMu.RLock()
+	cb := tm.onTransportCreated
+	tm.onTransportCreatedMu.RUnlock()
+
+	if cb == nil {
+		return
+	}
+
+	// Run callback asynchronously to not block transport setup
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		latencyMs := cb(ctx, remote, tp.Entry.ID)
+		if latencyMs > 0 {
+			tp.SetLatency(latencyMs)
+			tm.Logger.Debugf("Transport %s latency set to %.2f ms", tp.Entry.ID, latencyMs)
+
+			// Log latency to file if latency log store is configured
+			if tm.Conf.LatencyLogStore != nil {
+				stats := tp.GetLatencyStats()
+				if err := tm.Conf.LatencyLogStore.Record(tp.Entry.ID, stats.Min, stats.Max, stats.Avg); err != nil {
+					tm.Logger.WithError(err).Warn("Failed to log latency")
+				}
+			}
+		}
+	}()
 }
 
 // InitClient initilizes a network client
@@ -391,6 +498,13 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 	}
 
 	tm.Logger.Debugf("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), tpID, !ok)
+
+	// Invoke callback to measure latency for new transports (runs asynchronously)
+	// Skip for self-transports as they can't be used for routing
+	if !ok && transport.RemotePK() != client.PK() {
+		tm.invokeTransportCreatedCallback(transport.RemotePK(), mTp)
+	}
+
 	return nil
 }
 
@@ -470,32 +584,30 @@ func (tm *Manager) ARClient() addrresolver.APIClient {
 	return tm.arClient
 }
 
+// SaveTransportOptions contains options for transport creation.
+type SaveTransportOptions struct {
+	NoRegister       bool // skip transport discovery registration
+	SkipLatencyProbe bool // skip latency probe after transport creation
+}
+
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
 func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label) (*ManagedTransport, error) {
-	if tm.isClosing() {
-		return nil, io.ErrClosedPipe
-	}
-	for {
-		mTp, err := tm.saveTransport(ctx, remote, netType, label)
-
-		if err != nil {
-			if err == ErrNotServing {
-				continue
-			}
-			return nil, fmt.Errorf("save transport: %w", err)
-		}
-		return mTp, nil
-	}
+	return tm.SaveTransportWithOptions(ctx, remote, netType, label, SaveTransportOptions{})
 }
 
 // SaveTransportNoRegister is like SaveTransport but skips transport discovery registration.
 // This is only valid for user-labeled transports.
 func (tm *Manager) SaveTransportNoRegister(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label) (*ManagedTransport, error) {
+	return tm.SaveTransportWithOptions(ctx, remote, netType, label, SaveTransportOptions{NoRegister: true})
+}
+
+// SaveTransportWithOptions creates a transport with the given options.
+func (tm *Manager) SaveTransportWithOptions(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label, opts SaveTransportOptions) (*ManagedTransport, error) {
 	if tm.isClosing() {
 		return nil, io.ErrClosedPipe
 	}
 	for {
-		mTp, err := tm.saveTransportInternal(ctx, remote, netType, label, true)
+		mTp, err := tm.saveTransportInternal(ctx, remote, netType, label, opts)
 
 		if err != nil {
 			if err == ErrNotServing {
@@ -507,11 +619,7 @@ func (tm *Manager) SaveTransportNoRegister(ctx context.Context, remote cipher.Pu
 	}
 }
 
-func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label) (*ManagedTransport, error) {
-	return tm.saveTransportInternal(ctx, remote, netType, label, false)
-}
-
-func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label, noRegister bool) (*ManagedTransport, error) {
+func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label, opts SaveTransportOptions) (*ManagedTransport, error) {
 	if !tm.IsKnownNetwork(netType) {
 		return nil, ErrUnknownNetwork
 	}
@@ -532,16 +640,16 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		return nil, fmt.Errorf("client not found for the type %s", netType)
 	}
 
-	// Use no-op discovery client for self-transports or when noRegister is requested
+	// Use no-op discovery client for self-transports or when NoRegister is requested
 	// Self-transports can't be used for routing (routes can't go through same key twice)
 	// so they shouldn't be registered in transport discovery
 	dc := tm.Conf.DiscoveryClient
 	if remote == client.PK() {
 		dc = NewNoopDiscoveryClient()
 		tm.Logger.Debug("Using no-op discovery client for self-transport")
-	} else if noRegister {
+	} else if opts.NoRegister {
 		dc = NewNoopDiscoveryClient()
-		tm.Logger.Debug("Using no-op discovery client (noRegister requested)")
+		tm.Logger.Debug("Using no-op discovery client (NoRegister requested)")
 	}
 
 	mTp := NewManagedTransport(ManagedTransportConfig{
@@ -570,6 +678,14 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.tps[tpID] = mTp
 	tm.mx.Unlock()
 	tm.Logger.Debugf("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
+
+	// Invoke callback to measure latency (runs asynchronously)
+	// Skip for self-transports as they can't be used for routing
+	// Skip if SkipLatencyProbe is set (e.g., for transport setup-node)
+	if remote != client.PK() && !opts.SkipLatencyProbe {
+		tm.invokeTransportCreatedCallback(remote, mTp)
+	}
+
 	return mTp, nil
 }
 

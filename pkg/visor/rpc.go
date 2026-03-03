@@ -530,18 +530,19 @@ func (r *RPC) Transport(in *uuid.UUID, out *TransportSummary) (err error) {
 
 // AddTransportIn is input for AddTransport.
 type AddTransportIn struct {
-	RemotePK   cipher.PubKey
-	TpType     string
-	Timeout    time.Duration
-	Label      string // "user" or "skycoin" (default: "skycoin")
-	NoRegister bool   // skip transport discovery registration (only valid for "user" label)
+	RemotePK         cipher.PubKey
+	TpType           string
+	Timeout          time.Duration
+	Label            string // "user" or "skycoin" (default: "skycoin")
+	NoRegister       bool   // skip transport discovery registration (only valid for "user" label)
+	SkipLatencyProbe bool   // skip latency probe after transport creation
 }
 
 // AddTransport creates a transport for the visor.
 func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "AddTransport", in)(out, &err)
 
-	tp, err := r.visor.AddTransport(in.RemotePK, in.TpType, in.Timeout, in.Label, in.NoRegister)
+	tp, err := r.visor.AddTransport(in.RemotePK, in.TpType, in.Timeout, in.Label, in.NoRegister, in.SkipLatencyProbe)
 	if tp != nil {
 		*out = *tp
 	}
@@ -668,6 +669,34 @@ func (r *RPC) Shutdown(_ *struct{}, _ *struct{}) (err error) {
 func (r *RPC) SetMinHops(n *uint16, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetMinHops", *n)
 	err = r.visor.SetMinHops(*n)
+	return
+}
+
+// SetCalculateRoutes sets calculate_routes in visor's routing config
+func (r *RPC) SetCalculateRoutes(enabled *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetCalculateRoutes", *enabled)(nil, &err)
+	err = r.visor.SetCalculateRoutes(*enabled)
+	return
+}
+
+// GetCalculateRoutes gets calculate_routes from visor's routing config
+func (r *RPC) GetCalculateRoutes(_ *struct{}, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "GetCalculateRoutes", nil)(out, &err)
+	*out, err = r.visor.GetCalculateRoutes()
+	return
+}
+
+// SetSyncTPDData sets sync_tpd_data in visor's transport config
+func (r *RPC) SetSyncTPDData(enabled *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetSyncTPDData", *enabled)(nil, &err)
+	err = r.visor.SetSyncTPDData(*enabled)
+	return
+}
+
+// GetSyncTPDData gets sync_tpd_data from visor's transport config
+func (r *RPC) GetSyncTPDData(_ *struct{}, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "GetSyncTPDData", nil)(out, &err)
+	*out, err = r.visor.GetSyncTPDData()
 	return
 }
 

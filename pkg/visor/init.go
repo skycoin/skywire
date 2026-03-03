@@ -707,6 +707,18 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return fmt.Errorf("invalid store type: %v", v.conf.Transport.LogStore.Type)
 	}
 
+	// Initialize latency log store (uses same type as transport log store)
+	var latencyLogS transport.LatencyLogStore
+	latencyLogDir := filepath.Join(filepath.Dir(v.conf.Transport.LogStore.Location), skyenv.LatencyLogStore)
+	if v.conf.Transport.LogStore.Type == visorconfig.MemoryLogStore {
+		latencyLogS = transport.InMemoryLatencyLogStore()
+	} else if v.conf.Transport.LogStore.Type == visorconfig.FileLogStore {
+		latencyLogS, err = transport.FileLatencyLogStore(ctx, latencyLogDir, time.Duration(v.conf.Transport.LogStore.RotationInterval), log)
+		if err != nil {
+			return err
+		}
+	}
+
 	pTps, err := v.conf.GetPersistentTransports()
 	if err != nil {
 		err := fmt.Errorf("failed to get persistent transports: %w", err)
@@ -718,6 +730,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		SecKey:                    v.conf.SK,
 		DiscoveryClient:           tpdC,
 		LogStore:                  logS,
+		LatencyLogStore:           latencyLogS,
 		PersistentTransportsCache: pTps,
 	}
 
@@ -1639,6 +1652,18 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.router = r
 	v.initLock.Unlock()
 
+	// Set up transport latency measurement callback
+	// When a transport is created, measure its latency via a direct route ping
+	v.tpM.SetOnTransportCreated(func(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) float64 {
+		latencyMs, err := r.MeasureTransportLatency(ctx, remote, tpID)
+		if err != nil {
+			logger.WithError(err).Debugf("Failed to measure latency for transport %s", tpID)
+			return 0
+		}
+		logger.Debugf("Measured latency for transport %s: %.2f ms", tpID, latencyMs)
+		return latencyMs
+	})
+
 	return nil
 }
 
@@ -2231,7 +2256,7 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 }
 
 func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
-	tp, err := v.AddTransport(v.conf.PK, tpType, 0, "", false)
+	tp, err := v.AddTransport(v.conf.PK, tpType, 0, "", false, false)
 	if err != nil {
 		log.WithError(err).WithField("type", tpType).Warn("Failed to create self-transport")
 		return false
