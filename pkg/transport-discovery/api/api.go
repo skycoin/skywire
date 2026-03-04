@@ -131,6 +131,9 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Get("/metrics/visor/{pks}", api.getTransportMetricsByVisors)
 
 	r.Get("/uptimes", api.getUptimes)
+	r.Get("/version", api.getVersionStats)
+	r.Get("/versions", api.getVersions)
+	r.Get("/versions/{pks}", api.getVersionsByPKs)
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})
