@@ -143,6 +143,8 @@ var (
 	skyFwd vinit.Module
 	// Ping module (skywire routes)
 	pi vinit.Module
+	// Latency probe module (transport latency measurement)
+	lp vinit.Module
 	// Dmsg ping module (dmsg direct connection)
 	dmsgPi vinit.Module
 	// Dmsg server latency tracking (self-ping via each server)
@@ -199,6 +201,7 @@ func registerModules(logger *logging.MasterLogger) {
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc, &stcprC)
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
+	lp = maker("latency_probe", initLatencyProbe, &dmsgC, &tm)
 	dmsgPi = maker("dmsg_ping", initDmsgPing, &dmsgC)
 	dmsgServerLatency = maker("dmsg_server_latency", initDmsgServerLatency, &dmsgPi)
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm, &stcprC)
@@ -207,7 +210,7 @@ func registerModules(logger *logging.MasterLogger) {
 	uiServer = maker("ui_server", initUIServer, &dmsgC, &tr, &embTPS)
 	nodeHealth = maker("node_health", initNodeHealth, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer, &nodeHealth)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer, &nodeHealth)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -1273,6 +1276,79 @@ func handlePingConn(log *logging.Logger, remoteConn net.Conn, _ *Visor) {
 				return
 			}
 			log.Debug("Echoed ping response")
+		}
+	}
+}
+
+// initLatencyProbe starts a listener on LatencyProbePort (46) to accept
+// transport latency measurement routes. The RouteGroup automatically handles
+// ping/pong packets - we just need to keep the connection alive.
+func initLatencyProbe(ctx context.Context, v *Visor, log *logging.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	// Wait for at least one transport to initialize
+	<-v.tpM.Ready()
+
+	connApp := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyenv.LatencyProbePort),
+	}
+
+	l, err := appnet.ListenContext(ctx, connApp)
+	if err != nil {
+		cancel()
+		return err
+	}
+
+	v.pushCloseStack("latency_probe", func() error {
+		cancel()
+		if cErr := l.Close(); cErr != nil {
+			log.WithError(cErr).Error("Error closing latency probe listener.")
+		}
+		return nil
+	})
+
+	go func() {
+		for {
+			log.Debug("Accepting latency probe conn...")
+			conn, err := l.Accept()
+			if err != nil {
+				if !errors.Is(err, appnet.ErrClosedConn) {
+					log.WithError(err).Error("Failed to accept latency probe conn")
+				}
+				return
+			}
+			log.Debug("Accepted latency probe conn")
+
+			// Handle the connection in a goroutine.
+			// The RouteGroup handles ping/pong packets automatically.
+			// We just need to keep the connection alive until the initiator closes it.
+			go handleLatencyProbeConn(log, conn)
+		}
+	}()
+	return nil
+}
+
+// handleLatencyProbeConn keeps a latency probe connection alive.
+// The RouteGroup automatically responds to ping packets with pong packets.
+// This handler just waits for the connection to close.
+func handleLatencyProbeConn(log *logging.Logger, conn net.Conn) {
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.WithError(err).Debug("Error closing latency probe conn")
+		}
+	}()
+
+	// Read in a loop to detect when the connection is closed.
+	// The RouteGroup handles ping/pong packets at a lower level.
+	buf := make([]byte, 1024)
+	for {
+		_, err := conn.Read(buf)
+		if err != nil {
+			if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+				log.WithError(err).Debug("Latency probe conn closed")
+			}
+			return
 		}
 	}
 }
