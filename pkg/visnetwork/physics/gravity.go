@@ -1,6 +1,8 @@
 package physics
 
-import "math"
+import (
+	"math"
+)
 
 // CentralGravitySolver applies a force pulling all nodes toward the center
 // This prevents the graph from drifting off-screen
