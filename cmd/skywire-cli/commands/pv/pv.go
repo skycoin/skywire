@@ -4,8 +4,11 @@ package pv
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
@@ -22,9 +25,9 @@ var (
 	sdURL          string
 	utURL          string
 	tpdURL         string
-	cacheFileSD    string
-	cacheFileUT    string
-	cacheFileTPD   string
+	cacheDirSD     string
+	cacheDirUT     string
+	cacheDirTPD    string
 	cacheFilesAge  int
 	rawData        bool
 	noFilterOnline bool
@@ -33,17 +36,76 @@ var (
 	isStats        bool
 	showTransports bool
 	minTransports  int
+	testEnv        bool
 )
 
+// isTestEnv checks if test environment is enabled via SKYWIRETEST env var
+func isTestEnv() bool {
+	return os.Getenv("SKYWIRETEST") == "1"
+}
+
+// cacheDirPath returns a cache directory path based on the service URL host
+func cacheDirPath(serviceURL string) string {
+	u, err := url.Parse(serviceURL)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return filepath.Join(os.TempDir(), u.Host)
+}
+
+// cacheFile returns the full cache file path for a given URL.
+// If cacheDir is empty, returns "" (disables caching).
+// Creates the cache directory if it doesn't exist.
+func cacheFile(cacheDir, fullURL string) string {
+	if cacheDir == "" {
+		return ""
+	}
+
+	u, err := url.Parse(fullURL)
+	if err != nil {
+		return ""
+	}
+
+	// Create cache directory if it doesn't exist
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		return ""
+	}
+
+	// Sanitize the path for use as a filename
+	// e.g., "/api/services?type=visor" -> "api-services-type=visor.json"
+	pathAndQuery := strings.TrimPrefix(u.Path, "/")
+	if u.RawQuery != "" {
+		pathAndQuery += "-" + u.RawQuery
+	}
+	// Replace path separators with dashes
+	pathAndQuery = strings.ReplaceAll(pathAndQuery, "/", "-")
+	// Remove any other problematic characters
+	pathAndQuery = strings.ReplaceAll(pathAndQuery, "?", "-")
+
+	return filepath.Join(cacheDir, pathAndQuery+".json")
+}
+
+// getDeployment returns the appropriate deployment config based on test env
+func getDeployment() deployment.Services {
+	if isTestEnv() {
+		return deployment.Test
+	}
+	return deployment.Prod
+}
+
 func init() {
-	RootCmd.Flags().StringVarP(&sdURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
-	RootCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
-	RootCmd.Flags().StringVarP(&tpdURL, "tpdurl", "d", deployment.Prod.TransportDiscovery, "transport discovery url")
+	dep := getDeployment()
+	defaultTestEnv := isTestEnv()
+
+	RootCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
+	RootCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
+	RootCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.UptimeTracker, "uptime tracker url")
+	RootCmd.Flags().StringVarP(&tpdURL, "tpdurl", "d", dep.TransportDiscovery, "transport discovery url")
 	RootCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw json data")
 	RootCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
-	RootCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/visorsd.json", "SD cache file location")
-	RootCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location")
-	RootCmd.Flags().StringVar(&cacheFileTPD, "cft", os.TempDir()+"/tpd.json", "TPD cache file location")
+	RootCmd.Flags().StringVar(&cacheDirSD, "cds", cacheDirPath(dep.ServiceDiscovery), "SD cache dir (\"\" to disable)")
+	RootCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.UptimeTracker), "UT cache dir (\"\" to disable)")
+	RootCmd.Flags().StringVar(&cacheDirTPD, "cdt", cacheDirPath(dep.TransportDiscovery), "TPD cache dir (\"\" to disable)")
 	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	RootCmd.Flags().StringVarP(&country, "country", "c", "", "filter by country code")
 	RootCmd.Flags().StringVarP(&version, "version", "v", "", "filter by version")
@@ -61,10 +123,43 @@ var RootCmd = &cobra.Command{
 
 Returns only public keys, one per line.
 Use -t to show transport counts per visor.
-Set cache file location to "" to avoid using cache files`, deployment.Prod.ServiceDiscovery, serviceType),
+
+Cache files are stored in directories named after service hosts.
+Set cache dir to "" to disable caching for that service.
+
+Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment().ServiceDiscovery, serviceType),
 	Run: func(cmd *cobra.Command, _ []string) {
+		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
+		if testEnv && !isTestEnv() {
+			// --testenv was specified at runtime (not via SKYWIRETEST env)
+			// Override values that weren't explicitly changed by user
+			if !cmd.Flags().Changed("sdurl") {
+				sdURL = deployment.Test.ServiceDiscovery
+			}
+			if !cmd.Flags().Changed("uturl") {
+				utURL = deployment.Test.UptimeTracker
+			}
+			if !cmd.Flags().Changed("tpdurl") {
+				tpdURL = deployment.Test.TransportDiscovery
+			}
+			if !cmd.Flags().Changed("cds") {
+				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
+			}
+			if !cmd.Flags().Changed("cdu") {
+				cacheDirUT = cacheDirPath(deployment.Test.UptimeTracker)
+			}
+			if !cmd.Flags().Changed("cdt") {
+				cacheDirTPD = cacheDirPath(deployment.Test.TransportDiscovery)
+			}
+		}
+
+		// Build full URLs with endpoints
+		sdFullURL := sdURL + "/api/services?type=" + serviceType
+		utFullURL := utURL + "/uptimes?v=v2"
+		tpdFullURL := tpdURL + "/all-transports"
+
 		// Fetch SD
-		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
+		sds := internal.GetData(cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint:errcheck,gosec
 			return
@@ -101,7 +196,7 @@ Set cache file location to "" to avoid using cache files`, deployment.Prod.Servi
 			pks, _ = script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Slice() //nolint:errcheck
 		} else {
 			// Filter by online status via jq join
-			uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+			uts := internal.GetData(cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
 			joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, uts)
 
 			// Build jq filter with optional country and version conditions
@@ -139,7 +234,7 @@ Set cache file location to "" to avoid using cache files`, deployment.Prod.Servi
 		}
 
 		// Show transports mode - fetch TPD and count transports per visor
-		tpd := internal.GetData(cacheFileTPD, tpdURL+"/all-transports", cacheFilesAge)
+		tpd := internal.GetData(cacheFile(cacheDirTPD, tpdFullURL), tpdFullURL, cacheFilesAge)
 
 		var entries []*transport.Entry
 		if err := json.Unmarshal([]byte(tpd), &entries); err != nil {
