@@ -20,9 +20,9 @@ RUN apk add --no-cache git
 # The -w -s flags strip debug info to reduce binary size
 RUN if [ "$image_tag" = "integration" ]; then \
         apk add --no-cache build-base && \
-        CGO_ENABLED=1 go install -ldflags="-w -s" -race ./cmd/skywire; \
+        CGO_ENABLED=1 go install -ldflags="-w -s" -race .; \
     else \
-        go install -ldflags="-w -s" ./cmd/skywire; \
+        go install -ldflags="-w -s" .; \
     fi
 
 ## Resulting image
