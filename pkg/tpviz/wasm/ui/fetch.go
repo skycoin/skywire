@@ -104,7 +104,7 @@ type AppState struct {
 
 // PingResponse represents the /api/ping response (matching TypeScript types.ts PingResponse)
 type PingResponse struct {
-	Status     string    `json:"status"`      // "success", "timeout", "error"
+	Status     string    `json:"status"` // "success", "timeout", "error"
 	Error      string    `json:"error,omitempty"`
 	Mode       string    `json:"mode,omitempty"`
 	Latencies  []float64 `json:"latencies,omitempty"`
