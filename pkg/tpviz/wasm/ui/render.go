@@ -2,7 +2,9 @@
 
 package ui
 
-import "strings"
+import (
+	"strings"
+)
 
 // draw renders the entire scene
 func (a *App) draw() {
