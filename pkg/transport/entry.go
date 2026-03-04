@@ -145,6 +145,7 @@ type SignedEntry struct {
 	Registered int64          `json:"registered,omitempty"`
 	Latency    float64        `json:"latency_ms,omitempty"` // Inter-visor latency in milliseconds, measured via ping/pong
 	Bandwidth  *BandwidthData `json:"bandwidth,omitempty"`  // Cumulative bandwidth data
+	Version    string         `json:"version,omitempty"`    // Visor version reporting this entry
 }
 
 // Sign sets Signature for a given PubKey in correct position

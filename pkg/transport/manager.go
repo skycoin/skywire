@@ -41,6 +41,7 @@ type ManagerConfig struct {
 	LatencyLogStore           LatencyLogStore
 	PersistentTransportsCache []PersistentTransports
 	PTpsCacheMu               sync.RWMutex
+	Version                   string // Visor version for reporting to TPD
 }
 
 // TransportCreatedCallback is called after a transport is successfully created.
@@ -176,11 +177,12 @@ func (tm *Manager) reRegisterTransports(ctx context.Context) {
 		if tp.IsClosed() {
 			continue
 		}
-		// Create signed entry for re-registration with previous latency and current bandwidth
+		// Create signed entry for re-registration with previous latency, current bandwidth, and version
 		se := &SignedEntry{
 			Entry:     &tp.Entry,
 			Latency:   tp.GetLatency(),
 			Bandwidth: tp.GetBandwidth(),
+			Version:   tm.Conf.Version,
 		}
 		entries = append(entries, se)
 	}

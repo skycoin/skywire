@@ -56,6 +56,7 @@ func cacheDirPath(serviceURL string) string {
 // cacheFile returns the full cache file path for a given URL.
 // If cacheDir is empty, returns "" (disables caching).
 // Creates the cache directory if it doesn't exist.
+// Generates simple, descriptive filenames (e.g., "visor.json", "uptimes.json").
 func cacheFile(cacheDir, fullURL string) string {
 	if cacheDir == "" {
 		return ""
@@ -71,18 +72,27 @@ func cacheFile(cacheDir, fullURL string) string {
 		return ""
 	}
 
-	// Sanitize the path for use as a filename
-	// e.g., "/api/services?type=visor" -> "api-services-type=visor.json"
-	pathAndQuery := strings.TrimPrefix(u.Path, "/")
-	if u.RawQuery != "" {
-		pathAndQuery += "-" + u.RawQuery
-	}
-	// Replace path separators with dashes
-	pathAndQuery = strings.ReplaceAll(pathAndQuery, "/", "-")
-	// Remove any other problematic characters
-	pathAndQuery = strings.ReplaceAll(pathAndQuery, "?", "-")
+	// Extract a simple, meaningful name from the URL
+	var name string
 
-	return filepath.Join(cacheDir, pathAndQuery+".json")
+	// Check for service type in query (e.g., ?type=visor -> visor.json)
+	if typeVal := u.Query().Get("type"); typeVal != "" {
+		name = typeVal
+	} else {
+		// Use the last path segment (e.g., /all-transports -> all-transports.json)
+		path := strings.TrimSuffix(u.Path, "/")
+		if idx := strings.LastIndex(path, "/"); idx >= 0 {
+			name = path[idx+1:]
+		} else {
+			name = strings.TrimPrefix(path, "/")
+		}
+	}
+
+	if name == "" {
+		name = "cache"
+	}
+
+	return filepath.Join(cacheDir, name+".json")
 }
 
 // getDeployment returns the appropriate deployment config based on test env

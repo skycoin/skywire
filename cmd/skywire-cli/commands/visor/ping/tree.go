@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -21,6 +23,70 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
+// isTestEnv checks if test environment is enabled via SKYWIRETEST env var
+func isTestEnv() bool {
+	return os.Getenv("SKYWIRETEST") == "1"
+}
+
+// cacheDirPath returns a cache directory path based on the service URL host
+func cacheDirPath(serviceURL string) string {
+	u, err := url.Parse(serviceURL)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return filepath.Join(os.TempDir(), u.Host)
+}
+
+// cacheFile returns the full cache file path for a given URL.
+// If cacheDir is empty, returns "" (disables caching).
+// Creates the cache directory if it doesn't exist.
+// Generates simple, descriptive filenames (e.g., "all-transports.json", "uptimes.json").
+func cacheFile(cacheDir, fullURL string) string {
+	if cacheDir == "" {
+		return ""
+	}
+
+	u, err := url.Parse(fullURL)
+	if err != nil {
+		return ""
+	}
+
+	// Create cache directory if it doesn't exist
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		return ""
+	}
+
+	// Extract a simple, meaningful name from the URL
+	var name string
+
+	// Check for service type in query (e.g., ?type=visor -> visor.json)
+	if typeVal := u.Query().Get("type"); typeVal != "" {
+		name = typeVal
+	} else {
+		// Use the last path segment (e.g., /all-transports -> all-transports.json)
+		path := strings.TrimSuffix(u.Path, "/")
+		if idx := strings.LastIndex(path, "/"); idx >= 0 {
+			name = path[idx+1:]
+		} else {
+			name = strings.TrimPrefix(path, "/")
+		}
+	}
+
+	if name == "" {
+		name = "cache"
+	}
+
+	return filepath.Join(cacheDir, name+".json")
+}
+
+// getDeployment returns the appropriate deployment config based on test env
+func getDeployment() deployment.Services {
+	if isTestEnv() {
+		return deployment.Test
+	}
+	return deployment.Prod
+}
+
 // Flags for ping tree command (separate from ping graph for cleaner interface)
 var (
 	treeVersion        string
@@ -29,9 +95,9 @@ var (
 	treeSetupTimeout   time.Duration
 	treeTries          int
 	treePcktSize       int
-	treeCacheTPD       string
-	treeCacheUT        string
-	treeCacheDMSG      string
+	treeCacheDirTPD    string
+	treeCacheDirUT     string
+	treeCacheDirDMSG   string
 	treeCacheAge       int
 	treeTPDURL         string
 	treeUTURL          string
@@ -54,6 +120,7 @@ var (
 	treeRemakeTp       bool
 	treeRemakeRemoteTp bool
 	treeConcurrency    int
+	treeTestEnv        bool
 )
 
 func init() {
@@ -86,19 +153,23 @@ Use --dmsg-only to ping via DMSG servers instead of transport routes.
 Use --dmsg to pre-check visor reachability over DMSG before route ping (skips unreachable).
 Use --dmsg-all-servers to ping via all DMSG servers (not just first success).`
 
+	dep := getDeployment()
+	defaultTestEnv := isTestEnv()
+
+	pingTreeCmd.Flags().BoolVar(&treeTestEnv, "testenv", defaultTestEnv, "use test deployment")
 	pingTreeCmd.Flags().StringVarP(&treeVersion, "version", "v", "", "filter by minimum version")
 	pingTreeCmd.Flags().IntVarP(&treeMaxLevel, "max-level", "l", 0, "maximum hop level (0 = unlimited)")
 	pingTreeCmd.Flags().DurationVarP(&treeTimeout, "timeout", "o", 30*time.Second, "timeout per ping attempt")
 	pingTreeCmd.Flags().DurationVar(&treeSetupTimeout, "setup-timeout", 30*time.Second, "timeout for route setup phase")
 	pingTreeCmd.Flags().IntVarP(&treeTries, "tries", "t", 1, "ping attempts per transport")
 	pingTreeCmd.Flags().IntVarP(&treePcktSize, "size", "s", 2, "packet size in KB")
-	pingTreeCmd.Flags().StringVar(&treeCacheTPD, "cft", os.TempDir()+"/tpd.json", "TPD cache file location")
-	pingTreeCmd.Flags().StringVar(&treeCacheUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location")
-	pingTreeCmd.Flags().StringVar(&treeCacheDMSG, "cfd", os.TempDir()+"/dmsg-clients.json", "DMSG clients cache file location")
+	pingTreeCmd.Flags().StringVar(&treeCacheDirTPD, "cdt", cacheDirPath(dep.TransportDiscovery), "TPD cache dir (\"\" to disable)")
+	pingTreeCmd.Flags().StringVar(&treeCacheDirUT, "cdu", cacheDirPath(dep.UptimeTracker), "UT cache dir (\"\" to disable)")
+	pingTreeCmd.Flags().StringVar(&treeCacheDirDMSG, "cdd", cacheDirPath(dep.DmsgDiscovery), "DMSG cache dir (\"\" to disable)")
 	pingTreeCmd.Flags().IntVarP(&treeCacheAge, "cfa", "m", 5, "update cache files if older than n minutes")
-	pingTreeCmd.Flags().StringVar(&treeTPDURL, "tpdurl", deployment.Prod.TransportDiscovery, "transport discovery URL")
-	pingTreeCmd.Flags().StringVar(&treeUTURL, "uturl", deployment.Prod.UptimeTracker, "uptime tracker URL")
-	pingTreeCmd.Flags().StringVar(&treeDMSGURL, "dmsgurl", deployment.Prod.DmsgDiscovery, "DMSG discovery URL")
+	pingTreeCmd.Flags().StringVar(&treeTPDURL, "tpdurl", dep.TransportDiscovery, "transport discovery URL")
+	pingTreeCmd.Flags().StringVar(&treeUTURL, "uturl", dep.UptimeTracker, "uptime tracker URL")
+	pingTreeCmd.Flags().StringVar(&treeDMSGURL, "dmsgurl", dep.DmsgDiscovery, "DMSG discovery URL")
 	pingTreeCmd.Flags().BoolVarP(&treeOnlineOnly, "online", "g", false, "only ping visors marked online in UT")
 	pingTreeCmd.Flags().StringVarP(&treeOutput, "output", "O", "", "output base filename (writes .json file)")
 	pingTreeCmd.Flags().UintVar(&treeHops, "hops", 0, "exact hop level to ping (0 = all levels)")
@@ -125,6 +196,33 @@ var pingTreeCmd = &cobra.Command{
 	Use:   "tree",
 	Short: "Ping visors via transport routes (tree view)",
 	Run: func(cmd *cobra.Command, _ []string) {
+		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
+		if treeTestEnv && !isTestEnv() {
+			if !cmd.Flags().Changed("tpdurl") {
+				treeTPDURL = deployment.Test.TransportDiscovery
+			}
+			if !cmd.Flags().Changed("uturl") {
+				treeUTURL = deployment.Test.UptimeTracker
+			}
+			if !cmd.Flags().Changed("dmsgurl") {
+				treeDMSGURL = deployment.Test.DmsgDiscovery
+			}
+			if !cmd.Flags().Changed("cdt") {
+				treeCacheDirTPD = cacheDirPath(deployment.Test.TransportDiscovery)
+			}
+			if !cmd.Flags().Changed("cdu") {
+				treeCacheDirUT = cacheDirPath(deployment.Test.UptimeTracker)
+			}
+			if !cmd.Flags().Changed("cdd") {
+				treeCacheDirDMSG = cacheDirPath(deployment.Test.DmsgDiscovery)
+			}
+		}
+
+		// Build full URLs for cache file paths
+		tpdFullURL := treeTPDURL + "/all-transports"
+		utFullURL := treeUTURL + "/uptimes?v=v2"
+		dmsgFullURL := treeDMSGURL + "/dmsg-discovery/entries"
+
 		// Force pterm styling so tree output works even when redirected to file
 		pterm.EnableStyling()
 
@@ -135,9 +233,9 @@ var pingTreeCmd = &cobra.Command{
 		graphSetupTimeout = treeSetupTimeout
 		graphTries = treeTries
 		graphPcktSize = treePcktSize
-		graphCacheTPD = treeCacheTPD
-		graphCacheUT = treeCacheUT
-		graphCacheDMSG = treeCacheDMSG
+		graphCacheTPD = cacheFile(treeCacheDirTPD, tpdFullURL)
+		graphCacheUT = cacheFile(treeCacheDirUT, utFullURL)
+		graphCacheDMSG = cacheFile(treeCacheDirDMSG, dmsgFullURL)
 		graphCacheAge = treeCacheAge
 		graphTPDURL = treeTPDURL
 		graphUTURL = treeUTURL
