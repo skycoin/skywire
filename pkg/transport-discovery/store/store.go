@@ -62,33 +62,30 @@ type EdgeBandwidth struct {
 	Recv uint64 `json:"recv"` // Cumulative bytes received
 }
 
-// EdgeLatency contains latency data from one edge's perspective.
-type EdgeLatency struct {
-	AvgMs float64 `json:"avg_ms"` // Average latency in milliseconds
-	MinMs float64 `json:"min_ms"` // Minimum observed latency
-	MaxMs float64 `json:"max_ms"` // Maximum observed latency
+// TransportLatency contains latency statistics for a transport in microseconds.
+// Latency is at the transport level (not per-edge) since it's round-trip.
+type TransportLatency struct {
+	Min int64 `json:"min"` // Minimum observed latency in microseconds
+	Max int64 `json:"max"` // Maximum observed latency in microseconds
+	Avg int64 `json:"avg"` // Average latency in microseconds
 }
 
-// EdgeMetricFull contains combined bandwidth and latency for one edge.
-type EdgeMetricFull struct {
-	Bandwidth *EdgeBandwidth `json:"bandwidth,omitempty"`
-	Latency   *EdgeLatency   `json:"latency,omitempty"`
+// DailyEdgeBandwidth contains per-day bandwidth with edge A and B data.
+type DailyEdgeBandwidth struct {
+	Date string         `json:"date"`
+	A    *EdgeBandwidth `json:"a,omitempty"`
+	B    *EdgeBandwidth `json:"b,omitempty"`
 }
 
-// DailyEdgeMetric contains per-day metrics with edge A and B data.
-type DailyEdgeMetric struct {
-	Date string          `json:"date"`
-	A    *EdgeMetricFull `json:"a,omitempty"`
-	B    *EdgeMetricFull `json:"b,omitempty"`
-}
-
-// TransportMetric contains per-transport metrics with daily breakdowns.
+// TransportMetric contains per-transport metrics with latency at transport level
+// and daily bandwidth breakdowns per edge.
 type TransportMetric struct {
-	ID    string            `json:"id"`
-	Type  string            `json:"type"`
-	Live  bool              `json:"live"`
-	Edges []string          `json:"edges,omitempty"` // Only included if query.Edges=true
-	Daily []DailyEdgeMetric `json:"daily"`
+	ID      string               `json:"id"`
+	Type    string               `json:"type"`
+	Live    bool                 `json:"live"`
+	Edges   []string             `json:"edges,omitempty"`   // Only included if query.Edges=true
+	Latency *TransportLatency    `json:"latency,omitempty"` // Transport-level latency stats
+	Daily   []DailyEdgeBandwidth `json:"daily"`             // Per-day bandwidth by edge
 }
 
 // TypeMetricAggregate contains aggregate metrics for a transport type.

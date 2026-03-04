@@ -26,14 +26,16 @@ const (
 
 // TransportData stores transport entry with additional metadata.
 type TransportData struct {
-	ID         string  `json:"id"`
-	EdgeA      string  `json:"edge_a"`
-	EdgeB      string  `json:"edge_b"`
-	Type       string  `json:"type"`
-	Label      string  `json:"label"`
-	Latency    float64 `json:"latency"`     // Inter-visor ping latency in milliseconds
-	Bandwidth  uint64  `json:"bandwidth"`   // Total bytes (sent + recv)
-	LastUpdate int64   `json:"last_update"` // Unix timestamp of last update
+	ID         string `json:"id"`
+	EdgeA      string `json:"edge_a"`
+	EdgeB      string `json:"edge_b"`
+	Type       string `json:"type"`
+	Label      string `json:"label"`
+	LatencyMin int64  `json:"lat_min"`     // Minimum latency in microseconds
+	LatencyMax int64  `json:"lat_max"`     // Maximum latency in microseconds
+	LatencyAvg int64  `json:"lat_avg"`     // Average latency in microseconds
+	Bandwidth  uint64 `json:"bandwidth"`   // Total bytes (sent + recv)
+	LastUpdate int64  `json:"last_update"` // Unix timestamp of last update
 }
 
 type redisStore struct {
@@ -77,11 +79,6 @@ func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl
 }
 
 func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.SignedEntry) error {
-	return s.RegisterTransportWithLatency(ctx, sEntry, sEntry.Latency)
-}
-
-// RegisterTransportWithLatency registers transport with latency value.
-func (s *redisStore) RegisterTransportWithLatency(ctx context.Context, sEntry *transport.SignedEntry, latency float64) error {
 	entry := sEntry.Entry
 	if entry == nil {
 		return ErrBadEntry
@@ -96,8 +93,14 @@ func (s *redisStore) RegisterTransportWithLatency(ctx context.Context, sEntry *t
 		EdgeB:      entry.Edges[1].Hex(),
 		Type:       string(entry.Type),
 		Label:      string(entry.Label),
-		Latency:    latency,
 		LastUpdate: now.Unix(),
+	}
+
+	// Handle latency if provided
+	if sEntry.Latency != nil {
+		data.LatencyMin = sEntry.Latency.Min
+		data.LatencyMax = sEntry.Latency.Max
+		data.LatencyAvg = sEntry.Latency.Avg
 	}
 
 	// Handle bandwidth if provided
@@ -360,7 +363,8 @@ func (s *redisStore) dataToEntry(data TransportData) (*transport.Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	entry.Latency = data.Latency
+	// Convert latency from microseconds to milliseconds for backwards compatibility
+	entry.Latency = float64(data.LatencyAvg) / 1000.0
 	entry.Bandwidth = data.Bandwidth
 	return entry, nil
 }
@@ -876,62 +880,55 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 			ID:    entry.ID.String(),
 			Type:  string(entry.Type),
 			Live:  isLive,
-			Daily: make([]DailyEdgeMetric, 0, days),
+			Daily: make([]DailyEdgeBandwidth, 0, days),
 		}
 
 		if query.Edges {
 			metric.Edges = []string{entry.Edges[0].Hex(), entry.Edges[1].Hex()}
 		}
 
-		// Get daily metrics
-		for d := 0; d < days; d++ {
-			t := now.AddDate(0, 0, -d)
-			dateStr := t.Format("2006-01-02")
-
-			dailyMetric := DailyEdgeMetric{Date: dateStr}
-
-			// Get bandwidth for this transport on this day
-			key := s.bandwidthDailyKey(entry.ID.String(), t)
-			bwResult, err := s.client.HGetAll(ctx, key).Result()
-			if err == nil && len(bwResult) > 0 {
-				var bw uint64
-				if val, ok := bwResult["bandwidth"]; ok {
-					fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
-				}
-
-				if bw > 0 {
-					// Split bandwidth between edges (estimate)
-					halfBW := bw / 2
-
-					if query.Bandwidth && query.Latency {
-						dailyMetric.A = &EdgeMetricFull{
-							Bandwidth: &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
-							Latency:   &EdgeLatency{AvgMs: entry.Latency, MinMs: entry.Latency, MaxMs: entry.Latency},
-						}
-						dailyMetric.B = &EdgeMetricFull{
-							Bandwidth: &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
-							Latency:   &EdgeLatency{AvgMs: entry.Latency, MinMs: entry.Latency, MaxMs: entry.Latency},
-						}
-					} else if query.Bandwidth {
-						dailyMetric.A = &EdgeMetricFull{
-							Bandwidth: &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
-						}
-						dailyMetric.B = &EdgeMetricFull{
-							Bandwidth: &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
-						}
-					} else if query.Latency && entry.Latency > 0 {
-						dailyMetric.A = &EdgeMetricFull{
-							Latency: &EdgeLatency{AvgMs: entry.Latency, MinMs: entry.Latency, MaxMs: entry.Latency},
-						}
-						dailyMetric.B = &EdgeMetricFull{
-							Latency: &EdgeLatency{AvgMs: entry.Latency, MinMs: entry.Latency, MaxMs: entry.Latency},
-						}
+		// Get transport data from Redis to retrieve latency
+		if query.Latency {
+			tpKey := s.transportKey(entry.ID)
+			dataJSON, err := s.client.Get(ctx, tpKey).Result()
+			if err == nil {
+				var data TransportData
+				if json.Unmarshal([]byte(dataJSON), &data) == nil && data.LatencyAvg > 0 {
+					metric.Latency = &TransportLatency{
+						Min: data.LatencyMin,
+						Max: data.LatencyMax,
+						Avg: data.LatencyAvg,
 					}
 				}
 			}
+		}
 
-			if dailyMetric.A != nil || dailyMetric.B != nil {
-				metric.Daily = append(metric.Daily, dailyMetric)
+		// Get daily bandwidth metrics
+		if query.Bandwidth {
+			for d := 0; d < days; d++ {
+				t := now.AddDate(0, 0, -d)
+				dateStr := t.Format("2006-01-02")
+
+				// Get bandwidth for this transport on this day
+				key := s.bandwidthDailyKey(entry.ID.String(), t)
+				bwResult, err := s.client.HGetAll(ctx, key).Result()
+				if err == nil && len(bwResult) > 0 {
+					var bw uint64
+					if val, ok := bwResult["bandwidth"]; ok {
+						fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
+					}
+
+					if bw > 0 {
+						// Split bandwidth between edges (estimate)
+						halfBW := bw / 2
+						dailyMetric := DailyEdgeBandwidth{
+							Date: dateStr,
+							A:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
+							B:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
+						}
+						metric.Daily = append(metric.Daily, dailyMetric)
+					}
+				}
 			}
 		}
 

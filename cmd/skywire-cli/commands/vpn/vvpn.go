@@ -206,12 +206,16 @@ var (
 )
 
 func init() {
-	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
-	listCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
+	dep := getDeployment()
+	defaultTestEnv := isTestEnv()
+
+	listCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
+	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
+	listCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.UptimeTracker, "uptime tracker url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "pretty print json data")
 	listCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
-	listCmd.Flags().StringVar(&cacheFileSD, "cfs", os.TempDir()+"/vpnsd.json", "SD cache file location")
-	listCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
+	listCmd.Flags().StringVar(&cacheDirSD, "cds", cacheDirPath(dep.ServiceDiscovery), "SD cache dir (\"\" to disable)")
+	listCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.UptimeTracker), "UT cache dir (\"\" to disable)")
 	listCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
 	listCmd.Flags().StringVarP(&country, "country", "c", "", "filter by country code")
@@ -226,10 +230,30 @@ func init() {
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
-	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache file location to \"\" to avoid using cache files\ndefault virtual port of servers: %v", serviceType, deployment.Prod.ServiceDiscovery, serviceType, deployment.Prod.ServiceDiscovery, serviceType, serverPort),
+	Long: fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache dir to \"\" to avoid using cache files\ndefault virtual port of servers: %v\n\nUse --testenv or SKYWIRETEST=1 to use test deployment services.", serviceType, getDeployment().ServiceDiscovery, serviceType, getDeployment().ServiceDiscovery, serviceType, serverPort),
 	Run: func(cmd *cobra.Command, _ []string) {
+		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
+		if testEnv && !isTestEnv() {
+			if !cmd.Flags().Changed("sdurl") {
+				sdURL = deployment.Test.ServiceDiscovery
+			}
+			if !cmd.Flags().Changed("uturl") {
+				utURL = deployment.Test.UptimeTracker
+			}
+			if !cmd.Flags().Changed("cds") {
+				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
+			}
+			if !cmd.Flags().Changed("cdu") {
+				cacheDirUT = cacheDirPath(deployment.Test.UptimeTracker)
+			}
+		}
+
+		// Build full URLs
+		sdFullURL := sdURL + "/api/services?type=" + serviceType
+		utFullURL := utURL + "/uptimes?v=v2"
+
 		// --- Fetch SD ---
-		sds := internal.GetData(cacheFileSD, sdURL+"/api/services?type="+serviceType, cacheFilesAge)
+		sds := internal.GetData(cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint:errcheck,gosec
 			return
@@ -301,7 +325,7 @@ var listCmd = &cobra.Command{
 
 		// --- Show only offline servers ---
 		if showOffline {
-			uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+			uts := internal.GetData(cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
 
 			// Parse SD and UT data
 			var sdEntries []services.Service
@@ -445,7 +469,7 @@ var listCmd = &cobra.Command{
 		}
 
 		// --- Filtering by online status ---
-		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+		uts := internal.GetData(cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
 
 		// Use Go-based filtering when minVersion or maxVersion is specified (jq can't do semver comparison)
 		if minVersion != "" || maxVersion != "" {

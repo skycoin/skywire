@@ -48,6 +48,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -735,6 +736,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		LogStore:                  logS,
 		LatencyLogStore:           latencyLogS,
 		PersistentTransportsCache: pTps,
+		Version:                   buildinfo.Version(),
 	}
 
 	// todo: pass down configuration?
