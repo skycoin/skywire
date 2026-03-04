@@ -252,7 +252,7 @@ func (s *memoryStore) buildTransportMetrics(entries []*transport.Entry, query Me
 			ID:    entry.ID.String(),
 			Type:  string(entry.Type),
 			Live:  true, // All in-memory transports are considered live
-			Daily: []DailyEdgeMetric{},
+			Daily: []DailyEdgeBandwidth{},
 		}
 
 		if query.Edges {

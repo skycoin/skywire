@@ -141,6 +141,9 @@ The following endpoints are implemented in the Transport Discovery service. See 
 - `GET /all-transports/stats` - Get aggregate statistics
 - `GET /all-transports/per-key-stats` - Get per-visor statistics
 - `GET /uptimes` - Get visor uptime data
+- `GET /version` - Network-wide version statistics (count by version)
+- `GET /versions` - All visor PKs with versions (supports `on`, `status` params)
+- `GET /versions/{pks}` - Versions for specific PKs (supports `status` param)
 - `GET /metric` - Network-wide aggregate stats (supports `bandwidth`, `latency` params)
 - `GET /metric/visor/{pks}` - Visor aggregate stats (accepts comma-separated PKs)
 - `GET /metrics` - Per-transport metrics (supports `bandwidth`, `latency` params)
@@ -607,6 +610,168 @@ GET /uptimes
 | `on` | boolean | Current online status |
 | `version` | string | Skywire version running on the visor |
 | `daily` | object | Map of date (YYYY-MM-DD) to uptime percentage |
+
+---
+
+## Version Endpoints
+
+The Transport Discovery tracks visor versions as part of uptime registration. These endpoints provide access to version information for network analysis and compatibility checking.
+
+### GET /version
+
+Returns network-wide version statistics - a count of visors grouped by version.
+
+**Request:**
+
+```
+GET /version
+```
+
+**Response:**
+
+- 200 OK (Success).
+    ```json
+    {
+        "v1.3.34": 150,
+        "v1.3.33": 85,
+        "v1.3.32": 23,
+        "v1.3.31": 12
+    }
+    ```
+
+**Response Fields:**
+
+The response is a map where each key is a version string and the value is the count of visors running that version.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `{version}` | integer | Number of visors running this version |
+
+---
+
+### GET /versions
+
+Returns all visor public keys with their versions.
+
+**Request:**
+
+```
+GET /versions
+GET /versions?on=true
+GET /versions?status=true
+GET /versions?on=true&status=true
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `on` | string | `none` | Filter by online status: `true` (online only), `false` (offline only), `all` (no filter), `none` (no filter) |
+| `status` | boolean | false | Include `"on"` field in response showing online status |
+
+**Response (default, no status field):**
+
+- 200 OK (Success).
+    ```json
+    {
+        "<public-key-1>": "v1.3.34",
+        "<public-key-2>": "v1.3.33",
+        "<public-key-3>": "v1.3.34"
+    }
+    ```
+
+**Response (with `status=true`):**
+
+- 200 OK (Success).
+    ```json
+    {
+        "<public-key-1>": { "version": "v1.3.34", "on": true },
+        "<public-key-2>": { "version": "v1.3.33", "on": false },
+        "<public-key-3>": { "version": "v1.3.34", "on": true }
+    }
+    ```
+
+**Response Fields (default):**
+
+The response is a map where each key is a visor public key and the value is the version string.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `{pk}` | string | Version string for this visor |
+
+**Response Fields (with `status=true`):**
+
+The response is a map where each key is a visor public key and the value is an object.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `version` | string | Skywire version running on the visor |
+| `on` | boolean | Current online status |
+
+**Examples:**
+
+| Request | Description |
+|---------|-------------|
+| `/versions` | All PKs with versions, no online status field |
+| `/versions?on=true` | Only online PKs with versions, no online status field |
+| `/versions?on=false` | Only offline PKs with versions, no online status field |
+| `/versions?status=true` | All PKs with versions AND online status field |
+| `/versions?on=true&status=true` | Only online PKs with versions AND online status field |
+| `/versions?on=all&status=true` | All PKs with versions AND online status field (same as `status=true` alone) |
+
+---
+
+### GET /versions/{pks}
+
+Returns versions for specific visor public keys. Accepts comma-separated PKs.
+
+**Request:**
+
+```
+GET /versions/{pk}
+GET /versions/{pk1},{pk2},{pk3}
+GET /versions/{pks}?status=true
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `pks` | string | One or more visor public keys, comma-separated |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `status` | boolean | false | Include `"on"` field in response showing online status |
+
+**Note:** The `on` filter parameter is not applicable to this endpoint since specific PKs are requested.
+
+**Response (default):**
+
+- 200 OK (Success).
+    ```json
+    {
+        "<public-key-1>": "v1.3.34",
+        "<public-key-2>": "v1.3.33"
+    }
+    ```
+
+**Response (with `status=true`):**
+
+- 200 OK (Success).
+    ```json
+    {
+        "<public-key-1>": { "version": "v1.3.34", "on": true },
+        "<public-key-2>": { "version": "v1.3.33", "on": false }
+    }
+    ```
+
+**Error Responses:**
+
+- 400 Bad Request (Invalid public key format).
+- 404 Not Found (None of the specified PKs found).
+- 500 Internal Server Error (Server error).
 
 ---
 
@@ -1240,6 +1405,9 @@ GET /health
 | `/all-transports/stats` | GET | No | Get aggregate stats |
 | `/all-transports/per-key-stats` | GET | No | Get per-visor stats |
 | `/uptimes` | GET | No | Get visor uptimes |
+| `/version` | GET | No | Network-wide version statistics |
+| `/versions` | GET | No | All visor PKs with versions |
+| `/versions/{pks}` | GET | No | Versions for specific PKs |
 | `/health` | GET | No | Health check |
 
 ### Metrics Endpoints

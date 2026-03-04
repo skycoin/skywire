@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -502,4 +503,202 @@ func (api *API) getUptimes(w http.ResponseWriter, r *http.Request) {
 		api.log(r).WithError(err).Error("Error encoding uptimes")
 		api.writeError(w, r, err)
 	}
+}
+
+// GET /version - returns version statistics (count by version)
+// Query params: on=true|false|all|none (filter by online status)
+func (api *API) getVersionStats(w http.ResponseWriter, r *http.Request) {
+	uptimes := api.getUptimesFromCache()
+	if uptimes == nil {
+		uptimes = []store.VisorSummary{}
+	}
+
+	// Parse 'on' query parameter for online filtering
+	onParam := r.URL.Query().Get("on")
+
+	// Count versions
+	versionCounts := make(map[string]int)
+	for _, vs := range uptimes {
+		// Apply online filter
+		switch onParam {
+		case "true":
+			if !vs.Online {
+				continue
+			}
+		case "false":
+			if vs.Online {
+				continue
+			}
+		case "all":
+			// Include all
+		case "none", "":
+			// Default: include all (no filtering)
+		}
+
+		version := vs.Version
+		if version == "" {
+			version = "unknown"
+		}
+		versionCounts[version]++
+	}
+
+	if err := json.NewEncoder(w).Encode(versionCounts); err != nil {
+		api.log(r).WithError(err).Error("Error encoding version stats")
+		api.writeError(w, r, err)
+	}
+}
+
+// VersionEntry is a response entry for version endpoints
+type VersionEntry struct {
+	PK      string `json:"pk"`
+	Version string `json:"version"`
+	Online  *bool  `json:"on,omitempty"` // Only included if status=true
+}
+
+// GET /versions - returns all PKs with their versions
+// Query params:
+//   - on=true|false|all|none (filter by online status)
+//   - status=true (include online status in response)
+func (api *API) getVersions(w http.ResponseWriter, r *http.Request) {
+	uptimes := api.getUptimesFromCache()
+	if uptimes == nil {
+		uptimes = []store.VisorSummary{}
+	}
+
+	// Parse query parameters
+	onParam := r.URL.Query().Get("on")
+	includeStatus := r.URL.Query().Get("status") == "true"
+
+	var result []VersionEntry
+	for _, vs := range uptimes {
+		// Apply online filter
+		switch onParam {
+		case "true":
+			if !vs.Online {
+				continue
+			}
+		case "false":
+			if vs.Online {
+				continue
+			}
+		case "all":
+			// Include all
+		case "none", "":
+			// Default: include all (no filtering)
+		}
+
+		entry := VersionEntry{
+			PK:      vs.PK.Hex(),
+			Version: vs.Version,
+		}
+		if includeStatus {
+			online := vs.Online
+			entry.Online = &online
+		}
+		result = append(result, entry)
+	}
+
+	if result == nil {
+		result = []VersionEntry{}
+	}
+
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		api.log(r).WithError(err).Error("Error encoding versions")
+		api.writeError(w, r, err)
+	}
+}
+
+// GET /versions/{pks} - returns versions for specific PKs (comma-separated)
+// Query params:
+//   - on=true|false|all|none (filter by online status)
+//   - status=true (include online status in response)
+func (api *API) getVersionsByPKs(w http.ResponseWriter, r *http.Request) {
+	pksParam := chi.URLParam(r, "pks")
+	if pksParam == "" {
+		api.writeError(w, r, ErrEmptyPubKey)
+		return
+	}
+
+	uptimes := api.getUptimesFromCache()
+	if uptimes == nil {
+		uptimes = []store.VisorSummary{}
+	}
+
+	// Build a map for quick lookup
+	uptimeMap := make(map[string]store.VisorSummary)
+	for _, vs := range uptimes {
+		uptimeMap[vs.PK.Hex()] = vs
+	}
+
+	// Parse query parameters
+	onParam := r.URL.Query().Get("on")
+	includeStatus := r.URL.Query().Get("status") == "true"
+
+	// Parse the comma-separated PKs
+	pkStrings := splitPKs(pksParam)
+
+	var result []VersionEntry
+	for _, pkStr := range pkStrings {
+		vs, found := uptimeMap[pkStr]
+		if !found {
+			// Include entry with empty version if not found
+			entry := VersionEntry{
+				PK:      pkStr,
+				Version: "",
+			}
+			if includeStatus {
+				online := false
+				entry.Online = &online
+			}
+			result = append(result, entry)
+			continue
+		}
+
+		// Apply online filter
+		switch onParam {
+		case "true":
+			if !vs.Online {
+				continue
+			}
+		case "false":
+			if vs.Online {
+				continue
+			}
+		case "all":
+			// Include all
+		case "none", "":
+			// Default: include all (no filtering)
+		}
+
+		entry := VersionEntry{
+			PK:      vs.PK.Hex(),
+			Version: vs.Version,
+		}
+		if includeStatus {
+			online := vs.Online
+			entry.Online = &online
+		}
+		result = append(result, entry)
+	}
+
+	if result == nil {
+		result = []VersionEntry{}
+	}
+
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		api.log(r).WithError(err).Error("Error encoding versions")
+		api.writeError(w, r, err)
+	}
+}
+
+// splitPKs splits a comma-separated list of public keys
+func splitPKs(pks string) []string {
+	var result []string
+	for _, pk := range strings.Split(pks, ",") {
+		pk = strings.TrimSpace(pk)
+		if pk != "" {
+			result = append(result, pk)
+		}
+	}
+	return result
 }
