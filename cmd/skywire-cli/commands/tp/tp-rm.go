@@ -23,7 +23,7 @@ func init() {
 	rmTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "remove transport of given ID")
 	rmTpCmd.Flags().StringSliceVar(&rmRemoteVisors, "remote", nil, "remove transport on remote visor(s) via embedded TPS (comma-separated PKs)")
 	rmTpCmd.Flags().StringSliceVar(&rmRemoteTransports, "tp", nil, "transport ID(s) to remove on remote visor (comma-separated, use with --remote)")
-	rmTpCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	rmTpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 }
 
 var rmTpCmd = &cobra.Command{
