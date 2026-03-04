@@ -13,6 +13,9 @@ ENV CGO_ENABLED=${CGO_ENABLED} \
 COPY . /skywire
 WORKDIR /skywire
 
+# Install git for VCS version stamping (go install needs git to read .git directory)
+RUN apk add --no-cache git
+
 # Build using go install to get proper version info from runtime/debug.ReadBuildInfo()
 # The -w -s flags strip debug info to reduce binary size
 RUN if [ "$image_tag" = "integration" ]; then \
