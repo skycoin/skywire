@@ -52,7 +52,7 @@ func cacheFile(cacheDir, fullURL string) string {
 	}
 
 	// Create cache directory if it doesn't exist
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0750); err != nil {
 		return ""
 	}
 
