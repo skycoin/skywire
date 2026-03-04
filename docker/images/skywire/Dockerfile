@@ -2,24 +2,24 @@
 ARG base_image
 ARG image_tag
 FROM ${base_image} AS builder
-ARG build_opts
 ARG image_tag
 
-ARG BUILDINFO_LDFLAGS
 ARG CGO_ENABLED=0
 ENV CGO_ENABLED=${CGO_ENABLED} \
     GOOS=linux  \
-    GO111MODULE=on
+    GO111MODULE=on \
+    GOBIN=/release
 
 COPY . /skywire
 WORKDIR /skywire
 
-# Build with or without race detector
+# Build using go install to get proper version info from runtime/debug.ReadBuildInfo()
+# The -w -s flags strip debug info to reduce binary size
 RUN if [ "$image_tag" = "integration" ]; then \
         apk add --no-cache build-base && \
-        CGO_ENABLED=1 go build "${build_opts}" -race -o /release/skywire ./cmd/skywire; \
+        CGO_ENABLED=1 go install -ldflags="-w -s" -race ./cmd/skywire; \
     else \
-        go build "${build_opts}" -o /release/skywire ./cmd/skywire; \
+        go install -ldflags="-w -s" ./cmd/skywire; \
     fi
 
 ## Resulting image
