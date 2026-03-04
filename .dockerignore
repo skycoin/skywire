@@ -4,7 +4,6 @@ ci_scripts
 apps
 integration
 skywrie-services
-.git
 .gitignore
 .github
 .vscode

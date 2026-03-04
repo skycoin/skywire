@@ -101,12 +101,12 @@ type App struct {
 	globeActive   bool
 
 	// Pick modes (matching TypeScript state.ts)
-	pingPickMode        bool
-	localTpPickMode     bool
-	tpsPickMode         string // "target" or "remote"
-	tpsGroupPickMode    string // "target" or "remote" for group mode
-	dmsgHealthPickMode  bool
-	mhPickMode          bool
+	pingPickMode       bool
+	localTpPickMode    bool
+	tpsPickMode        string // "target" or "remote"
+	tpsGroupPickMode   string // "target" or "remote" for group mode
+	dmsgHealthPickMode bool
+	mhPickMode         bool
 
 	// TPS state
 	tpsTargetPK string
