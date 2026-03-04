@@ -1,6 +1,8 @@
 package physics
 
-import "math"
+import (
+	"math"
+)
 
 // SpringSolver calculates spring forces for edges, pulling connected
 // nodes toward their ideal edge length

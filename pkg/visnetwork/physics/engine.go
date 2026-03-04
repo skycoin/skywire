@@ -1,6 +1,8 @@
 package physics
 
-import "math"
+import (
+	"math"
+)
 
 // PhysicsEngine orchestrates the physics simulation, combining
 // node repulsion (Barnes-Hut), edge springs, and central gravity

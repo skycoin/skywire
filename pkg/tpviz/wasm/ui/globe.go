@@ -25,10 +25,10 @@ type GlobeRenderer struct {
 	nodePos3D map[string]Vec3
 
 	// Earth texture
-	earthImage   js.Value
-	earthLoaded  bool
-	earthCanvas  js.Value // Offscreen canvas for texture rendering
-	earthCtx     js.Value
+	earthImage  js.Value
+	earthLoaded bool
+	earthCanvas js.Value // Offscreen canvas for texture rendering
+	earthCtx    js.Value
 }
 
 // GlobeRotation holds the current rotation angles
@@ -87,22 +87,22 @@ var countryCoords = map[string]CountryCoord{
 	"CO": {4.5709, -74.2973},
 	"PE": {-9.1900, -75.0152},
 	"VE": {6.4238, -66.5897},
-	"UY": {-32.5228, -55.7658},  // Uruguay
-	"PY": {-23.4425, -58.4438},  // Paraguay
-	"BO": {-16.2902, -63.5887},  // Bolivia
-	"EC": {-1.8312, -78.1834},   // Ecuador
-	"PA": {8.5380, -80.7821},    // Panama
-	"CR": {9.7489, -83.7534},    // Costa Rica
-	"NI": {12.8654, -85.2072},   // Nicaragua
-	"HN": {15.2, -86.2419},      // Honduras
-	"SV": {13.7942, -88.8965},   // El Salvador
-	"GT": {15.7835, -90.2308},   // Guatemala
-	"BZ": {17.1899, -88.4976},   // Belize
-	"CU": {21.5218, -77.7812},   // Cuba
-	"DO": {18.7357, -70.1627},   // Dominican Republic
-	"JM": {18.1096, -77.2975},   // Jamaica
-	"PR": {18.2208, -66.5901},   // Puerto Rico
-	"TT": {10.6918, -61.2225},   // Trinidad and Tobago
+	"UY": {-32.5228, -55.7658}, // Uruguay
+	"PY": {-23.4425, -58.4438}, // Paraguay
+	"BO": {-16.2902, -63.5887}, // Bolivia
+	"EC": {-1.8312, -78.1834},  // Ecuador
+	"PA": {8.5380, -80.7821},   // Panama
+	"CR": {9.7489, -83.7534},   // Costa Rica
+	"NI": {12.8654, -85.2072},  // Nicaragua
+	"HN": {15.2, -86.2419},     // Honduras
+	"SV": {13.7942, -88.8965},  // El Salvador
+	"GT": {15.7835, -90.2308},  // Guatemala
+	"BZ": {17.1899, -88.4976},  // Belize
+	"CU": {21.5218, -77.7812},  // Cuba
+	"DO": {18.7357, -70.1627},  // Dominican Republic
+	"JM": {18.1096, -77.2975},  // Jamaica
+	"PR": {18.2208, -66.5901},  // Puerto Rico
+	"TT": {10.6918, -61.2225},  // Trinidad and Tobago
 	"GB": {55.3781, -3.4360},
 	"DE": {51.1657, 10.4515},
 	"FR": {46.2276, 2.2137},
@@ -157,23 +157,23 @@ var countryCoords = map[string]CountryCoord{
 	"EG": {26.8206, 30.8025},
 	"NG": {9.0820, 8.6753},
 	"KE": {-0.0236, 37.9062},
-	"MA": {31.7917, -7.0926},  // Morocco
-	"DZ": {28.0339, 1.6596},   // Algeria
-	"TN": {33.8869, 9.5375},   // Tunisia
-	"GH": {7.9465, -1.0232},   // Ghana
-	"TZ": {-6.3690, 34.8888},  // Tanzania
-	"ET": {9.1450, 40.4897},   // Ethiopia
+	"MA": {31.7917, -7.0926}, // Morocco
+	"DZ": {28.0339, 1.6596},  // Algeria
+	"TN": {33.8869, 9.5375},  // Tunisia
+	"GH": {7.9465, -1.0232},  // Ghana
+	"TZ": {-6.3690, 34.8888}, // Tanzania
+	"ET": {9.1450, 40.4897},  // Ethiopia
 	"IL": {31.0461, 34.8516},
 	"AE": {23.4241, 53.8478},
 	"SA": {23.8859, 45.0792},
 	"IR": {32.4279, 53.6880},
-	"IQ": {33.2232, 43.6793},  // Iraq
-	"JO": {30.5852, 36.2384},  // Jordan
-	"LB": {33.8547, 35.8623},  // Lebanon
-	"KW": {29.3117, 47.4818},  // Kuwait
-	"QA": {25.3548, 51.1839},  // Qatar
-	"OM": {21.4735, 55.9754},  // Oman
-	"BH": {26.0667, 50.5577},  // Bahrain
+	"IQ": {33.2232, 43.6793}, // Iraq
+	"JO": {30.5852, 36.2384}, // Jordan
+	"LB": {33.8547, 35.8623}, // Lebanon
+	"KW": {29.3117, 47.4818}, // Kuwait
+	"QA": {25.3548, 51.1839}, // Qatar
+	"OM": {21.4735, 55.9754}, // Oman
+	"BH": {26.0667, 50.5577}, // Bahrain
 	"PK": {30.3753, 69.3451},
 	"BD": {23.6850, 90.3563},
 	"HK": {22.3193, 114.1694},
@@ -545,8 +545,8 @@ func (g *GlobeRenderer) drawGrid(radius, scale float64) {
 
 // drawContinents draws filled continent shapes
 func (g *GlobeRenderer) drawContinents(radius, scale float64) {
-	landColor := "rgba(34, 85, 51, 0.8)"      // Dark green for land
-	outlineColor := "rgba(0, 217, 165, 0.6)"  // Teal outline
+	landColor := "rgba(34, 85, 51, 0.8)"     // Dark green for land
+	outlineColor := "rgba(0, 217, 165, 0.6)" // Teal outline
 
 	for _, outline := range continentOutlines {
 		points := make([]Point, 0, len(outline))
@@ -863,7 +863,7 @@ func (g *GlobeRenderer) drawNodes(radius, scale float64) {
 			// Project directly to screen without rotation (XZ plane, Y=0)
 			sx = centerX + pos3D.X*scale
 			sy = centerY - pos3D.Z*scale // Z becomes Y on screen
-			visible = true                // Satellites are always visible
+			visible = true               // Satellites are always visible
 		} else {
 			// Use geo position in geographic mode
 			pos, ok := g.nodeGeoPos[node.ID]
