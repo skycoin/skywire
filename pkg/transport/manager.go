@@ -499,11 +499,9 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 
 	tm.Logger.Debugf("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), tpID, !ok)
 
-	// Invoke callback to measure latency for new transports (runs asynchronously)
-	// Skip for self-transports as they can't be used for routing
-	if !ok && transport.RemotePK() != client.PK() {
-		tm.invokeTransportCreatedCallback(transport.RemotePK(), mTp)
-	}
+	// NOTE: Do NOT measure latency on the accepting side.
+	// Only the initiating side measures latency to avoid race conditions where
+	// both visors try to set up ping routes simultaneously on the same port.
 
 	return nil
 }
