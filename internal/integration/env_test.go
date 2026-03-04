@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -149,13 +150,13 @@ func (env *TestEnv) VerifyAppRunning(t *testing.T, visor, appName string) {
 
 // waitForHTTPEndpoint waits for an HTTP endpoint to be ready to accept connections
 func (env *TestEnv) waitForHTTPEndpoint(t *testing.T, host string, port int, timeout time.Duration) {
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	deadline := time.Now().Add(timeout)
 
 	for time.Now().Before(deadline) {
 		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 		if err == nil {
-			_ = conn.Close()
+			conn.Close() //nolint:errcheck,gosec
 			env.logger.Infof("HTTP endpoint %s is ready", addr)
 			return
 		}
