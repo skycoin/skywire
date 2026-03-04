@@ -177,10 +177,20 @@ func (tm *Manager) reRegisterTransports(ctx context.Context) {
 		if tp.IsClosed() {
 			continue
 		}
-		// Create signed entry for re-registration with previous latency, current bandwidth, and version
+		// Create signed entry for re-registration with latency stats, current bandwidth, and version
+		stats := tp.GetLatencyStats()
+		var latencyData *LatencyData
+		if stats.Avg > 0 {
+			// Convert milliseconds to microseconds
+			latencyData = &LatencyData{
+				Min: int64(stats.Min * 1000),
+				Max: int64(stats.Max * 1000),
+				Avg: int64(stats.Avg * 1000),
+			}
+		}
 		se := &SignedEntry{
 			Entry:     &tp.Entry,
-			Latency:   tp.GetLatency(),
+			Latency:   latencyData,
 			Bandwidth: tp.GetBandwidth(),
 			Version:   tm.Conf.Version,
 		}
