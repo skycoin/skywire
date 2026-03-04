@@ -137,14 +137,22 @@ type BandwidthData struct {
 	RecvBytes uint64 `json:"recv_bytes"` // Total bytes received (cumulative)
 }
 
+// LatencyData represents latency statistics for a transport in microseconds
+type LatencyData struct {
+	Min int64 `json:"min"` // Minimum observed latency in microseconds
+	Max int64 `json:"max"` // Maximum observed latency in microseconds
+	Avg int64 `json:"avg"` // Average latency in microseconds
+}
+
 // SignedEntry holds an Entry and it's associated signatures.
 // The signatures should be ordered as the contained 'Entry.Edges'.
 type SignedEntry struct {
 	Entry      *Entry         `json:"entry"`
 	Signatures [2]cipher.Sig  `json:"signatures"`
 	Registered int64          `json:"registered,omitempty"`
-	Latency    float64        `json:"latency_ms,omitempty"` // Inter-visor latency in milliseconds, measured via ping/pong
-	Bandwidth  *BandwidthData `json:"bandwidth,omitempty"`  // Cumulative bandwidth data
+	Latency    *LatencyData   `json:"latency,omitempty"`   // Latency statistics in microseconds
+	Bandwidth  *BandwidthData `json:"bandwidth,omitempty"` // Cumulative bandwidth data
+	Version    string         `json:"version,omitempty"`   // Visor version reporting this entry
 }
 
 // Sign sets Signature for a given PubKey in correct position

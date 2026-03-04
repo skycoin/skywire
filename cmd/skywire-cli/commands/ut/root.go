@@ -4,7 +4,9 @@ package cliut
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -16,6 +18,70 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
+// isTestEnv checks if test environment is enabled via SKYWIRETEST env var
+func isTestEnv() bool {
+	return os.Getenv("SKYWIRETEST") == "1"
+}
+
+// cacheDirPath returns a cache directory path based on the service URL host
+func cacheDirPath(serviceURL string) string {
+	u, err := url.Parse(serviceURL)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return filepath.Join(os.TempDir(), u.Host)
+}
+
+// cacheFile returns the full cache file path for a given URL.
+// If cacheDir is empty, returns "" (disables caching).
+// Creates the cache directory if it doesn't exist.
+// Generates simple, descriptive filenames (e.g., "visor.json", "uptimes.json").
+func cacheFile(cacheDir, fullURL string) string {
+	if cacheDir == "" {
+		return ""
+	}
+
+	u, err := url.Parse(fullURL)
+	if err != nil {
+		return ""
+	}
+
+	// Create cache directory if it doesn't exist
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		return ""
+	}
+
+	// Extract a simple, meaningful name from the URL
+	var name string
+
+	// Check for service type in query (e.g., ?type=visor -> visor.json)
+	if typeVal := u.Query().Get("type"); typeVal != "" {
+		name = typeVal
+	} else {
+		// Use the last path segment (e.g., /all-transports -> all-transports.json)
+		path := strings.TrimSuffix(u.Path, "/")
+		if idx := strings.LastIndex(path, "/"); idx >= 0 {
+			name = path[idx+1:]
+		} else {
+			name = strings.TrimPrefix(path, "/")
+		}
+	}
+
+	if name == "" {
+		name = "cache"
+	}
+
+	return filepath.Join(cacheDir, name+".json")
+}
+
+// getDeployment returns the appropriate deployment config based on test env
+func getDeployment() deployment.Services {
+	if isTestEnv() {
+		return deployment.Test
+	}
+	return deployment.Prod
+}
+
 // RootCmd is utCmd
 var RootCmd = utCmd
 
@@ -24,29 +90,35 @@ var (
 	online        bool
 	isStats       bool
 	isMoreStats   bool
-	utURL         = deployment.Prod.UptimeTracker
-	tpdURL        = deployment.Prod.TransportDiscovery
-	cacheFileUT   string
-	cacheFileTPD  string
+	utURL         string
+	tpdURL        string
+	cacheDirUT    string
+	cacheDirTPD   string
 	cacheFilesAge int
 	versionFilter string
 	minVersion    string
 	listVersions  bool
 	maxTP         int
+	testEnv       bool
 )
 
 var minUT int
 
 func init() {
+	dep := getDeployment()
+	defaultTestEnv := isTestEnv()
+
+	utCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	utCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
 	utCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
 	utCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
 	utCmd.Flags().BoolVarP(&isMoreStats, "stats2", "t", false, "count of versions")
 	utCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime percentage\n\r")
-	utCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location\n\r")
-	utCmd.Flags().StringVar(&cacheFileTPD, "cft", os.TempDir()+"/tpd.json", "TPD cache file location\n\r")
+	utCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.UptimeTracker), "UT cache dir (\"\" to disable)\n\r")
+	utCmd.Flags().StringVar(&cacheDirTPD, "cdt", cacheDirPath(dep.TransportDiscovery), "TPD cache dir (\"\" to disable)\n\r")
 	utCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes\n\r")
-	utCmd.Flags().StringVarP(&utURL, "url", "u", utURL, "specify alternative uptime tracker url\n\r")
+	utCmd.Flags().StringVarP(&utURL, "url", "u", dep.UptimeTracker, "specify alternative uptime tracker url\n\r")
+	utCmd.Flags().StringVar(&tpdURL, "tpdurl", dep.TransportDiscovery, "transport discovery url")
 	utCmd.Flags().StringVarP(&versionFilter, "version", "v", "", "filter visors by exact version")
 	utCmd.Flags().StringVar(&minVersion, "min-version", "", "filter visors with version >= specified (e.g. v1.3.34)")
 	utCmd.Flags().BoolVarP(&listVersions, "list-versions", "l", false, "list PKs with their versions")
@@ -56,14 +128,34 @@ func init() {
 var utCmd = &cobra.Command{
 	Use:   "ut",
 	Short: "query uptime tracker",
-	Long:  fmt.Sprintf("query uptime tracker\n\n%v/uptimes?v=v2\n\nCheck local visor daily uptime percent with:\n\n$ skywire-cli ut -n0 -k $(skywire-cli visor pk)\n\nSet cache file location to \"\" to avoid using cache files", utURL),
+	Long: fmt.Sprintf("query uptime tracker\n\n%v/uptimes?v=v2\n\nCheck local visor daily uptime percent with:\n\n$ skywire-cli ut -n0 -k $(skywire-cli visor pk)\n\nSet cache dir to \"\" to avoid using cache files\n\nUse --testenv or SKYWIRETEST=1 to use test deployment services.", getDeployment().UptimeTracker),
 	Run: func(cmd *cobra.Command, _ []string) {
-		uts := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
+		if testEnv && !isTestEnv() {
+			if !cmd.Flags().Changed("url") {
+				utURL = deployment.Test.UptimeTracker
+			}
+			if !cmd.Flags().Changed("tpdurl") {
+				tpdURL = deployment.Test.TransportDiscovery
+			}
+			if !cmd.Flags().Changed("cdu") {
+				cacheDirUT = cacheDirPath(deployment.Test.UptimeTracker)
+			}
+			if !cmd.Flags().Changed("cdt") {
+				cacheDirTPD = cacheDirPath(deployment.Test.TransportDiscovery)
+			}
+		}
+
+		// Build full URLs
+		utFullURL := utURL + "/uptimes?v=v2"
+		tpdFullURL := tpdURL + "/all-transports"
+
+		uts := internal.GetData(cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
 
 		// Build transport count map if --max-tp is specified
 		var tpCount map[string]int
 		if maxTP >= 0 {
-			tpd := internal.GetData(cacheFileTPD, tpdURL+"/all-transports", cacheFilesAge)
+			tpd := internal.GetData(cacheFile(cacheDirTPD, tpdFullURL), tpdFullURL, cacheFilesAge)
 			var entries []*transport.Entry
 			if err := json.Unmarshal([]byte(tpd), &entries); err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse TPD data: %w", err))
