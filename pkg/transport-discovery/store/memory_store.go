@@ -259,6 +259,12 @@ func (s *memoryStore) buildTransportMetrics(entries []*transport.Entry, query Me
 			metric.Edges = []string{entry.Edges[0].Hex(), entry.Edges[1].Hex()}
 		}
 
+		// Skip transports without any metrics data (no latency and no bandwidth)
+		// Note: memory store doesn't track these, so this filters all unless enhanced
+		if metric.Latency == nil && len(metric.Daily) == 0 {
+			continue
+		}
+
 		results = append(results, metric)
 	}
 

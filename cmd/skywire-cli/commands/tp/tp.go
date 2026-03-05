@@ -74,7 +74,7 @@ func init() {
 	tpCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
 	tpCmd.Flags().StringVarP(&tpID, "id", "i", "", "display transport matching ID")
 	tpCmd.Flags().BoolVarP(&tpTypes, "tptypes", "u", false, "display transport types used by the local visor")
-	tpCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	tpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	tpCmd.Flags().StringSliceVar(&listRemoteVisors, "remote", nil, "list transports on remote visor(s) via TPS (comma-separated PKs)")
 }
 

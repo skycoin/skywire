@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/skycoin/dmsg/pkg/disc"
@@ -14,14 +15,22 @@ import (
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
+const (
+	// RPCAddrEnvVar is the environment variable name for the RPC server address
+	RPCAddrEnvVar = "SKYWIRE_RPC"
+)
+
 var (
 	logger = logging.MustGetLogger("skywire-cli")
+	// DefaultRPCAddr is the default RPC address (from env var or default value)
+	DefaultRPCAddr = getDefaultRPCAddr()
 	// Addr is the address (ip:port) of the rpc server
 	Addr string
 	// Timeout is the timeout for RPC calls in seconds (0 = unlimited)
@@ -31,6 +40,14 @@ var (
 	// CliSK is the secret key for authenticating CLI over dmsg
 	CliSK string
 )
+
+// getDefaultRPCAddr returns the RPC address from environment variable or the default value
+func getDefaultRPCAddr() string {
+	if addr := os.Getenv(RPCAddrEnvVar); addr != "" {
+		return addr
+	}
+	return skyenv.RPCAddr
+}
 
 // Client is used by other skywire-cli commands to query the visor rpc
 func Client(cmdFlags *pflag.FlagSet) (visor.API, error) {
@@ -48,7 +65,9 @@ func Client(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	}
 	// Timeout of 0 means unlimited
 	rpcCallTimeout := time.Duration(Timeout) * time.Second
-	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, rpcCallTimeout), nil
+	// Use logger with RPC address as tag for better identification
+	rpcLogger := logging.MustGetLogger(fmt.Sprintf("rpc://%s", Addr))
+	return visor.NewRPCClient(rpcLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
 }
 
 // DmsgClient creates an RPC client over dmsg
@@ -118,5 +137,7 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	logger.Info("Connected to visor over dmsg")
 	// Use the configured timeout for RPC calls
 	rpcCallTimeout := time.Duration(Timeout) * time.Second
-	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, rpcCallTimeout), nil
+	// Use logger with dmsg address as tag for better identification
+	dmsgLogger := logging.MustGetLogger(fmt.Sprintf("dmsg://%s", VisorPK[:8]))
+	return visor.NewRPCClient(dmsgLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
 }
