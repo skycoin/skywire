@@ -9,7 +9,7 @@ atomicgo.dev/keyboard/keys
 # atomicgo.dev/schedule v0.1.0
 ## explicit; go 1.18
 atomicgo.dev/schedule
-# cogentcore.org/core v0.3.18
+# cogentcore.org/core v0.3.21
 ## explicit; go 1.25.6
 cogentcore.org/core/base/bools
 cogentcore.org/core/base/datasize
@@ -305,7 +305,7 @@ github.com/charmbracelet/bubbles/viewport
 # github.com/charmbracelet/bubbletea v1.3.10
 ## explicit; go 1.24.0
 github.com/charmbracelet/bubbletea
-# github.com/charmbracelet/colorprofile v0.4.1
+# github.com/charmbracelet/colorprofile v0.4.2
 ## explicit; go 1.24.2
 github.com/charmbracelet/colorprofile
 # github.com/charmbracelet/lipgloss v1.1.0
@@ -327,12 +327,9 @@ github.com/chen3feng/safecast
 # github.com/chewxy/math32 v1.11.1
 ## explicit; go 1.13
 github.com/chewxy/math32
-# github.com/clipperhouse/displaywidth v0.9.0
+# github.com/clipperhouse/displaywidth v0.11.0
 ## explicit; go 1.18
 github.com/clipperhouse/displaywidth
-# github.com/clipperhouse/stringish v0.1.1
-## explicit; go 1.18
-github.com/clipperhouse/stringish
 # github.com/clipperhouse/uax29/v2 v2.7.0
 ## explicit; go 1.18
 github.com/clipperhouse/uax29/v2/graphemes
@@ -488,8 +485,8 @@ github.com/gen2brain/dlgs
 # github.com/gin-contrib/sse v1.1.0
 ## explicit; go 1.23
 github.com/gin-contrib/sse
-# github.com/gin-gonic/gin v1.11.0
-## explicit; go 1.23.0
+# github.com/gin-gonic/gin v1.12.0
+## explicit; go 1.25.0
 github.com/gin-gonic/gin
 github.com/gin-gonic/gin/binding
 github.com/gin-gonic/gin/codec/json
@@ -511,7 +508,7 @@ github.com/go-chi/cors
 # github.com/go-chi/httprate v0.15.0
 ## explicit; go 1.23.0
 github.com/go-chi/httprate
-# github.com/go-echarts/go-echarts/v2 v2.6.7
+# github.com/go-echarts/go-echarts/v2 v2.7.0
 ## explicit; go 1.18
 github.com/go-echarts/go-echarts/v2/charts
 github.com/go-echarts/go-echarts/v2/datasets
@@ -570,7 +567,7 @@ github.com/go-redis/redis/v8/internal/pool
 github.com/go-redis/redis/v8/internal/proto
 github.com/go-redis/redis/v8/internal/rand
 github.com/go-redis/redis/v8/internal/util
-# github.com/go-text/typesetting v0.3.3
+# github.com/go-text/typesetting v0.3.4
 ## explicit; go 1.19
 github.com/go-text/typesetting/di
 github.com/go-text/typesetting/font
@@ -580,10 +577,10 @@ github.com/go-text/typesetting/font/opentype
 github.com/go-text/typesetting/font/opentype/tables
 github.com/go-text/typesetting/fontscan
 github.com/go-text/typesetting/harfbuzz
+github.com/go-text/typesetting/internal/unicodedata
 github.com/go-text/typesetting/language
 github.com/go-text/typesetting/segmenter
 github.com/go-text/typesetting/shaping
-github.com/go-text/typesetting/unicodedata
 # github.com/go-viper/mapstructure/v2 v2.5.0
 ## explicit; go 1.18
 github.com/go-viper/mapstructure/v2
@@ -800,8 +797,8 @@ github.com/lithammer/fuzzysearch/fuzzy
 # github.com/lucasb-eyer/go-colorful v1.3.0
 ## explicit; go 1.12
 github.com/lucasb-eyer/go-colorful
-# github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0
-## explicit; go 1.16
+# github.com/lufia/plan9stats v0.0.0-20260216142805-b3301c5f2a88
+## explicit; go 1.21
 github.com/lufia/plan9stats
 # github.com/mattn/go-colorable v0.1.14
 ## explicit; go 1.18
@@ -885,11 +882,11 @@ github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 ## explicit
 github.com/pmezard/go-difflib/difflib
-# github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c
+# github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55
 ## explicit; go 1.14
 github.com/power-devops/perfstat
-# github.com/pterm/pterm v0.12.82
-## explicit; go 1.23.0
+# github.com/pterm/pterm v0.12.83
+## explicit; go 1.24.0
 github.com/pterm/pterm
 github.com/pterm/pterm/internal
 github.com/pterm/pterm/putils
@@ -943,7 +940,7 @@ github.com/shirou/gopsutil/v3/internal/common
 github.com/shirou/gopsutil/v3/mem
 github.com/shirou/gopsutil/v3/net
 github.com/shirou/gopsutil/v3/process
-# github.com/shoenig/go-m1cpu v0.1.6
+# github.com/shoenig/go-m1cpu v0.1.7
 ## explicit; go 1.20
 github.com/shoenig/go-m1cpu
 # github.com/shopspring/decimal v1.4.0
@@ -1119,7 +1116,7 @@ github.com/subosito/gotenv
 # github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 ## explicit
 github.com/syndtr/gocapability/capability
-# github.com/tdewolff/parse/v2 v2.8.6
+# github.com/tdewolff/parse/v2 v2.8.10
 ## explicit; go 1.11
 github.com/tdewolff/parse/v2/strconv
 # github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161
@@ -1222,6 +1219,13 @@ go.etcd.io/bbolt
 go.etcd.io/bbolt/errors
 go.etcd.io/bbolt/internal/common
 go.etcd.io/bbolt/internal/freelist
+# go.mongodb.org/mongo-driver/v2 v2.5.0
+## explicit; go 1.19
+go.mongodb.org/mongo-driver/v2/bson
+go.mongodb.org/mongo-driver/v2/internal/binaryutil
+go.mongodb.org/mongo-driver/v2/internal/bsoncoreutil
+go.mongodb.org/mongo-driver/v2/internal/decimal128
+go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore
 # go.opentelemetry.io/auto/sdk v1.2.1
 ## explicit; go 1.24.0
 go.opentelemetry.io/auto/sdk
@@ -1258,8 +1262,6 @@ go.opentelemetry.io/otel/trace/embedded
 go.opentelemetry.io/otel/trace/internal/telemetry
 go.opentelemetry.io/otel/trace/noop
 # go.opentelemetry.io/proto/otlp v1.7.1
-## explicit; go 1.23.0
-# go.uber.org/mock v0.6.0
 ## explicit; go 1.23.0
 # go.yaml.in/yaml/v3 v3.0.4
 ## explicit; go 1.16
@@ -1305,8 +1307,8 @@ golang.org/x/image/webp
 # golang.org/x/mod v0.33.0
 ## explicit; go 1.24.0
 golang.org/x/mod/semver
-# golang.org/x/net v0.50.0
-## explicit; go 1.24.0
+# golang.org/x/net v0.51.0
+## explicit; go 1.25.0
 golang.org/x/net/bpf
 golang.org/x/net/context
 golang.org/x/net/html
@@ -1403,7 +1405,7 @@ golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
 # google.golang.org/genproto/googleapis/api v0.0.0-20260217215200-42d3e9bedb6d
 ## explicit; go 1.25.0
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20260217215200-42d3e9bedb6d
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171
 ## explicit; go 1.25.0
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.79.1
