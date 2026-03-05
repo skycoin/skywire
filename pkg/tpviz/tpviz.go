@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,18 +41,18 @@ type Config struct {
 	Addr string
 	// Port is the port to listen on (default: 8080)
 	Port int
-	// CacheFile is the location for the TPD cache file
-	CacheFile string
-	// CacheFileUT is the location for the uptime tracker cache file
-	CacheFileUT string
-	// CacheFileSD is the location for the service discovery cache file
-	CacheFileSD string
-	// CacheFileDMSGServers is the location for the DMSG servers cache file
-	CacheFileDMSGServers string
-	// CacheFileDMSGEntries is the location for the DMSG entries cache file
-	CacheFileDMSGEntries string
-	// CacheFileDMSGClients is the location for the DMSG server/clients cache file
-	CacheFileDMSGClients string
+	// CacheDirTPD is the cache directory for TPD data (default: /tmp/{tpd-host})
+	// Set to "" to disable caching
+	CacheDirTPD string
+	// CacheDirUT is the cache directory for uptime tracker data (default: /tmp/{ut-host})
+	// Set to "" to disable caching
+	CacheDirUT string
+	// CacheDirSD is the cache directory for service discovery data (default: /tmp/{sd-host})
+	// Set to "" to disable caching
+	CacheDirSD string
+	// CacheDirDMSG is the cache directory for DMSG discovery data (default: /tmp/{dmsg-host})
+	// Set to "" to disable caching
+	CacheDirDMSG string
 	// CacheMaxAge is the cache max age in minutes (default: 5)
 	CacheMaxAge int
 	// TPDURL is the transport discovery URL
@@ -73,25 +74,75 @@ type Config struct {
 	GeoIPURL string
 }
 
+// CacheDirFromURL returns a cache directory path based on the service URL host.
+// For example, "http://tpd.skywire.skycoin.com" -> "/tmp/tpd.skywire.skycoin.com"
+func CacheDirFromURL(serviceURL string) string {
+	u, err := url.Parse(serviceURL)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return filepath.Join(os.TempDir(), u.Host)
+}
+
+// CacheFilePath returns the full cache file path for a given URL.
+// If cacheDir is empty, returns "" (disables caching).
+// Creates the cache directory if it doesn't exist.
+// Generates simple, descriptive filenames based on URL path/query.
+func CacheFilePath(cacheDir, fullURL string) string {
+	if cacheDir == "" {
+		return ""
+	}
+
+	u, err := url.Parse(fullURL)
+	if err != nil {
+		return ""
+	}
+
+	// Create cache directory if it doesn't exist
+	if err := os.MkdirAll(cacheDir, 0750); err != nil {
+		return ""
+	}
+
+	// Extract a simple, meaningful name from the URL
+	var name string
+
+	// Check for service type in query (e.g., ?type=visor -> visor.json)
+	if typeVal := u.Query().Get("type"); typeVal != "" {
+		name = typeVal
+	} else {
+		// Use the last path segment (e.g., /all-transports -> all-transports.json)
+		path := strings.TrimSuffix(u.Path, "/")
+		if idx := strings.LastIndex(path, "/"); idx >= 0 {
+			name = path[idx+1:]
+		} else {
+			name = strings.TrimPrefix(path, "/")
+		}
+	}
+
+	if name == "" {
+		name = "cache"
+	}
+
+	return filepath.Join(cacheDir, name+".json")
+}
+
 // DefaultConfig returns a Config with default values
 func DefaultConfig() Config {
 	return Config{
-		Addr:                 "127.0.0.1",
-		Port:                 8080,
-		CacheFile:            filepath.Join(os.TempDir(), "tpd.json"),
-		CacheFileUT:          filepath.Join(os.TempDir(), "ut.json"),
-		CacheFileSD:          filepath.Join(os.TempDir(), "sd.json"),
-		CacheFileDMSGServers: filepath.Join(os.TempDir(), "dmsg-servers.json"),
-		CacheFileDMSGEntries: filepath.Join(os.TempDir(), "dmsg-entries.json"),
-		CacheFileDMSGClients: filepath.Join(os.TempDir(), "dmsg-clients.json"),
-		CacheMaxAge:          5,
-		TPDURL:               deployment.Prod.TransportDiscovery,
-		UTURL:                deployment.Prod.UptimeTracker,
-		SDURL:                deployment.Prod.ServiceDiscovery,
-		DMSGURL:              deployment.Prod.DmsgDiscovery,
-		NoCache:              false,
-		AutoRefresh:          true,
-		GeoIPURL:             "http://ip.skycoin.com",
+		Addr:         "127.0.0.1",
+		Port:         8080,
+		CacheDirTPD:  CacheDirFromURL(deployment.Prod.TransportDiscovery),
+		CacheDirUT:   CacheDirFromURL(deployment.Prod.UptimeTracker),
+		CacheDirSD:   CacheDirFromURL(deployment.Prod.ServiceDiscovery),
+		CacheDirDMSG: CacheDirFromURL(deployment.Prod.DmsgDiscovery),
+		CacheMaxAge:  5,
+		TPDURL:       deployment.Prod.TransportDiscovery,
+		UTURL:        deployment.Prod.UptimeTracker,
+		SDURL:        deployment.Prod.ServiceDiscovery,
+		DMSGURL:      deployment.Prod.DmsgDiscovery,
+		NoCache:      false,
+		AutoRefresh:  true,
+		GeoIPURL:     "http://ip.skycoin.com",
 	}
 }
 
@@ -474,9 +525,12 @@ func (s *Server) setupRoutes() {
 		w.Header().Set("Content-Type", "application/json")
 
 		// Get actual cache file ages in seconds
-		tpdAge := s.getCacheAgeSeconds(s.config.CacheFile)
-		utAge := s.getCacheAgeSeconds(s.config.CacheFileUT)
-		sdAge := s.getCacheAgeSeconds(s.config.CacheFileSD)
+		tpdCacheFile := CacheFilePath(s.config.CacheDirTPD, s.config.TPDURL+"/all-transports")
+		utCacheFile := CacheFilePath(s.config.CacheDirUT, s.config.UTURL+"/uptimes?v=v2")
+		sdCacheFile := CacheFilePath(s.config.CacheDirSD, s.config.SDURL+"/api/services?type=visor")
+		tpdAge := s.getCacheAgeSeconds(tpdCacheFile)
+		utAge := s.getCacheAgeSeconds(utCacheFile)
+		sdAge := s.getCacheAgeSeconds(sdCacheFile)
 
 		// Find the oldest cache age
 		maxAge := tpdAge
@@ -536,7 +590,9 @@ func (s *Server) setupRoutes() {
 }
 
 func (s *Server) handleTransports(w http.ResponseWriter, r *http.Request) {
-	data, err := s.getData(s.config.CacheFile, s.config.TPDURL+"/all-transports")
+	tpdURL := s.config.TPDURL + "/all-transports"
+	cacheFile := CacheFilePath(s.config.CacheDirTPD, tpdURL)
+	data, err := s.getData(cacheFile, tpdURL)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch data: %v", err), http.StatusInternalServerError)
 		return
@@ -548,7 +604,9 @@ func (s *Server) handleTransports(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUptimes(w http.ResponseWriter, r *http.Request) {
-	data, err := s.getData(s.config.CacheFileUT, s.config.UTURL+"/uptimes?v=v2")
+	utURL := s.config.UTURL + "/uptimes?v=v2"
+	cacheFile := CacheFilePath(s.config.CacheDirUT, utURL)
+	data, err := s.getData(cacheFile, utURL)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch uptime data: %v", err), http.StatusInternalServerError)
 		return
@@ -561,7 +619,7 @@ func (s *Server) handleUptimes(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 	// Try to use cached SD data first
-	if s.config.CacheFileSD != "" && !s.config.NoCache {
+	if s.config.CacheDirSD != "" && !s.config.NoCache {
 		data, err := s.getSDData()
 		if err == nil {
 			w.Header().Set("Content-Type", "application/json")
@@ -758,10 +816,20 @@ type surveyData struct {
 	IPAddr string `json:"ip_address"`
 }
 
+// sdCacheFile returns the combined SD cache file path
+func (s *Server) sdCacheFile() string {
+	return CacheFilePath(s.config.CacheDirSD, s.config.SDURL+"/api/services")
+}
+
 // getSDData gets service discovery data from cache or fetches fresh
 func (s *Server) getSDData() (string, error) {
+	cacheFile := s.sdCacheFile()
+	if cacheFile == "" {
+		return "", fmt.Errorf("SD cache disabled")
+	}
+
 	s.cacheMu.RLock()
-	info, err := os.Stat(s.config.CacheFileSD)
+	info, err := os.Stat(cacheFile)
 	if err != nil {
 		s.cacheMu.RUnlock()
 		return "", err
@@ -779,7 +847,7 @@ func (s *Server) getSDData() (string, error) {
 
 	s.cacheMu.RLock()
 	defer s.cacheMu.RUnlock()
-	return readFile(s.config.CacheFileSD)
+	return readFile(cacheFile)
 }
 
 // ServiceInfo holds service information for a visor
@@ -890,9 +958,13 @@ func (s *Server) refreshCacheFile(cacheFile, url string) {
 
 // refreshCache proactively refreshes all cache files
 func (s *Server) refreshCache() {
+	// Build URL to cache file mapping dynamically
+	tpdURL := s.config.TPDURL + "/all-transports"
+	utURL := s.config.UTURL + "/uptimes?v=v2"
+
 	urls := map[string]string{
-		s.config.CacheFile:   s.config.TPDURL + "/all-transports",
-		s.config.CacheFileUT: s.config.UTURL + "/uptimes?v=v2",
+		CacheFilePath(s.config.CacheDirTPD, tpdURL): tpdURL,
+		CacheFilePath(s.config.CacheDirUT, utURL):   utURL,
 	}
 
 	for cacheFile, url := range urls {
@@ -914,7 +986,7 @@ func (s *Server) refreshCache() {
 		}
 
 		s.cacheMu.Lock()
-		if err := os.WriteFile(cacheFile, []byte(data), 0644); err != nil { //nolint:gosec
+		if err := os.WriteFile(cacheFile, []byte(data), 0600); err != nil {
 			s.log.WithField("file", cacheFile).WithError(err).Warn("Failed to write cache file")
 		}
 		s.cacheMu.Unlock()
@@ -933,12 +1005,13 @@ func (s *Server) refreshCache() {
 
 // refreshSDCache refreshes the service discovery cache
 func (s *Server) refreshSDCache() {
-	if s.config.CacheFileSD == "" {
+	cacheFile := s.sdCacheFile()
+	if cacheFile == "" {
 		return
 	}
 
 	// Check if file needs refresh
-	info, err := os.Stat(s.config.CacheFileSD)
+	info, err := os.Stat(cacheFile)
 	if err == nil && time.Since(info.ModTime()).Minutes() <= float64(s.config.CacheMaxAge) {
 		return // File is fresh enough
 	}
@@ -972,23 +1045,32 @@ func (s *Server) refreshSDCache() {
 	}
 
 	s.cacheMu.Lock()
-	if err := os.WriteFile(s.config.CacheFileSD, result, 0644); err != nil { //nolint:gosec
-		s.log.WithField("file", s.config.CacheFileSD).WithError(err).Warn("Failed to write SD cache file")
+	if err := os.WriteFile(cacheFile, result, 0600); err != nil {
+		s.log.WithField("file", cacheFile).WithError(err).Warn("Failed to write SD cache file")
 	}
 	s.cacheMu.Unlock()
-	s.log.WithField("file", s.config.CacheFileSD).Debug("Auto-refreshed cache")
+	s.log.WithField("file", cacheFile).Debug("Auto-refreshed cache")
+}
+
+// dmsgCacheFiles returns the DMSG cache file paths for servers, entries, and clients
+func (s *Server) dmsgCacheFiles() (servers, entries, clients string) {
+	servers = CacheFilePath(s.config.CacheDirDMSG, s.config.DMSGURL+"/dmsg-discovery/all_servers")
+	entries = CacheFilePath(s.config.CacheDirDMSG, s.config.DMSGURL+"/dmsg-discovery/entries")
+	clients = CacheFilePath(s.config.CacheDirDMSG, s.config.DMSGURL+"/dmsg-discovery/servers/clients")
+	return
 }
 
 // refreshDMSGCache refreshes the DMSG discovery cache by calling getDMSGData
 // which handles all three sub-fetches (servers, entries, clients) with disk caching and geoip.
 func (s *Server) refreshDMSGCache() {
-	if s.config.DMSGURL == "" {
+	if s.config.DMSGURL == "" || s.config.CacheDirDMSG == "" {
 		return
 	}
 
 	// Check if any DMSG cache file needs refresh
+	servers, entries, clients := s.dmsgCacheFiles()
 	needsRefresh := false
-	for _, f := range []string{s.config.CacheFileDMSGServers, s.config.CacheFileDMSGEntries, s.config.CacheFileDMSGClients} {
+	for _, f := range []string{servers, entries, clients} {
 		if f == "" {
 			continue
 		}
@@ -1087,8 +1169,8 @@ func (s *Server) Start() {
 func (s *Server) ListenAndServe() error {
 	listenAddr := fmt.Sprintf("%s:%d", s.config.Addr, s.config.Port)
 	s.log.WithField("addr", "http://"+listenAddr).Info("Starting Skywire Network UI server")
-	s.log.WithField("tpd", s.config.CacheFile).WithField("ut", s.config.CacheFileUT).
-		WithField("sd", s.config.CacheFileSD).Info("Cache files")
+	s.log.WithField("tpd", s.config.CacheDirTPD).WithField("ut", s.config.CacheDirUT).
+		WithField("sd", s.config.CacheDirSD).Info("Cache directories")
 	s.log.WithField("max_age_min", s.config.CacheMaxAge).Debug("Cache max age")
 	s.log.WithField("tpd", s.config.TPDURL).WithField("ut", s.config.UTURL).
 		WithField("sd", s.config.SDURL).Debug("Service URLs")
@@ -2162,8 +2244,11 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 		LastUpdated: time.Now(),
 	}
 
+	// Get DMSG cache file paths
+	serversCacheFile, entriesCacheFile, clientsCacheFile := s.dmsgCacheFiles()
+
 	// Fetch servers (with disk caching)
-	serversJSON, err := s.getDMSGSubData(s.config.CacheFileDMSGServers, s.config.DMSGURL+"/dmsg-discovery/all_servers")
+	serversJSON, err := s.getDMSGSubData(serversCacheFile, s.config.DMSGURL+"/dmsg-discovery/all_servers")
 	if err != nil {
 		return nil, fmt.Errorf("fetch servers: %w", err)
 	}
@@ -2205,7 +2290,7 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 	}
 
 	// Fetch entries (with disk caching)
-	entriesJSON, err := s.getDMSGSubData(s.config.CacheFileDMSGEntries, s.config.DMSGURL+"/dmsg-discovery/entries")
+	entriesJSON, err := s.getDMSGSubData(entriesCacheFile, s.config.DMSGURL+"/dmsg-discovery/entries")
 	if err != nil {
 		s.log.WithError(err).Warn("Failed to fetch DMSG entries")
 	} else {
@@ -2217,7 +2302,7 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 	}
 
 	// Fetch clients by server (with disk caching, fault-tolerant)
-	clientsJSON, err := s.getDMSGSubData(s.config.CacheFileDMSGClients, s.config.DMSGURL+"/dmsg-discovery/servers/clients")
+	clientsJSON, err := s.getDMSGSubData(clientsCacheFile, s.config.DMSGURL+"/dmsg-discovery/servers/clients")
 	if err != nil {
 		s.log.WithError(err).Debug("Failed to fetch clients by server (endpoint may not be available)")
 	} else {
