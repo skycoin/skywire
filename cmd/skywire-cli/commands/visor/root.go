@@ -12,7 +12,7 @@ import (
 var logger = logging.MustGetLogger("skywire-cli")
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	RootCmd.AddCommand(ping.RootCmd)
 }
 

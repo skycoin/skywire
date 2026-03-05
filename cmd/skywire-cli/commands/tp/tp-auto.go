@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	autoCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	autoCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 }
 
 var autoCmd = &cobra.Command{

@@ -144,7 +144,7 @@ var (
 var RootCmd = routeCmd
 
 func init() {
-	routeCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	routeCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	routeCmd.AddCommand(
 		rmRuleCmd,
 		addRuleCmd,

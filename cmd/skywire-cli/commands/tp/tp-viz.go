@@ -47,7 +47,7 @@ func init() {
 	vizCmd.Flags().BoolVarP(&vizVisor, "visor", "v", false, "request the running visor to start its embedded UI server")
 	vizCmd.Flags().BoolVar(&vizStop, "stop", false, "request the running visor to stop its embedded UI server")
 	vizCmd.Flags().BoolVar(&vizStatus, "status", false, "check the status of the visor's embedded UI server")
-	vizCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "visor RPC address (for --visor, --stop, --status)")
+	vizCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "visor RPC address (env: SKYWIRE_RPC)")
 }
 
 var vizCmd = &cobra.Command{

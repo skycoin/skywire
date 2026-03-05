@@ -932,6 +932,11 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 			}
 		}
 
+		// Skip transports without any metrics data (no latency and no bandwidth)
+		if metric.Latency == nil && len(metric.Daily) == 0 {
+			continue
+		}
+
 		results = append(results, metric)
 	}
 
