@@ -80,7 +80,7 @@ func init() {
 	addPvCmd.Flags().BoolVar(&pvForceAttempt, "force", false, "attempt dmsg transport without checking dmsg discovery")
 	addPvCmd.Flags().IntVar(&pvRetries, "retries", 1, "number of times to retry per transport type")
 	addPvCmd.Flags().IntVar(&pvMinTransports, "min", 0, "minimum transport count for target visors")
-	addPvCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	addPvCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	addPvCmd.Flags().StringSliceVar(&pvRemoteVisors, "remote", nil, "request public visor transports on remote visor(s) via TPS (comma-separated PKs)")
 	addTpCmd.AddCommand(addPvCmd)
 }

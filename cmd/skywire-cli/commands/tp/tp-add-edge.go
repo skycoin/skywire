@@ -25,7 +25,7 @@ func init() {
 	addEdgeCmd.Flags().IntVarP(&edgeBatchSize, "batch", "b", 5, "number of transports to add in parallel")
 	addEdgeCmd.Flags().BoolVarP(&edgeVerbose, "verbose", "v", false, "verbose output")
 	addEdgeCmd.Flags().DurationVarP(&timeout, "timeout", "o", 30*time.Second, "timeout for each transport addition")
-	addEdgeCmd.Flags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	addEdgeCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 }
 
 var addEdgeCmd = &cobra.Command{
