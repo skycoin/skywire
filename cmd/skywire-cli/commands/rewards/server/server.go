@@ -186,12 +186,10 @@ func server(e error) {
 
 		// Create tpviz server with file caching (same as standalone skywire cli tp viz)
 		tpvizCfg := tpviz.DefaultConfig()
-		tpvizCfg.CacheFile = filepath.Join(wd, "tpd.json")
-		tpvizCfg.CacheFileUT = filepath.Join(wd, "ut.json")
-		tpvizCfg.CacheFileSD = filepath.Join(wd, "sd.json")
-		tpvizCfg.CacheFileDMSGServers = filepath.Join(wd, "dmsg-servers.json")
-		tpvizCfg.CacheFileDMSGEntries = filepath.Join(wd, "dmsg-entries.json")
-		tpvizCfg.CacheFileDMSGClients = filepath.Join(wd, "dmsg-clients.json")
+		tpvizCfg.CacheDirTPD = wd
+		tpvizCfg.CacheDirUT = wd
+		tpvizCfg.CacheDirSD = wd
+		tpvizCfg.CacheDirDMSG = wd
 		tpvizCfg.SurveyDir = filepath.Join(wd, "log_backups") // Survey data for IP grouping
 		tpvizServer := tpviz.NewServer(tpvizCfg)
 		tpvizServer.Start() // Initialize cache and start auto-refresh

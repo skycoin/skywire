@@ -4,7 +4,6 @@ package clitp
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -16,13 +15,15 @@ import (
 var (
 	vizAddr          string
 	vizPort          int
-	vizCacheFile     string
-	vizCacheFileUT   string
-	vizCacheFileSD   string
+	vizCacheDirTPD   string
+	vizCacheDirUT    string
+	vizCacheDirSD    string
+	vizCacheDirDMSG  string
 	vizCacheMaxAge   int
 	vizTPDURL        string
 	vizUTURL         string
 	vizSDURL         string
+	vizDMSGURL       string
 	vizNoCache       bool
 	vizNoAutoRefresh bool
 	vizSurveyDir     string
@@ -34,13 +35,15 @@ var (
 func init() {
 	vizCmd.Flags().StringVarP(&vizAddr, "addr", "a", "127.0.0.1", "address to bind to (standalone mode)")
 	vizCmd.Flags().IntVarP(&vizPort, "port", "p", 8080, "port to listen on (standalone mode)")
-	vizCmd.Flags().StringVar(&vizCacheFile, "cache", filepath.Join(os.TempDir(), "tpd.json"), "TPD cache file location")
-	vizCmd.Flags().StringVar(&vizCacheFileUT, "cache-ut", filepath.Join(os.TempDir(), "ut.json"), "uptime tracker cache file location")
-	vizCmd.Flags().StringVar(&vizCacheFileSD, "cache-sd", filepath.Join(os.TempDir(), "sd.json"), "service discovery cache file location")
-	vizCmd.Flags().IntVarP(&vizCacheMaxAge, "max-age", "m", 5, "update cache file if older than n minutes")
+	vizCmd.Flags().StringVar(&vizCacheDirTPD, "cdt", tpviz.CacheDirFromURL(deployment.Prod.TransportDiscovery), "TPD cache dir (\"\" to disable)")
+	vizCmd.Flags().StringVar(&vizCacheDirUT, "cdu", tpviz.CacheDirFromURL(deployment.Prod.UptimeTracker), "UT cache dir (\"\" to disable)")
+	vizCmd.Flags().StringVar(&vizCacheDirSD, "cds", tpviz.CacheDirFromURL(deployment.Prod.ServiceDiscovery), "SD cache dir (\"\" to disable)")
+	vizCmd.Flags().StringVar(&vizCacheDirDMSG, "cdd", tpviz.CacheDirFromURL(deployment.Prod.DmsgDiscovery), "DMSG cache dir (\"\" to disable)")
+	vizCmd.Flags().IntVarP(&vizCacheMaxAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	vizCmd.Flags().StringVar(&vizTPDURL, "tpd-url", deployment.Prod.TransportDiscovery, "transport discovery URL")
 	vizCmd.Flags().StringVarP(&vizUTURL, "ut-url", "w", deployment.Prod.UptimeTracker, "uptime tracker URL")
 	vizCmd.Flags().StringVar(&vizSDURL, "sd-url", deployment.Prod.ServiceDiscovery, "service discovery URL")
+	vizCmd.Flags().StringVar(&vizDMSGURL, "dmsg-url", deployment.Prod.DmsgDiscovery, "DMSG discovery URL")
 	vizCmd.Flags().BoolVar(&vizNoCache, "no-cache", false, "disable caching, always fetch fresh data")
 	vizCmd.Flags().BoolVar(&vizNoAutoRefresh, "no-auto-refresh", false, "disable auto-refresh of cache")
 	vizCmd.Flags().StringVar(&vizSurveyDir, "survey-dir", "", "directory containing visor surveys for IP-based grouping (node-info.json files)")
@@ -115,18 +118,20 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 
 		// Standalone mode - run local HTTP server
 		cfg := tpviz.Config{
-			Addr:        vizAddr,
-			Port:        vizPort,
-			CacheFile:   vizCacheFile,
-			CacheFileUT: vizCacheFileUT,
-			CacheFileSD: vizCacheFileSD,
-			CacheMaxAge: vizCacheMaxAge,
-			TPDURL:      vizTPDURL,
-			UTURL:       vizUTURL,
-			SDURL:       vizSDURL,
-			NoCache:     vizNoCache,
-			AutoRefresh: !vizNoAutoRefresh,
-			SurveyDir:   vizSurveyDir,
+			Addr:         vizAddr,
+			Port:         vizPort,
+			CacheDirTPD:  vizCacheDirTPD,
+			CacheDirUT:   vizCacheDirUT,
+			CacheDirSD:   vizCacheDirSD,
+			CacheDirDMSG: vizCacheDirDMSG,
+			CacheMaxAge:  vizCacheMaxAge,
+			TPDURL:       vizTPDURL,
+			UTURL:        vizUTURL,
+			SDURL:        vizSDURL,
+			DMSGURL:      vizDMSGURL,
+			NoCache:      vizNoCache,
+			AutoRefresh:  !vizNoAutoRefresh,
+			SurveyDir:    vizSurveyDir,
 		}
 
 		// Standalone mode doesn't connect to visor RPC (removed due to brittleness)
