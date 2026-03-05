@@ -168,6 +168,9 @@ const (
 	// ServiceDiscUpdateInterval update interval (heartbeat) for apps in service discovery
 	ServiceDiscUpdateInterval = 90 * time.Second
 
+	// PublicAutoconnectInterval interval for checking service discovery and connecting to public visors
+	PublicAutoconnectInterval = 300 * time.Second
+
 	// AppBinPath is the default path for the apps
 	AppBinPath = "./"
 
