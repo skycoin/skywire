@@ -34,7 +34,7 @@ func init() {
 	)
 
 	// Common flag
-	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", "localhost:3435", "RPC server address")
+	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 
 	// Add transport flags
 	addCmd.Flags().StringVarP(&targetPK, "target", "t", "", "target visor public key (visor to add transport on)")
