@@ -701,6 +701,12 @@ var genConfigCmd = &cobra.Command{
 
 		// Configure public visor
 		conf.IsPublic = isPublic
+		if isPublic {
+			conf.PublicVisorConfig = &visorconfig.PublicVisorConfig{
+				RegistrationTimeout: visorconfig.Duration(visorconfig.PublicVisorRegistrationTimeout),
+				MaxTransports:       visorconfig.PublicVisorMaxTransports,
+			}
+		}
 
 		// Manipulate Hypervisor PKs
 		conf.Hypervisors = make([]cipher.PubKey, 0)
