@@ -3359,10 +3359,10 @@ func (v *Visor) StartUIServer(addr string) error {
 
 	srv := &http.Server{
 		Handler:           tpvizServer.Handler(),
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       90 * time.Second,
-		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       visorconfig.HTTPReadTimeout,
+		WriteTimeout:      visorconfig.HTTPWriteTimeout,
+		IdleTimeout:       visorconfig.HTTPIdleTimeout,
+		ReadHeaderTimeout: visorconfig.HTTPReadHeaderTimeout,
 	}
 
 	go func() {
