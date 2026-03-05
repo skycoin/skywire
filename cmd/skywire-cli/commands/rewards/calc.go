@@ -96,12 +96,11 @@ func runRewardProcessing() {
 	log.Info("Processing rewards for date: ", wdate)
 
 	// Fetch uptime tracker data
-	utCacheFile := fmt.Sprintf("hist/%s_ut.json", wdate)
 	utOutputFile := fmt.Sprintf("hist/%s_ut.txt", wdate)
 	log.Info("Fetching uptime tracker data...")
 
 	//nolint:gosec
-	cmd := exec.Command("skywire-cli", "ut", "--cfu", utCacheFile)
+	cmd := exec.Command("skywire-cli", "ut", "--cdu", "hist/")
 	utData, err := cmd.Output()
 	if err != nil {
 		log.Fatal("Failed to fetch uptime tracker data: ", err)
