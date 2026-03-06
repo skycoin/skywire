@@ -20,6 +20,16 @@ service PingService {
 
   // GetRemoteDmsgServers returns the DMSG servers a remote visor is connected to
   rpc GetRemoteDmsgServers(DmsgServersRequest) returns (DmsgServersResponse);
+
+  // StreamSystemStats streams system stats (CPU, memory, disk, network, etc.) for gotop-style monitoring
+  rpc StreamSystemStats(SystemStatsRequest) returns (stream SystemStats);
+
+  // GetSystemStats returns a single snapshot of system stats
+  rpc GetSystemStats(SystemStatsRequest) returns (SystemStats);
+
+  // StreamRemoteSystemStats proxies system stats from a remote visor via DMSG
+  // The local visor dials the remote visor over DMSG and forwards the stats stream
+  rpc StreamRemoteSystemStats(RemoteSystemStatsRequest) returns (stream SystemStats);
 }
 
 message PingRequest {
@@ -76,4 +86,100 @@ message BandwidthProgress {
   double download_speed = 5;   // Current download speed in KB/s
   bool is_final = 6;           // True if this is the final result
   string error = 7;            // Error message if test failed
+}
+
+// SystemStatsRequest configures system stats streaming
+message SystemStatsRequest {
+  int64 update_interval_ns = 1;  // Update interval in nanoseconds (default 1s)
+  bool include_processes = 2;    // Include top processes (more expensive)
+  int32 process_limit = 3;       // Max processes to include (default 10)
+}
+
+// RemoteSystemStatsRequest requests system stats from a remote visor via DMSG
+message RemoteSystemStatsRequest {
+  string remote_pk = 1;              // Public key of remote visor to connect to
+  int64 update_interval_ns = 2;      // Update interval in nanoseconds (default 1s)
+  bool include_processes = 3;        // Include top processes (more expensive)
+  int32 process_limit = 4;           // Max processes to include (default 10)
+}
+
+// SystemStats contains system monitoring data for gotop-style display
+message SystemStats {
+  int64 timestamp_ns = 1;           // Unix timestamp in nanoseconds
+  HostInfo host = 2;                // Host information
+  repeated CpuStat cpu = 3;         // CPU usage per core
+  double cpu_average = 4;           // Average CPU usage across all cores
+  MemoryStat memory = 5;            // Memory usage
+  MemoryStat swap = 6;              // Swap usage
+  repeated DiskStat disks = 7;      // Disk usage per partition
+  NetworkStat network = 8;          // Network I/O
+  repeated TempStat temps = 9;      // Temperature sensors
+  repeated ProcessStat processes = 10; // Top processes
+  string error = 11;                // Error message if collection failed
+}
+
+// HostInfo contains basic host information
+message HostInfo {
+  string hostname = 1;
+  int64 uptime_sec = 2;         // System uptime in seconds
+  string os = 3;                // Operating system name
+  string platform = 4;          // Platform (e.g., ubuntu, centos)
+  string platform_version = 5;  // Platform version
+  string kernel_version = 6;    // Kernel version
+  string kernel_arch = 7;       // Kernel architecture
+  int32 num_cpus = 8;           // Number of logical CPUs
+}
+
+// CpuStat contains CPU usage for a single core
+message CpuStat {
+  string cpu = 1;         // CPU identifier (cpu0, cpu1, etc. or cpu-total)
+  double usage_percent = 2; // Usage percentage (0-100)
+}
+
+// MemoryStat contains memory usage information
+message MemoryStat {
+  uint64 total = 1;         // Total memory in bytes
+  uint64 used = 2;          // Used memory in bytes
+  uint64 available = 3;     // Available memory in bytes
+  double used_percent = 4;  // Usage percentage (0-100)
+}
+
+// DiskStat contains disk usage for a partition
+message DiskStat {
+  string device = 1;        // Device name
+  string mountpoint = 2;    // Mount point
+  string fstype = 3;        // Filesystem type
+  uint64 total = 4;         // Total space in bytes
+  uint64 used = 5;          // Used space in bytes
+  uint64 free = 6;          // Free space in bytes
+  double used_percent = 7;  // Usage percentage (0-100)
+}
+
+// NetworkStat contains network I/O information
+message NetworkStat {
+  uint64 bytes_sent = 1;        // Total bytes sent
+  uint64 bytes_recv = 2;        // Total bytes received
+  uint64 packets_sent = 3;      // Total packets sent
+  uint64 packets_recv = 4;      // Total packets received
+  double bytes_sent_rate = 5;   // Bytes sent per second (since last update)
+  double bytes_recv_rate = 6;   // Bytes received per second (since last update)
+}
+
+// TempStat contains temperature sensor information
+message TempStat {
+  string sensor_key = 1;      // Sensor identifier
+  double temperature = 2;     // Temperature in Celsius
+  double high = 3;            // High threshold (if available)
+  double critical = 4;        // Critical threshold (if available)
+}
+
+// ProcessStat contains information about a running process
+message ProcessStat {
+  int32 pid = 1;              // Process ID
+  string name = 2;            // Process name
+  double cpu_percent = 3;     // CPU usage percentage
+  double memory_percent = 4;  // Memory usage percentage
+  uint64 memory_rss = 5;      // Resident set size in bytes
+  string username = 6;        // Username running the process
+  string status = 7;          // Process status (running, sleeping, etc.)
 }

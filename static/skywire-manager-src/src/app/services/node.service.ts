@@ -59,6 +59,9 @@ export class NodeService {
           node.online = response.online;
           node.localPk = response.overview.local_pk;
           node.version = response.overview.build_info.version;
+          node.configVersion = response.config_version;
+          node.os = response.overview.build_info.os;
+          node.arch = response.overview.build_info.arch;
           node.autoconnectTransports = response.public_autoconnect;
           node.buildTag = response.build_tag ? response.build_tag : '';
           node.rewardsAddress = response.reward_address;
@@ -117,7 +120,16 @@ export class NodeService {
 
           // DMSG info.
           node.dmsgServerPk = response.dmsg_stats.server_public_key;
+          node.connectedDmsgServers = response.connected_dmsg_servers || [];
           node.roundTripPing = this.nsToMs(response.dmsg_stats.round_trip);
+
+          // Parse new dmsg_servers with per-server latencies
+          if (response.dmsg_servers && Array.isArray(response.dmsg_servers)) {
+            node.dmsgServers = response.dmsg_servers.map((s: any) => ({
+              pk: s.pk,
+              latency: s.latency || 0
+            }));
+          }
 
           // Check if is hypervisor.
           node.isHypervisor = response.is_hypervisor;
@@ -199,10 +211,14 @@ export class NodeService {
         // Basic data.
         node.localPk = response.overview.local_pk;
         node.version = response.overview.build_info.version;
+        node.configVersion = response.config_version;
+        node.os = response.overview.build_info.os;
+        node.arch = response.overview.build_info.arch;
         node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
         node.minHops = response.min_hops;
         node.buildTag = response.build_tag;
         node.skybianBuildVersion = response.skybian_build_version;
+        node.connectedDmsgServers = response.connected_dmsg_servers || [];
         node.isSymmeticNat = response.overview.is_symmetic_nat;
         node.publicIp = response.overview.public_ip;
         node.autoconnectTransports = response.public_autoconnect;
@@ -352,6 +368,17 @@ export class NodeService {
           node.dmsgServerPk = '-';
           node.roundTripPing = '-1';
         }
+
+        // Parse dmsg_servers with per-server latencies
+        if (response.dmsg_servers && Array.isArray(response.dmsg_servers)) {
+          node.dmsgServers = response.dmsg_servers.map((s: any) => ({
+            pk: s.pk,
+            latency: s.latency || 0
+          }));
+        }
+
+        // Check if is hypervisor (local visor)
+        node.isHypervisor = response.is_hypervisor;
 
         return node;
       })

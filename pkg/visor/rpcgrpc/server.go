@@ -4,7 +4,12 @@ package rpcgrpc
 import (
 	"context"
 	"fmt"
+	"io"
+	"net"
 	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -35,6 +40,8 @@ type VisorAPI interface {
 	StopDmsgPing(pk cipher.PubKey) error
 	GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error)
 	GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error)
+	// DialDmsgRPC dials a remote visor's gRPC/RPC port over DMSG and returns the connection
+	DialDmsgRPC(pk cipher.PubKey) (net.Conn, error)
 }
 
 // PingConf mirrors visor.PingConfig to avoid import cycles
@@ -543,4 +550,133 @@ func (s *PingServer) GetRemoteDmsgServers(_ context.Context, req *DmsgServersReq
 	return &DmsgServersResponse{
 		ServerPks: serverPKs,
 	}, nil
+}
+
+// statsCollector is used for system stats collection
+var statsCollector = NewSystemStatsCollector()
+
+// StreamSystemStats streams system stats for gotop-style monitoring
+func (s *PingServer) StreamSystemStats(req *SystemStatsRequest, stream PingService_StreamSystemStatsServer) error {
+	// Default update interval is 1 second
+	updateInterval := time.Duration(req.UpdateIntervalNs)
+	if updateInterval <= 0 {
+		updateInterval = time.Second
+	}
+
+	// Default process limit
+	processLimit := int(req.ProcessLimit)
+	if processLimit <= 0 {
+		processLimit = 10
+	}
+
+	s.log.Debugf("gRPC StreamSystemStats: starting with interval=%v, processes=%v, limit=%d",
+		updateInterval, req.IncludeProcesses, processLimit)
+
+	ticker := time.NewTicker(updateInterval)
+	defer ticker.Stop()
+
+	// Send initial stats immediately
+	stats, err := statsCollector.Collect(stream.Context(), req.IncludeProcesses, processLimit)
+	if err != nil {
+		stats = &SystemStats{Error: err.Error()}
+	}
+	if err := stream.Send(stats); err != nil {
+		return err
+	}
+
+	// Stream updates
+	for {
+		select {
+		case <-stream.Context().Done():
+			s.log.Debug("gRPC StreamSystemStats: client disconnected")
+			return stream.Context().Err()
+		case <-ticker.C:
+			stats, err := statsCollector.Collect(stream.Context(), req.IncludeProcesses, processLimit)
+			if err != nil {
+				stats = &SystemStats{Error: err.Error()}
+			}
+			if err := stream.Send(stats); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// GetSystemStats returns a single snapshot of system stats
+func (s *PingServer) GetSystemStats(ctx context.Context, req *SystemStatsRequest) (*SystemStats, error) {
+	processLimit := int(req.ProcessLimit)
+	if processLimit <= 0 {
+		processLimit = 10
+	}
+
+	s.log.Debugf("gRPC GetSystemStats: processes=%v, limit=%d", req.IncludeProcesses, processLimit)
+
+	stats, err := statsCollector.Collect(ctx, req.IncludeProcesses, processLimit)
+	if err != nil {
+		return &SystemStats{Error: err.Error()}, nil
+	}
+
+	return stats, nil
+}
+
+// StreamRemoteSystemStats proxies system stats from a remote visor via DMSG.
+// The local visor dials the remote visor over DMSG and forwards the stats stream.
+func (s *PingServer) StreamRemoteSystemStats(req *RemoteSystemStatsRequest, stream PingService_StreamRemoteSystemStatsServer) error {
+	var remotePK cipher.PubKey
+	if err := remotePK.Set(req.RemotePk); err != nil {
+		return fmt.Errorf("invalid remote public key: %w", err)
+	}
+
+	s.log.Debugf("gRPC StreamRemoteSystemStats: dialing remote visor %s over DMSG", remotePK)
+
+	// Dial remote visor over DMSG using the local visor's DMSG client
+	conn, err := s.visor.DialDmsgRPC(remotePK)
+	if err != nil {
+		return fmt.Errorf("failed to dial remote visor over DMSG: %w", err)
+	}
+	defer conn.Close() //nolint:errcheck
+
+	// Create gRPC client over the DMSG connection
+	grpcConn, err := grpc.NewClient("passthrough:///dmsg",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
+			return conn, nil
+		}),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create gRPC client: %w", err)
+	}
+	defer grpcConn.Close() //nolint:errcheck
+
+	// Create the service client
+	remoteClient := NewPingServiceClient(grpcConn)
+
+	// Forward the request to the remote visor
+	remoteReq := &SystemStatsRequest{
+		UpdateIntervalNs: req.UpdateIntervalNs,
+		IncludeProcesses: req.IncludeProcesses,
+		ProcessLimit:     req.ProcessLimit,
+	}
+
+	remoteStream, err := remoteClient.StreamSystemStats(stream.Context(), remoteReq)
+	if err != nil {
+		return fmt.Errorf("failed to start remote stats stream: %w", err)
+	}
+
+	s.log.Debugf("gRPC StreamRemoteSystemStats: connected to remote visor %s, proxying stream", remotePK)
+
+	// Proxy the stream
+	for {
+		stats, err := remoteStream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("remote stream error: %w", err)
+		}
+
+		if err := stream.Send(stats); err != nil {
+			return err
+		}
+	}
 }

@@ -1,3 +1,8 @@
+export interface DMSGServerInfo {
+  pk: string;
+  latency: number; // in nanoseconds
+}
+
 export class Node {
   label: string;
   localPk: string;
@@ -5,6 +10,9 @@ export class Node {
   publicIp?: string;
   ip: string;
   version: string;
+  configVersion?: string;
+  os?: string;
+  arch?: string;
   apps: Application[];
   transports: Transport[];
   persistentTransports: PersistentTransport[];
@@ -15,6 +23,8 @@ export class Node {
   secondsOnline?: number;
   health?: HealthInfo;
   dmsgServerPk?: string;
+  connectedDmsgServers?: string[]; // deprecated
+  dmsgServers?: DMSGServerInfo[];  // DMSG servers with per-server latencies
   roundTripPing?: string;
   isHypervisor?: boolean;
   buildTag: string;

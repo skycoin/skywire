@@ -117,9 +117,14 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		}
 	}
 
-	// setup
+	// setup local PTY using direct connection (bypasses DMSG for local visor)
 	hv.mu.Lock()
-	hv.selfConn.PtyUI = setupDmsgPtyUI(hv.dmsgC, hv.c.PK)
+	if hv.visor != nil && hv.visor.conf.Dmsgpty != nil && hv.visor.conf.Dmsgpty.CLINet != "" {
+		hv.selfConn.PtyUI = setupLocalPtyUI(hv.visor.conf.Dmsgpty.CLINet, hv.visor.conf.Dmsgpty.CLIAddr)
+	} else {
+		// Fallback to DMSG if local CLI config not available
+		hv.selfConn.PtyUI = setupDmsgPtyUI(hv.dmsgC, hv.c.PK)
+	}
 	hv.mu.Unlock()
 
 	for {
@@ -544,6 +549,10 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 		} else {
 			summary.DmsgStats = &dmsgtracker.DmsgClientSummary{}
 		}
+
+		// Check if this is the local visor (hypervisor)
+		summary.IsHypervisor = summary.Overview.PubKey == hv.visor.conf.PK
+
 		httputil.WriteJSON(w, r, http.StatusOK, summary)
 	})
 }
@@ -556,19 +565,15 @@ func makeSummaryResp(online, hyper bool, sum *Summary) Summary {
 
 func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Get DMSG stats first (before acquiring lock to avoid deadlock)
+		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
+		for _, stat := range hv.getDmsgSummary() {
+			dmsgStats[stat.PK.String()] = stat
+		}
+
 		hv.mu.RLock()
 		wg := new(sync.WaitGroup)
 		wg.Add(len(hv.remoteVisors))
-
-		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
-		wg.Add(1)
-		go func() {
-			summary := hv.getDmsgSummary()
-			for _, stat := range summary {
-				dmsgStats[stat.PK.String()] = stat
-			}
-			wg.Done()
-		}()
 
 		summaries := make([]Summary, 0)
 
@@ -1600,6 +1605,15 @@ type dmsgPtyUI struct {
 
 func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
 	ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: visorconfig.DmsgPtyPort})
+	return &dmsgPtyUI{
+		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
+	}
+}
+
+// setupLocalPtyUI creates a PTY UI that connects directly to the local CLI socket,
+// bypassing DMSG for improved performance on local visor connections.
+func setupLocalPtyUI(cliNet, cliAddr string) *dmsgPtyUI {
+	ptyDialer := dmsgpty.NetUIDialer(cliNet, cliAddr)
 	return &dmsgPtyUI{
 		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
 	}

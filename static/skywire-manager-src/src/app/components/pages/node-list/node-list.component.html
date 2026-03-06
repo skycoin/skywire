@@ -102,6 +102,14 @@
             {{ 'nodes.key' | translate }}
             <mat-icon *ngIf="dataSorter.currentSortingColumn === keySortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           </th>
+          <th class="sortable-column" (click)="dataSorter.changeSortingOrder(versionSortData)">
+            {{ 'nodes.version' | translate }}
+            <mat-icon *ngIf="dataSorter.currentSortingColumn === versionSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+          </th>
+          <th class="sortable-column" (click)="dataSorter.changeSortingOrder(configVersionSortData)">
+            {{ 'nodes.config-version' | translate }}
+            <mat-icon *ngIf="dataSorter.currentSortingColumn === configVersionSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+          </th>
           <th *ngIf="showDmsgInfo" class="sortable-column" (click)="dataSorter.changeSortingOrder(dmsgServerSortData)">
             {{ 'nodes.dmsg-server' | translate }}
             <ng-container *ngIf="dataSorter.currentSortingColumn === dmsgServerSortData">
@@ -144,6 +152,12 @@
           </td>
           <td>
             {{ node.localPk }}
+          </td>
+          <td>
+            {{ node.version || '-' }}
+          </td>
+          <td>
+            {{ node.configVersion || '-' }}
           </td>
           <td *ngIf="showDmsgInfo">
             <app-labeled-element-text
@@ -248,6 +262,14 @@
               <div class="list-row long-content">
                 <span class="title">{{ 'nodes.key' | translate }}</span>:
                 {{ node.localPk }}
+              </div>
+              <div class="list-row" *ngIf="node.version">
+                <span class="title">{{ 'nodes.version' | translate }}</span>:
+                {{ node.version }}
+              </div>
+              <div class="list-row" *ngIf="node.configVersion">
+                <span class="title">{{ 'nodes.config-version' | translate }}</span>:
+                {{ node.configVersion }}
               </div>
               <div class="list-row long-content" *ngIf="showDmsgInfo">
                 <span class="title">{{ 'nodes.dmsg-server' | translate }}</span>:
