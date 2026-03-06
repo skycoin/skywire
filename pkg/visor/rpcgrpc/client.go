@@ -275,3 +275,69 @@ func (c *PingClient) StreamDmsgBandwidthTest(ctx context.Context, pk string, dur
 			result.UploadSpeed, result.DownloadSpeed, result.IsFinal, testErr)
 	}
 }
+
+// SystemStatsCallback is called for each system stats update received from the stream.
+type SystemStatsCallback func(stats *SystemStats)
+
+// StreamSystemStats streams system stats and calls the callback for each update.
+// updateInterval specifies how often to receive updates (default 1s).
+// includeProcesses controls whether to include top processes (more expensive).
+// processLimit limits the number of processes to include (default 10).
+func (c *PingClient) StreamSystemStats(ctx context.Context, updateInterval time.Duration, includeProcesses bool, processLimit int32, cb SystemStatsCallback) error {
+	stream, err := c.client.StreamSystemStats(ctx, &SystemStatsRequest{
+		UpdateIntervalNs: updateInterval.Nanoseconds(),
+		IncludeProcesses: includeProcesses,
+		ProcessLimit:     processLimit,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to start system stats stream: %w", err)
+	}
+
+	for {
+		stats, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("stream error: %w", err)
+		}
+		cb(stats)
+	}
+}
+
+// GetSystemStats returns a single snapshot of system stats.
+func (c *PingClient) GetSystemStats(ctx context.Context, includeProcesses bool, processLimit int32) (*SystemStats, error) {
+	stats, err := c.client.GetSystemStats(ctx, &SystemStatsRequest{
+		IncludeProcesses: includeProcesses,
+		ProcessLimit:     processLimit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get system stats: %w", err)
+	}
+	return stats, nil
+}
+
+// StreamRemoteSystemStats streams system stats from a remote visor via DMSG.
+// The local visor proxies the connection to the remote visor using its DMSG client.
+func (c *PingClient) StreamRemoteSystemStats(ctx context.Context, remotePK string, updateInterval time.Duration, includeProcesses bool, processLimit int32, cb SystemStatsCallback) error {
+	stream, err := c.client.StreamRemoteSystemStats(ctx, &RemoteSystemStatsRequest{
+		RemotePk:         remotePK,
+		UpdateIntervalNs: updateInterval.Nanoseconds(),
+		IncludeProcesses: includeProcesses,
+		ProcessLimit:     processLimit,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to start remote system stats stream: %w", err)
+	}
+
+	for {
+		stats, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("stream error: %w", err)
+		}
+		cb(stats)
+	}
+}

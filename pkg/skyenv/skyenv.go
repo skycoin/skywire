@@ -160,6 +160,40 @@ const (
 	// UpdateRPCTimeout update requires huge timeout - NOTE: this is likely unused
 	UpdateRPCTimeout = 6 * time.Hour
 
+	// HealthTimeout defines timeout for /health endpoint calls done from hypervisor.
+	HealthTimeout = 5 * time.Second
+
+	// InnerHealthTimeout defines timeout for /health endpoint calls done from visor.
+	// Kept less than HealthTimeout so that the outer call completes.
+	InnerHealthTimeout = 3 * time.Second
+
+	// DMSG tracker constants.
+
+	// DmsgTrackerUpdateInterval is the interval for updating DMSG client summaries.
+	DmsgTrackerUpdateInterval = 30 * time.Second
+
+	// DmsgTrackerUpdateTimeout is the timeout for a single DMSG tracker update.
+	DmsgTrackerUpdateTimeout = 10 * time.Second
+
+	// Visor registration constants.
+
+	// PublicVisorRegistrationTimeout is the timeout for registering as a public visor.
+	PublicVisorRegistrationTimeout = 10 * time.Minute
+
+	// HTTP server timeout constants (for dmsg and local HTTP servers).
+
+	// HTTPReadTimeout is the maximum duration for reading the entire request.
+	HTTPReadTimeout = 30 * time.Second
+
+	// HTTPWriteTimeout is the maximum duration before timing out writes of the response.
+	HTTPWriteTimeout = 60 * time.Second
+
+	// HTTPIdleTimeout is the maximum time to wait for the next request when keep-alives are enabled.
+	HTTPIdleTimeout = 90 * time.Second
+
+	// HTTPReadHeaderTimeout is the amount of time allowed to read request headers.
+	HTTPReadHeaderTimeout = 10 * time.Second
+
 	// Default skywire app server and discovery constants
 
 	// AppSrvAddr address of app server
@@ -167,6 +201,9 @@ const (
 
 	// ServiceDiscUpdateInterval update interval (heartbeat) for apps in service discovery
 	ServiceDiscUpdateInterval = 90 * time.Second
+
+	// PublicAutoconnectInterval interval for checking service discovery and connecting to public visors
+	PublicAutoconnectInterval = 300 * time.Second
 
 	// AppBinPath is the default path for the apps
 	AppBinPath = "./"
