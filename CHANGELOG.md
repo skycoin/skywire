@@ -6,6 +6,42 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.35
+
+-   Fix dmsgtracker fails to connect  [#2188](https://github.com/skycoin/skywire/pull/2188)
+-   Optimize /metrics endpoint with Redis pipelining  [#2187](https://github.com/skycoin/skywire/pull/2187)
+-   Refactor tpviz cache config to use directories  [#2186](https://github.com/skycoin/skywire/pull/2186)
+-   Add SKYWIRE_RPC environment variable to set CLI RPC address  [#2185](https://github.com/skycoin/skywire/pull/2185)
+-   Dockerfile: build from repository root  [#2184](https://github.com/skycoin/skywire/pull/2184)
+-   Install git in Docker builder for VCS version stamping  [#2183](https://github.com/skycoin/skywire/pull/2183)
+-   Include .git in Docker build for automatic version embedding  [#2182](https://github.com/skycoin/skywire/pull/2182)
+-   Use go install in Dockerfile for proper version info  [#2181](https://github.com/skycoin/skywire/pull/2181)
+-   Add --testenv flag and SKYWIRETEST env for cli commands  [#2180](https://github.com/skycoin/skywire/pull/2180)
+-   Add latency probe listener for transport latency measurement  [#2179](https://github.com/skycoin/skywire/pull/2179)
+-   fix CI errors  [#2178](https://github.com/skycoin/skywire/pull/2178)
+-   Transport discovery changes  [#2177](https://github.com/skycoin/skywire/pull/2177)
+-   Consolidate TPD metrics endpoints and simplify API  [#2176](https://github.com/skycoin/skywire/pull/2176)
+-   Add globe visualization  [#2174](https://github.com/skycoin/skywire/pull/2174)
+-   Update Transport Discovery & specifications  [#2172](https://github.com/skycoin/skywire/pull/2172)
+-   Improve network visualizer / network control panel WASM to match TypeScript UI  [#2171](https://github.com/skycoin/skywire/pull/2171)
+-   Vendor dmsg f86aa3297c2f with help menu improvements  [#2170](https://github.com/skycoin/skywire/pull/2170)
+-   Add color functions to custom help template for usage=false mode  [#2169](https://github.com/skycoin/skywire/pull/2169)
+-   Fix coloredcobra: set help template before cc.Init()  [#2168](https://github.com/skycoin/skywire/pull/2168)
+-   Improve help menus & ping  [#2167](https://github.com/skycoin/skywire/pull/2167)
+-   Add fallback for old per-key-stats JSON format; update test deployment config  [#2166](https://github.com/skycoin/skywire/pull/2166)
+-   More improvements to `skywire cli visor ping` & autoconnect logic  [#2165](https://github.com/skycoin/skywire/pull/2165)
+-   update deps  [#2164](https://github.com/skycoin/skywire/pull/2164)
+-   Fix reward system unwanted stdout logging  [#2163](https://github.com/skycoin/skywire/pull/2163)
+-   Add missing DMSG API routes and caching to rewards UI  [#2162](https://github.com/skycoin/skywire/pull/2162)
+-   Fix bundle.js 404 on rewards UI transport graph  [#2161](https://github.com/skycoin/skywire/pull/2161)
+-   Fix nil pointer panic in log collection goroutine  [#2160](https://github.com/skycoin/skywire/pull/2160)
+-   Fix dirty version  [#2159](https://github.com/skycoin/skywire/pull/2159)
+-   Move from PG to Redis  [#2148](https://github.com/skycoin/skywire/pull/2148)
+
+## 1.3.34
+
+-   hypervisor ip display  [#2158](https://github.com/skycoin/skywire/pull/2158)
+
 ## 1.3.33
 
 -   SkyNet P2P port forwarding, tp-viz network visualization UI, and various improvements  [#2156](https://github.com/skycoin/skywire/pull/2156)
