@@ -8,11 +8,6 @@ release:
     owner: skycoin
     name: skywire
 
-before:
-  hooks:
-    - go mod tidy
-    - go mod vendor
-
 builds:
   - id: skywire
     binary: skywire
