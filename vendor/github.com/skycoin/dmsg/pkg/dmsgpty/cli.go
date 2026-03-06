@@ -117,7 +117,10 @@ func (cli *CLI) servePty(ctx context.Context, ptyC *PtyClient, cmd string, args 
 		WithField("cmd", fmt.Sprint(append([]string{cmd}, args...))).
 		Debugf("Executing...")
 
-	if err := ptyC.Start(cmd, args...); err != nil {
+	// Capture essential environment variables from the client to pass to the remote PTY
+	env := cli.captureEnv()
+
+	if err := ptyC.Start(cmd, env, args...); err != nil {
 		return fmt.Errorf("failed to start command on pty: %v", err)
 	}
 
@@ -151,4 +154,32 @@ func (cli *CLI) servePty(ctx context.Context, ptyC *PtyClient, cmd string, args 
 	}
 
 	return nil
+}
+
+// captureEnv captures essential environment variables from the client to pass to the remote PTY.
+// This ensures the remote shell has proper terminal settings.
+func (cli *CLI) captureEnv() []string {
+	// List of environment variables to pass from client to remote PTY
+	envVars := []string{"TERM", "COLORTERM", "LANG", "LC_ALL"}
+	var env []string
+
+	for _, name := range envVars {
+		if val := os.Getenv(name); val != "" {
+			env = append(env, name+"="+val)
+		}
+	}
+
+	// If TERM is not set, default to a sensible value
+	hasTerm := false
+	for _, e := range env {
+		if strings.HasPrefix(e, "TERM=") {
+			hasTerm = true
+			break
+		}
+	}
+	if !hasTerm {
+		env = append(env, "TERM=xterm-256color")
+	}
+
+	return env
 }
