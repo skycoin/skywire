@@ -379,10 +379,6 @@ func (api *API) health(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (api *API) logger(r *http.Request) logrus.FieldLogger {
-	return httputil.GetLogger(r)
-}
-
 // GET /bandwidth/transport/{id}?period=daily&limit=7
 func (api *API) getTransportBandwidth(w http.ResponseWriter, r *http.Request) {
 	idParam := chi.URLParam(r, "id")
