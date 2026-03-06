@@ -413,7 +413,11 @@ func (v *Visor) Summary() (*Summary, error) {
 	}
 
 	// Get DMSG servers with latency info
-	dmsgServers, _ := v.DMSGServers()
+	dmsgServers, err := v.DMSGServers()
+	if err != nil {
+		v.log.WithError(err).Warn("Failed to get DMSG servers info")
+		dmsgServers = nil
+	}
 
 	rewardAddress, err := v.GetRewardAddress()
 	if err != nil {
