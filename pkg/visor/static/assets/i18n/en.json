@@ -129,9 +129,9 @@
         "no-dmsg-server": "Not connected",
         "ping": "Ping:",
         "node-version": "Visor version:",
-        "build-type": "Build type:",
+        "os": "OS:",
+        "arch": "Architecture:",
         "skybian-version": "Skybian version:",
-        "unknown-build": "Unknown",
         "time": {
           "title": "Time online:",
           "seconds": "a few seconds",

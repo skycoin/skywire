@@ -159,6 +159,7 @@ type API interface {
 	StopAllPings() (int, []string, error)
 	DialDmsgPing(pk cipher.PubKey) error
 	DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error
+	DialDmsgRPC(pk cipher.PubKey) (net.Conn, error)
 	DmsgPing(conf PingConfig) ([]time.Duration, error)
 	DmsgPingOnce(conf PingConfig) (time.Duration, error)
 	StopDmsgPing(pk cipher.PubKey) error
@@ -2050,6 +2051,35 @@ func (v *Visor) DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) 
 	v.dmsgPingMx.Unlock()
 
 	return nil
+}
+
+// DialDmsgRPC implements API. Dials a remote visor's gRPC/RPC port over DMSG.
+// Returns a net.Conn that can be used to create a gRPC client.
+func (v *Visor) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
+	if v.dmsgC == nil {
+		return nil, fmt.Errorf("dmsg client not available")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Wait for dmsg client to be ready
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-v.dmsgC.Ready():
+	}
+
+	v.log.WithField("remote", pk.String()[:16]+"...").
+		Debug("Dialing remote visor RPC over DMSG")
+
+	// Dial to the hypervisor/RPC port
+	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: visorconfig.DmsgHypervisorPort})
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial dmsg RPC: %w", err)
+	}
+
+	return conn, nil
 }
 
 // GetDmsgPingServerPK implements API. Returns the DMSG server PK used for a ping connection.

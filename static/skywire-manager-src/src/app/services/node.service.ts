@@ -59,6 +59,8 @@ export class NodeService {
           node.online = response.online;
           node.localPk = response.overview.local_pk;
           node.version = response.overview.build_info.version;
+          node.os = response.overview.build_info.os;
+          node.arch = response.overview.build_info.arch;
           node.autoconnectTransports = response.public_autoconnect;
           node.buildTag = response.build_tag ? response.build_tag : '';
           node.rewardsAddress = response.reward_address;
@@ -199,6 +201,8 @@ export class NodeService {
         // Basic data.
         node.localPk = response.overview.local_pk;
         node.version = response.overview.build_info.version;
+        node.os = response.overview.build_info.os;
+        node.arch = response.overview.build_info.arch;
         node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
         node.minHops = response.min_hops;
         node.buildTag = response.build_tag;

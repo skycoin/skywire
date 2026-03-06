@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"strings"
 )
@@ -138,11 +139,31 @@ func DebugBuildInfo() *debug.BuildInfo {
 
 // Get returns a summary of build information.
 func Get() *Info {
+	// Build complete version string with commit
+	ver := Version()
+	if c := Commit(); c != "" && c != unknown && !strings.Contains(ver, c) {
+		// Append commit to version if not already present
+		if len(c) > 12 {
+			c = c[:12]
+		}
+		ver = ver + "-" + c
+	}
+	// Check for dirty working directory from debug.BuildInfo
+	if bi != nil {
+		for _, setting := range bi.Settings {
+			if setting.Key == "vcs.modified" && setting.Value == "true" {
+				ver = ver + "+dirty"
+				break
+			}
+		}
+	}
 	return &Info{
-		Version: Version(),
+		Version: ver,
 		Commit:  Commit(),
 		Date:    Date(),
 		Go:      Go(),
+		OS:      runtime.GOOS,
+		Arch:    runtime.GOARCH,
 	}
 }
 
@@ -166,6 +187,8 @@ type Info struct {
 	Version string `json:"version"`
 	Commit  string `json:"commit"`
 	Date    string `json:"date"`
+	OS      string `json:"os"`
+	Arch    string `json:"arch"`
 }
 
 // WriteTo writes build info summary to an io.Writer.

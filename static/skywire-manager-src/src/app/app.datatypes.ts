@@ -5,6 +5,8 @@ export class Node {
   publicIp?: string;
   ip: string;
   version: string;
+  os?: string;
+  arch?: string;
   apps: Application[];
   transports: Transport[];
   persistentTransports: PersistentTransport[];

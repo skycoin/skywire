@@ -2024,6 +2024,10 @@ func (a *visorPingAdapter) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubK
 	return a.v.GetRemoteDmsgServers(pk)
 }
 
+func (a *visorPingAdapter) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
+	return a.v.DialDmsgRPC(pk)
+}
+
 func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.CLIAddr == "" {
 		v.log.Debug("'cli_addr' is not configured, skipping.")
