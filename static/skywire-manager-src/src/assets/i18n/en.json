@@ -229,6 +229,8 @@
     "location": "Location",
     "dmsg-server": "DMSG server",
     "ping": "Ping",
+    "version": "Version",
+    "config-version": "Config",
     "hypervisor-info": "This visor is the current Hypervisor.",
     "copy-key": "Copy key",
     "copy-dmsg": "Copy DMSG server key",
