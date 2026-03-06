@@ -359,6 +359,7 @@ type Summary struct {
 	SkybianBuildVersion  string                           `json:"skybian_build_version,omitempty"` // Deprecated
 	RewardAddress        string                           `json:"reward_address"`
 	BuildTag             string                           `json:"build_tag"`
+	ConfigVersion        string                           `json:"config_version"`
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 }
 
@@ -423,6 +424,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
 		BuildTag:             runtime.GOOS + "_" + runtime.GOARCH,
+		ConfigVersion:        v.conf.Common.Version,
 		RewardAddress:        rewardAddress,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
 		DmsgStats:            dmsgStatValue,

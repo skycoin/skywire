@@ -55,3 +55,17 @@
   margin-top: 10px;
   margin-left: -4px;
 }
+
+.dmsg-servers-list {
+  margin-left: 1rem;
+  margin-top: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+
+  .dmsg-server-item {
+    font-family: monospace;
+    font-size: 0.85em;
+    opacity: 0.9;
+  }
+}

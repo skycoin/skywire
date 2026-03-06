@@ -26,14 +26,19 @@
       <app-copy-to-clipboard-text text="{{ node.ip }}"></app-copy-to-clipboard-text>
     </span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.dmsg-server' | translate }} </span>
-      <ng-container *ngIf="hasDmsgServer()">
-        <app-copy-to-clipboard-text text="{{ node.dmsgServerPk }}"></app-copy-to-clipboard-text>
+      <span class="title">{{ 'node.details.node-info.dmsg-servers' | translate }} </span>
+      <ng-container *ngIf="node.connectedDmsgServers && node.connectedDmsgServers.length > 0">
+        {{ node.connectedDmsgServers.length }} {{ 'node.details.node-info.connected' | translate }}
       </ng-container>
-      <ng-container *ngIf="!hasDmsgServer()">
+      <ng-container *ngIf="!node.connectedDmsgServers || node.connectedDmsgServers.length === 0">
         {{ 'node.details.node-info.no-dmsg-server' | translate }}
       </ng-container>
     </span>
+    <div class="info-line dmsg-servers-list" *ngIf="node.connectedDmsgServers && node.connectedDmsgServers.length > 0">
+      <div *ngFor="let server of node.connectedDmsgServers" class="dmsg-server-item">
+        <app-copy-to-clipboard-text text="{{ server }}"></app-copy-to-clipboard-text>
+      </div>
+    </div>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.ping' | translate }} </span>
       {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
@@ -41,6 +46,10 @@
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.node-version' | translate }} </span>
       {{ node.version ? node.version : ('common.unknown' | translate) }}
+    </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-info.config-version' | translate }} </span>
+      {{ node.configVersion ? node.configVersion : ('common.unknown' | translate) }}
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.os' | translate }} </span>

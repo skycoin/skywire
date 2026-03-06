@@ -108,8 +108,8 @@ var summaryCmd = &cobra.Command{
 
 		msg += fmt.Sprintf("DMSG Servers (%d connected):\n              %s\n", len(summary.ConnectedDmsgServers), dmsgServersStr)
 		msg += fmt.Sprintf("DMSG Latency: %s\n", summary.DmsgStats.RoundTrip)
-		msg += fmt.Sprintf("Visor Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
-			summary.Overview.BuildInfo.Version, summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
+		msg += fmt.Sprintf("Visor Version: %s\nConfig Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
+			summary.Overview.BuildInfo.Version, summary.ConfigVersion, summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
 
 		outputJSON := struct {
 			PublicKey            string   `json:"public_key"`
@@ -122,6 +122,7 @@ var summaryCmd = &cobra.Command{
 			ConnectedDmsgServers []string `json:"connected_dmsg_servers"`
 			DmsgLatency          string   `json:"dmsg_latency"`
 			VisorVersion         string   `json:"visor_version"`
+			ConfigVersion        string   `json:"config_version"`
 			UptimeTracker        string   `json:"uptime_tracker"`
 			TimeOnline           float64  `json:"time_online"`
 			BuildTag             string   `json:"build_tag"`
@@ -136,6 +137,7 @@ var summaryCmd = &cobra.Command{
 			ConnectedDmsgServers: summary.ConnectedDmsgServers,
 			DmsgLatency:          summary.DmsgStats.RoundTrip.String(),
 			VisorVersion:         summary.Overview.BuildInfo.Version,
+			ConfigVersion:        summary.ConfigVersion,
 			UptimeTracker:        summary.Health.ServicesHealth,
 			TimeOnline:           summary.Uptime,
 			BuildTag:             summary.BuildTag,

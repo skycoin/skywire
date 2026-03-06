@@ -5,6 +5,7 @@ export class Node {
   publicIp?: string;
   ip: string;
   version: string;
+  configVersion?: string;
   os?: string;
   arch?: string;
   apps: Application[];
@@ -17,6 +18,7 @@ export class Node {
   secondsOnline?: number;
   health?: HealthInfo;
   dmsgServerPk?: string;
+  connectedDmsgServers?: string[];
   roundTripPing?: string;
   isHypervisor?: boolean;
   buildTag: string;
