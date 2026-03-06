@@ -42,7 +42,7 @@ require (
 	github.com/pterm/pterm v0.12.83
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
-	github.com/skycoin/dmsg v1.3.29-0.20260223201331-540ad4d9146a
+	github.com/skycoin/dmsg v1.3.29-0.20260306014431-8cb737739a60
 	github.com/skycoin/skycoin v0.28.3
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
@@ -212,7 +212,7 @@ require (
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0 // indirect
-	github.com/shirou/gopsutil/v3 v3.24.5 // indirect
+	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/shoenig/go-m1cpu v0.1.7 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/skycoin/hardware-wallet-protob v0.0.0-20250805154629-410561e1bc2f // indirect
@@ -288,3 +288,5 @@ require (
 // 6) Run `go mod tidy && go mod vendor`
 
 //exclude google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd
+
+//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20260306014431-8cb737739a60
