@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/creack/pty"
@@ -68,8 +69,9 @@ func (s *Pty) Write(b []byte) (int, error) {
 	return s.pty.Write(b)
 }
 
-// Start runs a command with the given command name, args and optional window size.
-func (s *Pty) Start(name string, args []string, size *WinSize) error {
+// Start runs a command with the given command name, args, optional window size, and optional environment variables.
+// If env is provided, those variables will be merged with (and override) the host's environment.
+func (s *Pty) Start(name string, args []string, size *WinSize, env []string) error {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 
@@ -78,7 +80,7 @@ func (s *Pty) Start(name string, args []string, size *WinSize) error {
 	}
 
 	cmd := exec.Command(name, args...) //nolint:gosec
-	cmd.Env = os.Environ()
+	cmd.Env = mergeEnv(os.Environ(), env)
 	var sz *pty.Winsize
 	var err error
 
@@ -95,6 +97,38 @@ func (s *Pty) Start(name string, args []string, size *WinSize) error {
 
 	s.pty = f
 	return nil
+}
+
+// mergeEnv merges the base environment with override variables.
+// Variables in override will replace any matching variables in base.
+func mergeEnv(base, override []string) []string {
+	if len(override) == 0 {
+		return base
+	}
+
+	// Build a map of override variables for quick lookup
+	overrideMap := make(map[string]string)
+	for _, e := range override {
+		if idx := strings.Index(e, "="); idx > 0 {
+			overrideMap[e[:idx]] = e
+		}
+	}
+
+	// Filter base, keeping only variables not in override
+	result := make([]string, 0, len(base)+len(override))
+	for _, e := range base {
+		if idx := strings.Index(e, "="); idx > 0 {
+			key := e[:idx]
+			if _, exists := overrideMap[key]; !exists {
+				result = append(result, e)
+			}
+		}
+	}
+
+	// Add all override variables
+	result = append(result, override...)
+
+	return result
 }
 
 // SetPtySize sets the pty size.

@@ -11,15 +11,15 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgctrl"
 
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // Default values for DmsgTrackerManager
 const (
-	DefaultDTMUpdateInterval = time.Second * 30
-	DefaultDTMUpdateTimeout  = time.Second * 10
+	DefaultDTMUpdateInterval = skyenv.DmsgTrackerUpdateInterval
+	DefaultDTMUpdateTimeout  = skyenv.DmsgTrackerUpdateTimeout
 )
 
 // DmsgClientSummary summaries a dmsg client.
@@ -37,7 +37,7 @@ type DmsgTracker struct {
 
 // newDmsgTracker creates a new DmsgTracker.
 func newDmsgTracker(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey) (dt *DmsgTracker, err error) {
-	conn, err := dmsgC.DialStream(ctx, dmsg.Addr{PK: pk, Port: visorconfig.DmsgCtrlPort})
+	conn, err := dmsgC.DialStream(ctx, dmsg.Addr{PK: pk, Port: skyenv.DmsgCtrlPort})
 	if err != nil {
 		return nil, err
 	}

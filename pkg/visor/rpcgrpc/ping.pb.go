@@ -2,17 +2,16 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.6.1
-// source: pkg/visor/rpcgrpc/ping.proto
+// source: ping.proto
 
 package rpcgrpc
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -40,7 +39,7 @@ type PingRequest struct {
 
 func (x *PingRequest) Reset() {
 	*x = PingRequest{}
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[0]
+	mi := &file_ping_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -52,7 +51,7 @@ func (x *PingRequest) String() string {
 func (*PingRequest) ProtoMessage() {}
 
 func (x *PingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[0]
+	mi := &file_ping_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -65,7 +64,7 @@ func (x *PingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{0}
+	return file_ping_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *PingRequest) GetPublicKey() string {
@@ -154,7 +153,7 @@ type PingResult struct {
 
 func (x *PingResult) Reset() {
 	*x = PingResult{}
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[1]
+	mi := &file_ping_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -166,7 +165,7 @@ func (x *PingResult) String() string {
 func (*PingResult) ProtoMessage() {}
 
 func (x *PingResult) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[1]
+	mi := &file_ping_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -179,7 +178,7 @@ func (x *PingResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingResult.ProtoReflect.Descriptor instead.
 func (*PingResult) Descriptor() ([]byte, []int) {
-	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{1}
+	return file_ping_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *PingResult) GetSequence() int32 {
@@ -247,7 +246,7 @@ type DmsgServersRequest struct {
 
 func (x *DmsgServersRequest) Reset() {
 	*x = DmsgServersRequest{}
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[2]
+	mi := &file_ping_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -259,7 +258,7 @@ func (x *DmsgServersRequest) String() string {
 func (*DmsgServersRequest) ProtoMessage() {}
 
 func (x *DmsgServersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[2]
+	mi := &file_ping_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -272,7 +271,7 @@ func (x *DmsgServersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DmsgServersRequest.ProtoReflect.Descriptor instead.
 func (*DmsgServersRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{2}
+	return file_ping_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *DmsgServersRequest) GetPublicKey() string {
@@ -291,7 +290,7 @@ type DmsgServersResponse struct {
 
 func (x *DmsgServersResponse) Reset() {
 	*x = DmsgServersResponse{}
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[3]
+	mi := &file_ping_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -303,7 +302,7 @@ func (x *DmsgServersResponse) String() string {
 func (*DmsgServersResponse) ProtoMessage() {}
 
 func (x *DmsgServersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[3]
+	mi := &file_ping_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -316,7 +315,7 @@ func (x *DmsgServersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DmsgServersResponse.ProtoReflect.Descriptor instead.
 func (*DmsgServersResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{3}
+	return file_ping_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DmsgServersResponse) GetServerPks() []string {
@@ -338,7 +337,7 @@ type RouteHop struct {
 
 func (x *RouteHop) Reset() {
 	*x = RouteHop{}
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[4]
+	mi := &file_ping_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -350,7 +349,7 @@ func (x *RouteHop) String() string {
 func (*RouteHop) ProtoMessage() {}
 
 func (x *RouteHop) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[4]
+	mi := &file_ping_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -363,7 +362,7 @@ func (x *RouteHop) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RouteHop.ProtoReflect.Descriptor instead.
 func (*RouteHop) Descriptor() ([]byte, []int) {
-	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{4}
+	return file_ping_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *RouteHop) GetTpId() string {
@@ -406,7 +405,7 @@ type BandwidthRequest struct {
 
 func (x *BandwidthRequest) Reset() {
 	*x = BandwidthRequest{}
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[5]
+	mi := &file_ping_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -418,7 +417,7 @@ func (x *BandwidthRequest) String() string {
 func (*BandwidthRequest) ProtoMessage() {}
 
 func (x *BandwidthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[5]
+	mi := &file_ping_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -431,7 +430,7 @@ func (x *BandwidthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BandwidthRequest.ProtoReflect.Descriptor instead.
 func (*BandwidthRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{5}
+	return file_ping_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *BandwidthRequest) GetPublicKey() string {
@@ -477,7 +476,7 @@ type BandwidthProgress struct {
 
 func (x *BandwidthProgress) Reset() {
 	*x = BandwidthProgress{}
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[6]
+	mi := &file_ping_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -489,7 +488,7 @@ func (x *BandwidthProgress) String() string {
 func (*BandwidthProgress) ProtoMessage() {}
 
 func (x *BandwidthProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_visor_rpcgrpc_ping_proto_msgTypes[6]
+	mi := &file_ping_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -502,7 +501,7 @@ func (x *BandwidthProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BandwidthProgress.ProtoReflect.Descriptor instead.
 func (*BandwidthProgress) Descriptor() ([]byte, []int) {
-	return file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP(), []int{6}
+	return file_ping_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *BandwidthProgress) GetBytesSent() uint64 {
@@ -554,11 +553,830 @@ func (x *BandwidthProgress) GetError() string {
 	return ""
 }
 
-var File_pkg_visor_rpcgrpc_ping_proto protoreflect.FileDescriptor
+// SystemStatsRequest configures system stats streaming
+type SystemStatsRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	UpdateIntervalNs int64                  `protobuf:"varint,1,opt,name=update_interval_ns,json=updateIntervalNs,proto3" json:"update_interval_ns,omitempty"` // Update interval in nanoseconds (default 1s)
+	IncludeProcesses bool                   `protobuf:"varint,2,opt,name=include_processes,json=includeProcesses,proto3" json:"include_processes,omitempty"`   // Include top processes (more expensive)
+	ProcessLimit     int32                  `protobuf:"varint,3,opt,name=process_limit,json=processLimit,proto3" json:"process_limit,omitempty"`               // Max processes to include (default 10)
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
 
-const file_pkg_visor_rpcgrpc_ping_proto_rawDesc = "" +
+func (x *SystemStatsRequest) Reset() {
+	*x = SystemStatsRequest{}
+	mi := &file_ping_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SystemStatsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SystemStatsRequest) ProtoMessage() {}
+
+func (x *SystemStatsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SystemStatsRequest.ProtoReflect.Descriptor instead.
+func (*SystemStatsRequest) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SystemStatsRequest) GetUpdateIntervalNs() int64 {
+	if x != nil {
+		return x.UpdateIntervalNs
+	}
+	return 0
+}
+
+func (x *SystemStatsRequest) GetIncludeProcesses() bool {
+	if x != nil {
+		return x.IncludeProcesses
+	}
+	return false
+}
+
+func (x *SystemStatsRequest) GetProcessLimit() int32 {
+	if x != nil {
+		return x.ProcessLimit
+	}
+	return 0
+}
+
+// RemoteSystemStatsRequest requests system stats from a remote visor via DMSG
+type RemoteSystemStatsRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	RemotePk         string                 `protobuf:"bytes,1,opt,name=remote_pk,json=remotePk,proto3" json:"remote_pk,omitempty"`                            // Public key of remote visor to connect to
+	UpdateIntervalNs int64                  `protobuf:"varint,2,opt,name=update_interval_ns,json=updateIntervalNs,proto3" json:"update_interval_ns,omitempty"` // Update interval in nanoseconds (default 1s)
+	IncludeProcesses bool                   `protobuf:"varint,3,opt,name=include_processes,json=includeProcesses,proto3" json:"include_processes,omitempty"`   // Include top processes (more expensive)
+	ProcessLimit     int32                  `protobuf:"varint,4,opt,name=process_limit,json=processLimit,proto3" json:"process_limit,omitempty"`               // Max processes to include (default 10)
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RemoteSystemStatsRequest) Reset() {
+	*x = RemoteSystemStatsRequest{}
+	mi := &file_ping_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoteSystemStatsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteSystemStatsRequest) ProtoMessage() {}
+
+func (x *RemoteSystemStatsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteSystemStatsRequest.ProtoReflect.Descriptor instead.
+func (*RemoteSystemStatsRequest) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RemoteSystemStatsRequest) GetRemotePk() string {
+	if x != nil {
+		return x.RemotePk
+	}
+	return ""
+}
+
+func (x *RemoteSystemStatsRequest) GetUpdateIntervalNs() int64 {
+	if x != nil {
+		return x.UpdateIntervalNs
+	}
+	return 0
+}
+
+func (x *RemoteSystemStatsRequest) GetIncludeProcesses() bool {
+	if x != nil {
+		return x.IncludeProcesses
+	}
+	return false
+}
+
+func (x *RemoteSystemStatsRequest) GetProcessLimit() int32 {
+	if x != nil {
+		return x.ProcessLimit
+	}
+	return 0
+}
+
+// SystemStats contains system monitoring data for gotop-style display
+type SystemStats struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TimestampNs   int64                  `protobuf:"varint,1,opt,name=timestamp_ns,json=timestampNs,proto3" json:"timestamp_ns,omitempty"` // Unix timestamp in nanoseconds
+	Host          *HostInfo              `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`                                   // Host information
+	Cpu           []*CpuStat             `protobuf:"bytes,3,rep,name=cpu,proto3" json:"cpu,omitempty"`                                     // CPU usage per core
+	CpuAverage    float64                `protobuf:"fixed64,4,opt,name=cpu_average,json=cpuAverage,proto3" json:"cpu_average,omitempty"`   // Average CPU usage across all cores
+	Memory        *MemoryStat            `protobuf:"bytes,5,opt,name=memory,proto3" json:"memory,omitempty"`                               // Memory usage
+	Swap          *MemoryStat            `protobuf:"bytes,6,opt,name=swap,proto3" json:"swap,omitempty"`                                   // Swap usage
+	Disks         []*DiskStat            `protobuf:"bytes,7,rep,name=disks,proto3" json:"disks,omitempty"`                                 // Disk usage per partition
+	Network       *NetworkStat           `protobuf:"bytes,8,opt,name=network,proto3" json:"network,omitempty"`                             // Network I/O
+	Temps         []*TempStat            `protobuf:"bytes,9,rep,name=temps,proto3" json:"temps,omitempty"`                                 // Temperature sensors
+	Processes     []*ProcessStat         `protobuf:"bytes,10,rep,name=processes,proto3" json:"processes,omitempty"`                        // Top processes
+	Error         string                 `protobuf:"bytes,11,opt,name=error,proto3" json:"error,omitempty"`                                // Error message if collection failed
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SystemStats) Reset() {
+	*x = SystemStats{}
+	mi := &file_ping_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SystemStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SystemStats) ProtoMessage() {}
+
+func (x *SystemStats) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SystemStats.ProtoReflect.Descriptor instead.
+func (*SystemStats) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SystemStats) GetTimestampNs() int64 {
+	if x != nil {
+		return x.TimestampNs
+	}
+	return 0
+}
+
+func (x *SystemStats) GetHost() *HostInfo {
+	if x != nil {
+		return x.Host
+	}
+	return nil
+}
+
+func (x *SystemStats) GetCpu() []*CpuStat {
+	if x != nil {
+		return x.Cpu
+	}
+	return nil
+}
+
+func (x *SystemStats) GetCpuAverage() float64 {
+	if x != nil {
+		return x.CpuAverage
+	}
+	return 0
+}
+
+func (x *SystemStats) GetMemory() *MemoryStat {
+	if x != nil {
+		return x.Memory
+	}
+	return nil
+}
+
+func (x *SystemStats) GetSwap() *MemoryStat {
+	if x != nil {
+		return x.Swap
+	}
+	return nil
+}
+
+func (x *SystemStats) GetDisks() []*DiskStat {
+	if x != nil {
+		return x.Disks
+	}
+	return nil
+}
+
+func (x *SystemStats) GetNetwork() *NetworkStat {
+	if x != nil {
+		return x.Network
+	}
+	return nil
+}
+
+func (x *SystemStats) GetTemps() []*TempStat {
+	if x != nil {
+		return x.Temps
+	}
+	return nil
+}
+
+func (x *SystemStats) GetProcesses() []*ProcessStat {
+	if x != nil {
+		return x.Processes
+	}
+	return nil
+}
+
+func (x *SystemStats) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+// HostInfo contains basic host information
+type HostInfo struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Hostname        string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	UptimeSec       int64                  `protobuf:"varint,2,opt,name=uptime_sec,json=uptimeSec,proto3" json:"uptime_sec,omitempty"`                  // System uptime in seconds
+	Os              string                 `protobuf:"bytes,3,opt,name=os,proto3" json:"os,omitempty"`                                                  // Operating system name
+	Platform        string                 `protobuf:"bytes,4,opt,name=platform,proto3" json:"platform,omitempty"`                                      // Platform (e.g., ubuntu, centos)
+	PlatformVersion string                 `protobuf:"bytes,5,opt,name=platform_version,json=platformVersion,proto3" json:"platform_version,omitempty"` // Platform version
+	KernelVersion   string                 `protobuf:"bytes,6,opt,name=kernel_version,json=kernelVersion,proto3" json:"kernel_version,omitempty"`       // Kernel version
+	KernelArch      string                 `protobuf:"bytes,7,opt,name=kernel_arch,json=kernelArch,proto3" json:"kernel_arch,omitempty"`                // Kernel architecture
+	NumCpus         int32                  `protobuf:"varint,8,opt,name=num_cpus,json=numCpus,proto3" json:"num_cpus,omitempty"`                        // Number of logical CPUs
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *HostInfo) Reset() {
+	*x = HostInfo{}
+	mi := &file_ping_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HostInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HostInfo) ProtoMessage() {}
+
+func (x *HostInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HostInfo.ProtoReflect.Descriptor instead.
+func (*HostInfo) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *HostInfo) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *HostInfo) GetUptimeSec() int64 {
+	if x != nil {
+		return x.UptimeSec
+	}
+	return 0
+}
+
+func (x *HostInfo) GetOs() string {
+	if x != nil {
+		return x.Os
+	}
+	return ""
+}
+
+func (x *HostInfo) GetPlatform() string {
+	if x != nil {
+		return x.Platform
+	}
+	return ""
+}
+
+func (x *HostInfo) GetPlatformVersion() string {
+	if x != nil {
+		return x.PlatformVersion
+	}
+	return ""
+}
+
+func (x *HostInfo) GetKernelVersion() string {
+	if x != nil {
+		return x.KernelVersion
+	}
+	return ""
+}
+
+func (x *HostInfo) GetKernelArch() string {
+	if x != nil {
+		return x.KernelArch
+	}
+	return ""
+}
+
+func (x *HostInfo) GetNumCpus() int32 {
+	if x != nil {
+		return x.NumCpus
+	}
+	return 0
+}
+
+// CpuStat contains CPU usage for a single core
+type CpuStat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cpu           string                 `protobuf:"bytes,1,opt,name=cpu,proto3" json:"cpu,omitempty"`                                         // CPU identifier (cpu0, cpu1, etc. or cpu-total)
+	UsagePercent  float64                `protobuf:"fixed64,2,opt,name=usage_percent,json=usagePercent,proto3" json:"usage_percent,omitempty"` // Usage percentage (0-100)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CpuStat) Reset() {
+	*x = CpuStat{}
+	mi := &file_ping_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CpuStat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CpuStat) ProtoMessage() {}
+
+func (x *CpuStat) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CpuStat.ProtoReflect.Descriptor instead.
+func (*CpuStat) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *CpuStat) GetCpu() string {
+	if x != nil {
+		return x.Cpu
+	}
+	return ""
+}
+
+func (x *CpuStat) GetUsagePercent() float64 {
+	if x != nil {
+		return x.UsagePercent
+	}
+	return 0
+}
+
+// MemoryStat contains memory usage information
+type MemoryStat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Total         uint64                 `protobuf:"varint,1,opt,name=total,proto3" json:"total,omitempty"`                                 // Total memory in bytes
+	Used          uint64                 `protobuf:"varint,2,opt,name=used,proto3" json:"used,omitempty"`                                   // Used memory in bytes
+	Available     uint64                 `protobuf:"varint,3,opt,name=available,proto3" json:"available,omitempty"`                         // Available memory in bytes
+	UsedPercent   float64                `protobuf:"fixed64,4,opt,name=used_percent,json=usedPercent,proto3" json:"used_percent,omitempty"` // Usage percentage (0-100)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MemoryStat) Reset() {
+	*x = MemoryStat{}
+	mi := &file_ping_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryStat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryStat) ProtoMessage() {}
+
+func (x *MemoryStat) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryStat.ProtoReflect.Descriptor instead.
+func (*MemoryStat) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *MemoryStat) GetTotal() uint64 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+func (x *MemoryStat) GetUsed() uint64 {
+	if x != nil {
+		return x.Used
+	}
+	return 0
+}
+
+func (x *MemoryStat) GetAvailable() uint64 {
+	if x != nil {
+		return x.Available
+	}
+	return 0
+}
+
+func (x *MemoryStat) GetUsedPercent() float64 {
+	if x != nil {
+		return x.UsedPercent
+	}
+	return 0
+}
+
+// DiskStat contains disk usage for a partition
+type DiskStat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Device        string                 `protobuf:"bytes,1,opt,name=device,proto3" json:"device,omitempty"`                                // Device name
+	Mountpoint    string                 `protobuf:"bytes,2,opt,name=mountpoint,proto3" json:"mountpoint,omitempty"`                        // Mount point
+	Fstype        string                 `protobuf:"bytes,3,opt,name=fstype,proto3" json:"fstype,omitempty"`                                // Filesystem type
+	Total         uint64                 `protobuf:"varint,4,opt,name=total,proto3" json:"total,omitempty"`                                 // Total space in bytes
+	Used          uint64                 `protobuf:"varint,5,opt,name=used,proto3" json:"used,omitempty"`                                   // Used space in bytes
+	Free          uint64                 `protobuf:"varint,6,opt,name=free,proto3" json:"free,omitempty"`                                   // Free space in bytes
+	UsedPercent   float64                `protobuf:"fixed64,7,opt,name=used_percent,json=usedPercent,proto3" json:"used_percent,omitempty"` // Usage percentage (0-100)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiskStat) Reset() {
+	*x = DiskStat{}
+	mi := &file_ping_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiskStat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiskStat) ProtoMessage() {}
+
+func (x *DiskStat) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiskStat.ProtoReflect.Descriptor instead.
+func (*DiskStat) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *DiskStat) GetDevice() string {
+	if x != nil {
+		return x.Device
+	}
+	return ""
+}
+
+func (x *DiskStat) GetMountpoint() string {
+	if x != nil {
+		return x.Mountpoint
+	}
+	return ""
+}
+
+func (x *DiskStat) GetFstype() string {
+	if x != nil {
+		return x.Fstype
+	}
+	return ""
+}
+
+func (x *DiskStat) GetTotal() uint64 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+func (x *DiskStat) GetUsed() uint64 {
+	if x != nil {
+		return x.Used
+	}
+	return 0
+}
+
+func (x *DiskStat) GetFree() uint64 {
+	if x != nil {
+		return x.Free
+	}
+	return 0
+}
+
+func (x *DiskStat) GetUsedPercent() float64 {
+	if x != nil {
+		return x.UsedPercent
+	}
+	return 0
+}
+
+// NetworkStat contains network I/O information
+type NetworkStat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BytesSent     uint64                 `protobuf:"varint,1,opt,name=bytes_sent,json=bytesSent,proto3" json:"bytes_sent,omitempty"`                // Total bytes sent
+	BytesRecv     uint64                 `protobuf:"varint,2,opt,name=bytes_recv,json=bytesRecv,proto3" json:"bytes_recv,omitempty"`                // Total bytes received
+	PacketsSent   uint64                 `protobuf:"varint,3,opt,name=packets_sent,json=packetsSent,proto3" json:"packets_sent,omitempty"`          // Total packets sent
+	PacketsRecv   uint64                 `protobuf:"varint,4,opt,name=packets_recv,json=packetsRecv,proto3" json:"packets_recv,omitempty"`          // Total packets received
+	BytesSentRate float64                `protobuf:"fixed64,5,opt,name=bytes_sent_rate,json=bytesSentRate,proto3" json:"bytes_sent_rate,omitempty"` // Bytes sent per second (since last update)
+	BytesRecvRate float64                `protobuf:"fixed64,6,opt,name=bytes_recv_rate,json=bytesRecvRate,proto3" json:"bytes_recv_rate,omitempty"` // Bytes received per second (since last update)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NetworkStat) Reset() {
+	*x = NetworkStat{}
+	mi := &file_ping_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NetworkStat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NetworkStat) ProtoMessage() {}
+
+func (x *NetworkStat) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NetworkStat.ProtoReflect.Descriptor instead.
+func (*NetworkStat) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *NetworkStat) GetBytesSent() uint64 {
+	if x != nil {
+		return x.BytesSent
+	}
+	return 0
+}
+
+func (x *NetworkStat) GetBytesRecv() uint64 {
+	if x != nil {
+		return x.BytesRecv
+	}
+	return 0
+}
+
+func (x *NetworkStat) GetPacketsSent() uint64 {
+	if x != nil {
+		return x.PacketsSent
+	}
+	return 0
+}
+
+func (x *NetworkStat) GetPacketsRecv() uint64 {
+	if x != nil {
+		return x.PacketsRecv
+	}
+	return 0
+}
+
+func (x *NetworkStat) GetBytesSentRate() float64 {
+	if x != nil {
+		return x.BytesSentRate
+	}
+	return 0
+}
+
+func (x *NetworkStat) GetBytesRecvRate() float64 {
+	if x != nil {
+		return x.BytesRecvRate
+	}
+	return 0
+}
+
+// TempStat contains temperature sensor information
+type TempStat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SensorKey     string                 `protobuf:"bytes,1,opt,name=sensor_key,json=sensorKey,proto3" json:"sensor_key,omitempty"` // Sensor identifier
+	Temperature   float64                `protobuf:"fixed64,2,opt,name=temperature,proto3" json:"temperature,omitempty"`            // Temperature in Celsius
+	High          float64                `protobuf:"fixed64,3,opt,name=high,proto3" json:"high,omitempty"`                          // High threshold (if available)
+	Critical      float64                `protobuf:"fixed64,4,opt,name=critical,proto3" json:"critical,omitempty"`                  // Critical threshold (if available)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TempStat) Reset() {
+	*x = TempStat{}
+	mi := &file_ping_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TempStat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TempStat) ProtoMessage() {}
+
+func (x *TempStat) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TempStat.ProtoReflect.Descriptor instead.
+func (*TempStat) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *TempStat) GetSensorKey() string {
+	if x != nil {
+		return x.SensorKey
+	}
+	return ""
+}
+
+func (x *TempStat) GetTemperature() float64 {
+	if x != nil {
+		return x.Temperature
+	}
+	return 0
+}
+
+func (x *TempStat) GetHigh() float64 {
+	if x != nil {
+		return x.High
+	}
+	return 0
+}
+
+func (x *TempStat) GetCritical() float64 {
+	if x != nil {
+		return x.Critical
+	}
+	return 0
+}
+
+// ProcessStat contains information about a running process
+type ProcessStat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pid           int32                  `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`                                           // Process ID
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                          // Process name
+	CpuPercent    float64                `protobuf:"fixed64,3,opt,name=cpu_percent,json=cpuPercent,proto3" json:"cpu_percent,omitempty"`          // CPU usage percentage
+	MemoryPercent float64                `protobuf:"fixed64,4,opt,name=memory_percent,json=memoryPercent,proto3" json:"memory_percent,omitempty"` // Memory usage percentage
+	MemoryRss     uint64                 `protobuf:"varint,5,opt,name=memory_rss,json=memoryRss,proto3" json:"memory_rss,omitempty"`              // Resident set size in bytes
+	Username      string                 `protobuf:"bytes,6,opt,name=username,proto3" json:"username,omitempty"`                                  // Username running the process
+	Status        string                 `protobuf:"bytes,7,opt,name=status,proto3" json:"status,omitempty"`                                      // Process status (running, sleeping, etc.)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProcessStat) Reset() {
+	*x = ProcessStat{}
+	mi := &file_ping_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProcessStat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProcessStat) ProtoMessage() {}
+
+func (x *ProcessStat) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProcessStat.ProtoReflect.Descriptor instead.
+func (*ProcessStat) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ProcessStat) GetPid() int32 {
+	if x != nil {
+		return x.Pid
+	}
+	return 0
+}
+
+func (x *ProcessStat) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ProcessStat) GetCpuPercent() float64 {
+	if x != nil {
+		return x.CpuPercent
+	}
+	return 0
+}
+
+func (x *ProcessStat) GetMemoryPercent() float64 {
+	if x != nil {
+		return x.MemoryPercent
+	}
+	return 0
+}
+
+func (x *ProcessStat) GetMemoryRss() uint64 {
+	if x != nil {
+		return x.MemoryRss
+	}
+	return 0
+}
+
+func (x *ProcessStat) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *ProcessStat) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+var File_ping_proto protoreflect.FileDescriptor
+
+const file_ping_proto_rawDesc = "" +
 	"\n" +
-	"\x1cpkg/visor/rpcgrpc/ping.proto\x12\arpcgrpc\"\x90\x03\n" +
+	"\n" +
+	"ping.proto\x12\arpcgrpc\"\x90\x03\n" +
 	"\vPingRequest\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\tR\tpublicKey\x12\x14\n" +
@@ -613,78 +1431,183 @@ const file_pkg_visor_rpcgrpc_ping_proto_rawDesc = "" +
 	"\fupload_speed\x18\x04 \x01(\x01R\vuploadSpeed\x12%\n" +
 	"\x0edownload_speed\x18\x05 \x01(\x01R\rdownloadSpeed\x12\x19\n" +
 	"\bis_final\x18\x06 \x01(\bR\aisFinal\x12\x14\n" +
-	"\x05error\x18\a \x01(\tR\x05error2\xfe\x02\n" +
+	"\x05error\x18\a \x01(\tR\x05error\"\x94\x01\n" +
+	"\x12SystemStatsRequest\x12,\n" +
+	"\x12update_interval_ns\x18\x01 \x01(\x03R\x10updateIntervalNs\x12+\n" +
+	"\x11include_processes\x18\x02 \x01(\bR\x10includeProcesses\x12#\n" +
+	"\rprocess_limit\x18\x03 \x01(\x05R\fprocessLimit\"\xb7\x01\n" +
+	"\x18RemoteSystemStatsRequest\x12\x1b\n" +
+	"\tremote_pk\x18\x01 \x01(\tR\bremotePk\x12,\n" +
+	"\x12update_interval_ns\x18\x02 \x01(\x03R\x10updateIntervalNs\x12+\n" +
+	"\x11include_processes\x18\x03 \x01(\bR\x10includeProcesses\x12#\n" +
+	"\rprocess_limit\x18\x04 \x01(\x05R\fprocessLimit\"\xbe\x03\n" +
+	"\vSystemStats\x12!\n" +
+	"\ftimestamp_ns\x18\x01 \x01(\x03R\vtimestampNs\x12%\n" +
+	"\x04host\x18\x02 \x01(\v2\x11.rpcgrpc.HostInfoR\x04host\x12\"\n" +
+	"\x03cpu\x18\x03 \x03(\v2\x10.rpcgrpc.CpuStatR\x03cpu\x12\x1f\n" +
+	"\vcpu_average\x18\x04 \x01(\x01R\n" +
+	"cpuAverage\x12+\n" +
+	"\x06memory\x18\x05 \x01(\v2\x13.rpcgrpc.MemoryStatR\x06memory\x12'\n" +
+	"\x04swap\x18\x06 \x01(\v2\x13.rpcgrpc.MemoryStatR\x04swap\x12'\n" +
+	"\x05disks\x18\a \x03(\v2\x11.rpcgrpc.DiskStatR\x05disks\x12.\n" +
+	"\anetwork\x18\b \x01(\v2\x14.rpcgrpc.NetworkStatR\anetwork\x12'\n" +
+	"\x05temps\x18\t \x03(\v2\x11.rpcgrpc.TempStatR\x05temps\x122\n" +
+	"\tprocesses\x18\n" +
+	" \x03(\v2\x14.rpcgrpc.ProcessStatR\tprocesses\x12\x14\n" +
+	"\x05error\x18\v \x01(\tR\x05error\"\xff\x01\n" +
+	"\bHostInfo\x12\x1a\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\x12\x1d\n" +
+	"\n" +
+	"uptime_sec\x18\x02 \x01(\x03R\tuptimeSec\x12\x0e\n" +
+	"\x02os\x18\x03 \x01(\tR\x02os\x12\x1a\n" +
+	"\bplatform\x18\x04 \x01(\tR\bplatform\x12)\n" +
+	"\x10platform_version\x18\x05 \x01(\tR\x0fplatformVersion\x12%\n" +
+	"\x0ekernel_version\x18\x06 \x01(\tR\rkernelVersion\x12\x1f\n" +
+	"\vkernel_arch\x18\a \x01(\tR\n" +
+	"kernelArch\x12\x19\n" +
+	"\bnum_cpus\x18\b \x01(\x05R\anumCpus\"@\n" +
+	"\aCpuStat\x12\x10\n" +
+	"\x03cpu\x18\x01 \x01(\tR\x03cpu\x12#\n" +
+	"\rusage_percent\x18\x02 \x01(\x01R\fusagePercent\"w\n" +
+	"\n" +
+	"MemoryStat\x12\x14\n" +
+	"\x05total\x18\x01 \x01(\x04R\x05total\x12\x12\n" +
+	"\x04used\x18\x02 \x01(\x04R\x04used\x12\x1c\n" +
+	"\tavailable\x18\x03 \x01(\x04R\tavailable\x12!\n" +
+	"\fused_percent\x18\x04 \x01(\x01R\vusedPercent\"\xbb\x01\n" +
+	"\bDiskStat\x12\x16\n" +
+	"\x06device\x18\x01 \x01(\tR\x06device\x12\x1e\n" +
+	"\n" +
+	"mountpoint\x18\x02 \x01(\tR\n" +
+	"mountpoint\x12\x16\n" +
+	"\x06fstype\x18\x03 \x01(\tR\x06fstype\x12\x14\n" +
+	"\x05total\x18\x04 \x01(\x04R\x05total\x12\x12\n" +
+	"\x04used\x18\x05 \x01(\x04R\x04used\x12\x12\n" +
+	"\x04free\x18\x06 \x01(\x04R\x04free\x12!\n" +
+	"\fused_percent\x18\a \x01(\x01R\vusedPercent\"\xe1\x01\n" +
+	"\vNetworkStat\x12\x1d\n" +
+	"\n" +
+	"bytes_sent\x18\x01 \x01(\x04R\tbytesSent\x12\x1d\n" +
+	"\n" +
+	"bytes_recv\x18\x02 \x01(\x04R\tbytesRecv\x12!\n" +
+	"\fpackets_sent\x18\x03 \x01(\x04R\vpacketsSent\x12!\n" +
+	"\fpackets_recv\x18\x04 \x01(\x04R\vpacketsRecv\x12&\n" +
+	"\x0fbytes_sent_rate\x18\x05 \x01(\x01R\rbytesSentRate\x12&\n" +
+	"\x0fbytes_recv_rate\x18\x06 \x01(\x01R\rbytesRecvRate\"{\n" +
+	"\bTempStat\x12\x1d\n" +
+	"\n" +
+	"sensor_key\x18\x01 \x01(\tR\tsensorKey\x12 \n" +
+	"\vtemperature\x18\x02 \x01(\x01R\vtemperature\x12\x12\n" +
+	"\x04high\x18\x03 \x01(\x01R\x04high\x12\x1a\n" +
+	"\bcritical\x18\x04 \x01(\x01R\bcritical\"\xce\x01\n" +
+	"\vProcessStat\x12\x10\n" +
+	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1f\n" +
+	"\vcpu_percent\x18\x03 \x01(\x01R\n" +
+	"cpuPercent\x12%\n" +
+	"\x0ememory_percent\x18\x04 \x01(\x01R\rmemoryPercent\x12\x1d\n" +
+	"\n" +
+	"memory_rss\x18\x05 \x01(\x04R\tmemoryRss\x12\x1a\n" +
+	"\busername\x18\x06 \x01(\tR\busername\x12\x16\n" +
+	"\x06status\x18\a \x01(\tR\x06status2\xe3\x04\n" +
 	"\vPingService\x129\n" +
 	"\n" +
 	"StreamPing\x12\x14.rpcgrpc.PingRequest\x1a\x13.rpcgrpc.PingResult0\x01\x12=\n" +
 	"\x0eStreamDmsgPing\x12\x14.rpcgrpc.PingRequest\x1a\x13.rpcgrpc.PingResult0\x01\x12N\n" +
 	"\x13StreamBandwidthTest\x12\x19.rpcgrpc.BandwidthRequest\x1a\x1a.rpcgrpc.BandwidthProgress0\x01\x12R\n" +
 	"\x17StreamDmsgBandwidthTest\x12\x19.rpcgrpc.BandwidthRequest\x1a\x1a.rpcgrpc.BandwidthProgress0\x01\x12Q\n" +
-	"\x14GetRemoteDmsgServers\x12\x1b.rpcgrpc.DmsgServersRequest\x1a\x1c.rpcgrpc.DmsgServersResponseB.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
+	"\x14GetRemoteDmsgServers\x12\x1b.rpcgrpc.DmsgServersRequest\x1a\x1c.rpcgrpc.DmsgServersResponse\x12H\n" +
+	"\x11StreamSystemStats\x12\x1b.rpcgrpc.SystemStatsRequest\x1a\x14.rpcgrpc.SystemStats0\x01\x12C\n" +
+	"\x0eGetSystemStats\x12\x1b.rpcgrpc.SystemStatsRequest\x1a\x14.rpcgrpc.SystemStats\x12T\n" +
+	"\x17StreamRemoteSystemStats\x12!.rpcgrpc.RemoteSystemStatsRequest\x1a\x14.rpcgrpc.SystemStats0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
 
 var (
-	file_pkg_visor_rpcgrpc_ping_proto_rawDescOnce sync.Once
-	file_pkg_visor_rpcgrpc_ping_proto_rawDescData []byte
+	file_ping_proto_rawDescOnce sync.Once
+	file_ping_proto_rawDescData []byte
 )
 
-func file_pkg_visor_rpcgrpc_ping_proto_rawDescGZIP() []byte {
-	file_pkg_visor_rpcgrpc_ping_proto_rawDescOnce.Do(func() {
-		file_pkg_visor_rpcgrpc_ping_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_pkg_visor_rpcgrpc_ping_proto_rawDesc), len(file_pkg_visor_rpcgrpc_ping_proto_rawDesc)))
+func file_ping_proto_rawDescGZIP() []byte {
+	file_ping_proto_rawDescOnce.Do(func() {
+		file_ping_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_ping_proto_rawDesc), len(file_ping_proto_rawDesc)))
 	})
-	return file_pkg_visor_rpcgrpc_ping_proto_rawDescData
+	return file_ping_proto_rawDescData
 }
 
-var file_pkg_visor_rpcgrpc_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
-var file_pkg_visor_rpcgrpc_ping_proto_goTypes = []any{
-	(*PingRequest)(nil),         // 0: rpcgrpc.PingRequest
-	(*PingResult)(nil),          // 1: rpcgrpc.PingResult
-	(*DmsgServersRequest)(nil),  // 2: rpcgrpc.DmsgServersRequest
-	(*DmsgServersResponse)(nil), // 3: rpcgrpc.DmsgServersResponse
-	(*RouteHop)(nil),            // 4: rpcgrpc.RouteHop
-	(*BandwidthRequest)(nil),    // 5: rpcgrpc.BandwidthRequest
-	(*BandwidthProgress)(nil),   // 6: rpcgrpc.BandwidthProgress
+var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_ping_proto_goTypes = []any{
+	(*PingRequest)(nil),              // 0: rpcgrpc.PingRequest
+	(*PingResult)(nil),               // 1: rpcgrpc.PingResult
+	(*DmsgServersRequest)(nil),       // 2: rpcgrpc.DmsgServersRequest
+	(*DmsgServersResponse)(nil),      // 3: rpcgrpc.DmsgServersResponse
+	(*RouteHop)(nil),                 // 4: rpcgrpc.RouteHop
+	(*BandwidthRequest)(nil),         // 5: rpcgrpc.BandwidthRequest
+	(*BandwidthProgress)(nil),        // 6: rpcgrpc.BandwidthProgress
+	(*SystemStatsRequest)(nil),       // 7: rpcgrpc.SystemStatsRequest
+	(*RemoteSystemStatsRequest)(nil), // 8: rpcgrpc.RemoteSystemStatsRequest
+	(*SystemStats)(nil),              // 9: rpcgrpc.SystemStats
+	(*HostInfo)(nil),                 // 10: rpcgrpc.HostInfo
+	(*CpuStat)(nil),                  // 11: rpcgrpc.CpuStat
+	(*MemoryStat)(nil),               // 12: rpcgrpc.MemoryStat
+	(*DiskStat)(nil),                 // 13: rpcgrpc.DiskStat
+	(*NetworkStat)(nil),              // 14: rpcgrpc.NetworkStat
+	(*TempStat)(nil),                 // 15: rpcgrpc.TempStat
+	(*ProcessStat)(nil),              // 16: rpcgrpc.ProcessStat
 }
-var file_pkg_visor_rpcgrpc_ping_proto_depIdxs = []int32{
-	4, // 0: rpcgrpc.PingRequest.forward_hops:type_name -> rpcgrpc.RouteHop
-	4, // 1: rpcgrpc.PingRequest.reverse_hops:type_name -> rpcgrpc.RouteHop
-	4, // 2: rpcgrpc.PingResult.route_hop_details:type_name -> rpcgrpc.RouteHop
-	0, // 3: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
-	0, // 4: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
-	5, // 5: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	5, // 6: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	2, // 7: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
-	1, // 8: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
-	1, // 9: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
-	6, // 10: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	6, // 11: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	3, // 12: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
-	8, // [8:13] is the sub-list for method output_type
-	3, // [3:8] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+var file_ping_proto_depIdxs = []int32{
+	4,  // 0: rpcgrpc.PingRequest.forward_hops:type_name -> rpcgrpc.RouteHop
+	4,  // 1: rpcgrpc.PingRequest.reverse_hops:type_name -> rpcgrpc.RouteHop
+	4,  // 2: rpcgrpc.PingResult.route_hop_details:type_name -> rpcgrpc.RouteHop
+	10, // 3: rpcgrpc.SystemStats.host:type_name -> rpcgrpc.HostInfo
+	11, // 4: rpcgrpc.SystemStats.cpu:type_name -> rpcgrpc.CpuStat
+	12, // 5: rpcgrpc.SystemStats.memory:type_name -> rpcgrpc.MemoryStat
+	12, // 6: rpcgrpc.SystemStats.swap:type_name -> rpcgrpc.MemoryStat
+	13, // 7: rpcgrpc.SystemStats.disks:type_name -> rpcgrpc.DiskStat
+	14, // 8: rpcgrpc.SystemStats.network:type_name -> rpcgrpc.NetworkStat
+	15, // 9: rpcgrpc.SystemStats.temps:type_name -> rpcgrpc.TempStat
+	16, // 10: rpcgrpc.SystemStats.processes:type_name -> rpcgrpc.ProcessStat
+	0,  // 11: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
+	0,  // 12: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
+	5,  // 13: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	5,  // 14: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	2,  // 15: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
+	7,  // 16: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	7,  // 17: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	8,  // 18: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
+	1,  // 19: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
+	1,  // 20: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
+	6,  // 21: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	6,  // 22: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	3,  // 23: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
+	9,  // 24: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 25: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 26: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
+	19, // [19:27] is the sub-list for method output_type
+	11, // [11:19] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
-func init() { file_pkg_visor_rpcgrpc_ping_proto_init() }
-func file_pkg_visor_rpcgrpc_ping_proto_init() {
-	if File_pkg_visor_rpcgrpc_ping_proto != nil {
+func init() { file_ping_proto_init() }
+func file_ping_proto_init() {
+	if File_ping_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_visor_rpcgrpc_ping_proto_rawDesc), len(file_pkg_visor_rpcgrpc_ping_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ping_proto_rawDesc), len(file_ping_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_pkg_visor_rpcgrpc_ping_proto_goTypes,
-		DependencyIndexes: file_pkg_visor_rpcgrpc_ping_proto_depIdxs,
-		MessageInfos:      file_pkg_visor_rpcgrpc_ping_proto_msgTypes,
+		GoTypes:           file_ping_proto_goTypes,
+		DependencyIndexes: file_ping_proto_depIdxs,
+		MessageInfos:      file_ping_proto_msgTypes,
 	}.Build()
-	File_pkg_visor_rpcgrpc_ping_proto = out.File
-	file_pkg_visor_rpcgrpc_ping_proto_goTypes = nil
-	file_pkg_visor_rpcgrpc_ping_proto_depIdxs = nil
+	File_ping_proto = out.File
+	file_ping_proto_goTypes = nil
+	file_ping_proto_depIdxs = nil
 }

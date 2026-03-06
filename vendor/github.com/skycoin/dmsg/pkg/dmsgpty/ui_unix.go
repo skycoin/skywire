@@ -13,5 +13,7 @@ func (ui *UI) uiStartSize(ptyC *PtyClient) error {
 	if err != nil {
 		return err
 	}
-	return ptyC.StartWithSize(ui.conf.CmdName, ui.conf.CmdArgs, winSize)
+	// UI sessions use xterm-256color as they're accessed via web terminal
+	env := []string{"TERM=xterm-256color"}
+	return ptyC.StartWithSize(ui.conf.CmdName, ui.conf.CmdArgs, winSize, env)
 }

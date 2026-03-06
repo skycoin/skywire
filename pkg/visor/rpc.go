@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
@@ -25,11 +26,9 @@ const (
 	// RPCPrefix is the prefix used with all RPC calls.
 	RPCPrefix = "app-visor"
 	// HealthTimeout defines timeout for /health endpoint calls done from hypervisor.
-	HealthTimeout = 5 * time.Second
+	HealthTimeout = skyenv.HealthTimeout
 	// InnerHealthTimeout defines timeout for /health endpoint calls done from visor.
-	// We keep it is less than the `HealthTimeout`, so that the outer call would
-	// definitely complete.
-	InnerHealthTimeout = 3 * time.Second
+	InnerHealthTimeout = skyenv.InnerHealthTimeout
 )
 
 var (

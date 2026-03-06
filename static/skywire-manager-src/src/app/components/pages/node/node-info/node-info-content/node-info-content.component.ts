@@ -115,6 +115,37 @@ export class NodeInfoContentComponent implements OnDestroy {
   }
 
   /**
+   * Formats latency from nanoseconds to ms string.
+   */
+  formatLatency(latencyNs: number): string {
+    const ms = latencyNs / 1000000;
+    if (ms < 10) {
+      return ms.toFixed(2) + 'ms';
+    }
+    return Math.round(ms) + 'ms';
+  }
+
+  /**
+   * Returns transport statistics: total count and counts by type.
+   */
+  getTransportStats(): { total: number, byType: { type: string, count: number }[] } {
+    if (!this.node || !this.node.transports) {
+      return { total: 0, byType: [] };
+    }
+
+    const typeCounts: { [key: string]: number } = {};
+    for (const transport of this.node.transports) {
+      typeCounts[transport.type] = (typeCounts[transport.type] || 0) + 1;
+    }
+
+    const byType = Object.entries(typeCounts)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count); // Sort by count descending
+
+    return { total: this.node.transports.length, byType };
+  }
+
+  /**
    * Enables or disables the transport.public_autoconnect setting.
    */
   changeTransportsConfig() {
