@@ -4,11 +4,36 @@
   font-size: $font-size-base;
   font-weight: bold;
   text-transform: uppercase;
+  color: #00d4ff;
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.5), 0 0 20px rgba(0, 212, 255, 0.3);
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.info-table {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  align-items: baseline;
+  margin-top: 8px;
+
+  .info-label {
+    opacity: 0.7;
+    white-space: nowrap;
+    font-size: 0.9em;
+  }
+
+  .info-value {
+    word-break: break-word;
+  }
 }
 
 .info-line {
   word-break: break-word;
   margin-top: 7px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 
   .text-with-right-margin {
     margin-right: 5px;
@@ -40,7 +65,10 @@
   }
 
   .title {
-    opacity: 0.75;
+    opacity: 0.7;
+    white-space: nowrap;
+    min-width: 120px;
+    font-size: 0.9em;
   }
 }
 
@@ -49,6 +77,7 @@
   height: 0px;
   margin: 1rem 0;
   border-top: 1px solid $separator;
+  opacity: 0.5;
 }
 
 .config-button-container {
@@ -57,15 +86,78 @@
 }
 
 .dmsg-servers-list {
-  margin-left: 1rem;
-  margin-top: 5px;
+  margin-left: 0;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+  padding: 10px 12px;
+  background: rgba(0, 212, 255, 0.05);
+  border-radius: 6px;
+  border-left: 2px solid rgba(0, 212, 255, 0.3);
 
   .dmsg-server-item {
-    font-family: monospace;
-    font-size: 0.85em;
-    opacity: 0.9;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.82em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 0;
+    color: rgba(255, 255, 255, 0.95);
+    transition: all 0.2s ease;
+
+    &:hover {
+      color: #00d4ff;
+      text-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+    }
+
+    .dmsg-latency {
+      color: #4ade80;
+      font-weight: 500;
+      font-size: 0.95em;
+      text-shadow: 0 0 6px rgba(74, 222, 128, 0.3);
+
+      &.latency-high {
+        color: #fbbf24;
+        text-shadow: 0 0 6px rgba(251, 191, 36, 0.3);
+      }
+
+      &.latency-very-high {
+        color: #f87171;
+        text-shadow: 0 0 6px rgba(248, 113, 113, 0.3);
+      }
+    }
+  }
+}
+
+// Glow effect for key values
+.glow-value {
+  color: #e0f2fe;
+  text-shadow: 0 0 4px rgba(224, 242, 254, 0.2);
+}
+
+// Status indicators with glow
+.status-online {
+  color: #4ade80;
+  text-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+}
+
+.status-offline {
+  color: #f87171;
+  text-shadow: 0 0 8px rgba(248, 113, 113, 0.5);
+}
+
+// Transport stats styling
+.transport-stats {
+  color: rgba(255, 255, 255, 0.85);
+
+  .transport-type {
+    color: #a5b4fc;
+    font-weight: 500;
+  }
+
+  .transport-count {
+    color: #4ade80;
+    font-weight: 600;
   }
 }

@@ -119,19 +119,22 @@
     },
     "details": {
       "node-info": {
-        "title": "Visor Info",
+        "title": "Visor",
+        "title-local": "Local Visor",
         "label": "Label:",
         "public-key": "Public key:",
         "symmetic-nat": "Symmetic NAT:",
         "public-ip": "Public IP:",
         "ip": "IP:",
-        "dmsg-server": "DMSG server:",
+        "dmsg-servers": "DMSG servers:",
+        "connected": "connected",
         "no-dmsg-server": "Not connected",
         "ping": "Ping:",
         "node-version": "Visor version:",
-        "build-type": "Build type:",
+        "config-version": "Config version:",
+        "os": "OS:",
+        "arch": "Architecture:",
         "skybian-version": "Skybian version:",
-        "unknown-build": "Unknown",
         "time": {
           "title": "Time online:",
           "seconds": "a few seconds",
@@ -146,7 +149,7 @@
         }
       },
       "rewards-info": {
-        "title": "Reward Info",
+        "title": "Rewards",
         "rewards-address": "Reward address:",
         "not-registered": "Not registered",
         "not-registered-info": "You have not specified a Skycoin address for receiving rewards for this visor. If you want to register the visor for receiving rewards, press the \"Set address\" button and set a Skycoin address.",
@@ -155,7 +158,8 @@
         "change-address-button": "Change address"
       },
       "transports-info": {
-        "title": "Transports Info",
+        "title": "Transport",
+        "total": "Total:",
         "autoconnect": "Autoconnect:",
         "autoconnect-info": "When enabled, the visor will automatically create the transports needed when a connection to a public visor is requested. If disabled, the transports will have to be created before being able to make the connection.",
         "enabled": "Enabled",
@@ -168,13 +172,13 @@
         "disable-done": "The autoconnect feature has been disabled."
       },
       "router-info": {
-        "title": "Router Info",
+        "title": "Router",
         "min-hops": "Min hops:",
         "max-hops": "Max hops:",
         "change-config-button": "Change configuration"
       },
       "node-health": {
-        "title": "Health Info",
+        "title": "Health",
         "status": "Status:",
         "transport-discovery": "Transport discovery:",
         "route-finder": "Route finder:",

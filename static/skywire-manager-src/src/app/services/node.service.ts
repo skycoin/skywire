@@ -123,6 +123,14 @@ export class NodeService {
           node.connectedDmsgServers = response.connected_dmsg_servers || [];
           node.roundTripPing = this.nsToMs(response.dmsg_stats.round_trip);
 
+          // Parse new dmsg_servers with per-server latencies
+          if (response.dmsg_servers && Array.isArray(response.dmsg_servers)) {
+            node.dmsgServers = response.dmsg_servers.map((s: any) => ({
+              pk: s.pk,
+              latency: s.latency || 0
+            }));
+          }
+
           // Check if is hypervisor.
           node.isHypervisor = response.is_hypervisor;
 
@@ -360,6 +368,17 @@ export class NodeService {
           node.dmsgServerPk = '-';
           node.roundTripPing = '-1';
         }
+
+        // Parse dmsg_servers with per-server latencies
+        if (response.dmsg_servers && Array.isArray(response.dmsg_servers)) {
+          node.dmsgServers = response.dmsg_servers.map((s: any) => ({
+            pk: s.pk,
+            latency: s.latency || 0
+          }));
+        }
+
+        // Check if is hypervisor (local visor)
+        node.isHypervisor = response.is_hypervisor;
 
         return node;
       })

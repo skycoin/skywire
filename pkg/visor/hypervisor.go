@@ -549,6 +549,10 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 		} else {
 			summary.DmsgStats = &dmsgtracker.DmsgClientSummary{}
 		}
+
+		// Check if this is the local visor (hypervisor)
+		summary.IsHypervisor = summary.Overview.PubKey == hv.visor.conf.PK
+
 		httputil.WriteJSON(w, r, http.StatusOK, summary)
 	})
 }
@@ -561,19 +565,15 @@ func makeSummaryResp(online, hyper bool, sum *Summary) Summary {
 
 func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Get DMSG stats first (before acquiring lock to avoid deadlock)
+		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
+		for _, stat := range hv.getDmsgSummary() {
+			dmsgStats[stat.PK.String()] = stat
+		}
+
 		hv.mu.RLock()
 		wg := new(sync.WaitGroup)
 		wg.Add(len(hv.remoteVisors))
-
-		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
-		wg.Add(1)
-		go func() {
-			summary := hv.getDmsgSummary()
-			for _, stat := range summary {
-				dmsgStats[stat.PK.String()] = stat
-			}
-			wg.Done()
-		}()
 
 		summaries := make([]Summary, 0)
 

@@ -11,6 +11,7 @@ import (
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -71,13 +72,17 @@ var summaryCmd = &cobra.Command{
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 
-		// Build list of connected DMSG servers
+		// Build list of connected DMSG servers with latencies
 		dmsgServersStr := ""
-		for i, server := range summary.ConnectedDmsgServers {
+		for i, server := range summary.DMSGServers {
 			if i > 0 {
 				dmsgServersStr += "\n              "
 			}
-			dmsgServersStr += server
+			latStr := ""
+			if server.Latency > 0 {
+				latStr = fmt.Sprintf(" (%.1fms)", float64(server.Latency.Milliseconds()))
+			}
+			dmsgServersStr += server.PK.String() + latStr
 		}
 		if dmsgServersStr == "" {
 			dmsgServersStr = "(none)"
@@ -106,41 +111,41 @@ var summaryCmd = &cobra.Command{
 			msg += fmt.Sprintf("Location: %s\n", geoStr)
 		}
 
-		msg += fmt.Sprintf("DMSG Servers (%d connected):\n              %s\n", len(summary.ConnectedDmsgServers), dmsgServersStr)
+		msg += fmt.Sprintf("DMSG Servers (%d connected):\n              %s\n", len(summary.DMSGServers), dmsgServersStr)
 		msg += fmt.Sprintf("DMSG Latency: %s\n", summary.DmsgStats.RoundTrip)
 		msg += fmt.Sprintf("Visor Version: %s\nConfig Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
 			summary.Overview.BuildInfo.Version, summary.ConfigVersion, summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
 
 		outputJSON := struct {
-			PublicKey            string   `json:"public_key"`
-			IsSymmetricNAT       bool     `json:"symmetric_nat"`
-			LocalIP              string   `json:"local_ip"`
-			PublicIP             string   `json:"public_ip"`
-			CountryCode          string   `json:"country_code,omitempty"`
-			RegionName           string   `json:"region_name,omitempty"`
-			CityName             string   `json:"city_name,omitempty"`
-			ConnectedDmsgServers []string `json:"connected_dmsg_servers"`
-			DmsgLatency          string   `json:"dmsg_latency"`
-			VisorVersion         string   `json:"visor_version"`
-			ConfigVersion        string   `json:"config_version"`
-			UptimeTracker        string   `json:"uptime_tracker"`
-			TimeOnline           float64  `json:"time_online"`
-			BuildTag             string   `json:"build_tag"`
+			PublicKey      string                 `json:"public_key"`
+			IsSymmetricNAT bool                   `json:"symmetric_nat"`
+			LocalIP        string                 `json:"local_ip"`
+			PublicIP       string                 `json:"public_ip"`
+			CountryCode    string                 `json:"country_code,omitempty"`
+			RegionName     string                 `json:"region_name,omitempty"`
+			CityName       string                 `json:"city_name,omitempty"`
+			DMSGServers    []visor.DMSGServerInfo `json:"dmsg_servers"`
+			DmsgLatency    string                 `json:"dmsg_latency"`
+			VisorVersion   string                 `json:"visor_version"`
+			ConfigVersion  string                 `json:"config_version"`
+			UptimeTracker  string                 `json:"uptime_tracker"`
+			TimeOnline     float64                `json:"time_online"`
+			BuildTag       string                 `json:"build_tag"`
 		}{
-			PublicKey:            summary.Overview.PubKey.String(),
-			IsSymmetricNAT:       summary.Overview.IsSymmetricNAT,
-			LocalIP:              summary.Overview.LocalIP,
-			PublicIP:             summary.Overview.PublicIP,
-			CountryCode:          summary.Overview.CountryCode,
-			RegionName:           summary.Overview.RegionName,
-			CityName:             summary.Overview.CityName,
-			ConnectedDmsgServers: summary.ConnectedDmsgServers,
-			DmsgLatency:          summary.DmsgStats.RoundTrip.String(),
-			VisorVersion:         summary.Overview.BuildInfo.Version,
-			ConfigVersion:        summary.ConfigVersion,
-			UptimeTracker:        summary.Health.ServicesHealth,
-			TimeOnline:           summary.Uptime,
-			BuildTag:             summary.BuildTag,
+			PublicKey:      summary.Overview.PubKey.String(),
+			IsSymmetricNAT: summary.Overview.IsSymmetricNAT,
+			LocalIP:        summary.Overview.LocalIP,
+			PublicIP:       summary.Overview.PublicIP,
+			CountryCode:    summary.Overview.CountryCode,
+			RegionName:     summary.Overview.RegionName,
+			CityName:       summary.Overview.CityName,
+			DMSGServers:    summary.DMSGServers,
+			DmsgLatency:    summary.DmsgStats.RoundTrip.String(),
+			VisorVersion:   summary.Overview.BuildInfo.Version,
+			ConfigVersion:  summary.ConfigVersion,
+			UptimeTracker:  summary.Health.ServicesHealth,
+			TimeOnline:     summary.Uptime,
+			BuildTag:       summary.BuildTag,
 		}
 		internal.PrintOutput(cmd.Flags(), outputJSON, msg)
 	},

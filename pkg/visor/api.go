@@ -352,7 +352,8 @@ type Summary struct {
 	Routes               []routingRuleResp                `json:"routes"`
 	IsHypervisor         bool                             `json:"is_hypervisor,omitempty"`
 	DmsgStats            *dmsgtracker.DmsgClientSummary   `json:"dmsg_stats"`
-	ConnectedDmsgServers []string                         `json:"connected_dmsg_servers"`
+	ConnectedDmsgServers []string                         `json:"connected_dmsg_servers"` // Deprecated: use DMSGServers instead
+	DMSGServers          []DMSGServerInfo                 `json:"dmsg_servers"`           // Connected DMSG servers with latencies
 	Online               bool                             `json:"online"`
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
@@ -405,11 +406,14 @@ func (v *Visor) Summary() (*Summary, error) {
 		dmsgStatValue = &dmsgTracker
 	}
 
-	// Get all connected DMSG servers
+	// Get all connected DMSG servers (deprecated, for backward compatibility)
 	var connectedDmsgServers []string
 	if v.dmsgC != nil {
 		connectedDmsgServers = v.dmsgC.ConnectedServersPK()
 	}
+
+	// Get DMSG servers with latency info
+	dmsgServers, _ := v.DMSGServers()
 
 	rewardAddress, err := v.GetRewardAddress()
 	if err != nil {
@@ -429,6 +433,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
 		DmsgStats:            dmsgStatValue,
 		ConnectedDmsgServers: connectedDmsgServers,
+		DMSGServers:          dmsgServers,
 	}
 
 	return summary, nil
