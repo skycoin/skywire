@@ -148,16 +148,7 @@ func Get() *Info {
 		}
 		ver = ver + "-" + c
 	}
-	// Check for dirty working directory from debug.BuildInfo
-	// Only add +dirty if not already present in version string
-	if bi != nil && !strings.Contains(ver, "+dirty") {
-		for _, setting := range bi.Settings {
-			if setting.Key == "vcs.modified" && setting.Value == "true" {
-				ver = ver + "+dirty"
-				break
-			}
-		}
-	}
+	// Note: Go's module system already adds +dirty to version when built from dirty repo
 	return &Info{
 		Version: ver,
 		Commit:  Commit(),
