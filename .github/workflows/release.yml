@@ -1,139 +1,281 @@
 name: Release
-# only trigger on pull request closed events
 on:
   push:
     tags:
-      - '*'
+      - 'v*'
+
+env:
+  GO_VERSION: '1.25.6'
+  MUSL_RELEASE: 'v1.3.29'  # Release containing musl toolchains
+  SECP256K1_VERSION: 'v0.6.0'
+  LIBUSB_VERSION: 'v1.0.27'
+
 jobs:
   linux:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            goarch: amd64
+            toolchain: x86_64-linux-musl
+            toolchain_file: x86_64-linux-musl-cross.tgz
+          - arch: arm64
+            goarch: arm64
+            toolchain: aarch64-linux-musl
+            toolchain_file: aarch64-linux-musl-cross.tgz
+          - arch: arm
+            goarch: arm
+            goarm: "6"
+            toolchain: arm-linux-musleabi
+            toolchain_file: arm-linux-musleabi-cross.tgz
+          - arch: armhf
+            goarch: arm
+            goarm: "7"
+            toolchain: arm-linux-musleabihf
+            toolchain_file: arm-linux-musleabihf-cross.tgz
+          - arch: 386
+            goarch: "386"
+            toolchain: i686-linux-musl
+            toolchain_file: i686-linux-musl-cross.tgz
+          - arch: riscv64
+            goarch: riscv64
+            toolchain: riscv64-linux-musl
+            toolchain_file: riscv64-linux-musl-cross.tgz
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.6
-          cache: true
-          cache-dependency-path: go.sum
-      - uses: actions/checkout@v4
-      - name: Install Requirements
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y wget tar autoconf automake libtool
+
+      - name: Download musl toolchain
         run: |
-          sudo apt update
-          make dep-github-release
-      - name: Releasing
+          mkdir -p musl-data
+          wget -q "https://github.com/skycoin/skywire/releases/download/${{ env.MUSL_RELEASE }}/${{ matrix.toolchain_file }}"
+          tar -xzf "${{ matrix.toolchain_file }}" -C ./musl-data
+          rm "${{ matrix.toolchain_file }}"
+
+      - name: Build secp256k1
+        if: matrix.arch != '386'  # 386 doesn't need hardware wallet support
+        run: |
+          SYSROOT="$(pwd)/musl-data/${{ matrix.toolchain }}-cross"
+          BUILD_DIR="/tmp/secp256k1-build"
+          rm -rf "${BUILD_DIR}" && mkdir -p "${BUILD_DIR}" && cd "${BUILD_DIR}"
+          wget -q "https://github.com/bitcoin-core/secp256k1/archive/refs/tags/${{ env.SECP256K1_VERSION }}.tar.gz"
+          tar -xzf "${{ env.SECP256K1_VERSION }}.tar.gz"
+          cd "secp256k1-${SECP256K1_VERSION#v}"
+          ./autogen.sh
+          ./configure \
+              --host="${{ matrix.toolchain }}" \
+              CC="${SYSROOT}/bin/${{ matrix.toolchain }}-gcc" \
+              --prefix="${SYSROOT}/${{ matrix.toolchain }}" \
+              --enable-static --disable-shared \
+              --enable-module-recovery \
+              --disable-benchmark --disable-tests --disable-exhaustive-tests
+          make -j$(nproc)
+          make install
+
+      - name: Build libusb
+        if: matrix.arch != '386'  # 386 uses stub
+        run: |
+          SYSROOT="$(pwd)/musl-data/${{ matrix.toolchain }}-cross"
+          BUILD_DIR="/tmp/libusb-build"
+          rm -rf "${BUILD_DIR}" && mkdir -p "${BUILD_DIR}" && cd "${BUILD_DIR}"
+          wget -q "https://github.com/libusb/libusb/archive/refs/tags/${{ env.LIBUSB_VERSION }}.tar.gz"
+          tar -xzf "${{ env.LIBUSB_VERSION }}.tar.gz"
+          cd "libusb-${LIBUSB_VERSION#v}"
+          NOCONFIGURE=1 ./autogen.sh
+          ./configure \
+              --host="${{ matrix.toolchain }}" \
+              CC="${SYSROOT}/bin/${{ matrix.toolchain }}-gcc" \
+              --prefix="${SYSROOT}/${{ matrix.toolchain }}" \
+              --enable-static --disable-shared --disable-udev
+          make -j$(nproc)
+          make install
+
+      - name: Build skywire via go install
+        env:
+          CGO_ENABLED: "1"
+          CC: ${{ github.workspace }}/musl-data/${{ matrix.toolchain }}-cross/bin/${{ matrix.toolchain }}-gcc
+          PKG_CONFIG_PATH: ${{ github.workspace }}/musl-data/${{ matrix.toolchain }}-cross/${{ matrix.toolchain }}/lib/pkgconfig
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          GOBIN: ${{ github.workspace }}/bin
+        run: |
+          mkdir -p "$GOBIN"
+          go install -tags cgo -trimpath -ldflags "-s -w -linkmode external -extldflags '-static' -buildid=" \
+            github.com/skycoin/skywire@${{ github.ref_name }}
+
+          # Show version to verify it's clean
+          echo "Built binary version:"
+          if [ "${{ matrix.arch }}" = "amd64" ]; then
+            ./bin/skywire --version || true
+          fi
+
+      - name: Create archive
+        run: |
+          ARCHIVE_NAME="skywire-${{ github.ref_name }}-linux-${{ matrix.arch }}"
+          mkdir -p "dist/${ARCHIVE_NAME}"
+          cp bin/skywire "dist/${ARCHIVE_NAME}/"
+          cd dist
+          tar -czvf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+          sha256sum "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+
+      - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make github-release
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            dist/skywire-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.gz \
+            dist/skywire-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.gz.sha256 \
+            --repo ${{ github.repository }} \
+            --clobber
 
   darwin-amd64:
-    needs: linux
-    runs-on: macos-15-intel  # Intel runner
+    runs-on: macos-13  # Intel
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.6
-          cache: true
-          cache-dependency-path: go.sum
-      - uses: actions/checkout@v4
-      - name: Install Requirements
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
         run: |
-          brew install --quiet jq || brew upgrade --quiet jq
-          brew install --quiet wget || brew upgrade --quiet wget
-          brew install --quiet hidapi || brew upgrade --quiet hidapi
-          brew install --quiet libusb || brew upgrade --quiet libusb
-      - name: Releasing
+          brew install --quiet hidapi libusb
+
+      - name: Build skywire
+        env:
+          CGO_ENABLED: "1"
+          GOOS: darwin
+          GOARCH: amd64
+          GOBIN: ${{ github.workspace }}/bin
+        run: |
+          mkdir -p "$GOBIN"
+          go install -tags cgo -trimpath -ldflags "-s -w" \
+            github.com/skycoin/skywire@${{ github.ref_name }}
+          ./bin/skywire --version
+
+      - name: Create archive
+        run: |
+          ARCHIVE_NAME="skywire-${{ github.ref_name }}-darwin-amd64"
+          mkdir -p "dist/${ARCHIVE_NAME}"
+          cp bin/skywire "dist/${ARCHIVE_NAME}/"
+          cd dist
+          tar -czvf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+          sha256sum "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256" || shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+
+      - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make github-release-darwin-amd64
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            dist/skywire-${{ github.ref_name }}-darwin-amd64.tar.gz \
+            dist/skywire-${{ github.ref_name }}-darwin-amd64.tar.gz.sha256 \
+            --repo ${{ github.repository }} \
+            --clobber
 
   darwin-arm64:
-    needs: linux
-    runs-on: macos-latest  # ARM64 runner
+    runs-on: macos-latest  # ARM64
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.6
-          cache: true
-          cache-dependency-path: go.sum
-      - uses: actions/checkout@v4
-      - name: Install Requirements
-        run: |
-          brew install --quiet jq || brew upgrade --quiet jq
-          brew install --quiet wget || brew upgrade --quiet wget
-          brew install --quiet hidapi || brew upgrade --quiet hidapi
-          brew install --quiet libusb || brew upgrade --quiet libusb
-      - name: Releasing
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make github-release-darwin-arm64
+          go-version: ${{ env.GO_VERSION }}
 
-  darwin-installer:
-    needs: [darwin-amd64, darwin-arm64]
-    runs-on: macos-latest
-    steps:
-      - uses: actions/setup-go@v5
-        with:
-          go-version: 1.25.6
-          cache: true
-          cache-dependency-path: go.sum
-      - uses: actions/checkout@v4
-      - name: Install Requirements
+      - name: Install dependencies
         run: |
-          brew install --quiet jq || brew upgrade --quiet jq
-          brew install --quiet wget || brew upgrade --quiet wget
-      - name: Create and Upload macOS Installers
+          brew install --quiet hidapi libusb
+
+      - name: Build skywire
+        env:
+          CGO_ENABLED: "1"
+          GOOS: darwin
+          GOARCH: arm64
+          GOBIN: ${{ github.workspace }}/bin
+        run: |
+          mkdir -p "$GOBIN"
+          go install -tags cgo -trimpath -ldflags "-s -w" \
+            github.com/skycoin/skywire@${{ github.ref_name }}
+          ./bin/skywire --version
+
+      - name: Create archive
+        run: |
+          ARCHIVE_NAME="skywire-${{ github.ref_name }}-darwin-arm64"
+          mkdir -p "dist/${ARCHIVE_NAME}"
+          cp bin/skywire "dist/${ARCHIVE_NAME}/"
+          cd dist
+          tar -czvf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+          shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+
+      - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make mac-installer-release
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            dist/skywire-${{ github.ref_name }}-darwin-arm64.tar.gz \
+            dist/skywire-${{ github.ref_name }}-darwin-arm64.tar.gz.sha256 \
+            --repo ${{ github.repository }} \
+            --clobber
 
   windows:
-    needs: linux
     runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            goarch: amd64
+          - arch: "386"
+            goarch: "386"
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.6
-          cache: true
-          cache-dependency-path: go.sum
-      - uses: actions/checkout@v4
-      - name: Install Requirements
-        shell: pwsh
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build skywire
+        env:
+          CGO_ENABLED: "0"  # No CGO on Windows for simpler builds
+          GOOS: windows
+          GOARCH: ${{ matrix.goarch }}
+          GOBIN: ${{ github.workspace }}\bin
         run: |
-          choco install make
-      - name: Releasing
+          New-Item -ItemType Directory -Force -Path "$env:GOBIN"
+          go install -trimpath -ldflags "-s -w" github.com/skycoin/skywire@${{ github.ref_name }}
+          & "$env:GOBIN\skywire.exe" --version
+
+      - name: Create archive
+        run: |
+          $ARCHIVE_NAME = "skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}"
+          New-Item -ItemType Directory -Force -Path "dist\$ARCHIVE_NAME"
+          Copy-Item "bin\skywire.exe" "dist\$ARCHIVE_NAME\"
+          Compress-Archive -Path "dist\$ARCHIVE_NAME" -DestinationPath "dist\$ARCHIVE_NAME.zip"
+          Get-FileHash "dist\$ARCHIVE_NAME.zip" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $ARCHIVE_NAME.zip" } > "dist\$ARCHIVE_NAME.zip.sha256"
+
+      - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          make github-release-windows
-          make windows-installer-release
-  publish-winget:
-    needs: windows
-    runs-on: windows-latest
+          gh release upload "${{ github.ref_name }}" `
+            "dist\skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}.zip" `
+            "dist\skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}.zip.sha256" `
+            --repo ${{ github.repository }} `
+            --clobber
+
+  create-checksums:
+    needs: [linux, darwin-amd64, darwin-arm64, windows]
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Komac
-        run: |
-          $version = "2.13.0"
-          $url = "https://github.com/russellbanks/Komac/releases/download/v$version/komac-$version-x86_64-pc-windows-msvc.exe"
-          Invoke-WebRequest $url -OutFile komac.exe
-          mkdir $env:USERPROFILE\bin -Force
-          Move-Item komac.exe $env:USERPROFILE\bin\komac.exe
-          echo "$env:USERPROFILE\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Publish to WinGet
-        shell: pwsh
-        run: |
-          $tag = "${{ github.ref_name }}" -replace '^v',''
-          if ($tag -match '-(rc|alpha|beta)') {
-            Write-Host "Pre-release detected ($tag), skipping WinGet publish."
-            exit 0
-          }
-
-          komac update Skycoin.Skywire `
-          --version ${{ github.ref_name }} `
-          --urls "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-amd64.msi" `
-                 "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/skywire-installer-${{ github.ref_name }}-windows-386.msi" `
-          --submit `
-          --token $env:KOMAC_TOKEN
+      - name: Download all artifacts
         env:
-          KOMAC_TOKEN: ${{ secrets.WINGET_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "${{ github.ref_name }}" --repo ${{ github.repository }} --pattern "*.sha256"
+          cat *.sha256 > checksums.txt
+
+      - name: Upload combined checksums
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" checksums.txt \
+            --repo ${{ github.repository }} \
+            --clobber
