@@ -149,7 +149,8 @@ func Get() *Info {
 		ver = ver + "-" + c
 	}
 	// Check for dirty working directory from debug.BuildInfo
-	if bi != nil {
+	// Only add +dirty if not already present in version string
+	if bi != nil && !strings.Contains(ver, "+dirty") {
 		for _, setting := range bi.Settings {
 			if setting.Key == "vcs.modified" && setting.Value == "true" {
 				ver = ver + "+dirty"
