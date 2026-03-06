@@ -1,7 +1,7 @@
 <div *ngIf="node" class="font-smaller d-flex flex-column mt-4.5">
   <!-- Basic info section. -->
   <div class="d-flex flex-column">
-    <span class="section-title">{{ 'node.details.node-info.title' | translate }}</span>
+    <span class="section-title">{{ (node.isHypervisor ? 'node.details.node-info.title-local' : 'node.details.node-info.title') | translate }}</span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.label' | translate }} </span>
       <span class="highlight-internal-icon" (click)="showEditLabelDialog()">
@@ -26,14 +26,27 @@
       <app-copy-to-clipboard-text text="{{ node.ip }}"></app-copy-to-clipboard-text>
     </span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.dmsg-server' | translate }} </span>
-      <ng-container *ngIf="hasDmsgServer()">
-        <app-copy-to-clipboard-text text="{{ node.dmsgServerPk }}"></app-copy-to-clipboard-text>
+      <span class="title">{{ 'node.details.node-info.dmsg-servers' | translate }} </span>
+      <ng-container *ngIf="node.dmsgServers && node.dmsgServers.length > 0">
+        {{ node.dmsgServers.length }} {{ 'node.details.node-info.connected' | translate }}
       </ng-container>
-      <ng-container *ngIf="!hasDmsgServer()">
+      <ng-container *ngIf="!node.dmsgServers || node.dmsgServers.length === 0">
         {{ 'node.details.node-info.no-dmsg-server' | translate }}
       </ng-container>
     </span>
+    <div class="dmsg-servers-list" *ngIf="node.dmsgServers && node.dmsgServers.length > 0">
+      <div *ngFor="let server of node.dmsgServers" class="dmsg-server-item">
+        <app-copy-to-clipboard-text text="{{ server.pk }}"></app-copy-to-clipboard-text>
+        <span class="dmsg-latency"
+              *ngIf="server.latency > 0"
+              [ngClass]="{
+                'latency-high': server.latency > 300000000,
+                'latency-very-high': server.latency > 800000000
+              }">
+          {{ formatLatency(server.latency) }}
+        </span>
+      </div>
+    </div>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.ping' | translate }} </span>
       {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
@@ -43,8 +56,16 @@
       {{ node.version ? node.version : ('common.unknown' | translate) }}
     </span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.build-type' | translate }} </span>
-      {{ node.buildTag ? node.buildTag : ('node.details.node-info.unknown-build' | translate) }}
+      <span class="title">{{ 'node.details.node-info.config-version' | translate }} </span>
+      {{ node.configVersion ? node.configVersion : ('common.unknown' | translate) }}
+    </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-info.os' | translate }} </span>
+      {{ node.os ? node.os : ('common.unknown' | translate) }}
+    </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-info.arch' | translate }} </span>
+      {{ node.arch ? node.arch : ('common.unknown' | translate) }}
     </span>
     <span class="info-line" *ngIf="node.skybianBuildVersion">
       <span class="title">{{ 'node.details.node-info.skybian-version' | translate }} </span>
@@ -97,6 +118,15 @@
   <!-- Transports info section. -->
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.transports-info.title' | translate }}</span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.transports-info.total' | translate }} </span>
+      <span class="transport-stats">
+        <span class="transport-count">{{ getTransportStats().total }}</span>
+        <ng-container *ngIf="getTransportStats().byType.length > 0">
+          (<span *ngFor="let stat of getTransportStats().byType; let last = last"><span class="transport-type">{{ stat.type }}</span>: <span class="transport-count">{{ stat.count }}</span><span *ngIf="!last">, </span></span>)
+        </ng-container>
+      </span>
+    </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.transports-info.autoconnect' | translate }} </span>
       {{ ('node.details.transports-info.' + (node.autoconnectTransports ? 'enabled' : 'disabled')) | translate }}

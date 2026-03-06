@@ -844,6 +844,7 @@ func (s *redisStore) GetTransportMetricsByVisors(ctx context.Context, pks []ciph
 }
 
 // buildTransportMetrics builds TransportMetric slice from entries.
+// Uses Redis pipelining for efficient bulk fetching.
 func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*transport.Entry, expiredIDs map[uuid.UUID]bool, query MetricsQuery) ([]TransportMetric, error) {
 	days := query.Days
 	if days <= 0 {
@@ -854,7 +855,13 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 	}
 
 	now := time.Now().UTC()
-	var results []TransportMetric
+
+	// First pass: filter entries and prepare for bulk fetch
+	type filteredEntry struct {
+		entry  *transport.Entry
+		isLive bool
+	}
+	var filtered []filteredEntry
 
 	for _, entry := range entries {
 		// Apply type filter
@@ -873,24 +880,91 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 			if isLive {
 				continue
 			}
-			// "all" or empty - include both
 		}
 
+		filtered = append(filtered, filteredEntry{entry: entry, isLive: isLive})
+	}
+
+	if len(filtered) == 0 {
+		return []TransportMetric{}, nil
+	}
+
+	// Fetch latency data via pipeline
+	var latencyResults []*redis.StringCmd
+	if query.Latency {
+		pipe := s.client.Pipeline()
+		latencyResults = make([]*redis.StringCmd, len(filtered))
+		for i, f := range filtered {
+			latencyResults[i] = pipe.Get(ctx, s.transportKey(f.entry.ID))
+		}
+		_, _ = pipe.Exec(ctx) //nolint:errcheck // Errors handled per-command via Result()
+	}
+
+	// Fetch bandwidth data via pipeline
+	type bwKey struct {
+		idx     int
+		dayIdx  int
+		dateStr string
+	}
+	var bwKeys []bwKey
+	var bwResults []*redis.StringStringMapCmd
+
+	if query.Bandwidth {
+		pipe := s.client.Pipeline()
+		for i, f := range filtered {
+			for d := 0; d < days; d++ {
+				t := now.AddDate(0, 0, -d)
+				dateStr := t.Format("2006-01-02")
+				key := s.bandwidthDailyKey(f.entry.ID.String(), t)
+				bwKeys = append(bwKeys, bwKey{idx: i, dayIdx: d, dateStr: dateStr})
+				bwResults = append(bwResults, pipe.HGetAll(ctx, key))
+			}
+		}
+		_, _ = pipe.Exec(ctx) //nolint:errcheck // Errors handled per-command via Result()
+	}
+
+	// Build bandwidth lookup map: entryIdx -> []DailyEdgeBandwidth
+	bwByEntry := make(map[int][]DailyEdgeBandwidth)
+	for i, bk := range bwKeys {
+		result, err := bwResults[i].Result()
+		if err != nil || len(result) == 0 {
+			continue
+		}
+		var bw uint64
+		if val, ok := result["bandwidth"]; ok {
+			fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
+		}
+		if bw > 0 {
+			halfBW := bw / 2
+			dailyMetric := DailyEdgeBandwidth{
+				Date: bk.dateStr,
+				A:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
+				B:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
+			}
+			bwByEntry[bk.idx] = append(bwByEntry[bk.idx], dailyMetric)
+		}
+	}
+
+	// Build results
+	var results []TransportMetric
+	for i, f := range filtered {
 		metric := TransportMetric{
-			ID:    entry.ID.String(),
-			Type:  string(entry.Type),
-			Live:  isLive,
-			Daily: make([]DailyEdgeBandwidth, 0, days),
+			ID:    f.entry.ID.String(),
+			Type:  string(f.entry.Type),
+			Live:  f.isLive,
+			Daily: bwByEntry[i],
+		}
+		if metric.Daily == nil {
+			metric.Daily = []DailyEdgeBandwidth{}
 		}
 
 		if query.Edges {
-			metric.Edges = []string{entry.Edges[0].Hex(), entry.Edges[1].Hex()}
+			metric.Edges = []string{f.entry.Edges[0].Hex(), f.entry.Edges[1].Hex()}
 		}
 
-		// Get transport data from Redis to retrieve latency
-		if query.Latency {
-			tpKey := s.transportKey(entry.ID)
-			dataJSON, err := s.client.Get(ctx, tpKey).Result()
+		// Process latency result
+		if query.Latency && latencyResults != nil {
+			dataJSON, err := latencyResults[i].Result()
 			if err == nil {
 				var data TransportData
 				if json.Unmarshal([]byte(dataJSON), &data) == nil && data.LatencyAvg > 0 {
@@ -903,36 +977,7 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 			}
 		}
 
-		// Get daily bandwidth metrics
-		if query.Bandwidth {
-			for d := 0; d < days; d++ {
-				t := now.AddDate(0, 0, -d)
-				dateStr := t.Format("2006-01-02")
-
-				// Get bandwidth for this transport on this day
-				key := s.bandwidthDailyKey(entry.ID.String(), t)
-				bwResult, err := s.client.HGetAll(ctx, key).Result()
-				if err == nil && len(bwResult) > 0 {
-					var bw uint64
-					if val, ok := bwResult["bandwidth"]; ok {
-						fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
-					}
-
-					if bw > 0 {
-						// Split bandwidth between edges (estimate)
-						halfBW := bw / 2
-						dailyMetric := DailyEdgeBandwidth{
-							Date: dateStr,
-							A:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
-							B:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
-						}
-						metric.Daily = append(metric.Daily, dailyMetric)
-					}
-				}
-			}
-		}
-
-		// Skip transports without any metrics data (no latency and no bandwidth)
+		// Skip transports without any metrics data
 		if metric.Latency == nil && len(metric.Daily) == 0 {
 			continue
 		}

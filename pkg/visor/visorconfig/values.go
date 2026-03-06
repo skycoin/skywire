@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/bitfield/script"
 	"github.com/skycoin/dmsg/pkg/dmsg"
@@ -229,10 +228,24 @@ var (
 	IsPublic = skyenv.IsPublic
 
 	// PublicVisorRegistrationTimeout is how long to wait for external STCPR before deregistering
-	PublicVisorRegistrationTimeout = 10 * time.Minute
+	PublicVisorRegistrationTimeout = skyenv.PublicVisorRegistrationTimeout
 
 	// PublicVisorMaxTransports is the max transport count before deregistering
 	PublicVisorMaxTransports = 1000
+
+	// HTTP server timeouts
+
+	// HTTPReadTimeout is the maximum duration for reading the entire request.
+	HTTPReadTimeout = skyenv.HTTPReadTimeout
+
+	// HTTPWriteTimeout is the maximum duration before timing out writes of the response.
+	HTTPWriteTimeout = skyenv.HTTPWriteTimeout
+
+	// HTTPIdleTimeout is the maximum time to wait for the next request when keep-alives are enabled.
+	HTTPIdleTimeout = skyenv.HTTPIdleTimeout
+
+	// HTTPReadHeaderTimeout is the amount of time allowed to read request headers.
+	HTTPReadHeaderTimeout = skyenv.HTTPReadHeaderTimeout
 
 	// NodeInfo is the name of the survey file
 	NodeInfo = skyenv.NodeInfo

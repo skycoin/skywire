@@ -159,6 +159,7 @@ type API interface {
 	StopAllPings() (int, []string, error)
 	DialDmsgPing(pk cipher.PubKey) error
 	DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error
+	DialDmsgRPC(pk cipher.PubKey) (net.Conn, error)
 	DmsgPing(conf PingConfig) ([]time.Duration, error)
 	DmsgPingOnce(conf PingConfig) (time.Duration, error)
 	StopDmsgPing(pk cipher.PubKey) error
@@ -281,9 +282,18 @@ func (v *Visor) Overview() (*Overview, error) {
 			isSymmetricNAT = false
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
 			isSymmetricNAT = true
+			// Try to get IP from GeoIP service when STUN doesn't provide it
+			if ip, err := GetIP(v.conf.GeoIP); err == nil && ip != "" {
+				publicIP = ip
+			}
 		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
-			publicIP = v.stunClient.NATType.String()
 			isSymmetricNAT = false
+			// STUN failed, try GeoIP service as fallback
+			if ip, err := GetIP(v.conf.GeoIP); err == nil && ip != "" {
+				publicIP = ip
+			} else {
+				publicIP = v.stunClient.NATType.String()
+			}
 		}
 	}
 
@@ -342,13 +352,15 @@ type Summary struct {
 	Routes               []routingRuleResp                `json:"routes"`
 	IsHypervisor         bool                             `json:"is_hypervisor,omitempty"`
 	DmsgStats            *dmsgtracker.DmsgClientSummary   `json:"dmsg_stats"`
-	ConnectedDmsgServers []string                         `json:"connected_dmsg_servers"`
+	ConnectedDmsgServers []string                         `json:"connected_dmsg_servers"` // Deprecated: use DMSGServers instead
+	DMSGServers          []DMSGServerInfo                 `json:"dmsg_servers"`           // Connected DMSG servers with latencies
 	Online               bool                             `json:"online"`
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version,omitempty"` // Deprecated
 	RewardAddress        string                           `json:"reward_address"`
 	BuildTag             string                           `json:"build_tag"`
+	ConfigVersion        string                           `json:"config_version"`
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 }
 
@@ -394,10 +406,17 @@ func (v *Visor) Summary() (*Summary, error) {
 		dmsgStatValue = &dmsgTracker
 	}
 
-	// Get all connected DMSG servers
+	// Get all connected DMSG servers (deprecated, for backward compatibility)
 	var connectedDmsgServers []string
 	if v.dmsgC != nil {
 		connectedDmsgServers = v.dmsgC.ConnectedServersPK()
+	}
+
+	// Get DMSG servers with latency info
+	dmsgServers, err := v.DMSGServers()
+	if err != nil {
+		v.log.WithError(err).Warn("Failed to get DMSG servers info")
+		dmsgServers = nil
 	}
 
 	rewardAddress, err := v.GetRewardAddress()
@@ -413,10 +432,12 @@ func (v *Visor) Summary() (*Summary, error) {
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
 		BuildTag:             runtime.GOOS + "_" + runtime.GOARCH,
+		ConfigVersion:        v.conf.Common.Version,
 		RewardAddress:        rewardAddress,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
 		DmsgStats:            dmsgStatValue,
 		ConnectedDmsgServers: connectedDmsgServers,
+		DMSGServers:          dmsgServers,
 	}
 
 	return summary, nil
@@ -2043,6 +2064,35 @@ func (v *Visor) DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) 
 	return nil
 }
 
+// DialDmsgRPC implements API. Dials a remote visor's gRPC/RPC port over DMSG.
+// Returns a net.Conn that can be used to create a gRPC client.
+func (v *Visor) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
+	if v.dmsgC == nil {
+		return nil, fmt.Errorf("dmsg client not available")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Wait for dmsg client to be ready
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-v.dmsgC.Ready():
+	}
+
+	v.log.WithField("remote", pk.String()[:16]+"...").
+		Debug("Dialing remote visor RPC over DMSG")
+
+	// Dial to the hypervisor/RPC port
+	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: visorconfig.DmsgHypervisorPort})
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial dmsg RPC: %w", err)
+	}
+
+	return conn, nil
+}
+
 // GetDmsgPingServerPK implements API. Returns the DMSG server PK used for a ping connection.
 func (v *Visor) GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error) {
 	v.dmsgPingMx.Lock()
@@ -3350,10 +3400,10 @@ func (v *Visor) StartUIServer(addr string) error {
 
 	srv := &http.Server{
 		Handler:           tpvizServer.Handler(),
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       90 * time.Second,
-		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       visorconfig.HTTPReadTimeout,
+		WriteTimeout:      visorconfig.HTTPWriteTimeout,
+		IdleTimeout:       visorconfig.HTTPIdleTimeout,
+		ReadHeaderTimeout: visorconfig.HTTPReadHeaderTimeout,
 	}
 
 	go func() {

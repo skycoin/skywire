@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/rpc"
 	"sync"
 	"time"
@@ -800,6 +801,11 @@ func (rc *rpcClient) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, er
 	var servers []cipher.PubKey
 	err := rc.Call("GetRemoteDmsgServers", &pk, &servers)
 	return servers, err
+}
+
+// DialDmsgRPC is not supported over standard RPC - use gRPC StreamRemoteSystemStats instead.
+func (rc *rpcClient) DialDmsgRPC(_ cipher.PubKey) (net.Conn, error) {
+	return nil, fmt.Errorf("DialDmsgRPC not available over standard RPC, use gRPC StreamRemoteSystemStats")
 }
 
 // GetPreferredDmsgServer calls GetPreferredDmsgServer.
@@ -1821,6 +1827,11 @@ func (mc *mockRPCClient) GetDmsgPingServerPK(_ cipher.PubKey) (cipher.PubKey, er
 // GetRemoteDmsgServers implements API.
 func (mc *mockRPCClient) GetRemoteDmsgServers(_ cipher.PubKey) ([]cipher.PubKey, error) {
 	return []cipher.PubKey{}, nil
+}
+
+// DialDmsgRPC implements API.
+func (mc *mockRPCClient) DialDmsgRPC(_ cipher.PubKey) (net.Conn, error) {
+	return nil, fmt.Errorf("mock: DialDmsgRPC not implemented")
 }
 
 // GetPreferredDmsgServer implements API.

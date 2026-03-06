@@ -3,6 +3,7 @@ package dmsgpty
 
 import (
 	"bytes"
+	stdjson "encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -135,7 +136,8 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		}
 		defer func() { log.WithError(ws.Close(websocket.StatusNormalClosure, "closed")).Debug("Closed ws.") }()
 
-		wsConn := websocket.NetConn(r.Context(), ws, websocket.MessageText)
+		// Use binary mode for PTY data - text mode fails on non-UTF-8 bytes
+		wsConn := websocket.NetConn(r.Context(), ws, websocket.MessageBinary)
 
 		// open pty
 		logWS(wsConn, "Dialing...")
@@ -155,8 +157,6 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		defer func() { log.WithError(ptyC.Close()).Debug("Closed ptyC.") }()
 
 		if err = ui.uiStartSize(ptyC); err != nil {
-			log.Print("xxxx")
-
 			writeWSError(log, wsConn, err)
 			return
 		}
@@ -181,15 +181,26 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		// urlCommands from URL | set DMSGPTYTERM=1 all times
 		ptyC.Write([]byte(urlCommands(r, customCommands))) //nolint
 
+		// Create WebSocket reader that handles resize messages
+		wsReader := newWSReader(ws, ptyC, log, r)
+		defer func() {
+			if err := wsReader.Close(); err != nil {
+				log.WithError(err).Debug("Error closing wsReader")
+			}
+		}()
+
 		// io
 		done, once := make(chan struct{}), new(sync.Once)
 		closeDone := func() { once.Do(func() { close(done) }) }
 		go func() {
-			_, _ = io.Copy(wsConn, ptyC) //nolint:errcheck
+			// Buffer PTY output and flush periodically to reduce WebSocket message count
+			bw := newBufferedWSWriter(wsConn, 16*time.Millisecond)
+			defer bw.Close()
+			_, _ = io.Copy(bw, ptyC) //nolint:errcheck
 			closeDone()
 		}()
 		go func() {
-			_, _ = io.Copy(ptyC, wsConn) //nolint:errcheck
+			_, _ = io.Copy(ptyC, wsReader) //nolint:errcheck
 			closeDone()
 		}()
 		<-done
@@ -254,4 +265,152 @@ func urlCommands(r *http.Request, customCommands map[string][]string) string {
 	stringCommands := strings.Join(commands, " && ")
 	stringCommands += "\n"
 	return stringCommands
+}
+
+// resizeMsg represents a terminal resize message from the client.
+type resizeMsg struct {
+	Type string `json:"type"`
+	Cols int    `json:"cols"`
+	Rows int    `json:"rows"`
+}
+
+// wsReader reads from a WebSocket connection, handling resize messages separately.
+// Resize messages are JSON objects with type="resize", cols, and rows fields.
+// All other data is passed through to the PTY.
+type wsReader struct {
+	ws     *websocket.Conn
+	ptyC   *PtyClient
+	log    logrus.FieldLogger
+	ctx    *http.Request
+	closed bool
+	mu     sync.Mutex
+}
+
+func newWSReader(ws *websocket.Conn, ptyC *PtyClient, log logrus.FieldLogger, r *http.Request) *wsReader {
+	return &wsReader{
+		ws:   ws,
+		ptyC: ptyC,
+		log:  log,
+		ctx:  r,
+	}
+}
+
+func (wr *wsReader) Read(p []byte) (int, error) {
+	for {
+		wr.mu.Lock()
+		if wr.closed {
+			wr.mu.Unlock()
+			return 0, io.EOF
+		}
+		wr.mu.Unlock()
+
+		msgType, data, err := wr.ws.Read(wr.ctx.Context())
+		if err != nil {
+			return 0, err
+		}
+
+		// Try to parse as resize message
+		if msgType == websocket.MessageText && len(data) > 0 && data[0] == '{' {
+			var msg resizeMsg
+			if err := stdjson.Unmarshal(data, &msg); err == nil && msg.Type == "resize" {
+				// Handle resize (with bounds checking for uint16)
+				if msg.Cols > 0 && msg.Rows > 0 && msg.Cols <= 0xFFFF && msg.Rows <= 0xFFFF {
+					size := &WinSize{
+						Cols: uint16(msg.Cols), //nolint:gosec // bounds checked above
+						Rows: uint16(msg.Rows), //nolint:gosec // bounds checked above
+						X:    uint16(msg.Cols), //nolint:gosec // bounds checked above
+						Y:    uint16(msg.Rows), //nolint:gosec // bounds checked above
+					}
+					if err := wr.ptyC.SetPtySize(size); err != nil {
+						wr.log.WithError(err).Debug("Failed to set PTY size")
+					} else {
+						wr.log.WithField("cols", msg.Cols).WithField("rows", msg.Rows).Debug("Resized PTY")
+					}
+				}
+				continue // Don't pass resize message to PTY, read next message
+			}
+		}
+
+		// Regular data - copy to output buffer
+		n := copy(p, data)
+		return n, nil
+	}
+}
+
+func (wr *wsReader) Close() error {
+	wr.mu.Lock()
+	defer wr.mu.Unlock()
+	wr.closed = true
+	return nil
+}
+
+// bufferedWSWriter batches writes and flushes them periodically to reduce
+// the number of WebSocket messages, improving performance for high-frequency output.
+type bufferedWSWriter struct {
+	conn     net.Conn
+	buf      []byte
+	mu       sync.Mutex
+	closed   bool
+	interval time.Duration
+	done     chan struct{}
+}
+
+func newBufferedWSWriter(conn net.Conn, flushInterval time.Duration) *bufferedWSWriter {
+	bw := &bufferedWSWriter{
+		conn:     conn,
+		buf:      make([]byte, 0, 4096),
+		interval: flushInterval,
+		done:     make(chan struct{}),
+	}
+	go bw.flushLoop()
+	return bw
+}
+
+func (bw *bufferedWSWriter) Write(p []byte) (int, error) {
+	bw.mu.Lock()
+	defer bw.mu.Unlock()
+	if bw.closed {
+		return 0, io.ErrClosedPipe
+	}
+	bw.buf = append(bw.buf, p...)
+	return len(p), nil
+}
+
+func (bw *bufferedWSWriter) flushLoop() {
+	ticker := time.NewTicker(bw.interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			bw.flush()
+		case <-bw.done:
+			bw.flush() // Final flush
+			return
+		}
+	}
+}
+
+func (bw *bufferedWSWriter) flush() {
+	bw.mu.Lock()
+	if len(bw.buf) == 0 {
+		bw.mu.Unlock()
+		return
+	}
+	data := bw.buf
+	bw.buf = make([]byte, 0, 4096)
+	bw.mu.Unlock()
+
+	_, _ = bw.conn.Write(data) //nolint:errcheck
+}
+
+func (bw *bufferedWSWriter) Close() error {
+	bw.mu.Lock()
+	if bw.closed {
+		bw.mu.Unlock()
+		return nil
+	}
+	bw.closed = true
+	bw.mu.Unlock()
+	close(bw.done)
+	return nil
 }
