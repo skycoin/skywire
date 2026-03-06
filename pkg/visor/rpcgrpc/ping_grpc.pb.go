@@ -2,13 +2,12 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v3.6.1
-// source: pkg/visor/rpcgrpc/ping.proto
+// source: ping.proto
 
 package rpcgrpc
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -25,6 +24,9 @@ const (
 	PingService_StreamBandwidthTest_FullMethodName     = "/rpcgrpc.PingService/StreamBandwidthTest"
 	PingService_StreamDmsgBandwidthTest_FullMethodName = "/rpcgrpc.PingService/StreamDmsgBandwidthTest"
 	PingService_GetRemoteDmsgServers_FullMethodName    = "/rpcgrpc.PingService/GetRemoteDmsgServers"
+	PingService_StreamSystemStats_FullMethodName       = "/rpcgrpc.PingService/StreamSystemStats"
+	PingService_GetSystemStats_FullMethodName          = "/rpcgrpc.PingService/GetSystemStats"
+	PingService_StreamRemoteSystemStats_FullMethodName = "/rpcgrpc.PingService/StreamRemoteSystemStats"
 )
 
 // PingServiceClient is the client API for PingService service.
@@ -43,6 +45,13 @@ type PingServiceClient interface {
 	StreamDmsgBandwidthTest(ctx context.Context, in *BandwidthRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BandwidthProgress], error)
 	// GetRemoteDmsgServers returns the DMSG servers a remote visor is connected to
 	GetRemoteDmsgServers(ctx context.Context, in *DmsgServersRequest, opts ...grpc.CallOption) (*DmsgServersResponse, error)
+	// StreamSystemStats streams system stats (CPU, memory, disk, network, etc.) for gotop-style monitoring
+	StreamSystemStats(ctx context.Context, in *SystemStatsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SystemStats], error)
+	// GetSystemStats returns a single snapshot of system stats
+	GetSystemStats(ctx context.Context, in *SystemStatsRequest, opts ...grpc.CallOption) (*SystemStats, error)
+	// StreamRemoteSystemStats proxies system stats from a remote visor via DMSG
+	// The local visor dials the remote visor over DMSG and forwards the stats stream
+	StreamRemoteSystemStats(ctx context.Context, in *RemoteSystemStatsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SystemStats], error)
 }
 
 type pingServiceClient struct {
@@ -139,6 +148,54 @@ func (c *pingServiceClient) GetRemoteDmsgServers(ctx context.Context, in *DmsgSe
 	return out, nil
 }
 
+func (c *pingServiceClient) StreamSystemStats(ctx context.Context, in *SystemStatsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SystemStats], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PingService_ServiceDesc.Streams[4], PingService_StreamSystemStats_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SystemStatsRequest, SystemStats]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamSystemStatsClient = grpc.ServerStreamingClient[SystemStats]
+
+func (c *pingServiceClient) GetSystemStats(ctx context.Context, in *SystemStatsRequest, opts ...grpc.CallOption) (*SystemStats, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SystemStats)
+	err := c.cc.Invoke(ctx, PingService_GetSystemStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pingServiceClient) StreamRemoteSystemStats(ctx context.Context, in *RemoteSystemStatsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SystemStats], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PingService_ServiceDesc.Streams[5], PingService_StreamRemoteSystemStats_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[RemoteSystemStatsRequest, SystemStats]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamRemoteSystemStatsClient = grpc.ServerStreamingClient[SystemStats]
+
 // PingServiceServer is the server API for PingService service.
 // All implementations must embed UnimplementedPingServiceServer
 // for forward compatibility.
@@ -155,6 +212,13 @@ type PingServiceServer interface {
 	StreamDmsgBandwidthTest(*BandwidthRequest, grpc.ServerStreamingServer[BandwidthProgress]) error
 	// GetRemoteDmsgServers returns the DMSG servers a remote visor is connected to
 	GetRemoteDmsgServers(context.Context, *DmsgServersRequest) (*DmsgServersResponse, error)
+	// StreamSystemStats streams system stats (CPU, memory, disk, network, etc.) for gotop-style monitoring
+	StreamSystemStats(*SystemStatsRequest, grpc.ServerStreamingServer[SystemStats]) error
+	// GetSystemStats returns a single snapshot of system stats
+	GetSystemStats(context.Context, *SystemStatsRequest) (*SystemStats, error)
+	// StreamRemoteSystemStats proxies system stats from a remote visor via DMSG
+	// The local visor dials the remote visor over DMSG and forwards the stats stream
+	StreamRemoteSystemStats(*RemoteSystemStatsRequest, grpc.ServerStreamingServer[SystemStats]) error
 	mustEmbedUnimplementedPingServiceServer()
 }
 
@@ -179,6 +243,15 @@ func (UnimplementedPingServiceServer) StreamDmsgBandwidthTest(*BandwidthRequest,
 }
 func (UnimplementedPingServiceServer) GetRemoteDmsgServers(context.Context, *DmsgServersRequest) (*DmsgServersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetRemoteDmsgServers not implemented")
+}
+func (UnimplementedPingServiceServer) StreamSystemStats(*SystemStatsRequest, grpc.ServerStreamingServer[SystemStats]) error {
+	return status.Error(codes.Unimplemented, "method StreamSystemStats not implemented")
+}
+func (UnimplementedPingServiceServer) GetSystemStats(context.Context, *SystemStatsRequest) (*SystemStats, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSystemStats not implemented")
+}
+func (UnimplementedPingServiceServer) StreamRemoteSystemStats(*RemoteSystemStatsRequest, grpc.ServerStreamingServer[SystemStats]) error {
+	return status.Error(codes.Unimplemented, "method StreamRemoteSystemStats not implemented")
 }
 func (UnimplementedPingServiceServer) mustEmbedUnimplementedPingServiceServer() {}
 func (UnimplementedPingServiceServer) testEmbeddedByValue()                     {}
@@ -263,6 +336,46 @@ func _PingService_GetRemoteDmsgServers_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PingService_StreamSystemStats_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SystemStatsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PingServiceServer).StreamSystemStats(m, &grpc.GenericServerStream[SystemStatsRequest, SystemStats]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamSystemStatsServer = grpc.ServerStreamingServer[SystemStats]
+
+func _PingService_GetSystemStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SystemStatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PingServiceServer).GetSystemStats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PingService_GetSystemStats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PingServiceServer).GetSystemStats(ctx, req.(*SystemStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PingService_StreamRemoteSystemStats_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(RemoteSystemStatsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PingServiceServer).StreamRemoteSystemStats(m, &grpc.GenericServerStream[RemoteSystemStatsRequest, SystemStats]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamRemoteSystemStatsServer = grpc.ServerStreamingServer[SystemStats]
+
 // PingService_ServiceDesc is the grpc.ServiceDesc for PingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -273,6 +386,10 @@ var PingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetRemoteDmsgServers",
 			Handler:    _PingService_GetRemoteDmsgServers_Handler,
+		},
+		{
+			MethodName: "GetSystemStats",
+			Handler:    _PingService_GetSystemStats_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
@@ -296,6 +413,16 @@ var PingService_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _PingService_StreamDmsgBandwidthTest_Handler,
 			ServerStreams: true,
 		},
+		{
+			StreamName:    "StreamSystemStats",
+			Handler:       _PingService_StreamSystemStats_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamRemoteSystemStats",
+			Handler:       _PingService_StreamRemoteSystemStats_Handler,
+			ServerStreams: true,
+		},
 	},
-	Metadata: "pkg/visor/rpcgrpc/ping.proto",
+	Metadata: "ping.proto",
 }

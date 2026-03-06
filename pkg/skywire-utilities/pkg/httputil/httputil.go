@@ -3,7 +3,9 @@ package httputil
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,8 +21,9 @@ var json = jsoniter.ConfigFastest
 
 var log = logging.MustGetLogger("httputil")
 
-// WriteJSON writes a json object on a http.ResponseWriter with the given code,
-// panics on marshaling error
+// WriteJSON writes a json object on a http.ResponseWriter with the given code.
+// I/O errors (client disconnect, timeout) are logged but don't cause panics.
+// Marshaling errors panic as they indicate a programming error.
 func WriteJSON(w http.ResponseWriter, r *http.Request, code int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
@@ -36,8 +39,35 @@ func WriteJSON(w http.ResponseWriter, r *http.Request, code int, v interface{}) 
 		v = map[string]interface{}{"error": err.Error()}
 	}
 	if err := json.NewEncoder(w).Encode(v); err != nil {
+		// Check if it's an I/O error (client disconnect, timeout, etc.)
+		if isIOError(err) {
+			log.WithError(err).Debug("Failed to write JSON response (client likely disconnected)")
+			return
+		}
+		// Marshaling errors indicate programming bugs, so panic
 		panic(err)
 	}
+}
+
+// isIOError checks if an error is related to I/O (network issues, timeouts, etc.)
+func isIOError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for common I/O error patterns
+	errStr := err.Error()
+	if strings.Contains(errStr, "i/o timeout") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "broken pipe") ||
+		strings.Contains(errStr, "use of closed network connection") {
+		return true
+	}
+	// Check for net.Error (timeout or temporary)
+	var netErr net.Error
+	if ok := errors.As(err, &netErr); ok {
+		return netErr.Timeout()
+	}
+	return false
 }
 
 // ReadJSON reads the request body to a json object.

@@ -23,6 +23,7 @@ type CommandReq struct {
 	Name string
 	Arg  []string
 	Size *WinSize
+	Env  []string // Environment variables to pass to the PTY (e.g., TERM=xterm-256color)
 }
 
 // LocalPtyGateway is the gateway to a local pty.
@@ -50,7 +51,7 @@ func (g *LocalPtyGateway) Read(reqN *int, respB *[]byte) error {
 
 // Start starts the local pty.
 func (g *LocalPtyGateway) Start(req *CommandReq, _ *struct{}) error {
-	return g.ses.Start(req.Name, req.Arg, req.Size)
+	return g.ses.Start(req.Name, req.Arg, req.Size, req.Env)
 }
 
 // Write writes to the local pty.
@@ -82,7 +83,7 @@ func NewProxyGateway(ptyC *PtyClient) PtyGateway {
 
 // Start starts the remote pty.
 func (g *ProxiedPtyGateway) Start(req *CommandReq, _ *struct{}) error {
-	return g.ptyC.Start(req.Name, req.Arg...)
+	return g.ptyC.Start(req.Name, req.Env, req.Arg...)
 }
 
 // Stop stops the remote pty.

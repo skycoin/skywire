@@ -552,10 +552,10 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// Increased timeouts for dmsg latency characteristics
 	// DMSG has higher latency than direct TCP due to multi-hop routing
 	srv := &http.Server{
-		ReadTimeout:       30 * time.Second, // Allow for dmsg multi-hop latency
-		WriteTimeout:      60 * time.Second, // Allow time to generate large responses (logs, surveys)
-		IdleTimeout:       90 * time.Second, // Keep connections alive longer
-		ReadHeaderTimeout: 10 * time.Second, // Headers can be slow over dmsg
+		ReadTimeout:       visorconfig.HTTPReadTimeout,
+		WriteTimeout:      visorconfig.HTTPWriteTimeout,
+		IdleTimeout:       visorconfig.HTTPIdleTimeout,
+		ReadHeaderTimeout: visorconfig.HTTPReadHeaderTimeout,
 		Handler:           lsAPI,
 	}
 
@@ -2022,6 +2022,10 @@ func (a *visorPingAdapter) GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey,
 
 func (a *visorPingAdapter) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error) {
 	return a.v.GetRemoteDmsgServers(pk)
+}
+
+func (a *visorPingAdapter) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
+	return a.v.DialDmsgRPC(pk)
 }
 
 func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
@@ -3528,10 +3532,10 @@ func initUIServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	srv := &http.Server{
 		Handler:           tpvizServer.Handler(),
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       90 * time.Second,
-		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       visorconfig.HTTPReadTimeout,
+		WriteTimeout:      visorconfig.HTTPWriteTimeout,
+		IdleTimeout:       visorconfig.HTTPIdleTimeout,
+		ReadHeaderTimeout: visorconfig.HTTPReadHeaderTimeout,
 	}
 
 	wg := new(sync.WaitGroup)
@@ -3580,10 +3584,10 @@ func initUIServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 			dmsgSrv := &http.Server{
 				Handler:           handler,
-				ReadTimeout:       30 * time.Second,
-				WriteTimeout:      60 * time.Second,
-				IdleTimeout:       90 * time.Second,
-				ReadHeaderTimeout: 10 * time.Second,
+				ReadTimeout:       visorconfig.HTTPReadTimeout,
+				WriteTimeout:      visorconfig.HTTPWriteTimeout,
+				IdleTimeout:       visorconfig.HTTPIdleTimeout,
+				ReadHeaderTimeout: visorconfig.HTTPReadHeaderTimeout,
 			}
 
 			wg.Add(1)

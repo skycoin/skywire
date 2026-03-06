@@ -47,6 +47,8 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   stateSortData = new SortingColumn(['online'], 'nodes.state', SortingModes.Boolean);
   labelSortData = new SortingColumn(['label'], 'nodes.label', SortingModes.Text);
   keySortData = new SortingColumn(['localPk'], 'nodes.key', SortingModes.Text);
+  versionSortData = new SortingColumn(['version'], 'nodes.version', SortingModes.Text);
+  configVersionSortData = new SortingColumn(['configVersion'], 'nodes.config-version', SortingModes.Text);
   dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text, ['dmsgServerPk_label']);
   pingSortData = new SortingColumn(['roundTripPing'], 'nodes.ping', SortingModes.Number);
 
@@ -171,6 +173,8 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       this.stateSortData,
       this.labelSortData,
       this.keySortData,
+      this.versionSortData,
+      this.configVersionSortData,
     ];
     if (this.showDmsgInfo) {
       sortableColumns.push(this.dmsgServerSortData);

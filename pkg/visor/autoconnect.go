@@ -14,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
@@ -21,12 +22,8 @@ import (
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-const (
-	// PublicServiceDelay defines the interval for checking service discovery and adding transports to public visors.
-	PublicServiceDelay = 300 * time.Second
-
-	fetchServicesDelay = 10 * time.Second
-)
+// PublicServiceDelay defines the interval for checking service discovery and adding transports to public visors.
+const PublicServiceDelay = skyenv.PublicAutoconnectInterval
 
 // ConnectFn provides a way to connect to remote service
 type ConnectFn func(context.Context, cipher.PubKey) error
@@ -410,7 +407,7 @@ func (a *autoconnector) tryEstablishTransport(ctx context.Context, pk cipher.Pub
 }
 
 func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey, error) {
-	retrier := netutil.NewRetrier(a.log, fetchServicesDelay, 0, 5, 3)
+	retrier := netutil.NewDefaultRetrier(a.log)
 	var services []servicedisc.Service
 	fetch := func() (err error) {
 		// "return" services up from the closure

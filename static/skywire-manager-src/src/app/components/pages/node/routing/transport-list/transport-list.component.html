@@ -135,9 +135,7 @@
       </td>
       <td *ngIf="!!!transport.notFound">
         <app-labeled-element-text
-          [short]="true"
           id="{{ transport.id }}"
-          shortTextLength="4"
           (labelEdited)="refreshData()"
           [elementType]="labeledElementTypes.Transport">
         </app-labeled-element-text>
@@ -148,9 +146,7 @@
       </td>
       <td>
         <app-labeled-element-text
-          [short]="true"
           id="{{ transport.remotePk }}"
-          shortTextLength="4"
           (labelEdited)="refreshData()">
         </app-labeled-element-text>
       </td>
