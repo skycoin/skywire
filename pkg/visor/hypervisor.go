@@ -546,9 +546,8 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 
 		if stat, ok := dmsgStats[summary.Overview.PubKey.String()]; ok {
 			summary.DmsgStats = &stat
-		} else {
-			summary.DmsgStats = &dmsgtracker.DmsgClientSummary{}
 		}
+		// If stats not found, leave DmsgStats as nil (don't create empty struct with 0ms latency)
 
 		// Check if this is the local visor (hypervisor)
 		summary.IsHypervisor = summary.Overview.PubKey == hv.visor.conf.PK
@@ -618,9 +617,8 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		for i := 0; i < len(summaries); i++ {
 			if stat, ok := dmsgStats[summaries[i].Overview.PubKey.String()]; ok {
 				summaries[i].DmsgStats = &stat
-			} else {
-				summaries[i].DmsgStats = &dmsgtracker.DmsgClientSummary{}
 			}
+			// If stats not found, leave DmsgStats as nil (don't create empty struct with 0ms latency)
 		}
 
 		hv.mu.RUnlock()

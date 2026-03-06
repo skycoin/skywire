@@ -2,7 +2,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
@@ -103,10 +103,7 @@ func (api *API) getNetworkMetric(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(metrics); err != nil {
-		api.log(r).WithError(err).Error("Error encoding network metrics")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, metrics)
 }
 
 // GET /metric/visor/{pks}
@@ -134,10 +131,7 @@ func (api *API) getVisorAggregateMetric(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(metrics); err != nil {
-		api.log(r).WithError(err).Error("Error encoding visor aggregate metrics")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, metrics)
 }
 
 // GET /metrics
@@ -151,10 +145,7 @@ func (api *API) getAllTransportMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(metrics); err != nil {
-		api.log(r).WithError(err).Error("Error encoding transport metrics")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, metrics)
 }
 
 // GET /metrics/{ids}
@@ -182,10 +173,7 @@ func (api *API) getTransportMetricsByIDs(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(metrics); err != nil {
-		api.log(r).WithError(err).Error("Error encoding transport metrics by IDs")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, metrics)
 }
 
 // GET /metrics/visor/{pks}
@@ -213,8 +201,5 @@ func (api *API) getTransportMetricsByVisors(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(metrics); err != nil {
-		api.log(r).WithError(err).Error("Error encoding transport metrics by visors")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, metrics)
 }

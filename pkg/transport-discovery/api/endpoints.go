@@ -50,17 +50,11 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 			api.writeError(w, r, err)
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(allEntries); err != nil {
-			api.writeError(w, r, err)
-		}
+		httputil.WriteJSON(w, r, http.StatusCreated, allEntries)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(entries); err != nil {
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusCreated, entries)
 }
 
 func (api *API) getTransportByID(w http.ResponseWriter, r *http.Request) {
@@ -78,9 +72,7 @@ func (api *API) getTransportByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(entry); err != nil {
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, entry)
 }
 
 func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
@@ -101,10 +93,7 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 		api.writeError(w, r, err)
 		return
 	}
-	if err := json.NewEncoder(w).Encode(entries); err != nil {
-		api.log(r).WithError(err).Error("Error encoding entries")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, entries)
 }
 
 func (api *API) getTransportStats(w http.ResponseWriter, r *http.Request) {
@@ -137,10 +126,7 @@ func (api *API) getTransportStats(w http.ResponseWriter, r *http.Request) {
 		"by_type": byType,
 	}
 
-	if err := json.NewEncoder(w).Encode(stats); err != nil {
-		api.log(r).WithError(err).Error("Error encoding stats")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, stats)
 }
 
 func (api *API) getAllTransports(w http.ResponseWriter, r *http.Request) {
@@ -158,10 +144,7 @@ func (api *API) getAllTransports(w http.ResponseWriter, r *http.Request) {
 		api.writeError(w, r, err)
 		return
 	}
-	if err := json.NewEncoder(w).Encode(entries); err != nil {
-		api.log(r).WithError(err).Error("Error encoding entries")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, entries)
 }
 
 func (api *API) getAllTransportsStats(w http.ResponseWriter, r *http.Request) {
@@ -198,10 +181,7 @@ func (api *API) getAllTransportsStats(w http.ResponseWriter, r *http.Request) {
 		"unique_visors":    len(uniqueVisors),
 	}
 
-	if err := json.NewEncoder(w).Encode(stats); err != nil {
-		api.log(r).WithError(err).Error("Error encoding stats")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, stats)
 }
 
 func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Request) {
@@ -236,10 +216,7 @@ func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		api.log(r).WithError(err).Error("Error encoding per-key stats")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, result)
 }
 
 func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
@@ -329,7 +306,7 @@ func (api *API) deleteTransportsBatch(w http.ResponseWriter, r *http.Request) {
 		deleted++
 	}
 
-	api.writeJSON(w, r, http.StatusOK, map[string]int{"deleted": deleted, "skipped": skipped})
+	httputil.WriteJSON(w, r, http.StatusOK, map[string]int{"deleted": deleted, "skipped": skipped})
 }
 
 func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
@@ -389,39 +366,17 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.log(r).WithFields(logrus.Fields{"Number of Transports": len(tps), "Transports": tps}).Info("Deregistration process completed.")
-	api.writeJSON(w, r, http.StatusOK, nil)
+	httputil.WriteJSON(w, r, http.StatusOK, nil)
 }
 
 func (api *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
-	api.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
+	httputil.WriteJSON(w, r, http.StatusOK, HealthCheckResponse{
 		BuildInfo:   info,
 		StartedAt:   api.startedAt,
 		DmsgAddr:    api.dmsgAddr,
 		DmsgServers: api.DmsgServers,
 	})
-}
-
-func (api *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) {
-	jsonObject, err := json.Marshal(object)
-	if err != nil {
-		api.logger(r).WithError(err).Errorf("failed to encode json response")
-		w.WriteHeader(http.StatusInternalServerError)
-
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-
-	_, err = w.Write(jsonObject)
-	if err != nil {
-		api.logger(r).WithError(err).Errorf("failed to write json response")
-	}
-}
-
-func (api *API) logger(r *http.Request) logrus.FieldLogger {
-	return httputil.GetLogger(r)
 }
 
 // GET /bandwidth/transport/{id}?period=daily&limit=7
@@ -451,10 +406,7 @@ func (api *API) getTransportBandwidth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(history); err != nil {
-		api.log(r).WithError(err).Error("Error encoding bandwidth history")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, history)
 }
 
 // GET /bandwidth/visor/{pk}?period=daily&limit=7
@@ -486,10 +438,7 @@ func (api *API) getVisorBandwidth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(history); err != nil {
-		api.log(r).WithError(err).Error("Error encoding bandwidth history")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, history)
 }
 
 // GET /uptimes
@@ -499,10 +448,7 @@ func (api *API) getUptimes(w http.ResponseWriter, r *http.Request) {
 		uptimes = []store.VisorSummary{}
 	}
 
-	if err := json.NewEncoder(w).Encode(uptimes); err != nil {
-		api.log(r).WithError(err).Error("Error encoding uptimes")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, uptimes)
 }
 
 // GET /version - returns version statistics (count by version)
@@ -542,10 +488,7 @@ func (api *API) getVersionStats(w http.ResponseWriter, r *http.Request) {
 		versionCounts[version]++
 	}
 
-	if err := json.NewEncoder(w).Encode(versionCounts); err != nil {
-		api.log(r).WithError(err).Error("Error encoding version stats")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, versionCounts)
 }
 
 // VersionEntry is a response entry for version endpoints
@@ -602,10 +545,7 @@ func (api *API) getVersions(w http.ResponseWriter, r *http.Request) {
 		result = []VersionEntry{}
 	}
 
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		api.log(r).WithError(err).Error("Error encoding versions")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, result)
 }
 
 // GET /versions/{pks} - returns versions for specific PKs (comma-separated)
@@ -685,10 +625,7 @@ func (api *API) getVersionsByPKs(w http.ResponseWriter, r *http.Request) {
 		result = []VersionEntry{}
 	}
 
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		api.log(r).WithError(err).Error("Error encoding versions")
-		api.writeError(w, r, err)
-	}
+	httputil.WriteJSON(w, r, http.StatusOK, result)
 }
 
 // splitPKs splits a comma-separated list of public keys
