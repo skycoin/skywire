@@ -261,6 +261,7 @@ func (dtm *Manager) GetBulk(ctx context.Context, pks []cipher.PubKey) []DmsgClie
 		if !ok {
 			// we establish tracker if there is none
 			go dtm.establishTracker(ctx, pk)
+			continue // Don't append empty summary with 0ms latency
 		}
 		out = append(out, ds)
 	}
