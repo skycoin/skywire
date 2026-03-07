@@ -81,6 +81,7 @@ jobs:
       - name: Build skywire via go install
         env:
           GOPROXY: direct
+          GOSUMDB: "off"
           CGO_ENABLED: "1"
           CC: ${{ github.workspace }}/musl-data/${{ matrix.toolchain }}-cross/bin/${{ matrix.toolchain }}-gcc
           GOOS: linux
@@ -141,6 +142,7 @@ jobs:
       - name: Build skywire
         env:
           GOPROXY: direct
+          GOSUMDB: "off"
           CGO_ENABLED: "1"
         run: |
           # Native build on Intel runner
@@ -197,6 +199,7 @@ jobs:
       - name: Build skywire
         env:
           GOPROXY: direct
+          GOSUMDB: "off"
           CGO_ENABLED: "1"
         run: |
           # Native build - install directly
@@ -266,6 +269,7 @@ jobs:
       - name: Build skywire
         env:
           GOPROXY: direct
+          GOSUMDB: "off"
           CGO_ENABLED: "0"  # No CGO on Windows for simpler builds
           GOOS: windows
           GOARCH: ${{ matrix.goarch }}
