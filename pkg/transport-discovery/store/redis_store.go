@@ -985,6 +985,9 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		results = append(results, metric)
 	}
 
+	if results == nil {
+		return []TransportMetric{}, nil
+	}
 	return results, nil
 }
 
