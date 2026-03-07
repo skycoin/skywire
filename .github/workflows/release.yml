@@ -7,7 +7,6 @@ on:
 env:
   GO_VERSION: '1.25.6'
   MUSL_RELEASE: 'v1.3.29'  # Release containing musl toolchains
-  LIBUSB_VERSION: 'v1.0.27'
 
 jobs:
   create-release:
@@ -59,40 +58,30 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: false
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y wget tar autoconf automake libtool
+        run: sudo apt-get update && sudo apt-get install -y wget tar
+
+      - name: Cache musl toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: musl-data
+          key: musl-${{ env.MUSL_RELEASE }}-${{ matrix.toolchain }}
 
       - name: Download musl toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p musl-data
           wget -q "https://github.com/skycoin/skywire/releases/download/${{ env.MUSL_RELEASE }}/${{ matrix.toolchain_file }}"
           tar -xzf "${{ matrix.toolchain_file }}" -C ./musl-data
           rm "${{ matrix.toolchain_file }}"
 
-      - name: Build libusb
-        if: matrix.arch != '386'  # 386 uses stub
-        run: |
-          SYSROOT="$(pwd)/musl-data/${{ matrix.toolchain }}-cross"
-          BUILD_DIR="/tmp/libusb-build"
-          rm -rf "${BUILD_DIR}" && mkdir -p "${BUILD_DIR}" && cd "${BUILD_DIR}"
-          wget -q "https://github.com/libusb/libusb/archive/refs/tags/${{ env.LIBUSB_VERSION }}.tar.gz"
-          tar -xzf "${{ env.LIBUSB_VERSION }}.tar.gz"
-          cd "libusb-${LIBUSB_VERSION#v}"
-          NOCONFIGURE=1 ./autogen.sh
-          ./configure \
-              --host="${{ matrix.toolchain }}" \
-              CC="${SYSROOT}/bin/${{ matrix.toolchain }}-gcc" \
-              --prefix="${SYSROOT}/${{ matrix.toolchain }}" \
-              --enable-static --disable-shared --disable-udev
-          make -j$(nproc)
-          make install
-
       - name: Build skywire via go install
         env:
           CGO_ENABLED: "1"
           CC: ${{ github.workspace }}/musl-data/${{ matrix.toolchain }}-cross/bin/${{ matrix.toolchain }}-gcc
-          PKG_CONFIG_PATH: ${{ github.workspace }}/musl-data/${{ matrix.toolchain }}-cross/${{ matrix.toolchain }}/lib/pkgconfig
           GOOS: linux
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
@@ -146,6 +135,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: false
 
       - name: Install dependencies
         run: |
@@ -191,10 +181,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-
-      - name: Install dependencies
-        run: |
-          brew install --quiet hidapi libusb
+          cache: false
 
       - name: Build skywire
         env:
@@ -243,6 +230,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: false
 
       - name: Build skywire
         env:
