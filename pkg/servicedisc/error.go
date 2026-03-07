@@ -26,3 +26,26 @@ func (err *HTTPError) Log(log logrus.FieldLogger) {
 		WithField("http_status", http.StatusText(err.HTTPStatus)).
 		Warn()
 }
+
+// Timeout implements net.Error.
+func (err *HTTPError) Timeout() bool {
+	switch err.HTTPStatus {
+	case http.StatusGatewayTimeout, http.StatusRequestTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
+// Temporary implements net.Error.
+func (err *HTTPError) Temporary() bool {
+	if err.Timeout() {
+		return true
+	}
+	switch err.HTTPStatus {
+	case http.StatusServiceUnavailable, http.StatusTooManyRequests:
+		return true
+	default:
+		return false
+	}
+}

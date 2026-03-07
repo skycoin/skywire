@@ -109,16 +109,19 @@ func (c *httpClient) FetchUptimes(ctx context.Context, pk string) ([]byte, error
 
 	resp, err := c.Get(ctx, url)
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
 
 	if resp.Body != nil {
 		defer func() {
-			err = resp.Body.Close()
-			if err != nil {
-				return
+			if err := resp.Body.Close(); err != nil {
+				c.log.WithError(err).Warn("Failed to close response body")
 			}
 		}()
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("uptime tracker error: %s (status %d)", http.StatusText(resp.StatusCode), resp.StatusCode)
 	}
 
 	return io.ReadAll(resp.Body)

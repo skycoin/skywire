@@ -26,6 +26,7 @@ func init() {
 	RootCmd.AddCommand(buildInfoCmd)
 	RootCmd.AddCommand(portsCmd)
 	RootCmd.AddCommand(dmsgServersCmd)
+	RootCmd.AddCommand(runtimeLogsCmd)
 }
 
 var pkCmd = &cobra.Command{
@@ -240,5 +241,22 @@ var dmsgServersCmd = &cobra.Command{
 		msg += "Note: Latency is measured via self-ping through each server.\n"
 		msg += "Servers with '-' latency have not been measured yet (wait ~5s after startup).\n"
 		internal.PrintOutput(cmd.Flags(), servers, msg)
+	},
+}
+
+var runtimeLogsCmd = &cobra.Command{
+	Use:   "log",
+	Short: "Visor runtime logs",
+	Long:  "\n  Returns runtime logs from the visor",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		logs, err := rpcClient.RuntimeLogs()
+		if err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
+		internal.PrintOutput(cmd.Flags(), logs, logs)
 	},
 }
