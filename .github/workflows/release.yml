@@ -246,9 +246,15 @@ jobs:
         include:
           - arch: amd64
             goarch: amd64
+            wix_arch: x64
+            wintun_arch: amd64
           - arch: "386"
             goarch: "386"
+            wix_arch: x86
+            wintun_arch: x86
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -293,38 +299,36 @@ jobs:
 
       - name: Create MSI installer
         run: |
-          $MSI_NAME = "skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}"
-          $VERSION = "${{ github.ref_name }}".TrimStart('v')
+          $MSI_NAME = "skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}"
+          $VERSION = "${{ github.ref_name }}" -replace '(^v|-.+$)', ''
 
-          # Create WiX source file
-          @"
-          <?xml version="1.0" encoding="UTF-8"?>
-          <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-            <Package Name="Skywire" Version="$VERSION" Manufacturer="Skycoin" UpgradeCode="6B3F1E8A-2C4D-4E5F-8A9B-0C1D2E3F4A5B">
-              <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
-              <MediaTemplate EmbedCab="yes" />
-              <Feature Id="MainFeature" Title="Skywire" Level="1">
-                <ComponentGroupRef Id="ProductComponents" />
-              </Feature>
-            </Package>
-            <Fragment>
-              <StandardDirectory Id="ProgramFiles64Folder">
-                <Directory Id="INSTALLFOLDER" Name="Skywire" />
-              </StandardDirectory>
-            </Fragment>
-            <Fragment>
-              <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-                <Component Id="MainExecutable" Guid="7C4F2E9B-3D5A-4F6E-9A8B-1C2D3E4F5A6B">
-                  <File Id="SkywireExe" Source="dist\skywire.exe" KeyPath="yes" />
-                  <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
-                </Component>
-              </ComponentGroup>
-            </Fragment>
-          </Wix>
-          "@ | Out-File -FilePath "skywire.wxs" -Encoding UTF8
+          # Download WiX 3.11
+          Invoke-WebRequest "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip" -OutFile wix.zip
+          Expand-Archive wix.zip -DestinationPath wix
 
-          # Build MSI using WiX
-          wix build -o "dist\$MSI_NAME.msi" skywire.wxs
+          # Download wintun
+          Invoke-WebRequest "https://www.wintun.net/builds/wintun-0.14.1.zip" -OutFile wintun.zip
+          Expand-Archive wintun.zip -DestinationPath wintun_extracted
+
+          # Prepare build directory
+          Set-Location scripts\win_installer
+          New-Item -ItemType Directory -Force -Path "build\apps"
+          Copy-Item ..\..\bin\skywire.exe build\skywire.exe
+          Copy-Item skywire.bat build\skywire.bat
+          New-Item -ItemType File -Path "build\new.update"
+          Copy-Item ..\..\wintun_extracted\wintun\bin\${{ matrix.wintun_arch }}\wintun.dll build\wintun.dll
+
+          # Update version in Product.wxs
+          $productWxs = Get-Content -Path Product.wxs -Raw
+          $productWxs = $productWxs -replace "skywireVersion", $VERSION
+          Set-Content -Path Product.wxs -Value $productWxs
+
+          # Build MSI
+          ..\..\wix\candle.exe UI.wxs Product.wxs -arch ${{ matrix.wix_arch }}
+          ..\..\wix\light.exe -ext WixUIExtension -ext WixUtilExtension -sacl -spdb -out skywire.msi UI.wixobj Product.wixobj
+          Move-Item skywire.msi ..\..\dist\$MSI_NAME.msi
+
+          Set-Location ..\..
           Get-FileHash "dist\$MSI_NAME.msi" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $MSI_NAME.msi" } > "dist\$MSI_NAME.msi.sha256"
 
       - name: Upload to release
@@ -334,8 +338,8 @@ jobs:
           gh release upload "${{ github.ref_name }}" `
             "dist\skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}.zip" `
             "dist\skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}.zip.sha256" `
-            "dist\skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}.msi" `
-            "dist\skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}.msi.sha256" `
+            "dist\skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}.msi" `
+            "dist\skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}.msi.sha256" `
             --repo ${{ github.repository }} `
             --clobber
 
