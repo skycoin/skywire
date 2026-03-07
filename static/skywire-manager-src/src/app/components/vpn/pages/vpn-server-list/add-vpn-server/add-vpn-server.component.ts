@@ -23,9 +23,10 @@ export interface ManualVpnServerData {
  * operation, the window saves the new server and start connecting with it.
  */
 @Component({
-  selector: 'app-add-vpn-server',
-  templateUrl: './add-vpn-server.component.html',
-  styleUrls: ['./add-vpn-server.component.scss']
+    selector: 'app-add-vpn-server',
+    templateUrl: './add-vpn-server.component.html',
+    styleUrls: ['./add-vpn-server.component.scss'],
+    standalone: false
 })
 export class AddVpnServerComponent implements OnInit {
   @ViewChild('firstInput') firstInput: ElementRef;

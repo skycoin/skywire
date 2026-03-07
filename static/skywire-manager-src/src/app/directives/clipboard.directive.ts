@@ -7,8 +7,9 @@ import {ClipboardService} from '../services/clipboard.service';
  * Makes a component copy a specific text to the clipboard when clicked.
  */
 @Directive({
-  /* eslint-disable @angular-eslint/directive-selector */
-  selector: '[clipboard]',
+    /* eslint-disable @angular-eslint/directive-selector */
+    selector: '[clipboard]',
+    standalone: false
 })
 export class ClipboardDirective implements OnDestroy {
   /**

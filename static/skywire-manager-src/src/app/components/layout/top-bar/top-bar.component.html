@@ -2,31 +2,32 @@
 <div
   class="top-bar"
   [ngClass]="{'d-lg-none': !showVpnInfo, 'd-none': showVpnInfo}"
->
+  >
   <div class="button-container">
-    <button
-      mat-icon-button
-      *ngIf="returnText"
-      (click)="requestAction(null)"
-      class="transparent-button"
-    >
-      <mat-icon>chevron_left</mat-icon>
-    </button>
+    @if (returnText) {
+      <button
+        mat-icon-button
+        (click)="requestAction(null)"
+        class="transparent-button"
+        >
+        <mat-icon>chevron_left</mat-icon>
+      </button>
+    }
   </div>
   <div class="logo-container">
-    <ng-container *ngIf="!titleParts || titleParts.length < 2">
+    @if (!titleParts || titleParts.length < 2) {
       <img src="/assets/img/logo-s.png" />
-    </ng-container>
-    <ng-container *ngIf="titleParts && titleParts.length >= 2">
+    }
+    @if (titleParts && titleParts.length >= 2) {
       {{ titleParts[titleParts.length - 1] | translate }}
-    </ng-container>
+    }
   </div>
   <div class="button-container">
     <button
       mat-icon-button
       [matMenuTriggerFor]="menu"
       class="transparent-button"
-    >
+      >
       <mat-icon>menu</mat-icon>
     </button>
   </div>
@@ -38,161 +39,195 @@
 <!-- Options menu. -->
 <mat-menu #menu="matMenu" [overlapTrigger]="false">
   <!-- Options. -->
-  <ng-container *ngIf="optionsData && optionsData.length >= 1">
-    <ng-container *ngFor="let option of optionsData">
+  @if (optionsData && optionsData.length >= 1) {
+    @for (option of optionsData; track option) {
       <div mat-menu-item (click)="requestAction(option.actionName)" [disabled]="option.disabled">
         <mat-icon [ngClass]="{'transparent': option.disabled}">{{ option.icon }}</mat-icon> {{ option.name | translate }}
       </div>
-    </ng-container>
-    <div *ngIf="returnText" class="menu-separator"></div>
-  </ng-container>
-  <div *ngIf="!hideLanguageButton && optionsData && optionsData.length >= 1" class="menu-separator"></div>
+    }
+    @if (returnText) {
+      <div class="menu-separator"></div>
+    }
+  }
+  @if (!hideLanguageButton && optionsData && optionsData.length >= 1) {
+    <div class="menu-separator"></div>
+  }
   <!-- Language area. -->
-  <div *ngIf="!hideLanguageButton" mat-menu-item (click)="openLanguageWindow()">
-    <img *ngIf="language" [src]="'assets/img/lang/' + language.iconName" class="flag"> {{ (language ? language.name : '') | translate }}
-  </div>
-</mat-menu>
-
-<div class="main-container" [ngClass]="{'normal-height': !showVpnInfo}">
-  <!-- Return button and title text. -->
-  <div class="main-area"><div class="title" [ngClass]="{'d-none d-lg-flex': !showVpnInfo, 'd-flex': showVpnInfo}">
-    <div *ngIf="returnText" class="return-container">
-      <a class="return-button transparent-button" (click)="requestAction(null)" [matTooltip]="returnText | translate">
-        <mat-icon [inline]="true">chevron_left</mat-icon>
-      </a>
-    </div>
-    <span class="title-text" *ngIf="!showVpnInfo">
-      {{ titleParts[titleParts.length - 1] | translate }}
-    </span>
-    <img class="title-image" *ngIf="showVpnInfo" src="./assets/img/logo-vpn.png" />
-  </div>
-
-  <div class="lower-container">
-    <!-- Tabs list. Only shown on large screens or if there is only one tab. -->
-    <div
-      *ngFor="let tabData of tabsData; let i = index"
-      [ngClass]="{'d-lg-none': tabData.onlyIfLessThanLg, 'd-none d-md-inline-block': tabsData.length !== 1}"
-    >
-      <a
-        mat-button
-        class="tab-button white-theme"
-        [disabled]="i === selectedTabIndex"
-        [routerLink]="tabData.linkParts"
-        [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse && i !== selectedTabIndex}"
-      >
-        <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
-        <span>{{ tabData.label | translate }}</span>
-      </a>
-    </div>
-    <!-- Select tab button. Only shown on small screens when there is only one tab. -->
-    <div class="d-md-none" [ngClass]="{'d-none': tabsData.length === 1}" *ngIf="tabsData && tabsData[selectedTabIndex]">
-      <button
-        mat-button
-        class="tab-button select-tab-button white-theme"
-        [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse}"
-        (click)="openTabSelector()"
-      >
-        <div class="d-flex">
-          <mat-icon [inline]="true">{{ tabsData[selectedTabIndex].icon }}</mat-icon>
-          <span>{{ tabsData[selectedTabIndex].label | translate }}</span>
-          <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
-        </div>
-      </button>
-    </div>
-    <div class="blank-space"></div>
-    <!-- Right buttons area. -->
-    <div class="right-container" *ngIf="!showVpnInfo">
-      <app-refresh-button
-        *ngIf="showUpdateButton"
-        [secondsSinceLastUpdate]="secondsSinceLastUpdate"
-        [showLoading]="showLoading"
-        [showAlert]="showAlert"
-        [refeshRate]="refeshRate"
-        (click)="sendRefreshEvent()"
-      ></app-refresh-button>
-      <!-- Menu button. -->
-      <button
-        mat-button
-        class="menu-button subtle-transparent-button d-none d-lg-block"
-        [matMenuTriggerFor]="menu"
-      >
-        <div class="icon-container">
-          <mat-icon [inline]="true">menu</mat-icon>
-        </div>
-      </button>
-    </div>
-  </div></div>
-
-  <!-- VPN connection info. -->
-  <div *ngIf="showVpnInfo">
-    <div class="top-text-vpn-container">
-      <!-- Languaje button. -->
-      <div class="languaje-button-vpn" *ngIf="!hideLanguageButton && language">
-        <div class="text-container" (click)="openLanguageWindow()">
-          <img [src]="'assets/img/lang/' + language.iconName" class="language-flag" />
-          {{ (language ? language.name : '') | translate }}
-        </div>
+  @if (!hideLanguageButton) {
+    <div mat-menu-item (click)="openLanguageWindow()">
+      @if (language) {
+        <img [src]="'assets/img/lang/' + language.iconName" class="flag">
+        } {{ (language ? language.name : '') | translate }}
       </div>
-      <!-- Separator. -->
-      <div class="elements-separator"></div>
-      <!-- Connection error msg. -->
-      <div *ngIf="errorsConnectingToVpn" class="connection-error-msg-vpn blinking" [matTooltip]="'vpn.connection-error.info' | translate">
-        <mat-icon [inline]="true">warning</mat-icon>
-        {{ 'vpn.connection-error.text' | translate }}
-      </div>
+    }
+  </mat-menu>
+
+  <div class="main-container" [ngClass]="{'normal-height': !showVpnInfo}">
+    <!-- Return button and title text. -->
+    <div class="main-area"><div class="title" [ngClass]="{'d-none d-lg-flex': !showVpnInfo, 'd-flex': showVpnInfo}">
+      @if (returnText) {
+        <div class="return-container">
+          <a class="return-button transparent-button" (click)="requestAction(null)" [matTooltip]="returnText | translate">
+            <mat-icon [inline]="true">chevron_left</mat-icon>
+          </a>
+        </div>
+      }
+      @if (!showVpnInfo) {
+        <span class="title-text">
+          {{ titleParts[titleParts.length - 1] | translate }}
+        </span>
+      }
+      @if (showVpnInfo) {
+        <img class="title-image" src="./assets/img/logo-vpn.png" />
+      }
     </div>
-    <div class="vpn-info vpn-dark-box-radius">
-      <!-- Data. -->
-      <table cellspacing="0" cellpadding="0" *ngIf="vpnData">
-        <tr>
-          <!-- Current state. -->
-          <td [class]="vpnData.stateClass + ' state-td'" [matTooltip]="(vpnData.state + '-info') | translate">
-            <div [ngClass]="{'animation-container': showVpnStateAnimation, 'd-none': !showVpnStateAnimation}">
-              <div class="internal-animation-container">
-                <div class="animation-area">
-                  <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
-                  {{ vpnData.state | translate }}
-                </div>
+
+    <div class="lower-container">
+      <!-- Tabs list. Only shown on large screens or if there is only one tab. -->
+      @for (tabData of tabsData; track tabData; let i = $index) {
+        <div
+          [ngClass]="{'d-lg-none': tabData.onlyIfLessThanLg, 'd-none d-md-inline-block': tabsData.length !== 1}"
+          >
+          <a
+            mat-button
+            class="tab-button white-theme"
+            [disabled]="i === selectedTabIndex"
+            [routerLink]="tabData.linkParts"
+            [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse && i !== selectedTabIndex}"
+            >
+            <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
+            <span>{{ tabData.label | translate }}</span>
+          </a>
+        </div>
+      }
+      <!-- Select tab button. Only shown on small screens when there is only one tab. -->
+      @if (tabsData && tabsData[selectedTabIndex]) {
+        <div class="d-md-none" [ngClass]="{'d-none': tabsData.length === 1}">
+          <button
+            mat-button
+            class="tab-button select-tab-button white-theme"
+            [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse}"
+            (click)="openTabSelector()"
+            >
+            <div class="d-flex">
+              <mat-icon [inline]="true">{{ tabsData[selectedTabIndex].icon }}</mat-icon>
+              <span>{{ tabsData[selectedTabIndex].label | translate }}</span>
+              <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
+            </div>
+          </button>
+        </div>
+      }
+      <div class="blank-space"></div>
+      <!-- Right buttons area. -->
+      @if (!showVpnInfo) {
+        <div class="right-container">
+          @if (showUpdateButton) {
+            <app-refresh-button
+              [secondsSinceLastUpdate]="secondsSinceLastUpdate"
+              [showLoading]="showLoading"
+              [showAlert]="showAlert"
+              [refeshRate]="refeshRate"
+              (click)="sendRefreshEvent()"
+            ></app-refresh-button>
+          }
+          <!-- Menu button. -->
+          <button
+            mat-button
+            class="menu-button subtle-transparent-button d-none d-lg-block"
+            [matMenuTriggerFor]="menu"
+            >
+            <div class="icon-container">
+              <mat-icon [inline]="true">menu</mat-icon>
+            </div>
+          </button>
+        </div>
+      }
+    </div></div>
+
+    <!-- VPN connection info. -->
+    @if (showVpnInfo) {
+      <div>
+        <div class="top-text-vpn-container">
+          <!-- Languaje button. -->
+          @if (!hideLanguageButton && language) {
+            <div class="languaje-button-vpn">
+              <div class="text-container" (click)="openLanguageWindow()">
+                <img [src]="'assets/img/lang/' + language.iconName" class="language-flag" />
+                {{ (language ? language.name : '') | translate }}
               </div>
             </div>
-            <div class="aminated-state-icon-container" *ngIf="showVpnStateAnimatedDot">
-              <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+          }
+          <!-- Separator. -->
+          <div class="elements-separator"></div>
+          <!-- Connection error msg. -->
+          @if (errorsConnectingToVpn) {
+            <div class="connection-error-msg-vpn blinking" [matTooltip]="'vpn.connection-error.info' | translate">
+              <mat-icon [inline]="true">warning</mat-icon>
+              {{ 'vpn.connection-error.text' | translate }}
             </div>
-            <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
-            {{ vpnData.state | translate }}
-          </td>
-          <!-- Latency. -->
-          <td [matTooltip]="'vpn.connection-info.latency-info' | translate">
-            <mat-icon [inline]="true">swap_horiz</mat-icon>
-            {{ ('common.' + getLatencyValueString(vpnData.latency)) | translate:{ time: getPrintableLatency(vpnData.latency) } }}
-          </td>
-        </tr>
-        <tr>
-          <!-- Upload. -->
-          <td [matTooltip]="'vpn.connection-info.upload-info' | translate">
-            <mat-icon [inline]="true">arrow_upward</mat-icon>
-            {{ vpnData.uploadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, useBits: showVpnDataStatsInBits } }}
-          </td>
-          <!-- Download. -->
-          <td [matTooltip]="'vpn.connection-info.download-info' | translate">
-            <mat-icon [inline]="true">arrow_downward</mat-icon>
-            {{ vpnData.downloadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, useBits: showVpnDataStatsInBits } }}
-          </td>
-        </tr>
-      </table>
-      <!-- Loading animation. -->
-      <mat-spinner [diameter]="20" *ngIf="!vpnData"></mat-spinner>
-    </div>
+          }
+        </div>
+        <div class="vpn-info vpn-dark-box-radius">
+          <!-- Data. -->
+          @if (vpnData) {
+            <table cellspacing="0" cellpadding="0">
+              <tr>
+                <!-- Current state. -->
+                <td [class]="vpnData.stateClass + ' state-td'" [matTooltip]="(vpnData.state + '-info') | translate">
+                  <div [ngClass]="{'animation-container': showVpnStateAnimation, 'd-none': !showVpnStateAnimation}">
+                    <div class="internal-animation-container">
+                      <div class="animation-area">
+                        <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+                        {{ vpnData.state | translate }}
+                      </div>
+                    </div>
+                  </div>
+                  @if (showVpnStateAnimatedDot) {
+                    <div class="aminated-state-icon-container">
+                      <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+                    </div>
+                  }
+                  <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+                  {{ vpnData.state | translate }}
+                </td>
+                <!-- Latency. -->
+                <td [matTooltip]="'vpn.connection-info.latency-info' | translate">
+                  <mat-icon [inline]="true">swap_horiz</mat-icon>
+                  {{ ('common.' + getLatencyValueString(vpnData.latency)) | translate:{ time: getPrintableLatency(vpnData.latency) } }}
+                </td>
+              </tr>
+              <tr>
+                <!-- Upload. -->
+                <td [matTooltip]="'vpn.connection-info.upload-info' | translate">
+                  <mat-icon [inline]="true">arrow_upward</mat-icon>
+                  {{ vpnData.uploadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, useBits: showVpnDataStatsInBits } }}
+                </td>
+                <!-- Download. -->
+                <td [matTooltip]="'vpn.connection-info.download-info' | translate">
+                  <mat-icon [inline]="true">arrow_downward</mat-icon>
+                  {{ vpnData.downloadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, useBits: showVpnDataStatsInBits } }}
+                </td>
+              </tr>
+            </table>
+          }
+          <!-- Loading animation. -->
+          @if (!vpnData) {
+            <mat-spinner [diameter]="20"></mat-spinner>
+          }
+        </div>
+      </div>
+    }
   </div>
-</div>
 
-<!-- Remote access warning for the VPN client. -->
-<div class="remote-vpn-alert-container" *ngIf="showVpnInfo && remoteAccess">
-  <div class="top-line">
-    <mat-icon [inline]="true">error_outline</mat-icon>
-    {{ 'vpn.remote-access-title' | translate }}
-  </div>
-  <div class="bottom-line">
-    {{ 'vpn.remote-access-text' | translate }}
-  </div>
-</div>
+  <!-- Remote access warning for the VPN client. -->
+  @if (showVpnInfo && remoteAccess) {
+    <div class="remote-vpn-alert-container">
+      <div class="top-line">
+        <mat-icon [inline]="true">error_outline</mat-icon>
+        {{ 'vpn.remote-access-title' | translate }}
+      </div>
+      <div class="bottom-line">
+        {{ 'vpn.remote-access-text' | translate }}
+      </div>
+    </div>
+  }

@@ -31,9 +31,10 @@ export interface VpnDnsConfigParams {
  * and shows a confirmation msg by itself.
  */
 @Component({
-  selector: 'app-vpn-dns-config',
-  templateUrl: './vpn-dns-config.component.html',
-  styleUrls: ['./vpn-dns-config.component.scss']
+    selector: 'app-vpn-dns-config',
+    templateUrl: './vpn-dns-config.component.html',
+    styleUrls: ['./vpn-dns-config.component.scss'],
+    standalone: false
 })
 export class VpnDnsConfigComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;

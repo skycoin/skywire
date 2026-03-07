@@ -9,9 +9,10 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
  * Page for showing the complete list of the transports of a node.
  */
 @Component({
-  selector: 'app-all-transports',
-  templateUrl: './all-transports.component.html',
-  styleUrls: ['./all-transports.component.scss']
+    selector: 'app-all-transports',
+    templateUrl: './all-transports.component.html',
+    styleUrls: ['./all-transports.component.scss'],
+    standalone: false
 })
 export class AllTransportsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;

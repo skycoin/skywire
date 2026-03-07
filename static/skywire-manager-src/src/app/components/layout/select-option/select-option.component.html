@@ -1,14 +1,18 @@
 <app-dialog [headline]="data.title | translate" [dialog]="dialogRef" [includeVerticalMargins]="false">
-  <div class="options-list-button-container" *ngFor="let option of data.options; let i = index">
-    <button
-      mat-button
-      class="grey-button-background"
-      (click)="closePopup(i + 1)"
-    >
-      <div class="internal-container">
-        <mat-icon class="icon" [inline]="true" *ngIf="option.icon">{{ option.icon }}</mat-icon>
-        <span>{{ option.label | translate }}</span>
-      </div>
-    </button>
-  </div>
+  @for (option of data.options; track option; let i = $index) {
+    <div class="options-list-button-container">
+      <button
+        mat-button
+        class="grey-button-background"
+        (click)="closePopup(i + 1)"
+        >
+        <div class="internal-container">
+          @if (option.icon) {
+            <mat-icon class="icon" [inline]="true">{{ option.icon }}</mat-icon>
+          }
+          <span>{{ option.label | translate }}</span>
+        </div>
+      </button>
+    </div>
+  }
 </app-dialog>

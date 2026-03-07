@@ -17,9 +17,10 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
  * Page with the current state of the VPN. It also allows to start/stop the VPN protection.
  */
 @Component({
-  selector: 'app-vpn-status',
-  templateUrl: './vpn-status.component.html',
-  styleUrls: ['./vpn-status.component.scss'],
+    selector: 'app-vpn-status',
+    templateUrl: './vpn-status.component.html',
+    styleUrls: ['./vpn-status.component.scss'],
+    standalone: false
 })
 export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnDestroy {
   // Keys for persisting the server data, to be able to restore the state after navigation.

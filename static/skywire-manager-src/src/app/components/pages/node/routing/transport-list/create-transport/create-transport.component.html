@@ -1,59 +1,61 @@
 <app-dialog [headline]="'transports.create' | translate" [dialog]="dialogRef" [disableDismiss]="disableDismiss">
-  <app-loading-indicator [showWhite]="false" *ngIf="!types"></app-loading-indicator>
-  <form [formGroup]="form" *ngIf="types">
-    <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
-      <div class="field-container">
-        <label class="field-label" for="remoteKey">{{ 'transports.dialog.remote-key' | translate }}</label>
-        <input
-          formControlName="remoteKey"
-          maxlength="66"
-          #firstInput
-          matInput
+  @if (!types) {
+    <app-loading-indicator [showWhite]="false"></app-loading-indicator>
+  }
+  @if (types) {
+    <form [formGroup]="form">
+      <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
+        <div class="field-container">
+          <label class="field-label" for="remoteKey">{{ 'transports.dialog.remote-key' | translate }}</label>
+          <input
+            formControlName="remoteKey"
+            maxlength="66"
+            #firstInput
+            matInput
+            >
+        </div>
+        <mat-error>
+          @if (!this.form.get('remoteKey').hasError('pattern')) {
+            <span>{{ 'transports.dialog.errors.remote-key-length-error' | translate }}</span>
+          } @else {
+            <span>{{ 'transports.dialog.errors.remote-key-chars-error' | translate }}</span>
+          }
+        </mat-error>
+      </mat-form-field>
+      <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
+        <div class="field-container">
+          <label class="field-label" for="remoteKey">{{ 'transports.dialog.label' | translate }}</label>
+          <input
+            formControlName="label"
+            maxlength="66"
+            matInput
+            >
+        </div>
+      </mat-form-field>
+      <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
+        <div class="field-container">
+          <label class="field-label" for="remoteKey">{{ 'transports.dialog.transport-type' | translate }}</label>
+          <mat-select formControlName="type">
+            @for (type of types; track type) {
+              <mat-option [value]="type">{{ type }}</mat-option>
+            }
+          </mat-select>
+        </div>
+        <mat-error>
+          <span>{{ 'transports.dialog.errors.transport-type-error' | translate }}</span>
+        </mat-error>
+      </mat-form-field>
+      <mat-checkbox
+        color="primary"
+        [checked]="makePersistent"
+        (change)="setMakePersistent($event)"
+        [ngClass]="{'element-disabled' : disableDismiss}"
         >
-      </div>
-      <mat-error>
-        <ng-container *ngIf="!this.form.get('remoteKey').hasError('pattern');else hexError">
-          <span>{{ 'transports.dialog.errors.remote-key-length-error' | translate }}</span>
-        </ng-container>
-      </mat-error>
-      <ng-template #hexError>
-        <span>{{ 'transports.dialog.errors.remote-key-chars-error' | translate }}</span>
-      </ng-template>
-    </mat-form-field>
-
-    <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
-      <div class="field-container">
-        <label class="field-label" for="remoteKey">{{ 'transports.dialog.label' | translate }}</label>
-        <input
-          formControlName="label"
-          maxlength="66"
-          matInput
-        >
-      </div>
-    </mat-form-field>
-
-    <mat-form-field  [ngClass]="{'element-disabled' : disableDismiss}">
-      <div class="field-container">
-        <label class="field-label" for="remoteKey">{{ 'transports.dialog.transport-type' | translate }}</label>
-        <mat-select formControlName="type">
-          <mat-option *ngFor="let type of types" [value]="type">{{ type }}</mat-option>
-        </mat-select>
-      </div>
-      <mat-error>
-        <span>{{ 'transports.dialog.errors.transport-type-error' | translate }}</span>
-      </mat-error>
-    </mat-form-field>
-
-    <mat-checkbox
-      color="primary"
-      [checked]="makePersistent"
-      (change)="setMakePersistent($event)"
-      [ngClass]="{'element-disabled' : disableDismiss}"
-    >
-      {{ 'transports.dialog.make-persistent' | translate }}
-      <mat-icon [inline]="true" class="help-icon" [matTooltip]="'transports.dialog.persistent-tooltip' | translate">help</mat-icon>
-    </mat-checkbox>
-  </form>
+        {{ 'transports.dialog.make-persistent' | translate }}
+        <mat-icon [inline]="true" class="help-icon" [matTooltip]="'transports.dialog.persistent-tooltip' | translate">help</mat-icon>
+      </mat-checkbox>
+    </form>
+  }
 
   <app-button
     #button
@@ -61,7 +63,7 @@
     [disabled]="!form.valid"
     color="primary"
     class="float-right"
-  >
+    >
     {{ 'transports.create' | translate }}
   </app-button>
 </app-dialog>

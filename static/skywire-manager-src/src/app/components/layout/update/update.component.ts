@@ -132,9 +132,10 @@ interface UpdateVersion {
  * Modal window used for updating a list of nodes.
  */
 @Component({
-  selector: 'app-update',
-  templateUrl: './update.component.html',
-  styleUrls: ['./update.component.scss'],
+    selector: 'app-update',
+    templateUrl: './update.component.html',
+    styleUrls: ['./update.component.scss'],
+    standalone: false
 })
 export class UpdateComponent implements AfterViewInit, OnDestroy {
   // Current state of the window.

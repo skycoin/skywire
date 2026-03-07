@@ -30,9 +30,10 @@ export interface FilterWindowData {
  * selected filters.
  */
 @Component({
-  selector: 'app-skysocks-client-filter',
-  templateUrl: './skysocks-client-filter.component.html',
-  styleUrls: ['./skysocks-client-filter.component.scss']
+    selector: 'app-skysocks-client-filter',
+    templateUrl: './skysocks-client-filter.component.html',
+    styleUrls: ['./skysocks-client-filter.component.scss'],
+    standalone: false
 })
 export class SkysocksClientFilterComponent implements OnInit {
   form: UntypedFormGroup;
