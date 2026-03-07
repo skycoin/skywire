@@ -118,7 +118,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
         run: |
-          go install -tags cgo -trimpath -ldflags "-s -w -linkmode external -extldflags '-static' -buildid=" \
+          go install -trimpath -ldflags "-s -w -linkmode external -extldflags '-static' -buildid=" \
             github.com/skycoin/skywire@${{ github.ref_name }}
 
           # Copy to workspace for archiving (check both native and cross-compile paths)
@@ -161,28 +161,34 @@ jobs:
 
   darwin-amd64:
     needs: create-release
-    runs-on: macos-13  # Intel
+    runs-on: macos-latest
     steps:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Install dependencies
-        run: |
-          brew install --quiet hidapi libusb
-
       - name: Build skywire
         env:
-          CGO_ENABLED: "1"
+          CGO_ENABLED: "0"  # No CGO for cross-compile (no hardware wallet support)
+          GOOS: darwin
+          GOARCH: amd64
         run: |
-          # Native build - install directly
-          go install -tags cgo -trimpath -ldflags "-s -w" \
+          # Cross-compile for amd64 from ARM64 runner
+          go install -trimpath -ldflags "-s -w" \
             github.com/skycoin/skywire@${{ github.ref_name }}
 
           # Copy to workspace for archiving
           mkdir -p bin
-          cp "$(go env GOPATH)/bin/skywire" bin/
-          ./bin/skywire --version
+          GOPATH_BIN="$(go env GOPATH)/bin"
+          if [ -f "${GOPATH_BIN}/darwin_amd64/skywire" ]; then
+            cp "${GOPATH_BIN}/darwin_amd64/skywire" bin/
+          elif [ -f "${GOPATH_BIN}/skywire" ]; then
+            cp "${GOPATH_BIN}/skywire" bin/
+          else
+            echo "Binary not found"
+            find "${GOPATH_BIN}" -name "skywire*" -type f
+            exit 1
+          fi
 
       - name: Create archive
         run: |
@@ -220,7 +226,7 @@ jobs:
           CGO_ENABLED: "1"
         run: |
           # Native build - install directly
-          go install -tags cgo -trimpath -ldflags "-s -w" \
+          go install -trimpath -ldflags "-s -w" \
             github.com/skycoin/skywire@${{ github.ref_name }}
 
           # Copy to workspace for archiving
