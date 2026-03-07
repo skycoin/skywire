@@ -22,6 +22,7 @@
   "labeled-element": {
     "edit-label": "Bezeichnung ändern",
     "remove-label": "Bezeichnung löschen",
+    "view-all-labels": "Alle Bezeichnungen anzeigen",
     "copy": "Kopieren",
     "remove-label-confirmation": "Bezeichnung wirklich löschen?",
     "unnamed-element": "Unbenannt",

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -122,10 +123,11 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 
 		err = json.NewDecoder(res.Body).Decode(&apiErr)
 		if err != nil {
-			return nil, err
+			// If we can't decode JSON, return HTTP status info
+			return nil, fmt.Errorf("route finder error: %s (status %d)", http.StatusText(res.StatusCode), res.StatusCode)
 		}
 
-		return nil, errors.New(apiErr.Error.Message)
+		return nil, fmt.Errorf("route finder error: %s (status %d)", apiErr.Error.Message, res.StatusCode)
 	}
 
 	var paths map[routing.PathEdges][][]routing.Hop
