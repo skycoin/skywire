@@ -38,10 +38,12 @@
     <div class="mt-2 buttons-area">
       <!-- Alert shown when there are unsaved changes. -->
       <div class="text-area red-clear-text">
-        <span *ngIf="dataChanged">
-          <mat-icon [inline]="true">warning</mat-icon>
-          {{ 'settings.updater-config.not-saved' | translate }}
-        </span>
+        @if (dataChanged) {
+          <span>
+            <mat-icon [inline]="true">warning</mat-icon>
+            {{ 'settings.updater-config.not-saved' | translate }}
+          </span>
+        }
       </div>
 
       <!-- Buttons. -->

@@ -1,5 +1,6 @@
-<app-transport-list
-  *ngIf="node"
-  [node]="node"
-  [showShortList]="false">
-</app-transport-list>
+@if (node) {
+  <app-transport-list
+    [node]="node"
+    [showShortList]="false">
+  </app-transport-list>
+}

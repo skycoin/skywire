@@ -17,9 +17,10 @@ import { Application } from 'src/app/app.datatypes';
  * Modal window used for configuring the Skysocks and Vpn-Server apps.
  */
 @Component({
-  selector: 'app-skysocks-settings',
-  templateUrl: './skysocks-settings.component.html',
-  styleUrls: ['./skysocks-settings.component.scss']
+    selector: 'app-skysocks-settings',
+    templateUrl: './skysocks-settings.component.html',
+    styleUrls: ['./skysocks-settings.component.scss'],
+    standalone: false
 })
 export class SkysocksSettingsComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;

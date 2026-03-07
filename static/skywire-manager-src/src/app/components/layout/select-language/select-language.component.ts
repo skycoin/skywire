@@ -9,9 +9,10 @@ import { AppConfig } from 'src/app/app.config';
  * Modal window for changing UI language. It changes the language by itself.
  */
 @Component({
-  selector: 'app-select-language',
-  templateUrl: './select-language.component.html',
-  styleUrls: ['./select-language.component.scss'],
+    selector: 'app-select-language',
+    templateUrl: './select-language.component.html',
+    styleUrls: ['./select-language.component.scss'],
+    standalone: false
 })
 export class SelectLanguageComponent implements OnInit, OnDestroy {
   languages: LanguageData[] = [];

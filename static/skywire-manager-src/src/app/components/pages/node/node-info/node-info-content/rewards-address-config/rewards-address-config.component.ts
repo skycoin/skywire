@@ -30,9 +30,10 @@ export interface RewardsAddressConfigParams {
  * and shows a confirmation msg by itself.
  */
 @Component({
-  selector: 'app-rewards-address-config',
-  templateUrl: './rewards-address-config.component.html',
-  styleUrls: ['./rewards-address-config.component.scss']
+    selector: 'app-rewards-address-config',
+    templateUrl: './rewards-address-config.component.html',
+    styleUrls: ['./rewards-address-config.component.scss'],
+    standalone: false
 })
 export class RewardsAddressComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;

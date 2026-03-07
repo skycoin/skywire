@@ -2,23 +2,31 @@
   [matTooltip]="(!short ? 'labeled-element.tooltip' : 'labeled-element.tooltip-with-text') | translate:{ text: id }"
   [matTooltipClass]="{ 'tooltip-word-break': true }"
   (click)="$event.stopPropagation(); $event.preventDefault(); processClick();"
->
+  >
   <span class="label">
     <!-- Label prefix. -->
-    <span *ngIf="labelComponents && labelComponents.prefix">
-      {{labelComponents.prefix | translate}}
-    </span>
+    @if (labelComponents && labelComponents.prefix) {
+      <span>
+        {{labelComponents.prefix | translate}}
+      </span>
+    }
     <!-- Label prefix separator. -->
-    <span *ngIf="labelComponents && labelComponents.prefixSeparator">
-      {{ labelComponents.prefixSeparator }}
-    </span>
+    @if (labelComponents && labelComponents.prefixSeparator) {
+      <span>
+        {{ labelComponents.prefixSeparator }}
+      </span>
+    }
     <!-- Label. -->
-    <span *ngIf="labelComponents && labelComponents.label">
-      {{labelComponents.label}}
-    </span>
-    <span *ngIf="labelComponents && labelComponents.translatableLabel">
-      {{labelComponents.translatableLabel | translate}}
-    </span>
+    @if (labelComponents && labelComponents.label) {
+      <span>
+        {{labelComponents.label}}
+      </span>
+    }
+    @if (labelComponents && labelComponents.translatableLabel) {
+      <span>
+        {{labelComponents.translatableLabel | translate}}
+      </span>
+    }
   </span>
   <br />
   <!-- Id. -->

@@ -24,9 +24,10 @@ export interface EditVpnServerParams {
  * Modal window for modifying the custom name or note of a VPN server.
  */
 @Component({
-  selector: 'app-edit-vpn-server-value',
-  templateUrl: './edit-vpn-server-value.component.html',
-  styleUrls: ['./edit-vpn-server-value.component.scss']
+    selector: 'app-edit-vpn-server-value',
+    templateUrl: './edit-vpn-server-value.component.html',
+    styleUrls: ['./edit-vpn-server-value.component.scss'],
+    standalone: false
 })
 export class EditVpnServerValueComponent implements OnInit {
   @ViewChild('firstInput') firstInput: ElementRef;

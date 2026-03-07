@@ -11,9 +11,10 @@ import { AppConfig } from 'src/app/app.config';
  * msg by itself.
  */
 @Component({
-  selector: 'app-edit-label',
-  templateUrl: './edit-label.component.html',
-  styleUrls: ['./edit-label.component.scss']
+    selector: 'app-edit-label',
+    templateUrl: './edit-label.component.html',
+    styleUrls: ['./edit-label.component.scss'],
+    standalone: false
 })
 export class EditLabelComponent implements OnInit, AfterViewInit {
   @ViewChild('firstInput') firstInput: ElementRef;

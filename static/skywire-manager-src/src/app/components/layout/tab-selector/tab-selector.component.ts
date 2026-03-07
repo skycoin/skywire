@@ -6,9 +6,10 @@ import { MatDialog } from '@angular/material/dialog';
  * Button for changing the selected tab of an app-tab-selector component in small screens.
  */
 @Component({
-  selector: 'app-tab-selector',
-  templateUrl: './tab-selector.component.html',
-  styleUrls: ['./tab-selector.component.scss']
+    selector: 'app-tab-selector',
+    templateUrl: './tab-selector.component.html',
+    styleUrls: ['./tab-selector.component.scss'],
+    standalone: false
 })
 export class TabSelectorComponent implements OnDestroy {
   // Name of the available tabs, for the translation pipe.

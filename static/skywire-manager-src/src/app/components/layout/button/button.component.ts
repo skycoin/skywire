@@ -9,9 +9,10 @@ enum ButtonStates {
  * Common button used in the app.
  */
 @Component({
-  selector: 'app-button',
-  templateUrl: './button.component.html',
-  styleUrls: ['./button.component.scss']
+    selector: 'app-button',
+    templateUrl: './button.component.html',
+    styleUrls: ['./button.component.scss'],
+    standalone: false
 })
 export class ButtonComponent implements OnDestroy {
   @ViewChild('button1') button1: MatButton;

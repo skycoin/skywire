@@ -54,9 +54,10 @@ export interface SnackbarConfig {
  * To show it, use SnackbarService.
  */
 @Component({
-  selector: 'app-snack-bar',
-  templateUrl: './snack-bar.component.html',
-  styleUrls: ['./snack-bar.component.scss'],
+    selector: 'app-snack-bar',
+    templateUrl: './snack-bar.component.html',
+    styleUrls: ['./snack-bar.component.scss'],
+    standalone: false
 })
 export class SnackbarComponent {
   config: SnackbarConfig;

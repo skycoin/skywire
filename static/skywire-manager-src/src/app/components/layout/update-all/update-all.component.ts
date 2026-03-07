@@ -17,9 +17,10 @@ export interface NodeData {
  * Modal window used for updating all the nodes.
  */
 @Component({
-  selector: 'app-update-all',
-  templateUrl: './update-all.component.html',
-  styleUrls: ['./update-all.component.scss'],
+    selector: 'app-update-all',
+    templateUrl: './update-all.component.html',
+    styleUrls: ['./update-all.component.scss'],
+    standalone: false
 })
 export class UpdateAllComponent {
   updatableNodes: NodeData[];

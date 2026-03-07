@@ -30,9 +30,10 @@ export interface RouterConfigParams {
  * and shows a confirmation msg by itself.
  */
 @Component({
-  selector: 'app-router-config',
-  templateUrl: './router-config.component.html',
-  styleUrls: ['./router-config.component.scss']
+    selector: 'app-router-config',
+    templateUrl: './router-config.component.html',
+    styleUrls: ['./router-config.component.scss'],
+    standalone: false
 })
 export class RouterConfigComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;

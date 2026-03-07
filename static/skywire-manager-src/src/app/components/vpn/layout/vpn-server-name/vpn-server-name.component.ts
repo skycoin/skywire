@@ -5,9 +5,10 @@ import { Component, Input } from '@angular/core';
  * icons for any special condition. The text will take the size of the parent css.
  */
 @Component({
-  selector: 'app-vpn-server-name',
-  templateUrl: './vpn-server-name.component.html',
-  styleUrls: ['./vpn-server-name.component.scss']
+    selector: 'app-vpn-server-name',
+    templateUrl: './vpn-server-name.component.html',
+    styleUrls: ['./vpn-server-name.component.scss'],
+    standalone: false
 })
 export class VpnServerNameComponent {
   // Special conditions.

@@ -18,9 +18,10 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
  * Login page.
  */
 @Component({
-  selector: 'app-login',
-  templateUrl: './login.component.html',
-  styleUrls: ['./login.component.scss']
+    selector: 'app-login',
+    templateUrl: './login.component.html',
+    styleUrls: ['./login.component.scss'],
+    standalone: false
 })
 export class LoginComponent extends PageBaseComponent implements OnInit, OnDestroy {
   form: UntypedFormGroup;

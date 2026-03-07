@@ -9,9 +9,10 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
  * Page that shows the apps summary. It is a subpage of the Node page.
  */
 @Component({
-  selector: 'app-apps',
-  templateUrl: './apps.component.html',
-  styleUrls: ['./apps.component.scss']
+    selector: 'app-apps',
+    templateUrl: './apps.component.html',
+    styleUrls: ['./apps.component.scss'],
+    standalone: false
 })
 export class AppsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   apps: Application[];

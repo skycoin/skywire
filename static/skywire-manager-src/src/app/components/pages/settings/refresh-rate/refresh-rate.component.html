@@ -9,9 +9,11 @@
       <div class="field-container">
         <label class="field-label" for="remoteKey">{{ 'settings.refresh-rate' | translate }}</label>
         <mat-select formControlName="refreshRate">
-          <mat-option *ngFor="let time of timesList" value="{{time}}">
-            {{ time }} {{ 'settings.seconds' | translate }}
-          </mat-option>
+          @for (time of timesList; track time) {
+            <mat-option value="{{time}}">
+              {{ time }} {{ 'settings.seconds' | translate }}
+            </mat-option>
+          }
         </mat-select>
       </div>
     </mat-form-field>

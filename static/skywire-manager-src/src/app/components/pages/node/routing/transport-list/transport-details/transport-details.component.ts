@@ -8,9 +8,10 @@ import { AppConfig } from 'src/app/app.config';
  * Modal window for showing the details of a transport.
  */
 @Component({
-  selector: 'app-transport-details',
-  templateUrl: './transport-details.component.html',
-  styleUrls: ['./transport-details.component.scss']
+    selector: 'app-transport-details',
+    templateUrl: './transport-details.component.html',
+    styleUrls: ['./transport-details.component.scss'],
+    standalone: false
 })
 export class TransportDetailsComponent {
 

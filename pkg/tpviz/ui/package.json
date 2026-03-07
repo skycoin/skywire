@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@types/three": "^0.160.0",
-    "esbuild": "^0.19.12",
+    "esbuild": "^0.25.12",
     "typescript": "~5.0.4"
   }
 }
