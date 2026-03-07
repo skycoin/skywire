@@ -287,7 +287,7 @@ github.com/bytedance/sonic/loader/internal/abi
 github.com/bytedance/sonic/loader/internal/iasm/expr
 github.com/bytedance/sonic/loader/internal/iasm/x86_64
 github.com/bytedance/sonic/loader/internal/rt
-# github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
+# github.com/ccding/go-stun v0.1.5
 ## explicit; go 1.14
 github.com/ccding/go-stun/stun
 # github.com/cenkalti/backoff v2.2.1+incompatible

@@ -87,6 +87,10 @@ type Manager struct {
 	dts map[cipher.PubKey]*DmsgTracker
 	mx  sync.Mutex
 
+	// Track PKs with establishment attempts in progress to avoid duplicate goroutines
+	inProgress   map[cipher.PubKey]struct{}
+	inProgressMx sync.Mutex
+
 	done     chan struct{}
 	doneOnce sync.Once
 }
@@ -107,6 +111,7 @@ func NewDmsgTrackerManager(mLog *logging.MasterLogger, dc *dmsg.Client, updateIn
 		log:            log,
 		dc:             dc,
 		dts:            make(map[cipher.PubKey]*DmsgTracker),
+		inProgress:     make(map[cipher.PubKey]struct{}),
 		done:           make(chan struct{}),
 	}
 
@@ -208,6 +213,22 @@ func (dtm *Manager) Get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 // mustEstablishTracker creates / re-creates tracker when dmsgTrackerMap entry got deleted, and reconnected.
 // It is ment to be used as a goroutine and saves the new DmsgTracker to dtm.dts.
 func (dtm *Manager) establishTracker(ctx context.Context, pk cipher.PubKey) {
+	// Check if establishment is already in progress for this PK
+	dtm.inProgressMx.Lock()
+	if _, exists := dtm.inProgress[pk]; exists {
+		dtm.inProgressMx.Unlock()
+		return // Another goroutine is already working on this PK
+	}
+	dtm.inProgress[pk] = struct{}{}
+	dtm.inProgressMx.Unlock()
+
+	// Ensure we remove from inProgress when done
+	defer func() {
+		dtm.inProgressMx.Lock()
+		delete(dtm.inProgress, pk)
+		dtm.inProgressMx.Unlock()
+	}()
+
 	log := dtm.log.WithField("func", "dtm.establishTracker")
 
 	type errReport struct {
@@ -310,6 +331,13 @@ func (dtm *Manager) Close() error {
 	}
 
 	return nil
+}
+
+// InProgressCount returns the number of tracker establishments currently in progress.
+func (dtm *Manager) InProgressCount() int {
+	dtm.inProgressMx.Lock()
+	defer dtm.inProgressMx.Unlock()
+	return len(dtm.inProgress)
 }
 
 func isDone(done <-chan struct{}) bool {

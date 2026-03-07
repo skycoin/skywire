@@ -21,6 +21,7 @@
   "labeled-element": {
     "edit-label": "Editar rótulo",
     "remove-label": "Remover rótulo",
+    "view-all-labels": "Ver todos os rótulos",
     "copy": "Copiar",
     "remove-label-confirmation": "Tem certeza de que deseja remover o rótulo?",
     "unnamed-element": "Sem nome",

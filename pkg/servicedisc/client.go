@@ -149,7 +149,8 @@ func (c *HTTPClient) Services(ctx context.Context, quantity int, version, countr
 	if resp.StatusCode != http.StatusOK {
 		var hErr HTTPError
 		if err = json.NewDecoder(resp.Body).Decode(&hErr); err != nil {
-			return nil, err
+			// If we can't decode JSON, return HTTP status info
+			return nil, fmt.Errorf("service discovery error: %s (status %d)", http.StatusText(resp.StatusCode), resp.StatusCode)
 		}
 		return nil, &hErr
 	}
@@ -245,12 +246,13 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return Service{}, fmt.Errorf("read response body: %w", err)
+			return Service{}, fmt.Errorf("service discovery error: %s (status %d, read body failed: %v)", http.StatusText(resp.StatusCode), resp.StatusCode, err)
 		}
 
 		var hErr HTTPError
 		if err = json.Unmarshal(respBody, &hErr); err != nil {
-			return Service{}, err
+			// If we can't decode JSON, return HTTP status with raw body
+			return Service{}, fmt.Errorf("service discovery error: %s (status %d)", http.StatusText(resp.StatusCode), resp.StatusCode)
 		}
 
 		return Service{}, errors.New(hErr.Err)
@@ -296,7 +298,8 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 	if resp.StatusCode != http.StatusOK {
 		var hErr HTTPError
 		if err = json.NewDecoder(resp.Body).Decode(&hErr); err != nil {
-			return err
+			// If we can't decode JSON, return HTTP status info
+			return fmt.Errorf("service discovery error: %s (status %d)", http.StatusText(resp.StatusCode), resp.StatusCode)
 		}
 		return &hErr
 	}

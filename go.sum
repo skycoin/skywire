@@ -161,8 +161,8 @@ github.com/bytedance/sonic v1.15.0 h1:/PXeWFaR5ElNcVE84U0dOHjiMHQOwNIx3K4ymzh/uS
 github.com/bytedance/sonic v1.15.0/go.mod h1:tFkWrPz0/CUCLEF4ri4UkHekCIcdnkqXw9VduqpJh0k=
 github.com/bytedance/sonic/loader v0.5.0 h1:gXH3KVnatgY7loH5/TkeVyXPfESoqSBSBEiDd5VjlgE=
 github.com/bytedance/sonic/loader v0.5.0/go.mod h1:AR4NYCk5DdzZizZ5djGqQ92eEhCCcdf5x77udYiSJRo=
-github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029 h1:POmUHfxXdeyM8Aomg4tKDcwATCFuW+cYLkj6pwsw9pc=
-github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029/go.mod h1:Rpr5n9cGHYdM3S3IK8ROSUUUYjQOu+MSUCZDcJbYWi8=
+github.com/ccding/go-stun v0.1.5 h1:qEM367nnezmj7dv+SdT52prv5x6HUTG3nlrjX5aitlo=
+github.com/ccding/go-stun v0.1.5/go.mod h1:cCZjJ1J3WFSJV6Wj8Y9Di8JMTsEXh6uv2eNmLzKaUeM=
 github.com/cenkalti/backoff v2.2.1+incompatible h1:tNowT99t7UNflLxfYYSlKYsBpXdEet03Pg2g16Swow4=
 github.com/cenkalti/backoff v2.2.1+incompatible/go.mod h1:90ReRw6GdpyfrHakVjL/QHaoyV4aDUVVkXQJJJ3NXXM=
 github.com/cenkalti/backoff/v5 v5.0.3 h1:ZN+IMa753KfX5hd8vVaMixjnqRZ3y8CuJKRKj1xcsSM=

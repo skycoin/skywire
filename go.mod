@@ -11,7 +11,6 @@ require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/bitfield/script v0.24.1
 	github.com/blang/semver/v4 v4.0.0
-	github.com/ccding/go-stun/stun v0.0.0-20200514191101-4dc67bcdb029
 	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937 // indirect
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/elazarl/goproxy v1.8.2
@@ -66,6 +65,7 @@ require (
 )
 
 require (
+	github.com/ccding/go-stun v0.1.5
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0

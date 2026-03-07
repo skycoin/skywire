@@ -2,7 +2,6 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { interval, Observable, of, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
-import { TranslateService } from '@ngx-translate/core';
 import BigNumber from 'bignumber.js';
 
 import { VpnHelpers } from '../../vpn-helpers';
@@ -25,7 +24,6 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
 export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnDestroy {
   // Keys for persisting the server data, to be able to restore the state after navigation.
   private readonly persistentServerDataResponseKey = 'serv-dat-response';
-  private readonly persistentIpResponseKey = 'serv-ip-response';
   
   // Data for populating the tabs of the top bar.
   tabsData = VpnHelpers.vpnTabsData;
@@ -84,8 +82,6 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
   loadingCurrentIp = true;
   // If there was a problem the last time the code tried to get the current IP.
   problemGettingIp = false;
-  // Moment in which the IP was refreshed for the last time.
-  private lastIpRefresDate = 0;
   // Pk of the local visor.
   currentLocalPk: string;
   // Currently selected server.
@@ -99,13 +95,11 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
   private currentRemoteServerSubscription: Subscription;
   private operationSubscription: Subscription;
   private navigationsSubscription: Subscription;
-  private ipSubscription: Subscription;
 
   constructor(
     private vpnClientService: VpnClientService,
     private vpnSavedDataService: VpnSavedDataService,
     private snackbarService: SnackbarService,
-    private translateService: TranslateService,
     private route: ActivatedRoute,
     private dialog: MatDialog,
     private router: Router,
@@ -167,24 +161,21 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
       }
 
       if (data && data.serviceState !== VpnServiceStates.PerformingInitialCheck) {
-        const firstEventExecution = !!!this.backendState; // eslint-disable-line no-extra-boolean-cast
         this.backendState = data;
 
-        if (!firstEventExecution) {
-          // If the app enters or leaves the Running state, update the IP.
-          if (
-            (this.lastAppState === AppState.Running && data.vpnClientAppData.appState !== AppState.Running) ||
-            (this.lastAppState !== AppState.Running && data.vpnClientAppData.appState === AppState.Running)
-          ) {
-            this.getIp(true, checkSavedData);
-            console.info(1);
-          }
+        // Update IP data from the visor's summary (obtained by the VPN client service)
+        if (data.publicIp) {
+          this.currentIp = data.publicIp;
+          this.problemGettingIp = false;
         } else {
-          // Get the ip data for the first time.
-          this.getIp(true, checkSavedData);
-          console.info(2);
-          console.info(checkSavedData);
+          this.currentIp = null;
         }
+        if (data.countryName) {
+          this.ipCountry = data.countryName;
+        } else {
+          this.ipCountry = null;
+        }
+        this.loadingCurrentIp = false;
 
         this.showStarted = data.vpnClientAppData.running || data.vpnClientAppData.appState !== AppState.Stopped;
         if (this.showStartedLastValue !== this.showStarted) {
@@ -295,10 +286,6 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
     this.navigationsSubscription.unsubscribe();
     this.currentRemoteServerSubscription.unsubscribe();
     this.closeOperationSubscription();
-
-    if (this.ipSubscription) {
-      this.ipSubscription.unsubscribe();
-    }
 
     if (this.timeUpdateSubscription) {
       this.timeUpdateSubscription.unsubscribe();
@@ -497,80 +484,17 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
   }
 
   /**
-   * Checks and updates the public IP of the machine running the app and its country. The
-   * operation is cancelled if the function was already called shortly before.
-   * @param ignoreTimeCheck If true, the operation will be performed even if the function
-   * was called shortly before.
+   * Triggers a refresh of the visor data, which will update the IP information.
    */
-  public getIp(ignoreTimeCheck = false, checkSavedData = false) {
-    // Cancel the operation if the used blocked the IP checking functionality.
+  public getIp() {
+    // Cancel the operation if the user blocked the IP checking functionality.
     if (!this.ipInfoAllowed) {
       return;
     }
 
-    if (!ignoreTimeCheck) {
-      // Cancel the operation if the IP or its country is already being obtained.
-      if (this.loadingCurrentIp) {
-        this.snackbarService.showWarning('vpn.status-page.data.ip-refresh-loading-warning');
-
-        return;
-      }
-
-      // Cancel the operation if the IP was updated shortly before.
-      const msToWait = 10000;
-      if (Date.now() - this.lastIpRefresDate < msToWait) {
-        const remainingSeconds = Math.ceil((msToWait - (Date.now() - this.lastIpRefresDate)) / 1000);
-
-        this.snackbarService.showWarning(
-          this.translateService.instant('vpn.status-page.data.ip-refresh-time-warning', {seconds: remainingSeconds})
-        );
-
-        return;
-      }
-    }
-
-    if (this.ipSubscription) {
-      this.ipSubscription.unsubscribe();
-    }
-
-    // Indicate that the IP and its country are being loaded.
-    this.loadingCurrentIp = true;
-
-    // Use saved data or get from the server. If there is no saved data, savedData is null.
-    const savedData = checkSavedData ? this.getLocalValue(this.persistentIpResponseKey) : null;
-    let nextOperation: Observable<any> = this.vpnClientService.getIpData();
-    if (savedData) {
-      nextOperation = of(JSON.parse(savedData.value));
-    }
-
-    // Get the IP and country.
-    this.ipSubscription = nextOperation.subscribe(response => {
-      if (!savedData) {
-        this.saveLocalValue(this.persistentIpResponseKey, JSON.stringify(response));
-      }
-
-      this.loadingCurrentIp = false;
-      this.lastIpRefresDate = Date.now();
-
-      if (response) {
-        // Update the data.
-        this.problemGettingIp = false;
-        this.currentIp = response[0];
-        this.ipCountry = response[1];
-      } else {
-        // Indicate that there was a problem.
-        this.problemGettingIp = true;
-      }
-
-      // If old saved data was used, repeat the operation, ignoring the saved data.
-      if (savedData) {
-        this.getIp(ignoreTimeCheck, false);
-      }
-    }, () => {
-      // Indicate that there was a problem.
-      this.lastIpRefresDate = Date.now();
-      this.loadingCurrentIp = false;
-      this.problemGettingIp = false;
-    });
+    // Request a data refresh from the VPN client service.
+    // The IP data will be updated automatically from the visor summary.
+    this.vpnClientService.updateData();
+    this.snackbarService.showDone('common.refreshed');
   }
 }
