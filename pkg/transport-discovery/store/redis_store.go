@@ -620,6 +620,7 @@ func (s *redisStore) getBandwidthFromHash(ctx context.Context, key, transportID,
 }
 
 // GetNetworkMetrics returns network-wide aggregate metrics.
+// Uses Redis pipelining for efficient bulk fetching.
 func (s *redisStore) GetNetworkMetrics(ctx context.Context, query MetricsQuery) (*NetworkMetricResponse, error) {
 	days := query.Days
 	if days <= 0 {
@@ -641,63 +642,122 @@ func (s *redisStore) GetNetworkMetrics(ctx context.Context, query MetricsQuery) 
 		return nil, err
 	}
 
-	// Group transports by type for daily aggregation
+	if len(entries) == 0 {
+		return response, nil
+	}
+
+	// Build all bandwidth keys and fetch via pipeline
+	type bwKey struct {
+		dayIdx  int
+		entryIdx int
+		tpType  string
+		dateStr string
+	}
+	var bwKeys []bwKey
+	var bwResults []*redis.StringStringMapCmd
+
+	pipe := s.client.Pipeline()
 	for d := 0; d < days; d++ {
 		t := now.AddDate(0, 0, -d)
 		dateStr := t.Format("2006-01-02")
-
-		dailyAgg := DailyAggregate{
-			Date:   dateStr,
-			ByType: make(map[string]*TypeMetricAggregate),
-		}
-
-		for _, entry := range entries {
-			tpType := string(entry.Type)
-
-			// Get transport bandwidth for this day
+		for i, entry := range entries {
 			key := s.bandwidthDailyKey(entry.ID.String(), t)
-			bwResult, err := s.client.HGetAll(ctx, key).Result()
-			if err != nil || len(bwResult) == 0 {
-				continue
-			}
+			bwKeys = append(bwKeys, bwKey{
+				dayIdx:   d,
+				entryIdx: i,
+				tpType:   string(entry.Type),
+				dateStr:  dateStr,
+			})
+			bwResults = append(bwResults, pipe.HGetAll(ctx, key))
+		}
+	}
+	_, _ = pipe.Exec(ctx) //nolint:errcheck
 
-			var bw uint64
-			if val, ok := bwResult["bandwidth"]; ok {
-				fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
-			}
+	// Process results: aggregate by day
+	type dayData struct {
+		agg          DailyAggregate
+		latencySum   float64
+		latencyCount int
+		typeLatSum   map[string]float64
+		typeLatCount map[string]int
+	}
+	dayMap := make(map[int]*dayData)
 
-			if bw == 0 {
-				continue
-			}
+	for i, bk := range bwKeys {
+		result, err := bwResults[i].Result()
+		if err != nil || len(result) == 0 {
+			continue
+		}
 
-			if query.Bandwidth {
-				dailyAgg.Bandwidth += bw
-				if dailyAgg.ByType[tpType] == nil {
-					dailyAgg.ByType[tpType] = &TypeMetricAggregate{}
+		var bw uint64
+		if val, ok := result["bandwidth"]; ok {
+			fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
+		}
+		if bw == 0 {
+			continue
+		}
+
+		// Initialize day data if needed
+		if dayMap[bk.dayIdx] == nil {
+			dayMap[bk.dayIdx] = &dayData{
+				agg: DailyAggregate{
+					Date:   bk.dateStr,
+					ByType: make(map[string]*TypeMetricAggregate),
+				},
+				typeLatSum:   make(map[string]float64),
+				typeLatCount: make(map[string]int),
+			}
+		}
+		dd := dayMap[bk.dayIdx]
+
+		if query.Bandwidth {
+			dd.agg.Bandwidth += bw
+			if dd.agg.ByType[bk.tpType] == nil {
+				dd.agg.ByType[bk.tpType] = &TypeMetricAggregate{}
+			}
+			dd.agg.ByType[bk.tpType].Bandwidth += bw
+
+			response.Cumulative.Bandwidth += bw
+			if response.Cumulative.ByType[bk.tpType] == nil {
+				response.Cumulative.ByType[bk.tpType] = &TypeMetricAggregate{}
+			}
+			response.Cumulative.ByType[bk.tpType].Bandwidth += bw
+		}
+
+		// Track latency for proper averaging
+		if query.Latency {
+			entry := entries[bk.entryIdx]
+			if entry.Latency > 0 {
+				dd.latencySum += entry.Latency
+				dd.latencyCount++
+				dd.typeLatSum[bk.tpType] += entry.Latency
+				dd.typeLatCount[bk.tpType]++
+			}
+		}
+	}
+
+	// Compute averages and build response
+	for d := 0; d < days; d++ {
+		dd, ok := dayMap[d]
+		if !ok {
+			continue
+		}
+
+		// Compute proper latency averages
+		if dd.latencyCount > 0 {
+			dd.agg.Latency = dd.latencySum / float64(dd.latencyCount)
+		}
+		for tpType, sum := range dd.typeLatSum {
+			if count := dd.typeLatCount[tpType]; count > 0 {
+				if dd.agg.ByType[tpType] == nil {
+					dd.agg.ByType[tpType] = &TypeMetricAggregate{}
 				}
-				dailyAgg.ByType[tpType].Bandwidth += bw
-
-				response.Cumulative.Bandwidth += bw
-				if response.Cumulative.ByType[tpType] == nil {
-					response.Cumulative.ByType[tpType] = &TypeMetricAggregate{}
-				}
-				response.Cumulative.ByType[tpType].Bandwidth += bw
-			}
-
-			// Latency is stored per-transport in the transport data, not per-day
-			// We'll use the current latency value for now
-			if query.Latency && entry.Latency > 0 {
-				// Average latency across transports
-				dailyAgg.Latency = (dailyAgg.Latency + entry.Latency) / 2
-				if dailyAgg.ByType[tpType] == nil {
-					dailyAgg.ByType[tpType] = &TypeMetricAggregate{}
-				}
-				dailyAgg.ByType[tpType].Latency = (dailyAgg.ByType[tpType].Latency + entry.Latency) / 2
+				dd.agg.ByType[tpType].Latency = sum / float64(count)
 			}
 		}
 
-		if dailyAgg.Bandwidth > 0 || dailyAgg.Latency > 0 {
-			response.Daily = append(response.Daily, dailyAgg)
+		if dd.agg.Bandwidth > 0 || dd.agg.Latency > 0 {
+			response.Daily = append(response.Daily, dd.agg)
 		}
 	}
 
