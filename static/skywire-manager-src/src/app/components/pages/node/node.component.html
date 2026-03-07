@@ -1,53 +1,63 @@
 <!-- Content when loading. -->
-<div *ngIf="!node" class="d-flex flex-column h-100 w-100">
-  <div>
-    <app-top-bar
-      [titleParts]="titleParts"
-      [tabsData]="tabsData"
-      [selectedTabIndex]="selectedTabIndex"
-      [showUpdateButton]="false"
-      [optionsData]="nodeActionsHelper ? nodeActionsHelper.options : null"
-      [returnText]="nodeActionsHelper ? nodeActionsHelper.returnButtonText : ''"
-      (optionSelected)="performAction($event)"
-    ></app-top-bar>
-  </div>
-  <app-loading-indicator *ngIf="!notFound"></app-loading-indicator>
-  <!-- Msg shown if the node is not found. -->
-  <div *ngIf="notFound" class="w-100 h-100 d-flex not-found-label">
+@if (!node) {
+  <div class="d-flex flex-column h-100 w-100">
     <div>
-      <mat-icon [inline]="true">error</mat-icon>
-      {{ 'node.not-found' | translate }}
+      <app-top-bar
+        [titleParts]="titleParts"
+        [tabsData]="tabsData"
+        [selectedTabIndex]="selectedTabIndex"
+        [showUpdateButton]="false"
+        [optionsData]="nodeActionsHelper ? nodeActionsHelper.options : null"
+        [returnText]="nodeActionsHelper ? nodeActionsHelper.returnButtonText : ''"
+        (optionSelected)="performAction($event)"
+      ></app-top-bar>
     </div>
+    @if (!notFound) {
+      <app-loading-indicator></app-loading-indicator>
+    }
+    <!-- Msg shown if the node is not found. -->
+    @if (notFound) {
+      <div class="w-100 h-100 d-flex not-found-label">
+        <div>
+          <mat-icon [inline]="true">error</mat-icon>
+          {{ 'node.not-found' | translate }}
+        </div>
+      </div>
+    }
   </div>
-</div>
+}
 
 <!-- Content when loaded. -->
-<div class="row" *ngIf="node">
-  <div class="col-12">
-    <app-top-bar
-      [titleParts]="titleParts"
-      [tabsData]="tabsData"
-      [selectedTabIndex]="selectedTabIndex"
-      [secondsSinceLastUpdate]="secondsSinceLastUpdate" 
-      [showLoading]="updating"
-      [showAlert]="errorsUpdating"
-      [refeshRate]="storageService.getRefreshTime()"
-      [optionsData]="nodeActionsHelper ? nodeActionsHelper.options : null"
-      [returnText]="nodeActionsHelper ? nodeActionsHelper.returnButtonText : ''"
-      (optionSelected)="performAction($event)"
-      (refreshRequested)="forceDataRefresh(true)"
-    ></app-top-bar>
-  </div>
-  <div class="col-12">
-    <div [ngClass]="{'main-area': !showingInfo && !showingFullList, 'full-size-main-area': showingInfo || showingFullList}">
-      <div class="d-flex flex-column h-100">
-        <!-- Content of the subpage. -->
-        <router-outlet></router-outlet>
+@if (node) {
+  <div class="row">
+    <div class="col-12">
+      <app-top-bar
+        [titleParts]="titleParts"
+        [tabsData]="tabsData"
+        [selectedTabIndex]="selectedTabIndex"
+        [secondsSinceLastUpdate]="secondsSinceLastUpdate"
+        [showLoading]="updating"
+        [showAlert]="errorsUpdating"
+        [refeshRate]="storageService.getRefreshTime()"
+        [optionsData]="nodeActionsHelper ? nodeActionsHelper.options : null"
+        [returnText]="nodeActionsHelper ? nodeActionsHelper.returnButtonText : ''"
+        (optionSelected)="performAction($event)"
+        (refreshRequested)="forceDataRefresh(true)"
+      ></app-top-bar>
+    </div>
+    <div class="col-12">
+      <div [ngClass]="{'main-area': !showingInfo && !showingFullList, 'full-size-main-area': showingInfo || showingFullList}">
+        <div class="d-flex flex-column h-100">
+          <!-- Content of the subpage. -->
+          <router-outlet></router-outlet>
+        </div>
+      </div>
+      <!-- Right bar. -->
+      <div class="right-bar" [ngClass]="{'d-none': showingInfo || showingFullList}">
+        @if (!showingInfo && !showingFullList) {
+          <app-node-info-content [nodeInfo]="node" [trafficData]="trafficData"></app-node-info-content>
+        }
       </div>
     </div>
-    <!-- Right bar. -->
-    <div class="right-bar" [ngClass]="{'d-none': showingInfo || showingFullList}">
-      <app-node-info-content *ngIf="!showingInfo && !showingFullList" [nodeInfo]="node" [trafficData]="trafficData"></app-node-info-content>
-    </div>
   </div>
-</div>
+}

@@ -5,11 +5,13 @@
     </div>
     <div class="item">
       <span>{{ 'transports.details.basic.persistent' | translate }}</span>
-      <ng-container *ngIf="data.isPersistent">
+      @if (data.isPersistent) {
         {{ 'common.yes' | translate }}
         <mat-icon [inline]="true" class="help-icon d-none d-md-inline" [matTooltip]="'transports.persistent-transport-tooltip' | translate">help</mat-icon>
-      </ng-container>
-      <ng-container *ngIf="!data.isPersistent">{{ 'common.no' | translate }}</ng-container>
+      }
+      @if (!data.isPersistent) {
+        {{ 'common.no' | translate }}
+      }
     </div>
     <div class="item">
       <span>{{ 'transports.details.basic.id' | translate }}</span> {{ data.id }}

@@ -23,9 +23,10 @@ enum KnownProblems {
  * KnownProblems.UnableToConnectWithTheVpnClientApp is used.
  */
 @Component({
-  selector: 'app-vpn-error',
-  templateUrl: './vpn-error.component.html',
-  styleUrls: ['./vpn-error.component.scss'],
+    selector: 'app-vpn-error',
+    templateUrl: './vpn-error.component.html',
+    styleUrls: ['./vpn-error.component.scss'],
+    standalone: false
 })
 export class VpnErrorComponent extends PageBaseComponent {
   private problem = null;

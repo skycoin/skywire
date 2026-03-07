@@ -32,9 +32,10 @@ import { SkychatSettingsComponent } from '../node-apps/skychat-settings/skychat-
  * the showOfficialApps property should be set first.
  */
 @Component({
-  selector: 'app-node-app-list',
-  templateUrl: './node-apps-list.component.html',
-  styleUrls: ['./node-apps-list.component.scss']
+    selector: 'app-node-app-list',
+    templateUrl: './node-apps-list.component.html',
+    styleUrls: ['./node-apps-list.component.scss'],
+    standalone: false
 })
 export class NodeAppsListComponent implements OnInit, OnDestroy {
   // Small text for identifying the list, needed for the helper objects.

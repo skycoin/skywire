@@ -1,6 +1,7 @@
-<app-route-list
-  *ngIf="routes"
-  [routes]="routes"
-  [showShortList]="false"
-  [nodePK]="nodePK">
-</app-route-list>
+@if (routes) {
+  <app-route-list
+    [routes]="routes"
+    [showShortList]="false"
+    [nodePK]="nodePK">
+  </app-route-list>
+}

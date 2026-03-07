@@ -14,9 +14,10 @@ import { processServiceError } from '../../../../utils/errors';
  * Allows both to set the password for the first time and to change the existing password.
  */
 @Component({
-  selector: 'app-password',
-  templateUrl: './password.component.html',
-  styleUrls: ['./password.component.scss']
+    selector: 'app-password',
+    templateUrl: './password.component.html',
+    styleUrls: ['./password.component.scss'],
+    standalone: false
 })
 export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;

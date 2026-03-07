@@ -32,9 +32,10 @@ interface LogMessage {
  * of the log messages that are shown.
  */
 @Component({
-  selector: 'app-log',
-  templateUrl: './log.component.html',
-  styleUrls: ['./log.component.scss'],
+    selector: 'app-log',
+    templateUrl: './log.component.html',
+    styleUrls: ['./log.component.scss'],
+    standalone: false
 })
 export class LogComponent implements OnInit, OnDestroy {
   @ViewChild('content') content: ElementRef;

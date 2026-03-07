@@ -28,9 +28,10 @@ enum WorkingOptions {
  * Page for changing the configuration of the VPN client.
  */
 @Component({
-  selector: 'app-vpn-settings-list',
-  templateUrl: './vpn-settings.component.html',
-  styleUrls: ['./vpn-settings.component.scss'],
+    selector: 'app-vpn-settings-list',
+    templateUrl: './vpn-settings.component.html',
+    styleUrls: ['./vpn-settings.component.scss'],
+    standalone: false
 })
 export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy {
   @ViewChild('topBarLoading') topBarLoading: TopBarComponent;

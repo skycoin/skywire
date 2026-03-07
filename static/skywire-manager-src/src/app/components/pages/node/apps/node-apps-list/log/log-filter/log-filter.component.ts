@@ -25,9 +25,10 @@ export interface LogsFilter {
  * indicated in days from now. It returns -1 for the "show all" option.
  */
 @Component({
-  selector: 'app-log-filter',
-  templateUrl: './log-filter.component.html',
-  styleUrls: ['./log-filter.component.scss']
+    selector: 'app-log-filter',
+    templateUrl: './log-filter.component.html',
+    styleUrls: ['./log-filter.component.scss'],
+    standalone: false
 })
 export class LogFilterComponent implements OnInit, OnDestroy {
   filters: LogsFilter[];

@@ -10,9 +10,10 @@ import { AppConfig } from 'src/app/app.config';
  * added to the start.
  */
 @Component({
-  selector: 'app-enter-vpn-server-password',
-  templateUrl: './enter-vpn-server-password.component.html',
-  styleUrls: ['./enter-vpn-server-password.component.scss']
+    selector: 'app-enter-vpn-server-password',
+    templateUrl: './enter-vpn-server-password.component.html',
+    styleUrls: ['./enter-vpn-server-password.component.scss'],
+    standalone: false
 })
 export class EnterVpnServerPasswordComponent implements OnInit {
   @ViewChild('firstInput') firstInput: ElementRef;

@@ -9,16 +9,15 @@
           maxlength="66"
           #firstInput
           matInput
-        >
+          >
       </div>
       <mat-error>
-        <ng-container *ngIf="!this.form.get('pk').hasError('pattern');else hexError">
+        @if (!this.form.get('pk').hasError('pattern')) {
           <span>{{ 'vpn.server-list.add-server-dialog.pk-length-error' | translate }}</span>
-        </ng-container>
+        } @else {
+          <span>{{ 'vpn.server-list.add-server-dialog.pk-chars-error' | translate }}</span>
+        }
       </mat-error>
-      <ng-template #hexError>
-        <span>{{ 'vpn.server-list.add-server-dialog.pk-chars-error' | translate }}</span>
-      </ng-template>
     </mat-form-field>
 
     <!-- Password. -->
@@ -29,7 +28,7 @@
           formControlName="password"
           type="password"
           matInput
-        >
+          >
       </div>
     </mat-form-field>
 
@@ -41,7 +40,7 @@
           formControlName="name"
           maxlength="100"
           matInput
-        >
+          >
       </div>
     </mat-form-field>
 
@@ -53,7 +52,7 @@
           formControlName="note"
           maxlength="100"
           matInput
-        >
+          >
       </div>
     </mat-form-field>
   </form>
@@ -64,7 +63,7 @@
     [disabled]="!form.valid"
     color="primary"
     class="float-right"
-  >
+    >
     {{ 'vpn.server-list.add-server-dialog.use-server-button' | translate }}
   </app-button>
 </app-dialog>

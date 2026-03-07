@@ -38,9 +38,10 @@ interface NodeToEditCompleteData extends NodeToEditData {
  * Modal window used for changing the rewards addresses of a list of nodes.
  */
 @Component({
-  selector: 'app-bulk-reward-address-changer',
-  templateUrl: './bulk-reward-address-changer.component.html',
-  styleUrls: ['./bulk-reward-address-changer.component.scss'],
+    selector: 'app-bulk-reward-address-changer',
+    templateUrl: './bulk-reward-address-changer.component.html',
+    styleUrls: ['./bulk-reward-address-changer.component.scss'],
+    standalone: false
 })
 export class BulkRewardAddressChangerComponent implements OnDestroy {
   @ViewChild('button') button: ButtonComponent;

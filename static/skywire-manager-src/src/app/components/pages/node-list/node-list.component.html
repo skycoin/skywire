@@ -1,321 +1,413 @@
 <!-- Content when loading. -->
-<div *ngIf="loading" class="d-flex flex-column h-100 w-100">
-  <div>
-    <app-top-bar
-      [titleParts]="['start.title']"
-      [tabsData]="tabsData"
-      [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
-      [showUpdateButton]="false"
-    ></app-top-bar>
+@if (loading) {
+  <div class="d-flex flex-column h-100 w-100">
+    <div>
+      <app-top-bar
+        [titleParts]="['start.title']"
+        [tabsData]="tabsData"
+        [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
+        [showUpdateButton]="false"
+      ></app-top-bar>
+    </div>
+    <app-loading-indicator class="h-100"></app-loading-indicator>
   </div>
-  <app-loading-indicator class="h-100"></app-loading-indicator>
-</div>
+}
 
 <!-- Content when loaded. -->
-<div *ngIf="!loading" class="row">
-  <div class="col-12">
-    <app-top-bar
-      [titleParts]="['start.title']"
-      [tabsData]="tabsData"
-      [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
-      [secondsSinceLastUpdate]="secondsSinceLastUpdate" 
-      [showLoading]="updating"
-      [showAlert]="errorsUpdating"
-      [refeshRate]="storageService.getRefreshTime()"
-      [optionsData]="options"
-      (refreshRequested)="forceDataRefresh(true)"
-      (optionSelected)="performAction($event)"
-    ></app-top-bar>
-  </div>
-  <div class="col-12">
-
-    <!-- Header. -->
-    <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': numberOfPages > 1}">
-      <div class="title">
-        <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
-          <div *ngFor="let filterTexts of dataFilterer.currentFiltersTexts" class="item">
-            <span>{{ filterTexts.filterName | translate }}: </span>
-            <ng-container *ngIf="filterTexts.translatableValue">{{ filterTexts.translatableValue | translate }}</ng-container>
-            <ng-container *ngIf="filterTexts.value">{{ filterTexts.value }}</ng-container>
-          </div>
-          <div class="transparent-50">{{ 'filters.press-to-remove' | translate }}</div>
-        </div>
-      </div>
-      <div class="options">
-        <div class="options-container">
-          <mat-icon
-            [inline]="true"
-            (click)="dataFilterer.changeFilters()"
-            [matTooltip]="'filters.filter-action' | translate"
-            class="small-icon"
-            *ngIf="allNodes && allNodes.length > 0"
-          >filter_list</mat-icon>
-          <mat-icon
-            [matMenuTriggerFor]="selectionMenu"
-            *ngIf="dataSource.length > 0"
-          >more_horiz</mat-icon>
-          <mat-menu #selectionMenu="matMenu" [overlapTrigger]="false">
-            <div mat-menu-item disabled="{{ !hasOfflineNodes }}" (click)="removeOffline()">
-              {{ 'nodes.delete-all-offline' | translate }}
-            </div>
-          </mat-menu>
-        </div>
-        <!-- Upper paginator. -->
-        <app-paginator
-          *ngIf="numberOfPages > 1"
-          [currentPage]="currentPage"
-          [numberOfPages]="numberOfPages"
-          [linkParts]="!showDmsgInfo ? ['/nodes', 'list'] : ['/nodes', 'dmsg']"
-          [queryParams]="dataFilterer.currentUrlQueryParams">
-        </app-paginator>
-      </div>
+@if (!loading) {
+  <div class="row">
+    <div class="col-12">
+      <app-top-bar
+        [titleParts]="['start.title']"
+        [tabsData]="tabsData"
+        [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
+        [secondsSinceLastUpdate]="secondsSinceLastUpdate"
+        [showLoading]="updating"
+        [showAlert]="errorsUpdating"
+        [refeshRate]="storageService.getRefreshTime()"
+        [optionsData]="options"
+        (refreshRequested)="forceDataRefresh(true)"
+        (optionSelected)="performAction($event)"
+      ></app-top-bar>
     </div>
-
-    <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length !== 0"><div class="box-internal-container overflow full-node-list-margins">
-      <!-- Table for large screens. -->
-      <table
-        class="responsive-table-translucid d-none d-md-table"
-        *ngIf="dataSource.length > 0"
-        cellspacing="0" cellpadding="0"
-      >
-        <!-- Column names. -->
-        <tr>
-          <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(hypervisorSortData)" [matTooltip]="'nodes.hypervisor' | translate">
-            <mat-icon class="hypervisor-icon grey-text">star_outline</mat-icon>
-            <mat-icon *ngIf="dataSorter.currentSortingColumn === hypervisorSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-          </th>
-          <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(stateSortData)" [matTooltip]="'nodes.state-tooltip' | translate">
-            <span class="dot-outline-gray"></span>
-            <mat-icon *ngIf="dataSorter.currentSortingColumn === stateSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-          </th>
-          <th class="sortable-column labels" (click)="dataSorter.changeSortingOrder(labelSortData)">
-            {{ 'nodes.label' | translate }}
-            <mat-icon *ngIf="dataSorter.currentSortingColumn === labelSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-          </th>
-          <th>
-            {{ 'nodes.ip' | translate }}
-          </th>
-          <th>
-            {{ 'nodes.location' | translate }}
-          </th>
-          <th class="sortable-column" (click)="dataSorter.changeSortingOrder(keySortData)">
-            {{ 'nodes.key' | translate }}
-            <mat-icon *ngIf="dataSorter.currentSortingColumn === keySortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-          </th>
-          <th class="sortable-column" (click)="dataSorter.changeSortingOrder(versionSortData)">
-            {{ 'nodes.version' | translate }}
-            <mat-icon *ngIf="dataSorter.currentSortingColumn === versionSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-          </th>
-          <th class="sortable-column" (click)="dataSorter.changeSortingOrder(configVersionSortData)">
-            {{ 'nodes.config-version' | translate }}
-            <mat-icon *ngIf="dataSorter.currentSortingColumn === configVersionSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-          </th>
-          <th *ngIf="showDmsgInfo" class="sortable-column" (click)="dataSorter.changeSortingOrder(dmsgServerSortData)">
-            {{ 'nodes.dmsg-server' | translate }}
-            <ng-container *ngIf="dataSorter.currentSortingColumn === dmsgServerSortData">
-              <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-              <ng-container *ngIf="dataSorter.currentlySortingByLabel">*</ng-container>
-            </ng-container>
-          </th>
-          <th *ngIf="showDmsgInfo" class="sortable-column" (click)="dataSorter.changeSortingOrder(pingSortData)">
-            {{ 'nodes.ping' | translate }}
-            <mat-icon *ngIf="dataSorter.currentSortingColumn === pingSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-          </th>
-          <th class="actions"></th>
-        </tr>
-
-        <!-- Values. -->
-        <a
-          *ngFor="let node of dataSource"
-          [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online}"
-          class="selectable link-row"
-          [routerLink]="node.online ? ['/nodes', node.localPk] : null"
-        >
-          <td>
-            <mat-icon *ngIf="node.isHypervisor" class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>
-          </td>
-          <td>
-            <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
-          </td>
-          <td>
-            {{ node.label }}
-          </td>
-          <td>
-            <span *ngIf="node.ip" [matTooltip]="'nodes.lan-ip' | translate">{{ node.ip }}</span>
-            <span *ngIf="node.publicIp"> / </span>
-            <span *ngIf="node.publicIp" [matTooltip]="'nodes.public-ip' | translate">{{ node.publicIp }}</span>
-            <span *ngIf="!node.ip && !node.publicIp">-</span>
-          </td>
-          <td>
-            <span *ngIf="node.countryCode">{{ node.cityName ? node.cityName + ', ' : '' }}{{ node.regionName ? node.regionName + ', ' : '' }}{{ node.countryCode }}</span>
-            <span *ngIf="!node.countryCode">-</span>
-          </td>
-          <td>
-            {{ node.localPk }}
-          </td>
-          <td>
-            {{ node.version || '-' }}
-          </td>
-          <td>
-            {{ node.configVersion || '-' }}
-          </td>
-          <td *ngIf="showDmsgInfo">
-            <app-labeled-element-text
-              *ngIf="node.dmsgServerPk"
-              [short]="true"
-              id="{{ node.dmsgServerPk }}"
-              shortTextLength="4"
-              (labelEdited)="forceDataRefresh()"
-              [elementType]="labeledElementTypes.DmsgServer">
-            </app-labeled-element-text>
-          </td>
-          <td *ngIf="showDmsgInfo">
-            <ng-container *ngIf="node.dmsgServerPk">
-              {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
-            </ng-container>
-          </td>
-          <td class="actions">
-            <button
-              (click)="$event.stopPropagation(); $event.preventDefault(); copyToClipboard(node);"
-              mat-button
-              [matTooltip]="(showDmsgInfo ? 'nodes.copy-data' : 'nodes.copy-key') | translate"
-              class="big-action-button transparent-button"
-            >
-              <mat-icon [inline]="true">filter_none</mat-icon>
-            </button>
-            <button
-              (click)="$event.stopPropagation(); $event.preventDefault(); showEditLabelDialog(node);"
-              mat-button
-              [matTooltip]="'labeled-element.edit-label' | translate"
-              class="big-action-button transparent-button"
-            >
-              <mat-icon [inline]="true">short_text</mat-icon>
-            </button>
-            <button
-              *ngIf="node.online"
-              mat-button
-              [matTooltip]="'nodes.view-node' | translate"
-              class="big-action-button transparent-button"
-            >
-              <mat-icon [inline]="true">chevron_right</mat-icon>
-            </button>
-            <button
-              *ngIf="!node.online"
-              (click)="$event.stopPropagation(); $event.preventDefault(); deleteNode(node);"
-              mat-button
-              [matTooltip]="'nodes.delete-node' | translate"
-              class="big-action-button transparent-button"
-            >
-              <mat-icon>close</mat-icon>
-            </button>
-          </td>
-        </a>
-      </table>
-
-      <!-- List for small screens. -->
-      <table
-        class="responsive-table-translucid d-md-none nowrap"
-        *ngIf="dataSource.length > 0"
-        cellspacing="0" cellpadding="0"
-      >
-        <!-- Sorting button. -->
-        <tr class="selectable click-effect" (click)="dataSorter.openSortingOrderModal()"><td>
-          <div class="list-item-container">
-            <div class="left-part">
-              <div class="title">{{ 'tables.sorting-title' | translate }}</div>
-              <div>{{ dataSorter.currentSortingColumn.label | translate }}
-                <ng-container *ngIf="dataSorter.currentlySortingByLabel">{{ 'tables.label' | translate }}</ng-container>
-                <ng-container *ngIf="dataSorter.sortingInReverseOrder">{{ 'tables.inverted-order' | translate }}</ng-container>
+    <div class="col-12">
+      <!-- Header. -->
+      <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': numberOfPages > 1}">
+        <div class="title">
+          @if (dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0) {
+            <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()">
+              @for (filterTexts of dataFilterer.currentFiltersTexts; track filterTexts) {
+                <div class="item">
+                  <span>{{ filterTexts.filterName | translate }}: </span>
+                  @if (filterTexts.translatableValue) {
+                    {{ filterTexts.translatableValue | translate }}
+                  }
+                  @if (filterTexts.value) {
+                    {{ filterTexts.value }}
+                  }
+                </div>
+              }
+              <div class="transparent-50">{{ 'filters.press-to-remove' | translate }}</div>
+            </div>
+          }
+        </div>
+        <div class="options">
+          <div class="options-container">
+            @if (allNodes && allNodes.length > 0) {
+              <mat-icon
+                [inline]="true"
+                (click)="dataFilterer.changeFilters()"
+                [matTooltip]="'filters.filter-action' | translate"
+                class="small-icon"
+              >filter_list</mat-icon>
+            }
+            @if (dataSource.length > 0) {
+              <mat-icon
+                [matMenuTriggerFor]="selectionMenu"
+              >more_horiz</mat-icon>
+            }
+            <mat-menu #selectionMenu="matMenu" [overlapTrigger]="false">
+              <div mat-menu-item disabled="{{ !hasOfflineNodes }}" (click)="removeOffline()">
+                {{ 'nodes.delete-all-offline' | translate }}
               </div>
-            </div>
-            <div class="right-part">
-              <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
-            </div>
+            </mat-menu>
           </div>
-        </td></tr>
-        <!-- Values. -->
-        <a *ngFor="let node of dataSource" class="link-row" [ngClass]="{'selectable click-effect': node.online}" [routerLink]="node.online ? ['/nodes', node.localPk] : null"><tr class="d-block"><td class="d-block">
-          <div class="list-item-container">
-            <div class="left-part">
-              <div class="list-row" *ngIf="node.isHypervisor">
-                <mat-icon class="hypervisor-icon" [inline]="true">star</mat-icon>&nbsp;
-                <span class="yellow-clear-text title">{{ 'nodes.hypervisor' | translate }}</span>
-              </div>
-              <div class="list-row">
-                <span class="title">{{ 'nodes.state' | translate }}</span>:
-                <span [class]="nodeStatusClass(node, false) + ' title'">{{ nodeStatusText(node, false) | translate }}</span>
-              </div>
-              <div class="list-row">
-                <span class="title">{{ 'nodes.label' | translate }}</span>:
-                {{ node.label }}
-              </div>
-              <div class="list-row" *ngIf="node.ip || node.publicIp">
-                <span class="title">{{ 'nodes.ip' | translate }}</span>:
-                <span *ngIf="node.ip">{{ node.ip }}</span>
-                <span *ngIf="node.ip && node.publicIp"> / </span>
-                <span *ngIf="node.publicIp">{{ node.publicIp }}</span>
-              </div>
-              <div class="list-row" *ngIf="node.countryCode">
-                <span class="title">{{ 'nodes.location' | translate }}</span>:
-                <span *ngIf="node.cityName">{{ node.cityName }}, </span><span *ngIf="node.regionName">{{ node.regionName }}, </span>{{ node.countryCode }}
-              </div>
-              <div class="list-row long-content">
-                <span class="title">{{ 'nodes.key' | translate }}</span>:
-                {{ node.localPk }}
-              </div>
-              <div class="list-row" *ngIf="node.version">
-                <span class="title">{{ 'nodes.version' | translate }}</span>:
-                {{ node.version }}
-              </div>
-              <div class="list-row" *ngIf="node.configVersion">
-                <span class="title">{{ 'nodes.config-version' | translate }}</span>:
-                {{ node.configVersion }}
-              </div>
-              <div class="list-row long-content" *ngIf="showDmsgInfo">
-                <span class="title">{{ 'nodes.dmsg-server' | translate }}</span>:
-                <app-labeled-element-text
-                  id="{{ node.dmsgServerPk }}"
-                  (labelEdited)="forceDataRefresh()"
-                  [elementType]="labeledElementTypes.DmsgServer">
-                </app-labeled-element-text>
-              </div>
-              <div class="list-row" *ngIf="showDmsgInfo">
-                <span class="title">{{ 'nodes.ping' | translate }}</span>:
-                {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
-              </div>
-            </div>
-            <div class="margin-part"></div>
-            <div class="right-part">
-              <button
-                (click)="$event.stopPropagation(); $event.preventDefault(); showOptionsDialog(node);"
-                mat-icon-button
-                [matTooltip]="'common.options' | translate"
-                class="transparent-button"
+          <!-- Upper paginator. -->
+          @if (numberOfPages > 1) {
+            <app-paginator
+              [currentPage]="currentPage"
+              [numberOfPages]="numberOfPages"
+              [linkParts]="!showDmsgInfo ? ['/nodes', 'list'] : ['/nodes', 'dmsg']"
+              [queryParams]="dataFilterer.currentUrlQueryParams">
+            </app-paginator>
+          }
+        </div>
+      </div>
+      @if (dataSource.length !== 0) {
+        <div class="rounded-elevated-box mt-3"><div class="box-internal-container overflow full-node-list-margins">
+          <!-- Table for large screens. -->
+          @if (dataSource.length > 0) {
+            <table
+              class="responsive-table-translucid d-none d-md-table"
+              cellspacing="0" cellpadding="0"
               >
-                <mat-icon>{{ 'add' }}</mat-icon>
-              </button>
+              <!-- Column names. -->
+              <tr>
+                <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(hypervisorSortData)" [matTooltip]="'nodes.hypervisor' | translate">
+                  <mat-icon class="hypervisor-icon grey-text">star_outline</mat-icon>
+                  @if (dataSorter.currentSortingColumn === hypervisorSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
+                </th>
+                <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(stateSortData)" [matTooltip]="'nodes.state-tooltip' | translate">
+                  <span class="dot-outline-gray"></span>
+                  @if (dataSorter.currentSortingColumn === stateSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
+                </th>
+                <th class="sortable-column labels" (click)="dataSorter.changeSortingOrder(labelSortData)">
+                  {{ 'nodes.label' | translate }}
+                  @if (dataSorter.currentSortingColumn === labelSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
+                </th>
+                <th>
+                  {{ 'nodes.ip' | translate }}
+                </th>
+                <th>
+                  {{ 'nodes.location' | translate }}
+                </th>
+                <th class="sortable-column" (click)="dataSorter.changeSortingOrder(keySortData)">
+                  {{ 'nodes.key' | translate }}
+                  @if (dataSorter.currentSortingColumn === keySortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
+                </th>
+                <th class="sortable-column" (click)="dataSorter.changeSortingOrder(versionSortData)">
+                  {{ 'nodes.version' | translate }}
+                  @if (dataSorter.currentSortingColumn === versionSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
+                </th>
+                <th class="sortable-column" (click)="dataSorter.changeSortingOrder(configVersionSortData)">
+                  {{ 'nodes.config-version' | translate }}
+                  @if (dataSorter.currentSortingColumn === configVersionSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
+                </th>
+                @if (showDmsgInfo) {
+                  <th class="sortable-column" (click)="dataSorter.changeSortingOrder(dmsgServerSortData)">
+                    {{ 'nodes.dmsg-server' | translate }}
+                    @if (dataSorter.currentSortingColumn === dmsgServerSortData) {
+                      <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                      @if (dataSorter.currentlySortingByLabel) {
+                        *
+                      }
+                    }
+                  </th>
+                }
+                @if (showDmsgInfo) {
+                  <th class="sortable-column" (click)="dataSorter.changeSortingOrder(pingSortData)">
+                    {{ 'nodes.ping' | translate }}
+                    @if (dataSorter.currentSortingColumn === pingSortData) {
+                      <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                    }
+                  </th>
+                }
+                <th class="actions"></th>
+              </tr>
+              <!-- Values. -->
+              @for (node of dataSource; track node) {
+                <a
+                  [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online}"
+                  class="selectable link-row"
+                  [routerLink]="node.online ? ['/nodes', node.localPk] : null"
+                  >
+                  <td>
+                    @if (node.isHypervisor) {
+                      <mat-icon class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>
+                    }
+                  </td>
+                  <td>
+                    <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
+                  </td>
+                  <td>
+                    {{ node.label }}
+                  </td>
+                  <td>
+                    @if (node.ip) {
+                      <span [matTooltip]="'nodes.lan-ip' | translate">{{ node.ip }}</span>
+                    }
+                    @if (node.publicIp) {
+                      <span> / </span>
+                    }
+                    @if (node.publicIp) {
+                      <span [matTooltip]="'nodes.public-ip' | translate">{{ node.publicIp }}</span>
+                    }
+                    @if (!node.ip && !node.publicIp) {
+                      <span>-</span>
+                    }
+                  </td>
+                  <td>
+                    @if (node.countryCode) {
+                      <span>{{ node.cityName ? node.cityName + ', ' : '' }}{{ node.regionName ? node.regionName + ', ' : '' }}{{ node.countryCode }}</span>
+                    }
+                    @if (!node.countryCode) {
+                      <span>-</span>
+                    }
+                  </td>
+                  <td>
+                    {{ node.localPk }}
+                  </td>
+                  <td>
+                    {{ node.version || '-' }}
+                  </td>
+                  <td>
+                    {{ node.configVersion || '-' }}
+                  </td>
+                  @if (showDmsgInfo) {
+                    <td>
+                      @if (node.dmsgServerPk) {
+                        <app-labeled-element-text
+                          [short]="true"
+                          id="{{ node.dmsgServerPk }}"
+                          shortTextLength="4"
+                          (labelEdited)="forceDataRefresh()"
+                          [elementType]="labeledElementTypes.DmsgServer">
+                        </app-labeled-element-text>
+                      }
+                    </td>
+                  }
+                  @if (showDmsgInfo) {
+                    <td>
+                      @if (node.dmsgServerPk) {
+                        {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
+                      }
+                    </td>
+                  }
+                  <td class="actions">
+                    <button
+                      (click)="$event.stopPropagation(); $event.preventDefault(); copyToClipboard(node);"
+                      mat-button
+                      [matTooltip]="(showDmsgInfo ? 'nodes.copy-data' : 'nodes.copy-key') | translate"
+                      class="big-action-button transparent-button"
+                      >
+                      <mat-icon [inline]="true">filter_none</mat-icon>
+                    </button>
+                    <button
+                      (click)="$event.stopPropagation(); $event.preventDefault(); showEditLabelDialog(node);"
+                      mat-button
+                      [matTooltip]="'labeled-element.edit-label' | translate"
+                      class="big-action-button transparent-button"
+                      >
+                      <mat-icon [inline]="true">short_text</mat-icon>
+                    </button>
+                    @if (node.online) {
+                      <button
+                        mat-button
+                        [matTooltip]="'nodes.view-node' | translate"
+                        class="big-action-button transparent-button"
+                        >
+                        <mat-icon [inline]="true">chevron_right</mat-icon>
+                      </button>
+                    }
+                    @if (!node.online) {
+                      <button
+                        (click)="$event.stopPropagation(); $event.preventDefault(); deleteNode(node);"
+                        mat-button
+                        [matTooltip]="'nodes.delete-node' | translate"
+                        class="big-action-button transparent-button"
+                        >
+                        <mat-icon>close</mat-icon>
+                      </button>
+                    }
+                  </td>
+                </a>
+              }
+            </table>
+          }
+          <!-- List for small screens. -->
+          @if (dataSource.length > 0) {
+            <table
+              class="responsive-table-translucid d-md-none nowrap"
+              cellspacing="0" cellpadding="0"
+              >
+              <!-- Sorting button. -->
+              <tr class="selectable click-effect" (click)="dataSorter.openSortingOrderModal()"><td>
+                <div class="list-item-container">
+                  <div class="left-part">
+                    <div class="title">{{ 'tables.sorting-title' | translate }}</div>
+                    <div>{{ dataSorter.currentSortingColumn.label | translate }}
+                      @if (dataSorter.currentlySortingByLabel) {
+                        {{ 'tables.label' | translate }}
+                      }
+                      @if (dataSorter.sortingInReverseOrder) {
+                        {{ 'tables.inverted-order' | translate }}
+                      }
+                    </div>
+                  </div>
+                  <div class="right-part">
+                    <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
+                  </div>
+                </div>
+              </td></tr>
+              <!-- Values. -->
+              @for (node of dataSource; track node) {
+                <a class="link-row" [ngClass]="{'selectable click-effect': node.online}" [routerLink]="node.online ? ['/nodes', node.localPk] : null"><tr class="d-block"><td class="d-block">
+                  <div class="list-item-container">
+                    <div class="left-part">
+                      @if (node.isHypervisor) {
+                        <div class="list-row">
+                          <mat-icon class="hypervisor-icon" [inline]="true">star</mat-icon>&nbsp;
+                          <span class="yellow-clear-text title">{{ 'nodes.hypervisor' | translate }}</span>
+                        </div>
+                      }
+                      <div class="list-row">
+                        <span class="title">{{ 'nodes.state' | translate }}</span>:
+                        <span [class]="nodeStatusClass(node, false) + ' title'">{{ nodeStatusText(node, false) | translate }}</span>
+                      </div>
+                      <div class="list-row">
+                        <span class="title">{{ 'nodes.label' | translate }}</span>:
+                        {{ node.label }}
+                      </div>
+                      @if (node.ip || node.publicIp) {
+                        <div class="list-row">
+                          <span class="title">{{ 'nodes.ip' | translate }}</span>:
+                          @if (node.ip) {
+                            <span>{{ node.ip }}</span>
+                          }
+                          @if (node.ip && node.publicIp) {
+                            <span> / </span>
+                          }
+                          @if (node.publicIp) {
+                            <span>{{ node.publicIp }}</span>
+                          }
+                        </div>
+                      }
+                      @if (node.countryCode) {
+                        <div class="list-row">
+                          <span class="title">{{ 'nodes.location' | translate }}</span>:
+                          @if (node.cityName) {
+                            <span>{{ node.cityName }}, </span>
+                            }@if (node.regionName) {
+                            <span>{{ node.regionName }}, </span>
+                            }{{ node.countryCode }}
+                          </div>
+                        }
+                        <div class="list-row long-content">
+                          <span class="title">{{ 'nodes.key' | translate }}</span>:
+                          {{ node.localPk }}
+                        </div>
+                        @if (node.version) {
+                          <div class="list-row">
+                            <span class="title">{{ 'nodes.version' | translate }}</span>:
+                            {{ node.version }}
+                          </div>
+                        }
+                        @if (node.configVersion) {
+                          <div class="list-row">
+                            <span class="title">{{ 'nodes.config-version' | translate }}</span>:
+                            {{ node.configVersion }}
+                          </div>
+                        }
+                        @if (showDmsgInfo) {
+                          <div class="list-row long-content">
+                            <span class="title">{{ 'nodes.dmsg-server' | translate }}</span>:
+                            <app-labeled-element-text
+                              id="{{ node.dmsgServerPk }}"
+                              (labelEdited)="forceDataRefresh()"
+                              [elementType]="labeledElementTypes.DmsgServer">
+                            </app-labeled-element-text>
+                          </div>
+                        }
+                        @if (showDmsgInfo) {
+                          <div class="list-row">
+                            <span class="title">{{ 'nodes.ping' | translate }}</span>:
+                            {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
+                          </div>
+                        }
+                      </div>
+                      <div class="margin-part"></div>
+                      <div class="right-part">
+                        <button
+                          (click)="$event.stopPropagation(); $event.preventDefault(); showOptionsDialog(node);"
+                          mat-icon-button
+                          [matTooltip]="'common.options' | translate"
+                          class="transparent-button"
+                          >
+                          <mat-icon>{{ 'add' }}</mat-icon>
+                        </button>
+                      </div>
+                    </div>
+                  </td></tr></a>
+                }
+              </table>
+            }
+          </div></div>
+        }
+        <!-- Lower paginator. -->
+        @if (numberOfPages > 1) {
+          <app-paginator
+            [currentPage]="currentPage"
+            [numberOfPages]="numberOfPages"
+            [linkParts]="!showDmsgInfo ? ['/nodes', 'list'] : ['/nodes', 'dmsg']"
+            [queryParams]="dataFilterer.currentUrlQueryParams">
+          </app-paginator>
+        }
+        <!-- Msg shown if the list is empty. -->
+        @if (dataSource.length === 0) {
+          <div class="rounded-elevated-box mt-3">
+            <div class="box-internal-container font-sm">
+              <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
+              @if (allNodes.length === 0) {
+                <span class="font-sm">{{ 'nodes.empty' | translate }}</span>
+              }
+              @if (allNodes.length !== 0) {
+                <span class="font-sm">{{ 'nodes.empty-with-filter' | translate }}</span>
+              }
             </div>
           </div>
-        </td></tr></a>
-      </table>
-    </div></div>
-
-    <!-- Lower paginator. -->
-    <app-paginator
-      *ngIf="numberOfPages > 1"
-      [currentPage]="currentPage"
-      [numberOfPages]="numberOfPages"
-      [linkParts]="!showDmsgInfo ? ['/nodes', 'list'] : ['/nodes', 'dmsg']"
-      [queryParams]="dataFilterer.currentUrlQueryParams">
-    </app-paginator>
-
-    <!-- Msg shown if the list is empty. -->
-    <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length === 0">
-      <div class="box-internal-container font-sm">
-        <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
-        <span class="font-sm" *ngIf="allNodes.length === 0">{{ 'nodes.empty' | translate }}</span>
-        <span class="font-sm" *ngIf="allNodes.length !== 0">{{ 'nodes.empty-with-filter' | translate }}</span>
+        }
       </div>
     </div>
-  </div>
-</div>
+  }

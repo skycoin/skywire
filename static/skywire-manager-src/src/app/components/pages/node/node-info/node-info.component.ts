@@ -10,9 +10,10 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
  * Page for showing the basic info of a node.
  */
 @Component({
-  selector: 'app-node-info',
-  templateUrl: './node-info.component.html',
-  styleUrls: ['./node-info.component.scss']
+    selector: 'app-node-info',
+    templateUrl: './node-info.component.html',
+    styleUrls: ['./node-info.component.scss'],
+    standalone: false
 })
 export class NodeInfoComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;

@@ -34,9 +34,10 @@ export interface BasicTerminalData {
  * input, sends it to the hypervisor via the API and prints the response.
  */
 @Component({
-  selector: 'app-basic-terminal',
-  templateUrl: './basic-terminal.component.html',
-  styleUrls: ['./basic-terminal.component.scss']
+    selector: 'app-basic-terminal',
+    templateUrl: './basic-terminal.component.html',
+    styleUrls: ['./basic-terminal.component.scss'],
+    standalone: false
 })
 export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
   @ViewChild('terminal') terminalElement: ElementRef<HTMLDivElement>;

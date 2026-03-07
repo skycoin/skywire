@@ -4,7 +4,9 @@
       <div class="field-container">
         <label class="field-label" for="remoteKey">{{ 'apps.log.filter.filter' | translate }}</label>
         <mat-select formControlName="filter">
-          <mat-option *ngFor="let filter of filters" [value]="filter.days">{{ filter.text | translate }}</mat-option>
+          @for (filter of filters; track filter) {
+            <mat-option [value]="filter.days">{{ filter.text | translate }}</mat-option>
+          }
         </mat-select>
       </div>
     </mat-form-field>

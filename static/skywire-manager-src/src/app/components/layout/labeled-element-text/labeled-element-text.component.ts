@@ -44,9 +44,10 @@ export class LabelComponents {
  * text for the id, case in which a tooltip allows the user to see the complete id.
  */
 @Component({
-  selector: 'app-labeled-element-text',
-  templateUrl: './labeled-element-text.component.html',
-  styleUrls: ['./labeled-element-text.component.scss']
+    selector: 'app-labeled-element-text',
+    templateUrl: './labeled-element-text.component.html',
+    styleUrls: ['./labeled-element-text.component.scss'],
+    standalone: false
 })
 export class LabeledElementTextComponent implements OnDestroy {
   private idInternal: string;

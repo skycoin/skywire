@@ -71,9 +71,10 @@ class LogEntryExtraValue {
  * Modal window for showing the runtime logs of a node.
  */
 @Component({
-  selector: 'app-node-logs',
-  templateUrl: './node-logs.component.html',
-  styleUrls: ['./node-logs.component.scss'],
+    selector: 'app-node-logs',
+    templateUrl: './node-logs.component.html',
+    styleUrls: ['./node-logs.component.scss'],
+    standalone: false
 })
 export class NodeLogsComponent implements OnInit, OnDestroy {
   @ViewChild('content') content: ElementRef;

@@ -1,18 +1,28 @@
 <!-- Header. -->
 <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': !showShortList_ && numberOfPages > 1 && dataSource}">
   <div class="title">
-    <span *ngIf="showShortList_" class="uppercase">
-      {{ 'transports.title' | translate }}
-      <mat-icon [inline]="true" class="help d-none d-md-inline" [matTooltip]="'transports.info' | translate">help</mat-icon>
-    </span>
-    <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
-      <div *ngFor="let filterTexts of dataFilterer.currentFiltersTexts" class="item">
-        <span>{{ filterTexts.filterName | translate }}: </span>
-        <ng-container *ngIf="filterTexts.translatableValue">{{ filterTexts.translatableValue | translate }}</ng-container>
-        <ng-container *ngIf="filterTexts.value">{{ filterTexts.value }}</ng-container>
+    @if (showShortList_) {
+      <span class="uppercase">
+        {{ 'transports.title' | translate }}
+        <mat-icon [inline]="true" class="help d-none d-md-inline" [matTooltip]="'transports.info' | translate">help</mat-icon>
+      </span>
+    }
+    @if (dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0) {
+      <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()">
+        @for (filterTexts of dataFilterer.currentFiltersTexts; track filterTexts) {
+          <div class="item">
+            <span>{{ filterTexts.filterName | translate }}: </span>
+            @if (filterTexts.translatableValue) {
+              {{ filterTexts.translatableValue | translate }}
+            }
+            @if (filterTexts.value) {
+              {{ filterTexts.value }}
+            }
+          </div>
+        }
+        <div class="transparent-50">{{ 'filters.press-to-remove' | translate }}</div>
       </div>
-      <div class="transparent-50">{{ 'filters.press-to-remove' | translate }}</div>
-    </div>
+    }
   </div>
   <div class="options">
     <div class="options-container">
@@ -20,17 +30,19 @@
         [inline]="true"
         (click)="create()"
       >add</mat-icon>
-      <mat-icon
-        [inline]="true"
-        (click)="dataFilterer.changeFilters()"
-        class="small-icon"
-        *ngIf="allTransports && allTransports.length > 0"
-      >filter_list</mat-icon>
-      <mat-icon
-        [inline]="true"
-        [matMenuTriggerFor]="selectionMenu"
-        *ngIf="dataSource && dataSource.length > 0"
-      >more_horiz</mat-icon>
+      @if (allTransports && allTransports.length > 0) {
+        <mat-icon
+          [inline]="true"
+          (click)="dataFilterer.changeFilters()"
+          class="small-icon"
+        >filter_list</mat-icon>
+      }
+      @if (dataSource && dataSource.length > 0) {
+        <mat-icon
+          [inline]="true"
+          [matMenuTriggerFor]="selectionMenu"
+        >more_horiz</mat-icon>
+      }
       <mat-menu #selectionMenu="matMenu" [overlapTrigger]="false">
         <div mat-menu-item (click)="changeAllSelections(true)">
           {{ 'selection.select-all' | translate }}
@@ -50,251 +62,310 @@
       </mat-menu>
     </div>
     <!-- Upper paginator. -->
-    <app-paginator
-      *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
-      [currentPage]="currentPage"
-      [numberOfPages]="numberOfPages"
-      [linkParts]="['/nodes', nodePK, 'transports']"
-      [queryParams]="dataFilterer.currentUrlQueryParams">
-    </app-paginator>
+    @if (!showShortList_ && numberOfPages > 1 && dataSource) {
+      <app-paginator
+        [currentPage]="currentPage"
+        [numberOfPages]="numberOfPages"
+        [linkParts]="['/nodes', nodePK, 'transports']"
+        [queryParams]="dataFilterer.currentUrlQueryParams">
+      </app-paginator>
+    }
   </div>
 </div>
 
-<div
-  class="rounded-elevated-box mt-3"
-  *ngIf="dataSource && dataSource.length > 0"
-><div class="box-internal-container overflow" [ngClass]="{'small-node-list-margins': showShortList_, 'full-node-list-margins': !showShortList_}">
-  <!-- Table for large screens. -->
-  <table
-    class="responsive-table-translucid d-none d-md-table"
-    [ngClass]="{'d-lg-none d-xl-table': showShortList_}"
-    cellspacing="0" cellpadding="0"
-  >
-    <!-- Column names. -->
-    <tr>
-      <th></th>
-      <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(persistentSortData)" [matTooltip]="'transports.persistent-tooltip' | translate">
-        <mat-icon class="persistent-icon grey-text">star_outline</mat-icon>
-        <mat-icon *ngIf="dataSorter.currentSortingColumn === persistentSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-      </th>
-      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(idSortData)">
-        {{ 'transports.id' | translate }}
-        <ng-container *ngIf="dataSorter.currentSortingColumn === idSortData">
-          <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-          <ng-container *ngIf="dataSorter.currentlySortingByLabel">*</ng-container>
-        </ng-container>
-      </th>
-      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(remotePkSortData)">
-        {{ 'transports.remote-node' | translate }}
-        <ng-container *ngIf="dataSorter.currentSortingColumn === remotePkSortData">
-          <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-          <ng-container *ngIf="dataSorter.currentlySortingByLabel">*</ng-container>
-        </ng-container>
-      </th>
-      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(typeSortData)">
-        {{ 'transports.type' | translate }}
-        <mat-icon *ngIf="dataSorter.currentSortingColumn === typeSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-      </th>
-      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(uploadedSortData)">
-        {{ 'common.uploaded' | translate }}
-        <mat-icon *ngIf="dataSorter.currentSortingColumn === uploadedSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-      </th>
-      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(downloadedSortData)">
-        {{ 'common.downloaded' | translate }}
-        <mat-icon *ngIf="dataSorter.currentSortingColumn === downloadedSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-      </th>
-      <th class="actions"></th>
-    </tr>
-    <!-- Values. -->
-    <tr *ngFor="let transport of dataSource" [ngClass]="{ 'offline': transport.notFound }">
-      <td class="selection-col">
-        <mat-checkbox
-          [checked]="selections.get(transport.id)"
-          (change)="changeSelection(transport)">
-        </mat-checkbox>
-      </td>
-      <td>
-        <button
-          *ngIf="transport.isPersistent"
-          (click)="changeIfPersistent([transport], false)"
-          mat-button
-          [matTooltip]="'transports.persistent-transport-button-tooltip' | translate"
-          class="action-button subtle-transparent-button"
-        >
-          <mat-icon [inline]="true" class="persistent-icon default-cursor">star</mat-icon>
-        </button>
-        <button
-          *ngIf="!transport.isPersistent"
-          (click)="changeIfPersistent([transport], true)"
-          mat-button
-          [matTooltip]="'transports.non-persistent-transport-button-tooltip' | translate"
-          class="action-button subtle-transparent-button"
-        >
-          <mat-icon [inline]="true" class="persistent-icon grey-text">star_outline</mat-icon>
-        </button>
-      </td>
-      <td *ngIf="!!!transport.notFound">
-        <app-labeled-element-text
-          id="{{ transport.id }}"
-          (labelEdited)="refreshData()"
-          [elementType]="labeledElementTypes.Transport">
-        </app-labeled-element-text>
-        <span *ngIf="transport.notFound">{{ 'transports.offline' | translate }}</span>
-      </td>
-      <td *ngIf="transport.notFound">
-        {{ 'transports.offline' | translate }}
-      </td>
-      <td>
-        <app-labeled-element-text
-          id="{{ transport.remotePk }}"
-          (labelEdited)="refreshData()">
-        </app-labeled-element-text>
-      </td>
-      <td>
-        {{ transport.type }}
-      </td>
-      <td *ngIf="!!!transport.notFound">
-        {{ transport.sent | autoScale }}
-      </td>
-      <td *ngIf="!!!transport.notFound">
-        {{ transport.recv | autoScale }}
-      </td>
-      <td *ngIf="transport.notFound">
-        {{ 'transports.offline' | translate }}
-      </td>
-      <td *ngIf="transport.notFound">
-        {{ 'transports.offline' | translate }}
-      </td>
-      <td class="actions">
-        <button
-          *ngIf="!transport.notFound"
-          (click)="details(transport)"
-          mat-button
-          [matTooltip]="'transports.details.title' | translate"
-          class="action-button transparent-button"
-        >
-          <mat-icon [inline]="true">visibility</mat-icon>
-        </button>
-        <button
-          *ngIf="!transport.notFound"
-          (click)="delete(transport)"
-          mat-button
-          [matTooltip]="'transports.delete' | translate"
-          class="action-button transparent-button"
-        >
-          <mat-icon [inline]="true">close</mat-icon>
-        </button>
-      </td>
-    </tr>
-  </table>
-
-  <!-- List for small screens. -->
-  <table
-    class="responsive-table-translucid d-md-none"
-    [ngClass]="{'d-lg-table d-xl-none': showShortList_}"
-    cellspacing="0" cellpadding="0"
-  >
-    <!-- Sorting button. -->
-    <tr class="selectable" (click)="dataSorter.openSortingOrderModal()"><td>
-      <div class="list-item-container">
-        <div class="left-part">
-          <div class="title">{{ 'tables.sorting-title' | translate }}</div>
-          <div>{{ dataSorter.currentSortingColumn.label | translate }}
-            <ng-container *ngIf="dataSorter.currentlySortingByLabel">{{ 'tables.label' | translate }}</ng-container>
-            <ng-container *ngIf="dataSorter.sortingInReverseOrder">{{ 'tables.inverted-order' | translate }}</ng-container>
-          </div>
-        </div>
-        <div class="right-part">
-          <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
-        </div>
-      </div>
-    </td></tr>
-    <!-- Values. -->
-    <tr *ngFor="let transport of dataSource"><td>
-      <div class="list-item-container" [ngClass]="{ 'offline': transport.notFound }">
-        <div class="check-part">
-          <mat-checkbox
-            [checked]="selections.get(transport.id)"
-            (change)="changeSelection(transport)">
-          </mat-checkbox>
-        </div>
-        <div class="left-part">
-          <div class="list-row" *ngIf="transport.isPersistent">
-            <div class="list-row">
-              <mat-icon class="persistent-icon" [inline]="true">star</mat-icon>&nbsp;
-              <span class="yellow-clear-text title">{{ 'transports.persistent' | translate }}</span>
-            </div>
-          </div>
-          <div class="list-row long-content">
-            <span class="title">{{ 'transports.id' | translate }}</span>:
-            <app-labeled-element-text
-              *ngIf="!!!transport.notFound"
-              id="{{ transport.id }}"
-              (labelEdited)="refreshData()"
-              [elementType]="labeledElementTypes.Transport">
-            </app-labeled-element-text>
-            <ng-container *ngIf="transport.notFound">{{ 'transports.offline' | translate }}</ng-container>
-          </div>
-          <div class="list-row long-content">
-            <span class="title">{{ 'transports.remote-node' | translate }}</span>:
+@if (dataSource && dataSource.length > 0) {
+  <div
+    class="rounded-elevated-box mt-3"
+    ><div class="box-internal-container overflow" [ngClass]="{'small-node-list-margins': showShortList_, 'full-node-list-margins': !showShortList_}">
+    <!-- Table for large screens. -->
+    <table
+      class="responsive-table-translucid d-none d-md-table"
+      [ngClass]="{'d-lg-none d-xl-table': showShortList_}"
+      cellspacing="0" cellpadding="0"
+      >
+      <!-- Column names. -->
+      <tr>
+        <th></th>
+        <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(persistentSortData)" [matTooltip]="'transports.persistent-tooltip' | translate">
+          <mat-icon class="persistent-icon grey-text">star_outline</mat-icon>
+          @if (dataSorter.currentSortingColumn === persistentSortData) {
+            <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+          }
+        </th>
+        <th class="sortable-column" (click)="dataSorter.changeSortingOrder(idSortData)">
+          {{ 'transports.id' | translate }}
+          @if (dataSorter.currentSortingColumn === idSortData) {
+            <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            @if (dataSorter.currentlySortingByLabel) {
+              *
+            }
+          }
+        </th>
+        <th class="sortable-column" (click)="dataSorter.changeSortingOrder(remotePkSortData)">
+          {{ 'transports.remote-node' | translate }}
+          @if (dataSorter.currentSortingColumn === remotePkSortData) {
+            <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            @if (dataSorter.currentlySortingByLabel) {
+              *
+            }
+          }
+        </th>
+        <th class="sortable-column" (click)="dataSorter.changeSortingOrder(typeSortData)">
+          {{ 'transports.type' | translate }}
+          @if (dataSorter.currentSortingColumn === typeSortData) {
+            <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+          }
+        </th>
+        <th class="sortable-column" (click)="dataSorter.changeSortingOrder(uploadedSortData)">
+          {{ 'common.uploaded' | translate }}
+          @if (dataSorter.currentSortingColumn === uploadedSortData) {
+            <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+          }
+        </th>
+        <th class="sortable-column" (click)="dataSorter.changeSortingOrder(downloadedSortData)">
+          {{ 'common.downloaded' | translate }}
+          @if (dataSorter.currentSortingColumn === downloadedSortData) {
+            <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+          }
+        </th>
+        <th class="actions"></th>
+      </tr>
+      <!-- Values. -->
+      @for (transport of dataSource; track transport) {
+        <tr [ngClass]="{ 'offline': transport.notFound }">
+          <td class="selection-col">
+            <mat-checkbox
+              [checked]="selections.get(transport.id)"
+              (change)="changeSelection(transport)">
+            </mat-checkbox>
+          </td>
+          <td>
+            @if (transport.isPersistent) {
+              <button
+                (click)="changeIfPersistent([transport], false)"
+                mat-button
+                [matTooltip]="'transports.persistent-transport-button-tooltip' | translate"
+                class="action-button subtle-transparent-button"
+                >
+                <mat-icon [inline]="true" class="persistent-icon default-cursor">star</mat-icon>
+              </button>
+            }
+            @if (!transport.isPersistent) {
+              <button
+                (click)="changeIfPersistent([transport], true)"
+                mat-button
+                [matTooltip]="'transports.non-persistent-transport-button-tooltip' | translate"
+                class="action-button subtle-transparent-button"
+                >
+                <mat-icon [inline]="true" class="persistent-icon grey-text">star_outline</mat-icon>
+              </button>
+            }
+          </td>
+          @if (!!!transport.notFound) {
+            <td>
+              <app-labeled-element-text
+                id="{{ transport.id }}"
+                (labelEdited)="refreshData()"
+                [elementType]="labeledElementTypes.Transport">
+              </app-labeled-element-text>
+              @if (transport.notFound) {
+                <span>{{ 'transports.offline' | translate }}</span>
+              }
+            </td>
+          }
+          @if (transport.notFound) {
+            <td>
+              {{ 'transports.offline' | translate }}
+            </td>
+          }
+          <td>
             <app-labeled-element-text
               id="{{ transport.remotePk }}"
               (labelEdited)="refreshData()">
             </app-labeled-element-text>
-          </div>
-          <div class="list-row">
-            <span class="title">{{ 'transports.type' | translate }}</span>:
+          </td>
+          <td>
             {{ transport.type }}
+          </td>
+          @if (!!!transport.notFound) {
+            <td>
+              {{ transport.sent | autoScale }}
+            </td>
+          }
+          @if (!!!transport.notFound) {
+            <td>
+              {{ transport.recv | autoScale }}
+            </td>
+          }
+          @if (transport.notFound) {
+            <td>
+              {{ 'transports.offline' | translate }}
+            </td>
+          }
+          @if (transport.notFound) {
+            <td>
+              {{ 'transports.offline' | translate }}
+            </td>
+          }
+          <td class="actions">
+            @if (!transport.notFound) {
+              <button
+                (click)="details(transport)"
+                mat-button
+                [matTooltip]="'transports.details.title' | translate"
+                class="action-button transparent-button"
+                >
+                <mat-icon [inline]="true">visibility</mat-icon>
+              </button>
+            }
+            @if (!transport.notFound) {
+              <button
+                (click)="delete(transport)"
+                mat-button
+                [matTooltip]="'transports.delete' | translate"
+                class="action-button transparent-button"
+                >
+                <mat-icon [inline]="true">close</mat-icon>
+              </button>
+            }
+          </td>
+        </tr>
+      }
+    </table>
+    <!-- List for small screens. -->
+    <table
+      class="responsive-table-translucid d-md-none"
+      [ngClass]="{'d-lg-table d-xl-none': showShortList_}"
+      cellspacing="0" cellpadding="0"
+      >
+      <!-- Sorting button. -->
+      <tr class="selectable" (click)="dataSorter.openSortingOrderModal()"><td>
+        <div class="list-item-container">
+          <div class="left-part">
+            <div class="title">{{ 'tables.sorting-title' | translate }}</div>
+            <div>{{ dataSorter.currentSortingColumn.label | translate }}
+              @if (dataSorter.currentlySortingByLabel) {
+                {{ 'tables.label' | translate }}
+              }
+              @if (dataSorter.sortingInReverseOrder) {
+                {{ 'tables.inverted-order' | translate }}
+              }
+            </div>
           </div>
-          <div class="list-row">
-            <span class="title">{{ 'common.uploaded' | translate }}</span>:
-            <ng-container *ngIf="!!!transport.notFound">{{ transport.sent | autoScale }}</ng-container>
-            <ng-container *ngIf="transport.notFound">{{ 'transports.offline' | translate }}</ng-container>
-          </div>
-          <div class="list-row">
-            <span class="title">{{ 'common.downloaded' | translate }}</span>:
-            <ng-container *ngIf="!!!transport.notFound">{{ transport.recv | autoScale }}</ng-container>
-            <ng-container *ngIf="transport.notFound">{{ 'transports.offline' | translate }}</ng-container>
+          <div class="right-part">
+            <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
           </div>
         </div>
-        <div class="margin-part"></div>
-        <div class="right-part">
-          <button
-            (click)="$event.stopPropagation(); showOptionsDialog(transport)"
-            mat-icon-button
-            [matTooltip]="'common.options' | translate"
-            class="transparent-button"
-          >
-            <mat-icon>{{ 'add' }}</mat-icon>
-          </button>
-        </div>
-      </div>
-    </td></tr>
-  </table>
-
-  <!-- Link for accessing the full list. -->
-  <app-view-all-link
-    [numberOfElements]="filteredTransports.length"
-    [linkParts]="['/nodes', nodePK, 'transports']"
-    [queryParams]="dataFilterer.currentUrlQueryParams"
-    *ngIf="showShortList_ && numberOfPages > 1"
-  ></app-view-all-link>
-</div></div>
+      </td></tr>
+      <!-- Values. -->
+      @for (transport of dataSource; track transport) {
+        <tr><td>
+          <div class="list-item-container" [ngClass]="{ 'offline': transport.notFound }">
+            <div class="check-part">
+              <mat-checkbox
+                [checked]="selections.get(transport.id)"
+                (change)="changeSelection(transport)">
+              </mat-checkbox>
+            </div>
+            <div class="left-part">
+              @if (transport.isPersistent) {
+                <div class="list-row">
+                  <div class="list-row">
+                    <mat-icon class="persistent-icon" [inline]="true">star</mat-icon>&nbsp;
+                    <span class="yellow-clear-text title">{{ 'transports.persistent' | translate }}</span>
+                  </div>
+                </div>
+              }
+              <div class="list-row long-content">
+                <span class="title">{{ 'transports.id' | translate }}</span>:
+                @if (!!!transport.notFound) {
+                  <app-labeled-element-text
+                    id="{{ transport.id }}"
+                    (labelEdited)="refreshData()"
+                    [elementType]="labeledElementTypes.Transport">
+                  </app-labeled-element-text>
+                }
+                @if (transport.notFound) {
+                  {{ 'transports.offline' | translate }}
+                }
+              </div>
+              <div class="list-row long-content">
+                <span class="title">{{ 'transports.remote-node' | translate }}</span>:
+                <app-labeled-element-text
+                  id="{{ transport.remotePk }}"
+                  (labelEdited)="refreshData()">
+                </app-labeled-element-text>
+              </div>
+              <div class="list-row">
+                <span class="title">{{ 'transports.type' | translate }}</span>:
+                {{ transport.type }}
+              </div>
+              <div class="list-row">
+                <span class="title">{{ 'common.uploaded' | translate }}</span>:
+                @if (!!!transport.notFound) {
+                  {{ transport.sent | autoScale }}
+                }
+                @if (transport.notFound) {
+                  {{ 'transports.offline' | translate }}
+                }
+              </div>
+              <div class="list-row">
+                <span class="title">{{ 'common.downloaded' | translate }}</span>:
+                @if (!!!transport.notFound) {
+                  {{ transport.recv | autoScale }}
+                }
+                @if (transport.notFound) {
+                  {{ 'transports.offline' | translate }}
+                }
+              </div>
+            </div>
+            <div class="margin-part"></div>
+            <div class="right-part">
+              <button
+                (click)="$event.stopPropagation(); showOptionsDialog(transport)"
+                mat-icon-button
+                [matTooltip]="'common.options' | translate"
+                class="transparent-button"
+                >
+                <mat-icon>{{ 'add' }}</mat-icon>
+              </button>
+            </div>
+          </div>
+        </td></tr>
+      }
+    </table>
+    <!-- Link for accessing the full list. -->
+    @if (showShortList_ && numberOfPages > 1) {
+      <app-view-all-link
+        [numberOfElements]="filteredTransports.length"
+        [linkParts]="['/nodes', nodePK, 'transports']"
+        [queryParams]="dataFilterer.currentUrlQueryParams"
+      ></app-view-all-link>
+    }
+  </div></div>
+}
 
 <!-- Msg shown if the list is empty. -->
-<div class="rounded-elevated-box mt-3" *ngIf="!dataSource || dataSource.length === 0">
-  <div class="box-internal-container">
-    <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
-    <span class="font-sm" *ngIf="allTransports.length === 0">{{ 'transports.empty' | translate }}</span>
-    <span class="font-sm" *ngIf="allTransports.length !== 0">{{ 'transports.empty-with-filter' | translate }}</span>
+@if (!dataSource || dataSource.length === 0) {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container">
+      <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
+      @if (allTransports.length === 0) {
+        <span class="font-sm">{{ 'transports.empty' | translate }}</span>
+      }
+      @if (allTransports.length !== 0) {
+        <span class="font-sm">{{ 'transports.empty-with-filter' | translate }}</span>
+      }
+    </div>
   </div>
-</div>
+}
 
 <!-- Upper paginator. -->
-<app-paginator
-  *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
-  [currentPage]="currentPage"
-  [numberOfPages]="numberOfPages"
-  [linkParts]="['/nodes', nodePK, 'transports']"
-  [queryParams]="dataFilterer.currentUrlQueryParams">
-</app-paginator>
+@if (!showShortList_ && numberOfPages > 1 && dataSource) {
+  <app-paginator
+    [currentPage]="currentPage"
+    [numberOfPages]="numberOfPages"
+    [linkParts]="['/nodes', nodePK, 'transports']"
+    [queryParams]="dataFilterer.currentUrlQueryParams">
+  </app-paginator>
+}

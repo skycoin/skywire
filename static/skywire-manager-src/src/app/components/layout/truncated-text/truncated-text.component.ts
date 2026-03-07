@@ -5,9 +5,10 @@ import { Component, Input } from '@angular/core';
  * to see the complete text.
  */
 @Component({
-  selector: 'app-truncated-text',
-  templateUrl: './truncated-text.component.html',
-  styleUrls: ['./truncated-text.component.scss']
+    selector: 'app-truncated-text',
+    templateUrl: './truncated-text.component.html',
+    styleUrls: ['./truncated-text.component.scss'],
+    standalone: false
 })
 export class TruncatedTextComponent {
   /**

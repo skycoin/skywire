@@ -28,9 +28,10 @@ interface ComponentData {
  * returned in the "afterClosed" envent.
  */
 @Component({
-  selector: 'app-select-option',
-  templateUrl: './select-option.component.html',
-  styleUrls: ['./select-option.component.scss'],
+    selector: 'app-select-option',
+    templateUrl: './select-option.component.html',
+    styleUrls: ['./select-option.component.scss'],
+    standalone: false
 })
 export class SelectOptionComponent {
   /**
