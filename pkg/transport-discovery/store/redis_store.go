@@ -648,10 +648,10 @@ func (s *redisStore) GetNetworkMetrics(ctx context.Context, query MetricsQuery) 
 
 	// Build all bandwidth keys and fetch via pipeline
 	type bwKey struct {
-		dayIdx  int
+		dayIdx   int
 		entryIdx int
-		tpType  string
-		dateStr string
+		tpType   string
+		dateStr  string
 	}
 	var bwKeys []bwKey
 	var bwResults []*redis.StringStringMapCmd
