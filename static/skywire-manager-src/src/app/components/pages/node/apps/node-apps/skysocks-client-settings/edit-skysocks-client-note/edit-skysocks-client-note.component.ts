@@ -11,9 +11,10 @@ import { AppConfig } from 'src/app/app.config';
  * to help avoiding problems while checking empty strings.
  */
 @Component({
-  selector: 'app-edit-skysocks-client-note',
-  templateUrl: './edit-skysocks-client-note.component.html',
-  styleUrls: ['./edit-skysocks-client-note.component.scss']
+    selector: 'app-edit-skysocks-client-note',
+    templateUrl: './edit-skysocks-client-note.component.html',
+    styleUrls: ['./edit-skysocks-client-note.component.scss'],
+    standalone: false
 })
 export class EditSkysocksClientNoteComponent implements OnInit {
   @ViewChild('firstInput', { static: false }) firstInput: ElementRef;

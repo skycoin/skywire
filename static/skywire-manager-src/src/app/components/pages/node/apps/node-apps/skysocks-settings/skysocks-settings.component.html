@@ -2,7 +2,7 @@
   [headline]="('apps.vpn-socks-server-settings.' + ( configuringVpn ? 'vpn-title' : 'socks-title')) | translate"
   [dialog]="dialogRef"
   [disableDismiss]="disableDismiss"
->
+  >
   <form [formGroup]="form">
     <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
       <div class="field-container">
@@ -14,7 +14,7 @@
           maxlength="100"
           #firstInput
           matInput
-        >
+          >
       </div>
     </mat-form-field>
     <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
@@ -27,34 +27,38 @@
           maxlength="100"
           #firstInput
           matInput
-        >
+          >
       </div>
       <mat-error>
         <span>{{ 'apps.vpn-socks-server-settings.passwords-not-match' | translate }}</span>
       </mat-error>
     </mat-form-field>
-    <mat-form-field *ngIf="configuringVpn" [ngClass]="{'element-disabled' : disableDismiss}">
-      <div class="field-container">
-        <label class="field-label" for="remoteKey">{{ 'apps.vpn-socks-server-settings.netifc' | translate }}</label>
-        <input
-          id="netifc"
-          type="text"
-          formControlName="netifc"
-          matInput
-        >
+    @if (configuringVpn) {
+      <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
+        <div class="field-container">
+          <label class="field-label" for="remoteKey">{{ 'apps.vpn-socks-server-settings.netifc' | translate }}</label>
+          <input
+            id="netifc"
+            type="text"
+            formControlName="netifc"
+            matInput
+            >
+        </div>
+      </mat-form-field>
+    }
+    @if (configuringVpn) {
+      <div class="main-theme settings-option">
+        <mat-checkbox
+          color="primary"
+          [checked]="secureMode"
+          (change)="setSecureMode($event)"
+          [ngClass]="{'element-disabled' : disableDismiss}"
+          >
+          {{ 'apps.vpn-socks-server-settings.secure-mode-check' | translate }}
+          <mat-icon [inline]="true" class="help-icon" [matTooltip]="'apps.vpn-socks-server-settings.secure-mode-info' | translate">help</mat-icon>
+        </mat-checkbox>
       </div>
-    </mat-form-field>
-    <div class="main-theme settings-option" *ngIf="configuringVpn">
-      <mat-checkbox
-        color="primary"
-        [checked]="secureMode"
-        (change)="setSecureMode($event)"
-        [ngClass]="{'element-disabled' : disableDismiss}"
-      >
-        {{ 'apps.vpn-socks-server-settings.secure-mode-check' | translate }}
-        <mat-icon [inline]="true" class="help-icon" [matTooltip]="'apps.vpn-socks-server-settings.secure-mode-info' | translate">help</mat-icon>
-      </mat-checkbox>
-    </div>
+    }
   </form>
 
   <app-button
@@ -63,7 +67,7 @@
     [disabled]="!form.valid"
     color="primary"
     class="float-right"
-  >
+    >
     {{ 'apps.vpn-socks-server-settings.save' | translate }}
   </app-button>
 </app-dialog>

@@ -21,9 +21,10 @@ import { TrafficData } from 'src/app/services/single-node-data.service';
  * Shows the basic info of a node.
  */
 @Component({
-  selector: 'app-node-info-content',
-  templateUrl: './node-info-content.component.html',
-  styleUrls: ['./node-info-content.component.scss']
+    selector: 'app-node-info-content',
+    templateUrl: './node-info-content.component.html',
+    styleUrls: ['./node-info-content.component.scss'],
+    standalone: false
 })
 export class NodeInfoContentComponent implements OnDestroy {
   @Input() set nodeInfo(val: Node) {

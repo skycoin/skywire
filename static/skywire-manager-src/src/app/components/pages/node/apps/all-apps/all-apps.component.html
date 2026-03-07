@@ -1,6 +1,7 @@
-<app-node-app-list
-  *ngIf="apps"
-  [apps]="apps"
-  [showShortList]="false"
-  [nodePK]="nodePK">
-</app-node-app-list>
+@if (apps) {
+  <app-node-app-list
+    [apps]="apps"
+    [showShortList]="false"
+    [nodePK]="nodePK">
+  </app-node-app-list>
+}

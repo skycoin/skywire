@@ -30,9 +30,10 @@ import { AppComponent } from 'src/app/app.component';
  * Page for showing the node list.
  */
 @Component({
-  selector: 'app-node-list',
-  templateUrl: './node-list.component.html',
-  styleUrls: ['./node-list.component.scss'],
+    selector: 'app-node-list',
+    templateUrl: './node-list.component.html',
+    styleUrls: ['./node-list.component.scss'],
+    standalone: false
 })
 export class NodeListComponent extends PageBaseComponent implements OnInit, OnDestroy {
   // Keys for persisting the server data, to be able to restore the state after navigation.

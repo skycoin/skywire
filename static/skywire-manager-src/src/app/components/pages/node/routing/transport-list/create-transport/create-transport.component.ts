@@ -20,9 +20,10 @@ import { PersistentTransport } from 'src/app/app.datatypes';
  * confirmation msg by itself.
  */
 @Component({
-  selector: 'app-create-transport',
-  templateUrl: './create-transport.component.html',
-  styleUrls: ['./create-transport.component.scss']
+    selector: 'app-create-transport',
+    templateUrl: './create-transport.component.html',
+    styleUrls: ['./create-transport.component.scss'],
+    standalone: false
 })
 export class CreateTransportComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;

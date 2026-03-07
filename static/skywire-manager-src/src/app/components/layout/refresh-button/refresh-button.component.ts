@@ -7,9 +7,10 @@ import TimeUtils, { ElapsedTime } from '../../../utils/timeUtils';
  * it been since the data was updated for the last time.
  */
 @Component({
-  selector: 'app-refresh-button',
-  templateUrl: './refresh-button.component.html',
-  styleUrls: ['./refresh-button.component.scss']
+    selector: 'app-refresh-button',
+    templateUrl: './refresh-button.component.html',
+    styleUrls: ['./refresh-button.component.scss'],
+    standalone: false
 })
 export class RefreshButtonComponent {
   @Input() set secondsSinceLastUpdate(val: number) {

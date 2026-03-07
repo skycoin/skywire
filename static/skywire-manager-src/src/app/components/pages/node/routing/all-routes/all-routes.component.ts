@@ -9,9 +9,10 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
  * Page for showing the complete list of the routes of a node.
  */
 @Component({
-  selector: 'app-all-routes',
-  templateUrl: './all-routes.component.html',
-  styleUrls: ['./all-routes.component.scss']
+    selector: 'app-all-routes',
+    templateUrl: './all-routes.component.html',
+    styleUrls: ['./all-routes.component.scss'],
+    standalone: false
 })
 export class AllRoutesComponent extends PageBaseComponent implements OnInit, OnDestroy {
   routes: Route[];

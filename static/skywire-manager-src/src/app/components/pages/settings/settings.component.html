@@ -12,10 +12,14 @@
   <div class="content col-12 mt-4.5">
     <app-refresh-rate class="d-block mb-4"></app-refresh-rate>
 
-    <app-password *ngIf="authChecked && authActive"></app-password>
-    <div class="white-theme checking-container" *ngIf="!authChecked && !waitBeforeShowingLoading">
-      <mat-spinner [diameter]="11"></mat-spinner> {{ 'settings.checking-auth' | translate }}
-    </div>
+    @if (authChecked && authActive) {
+      <app-password></app-password>
+    }
+    @if (!authChecked && !waitBeforeShowingLoading) {
+      <div class="white-theme checking-container">
+        <mat-spinner [diameter]="11"></mat-spinner> {{ 'settings.checking-auth' | translate }}
+      </div>
+    }
 
     <app-label-list
       [showShortList]="true">

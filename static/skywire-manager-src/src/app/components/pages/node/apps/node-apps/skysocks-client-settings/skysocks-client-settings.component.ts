@@ -57,9 +57,10 @@ export interface HistoryEntry {
  * Modal window used for configuring the Vpn-Client and Skysocks-Client apps.
  */
 @Component({
-  selector: 'app-skysocks-client-settings',
-  templateUrl: './skysocks-client-settings.component.html',
-  styleUrls: ['./skysocks-client-settings.component.scss']
+    selector: 'app-skysocks-client-settings',
+    templateUrl: './skysocks-client-settings.component.html',
+    styleUrls: ['./skysocks-client-settings.component.scss'],
+    standalone: false
 })
 export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   // Keys for saving the history in persistent storage.

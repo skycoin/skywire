@@ -9,9 +9,10 @@ import { SelectLanguageComponent } from '../select-language/select-language.comp
  * Button for opening the language selection modal window. It normally is in the tab bar.
  */
 @Component({
-  selector: 'app-lang-button',
-  templateUrl: './lang-button.component.html',
-  styleUrls: ['./lang-button.component.scss']
+    selector: 'app-lang-button',
+    templateUrl: './lang-button.component.html',
+    styleUrls: ['./lang-button.component.scss'],
+    standalone: false
 })
 export class LangButtonComponent implements OnInit, OnDestroy {
   language: LanguageData;

@@ -18,9 +18,10 @@ import { DataFilterer } from 'src/app/utils/lists/data-filterer';
  * elements and a link for showing the rest; or the full list, with pagination controls.
  */
 @Component({
-  selector: 'app-label-list',
-  templateUrl: './label-list.component.html',
-  styleUrls: ['./label-list.component.scss']
+    selector: 'app-label-list',
+    templateUrl: './label-list.component.html',
+    styleUrls: ['./label-list.component.scss'],
+    standalone: false
 })
 export class LabelListComponent implements OnDestroy {
   // Small text for identifying the list, needed for the helper objects.

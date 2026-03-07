@@ -1,6 +1,6 @@
-import { Inject } from '@angular/core';
+import { Inject, DOCUMENT } from '@angular/core';
 import { Injectable } from '@angular/core';
-import { DOCUMENT } from '@angular/common';
+
 
 /**
  * Allows to copy text to the clipboard.

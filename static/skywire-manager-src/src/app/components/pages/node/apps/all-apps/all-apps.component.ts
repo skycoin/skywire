@@ -9,9 +9,10 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
  * Page for showing the complete list of the apps of a node.
  */
 @Component({
-  selector: 'app-all-apps',
-  templateUrl: './all-apps.component.html',
-  styleUrls: ['./all-apps.component.scss']
+    selector: 'app-all-apps',
+    templateUrl: './all-apps.component.html',
+    styleUrls: ['./all-apps.component.scss'],
+    standalone: false
 })
 export class AllAppsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   apps: Application[];
