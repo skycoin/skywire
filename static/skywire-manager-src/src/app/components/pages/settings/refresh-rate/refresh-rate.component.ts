@@ -9,9 +9,10 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
  * Allows to change the frequency of the automatic data refresing.
  */
 @Component({
-  selector: 'app-refresh-rate',
-  templateUrl: './refresh-rate.component.html',
-  styleUrls: ['./refresh-rate.component.scss']
+    selector: 'app-refresh-rate',
+    templateUrl: './refresh-rate.component.html',
+    styleUrls: ['./refresh-rate.component.scss'],
+    standalone: false
 })
 export class RefreshRateComponent implements OnInit, OnDestroy {
   form: UntypedFormGroup;

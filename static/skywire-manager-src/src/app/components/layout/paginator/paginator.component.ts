@@ -8,9 +8,10 @@ import { SelectableOption, SelectOptionComponent } from '../select-option/select
  * Generic paginator for the long lists of the app.
  */
 @Component({
-  selector: 'app-paginator',
-  templateUrl: './paginator.component.html',
-  styleUrls: ['./paginator.component.scss']
+    selector: 'app-paginator',
+    templateUrl: './paginator.component.html',
+    styleUrls: ['./paginator.component.scss'],
+    standalone: false
 })
 export class PaginatorComponent {
   @Input() currentPage: number;

@@ -141,9 +141,10 @@ interface VpnServerForList {
  * Page for showing the vpn server lists.
  */
 @Component({
-  selector: 'app-vpn-server-list',
-  templateUrl: './vpn-server-list.component.html',
-  styleUrls: ['./vpn-server-list.component.scss'],
+    selector: 'app-vpn-server-list',
+    templateUrl: './vpn-server-list.component.html',
+    styleUrls: ['./vpn-server-list.component.scss'],
+    standalone: false
 })
 export class VpnServerListComponent extends PageBaseComponent implements OnDestroy {
   // Keys for persisting the server data, to be able to restore the state after navigation.

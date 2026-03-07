@@ -17,9 +17,10 @@ import GeneralUtils from 'src/app/utils/generalUtils';
  * Modal window used for configuring the Skychat app.
  */
 @Component({
-  selector: 'app-skychat-settings',
-  templateUrl: './skychat-settings.component.html',
-  styleUrls: ['./skychat-settings.component.scss']
+    selector: 'app-skychat-settings',
+    templateUrl: './skychat-settings.component.html',
+    styleUrls: ['./skychat-settings.component.scss'],
+    standalone: false
 })
 export class SkychatSettingsComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;

@@ -28,9 +28,10 @@ import { NodeService } from 'src/app/services/node.service';
  * elements and a link for showing the rest: or the full list, with pagination controls.
  */
 @Component({
-  selector: 'app-transport-list',
-  templateUrl: './transport-list.component.html',
-  styleUrls: ['./transport-list.component.scss']
+    selector: 'app-transport-list',
+    templateUrl: './transport-list.component.html',
+    styleUrls: ['./transport-list.component.scss'],
+    standalone: false
 })
 export class TransportListComponent implements OnDestroy {
   // Small text for identifying the list, needed for the helper objects.

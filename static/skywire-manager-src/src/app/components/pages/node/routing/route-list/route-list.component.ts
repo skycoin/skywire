@@ -26,9 +26,10 @@ import { LabeledElementTypes, StorageService } from 'src/app/services/storage.se
  * elements and a link for showing the rest: or the full list, with pagination controls.
  */
 @Component({
-  selector: 'app-route-list',
-  templateUrl: './route-list.component.html',
-  styleUrls: ['./route-list.component.scss']
+    selector: 'app-route-list',
+    templateUrl: './route-list.component.html',
+    styleUrls: ['./route-list.component.scss'],
+    standalone: false
 })
 export class RouteListComponent implements OnDestroy {
   // Small text for identifying the list, needed for the helper objects.

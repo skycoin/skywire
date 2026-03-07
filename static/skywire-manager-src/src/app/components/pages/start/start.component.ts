@@ -11,9 +11,10 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
  * all other cases.
  */
 @Component({
-  selector: 'app-start',
-  templateUrl: './start.component.html',
-  styleUrls: ['./start.component.scss']
+    selector: 'app-start',
+    templateUrl: './start.component.html',
+    styleUrls: ['./start.component.scss'],
+    standalone: false
 })
 export class StartComponent extends PageBaseComponent implements OnInit, OnDestroy {
   private verificationSubscription: Subscription;

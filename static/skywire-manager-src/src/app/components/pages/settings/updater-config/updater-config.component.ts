@@ -11,9 +11,10 @@ import GeneralUtils from 'src/app/utils/generalUtils';
  * Allows to set a custom configuration for the calls to the updater API endpoint.
  */
 @Component({
-  selector: 'app-updater-config',
-  templateUrl: './updater-config.component.html',
-  styleUrls: ['./updater-config.component.scss']
+    selector: 'app-updater-config',
+    templateUrl: './updater-config.component.html',
+    styleUrls: ['./updater-config.component.scss'],
+    standalone: false
 })
 export class UpdaterConfigComponent implements OnInit, OnDestroy {
   form: UntypedFormGroup;

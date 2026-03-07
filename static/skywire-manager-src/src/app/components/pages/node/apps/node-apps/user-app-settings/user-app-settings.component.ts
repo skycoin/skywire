@@ -17,9 +17,10 @@ import { Application } from 'src/app/app.datatypes';
  * Modal window used for configuring user apps. It allows to add settings as name-value pairs
  */
 @Component({
-  selector: 'app-user-app-settings',
-  templateUrl: './user-app-settings.component.html',
-  styleUrls: ['./user-app-settings.component.scss']
+    selector: 'app-user-app-settings',
+    templateUrl: './user-app-settings.component.html',
+    styleUrls: ['./user-app-settings.component.scss'],
+    standalone: false
 })
 export class UserAppSettingsComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;

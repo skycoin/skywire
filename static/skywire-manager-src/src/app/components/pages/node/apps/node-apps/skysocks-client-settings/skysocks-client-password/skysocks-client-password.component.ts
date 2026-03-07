@@ -11,9 +11,10 @@ import { AppConfig } from 'src/app/app.config';
  * added to the begining, to help avoiding problems while checking empty strings.
  */
 @Component({
-  selector: 'app-skysocks-client-password',
-  templateUrl: './skysocks-client-password.component.html',
-  styleUrls: ['./skysocks-client-password.component.scss']
+    selector: 'app-skysocks-client-password',
+    templateUrl: './skysocks-client-password.component.html',
+    styleUrls: ['./skysocks-client-password.component.scss'],
+    standalone: false
 })
 export class SkysocksClientPasswordComponent implements OnInit {
   @ViewChild('firstInput', { static: false }) firstInput: ElementRef;

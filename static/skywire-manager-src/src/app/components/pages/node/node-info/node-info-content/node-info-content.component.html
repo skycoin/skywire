@@ -1,130 +1,146 @@
-<div *ngIf="node" class="font-smaller d-flex flex-column mt-4.5">
-  <!-- Basic info section. -->
-  <div class="d-flex flex-column">
-    <span class="section-title">{{ (node.isHypervisor ? 'node.details.node-info.title-local' : 'node.details.node-info.title') | translate }}</span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.label' | translate }} </span>
-      <span class="highlight-internal-icon" (click)="showEditLabelDialog()">
-        <span class="text-with-small-right-margin">{{ node.label }}</span>
-        <mat-icon class="edit-icon" [inline]="true">edit</mat-icon>
+@if (node) {
+  <div class="font-smaller d-flex flex-column mt-4.5">
+    <!-- Basic info section. -->
+    <div class="d-flex flex-column">
+      <span class="section-title">{{ (node.isHypervisor ? 'node.details.node-info.title-local' : 'node.details.node-info.title') | translate }}</span>
+      <span class="info-line">
+        <span class="title">{{ 'node.details.node-info.label' | translate }} </span>
+        <span class="highlight-internal-icon" (click)="showEditLabelDialog()">
+          <span class="text-with-small-right-margin">{{ node.label }}</span>
+          <mat-icon class="edit-icon" [inline]="true">edit</mat-icon>
+        </span>
       </span>
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.public-key' | translate }} </span>
-      <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.symmetic-nat' | translate }} </span>
-      {{ (node.isSymmeticNat ? 'common.yes' : 'common.no') | translate }}
-    </span>
-    <span class="info-line" *ngIf="!node.isSymmeticNat">
-      <span class="title">{{ 'node.details.node-info.public-ip' | translate }} </span>
-      <app-copy-to-clipboard-text text="{{ node.publicIp }}"></app-copy-to-clipboard-text>
-    </span>
-    <span class="info-line" *ngIf="node.ip">
-      <span class="title">{{ 'node.details.node-info.ip' | translate }} </span>
-      <app-copy-to-clipboard-text text="{{ node.ip }}"></app-copy-to-clipboard-text>
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.dmsg-servers' | translate }} </span>
-      <ng-container *ngIf="node.dmsgServers && node.dmsgServers.length > 0">
-        {{ node.dmsgServers.length }} {{ 'node.details.node-info.connected' | translate }}
-      </ng-container>
-      <ng-container *ngIf="!node.dmsgServers || node.dmsgServers.length === 0">
-        {{ 'node.details.node-info.no-dmsg-server' | translate }}
-      </ng-container>
-    </span>
-    <div class="dmsg-servers-list" *ngIf="node.dmsgServers && node.dmsgServers.length > 0">
-      <div *ngFor="let server of node.dmsgServers" class="dmsg-server-item">
-        <app-copy-to-clipboard-text text="{{ server.pk }}"></app-copy-to-clipboard-text>
-        <span class="dmsg-latency"
-              *ngIf="server.latency > 0"
+      <span class="info-line">
+        <span class="title">{{ 'node.details.node-info.public-key' | translate }} </span>
+        <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
+      </span>
+      <span class="info-line">
+        <span class="title">{{ 'node.details.node-info.symmetic-nat' | translate }} </span>
+        {{ (node.isSymmeticNat ? 'common.yes' : 'common.no') | translate }}
+      </span>
+      @if (!node.isSymmeticNat) {
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.public-ip' | translate }} </span>
+          <app-copy-to-clipboard-text text="{{ node.publicIp }}"></app-copy-to-clipboard-text>
+        </span>
+      }
+      @if (node.ip) {
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.ip' | translate }} </span>
+          <app-copy-to-clipboard-text text="{{ node.ip }}"></app-copy-to-clipboard-text>
+        </span>
+      }
+      <span class="info-line">
+        <span class="title">{{ 'node.details.node-info.dmsg-servers' | translate }} </span>
+        @if (node.dmsgServers && node.dmsgServers.length > 0) {
+          {{ node.dmsgServers.length }} {{ 'node.details.node-info.connected' | translate }}
+        }
+        @if (!node.dmsgServers || node.dmsgServers.length === 0) {
+          {{ 'node.details.node-info.no-dmsg-server' | translate }}
+        }
+      </span>
+      @if (node.dmsgServers && node.dmsgServers.length > 0) {
+        <div class="dmsg-servers-list">
+          @for (server of node.dmsgServers; track server) {
+            <div class="dmsg-server-item">
+              <app-copy-to-clipboard-text text="{{ server.pk }}"></app-copy-to-clipboard-text>
+              @if (server.latency > 0) {
+                <span class="dmsg-latency"
               [ngClass]="{
                 'latency-high': server.latency > 300000000,
                 'latency-very-high': server.latency > 800000000
               }">
-          {{ formatLatency(server.latency) }}
+                  {{ formatLatency(server.latency) }}
+                </span>
+              }
+            </div>
+          }
+        </div>
+      }
+      <span class="info-line">
+        <span class="title">{{ 'node.details.node-info.ping' | translate }} </span>
+        {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
+      </span>
+      <span class="info-line">
+        <span class="title">{{ 'node.details.node-info.node-version' | translate }} </span>
+        {{ node.version ? node.version : ('common.unknown' | translate) }}
+      </span>
+      <span class="info-line">
+        <span class="title">{{ 'node.details.node-info.config-version' | translate }} </span>
+        {{ node.configVersion ? node.configVersion : ('common.unknown' | translate) }}
+      </span>
+      <span class="info-line">
+        <span class="title">{{ 'node.details.node-info.os' | translate }} </span>
+        {{ node.os ? node.os : ('common.unknown' | translate) }}
+      </span>
+      <span class="info-line">
+        <span class="title">{{ 'node.details.node-info.arch' | translate }} </span>
+        {{ node.arch ? node.arch : ('common.unknown' | translate) }}
+      </span>
+      @if (node.skybianBuildVersion) {
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.skybian-version' | translate }} </span>
+          {{ node.skybianBuildVersion }}
         </span>
+      }
+      <span class="info-line">
+        <span class="title">{{ 'node.details.node-info.time.title' | translate }} </span>
+        {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
+        @if (timeOnline.totalMinutes > 60) {
+          <mat-icon
+            [inline]="true"
+            [matTooltip]="'node.details.node-info.time.minutes' | translate:{time: timeOnline.totalMinutes}"
+            >
+            info
+          </mat-icon>
+        }
+      </span>
+    </div>
+    <div class="separator"></div>
+    <!-- Rewards info section. -->
+    <div class="d-flex flex-column">
+      <span class="section-title">{{ 'node.details.rewards-info.title' | translate }}</span>
+      <span class="info-line">
+        <span class="title">{{ 'node.details.rewards-info.rewards-address' | translate }} </span>
+        @if (node.rewardsAddress) {
+          <app-copy-to-clipboard-text class="text-with-right-margin" text="{{ node.rewardsAddress }}"></app-copy-to-clipboard-text>
+          <a [href]="'https://explorer.skycoin.com/app/address/' + node.rewardsAddress" target="_blank" rel="noreferrer nofollow noopener">
+            <mat-icon [inline]="true" class="link-icon transparent-button" [matTooltip]="'node.details.rewards-info.open-in-explorer' | translate">
+              open_in_browser
+            </mat-icon>
+          </a>
+        }
+        @if (!node.rewardsAddress) {
+          {{ 'node.details.rewards-info.not-registered' | translate }}
+          <mat-icon [inline]="true" [matTooltip]="'node.details.rewards-info.not-registered-info' | translate">info</mat-icon>
+        }
+      </span>
+      <div class="config-button-container">
+        <app-button color="primary" (action)="changeRewardsAddressConfig()" [forDarkBackground]="true">
+          @if (node.rewardsAddress) {
+            {{ 'node.details.rewards-info.change-address-button' | translate }}
+          }
+          @if (!node.rewardsAddress) {
+            {{ 'node.details.rewards-info.set-address-button' | translate }}
+          }
+        </app-button>
       </div>
     </div>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.ping' | translate }} </span>
-      {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.node-version' | translate }} </span>
-      {{ node.version ? node.version : ('common.unknown' | translate) }}
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.config-version' | translate }} </span>
-      {{ node.configVersion ? node.configVersion : ('common.unknown' | translate) }}
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.os' | translate }} </span>
-      {{ node.os ? node.os : ('common.unknown' | translate) }}
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.arch' | translate }} </span>
-      {{ node.arch ? node.arch : ('common.unknown' | translate) }}
-    </span>
-    <span class="info-line" *ngIf="node.skybianBuildVersion">
-      <span class="title">{{ 'node.details.node-info.skybian-version' | translate }} </span>
-      {{ node.skybianBuildVersion }}
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.time.title' | translate }} </span>
-      {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
-
-      <mat-icon
-        *ngIf="timeOnline.totalMinutes > 60"
-        [inline]="true"
-        [matTooltip]="'node.details.node-info.time.minutes' | translate:{time: timeOnline.totalMinutes}"
-        >
-        info
-      </mat-icon>
-    </span>
-  </div>
-  <div class="separator"></div>
-  <!-- Rewards info section. -->
-  <div class="d-flex flex-column">
-    <span class="section-title">{{ 'node.details.rewards-info.title' | translate }}</span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.rewards-info.rewards-address' | translate }} </span>
-      <ng-container *ngIf="node.rewardsAddress">
-        <app-copy-to-clipboard-text class="text-with-right-margin" text="{{ node.rewardsAddress }}"></app-copy-to-clipboard-text> 
-        <a [href]="'https://explorer.skycoin.com/app/address/' + node.rewardsAddress" target="_blank" rel="noreferrer nofollow noopener">
-          <mat-icon [inline]="true" class="link-icon transparent-button" [matTooltip]="'node.details.rewards-info.open-in-explorer' | translate">
-            open_in_browser
-          </mat-icon>
-        </a>
-      </ng-container>
-      <ng-container *ngIf="!node.rewardsAddress">
-        {{ 'node.details.rewards-info.not-registered' | translate }}
-        <mat-icon [inline]="true" [matTooltip]="'node.details.rewards-info.not-registered-info' | translate">info</mat-icon>
-      </ng-container>
-    </span>
-    <div class="config-button-container">
-      <app-button color="primary" (action)="changeRewardsAddressConfig()" [forDarkBackground]="true">
-        <ng-container *ngIf="node.rewardsAddress">
-          {{ 'node.details.rewards-info.change-address-button' | translate }}
-        </ng-container>
-        <ng-container *ngIf="!node.rewardsAddress">
-          {{ 'node.details.rewards-info.set-address-button' | translate }}
-        </ng-container>
-      </app-button>
-    </div>
-  </div>
-  <div class="separator"></div>
-  <!-- Transports info section. -->
-  <div class="d-flex flex-column">
-    <span class="section-title">{{ 'node.details.transports-info.title' | translate }}</span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.transports-info.total' | translate }} </span>
-      <span class="transport-stats">
-        <span class="transport-count">{{ getTransportStats().total }}</span>
-        <ng-container *ngIf="getTransportStats().byType.length > 0">
-          (<span *ngFor="let stat of getTransportStats().byType; let last = last"><span class="transport-type">{{ stat.type }}</span>: <span class="transport-count">{{ stat.count }}</span><span *ngIf="!last">, </span></span>)
-        </ng-container>
+    <div class="separator"></div>
+    <!-- Transports info section. -->
+    <div class="d-flex flex-column">
+      <span class="section-title">{{ 'node.details.transports-info.title' | translate }}</span>
+      <span class="info-line">
+        <span class="title">{{ 'node.details.transports-info.total' | translate }} </span>
+        <span class="transport-stats">
+          <span class="transport-count">{{ getTransportStats().total }}</span>
+          @if (getTransportStats().byType.length > 0) {
+            (@for (stat of getTransportStats().byType; track stat; let last = $last) {
+            <span><span class="transport-type">{{ stat.type }}</span>: <span class="transport-count">{{ stat.count }}</span>@if (!last) {
+            <span>, </span>
+          }</span>
+          })
+        }
       </span>
     </span>
     <span class="info-line">
@@ -169,3 +185,4 @@
     <app-charts [trafficData]="trafficData" class="d-flex flex-column justify-content-end mt-3"></app-charts>
   </div>
 </div>
+}

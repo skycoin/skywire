@@ -6,9 +6,10 @@ import { Component, Input } from '@angular/core';
  * in the middle of its container, but the container must allow it.
  */
 @Component({
-  selector: 'app-loading-indicator',
-  templateUrl: './loading-indicator.component.html',
-  styleUrls: ['./loading-indicator.component.scss']
+    selector: 'app-loading-indicator',
+    templateUrl: './loading-indicator.component.html',
+    styleUrls: ['./loading-indicator.component.scss'],
+    standalone: false
 })
 export class LoadingIndicatorComponent {
   @Input() showWhite = true;
