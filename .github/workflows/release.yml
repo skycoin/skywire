@@ -122,11 +122,12 @@ jobs:
       - name: Create archive
         run: |
           ARCHIVE_NAME="skywire-${{ github.ref_name }}-linux-${{ matrix.arch }}"
-          mkdir -p "dist/${ARCHIVE_NAME}"
-          cp bin/skywire "dist/${ARCHIVE_NAME}/"
+          mkdir -p dist
+          cp bin/skywire dist/
           cd dist
-          tar -czvf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+          tar -czvf "${ARCHIVE_NAME}.tar.gz" skywire
           sha256sum "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+          rm skywire
 
       - name: Upload to release
         env:
@@ -140,43 +141,38 @@ jobs:
 
   darwin-amd64:
     needs: create-release
-    runs-on: macos-latest
+    runs-on: macos-15-intel  # Intel runner
     steps:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Install dependencies
+        run: |
+          brew install --quiet hidapi libusb
+
       - name: Build skywire
         env:
-          CGO_ENABLED: "0"  # No CGO for cross-compile (no hardware wallet support)
-          GOOS: darwin
-          GOARCH: amd64
+          CGO_ENABLED: "1"
         run: |
-          # Cross-compile for amd64 from ARM64 runner
+          # Native build on Intel runner
           go install -trimpath -ldflags "-s -w" \
             github.com/skycoin/skywire@${{ github.ref_name }}
 
           # Copy to workspace for archiving
           mkdir -p bin
-          GOPATH_BIN="$(go env GOPATH)/bin"
-          if [ -f "${GOPATH_BIN}/darwin_amd64/skywire" ]; then
-            cp "${GOPATH_BIN}/darwin_amd64/skywire" bin/
-          elif [ -f "${GOPATH_BIN}/skywire" ]; then
-            cp "${GOPATH_BIN}/skywire" bin/
-          else
-            echo "Binary not found"
-            find "${GOPATH_BIN}" -name "skywire*" -type f
-            exit 1
-          fi
+          cp "$(go env GOPATH)/bin/skywire" bin/
+          ./bin/skywire --version
 
       - name: Create archive
         run: |
           ARCHIVE_NAME="skywire-${{ github.ref_name }}-darwin-amd64"
-          mkdir -p "dist/${ARCHIVE_NAME}"
-          cp bin/skywire "dist/${ARCHIVE_NAME}/"
+          mkdir -p dist
+          cp bin/skywire dist/
           cd dist
-          tar -czvf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+          tar -czvf "${ARCHIVE_NAME}.tar.gz" skywire
           shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+          rm skywire
 
       - name: Upload to release
         env:
@@ -216,11 +212,12 @@ jobs:
       - name: Create archive
         run: |
           ARCHIVE_NAME="skywire-${{ github.ref_name }}-darwin-arm64"
-          mkdir -p "dist/${ARCHIVE_NAME}"
-          cp bin/skywire "dist/${ARCHIVE_NAME}/"
+          mkdir -p dist
+          cp bin/skywire dist/
           cd dist
-          tar -czvf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+          tar -czvf "${ARCHIVE_NAME}.tar.gz" skywire
           shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+          rm skywire
 
       - name: Upload to release
         env:
@@ -279,10 +276,11 @@ jobs:
       - name: Create archive
         run: |
           $ARCHIVE_NAME = "skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}"
-          New-Item -ItemType Directory -Force -Path "dist\$ARCHIVE_NAME"
-          Copy-Item "bin\skywire.exe" "dist\$ARCHIVE_NAME\"
-          Compress-Archive -Path "dist\$ARCHIVE_NAME" -DestinationPath "dist\$ARCHIVE_NAME.zip"
+          New-Item -ItemType Directory -Force -Path "dist"
+          Copy-Item "bin\skywire.exe" "dist\"
+          Compress-Archive -Path "dist\skywire.exe" -DestinationPath "dist\$ARCHIVE_NAME.zip"
           Get-FileHash "dist\$ARCHIVE_NAME.zip" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $ARCHIVE_NAME.zip" } > "dist\$ARCHIVE_NAME.zip.sha256"
+          Remove-Item "dist\skywire.exe"
 
       - name: Upload to release
         env:
