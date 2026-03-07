@@ -5,9 +5,10 @@ import { Chart } from 'chart.js';
  * Line chart used for showing how much data has been uploaded/downloaded.
  */
 @Component({
-  selector: 'app-line-chart',
-  templateUrl: './line-chart.component.html',
-  styleUrls: ['./line-chart.component.scss']
+    selector: 'app-line-chart',
+    templateUrl: './line-chart.component.html',
+    styleUrls: ['./line-chart.component.scss'],
+    standalone: false
 })
 export class LineChartComponent implements AfterViewInit, DoCheck, OnDestroy {
   // Margin at the top of the chart. The max value will be this many pixels from the top.

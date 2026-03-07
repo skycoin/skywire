@@ -5,9 +5,10 @@ import { MatDialog, MatDialogRef } from '@angular/material/dialog';
  * Base component for all the modal windows. Its main function is to show the title bar.
  */
 @Component({
-  selector: 'app-dialog',
-  templateUrl: './dialog.component.html',
-  styleUrls: ['./dialog.component.scss']
+    selector: 'app-dialog',
+    templateUrl: './dialog.component.html',
+    styleUrls: ['./dialog.component.scss'],
+    standalone: false
 })
 export class DialogComponent {
   @Input() headline: string;

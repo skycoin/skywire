@@ -31,7 +31,8 @@ class AutoScalePipeParams {
  * Allows to convert a bytes value to KB, MB, GB, etc. It considers 1024, and not 1000, a K.
  */
 @Pipe({
-  name: 'autoScale'
+    name: 'autoScale',
+    standalone: false
 })
 export class AutoScalePipe implements PipeTransform {
   private static readonly accumulatedMeasurements = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];

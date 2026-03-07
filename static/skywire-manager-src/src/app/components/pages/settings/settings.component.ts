@@ -14,9 +14,10 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
  * Page with the general settings of the app.
  */
 @Component({
-  selector: 'app-settings',
-  templateUrl: './settings.component.html',
-  styleUrls: ['./settings.component.scss']
+    selector: 'app-settings',
+    templateUrl: './settings.component.html',
+    styleUrls: ['./settings.component.scss'],
+    standalone: false
 })
 export class SettingsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   // Keys for persisting the server data, to be able to restore the state after navigation.

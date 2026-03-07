@@ -79,9 +79,10 @@ interface VpnData {
  * to use only a maximum of 3 tabs with short texts, to avoid some problems.
  */
 @Component({
-  selector: 'app-top-bar',
-  templateUrl: './top-bar.component.html',
-  styleUrls: ['./top-bar.component.scss']
+    selector: 'app-top-bar',
+    templateUrl: './top-bar.component.html',
+    styleUrls: ['./top-bar.component.scss'],
+    standalone: false
 })
 export class TopBarComponent implements OnInit, OnDestroy {
   /**

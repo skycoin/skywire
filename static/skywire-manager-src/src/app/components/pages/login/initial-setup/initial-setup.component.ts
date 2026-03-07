@@ -7,9 +7,10 @@ import { AppConfig } from 'src/app/app.config';
  * Modal window for setting the node password for the first time.
  */
 @Component({
-  selector: 'app-initial-setup',
-  templateUrl: './initial-setup.component.html',
-  styleUrls: ['./initial-setup.component.scss']
+    selector: 'app-initial-setup',
+    templateUrl: './initial-setup.component.html',
+    styleUrls: ['./initial-setup.component.scss'],
+    standalone: false
 })
 export class InitialSetupComponent {
 

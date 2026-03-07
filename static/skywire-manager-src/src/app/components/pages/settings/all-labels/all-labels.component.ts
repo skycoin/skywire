@@ -7,9 +7,10 @@ import { TabButtonData } from '../../../layout/top-bar/top-bar.component';
  * Page for showing the complete list of the labels.
  */
 @Component({
-  selector: 'app-all-labels',
-  templateUrl: './all-labels.component.html',
-  styleUrls: ['./all-labels.component.scss']
+    selector: 'app-all-labels',
+    templateUrl: './all-labels.component.html',
+    styleUrls: ['./all-labels.component.scss'],
+    standalone: false
 })
 export class AllLabelsComponent {
   tabsData: TabButtonData[] = [];

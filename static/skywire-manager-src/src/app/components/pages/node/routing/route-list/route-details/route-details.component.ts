@@ -9,9 +9,10 @@ import { StorageService } from 'src/app/services/storage.service';
  * Modal window for showing the details of a route.
  */
 @Component({
-  selector: 'app-route-details',
-  templateUrl: './route-details.component.html',
-  styleUrls: ['./route-details.component.scss']
+    selector: 'app-route-details',
+    templateUrl: './route-details.component.html',
+    styleUrls: ['./route-details.component.scss'],
+    standalone: false
 })
 export class RouteDetailsComponent {
   routeRule: Route;

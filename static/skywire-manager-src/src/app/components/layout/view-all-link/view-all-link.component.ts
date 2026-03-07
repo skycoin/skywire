@@ -5,9 +5,10 @@ import { Component, Input } from '@angular/core';
  * data. It does nothing by itself.
  */
 @Component({
-  selector: 'app-view-all-link',
-  templateUrl: './view-all-link.component.html',
-  styleUrls: ['./view-all-link.component.scss']
+    selector: 'app-view-all-link',
+    templateUrl: './view-all-link.component.html',
+    styleUrls: ['./view-all-link.component.scss'],
+    standalone: false
 })
 export class ViewAllLinkComponent {
   /**
