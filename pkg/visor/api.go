@@ -55,6 +55,7 @@ type API interface {
 	Summary() (*Summary, error)
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
+	RuntimeStats() (*RuntimeStatsInfo, error)
 	Reload() error
 	Shutdown() error
 	RuntimeLogs() (string, error)
@@ -448,6 +449,21 @@ type HealthInfo struct {
 	ServicesHealth string `json:"services_health"`
 }
 
+// RuntimeStatsInfo carries Go runtime statistics for the visor process.
+type RuntimeStatsInfo struct {
+	NumGoroutine int    `json:"num_goroutine"`
+	NumCPU       int    `json:"num_cpu"`
+	GOMAXPROCS   int    `json:"gomaxprocs"`
+	GoVersion    string `json:"go_version"`
+	// Memory stats in bytes
+	MemAlloc      uint64 `json:"mem_alloc"`
+	MemTotalAlloc uint64 `json:"mem_total_alloc"`
+	MemSys        uint64 `json:"mem_sys"`
+	MemHeapAlloc  uint64 `json:"mem_heap_alloc"`
+	MemHeapSys    uint64 `json:"mem_heap_sys"`
+	NumGC         uint32 `json:"num_gc"`
+}
+
 // internalHealthInfo contains information of the status of the visor itself.
 // It's thread-safe, and could be used in multiple goroutines
 type internalHealthInfo int32
@@ -496,6 +512,25 @@ func (v *Visor) Health() (*HealthInfo, error) {
 // Uptime implements API.
 func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
+}
+
+// RuntimeStats implements API.
+func (v *Visor) RuntimeStats() (*RuntimeStatsInfo, error) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	return &RuntimeStatsInfo{
+		NumGoroutine:  runtime.NumGoroutine(),
+		NumCPU:        runtime.NumCPU(),
+		GOMAXPROCS:    runtime.GOMAXPROCS(0),
+		GoVersion:     runtime.Version(),
+		MemAlloc:      m.Alloc,
+		MemTotalAlloc: m.TotalAlloc,
+		MemSys:        m.Sys,
+		MemHeapAlloc:  m.HeapAlloc,
+		MemHeapSys:    m.HeapSys,
+		NumGC:         m.NumGC,
+	}, nil
 }
 
 // SetRewardAddress implements API.

@@ -171,8 +171,8 @@ export class LabeledElementTextComponent implements OnDestroy {
     }
 
     options.push({
-      icon: 'settings',
-      label: 'labeled-element.go-to-settings',
+      icon: 'list',
+      label: 'labeled-element.view-all-labels',
     });
 
     // Show the options modal window.
@@ -196,8 +196,8 @@ export class LabeledElementTextComponent implements OnDestroy {
             this.labelEdited.emit();
           });
         } else {
-          // Navigate to the settings page.
-          this.router.navigate(['/settings']);
+          // Navigate to the labels list page.
+          this.router.navigate(['/settings', 'labels']);
         }
       } else {
         // Params for the edit label modal window.

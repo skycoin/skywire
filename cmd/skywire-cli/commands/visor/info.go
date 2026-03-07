@@ -26,6 +26,8 @@ func init() {
 	RootCmd.AddCommand(buildInfoCmd)
 	RootCmd.AddCommand(portsCmd)
 	RootCmd.AddCommand(dmsgServersCmd)
+	RootCmd.AddCommand(runtimeLogsCmd)
+	RootCmd.AddCommand(runtimeStatsCmd)
 }
 
 var pkCmd = &cobra.Command{
@@ -240,5 +242,53 @@ var dmsgServersCmd = &cobra.Command{
 		msg += "Note: Latency is measured via self-ping through each server.\n"
 		msg += "Servers with '-' latency have not been measured yet (wait ~5s after startup).\n"
 		internal.PrintOutput(cmd.Flags(), servers, msg)
+	},
+}
+
+var runtimeLogsCmd = &cobra.Command{
+	Use:   "log",
+	Short: "Visor runtime logs",
+	Long:  "\n  Returns runtime logs from the visor",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		logs, err := rpcClient.RuntimeLogs()
+		if err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
+		internal.PrintOutput(cmd.Flags(), logs, logs)
+	},
+}
+
+var runtimeStatsCmd = &cobra.Command{
+	Use:   "go",
+	Short: "Go runtime statistics",
+	Long:  "\n  Returns Go runtime statistics including goroutine count and memory usage",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		stats, err := rpcClient.RuntimeStats()
+		if err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
+
+		msg := ".:: Go Runtime Stats ::.\n"
+		msg += fmt.Sprintf("Goroutines:  %d\n", stats.NumGoroutine)
+		msg += fmt.Sprintf("CPUs:        %d\n", stats.NumCPU)
+		msg += fmt.Sprintf("GOMAXPROCS:  %d\n", stats.GOMAXPROCS)
+		msg += fmt.Sprintf("Go Version:  %s\n", stats.GoVersion)
+		msg += "\n.:: Memory Stats ::.\n"
+		msg += fmt.Sprintf("Alloc:       %.2f MB\n", float64(stats.MemAlloc)/1024/1024)
+		msg += fmt.Sprintf("TotalAlloc:  %.2f MB\n", float64(stats.MemTotalAlloc)/1024/1024)
+		msg += fmt.Sprintf("Sys:         %.2f MB\n", float64(stats.MemSys)/1024/1024)
+		msg += fmt.Sprintf("HeapAlloc:   %.2f MB\n", float64(stats.MemHeapAlloc)/1024/1024)
+		msg += fmt.Sprintf("HeapSys:     %.2f MB\n", float64(stats.MemHeapSys)/1024/1024)
+		msg += fmt.Sprintf("NumGC:       %d\n", stats.NumGC)
+
+		internal.PrintOutput(cmd.Flags(), stats, msg)
 	},
 }

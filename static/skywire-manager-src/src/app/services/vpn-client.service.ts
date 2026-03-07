@@ -7,6 +7,7 @@ import { TranslateService } from '@ngx-translate/core';
 
 import { ApiService, RequestOptions } from './api.service';
 import { AppsService } from './apps.service';
+import { countriesList } from '../utils/countries-list';
 import { VpnServer } from './vpn-client-discovery.service';
 import { ManualVpnServerData } from '../components/vpn/pages/vpn-server-list/add-vpn-server/add-vpn-server.component';
 import { VpnSavedDataService, LocalServerData } from './vpn-saved-data.service';
@@ -48,6 +49,18 @@ export class BackendState {
    * State and properties of the VPN client app.
    */
   vpnClientAppData: VpnClientAppData;
+  /**
+   * Public IP of the local visor, from the visor summary.
+   */
+  publicIp: string;
+  /**
+   * Country code of the local visor, from the visor summary.
+   */
+  countryCode: string;
+  /**
+   * Country name of the local visor, from the visor summary.
+   */
+  countryName: string;
 }
 
 /**
@@ -188,6 +201,13 @@ export class VpnClientService {
   private latencyHistory: number[];
   // Pk of the server for which the last data transmission history values were obtained.
   private connectionHistoryPk: string;
+
+  // Public IP of the local visor, obtained from the visor summary.
+  private visorPublicIp: string;
+  // Country code of the local visor, obtained from the visor summary.
+  private visorCountryCode: string;
+  // Country name of the local visor, obtained from the visor summary.
+  private visorCountryName: string;
 
   private dataSubscription: Subscription;
   private continuousUpdateSubscription: Subscription;
@@ -670,6 +690,23 @@ export class VpnClientService {
     return this.apiService.get(`visors/${this.nodeKey}/summary`, options).pipe(mergeMap(nodeInfo => {
       let appData: any;
 
+      // Extract IP and country data from the visor summary.
+      if (nodeInfo && nodeInfo.overview) {
+        if (nodeInfo.overview.public_ip && (nodeInfo.overview.public_ip as string).trim()) {
+          this.visorPublicIp = nodeInfo.overview.public_ip;
+        } else {
+          this.visorPublicIp = null;
+        }
+        if (nodeInfo.overview.country_code) {
+          this.visorCountryCode = nodeInfo.overview.country_code;
+          const countryName = countriesList[nodeInfo.overview.country_code.toUpperCase()];
+          this.visorCountryName = countryName ? countryName : nodeInfo.overview.country_code;
+        } else {
+          this.visorCountryCode = null;
+          this.visorCountryName = null;
+        }
+      }
+
       // Get the data of the VPN client app.
       if (nodeInfo && nodeInfo.overview && nodeInfo.overview.apps && (nodeInfo.overview.apps as any[]).length > 0) {
         (nodeInfo.overview.apps as any[]).forEach(value => {
@@ -807,6 +844,9 @@ export class VpnClientService {
   private sendUpdate() {
     this.currentEventData.serviceState = this.lastServiceState;
     this.currentEventData.busy = this.working;
+    this.currentEventData.publicIp = this.visorPublicIp;
+    this.currentEventData.countryCode = this.visorCountryCode;
+    this.currentEventData.countryName = this.visorCountryName;
     this.stateSubject.next(this.currentEventData);
   }
 }

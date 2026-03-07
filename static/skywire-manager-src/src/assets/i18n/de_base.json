@@ -22,6 +22,7 @@
   "labeled-element": {
     "edit-label": "Edit label",
     "remove-label": "Remove label",
+    "view-all-labels": "View all labels",
     "copy": "Copy",
     "remove-label-confirmation": "Do you really want to remove the label?",
     "unnamed-element": "Unnamed",
