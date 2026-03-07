@@ -536,6 +536,13 @@ func (rc *rpcClient) RuntimeLogs() (string, error) {
 	return logs, err
 }
 
+// RuntimeStats calls RuntimeStats.
+func (rc *rpcClient) RuntimeStats() (*RuntimeStatsInfo, error) {
+	var stats RuntimeStatsInfo
+	err := rc.Call("RuntimeStats", &struct{}{}, &stats)
+	return &stats, err
+}
+
 // SetMinHops sets the min_hops from visor routing config
 func (rc *rpcClient) SetMinHops(hops uint16) error {
 	err := rc.Call("SetMinHops", &hops, &struct{}{})
@@ -1636,6 +1643,16 @@ func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 // RuntimeLogs implements API.
 func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 	return "", nil
+}
+
+// RuntimeStats implements API.
+func (mc *mockRPCClient) RuntimeStats() (*RuntimeStatsInfo, error) {
+	return &RuntimeStatsInfo{
+		NumGoroutine: 10,
+		NumCPU:       4,
+		GOMAXPROCS:   4,
+		GoVersion:    "go1.21.0",
+	}, nil
 }
 
 // SetMinHops implements API
