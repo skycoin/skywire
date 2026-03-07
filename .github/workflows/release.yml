@@ -11,7 +11,21 @@ env:
   LIBUSB_VERSION: 'v1.0.27'
 
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --repo ${{ github.repository }} \
+            --title "${{ github.ref_name }}" \
+            --draft \
+            --generate-notes || true
+
   linux:
+    needs: create-release
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -103,13 +117,16 @@ jobs:
           GOOS: linux
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
-          GOBIN: ${{ github.workspace }}/bin
         run: |
-          mkdir -p "$GOBIN"
+          # Cross-compiled binaries go to $GOPATH/bin/$GOOS_$GOARCH/
           go install -tags cgo -trimpath -ldflags "-s -w -linkmode external -extldflags '-static' -buildid=" \
             github.com/skycoin/skywire@${{ github.ref_name }}
 
-          # Show version to verify it's clean
+          # Copy to workspace for archiving
+          mkdir -p bin
+          cp "$(go env GOPATH)/bin/linux_${{ matrix.goarch }}/skywire" bin/
+
+          # Show version to verify it's clean (only works for amd64 on amd64 runner)
           echo "Built binary version:"
           if [ "${{ matrix.arch }}" = "amd64" ]; then
             ./bin/skywire --version || true
@@ -135,6 +152,7 @@ jobs:
             --clobber
 
   darwin-amd64:
+    needs: create-release
     runs-on: macos-13  # Intel
     steps:
       - uses: actions/setup-go@v5
@@ -148,13 +166,14 @@ jobs:
       - name: Build skywire
         env:
           CGO_ENABLED: "1"
-          GOOS: darwin
-          GOARCH: amd64
-          GOBIN: ${{ github.workspace }}/bin
         run: |
-          mkdir -p "$GOBIN"
+          # Native build - install directly
           go install -tags cgo -trimpath -ldflags "-s -w" \
             github.com/skycoin/skywire@${{ github.ref_name }}
+
+          # Copy to workspace for archiving
+          mkdir -p bin
+          cp "$(go env GOPATH)/bin/skywire" bin/
           ./bin/skywire --version
 
       - name: Create archive
@@ -164,7 +183,7 @@ jobs:
           cp bin/skywire "dist/${ARCHIVE_NAME}/"
           cd dist
           tar -czvf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
-          sha256sum "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256" || shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+          shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
 
       - name: Upload to release
         env:
@@ -177,6 +196,7 @@ jobs:
             --clobber
 
   darwin-arm64:
+    needs: create-release
     runs-on: macos-latest  # ARM64
     steps:
       - uses: actions/setup-go@v5
@@ -190,13 +210,14 @@ jobs:
       - name: Build skywire
         env:
           CGO_ENABLED: "1"
-          GOOS: darwin
-          GOARCH: arm64
-          GOBIN: ${{ github.workspace }}/bin
         run: |
-          mkdir -p "$GOBIN"
+          # Native build - install directly
           go install -tags cgo -trimpath -ldflags "-s -w" \
             github.com/skycoin/skywire@${{ github.ref_name }}
+
+          # Copy to workspace for archiving
+          mkdir -p bin
+          cp "$(go env GOPATH)/bin/skywire" bin/
           ./bin/skywire --version
 
       - name: Create archive
@@ -219,6 +240,7 @@ jobs:
             --clobber
 
   windows:
+    needs: create-release
     runs-on: windows-latest
     strategy:
       matrix:
@@ -237,11 +259,19 @@ jobs:
           CGO_ENABLED: "0"  # No CGO on Windows for simpler builds
           GOOS: windows
           GOARCH: ${{ matrix.goarch }}
-          GOBIN: ${{ github.workspace }}\bin
         run: |
-          New-Item -ItemType Directory -Force -Path "$env:GOBIN"
+          # Cross-compiled binaries go to $GOPATH/bin/$GOOS_$GOARCH/
           go install -trimpath -ldflags "-s -w" github.com/skycoin/skywire@${{ github.ref_name }}
-          & "$env:GOBIN\skywire.exe" --version
+
+          # Copy to workspace for archiving
+          New-Item -ItemType Directory -Force -Path "bin"
+          $gopath = go env GOPATH
+          Copy-Item "$gopath\bin\windows_${{ matrix.goarch }}\skywire.exe" "bin\"
+
+          # Show version (works for amd64 on amd64 runner)
+          if ("${{ matrix.arch }}" -eq "amd64") {
+            & "bin\skywire.exe" --version
+          }
 
       - name: Create archive
         run: |
