@@ -8,9 +8,10 @@ import { SnackbarService } from '../../../services/snackbar.service';
  * truncated text, case in which a tooltip allows the user to see the complete text.
  */
 @Component({
-  selector: 'app-copy-to-clipboard-text',
-  templateUrl: './copy-to-clipboard-text.component.html',
-  styleUrls: ['./copy-to-clipboard-text.component.scss']
+    selector: 'app-copy-to-clipboard-text',
+    templateUrl: './copy-to-clipboard-text.component.html',
+    styleUrls: ['./copy-to-clipboard-text.component.scss'],
+    standalone: false
 })
 export class CopyToClipboardTextComponent {
   @Input() text: string;

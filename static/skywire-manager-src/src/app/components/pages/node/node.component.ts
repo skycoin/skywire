@@ -20,9 +20,10 @@ import { AppComponent } from 'src/app/app.component';
  * the subpages which shows the transport, apps and other details.
  */
 @Component({
-  selector: 'app-node',
-  templateUrl: './node.component.html',
-  styleUrls: ['./node.component.scss']
+    selector: 'app-node',
+    templateUrl: './node.component.html',
+    styleUrls: ['./node.component.scss'],
+    standalone: false
 })
 export class NodeComponent extends PageBaseComponent implements OnInit, OnDestroy {
   /**

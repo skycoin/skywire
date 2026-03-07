@@ -3,13 +3,15 @@
   (copyEvent)="onCopyToClipboardClicked()"
   [matTooltip]="(!short && !shortSimple ? 'copy.tooltip' : 'copy.tooltip-with-text') | translate:{ text: text }"
   [matTooltipClass]="{ 'tooltip-word-break': true }"
->
-  <ng-container *ngIf="!shortSimple">
+  >
+  @if (!shortSimple) {
     <app-truncated-text class="text-margin" [short]="short" [showTooltip]="false" [shortTextLength]="shortTextLength" [text]="text"></app-truncated-text>
     <mat-icon [inline]="true">filter_none</mat-icon>
-  </ng-container>
-  <div *ngIf="shortSimple" class="d-flex">
-    <div class="single-line text-margin">{{text}}</div>
-    <mat-icon [inline]="true">filter_none</mat-icon>
-  </div>
+  }
+  @if (shortSimple) {
+    <div class="d-flex">
+      <div class="single-line text-margin">{{text}}</div>
+      <mat-icon [inline]="true">filter_none</mat-icon>
+    </div>
+  }
 </div>

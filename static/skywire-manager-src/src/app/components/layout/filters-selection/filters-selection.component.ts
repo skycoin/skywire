@@ -28,9 +28,10 @@ export interface FiltersSelectiondParams {
  * the user.
  */
 @Component({
-  selector: 'app-filters-selection',
-  templateUrl: './filters-selection.component.html',
-  styleUrls: ['./filters-selection.component.scss']
+    selector: 'app-filters-selection',
+    templateUrl: './filters-selection.component.html',
+    styleUrls: ['./filters-selection.component.scss'],
+    standalone: false
 })
 export class FiltersSelectionComponent implements OnInit {
   form: UntypedFormGroup;

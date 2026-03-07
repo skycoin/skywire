@@ -1,11 +1,15 @@
 <div [class]="'main-container ' + config.color">
-  <div class="icon-container" *ngIf="config.icon"><mat-icon [inline]="true">{{ config.icon }}</mat-icon></div>
+  @if (config.icon) {
+    <div class="icon-container"><mat-icon [inline]="true">{{ config.icon }}</mat-icon></div>
+  }
   <div class="text-container">
     {{ config.text | translate:config.textTranslationParams }}
-    <div class="second-line" *ngIf="config.smallText">
-      {{ 'common.error' | translate }}
-      {{ config.smallText | translate:config.smallTextTranslationParams }}
-    </div>
+    @if (config.smallText) {
+      <div class="second-line">
+        {{ 'common.error' | translate }}
+        {{ config.smallText | translate:config.smallTextTranslationParams }}
+      </div>
+    }
   </div>
   <div class="close-button-separator"></div>
   <mat-icon class="close-button" (click)="close()">close</mat-icon>

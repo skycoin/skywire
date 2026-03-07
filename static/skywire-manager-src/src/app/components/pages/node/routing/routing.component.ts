@@ -9,9 +9,10 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
  * Page that shows the routing summary. It is a subpage of the Node page.
  */
 @Component({
-  selector: 'app-routing',
-  templateUrl: './routing.component.html',
-  styleUrls: ['./routing.component.scss']
+    selector: 'app-routing',
+    templateUrl: './routing.component.html',
+    styleUrls: ['./routing.component.scss'],
+    standalone: false
 })
 export class RoutingComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
