@@ -2,15 +2,15 @@
   "test": {
     "dmsg_servers": [
       {
-        "static": "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7",
+        "static": "02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0",
         "server": {
-          "address": "70.121.13.123:9082"
+          "address": "45.79.213.251:30080"
         }
       },
       {
-        "static": "024716428e6315d954356e9ad72bea32bb2b41aab5a54a9b5cb4313964016e64d8",
+        "static": "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7",
         "server": {
-          "address": "45.79.213.251:30080"
+          "address": "70.121.13.123:9082"
         }
       }
     ],
@@ -24,9 +24,21 @@
   "prod": {
     "dmsg_servers": [
       {
+        "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "server": {
+          "address": "139.162.160.227:30086"
+        }
+      },
+      {
         "static": "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13",
         "server": {
-          "address": "172.105.179.5:30087"
+          "address": "139.162.160.227:30087"
+        }
+      },
+      {
+        "static": "02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0",
+        "server": {
+          "address": "139.162.160.227:30081"
         }
       },
       {
@@ -36,27 +48,15 @@
         }
       },
       {
-        "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
         "server": {
-          "address": "172.104.166.8:30086"
+          "address": "139.162.173.101:30082"
         }
       },
       {
         "static": "03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4",
         "server": {
           "address": "139.162.173.101:30083"
-        }
-      },
-      {
-        "static": "02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0",
-        "server": {
-          "address": "74.207.231.164:30081"
-        }
-      },
-      {
-        "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
-        "server": {
-          "address": "139.162.173.101:30082"
         }
       }
     ],
