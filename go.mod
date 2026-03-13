@@ -42,7 +42,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/skycoin/dmsg v1.3.29-0.20260306014431-8cb737739a60
-	github.com/skycoin/skycoin v0.28.4-0.20260308015437-6285a5110ed0
+	github.com/skycoin/skycoin v0.28.4-0.20260313194623-78086c1cedf8
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -71,8 +71,11 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/cloudfoundry-attic/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21
 	github.com/coder/websocket v1.8.14
+	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/itchyny/gojq v0.12.18
+	github.com/pgavlin/femto v0.0.0-20201224065653-0c9d20f9cac4
+	github.com/rivo/tview v0.42.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/xxxserxxx/gotop/v4 v4.2.1-0.20250927202203-54213c890e66
 	github.com/xxxserxxx/lingo/v2 v2.0.1
@@ -82,6 +85,7 @@ require (
 )
 
 require (
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.2 // indirect
 	github.com/charmbracelet/x/ansi v0.11.6 // indirect
@@ -93,7 +97,10 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
+	github.com/sergi/go-diff v1.2.0 // indirect
+	github.com/zyedidia/micro v1.4.1 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 require (
