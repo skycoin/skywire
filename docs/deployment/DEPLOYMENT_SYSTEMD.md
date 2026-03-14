@@ -1,4 +1,8 @@
-# Skywire Deployment Documentation
+# Skywire Systemd Deployment
+
+This document describes deploying skywire services directly on the host using systemd.
+
+For Docker Compose deployment, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md).
 
 (original documentation at: https://github.com/skycoin/skywire-deployment)
 
