@@ -19,7 +19,6 @@ export class ClipboardService {
    */
   public copy(value: string): boolean {
     let textarea = null;
-    let result = false;
 
     try {
       textarea = this.dom.createElement( 'textarea' );
@@ -36,13 +35,13 @@ export class ClipboardService {
 
       this.dom.execCommand( 'copy' );
 
-      result = true;
+      return true;
+    } catch {
+      return false;
     } finally {
       if ( textarea && textarea.parentNode ) {
         textarea.parentNode.removeChild( textarea );
       }
     }
-
-    return result;
   }
 }

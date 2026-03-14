@@ -1,9 +1,16 @@
 // Bootstrap required
 @import "bootstrap/scss/functions";
-@import "bootstrap/scss/mixins";
 
 @import "assets/scss/variables";
 @import "assets/scss/utilities/utilities";
+
+// Skywire bootstrap overrides (before Bootstrap variables)
+@import "assets/scss/bootstrap_overrides";
+
+// Bootstrap required
+@import "bootstrap/scss/variables";
+@import "bootstrap/scss/maps";
+@import "bootstrap/scss/mixins";
 
 @import "assets/scss/fonts";
 @import "assets/scss/text";
@@ -16,26 +23,15 @@
 @import "assets/scss/vpn_client";
 
 /***************************
-* Bootsrap 4
+* Bootstrap 5
 ****************************/
-
-// Skywire boostrap overrides
-@import "assets/scss/bootstrap_overrides";
-
-// Bootstrap required
-@import "bootstrap/scss/variables";
 
 // Bootstrap optional
 @import "bootstrap/scss/reboot";
 @import "bootstrap/scss/list-group";
 @import "bootstrap/scss/type";
 @import "bootstrap/scss/bootstrap-grid";
-@import "bootstrap/scss/utilities/sizing";
-@import "bootstrap/scss/utilities/align";
-@import "bootstrap/scss/utilities/text";
-@import "bootstrap/scss/utilities/borders";
-@import "bootstrap/scss/utilities/float";
-@import "bootstrap/scss/utilities/spacing";
+@import "bootstrap/scss/utilities";
 @import "bootstrap/scss/navbar";
 
 
@@ -48,7 +44,7 @@ html, body {
   min-height: 100%;
   font-family: $skywire-font-family;
   margin:0;
-  color: theme-color(white) !important;
+  color: map-get($theme-colors, white) !important;
   font-size: $font-size-base;
   backface-visibility: hidden
 }

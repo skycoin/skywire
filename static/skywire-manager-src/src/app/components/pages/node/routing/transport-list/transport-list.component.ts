@@ -378,7 +378,7 @@ export class TransportListComponent implements OnDestroy {
 
       this.persistentTransportSubscription = this.transportService.getPersistentTransports(this.nodePK).subscribe((list: any[]) => {
         const dataToUse = list ? list : [];
-        let nothingToDo = false;
+        let nothingToDo: boolean;
 
         const transportsMap: Map<string, Transport> = new Map<string, Transport>();
         transports.forEach(t => transportsMap.set(this.getPersistentTransportID(t.remotePk, t.type), t));
