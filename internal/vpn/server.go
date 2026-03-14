@@ -412,15 +412,16 @@ func (s *Server) validateInterface(ifcs []string, selectedIfc string) bool {
 
 // getRemotePK extracts the remote public key from the connection
 func (s *Server) getRemotePK(conn net.Conn) (cipher.PubKey, error) {
-	wrappedConn, err := appnet.WrapConn(conn)
+	// Try direct type assertion first (app framework connections already use appnet.Addr)
+	if rAddr, ok := conn.RemoteAddr().(appnet.Addr); ok {
+		return rAddr.PubKey, nil
+	}
+
+	// Fall back to ConvertAddr for other connection types (dmsg, routing)
+	addr, err := appnet.ConvertAddr(conn.RemoteAddr())
 	if err != nil {
-		return cipher.PubKey{}, fmt.Errorf("failed to wrap connection: %w", err)
+		return cipher.PubKey{}, fmt.Errorf("failed to get remote address: %w", err)
 	}
 
-	rAddr, ok := wrappedConn.RemoteAddr().(appnet.Addr)
-	if !ok {
-		return cipher.PubKey{}, fmt.Errorf("failed to get remote address")
-	}
-
-	return rAddr.PubKey, nil
+	return addr.PubKey, nil
 }
