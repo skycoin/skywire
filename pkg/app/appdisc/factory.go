@@ -112,8 +112,11 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 
 	log := f.Log.WithField("appName", conf.AppName)
 
-	// Do not update in service discovery if passcode-protected.
+	// Do not update in service discovery if passcode-protected or whitelist-protected.
 	if conf.ContainsFlag("passcode") && conf.ArgVal("passcode") != "" {
+		return &emptyUpdater{}, false
+	}
+	if conf.ContainsFlag("whitelist") && conf.ArgVal("whitelist") != "" {
 		return &emptyUpdater{}, false
 	}
 

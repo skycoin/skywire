@@ -641,7 +641,7 @@ github.com/gobwas/glob/util/strings
 # github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1
 ## explicit; go 1.13
 github.com/gocarina/gocsv
-# github.com/goccy/go-json v0.10.5
+# github.com/goccy/go-json v0.10.6
 ## explicit; go 1.19
 github.com/goccy/go-json
 github.com/goccy/go-json/internal/decoder
@@ -1049,7 +1049,7 @@ github.com/skycoin/hardware-wallet/firmware
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.4-0.20260313194623-78086c1cedf8
+# github.com/skycoin/skycoin v0.28.4-0.20260314003836-184fef102ebb
 ## explicit; go 1.25.6
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/hardware-wallet/commands
@@ -1322,11 +1322,11 @@ go.opentelemetry.io/otel/trace/noop
 # go.yaml.in/yaml/v3 v3.0.4
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
-# golang.org/x/arch v0.24.0
-## explicit; go 1.24.0
+# golang.org/x/arch v0.25.0
+## explicit; go 1.25.0
 golang.org/x/arch/x86/x86asm
-# golang.org/x/crypto v0.48.0
-## explicit; go 1.24.0
+# golang.org/x/crypto v0.49.0
+## explicit; go 1.25.0
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/blowfish
@@ -1363,7 +1363,7 @@ golang.org/x/image/webp
 # golang.org/x/mod v0.33.0
 ## explicit; go 1.24.0
 golang.org/x/mod/semver
-# golang.org/x/net v0.51.0
+# golang.org/x/net v0.52.0
 ## explicit; go 1.25.0
 golang.org/x/net/bpf
 golang.org/x/net/context
@@ -1386,22 +1386,22 @@ golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
 golang.org/x/net/trace
-# golang.org/x/sync v0.19.0
-## explicit; go 1.24.0
+# golang.org/x/sync v0.20.0
+## explicit; go 1.25.0
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.41.0
-## explicit; go 1.24.0
+# golang.org/x/sys v0.42.0
+## explicit; go 1.25.0
 golang.org/x/sys/cpu
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/term v0.40.0
-## explicit; go 1.24.0
+# golang.org/x/term v0.41.0
+## explicit; go 1.25.0
 golang.org/x/term
-# golang.org/x/text v0.34.0
-## explicit; go 1.24.0
+# golang.org/x/text v0.35.0
+## explicit; go 1.25.0
 golang.org/x/text/cases
 golang.org/x/text/encoding
 golang.org/x/text/encoding/charmap
@@ -1591,10 +1591,11 @@ gorm.io/gorm/utils
 # howett.net/plist v1.0.2-0.20250314012144-ee69052608d9
 ## explicit; go 1.12
 howett.net/plist
-# mvdan.cc/sh/v3 v3.12.0
-## explicit; go 1.23.0
+# mvdan.cc/sh/v3 v3.13.0
+## explicit; go 1.25.0
 mvdan.cc/sh/v3/expand
 mvdan.cc/sh/v3/fileutil
+mvdan.cc/sh/v3/internal
 mvdan.cc/sh/v3/pattern
 mvdan.cc/sh/v3/shell
 mvdan.cc/sh/v3/syntax
