@@ -678,9 +678,9 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	err = <-errCh
 	if err != nil {
 		tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.client.Type(), err)
-		if closeErr := mTp.Close(); closeErr != nil {
-			tm.Logger.WithError(err).Warn("Error closing transport")
-		}
+		// Use closeWithoutDeregister since the transport was never registered with TPD
+		// (registration only happens during settlement handshake after successful dial)
+		mTp.closeWithoutDeregister()
 		return nil, err
 	}
 	go mTp.Serve(tm.readCh)

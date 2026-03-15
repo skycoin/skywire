@@ -43,9 +43,10 @@ type API struct {
 
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
-	BuildInfo *buildinfo.Info `json:"build_info,omitempty"`
-	StartedAt time.Time       `json:"started_at"`
-	DmsgAddr  string          `json:"dmsg_address,omitempty"`
+	ServiceName string          `json:"service_name,omitempty"`
+	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
+	StartedAt   time.Time       `json:"started_at"`
+	DmsgAddr    string          `json:"dmsg_address,omitempty"`
 }
 
 // Error is the object returned to the client when there's an error.
@@ -123,9 +124,10 @@ func (a *API) logger(r *http.Request) logrus.FieldLogger {
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	a.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
-		BuildInfo: info,
-		StartedAt: a.startedAt,
-		DmsgAddr:  a.dmsgAddr,
+		ServiceName: "config-bootstrapper",
+		BuildInfo:   info,
+		StartedAt:   a.startedAt,
+		DmsgAddr:    a.dmsgAddr,
 	})
 }
 

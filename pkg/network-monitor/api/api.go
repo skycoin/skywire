@@ -68,8 +68,9 @@ const (
 
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
-	BuildInfo *buildinfo.Info `json:"build_info,omitempty"`
-	StartedAt time.Time       `json:"started_at,omitempty"`
+	ServiceName string          `json:"service_name,omitempty"`
+	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
+	StartedAt   time.Time       `json:"started_at,omitempty"`
 }
 
 // Error is the object returned to the client when there's an error.
@@ -125,8 +126,9 @@ func (api *API) getStatus(w http.ResponseWriter, r *http.Request) {
 func (api *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	api.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
-		BuildInfo: info,
-		StartedAt: api.startedAt,
+		ServiceName: "network-monitor",
+		BuildInfo:   info,
+		StartedAt:   api.startedAt,
 	})
 }
 

@@ -210,7 +210,7 @@ func (d *Download) Start() error {
 	}
 	defer file.Close() //nolint:errcheck
 
-	if err := file.Truncate(int64(d.TotalSize())); err != nil {
+	if err := file.Truncate(int64(d.TotalSize())); err != nil { //nolint:gosec
 		return err
 	}
 
@@ -225,7 +225,7 @@ func (d *Download) Start() error {
 
 	// Clean up state file on success
 	if err == nil {
-		os.Remove(d.statePath()) //nolint:errcheck
+		os.Remove(d.statePath()) //nolint:errcheck,gosec
 	}
 
 	return err
@@ -234,10 +234,10 @@ func (d *Download) Start() error {
 // RunProgress calls fn periodically until StopProgress is set.
 func (d *Download) RunProgress(fn ProgressFunc) {
 	if d.Interval == 0 {
-		d.Interval = uint64(400 / runtime.NumCPU())
+		d.Interval = uint64(400 / runtime.NumCPU()) //nolint:gosec
 	}
 
-	sleepd := time.Duration(d.Interval) * time.Millisecond
+	sleepd := time.Duration(d.Interval) * time.Millisecond //nolint:gosec
 
 	for !d.StopProgress {
 		select {
@@ -337,13 +337,13 @@ func (d *Download) dl(dest io.WriterAt, errC chan error) {
 			defer wg.Done()
 
 			chunk := d.chunks[idx]
-			if err := d.downloadChunkWithRetry(chunk, &OffsetWriter{dest, int64(chunk.Start)}); err != nil {
+			if err := d.downloadChunkWithRetry(chunk, &OffsetWriter{dest, int64(chunk.Start)}); err != nil { //nolint:gosec
 				errC <- err
 				return
 			}
 
 			chunk.Done = true
-			d.saveState() //nolint:errcheck
+			d.saveState() //nolint:errcheck,gosec
 
 			<-max
 		}(i)
@@ -362,7 +362,7 @@ func (d *Download) downloadChunkWithRetry(c *Chunk, dest io.Writer) error {
 			if d.ctx.Err() != nil {
 				return err
 			}
-			backoff := time.Duration(1<<uint(attempt)) * time.Second
+			backoff := time.Duration(1<<uint(attempt)) * time.Second //nolint:gosec
 			select {
 			case <-time.After(backoff):
 			case <-d.ctx.Done():
@@ -395,7 +395,7 @@ func (d *Download) DownloadChunk(c *Chunk, dest io.Writer) error {
 		return fmt.Errorf("expected 206 Partial Content, got %d for range %s", res.StatusCode, contentRange)
 	}
 
-	expectedLen := int64(c.End - c.Start + 1)
+	expectedLen := int64(c.End - c.Start + 1) //nolint:gosec
 	if res.ContentLength > 0 && res.ContentLength != expectedLen {
 		return fmt.Errorf("range %s: expected Content-Length %d, got %d", contentRange, expectedLen, res.ContentLength)
 	}
@@ -447,7 +447,7 @@ func NewDownload(ctx context.Context, URL, dest string) *Download {
 }
 
 func getDefaultConcurrency() uint {
-	c := uint(runtime.NumCPU() * 3)
+	c := uint(runtime.NumCPU() * 3) //nolint:gosec
 	if c > 20 {
 		c = 20
 	}
