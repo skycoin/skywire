@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -16,7 +15,7 @@ import (
 // UserAgent is the default user agent for got HTTP requests.
 var UserAgent = "Got/2.0"
 
-// ErrDownloadAborted is returned when a download is cancelled.
+// ErrDownloadAborted is returned when a download is canceled.
 var ErrDownloadAborted = errors.New("download aborted")
 
 // Header represents an HTTP header key-value pair.
@@ -184,10 +183,6 @@ func ParseHeaders(raw []string) ([]Header, error) {
 func NormalizeURL(rawURL string) (string, error) {
 	if !strings.Contains(rawURL, "://") {
 		rawURL = "https://" + rawURL
-	}
-	// Validate by parsing
-	if _, err := net.ResolveTCPAddr("tcp", ""); err != nil {
-		// just a dummy check, actual validation happens in http.NewRequest
 	}
 	return rawURL, nil
 }

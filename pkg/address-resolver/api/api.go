@@ -71,6 +71,7 @@ type API struct {
 
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
+	ServiceName string          `json:"service_name,omitempty"`
 	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
 	StartedAt   time.Time       `json:"started_at"`
 	DmsgAddr    string          `json:"dmsg_address,omitempty"`
@@ -336,6 +337,7 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	a.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
+		ServiceName: "address-resolver",
 		BuildInfo:   info,
 		StartedAt:   a.startedAt,
 		DmsgAddr:    a.dmsgAddr,

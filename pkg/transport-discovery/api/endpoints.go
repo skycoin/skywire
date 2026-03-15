@@ -387,6 +387,7 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 func (api *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	httputil.WriteJSON(w, r, http.StatusOK, HealthCheckResponse{
+		ServiceName: "transport-discovery",
 		BuildInfo:   info,
 		StartedAt:   api.startedAt,
 		DmsgAddr:    api.dmsgAddr,
