@@ -9,7 +9,9 @@ ARG CGO_ENABLED=0
 ENV CGO_ENABLED=${CGO_ENABLED} \
     GOOS=linux  \
     GO111MODULE=on \
-    GOBIN=/release
+    GOBIN=/release \
+    GONOSUMDB=github.com/skycoin/skywire \
+    GONOSUMCHECK=github.com/skycoin/skywire
 
 RUN apk add --no-cache git && \
     if [ "$image_tag" = "integration" ]; then \
