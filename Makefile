@@ -257,6 +257,11 @@ tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v
 
 format: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
+	@if grep -qE '^(replace|exclude)' go.mod; then \
+		echo "ERROR: go.mod contains replace or exclude directives which break go install @version and Docker builds"; \
+		grep -E '^(replace|exclude)' go.mod; \
+		exit 1; \
+	fi
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg ./cmd ./internal
 	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} {} \;
 
