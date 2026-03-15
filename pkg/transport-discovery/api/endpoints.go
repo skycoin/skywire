@@ -136,12 +136,17 @@ func (api *API) getAllTransports(w http.ResponseWriter, r *http.Request) {
 	if selfTransportsParam == "hide" {
 		selfTransports = false
 	}
-	entries, err := api.store.GetAllTransports(r.Context(), selfTransports)
-	if err != nil {
-		if err != store.ErrTransportNotFound {
-			api.log(r).WithError(err).Error("Error getting transports")
+	entries := api.getTransportsFromCache(selfTransports)
+	if entries == nil {
+		var err error
+		entries, err = api.store.GetAllTransports(r.Context(), selfTransports)
+		if err != nil {
+			api.writeError(w, r, err)
+			return
 		}
-		api.writeError(w, r, err)
+	}
+	if len(entries) == 0 {
+		api.writeError(w, r, store.ErrTransportNotFound)
 		return
 	}
 	httputil.WriteJSON(w, r, http.StatusOK, entries)
@@ -155,12 +160,17 @@ func (api *API) getAllTransportsStats(w http.ResponseWriter, r *http.Request) {
 		selfTransports = false
 	}
 
-	entries, err := api.store.GetAllTransports(r.Context(), selfTransports)
-	if err != nil {
-		if err != store.ErrTransportNotFound {
-			api.log(r).WithError(err).Error("Error getting transports for stats")
+	entries := api.getTransportsFromCache(selfTransports)
+	if entries == nil {
+		var err error
+		entries, err = api.store.GetAllTransports(r.Context(), selfTransports)
+		if err != nil {
+			api.writeError(w, r, err)
+			return
 		}
-		api.writeError(w, r, err)
+	}
+	if len(entries) == 0 {
+		api.writeError(w, r, store.ErrTransportNotFound)
 		return
 	}
 
@@ -192,12 +202,17 @@ func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Reque
 		selfTransports = false
 	}
 
-	entries, err := api.store.GetAllTransports(r.Context(), selfTransports)
-	if err != nil {
-		if err != store.ErrTransportNotFound {
-			api.log(r).WithError(err).Error("Error getting transports for per-key stats")
+	entries := api.getTransportsFromCache(selfTransports)
+	if entries == nil {
+		var err error
+		entries, err = api.store.GetAllTransports(r.Context(), selfTransports)
+		if err != nil {
+			api.writeError(w, r, err)
+			return
 		}
-		api.writeError(w, r, err)
+	}
+	if len(entries) == 0 {
+		api.writeError(w, r, store.ErrTransportNotFound)
 		return
 	}
 

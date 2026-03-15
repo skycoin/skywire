@@ -484,6 +484,13 @@ func (a *API) setUDPConn(pk cipher.PubKey, conn net.Conn) {
 	a.udpConns[pk] = conn
 }
 
+func (a *API) deleteUDPConn(pk cipher.PubKey) {
+	a.udpConnsMu.Lock()
+	defer a.udpConnsMu.Unlock()
+
+	delete(a.udpConns, pk)
+}
+
 func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) {
 	jsonObject, err := json.Marshal(object)
 	if err != nil {
@@ -536,6 +543,15 @@ func (a *API) sudphConnHandshake(conn net.Conn) {
 	a.bindSUDPH(wrapped, remoteAddr, remote.PK.String())
 }
 
+// sudphReadTimeout is the maximum time to wait for data from a SUDPH connection.
+// Clients send heartbeats every 10s and re-register every 90s, so 3 minutes
+// is generous enough to detect dead connections without false positives.
+const sudphReadTimeout = 3 * time.Minute
+
+// sudphInitialReadTimeout is the maximum time to wait for the initial
+// LocalAddresses payload after a successful handshake.
+const sudphInitialReadTimeout = 30 * time.Second
+
 func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 	a.log.Infof("Binding %v to %v (SUDPH)", strPK, remoteAddr)
 
@@ -558,15 +574,23 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 
 	buf := make([]byte, 4096)
 
+	if err := conn.SetReadDeadline(time.Now().Add(sudphInitialReadTimeout)); err != nil {
+		a.log.WithError(err).Warnf("Failed to set read deadline")
+		a.cleanupUDPConn(pk, conn)
+		return
+	}
+
 	n, err := conn.Read(buf)
 	if err != nil {
 		a.log.WithError(err).Warnf("Failed to read from connection")
+		a.cleanupUDPConn(pk, conn)
 		return
 	}
 
 	var localAddresses addrresolver.LocalAddresses
 	if err := json.Unmarshal(buf[:n], &localAddresses); err != nil {
 		a.log.WithError(err).Warnf("Failed to unmarshal data: %v", string(buf[:n]))
+		a.cleanupUDPConn(pk, conn)
 		return
 	}
 
@@ -577,13 +601,21 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 
 	if err := a.store.Bind(context.TODO(), types.SUDPH, pk, visorData); err != nil {
 		a.log.WithError(err).Errorf("Failed to bind (SUDPH) pk %q to addr %q", strPK, remoteAddr)
+		a.cleanupUDPConn(pk, conn)
 		return
 	}
 
 	a.log.Infof("Bound %v to %v (SUDPH)", pk, remoteAddr)
 
 	go func(pk cipher.PubKey, fromAddr string, conn net.Conn) {
+		defer a.cleanupUDPConn(pk, conn)
+
 		for {
+			if err := conn.SetReadDeadline(time.Now().Add(sudphReadTimeout)); err != nil {
+				a.log.Warnf("Failed to set read deadline for %v: %v", pk, err)
+				return
+			}
+
 			buf := make([]byte, 4096)
 
 			n, err := conn.Read(buf)
@@ -618,6 +650,14 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 			}
 		}
 	}(pk, remoteAddr, conn)
+}
+
+// cleanupUDPConn removes the connection from the map and closes it.
+func (a *API) cleanupUDPConn(pk cipher.PubKey, conn net.Conn) {
+	a.deleteUDPConn(pk)
+	if err := conn.Close(); err != nil {
+		a.log.WithError(err).Debugf("Failed to close SUDPH connection for %v", pk)
+	}
 }
 
 func sameIP(addr1, addr2 string) bool {

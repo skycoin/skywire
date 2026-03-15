@@ -89,11 +89,18 @@ if [[ "$image_tag" == "integration" ]]; then
   rm -rf ./tmp/*
 fi
 
-echo "Build Skywire Image (commit: $git_commit)"
+echo "Build Skywire Image (tag: $image_tag)"
+commit_arg=""
+if [[ "$image_tag" == "prod" ]] || [[ "$image_tag" == "test" ]] || [[ "$image_tag" == "latest" ]]; then
+  echo "Using remote install: github.com/skycoin/skywire@$git_commit"
+  commit_arg="--build-arg commit=$git_commit"
+else
+  echo "Using local source build"
+fi
 DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire/Dockerfile \
   --build-arg base_image="$base_image" \
   --build-arg image_tag="$image_tag" \
-  --build-arg commit="$git_commit" \
+  $commit_arg \
   $platform \
   -t "$registry"/skywire:"$image_tag" .
 

@@ -1,4 +1,1 @@
-# Only docker/common/ is needed from the build context.
-# The Go source is fetched directly via go install @commit.
-*
-!docker/
+.git

@@ -21,8 +21,7 @@ import (
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
 	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
-	cliedit "github.com/skycoin/skywire/cmd/skywire-cli/commands/edit"
-	clijq "github.com/skycoin/skywire/cmd/skywire-cli/commands/jq"
+	cliutil "github.com/skycoin/skywire/cmd/skywire-cli/commands/util"
 	services "github.com/skycoin/skywire/cmd/skywire-services/commands"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -52,8 +51,7 @@ func init() {
 		appsCmd,
 		treeCmd,
 		docCmd,
-		clijq.RootCmd,
-		cliedit.RootCmd,
+		cliutil.RootCmd,
 	)
 
 	visor.RootCmd.Long = calvin.AsciiFont("skywire-visor")

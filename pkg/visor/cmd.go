@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
 	"os/exec"
 	"path/filepath"

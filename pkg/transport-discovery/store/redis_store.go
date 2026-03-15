@@ -219,22 +219,59 @@ func (s *redisStore) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) 
 		return nil, ErrTransportNotFound
 	}
 
-	var entries []*transport.Entry
+	// Build transport keys and filter out unparseable UUIDs
+	type idMapping struct {
+		idStr string
+		id    uuid.UUID
+	}
+	var mappings []idMapping
+	var keys []string
 	for _, idStr := range ids {
 		id, err := uuid.Parse(idStr)
 		if err != nil {
 			continue
 		}
+		mappings = append(mappings, idMapping{idStr: idStr, id: id})
+		keys = append(keys, s.transportKey(id))
+	}
 
-		entry, err := s.GetTransportByID(ctx, id)
+	if len(keys) == 0 {
+		return nil, ErrTransportNotFound
+	}
+
+	// Fetch all transport values in one MGET call
+	vals, err := s.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var entries []*transport.Entry
+	var staleIDs []interface{}
+	for i, val := range vals {
+		raw, ok := val.(string)
+		if !ok || raw == "" {
+			// Transport expired or missing, mark for cleanup
+			staleIDs = append(staleIDs, mappings[i].idStr)
+			continue
+		}
+
+		var data TransportData
+		if err := json.Unmarshal([]byte(raw), &data); err != nil {
+			continue
+		}
+
+		entry, err := s.dataToEntry(data)
 		if err != nil {
-			// Transport expired, remove from edge set
-			if errors.Is(err, ErrTransportNotFound) {
-				s.client.SRem(ctx, edgeKey, idStr)
-			}
 			continue
 		}
 		entries = append(entries, entry)
+	}
+
+	// Clean up stale IDs from the edge set via pipeline
+	if len(staleIDs) > 0 {
+		pipe := s.client.Pipeline()
+		pipe.SRem(ctx, edgeKey, staleIDs...)
+		_, _ = pipe.Exec(ctx) //nolint:errcheck
 	}
 
 	if len(entries) == 0 {
@@ -289,66 +326,17 @@ func (s *redisStore) GetNumberOfTransports(ctx context.Context) (map[types.Type]
 }
 
 func (s *redisStore) GetAllTransports(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
-	// Collect all transport keys via SCAN
-	pattern := fmt.Sprintf("%s:tp:*", serviceName)
-	var keys []string
-	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
-	for iter.Next(ctx) {
-		keys = append(keys, iter.Val())
-	}
-	if err := iter.Err(); err != nil {
-		return nil, err
-	}
-	if len(keys) == 0 {
-		return nil, nil
-	}
-
-	// Fetch all values in batched MGET calls via pipeline
-	const mgetBatch = 10000
-	var entries []*transport.Entry
-
-	for i := 0; i < len(keys); i += mgetBatch {
-		end := i + mgetBatch
-		if end > len(keys) {
-			end = len(keys)
-		}
-		batch := keys[i:end]
-
-		vals, err := s.client.MGet(ctx, batch...).Result()
-		if err != nil {
-			return nil, err
-		}
-
-		for _, val := range vals {
-			raw, ok := val.(string)
-			if !ok || raw == "" {
-				continue
-			}
-
-			var data TransportData
-			if err := json.Unmarshal([]byte(raw), &data); err != nil {
-				continue
-			}
-
-			entry, err := s.dataToEntryCore(data)
-			if err != nil {
-				continue
-			}
-
-			if !selfTransports && entry.Edges[0] == entry.Edges[1] {
-				continue
-			}
-
-			entries = append(entries, entry)
-		}
-	}
-
-	return entries, nil
+	return s.scanAllTransports(ctx, selfTransports, false)
 }
 
 // getAllTransportsWithQoS returns all transports including QoS metrics.
 // Used internally by metrics functions that need bandwidth/latency data.
 func (s *redisStore) getAllTransportsWithQoS(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
+	return s.scanAllTransports(ctx, selfTransports, true)
+}
+
+// scanAllTransports is the shared implementation for GetAllTransports and getAllTransportsWithQoS.
+func (s *redisStore) scanAllTransports(ctx context.Context, selfTransports, withQoS bool) ([]*transport.Entry, error) {
 	pattern := fmt.Sprintf("%s:tp:*", serviceName)
 	var keys []string
 	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
@@ -370,6 +358,7 @@ func (s *redisStore) getAllTransportsWithQoS(ctx context.Context, selfTransports
 		if end > len(keys) {
 			end = len(keys)
 		}
+
 		vals, err := s.client.MGet(ctx, keys[i:end]...).Result()
 		if err != nil {
 			return nil, err
@@ -386,7 +375,12 @@ func (s *redisStore) getAllTransportsWithQoS(ctx context.Context, selfTransports
 				continue
 			}
 
-			entry, err := s.dataToEntry(data)
+			var entry *transport.Entry
+			if withQoS {
+				entry, err = s.dataToEntry(data)
+			} else {
+				entry, err = s.dataToEntryCore(data)
+			}
 			if err != nil {
 				continue
 			}
@@ -558,40 +552,72 @@ func (s *redisStore) GetTransportBandwidth(ctx context.Context, tpID uuid.UUID,
 func (s *redisStore) GetVisorBandwidth(ctx context.Context, pk cipher.PubKey,
 	period string, limit int) ([]BandwidthAggregation, error) {
 
-	// Get all transports for this visor
+	if period != "daily" {
+		return nil, fmt.Errorf("invalid period: %s (only 'daily' is supported)", period)
+	}
+
 	entries, err := s.GetTransportsByEdge(ctx, pk)
 	if err != nil {
 		return nil, err
 	}
 
-	// Aggregate bandwidth from all transports
-	aggregatedByPeriod := make(map[string]*BandwidthAggregation)
+	now := time.Now().UTC()
 
-	for _, entry := range entries {
-		tpBandwidth, err := s.GetTransportBandwidth(ctx, entry.ID, period, limit)
-		if err != nil {
+	// Pipeline all HGetAll calls: entries × days
+	type bwLookup struct {
+		dateStr string
+	}
+	var lookups []bwLookup
+	var cmds []*redis.StringStringMapCmd
+
+	pipe := s.client.Pipeline()
+	for d := 0; d < limit; d++ {
+		t := now.AddDate(0, 0, -d)
+		dateStr := t.Format("2006-01-02")
+		for _, entry := range entries {
+			key := s.bandwidthDailyKey(entry.ID.String(), t)
+			cmds = append(cmds, pipe.HGetAll(ctx, key))
+			lookups = append(lookups, bwLookup{dateStr: dateStr})
+		}
+	}
+	_, _ = pipe.Exec(ctx) //nolint:errcheck
+
+	// Aggregate by date
+	aggregatedByPeriod := make(map[string]*BandwidthAggregation)
+	for i, cmd := range cmds {
+		result, err := cmd.Result()
+		if err != nil || len(result) == 0 {
 			continue
 		}
+		var bw uint64
+		if val, ok := result["bandwidth"]; ok {
+			fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
+		}
+		if bw == 0 {
+			continue
+		}
+		var updatedAt int64
+		if val, ok := result["updated_at"]; ok {
+			fmt.Sscanf(val, "%d", &updatedAt) //nolint:errcheck,gosec
+		}
 
-		for _, bw := range tpBandwidth {
-			if existing, ok := aggregatedByPeriod[bw.PeriodKey]; ok {
-				existing.Bandwidth += bw.Bandwidth
-				if bw.UpdatedAt > existing.UpdatedAt {
-					existing.UpdatedAt = bw.UpdatedAt
-				}
-			} else {
-				aggregatedByPeriod[bw.PeriodKey] = &BandwidthAggregation{
-					TransportID: pk.Hex(), // Use visor PK as identifier
-					Period:      period,
-					PeriodKey:   bw.PeriodKey,
-					Bandwidth:   bw.Bandwidth,
-					UpdatedAt:   bw.UpdatedAt,
-				}
+		dateStr := lookups[i].dateStr
+		if existing, ok := aggregatedByPeriod[dateStr]; ok {
+			existing.Bandwidth += bw
+			if updatedAt > existing.UpdatedAt {
+				existing.UpdatedAt = updatedAt
+			}
+		} else {
+			aggregatedByPeriod[dateStr] = &BandwidthAggregation{
+				TransportID: pk.Hex(),
+				Period:      period,
+				PeriodKey:   dateStr,
+				Bandwidth:   bw,
+				UpdatedAt:   updatedAt,
 			}
 		}
 	}
 
-	// Convert map to slice
 	var results []BandwidthAggregation
 	for _, agg := range aggregatedByPeriod {
 		results = append(results, *agg)
@@ -858,29 +884,54 @@ func (s *redisStore) GetVisorAggregateMetrics(ctx context.Context, pks []cipher.
 		}
 
 		var totalSent, totalRecv uint64
-		var latencySum float64
-		var latencyCount int
 
-		// Get transports for this visor to calculate latency
-		entries, _ := s.GetTransportsByEdge(ctx, pk) //nolint:errcheck
+		// Calculate latency once (it's a point-in-time metric, not per-day)
+		var avgLatency float64
+		if query.Latency {
+			entries, _ := s.GetTransportsByEdge(ctx, pk) //nolint:errcheck
+			var latencySum float64
+			var latencyCount int
+			for _, entry := range entries {
+				if entry.Latency > 0 {
+					latencySum += entry.Latency
+					latencyCount++
+				}
+			}
+			if latencyCount > 0 {
+				avgLatency = latencySum / float64(latencyCount)
+			}
+		}
+
+		// Pipeline all daily bandwidth lookups for this visor
+		type bwCmd struct {
+			dateStr string
+			cmd     *redis.StringStringMapCmd
+		}
+		var bwCmds []bwCmd
+		if query.Bandwidth {
+			pipe := s.client.Pipeline()
+			for d := 0; d < days; d++ {
+				t := now.AddDate(0, 0, -d)
+				bwCmds = append(bwCmds, bwCmd{
+					dateStr: t.Format("2006-01-02"),
+					cmd:     pipe.HGetAll(ctx, s.visorBandwidthDailyKey(pkHex, t)),
+				})
+			}
+			_, _ = pipe.Exec(ctx) //nolint:errcheck
+		}
 
 		for d := 0; d < days; d++ {
-			t := now.AddDate(0, 0, -d)
-			dateStr := t.Format("2006-01-02")
+			dailyAgg := DailyVisorAggregate{}
 
-			dailyAgg := DailyVisorAggregate{Date: dateStr}
-
-			if query.Bandwidth {
-				// Get visor-level daily bandwidth
-				key := s.visorBandwidthDailyKey(pkHex, t)
-				bwResult, err := s.client.HGetAll(ctx, key).Result()
+			if d < len(bwCmds) {
+				dailyAgg.Date = bwCmds[d].dateStr
+				bwResult, err := bwCmds[d].cmd.Result()
 				if err == nil && len(bwResult) > 0 {
 					var bw uint64
 					if val, ok := bwResult["bandwidth"]; ok {
 						fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
 					}
 					if bw > 0 {
-						// Split bandwidth roughly 50/50 for sent/recv estimate
 						dailyAgg.Bandwidth = &VisorBandwidthAggregate{
 							Sent:  bw / 2,
 							Recv:  bw / 2,
@@ -890,19 +941,13 @@ func (s *redisStore) GetVisorAggregateMetrics(ctx context.Context, pks []cipher.
 						totalRecv += bw / 2
 					}
 				}
+			} else {
+				t := now.AddDate(0, 0, -d)
+				dailyAgg.Date = t.Format("2006-01-02")
 			}
 
-			if query.Latency && len(entries) > 0 {
-				// Average latency from all transports
-				for _, entry := range entries {
-					if entry.Latency > 0 {
-						latencySum += entry.Latency
-						latencyCount++
-					}
-				}
-				if latencyCount > 0 {
-					dailyAgg.Latency = latencySum / float64(latencyCount)
-				}
+			if query.Latency {
+				dailyAgg.Latency = avgLatency
 			}
 
 			if dailyAgg.Bandwidth != nil || dailyAgg.Latency > 0 {
@@ -917,8 +962,8 @@ func (s *redisStore) GetVisorAggregateMetrics(ctx context.Context, pks []cipher.
 				Total: totalSent + totalRecv,
 			}
 		}
-		if query.Latency && latencyCount > 0 {
-			visorResp.Cumulative.Latency = latencySum / float64(latencyCount)
+		if query.Latency && avgLatency > 0 {
+			visorResp.Cumulative.Latency = avgLatency
 		}
 
 		result[pkHex] = visorResp

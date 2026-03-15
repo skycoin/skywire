@@ -13,12 +13,24 @@ ENV CGO_ENABLED=${CGO_ENABLED} \
     GONOSUMDB=github.com/skycoin/skywire \
     GONOSUMCHECK=github.com/skycoin/skywire
 
+COPY . /src
+
 RUN apk add --no-cache git && \
-    if [ "$image_tag" = "integration" ]; then \
-        apk add --no-cache build-base && \
-        CGO_ENABLED=1 GOPROXY=direct go install -ldflags="-w -s" -race github.com/skycoin/skywire@${commit}; \
+    if [ -n "$commit" ]; then \
+        if [ "$image_tag" = "integration" ]; then \
+            apk add --no-cache build-base && \
+            CGO_ENABLED=1 GOPROXY=direct go install -ldflags="-w -s" -race github.com/skycoin/skywire@${commit}; \
+        else \
+            GOPROXY=direct go install -ldflags="-w -s" github.com/skycoin/skywire@${commit}; \
+        fi; \
     else \
-        GOPROXY=direct go install -ldflags="-w -s" github.com/skycoin/skywire@${commit}; \
+        cd /src && \
+        if [ "$image_tag" = "integration" ]; then \
+            apk add --no-cache build-base && \
+            CGO_ENABLED=1 go install -ldflags="-w -s" -race .; \
+        else \
+            go install -ldflags="-w -s" .; \
+        fi; \
     fi
 
 ## Resulting image
