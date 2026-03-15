@@ -466,7 +466,6 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
   private calculateGraphLimits(arrayToCheck: number[]) {
     const min = 0;
     let max = 0;
-    let mid = 0;
 
     arrayToCheck.forEach(val => {
       if (val > max) {
@@ -479,7 +478,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
       max += 1;
     }
 
-    mid = (new BigNumber(max)).minus(min).dividedBy(2).plus(min).decimalPlaces(1).toNumber();
+    const mid = (new BigNumber(max)).minus(min).dividedBy(2).plus(min).decimalPlaces(1).toNumber();
 
     return [min, mid, max];
   }

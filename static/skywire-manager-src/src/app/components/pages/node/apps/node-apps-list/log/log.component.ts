@@ -1,7 +1,6 @@
 import { Component, Inject, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogConfig, MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { Subscription, of } from 'rxjs';
-import { delay, mergeMap } from 'rxjs/operators';
+import { Subscription, delay, mergeMap, of } from 'rxjs';
 
 import { AppsService } from '../../../../../../services/apps.service';
 import { Application } from '../../../../../../app.datatypes';

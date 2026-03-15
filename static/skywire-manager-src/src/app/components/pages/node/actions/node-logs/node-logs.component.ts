@@ -1,7 +1,6 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { MatDialogConfig, MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { Subscription, of, timer } from 'rxjs';
-import { delay, mergeMap } from 'rxjs/operators';
+import { Subscription, delay, mergeMap, of, timer } from 'rxjs';
 
 import { AppConfig } from 'src/app/app.config';
 import { OperationError } from 'src/app/utils/operation-error';

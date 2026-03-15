@@ -1,8 +1,7 @@
 import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
-import { Subscription, of, timer, Observable } from 'rxjs';
+import { Observable, Subscription, catchError, mergeMap, of, timer } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute } from '@angular/router';
-import { catchError, mergeMap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 
 import { NodeService, KnownHealthStatuses } from '../../../services/node.service';

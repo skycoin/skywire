@@ -1,7 +1,6 @@
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Router } from '@angular/router';
-import { map, mergeMap } from 'rxjs/operators';
-import { Observable, of } from 'rxjs';
+import { Observable, map, mergeMap, of } from 'rxjs';
 
 import { TabButtonData } from '../layout/top-bar/top-bar.component';
 import { VpnClientService, CheckPkResults } from 'src/app/services/vpn-client.service';

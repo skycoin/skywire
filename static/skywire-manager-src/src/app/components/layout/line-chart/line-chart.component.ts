@@ -1,5 +1,7 @@
 import { Component, DoCheck, ElementRef, Input, IterableDiffers, ViewChild, AfterViewInit, IterableDiffer, OnDestroy } from '@angular/core';
-import { Chart } from 'chart.js';
+import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler } from 'chart.js';
+
+Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler);
 
 /**
  * Line chart used for showing how much data has been uploaded/downloaded.
@@ -44,24 +46,24 @@ export class LineChartComponent implements AfterViewInit, DoCheck, OnDestroy {
         labels: Array.from(Array(this.data.length).keys()),
         datasets: [{
           data: this.data,
-          backgroundColor: ['rgba(10, 15, 22, 0.4)'],
-          borderColor: ['rgba(10, 15, 22, 0.4)'],
+          backgroundColor: 'rgba(10, 15, 22, 0.4)',
+          borderColor: 'rgba(10, 15, 22, 0.4)',
           borderWidth: 1,
         }],
       },
       options: {
         maintainAspectRatio: false,
         events: [],
-        legend: { display: false },
-        tooltips: { enabled: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false },
+        },
         scales: {
-          yAxes: [{
+          y: {
             display: false,
-            ticks: {
-              suggestedMin: 0,
-            },
-          }],
-          xAxes: [{ display: false }],
+            suggestedMin: 0,
+          },
+          x: { display: false },
         },
         elements: { point: { radius: 0 } },
         layout: {
@@ -72,13 +74,14 @@ export class LineChartComponent implements AfterViewInit, DoCheck, OnDestroy {
               bottom: 0
           }
         },
+        animation: this.animated ? undefined : false,
       },
     });
 
     // Update the max and min values, if set.
     if (this.min !== undefined && this.max !== undefined) {
       this.updateMinAndMax();
-      this.chart.update(0);
+      this.chart.update();
     }
   }
 
@@ -94,7 +97,7 @@ export class LineChartComponent implements AfterViewInit, DoCheck, OnDestroy {
       if (this.animated) {
         this.chart.update();
       } else {
-        this.chart.update(0);
+        this.chart.update('none');
       }
     }
   }
@@ -109,15 +112,7 @@ export class LineChartComponent implements AfterViewInit, DoCheck, OnDestroy {
    * Updates the max and min values the chart shows.
    */
   private updateMinAndMax() {
-    this.chart.options.scales = {
-      yAxes: [{
-          display: false,
-          ticks: {
-            min: this.min,
-            max: this.max,
-          },
-      }],
-      xAxes: [{ display: false }],
-    };
+    this.chart.options.scales.y.min = this.min;
+    this.chart.options.scales.y.max = this.max;
   }
 }
