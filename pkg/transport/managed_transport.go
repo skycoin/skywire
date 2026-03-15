@@ -431,7 +431,9 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 	retrier := netutil.NewRetrier(mt.log, 1*time.Second, netutil.DefaultMaxBackoff, 5, 2)
 	return retrier.Do(context.Background(), func() error {
 		err := mt.dc.DeleteTransport(context.Background(), mt.Entry.ID)
-		mt.log.WithField("tp-id", mt.Entry.ID).WithError(err).Debug("Error deleting transport")
+		if err != nil {
+			mt.log.WithField("tp-id", mt.Entry.ID).WithError(err).Debug("Error deleting transport")
+		}
 		if netErr, ok := err.(net.Error); ok && netErr.Temporary() { // nolint
 			mt.log.
 				WithError(err).
