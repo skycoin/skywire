@@ -6,6 +6,7 @@ image_tag="$1"
 go_buildopts="$2"
 build_arch="$3"
 git_branch="$(git rev-parse --abbrev-ref HEAD)"
+git_commit="$(git rev-parse HEAD)"
 bldkit="1"
 platform="--platform=linux/amd64"
 
@@ -88,11 +89,11 @@ if [[ "$image_tag" == "integration" ]]; then
   rm -rf ./tmp/*
 fi
 
-echo "Build Skywire Image"
+echo "Build Skywire Image (commit: $git_commit)"
 DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire/Dockerfile \
   --build-arg base_image="$base_image" \
-  --build-arg build_opts="$go_buildopts" \
   --build-arg image_tag="$image_tag" \
+  --build-arg commit="$git_commit" \
   $platform \
   -t "$registry"/skywire:"$image_tag" .
 
