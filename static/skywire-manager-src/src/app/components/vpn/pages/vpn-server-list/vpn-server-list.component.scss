@@ -44,7 +44,7 @@
       user-select: none;
 
       &:hover {
-        background: theme-color(translucid-hover);
+        background: map-get($theme-colors,translucid-hover);
       }
     }
 
@@ -71,11 +71,11 @@
     }
 
     .selected {
-      background: scale-color(theme-color(translucid-hover), $alpha: 20%);
+      background: scale-color(map-get($theme-colors,translucid-hover), $alpha: 20%);
       cursor: unset !important;
 
       &:hover {
-        background: scale-color(theme-color(translucid-hover), $alpha: 50%);
+        background: scale-color(map-get($theme-colors,translucid-hover), $alpha: 50%);
       }
     }
   }
