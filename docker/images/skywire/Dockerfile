@@ -11,7 +11,8 @@ ENV CGO_ENABLED=${CGO_ENABLED} \
     GO111MODULE=on \
     GOBIN=/release
 
-RUN if [ "$image_tag" = "integration" ]; then \
+RUN apk add --no-cache git && \
+    if [ "$image_tag" = "integration" ]; then \
         apk add --no-cache build-base && \
         CGO_ENABLED=1 GOPROXY=direct go install -ldflags="-w -s" -race github.com/skycoin/skywire@${commit}; \
     else \
