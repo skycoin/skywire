@@ -106,9 +106,10 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		r.Use(metricsutil.RequestDurationMiddleware)
 	}
 	r.Use(httputil.SetLoggerMiddleware(log))
-	r.Use(api.rateLimiter.Middleware()) // Add rate limiting middleware
 
+	// Authenticated endpoints (rate limited + auth)
 	r.Group(func(r chi.Router) {
+		r.Use(api.rateLimiter.Middleware())
 		r.Use(httpauth.MakeMiddleware(nonceStore))
 
 		r.Get("/transports/id:{id}", api.getTransportByID)
@@ -118,28 +119,35 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		r.Post("/transports/delete-batch", api.deleteTransportsBatch)
 	})
 
+	// Public data endpoints (rate limited, no auth)
+	r.Group(func(r chi.Router) {
+		r.Use(api.rateLimiter.Middleware())
+
+		r.Get("/all-transports", api.getAllTransports)
+		r.Get("/all-transports/stats", api.getAllTransportsStats)
+		r.Get("/all-transports/per-key-stats", api.getAllTransportsPerKeyStats)
+		r.Get("/transports/stats/{edge}", api.getTransportStats)
+		r.Delete("/transports/deregister", api.deregisterTransport)
+
+		// Bandwidth endpoints (legacy)
+		r.Get("/bandwidth/transport/{id}", api.getTransportBandwidth)
+		r.Get("/bandwidth/visor/{pk}", api.getVisorBandwidth)
+
+		// Metrics endpoints (new consolidated API)
+		r.Get("/metric", api.getNetworkMetric)
+		r.Get("/metric/visor/{pks}", api.getVisorAggregateMetric)
+		r.Get("/metrics", api.getAllTransportMetrics)
+		r.Get("/metrics/{ids}", api.getTransportMetricsByIDs)
+		r.Get("/metrics/visor/{pks}", api.getTransportMetricsByVisors)
+
+		r.Get("/uptimes", api.getUptimes)
+		r.Get("/version", api.getVersionStats)
+		r.Get("/versions", api.getVersions)
+		r.Get("/versions/{pks}", api.getVersionsByPKs)
+	})
+
+	// Infrastructure endpoints (no rate limiting, no auth)
 	r.Get("/health", api.health)
-	r.Get("/all-transports", api.getAllTransports)
-	r.Get("/all-transports/stats", api.getAllTransportsStats)
-	r.Get("/all-transports/per-key-stats", api.getAllTransportsPerKeyStats)
-	r.Get("/transports/stats/{edge}", api.getTransportStats)
-	r.Delete("/transports/deregister", api.deregisterTransport)
-
-	// Bandwidth endpoints (legacy)
-	r.Get("/bandwidth/transport/{id}", api.getTransportBandwidth)
-	r.Get("/bandwidth/visor/{pk}", api.getVisorBandwidth)
-
-	// Metrics endpoints (new consolidated API)
-	r.Get("/metric", api.getNetworkMetric)
-	r.Get("/metric/visor/{pks}", api.getVisorAggregateMetric)
-	r.Get("/metrics", api.getAllTransportMetrics)
-	r.Get("/metrics/{ids}", api.getTransportMetricsByIDs)
-	r.Get("/metrics/visor/{pks}", api.getTransportMetricsByVisors)
-
-	r.Get("/uptimes", api.getUptimes)
-	r.Get("/version", api.getVersionStats)
-	r.Get("/versions", api.getVersions)
-	r.Get("/versions/{pks}", api.getVersionsByPKs)
 	r.Post("/statuses", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusGone)
 	})
