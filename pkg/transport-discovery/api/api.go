@@ -20,13 +20,15 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/networkmonitor"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 const (
-	transportsNumberDelay = time.Second * 10
-	uptimesCacheDelay     = 5 * time.Minute
-	backupTickerDelay     = 1 * time.Hour
+	transportsCacheDelay = 30 * time.Second
+	uptimesCacheDelay    = 5 * time.Minute
+	backupTickerDelay    = 1 * time.Hour
 )
 
 var (
@@ -58,6 +60,9 @@ type API struct {
 	dmsgAddr                    string
 	DmsgServers                 []string
 	backupPath                  string
+
+	transportsCache []*transport.Entry
+	transportsMu    sync.RWMutex
 
 	uptimesCache []store.VisorSummary
 	uptimesMu    sync.RWMutex
@@ -148,7 +153,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 
 // RunBackgroundTasks is function which runs periodic background tasks of API.
 func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogger) {
-	tpTicker := time.NewTicker(transportsNumberDelay)
+	tpTicker := time.NewTicker(transportsCacheDelay)
 	defer tpTicker.Stop()
 
 	uptimesTicker := time.NewTicker(uptimesCacheDelay)
@@ -157,7 +162,7 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 	backupTicker := time.NewTicker(backupTickerDelay)
 	defer backupTicker.Stop()
 
-	api.updateTransportsNumber(ctx, logger)
+	api.refreshTransportsCache(ctx, logger)
 	api.refreshUptimesCache(ctx, logger)
 
 	for {
@@ -165,7 +170,7 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 		case <-ctx.Done():
 			return
 		case <-tpTicker.C:
-			api.updateTransportsNumber(ctx, logger)
+			api.refreshTransportsCache(ctx, logger)
 		case <-uptimesTicker.C:
 			api.refreshUptimesCache(ctx, logger)
 		case <-backupTicker.C:
@@ -245,12 +250,37 @@ func (api *API) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	api.renderError(w, r, status, err)
 }
 
-// updateTransportsNumber is background function which updates number of registered transports
-func (api *API) updateTransportsNumber(ctx context.Context, logger logrus.FieldLogger) {
-	transports, err := api.store.GetNumberOfTransports(ctx)
+// refreshTransportsCache loads all transports from Redis into memory and updates metrics.
+func (api *API) refreshTransportsCache(ctx context.Context, logger logrus.FieldLogger) {
+	entries, err := api.store.GetAllTransports(ctx, true)
 	if err != nil {
-		logger.WithError(err).Errorf("failed to get transports count")
+		logger.WithError(err).Error("failed to refresh transports cache")
 		return
 	}
-	api.metrics.SetTPCounts(transports)
+	api.transportsMu.Lock()
+	api.transportsCache = entries
+	api.transportsMu.Unlock()
+
+	// Derive transport counts from the cached data for metrics
+	counts := make(map[types.Type]int)
+	for _, e := range entries {
+		counts[e.Type]++
+	}
+	api.metrics.SetTPCounts(counts)
+}
+
+// getTransportsFromCache returns the cached transports, optionally filtering self-transports.
+func (api *API) getTransportsFromCache(selfTransports bool) []*transport.Entry {
+	api.transportsMu.RLock()
+	defer api.transportsMu.RUnlock()
+	if selfTransports {
+		return api.transportsCache
+	}
+	var filtered []*transport.Entry
+	for _, e := range api.transportsCache {
+		if e.Edges[0] != e.Edges[1] {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
 }
