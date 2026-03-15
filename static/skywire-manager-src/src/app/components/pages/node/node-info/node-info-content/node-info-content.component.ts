@@ -123,6 +123,7 @@ export class NodeInfoContentComponent implements OnDestroy {
     if (ms < 10) {
       return ms.toFixed(2) + 'ms';
     }
+
     return Math.round(ms) + 'ms';
   }
 
@@ -140,10 +141,12 @@ export class NodeInfoContentComponent implements OnDestroy {
     }
 
     const byType = Object.entries(typeCounts)
-      .map(([type, count]) => ({ type, count }))
+      .map(([type, count]) => {
+return { type: type, count: count }
+})
       .sort((a, b) => b.count - a.count); // Sort by count descending
 
-    return { total: this.node.transports.length, byType };
+    return { total: this.node.transports.length, byType: byType };
   }
 
   /**

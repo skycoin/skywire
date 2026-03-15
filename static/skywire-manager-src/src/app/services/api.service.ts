@@ -1,7 +1,6 @@
 import { Injectable, NgZone } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
-import { Observable, throwError } from 'rxjs';
-import { catchError, first, map, mergeMap } from 'rxjs/operators';
+import { Observable, catchError, first, map, mergeMap, throwError } from 'rxjs';
 import { webSocket } from 'rxjs/webSocket';
 import { Router } from '@angular/router';
 

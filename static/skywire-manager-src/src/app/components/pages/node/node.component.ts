@@ -1,9 +1,8 @@
 import { Component, OnDestroy, OnInit, NgZone, Injector } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs/internal/Subscription';
-import { Observable, of, ReplaySubject, timer } from 'rxjs';
+import { Observable, ReplaySubject, delay, of, timer } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
-import { delay } from 'rxjs/operators';
 
 import { Node } from '../../../app.datatypes';
 import { StorageService } from '../../../services/storage.service';

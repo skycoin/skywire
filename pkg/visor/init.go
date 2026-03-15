@@ -670,6 +670,8 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 		switch v.stunClient.NATType {
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
 			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
+		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
+			log.Warnf("SUDPH transport wont be available: STUN detection failed (%v)", v.stunClient.NATType.String())
 		default:
 			v.tpM.InitClient(ctx, types.SUDPH, v.conf.Transport.SudphPort)
 		}
@@ -1637,10 +1639,13 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				// Wait until stun client is ready
 				<-v.stunReady
 
-				// skip if SUDPH is under symmetric NAT / under UDP firewall.
-				if nType == types.SUDPH && (v.stunClient.NATType == stun.NATSymmetric ||
-					v.stunClient.NATType == stun.NATSymmetricUDPFirewall) {
-					continue
+				// skip SUDPH if NAT type prevents it (symmetric NAT, firewall, or STUN failure)
+				if nType == types.SUDPH {
+					switch v.stunClient.NATType {
+					case stun.NATSymmetric, stun.NATSymmetricUDPFirewall,
+						stun.NATError, stun.NATUnknown, stun.NATBlocked:
+						continue
+					}
 				}
 				trySUDPH = true
 			}

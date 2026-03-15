@@ -1,8 +1,7 @@
 import { Component } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
-import { of, Subscription } from 'rxjs';
-import { delay, mergeMap } from 'rxjs/operators';
+import { Subscription, delay, mergeMap, of } from 'rxjs';
 
 import { StorageService } from './services/storage.service';
 import { SnackbarService } from './services/snackbar.service';

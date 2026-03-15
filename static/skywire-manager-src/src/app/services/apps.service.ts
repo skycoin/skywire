@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { map } from 'rxjs/operators';
+import { map } from 'rxjs';
 import { formatDate } from '@angular/common';
 
 import { ApiService } from './api.service';

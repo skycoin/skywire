@@ -1,8 +1,7 @@
 import { Component, OnInit, ViewChild, OnDestroy, ElementRef } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
-import { Subscription, of } from 'rxjs';
-import { delay, mergeMap } from 'rxjs/operators';
+import { Subscription, delay, mergeMap, of } from 'rxjs';
 
 import { TransportService } from '../../../../../../services/transport.service';
 import { ButtonComponent } from '../../../../../layout/button/button.component';

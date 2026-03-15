@@ -24,8 +24,8 @@
     "uptime_tracker": "http://ut.skywire.dev",
     "service_discovery": "http://sd.skywire.dev",
     "stun_servers": [
-      "139.162.160.227:3479",
-      "172.104.145.184:3479"
+      "139.162.160.227:3478",
+      "172.104.247.120:3478"
     ],
     "dns_server": "1.1.1.1",
     "survey_whitelist": [
@@ -63,8 +63,8 @@
     "uptime_tracker": "http://ut.skywire.skycoin.com",
     "service_discovery": "http://sd.skycoin.com",
     "stun_servers": [
-      "139.162.160.227:3479",
-      "172.104.145.184:3479"
+      "139.162.160.227:3478",
+      "172.104.247.120:3478"
     ],
     "dns_server": "1.1.1.1",
     "survey_whitelist": [
