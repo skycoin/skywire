@@ -2,6 +2,7 @@
 package cligot
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -223,7 +224,7 @@ func newGot() (*got.Got, error) {
 	}
 
 	if proxyAddr != "" {
-		return got.NewWithProxy(nil, proxyAddr)
+		return got.NewWithProxy(context.TODO(), proxyAddr)
 	}
 
 	return got.New(), nil
