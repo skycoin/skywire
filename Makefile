@@ -502,7 +502,7 @@ help-windows: ## Display help for windows
 e2e-build: set-forwarding e2e-dock ## E2E. Set port forwarding & Build dockers and containers for e2e-tests
 
 e2e-dock: ## E2E. Build dockers and containers for e2e-tests
-	./docker/docker_build.sh e2e ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+	./docker/docker_build.sh e2e "" $(BUILD_ARCH)
 
 e2e-run: ## E2E. Start e2e environment
 	bash -c "DOCKER_TAG=e2e docker compose up -d"
@@ -536,17 +536,17 @@ e2e-help: ## E2E. Show env-vars and useful commands
 	@echo -e "\nConsult with:\n\n   docker compose help\n"
 
 docker-build-test:
-	bash ./docker/docker_build.sh test ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+	bash ./docker/docker_build.sh test "" $(BUILD_ARCH)
 
 docker-build:
-	bash ./docker/docker_build.sh prod ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+	bash ./docker/docker_build.sh prod "" $(BUILD_ARCH)
 
 docker-push-test:
-	bash ./docker/docker_build.sh test ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+	bash ./docker/docker_build.sh test "" $(BUILD_ARCH)
 	bash ./docker/docker_push.sh test
 
 docker-push:
-	bash ./docker/docker_build.sh prod ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+	bash ./docker/docker_build.sh prod "" $(BUILD_ARCH)
 	bash ./docker/docker_push.sh prod
 
 set-forwarding: #sudo ./ci_scripts/setup-sudo-requirements.sh
@@ -558,7 +558,7 @@ set-forwarding: #sudo ./ci_scripts/setup-sudo-requirements.sh
 	#   sudo sysctl -w net.ipv6.conf.all.forwarding=0
 
 integration-env-build: #build
-	./docker/docker_build.sh integration ${BUILD_OPTS_DEPLOY} $(BUILD_ARCH)
+	./docker/docker_build.sh integration "" $(BUILD_ARCH)
 	bash -c "DOCKER_TAG=integration docker compose up -d"
 
 integration-env-start: #start
