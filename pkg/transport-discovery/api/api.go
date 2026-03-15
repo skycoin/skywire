@@ -61,8 +61,9 @@ type API struct {
 	DmsgServers                 []string
 	backupPath                  string
 
-	transportsCache []*transport.Entry
-	transportsMu    sync.RWMutex
+	transportsCache         []*transport.Entry
+	transportsCacheFiltered []*transport.Entry // excludes self-transports
+	transportsMu            sync.RWMutex
 
 	uptimesCache []store.VisorSummary
 	uptimesMu    sync.RWMutex
@@ -257,15 +258,22 @@ func (api *API) refreshTransportsCache(ctx context.Context, logger logrus.FieldL
 		logger.WithError(err).Error("failed to refresh transports cache")
 		return
 	}
-	api.transportsMu.Lock()
-	api.transportsCache = entries
-	api.transportsMu.Unlock()
 
-	// Derive transport counts from the cached data for metrics
+	// Pre-compute the filtered variant (no self-transports)
+	var filtered []*transport.Entry
 	counts := make(map[types.Type]int)
 	for _, e := range entries {
 		counts[e.Type]++
+		if e.Edges[0] != e.Edges[1] {
+			filtered = append(filtered, e)
+		}
 	}
+
+	api.transportsMu.Lock()
+	api.transportsCache = entries
+	api.transportsCacheFiltered = filtered
+	api.transportsMu.Unlock()
+
 	api.metrics.SetTPCounts(counts)
 }
 
@@ -273,19 +281,12 @@ func (api *API) refreshTransportsCache(ctx context.Context, logger logrus.FieldL
 // Returns nil if the cache has not been initialized yet (caller should fall back to the store).
 func (api *API) getTransportsFromCache(selfTransports bool) []*transport.Entry {
 	api.transportsMu.RLock()
-	cached := api.transportsCache
-	api.transportsMu.RUnlock()
-	if cached == nil {
+	defer api.transportsMu.RUnlock()
+	if api.transportsCache == nil {
 		return nil
 	}
 	if selfTransports {
-		return cached
+		return api.transportsCache
 	}
-	var filtered []*transport.Entry
-	for _, e := range cached {
-		if e.Edges[0] != e.Edges[1] {
-			filtered = append(filtered, e)
-		}
-	}
-	return filtered
+	return api.transportsCacheFiltered
 }
