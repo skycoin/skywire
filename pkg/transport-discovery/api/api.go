@@ -270,14 +270,19 @@ func (api *API) refreshTransportsCache(ctx context.Context, logger logrus.FieldL
 }
 
 // getTransportsFromCache returns the cached transports, optionally filtering self-transports.
+// Returns nil if the cache has not been initialized yet (caller should fall back to the store).
 func (api *API) getTransportsFromCache(selfTransports bool) []*transport.Entry {
 	api.transportsMu.RLock()
-	defer api.transportsMu.RUnlock()
+	cached := api.transportsCache
+	api.transportsMu.RUnlock()
+	if cached == nil {
+		return nil
+	}
 	if selfTransports {
-		return api.transportsCache
+		return cached
 	}
 	var filtered []*transport.Entry
-	for _, e := range api.transportsCache {
+	for _, e := range cached {
 		if e.Edges[0] != e.Edges[1] {
 			filtered = append(filtered, e)
 		}

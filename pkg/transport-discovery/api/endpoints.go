@@ -137,6 +137,14 @@ func (api *API) getAllTransports(w http.ResponseWriter, r *http.Request) {
 		selfTransports = false
 	}
 	entries := api.getTransportsFromCache(selfTransports)
+	if entries == nil {
+		var err error
+		entries, err = api.store.GetAllTransports(r.Context(), selfTransports)
+		if err != nil {
+			api.writeError(w, r, err)
+			return
+		}
+	}
 	if len(entries) == 0 {
 		api.writeError(w, r, store.ErrTransportNotFound)
 		return
@@ -153,6 +161,14 @@ func (api *API) getAllTransportsStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	entries := api.getTransportsFromCache(selfTransports)
+	if entries == nil {
+		var err error
+		entries, err = api.store.GetAllTransports(r.Context(), selfTransports)
+		if err != nil {
+			api.writeError(w, r, err)
+			return
+		}
+	}
 	if len(entries) == 0 {
 		api.writeError(w, r, store.ErrTransportNotFound)
 		return
@@ -187,6 +203,14 @@ func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Reque
 	}
 
 	entries := api.getTransportsFromCache(selfTransports)
+	if entries == nil {
+		var err error
+		entries, err = api.store.GetAllTransports(r.Context(), selfTransports)
+		if err != nil {
+			api.writeError(w, r, err)
+			return
+		}
+	}
 	if len(entries) == 0 {
 		api.writeError(w, r, store.ErrTransportNotFound)
 		return
