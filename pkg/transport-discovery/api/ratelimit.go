@@ -72,14 +72,14 @@ func (rl *PubKeyRateLimiter) getLimiter(pubkey string) *rate.Limiter {
 	return limiter
 }
 
-// Allow checks if a request from the given public key should be allowed
-func (rl *PubKeyRateLimiter) Allow(pubkey string) bool {
-	if pubkey == "" {
-		// Allow requests without pubkey (localhost, etc)
+// Allow checks if a request from the given key should be allowed.
+// The key can be a public key (for dmsg requests) or an IP address (for HTTP requests).
+func (rl *PubKeyRateLimiter) Allow(key string) bool {
+	if key == "" {
 		return true
 	}
 
-	limiter := rl.getLimiter(pubkey)
+	limiter := rl.getLimiter(key)
 	return limiter.Allow()
 }
 
@@ -110,8 +110,14 @@ func (rl *PubKeyRateLimiter) Middleware() func(http.Handler) http.Handler {
 			// In dmsg, the remote address format is: "pubkey:port"
 			pubkey := extractPubKeyFromRemoteAddr(r.RemoteAddr)
 
-			if !rl.Allow(pubkey) {
-				http.Error(w, "Rate limit exceeded: maximum 30 requests per minute per public key", http.StatusTooManyRequests)
+			// If no pubkey (IP-based HTTP request), rate limit by remote IP instead
+			key := pubkey
+			if key == "" {
+				key = r.RemoteAddr
+			}
+
+			if !rl.Allow(key) {
+				http.Error(w, "Rate limit exceeded: maximum 30 requests per minute", http.StatusTooManyRequests)
 				return
 			}
 
