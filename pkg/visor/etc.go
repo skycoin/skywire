@@ -3,8 +3,10 @@ package visor
 
 import (
 	"fmt"
+	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -12,46 +14,27 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
-// func initPProf(log *logging.MasterLogger, profMode string, profAddr string) (stop func()) {
-// 	var optFunc func(*profile.Profile)
+func initPProf(log *logging.MasterLogger, profMode string, profAddr string) (stop func()) {
+	switch profMode {
+	case "http":
+		go func() {
+			srv := &http.Server{ //nolint:gosec
+				Addr:              profAddr,
+				Handler:           nil,
+				ReadHeaderTimeout: 5 * time.Second,
+				WriteTimeout:      30 * time.Second,
+			}
+			err := srv.ListenAndServe()
+			log.WithError(err).
+				WithField("mode", profMode).
+				WithField("addr", profAddr).
+				Info("Stopped serving pprof on http.")
+		}()
+	}
 
-// 	switch profMode {
-// 	case "none", "":
-// 	case "http":
-// 		go func() {
-// 			srv := &http.Server{ //nolint gosec
-// 				Addr:         profAddr,
-// 				Handler:      nil,
-// 				ReadTimeout:  5 * time.Second,
-// 				WriteTimeout: 10 * time.Second,
-// 			}
-// 			err := srv.ListenAndServe()
-// 			log.WithError(err).
-// 				WithField("mode", profMode).
-// 				WithField("addr", profAddr).
-// 				Info("Stopped serving pprof on http.")
-// 		}()
-// 	case "cpu":
-// 		optFunc = profile.CPUProfile
-// 	case "mem":
-// 		optFunc = profile.MemProfile
-// 	case "mutex":
-// 		optFunc = profile.MutexProfile
-// 	case "block":
-// 		optFunc = profile.BlockProfile
-// 	case "trace":
-// 		optFunc = profile.TraceProfile
-// 	}
-
-// 	if optFunc != nil {
-// 		stop = profile.Start(profile.ProfilePath("."), optFunc).Stop
-// 	}
-
-// 	if stop == nil {
-// 		stop = func() {}
-// 	}
-// 	return stop
-// }
+	stop = func() {}
+	return stop
+}
 
 func logBuildInfo(mLog *logging.MasterLogger) {
 	log := mLog.PackageLogger("buildinfo")
