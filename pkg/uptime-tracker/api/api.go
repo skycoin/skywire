@@ -72,6 +72,7 @@ type PrivateAPI struct {
 
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
+	ServiceName string          `json:"service_name,omitempty"`
 	BuildInfo   *buildinfo.Info `json:"build_info,omitempty"`
 	StartedAt   time.Time       `json:"started_at,omitempty"`
 	DmsgAddr    string          `json:"dmsg_address,omitempty"`
@@ -557,6 +558,7 @@ func (api *API) handleUptime(w http.ResponseWriter, r *http.Request) {
 func (api *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	api.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
+		ServiceName: "uptime-tracker",
 		BuildInfo:   info,
 		StartedAt:   api.startedAt,
 		DmsgAddr:    api.dmsgAddr,
