@@ -17,6 +17,7 @@ import (
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
 	clidmsg "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsg"
 	cliedit "github.com/skycoin/skywire/cmd/skywire-cli/commands/edit"
+	cligot "github.com/skycoin/skywire/cmd/skywire-cli/commands/got"
 	cligotop "github.com/skycoin/skywire/cmd/skywire-cli/commands/gotop"
 	clijq "github.com/skycoin/skywire/cmd/skywire-cli/commands/jq"
 	clilog "github.com/skycoin/skywire/cmd/skywire-cli/commands/log"
@@ -65,6 +66,7 @@ func init() {
 		clipv.RootCmd,
 		clijq.RootCmd,
 		cliedit.RootCmd,
+		cligot.RootCmd,
 		treeCmd,
 		docCmd,
 	)
