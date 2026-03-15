@@ -1,8 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
-import { Observable, of, Subscription } from 'rxjs';
-import { delay, mergeMap } from 'rxjs/operators';
+import { Observable, Subscription, delay, mergeMap, of } from 'rxjs';
 
 import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
 import { AuthService, AuthStates } from '../../../services/auth.service';

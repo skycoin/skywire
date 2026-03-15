@@ -1,0 +1,374 @@
+services:
+  address-resolver:
+    container_name: address-resolver
+    image: "skycoin/skywire:test"
+    restart: always
+    ports:
+      - ${AR_PORT}:${AR_PORT}
+      - 30178:30178/udp
+      - 127.0.0.1:${AR_PPROF}:${AR_PPROF}
+    command:
+      - svc
+      - ar
+      - --addr
+      - :${AR_PORT}
+      - --sk
+      - ${AR_SECKEY}
+      - --dmsg-disc
+      - http://${DMSGDISC_HOST}:${DMSGDISC_PORT}
+      - --redis
+      - redis://${REDIS_HOST}:${REDIS_PORT}
+      - --redis-pool-size
+      - "150"
+      - --pprof
+      - :${AR_PPROF}
+      - --whitelist-keys
+      - ${NETWORK_MONITOR_PUBKEY},${NETWORK_MONITOR_PUBKEY_MOSES}
+      - --entry-timeout
+      - 2m
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      - redis
+      - dmsg-discovery
+  conf-service:
+    container_name: conf-service
+    image: "skycoin/skywire:test"
+    restart: always
+    ports:
+      - ${CONF_PORT}:${CONF_PORT}
+      - 127.0.0.1:${CONF_PPROF}:${CONF_PPROF}
+    command:
+      - svc
+      - confbs
+      - --pprof
+      - :${CONF_PPROF}
+      - -c
+      - /etc/skywire/config.json
+    volumes:
+      - ./config-bootstrapper:/etc/skywire
+  dmsg-discovery:
+    container_name: dmsg-discovery
+    image: "skycoin/skywire:test"
+    restart: always
+    ports:
+      - ${DMSGDISC_PORT}:${DMSGDISC_PORT}
+      - 127.0.0.1:${DMSGDISC_PPROF}:${DMSGDISC_PPROF}
+    command:
+      - dmsg
+      - disc
+      - --redis
+      - redis://${REDIS_HOST}:${REDIS_PORT}
+      - --addr
+      - :${DMSGDISC_PORT}
+      - --pprof
+      - :${DMSGDISC_PPROF}
+      - --sk
+      - ${DMSGDISC_SECKEY}
+      - --official-servers
+      - ${DMSGDISC_OFFICIAL_SERVERS}
+      - --whitelist-keys
+      - ${NETWORK_MONITOR_PUBKEY},${NETWORK_MONITOR_PUBKEY_MOSES}
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      - redis
+  dmsg-server-1:
+    container_name: dmsg-server-1
+    image: "skycoin/skywire:test"
+    restart: always
+    command:
+      - dmsg
+      - server
+      - start
+      - /etc/skywire/dmsg-server/config.json
+      - --pprof
+      - :${DMSGSERVER_1_PPROF}
+    volumes:
+      - ./dmsg-server/dmsg-server-1/:/etc/skywire/dmsg-server
+    ports:
+      - "30081:8080"
+      - 127.0.0.1:${DMSGSERVER_1_PPROF}:${DMSGSERVER_1_PPROF}
+  dmsg-server-6:
+    container_name: dmsg-server-6
+    image: "skycoin/skywire:test"
+    restart: always
+    command:
+      - dmsg
+      - server
+      - start
+      - /etc/skywire/dmsg-server/config.json
+      - --pprof
+      - :${DMSGSERVER_6_PPROF}
+    volumes:
+      - ./dmsg-server/dmsg-server-6/:/etc/skywire/dmsg-server
+    ports:
+      - "30086:8080"
+      - 127.0.0.1:${DMSGSERVER_6_PPROF}:${DMSGSERVER_6_PPROF}
+  dmsg-server-7:
+    container_name: dmsg-server-7
+    image: "skycoin/skywire:test"
+    restart: always
+    command:
+      - dmsg
+      - server
+      - start
+      - /etc/skywire/dmsg-server/config.json
+      - --pprof
+      - :${DMSGSERVER_7_PPROF}
+    volumes:
+      - ./dmsg-server/dmsg-server-7/:/etc/skywire/dmsg-server
+    ports:
+      - "30087:8080"
+      - 127.0.0.1:${DMSGSERVER_7_PPROF}:${DMSGSERVER_7_PPROF}
+  network-monitor:
+    container_name: network-monitor
+    image: "skycoin/skywire:test"
+    restart: always
+    command:
+      - svc
+      - nm
+      - --addr
+      - :${NETWORK_MONITOR_ADDR}
+      - --pprof
+      - :${NETWORK_MONITOR_PPROF}
+      - --pk
+      - ${NETWORK_MONITOR_PUBKEY}
+      - --sk
+      - ${NETWORK_MONITOR_SECKEY}
+      - --ar-url
+      - http://${AR_HOST}:${AR_PORT}
+      - --dmsgd-url
+      - http://${DMSGDISC_HOST}:${DMSGDISC_PORT}
+      - --sd-url
+      - http://${SD_HOST}:${SD_PORT}
+      - --tpd-url
+      - http://${TPDISC_HOST}:${TPDISC_PORT}
+      - --ut-url
+      - http://${UTTRACKER_HOST}:${UTTRACKER_PORT}
+      - --cleaning-delay
+      - "180"
+    depends_on:
+      - uptime-tracker
+      - route-finder
+      - setup-node
+      - service-discovery
+      - address-resolver
+    ports:
+      - ${NETWORK_MONITOR_ADDR}:${NETWORK_MONITOR_ADDR}
+      - 127.0.0.1:${NETWORK_MONITOR_PPROF}:${NETWORK_MONITOR_PPROF}
+  route-finder:
+    container_name: route-finder
+    image: "skycoin/skywire:test"
+    restart: always
+    ports:
+      - ${RF_PORT}:${RF_PORT}
+      - 127.0.0.1:${RF_PPROF}:${RF_PPROF}
+    command:
+      - svc
+      - rf
+      - -a
+      - :${RF_PORT}
+      - --pprof
+      - :${RF_PPROF}
+      - -l
+      - debug
+      - --sk
+      - ${RF_SECKEY}
+      - --dmsg-disc
+      - http://${DMSGDISC_HOST}:${DMSGDISC_PORT}
+      - --redis
+      - redis://${REDIS_HOST}:${REDIS_PORT}
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_ADDR=${REDIS_HOST}:${REDIS_PORT}
+    depends_on:
+      - redis
+      - dmsg-discovery
+      - transport-discovery
+  service-discovery:
+    container_name: service-discovery
+    image: "skycoin/skywire:test"
+    restart: always
+    ports:
+      - ${SD_PORT}:${SD_PORT}
+      - 127.0.0.1:${SD_PPROF}:${SD_PPROF}
+    command:
+      - svc
+      - sd
+      - --addr
+      - :${SD_PORT}
+      - --pprof
+      - :${SD_PPROF}
+      - --sk
+      - ${SD_SECKEY}
+      - --redis
+      - redis://${REDIS_HOST}:${REDIS_PORT}
+      - --dmsg-disc
+      - http://${DMSGDISC_HOST}:${DMSGDISC_PORT}
+      - --whitelist-keys
+      - ${NETWORK_MONITOR_PUBKEY},${NETWORK_MONITOR_PUBKEY_MOSES}
+      - --entry-timeout
+      - 2m
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      - redis
+      - dmsg-discovery
+  setup-node:
+    container_name: setup-node
+    image: "skycoin/skywire:test"
+    ports:
+      - 127.0.0.1:${SN_PPROF}:${SN_PPROF}
+    command:
+      - svc
+      - sn
+      - --pprof
+      - :${SN_PPROF}
+      - /etc/skywire/setup-node/config.json
+    volumes:
+      - ./setup-node:/etc/skywire/setup-node
+    depends_on:
+      - dmsg-discovery
+  skywire-visor:
+    container_name: skywire-visor
+    image: "skycoin/skywire:test"
+    restart: always
+    command:
+      - visor
+      - -c
+      - /etc/skywire/skywire-visor/skywire.json
+    volumes:
+      - ./visors-config:/etc/skywire/skywire-visor
+    depends_on:
+      - uptime-tracker
+      - route-finder
+      - setup-node
+      - service-discovery
+      - address-resolver
+  transport-discovery:
+    container_name: transport-discovery
+    image: "skycoin/skywire:test"
+    restart: always
+    ports:
+      - ${TPDISC_PORT}:${TPDISC_PORT}
+      - 127.0.0.1:${TPDISC_PPROF}:${TPDISC_PPROF}
+    command:
+      - svc
+      - tpd
+      - --addr
+      - :${TPDISC_PORT}
+      - --pprof
+      - :${TPDISC_PPROF}
+      - --redis
+      - redis://${REDIS_HOST}:${REDIS_PORT}
+      - --sk
+      - ${TPDISC_SECKEY}
+      - --dmsg-disc
+      - http://${DMSGDISC_HOST}:${DMSGDISC_PORT}
+      - --whitelist-keys
+      - ${NETWORK_MONITOR_PUBKEY},${NETWORK_MONITOR_PUBKEY_MOSES}
+      - --entry-timeout
+      - 2m
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      - redis
+      - dmsg-discovery
+  transport-setup:
+    container_name: transport-setup
+    image: "skycoin/skywire:test"
+    command:
+      - svc
+      - tps
+      - -c
+      - /etc/transport-setup/tps.json
+    volumes:
+      - ./visors-config:/etc/transport-setup
+  uptime-tracker:
+    container_name: uptime-tracker
+    image: "skycoin/skywire:test"
+    restart: always
+    ports:
+      - ${UTTRACKER_PORT}:${UTTRACKER_PORT}
+    command:
+      - svc
+      - ut
+      - --addr
+      - :${UTTRACKER_PORT}
+      - --pprof
+      - :${UTTRACKER_PPROF}
+      - --redis
+      - redis://${REDIS_HOST}:${REDIS_PORT}
+      - --sk
+      - ${UTTRACKER_SECKEY}
+      - --dmsg-disc
+      - http://${DMSGDISC_HOST}:${DMSGDISC_PORT}
+      - --pg-host
+      - ${POSTGRES_HOST}
+    environment:
+      - REDIS_ADDR=${REDIS_HOST}:${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - API_KEY=${UTTRACKER_API_KEY}
+      - PG_PASSWORD=${POSTGRES_PASSWORD}
+      - PG_USER=${POSTGRES_USER}
+      - PG_DATABASE=uptime_tracker
+    depends_on:
+      - postgres
+      - redis
+      - dmsg-discovery
+  postgres:
+    container_name: ${POSTGRES_HOST}
+    image: "postgres:15.4-alpine3.18"
+    restart: always
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_MULTIPLE_DATABASES=${POSTGRES_MULTIPLE_DATABASES}
+    volumes:
+      - ./postgres-init:/docker-entrypoint-initdb.d
+      - ./postgres-data:/var/lib/postgresql/data
+  redis:
+    container_name: ${REDIS_HOST}
+    image: "redis:alpine3.18"
+    restart: always
+    ports:
+      - ${REDIS_PORT}:${REDIS_PORT}
+    volumes:
+      - ./redis-data:/data
+    command:
+      - --save
+      - 180 1
+      - --requirepass
+      - "${REDIS_PASSWORD}"
+  stun:
+    container_name: stun
+    image: "skycoin/skywire:test"
+    network_mode: "host"
+    restart: always
+    command:
+      - svc
+      - stun
+      - --primary-ip
+      - "139.162.160.227"
+      - --secondary-ip
+      - "172.104.247.120"
+      - --port
+      - "3478"
+      - --alt-port
+      - "3479"
+  geoip:
+    container_name: geoip
+    image: "skycoin/skywire:test"
+    restart: always
+    ports:
+      - ${GEOIP_PORT}:${GEOIP_PORT}
+      - 127.0.0.1:${GEOIP_PPROF}:${GEOIP_PPROF}
+    command:
+      - svc
+      - ip
+      - --api
+      - --addr
+      - :${GEOIP_PORT}
+      - --pprof
+      - :${GEOIP_PPROF}

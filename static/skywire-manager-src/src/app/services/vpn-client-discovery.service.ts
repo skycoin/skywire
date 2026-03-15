@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
-import { Observable, of } from 'rxjs';
+import { Observable, delay, map, of, retryWhen } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
-import { retryWhen, delay, map } from 'rxjs/operators';
 
 /**
  * Ratings some properties of a server can have.

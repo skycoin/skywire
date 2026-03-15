@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, delay, map, retryWhen } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
-import { retryWhen, delay, map } from 'rxjs/operators';
 
 import { ProxyDiscoveryEntry } from '../app.datatypes';
 import { countriesList } from '../utils/countries-list';
