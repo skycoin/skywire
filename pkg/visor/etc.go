@@ -4,7 +4,7 @@ package visor
 import (
 	"fmt"
 	"net/http"
-	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
+	nethttppprof "net/http/pprof" //nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
 	"time"
 
@@ -18,12 +18,21 @@ func initPProf(log *logging.MasterLogger, profMode string, profAddr string) (sto
 	switch profMode {
 	case "http":
 		go func() {
+			// Use a dedicated mux to avoid conflicts with DefaultServeMux
+			// (which other components like skychat may register on).
+			mux := http.NewServeMux()
+			mux.HandleFunc("/debug/pprof/", nethttppprof.Index)
+			mux.HandleFunc("/debug/pprof/cmdline", nethttppprof.Cmdline)
+			mux.HandleFunc("/debug/pprof/profile", nethttppprof.Profile)
+			mux.HandleFunc("/debug/pprof/symbol", nethttppprof.Symbol)
+			mux.HandleFunc("/debug/pprof/trace", nethttppprof.Trace)
 			srv := &http.Server{ //nolint:gosec
 				Addr:              profAddr,
-				Handler:           nil,
+				Handler:           mux,
 				ReadHeaderTimeout: 5 * time.Second,
 				WriteTimeout:      30 * time.Second,
 			}
+			log.WithField("addr", profAddr).Info("Serving pprof on http")
 			err := srv.ListenAndServe()
 			log.WithError(err).
 				WithField("mode", profMode).
