@@ -1,7 +1,7 @@
 // Backgrounds for the tables used in the app.
 $responsive-table-colors: (
   // Background, background:hover, font color
-  translucid: (transparent, theme-color(translucid-hover), theme-color(white), theme-color(translucid-hover-hard)),
+  translucid: (transparent, map-get($theme-colors,translucid-hover), map-get($theme-colors,white), map-get($theme-colors,translucid-hover-hard)),
 );
 
 // Create styles for the tables. One per background color.

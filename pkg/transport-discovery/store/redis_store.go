@@ -253,93 +253,153 @@ func (s *redisStore) GetNumberOfTransports(ctx context.Context) (map[types.Type]
 	}
 
 	pattern := fmt.Sprintf("%s:tp:*", serviceName)
+	var keys []string
 	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
-
 	for iter.Next(ctx) {
-		key := iter.Val()
-		raw, err := s.client.Get(ctx, key).Result()
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		return nil, err
+	}
+
+	const mgetBatch = 10000
+	for i := 0; i < len(keys); i += mgetBatch {
+		end := i + mgetBatch
+		if end > len(keys) {
+			end = len(keys)
+		}
+		vals, err := s.client.MGet(ctx, keys[i:end]...).Result()
 		if err != nil {
 			continue
 		}
-
-		var data TransportData
-		if err := json.Unmarshal([]byte(raw), &data); err != nil {
-			continue
+		for _, val := range vals {
+			raw, ok := val.(string)
+			if !ok || raw == "" {
+				continue
+			}
+			var data TransportData
+			if err := json.Unmarshal([]byte(raw), &data); err != nil {
+				continue
+			}
+			response[types.Type(data.Type)]++
 		}
-		response[types.Type(data.Type)]++
 	}
 
-	return response, iter.Err()
+	return response, nil
 }
 
 func (s *redisStore) GetAllTransports(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
-	var entries []*transport.Entry
-
+	// Collect all transport keys via SCAN
 	pattern := fmt.Sprintf("%s:tp:*", serviceName)
+	var keys []string
 	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
-
 	for iter.Next(ctx) {
-		key := iter.Val()
-		raw, err := s.client.Get(ctx, key).Result()
-		if err != nil {
-			continue
-		}
-
-		var data TransportData
-		if err := json.Unmarshal([]byte(raw), &data); err != nil {
-			continue
-		}
-
-		// Use dataToEntryCore to exclude QoS metrics (bandwidth/latency) per spec
-		entry, err := s.dataToEntryCore(data)
-		if err != nil {
-			continue
-		}
-
-		if !selfTransports && entry.Edges[0] == entry.Edges[1] {
-			continue
-		}
-
-		entries = append(entries, entry)
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		return nil, err
+	}
+	if len(keys) == 0 {
+		return nil, nil
 	}
 
-	return entries, iter.Err()
+	// Fetch all values in batched MGET calls via pipeline
+	const mgetBatch = 10000
+	var entries []*transport.Entry
+
+	for i := 0; i < len(keys); i += mgetBatch {
+		end := i + mgetBatch
+		if end > len(keys) {
+			end = len(keys)
+		}
+		batch := keys[i:end]
+
+		vals, err := s.client.MGet(ctx, batch...).Result()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, val := range vals {
+			raw, ok := val.(string)
+			if !ok || raw == "" {
+				continue
+			}
+
+			var data TransportData
+			if err := json.Unmarshal([]byte(raw), &data); err != nil {
+				continue
+			}
+
+			entry, err := s.dataToEntryCore(data)
+			if err != nil {
+				continue
+			}
+
+			if !selfTransports && entry.Edges[0] == entry.Edges[1] {
+				continue
+			}
+
+			entries = append(entries, entry)
+		}
+	}
+
+	return entries, nil
 }
 
 // getAllTransportsWithQoS returns all transports including QoS metrics.
 // Used internally by metrics functions that need bandwidth/latency data.
 func (s *redisStore) getAllTransportsWithQoS(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
-	var entries []*transport.Entry
-
 	pattern := fmt.Sprintf("%s:tp:*", serviceName)
+	var keys []string
 	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
-
 	for iter.Next(ctx) {
-		key := iter.Val()
-		raw, err := s.client.Get(ctx, key).Result()
-		if err != nil {
-			continue
-		}
-
-		var data TransportData
-		if err := json.Unmarshal([]byte(raw), &data); err != nil {
-			continue
-		}
-
-		// Use dataToEntry to include QoS metrics (bandwidth/latency) for metrics
-		entry, err := s.dataToEntry(data)
-		if err != nil {
-			continue
-		}
-
-		if !selfTransports && entry.Edges[0] == entry.Edges[1] {
-			continue
-		}
-
-		entries = append(entries, entry)
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		return nil, err
+	}
+	if len(keys) == 0 {
+		return nil, nil
 	}
 
-	return entries, iter.Err()
+	const mgetBatch = 10000
+	var entries []*transport.Entry
+
+	for i := 0; i < len(keys); i += mgetBatch {
+		end := i + mgetBatch
+		if end > len(keys) {
+			end = len(keys)
+		}
+		vals, err := s.client.MGet(ctx, keys[i:end]...).Result()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, val := range vals {
+			raw, ok := val.(string)
+			if !ok || raw == "" {
+				continue
+			}
+
+			var data TransportData
+			if err := json.Unmarshal([]byte(raw), &data); err != nil {
+				continue
+			}
+
+			entry, err := s.dataToEntry(data)
+			if err != nil {
+				continue
+			}
+
+			if !selfTransports && entry.Edges[0] == entry.Edges[1] {
+				continue
+			}
+
+			entries = append(entries, entry)
+		}
+	}
+
+	return entries, nil
 }
 
 func (s *redisStore) Close() {
@@ -544,30 +604,43 @@ func (s *redisStore) GetVisorBandwidth(ctx context.Context, pk cipher.PubKey,
 // Online status is determined by having active transports.
 // Version and Daily uptime fields require uptime tracker integration.
 func (s *redisStore) GetAllVisorSummaries(ctx context.Context) ([]VisorSummary, error) {
-	// SCAN active tp:* keys to determine online visors
-	onlineVisors := make(map[string]struct{})
+	// SCAN active tp:* keys, then MGET to determine online visors
 	pattern := fmt.Sprintf("%s:tp:*", serviceName)
+	var keys []string
 	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
-
 	for iter.Next(ctx) {
-		key := iter.Val()
-		raw, err := s.client.Get(ctx, key).Result()
-		if err != nil {
-			continue
-		}
-
-		var data TransportData
-		if err := json.Unmarshal([]byte(raw), &data); err != nil {
-			continue
-		}
-
-		onlineVisors[data.EdgeA] = struct{}{}
-		if data.EdgeA != data.EdgeB {
-			onlineVisors[data.EdgeB] = struct{}{}
-		}
+		keys = append(keys, iter.Val())
 	}
 	if err := iter.Err(); err != nil {
 		return nil, err
+	}
+
+	onlineVisors := make(map[string]struct{})
+
+	const mgetBatch = 10000
+	for i := 0; i < len(keys); i += mgetBatch {
+		end := i + mgetBatch
+		if end > len(keys) {
+			end = len(keys)
+		}
+		vals, err := s.client.MGet(ctx, keys[i:end]...).Result()
+		if err != nil {
+			continue
+		}
+		for _, val := range vals {
+			raw, ok := val.(string)
+			if !ok || raw == "" {
+				continue
+			}
+			var data TransportData
+			if err := json.Unmarshal([]byte(raw), &data); err != nil {
+				continue
+			}
+			onlineVisors[data.EdgeA] = struct{}{}
+			if data.EdgeA != data.EdgeB {
+				onlineVisors[data.EdgeB] = struct{}{}
+			}
+		}
 	}
 
 	if len(onlineVisors) == 0 {

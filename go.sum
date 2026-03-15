@@ -818,8 +818,8 @@ github.com/skycoin/hardware-wallet/firmware v0.0.0-20260117000250-43c66b2bf1d2 h
 github.com/skycoin/hardware-wallet/firmware v0.0.0-20260117000250-43c66b2bf1d2/go.mod h1:XxSbk28CuQk5in9+tr7ns6AP282s5JP5pgr6axuJhgo=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0duwyG+7WliWz5u9kgk1h5MnLuA=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6/go.mod h1:UXghlricA7J3aRD/k7p/zBObQfmBawwCxIVPVjz2Q3o=
-github.com/skycoin/skycoin v0.28.4-0.20260314003836-184fef102ebb h1:KxlvjqaULBtbNXGAgveFLHFtH3R801naK6RS8bIBwzE=
-github.com/skycoin/skycoin v0.28.4-0.20260314003836-184fef102ebb/go.mod h1:7kGBXotIxGhuV9RjoRxB9bsWGQnsNwGH6mO3aS73+EI=
+github.com/skycoin/skycoin v0.28.4-0.20260314183343-aec7225fc0cf h1:AxIxRIwgYJIJO82ycYj2oWwyj7CFN3FMpWqo03cDwnI=
+github.com/skycoin/skycoin v0.28.4-0.20260314183343-aec7225fc0cf/go.mod h1:7kGBXotIxGhuV9RjoRxB9bsWGQnsNwGH6mO3aS73+EI=
 github.com/soheilhy/cmux v0.1.5 h1:jjzc5WVemNEDTLwv9tlmemhC73tI08BNOIGwBOo10Js=
 github.com/soheilhy/cmux v0.1.5/go.mod h1:T7TcVDs9LWfQgPlPsdngu6I6QIoyIFZDDC6sNE1GqG0=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=

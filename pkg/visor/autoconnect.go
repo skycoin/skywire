@@ -25,6 +25,9 @@ import (
 // PublicServiceDelay defines the interval for checking service discovery and adding transports to public visors.
 const PublicServiceDelay = skyenv.PublicAutoconnectInterval
 
+// sudphCacheTTL defines how long the cached SUDPH-capable visors list remains valid.
+const sudphCacheTTL = 5 * time.Minute
+
 // ConnectFn provides a way to connect to remote service
 type ConnectFn func(context.Context, cipher.PubKey) error
 
@@ -40,6 +43,9 @@ type autoconnector struct {
 	tm             *transport.Manager
 	visorIsPublic  bool
 	clientPublicIP string
+
+	sudphVisors        map[cipher.PubKey]struct{}
+	sudphVisorsFetched time.Time
 }
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
@@ -211,6 +217,12 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// Track which public visors we connect to
 			connectedPublicVisors := make([]cipher.PubKey, 0, maxPublicVisors)
 
+			// Fetch SUDPH-capable visors from address resolver (cached for 5 minutes)
+			var sudphCapable map[cipher.PubKey]struct{}
+			if localSupportsSUDPH {
+				sudphCapable = a.fetchSUDPHVisors(ctx)
+			}
+
 			// Phase 1: SUDPH to public visors (if supported)
 			if localSupportsSUDPH {
 				a.log.Debug("Phase 1: Connecting to public visors via SUDPH")
@@ -234,6 +246,14 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					if existingByPK[pk][tptypes.SUDPH] {
 						connectedPublicVisors = append(connectedPublicVisors, pk)
 						continue
+					}
+
+					// Skip visors not registered for SUDPH in the address resolver
+					if sudphCapable != nil {
+						if _, ok := sudphCapable[pk]; !ok {
+							connectedPublicVisors = append(connectedPublicVisors, pk)
+							continue
+						}
 					}
 
 					// Skip visors behind the same NAT
@@ -345,6 +365,13 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					// Skip if we already have SUDPH to this visor
 					if existingByPK[pk][tptypes.SUDPH] {
 						continue
+					}
+
+					// Skip visors not registered for SUDPH in the address resolver
+					if sudphCapable != nil {
+						if _, ok := sudphCapable[pk]; !ok {
+							continue
+						}
 					}
 
 					// Skip visors behind the same NAT
@@ -464,6 +491,35 @@ func (a *autoconnector) isSameLAN(ctx context.Context, pk cipher.PubKey, netType
 	}
 
 	return remoteIP != "" && remoteIP == a.clientPublicIP
+}
+
+// fetchSUDPHVisors returns the set of visors registered for SUDPH in the address resolver,
+// using a cached result if it is less than sudphCacheTTL old.
+func (a *autoconnector) fetchSUDPHVisors(ctx context.Context) map[cipher.PubKey]struct{} {
+	if a.sudphVisors != nil && time.Since(a.sudphVisorsFetched) < sudphCacheTTL {
+		return a.sudphVisors
+	}
+
+	arClient := a.tm.ARClient()
+	if arClient == nil {
+		a.log.Warn("Address resolver client not available for SUDPH visor lookup")
+		return a.sudphVisors
+	}
+
+	result, err := arClient.TransportsType(ctx, tptypes.SUDPH)
+	if err != nil {
+		a.log.WithError(err).Warn("Failed to fetch SUDPH visors from address resolver")
+		return a.sudphVisors
+	}
+
+	sudphSet := make(map[cipher.PubKey]struct{}, len(result))
+	for pk := range result {
+		sudphSet[pk] = struct{}{}
+	}
+	a.sudphVisors = sudphSet
+	a.sudphVisorsFetched = time.Now()
+	a.log.WithField("count", len(sudphSet)).Debug("Cached SUDPH-capable visors from address resolver")
+	return sudphSet
 }
 
 // transportDiscoveryCache holds cached transport discovery data to reduce API calls

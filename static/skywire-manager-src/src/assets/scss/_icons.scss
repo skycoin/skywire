@@ -1,8 +1,8 @@
 // Solid circles
 $dot-icons: (
-  green: theme-color(green),
-  red: theme-color(red),
-  yellow: theme-color(yellow),
+  green: map-get($theme-colors,green),
+  red: map-get($theme-colors,red),
+  yellow: map-get($theme-colors,yellow),
 );
 
 $dot-size:    10px;
@@ -28,8 +28,8 @@ $dot-size-sm: 7px;
 
 // Circle outlines
 $outlines: (
-  white: theme-color(white),
-  gray: theme-color(light-gray)
+  white: map-get($theme-colors,white),
+  gray: map-get($theme-colors,light-gray)
 );
 
 @each $color-name, $color-value in $outlines

@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
-import { Observable, Subscription, of, BehaviorSubject, concat, throwError } from 'rxjs';
-import { mergeMap, delay, retryWhen, take, catchError, map } from 'rxjs/operators';
+import { BehaviorSubject, Observable, Subscription, catchError, concat, delay, map, mergeMap, of, retryWhen, take, throwError } from 'rxjs';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { TranslateService } from '@ngx-translate/core';
 
@@ -320,19 +319,13 @@ export class VpnClientService {
     return this.http.request('GET', window.location.protocol + '//ip.skycoin.com/').pipe(
       retryWhen(errors => concat(errors.pipe(delay(this.standardWaitTime), take(4)), throwError(''))),
       map(data => {
-        let ip = '';
-        if (data && data['ip_address']) {
-          ip = data['ip_address'];
-        } else {
-          ip = this.translateService.instant('common.unknown');
-        }
+        const ip = data && data['ip_address']
+          ? data['ip_address']
+          : this.translateService.instant('common.unknown');
 
-        let country = '';
-        if (data && data['country_name']) {
-          country = data['country_name'];
-        } else {
-          country = this.translateService.instant('common.unknown');
-        }
+        const country = data && data['country_name']
+          ? data['country_name']
+          : this.translateService.instant('common.unknown');
 
         return [ip, country];
       })
