@@ -116,8 +116,9 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 
 func (api *API) health(c *gin.Context) {
 	resp := httputil.HealthCheckResponse{
-		BuildInfo: buildinfo.Get(),
-		StartedAt: api.startedAt,
+		ServiceName: "visor",
+		BuildInfo:   buildinfo.Get(),
+		StartedAt:   api.startedAt,
 	}
 
 	// Add transport stats if provider is available
