@@ -1,22 +1,4 @@
-bin
-skywire
-ci_scripts
-apps
-integration
-skywrie-services
-.gitignore
-.github
-.vscode
-.idea
-
-# Local development files
-local/
-*.log
-*.txt
-*.md
-!README.md
-!CHANGELOG.md
-
-# Build artifacts not needed
-build/
-dist/
+# Only docker/common/ is needed from the build context.
+# The Go source is fetched directly via go install @commit.
+*
+!docker/
