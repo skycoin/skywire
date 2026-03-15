@@ -264,17 +264,15 @@ func (v *Visor) Overview() (*Overview, error) {
 	if v == nil {
 		return &Overview{}, ErrVisorNotAvailable
 	}
-	if v.tpM == nil {
-		return &Overview{}, ErrTrpMangerNotAvailable
+
+	// Collect transport summaries if transport manager and router are ready
+	if v.tpM != nil && v.router != nil {
+		v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+			tSummaries = append(tSummaries,
+				newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
+			return true
+		})
 	}
-	if v.router == nil {
-		return &Overview{}, ErrRouterNotReady
-	}
-	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		tSummaries = append(tSummaries,
-			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
-		return true
-	})
 
 	if v.isStunReady() {
 		switch v.stunClient.NATType {
@@ -303,13 +301,18 @@ func (v *Visor) Overview() (*Overview, error) {
 		apps = v.appL.AppStates()
 	}
 
+	var routesCount int
+	if v.router != nil {
+		routesCount = v.router.RoutesCount()
+	}
+
 	overview := &Overview{
 		PubKey:          v.conf.PK,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            apps,
 		Transports:      tSummaries,
-		RoutesCount:     v.router.RoutesCount(),
+		RoutesCount:     routesCount,
 		PublicIP:        publicIP,
 		IsSymmetricNAT:  isSymmetricNAT,
 	}

@@ -75,6 +75,18 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 	return err
 }
 
+// RuntimeStats returns Go runtime statistics for the visor process.
+func (r *RPC) RuntimeStats(_ *struct{}, out *RuntimeStatsInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "RuntimeStats", nil)(out, &err)
+
+	stats, err := r.visor.RuntimeStats()
+	if stats != nil {
+		*out = *stats
+	}
+
+	return err
+}
+
 /*
 	<<< THIS NODE UPTIME >>>
 */
