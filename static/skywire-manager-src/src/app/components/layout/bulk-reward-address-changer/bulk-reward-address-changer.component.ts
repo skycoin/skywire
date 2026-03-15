@@ -1,13 +1,12 @@
 import { Component, Inject, OnDestroy, ViewChild } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angular/material/dialog';
-import { Subscription, of, Observable } from 'rxjs';
+import { Observable, Subscription, delay, mergeMap, of } from 'rxjs';
 
 import { AppConfig } from 'src/app/app.config';
 import { NodeService } from 'src/app/services/node.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { FormArray, UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { ButtonComponent } from '../button/button.component';
-import { delay, mergeMap } from 'rxjs/operators';
 import GeneralUtils from 'src/app/utils/generalUtils';
 
 /**

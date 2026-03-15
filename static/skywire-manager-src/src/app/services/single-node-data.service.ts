@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Observable, Subscription, BehaviorSubject, of } from 'rxjs';
-import { delay, tap, mergeMap } from 'rxjs/operators';
+import { BehaviorSubject, Observable, Subscription, delay, mergeMap, of, tap } from 'rxjs';
 import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';

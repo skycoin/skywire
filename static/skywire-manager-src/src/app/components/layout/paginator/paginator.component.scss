@@ -25,7 +25,7 @@
     justify-content: center;
 
     &:hover {
-      background: theme-color(translucid-hover);
+      background: map-get($theme-colors,translucid-hover);
     }
 
     mat-icon {
@@ -40,12 +40,12 @@
 
   .selected {
     color: $white;
-    background: scale-color(theme-color(translucid-hover), $alpha: 20%);
+    background: scale-color(map-get($theme-colors,translucid-hover), $alpha: 20%);
     padding: $elements-padding ($elements-padding * 2);
     cursor: pointer;
 
     &:hover {
-      background: scale-color(theme-color(translucid-hover), $alpha: 50%);
+      background: scale-color(map-get($theme-colors,translucid-hover), $alpha: 50%);
     }
   }
 

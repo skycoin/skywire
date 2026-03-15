@@ -1,6 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, map } from 'rxjs';
 import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';
@@ -125,10 +124,12 @@ export class NodeService {
 
           // Parse new dmsg_servers with per-server latencies
           if (response.dmsg_servers && Array.isArray(response.dmsg_servers)) {
-            node.dmsgServers = response.dmsg_servers.map((s: any) => ({
+            node.dmsgServers = response.dmsg_servers.map((s: any) => {
+return {
               pk: s.pk,
               latency: s.latency || 0
-            }));
+            }
+});
           }
 
           // Check if is hypervisor.
@@ -371,10 +372,12 @@ export class NodeService {
 
         // Parse dmsg_servers with per-server latencies
         if (response.dmsg_servers && Array.isArray(response.dmsg_servers)) {
-          node.dmsgServers = response.dmsg_servers.map((s: any) => ({
+          node.dmsgServers = response.dmsg_servers.map((s: any) => {
+return {
             pk: s.pk,
             latency: s.latency || 0
-          }));
+          }
+});
         }
 
         // Check if is hypervisor (local visor)
