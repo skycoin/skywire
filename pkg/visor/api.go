@@ -406,8 +406,9 @@ func (v *Visor) Summary() (*Summary, error) {
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
 	if v.isDTMReady() {
-		dmsgTracker, _ := v.dtm.Get(v.conf.PK)
-		dmsgStatValue = &dmsgTracker
+		if dmsgTracker, ok := v.dtm.Get(v.conf.PK); ok {
+			dmsgStatValue = &dmsgTracker
+		}
 	}
 
 	// Get all connected DMSG servers (deprecated, for backward compatibility)
@@ -2714,7 +2715,7 @@ func (v *Visor) TestVisor(conf PingConfig) ([]TestResult, error) {
 		return result, err
 	}
 
-	if conf.PubVisCount < len(publicVisors) {
+	if conf.PubVisCount+1 <= len(publicVisors) {
 		publicVisors = publicVisors[:conf.PubVisCount+1]
 	}
 
@@ -3011,7 +3012,7 @@ func (v *Visor) GetVPNClientAddress() string {
 	for _, v := range v.conf.Launcher.Apps {
 		if v.Name == visorconfig.VPNClientName {
 			for index := range v.Args {
-				if v.Args[index] == "--srv" {
+				if v.Args[index] == "--srv" && index+1 < len(v.Args) {
 					return v.Args[index+1]
 				}
 			}
@@ -3025,7 +3026,7 @@ func (v *Visor) GetSkysocksClientAddress() string {
 	for _, v := range v.conf.Launcher.Apps {
 		if v.Name == visorconfig.SkysocksClientAddr {
 			for index := range v.Args {
-				if v.Args[index] == "--srv" {
+				if v.Args[index] == "--srv" && index+1 < len(v.Args) {
 					return v.Args[index+1]
 				}
 			}
@@ -3037,8 +3038,8 @@ func (v *Visor) GetSkysocksClientAddress() string {
 // IsDMSGClientReady return availability of dsmg client
 func (v *Visor) IsDMSGClientReady() (bool, error) {
 	if v.isDTMReady() {
-		dmsgTracker, _ := v.dtm.Get(v.conf.PK)
-		if dmsgTracker.ServerPK.Hex()[:5] != "00000" {
+		dmsgTracker, ok := v.dtm.Get(v.conf.PK)
+		if ok && dmsgTracker.ServerPK.Hex()[:5] != "00000" {
 			return true, nil
 		}
 	}
