@@ -351,15 +351,27 @@ func server(e error) {
 
 		r1.GET("/log-collection/tplogs", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write([]byte(func() (l string) { //nolint:errcheck,gosec  //nolint:errcheck,gosec
-				l = "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>"
+			c.Writer.Write([]byte(func() (l string) { //nolint:errcheck,gosec
+				l = "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title>"
+				l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; } pre { font-family:Courier New; font-size:10pt; } body { background-color:black; color:white; }</style>"
+				l += "</head><body><pre>"
 				l += navlinks
-				l += "<p style='color:blue'>Blue = Verified Bandwidth</p>"
-				l += "<p style='color:yellow'>Yellow = Transport bandwidth inconsistent</p>"
-				l += "<p style='color:red'>Red = Error: sent or received is zero</p>"
-				tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint:errcheck,gosec
-				l += fmt.Sprintf("%s\n", ansihtml.ConvertToHTML([]byte(tp)))
+				l += "<p><a href='/stats/bandwidth-history'>View Bandwidth History Graph</a></p>"
+				l += "<p style='color:#36A2EB'>Blue = Verified Bandwidth</p>"
+				l += "<p style='color:#FFCE56'>Yellow = Transport bandwidth inconsistent</p>"
+				l += "<p style='color:#FF6384'>Red = Error: sent or received is zero</p>"
+
+				tpdData, err := fetchTPDBandwidthMetrics(7)
+				if err != nil {
+					l += fmt.Sprintf("<p style='color:red'>Error fetching TPD data: %v</p>", err)
+					// Fallback to shell-out
+					tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint:errcheck,gosec
+					l += fmt.Sprintf("%s\n", ansihtml.ConvertToHTML([]byte(tp)))
+				} else {
+					l += renderTPDBandwidthTable(tpdData)
+				}
 				l += htmltoplink
 				l += htmlend
 				return l
@@ -419,7 +431,7 @@ func server(e error) {
 				l += "Error fetching uptime tracker stats"
 			}
 			l += "</pre>"
-			l += "<p><a href='/stats/version-history'>View Version History Graph</a></p>"
+			l += "<p><a href='/stats/version-history'>View Version History Graph</a> | <a href='/stats/bandwidth-history'>View Bandwidth History Graph</a></p>"
 
 			// Architecture Stats
 			l += "<h2><a href='/stats/arch'>Architecture Statistics</a></h2>"
@@ -565,6 +577,39 @@ func server(e error) {
 					latest := history[len(history)-1]
 					l += fmt.Sprintf("<h3>Latest: %s (Total: %d visors ≥75%% uptime)</h3>", latest.Date, latest.Total)
 				}
+			}
+
+			l += "<br>" + htmltoplink
+			l += "</body></html>"
+
+			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+		})
+
+		// Bandwidth history chart route
+		r1.GET("/stats/bandwidth-history", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+			c.Writer.WriteHeader(http.StatusOK)
+
+			l := "<html><head><title>Bandwidth History</title>"
+			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
+			l += "</head>"
+			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
+			l += "<a id='top'></a>"
+			l += navlinks
+			l += "<h1>Network Bandwidth History</h1>"
+			l += "<p>Shows daily total bandwidth for qualifying visors (≥ minimum bandwidth threshold).</p>"
+
+			histDir := filepath.Join(wd, "hist")
+			history, err := ParseHistoricBandwidthData(histDir)
+			if err != nil {
+				l += fmt.Sprintf("<p>Error loading bandwidth data: %v</p>", err)
+			} else if len(history) == 0 {
+				l += "<p>No bandwidth history data available. Run <code>bw-collect</code> to start collecting.</p>"
+			} else {
+				chartWidth := 800
+				chartHeight := 300
+				l += GenerateBandwidthHistoryChartHTML(history, chartWidth, chartHeight)
 			}
 
 			l += "<br>" + htmltoplink

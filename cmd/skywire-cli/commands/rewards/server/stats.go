@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,6 +17,8 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
+
+	"github.com/skycoin/skywire/deployment"
 )
 
 var (
@@ -822,5 +826,300 @@ func GeneratePieChartHTML(items []PieChartItem, maxSlices int) string {
 	sb.WriteString("</div>\n")
 
 	sb.WriteString("</div>\n")
+	return sb.String()
+}
+
+// BandwidthHistoryEntry represents bandwidth totals for a single day
+type BandwidthHistoryEntry struct {
+	Date       string            `json:"date"`
+	Total      uint64            `json:"total"`
+	ByVisor    map[string]uint64 `json:"by_visor,omitempty"`
+	VisorCount int               `json:"visor_count"`
+}
+
+// ParseHistoricBandwidthData reads all *_bandwidth.json files from hist directory
+func ParseHistoricBandwidthData(histDir string) ([]BandwidthHistoryEntry, error) {
+	files, err := filepath.Glob(filepath.Join(histDir, "*_bandwidth.json"))
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Strings(files) // chronological order
+
+	var history []BandwidthHistoryEntry
+	for _, file := range files {
+		data, err := os.ReadFile(file) //nolint:gosec
+		if err != nil {
+			continue
+		}
+
+		var bwMap map[string]uint64
+		if err := json.Unmarshal(data, &bwMap); err != nil {
+			continue
+		}
+
+		// Extract date from filename: YYYY-MM-DD_bandwidth.json
+		base := filepath.Base(file)
+		date := strings.TrimSuffix(base, "_bandwidth.json")
+
+		var total uint64
+		for _, bw := range bwMap {
+			total += bw
+		}
+
+		history = append(history, BandwidthHistoryEntry{
+			Date:       date,
+			Total:      total,
+			VisorCount: len(bwMap),
+		})
+	}
+
+	return history, nil
+}
+
+// GenerateBandwidthHistoryChartHTML creates a CSS-based bar chart showing daily network bandwidth
+func GenerateBandwidthHistoryChartHTML(history []BandwidthHistoryEntry, chartWidth, chartHeight int) string {
+	if len(history) == 0 {
+		return "<p>No bandwidth history data available</p>"
+	}
+
+	// Find max total for scaling
+	var maxTotal uint64
+	for _, entry := range history {
+		if entry.Total > maxTotal {
+			maxTotal = entry.Total
+		}
+	}
+	if maxTotal == 0 {
+		return "<p>No bandwidth data points</p>"
+	}
+
+	var sb strings.Builder
+
+	// Container
+	sb.WriteString("<div style='margin: 20px 0; max-width: 100%; overflow-x: auto;'>\n")
+	sb.WriteString("<h3>Daily Network Bandwidth (qualifying visors)</h3>\n")
+
+	// Chart container with axes
+	sb.WriteString("<div style='display: flex; align-items: flex-end; gap: 5px; min-width: fit-content;'>\n")
+
+	// Y-axis labels
+	sb.WriteString(fmt.Sprintf("<div style='display: flex; flex-direction: column; justify-content: space-between; height: %dpx; font-size: 11px; color: #888; text-align: right; padding-right: 5px; flex-shrink: 0;'>\n", chartHeight))
+	sb.WriteString(fmt.Sprintf("<span>%s</span>\n", formatBytesChart(maxTotal)))
+	sb.WriteString(fmt.Sprintf("<span>%s</span>\n", formatBytesChart(maxTotal*3/4)))
+	sb.WriteString(fmt.Sprintf("<span>%s</span>\n", formatBytesChart(maxTotal/2)))
+	sb.WriteString(fmt.Sprintf("<span>%s</span>\n", formatBytesChart(maxTotal/4)))
+	sb.WriteString("<span>0</span>\n")
+	sb.WriteString("</div>\n")
+
+	// Chart area
+	sb.WriteString(fmt.Sprintf("<div style='position: relative; min-width: %dpx; height: %dpx; border-left: 1px solid #444; border-bottom: 1px solid #444; background: #1a1a1a; flex-shrink: 0;'>\n", chartWidth, chartHeight))
+
+	// Grid lines
+	for i := 1; i <= 4; i++ {
+		y := chartHeight - (chartHeight * i / 4)
+		sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: 0; right: 0; top: %dpx; border-top: 1px dashed #333;'></div>\n", y))
+	}
+
+	// Calculate bar width
+	barWidth := chartWidth / len(history)
+	if barWidth < 4 {
+		barWidth = 4
+	}
+
+	// Draw bars
+	for i, entry := range history {
+		x := i * barWidth
+		barHeight := int(entry.Total * uint64(chartHeight) / maxTotal)
+		if barHeight < 1 && entry.Total > 0 {
+			barHeight = 1
+		}
+
+		color := "#36A2EB"
+		sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: %dpx; bottom: 0; width: %dpx; height: %dpx; background: %s;' title='%s: %s (%d visors)'></div>\n",
+			x, barWidth-1, barHeight, color, entry.Date, formatBytesChart(entry.Total), entry.VisorCount))
+	}
+
+	sb.WriteString("</div>\n") // chart area
+	sb.WriteString("</div>\n") // flex container
+
+	// X-axis labels
+	labelInterval := len(history) / 10
+	if labelInterval < 1 {
+		labelInterval = 1
+	}
+
+	sb.WriteString(fmt.Sprintf("<div style='display: flex; margin-left: 40px; font-size: 10px; color: #888; min-width: %dpx;'>\n", chartWidth))
+	for i, entry := range history {
+		if i%labelInterval == 0 || i == len(history)-1 {
+			dateParts := strings.Split(entry.Date, "-")
+			label := entry.Date
+			if len(dateParts) == 3 {
+				label = dateParts[1] + "-" + dateParts[2]
+			}
+			width := barWidth * labelInterval
+			sb.WriteString(fmt.Sprintf("<span style='width: %dpx; text-align: left;'>%s</span>\n", width, label))
+		}
+	}
+	sb.WriteString("</div>\n")
+
+	// Summary table
+	sb.WriteString("<div style='margin-top: 15px; font-size: 12px;'>\n")
+	if len(history) > 0 {
+		latest := history[len(history)-1]
+		sb.WriteString(fmt.Sprintf("<p>Latest: %s — %s total bandwidth across %d qualifying visors</p>\n",
+			latest.Date, formatBytesChart(latest.Total), latest.VisorCount))
+	}
+	sb.WriteString("</div>\n")
+
+	sb.WriteString("</div>\n") // container
+
+	return sb.String()
+}
+
+// formatBytesChart converts bytes to human-readable for chart labels
+func formatBytesChart(b uint64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := uint64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+// fetchTPDBandwidthMetrics fetches bandwidth metrics from TPD for the given number of days
+func fetchTPDBandwidthMetrics(days int) ([]tpdTransportMetric, error) {
+	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
+	url := fmt.Sprintf("%s/metrics?days=%d&bandwidth=true&latency=false", tpdURL, days)
+
+	//nolint:gosec
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("TPD returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var metrics []tpdTransportMetric
+	if err := json.Unmarshal(body, &metrics); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	return metrics, nil
+}
+
+// tpdTransportMetric represents a transport metric from TPD /metrics endpoint
+type tpdTransportMetric struct {
+	ID    string   `json:"id"`
+	Type  string   `json:"type"`
+	Live  bool     `json:"live"`
+	Edges []string `json:"edges,omitempty"`
+	Daily []struct {
+		Date string `json:"date"`
+		A    *struct {
+			Sent uint64 `json:"sent"`
+			Recv uint64 `json:"recv"`
+		} `json:"a,omitempty"`
+		B *struct {
+			Sent uint64 `json:"sent"`
+			Recv uint64 `json:"recv"`
+		} `json:"b,omitempty"`
+	} `json:"daily"`
+}
+
+// renderTPDBandwidthTable renders TPD transport metrics as an HTML table
+func renderTPDBandwidthTable(metrics []tpdTransportMetric) string {
+	if len(metrics) == 0 {
+		return "<p>No transport metrics available from TPD</p>"
+	}
+
+	// Collect all dates across all transports
+	dateSet := make(map[string]struct{})
+	for _, m := range metrics {
+		for _, d := range m.Daily {
+			dateSet[d.Date] = struct{}{}
+		}
+	}
+	var dates []string
+	for d := range dateSet {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("<p>Showing %d transports with bandwidth data over %d days</p>\n", len(metrics), len(dates)))
+	sb.WriteString("<table style='border-collapse: collapse; font-size: 10px;'>\n")
+	sb.WriteString("<thead><tr style='border-bottom: 1px solid #555;'>")
+	sb.WriteString("<th style='padding: 4px 8px; text-align: left;'>Transport</th>")
+	sb.WriteString("<th style='padding: 4px 8px;'>Type</th>")
+	sb.WriteString("<th style='padding: 4px 8px;'>Live</th>")
+	for _, date := range dates {
+		dateParts := strings.Split(date, "-")
+		label := date
+		if len(dateParts) == 3 {
+			label = dateParts[1] + "-" + dateParts[2]
+		}
+		sb.WriteString(fmt.Sprintf("<th style='padding: 4px 8px;'>%s</th>", label))
+	}
+	sb.WriteString("</tr></thead>\n<tbody>\n")
+
+	for _, m := range metrics {
+		// Build a map of date -> bandwidth for this transport
+		dailyBW := make(map[string]uint64)
+		for _, d := range m.Daily {
+			var bw uint64
+			if d.A != nil {
+				bw += d.A.Sent + d.A.Recv
+			}
+			if d.B != nil {
+				bw += d.B.Sent + d.B.Recv
+			}
+			dailyBW[d.Date] = bw
+		}
+
+		idShort := m.ID
+		if len(idShort) > 8 {
+			idShort = idShort[:8]
+		}
+
+		liveStr := "<span style='color:#FF6384'>no</span>"
+		if m.Live {
+			liveStr = "<span style='color:#4BC0C0'>yes</span>"
+		}
+
+		sb.WriteString("<tr style='border-bottom: 1px solid #333;'>")
+		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px;' title='%s'>%s</td>", m.ID, idShort))
+		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; text-align: center;'>%s</td>", m.Type))
+		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; text-align: center;'>%s</td>", liveStr))
+
+		for _, date := range dates {
+			bw := dailyBW[date]
+			var color string
+			switch {
+			case bw == 0:
+				color = "#666"
+			case bw < 1024:
+				color = "#FFCE56" // yellow - very low
+			default:
+				color = "#36A2EB" // blue - verified
+			}
+			sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; text-align: right; color: %s;'>%s</td>", color, formatBytesChart(bw)))
+		}
+		sb.WriteString("</tr>\n")
+	}
+
+	sb.WriteString("</tbody></table>\n")
 	return sb.String()
 }
