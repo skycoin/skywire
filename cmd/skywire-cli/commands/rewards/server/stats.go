@@ -930,7 +930,7 @@ func GenerateBandwidthHistoryChartHTML(history []BandwidthHistoryEntry, chartWid
 	// Draw bars
 	for i, entry := range history {
 		x := i * barWidth
-		barHeight := int(entry.Total * uint64(chartHeight) / maxTotal)
+		barHeight := int(entry.Total * uint64(chartHeight) / maxTotal) //nolint:gosec // chartHeight is always positive
 		if barHeight < 1 && entry.Total > 0 {
 			barHeight = 1
 		}
