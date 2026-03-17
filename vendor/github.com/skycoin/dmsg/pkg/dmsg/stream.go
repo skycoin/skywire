@@ -3,6 +3,7 @@ package dmsg
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 
@@ -82,16 +83,18 @@ func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 	// Reserve stream in porter.
 	var lPort uint16
 	if lPort, s.close, err = s.ses.porter.ReserveEphemeral(context.Background(), s); err != nil {
-		return
+		return req, err
 	}
 
 	// Prepare fields.
-	s.prepareFields(true, Addr{PK: s.ses.LocalPK(), Port: lPort}, rAddr)
+	if err = s.prepareFields(true, Addr{PK: s.ses.LocalPK(), Port: lPort}, rAddr); err != nil {
+		return req, err
+	}
 
 	// Prepare request.
 	var nsMsg []byte
 	if nsMsg, err = s.ns.MakeHandshakeMessage(); err != nil {
-		return
+		return req, err
 	}
 	req = StreamRequest{
 		Timestamp: time.Now().UnixNano(),
@@ -104,21 +107,23 @@ func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 	// Write request.
 	if s.sStr != nil {
 		err = s.ses.writeObject(s.sStr, obj)
-		return
+		return req, err
 	}
 	err = s.ses.writeObject(s.yStr, obj)
-	return
+	return req, err
 }
 
 func (s *Stream) writeIPRequest(rAddr Addr) (req StreamRequest, err error) {
 	// Reserve stream in porter.
 	var lPort uint16
 	if lPort, s.close, err = s.ses.porter.ReserveEphemeral(context.Background(), s); err != nil {
-		return
+		return req, err
 	}
 
 	// Prepare fields.
-	s.prepareFields(true, Addr{PK: s.ses.LocalPK(), Port: lPort}, rAddr)
+	if err = s.prepareFields(true, Addr{PK: s.ses.LocalPK(), Port: lPort}, rAddr); err != nil {
+		return req, err
+	}
 
 	req = StreamRequest{
 		Timestamp: time.Now().UnixNano(),
@@ -131,42 +136,43 @@ func (s *Stream) writeIPRequest(rAddr Addr) (req StreamRequest, err error) {
 	// Write request.
 	if s.sStr != nil {
 		err = s.ses.writeObject(s.sStr, obj)
-		return
+		return req, err
 	}
 	err = s.ses.writeObject(s.yStr, obj)
-	return
+	return req, err
 }
 
 func (s *Stream) readRequest() (req StreamRequest, err error) {
 	var obj SignedObject
 	if s.sStr != nil {
 		if obj, err = s.ses.readObject(s.sStr); err != nil {
-			return
+			return req, err
 		}
 	} else {
 		if obj, err = s.ses.readObject(s.yStr); err != nil {
-			return
+			return req, err
 		}
 	}
 
 	if req, err = obj.ObtainStreamRequest(); err != nil {
-		return
+		return req, err
 	}
 	if err = req.Verify(0); err != nil {
-		return
+		return req, err
 	}
 	if req.DstAddr.PK != s.ses.LocalPK() {
-		err = ErrReqInvalidDstPK
-		return
+		return req, ErrReqInvalidDstPK
 	}
 
 	// Prepare fields.
-	s.prepareFields(false, req.DstAddr, req.SrcAddr)
+	if err = s.prepareFields(false, req.DstAddr, req.SrcAddr); err != nil {
+		return req, err
+	}
 
 	if err = s.ns.ProcessHandshakeMessage(req.NoiseMsg); err != nil {
-		return
+		return req, err
 	}
-	return
+	return req, nil
 }
 
 func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
@@ -254,7 +260,7 @@ func (s *Stream) readIPResponse(req StreamRequest) (net.IP, error) {
 	return resp.IP, nil
 }
 
-func (s *Stream) prepareFields(init bool, lAddr, rAddr Addr) {
+func (s *Stream) prepareFields(init bool, lAddr, rAddr Addr) error {
 	ns, err := noise.New(noise.HandshakeKK, noise.Config{
 		LocalPK:   s.ses.LocalPK(),
 		LocalSK:   s.ses.localSK(),
@@ -262,7 +268,7 @@ func (s *Stream) prepareFields(init bool, lAddr, rAddr Addr) {
 		Initiator: init,
 	})
 	if err != nil {
-		s.log.WithError(err).Panic("Failed to prepare stream noise object.")
+		return fmt.Errorf("failed to prepare stream noise object: %w", err)
 	}
 
 	s.lAddr = lAddr
@@ -274,6 +280,7 @@ func (s *Stream) prepareFields(init bool, lAddr, rAddr Addr) {
 		s.nsConn = noise.NewReadWriter(s.yStr, s.ns)
 	}
 	s.log = s.ses.log.WithField("stream", s.lAddr.ShortString()+"->"+s.rAddr.ShortString())
+	return nil
 }
 
 // LocalAddr returns the local address of the dmsg stream.
