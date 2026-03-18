@@ -437,7 +437,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 		status := resp.StatusCode
 
 		if status == http.StatusTooManyRequests {
-			resp.Body.Close() //nolint:errcheck
+			resp.Body.Close() //nolint:errcheck,gosec
 			c.log.Warnf("Rate limited by address resolver on resolve for %s, retrying...", pk.String()[:8])
 			continue
 		}
