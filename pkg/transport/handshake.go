@@ -7,11 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
@@ -131,7 +128,10 @@ func MakeSettlementHS(init bool, log *logging.Logger, label Label) SettlementHS 
 	}
 
 	// responding logic.
-	respHS := func(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (Label, error) {
+	// NOTE: Registration with TPD is NOT done here. The transport manager's
+	// periodic re-registration loop handles batch registration of all transports,
+	// which avoids per-transport HTTP calls that hit TPD rate limits on public visors.
+	respHS := func(ctx context.Context, _ DiscoveryClient, transport network.Transport, sk cipher.SecKey) (Label, error) {
 		// Use LabelUser for local comparison entry; compareEntries does not check label,
 		// so this is backward-compatible with older visors that always send LabelUser.
 		entry := makeEntryFromTransport(transport, LabelUser)
@@ -152,30 +152,6 @@ func MakeSettlementHS(init bool, log *logging.Logger, label Label) SettlementHS 
 		entry = *recvSE.Entry
 		receivedLabel := entry.Label
 
-		// Ensure transport is registered.
-		if err := dc.RegisterTransports(ctx, recvSE); err != nil {
-			if httpErr, ok := err.(*httputil.HTTPError); ok && httpErr.Status == http.StatusConflict {
-				log.WithError(err).Debug("An expected error occurred while trying to register transport.")
-			} else {
-				// Retry registration with exponential backoff for transient errors
-				log.WithError(err).Warn("Failed to register transport, retrying with backoff...")
-				maxRetries := 3
-				for attempt := 1; attempt <= maxRetries; attempt++ {
-					backoff := time.Duration(attempt) * time.Second
-					time.Sleep(backoff)
-
-					if retryErr := dc.RegisterTransports(ctx, recvSE); retryErr != nil {
-						log.WithError(retryErr).Warnf("Registration retry %d/%d failed", attempt, maxRetries)
-						if attempt == maxRetries {
-							log.WithError(retryErr).Error("Failed to register transport after all retries.")
-						}
-					} else {
-						log.Infof("Successfully registered transport after %d retries", attempt)
-						break
-					}
-				}
-			}
-		}
 		return receivedLabel, writeHsResponse(transport, responseOK)
 	}
 
