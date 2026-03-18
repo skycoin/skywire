@@ -80,6 +80,10 @@ type Manager struct {
 	// tpdCache stores the cached transport discovery data for local route calculation
 	tpdCache   []*Entry
 	tpdCacheMu sync.RWMutex
+
+	// regNudge signals the re-registration loop to run soon (after a short debounce).
+	// Sent after accepting a new transport so it gets batch-registered quickly.
+	regNudge chan struct{}
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -99,6 +103,7 @@ func NewManager(log *logging.Logger, arClient addrresolver.APIClient, ebc *appev
 		arClient:   arClient,
 		factory:    factory,
 		ebc:        ebc,
+		regNudge:   make(chan struct{}, 1),
 	}
 	return tm, nil
 }
@@ -162,6 +167,28 @@ func (tm *Manager) runReRegisterTransports(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			tm.reRegisterTransports(ctx)
+		case <-tm.regNudge:
+			// New transport accepted — debounce 5s to batch concurrent accepts,
+			// then register all transports in one call.
+			tm.Logger.Debug("Registration nudge received, debouncing...")
+			select {
+			case <-time.After(5 * time.Second):
+			case <-tm.done:
+				return
+			case <-ctx.Done():
+				return
+			}
+			// Drain any additional nudges that arrived during debounce
+			for {
+				select {
+				case <-tm.regNudge:
+				default:
+					goto register
+				}
+			}
+		register:
+			tm.reRegisterTransports(ctx)
+			ticker.Reset(transportReRegisterInterval)
 		case <-tm.done:
 			return
 		case <-ctx.Done():
@@ -510,6 +537,13 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 	}
 
 	tm.Logger.Debugf("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), tpID, !ok)
+
+	// Nudge the re-registration loop to batch-register this transport with TPD soon.
+	// Registration is deferred to avoid per-transport HTTP calls that hit rate limits.
+	select {
+	case tm.regNudge <- struct{}{}:
+	default: // nudge already pending
+	}
 
 	// NOTE: Do NOT measure latency on the accepting side.
 	// Only the initiating side measures latency to avoid race conditions where
