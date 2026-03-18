@@ -35,6 +35,7 @@ var (
 	showInactive     bool
 	logger           = logging.MustGetLogger("skywire-cli")
 	tpTypes          bool
+	showStats        bool
 	utURL            string
 	sdURL            string
 	listRemoteVisors []string
@@ -74,6 +75,7 @@ func init() {
 	tpCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
 	tpCmd.Flags().StringVarP(&tpID, "id", "i", "", "display transport matching ID")
 	tpCmd.Flags().BoolVarP(&tpTypes, "tptypes", "u", false, "display transport types used by the local visor")
+	tpCmd.Flags().BoolVarP(&showStats, "stats", "s", false, "show transport statistics (count by type, unique visors)")
 	tpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	tpCmd.Flags().StringSliceVar(&listRemoteVisors, "remote", nil, "list transports on remote visor(s) via TPS (comma-separated PKs)")
 }
@@ -213,6 +215,45 @@ var tpCmd = &cobra.Command{
 			types, err := rpcClient.TransportTypes()
 			internal.Catch(cmd.Flags(), err)
 			internal.PrintOutput(cmd.Flags(), types, fmt.Sprintln(strings.Join(types, "\n")))
+			return
+		}
+
+		if showStats {
+			transports, err := rpcClient.Transports(filterTypes, nil, false)
+			internal.Catch(cmd.Flags(), err)
+
+			byType := make(map[string]int)
+			uniqueVisors := make(map[cipher.PubKey]struct{})
+			for _, tp := range transports {
+				byType[string(tp.Type)]++
+				uniqueVisors[tp.Remote] = struct{}{}
+			}
+
+			type statsOutput struct {
+				Total        int            `json:"total"`
+				UniqueVisors int            `json:"unique_visors"`
+				ByType       map[string]int `json:"by_type"`
+			}
+			stats := statsOutput{
+				Total:        len(transports),
+				UniqueVisors: len(uniqueVisors),
+				ByType:       byType,
+			}
+
+			var b strings.Builder
+			fmt.Fprintf(&b, "Total transports:  %d\n", stats.Total)
+			fmt.Fprintf(&b, "Unique visors:     %d\n", stats.UniqueVisors)
+			// Sort type names for consistent output
+			typeNames := make([]string, 0, len(byType))
+			for t := range byType {
+				typeNames = append(typeNames, t)
+			}
+			sort.Strings(typeNames)
+			for _, t := range typeNames {
+				fmt.Fprintf(&b, "  %-10s %d\n", t+":", byType[t])
+			}
+
+			internal.PrintOutput(cmd.Flags(), stats, b.String())
 			return
 		}
 

@@ -14,10 +14,11 @@ import (
 
 const expectedFieldsLen = 2
 
-// PKTable associates public keys to udp addresses.
+// PKTable associates public keys to tcp addresses.
 type PKTable interface {
 	Addr(pk cipher.PubKey) (string, bool)
 	PubKey(addr string) (cipher.PubKey, bool)
+	SetAddr(pk cipher.PubKey, addr string)
 	Count() int
 }
 
@@ -91,6 +92,12 @@ func (mt *memoryTable) Addr(pk cipher.PubKey) (string, bool) {
 func (mt *memoryTable) PubKey(addr string) (cipher.PubKey, bool) {
 	pk, ok := mt.reverse[addr]
 	return pk, ok
+}
+
+// SetAddr associates a public key with an address at runtime.
+func (mt *memoryTable) SetAddr(pk cipher.PubKey, addr string) {
+	mt.entries[pk] = addr
+	mt.reverse[addr] = pk
 }
 
 // Count returns the number of entries within the PKTable implementation.

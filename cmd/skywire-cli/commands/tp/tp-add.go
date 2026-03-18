@@ -64,7 +64,10 @@ func init() {
 	addTpCmd.Flags().BoolVarP(&userLabel, "user", "u", false, "set transport label to 'user' (default is 'skycoin')")
 	addTpCmd.Flags().BoolVar(&noRegister, "no-register", false, "skip transport discovery registration (implies --user)")
 	addTpCmd.Flags().StringSliceVar(&remoteVisorPKs, "remote", nil, "request transport via TPS on remote visor(s) (comma-separated PKs)")
+	addTpCmd.Flags().StringVar(&stcpAddr, "addr", "", "remote address (ip:port) for stcp transport")
 }
+
+var stcpAddr string
 
 var addTpCmd = &cobra.Command{
 	Use:   "add <public-key> [public-key]...",
@@ -78,8 +81,14 @@ var addTpCmd = &cobra.Command{
 	Args:                  cobra.MinimumNArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		if transportType != "dmsg" && transportType != "stcpr" && transportType != "sudph" && transportType != "" {
+		if transportType != "dmsg" && transportType != "stcpr" && transportType != "sudph" && transportType != "stcp" && transportType != "" {
 			logger.Fatal("Invalid transport type specified:", transportType)
+		}
+		if stcpAddr != "" && transportType != "stcp" {
+			logger.Fatal("--addr flag requires -t stcp")
+		}
+		if transportType == "stcp" && stcpAddr == "" {
+			logger.Fatal("stcp transport requires --addr ip:port")
 		}
 		// --no-register implies --user label
 		if noRegister {
@@ -110,6 +119,15 @@ var addTpCmd = &cobra.Command{
 
 		if len(pks) == 0 {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("no public keys specified"))
+		}
+
+		// For stcp, inject the address into the visor's PK table before dialing
+		if transportType == "stcp" && stcpAddr != "" {
+			for _, pk := range pks {
+				if err := rpcClient.SetSTCPAddr(pk, stcpAddr); err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set STCP address: %w", err))
+				}
+			}
 		}
 
 		// Handle --remote flag: request transport via TPS on remote visor(s)

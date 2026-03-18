@@ -84,6 +84,12 @@ type Manager struct {
 	// regNudge signals the re-registration loop to run soon (after a short debounce).
 	// Sent after accepting a new transport so it gets batch-registered quickly.
 	regNudge chan struct{}
+
+	// delQueue collects transport IDs for deferred batch deletion from TPD.
+	// Transports queue their ID here on close instead of making individual HTTP calls.
+	delQueue   []uuid.UUID
+	delQueueMu sync.Mutex
+	delNudge   chan struct{}
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -104,6 +110,7 @@ func NewManager(log *logging.Logger, arClient addrresolver.APIClient, ebc *appev
 		factory:    factory,
 		ebc:        ebc,
 		regNudge:   make(chan struct{}, 1),
+		delNudge:   make(chan struct{}, 1),
 	}
 	return tm, nil
 }
@@ -118,11 +125,12 @@ func (tm *Manager) InitDmsgClient(ctx context.Context, dmsgC *dmsg.Client) {
 // from all those clients
 // Additionally, it runs cleanup and persistent reconnection routines
 func (tm *Manager) Serve(ctx context.Context) {
-	// for cleanup, reconnect and re-registration goroutines
-	tm.wg.Add(3)
+	// for cleanup, reconnect, re-registration, and deferred deletion goroutines
+	tm.wg.Add(4)
 	go tm.cleanupTransports(ctx)
 	go tm.runReconnectPersistent(ctx)
 	go tm.runReRegisterTransports(ctx)
+	go tm.runDeferredDeletions(ctx)
 	tm.Logger.Debug("transport manager is serving.")
 }
 
@@ -194,6 +202,79 @@ func (tm *Manager) runReRegisterTransports(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+// queueDeletion adds a transport ID to the deferred deletion queue.
+// Called by ManagedTransport.close() instead of making individual HTTP calls.
+func (tm *Manager) queueDeletion(id uuid.UUID) {
+	tm.delQueueMu.Lock()
+	tm.delQueue = append(tm.delQueue, id)
+	tm.delQueueMu.Unlock()
+	// Non-blocking nudge
+	select {
+	case tm.delNudge <- struct{}{}:
+	default: // nudge already pending
+	}
+}
+
+const deletionDebounce = 5 * time.Second
+
+// runDeferredDeletions batch-deletes transport IDs that were queued by closing transports.
+// Uses the same debounce pattern as registration nudges to avoid flooding TPD.
+func (tm *Manager) runDeferredDeletions(ctx context.Context) {
+	defer tm.wg.Done()
+	for {
+		select {
+		case <-tm.delNudge:
+			// Debounce: wait for burst of closures to settle
+			tm.Logger.Debug("Deletion nudge received, debouncing...")
+			select {
+			case <-time.After(deletionDebounce):
+			case <-tm.done:
+				tm.flushDeletionQueue()
+				return
+			case <-ctx.Done():
+				return
+			}
+			// Drain any additional nudges
+			for {
+				select {
+				case <-tm.delNudge:
+				default:
+					goto flush
+				}
+			}
+		flush:
+			tm.flushDeletionQueue()
+		case <-tm.done:
+			tm.flushDeletionQueue()
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// flushDeletionQueue batch-deletes all queued transport IDs from TPD.
+func (tm *Manager) flushDeletionQueue() {
+	tm.delQueueMu.Lock()
+	ids := tm.delQueue
+	tm.delQueue = nil
+	tm.delQueueMu.Unlock()
+
+	if len(ids) == 0 {
+		return
+	}
+
+	tm.Logger.Debugf("Batch deleting %d transports from TPD", len(ids))
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	deleted, err := tm.Conf.DiscoveryClient.DeleteTransports(ctx, ids)
+	cancel()
+	if err != nil {
+		tm.Logger.WithError(err).Warnf("Batch delete completed with error: %d/%d deleted", deleted, len(ids))
+	} else {
+		tm.Logger.Debugf("Batch deleted %d/%d transports from TPD", deleted, len(ids))
 	}
 }
 
@@ -513,6 +594,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			TransportLabel: LabelUser,
 			ebc:            tm.ebc,
 			mlog:           tm.factory.MLogger,
+			QueueDeletion:  tm.queueDeletion,
 		})
 
 		go func() {
@@ -704,6 +786,7 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		RemotePK:       remote,
 		TransportLabel: label,
 		mlog:           tm.factory.MLogger,
+		QueueDeletion:  tm.queueDeletion,
 	})
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
@@ -814,7 +897,7 @@ func (tm *Manager) DeleteAllTransports() {
 
 	select {
 	case <-done:
-		// All transports closed and deregistered from TPD
+		// All transports closed; TPD deregistration queued for batch processing
 		tm.Logger.Debug("All transports closed successfully")
 	case <-time.After(30 * time.Second):
 		// Timeout - some transports may not have completed TPD cleanup
