@@ -42,7 +42,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/skycoin/dmsg v1.3.29-0.20260316193050-4ed20dc75c05
-	github.com/skycoin/skycoin v0.28.4-0.20260314183343-aec7225fc0cf
+	github.com/skycoin/skycoin v0.28.4-0.20260318005924-e381a501582c
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -122,7 +122,7 @@ require (
 	github.com/anthonynsimon/bild v0.14.0 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
-	github.com/bytedance/gopkg v0.1.3 // indirect
+	github.com/bytedance/gopkg v0.1.4 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
