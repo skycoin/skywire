@@ -152,12 +152,12 @@ func RunSkychat(ctx context.Context, args []string) error {
 
 	url := ""
 	address := addr
-	if len(address) < 5 || (address[:1] != ":" && address[:2] != "*:") {
-		url = "127.0.0.1:8001"
-	} else if address[:1] == ":" {
-		url = "127.0.0.1" + address
-	} else if address[:2] == "*:" {
+	if len(address) >= 2 && address[:2] == "*:" {
 		url = "0.0.0.0" + address[1:]
+	} else if len(address) >= 1 && address[:1] == ":" {
+		url = "127.0.0.1" + address
+	} else if host, port, err := net.SplitHostPort(address); err == nil && host != "" && port != "" {
+		url = address
 	} else {
 		url = "127.0.0.1:8001"
 	}
