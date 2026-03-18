@@ -111,7 +111,10 @@ func (c *stcprClient) serve() {
 	c.acceptTransports(lis)
 }
 
-// reRegisterLoop periodically re-registers with address resolver to keep the entry alive
+// reRegisterLoop periodically re-registers with address resolver to keep the entry alive.
+// The AR server sets a 2-minute TTL on re-registered entries, so missing a single
+// re-registration makes the visor invisible. On failure, retry with backoff rather
+// than waiting the full interval.
 func (c *stcprClient) reRegisterLoop(port string) {
 	ticker := time.NewTicker(stcprReRegisterInterval)
 	defer ticker.Stop()
@@ -124,7 +127,24 @@ func (c *stcprClient) reRegisterLoop(port string) {
 		case <-ticker.C:
 			c.log.Debug("Re-registering STCPR with address resolver")
 			if err := c.ar.BindSTCPR(context.Background(), port); err != nil {
-				c.log.WithError(err).Warn("Failed to re-register STCPR with address resolver")
+				c.log.WithError(err).Warn("Failed to re-register STCPR, retrying...")
+				// Retry with backoff — a missed re-registration means a 2min blackout
+				delay := stcprBindRetryDelay
+				for attempt := 1; attempt <= 3; attempt++ {
+					if c.isClosed() {
+						return
+					}
+					time.Sleep(delay)
+					if err := c.ar.BindSTCPR(context.Background(), port); err == nil {
+						c.log.Debugf("Successfully re-registered STCPR after %d retries", attempt)
+						break
+					}
+					c.log.WithError(err).Warnf("STCPR re-registration retry %d/3 failed", attempt)
+					delay *= 2
+					if delay > stcprBindMaxRetryDelay {
+						delay = stcprBindMaxRetryDelay
+					}
+				}
 			} else {
 				c.log.Debug("Successfully re-registered STCPR")
 			}
