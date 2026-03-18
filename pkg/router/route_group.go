@@ -398,7 +398,7 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 	err := tp.WritePacket(ctx, packet)
 	// note equality here. update activity only if there was NO error
 	if err == nil {
-		if packet.Type() != routing.ClosePacket || packet.Type() != routing.HandshakePacket {
+		if packet.Type() != routing.ClosePacket && packet.Type() != routing.HandshakePacket {
 			rg.networkStats.AddBandwidthSent(uint64(packet.Size()))
 		}
 
@@ -938,7 +938,7 @@ func (rg *RouteGroup) MeasureLatency(ctx context.Context, count int) (min, max, 
 }
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
-	for i := 0; i < len(rg.tps); i++ {
+	for i := 0; i < len(rg.tps) && i < len(rg.fwd); i++ {
 		if rg.tps[i] == nil || rg.fwd[i] == nil {
 			continue
 		}
