@@ -154,8 +154,11 @@ func (s *Server) Serve(l net.Listener) error {
 		for {
 			conn, err := s.lis.Accept()
 			if err != nil {
-				serveErr = fmt.Errorf("failed to accept client connection: %w", err)
-				return
+				if strings.Contains(err.Error(), "use of closed network connection") {
+					return
+				}
+				fmt.Printf("Failed to accept VPN client connection, continuing: %v\n", err)
+				continue
 			}
 
 			go s.serveConn(conn)
