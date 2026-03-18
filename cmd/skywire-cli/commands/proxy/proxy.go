@@ -243,10 +243,20 @@ var startCmd = &cobra.Command{
 					}
 					if state.Status == appserver.AppStatusStopped {
 						startProcess = false
-						out := output{
-							AppError: state.DetailedStatus,
+						// Brief wait to let error propagate from proc cleanup
+						time.Sleep(500 * time.Millisecond)
+						// Re-fetch to get the error if it was set after stop
+						if updatedState, err := rpcClient.App(stateName); err == nil && updatedState != nil {
+							state = updatedState
 						}
-						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln("\nStopped!"+state.DetailedStatus))
+						errMsg := state.DetailedStatus
+						if errMsg == "" || errMsg == string(appserver.AppDetailedStatusStopped) {
+							errMsg = "(check visor logs for details)"
+						}
+						out := output{
+							AppError: errMsg,
+						}
+						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln("\nStopped! "+errMsg))
 					}
 				}
 			}
