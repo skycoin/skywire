@@ -208,7 +208,7 @@ After=network.target
 Type=simple
 User={{.User}}
 WorkingDirectory={{.Dir}}/rewards
-ExecStart=/bin/bash -c 'skywire cli rewards script getlogs | bash && skywire cli rewards script reward | bash ; exit 0'
+ExecStart=/bin/bash -c 'skywire cli rewards script getlogs | bash && skywire cli rewards tp-collect && skywire cli rewards bw-collect && skywire cli rewards script reward | bash ; exit 0'
 
 [Install]
 WantedBy=multi-user.target

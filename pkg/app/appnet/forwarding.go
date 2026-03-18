@@ -258,10 +258,11 @@ func (f *RawTCPForwardConn) Serve() {
 
 			localConn, err := f.listener.Accept()
 			if err != nil {
-				if !errors.Is(err, net.ErrClosed) {
-					f.log.WithError(err).Error("Failed to accept local connection")
+				if errors.Is(err, net.ErrClosed) {
+					return
 				}
-				return
+				f.log.WithError(err).Warn("Failed to accept local connection, continuing")
+				continue
 			}
 
 			f.log.Debugf("Accepted local connection from %s", localConn.RemoteAddr())

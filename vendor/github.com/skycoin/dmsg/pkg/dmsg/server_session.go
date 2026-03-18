@@ -49,13 +49,12 @@ func (ss *ServerSession) Serve() {
 		for {
 			sStr, err := ss.sm.smux.AcceptStream()
 			if err != nil {
-				switch err {
-				case io.EOF:
+				if err == io.EOF || err == smux.ErrInvalidProtocol || ss.sm.smux.IsClosed() {
 					ss.log.WithError(err).Info("Stopping session...")
-				default:
-					ss.log.WithError(err).Warn("Failed to accept stream, stopping session...")
+					return
 				}
-				return
+				ss.log.WithError(err).Warn("Failed to accept smux stream, continuing...")
+				continue
 			}
 
 			log := ss.log.WithField("smux_id", sStr.ID())
@@ -75,13 +74,12 @@ func (ss *ServerSession) Serve() {
 		for {
 			yStr, err := ss.sm.yamux.AcceptStream()
 			if err != nil {
-				switch err {
-				case yamux.ErrSessionShutdown, io.EOF:
+				if err == yamux.ErrSessionShutdown || err == io.EOF || ss.sm.yamux.IsClosed() {
 					ss.log.WithError(err).Info("Stopping session...")
-				default:
-					ss.log.WithError(err).Warn("Failed to accept stream, stopping session...")
+					return
 				}
-				return
+				ss.log.WithError(err).Warn("Failed to accept yamux stream, continuing...")
+				continue
 			}
 
 			log := ss.log.WithField("yamux_id", yStr.StreamID())

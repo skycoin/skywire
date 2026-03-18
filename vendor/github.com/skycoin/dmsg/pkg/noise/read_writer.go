@@ -303,7 +303,7 @@ func ReadRawFrame(r *bufio.Reader) (p []byte, err error) {
 		return nil, err
 	}
 	if _, err := r.Discard(prefixSize + prefix); err != nil {
-		panic(fmt.Errorf("unexpected error when discarding %d bytes: %v", prefixSize+prefix, err))
+		return nil, fmt.Errorf("unexpected error when discarding %d bytes: %w", prefixSize+prefix, err)
 	}
 
 	return b[prefixSize:], nil

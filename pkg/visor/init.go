@@ -969,10 +969,11 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 			log.Debug("Accepting sky forwarding conn...")
 			conn, err := l.Accept()
 			if err != nil {
-				if !errors.Is(err, appnet.ErrClosedConn) {
-					log.WithError(err).Error("Failed to accept conn")
+				if errors.Is(err, appnet.ErrClosedConn) {
+					return
 				}
-				return
+				log.WithError(err).Warn("Failed to accept forwarding conn, continuing")
+				continue
 			}
 			log.Debug("Accepted sky forwarding conn")
 
@@ -987,8 +988,9 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 			log.Debug("Wrapping conn...")
 			wrappedConn, err := appnet.WrapConn(conn)
 			if err != nil {
-				log.WithError(err).Error("Failed to wrap conn")
-				return
+				log.WithError(err).Warn("Failed to wrap forwarding conn, continuing")
+				conn.Close() //nolint:errcheck,gosec
+				continue
 			}
 
 			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
@@ -1201,17 +1203,19 @@ func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 			log.Debug("Accepting sky ping conn...")
 			conn, err := l.Accept()
 			if err != nil {
-				if !errors.Is(err, appnet.ErrClosedConn) {
-					log.WithError(err).Error("Failed to accept ping conn")
+				if errors.Is(err, appnet.ErrClosedConn) {
+					return
 				}
-				return
+				log.WithError(err).Warn("Failed to accept ping conn, continuing")
+				continue
 			}
 			log.Debug("Accepted sky ping conn")
 			log.Debug("Wrapping conn...")
 			wrappedConn, err := appnet.WrapConn(conn)
 			if err != nil {
-				log.WithError(err).Error("Failed to wrap conn")
-				return
+				log.WithError(err).Warn("Failed to wrap ping conn, continuing")
+				conn.Close() //nolint:errcheck,gosec
+				continue
 			}
 
 			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
@@ -1317,10 +1321,11 @@ func initLatencyProbe(ctx context.Context, v *Visor, log *logging.Logger) error 
 			log.Debug("Accepting latency probe conn...")
 			conn, err := l.Accept()
 			if err != nil {
-				if !errors.Is(err, appnet.ErrClosedConn) {
-					log.WithError(err).Error("Failed to accept latency probe conn")
+				if errors.Is(err, appnet.ErrClosedConn) {
+					return
 				}
-				return
+				log.WithError(err).Warn("Failed to accept latency probe conn, continuing")
+				continue
 			}
 			log.Debug("Accepted latency probe conn")
 
