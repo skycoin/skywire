@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -46,6 +48,9 @@ type ManagedTransportConfig struct {
 	TransportLabel  Label
 	InactiveTimeout time.Duration
 	mlog            *logging.MasterLogger
+	// QueueDeletion, when set, defers TPD deregistration to the manager's batch
+	// deletion loop instead of making an HTTP call per transport close.
+	QueueDeletion func(id uuid.UUID)
 }
 
 // ManagedTransport manages a direct line of communication between two visor nodes.
@@ -71,7 +76,8 @@ type ManagedTransport struct {
 	done chan struct{}
 	wg   sync.WaitGroup
 
-	timeout time.Duration
+	timeout       time.Duration
+	queueDeletion func(id uuid.UUID)
 
 	latencyStats LatencyStats
 	latencyMx    sync.RWMutex
@@ -95,16 +101,17 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	logEntry := MakeLogEntry(conf.LS, entry.ID, log)
 
 	mt := &ManagedTransport{
-		log:         log,
-		rPK:         conf.RemotePK,
-		dc:          conf.DC,
-		ls:          conf.LS,
-		client:      conf.client,
-		Entry:       entry,
-		LogEntry:    logEntry,
-		transportCh: make(chan struct{}, 1),
-		done:        make(chan struct{}),
-		timeout:     conf.InactiveTimeout,
+		log:           log,
+		rPK:           conf.RemotePK,
+		dc:            conf.DC,
+		ls:            conf.LS,
+		client:        conf.client,
+		Entry:         entry,
+		LogEntry:      logEntry,
+		transportCh:   make(chan struct{}, 1),
+		done:          make(chan struct{}),
+		timeout:       conf.InactiveTimeout,
+		queueDeletion: conf.QueueDeletion,
 	}
 	return mt
 }
@@ -259,11 +266,9 @@ func (mt *ManagedTransport) IsClosed() bool {
 	}
 }
 
-// close underlying transport and remove the entry from transport discovery
-// todo: this currently performs http request to discovery service
-// it only makes sense to wait for the completion if we are closing the visor itself,
-// regular transport close operations should probably call it concurrently
-// need to find a way to handle this properly (done channel in return?)
+// close underlying transport and queue deregistration from transport discovery.
+// If queueDeletion is set (manager-level batch deletion), the transport ID is
+// queued for deferred batch deletion instead of making an individual HTTP call.
 func (mt *ManagedTransport) close() {
 	select {
 	case <-mt.done:
@@ -280,7 +285,11 @@ func (mt *ManagedTransport) close() {
 		mt.transport = nil
 	}
 	mt.transportMx.Unlock()
-	_ = mt.deleteFromDiscovery() //nolint:errcheck
+	if mt.queueDeletion != nil {
+		mt.queueDeletion(mt.Entry.ID)
+	} else {
+		_ = mt.deleteFromDiscovery() //nolint:errcheck
+	}
 }
 
 // closeWithoutDeregister closes the transport without deregistering from TPD.

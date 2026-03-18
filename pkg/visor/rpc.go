@@ -561,6 +561,18 @@ func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error
 	return err
 }
 
+// SetSTCPAddrIn is input for SetSTCPAddr.
+type SetSTCPAddrIn struct {
+	PK   cipher.PubKey
+	Addr string
+}
+
+// SetSTCPAddr injects an STCP PK table entry at runtime.
+func (r *RPC) SetSTCPAddr(in *SetSTCPAddrIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetSTCPAddr", in)(nil, &err)
+	return r.visor.SetSTCPAddr(in.PK, in.Addr)
+}
+
 // RemoveTransport removes a Transport from the visor.
 func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoveTransport", tid)(nil, &err)
