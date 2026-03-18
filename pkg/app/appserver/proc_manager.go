@@ -127,11 +127,11 @@ func (m *procManager) serve() {
 	for {
 		conn, err := m.lis.Accept()
 		if err != nil {
-			if !isDone(m.done) {
-				m.log.WithError(err).WithField("remote_addr", conn.RemoteAddr()).
-					Debug("Unexpected error occurred when accepting app conn.")
+			if isDone(m.done) {
+				return
 			}
-			return
+			m.log.WithError(err).Debug("Failed to accept app conn, continuing")
+			continue
 		}
 		m.conns[conn.RemoteAddr().String()] = conn
 

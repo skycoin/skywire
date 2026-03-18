@@ -33,28 +33,29 @@ func init() {
 	nl = append(nl, "  <a href='/skycoin-rewards'>skycoin rewards</a>")
 	nl = append(nl, "  <a href='/stats'>network stats</a>")
 	nl = append(nl, "  <a href='/stats/version-history'>version history</a>")
+	nl = append(nl, "  <a href='/stats/bandwidth-history'>bandwidth history</a>")
 	nl = append(nl, "  <a href='/transport-graph'>transport graph</a>")
 
 	// Log collection section
-	nl = append(nl, "  <details style='display: inline;'><summary style='cursor: pointer; color: #3399FF;'>log collection</summary>")
+	nl = append(nl, "  <details><summary>log collection</summary><div class='dropdown'>")
 	nl = append(nl, "    <a href='/log-collection'>overview</a>")
 	nl = append(nl, "    <a href='/log-collection/tree'>survey index</a>")
 	nl = append(nl, "    <a href='/log-collection/tplogs'>transport logs</a>")
-	nl = append(nl, "  </details>")
+	nl = append(nl, "  </div></details>")
 
 	// External services section
-	nl = append(nl, "  <details style='display: inline;'><summary style='cursor: pointer; color: #3399FF;'>services</summary>")
+	nl = append(nl, "  <details><summary>services</summary><div class='dropdown'>")
 	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.UptimeTracker, "http://", "https://")+"/uptimes?v=v2'>uptime tracker</a>")
 	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.AddressResolver, "http://", "https://")+"'>address resolver</a>")
 	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.TransportDiscovery, "http://", "https://")+"/all-transports'>transport discovery</a>")
-	nl = append(nl, "  </details>")
+	nl = append(nl, "  </div></details>")
 
 	// DMSG discovery section
-	nl = append(nl, "  <details style='display: inline;'><summary style='cursor: pointer; color: #3399FF;'>dmsg</summary>")
+	nl = append(nl, "  <details><summary>dmsg</summary><div class='dropdown'>")
 	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/entries'>entries</a>")
 	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/all_servers'>all servers</a>")
 	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/available_servers'>available servers</a>")
-	nl = append(nl, "  </details>")
+	nl = append(nl, "  </div></details>")
 
 	nl = append(nl, "\n<br>\n")
 	navlinks = strings.Join(nl, "")
@@ -115,26 +116,27 @@ var htmlMainPageTemplate = `
   <a href='/skycoin-rewards'>skycoin rewards</a>
   <a href='/stats'>network stats</a>
   <a href='/stats/version-history'>version history</a>
+  <a href='/stats/bandwidth-history'>bandwidth history</a>
   <a href='/transport-graph'>transport graph</a>
-  <details style='display: inline;'><summary style='cursor: pointer; color: #3399FF;'>logs</summary>
+  <details><summary>logs</summary><div class='dropdown'>
     <a href='/log-collection'>overview</a>
     <a href='/log-collection/tree'>survey index</a>
     <a href='/log-collection/tplogs'>transport logs</a>
-  </details>
-  <details style='display: inline;'><summary style='cursor: pointer; color: #3399FF;'>services</summary>
+  </div></details>
+  <details><summary>services</summary><div class='dropdown'>
     <a href='` + strings.ReplaceAll(deployment.Prod.UptimeTracker, "http://", "https://") + `/uptimes?v=v2'>uptime tracker</a>
     <a href='` + strings.ReplaceAll(deployment.Prod.AddressResolver, "http://", "https://") + `'>address resolver</a>
     <a href='` + strings.ReplaceAll(deployment.Prod.TransportDiscovery, "http://", "https://") + `/all-transports'>transport discovery</a>
-  </details>
-  <details style='display: inline;'><summary style='cursor: pointer; color: #3399FF;'>dmsg</summary>
+  </div></details>
+  <details><summary>dmsg</summary><div class='dropdown'>
     <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/entries'>entries</a>
     <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/all_servers'>all servers</a>
     <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available servers</a>
-  </details>
-  <details style='display: inline;'><summary style='cursor: pointer; color: #3399FF;'>community</summary>
+  </div></details>
+  <details><summary>community</summary><div class='dropdown'>
     <a title='@skywire telegram' href='https://t.me/skywire'>skywire telegram</a>
     <a title='@skywire_reward telegram' href='https://t.me/skywire_reward'>reward notifications</a>
-  </details>
+  </div></details>
   </nav>
 </header>
 <br>
@@ -209,11 +211,18 @@ nav details summary::after {
 nav details[open] summary::after {
 	content: ' ▼';
 }
-nav details[open] {
+nav .dropdown {
+	position: absolute;
+	top: 100%;
+	left: 0;
 	background: #222;
 	border-radius: 4px;
+	z-index: 100;
+	min-width: max-content;
+	padding: 4px 0;
+	border: 1px solid #333;
 }
-nav details a {
+nav .dropdown a {
 	display: block;
 	padding: 4px 12px;
 }

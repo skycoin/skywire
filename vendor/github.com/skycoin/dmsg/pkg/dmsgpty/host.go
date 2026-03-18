@@ -176,7 +176,7 @@ func (h *Host) serveConn(ctx context.Context, log logrus.FieldLogger, mux *hostM
 func (h *Host) authorize(log logrus.FieldLogger, rPK cipher.PubKey) bool {
 	ok, err := h.wl.Get(rPK)
 	if err != nil {
-		log.WithError(err).Panic("dmsgpty.Whitelist error.")
+		log.WithError(err).Error("dmsgpty.Whitelist error.")
 		return false
 	}
 	if !ok {

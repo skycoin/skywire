@@ -47,6 +47,8 @@ var (
 	nodeInfoSvc           []byte
 	requireTransports     bool
 	transportHistPath     string
+	requireBandwidth      bool
+	minBWThreshold        uint64
 )
 
 type nodeinfo struct {
@@ -62,6 +64,7 @@ type nodeinfo struct {
 	SvcConf    bool    `json:"service_conf"`
 	HV         string  `json:"hypervisor"`        //NOT the skywire hypervisor ; will be null unless the visor is running on virtual machine
 	Reason     string  `json:"ineligible_reason"` //Reason why the visor will not be rewarded
+	Bandwidth  uint64  `json:"bandwidth"`         //daily bandwidth in bytes from TPD
 }
 
 type counting struct {
@@ -228,6 +231,8 @@ func init() {
 	RootCmd.Flags().BoolVarP(&processRewards, "process", "r", false, "run complete reward processing workflow")
 	RootCmd.Flags().BoolVarP(&requireTransports, "require-tp", "t", true, "require minimum transports (from hist/YYYY-MM-DD_transports.txt)")
 	RootCmd.Flags().StringVarP(&transportHistPath, "tp-hist", "T", "hist", "path to transport history directory")
+	RootCmd.Flags().BoolVarP(&requireBandwidth, "require-bw", "b", false, "require minimum bandwidth (proportional reward based on bandwidth)")
+	RootCmd.Flags().Uint64VarP(&minBWThreshold, "min-bw", "B", defaultMinBandwidth, "minimum bandwidth in bytes to qualify (used with --require-bw)")
 }
 
 // RootCmd is the root command for skywire-cli rewards
@@ -312,10 +317,12 @@ Architectures:
 			}
 		}
 
-		// Check for common architectures between the two allowed slices
-		for arch := range allowArchMap1 {
-			if _, exists := allowArchMap2[arch]; exists {
-				log.Fatal("Error: Architecture cannot be specified in both pools: " + arch)
+		if !requireBandwidth {
+			// Legacy mode: check for common architectures between the two allowed slices
+			for arch := range allowArchMap1 {
+				if _, exists := allowArchMap2[arch]; exists {
+					log.Fatal("Error: Architecture cannot be specified in both pools: " + arch)
+				}
 			}
 		}
 
@@ -329,6 +336,18 @@ Architectures:
 		for arch := range allowArchMap2 {
 			if _, isValid := supportedArchitecturesMap[arch]; !isValid {
 				log.Fatal("Error: Architecture is not valid: ", arch)
+			}
+		}
+
+		// In bandwidth mode, merge both arch pools into a single allowed set for the presence pool
+		// Pool 1 = presence (all archs, equal shares), Pool 2 = bandwidth (proportional)
+		allowArchMapAll := make(map[string]struct{})
+		if requireBandwidth {
+			for arch := range allowArchMap1 {
+				allowArchMapAll[arch] = struct{}{}
+			}
+			for arch := range allowArchMap2 {
+				allowArchMapAll[arch] = struct{}{}
 			}
 		}
 
@@ -350,6 +369,23 @@ Architectures:
 			}
 		}
 
+		// Load bandwidth data for bandwidth pool
+		bandwidthMap := make(map[string]uint64)
+		if requireBandwidth {
+			bwFile := fmt.Sprintf("%s/%s_bandwidth.json", transportHistPath, wdate)
+			if data, err := os.ReadFile(bwFile); err == nil { //nolint:gosec
+				if err := json.Unmarshal(data, &bandwidthMap); err != nil {
+					log.Warnf("Failed to parse bandwidth file %s: %v", bwFile, err)
+					requireBandwidth = false
+				} else {
+					log.Infof("Loaded bandwidth data for %d visors from %s", len(bandwidthMap), bwFile)
+				}
+			} else {
+				log.Warnf("Bandwidth file not found: %s (bandwidth pool will be skipped)", bwFile)
+				requireBandwidth = false
+			}
+		}
+
 		var res []string
 		if pubkey == "" {
 			//nolint:errcheck
@@ -364,6 +400,10 @@ Architectures:
 				log.Fatal("Specified key " + pubkey + "\n did not achieve minimum uptime on " + wdate + " !")
 			}
 		}
+
+		// Collect eligible nodes
+		// In legacy mode: nodesInfos1 = arch pool 1, nodesInfos2 = arch pool 2
+		// In bandwidth mode: nodesInfos1 = presence pool (all archs), nodesInfos2 unused for presence
 		var nodesInfos1 []nodeinfo
 		var nodesInfos2 []nodeinfo
 		var grrInfos []nodeinfo
@@ -441,6 +481,16 @@ Architectures:
 			_, hasTransports := transportMap[pk]
 			meetsTransportReq := !requireTransports || hasTransports
 
+			visorBW := bandwidthMap[pk]
+
+			// Determine architecture eligibility
+			var archAllowed bool
+			if requireBandwidth {
+				_, archAllowed = allowArchMapAll[arch]
+			} else {
+				archAllowed = allowed1 || allowed2
+			}
+
 			ni := nodeinfo{
 				IPAddr:     ip,
 				SkyAddr:    sky,
@@ -451,9 +501,10 @@ Architectures:
 				UUID:       uu,
 				SvcConf:    svcconf,
 				HV:         hv,
+				Bandwidth:  visorBW,
 				Reason: func() string {
 					switch {
-					case !(allowed1 || allowed2):
+					case !archAllowed:
 						return arch
 					case strings.Count(ip, ".") != 3:
 						return ip
@@ -475,12 +526,20 @@ Architectures:
 				}(),
 			}
 
-			if (allowed1 || allowed2) && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && err == nil && meetsTransportReq {
-				if allowed1 {
+			baseEligible := archAllowed && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && err == nil && meetsTransportReq
+
+			if baseEligible {
+				if requireBandwidth {
+					// Bandwidth mode: all eligible visors go into the single presence pool
 					nodesInfos1 = append(nodesInfos1, ni)
-				}
-				if allowed2 {
-					nodesInfos2 = append(nodesInfos2, ni)
+				} else {
+					// Legacy mode: split by architecture
+					if allowed1 {
+						nodesInfos1 = append(nodesInfos1, ni)
+					}
+					if allowed2 {
+						nodesInfos2 = append(nodesInfos2, ni)
+					}
 				}
 			} else {
 				if grr {
@@ -499,19 +558,12 @@ Architectures:
 		monthReward := (float64(yearlyTotal) / float64(daysThisYear)) * float64(daysThisMonth)
 		dayReward := monthReward / float64(daysThisMonth)
 		wdate = strings.ReplaceAll(wdate, " ", "0")
-		if !h0 {
-			fmt.Printf("date: %s\n", wdate)
-			fmt.Printf("days this month: %d\n", daysThisMonth)
-			fmt.Printf("days in the year: %d\n", daysThisYear)
-			fmt.Printf("this month's rewards: %.6f\n", monthReward)
-			fmt.Printf("reward total per pool: %.6f\n", dayReward)
-		}
+
+		// Compute IP/MAC dedup counts across all eligible visors
+		allEligible := append(nodesInfos1, nodesInfos2...)
 		uniqueIP, _ := script.Echo(func() string { //nolint:errcheck
 			var inputStr strings.Builder
-			for _, ni := range nodesInfos1 {
-				inputStr.WriteString(fmt.Sprintf("%s\n", ni.IPAddr))
-			}
-			for _, ni := range nodesInfos2 {
+			for _, ni := range allEligible {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.IPAddr))
 			}
 			return inputStr.String()
@@ -532,10 +584,7 @@ Architectures:
 		}
 		uniqueUUID, _ := script.Echo(func() string { //nolint:errcheck
 			var inputStr strings.Builder
-			for _, ni := range nodesInfos1 {
-				inputStr.WriteString(fmt.Sprintf("%s\n", ni.UUID))
-			}
-			for _, ni := range nodesInfos2 {
+			for _, ni := range allEligible {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.UUID))
 			}
 			return inputStr.String()
@@ -544,10 +593,7 @@ Architectures:
 		// look at the first non loopback interface macaddress
 		uniqueMac, _ := script.Echo(func() string { //nolint:errcheck
 			var inputStr strings.Builder
-			for _, ni := range nodesInfos1 {
-				inputStr.WriteString(fmt.Sprintf("%s\n", ni.MacAddr))
-			}
-			for _, ni := range nodesInfos2 {
+			for _, ni := range allEligible {
 				inputStr.WriteString(fmt.Sprintf("%s\n", ni.MacAddr))
 			}
 			return inputStr.String()
@@ -569,11 +615,8 @@ Architectures:
 			}
 		}
 
-		totalValidShares1 := 0.0
-		totalValidShares2 := 0.0
-
-		// Calculate shares and rewards for nodesInfos1
-		for _, ni := range nodesInfos1 {
+		// calcPresenceShare computes equal share with IP/MAC dedup (base = 1.0)
+		calcPresenceShare := func(ni nodeinfo) float64 {
 			share := 1.0
 			for _, ipCount := range ipCounts {
 				if ni.IPAddr == ipCount.Name {
@@ -587,118 +630,188 @@ Architectures:
 					share = share / float64(macCount.Count)
 				}
 			}
-			totalValidShares1 += share
+			return share
 		}
 
-		// Calculate shares and rewards for nodesInfos2
-		for _, ni := range nodesInfos2 {
-			share := 1.0
-			for _, ipCount := range ipCounts {
-				if ni.IPAddr == ipCount.Name {
-					if ipCount.Count >= 8 {
-						share = 8.0 / float64(ipCount.Count)
+		if requireBandwidth {
+			// ==================== NEW TWO-POOL MODEL ====================
+			// Pool 1: Presence — all archs combined, equal shares with IP/MAC dedup
+			// Pool 2: Bandwidth — pure proportional to bandwidth bytes
+			// Both pools are the same yearly total (408K/yr each)
+
+			// --- Pool 1: Presence ---
+			totalPresenceShares := 0.0
+			for _, ni := range nodesInfos1 {
+				totalPresenceShares += calcPresenceShare(ni)
+			}
+
+			for i, ni := range nodesInfos1 {
+				nodesInfos1[i].Share = calcPresenceShare(ni)
+				if totalPresenceShares > 0 {
+					nodesInfos1[i].Reward = nodesInfos1[i].Share * dayReward / totalPresenceShares
+				}
+			}
+
+			// --- Pool 2: Bandwidth (pure proportional) ---
+			// Only visors with bandwidth >= threshold qualify for the bandwidth pool
+			var bwPoolNodes []int // indices into nodesInfos1
+			var totalBWShares float64
+			for i, ni := range nodesInfos1 {
+				if ni.Bandwidth >= minBWThreshold {
+					bwPoolNodes = append(bwPoolNodes, i)
+					totalBWShares += float64(ni.Bandwidth)
+				}
+			}
+
+			for _, idx := range bwPoolNodes {
+				bwShare := float64(nodesInfos1[idx].Bandwidth)
+				if totalBWShares > 0 {
+					nodesInfos1[idx].Reward += bwShare * dayReward / totalBWShares
+				}
+			}
+
+			// --- Output ---
+			if !h0 {
+				fmt.Printf("date: %s\n", wdate)
+				fmt.Printf("days this month: %d\n", daysThisMonth)
+				fmt.Printf("days in the year: %d\n", daysThisYear)
+				fmt.Printf("this month's rewards: %.6f\n", monthReward)
+				fmt.Printf("reward per pool: %.6f\n", dayReward)
+				fmt.Printf("reward mode: presence + bandwidth (two pools)\n")
+				fmt.Printf("\n--- Presence Pool (equal shares, IP/MAC dedup) ---\n")
+				fmt.Printf("qualifying visors: %d\n", len(nodesInfos1))
+				fmt.Printf("total presence shares: %.6f\n", totalPresenceShares)
+				if totalPresenceShares > 0 {
+					fmt.Printf("skycoin per presence share: %.6f\n", dayReward/totalPresenceShares)
+				}
+				fmt.Printf("\n--- Bandwidth Pool (proportional to bytes) ---\n")
+				fmt.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
+				fmt.Printf("qualifying visors: %d\n", len(bwPoolNodes))
+				var totalBW uint64
+				for _, idx := range bwPoolNodes {
+					totalBW += nodesInfos1[idx].Bandwidth
+				}
+				fmt.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
+				if totalBWShares > 0 {
+					fmt.Printf("skycoin per byte: %.12f\n", dayReward/totalBWShares)
+				}
+				fmt.Printf("\nUnique mac addresses: %d\n", len(uniqueMac))
+				fmt.Printf("Unique IP Addresses: %d\n", len(uniqueIP))
+				fmt.Printf("Unique UUIDs: %d\n", len(uniqueUUID))
+			}
+
+			if !h1 {
+				fmt.Println("Skycoin Address, Skywire Public Key, Presence Share, Bandwidth (bytes), Total Reward SKY, IP, Architecture, UUID, Interfaces")
+				for _, ni := range nodesInfos1 {
+					fmt.Printf("%s, %s, %.6f, %d, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Share, ni.Bandwidth, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
+				}
+			}
+
+			// Calculate reward sum by Skycoin Address
+			rewardSumBySkyAddr := make(map[string]float64)
+			for _, ni := range nodesInfos1 {
+				rewardSumBySkyAddr[ni.SkyAddr] += ni.Reward
+			}
+			var sortedSkyAddrs []rewardData
+			for skyAddr, rewardSum := range rewardSumBySkyAddr {
+				sortedSkyAddrs = append(sortedSkyAddrs, rewardData{SkyAddr: skyAddr, Reward: rewardSum})
+			}
+			sort.Slice(sortedSkyAddrs, func(i, j int) bool {
+				return sortedSkyAddrs[i].Reward > sortedSkyAddrs[j].Reward
+			})
+			if !h0 {
+				fmt.Printf("\nTotal Reward Amount (both pools): %.6f\n", func() (tr float64) {
+					for _, skyAddrReward := range sortedSkyAddrs {
+						tr += skyAddrReward.Reward
 					}
-				}
+					return tr
+				}())
 			}
-			for _, macCount := range macCounts {
-				if macCount.Name == ni.MacAddr {
-					share = share / float64(macCount.Count)
-				}
-			}
-			totalValidShares2 += share
-		}
-
-		// Output information for both pools
-		if !h0 {
-			fmt.Printf("Visors meeting uptime & other requirements (Pool 1): %d\n", len(nodesInfos1))
-			fmt.Printf("Visors meeting uptime & other requirements (Pool 2): %d\n", len(nodesInfos2))
-			fmt.Printf("Unique mac addresses for first interface after lo: %d\n", len(uniqueMac))
-			fmt.Printf("Unique IP Addresses: %d\n", len(uniqueIP))
-			fmt.Printf("Unique UUIDs: %d\n", len(uniqueUUID))
-			fmt.Printf("Total valid shares (Pool 1): %.6f\n", totalValidShares1)
-			fmt.Printf("Total valid shares (Pool 2): %.6f\n", totalValidShares2)
-			if totalValidShares1 != 0 {
-				fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalValidShares1)
-			} else {
-				fmt.Printf("Skycoin Per Share (Pool 1): 0\n")
-			}
-			if totalValidShares2 != 0 {
-				fmt.Printf("Skycoin Per Share (Pool 2): %.6f\n", dayReward/totalValidShares2)
-			} else {
-				fmt.Printf("Skycoin Per Share (Pool 2): 0\n")
-			}
-		}
-
-		// Calculate rewards for nodesInfos1
-		for i, ni := range nodesInfos1 {
-			nodesInfos1[i].Share = 1.0
-			for _, ipCount := range ipCounts {
-				if ni.IPAddr == ipCount.Name {
-					if ipCount.Count >= 8 {
-						nodesInfos1[i].Share = 8.0 / float64(ipCount.Count)
-					}
-				}
-			}
-			for _, macCount := range macCounts {
-				if macCount.Name == ni.MacAddr {
-					nodesInfos1[i].Share = nodesInfos1[i].Share / float64(macCount.Count)
-				}
-			}
-			nodesInfos1[i].Reward = nodesInfos1[i].Share * dayReward / float64(totalValidShares1)
-		}
-
-		// Calculate rewards for nodesInfos2
-		for i, ni := range nodesInfos2 {
-			nodesInfos2[i].Share = 1.0
-			for _, ipCount := range ipCounts {
-				if ni.IPAddr == ipCount.Name {
-					if ipCount.Count >= 8 {
-						nodesInfos2[i].Share = 8.0 / float64(ipCount.Count)
-					}
-				}
-			}
-			for _, macCount := range macCounts {
-				if macCount.Name == ni.MacAddr {
-					nodesInfos2[i].Share = nodesInfos2[i].Share / float64(macCount.Count)
-				}
-			}
-			nodesInfos2[i].Reward = nodesInfos2[i].Share * dayReward / float64(totalValidShares2)
-		}
-
-		// Combine nodesInfos1 and nodesInfos2 for output
-		combinedNodesInfos := append(nodesInfos1, nodesInfos2...)
-
-		if !h1 {
-			fmt.Println("Skycoin Address, Skywire Public Key, Reward Shares, Reward SKY Amount, IP, Architecture, UUID, Interfaces")
-			for _, ni := range combinedNodesInfos {
-				fmt.Printf("%s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
-			}
-		}
-
-		// Calculate reward sum by Skycoin Address
-		rewardSumBySkyAddr := make(map[string]float64)
-		for _, ni := range combinedNodesInfos {
-			rewardSumBySkyAddr[ni.SkyAddr] += ni.Reward
-		}
-		var sortedSkyAddrs []rewardData
-		for skyAddr, rewardSum := range rewardSumBySkyAddr {
-			sortedSkyAddrs = append(sortedSkyAddrs, rewardData{SkyAddr: skyAddr, Reward: rewardSum})
-		}
-		sort.Slice(sortedSkyAddrs, func(i, j int) bool {
-			return sortedSkyAddrs[i].Reward > sortedSkyAddrs[j].Reward
-		})
-		if !h0 {
-			fmt.Printf("Total Reward Amount: %.6f\n", func() (tr float64) {
+			if !h2 {
+				fmt.Println("Skycoin Address, Reward Amount")
 				for _, skyAddrReward := range sortedSkyAddrs {
-					tr += skyAddrReward.Reward
+					fmt.Printf("%s, %.6f\n", skyAddrReward.SkyAddr, skyAddrReward.Reward)
 				}
-				return tr
-			}())
-		}
-		if !h2 {
-			fmt.Println("Skycoin Address, Reward Amount")
-			for _, skyAddrReward := range sortedSkyAddrs {
-				fmt.Printf("%s, %.6f\n", skyAddrReward.SkyAddr, skyAddrReward.Reward)
+			}
+		} else {
+			// ==================== LEGACY TWO-ARCH-POOL MODEL ====================
+			totalValidShares1 := 0.0
+			totalValidShares2 := 0.0
+
+			for _, ni := range nodesInfos1 {
+				totalValidShares1 += calcPresenceShare(ni)
+			}
+			for _, ni := range nodesInfos2 {
+				totalValidShares2 += calcPresenceShare(ni)
+			}
+
+			if !h0 {
+				fmt.Printf("date: %s\n", wdate)
+				fmt.Printf("days this month: %d\n", daysThisMonth)
+				fmt.Printf("days in the year: %d\n", daysThisYear)
+				fmt.Printf("this month's rewards: %.6f\n", monthReward)
+				fmt.Printf("reward total per pool: %.6f\n", dayReward)
+				fmt.Printf("Visors meeting uptime & other requirements (Pool 1): %d\n", len(nodesInfos1))
+				fmt.Printf("Visors meeting uptime & other requirements (Pool 2): %d\n", len(nodesInfos2))
+				fmt.Printf("Unique mac addresses for first interface after lo: %d\n", len(uniqueMac))
+				fmt.Printf("Unique IP Addresses: %d\n", len(uniqueIP))
+				fmt.Printf("Unique UUIDs: %d\n", len(uniqueUUID))
+				fmt.Printf("Total valid shares (Pool 1): %.6f\n", totalValidShares1)
+				fmt.Printf("Total valid shares (Pool 2): %.6f\n", totalValidShares2)
+				if totalValidShares1 != 0 {
+					fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalValidShares1)
+				} else {
+					fmt.Printf("Skycoin Per Share (Pool 1): 0\n")
+				}
+				if totalValidShares2 != 0 {
+					fmt.Printf("Skycoin Per Share (Pool 2): %.6f\n", dayReward/totalValidShares2)
+				} else {
+					fmt.Printf("Skycoin Per Share (Pool 2): 0\n")
+				}
+			}
+
+			for i, ni := range nodesInfos1 {
+				nodesInfos1[i].Share = calcPresenceShare(ni)
+				nodesInfos1[i].Reward = nodesInfos1[i].Share * dayReward / float64(totalValidShares1)
+			}
+			for i, ni := range nodesInfos2 {
+				nodesInfos2[i].Share = calcPresenceShare(ni)
+				nodesInfos2[i].Reward = nodesInfos2[i].Share * dayReward / float64(totalValidShares2)
+			}
+
+			combinedNodesInfos := append(nodesInfos1, nodesInfos2...)
+
+			if !h1 {
+				fmt.Println("Skycoin Address, Skywire Public Key, Reward Shares, Reward SKY Amount, IP, Architecture, UUID, Interfaces")
+				for _, ni := range combinedNodesInfos {
+					fmt.Printf("%s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
+				}
+			}
+
+			rewardSumBySkyAddr := make(map[string]float64)
+			for _, ni := range combinedNodesInfos {
+				rewardSumBySkyAddr[ni.SkyAddr] += ni.Reward
+			}
+			var sortedSkyAddrs []rewardData
+			for skyAddr, rewardSum := range rewardSumBySkyAddr {
+				sortedSkyAddrs = append(sortedSkyAddrs, rewardData{SkyAddr: skyAddr, Reward: rewardSum})
+			}
+			sort.Slice(sortedSkyAddrs, func(i, j int) bool {
+				return sortedSkyAddrs[i].Reward > sortedSkyAddrs[j].Reward
+			})
+			if !h0 {
+				fmt.Printf("Total Reward Amount: %.6f\n", func() (tr float64) {
+					for _, skyAddrReward := range sortedSkyAddrs {
+						tr += skyAddrReward.Reward
+					}
+					return tr
+				}())
+			}
+			if !h2 {
+				fmt.Println("Skycoin Address, Reward Amount")
+				for _, skyAddrReward := range sortedSkyAddrs {
+					fmt.Printf("%s, %.6f\n", skyAddrReward.SkyAddr, skyAddrReward.Reward)
+				}
 			}
 		}
 	},

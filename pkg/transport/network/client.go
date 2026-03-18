@@ -168,8 +168,8 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 
 			c.log.Warnf("failed to accept incoming connection: %v", err)
 			if !handshake.IsHandshakeError(err) {
-				c.log.Warnf("stopped serving")
-				return
+				c.log.Warnf("non-handshake accept error, continuing: %v", err)
+				continue
 			}
 		}
 	}
