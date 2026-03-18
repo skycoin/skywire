@@ -182,7 +182,7 @@ func (ce *Client) Serve(ctx context.Context) {
 			}
 
 			for ind, entry := range entries {
-				if entry.Static.Hex() == ctx.Value("dmsgServer").(string) {
+				if dmsgServer, ok := ctx.Value("dmsgServer").(string); ok && entry.Static.Hex() == dmsgServer {
 					entries = entries[ind : ind+1]
 				}
 			}
@@ -585,12 +585,20 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	}
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ce.log.Warnf("recovered panic in session serve goroutine: %v", r)
+			}
+		}()
 		ce.log.WithField("remote_pk", dSes.RemotePK()).Debug("Serving session.")
 		err := dSes.serve()
 		if !isClosed(ce.done) {
-			// We should only report an error when client is not closed.
-			// Also, when the client is closed, it will automatically delete all sessions.
-			ce.errCh <- fmt.Errorf("failed to serve dialed session to %s: %v", dSes.RemotePK(), err)
+			ce.sesMx.Lock()
+			select {
+			case ce.errCh <- fmt.Errorf("failed to serve dialed session to %s: %v", dSes.RemotePK(), err):
+			default:
+			}
+			ce.sesMx.Unlock()
 			ce.delSession(ctx, dSes.RemotePK())
 		}
 

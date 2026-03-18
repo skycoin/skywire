@@ -3,7 +3,12 @@ package dmsgctrl
 
 import (
 	"net"
+	"strings"
+
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
+
+var log = logging.MustGetLogger("dmsgctrl")
 
 // ServeListener serves a listener with dmsgctrl.Control.
 // It returns a channel for incoming Controls.
@@ -16,7 +21,11 @@ func ServeListener(l net.Listener, chanLen int) <-chan *Control {
 		for {
 			conn, err := l.Accept()
 			if err != nil {
-				return
+				if strings.Contains(err.Error(), "use of closed") {
+					return
+				}
+				log.Warnf("Failed to accept dmsgctrl conn, continuing: %v", err)
+				continue
 			}
 			if ctrl := ControlStream(conn); ch != nil && len(ch) < cap(ch) {
 				ch <- ctrl

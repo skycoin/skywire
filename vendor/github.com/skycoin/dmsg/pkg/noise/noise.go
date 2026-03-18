@@ -132,10 +132,12 @@ func (ns *Noise) LocalStatic() cipher.PubKey {
 }
 
 // RemoteStatic returns the remote static public key.
+// Returns an empty public key if the peer static key is invalid.
 func (ns *Noise) RemoteStatic() cipher.PubKey {
 	pk, err := cipher.NewPubKey(ns.hs.PeerStatic())
 	if err != nil {
-		panic(err)
+		noiseLogger.WithError(err).Error("Invalid remote static public key")
+		return cipher.PubKey{}
 	}
 	return pk
 }
