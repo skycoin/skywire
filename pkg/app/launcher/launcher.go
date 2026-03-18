@@ -167,26 +167,34 @@ func (l *AppLauncher) AppState(name string) (*appserver.AppState, bool) {
 		return nil, false
 	}
 	state := &appserver.AppState{AppConfig: ac, Status: appserver.AppStatusStopped}
-	if err, ok := l.procM.ErrorByName(ac.Name); ok {
-		if err != "" {
-			state.DetailedStatus = err
-			state.Status = appserver.AppStatusErrored
-		}
+	// Check for stored error first (persists after proc cleanup)
+	var savedError string
+	if err, ok := l.procM.ErrorByName(ac.Name); ok && err != "" {
+		savedError = err
+		state.DetailedStatus = err
+		state.Status = appserver.AppStatusErrored
 	}
 	if proc, ok := l.procM.ProcByName(ac.Name); ok {
-		state.DetailedStatus = proc.DetailedStatus()
+		procStatus := proc.DetailedStatus()
 		connSummary := proc.ConnectionsSummary()
 		if connSummary != nil {
 			state.Status = appserver.AppStatusRunning
-		}
-		// Check if the proc is actually running - this handles apps that don't use connections
-		// (like skynet server which only registers ports via RPC)
-		if proc.IsRunning() && state.DetailedStatus == appserver.AppDetailedStatusRunning {
+			state.DetailedStatus = procStatus
+		} else if proc.IsRunning() && procStatus == appserver.AppDetailedStatusRunning {
+			// App is running but doesn't use connections (e.g. skynet server)
 			state.Status = appserver.AppStatusRunning
+			state.DetailedStatus = procStatus
+		} else if savedError != "" {
+			// Proc exists but not running — preserve the saved error
+			state.DetailedStatus = savedError
+			state.Status = appserver.AppStatusErrored
+		} else {
+			state.DetailedStatus = procStatus
 		}
-		switch state.DetailedStatus {
+		switch procStatus {
 		case appserver.AppDetailedStatusVPNConnecting, appserver.AppDetailedStatusStarting, appserver.AppDetailedStatusReconnecting:
 			state.Status = appserver.AppStatusStarting
+			state.DetailedStatus = procStatus
 		}
 	}
 	return state, true
