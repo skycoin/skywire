@@ -32,6 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
@@ -160,6 +161,9 @@ type Visor struct {
 	// Log server API references for health stats
 	logServerAPI      *logserver.API
 	localLogServerAPI *logserver.API // Localhost log server (optional)
+
+	// STCP PK table for runtime address injection (tp add -t stcp --addr)
+	stcpTable stcp.PKTable
 }
 
 // todo: consider moving module closing to the module system

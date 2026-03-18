@@ -748,6 +748,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		table = stcp.NewTable(v.conf.STCP.PKTable)
 		listenAddr = v.conf.STCP.ListeningAddress
 	}
+	v.stcpTable = table
 	factory := network.ClientFactory{
 		PK:         v.conf.PK,
 		SK:         v.conf.SK,

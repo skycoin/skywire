@@ -427,6 +427,11 @@ func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, timeout t
 	return &summary, err
 }
 
+// SetSTCPAddr injects an STCP PK table entry at runtime.
+func (rc *rpcClient) SetSTCPAddr(pk cipher.PubKey, addr string) error {
+	return rc.Call("SetSTCPAddr", &SetSTCPAddrIn{PK: pk, Addr: addr}, &struct{}{})
+}
+
 // RemoveTransport calls RemoveTransport.
 func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 	return rc.Call("RemoveTransport", &tid, &struct{}{})
@@ -1521,6 +1526,11 @@ func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ tim
 		mc.o.Transports = append(mc.o.Transports, summary)
 		return nil
 	})
+}
+
+// SetSTCPAddr implements API.
+func (mc *mockRPCClient) SetSTCPAddr(_ cipher.PubKey, _ string) error {
+	return nil
 }
 
 // RemoveTransport implements API.
