@@ -16,10 +16,9 @@ const (
 	// stcprReRegisterInterval is the interval for re-registering STCPR with address resolver
 	// to keep the entry alive before it expires. Should be less than the server's entry timeout.
 	stcprReRegisterInterval = 90 * time.Second
-	// stcprBindMaxRetries is the maximum number of retries for initial STCPR bind
-	stcprBindMaxRetries = 5
-	// stcprBindRetryDelay is the initial delay between bind retries (doubles each attempt)
-	stcprBindRetryDelay = 5 * time.Second
+	// stcprBindRetryDelay is the initial delay between bind retries (doubles each attempt, caps at 60s)
+	stcprBindRetryDelay    = 5 * time.Second
+	stcprBindMaxRetryDelay = 60 * time.Second
 )
 
 type stcprClient struct {
@@ -89,22 +88,21 @@ func (c *stcprClient) serve() {
 	}
 	c.log.Debug("Binding")
 	delay := stcprBindRetryDelay
-	var bindErr error
-	for attempt := 0; attempt <= stcprBindMaxRetries; attempt++ {
-		if attempt > 0 {
-			c.log.Warnf("Retrying STCPR bind (attempt %d/%d) after %v", attempt+1, stcprBindMaxRetries+1, delay)
-			time.Sleep(delay)
-			delay *= 2
-		}
-		if bindErr = c.ar.BindSTCPR(context.Background(), port); bindErr == nil {
+	for attempt := 1; ; attempt++ {
+		if err := c.ar.BindSTCPR(context.Background(), port); err == nil {
+			c.log.Debugf("Successfully bound stcpr to port %s", port)
 			break
+		} else {
+			c.log.WithError(err).Warnf("Failed to bind STCPR (attempt %d), retrying in %v", attempt, delay)
 		}
-		c.log.WithError(bindErr).Warnf("Failed to bind STCPR (attempt %d/%d)", attempt+1, stcprBindMaxRetries+1)
-	}
-	if bindErr != nil {
-		c.log.WithError(bindErr).Errorf("Failed to bind STCPR after %d attempts, will rely on re-registration loop", stcprBindMaxRetries+1)
-	} else {
-		c.log.Debugf("Successfully bound stcpr to port %s", port)
+		if c.isClosed() {
+			return
+		}
+		time.Sleep(delay)
+		delay *= 2
+		if delay > stcprBindMaxRetryDelay {
+			delay = stcprBindMaxRetryDelay
+		}
 	}
 
 	// Start re-registration loop to keep entry alive in address resolver
