@@ -16,6 +16,9 @@ const (
 	// stcprReRegisterInterval is the interval for re-registering STCPR with address resolver
 	// to keep the entry alive before it expires. Should be less than the server's entry timeout.
 	stcprReRegisterInterval = 90 * time.Second
+	// stcprBindRetryDelay is the initial delay between bind retries (doubles each attempt, caps at 60s)
+	stcprBindRetryDelay    = 5 * time.Second
+	stcprBindMaxRetryDelay = 60 * time.Second
 )
 
 type stcprClient struct {
@@ -84,11 +87,23 @@ func (c *stcprClient) serve() {
 		return
 	}
 	c.log.Debug("Binding")
-	if err := c.ar.BindSTCPR(context.Background(), port); err != nil {
-		c.log.Errorf("Failed to bind STCPR: %v", err)
-		return
+	delay := stcprBindRetryDelay
+	for attempt := 1; ; attempt++ {
+		if err := c.ar.BindSTCPR(context.Background(), port); err == nil {
+			c.log.Debugf("Successfully bound stcpr to port %s", port)
+			break
+		} else {
+			c.log.WithError(err).Warnf("Failed to bind STCPR (attempt %d), retrying in %v", attempt, delay)
+		}
+		if c.isClosed() {
+			return
+		}
+		time.Sleep(delay)
+		delay *= 2
+		if delay > stcprBindMaxRetryDelay {
+			delay = stcprBindMaxRetryDelay
+		}
 	}
-	c.log.Debugf("Successfully bound stcpr to port %s", port)
 
 	// Start re-registration loop to keep entry alive in address resolver
 	go c.reRegisterLoop(port)

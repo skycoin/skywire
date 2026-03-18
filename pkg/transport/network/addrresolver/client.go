@@ -289,6 +289,10 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		}
 	}()
 
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return fmt.Errorf("rate limited by address resolver (status 429)")
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
 	}
@@ -411,37 +415,61 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 
 	path := fmt.Sprintf("/resolve/%s/%s", tType, pk.String())
 
-	resp, err := c.Get(ctx, path)
-	if err != nil {
-		return VisorData{}, err
-	}
+	const maxRetries = 3
+	delay := 2 * time.Second
 
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.log.WithError(err).Warn("Failed to close response body")
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			c.log.Debugf("Retrying resolve for %s (attempt %d/%d) after %v", pk.String()[:8], attempt+1, maxRetries+1, delay)
+			select {
+			case <-ctx.Done():
+				return VisorData{}, ctx.Err()
+			case <-time.After(delay):
+			}
+			delay *= 2
 		}
-	}()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return VisorData{}, ErrNoEntry
+		resp, err := c.Get(ctx, path)
+		if err != nil {
+			return VisorData{}, err
+		}
+
+		status := resp.StatusCode
+
+		if status == http.StatusTooManyRequests {
+			resp.Body.Close() //nolint:errcheck,gosec
+			c.log.Warnf("Rate limited by address resolver on resolve for %s, retrying...", pk.String()[:8])
+			continue
+		}
+
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				c.log.WithError(err).Warn("Failed to close response body")
+			}
+		}()
+
+		if status == http.StatusNotFound {
+			return VisorData{}, ErrNoEntry
+		}
+
+		if status != http.StatusOK {
+			return VisorData{}, fmt.Errorf("status: %d, error: %w", status, httpauth.ExtractError(resp.Body))
+		}
+
+		rawBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return VisorData{}, err
+		}
+
+		var resolveResp VisorData
+		if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
+			return VisorData{}, err
+		}
+
+		return resolveResp, nil
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return VisorData{}, fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
-	}
-
-	rawBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return VisorData{}, err
-	}
-
-	var resolveResp VisorData
-
-	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
-		return VisorData{}, err
-	}
-
-	return resolveResp, nil
+	return VisorData{}, fmt.Errorf("resolve for %s failed: rate limited after %d attempts", pk.String()[:8], maxRetries+1)
 }
 
 // Transports query available transports.
