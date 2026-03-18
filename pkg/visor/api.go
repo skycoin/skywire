@@ -119,6 +119,7 @@ type API interface {
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
 	Transport(tid uuid.UUID) (*TransportSummary, error)
 	AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, skipLatencyProbe bool) (*TransportSummary, error)
+	SetSTCPAddr(pk cipher.PubKey, addr string) error
 	RemoveTransport(tid uuid.UUID) error
 	RemoveAllTransports() error
 	SetPublicAutoconnect(pAc bool) error
@@ -1512,6 +1513,17 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.D
 	v.log.Debugf("Saved transport to %v via %v, label %s", remote, tpType, tp.Entry.Label)
 
 	return newTransportSummary(v.tpM, tp, false, v.router.SetupIsTrusted(tp.Remote())), nil
+}
+
+// SetSTCPAddr injects an STCP PK table entry at runtime, mapping a public key to a TCP address.
+// This allows creating STCP transports to visors not preconfigured in the STCP config.
+func (v *Visor) SetSTCPAddr(pk cipher.PubKey, addr string) error {
+	if v.stcpTable == nil {
+		return fmt.Errorf("STCP is not configured on this visor")
+	}
+	v.stcpTable.SetAddr(pk, addr)
+	v.log.Infof("Set STCP address for %s -> %s", pk, addr)
+	return nil
 }
 
 // RemoveTransport implements API.
