@@ -1023,9 +1023,7 @@ func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth
 
 	// Build list of labels (short PKs + "Other")
 	allLabels := make([]string, 0, len(topVisors)+1)
-	for _, pk := range topVisors {
-		allLabels = append(allLabels, pk)
-	}
+	allLabels = append(allLabels, topVisors...)
 	if hasOther {
 		allLabels = append(allLabels, "Other")
 	}

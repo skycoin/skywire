@@ -184,10 +184,6 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		l += "</style></head><body>"
 		l += navlinks
 
-		shortAddr := sess.Address
-		if len(shortAddr) > 20 {
-			shortAddr = shortAddr[:20] + "..."
-		}
 		l += "<h1>Account</h1>"
 		l += "<p>Reward address: <code>" + sess.Address + "</code></p>"
 		l += fmt.Sprintf("<p>%d visor(s) found</p>", len(sess.Visors))

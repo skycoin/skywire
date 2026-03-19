@@ -125,7 +125,7 @@ func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
 	cleanupFn := func() {
 		fmt.Println("Login chain: stopping node...")
 		if cmd.Process != nil {
-			cmd.Process.Kill() //nolint:errcheck
+			cmd.Process.Kill() //nolint:errcheck,gosec
 		}
 	}
 
@@ -136,7 +136,7 @@ func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
 		time.Sleep(1 * time.Second)
 		resp, err := http.Get(healthURL) //nolint:gosec
 		if err == nil {
-			resp.Body.Close() //nolint:errcheck
+			resp.Body.Close() //nolint:errcheck,gosec
 			if resp.StatusCode == http.StatusOK {
 				healthy = true
 				break

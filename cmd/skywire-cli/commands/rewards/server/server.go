@@ -42,7 +42,7 @@ func server(e error) {
 
 	// Set RPC_ADDR so skycoin-cli targets the explicit Skycoin mainnet node
 	if skycoinNode != "" {
-		os.Setenv("RPC_ADDR", skycoinNode) //nolint:errcheck
+		os.Setenv("RPC_ADDR", skycoinNode) //nolint:errcheck,gosec // G104
 		fmt.Printf("Skycoin mainnet node: %s\n", skycoinNode)
 	}
 
@@ -1216,9 +1216,9 @@ func server(e error) {
 					rdata.Mode = "bandwidth"
 					rdata.Unit2 = "SKY/GB"
 					pool1, _ := script.File(statsFile).Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint:errcheck,gosec
-					rdata.One, _ = strconv.ParseFloat(strings.TrimRight(pool1, "\n"), 64)
-					pool2, _ := script.File(statsFile).Match("Skycoin Per GB (Pool 2): ").Replace("Skycoin Per GB (Pool 2): ", "").String() //nolint:errcheck,gosec
-					rdata.Two, _ = strconv.ParseFloat(strings.TrimRight(pool2, "\n"), 64)
+					rdata.One, _ = strconv.ParseFloat(strings.TrimRight(pool1, "\n"), 64)                                                         //nolint:errcheck
+					pool2, _ := script.File(statsFile).Match("Skycoin Per GB (Pool 2): ").Replace("Skycoin Per GB (Pool 2): ", "").String()       //nolint:errcheck,gosec
+					rdata.Two, _ = strconv.ParseFloat(strings.TrimRight(pool2, "\n"), 64)                                                         //nolint:errcheck
 				} else {
 					skycoinpershare, err := script.File(statsFile).Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String()
 					if err != nil {
@@ -1251,7 +1251,7 @@ func server(e error) {
 							rdata.Two = 0.0
 						}
 					} else {
-						rdata.One, _ = strconv.ParseFloat(skycoinpershare, 64)
+						rdata.One, _ = strconv.ParseFloat(skycoinpershare, 64) //nolint:errcheck
 					}
 				}
 				//			rdata.Sent = "❌"
