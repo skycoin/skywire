@@ -97,15 +97,17 @@ func (c *Config) SetDefaults() {
 
 // DialOptions describes dial options.
 type DialOptions struct {
-	MinForwardRts     int
-	MaxForwardRts     int
-	MinConsumeRts     int
-	MaxConsumeRts     int
-	Retries           int
-	UseExistingTpOnly bool          // If true, only use routes through existing transports, don't create new ones
-	TransportID       uuid.UUID     // If set, use this specific transport (skips route calculation for direct transports)
-	ForwardHops       []routing.Hop // If set, use these hops for forward path (skips route calculation)
-	ReverseHops       []routing.Hop // If set, use these hops for reverse path (skips route calculation)
+	MinForwardRts       int
+	MaxForwardRts       int
+	MinConsumeRts       int
+	MaxConsumeRts       int
+	Retries             int
+	UseExistingTpOnly   bool          // If true, only use routes through existing transports, don't create new ones
+	TransportID         uuid.UUID     // If set, use this specific transport (skips route calculation for direct transports)
+	ForwardHops         []routing.Hop // If set, use these hops for forward path (skips route calculation)
+	ReverseHops         []routing.Hop // If set, use these hops for reverse path (skips route calculation)
+	MuxRoutes           int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
+	ExcludeTransportIDs []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
 }
 
 // DefaultDialOptions returns default dial options.
@@ -380,6 +382,54 @@ func (r *router) DialRoutes(
 		nrg.rg.startOffServiceLoops()
 
 		r.logger.Debugf("Created new routes to %s on port %d", rPK, lPort)
+
+		// Attempt additional mux routes if requested and mux was negotiated
+		muxCount := 1
+		if opts != nil && opts.MuxRoutes > 1 {
+			muxCount = opts.MuxRoutes
+		}
+		if muxCount > 1 && nrg.rg.muxEnabled {
+			// Collect transport IDs already in use
+			excludeIDs := []uuid.UUID{rules.Forward.NextTransportID()}
+
+			for i := 1; i < muxCount; i++ {
+				muxOpts := &DialOptions{
+					MinForwardRts:       1,
+					MaxForwardRts:       1,
+					MinConsumeRts:       1,
+					MaxConsumeRts:       1,
+					Retries:             1,
+					ExcludeTransportIDs: excludeIDs,
+				}
+
+				muxFwd, muxRev, err := r.fetchBestRoutes(ctx, lPK, rPK, muxOpts)
+				if err != nil {
+					r.logger.Debugf("Mux route %d/%d: no additional route found: %v", i+1, muxCount, err)
+					break
+				}
+
+				muxReq := routing.BidirectionalRoute{
+					Desc:      forwardDesc,
+					KeepAlive: DefaultRouteKeepAlive,
+					Forward:   muxFwd,
+					Reverse:   muxRev,
+				}
+
+				muxRules, _, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, muxReq)
+				if err != nil {
+					r.logger.Debugf("Mux route %d/%d: setup failed: %v", i+1, muxCount, err)
+					break
+				}
+
+				if err := r.appendRouteToGroup(nrg, muxRules); err != nil {
+					r.logger.Debugf("Mux route %d/%d: append failed: %v", i+1, muxCount, err)
+					break
+				}
+
+				excludeIDs = append(excludeIDs, muxRules.Forward.NextTransportID())
+				r.logger.Infof("Mux route %d/%d established via transport %s", i+1, muxCount, muxRules.Forward.NextTransportID())
+			}
+		}
 
 		// reset MinHops default value if changed before
 		if defaultMinHops != 1 {
@@ -859,6 +909,38 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	r.mx.Unlock()
 
 	return nrg, nil
+}
+
+// appendRouteToGroup adds an additional transport/rule pair to an existing
+// mux-enabled NoiseRouteGroup. Used for establishing additional parallel routes.
+func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRules) error {
+	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+		return fmt.Errorf("SaveRoutingRules: %w", err)
+	}
+
+	nextTpID := rules.Forward.NextTransportID()
+	tp := r.tm.Transport(nextTpID)
+	if tp == nil {
+		return fmt.Errorf("transport %s not found for additional mux route", nextTpID)
+	}
+
+	nrg.rg.appendRules(rules.Forward, rules.Reverse, tp)
+
+	// Send handshake on the new transport to inform the remote side
+	rg := nrg.rg
+	rg.mu.Lock()
+	lastIdx := len(rg.tps) - 1
+	lastTp := rg.tps[lastIdx]
+	lastRule := rg.fwd[lastIdx]
+	rg.mu.Unlock()
+
+	packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, routing.CapMux)
+	if err := rg.writePacket(context.Background(), lastTp, packet, lastRule.KeyRouteID()); err != nil {
+		r.logger.WithError(err).Warn("Failed to send handshake on additional mux transport")
+	}
+
+	r.logger.Debugf("Appended mux route via transport %s to RouteGroup %s", nextTpID, &rules.Desc)
+	return nil
 }
 
 func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packet) error {
@@ -1400,7 +1482,11 @@ fetchRoutesAgain:
 // calculateLocalRoutes attempts to calculate routes locally using the transport manager
 // and transport discovery data, without relying on the route finder service.
 // It supports 1-hop (direct), 2-hop routes, and self-ping (src == dst).
-func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKey) (fwd, rev []routing.Hop, err error) {
+func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKey, opts ...*DialOptions) (fwd, rev []routing.Hop, err error) {
+	var dialOpts *DialOptions
+	if len(opts) > 0 {
+		dialOpts = opts[0]
+	}
 	if r.tm == nil {
 		return nil, nil, errors.New("transport manager not available")
 	}
@@ -1442,6 +1528,20 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 	// Check for direct (1-hop) route first
 	for _, tp := range localTps {
 		if tp.remotePK == dst {
+			// Skip excluded transport IDs (used by mux to get different transports)
+			excluded := false
+			if dialOpts != nil {
+				for _, exID := range dialOpts.ExcludeTransportIDs {
+					if tp.id == exID {
+						excluded = true
+						break
+					}
+				}
+			}
+			if excluded {
+				r.logger.Debugf("Skipping excluded transport %s to destination", tp.id)
+				continue
+			}
 			r.logger.Debugf("Found direct transport to destination: %s (type=%s)", tp.id, tp.tpType)
 			fwdHop := routing.Hop{TpID: tp.id, From: src, To: dst}
 			revHop := routing.Hop{TpID: tp.id, From: dst, To: src}
@@ -1663,6 +1763,23 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
 		return fmt.Errorf("SaveRoutingRules: %w", err)
 	}
+
+	// Check if we already have an active mux-enabled route group for this descriptor.
+	// If so, append the additional route instead of creating a new connection.
+	r.mx.Lock()
+	if nrg, ok := r.rgsNs[rules.Desc]; ok && nrg != nil && nrg.rg.muxEnabled {
+		r.mx.Unlock()
+
+		nextTpID := rules.Forward.NextTransportID()
+		tp := r.tm.Transport(nextTpID)
+		if tp == nil {
+			return fmt.Errorf("transport %s not found for additional mux route", nextTpID)
+		}
+		nrg.rg.appendRules(rules.Forward, rules.Reverse, tp)
+		r.logger.Debugf("Appended additional mux route to existing RouteGroup for %s", &rules.Desc)
+		return nil
+	}
+	r.mx.Unlock()
 
 	select {
 	case <-r.done:
