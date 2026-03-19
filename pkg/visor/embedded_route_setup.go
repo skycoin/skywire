@@ -86,8 +86,13 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 // CreateRouteGroup creates a route group by directly calling the setup-node logic.
 // This bypasses the need to dial a remote setup-node over dmsg.
 func (ers *EmbeddedRouteSetup) CreateRouteGroup(ctx context.Context, biRt routing.BidirectionalRoute) (routing.EdgeRules, error) {
+	const timeout = 30 * time.Second
+
 	ers.log.WithField("src", biRt.Desc.SrcPK()).WithField("dst", biRt.Desc.DstPK()).
 		Debug("Creating route group via embedded setup-node")
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	dialer := router.WrapDmsgClient(ers.dmsgC)
 	metrics := setupmetrics.NewEmpty()

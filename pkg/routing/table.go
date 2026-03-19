@@ -106,7 +106,7 @@ func (mt *memTable) SaveRule(rule Rule) error {
 	defer mt.Unlock()
 
 	mt.rules[key] = rule
-	mt.log.Debugf("ROUTING TABLE CONTENTS: %v", mt.rules)
+	mt.log.Debugf("Saved routing rule: keyRtID=%d type=%s (total rules: %d)", key, rule.Type(), len(mt.rules))
 	mt.activity[key] = now
 
 	return nil
