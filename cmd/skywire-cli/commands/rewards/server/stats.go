@@ -870,6 +870,7 @@ func ParseHistoricBandwidthData(histDir string) ([]BandwidthHistoryEntry, error)
 		history = append(history, BandwidthHistoryEntry{
 			Date:       date,
 			Total:      total,
+			ByVisor:    bwMap,
 			VisorCount: len(bwMap),
 		})
 	}
@@ -969,6 +970,200 @@ func GenerateBandwidthHistoryChartHTML(history []BandwidthHistoryEntry, chartWid
 		latest := history[len(history)-1]
 		sb.WriteString(fmt.Sprintf("<p>Latest: %s — %s total bandwidth across %d qualifying visors</p>\n",
 			latest.Date, formatBytesChart(latest.Total), latest.VisorCount))
+	}
+	sb.WriteString("</div>\n")
+
+	sb.WriteString("</div>\n") // container
+
+	return sb.String()
+}
+
+// GenerateVisorBandwidthChartHTML creates a stacked bar chart showing per-visor bandwidth over time.
+// Only the top maxVisors by total bandwidth are shown individually; the rest are grouped as "Other".
+func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth, chartHeight, maxVisors int) string {
+	if len(history) == 0 {
+		return "<p>No bandwidth history data available</p>"
+	}
+
+	// Aggregate total bandwidth per visor across all days
+	visorTotals := make(map[string]uint64)
+	for _, entry := range history {
+		for pk, bw := range entry.ByVisor {
+			visorTotals[pk] += bw
+		}
+	}
+	if len(visorTotals) == 0 {
+		return "<p>No per-visor bandwidth data available</p>"
+	}
+
+	// Sort visors by total bandwidth descending
+	type visorBW struct {
+		PK    string
+		Total uint64
+	}
+	var sorted []visorBW
+	for pk, total := range visorTotals {
+		sorted = append(sorted, visorBW{PK: pk, Total: total})
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Total > sorted[j].Total
+	})
+
+	// Top N visors shown individually, rest grouped as "Other"
+	topVisors := make([]string, 0, maxVisors)
+	topSet := make(map[string]bool)
+	for i, v := range sorted {
+		if i >= maxVisors-1 && len(sorted) > maxVisors {
+			break
+		}
+		topVisors = append(topVisors, v.PK)
+		topSet[v.PK] = true
+	}
+	hasOther := len(sorted) > maxVisors
+
+	// Build list of labels (short PKs + "Other")
+	allLabels := make([]string, 0, len(topVisors)+1)
+	for _, pk := range topVisors {
+		allLabels = append(allLabels, pk)
+	}
+	if hasOther {
+		allLabels = append(allLabels, "Other")
+	}
+
+	// Find max daily total for Y-axis scaling
+	var maxTotal uint64
+	for _, entry := range history {
+		if entry.Total > maxTotal {
+			maxTotal = entry.Total
+		}
+	}
+	if maxTotal == 0 {
+		return "<p>No bandwidth data points</p>"
+	}
+
+	// Assign colors
+	labelColors := make(map[string]string)
+	for i, label := range allLabels {
+		labelColors[label] = pieChartColors[i%len(pieChartColors)]
+	}
+
+	var sb strings.Builder
+
+	sb.WriteString("<div style='margin: 20px 0; max-width: 100%; overflow-x: auto;'>\n")
+	sb.WriteString("<h3>Per-Visor Bandwidth Over Time</h3>\n")
+
+	// Chart container
+	sb.WriteString("<div style='display: flex; align-items: flex-end; gap: 5px; min-width: fit-content;'>\n")
+
+	// Y-axis
+	sb.WriteString(fmt.Sprintf("<div style='display: flex; flex-direction: column; justify-content: space-between; height: %dpx; font-size: 11px; color: #888; text-align: right; padding-right: 5px; flex-shrink: 0;'>\n", chartHeight))
+	sb.WriteString(fmt.Sprintf("<span>%s</span>\n", formatBytesChart(maxTotal)))
+	sb.WriteString(fmt.Sprintf("<span>%s</span>\n", formatBytesChart(maxTotal*3/4)))
+	sb.WriteString(fmt.Sprintf("<span>%s</span>\n", formatBytesChart(maxTotal/2)))
+	sb.WriteString(fmt.Sprintf("<span>%s</span>\n", formatBytesChart(maxTotal/4)))
+	sb.WriteString("<span>0</span>\n")
+	sb.WriteString("</div>\n")
+
+	// Chart area
+	sb.WriteString(fmt.Sprintf("<div style='position: relative; min-width: %dpx; height: %dpx; border-left: 1px solid #444; border-bottom: 1px solid #444; background: #1a1a1a; flex-shrink: 0;'>\n", chartWidth, chartHeight))
+
+	// Grid lines
+	for i := 1; i <= 4; i++ {
+		y := chartHeight - (chartHeight * i / 4)
+		sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: 0; right: 0; top: %dpx; border-top: 1px dashed #333;'></div>\n", y))
+	}
+
+	barWidth := chartWidth / len(history)
+	if barWidth < 2 {
+		barWidth = 2
+	}
+
+	// Draw stacked bars
+	for i, entry := range history {
+		x := i * barWidth
+		currentY := 0
+
+		// Draw top visors
+		for _, pk := range topVisors {
+			bw := entry.ByVisor[pk]
+			if bw == 0 {
+				continue
+			}
+			segmentHeight := int(bw * uint64(chartHeight) / maxTotal) //nolint:gosec
+			if segmentHeight < 1 {
+				segmentHeight = 1
+			}
+			color := labelColors[pk]
+			shortPK := pk
+			if len(shortPK) > 8 {
+				shortPK = shortPK[:8] + "..."
+			}
+			sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: %dpx; bottom: %dpx; width: %dpx; height: %dpx; background: %s;' title='%s: %s (%s)'></div>\n",
+				x, currentY, barWidth-1, segmentHeight, color, entry.Date, shortPK, formatBytesChart(bw)))
+			currentY += segmentHeight
+		}
+
+		// Draw "Other" aggregate
+		if hasOther {
+			var otherBW uint64
+			for pk, bw := range entry.ByVisor {
+				if !topSet[pk] {
+					otherBW += bw
+				}
+			}
+			if otherBW > 0 {
+				segmentHeight := int(otherBW * uint64(chartHeight) / maxTotal) //nolint:gosec
+				if segmentHeight < 1 {
+					segmentHeight = 1
+				}
+				color := labelColors["Other"]
+				sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: %dpx; bottom: %dpx; width: %dpx; height: %dpx; background: %s;' title='%s: Other (%s)'></div>\n",
+					x, currentY, barWidth-1, segmentHeight, color, entry.Date, formatBytesChart(otherBW)))
+			}
+		}
+	}
+
+	sb.WriteString("</div>\n") // chart area
+	sb.WriteString("</div>\n") // flex container
+
+	// X-axis labels
+	labelInterval := len(history) / 10
+	if labelInterval < 1 {
+		labelInterval = 1
+	}
+	sb.WriteString(fmt.Sprintf("<div style='display: flex; margin-left: 40px; font-size: 10px; color: #888; min-width: %dpx;'>\n", chartWidth))
+	for i, entry := range history {
+		if i%labelInterval == 0 || i == len(history)-1 {
+			dateParts := strings.Split(entry.Date, "-")
+			label := entry.Date
+			if len(dateParts) == 3 {
+				label = dateParts[1] + "-" + dateParts[2]
+			}
+			width := barWidth * labelInterval
+			sb.WriteString(fmt.Sprintf("<span style='width: %dpx; text-align: left;'>%s</span>\n", width, label))
+		}
+	}
+	sb.WriteString("</div>\n")
+
+	// Legend — show short PKs with total bandwidth
+	sb.WriteString("<div style='margin-top: 15px; display: flex; flex-wrap: wrap; gap: 8px 15px; font-size: 12px;'>\n")
+	for _, pk := range topVisors {
+		color := labelColors[pk]
+		shortPK := pk
+		if len(shortPK) > 16 {
+			shortPK = shortPK[:16] + "..."
+		}
+		sb.WriteString(fmt.Sprintf("<span style='display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;'><span style='display: inline-block; width: 12px; height: 12px; background: %s; flex-shrink: 0;'></span>%s (%s)</span>\n",
+			color, html.EscapeString(shortPK), formatBytesChart(visorTotals[pk])))
+	}
+	if hasOther {
+		var otherTotal uint64
+		for _, v := range sorted[maxVisors-1:] {
+			otherTotal += v.Total
+		}
+		color := labelColors["Other"]
+		sb.WriteString(fmt.Sprintf("<span style='display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;'><span style='display: inline-block; width: 12px; height: 12px; background: %s; flex-shrink: 0;'></span>Other (%d visors, %s)</span>\n",
+			color, len(sorted)-(maxVisors-1), formatBytesChart(otherTotal)))
 	}
 	sb.WriteString("</div>\n")
 

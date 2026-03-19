@@ -34,6 +34,7 @@ func init() {
 	nl = append(nl, "  <a href='/stats'>network stats</a>")
 	nl = append(nl, "  <a href='/stats/version-history'>version history</a>")
 	nl = append(nl, "  <a href='/stats/bandwidth-history'>bandwidth history</a>")
+	nl = append(nl, "  <a href='/stats/visor-bandwidth'>visor bandwidth</a>")
 	nl = append(nl, "  <a href='/transport-graph'>transport graph</a>")
 
 	// Log collection section
@@ -117,6 +118,7 @@ var htmlMainPageTemplate = `
   <a href='/stats'>network stats</a>
   <a href='/stats/version-history'>version history</a>
   <a href='/stats/bandwidth-history'>bandwidth history</a>
+  <a href='/stats/visor-bandwidth'>visor bandwidth</a>
   <a href='/transport-graph'>transport graph</a>
   <details><summary>logs</summary><div class='dropdown'>
     <a href='/log-collection'>overview</a>

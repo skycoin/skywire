@@ -25,17 +25,25 @@ Reward distribution notifications are on telegram [@skywire_reward](https://t.me
 
 Information about reward distribution as well as other metrics for the skywire network can be found at [fiber.skywire.dev](https://fiber.skywire.dev)
 
-# Uptime Reward Pools
+# Reward Pools
 
-816000 Skycoin are distributed annually to those visors which meet the mimimum uptime and the other requirements listed below, in two equally sized reward pools.
-
-The reward amount for a day is evenly divided among those eligible participants for a given reward pool on the basis of having met uptime and other requirements, for the previous day.
+816000 Skycoin are distributed annually to those visors which meet the minimum uptime and the other requirements listed below, in two equally sized reward pools.
 
 A total of up to ~1117.808 Skycoin __per pool__ are distributed daily in non leap-years.
 
 A total of up to ~1114.754  Skycoin __per pool__ are distributed daily in leap-years.
 
-The two reward pools are differentiated by architecture ; one pool for ARM / RISC / MIPS architectures, the other pool for AMD64 / x86_64 / i686 architecture machines. The requirements are otherwise identical for reward eligibility in these pools.
+## Pool 1: Presence
+
+The presence pool reward for a day is evenly divided among all eligible visors on the basis of having met uptime and other requirements for the previous day, with IP and MAC address deduplication applied. All architectures are eligible for the presence pool.
+
+## Pool 2: Bandwidth
+
+The bandwidth pool reward for a day is distributed proportionally based on the amount of transport bandwidth each visor handled during the previous day. Only visors which handled bandwidth above a minimum threshold are eligible for the bandwidth pool.
+
+Visors which do not meet the minimum bandwidth threshold will still receive rewards from the presence pool, but will not receive any share of the bandwidth pool.
+
+The bandwidth considered for this pool excludes same-LAN transports (where both edges share the same external IP address).
 
 ## Rules & Requirements
 
@@ -209,7 +217,7 @@ Flags:
 
 ### Architecture
 
-We are pleased to state as of November 1, 2024 Skywire Rewards are open to all architectures, with a reward pool added for non-ARM architectures (amd64 & i386)
+All computer hardware and architectures are eligible for both reward pools.
 
 ### Deployment
 
@@ -462,6 +470,6 @@ The policy for handling rewards in the instance of a deployment outage is to rep
 
 ## Hardware
 
-As of November 2024, skywire rewards are open to all computer hardware and architectures.
+Skywire rewards are open to all computer hardware and architectures.
 
 If there is not a release for your desired architecture, we can attempt to add it, on request.
