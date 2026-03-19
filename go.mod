@@ -1,13 +1,13 @@
 module github.com/skycoin/skywire
 
-go 1.25.6
+go 1.26
 
 require (
 	cogentcore.org/core v0.3.21
 	fyne.io/systray v1.12.0
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/MichaelMure/go-term-markdown v0.1.4
-	github.com/VictoriaMetrics/metrics v1.41.2
+	github.com/VictoriaMetrics/metrics v1.42.0
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/bitfield/script v0.24.1
 	github.com/blang/semver/v4 v4.0.0
@@ -20,7 +20,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/cors v1.2.2
 	github.com/go-chi/httprate v0.15.0
-	github.com/go-echarts/go-echarts/v2 v2.7.0
+	github.com/go-echarts/go-echarts/v2 v2.7.1
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.11.5
@@ -33,7 +33,7 @@ require (
 	github.com/james-barrow/golang-ipc v1.2.4
 	github.com/jaypipes/ghw v0.23.0
 	github.com/json-iterator/go v1.1.12
-	github.com/lib/pq v1.11.2
+	github.com/lib/pq v1.12.0
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/oschwald/geoip2-golang/v2 v2.1.0
@@ -71,7 +71,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/cloudfoundry-attic/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21
 	github.com/coder/websocket v1.8.14
-	github.com/gdamore/tcell/v2 v2.8.1
+	github.com/gdamore/tcell/v2 v2.13.8
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/itchyny/gojq v0.12.18
 	github.com/pgavlin/femto v0.0.0-20201224065653-0c9d20f9cac4
@@ -79,15 +79,15 @@ require (
 	github.com/soheilhy/cmux v0.1.5
 	github.com/xxxserxxx/gotop/v4 v4.2.1-0.20250927202203-54213c890e66
 	github.com/xxxserxxx/lingo/v2 v2.0.1
-	golang.org/x/time v0.14.0
-	google.golang.org/grpc v1.79.1
+	golang.org/x/time v0.15.0
+	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 )
 
 require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
-	github.com/charmbracelet/colorprofile v0.4.2 // indirect
+	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/x/ansi v0.11.6 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
@@ -97,7 +97,7 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
-	github.com/sergi/go-diff v1.2.0 // indirect
+	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/zyedidia/micro v1.4.1 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
@@ -118,7 +118,7 @@ require (
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/alecthomas/chroma v0.10.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.23.1 // indirect
-	github.com/anatol/smart.go v0.0.0-20260213010714-b8c428e1f7f2 // indirect
+	github.com/anatol/smart.go v0.0.0-20260314002218-4abf60ecc43c // indirect
 	github.com/anthonynsimon/bild v0.14.0 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
@@ -189,7 +189,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
-	github.com/klauspost/reedsolomon v1.13.2 // indirect
+	github.com/klauspost/reedsolomon v1.13.3 // indirect
 	github.com/kyokomi/emoji/v2 v2.2.13 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
@@ -197,7 +197,7 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20260216142805-b3301c5f2a88 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.20 // indirect
+	github.com/mattn/go-runewidth v0.0.21 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
@@ -220,7 +220,7 @@ require (
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0 // indirect
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/shoenig/go-m1cpu v0.1.7 // indirect
+	github.com/shoenig/go-m1cpu v0.2.1 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/skycoin/hardware-wallet-protob v0.0.0-20250805154629-410561e1bc2f // indirect
 	github.com/skycoin/hardware-wallet/firmware v0.0.0-20260117000250-43c66b2bf1d2 // indirect
@@ -242,7 +242,7 @@ require (
 	github.com/valyala/histogram v1.2.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
-	github.com/xtaci/smux v1.5.56 // indirect
+	github.com/xtaci/smux v1.5.57 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -255,14 +255,14 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.25.0 // indirect
 	golang.org/x/crypto v0.49.0 // indirect
-	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
-	golang.org/x/image v0.36.0 // indirect
-	golang.org/x/mod v0.33.0 // indirect
+	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90 // indirect
+	golang.org/x/image v0.37.0 // indirect
+	golang.org/x/mod v0.34.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
-	golang.org/x/tools v0.42.0 // indirect
+	golang.org/x/tools v0.43.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260217215200-42d3e9bedb6d // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260316180232-0b37fe3546d5 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
