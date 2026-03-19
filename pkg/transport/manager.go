@@ -402,22 +402,40 @@ func (tm *Manager) invokeTransportCreatedCallback(remote cipher.PubKey, tp *Mana
 		return
 	}
 
-	// Run callback asynchronously to not block transport setup
+	// Run callback asynchronously with retry on failure
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-		defer cancel()
+		backoff := 30 * time.Second
+		const maxBackoff = 5 * time.Minute
 
-		latencyMs := cb(ctx, remote, tp.Entry.ID)
-		if latencyMs > 0 {
-			tp.SetLatency(latencyMs)
-			tm.Logger.Debugf("Transport %s latency set to %.2f ms", tp.Entry.ID, latencyMs)
+		for {
+			if tp.IsClosed() {
+				return
+			}
 
-			// Log latency to file if latency log store is configured
-			if tm.Conf.LatencyLogStore != nil {
-				stats := tp.GetLatencyStats()
-				if err := tm.Conf.LatencyLogStore.Record(tp.Entry.ID, stats.Min, stats.Max, stats.Avg); err != nil {
-					tm.Logger.WithError(err).Warn("Failed to log latency")
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			latencyMs := cb(ctx, remote, tp.Entry.ID)
+			cancel()
+
+			if latencyMs > 0 {
+				tp.SetLatency(latencyMs)
+				tm.Logger.Debugf("Transport %s latency set to %.2f ms", tp.Entry.ID, latencyMs)
+
+				// Log latency to file if latency log store is configured
+				if tm.Conf.LatencyLogStore != nil {
+					stats := tp.GetLatencyStats()
+					if err := tm.Conf.LatencyLogStore.Record(tp.Entry.ID, stats.Min, stats.Max, stats.Avg); err != nil {
+						tm.Logger.WithError(err).Warn("Failed to log latency")
+					}
 				}
+				return
+			}
+
+			// Wait before retrying, exit if transport closes
+			tm.Logger.Debugf("Transport %s latency probe failed, retrying in %v", tp.Entry.ID, backoff)
+			time.Sleep(backoff)
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
 			}
 		}
 	}()
