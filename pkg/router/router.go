@@ -31,12 +31,12 @@ import (
 
 const (
 	// DefaultRouteKeepAlive is the default expiration interval for routes
-	DefaultRouteKeepAlive = 30 * time.Second
+	DefaultRouteKeepAlive = 2 * time.Minute
 	// DefaultRulesGCInterval is the default duration for garbage collection of routing rules.
-	DefaultRulesGCInterval = 5 * time.Second
+	DefaultRulesGCInterval = 10 * time.Second
 	acceptSize             = 1024
 
-	handshakeAwaitTimeout = 10 * time.Second
+	handshakeAwaitTimeout = 30 * time.Second
 
 	maxHops       = 1000
 	retryDuration = 2 * time.Second
