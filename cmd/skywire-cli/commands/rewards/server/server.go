@@ -1304,6 +1304,9 @@ func server(e error) {
 			})
 
 		}
+		// Login routes
+		registerLoginRoutes(r1, wd)
+
 		// Start the server using the custom Gin handler
 	}
 
