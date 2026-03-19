@@ -132,6 +132,12 @@ type RouteGroup struct {
 	// For synchronous latency measurement
 	pendingPongCh chan float64 // Receives measured latency when pong arrives
 	pendingPongMu sync.Mutex
+
+	// Route multiplexing fields
+	muxEnabled bool           // true when both peers advertised CapMux
+	writeSeq   uint32         // next outgoing sequence number (atomic)
+	tpIndex    uint32         // round-robin index for transport selection (atomic)
+	reorderBuf *reorderBuffer // reorder buffer for incoming sequenced packets
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -160,6 +166,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		writeDeadline:      deadline.MakePipeDeadline(),
 		handshakeProcessed: make(chan struct{}),
 		networkStats:       newNetworkStats(),
+		reorderBuf:         newReorderBuffer(64),
 	}
 
 	return rg
@@ -200,18 +207,11 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	}
 
 	rg.mu.Lock()
-	tp, err := rg.tp()
+	tp, rule, err := rg.nextTransport()
 	if err != nil {
 		rg.mu.Unlock()
 		return 0, err
 	}
-
-	rule, err := rg.rule()
-	if err != nil {
-		rg.mu.Unlock()
-		return 0, err
-	}
-	// we don't need to keep holding mutex from this point on
 	rg.mu.Unlock()
 
 	return rg.write(p, tp, rule)
@@ -349,7 +349,14 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 }
 
 func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule) (int, error) {
-	packet, err := routing.MakeDataPacket(rule.NextRouteID(), data)
+	var packet routing.Packet
+	var err error
+	if rg.muxEnabled {
+		seq := atomic.AddUint32(&rg.writeSeq, 1) - 1
+		packet, err = routing.MakeSequencedDataPacket(rule.NextRouteID(), seq, data)
+	} else {
+		packet, err = routing.MakeDataPacket(rule.NextRouteID(), data)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -422,6 +429,40 @@ func (rg *RouteGroup) rule() (routing.Rule, error) {
 	rule := rg.fwd[0]
 
 	return rule, nil
+}
+
+// nextTransport selects the next transport/rule pair. When mux is enabled and
+// multiple transports exist, uses round-robin. Otherwise returns index 0
+// (legacy single-transport behavior).
+// NOTE: not thread-safe, caller must hold rg.mu.
+func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule, error) {
+	if len(rg.tps) == 0 {
+		return nil, nil, ErrNoTransports
+	}
+	if len(rg.fwd) == 0 {
+		return nil, nil, ErrNoRules
+	}
+	if len(rg.tps) != len(rg.fwd) {
+		return nil, nil, ErrRuleTransportMismatch
+	}
+
+	if !rg.muxEnabled || len(rg.tps) == 1 {
+		if rg.tps[0] == nil {
+			return nil, nil, ErrBadTransport
+		}
+		return rg.tps[0], rg.fwd[0], nil
+	}
+
+	n := uint32(len(rg.tps))
+	start := atomic.AddUint32(&rg.tpIndex, 1) - 1
+	for i := uint32(0); i < n; i++ {
+		idx := (start + i) % n
+		tp := rg.tps[idx]
+		if tp != nil && !tp.IsClosed() {
+			return tp, rg.fwd[idx], nil
+		}
+	}
+	return nil, nil, ErrNoSuitableTransport
 }
 
 // tp fetches first available transport.
@@ -655,7 +696,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		}
 
 		rule := rg.fwd[i]
-		packet := routing.MakeHandshakePacket(rule.NextRouteID(), encrypt)
+		packet := routing.MakeHandshakePacket(rule.NextRouteID(), encrypt, routing.CapMux)
 
 		err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 		if err == nil {
@@ -756,6 +797,13 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 				rg.encrypt = false
 			}
 
+			// Extended capabilities negotiation
+			remoteCaps := packet.HandshakeCapabilities()
+			if remoteCaps&routing.CapMux != 0 {
+				rg.muxEnabled = true
+				rg.logger.Debug("Route multiplexing enabled (both peers support CapMux)")
+			}
+
 			close(rg.handshakeProcessed)
 		})
 	case routing.PingPacket:
@@ -779,6 +827,21 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 	}
 	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
+	if rg.muxEnabled && rg.reorderBuf != nil {
+		seq := packet.SequenceNumber()
+		data := packet.DataPayloadAfterSeq()
+		delivered := rg.reorderBuf.Insert(seq, data)
+		for _, d := range delivered {
+			select {
+			case <-rg.closed:
+				return io.ErrClosedPipe
+			case rg.readCh <- d:
+			}
+		}
+		return nil
+	}
+
+	// Legacy path: deliver payload directly
 	select {
 	case <-rg.closed:
 		return io.ErrClosedPipe

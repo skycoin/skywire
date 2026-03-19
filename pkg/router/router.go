@@ -1248,12 +1248,8 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 			return err
 		}
 	case routing.HandshakePacket:
-		b := int(packet[routing.PacketPayloadOffset])
-		supportEncryptionVal := true
-		if b == 0 {
-			supportEncryptionVal = false
-		}
-		p = routing.MakeHandshakePacket(rule.NextRouteID(), supportEncryptionVal)
+		// Forward the full handshake payload (preserves capability bitmap for extended handshakes)
+		p = routing.MakeHandshakePacketRaw(rule.NextRouteID(), packet.Payload())
 	case routing.KeepAlivePacket:
 		p = routing.MakeKeepAlivePacket(rule.NextRouteID())
 	case routing.ClosePacket:

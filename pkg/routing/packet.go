@@ -74,6 +74,16 @@ const (
 	ErrorPacket
 )
 
+// Capability bitmap flags for extended handshake negotiation.
+// Transmitted as a little-endian uint16 at HandshakePacket payload bytes 1-2.
+const (
+	CapMux uint16 = 1 << 0 // Supports route multiplexing (sequenced DataPackets)
+)
+
+// SeqSize is the byte size of the sequence number prepended to DataPacket
+// payloads when mux mode is active.
+const SeqSize = 4
+
 // CloseCode represents close code for ClosePacket.
 type CloseCode byte
 
@@ -159,21 +169,76 @@ func MakePongPacket(id RouteID, timestamp int64) Packet {
 	return packet
 }
 
-// MakeHandshakePacket constructs a new HandshakePacket.
-func MakeHandshakePacket(id RouteID, supportEncryption bool) Packet {
-	packet := make([]byte, PacketHeaderSize+1)
+// MakeHandshakePacket constructs a new HandshakePacket with capability bitmap.
+// Payload layout: [encryption flag (1 byte)][capabilities (2 bytes, little-endian)]
+// Old visors only read byte 0 and ignore the rest, so this is backward compatible.
+func MakeHandshakePacket(id RouteID, supportEncryption bool, capabilities uint16) Packet {
+	packet := make([]byte, PacketHeaderSize+3)
 
-	supportEncryptionVal := 1
+	supportEncryptionVal := byte(1)
 	if !supportEncryption {
 		supportEncryptionVal = 0
 	}
 
 	packet[PacketTypeOffset] = byte(HandshakePacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
-	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(1))
-	packet[PacketPayloadOffset] = byte(supportEncryptionVal)
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(3))
+	packet[PacketPayloadOffset] = supportEncryptionVal
+	binary.LittleEndian.PutUint16(packet[PacketPayloadOffset+1:], capabilities)
 
 	return packet
+}
+
+// MakeHandshakePacketRaw constructs a HandshakePacket with an arbitrary payload.
+// Used for forwarding handshake packets through intermediary nodes.
+func MakeHandshakePacketRaw(id RouteID, payload []byte) Packet {
+	packet := make([]byte, PacketHeaderSize+len(payload))
+
+	packet[PacketTypeOffset] = byte(HandshakePacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(payload))) //nolint:gosec
+	copy(packet[PacketPayloadOffset:], payload)
+
+	return packet
+}
+
+// MakeSequencedDataPacket constructs a DataPacket with a 4-byte sequence number
+// prepended to the payload. Used when mux mode is active.
+func MakeSequencedDataPacket(id RouteID, seq uint32, payload []byte) (Packet, error) {
+	totalPayload := SeqSize + len(payload)
+	if totalPayload > math.MaxUint16 {
+		return Packet{}, ErrPayloadTooBig
+	}
+
+	packet := make([]byte, PacketHeaderSize+totalPayload)
+
+	packet[PacketTypeOffset] = byte(DataPacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(totalPayload)) //nolint:gosec
+	binary.BigEndian.PutUint32(packet[PacketPayloadOffset:], seq)
+	copy(packet[PacketPayloadOffset+SeqSize:], payload)
+
+	return packet, nil
+}
+
+// SequenceNumber extracts the 4-byte sequence number from a sequenced DataPacket payload.
+func (p Packet) SequenceNumber() uint32 {
+	return binary.BigEndian.Uint32(p[PacketPayloadOffset:])
+}
+
+// DataPayloadAfterSeq returns the data payload after the sequence number prefix.
+func (p Packet) DataPayloadAfterSeq() []byte {
+	return p[PacketPayloadOffset+SeqSize:]
+}
+
+// HandshakeCapabilities extracts the capability bitmap from an extended handshake payload.
+// Returns 0 if the payload is too short (old visor).
+func (p Packet) HandshakeCapabilities() uint16 {
+	payload := p.Payload()
+	if len(payload) >= 3 {
+		return binary.LittleEndian.Uint16(payload[1:3])
+	}
+	return 0
 }
 
 // MakeErrorPacket constructs a new ErrorPacket.
