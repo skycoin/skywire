@@ -1307,6 +1307,17 @@ func server(e error) {
 		// Login routes
 		registerLoginRoutes(r1, wd)
 
+		// Fiber node reverse proxy (for blockchain-based wallet authentication)
+		if nodeURL != "" {
+			if err := nodeHealthCheck(nodeURL); err != nil {
+				fmt.Printf("Warning: fiber node at %s not reachable: %v\n", nodeURL, err)
+				fmt.Println("Node proxy routes will be registered but may not work until the node is available.")
+			}
+			if err := registerNodeProxy(r1, nodeURL); err != nil {
+				fmt.Printf("Error setting up node proxy: %v\n", err)
+			}
+		}
+
 		// Start the server using the custom Gin handler
 	}
 

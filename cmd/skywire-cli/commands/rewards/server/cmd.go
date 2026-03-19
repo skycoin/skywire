@@ -34,6 +34,7 @@ var (
 	wlkeys          []cipher.PubKey
 	webPort         uint
 	ensureOnlineURL string
+	nodeURL         string
 	healthOnly      bool
 	noUI            bool
 	buildTimeout    time.Duration
@@ -66,6 +67,7 @@ func init() {
 		sk.Set(scriptExecString("${DMSGHTTP_SK}")) //nolint:errcheck,gosec
 	}
 	ServerCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
+	ServerCmd.Flags().StringVar(&nodeURL, "node", scriptExecString("${FIBERNODE}"), "fiber node URL to reverse proxy /api/v1/* and /api/v2/* to\n(e.g. http://localhost:6420)")
 	ServerCmd.Flags().BoolVar(&healthOnly, "health-only", false, "serve only /health endpoint for testing")
 	ServerCmd.Flags().BoolVar(&noUI, "no-ui", false, "skip cogentcore UI extraction and compilation, serve plain HTTP")
 	ServerCmd.Flags().DurationVar(&buildTimeout, "build-timeout", 5*time.Minute, "timeout for UI build process")
