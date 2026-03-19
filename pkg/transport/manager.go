@@ -404,7 +404,7 @@ func (tm *Manager) invokeTransportCreatedCallback(remote cipher.PubKey, tp *Mana
 
 	// Run callback asynchronously to not block transport setup
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 
 		latencyMs := cb(ctx, remote, tp.Entry.ID)
