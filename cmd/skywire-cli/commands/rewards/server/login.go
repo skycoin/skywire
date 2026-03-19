@@ -66,7 +66,8 @@ func findVisorsByRewardAddress(backupsDir, address string) []string {
 }
 
 // registerLoginRoutes adds login-related routes to the gin router.
-func registerLoginRoutes(r *gin.Engine, wd string) {
+// When loginEnabled is false, the login page shows a "not available" message.
+func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 	backupsDir := filepath.Join(wd, "log_backups")
 
 	// Login page
@@ -84,6 +85,15 @@ func registerLoginRoutes(r *gin.Engine, wd string) {
 		l += ".info { color: #4BC0C0; }"
 		l += "</style></head><body>"
 		l += navlinks
+
+		if !loginEnabled {
+			l += "<h1>Login</h1>"
+			l += "<p class='info'>Login is not currently available on this instance.</p>"
+			l += "</body></html>"
+			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+			return
+		}
+
 		l += "<h1>Login</h1>"
 		l += "<p>Enter your reward address or xpub key to view your visor data.</p>"
 		l += "<form method='POST' action='/login'>"
@@ -105,6 +115,10 @@ func registerLoginRoutes(r *gin.Engine, wd string) {
 
 	// Login POST — look up address in surveys
 	r.POST("/login", func(c *gin.Context) {
+		if !loginEnabled {
+			c.Redirect(http.StatusFound, "/login?msg=Login+is+not+currently+available")
+			return
+		}
 		address := strings.TrimSpace(c.PostForm("address"))
 		if address == "" {
 			c.Redirect(http.StatusFound, "/login?msg=Please+enter+an+address+or+xpub+key")
@@ -135,6 +149,10 @@ func registerLoginRoutes(r *gin.Engine, wd string) {
 
 	// Account page — shows visor data for logged-in user
 	r.GET("/account", func(c *gin.Context) {
+		if !loginEnabled {
+			c.Redirect(http.StatusFound, "/login?msg=Login+is+not+currently+available")
+			return
+		}
 		sessionID, err := c.Cookie("session")
 		if err != nil {
 			c.Redirect(http.StatusFound, "/login?msg=Please+log+in")

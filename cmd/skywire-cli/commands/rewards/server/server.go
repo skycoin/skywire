@@ -40,6 +40,12 @@ func server(e error) {
 		log.Fatal("Dmsg Discovery URL not specified")
 	}
 
+	// Set RPC_ADDR so skycoin-cli targets the explicit Skycoin mainnet node
+	if skycoinNode != "" {
+		os.Setenv("RPC_ADDR", skycoinNode) //nolint:errcheck
+		fmt.Printf("Skycoin mainnet node: %s\n", skycoinNode)
+	}
+
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 	defer cancel()
 	pk, err := sk.PubKey()
@@ -1304,16 +1310,29 @@ func server(e error) {
 			})
 
 		}
-		// Login routes
-		registerLoginRoutes(r1, wd)
+		// Login chain auto-setup
+		if loginNode == "auto" {
+			addr, cleanup, err := ensureLoginChain(wd)
+			if err != nil {
+				fmt.Printf("Warning: login chain auto-setup failed: %v\n", err)
+				fmt.Println("Continuing without login chain.")
+				loginNode = ""
+			} else {
+				defer cleanup()
+				loginNode = addr
+			}
+		}
 
-		// Fiber node reverse proxy (for blockchain-based wallet authentication)
-		if nodeURL != "" {
-			if err := nodeHealthCheck(nodeURL); err != nil {
-				fmt.Printf("Warning: fiber node at %s not reachable: %v\n", nodeURL, err)
+		// Login routes (enabled only when loginNode is configured)
+		registerLoginRoutes(r1, wd, loginNode != "")
+
+		// Login chain node reverse proxy
+		if loginNode != "" {
+			if err := nodeHealthCheck(loginNode); err != nil {
+				fmt.Printf("Warning: login node at %s not reachable: %v\n", loginNode, err)
 				fmt.Println("Node proxy routes will be registered but may not work until the node is available.")
 			}
-			if err := registerNodeProxy(r1, nodeURL); err != nil {
+			if err := registerNodeProxy(r1, loginNode); err != nil {
 				fmt.Printf("Error setting up node proxy: %v\n", err)
 			}
 		}
