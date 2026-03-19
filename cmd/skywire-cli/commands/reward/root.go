@@ -6,12 +6,12 @@ import (
 	"os"
 	"strings"
 
-	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -59,13 +59,14 @@ var RootCmd = rewardCmd
 const longtext = `
 	reward address setting
 
-	Sets the skycoin reward address for the visor.
+	Sets the skycoin reward address or xpub key for the visor.
+	Accepts either a skycoin address or a BIP44 account xpub key.
 	The address is written to the root of the default 'local' directory specified in the visor's config
 
-	This file is parsed by the visor at runtime, and the skycoin address is included in the survey which is served via dmsghttp along with transport logs
+	This file is parsed by the visor at runtime, and the reward address is included in the survey which is served via dmsghttp along with transport logs
 	and the system hardware survey for automating reward distribution
 
-	By setting a skycoin reward address, you consent to collection of the survey from the visors where the reward address is set.
+	By setting a reward address, you consent to collection of the survey from the visors where the reward address is set.
 	The survey is ONLY for verification of reward eligibility. We respect your privacy.`
 
 func longText() string {
@@ -77,7 +78,7 @@ func longText() string {
 		if err != nil {
 			fmt.Printf("    reward settings misconfigured!")
 		}
-		_, err = coincipher.DecodeBase58Address(strings.TrimSpace(string(reward)))
+		_, _, err = rewardconfig.ValidateRewardAddress(strings.TrimSpace(string(reward)))
 		if err != nil {
 			fmt.Printf("    invalid address in reward config %v", err)
 		}
@@ -89,9 +90,9 @@ func longText() string {
 }
 
 var rewardCmd = &cobra.Command{
-	Use:                   "reward <address> || [flags]",
+	Use:                   "reward <address | xpub> || [flags]",
 	DisableFlagsInUseLine: true,
-	Short:                 "skycoin reward address",
+	Short:                 "skycoin reward address or xpub key",
 	Long:                  longText(),
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		//--all unhides flags, prints help menu, and exits
@@ -162,21 +163,21 @@ var rewardCmd = &cobra.Command{
 		}
 		//remove any newline from rewardAddress string
 		rewardAddress = strings.TrimSuffix(rewardAddress, "\n")
-		//validate the skycoin address
-		cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
+		//validate the skycoin address or xpub key
+		canonical, _, err := rewardconfig.ValidateRewardAddress(rewardAddress)
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address specified: %v", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address or xpub key specified: %v", err))
 		}
 
 		//using the rpc of the running visor avoids needing sudo permissions
 		if clienterr != nil {
-			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0600))
+			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(canonical), 0600))
 			readRewardFile(cmd.Flags())
 			return
 		}
 
 		if clienterr == nil {
-			rwdAdd, err := client.SetRewardAddress(rewardAddress)
+			rwdAdd, err := client.SetRewardAddress(canonical)
 			if err != nil {
 				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 				return
@@ -185,7 +186,7 @@ var rewardCmd = &cobra.Command{
 			internal.PrintOutput(cmd.Flags(), output, output)
 		}
 		if clienterr != nil {
-			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(cAddr.String()), 0600))
+			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(canonical), 0600))
 			readRewardFile(cmd.Flags())
 		}
 	},
