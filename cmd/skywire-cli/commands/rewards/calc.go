@@ -730,7 +730,8 @@ Architectures:
 			if !h2 {
 				fmt.Println("Skycoin Address, Reward Amount")
 				for _, skyAddrReward := range sortedSkyAddrs {
-					fmt.Printf("%s, %.6f\n", skyAddrReward.SkyAddr, skyAddrReward.Reward)
+					resolved := resolveRewardAddress(skyAddrReward.SkyAddr)
+					fmt.Printf("%s, %.6f\n", resolved, skyAddrReward.Reward)
 				}
 			}
 		} else {
@@ -810,11 +811,36 @@ Architectures:
 			if !h2 {
 				fmt.Println("Skycoin Address, Reward Amount")
 				for _, skyAddrReward := range sortedSkyAddrs {
-					fmt.Printf("%s, %.6f\n", skyAddrReward.SkyAddr, skyAddrReward.Reward)
+					resolved := resolveRewardAddress(skyAddrReward.SkyAddr)
+					fmt.Printf("%s, %.6f\n", resolved, skyAddrReward.Reward)
 				}
 			}
 		}
 	},
+}
+
+// resolveRewardAddress resolves an xpub key to the next unused skycoin address
+// using skycoin-cli. Regular addresses are returned as-is.
+func resolveRewardAddress(addr string) string {
+	if !strings.HasPrefix(addr, "xpub") {
+		return addr
+	}
+	out, err := exec.Command("skycoin-cli", "nextAddress", addr).Output() //nolint:gosec
+	if err != nil {
+		log.Warnf("Failed to derive address from xpub %s...: %v", addr[:20], err)
+		return addr // fall back to xpub string — won't be sendable but won't lose data
+	}
+	// nextAddress output format: "address: <addr>\nchild_index: <n>\npublic_key: <pk>\n"
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "address: ") {
+			resolved := strings.TrimPrefix(line, "address: ")
+			log.Infof("Resolved xpub %s... → %s", addr[:20], resolved)
+			return resolved
+		}
+	}
+	log.Warnf("Could not parse nextAddress output for xpub %s...", addr[:20])
+	return addr
 }
 
 func mustExist(path string) {
