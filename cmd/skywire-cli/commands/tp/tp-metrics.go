@@ -66,6 +66,30 @@ func minBW(a, b uint64) uint64 {
 	return b
 }
 
+func formatLatency(lat *store.TransportLatency) string {
+	if lat == nil || lat.Avg == 0 {
+		return "-"
+	}
+	ms := float64(lat.Avg) / 1000.0
+	if ms < 1 {
+		return fmt.Sprintf("%.0fμs", float64(lat.Avg))
+	}
+	if ms < 1000 {
+		return fmt.Sprintf("%.1fms", ms)
+	}
+	return fmt.Sprintf("%.2fs", ms/1000.0)
+}
+
+func formatLatencyFull(lat *store.TransportLatency) string {
+	if lat == nil || lat.Avg == 0 {
+		return "-"
+	}
+	minMs := float64(lat.Min) / 1000.0
+	avgMs := float64(lat.Avg) / 1000.0
+	maxMs := float64(lat.Max) / 1000.0
+	return fmt.Sprintf("%.1f/%.1f/%.1fms", minMs, avgMs, maxMs)
+}
+
 var metricsCmd = &cobra.Command{
 	Use:   "metrics",
 	Short: "Transport discovery bandwidth metrics",
@@ -76,7 +100,7 @@ var metricsCmd = &cobra.Command{
 	With --by-transport: show bandwidth per transport ID.
 	With --tree: tree view with visors and their transports.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		url := fmt.Sprintf("%s/metrics?days=%d&bandwidth=true&latency=false&edges=true",
+		url := fmt.Sprintf("%s/metrics?days=%d&bandwidth=true&latency=true&edges=true",
 			strings.TrimSuffix(metricsTpdURL, "/"), metricsDays)
 
 		resp, err := http.Get(url) //nolint:gosec
@@ -110,13 +134,14 @@ var metricsCmd = &cobra.Command{
 
 func printByTransport(cmd *cobra.Command, metrics []store.TransportMetric) {
 	type tpEntry struct {
-		ID        string `json:"id"`
-		Type      string `json:"type"`
-		EdgeA     string `json:"edge_a"`
-		EdgeB     string `json:"edge_b"`
-		Sent      uint64 `json:"sent"`
-		Recv      uint64 `json:"recv"`
-		Bandwidth uint64 `json:"bandwidth"`
+		ID        string                  `json:"id"`
+		Type      string                  `json:"type"`
+		EdgeA     string                  `json:"edge_a"`
+		EdgeB     string                  `json:"edge_b"`
+		Sent      uint64                  `json:"sent"`
+		Recv      uint64                  `json:"recv"`
+		Bandwidth uint64                  `json:"bandwidth"`
+		Latency   *store.TransportLatency `json:"latency,omitempty"`
 	}
 
 	var entries []tpEntry
@@ -129,7 +154,7 @@ func printByTransport(cmd *cobra.Command, metrics []store.TransportMetric) {
 		}
 		aToB, bToA := verifiedBandwidth(m)
 		bw := aToB + bToA
-		if bw == 0 {
+		if bw == 0 && m.Latency == nil {
 			continue
 		}
 		entries = append(entries, tpEntry{
@@ -140,6 +165,7 @@ func printByTransport(cmd *cobra.Command, metrics []store.TransportMetric) {
 			Sent:      aToB,
 			Recv:      bToA,
 			Bandwidth: bw,
+			Latency:   m.Latency,
 		})
 	}
 
@@ -161,21 +187,21 @@ func printByTransport(cmd *cobra.Command, metrics []store.TransportMetric) {
 	var networkTotal uint64
 
 	if metricsVerbose {
-		fmt.Fprintln(w, "transport_id\ttype\tedge_a\tedge_b\tsent\trecv\tbandwidth") //nolint:errcheck
+		fmt.Fprintln(w, "transport_id\ttype\tedge_a\tedge_b\tsent\trecv\tbandwidth\tlatency (min/avg/max)") //nolint:errcheck
 		for _, e := range entries {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
 				e.ID, e.Type, e.EdgeA, e.EdgeB,
 				formatBytes(e.Sent), formatBytes(e.Recv),
-				formatBytes(e.Bandwidth))
+				formatBytes(e.Bandwidth), formatLatencyFull(e.Latency))
 			networkTotal += e.Bandwidth
 		}
 	} else {
-		fmt.Fprintln(w, "transport_id\ttype\tsent\trecv\tbandwidth") //nolint:errcheck
+		fmt.Fprintln(w, "transport_id\ttype\tsent\trecv\tbandwidth\tlatency") //nolint:errcheck
 		for _, e := range entries {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
 				e.ID, e.Type,
 				formatBytes(e.Sent), formatBytes(e.Recv),
-				formatBytes(e.Bandwidth))
+				formatBytes(e.Bandwidth), formatLatency(e.Latency))
 			networkTotal += e.Bandwidth
 		}
 	}
@@ -191,10 +217,13 @@ func printByTransport(cmd *cobra.Command, metrics []store.TransportMetric) {
 
 func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 	type visorBW struct {
-		Sent       uint64 `json:"sent"`
-		Recv       uint64 `json:"recv"`
-		Bandwidth  uint64 `json:"bandwidth"`
-		Transports int    `json:"transports"`
+		Sent       uint64  `json:"sent"`
+		Recv       uint64  `json:"recv"`
+		Bandwidth  uint64  `json:"bandwidth"`
+		Transports int     `json:"transports"`
+		LatencySum float64 `json:"-"`
+		LatencyN   int     `json:"-"`
+		AvgLatency float64 `json:"avg_latency_ms,omitempty"`
 	}
 	byPK := make(map[string]*visorBW)
 
@@ -212,6 +241,13 @@ func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 		pkA := m.Edges[0]
 		pkB := m.Edges[1]
 
+		addLatency := func(vbw *visorBW) {
+			if m.Latency != nil && m.Latency.Avg > 0 {
+				vbw.LatencySum += float64(m.Latency.Avg) / 1000.0
+				vbw.LatencyN++
+			}
+		}
+
 		// Edge A sent a→b, received b→a
 		if metricsPK == "" || pkA == metricsPK {
 			vbw, ok := byPK[pkA]
@@ -223,6 +259,7 @@ func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 			vbw.Sent += aToB
 			vbw.Recv += bToA
 			vbw.Bandwidth += tpBW
+			addLatency(vbw)
 		}
 
 		// Edge B sent b→a, received a→b
@@ -236,6 +273,14 @@ func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 			vbw.Sent += bToA
 			vbw.Recv += aToB
 			vbw.Bandwidth += tpBW
+			addLatency(vbw)
+		}
+	}
+
+	// Compute averages
+	for _, vbw := range byPK {
+		if vbw.LatencyN > 0 {
+			vbw.AvgLatency = vbw.LatencySum / float64(vbw.LatencyN)
 		}
 	}
 
@@ -262,12 +307,16 @@ func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 
 	var b bytes.Buffer
 	w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
-	fmt.Fprintln(w, "public_key\ttransports\tsent\trecv\tbandwidth") //nolint:errcheck
+	fmt.Fprintln(w, "public_key\ttransports\tsent\trecv\tbandwidth\tavg latency") //nolint:errcheck
 	for _, v := range sorted {
-		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\n", //nolint:errcheck
+		latStr := "-"
+		if v.BW.AvgLatency > 0 {
+			latStr = fmt.Sprintf("%.1fms", v.BW.AvgLatency)
+		}
+		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%s\n", //nolint:errcheck
 			v.PK, v.BW.Transports,
 			formatBytes(v.BW.Sent), formatBytes(v.BW.Recv),
-			formatBytes(v.BW.Bandwidth))
+			formatBytes(v.BW.Bandwidth), latStr)
 	}
 	w.Flush() //nolint:errcheck,gosec
 
@@ -282,12 +331,13 @@ func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 
 func printTree(cmd *cobra.Command, metrics []store.TransportMetric) {
 	type tpInfo struct {
-		ID        string `json:"id"`
-		Type      string `json:"type"`
-		Remote    string `json:"remote"`
-		Sent      uint64 `json:"sent"`
-		Recv      uint64 `json:"recv"`
-		Bandwidth uint64 `json:"bandwidth"`
+		ID        string                  `json:"id"`
+		Type      string                  `json:"type"`
+		Remote    string                  `json:"remote"`
+		Sent      uint64                  `json:"sent"`
+		Recv      uint64                  `json:"recv"`
+		Bandwidth uint64                  `json:"bandwidth"`
+		Latency   *store.TransportLatency `json:"latency,omitempty"`
 	}
 	type visorTree struct {
 		Sent       uint64   `json:"sent"`
@@ -320,10 +370,11 @@ func printTree(cmd *cobra.Command, metrics []store.TransportMetric) {
 			vt.Sent += aToB
 			vt.Recv += bToA
 			vt.Bandwidth += tpBW
-			if tpBW > 0 {
+			if tpBW > 0 || m.Latency != nil {
 				vt.Transports = append(vt.Transports, tpInfo{
 					ID: m.ID, Type: m.Type, Remote: pkB,
 					Sent: aToB, Recv: bToA, Bandwidth: tpBW,
+					Latency: m.Latency,
 				})
 			}
 		}
@@ -337,10 +388,11 @@ func printTree(cmd *cobra.Command, metrics []store.TransportMetric) {
 			vt.Sent += bToA
 			vt.Recv += aToB
 			vt.Bandwidth += tpBW
-			if tpBW > 0 {
+			if tpBW > 0 || m.Latency != nil {
 				vt.Transports = append(vt.Transports, tpInfo{
 					ID: m.ID, Type: m.Type, Remote: pkA,
 					Sent: bToA, Recv: aToB, Bandwidth: tpBW,
+					Latency: m.Latency,
 				})
 			}
 		}
@@ -384,10 +436,14 @@ func printTree(cmd *cobra.Command, metrics []store.TransportMetric) {
 			if i == len(v.Tree.Transports)-1 {
 				prefix = "└── "
 			}
-			fmt.Fprintf(&b, "%s%s  %s  → %s  sent %s  recv %s  total %s\n",
+			latStr := ""
+			if tp.Latency != nil && tp.Latency.Avg > 0 {
+				latStr = fmt.Sprintf("  latency %s", formatLatencyFull(tp.Latency))
+			}
+			fmt.Fprintf(&b, "%s%s  %s  → %s  sent %s  recv %s  total %s%s\n",
 				prefix, tp.ID, tp.Type, tp.Remote,
 				formatBytes(tp.Sent), formatBytes(tp.Recv),
-				formatBytes(tp.Bandwidth))
+				formatBytes(tp.Bandwidth), latStr)
 		}
 		b.WriteString("\n")
 	}
