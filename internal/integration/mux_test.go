@@ -95,7 +95,7 @@ func testMuxDistributesTraffic(t *testing.T, env *TestEnv) {
 			t.Logf("Request %d failed: %v", i+1, err)
 			continue
 		}
-		resp.Body.Close() //nolint:errcheck
+		resp.Body.Close() //nolint:errcheck,gosec
 		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotFound {
 			successCount++
 		}
