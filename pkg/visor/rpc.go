@@ -654,8 +654,8 @@ func (r *RPC) RemoveRoutingRule(key *routing.RouteID, _ *struct{}) (err error) {
 
 // RouteGroupInfo is a human-understandable representation of a RouteGroup.
 type RouteGroupInfo struct {
-	ConsumeRule routing.Rule
-	FwdRule     routing.Rule
+	ConsumeRule routing.Rule `json:"consume_rule"`
+	FwdRule     routing.Rule `json:"fwd_rule"`
 }
 
 // RouteGroups retrieves routegroups via rules of the routing table.
