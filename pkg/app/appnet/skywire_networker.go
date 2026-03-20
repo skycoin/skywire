@@ -170,8 +170,15 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 
 		conn, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
-			log.WithError(err).Debug("Stopped accepting routes.")
-			return err
+			// Check if context was canceled (normal shutdown)
+			if ctx.Err() != nil {
+				log.WithError(err).Debug("Stopped accepting routes.")
+				return err
+			}
+			// Non-fatal error (e.g., missing transport for a stale route).
+			// Log and continue accepting — don't kill the accept loop.
+			log.WithError(err).Warn("Failed to accept route group, continuing...")
+			continue
 		}
 
 		log.

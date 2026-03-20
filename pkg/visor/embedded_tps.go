@@ -108,8 +108,8 @@ func (tps *embeddedTPS) Serve(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return nil
 			}
-			tps.log.WithError(err).Error("Failed to accept dmsg stream")
-			return err
+			tps.log.WithError(err).Warn("Failed to accept dmsg stream, continuing...")
+			continue
 		}
 
 		remotePK := conn.RawRemoteAddr().PK
