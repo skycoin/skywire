@@ -389,7 +389,7 @@ func (r *router) DialRoutes(
 		if opts != nil && opts.MuxRoutes > 1 {
 			muxCount = opts.MuxRoutes
 		}
-		if muxCount > 1 && nrg.rg.muxEnabled {
+		if muxCount > 1 && nrg.rg.mux != nil {
 			// Collect transport IDs already in use
 			excludeIDs := []uuid.UUID{rules.Forward.NextTransportID()}
 
@@ -1794,7 +1794,7 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 	// Check if we already have an active mux-enabled route group for this descriptor.
 	// If so, append the additional route instead of creating a new connection.
 	r.mx.Lock()
-	if nrg, ok := r.rgsNs[rules.Desc]; ok && nrg != nil && nrg.rg.muxEnabled {
+	if nrg, ok := r.rgsNs[rules.Desc]; ok && nrg != nil && nrg.rg.mux != nil {
 		r.mx.Unlock()
 
 		nextTpID := rules.Forward.NextTransportID()
