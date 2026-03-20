@@ -4,6 +4,7 @@
 package integration_test
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -111,33 +112,36 @@ func testMuxDistributesTraffic(t *testing.T, env *TestEnv) {
 	// Give a moment for bandwidth counters to update.
 	time.Sleep(2 * time.Second)
 
-	tpsAfter, err := env.VisorTpLs(visorC)
+	// Parse transport list with bandwidth data (CLI outputs flat recv_bytes/sent_bytes)
+	type tpWithBW struct {
+		ID        string `json:"id"`
+		Type      string `json:"type"`
+		RemotePK  string `json:"remote_pk"`
+		RecvBytes uint64 `json:"recv_bytes,omitempty"`
+		SentBytes uint64 `json:"sent_bytes,omitempty"`
+	}
+	var tpResult struct {
+		Output []tpWithBW `json:"output"`
+	}
+	err = env.ExecJSON(
+		fmt.Sprintf("/release/skywire cli --rpc %s:3435 tp --json", visorC),
+		&tpResult,
+	)
 	require.NoError(t, err, "Failed to list transports after traffic")
 
 	var dmsgBytes, stcprBytes uint64
-	for _, tp := range tpsAfter {
-		if tp.Remote.String() != serverPK {
+	for _, tp := range tpResult.Output {
+		if tp.RemotePK != serverPK {
 			continue
 		}
-		if tp.Log == nil {
-			continue
-		}
-		sent := uint64(0)
-		recv := uint64(0)
-		if tp.Log.SentBytes != nil {
-			sent = *tp.Log.SentBytes
-		}
-		if tp.Log.RecvBytes != nil {
-			recv = *tp.Log.RecvBytes
-		}
-		bw := sent + recv
-		switch tp.Type {
+		bw := tp.RecvBytes + tp.SentBytes
+		switch types.Type(tp.Type) {
 		case types.DMSG:
 			dmsgBytes = bw
-			t.Logf("DMSG transport bandwidth: sent=%d recv=%d total=%d", sent, recv, bw)
+			t.Logf("DMSG transport bandwidth: sent=%d recv=%d total=%d", tp.SentBytes, tp.RecvBytes, bw)
 		case types.STCPR:
 			stcprBytes = bw
-			t.Logf("STCPR transport bandwidth: sent=%d recv=%d total=%d", sent, recv, bw)
+			t.Logf("STCPR transport bandwidth: sent=%d recv=%d total=%d", tp.SentBytes, tp.RecvBytes, bw)
 		}
 	}
 
@@ -162,24 +166,22 @@ func testMuxDistributesTraffic(t *testing.T, env *TestEnv) {
 	t.Logf("Total bandwidth across muxed transports: %d bytes", totalBW)
 
 	// Also verify on the server side
-	serverTps, err := env.VisorTpLs(visorA)
+	clientPK := env.visorPKs[visorC]
+	var serverResult struct {
+		Output []tpWithBW `json:"output"`
+	}
+	err = env.ExecJSON(
+		fmt.Sprintf("/release/skywire cli --rpc %s:3435 tp --json", visorA),
+		&serverResult,
+	)
 	if err == nil {
-		clientPK := env.visorPKs[visorC]
 		var serverDmsgBW, serverStcprBW uint64
-		for _, tp := range serverTps {
-			if tp.Remote.String() != clientPK || tp.Log == nil {
+		for _, tp := range serverResult.Output {
+			if tp.RemotePK != clientPK {
 				continue
 			}
-			sent := uint64(0)
-			recv := uint64(0)
-			if tp.Log.SentBytes != nil {
-				sent = *tp.Log.SentBytes
-			}
-			if tp.Log.RecvBytes != nil {
-				recv = *tp.Log.RecvBytes
-			}
-			bw := sent + recv
-			switch tp.Type {
+			bw := tp.RecvBytes + tp.SentBytes
+			switch types.Type(tp.Type) {
 			case types.DMSG:
 				serverDmsgBW = bw
 			case types.STCPR:
