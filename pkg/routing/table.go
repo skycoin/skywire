@@ -208,11 +208,24 @@ func (mt *memTable) CollectGarbage() []Rule {
 	defer mt.Unlock()
 
 	var timedOutRules []Rule
+	var oldestIdling time.Duration
+	var oldestID RouteID
 	for routeID, rule := range mt.rules {
 		if mt.ruleIsTimedOut(routeID, rule) {
 			timedOutRules = append(timedOutRules, rule)
 			mt.delRule(routeID)
+		} else if lastActivity, ok := mt.activity[routeID]; ok {
+			idling := time.Since(lastActivity)
+			if idling > oldestIdling {
+				oldestIdling = idling
+				oldestID = routeID
+			}
+			_ = rule
 		}
+	}
+
+	if len(mt.rules) > 50 && len(timedOutRules) == 0 {
+		mt.log.Debugf("GC: %d rules, 0 expired. Oldest idle: rtID=%d idle=%v", len(mt.rules), oldestID, oldestIdling)
 	}
 
 	return timedOutRules
