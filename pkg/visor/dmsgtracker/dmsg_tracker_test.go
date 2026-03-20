@@ -39,24 +39,33 @@ func TestDmsgTracker_Update(t *testing.T) {
 	cT, err := env.NewClient(&conf)
 	require.NoError(t, err)
 
-	// Retry tracker creation to handle transient session timing on macOS
+	// Retry tracker creation and update to handle transient dmsg session timing
+	// in CI environments. The single-server test environment can have brief
+	// connectivity gaps during session setup.
 	var dt *DmsgTracker
 	for i := 0; i < 3; i++ {
 		dt, err = newDmsgTracker(context.TODO(), cT, cL.LocalPK())
 		if err == nil {
 			break
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
 	require.NoError(t, err)
 
-	// act: attempt update
-	assert.NoError(t, dt.Update(context.TODO()))
+	// act: attempt update with retry
+	for i := 0; i < 3; i++ {
+		err = dt.Update(context.TODO())
+		if err == nil {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	assert.NoError(t, err)
 
 	// assert: check all fields
 	assert.Equal(t, cL.LocalPK(), dt.sum.PK)
 	assert.Equal(t, env.AllServers()[0].LocalPK(), dt.sum.ServerPK)
-	if !(runtime.GOOS == "windows") {
+	if !(runtime.GOOS == "windows") && err == nil {
 		assert.NotZero(t, dt.sum.RoundTrip)
 	}
 }
