@@ -113,7 +113,7 @@ func (dg *DmsgCurl) Run(ctx context.Context, log *logging.Logger, skStr string, 
 
 	httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 
-	for i := 0; i < dg.dlF.Tries; i++ {
+	for i := 0; dg.dlF.Tries == 0 || i < dg.dlF.Tries; i++ {
 		log.Infof("Download attempt %d/%d ...", i, dg.dlF.Tries)
 
 		if _, err := file.Seek(0, 0); err != nil {
@@ -220,12 +220,17 @@ func (dg *DmsgCurl) StartDmsg(ctx context.Context, log *logging.Logger, pk ciphe
 func Download(ctx context.Context, log logrus.FieldLogger, httpC *http.Client, w io.Writer, urlStr string, maxSize int64) error {
 	req, err := http.NewRequest(http.MethodGet, urlStr, nil)
 	if err != nil {
-		log.WithError(err).Fatal("Failed to formulate HTTP request.")
+		return fmt.Errorf("failed to formulate HTTP request: %w", err)
 	}
 	resp, err := httpC.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to HTTP server: %w", err)
 	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("HTTP Response body closed with non-nil error.")
+		}
+	}()
 	if maxSize > 0 {
 		if resp.ContentLength > maxSize*1024 {
 			return fmt.Errorf("requested file size is more than allowed size: %d KB > %d KB", (resp.ContentLength / 1024), maxSize)
@@ -235,11 +240,6 @@ func Download(ctx context.Context, log logrus.FieldLogger, httpC *http.Client, w
 	if err != nil {
 		return fmt.Errorf("download failed at %d/%dB: %w", n, resp.ContentLength, err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("HTTP Response body closed with non-nil error.")
-		}
-	}()
 
 	return nil
 }

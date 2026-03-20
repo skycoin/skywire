@@ -177,5 +177,10 @@ func (ns *Noise) DecryptWithNonceMap(nm NonceMap, ciphertext []byte) ([]byte, er
 	if _, ok := nm[recvSeq]; ok {
 		return nil, fmt.Errorf("received decryption nonce (%d) is repeated", recvSeq)
 	}
-	return ns.dec.Cipher().Decrypt(nil, recvSeq, nil, ciphertext[nonceSize:])
+	plaintext, err := ns.dec.Cipher().Decrypt(nil, recvSeq, nil, ciphertext[nonceSize:])
+	if err != nil {
+		return nil, err
+	}
+	nm[recvSeq] = struct{}{}
+	return plaintext, nil
 }

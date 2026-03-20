@@ -144,6 +144,7 @@ func (c *httpClient) PostEntry(ctx context.Context, entry *Entry) error {
 			Error()
 		return errFromString(httpResponse.Message)
 	}
+	_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck
 	return nil
 }
 
@@ -198,6 +199,7 @@ func (c *httpClient) DelEntry(ctx context.Context, entry *Entry) error {
 			Error()
 		return errFromString(httpResponse.Message)
 	}
+	_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck
 	return nil
 }
 
@@ -206,10 +208,11 @@ func (c *httpClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *Entr
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
 
-	entry.Sequence++
+	sequence := entry.Sequence + 1
 	entry.Timestamp = time.Now().UnixNano()
 
 	for {
+		entry.Sequence = sequence
 		err := entry.Sign(sk)
 		if err != nil {
 			return err
@@ -219,18 +222,17 @@ func (c *httpClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *Entr
 			return nil
 		}
 		if err != ErrValidationWrongSequence {
-			entry.Sequence--
 			return err
 		}
 		rE, entryErr := c.Entry(ctx, entry.Static)
 		if entryErr != nil {
-			return err
+			return entryErr
 		}
 		if rE.Timestamp > entry.Timestamp { // If there is a more up to date entry drop update
 			entry.Sequence = rE.Sequence
 			return nil
 		}
-		entry.Sequence = rE.Sequence + 1
+		sequence = rE.Sequence + 1
 	}
 }
 

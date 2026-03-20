@@ -31,7 +31,7 @@ func GetServers(ctx context.Context, dmsgDisc string, dmsgServerType string, log
 		if dmsgServerType != "" {
 			var filteredServers []*disc.Entry
 			for _, server := range servers {
-				if server.Server.ServerType == dmsgServerType {
+				if server.Server != nil && server.Server.ServerType == dmsgServerType {
 					filteredServers = append(filteredServers, server)
 				}
 			}
@@ -69,7 +69,7 @@ func UpdateServers(ctx context.Context, dClient disc.APIClient, dmsgDisc string,
 			if dmsgServerType != "" {
 				var filteredServers []*disc.Entry
 				for _, server := range servers {
-					if server.Server.ServerType == dmsgServerType {
+					if server.Server != nil && server.Server.ServerType == dmsgServerType {
 						filteredServers = append(filteredServers, server)
 					}
 				}

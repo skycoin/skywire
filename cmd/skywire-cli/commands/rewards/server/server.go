@@ -40,7 +40,7 @@ func server(e error) {
 		log.Fatal("Dmsg Discovery URL not specified")
 	}
 
-	// Set RPC_ADDR so skycoin-cli targets the explicit Skycoin mainnet node
+	// Set RPC_ADDR so skywire skycoin cli targets the explicit Skycoin mainnet node
 	if skycoinNode != "" {
 		os.Setenv("RPC_ADDR", skycoinNode) //nolint:errcheck,gosec // G104
 		fmt.Printf("Skycoin mainnet node: %s\n", skycoinNode)
@@ -804,10 +804,10 @@ func server(e error) {
 				return
 			}
 			//check that wallet is running
-			status, err := script.Exec("skycoin-cli status").String()
+			status, err := script.Exec("skywire skycoin cli status").String()
 			if err != nil {
 				c.Writer.WriteHeader(http.StatusInternalServerError)
-				c.Writer.Write([]byte("skycoin-cli status:\n\n" + status + "\n\nskycoin-cli status error:\n\n" + err.Error())) //nolint:errcheck,gosec
+				c.Writer.Write([]byte("skywire skycoin cli status:\n\n" + status + "\n\nskywire skycoin cli status error:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
 			//find all transacion csvs
@@ -825,17 +825,17 @@ func server(e error) {
 				//also consider rewards not distributed if the file exists but is empty or contains "test" - for testing
 				if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
 					//raw transaction is the request body ; decode it to make sure it's good
-					decoded, err := script.Exec("skycoin-cli decodeRawTransaction " + string(body)).String()
+					decoded, err := script.Exec("skywire skycoin cli decodeRawTransaction " + string(body)).String()
 					if err != nil {
 						c.Writer.WriteHeader(http.StatusBadRequest)
-						c.Writer.Write([]byte("skycoin-cli decodeRawTransaction:\n\n" + decoded + "\n\nskycoin-cli decodeRawTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
+						c.Writer.Write([]byte("skywire skycoin cli decodeRawTransaction:\n\n" + decoded + "\n\nskywire skycoin cli decodeRawTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
 						return
 					}
 					//if all is well, broadcast the transaction
-					txid, err := script.Exec("skycoin-cli broadcastTransaction " + string(body)).String()
+					txid, err := script.Exec("skywire skycoin cli broadcastTransaction " + string(body)).String()
 					if err != nil {
 						c.Writer.WriteHeader(http.StatusInternalServerError)
-						c.Writer.Write([]byte("skycoin-cli broadcastTransaction:\n\n" + txid + "\n\nskycoin-cli broadcastTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
+						c.Writer.Write([]byte("skywire skycoin cli broadcastTransaction:\n\n" + txid + "\n\nskywire skycoin cli broadcastTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
 						return
 					}
 					//record the transaction ID for that day's reward

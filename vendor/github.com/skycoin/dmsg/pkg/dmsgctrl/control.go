@@ -28,9 +28,11 @@ const (
 // Control wraps and takes over a dmsg.Stream and provides control features.
 type Control struct {
 	conn    net.Conn
+	wMu     sync.Mutex // protects concurrent writes to conn
 	pongCh  chan time.Time
 	doneCh  chan struct{}
-	err     error // the resultant error after control stops serving
+	errMu   sync.Mutex // protects c.err
+	err     error      // the resultant error after control stops serving
 	errOnce sync.Once
 }
 
@@ -60,7 +62,10 @@ func (c *Control) serve() {
 
 		switch pt := PacketType(rawType[0]); pt {
 		case PingType:
-			if _, err := c.conn.Write([]byte{byte(PongType)}); err != nil {
+			c.wMu.Lock()
+			_, err := c.conn.Write([]byte{byte(PongType)})
+			c.wMu.Unlock()
+			if err != nil {
 				c.reportErr(fmt.Errorf("failed to write pong: %w", err))
 				return
 			}
@@ -84,7 +89,10 @@ func (c *Control) serve() {
 func (c *Control) Ping(ctx context.Context) (time.Duration, error) {
 	start := time.Now()
 
-	if _, err := c.conn.Write([]byte{byte(PingType)}); err != nil {
+	c.wMu.Lock()
+	_, err := c.conn.Write([]byte{byte(PingType)})
+	c.wMu.Unlock()
+	if err != nil {
 		return 0, err
 	}
 
@@ -94,7 +102,10 @@ func (c *Control) Ping(ctx context.Context) (time.Duration, error) {
 
 	case t, ok := <-c.pongCh:
 		if !ok {
-			return 0, c.err
+			c.errMu.Lock()
+			err = c.err
+			c.errMu.Unlock()
+			return 0, err
 		}
 		return t.Sub(start), nil
 	}
@@ -108,7 +119,10 @@ func (c *Control) Conn() net.Conn {
 // Close implements io.Closer
 func (c *Control) Close() error {
 	if isDone(c.doneCh) {
-		return c.err
+		c.errMu.Lock()
+		err := c.err
+		c.errMu.Unlock()
+		return err
 	}
 
 	c.reportErr(ErrClosed)
@@ -126,12 +140,17 @@ func (c *Control) Err() error {
 	if !isDone(c.doneCh) {
 		return nil
 	}
-	return c.err
+	c.errMu.Lock()
+	err := c.err
+	c.errMu.Unlock()
+	return err
 }
 
 func (c *Control) reportErr(err error) {
 	c.errOnce.Do(func() {
+		c.errMu.Lock()
 		c.err = err
+		c.errMu.Unlock()
 		close(c.doneCh)
 	})
 }
