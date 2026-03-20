@@ -870,6 +870,7 @@ func ParseHistoricBandwidthData(histDir string) ([]BandwidthHistoryEntry, error)
 		history = append(history, BandwidthHistoryEntry{
 			Date:       date,
 			Total:      total,
+			ByVisor:    bwMap,
 			VisorCount: len(bwMap),
 		})
 	}
@@ -969,6 +970,198 @@ func GenerateBandwidthHistoryChartHTML(history []BandwidthHistoryEntry, chartWid
 		latest := history[len(history)-1]
 		sb.WriteString(fmt.Sprintf("<p>Latest: %s — %s total bandwidth across %d qualifying visors</p>\n",
 			latest.Date, formatBytesChart(latest.Total), latest.VisorCount))
+	}
+	sb.WriteString("</div>\n")
+
+	sb.WriteString("</div>\n") // container
+
+	return sb.String()
+}
+
+// GenerateVisorBandwidthChartHTML creates a stacked bar chart showing per-visor bandwidth over time.
+// Only the top maxVisors by total bandwidth are shown individually; the rest are grouped as "Other".
+func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth, chartHeight, maxVisors int) string {
+	if len(history) == 0 {
+		return "<p>No bandwidth history data available</p>"
+	}
+
+	// Aggregate total bandwidth per visor across all days
+	visorTotals := make(map[string]uint64)
+	for _, entry := range history {
+		for pk, bw := range entry.ByVisor {
+			visorTotals[pk] += bw
+		}
+	}
+	if len(visorTotals) == 0 {
+		return "<p>No per-visor bandwidth data available</p>"
+	}
+
+	// Sort visors by total bandwidth descending
+	type visorBW struct {
+		PK    string
+		Total uint64
+	}
+	var sorted []visorBW
+	for pk, total := range visorTotals {
+		sorted = append(sorted, visorBW{PK: pk, Total: total})
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Total > sorted[j].Total
+	})
+
+	// Top N visors shown individually, rest grouped as "Other"
+	topVisors := make([]string, 0, maxVisors)
+	topSet := make(map[string]bool)
+	for i, v := range sorted {
+		if i >= maxVisors-1 && len(sorted) > maxVisors {
+			break
+		}
+		topVisors = append(topVisors, v.PK)
+		topSet[v.PK] = true
+	}
+	hasOther := len(sorted) > maxVisors
+
+	// Build list of labels (short PKs + "Other")
+	allLabels := make([]string, 0, len(topVisors)+1)
+	allLabels = append(allLabels, topVisors...)
+	if hasOther {
+		allLabels = append(allLabels, "Other")
+	}
+
+	// Find max daily total for Y-axis scaling
+	var maxTotal uint64
+	for _, entry := range history {
+		if entry.Total > maxTotal {
+			maxTotal = entry.Total
+		}
+	}
+	if maxTotal == 0 {
+		return "<p>No bandwidth data points</p>"
+	}
+
+	// Assign colors
+	labelColors := make(map[string]string)
+	for i, label := range allLabels {
+		labelColors[label] = pieChartColors[i%len(pieChartColors)]
+	}
+
+	var sb strings.Builder
+
+	sb.WriteString("<div style='margin: 20px 0; max-width: 100%; overflow-x: auto;'>\n")
+	sb.WriteString("<h3>Per-Visor Bandwidth Over Time</h3>\n")
+
+	// Chart container
+	sb.WriteString("<div style='display: flex; align-items: flex-end; gap: 5px; min-width: fit-content;'>\n")
+
+	// Y-axis
+	sb.WriteString(fmt.Sprintf("<div style='display: flex; flex-direction: column; justify-content: space-between; height: %dpx; font-size: 11px; color: #888; text-align: right; padding-right: 5px; flex-shrink: 0;'>\n", chartHeight))
+	sb.WriteString(fmt.Sprintf("<span>%s</span>\n", formatBytesChart(maxTotal)))
+	sb.WriteString(fmt.Sprintf("<span>%s</span>\n", formatBytesChart(maxTotal*3/4)))
+	sb.WriteString(fmt.Sprintf("<span>%s</span>\n", formatBytesChart(maxTotal/2)))
+	sb.WriteString(fmt.Sprintf("<span>%s</span>\n", formatBytesChart(maxTotal/4)))
+	sb.WriteString("<span>0</span>\n")
+	sb.WriteString("</div>\n")
+
+	// Chart area
+	sb.WriteString(fmt.Sprintf("<div style='position: relative; min-width: %dpx; height: %dpx; border-left: 1px solid #444; border-bottom: 1px solid #444; background: #1a1a1a; flex-shrink: 0;'>\n", chartWidth, chartHeight))
+
+	// Grid lines
+	for i := 1; i <= 4; i++ {
+		y := chartHeight - (chartHeight * i / 4)
+		sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: 0; right: 0; top: %dpx; border-top: 1px dashed #333;'></div>\n", y))
+	}
+
+	barWidth := chartWidth / len(history)
+	if barWidth < 2 {
+		barWidth = 2
+	}
+
+	// Draw stacked bars
+	for i, entry := range history {
+		x := i * barWidth
+		currentY := 0
+
+		// Draw top visors
+		for _, pk := range topVisors {
+			bw := entry.ByVisor[pk]
+			if bw == 0 {
+				continue
+			}
+			segmentHeight := int(bw * uint64(chartHeight) / maxTotal) //nolint:gosec
+			if segmentHeight < 1 {
+				segmentHeight = 1
+			}
+			color := labelColors[pk]
+			shortPK := pk
+			if len(shortPK) > 8 {
+				shortPK = shortPK[:8] + "..."
+			}
+			sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: %dpx; bottom: %dpx; width: %dpx; height: %dpx; background: %s;' title='%s: %s (%s)'></div>\n",
+				x, currentY, barWidth-1, segmentHeight, color, entry.Date, shortPK, formatBytesChart(bw)))
+			currentY += segmentHeight
+		}
+
+		// Draw "Other" aggregate
+		if hasOther {
+			var otherBW uint64
+			for pk, bw := range entry.ByVisor {
+				if !topSet[pk] {
+					otherBW += bw
+				}
+			}
+			if otherBW > 0 {
+				segmentHeight := int(otherBW * uint64(chartHeight) / maxTotal) //nolint:gosec
+				if segmentHeight < 1 {
+					segmentHeight = 1
+				}
+				color := labelColors["Other"]
+				sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: %dpx; bottom: %dpx; width: %dpx; height: %dpx; background: %s;' title='%s: Other (%s)'></div>\n",
+					x, currentY, barWidth-1, segmentHeight, color, entry.Date, formatBytesChart(otherBW)))
+			}
+		}
+	}
+
+	sb.WriteString("</div>\n") // chart area
+	sb.WriteString("</div>\n") // flex container
+
+	// X-axis labels
+	labelInterval := len(history) / 10
+	if labelInterval < 1 {
+		labelInterval = 1
+	}
+	sb.WriteString(fmt.Sprintf("<div style='display: flex; margin-left: 40px; font-size: 10px; color: #888; min-width: %dpx;'>\n", chartWidth))
+	for i, entry := range history {
+		if i%labelInterval == 0 || i == len(history)-1 {
+			dateParts := strings.Split(entry.Date, "-")
+			label := entry.Date
+			if len(dateParts) == 3 {
+				label = dateParts[1] + "-" + dateParts[2]
+			}
+			width := barWidth * labelInterval
+			sb.WriteString(fmt.Sprintf("<span style='width: %dpx; text-align: left;'>%s</span>\n", width, label))
+		}
+	}
+	sb.WriteString("</div>\n")
+
+	// Legend — show short PKs with total bandwidth
+	sb.WriteString("<div style='margin-top: 15px; display: flex; flex-wrap: wrap; gap: 8px 15px; font-size: 12px;'>\n")
+	for _, pk := range topVisors {
+		color := labelColors[pk]
+		shortPK := pk
+		if len(shortPK) > 16 {
+			shortPK = shortPK[:16] + "..."
+		}
+		sb.WriteString(fmt.Sprintf("<span style='display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;'><span style='display: inline-block; width: 12px; height: 12px; background: %s; flex-shrink: 0;'></span>%s (%s)</span>\n",
+			color, html.EscapeString(shortPK), formatBytesChart(visorTotals[pk])))
+	}
+	if hasOther {
+		var otherTotal uint64
+		for _, v := range sorted[maxVisors-1:] {
+			otherTotal += v.Total
+		}
+		color := labelColors["Other"]
+		sb.WriteString(fmt.Sprintf("<span style='display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;'><span style='display: inline-block; width: 12px; height: 12px; background: %s; flex-shrink: 0;'></span>Other (%d visors, %s)</span>\n",
+			color, len(sorted)-(maxVisors-1), formatBytesChart(otherTotal)))
 	}
 	sb.WriteString("</div>\n")
 
@@ -1122,4 +1315,166 @@ func renderTPDBandwidthTable(metrics []tpdTransportMetric) string {
 
 	sb.WriteString("</tbody></table>\n")
 	return sb.String()
+}
+
+// tpdNetworkSummary holds cached network-wide TPD metrics summary.
+type tpdNetworkSummary struct {
+	TotalTransports int            `json:"total_transports"`
+	LiveTransports  int            `json:"live_transports"`
+	ByType          map[string]int `json:"by_type"`
+	TotalBandwidth  uint64         `json:"total_bandwidth"`
+	AvgLatencyMs    float64        `json:"avg_latency_ms"`
+	LatencyCount    int            `json:"latency_count"`
+	UniqueVisors    int            `json:"unique_visors"`
+	LastUpdated     string         `json:"last_updated"`
+}
+
+const tpdSummaryCacheFile = "tpd_summary.json"
+const tpdSummaryCacheMaxAge = 5 * time.Minute
+
+// getTPDNetworkSummary returns cached TPD network summary, fetching fresh data
+// only if the cache is stale (on-demand caching).
+func getTPDNetworkSummary() (*tpdNetworkSummary, error) {
+	cachePath := filepath.Join(tempStatsPath, tpdSummaryCacheFile)
+
+	// Check if cache is fresh
+	info, err := os.Stat(cachePath)
+	if err == nil && time.Since(info.ModTime()) <= tpdSummaryCacheMaxAge {
+		data, err := os.ReadFile(cachePath) //nolint:gosec
+		if err == nil {
+			var summary tpdNetworkSummary
+			if json.Unmarshal(data, &summary) == nil {
+				return &summary, nil
+			}
+		}
+	}
+
+	// Cache is stale or missing — fetch fresh data
+	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
+	url := fmt.Sprintf("%s/metrics?days=1&bandwidth=true&latency=true&edges=true", tpdURL)
+
+	resp, err := http.Get(url) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("TPD request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("TPD returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read TPD response: %w", err)
+	}
+
+	var metrics []struct {
+		ID      string   `json:"id"`
+		Type    string   `json:"type"`
+		Live    bool     `json:"live"`
+		Edges   []string `json:"edges,omitempty"`
+		Latency *struct {
+			Avg int64 `json:"avg"`
+		} `json:"latency,omitempty"`
+		Daily []struct {
+			A *struct {
+				Sent uint64 `json:"sent"`
+				Recv uint64 `json:"recv"`
+			} `json:"a,omitempty"`
+			B *struct {
+				Sent uint64 `json:"sent"`
+				Recv uint64 `json:"recv"`
+			} `json:"b,omitempty"`
+		} `json:"daily"`
+	}
+	if err := json.Unmarshal(body, &metrics); err != nil {
+		return nil, fmt.Errorf("failed to parse TPD metrics: %w", err)
+	}
+
+	// Compute summary
+	summary := &tpdNetworkSummary{
+		TotalTransports: len(metrics),
+		ByType:          make(map[string]int),
+		LastUpdated:     time.Now().UTC().Format(time.RFC3339),
+	}
+
+	visors := make(map[string]bool)
+	var latencySum float64
+
+	for _, m := range metrics {
+		summary.ByType[m.Type]++
+		if m.Live {
+			summary.LiveTransports++
+		}
+		for _, edge := range m.Edges {
+			visors[edge] = true
+		}
+		if m.Latency != nil && m.Latency.Avg > 0 {
+			latencySum += float64(m.Latency.Avg) / 1000.0 // microseconds to ms
+			summary.LatencyCount++
+		}
+		for _, daily := range m.Daily {
+			if daily.A != nil && daily.B != nil {
+				aToB := daily.A.Sent
+				if daily.B.Recv < aToB {
+					aToB = daily.B.Recv
+				}
+				bToA := daily.A.Recv
+				if daily.B.Sent < bToA {
+					bToA = daily.B.Sent
+				}
+				summary.TotalBandwidth += aToB + bToA
+			} else if daily.A != nil {
+				summary.TotalBandwidth += daily.A.Sent + daily.A.Recv
+			} else if daily.B != nil {
+				summary.TotalBandwidth += daily.B.Sent + daily.B.Recv
+			}
+		}
+	}
+
+	summary.UniqueVisors = len(visors)
+	if summary.LatencyCount > 0 {
+		summary.AvgLatencyMs = latencySum / float64(summary.LatencyCount)
+	}
+
+	// Write to cache
+	cacheData, err := json.MarshalIndent(summary, "", "  ")
+	if err == nil {
+		os.WriteFile(cachePath, cacheData, 0600) //nolint:errcheck,gosec
+	}
+
+	return summary, nil
+}
+
+// renderTPDNetworkSummaryHTML renders the TPD network summary as HTML.
+func renderTPDNetworkSummaryHTML() string {
+	summary, err := getTPDNetworkSummary()
+	if err != nil {
+		return fmt.Sprintf("<p style='color: #FF6384;'>Error fetching TPD network summary: %v</p>", err)
+	}
+
+	l := "<h2>Transport Discovery Network Summary</h2>"
+	l += "<pre>"
+	l += fmt.Sprintf("Total Transports:  %d (%d live)\n", summary.TotalTransports, summary.LiveTransports)
+	l += fmt.Sprintf("Unique Visors:     %d\n", summary.UniqueVisors)
+
+	// Transport counts by type
+	l += "Transports by Type:\n"
+	for tpType, count := range summary.ByType {
+		l += fmt.Sprintf("  %-8s %d\n", tpType, count)
+	}
+
+	// Bandwidth
+	l += fmt.Sprintf("Network Bandwidth: %s (verified, 1 day)\n", formatBytesChart(summary.TotalBandwidth))
+
+	// Latency
+	if summary.LatencyCount > 0 {
+		l += fmt.Sprintf("Avg Latency:       %.1fms (across %d transports with data)\n", summary.AvgLatencyMs, summary.LatencyCount)
+	} else {
+		l += "Avg Latency:       no data\n"
+	}
+
+	l += "</pre>"
+	l += fmt.Sprintf("<p style='color: #888; font-size: 0.8em;'>Last updated: %s</p>", summary.LastUpdated)
+	return l
 }

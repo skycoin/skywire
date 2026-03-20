@@ -130,7 +130,6 @@ func (c *Client) Get(endpoint string, obj interface{}) error {
 	}
 
 	d := json.NewDecoder(resp.Body)
-	d.DisallowUnknownFields()
 	return d.Decode(obj)
 }
 
@@ -219,7 +218,7 @@ func (c *Client) Post(endpoint string, contentType string, body io.Reader, obj i
 	}
 
 	decoder := json.NewDecoder(resp.Body)
-	decoder.DisallowUnknownFields()
+
 	return decoder.Decode(obj)
 }
 
@@ -276,7 +275,6 @@ func (c *Client) requestV2(method, endpoint string, body io.Reader, respObj inte
 	}
 
 	decoder := json.NewDecoder(bytes.NewReader(respBody))
-	decoder.DisallowUnknownFields()
 
 	var wrapObj ReceivedHTTPResponse
 	if err := decoder.Decode(&wrapObj); err != nil {
@@ -310,7 +308,6 @@ func (c *Client) requestV2(method, endpoint string, body io.Reader, respObj inte
 	}
 
 	decoder = json.NewDecoder(bytes.NewReader(wrapObj.Data))
-	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(respObj); err != nil {
 		return false, err
@@ -345,7 +342,6 @@ func (c *Client) CSRF() (string, error) {
 	}
 
 	d := json.NewDecoder(resp.Body)
-	d.DisallowUnknownFields()
 
 	var m map[string]string
 	if err := d.Decode(&m); err != nil {
@@ -738,8 +734,10 @@ func (c *Client) NewWalletAddress(id string, password string, options ...wallet.
 	}
 
 	var opts wallet.AdvancedOptions
+	var bip44Opts wallet.Bip44EntriesOptions
 	for _, f := range options {
 		f(&opts)
+		f(&bip44Opts)
 	}
 
 	if opts.GenerateN > 0 {
@@ -752,6 +750,19 @@ func (c *Client) NewWalletAddress(id string, password string, options ...wallet.
 			keys = append(keys, k.Hex())
 		}
 		v.Add("private-keys", strings.Join(keys, ","))
+	}
+
+	// Pass BIP44 chain selection
+	switch bip44Opts.ChainMode {
+	case wallet.ExternalChain:
+		v.Add("chain", "external")
+	case wallet.ChangeChain:
+		v.Add("chain", "change")
+	}
+
+	// Pass BIP44 account index
+	if bip44Opts.Account > 0 {
+		v.Add("account", fmt.Sprint(bip44Opts.Account))
 	}
 
 	var obj struct {
