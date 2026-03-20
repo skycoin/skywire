@@ -2916,31 +2916,58 @@ func (v *Visor) RemoveRoutingRule(key routing.RouteID) error {
 }
 
 // RouteGroups implements API.
-func (v *Visor) RouteGroups() ([]RouteGroupInfo, error) {
+func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 	if v.router == nil {
 		return nil, nil
 	}
-	var routegroups []RouteGroupInfo
+
+	// Protect against panics from corrupt/race-condition rules
+	defer func() {
+		if r := recover(); r != nil {
+			rgs = nil
+			err = fmt.Errorf("recovered panic in RouteGroups: %v", r)
+		}
+	}()
 
 	rules := v.router.Rules()
 	for _, consumeRule := range rules {
-		if consumeRule.Type() != routing.RuleReverse {
-			continue
-		}
+		func() {
+			defer func() { recover() }() //nolint:errcheck
 
-		fwdRID := consumeRule.NextRouteID()
-		fwdRule, err := v.router.Rule(fwdRID)
-		if err != nil {
-			continue // forward rule may have been GC'd
-		}
+			if len(consumeRule) == 0 || consumeRule.Type() != routing.RuleReverse {
+				return
+			}
 
-		routegroups = append(routegroups, RouteGroupInfo{
-			ConsumeRule: consumeRule,
-			FwdRule:     fwdRule,
-		})
+			consumeSummary := consumeRule.Summary()
+			if consumeSummary == nil || consumeSummary.ConsumeFields == nil {
+				return
+			}
+
+			fwdRID := consumeRule.NextRouteID()
+			fwdRule, err := v.router.Rule(fwdRID)
+			if err != nil || fwdRule == nil || len(fwdRule) == 0 {
+				return
+			}
+
+			fwdSummary := fwdRule.Summary()
+			if fwdSummary == nil {
+				return
+			}
+
+			info := RouteGroupInfo{
+				ConsumeRuleID: consumeSummary.KeyRouteID,
+				FwdRuleID:     fwdSummary.KeyRouteID,
+				Desc:          consumeSummary.ConsumeFields.RouteDescriptor,
+			}
+			if fwdSummary.ForwardFields != nil {
+				info.FwdNextTpID = fwdSummary.ForwardFields.NextTID.String()
+			}
+
+			rgs = append(rgs, info)
+		}()
 	}
 
-	return routegroups, nil
+	return rgs, nil
 }
 
 // Reload implements API.

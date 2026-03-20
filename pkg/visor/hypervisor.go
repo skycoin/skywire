@@ -1212,19 +1212,14 @@ func (hv *Hypervisor) deleteRoutes() http.HandlerFunc {
 }
 
 type routeGroupResp struct {
-	routing.RuleConsumeFields
-	FwdRule routing.RuleForwardFields `json:"resp"`
+	ConsumeRuleID routing.RouteID               `json:"consume_rule_id"`
+	FwdRuleID     routing.RouteID               `json:"fwd_rule_id"`
+	Desc          routing.RouteDescriptorFields `json:"desc"`
+	FwdNextTpID   string                        `json:"fwd_next_tp_id,omitempty"`
 }
 
 func makeRouteGroupResp(info RouteGroupInfo) routeGroupResp {
-	if len(info.FwdRule) == 0 || len(info.ConsumeRule) == 0 {
-		return routeGroupResp{}
-	}
-
-	return routeGroupResp{
-		RuleConsumeFields: *info.ConsumeRule.Summary().ConsumeFields,
-		FwdRule:           *info.FwdRule.Summary().ForwardFields,
-	}
+	return routeGroupResp(info)
 }
 
 func (hv *Hypervisor) getRouteGroups() http.HandlerFunc {

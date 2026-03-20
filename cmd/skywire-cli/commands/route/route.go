@@ -524,17 +524,21 @@ var groupsCmd = &cobra.Command{
 
 		var b bytes.Buffer
 		w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
-		fmt.Fprintln(w, "index\tlocal_pk\tremote_pk\tlocal_port\tremote_port\tfwd_id\tconsume_id") //nolint:errcheck
+		fmt.Fprintln(w, "index\tlocal_pk\tremote_pk\tlocal_port\tremote_port\tfwd_id\tconsume_id\ttransport") //nolint:errcheck
 		for i, rg := range rgs {
-			desc := rg.FwdRule.RouteDescriptor()
-			fmt.Fprintf(w, "%d\t%s\t%s\t%d\t%d\t%d\t%d\n", //nolint:errcheck
+			tpID := rg.FwdNextTpID
+			if tpID == "" {
+				tpID = "-"
+			}
+			fmt.Fprintf(w, "%d\t%s\t%s\t%d\t%d\t%d\t%d\t%s\n", //nolint:errcheck
 				i,
-				desc.SrcPK(),
-				desc.DstPK(),
-				desc.SrcPort(),
-				desc.DstPort(),
-				rg.FwdRule.KeyRouteID(),
-				rg.ConsumeRule.KeyRouteID(),
+				rg.Desc.SrcPK,
+				rg.Desc.DstPK,
+				rg.Desc.SrcPort,
+				rg.Desc.DstPort,
+				rg.FwdRuleID,
+				rg.ConsumeRuleID,
+				tpID,
 			)
 		}
 		internal.Catch(cmd.Flags(), w.Flush())
