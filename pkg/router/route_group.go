@@ -438,18 +438,6 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 	return err
 }
 
-// rule fetches first available forward rule.
-// NOTE: not thread-safe.
-func (rg *RouteGroup) rule() (routing.Rule, error) {
-	if len(rg.fwd) == 0 {
-		return nil, ErrNoRules
-	}
-
-	rule := rg.fwd[0]
-
-	return rule, nil
-}
-
 // nextTransport selects the next transport/rule pair. When mux is enabled and
 // multiple transports exist, uses latency-weighted selection. Falls back to
 // round-robin when latency data is unavailable, and to index 0 for single
@@ -485,7 +473,7 @@ func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule
 	}
 
 	// Fallback: round-robin with skip-dead
-	n := uint32(len(rg.tps))
+	n := uint32(len(rg.tps)) //nolint:gosec
 	start := atomic.AddUint32(&rg.tpIndex, 1) - 1
 	for i := uint32(0); i < n; i++ {
 		idx := (start + i) % n
@@ -495,22 +483,6 @@ func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule
 		}
 	}
 	return nil, nil, ErrNoSuitableTransport
-}
-
-// tp fetches first available transport.
-// NOTE: not thread-safe.
-func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
-	if len(rg.tps) == 0 {
-		return nil, ErrNoTransports
-	}
-
-	tp := rg.tps[0]
-
-	if tp == nil {
-		return nil, ErrBadTransport
-	}
-
-	return tp, nil
 }
 
 // RouteHops returns the list of visor public keys that form the route path.

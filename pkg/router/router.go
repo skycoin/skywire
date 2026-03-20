@@ -1421,7 +1421,7 @@ func (r *router) fetchBestRoutes(ctx context.Context, src, dst cipher.PubKey, op
 	if forceLocal {
 		r.logger.Info("Calculating route locally (--local-route enabled)")
 		calcStart := time.Now()
-		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst)
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst, opts)
 		calcTime := time.Since(calcStart)
 		r.lastRouteCalcMu.Lock()
 		r.lastRouteCalcTime = calcTime
@@ -1454,7 +1454,7 @@ fetchRoutesAgain:
 	if err == rfclient.ErrTransportNotFound {
 		// Try local route calculation - may find a local transport that's not yet in TPD
 		r.logger.Info("Route finder returned transport not found, attempting local route calculation...")
-		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst)
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst, opts)
 		if localErr == nil {
 			r.logger.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
 			return localFwd, localRev, nil
@@ -1466,7 +1466,7 @@ fetchRoutesAgain:
 	if retries == 0 {
 		// Try local route calculation as fallback before giving up
 		r.logger.Info("Route finder exhausted retries, attempting local route calculation...")
-		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst)
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst, opts)
 		if localErr == nil {
 			r.logger.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
 			return localFwd, localRev, nil
@@ -1484,7 +1484,7 @@ fetchRoutesAgain:
 		case <-timer.C:
 			// Try local route calculation as fallback
 			r.logger.Info("Route finder timed out, attempting local route calculation...")
-			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst)
+			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst, opts)
 			if localErr == nil {
 				r.logger.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
 				return localFwd, localRev, nil
@@ -1505,11 +1505,8 @@ fetchRoutesAgain:
 // calculateLocalRoutes attempts to calculate routes locally using the transport manager
 // and transport discovery data, without relying on the route finder service.
 // It supports 1-hop (direct), 2-hop routes, and self-ping (src == dst).
-func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKey, opts ...*DialOptions) (fwd, rev []routing.Hop, err error) {
-	var dialOpts *DialOptions
-	if len(opts) > 0 {
-		dialOpts = opts[0]
-	}
+func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
+	dialOpts := opts
 	if r.tm == nil {
 		return nil, nil, errors.New("transport manager not available")
 	}
