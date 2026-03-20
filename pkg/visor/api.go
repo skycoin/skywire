@@ -1640,6 +1640,9 @@ func readTransportLogFile(filename string) ([]TransportLogEntry, error) {
 
 // RoutingRules implements API.
 func (v *Visor) RoutingRules() ([]routing.Rule, error) {
+	if v.router == nil {
+		return nil, nil
+	}
 	return v.router.Rules(), nil
 }
 
@@ -2914,6 +2917,9 @@ func (v *Visor) RemoveRoutingRule(key routing.RouteID) error {
 
 // RouteGroups implements API.
 func (v *Visor) RouteGroups() ([]RouteGroupInfo, error) {
+	if v.router == nil {
+		return nil, nil
+	}
 	var routegroups []RouteGroupInfo
 
 	rules := v.router.Rules()
