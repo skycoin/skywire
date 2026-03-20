@@ -142,7 +142,7 @@ var RootCmd = &cobra.Command{
 			httpClient = &http.Client{
 				Transport: transport,
 			}
-			ctx = context.WithValue(context.Background(), "socks5_proxy", proxyAddr) //nolint
+			ctx = context.WithValue(ctx, "socks5_proxy", proxyAddr) //nolint
 		}
 
 		cErr = handleRequest(ctx, pk, sk, httpClient, parsedURL, dmsgcurlData)
@@ -166,7 +166,7 @@ func handleRequest(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, http
 			Code:  errorCode["WRITE_INIT"],
 		}
 	}
-	defer closeAndCleanFile(file, err)
+	defer func() { closeAndCleanFile(file, err) }()
 	var httpC http.Client
 
 	if flags.UseDC {
@@ -256,9 +256,8 @@ func handleRequest(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, http
 			dlog.WithError(err).Debug("Failed to perform HTTP request after maximum retries")
 			continue // Retry outer attempt
 		}
-		defer closeResponseBody(resp)
-
 		n, err := cancellableCopy(ctx, file, resp.Body, resp.ContentLength)
+		closeResponseBody(resp)
 		if err != nil {
 			dlog.WithError(err).Errorf("Download failed at %d/%dB", n, resp.ContentLength)
 			select {
@@ -373,7 +372,12 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 	n := len(p)
 	current := atomic.AddInt64(&pw.Current, int64(n))
 	total := atomic.LoadInt64(&pw.Total)
-	pc := fmt.Sprintf("%d%%", current*100/total)
+	var pc string
+	if total > 0 {
+		pc = fmt.Sprintf("%d%%", current*100/total)
+	} else {
+		pc = "unknown"
+	}
 	if dmsgcurlOutput != "" {
 		fmt.Printf("Downloading: %d/%dB (%s)", current, total, pc)
 		if current != total {

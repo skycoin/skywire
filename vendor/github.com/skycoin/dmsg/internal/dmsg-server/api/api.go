@@ -82,26 +82,24 @@ func (a *API) SetDmsgServer(srv *dmsg.Server) {
 
 // ListenAndServe runs dmsg Serve function alongside health endpoint
 func (a *API) ListenAndServe(lAddr, pAddr, httpAddr string) error {
-	errCh := make(chan error)
+	errCh := make(chan error, 2)
 
 	dmsgLn, err := net.Listen("tcp", lAddr)
 	if err != nil {
 		return err
 	}
 	dmsgLis := &proxyproto.Listener{Listener: dmsgLn}
-	defer dmsgLis.Close() // nolint:errcheck
 	go func(l net.Listener, address string) {
-		if err := a.dmsgServer.Serve(l, address); err != nil {
-			errCh <- err
-		}
+		errCh <- a.dmsgServer.Serve(l, address)
+		l.Close() //nolint:errcheck,gosec
 	}(dmsgLis, pAddr)
 
 	ln, err := net.Listen("tcp", httpAddr)
 	if err != nil {
+		dmsgLis.Close() //nolint:errcheck,gosec
 		return err
 	}
 	lis := &proxyproto.Listener{Listener: ln}
-	defer lis.Close() // nolint:errcheck
 	srv := &http.Server{
 		ReadTimeout:       3 * time.Second,
 		WriteTimeout:      3 * time.Second,
@@ -110,9 +108,8 @@ func (a *API) ListenAndServe(lAddr, pAddr, httpAddr string) error {
 		//Addr:              lis,
 		Handler: a.router,
 	}
-	if err := srv.Serve(lis); err != nil {
-		errCh <- err
-	}
+	errCh <- srv.Serve(lis)
+	lis.Close() //nolint:errcheck,gosec
 
 	return <-errCh
 }
@@ -161,6 +158,9 @@ func (a *API) updateInternalState() {
 // UpdateAverageNumberOfPacketsPerMinute is function which needs to called every minute.
 func (a *API) updateAverageNumberOfPacketsPerMinute() {
 	if a.dmsgServer != nil {
+		a.sMu.Lock()
+		defer a.sMu.Unlock()
+
 		newDecValues, newEncValues, average := calculateThroughput(
 			a.dmsgServer.GetSessions(),
 			a.minuteDecValues,
@@ -169,8 +169,6 @@ func (a *API) updateAverageNumberOfPacketsPerMinute() {
 
 		a.metrics.SetPacketsPerMinute(average)
 
-		a.sMu.Lock()
-		defer a.sMu.Unlock()
 		a.minuteDecValues = newDecValues
 		a.minuteEncValues = newEncValues
 	}

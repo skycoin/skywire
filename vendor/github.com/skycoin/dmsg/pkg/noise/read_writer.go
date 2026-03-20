@@ -135,8 +135,6 @@ func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 		return 0, err
 	}
 
-	p = p[:]
-
 	for len(p) > 0 {
 		// Enforce max frame size.
 		wn := len(p)
@@ -192,6 +190,13 @@ func (rw *ReadWriter) Handshake(hsTimeout time.Duration) error {
 	case err := <-errCh:
 		return err
 	case <-time.After(hsTimeout):
+		// Set a past deadline on the underlying connection to unblock the
+		// handshake goroutine which may be stuck in a Read or Write call.
+		if conn, ok := rw.origin.(net.Conn); ok {
+			conn.SetDeadline(time.Now()) //nolint:errcheck,gosec
+		}
+		// Drain the goroutine result to avoid a leak.
+		<-errCh
 		return timeoutError{}
 	}
 }
@@ -302,11 +307,13 @@ func ReadRawFrame(r *bufio.Reader) (p []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
+	out := make([]byte, prefix)
+	copy(out, b[prefixSize:])
 	if _, err := r.Discard(prefixSize + prefix); err != nil {
 		return nil, fmt.Errorf("unexpected error when discarding %d bytes: %w", prefixSize+prefix, err)
 	}
 
-	return b[prefixSize:], nil
+	return out, nil
 }
 
 func isTemp(err error) bool {

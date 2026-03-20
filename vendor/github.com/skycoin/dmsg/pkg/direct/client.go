@@ -36,10 +36,8 @@ func NewClient(entries []*disc.Entry, log *logging.Logger) disc.APIClient {
 func (c *directClient) Entry(_ context.Context, pubKey cipher.PubKey) (*disc.Entry, error) {
 	c.mx.RLock()
 	defer c.mx.RUnlock()
-	for _, entry := range c.entries {
-		if entry.Static == pubKey {
-			return entry, nil
-		}
+	if entry, ok := c.entries[pubKey]; ok {
+		return entry, nil
 	}
 	return nil, disc.ErrKeyNotFound
 }
