@@ -29,8 +29,14 @@ func ServeListener(l net.Listener, chanLen int) <-chan *Control {
 				log.Warnf("Failed to accept dmsgctrl conn, continuing: %v", err)
 				continue
 			}
-			if ctrl := ControlStream(conn); ch != nil && len(ch) < cap(ch) {
-				ch <- ctrl
+			ctrl := ControlStream(conn)
+			select {
+			case ch <- ctrl:
+			default:
+				log.Warnf("Control channel full, dropping and closing control")
+				if err := ctrl.Close(); err != nil {
+					log.Warnf("Failed to close dropped control: %v", err)
+				}
 			}
 		}
 	}()

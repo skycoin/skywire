@@ -326,6 +326,10 @@ func Copy(dst, src *Entry) {
 		dst.Client = nil
 	} else {
 		*dst.Client = *src.Client
+		if src.Client.DelegatedServers != nil {
+			dst.Client.DelegatedServers = make([]cipher.PubKey, len(src.Client.DelegatedServers))
+			copy(dst.Client.DelegatedServers, src.Client.DelegatedServers)
+		}
 	}
 
 	dst.Static = src.Static

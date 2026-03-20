@@ -110,13 +110,15 @@ func (d *RPCClientDialer) establishConn() error {
 	}
 	ns, err := New(d.pattern, d.config)
 	if err != nil {
+		conn.Close() //nolint:errcheck,gosec
 		return err
 	}
-	conn, err = WrapConn(conn, ns, time.Second*5)
+	wrappedConn, err := WrapConn(conn, ns, time.Second*5)
 	if err != nil {
+		conn.Close() //nolint:errcheck,gosec
 		return err
 	}
-	d.conn = conn
+	d.conn = wrappedConn
 	return nil
 }
 
@@ -231,6 +233,7 @@ func (ml *Listener) Accept() (net.Conn, error) {
 		rw := NewReadWriter(conn, ns)
 		if err := rw.Handshake(AcceptHandshakeTimeout); err != nil {
 			noiseLogger.WithError(err).Warn("accept: noise handshake failed.")
+			conn.Close() //nolint:errcheck,gosec
 			continue
 		}
 		noiseLogger.Infoln("accepted:", rw.RemoteStatic())

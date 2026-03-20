@@ -805,8 +805,8 @@ github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrf
 github.com/sirupsen/logrus v1.9.0/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/sirupsen/logrus v1.9.4 h1:TsZE7l11zFCLZnZ+teH4Umoq5BhEIfIzfRDZ1Uzql2w=
 github.com/sirupsen/logrus v1.9.4/go.mod h1:ftWc9WdOfJ0a92nsE2jF5u5ZwH8Bv2zdeOC42RjbV2g=
-github.com/skycoin/dmsg v1.3.29-0.20260318145752-f02092dd2230 h1:m+LbRc4zsSh0RUgHyjeaA4GWO0zRcQetJrFEAGK7dCQ=
-github.com/skycoin/dmsg v1.3.29-0.20260318145752-f02092dd2230/go.mod h1:5EIwtsJgR0RSndqKrKz/yY3MSu2NU5k7hOz2NWDiF44=
+github.com/skycoin/dmsg v1.3.29-0.20260320163853-e9cd200171ba h1:RrpxEvASHOy4LER2XdjJqJOsW+tsZ5FxnLtz9GnQ6xg=
+github.com/skycoin/dmsg v1.3.29-0.20260320163853-e9cd200171ba/go.mod h1:5EIwtsJgR0RSndqKrKz/yY3MSu2NU5k7hOz2NWDiF44=
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9 h1:DElGw1Fhj4amuW1KM5q8Xowosb3RiOQce0lDJw0Qv0Y=
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9/go.mod h1:OQz8NXVJUWEw7PWYASZ/1BIw5GXgVMTGvrCGDlZa9+k=
 github.com/skycoin/hardware-wallet-protob v0.0.0-20250805154629-410561e1bc2f h1:wKpqEhubs7kKtb7nqU4V8zkTxwnnwcB2797elV2z1t8=
