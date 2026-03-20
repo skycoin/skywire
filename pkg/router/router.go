@@ -108,6 +108,7 @@ type DialOptions struct {
 	ReverseHops         []routing.Hop // If set, use these hops for reverse path (skips route calculation)
 	MuxRoutes           int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
 	ExcludeTransportIDs []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
+	ExcludeDMSG         bool          // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
 }
 
 // DefaultDialOptions returns default dial options.
@@ -400,6 +401,7 @@ func (r *router) DialRoutes(
 					MaxConsumeRts:       1,
 					Retries:             1,
 					ExcludeTransportIDs: excludeIDs,
+					ExcludeDMSG:         true, // DMSG is a relay, not suitable for multiplexing
 				}
 
 				muxFwd, muxRev, err := r.fetchBestRoutes(ctx, lPK, rPK, muxOpts)
@@ -1548,6 +1550,11 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 	// Check for direct (1-hop) route first
 	for _, tp := range localTps {
 		if tp.remotePK == dst {
+			// Skip DMSG transports for mux (DMSG is a relay, not suitable for multiplexing)
+			if dialOpts != nil && dialOpts.ExcludeDMSG && tp.tpType == "dmsg" {
+				r.logger.Debugf("Skipping DMSG transport %s (excluded for mux)", tp.id)
+				continue
+			}
 			// Skip excluded transport IDs (used by mux to get different transports)
 			excluded := false
 			if dialOpts != nil {
