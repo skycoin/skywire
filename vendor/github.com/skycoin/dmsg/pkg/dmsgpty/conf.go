@@ -40,12 +40,13 @@ func WriteConfig(conf Config, path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open config file: %w", err)
 	}
+	defer f.Close() //nolint:errcheck
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "    ")
 	if err = enc.Encode(&conf); err != nil {
 		return err
 	}
-	return f.Close()
+	return nil
 }
 
 func findStringsEnclosedBy(str string, sep string, result []string, lastIndex int) ([]string, int) {
@@ -88,7 +89,7 @@ func ParseWindowsEnv(cliAddr string) string {
 			}
 			paths[len(paths)-1] = strings.Replace(cliAddr[lastIndex:], string(filepath.Separator), "", 1)
 			cliAddr = filepath.Join(paths...)
-			_ = strings.ReplaceAll(cliAddr, `\`, `\\`)
+			cliAddr = strings.ReplaceAll(cliAddr, `\`, `\\`)
 			return cliAddr
 		}
 	}

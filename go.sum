@@ -805,8 +805,8 @@ github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrf
 github.com/sirupsen/logrus v1.9.0/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/sirupsen/logrus v1.9.4 h1:TsZE7l11zFCLZnZ+teH4Umoq5BhEIfIzfRDZ1Uzql2w=
 github.com/sirupsen/logrus v1.9.4/go.mod h1:ftWc9WdOfJ0a92nsE2jF5u5ZwH8Bv2zdeOC42RjbV2g=
-github.com/skycoin/dmsg v1.3.29-0.20260318145752-f02092dd2230 h1:m+LbRc4zsSh0RUgHyjeaA4GWO0zRcQetJrFEAGK7dCQ=
-github.com/skycoin/dmsg v1.3.29-0.20260318145752-f02092dd2230/go.mod h1:5EIwtsJgR0RSndqKrKz/yY3MSu2NU5k7hOz2NWDiF44=
+github.com/skycoin/dmsg v1.3.29-0.20260320173710-e5ee528c2dcc h1:sUpmisDXBg3cKfZjvlX2kThGIHjd0Pg4voBxdhiET9s=
+github.com/skycoin/dmsg v1.3.29-0.20260320173710-e5ee528c2dcc/go.mod h1:5EIwtsJgR0RSndqKrKz/yY3MSu2NU5k7hOz2NWDiF44=
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9 h1:DElGw1Fhj4amuW1KM5q8Xowosb3RiOQce0lDJw0Qv0Y=
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9/go.mod h1:OQz8NXVJUWEw7PWYASZ/1BIw5GXgVMTGvrCGDlZa9+k=
 github.com/skycoin/hardware-wallet-protob v0.0.0-20250805154629-410561e1bc2f h1:wKpqEhubs7kKtb7nqU4V8zkTxwnnwcB2797elV2z1t8=
@@ -815,8 +815,8 @@ github.com/skycoin/hardware-wallet/firmware v0.0.0-20260117000250-43c66b2bf1d2 h
 github.com/skycoin/hardware-wallet/firmware v0.0.0-20260117000250-43c66b2bf1d2/go.mod h1:XxSbk28CuQk5in9+tr7ns6AP282s5JP5pgr6axuJhgo=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0duwyG+7WliWz5u9kgk1h5MnLuA=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6/go.mod h1:UXghlricA7J3aRD/k7p/zBObQfmBawwCxIVPVjz2Q3o=
-github.com/skycoin/skycoin v0.28.4-0.20260320140017-42c2cdc1efbe h1:wgjGM5e5ObfKeNgcrwqqjSGIkE5JUI9Ow47g7ZAcX/E=
-github.com/skycoin/skycoin v0.28.4-0.20260320140017-42c2cdc1efbe/go.mod h1:EZt6yh18q3V7kjjFkHqpM9vwgBQjX87o1uV/EPanL5I=
+github.com/skycoin/skycoin v0.28.4-0.20260320181518-fa4dc2004196 h1:zt/Fm+YV7bOzcnZ7ttUsRS1aikDV3+54mobEA7J5nIA=
+github.com/skycoin/skycoin v0.28.4-0.20260320181518-fa4dc2004196/go.mod h1:EZt6yh18q3V7kjjFkHqpM9vwgBQjX87o1uV/EPanL5I=
 github.com/soheilhy/cmux v0.1.5 h1:jjzc5WVemNEDTLwv9tlmemhC73tI08BNOIGwBOo10Js=
 github.com/soheilhy/cmux v0.1.5/go.mod h1:T7TcVDs9LWfQgPlPsdngu6I6QIoyIFZDDC6sNE1GqG0=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=

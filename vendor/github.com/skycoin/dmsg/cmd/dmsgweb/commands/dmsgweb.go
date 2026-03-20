@@ -219,7 +219,7 @@ dmsgweb conf file detected: ` + dwcfg
 			httpClient = &http.Client{
 				Transport: transport,
 			}
-			ctx = context.WithValue(context.Background(), "socks5_proxy", proxyAddr) //nolint
+			ctx = context.WithValue(ctx, "socks5_proxy", proxyAddr) //nolint
 		}
 
 		dmsgC, closeDmsg, err = cli.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, "")
@@ -390,7 +390,7 @@ func proxyHTTPConn(n int) {
 			} else {
 				dmsgp = "80"
 			}
-			urlStr = fmt.Sprintf("dmsg://%s:%s%s", strings.TrimRight(hostParts[0], filterDomainSuffix), dmsgp, c.Param("path"))
+			urlStr = fmt.Sprintf("dmsg://%s:%s%s", strings.TrimSuffix(hostParts[0], filterDomainSuffix), dmsgp, c.Param("path"))
 			if c.Request.URL.RawQuery != "" {
 				urlStr = fmt.Sprintf("%s?%s", urlStr, c.Request.URL.RawQuery)
 			}
