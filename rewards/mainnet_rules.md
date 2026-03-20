@@ -398,20 +398,29 @@ skywire cli pv -t
 
 ### Transport Setup Node
 
-Previously, the transport setup node was run continuously as part of the reward system to ensure that visors were responding as expected to transport setup-node requests.
-However, there were intermittent issues with reliability of the results ; because there is no caching mechanism for responsiveness to transport setup-node requests as there exists for uptime.
+The visor must respond to transport setup-node requests. The transport setup-nodes configured for the visor are included in the survey and verified as an eligibility requirement for rewards.
 
-Currently, the transport setup-nodes which are configured for the visor are included in the survey and verified as an eligibility requirement for rewards by the reward system.
+Routes are established through the network via setup-nodes. When a setup-node contacts your visor to establish a route, the visor must accept and process the request. Visors which do not have the correct setup-nodes configured, or which are unable to respond to setup-node requests, are not eligible for rewards.
 
-### Routability Ping Latency metric
+### Routability and Ping Latency
 
-New on v1.3.34: the visor must be route-able (over existing transports) and respond to pings. There is no minimum latency requirement as the measurement is relative to where it is being measured from.
+The visor must be route-able over existing transports and respond to pings. There is no minimum latency requirement, as the measurement is relative to where it is being measured from.
 
-### Transport Bandwidth Logs
+Transport latency is measured automatically when transports are established. If the initial measurement fails (e.g., due to a busy remote visor), the visor will retry with exponential backoff until a measurement succeeds or the transport is closed. Latency data is reported to the transport discovery service on transport re-registration.
 
-The visor will only produce transport bandwidth logs in response to transports being established to them. These are collected, along with the system survey, and are displayed on the reward system [here](https://fiber.skywire.dev/log-collection/tplogs)
+### Transport Bandwidth and Metrics
 
-In the future, it is anticipated that the transport bandwidth logs and ping metric will be collected by the transport discovery automatically.
+Transport bandwidth and latency metrics are collected by the transport discovery service. Each visor reports its bandwidth counters when transports are re-registered with the transport discovery. These metrics can be viewed with:
+
+```
+skywire cli tp metrics
+skywire cli tp metrics -t
+skywire cli tp metrics --tree
+```
+
+The bandwidth data from the transport discovery is used for the bandwidth pool reward distribution. Both edges of a transport must agree on the bandwidth transferred for it to be counted (verified bandwidth). This prevents any single visor from inflating its bandwidth figures.
+
+The visor also produces transport bandwidth log CSV files locally in response to transports handling traffic. These are collected hourly by the reward system along with the system survey, and are displayed [here](https://fiber.skywire.dev/log-collection/tplogs).
 
 ### Survey
 
