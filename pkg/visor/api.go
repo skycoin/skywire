@@ -2931,36 +2931,40 @@ func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 
 	rules := v.router.Rules()
 	for _, consumeRule := range rules {
-		if consumeRule == nil || consumeRule.Type() != routing.RuleReverse {
-			continue
-		}
+		func() {
+			defer func() { recover() }() //nolint:errcheck
 
-		consumeSummary := consumeRule.Summary()
-		if consumeSummary == nil || consumeSummary.ConsumeFields == nil {
-			continue
-		}
+			if consumeRule == nil || len(consumeRule) == 0 || consumeRule.Type() != routing.RuleReverse {
+				return
+			}
 
-		fwdRID := consumeRule.NextRouteID()
-		fwdRule, err := v.router.Rule(fwdRID)
-		if err != nil || fwdRule == nil {
-			continue
-		}
+			consumeSummary := consumeRule.Summary()
+			if consumeSummary == nil || consumeSummary.ConsumeFields == nil {
+				return
+			}
 
-		fwdSummary := fwdRule.Summary()
-		if fwdSummary == nil {
-			continue
-		}
+			fwdRID := consumeRule.NextRouteID()
+			fwdRule, err := v.router.Rule(fwdRID)
+			if err != nil || fwdRule == nil || len(fwdRule) == 0 {
+				return
+			}
 
-		info := RouteGroupInfo{
-			ConsumeRuleID: consumeSummary.KeyRouteID,
-			FwdRuleID:     fwdSummary.KeyRouteID,
-			Desc:          consumeSummary.ConsumeFields.RouteDescriptor,
-		}
-		if fwdSummary.ForwardFields != nil {
-			info.FwdNextTpID = fwdSummary.ForwardFields.NextTID.String()
-		}
+			fwdSummary := fwdRule.Summary()
+			if fwdSummary == nil {
+				return
+			}
 
-		rgs = append(rgs, info)
+			info := RouteGroupInfo{
+				ConsumeRuleID: consumeSummary.KeyRouteID,
+				FwdRuleID:     fwdSummary.KeyRouteID,
+				Desc:          consumeSummary.ConsumeFields.RouteDescriptor,
+			}
+			if fwdSummary.ForwardFields != nil {
+				info.FwdNextTpID = fwdSummary.ForwardFields.NextTID.String()
+			}
+
+			rgs = append(rgs, info)
+		}()
 	}
 
 	return rgs, nil
