@@ -1046,7 +1046,7 @@ github.com/skycoin/hardware-wallet/firmware
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.4-0.20260320140017-42c2cdc1efbe
+# github.com/skycoin/skycoin v0.28.4-0.20260320181518-fa4dc2004196
 ## explicit; go 1.25.6
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/hardware-wallet/commands
