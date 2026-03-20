@@ -129,7 +129,11 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
-			return err
+			if ctx.Err() != nil {
+				return nil
+			}
+			hv.visor.MasterLogger().PackageLogger("hypervisor").WithError(err).Warn("Failed to accept dmsg stream, continuing...")
+			continue
 		}
 
 		addr := conn.RawRemoteAddr()
