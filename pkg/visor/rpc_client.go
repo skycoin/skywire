@@ -1616,20 +1616,33 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	var routeGroups []RouteGroupInfo
 
 	rules := mc.rt.AllRules()
-	for _, rule := range rules {
-		if rule.Type() != routing.RuleReverse {
+	for _, consumeRule := range rules {
+		if consumeRule == nil || consumeRule.Type() != routing.RuleReverse {
 			continue
 		}
 
-		fwdRID := rule.NextRouteID()
+		fwdRID := consumeRule.NextRouteID()
 		fwdRule, err := mc.rt.Rule(fwdRID)
-		if err != nil {
-			return nil, err
+		if err != nil || fwdRule == nil {
+			continue
 		}
-		routeGroups = append(routeGroups, RouteGroupInfo{
-			ConsumeRule: rule,
-			FwdRule:     fwdRule,
-		})
+
+		desc := consumeRule.RouteDescriptor()
+		info := RouteGroupInfo{
+			ConsumeRuleID: consumeRule.KeyRouteID(),
+			FwdRuleID:     fwdRule.KeyRouteID(),
+			Desc: routing.RouteDescriptorFields{
+				DstPK:   desc.DstPK(),
+				SrcPK:   desc.SrcPK(),
+				DstPort: desc.DstPort(),
+				SrcPort: desc.SrcPort(),
+			},
+		}
+		if fwdRule.Summary() != nil && fwdRule.Summary().ForwardFields != nil {
+			info.FwdNextTpID = fwdRule.Summary().ForwardFields.NextTID.String()
+		}
+
+		routeGroups = append(routeGroups, info)
 	}
 
 	return routeGroups, nil
