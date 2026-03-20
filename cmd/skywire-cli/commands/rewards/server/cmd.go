@@ -34,6 +34,8 @@ var (
 	wlkeys          []cipher.PubKey
 	webPort         uint
 	ensureOnlineURL string
+	loginNode       string
+	skycoinNode     string
 	healthOnly      bool
 	noUI            bool
 	buildTimeout    time.Duration
@@ -66,6 +68,8 @@ func init() {
 		sk.Set(scriptExecString("${DMSGHTTP_SK}")) //nolint:errcheck,gosec
 	}
 	ServerCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
+	ServerCmd.Flags().StringVar(&loginNode, "login-node", scriptExecString("${LOGINNODE}"), "login chain node: empty=disabled, 'auto'=auto-setup on localhost:6421,\nor URL of external node (e.g. http://localhost:6421)")
+	ServerCmd.Flags().StringVar(&skycoinNode, "skycoin-node", scriptExecString("${SKYCOINNODE:-http://127.0.0.1:6420}"), "Skycoin mainnet node URL for reward transaction broadcasts")
 	ServerCmd.Flags().BoolVar(&healthOnly, "health-only", false, "serve only /health endpoint for testing")
 	ServerCmd.Flags().BoolVar(&noUI, "no-ui", false, "skip cogentcore UI extraction and compilation, serve plain HTTP")
 	ServerCmd.Flags().DurationVar(&buildTimeout, "build-timeout", 5*time.Minute, "timeout for UI build process")

@@ -330,16 +330,17 @@ type AtaIdentifyDevice struct {
 } // 512 bytes
 
 func (a *AtaIdentifyDevice) IsGeneralPurposeLoggingCapable() bool {
+	// Per ATA spec, words 84/87 bits 15:14 must be 0b01 to indicate that the word
+	// contains valid data (bit 14 set, bit 15 cleared). Bit 5 indicates GPL support.
 	enabled := uint16(1) << 14
 	enabledMask := uint16(0b11) << 14
-
-	glLoggigAttr := uint16(1) << 5
+	glLoggingAttr := uint16(1) << 5
 
 	if a.CommandsSupported3&enabledMask == enabled {
-		return a.CommandsSupported3&enabledMask&glLoggigAttr == glLoggigAttr
+		return a.CommandsSupported3&glLoggingAttr != 0
 	}
 	if a.CommandsEnabled3&enabledMask == enabled {
-		return a.CommandsEnabled3&enabledMask&glLoggigAttr == glLoggigAttr
+		return a.CommandsEnabled3&glLoggingAttr != 0
 	}
 
 	return false
@@ -413,6 +414,8 @@ func (i *AtaIdentifyDevice) Capacity() (sectors, capacity, logicalSectorSize, ph
 	}
 	logicalSectorOffset = uint64(i.LogicalSectorOffset&0x3fff) * logicalSectorSize
 
+	// Prefer lba48 when it's larger (the authoritative count) or when the device
+	// uses large logical sectors (lba28 is unreliable on those early LLS drives).
 	// Some early 4KiB LLS disks (Samsung N3U-3) return bogus lba28 value
 	if lba48 >= lba28 || (lba48 != 0 && logicalSectorSize > 512) {
 		sectors = lba48
@@ -450,7 +453,7 @@ const (
 	AtaDeviceAttributeTypeSec2Hour                 // formatting is hours = raw/3600; minutes = (raw-3600*hours)/60; seconds = raw%60
 	AtaDeviceAttributeTypeMin2Hour                 // formatting is hours = raw[0:32]/60; minutes = raw[0:32]%60; optional raw[32:48] as ???
 	AtaDeviceAttributeTypeHalfMin2Hour             // formatting is hours = raw/120; minutes = (raw-120*hours)/2
-	AtaDeviceAttributeTypeMsec24Hour32             // formatting is hours = raw[32:64]; milliseconds = raw[0:32]
+	AtaDeviceAttributeTypeMsec24Hour32             // formatting is hours = raw[0:32]; milliseconds = raw[32:64]
 	AtaDeviceAttributeTypeTempMinMax               // formatting is too complicated
 	AtaDeviceAttributeTypeTemp10X                  // formatting is temp = raw[0:32]/10 in Celsius
 )
@@ -564,11 +567,7 @@ func (d *SataDevice) ReadGenericAttributes() (*GenericAttributes, error) {
 	a := GenericAttributes{}
 	for _, attr := range page.Attrs {
 		switch attr.Name {
-		case "Airflow_Temperature_Cel":
-			fallthrough
-		case "Temperature_Celsius":
-			fallthrough
-		case "Temperature_Celsius_X10":
+		case "Airflow_Temperature_Cel", "Temperature_Celsius", "Temperature_Celsius_X10":
 			current, _, _, _, err := attr.ParseAsTemperature()
 			if err != nil {
 				return nil, err
@@ -670,7 +669,7 @@ func (a AtaSmartAttr) ParseAsDuration() (time.Duration, error) {
 		// 30-second counter
 		return time.Duration(a.ValueRaw) * 30 * time.Second, nil
 	case AtaDeviceAttributeTypeMsec24Hour32:
-		// hours + milliseconds
+		// hours = raw[0:32]; milliseconds = raw[32:64]
 		hours := a.ValueRaw & 0xffffffff
 		milliseconds := a.ValueRaw >> 32
 		return time.Duration(hours)*time.Hour + time.Duration(milliseconds)*time.Millisecond, nil
@@ -731,6 +730,15 @@ func (a AtaSmartAttr) ParseAsTemperature() (int /* val */, int /* low */, int /*
 	}
 }
 
+// checkTempWord returns a bitmask indicating whether word can represent a
+// plausible temperature when interpreted as a signed integer:
+//   - bit 0 set: valid as a signed byte (range -128..127)
+//   - bit 1 set: valid as a signed word (range -32768..32767, but limited to negative here)
+//
+// 0x11 => valid as both signed byte and signed word (0..127)
+// 0x01 => valid as signed byte only, negative as byte (128..255)
+// 0x10 => valid as signed word only, negative as word (0xff80..0xffff, i.e. -128..-1)
+// 0x00 => not a plausible temperature in either interpretation
 func checkTempWord(word uint16) int {
 	if word <= 0x7f {
 		return 0x11 // >= 0, signed byte or word
@@ -744,6 +752,10 @@ func checkTempWord(word uint16) int {
 	return 0x00
 }
 
+// checkTempRange validates that t1 and t2 form a plausible [min, max] temperature
+// range containing the current temperature t. It normalises t1/t2 order, checks
+// that the range falls within -60..120 °C, and rejects the degenerate case where
+// both lo and hi are ≤ 0 with lo == -1 (which would indicate uninitialized data).
 func checkTempRange(t int8, t1 int8, t2 int8, lo *int8, hi *int8) bool {
 	if t1 > t2 {
 		tx := t1
@@ -799,24 +811,26 @@ func (d *SataDevice) ReadSMARTData() (*AtaSmartPage, error) {
 	return &page, nil
 }
 
+// computeAttributeRawValue builds a uint64 from the raw attribute bytes using a
+// byte-order string. Each character in byteOrder selects one source byte:
+// '0'-'5' = vendorBytes[0-5], 'r' = reserved, 'v' = current, 'w' = worst.
+// The result is assembled in big-endian order: the first character ends up in
+// the most-significant byte of the returned value.
+// Certain attribute types override the per-device byteOrder from the database.
 func computeAttributeRawValue(mapping ataDeviceAttr, vendorBytes [6]byte, reserved uint8, current uint8, worst uint8) uint64 {
 	byteOrder := mapping.byteOrder
 	switch mapping.typ {
-	case AtaDeviceAttributeTypeRaw64:
-		fallthrough
-	case AtaDeviceAttributeTypeHex64:
+	case AtaDeviceAttributeTypeRaw64, AtaDeviceAttributeTypeHex64:
+		// 64-bit value: include current and worst in addition to the 6 vendor bytes
 		byteOrder = "543210wv"
 
-	case AtaDeviceAttributeTypeRaw56:
-		fallthrough
-	case AtaDeviceAttributeTypeHex56:
-		fallthrough
-	case AtaDeviceAttributeTypeRaw24DivRaw32:
-		fallthrough
-	case AtaDeviceAttributeTypeMsec24Hour32:
+	case AtaDeviceAttributeTypeRaw56, AtaDeviceAttributeTypeHex56,
+		AtaDeviceAttributeTypeRaw24DivRaw32, AtaDeviceAttributeTypeMsec24Hour32:
+		// 56-bit value: include reserved byte ahead of the 6 vendor bytes
 		byteOrder = "r543210"
 
 	default:
+		// 48-bit value: use only the 6 vendor bytes
 		byteOrder = "543210"
 	}
 

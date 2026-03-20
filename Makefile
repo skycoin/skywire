@@ -570,3 +570,55 @@ integration-env-stop: #stop
 integration-env-clean: #clean
 	bash -c "DOCKER_TAG=integration docker compose -f ${COMPOSE_FILE} down"
 	bash ./docker/docker_clean.sh integration
+
+update-dep: #update vendor deps
+	go get -v -u ./...
+	echo "hold distatus/battery@v0.10.0"
+	go get github.com/distatus/battery@v0.10.0
+	go mod tidy
+	go mod vendor
+	git add go.mod go.sum vendor
+	git commit -m "update deps"
+	git push
+
+## Sync local develop branch with upstream skycoin/skywire develop.
+## Requires: origin = your fork, upstream = skycoin/skywire
+sync-upstream-develop: #sync develop branch with upstream develop branch for forks
+	@normalize() { \
+		echo "$$1" | sed \
+			-e 's|git@github.com:|https://github.com/|' \
+			-e 's|\.git$$||' \
+			-e 's|https://github.com/||' \
+			| tr '[:upper:]' '[:lower:]'; \
+	}; \
+	# --- check upstream points to skycoin/skywire --- \
+	UPSTREAM_URL=$$(git remote get-url upstream 2>/dev/null); \
+	if [ -z "$$UPSTREAM_URL" ]; then \
+		echo "[error] no 'upstream' remote found. Add it with:"; \
+		echo "  git remote add upstream https://github.com/skycoin/skywire.git"; \
+		exit 1; \
+	fi; \
+	UPSTREAM_NORM=$$(normalize "$$UPSTREAM_URL"); \
+	if [ "$$UPSTREAM_NORM" != "skycoin/skywire" ]; then \
+		echo "[error] upstream remote does not point to skycoin/skywire."; \
+		echo "  Found: $$UPSTREAM_URL"; \
+		exit 1; \
+	fi; \
+	# --- check origin is NOT skycoin/skywire (must be a fork) --- \
+	ORIGIN_URL=$$(git remote get-url origin 2>/dev/null); \
+	if [ -z "$$ORIGIN_URL" ]; then \
+		echo "[error] no 'origin' remote found."; \
+		exit 1; \
+	fi; \
+	ORIGIN_NORM=$$(normalize "$$ORIGIN_URL"); \
+	if [ "$$ORIGIN_NORM" = "skycoin/skywire" ]; then \
+		echo "[error] origin points to skycoin/skywire directly."; \
+		echo "  This target must be run from a fork, not a clone of the canonical repo."; \
+		exit 1; \
+	fi; \
+	echo "[ok] origin is a fork ($$ORIGIN_NORM), upstream is skycoin/skywire — syncing develop..."; \
+	git checkout develop && \
+	git pull && \
+	git fetch upstream && \
+	git merge upstream/develop && \
+	git push

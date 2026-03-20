@@ -52,6 +52,7 @@ type AppLauncherConfig struct {
 	BinPath       string
 	LocalPath     string
 	DisplayNodeIP bool
+	MuxRoutes     int // Number of parallel mux routes per connection (0 = disabled)
 }
 
 // ResetConfig resets the launcher config.
@@ -93,6 +94,9 @@ func NewLauncher(log logrus.FieldLogger, conf AppLauncherConfig, dmsgC *dmsg.Cli
 
 	// Prepare networks.
 	skyN := appnet.NewSkywireNetworker(log.WithField("_", appnet.TypeSkynet), r)
+	if sn, ok := skyN.(*appnet.SkywireNetworker); ok && conf.MuxRoutes > 1 {
+		sn.MuxRoutes = conf.MuxRoutes
+	}
 	if err := appnet.AddNetworker(appnet.TypeSkynet, skyN); err != nil {
 		return nil, err
 	}
