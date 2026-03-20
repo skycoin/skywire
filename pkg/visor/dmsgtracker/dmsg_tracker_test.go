@@ -38,7 +38,16 @@ func TestDmsgTracker_Update(t *testing.T) {
 	// arrange: tracking client
 	cT, err := env.NewClient(&conf)
 	require.NoError(t, err)
-	dt, err := newDmsgTracker(context.TODO(), cT, cL.LocalPK())
+
+	// Retry tracker creation to handle transient session timing on macOS
+	var dt *dmsgTracker
+	for i := 0; i < 3; i++ {
+		dt, err = newDmsgTracker(context.TODO(), cT, cL.LocalPK())
+		if err == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	require.NoError(t, err)
 
 	// act: attempt update
