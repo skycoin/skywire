@@ -18,6 +18,8 @@ import (
 var (
 	json = jsoniter.ConfigFastest
 	wl   cipher.PubKeys
+	// wlMu protects the global wl and conf variables from concurrent access.
+	wlMu sync.Mutex
 )
 
 // Whitelist represents a whitelist of public keys.
@@ -49,6 +51,9 @@ type configWhitelist struct {
 }
 
 func (w *configWhitelist) Get(pk cipher.PubKey) (bool, error) {
+	wlMu.Lock()
+	defer wlMu.Unlock()
+
 	var ok bool
 	err := w.open()
 	if err != nil {
@@ -63,6 +68,9 @@ func (w *configWhitelist) Get(pk cipher.PubKey) (bool, error) {
 }
 
 func (w *configWhitelist) All() (map[cipher.PubKey]bool, error) {
+	wlMu.Lock()
+	defer wlMu.Unlock()
+
 	err := w.open()
 	if err != nil {
 		return nil, err
@@ -75,6 +83,9 @@ func (w *configWhitelist) All() (map[cipher.PubKey]bool, error) {
 }
 
 func (w *configWhitelist) Add(pks ...cipher.PubKey) error {
+	wlMu.Lock()
+	defer wlMu.Unlock()
+
 	err := w.open()
 	if err != nil {
 		return err
@@ -123,6 +134,9 @@ func (w *configWhitelist) Add(pks ...cipher.PubKey) error {
 }
 
 func (w *configWhitelist) Remove(pks ...cipher.PubKey) error {
+	wlMu.Lock()
+	defer wlMu.Unlock()
+
 	err := w.open()
 	if err != nil {
 		return err
@@ -156,12 +170,19 @@ func (w *configWhitelist) open() error {
 	info, err := os.Stat(w.confPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			_, err = os.Create(w.confPath)
+			f, createErr := os.Create(w.confPath)
+			if createErr != nil {
+				return createErr
+			}
+			f.Close() //nolint:errcheck,gosec
+			// Re-stat to get the info for the newly created file.
+			info, err = os.Stat(w.confPath)
 			if err != nil {
 				return err
 			}
+		} else {
+			return err
 		}
-		return err
 	}
 
 	if info.Size() == 0 {

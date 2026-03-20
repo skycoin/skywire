@@ -143,6 +143,7 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 
 // updateServerEntry updates the dmsg server's entry within dmsg discovery.
 // If 'addr' is an empty string, the Entry.addr field will not be updated in discovery.
+// Caller must hold c.sessionsMx.
 func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSessions int, authPassphrase string) (err error) {
 	if addr == "" {
 		panic("updateServerEntry cannot accept empty 'addr' input") // this should never happen
@@ -233,7 +234,9 @@ func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType stri
 		}
 	}()
 
+	c.sessionsMx.Lock()
 	srvPKs := make([]cipher.PubKey, 0, len(c.sessions))
+	c.sessionsMx.Unlock()
 
 	_, err = c.dc.Entry(ctx, c.pk)
 	if err != nil {

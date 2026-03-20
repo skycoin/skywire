@@ -2,6 +2,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/skycoin/dmsg/pkg/disc"
@@ -36,9 +37,12 @@ func (a *API) handleError(w http.ResponseWriter, r *http.Request, e error) {
 		code = http.StatusUnprocessableEntity
 		msg = e.Error()
 	} else {
-		f, ok := apiErrors[e]
-		if !ok {
-			f = func() (int, string) { return http.StatusInternalServerError, disc.ErrUnexpected.Error() }
+		f := func() (int, string) { return http.StatusInternalServerError, disc.ErrUnexpected.Error() }
+		for target, handler := range apiErrors {
+			if errors.Is(e, target) {
+				f = handler
+				break
+			}
 		}
 		code, msg = f()
 	}

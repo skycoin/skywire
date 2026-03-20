@@ -2,6 +2,7 @@
 package noise
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/skycoin/noise"
@@ -22,22 +23,17 @@ func (Secp256k1) GenerateKeypair(_ io.Reader) (noise.DHKey, error) {
 
 // DH helps to implement `noise.DHFunc`.
 func (Secp256k1) DH(sk, pk []byte) []byte {
-	// Use non-panic versions to handle invalid keys gracefully
 	pubKey, err := cipher.NewPubKey(pk)
 	if err != nil {
-		// Return empty key on error to prevent panic
-		// The handshake will fail with this invalid key
-		return make([]byte, 33)
+		panic(fmt.Sprintf("noise DH: invalid public key: %v", err))
 	}
 	secKey, err := cipher.NewSecKey(sk)
 	if err != nil {
-		// Return empty key on error to prevent panic
-		return make([]byte, 33)
+		panic(fmt.Sprintf("noise DH: invalid secret key: %v", err))
 	}
 	ecdh, err := cipher.ECDH(pubKey, secKey)
 	if err != nil {
-		// Return empty key on error to prevent panic
-		return make([]byte, 33)
+		panic(fmt.Sprintf("noise DH: ECDH failed: %v", err))
 	}
 	return append(ecdh, byte(0))
 }
