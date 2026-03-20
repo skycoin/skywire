@@ -100,3 +100,10 @@ func (rb *reorderBuffer) Pending() int {
 	defer rb.mu.Unlock()
 	return len(rb.buf)
 }
+
+// NextSeq returns the next expected sequence number (first not yet delivered in order).
+func (rb *reorderBuffer) NextSeq() uint32 {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	return rb.nextSeq
+}

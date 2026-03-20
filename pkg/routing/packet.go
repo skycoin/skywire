@@ -51,6 +51,8 @@ func (t PacketType) String() string {
 		return "Pong"
 	case ErrorPacket:
 		return "Error"
+	case SACKPacket:
+		return "SACK"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -72,17 +74,23 @@ const (
 	PingPacket
 	PongPacket
 	ErrorPacket
+	SACKPacket
 )
 
 // Capability bitmap flags for extended handshake negotiation.
 // Transmitted as a little-endian uint16 at HandshakePacket payload bytes 1-2.
 const (
-	CapMux uint16 = 1 << 0 // Supports route multiplexing (sequenced DataPackets)
+	CapMux  uint16 = 1 << 0 // Supports route multiplexing (sequenced DataPackets)
+	CapSACK uint16 = 1 << 1 // Supports SACK retransmission
 )
 
 // SeqSize is the byte size of the sequence number prepended to DataPacket
 // payloads when mux mode is active.
 const SeqSize = 4
+
+// SACKPayloadSize is the size of a SACK packet payload:
+// last_contiguous_seq (uint32) + bitmap (uint64) = 12 bytes.
+const SACKPayloadSize = 12
 
 // CloseCode represents close code for ClosePacket.
 type CloseCode byte
@@ -256,6 +264,31 @@ func MakeErrorPacket(id RouteID, errPayload []byte) (Packet, error) {
 	copy(packet[PacketPayloadOffset:], errPayload)
 
 	return packet, nil
+}
+
+// MakeSACKPacket constructs a SACK (Selective Acknowledgment) packet.
+// Payload: [last_contiguous_seq (4 bytes BE)][bitmap (8 bytes BE)]
+// bitmap bit i == 1 means (last_contiguous_seq + 1 + i) has been received.
+func MakeSACKPacket(id RouteID, lastContiguousSeq uint32, bitmap uint64) Packet {
+	packet := make([]byte, PacketHeaderSize+SACKPayloadSize)
+
+	packet[PacketTypeOffset] = byte(SACKPacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(SACKPayloadSize))
+	binary.BigEndian.PutUint32(packet[PacketPayloadOffset:], lastContiguousSeq)
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+4:], bitmap)
+
+	return packet
+}
+
+// SACKLastContiguousSeq extracts the last contiguous sequence number from a SACK packet.
+func (p Packet) SACKLastContiguousSeq() uint32 {
+	return binary.BigEndian.Uint32(p[PacketPayloadOffset:])
+}
+
+// SACKBitmap extracts the 64-bit bitmap from a SACK packet.
+func (p Packet) SACKBitmap() uint64 {
+	return binary.BigEndian.Uint64(p[PacketPayloadOffset+4:])
 }
 
 // Type returns Packet's type.

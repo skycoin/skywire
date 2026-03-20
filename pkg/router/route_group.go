@@ -138,6 +138,11 @@ type RouteGroup struct {
 	writeSeq   uint32         // next outgoing sequence number (atomic)
 	tpIndex    uint32         // round-robin index for transport selection (atomic)
 	reorderBuf *reorderBuffer // reorder buffer for incoming sequenced packets
+
+	// SACK retransmission fields
+	sackEnabled bool         // true when both peers advertised CapSACK
+	sackTracker *sackTracker // receiver: tracks received seqs for SACK generation
+	retxBuf     *retxBuffer  // sender: holds unACKed packets for retransmission
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -167,6 +172,8 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		handshakeProcessed: make(chan struct{}),
 		networkStats:       newNetworkStats(),
 		reorderBuf:         newReorderBuffer(64),
+		sackTracker:        newSACKTracker(),
+		retxBuf:            newRetxBuffer(128),
 	}
 
 	return rg
@@ -351,9 +358,17 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule) (int, error) {
 	var packet routing.Packet
 	var err error
+	var seq uint32
 	if rg.muxEnabled {
-		seq := atomic.AddUint32(&rg.writeSeq, 1) - 1
+		seq = atomic.AddUint32(&rg.writeSeq, 1) - 1
 		packet, err = routing.MakeSequencedDataPacket(rule.NextRouteID(), seq, data)
+		if err != nil {
+			return 0, err
+		}
+		// Store for retransmission before sending
+		if rg.sackEnabled && rg.retxBuf != nil {
+			rg.retxBuf.Store(seq, data) //nolint:errcheck
+		}
 	} else {
 		packet, err = routing.MakeDataPacket(rule.NextRouteID(), data)
 	}
@@ -696,7 +711,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		}
 
 		rule := rg.fwd[i]
-		packet := routing.MakeHandshakePacket(rule.NextRouteID(), encrypt, routing.CapMux)
+		packet := routing.MakeHandshakePacket(rule.NextRouteID(), encrypt, routing.CapMux|routing.CapSACK)
 
 		err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 		if err == nil {
@@ -803,6 +818,11 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 				rg.muxEnabled = true
 				rg.logger.Debug("Route multiplexing enabled (both peers support CapMux)")
 			}
+			if remoteCaps&routing.CapSACK != 0 && rg.muxEnabled {
+				rg.sackEnabled = true
+				rg.logger.Debug("SACK retransmission enabled (both peers support CapSACK)")
+				go rg.servicePacketLoop("sack", rg.cfg.KeepAliveInterval/2, rg.sackServiceFn)
+			}
 
 			close(rg.handshakeProcessed)
 		})
@@ -812,6 +832,8 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		return rg.handlePongPacket(packet)
 	case routing.ErrorPacket:
 		return rg.handleErrorPacket(packet)
+	case routing.SACKPacket:
+		return rg.handleSACKPacket(packet)
 	}
 
 	return nil
@@ -830,7 +852,23 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 	if rg.muxEnabled && rg.reorderBuf != nil {
 		seq := packet.SequenceNumber()
 		data := packet.DataPayloadAfterSeq()
+
+		// Track for SACK generation
+		var gapDetected bool
+		if rg.sackEnabled && rg.sackTracker != nil {
+			gapDetected = rg.sackTracker.RecordReceived(seq)
+		}
+
 		delivered := rg.reorderBuf.Insert(seq, data)
+
+		// Sync SACK tracker with reorder buffer delivery state
+		if rg.sackEnabled && rg.sackTracker != nil {
+			rg.sackTracker.AdvanceContiguous(rg.reorderBuf.NextSeq())
+			if gapDetected {
+				go rg.sendSACK() //nolint:errcheck
+			}
+		}
+
 		for _, d := range delivered {
 			select {
 			case <-rg.closed:
@@ -862,6 +900,82 @@ func (rg *RouteGroup) handleErrorPacket(packet routing.Packet) error {
 
 	rg.SetError(errors.New((string(packet.Payload()))))
 	return nil
+}
+
+// sendSACK sends a SACK packet with the current receiver state.
+func (rg *RouteGroup) sendSACK() error {
+	if !rg.sackEnabled || rg.sackTracker == nil {
+		return nil
+	}
+
+	rg.mu.Lock()
+	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+		rg.mu.Unlock()
+		return nil
+	}
+	// Use first available transport for SACK (control channel)
+	tp := rg.tps[0]
+	rule := rg.fwd[0]
+	rg.mu.Unlock()
+
+	if tp == nil {
+		return nil
+	}
+
+	lastContig, bitmap := rg.sackTracker.GenerateSACK()
+	packet := routing.MakeSACKPacket(rule.NextRouteID(), lastContig, bitmap)
+	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+}
+
+// handleSACKPacket processes a received SACK and retransmits missing packets.
+func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
+	if !rg.sackEnabled || rg.retxBuf == nil {
+		return nil
+	}
+
+	lastContig := packet.SACKLastContiguousSeq()
+	bitmap := packet.SACKBitmap()
+
+	retxSeqs := rg.retxBuf.ProcessSACK(lastContig, bitmap)
+	if len(retxSeqs) == 0 {
+		return nil
+	}
+
+	rg.logger.Debugf("SACK: retransmitting %d packets", len(retxSeqs))
+
+	for _, seq := range retxSeqs {
+		data := rg.retxBuf.Get(seq)
+		if data == nil {
+			continue
+		}
+
+		rg.mu.Lock()
+		tp, rule, err := rg.nextTransport()
+		rg.mu.Unlock()
+		if err != nil {
+			return err
+		}
+
+		retxPacket, err := routing.MakeSequencedDataPacket(rule.NextRouteID(), seq, data)
+		if err != nil {
+			return err
+		}
+
+		if err := rg.writePacket(context.Background(), tp, retxPacket, rule.KeyRouteID()); err != nil {
+			rg.logger.WithError(err).Warnf("SACK: failed to retransmit seq %d", seq)
+		}
+	}
+	return nil
+}
+
+// sackServiceFn is the periodic SACK sender, run as a service loop.
+func (rg *RouteGroup) sackServiceFn(_ time.Duration) {
+	if !rg.sackEnabled {
+		return
+	}
+	if err := rg.sendSACK(); err != nil {
+		rg.logger.WithError(err).Warn("Failed to send periodic SACK")
+	}
 }
 
 func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {

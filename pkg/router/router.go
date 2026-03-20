@@ -934,7 +934,7 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	lastRule := rg.fwd[lastIdx]
 	rg.mu.Unlock()
 
-	packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, routing.CapMux)
+	packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, routing.CapMux|routing.CapSACK)
 	if err := rg.writePacket(context.Background(), lastTp, packet, lastRule.KeyRouteID()); err != nil {
 		r.logger.WithError(err).Warn("Failed to send handshake on additional mux transport")
 	}
@@ -957,6 +957,8 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		return r.handlePongPacket(ctx, packet)
 	case routing.ErrorPacket:
 		return r.handleErrorPacket(ctx, packet)
+	case routing.SACKPacket:
+		return r.handleSACKRouterPacket(ctx, packet)
 	default:
 		return ErrUnknownPacketType
 	}
@@ -1262,6 +1264,25 @@ func (r *router) handleErrorPacket(ctx context.Context, packet routing.Packet) e
 	return rg.handlePacket(packet)
 }
 
+func (r *router) handleSACKRouterPacket(ctx context.Context, packet routing.Packet) error {
+	rule, err := r.GetRule(packet.RouteID())
+	if err != nil {
+		return err
+	}
+
+	if rt := rule.Type(); rt == routing.RuleForward || rt == routing.RuleIntermediary {
+		return r.forwardPacket(ctx, packet, rule)
+	}
+
+	desc := rule.RouteDescriptor()
+	nrg, ok := r.noiseRouteGroup(desc)
+	if !ok || nrg == nil {
+		return nil // SACK for unknown route, ignore silently
+	}
+
+	return nrg.handlePacket(packet)
+}
+
 // GetRule gets routing rule.
 func (r *router) GetRule(routeID routing.RouteID) (routing.Rule, error) {
 	rule, err := r.rt.Rule(routeID)
@@ -1350,6 +1371,8 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 		if err != nil {
 			return err
 		}
+	case routing.SACKPacket:
+		p = routing.MakeSACKPacket(rule.NextRouteID(), packet.SACKLastContiguousSeq(), packet.SACKBitmap())
 	default:
 		return fmt.Errorf("packet of type %s can't be forwarded", packet.Type())
 	}
