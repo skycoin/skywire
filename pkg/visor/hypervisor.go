@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/tpviz"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
@@ -64,6 +65,7 @@ type Hypervisor struct {
 	vsMu         *sync.RWMutex
 	selfConn     Conn
 	logger       *logging.Logger
+	tpvizServer  *tpviz.Server
 }
 
 // NewHypervisor creates a new Hypervisor.
@@ -99,6 +101,21 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 		selfConn:     selfConn,
 		logger:       mLogger.PackageLogger("hypervisor"),
 	}
+
+	if config.TPViz.Enable && visor != nil {
+		tpvizCfg := tpviz.DefaultConfig()
+		if config.TPViz.SurveyDir != "" {
+			tpvizCfg.SurveyDir = config.TPViz.SurveyDir
+		}
+		if config.TPViz.CacheMaxAge > 0 {
+			tpvizCfg.CacheMaxAge = config.TPViz.CacheMaxAge
+		}
+		hv.tpvizServer = tpviz.NewServer(tpvizCfg)
+		adapter := &visorAPIAdapter{v: visor}
+		hv.tpvizServer.SetVisorAPI(adapter, visor.conf.PK.Hex())
+		hv.tpvizServer.Start()
+	}
+
 	return hv, nil
 }
 
@@ -329,6 +346,11 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 			r.Get("/{pk}", hv.getPty())
 		})
+
+		// Mount tp-viz UI if enabled
+		if hv.tpvizServer != nil {
+			r.Mount("/tp-viz", http.StripPrefix("/tp-viz", hv.tpvizServer.Handler()))
+		}
 
 		r.Handle("/*", http.FileServer(http.FS(hv.c.UIAssets)))
 	})
