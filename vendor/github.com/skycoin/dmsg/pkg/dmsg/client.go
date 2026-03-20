@@ -80,7 +80,8 @@ type Client struct {
 	conf   *Config
 	porter *netutil.Porter
 
-	bo     time.Duration // initial backoff duration
+	initBO time.Duration // initial backoff duration (constant)
+	bo     time.Duration // current backoff duration
 	maxBO  time.Duration // maximum backoff duration
 	factor float64       // multiplier for the backoff duration that is applied on every retry
 
@@ -106,6 +107,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 		errCh:  make(chan error, 10),
 		done:   make(chan struct{}),
 		conf:   conf,
+		initBO: time.Second * 5,
 		bo:     time.Second * 5,
 		maxBO:  time.Minute,
 		factor: netutil.DefaultFactor,
@@ -210,6 +212,7 @@ func (ce *Client) Serve(ctx context.Context) {
 		if len(entries) == 0 {
 			ce.log.Warnf("No entries found. Retrying after %s...", ce.bo.String())
 			ce.serveWait()
+			continue
 		}
 		// randomize dmsg servers list using crypto/rand seed for true randomization
 		// This ensures each client connects to servers in a different order,
@@ -280,6 +283,9 @@ func (ce *Client) Serve(ctx context.Context) {
 				ce.log.WithField("remote_pk", entry.Static).WithError(err).WithField("current_backoff", ce.bo.String()).
 					Warn("Failed to establish session.")
 				ce.serveWait()
+			} else {
+				// Reset backoff on successful session establishment.
+				ce.bo = ce.initBO
 			}
 		}
 
@@ -373,10 +379,16 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	}
 
 	// Range client's delegated servers.
-	// See if we are already connected to a delegated server.
+	// Try existing sessions first, falling back to next server on failure.
 	for _, srvPK := range entry.Client.DelegatedServers {
 		if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
-			return dSes.DialStream(addr)
+			stream, err := dSes.DialStream(addr)
+			if err != nil {
+				ce.log.WithError(err).WithField("server", srvPK).
+					Debug("DialStream failed via existing session, trying next server")
+				continue
+			}
+			return stream, nil
 		}
 	}
 
@@ -387,7 +399,13 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		if err != nil {
 			continue
 		}
-		return dSes.DialStream(addr)
+		stream, err := dSes.DialStream(addr)
+		if err != nil {
+			ce.log.WithError(err).WithField("server", srvPK).
+				Debug("DialStream failed via new session, trying next server")
+			continue
+		}
+		return stream, nil
 	}
 
 	return nil, ErrCannotConnectToDelegated

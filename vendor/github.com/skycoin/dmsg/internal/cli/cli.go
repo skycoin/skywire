@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -519,8 +520,28 @@ func NewFallbackRoundTripper(ctx context.Context, clients []*dmsg.Client) http.R
 
 // RoundTrip tries each DMSG client in order until a successful response is received.
 func (f *FallbackRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Buffer the request body so it can be replayed on retry.
+	// Without this, the first failed transport consumes the body
+	// and subsequent transports receive an empty body.
+	var bodyBytes []byte
+	if req.Body != nil {
+		var err error
+		bodyBytes, err = io.ReadAll(req.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read request body for retry: %w", err)
+		}
+		req.Body.Close() //nolint:errcheck,gosec
+	}
+
 	var lastErr error
 	for _, client := range f.clients {
+		// Reset the body for each attempt
+		if bodyBytes != nil {
+			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		} else {
+			req.Body = nil
+		}
+
 		rt := dmsghttp.MakeHTTPTransport(f.ctx, client)
 		resp, err := rt.RoundTrip(req)
 		if err != nil {
