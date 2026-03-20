@@ -63,6 +63,14 @@ type HypervisorConfig struct {
 	EnableTLS     bool          `json:"enable_tls"`          // Whether to enable TLS.
 	TLSCertFile   string        `json:"tls_cert_file"`       // TLS cert file location.
 	TLSKeyFile    string        `json:"tls_key_file"`        // TLS key file location.
+	TPViz         TPVizConfig   `json:"tp_viz"`              // Transport visualizer config.
+}
+
+// TPVizConfig configures the embedded transport visualizer.
+type TPVizConfig struct {
+	Enable      bool   `json:"enable"`                  // Whether to enable tp viz UI at /tp-viz/.
+	SurveyDir   string `json:"survey_dir,omitempty"`    // Directory containing visor surveys.
+	CacheMaxAge int    `json:"cache_max_age,omitempty"` // Cache max age in minutes (default: 5).
 }
 
 // MakeConfig returns hypervisor config.
@@ -134,6 +142,7 @@ func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 			c.HTTPAddr = httpAddr
 		}
 		c.Cookies.FillDefaults()
+		c.TPViz.Enable = true
 		c.EnableAuth = EnableAuth
 		c.EnableTLS = EnableTLS
 		c.TLSCertFile = TLSCert

@@ -133,19 +133,9 @@ type RouteGroup struct {
 	pendingPongCh chan float64 // Receives measured latency when pong arrives
 	pendingPongMu sync.Mutex
 
-	// Route multiplexing fields
-	muxEnabled bool           // true when both peers advertised CapMux
-	writeSeq   uint32         // next outgoing sequence number (atomic)
-	tpIndex    uint32         // round-robin index for transport selection (atomic)
-	reorderBuf *reorderBuffer // reorder buffer for incoming sequenced packets
-
-	// Adaptive transport weighting
-	tpSelector *transportSelector // weighted transport selection based on latency
-
-	// SACK retransmission fields
-	sackEnabled bool         // true when both peers advertised CapSACK
-	sackTracker *sackTracker // receiver: tracks received seqs for SACK generation
-	retxBuf     *retxBuffer  // sender: holds unACKed packets for retransmission
+	// Route multiplexing layer (nil when mux not negotiated).
+	// Encapsulates sequencing, reordering, SACK, and transport selection.
+	mux *routeMux
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -174,10 +164,6 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		writeDeadline:      deadline.MakePipeDeadline(),
 		handshakeProcessed: make(chan struct{}),
 		networkStats:       newNetworkStats(),
-		reorderBuf:         newReorderBuffer(64),
-		tpSelector:         newTransportSelector(),
-		sackTracker:        newSACKTracker(),
-		retxBuf:            newRetxBuffer(128),
 	}
 
 	return rg
@@ -362,17 +348,8 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule) (int, error) {
 	var packet routing.Packet
 	var err error
-	var seq uint32
-	if rg.muxEnabled {
-		seq = atomic.AddUint32(&rg.writeSeq, 1) - 1
-		packet, err = routing.MakeSequencedDataPacket(rule.NextRouteID(), seq, data)
-		if err != nil {
-			return 0, err
-		}
-		// Store for retransmission before sending
-		if rg.sackEnabled && rg.retxBuf != nil {
-			rg.retxBuf.Store(seq, data) //nolint:errcheck
-		}
+	if rg.mux != nil {
+		packet, _, err = rg.mux.wrapPayload(rule.NextRouteID(), data)
 	} else {
 		packet, err = routing.MakeDataPacket(rule.NextRouteID(), data)
 	}
@@ -454,35 +431,14 @@ func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule
 		return nil, nil, ErrRuleTransportMismatch
 	}
 
-	if !rg.muxEnabled || len(rg.tps) == 1 {
-		if rg.tps[0] == nil {
-			return nil, nil, ErrBadTransport
-		}
-		return rg.tps[0], rg.fwd[0], nil
+	if rg.mux != nil && len(rg.tps) > 1 {
+		return rg.mux.selectTransport(rg.tps, rg.fwd)
 	}
 
-	// Use weighted selector if available
-	if rg.tpSelector != nil && rg.tpSelector.Len() > 0 {
-		idx := rg.tpSelector.Select()
-		if idx < len(rg.tps) {
-			tp := rg.tps[idx]
-			if tp != nil && !tp.IsClosed() {
-				return tp, rg.fwd[idx], nil
-			}
-		}
+	if rg.tps[0] == nil {
+		return nil, nil, ErrBadTransport
 	}
-
-	// Fallback: round-robin with skip-dead
-	n := uint32(len(rg.tps)) //nolint:gosec
-	start := atomic.AddUint32(&rg.tpIndex, 1) - 1
-	for i := uint32(0); i < n; i++ {
-		idx := (start + i) % n
-		tp := rg.tps[idx]
-		if tp != nil && !tp.IsClosed() {
-			return tp, rg.fwd[idx], nil
-		}
-	}
-	return nil, nil, ErrNoSuitableTransport
+	return rg.tps[0], rg.fwd[0], nil
 }
 
 // RouteHops returns the list of visor public keys that form the route path.
@@ -656,9 +612,9 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 	}
 
 	// Rebuild transport weights based on current latency measurements
-	if rg.muxEnabled && rg.tpSelector != nil && len(rg.tps) > 1 {
+	if rg.mux != nil && len(rg.tps) > 1 {
 		rg.mu.Lock()
-		rg.tpSelector.Rebuild(rg.tps)
+		rg.mux.rebuildWeights(rg.tps)
 		rg.mu.Unlock()
 	}
 }
@@ -811,13 +767,13 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 			// Extended capabilities negotiation
 			remoteCaps := packet.HandshakeCapabilities()
 			if remoteCaps&routing.CapMux != 0 {
-				rg.muxEnabled = true
+				sack := remoteCaps&routing.CapSACK != 0
+				rg.mux = newRouteMux(rg.logger, sack)
 				rg.logger.Debug("Route multiplexing enabled (both peers support CapMux)")
-			}
-			if remoteCaps&routing.CapSACK != 0 && rg.muxEnabled {
-				rg.sackEnabled = true
-				rg.logger.Debug("SACK retransmission enabled (both peers support CapSACK)")
-				go rg.servicePacketLoop("sack", rg.cfg.KeepAliveInterval/2, rg.sackServiceFn)
+				if sack {
+					rg.logger.Debug("SACK retransmission enabled (both peers support CapSACK)")
+					go rg.servicePacketLoop("sack", rg.cfg.KeepAliveInterval/2, rg.sackServiceFn)
+				}
 			}
 
 			close(rg.handshakeProcessed)
@@ -845,24 +801,14 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 	}
 	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
-	if rg.muxEnabled && rg.reorderBuf != nil {
+	if rg.mux != nil {
 		seq := packet.SequenceNumber()
 		data := packet.DataPayloadAfterSeq()
 
-		// Track for SACK generation
-		var gapDetected bool
-		if rg.sackEnabled && rg.sackTracker != nil {
-			gapDetected = rg.sackTracker.RecordReceived(seq)
-		}
+		delivered, gapDetected := rg.mux.deliverData(seq, data)
 
-		delivered := rg.reorderBuf.Insert(seq, data)
-
-		// Sync SACK tracker with reorder buffer delivery state
-		if rg.sackEnabled && rg.sackTracker != nil {
-			rg.sackTracker.AdvanceContiguous(rg.reorderBuf.NextSeq())
-			if gapDetected {
-				go rg.sendSACK() //nolint:errcheck
-			}
+		if gapDetected {
+			go rg.sendSACK() //nolint:errcheck
 		}
 
 		for _, d := range delivered {
@@ -900,7 +846,7 @@ func (rg *RouteGroup) handleErrorPacket(packet routing.Packet) error {
 
 // sendSACK sends a SACK packet with the current receiver state.
 func (rg *RouteGroup) sendSACK() error {
-	if !rg.sackEnabled || rg.sackTracker == nil {
+	if rg.mux == nil || !rg.mux.sackEnabled {
 		return nil
 	}
 
@@ -918,21 +864,21 @@ func (rg *RouteGroup) sendSACK() error {
 		return nil
 	}
 
-	lastContig, bitmap := rg.sackTracker.GenerateSACK()
+	lastContig, bitmap := rg.mux.generateSACK()
 	packet := routing.MakeSACKPacket(rule.NextRouteID(), lastContig, bitmap)
 	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 }
 
 // handleSACKPacket processes a received SACK and retransmits missing packets.
 func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
-	if !rg.sackEnabled || rg.retxBuf == nil {
+	if rg.mux == nil || !rg.mux.sackEnabled {
 		return nil
 	}
 
 	lastContig := packet.SACKLastContiguousSeq()
 	bitmap := packet.SACKBitmap()
 
-	retxSeqs := rg.retxBuf.ProcessSACK(lastContig, bitmap)
+	retxSeqs := rg.mux.processSACK(lastContig, bitmap)
 	if len(retxSeqs) == 0 {
 		return nil
 	}
@@ -940,7 +886,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 	rg.logger.Debugf("SACK: retransmitting %d packets", len(retxSeqs))
 
 	for _, seq := range retxSeqs {
-		data := rg.retxBuf.Get(seq)
+		data := rg.mux.getRetxPayload(seq)
 		if data == nil {
 			continue
 		}
@@ -966,7 +912,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 
 // sackServiceFn is the periodic SACK sender, run as a service loop.
 func (rg *RouteGroup) sackServiceFn(_ time.Duration) {
-	if !rg.sackEnabled {
+	if rg.mux == nil || !rg.mux.sackEnabled {
 		return
 	}
 	if err := rg.sendSACK(); err != nil {
@@ -1174,8 +1120,8 @@ func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.M
 	rg.tps = append(rg.tps, tp)
 
 	// Rebuild transport weights when transports change
-	if rg.tpSelector != nil && len(rg.tps) > 1 {
-		rg.tpSelector.Rebuild(rg.tps)
+	if rg.mux != nil && len(rg.tps) > 1 {
+		rg.mux.rebuildWeights(rg.tps)
 	}
 }
 
