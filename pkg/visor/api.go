@@ -2917,20 +2917,20 @@ func (v *Visor) RouteGroups() ([]RouteGroupInfo, error) {
 	var routegroups []RouteGroupInfo
 
 	rules := v.router.Rules()
-	for _, rule := range rules {
-		if rule.Type() != routing.RuleReverse {
+	for _, consumeRule := range rules {
+		if consumeRule.Type() != routing.RuleReverse {
 			continue
 		}
 
-		fwdRID := rule.NextRouteID()
-		rule, err := v.router.Rule(fwdRID)
+		fwdRID := consumeRule.NextRouteID()
+		fwdRule, err := v.router.Rule(fwdRID)
 		if err != nil {
-			return nil, err
+			continue // forward rule may have been GC'd
 		}
 
 		routegroups = append(routegroups, RouteGroupInfo{
-			ConsumeRule: rule,
-			FwdRule:     rule,
+			ConsumeRule: consumeRule,
+			FwdRule:     fwdRule,
 		})
 	}
 
