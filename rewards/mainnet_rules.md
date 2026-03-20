@@ -25,24 +25,32 @@ Reward distribution notifications are on telegram [@skywire_reward](https://t.me
 
 Information about reward distribution as well as other metrics for the skywire network can be found at [fiber.skywire.dev](https://fiber.skywire.dev)
 
-# Uptime Reward Pools
+# Reward Pools
 
-816000 Skycoin are distributed annually to those visors which meet the mimimum uptime and the other requirements listed below, in two equally sized reward pools.
-
-The reward amount for a day is evenly divided among those eligible participants for a given reward pool on the basis of having met uptime and other requirements, for the previous day.
+816000 Skycoin are distributed annually to those visors which meet the minimum uptime and the other requirements listed below, in two equally sized reward pools.
 
 A total of up to ~1117.808 Skycoin __per pool__ are distributed daily in non leap-years.
 
 A total of up to ~1114.754  Skycoin __per pool__ are distributed daily in leap-years.
 
-The two reward pools are differentiated by architecture ; one pool for ARM / RISC / MIPS architectures, the other pool for AMD64 / x86_64 / i686 architecture machines. The requirements are otherwise identical for reward eligibility in these pools.
+## Pool 1: Presence
+
+The presence pool reward for a day is evenly divided among all eligible visors on the basis of having met uptime and other requirements for the previous day, with IP and MAC address deduplication applied. All architectures are eligible for the presence pool.
+
+## Pool 2: Bandwidth
+
+The bandwidth pool reward for a day is distributed proportionally based on the amount of transport bandwidth each visor handled during the previous day. Only visors which handled bandwidth above a minimum threshold are eligible for the bandwidth pool.
+
+Visors which do not meet the minimum bandwidth threshold will still receive rewards from the presence pool, but will not receive any share of the bandwidth pool.
+
+The bandwidth considered for this pool excludes same-LAN transports (where both edges share the same external IP address).
 
 ## Rules & Requirements
 
 To receive Skycoin rewards for running skywire, the following requirements must be met:
 
 
-* [1)](#Version) **Minimum skywire [version](#Version) v1.3.34** - Cutoff February 1st 2026
+* [1)](#Version) **Minimum skywire [version](#Version) v1.3.36** - Cutoff March 20th 2026
 
 * [2)](#Uptime) **75% [uptime](#Uptime) per day** minimum is required to be eligible to receive rewards
 
@@ -121,6 +129,12 @@ Rewards Cutoff date for updating 02-01-2026
 Requirement established 02-10-2026
 
 Rewards Cutoff date for updating 02-25-2026
+
+**Reward eligibility after 03-20-2026 requires Skywire v1.3.36**
+
+Requirement established 03-06-2026
+
+Rewards Cutoff date for updating 03-20-2026
 
 ### Uptime
 
@@ -209,7 +223,7 @@ Flags:
 
 ### Architecture
 
-We are pleased to state as of November 1, 2024 Skywire Rewards are open to all architectures, with a reward pool added for non-ARM architectures (amd64 & i386)
+All computer hardware and architectures are eligible for both reward pools.
 
 ### Deployment
 
@@ -384,20 +398,29 @@ skywire cli pv -t
 
 ### Transport Setup Node
 
-Previously, the transport setup node was run continuously as part of the reward system to ensure that visors were responding as expected to transport setup-node requests.
-However, there were intermittent issues with reliability of the results ; because there is no caching mechanism for responsiveness to transport setup-node requests as there exists for uptime.
+The visor must respond to transport setup-node requests. The transport setup-nodes configured for the visor are included in the survey and verified as an eligibility requirement for rewards.
 
-Currently, the transport setup-nodes which are configured for the visor are included in the survey and verified as an eligibility requirement for rewards by the reward system.
+Routes are established through the network via setup-nodes. When a setup-node contacts your visor to establish a route, the visor must accept and process the request. Visors which do not have the correct setup-nodes configured, or which are unable to respond to setup-node requests, are not eligible for rewards.
 
-### Routability Ping Latency metric
+### Routability and Ping Latency
 
-New on v1.3.34: the visor must be route-able (over existing transports) and respond to pings. There is no minimum latency requirement as the measurement is relative to where it is being measured from.
+The visor must be route-able over existing transports and respond to pings. There is no minimum latency requirement, as the measurement is relative to where it is being measured from.
 
-### Transport Bandwidth Logs
+Transport latency is measured automatically when transports are established. If the initial measurement fails (e.g., due to a busy remote visor), the visor will retry with exponential backoff until a measurement succeeds or the transport is closed. Latency data is reported to the transport discovery service on transport re-registration.
 
-The visor will only produce transport bandwidth logs in response to transports being established to them. These are collected, along with the system survey, and are displayed on the reward system [here](https://fiber.skywire.dev/log-collection/tplogs)
+### Transport Bandwidth and Metrics
 
-In the future, it is anticipated that the transport bandwidth logs and ping metric will be collected by the transport discovery automatically.
+Transport bandwidth and latency metrics are collected by the transport discovery service. Each visor reports its bandwidth counters when transports are re-registered with the transport discovery. These metrics can be viewed with:
+
+```
+skywire cli tp metrics
+skywire cli tp metrics -t
+skywire cli tp metrics --tree
+```
+
+The bandwidth data from the transport discovery is used for the bandwidth pool reward distribution. Both edges of a transport must agree on the bandwidth transferred for it to be counted (verified bandwidth). This prevents any single visor from inflating its bandwidth figures.
+
+The visor also produces transport bandwidth log CSV files locally in response to transports handling traffic. These are collected hourly by the reward system along with the system survey, and are displayed [here](https://fiber.skywire.dev/log-collection/tplogs).
 
 ### Survey
 
@@ -462,6 +485,6 @@ The policy for handling rewards in the instance of a deployment outage is to rep
 
 ## Hardware
 
-As of November 2024, skywire rewards are open to all computer hardware and architectures.
+Skywire rewards are open to all computer hardware and architectures.
 
 If there is not a release for your desired architecture, we can attempt to add it, on request.

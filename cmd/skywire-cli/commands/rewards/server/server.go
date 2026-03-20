@@ -40,6 +40,12 @@ func server(e error) {
 		log.Fatal("Dmsg Discovery URL not specified")
 	}
 
+	// Set RPC_ADDR so skycoin-cli targets the explicit Skycoin mainnet node
+	if skycoinNode != "" {
+		os.Setenv("RPC_ADDR", skycoinNode) //nolint:errcheck,gosec // G104
+		fmt.Printf("Skycoin mainnet node: %s\n", skycoinNode)
+	}
+
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 	defer cancel()
 	pk, err := sk.PubKey()
@@ -421,6 +427,9 @@ func server(e error) {
 			l += navlinks
 			l += "<h1>Skywire Network Statistics</h1>"
 
+			// Transport Discovery Network Summary (on-demand cached)
+			l += renderTPDNetworkSummaryHTML()
+
 			// Uptime Tracker Version Stats
 			l += "<h2><a href='/stats/ut'>Uptime Tracker Version Statistics</a></h2>"
 			l += "<pre>"
@@ -618,6 +627,39 @@ func server(e error) {
 			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
 		})
 
+		// Per-visor bandwidth stacked chart route
+		r1.GET("/stats/visor-bandwidth", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+			c.Writer.WriteHeader(http.StatusOK)
+
+			l := "<html><head><title>Visor Bandwidth</title>"
+			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
+			l += "</head>"
+			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
+			l += "<a id='top'></a>"
+			l += navlinks
+			l += "<h1>Per-Visor Bandwidth History</h1>"
+			l += "<p>Shows daily bandwidth per visor for reward-eligible visors. Top 20 visors by total bandwidth shown individually.</p>"
+
+			histDir := filepath.Join(wd, "hist")
+			history, err := ParseHistoricBandwidthData(histDir)
+			if err != nil {
+				l += fmt.Sprintf("<p>Error loading bandwidth data: %v</p>", err)
+			} else if len(history) == 0 {
+				l += "<p>No bandwidth history data available.</p>"
+			} else {
+				chartWidth := 800
+				chartHeight := 400
+				l += GenerateVisorBandwidthChartHTML(history, chartWidth, chartHeight, 20)
+			}
+
+			l += "<br>" + htmltoplink
+			l += "</body></html>"
+
+			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+		})
+
 		r1.GET("/skycoin-rewards", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
@@ -659,23 +701,40 @@ func server(e error) {
 			l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
 			l += "<thead>\n"
 			l += "<tr>\n"
-			l += "<th style='text-align: center;'> <br> <u>RewardDate</u> </th><th style='text-align: center;'> Pool 1 <br> <u>SKY/VISOR</u> </th><th style='text-align: center;'> Pool 2 <br> <u>SKY/VISOR</u> </th><th style='text-align: center;'> Distributed <br> <u>[<span style='color: red;'>&#10060;</span>/<span style='color: green;'>&#10004;</span>]</u> </th>\n"
+			l += "<th style='text-align: center;'> <br> <u>RewardDate</u> </th><th style='text-align: center;'> Pool 1 <br> <u>SKY/Share</u> </th><th style='text-align: center;'> Pool 2 <br> </th><th style='text-align: center;'> Distributed <br> <u>[<span style='color: red;'>&#10060;</span>/<span style='color: green;'>&#10004;</span>]</u> </th>\n"
 			l += "</tr>\n"
 			l += "</thead>\n"
 			l += "<tbody>\n"
 			rewardtxncsvs, _ := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+"/hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint:errcheck,gosec
 			for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
-				skycoinpershare, _ := script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint:errcheck,gosec  //nolint:errcheck,gosec
+				statsFile := wd + "/hist/" + rewardtxncsvs[i] + "_stats.txt"
 				skycoinpershare1 := ""
 				skycoinpershare2 := ""
-				if strings.TrimSpace(skycoinpershare) == "" {
-					skycoinpershare1, _ = script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint:errcheck,gosec  //nolint:errcheck,gosec
-					skycoinpershare2, _ = script.File(wd+"/hist/"+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String() //nolint:errcheck,gosec  //nolint:errcheck,gosec
-					skycoinpershare1 = strings.TrimSpace(skycoinpershare1)
-					skycoinpershare2 = strings.TrimSpace(skycoinpershare2)
+				pool2Label := ""
+
+				// Detect reward mode from stats file
+				rewardMode, _ := script.File(statsFile).Match("reward mode: ").Replace("reward mode: ", "").String() //nolint:errcheck,gosec
+				rewardMode = strings.TrimSpace(rewardMode)
+
+				if rewardMode == "presence + bandwidth" {
+					// New bandwidth mode
+					val, _ := script.File(statsFile).Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint:errcheck,gosec
+					skycoinpershare1 = strings.TrimSpace(val)
+					val, _ = script.File(statsFile).Match("Skycoin Per GB (Pool 2): ").Replace("Skycoin Per GB (Pool 2): ", "").String() //nolint:errcheck,gosec
+					skycoinpershare2 = strings.TrimSpace(val)
+					pool2Label = " SKY/GB"
 				} else {
-					skycoinpershare1 = strings.TrimSpace(skycoinpershare)
-					skycoinpershare2 = ""
+					// Legacy mode: try single-pool first, then two-arch-pool
+					skycoinpershare, _ := script.File(statsFile).Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String() //nolint:errcheck,gosec
+					if strings.TrimSpace(skycoinpershare) == "" {
+						val, _ := script.File(statsFile).Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint:errcheck,gosec
+						skycoinpershare1 = strings.TrimSpace(val)
+						val, _ = script.File(statsFile).Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String() //nolint:errcheck,gosec
+						skycoinpershare2 = strings.TrimSpace(val)
+						pool2Label = " SKY/Share"
+					} else {
+						skycoinpershare1 = strings.TrimSpace(skycoinpershare)
+					}
 				}
 
 				var distributedIcon string
@@ -688,7 +747,7 @@ func server(e error) {
 				l += "<td style='text-align: center;'><a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a></td>\n"
 				l += "<td style='text-align: center;'>" + skycoinpershare1 + "</td>\n"
 				if skycoinpershare2 != "" {
-					l += "<td style='text-align: center;'>" + skycoinpershare2 + "</td>\n"
+					l += "<td style='text-align: center;'>" + skycoinpershare2 + pool2Label + "</td>\n"
 				} else {
 					l += "<td style='text-align: center;'></td>\n"
 				}
@@ -1123,10 +1182,12 @@ func server(e error) {
 		})
 
 		type reward struct {
-			Date string  `json:"date"`
-			One  float64 `json:"1"`
-			Two  float64 `json:"2"`
-			Sent string  `json:"sent"`
+			Date  string  `json:"date"`
+			One   float64 `json:"1"`
+			Two   float64 `json:"2"`
+			Sent  string  `json:"sent"`
+			Mode  string  `json:"mode,omitempty"`
+			Unit2 string  `json:"unit2,omitempty"`
 		}
 
 		type rewards []reward
@@ -1148,40 +1209,52 @@ func server(e error) {
 				counter++
 				var rdata reward
 				rdata.Date = rewardtxncsvs[i]
-				skycoinpershare, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String()
-				if err != nil {
-					c.Writer.WriteHeader(http.StatusInternalServerError)
-					c.Writer.Write([]byte("500 Internal Server Error #2 " + err.Error())) //nolint:errcheck,gosec
-					c.AbortWithStatus(http.StatusInternalServerError)
-					return
-				}
-				if strings.TrimSpace(skycoinpershare) == "" {
-					pool1, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String()
-					if err != nil {
-						c.Writer.WriteHeader(http.StatusInternalServerError)
-						c.Writer.Write([]byte("500 Internal Server Error #3 " + err.Error())) //nolint:errcheck,gosec
-						c.AbortWithStatus(http.StatusInternalServerError)
-						return
-					}
-					rdata.One, err = strconv.ParseFloat(strings.TrimRight(pool1, "\n"), 64)
-					if err != nil {
-						rdata.One = 0.0
-					}
-					pool2, err := script.File(wd+`/hist/`+rewardtxncsvs[i]+"_stats.txt").Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String()
-					if err != nil {
-						c.Writer.WriteHeader(http.StatusInternalServerError)
-						c.Writer.Write([]byte("500 Internal Server Error #5 " + err.Error())) //nolint:errcheck,gosec
-						c.AbortWithStatus(http.StatusInternalServerError)
-						return
-					}
-					rdata.Two, err = strconv.ParseFloat(strings.TrimRight(pool2, "\n"), 64)
-					if err != nil {
-						rdata.Two = 0.0
-					}
+				statsFile := wd + `/hist/` + rewardtxncsvs[i] + "_stats.txt"
+
+				// Detect reward mode
+				rewardMode, _ := script.File(statsFile).Match("reward mode: ").Replace("reward mode: ", "").String() //nolint:errcheck,gosec
+				rewardMode = strings.TrimSpace(rewardMode)
+
+				if rewardMode == "presence + bandwidth" {
+					rdata.Mode = "bandwidth"
+					rdata.Unit2 = "SKY/GB"
+					pool1, _ := script.File(statsFile).Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String() //nolint:errcheck,gosec
+					rdata.One, _ = strconv.ParseFloat(strings.TrimRight(pool1, "\n"), 64)                                                         //nolint:errcheck
+					pool2, _ := script.File(statsFile).Match("Skycoin Per GB (Pool 2): ").Replace("Skycoin Per GB (Pool 2): ", "").String()       //nolint:errcheck,gosec
+					rdata.Two, _ = strconv.ParseFloat(strings.TrimRight(pool2, "\n"), 64)                                                         //nolint:errcheck
 				} else {
-					rdata.One, err = strconv.ParseFloat(skycoinpershare, 64)
+					skycoinpershare, err := script.File(statsFile).Match("Skycoin Per Share: ").Replace("Skycoin Per Share: ", "").String()
 					if err != nil {
-						rdata.One = 0.0
+						c.Writer.WriteHeader(http.StatusInternalServerError)
+						c.Writer.Write([]byte("500 Internal Server Error #2 " + err.Error())) //nolint:errcheck,gosec
+						c.AbortWithStatus(http.StatusInternalServerError)
+						return
+					}
+					if strings.TrimSpace(skycoinpershare) == "" {
+						pool1, err := script.File(statsFile).Match("Skycoin Per Share (Pool 1): ").Replace("Skycoin Per Share (Pool 1): ", "").String()
+						if err != nil {
+							c.Writer.WriteHeader(http.StatusInternalServerError)
+							c.Writer.Write([]byte("500 Internal Server Error #3 " + err.Error())) //nolint:errcheck,gosec
+							c.AbortWithStatus(http.StatusInternalServerError)
+							return
+						}
+						rdata.One, err = strconv.ParseFloat(strings.TrimRight(pool1, "\n"), 64)
+						if err != nil {
+							rdata.One = 0.0
+						}
+						pool2, err := script.File(statsFile).Match("Skycoin Per Share (Pool 2): ").Replace("Skycoin Per Share (Pool 2): ", "").String()
+						if err != nil {
+							c.Writer.WriteHeader(http.StatusInternalServerError)
+							c.Writer.Write([]byte("500 Internal Server Error #5 " + err.Error())) //nolint:errcheck,gosec
+							c.AbortWithStatus(http.StatusInternalServerError)
+							return
+						}
+						rdata.Two, err = strconv.ParseFloat(strings.TrimRight(pool2, "\n"), 64)
+						if err != nil {
+							rdata.Two = 0.0
+						}
+					} else {
+						rdata.One, _ = strconv.ParseFloat(skycoinpershare, 64) //nolint:errcheck
 					}
 				}
 				//			rdata.Sent = "❌"
@@ -1240,6 +1313,33 @@ func server(e error) {
 			})
 
 		}
+		// Login chain auto-setup
+		if loginNode == "auto" {
+			addr, cleanup, err := ensureLoginChain(wd)
+			if err != nil {
+				fmt.Printf("Warning: login chain auto-setup failed: %v\n", err)
+				fmt.Println("Continuing without login chain.")
+				loginNode = ""
+			} else {
+				defer cleanup()
+				loginNode = addr
+			}
+		}
+
+		// Login routes (enabled only when loginNode is configured)
+		registerLoginRoutes(r1, wd, loginNode != "")
+
+		// Login chain node reverse proxy
+		if loginNode != "" {
+			if err := nodeHealthCheck(loginNode); err != nil {
+				fmt.Printf("Warning: login node at %s not reachable: %v\n", loginNode, err)
+				fmt.Println("Node proxy routes will be registered but may not work until the node is available.")
+			}
+			if err := registerNodeProxy(r1, loginNode); err != nil {
+				fmt.Printf("Error setting up node proxy: %v\n", err)
+			}
+		}
+
 		// Start the server using the custom Gin handler
 	}
 

@@ -584,7 +584,11 @@ func New(dataShards, parityShards int, opts ...Option) (Encoder, error) {
 	}
 
 	if codeGen /* && r.o.useAVX2 */ {
-		sz := r.dataShards * r.parityShards * 2 * 32
+		paddedDS := r.dataShards
+		if codeGenPadInputs > 1 {
+			paddedDS = ((paddedDS + codeGenPadInputs - 1) / codeGenPadInputs) * codeGenPadInputs
+		}
+		sz := paddedDS * r.parityShards * 2 * 32
 		r.mPool.New = func() any {
 			return AllocAligned(1, sz)[0]
 		}
@@ -1489,14 +1493,14 @@ func (r *reedSolomon) DecodeIdx(dst [][]byte, expectInput []bool, input [][]byte
 	}
 
 	// Check for unexpected inputs first
-	for inputIdx := 0; inputIdx < len(input); inputIdx++ {
+	for inputIdx := range input {
 		if input[inputIdx] != nil && !expectInput[inputIdx] {
 			return errors.Join(ErrInvalidInput, fmt.Errorf("unexpected input at index %d (not marked in expectInput)", inputIdx))
 		}
 	}
 
 	// Check that dst shards are not allocated for expected inputs
-	for i := 0; i < len(expectInput); i++ {
+	for i := range expectInput {
 		if expectInput[i] && dst[i] != nil {
 			return errors.Join(ErrInvalidInput, fmt.Errorf("dst[%d] should be nil (marked as input in expectInput)", i))
 		}
@@ -1548,7 +1552,7 @@ func (r *reedSolomon) DecodeIdx(dst [][]byte, expectInput []bool, input [][]byte
 	outputs := make([][]byte, 0, r.totalShards)
 	matrixRows := make([][]byte, 0, r.totalShards)
 
-	for dstIdx := 0; dstIdx < len(dst); dstIdx++ {
+	for dstIdx := range dst {
 		if dst[dstIdx] == nil {
 			continue
 		}

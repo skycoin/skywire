@@ -465,8 +465,9 @@ func (s *redisStore) visorAllKey() string {
 	return fmt.Sprintf("%s:bw:visor:all", serviceName)
 }
 
-// updateBandwidth calculates the bandwidth delta (sent + recv combined) and
-// updates per-transport and per-visor aggregation hashes in Redis.
+// updateBandwidth calculates the bandwidth delta and updates per-transport and
+// per-visor aggregation hashes in Redis. Sent and recv are tracked separately
+// per-reporter so the metrics API can reconstruct accurate per-edge bandwidth.
 // The prev snapshot is keyed per-reporter to avoid cross-contamination when both
 // edges of a transport register independently.
 func (s *redisStore) updateBandwidth(ctx context.Context, transportID string,
@@ -474,38 +475,47 @@ func (s *redisStore) updateBandwidth(ctx context.Context, transportID string,
 
 	now := time.Now().UTC()
 	reporterHex := reporterPK.Hex()
-	currentBW := currentSent + currentRecv
 
-	// 1. Get previous snapshot (per-reporter) to calculate delta
+	// 1. Get previous snapshot (per-reporter) to calculate deltas
 	prevKey := s.bandwidthPrevKey(transportID, reporterHex)
-	prevBW, err := s.client.Get(ctx, prevKey).Uint64()
+	prevResult, err := s.client.HGetAll(ctx, prevKey).Result()
 
-	var delta uint64
-	if err == nil {
-		// Previous snapshot exists — compute delta
-		if currentBW >= prevBW {
-			delta = currentBW - prevBW
+	var deltaSent, deltaRecv uint64
+	if err == nil && len(prevResult) > 0 {
+		var prevSent, prevRecv uint64
+		fmt.Sscanf(prevResult["sent"], "%d", &prevSent) //nolint:errcheck,gosec
+		fmt.Sscanf(prevResult["recv"], "%d", &prevRecv) //nolint:errcheck,gosec
+		if currentSent >= prevSent {
+			deltaSent = currentSent - prevSent
 		} else {
-			delta = currentBW // Counter reset, use full value
+			deltaSent = currentSent // Counter reset
+		}
+		if currentRecv >= prevRecv {
+			deltaRecv = currentRecv - prevRecv
+		} else {
+			deltaRecv = currentRecv // Counter reset
 		}
 	} else {
-		// First time or key expired — use full current value as delta
-		// so we don't lose bandwidth accumulated before this point
-		delta = currentBW
+		// First time or key expired — use full current values
+		deltaSent = currentSent
+		deltaRecv = currentRecv
 	}
 
 	// 2. Store current as previous for next calculation
 	// TTL of 10 minutes allows for missed re-registration cycles (every 90s)
 	pipe := s.client.Pipeline()
-	pipe.Set(ctx, prevKey, currentBW, 10*time.Minute)
+	pipe.HSet(ctx, prevKey, "sent", currentSent, "recv", currentRecv)
+	pipe.Expire(ctx, prevKey, 10*time.Minute)
 
-	// 3. Add delta to aggregations (only if we have a delta)
+	// 3. Add deltas to aggregations
+	delta := deltaSent + deltaRecv
 	if delta > 0 {
-		deltaI := int64(delta) //nolint:gosec // delta is bounded and will never exceed int64 max
-
-		// Per-transport daily aggregation
+		// Per-transport daily aggregation — store per-reporter sent/recv separately
 		dailyKey := s.bandwidthDailyKey(transportID, now)
-		pipe.HIncrBy(ctx, dailyKey, "bandwidth", deltaI)
+		pipe.HIncrBy(ctx, dailyKey, reporterHex+":sent", int64(deltaSent)) //nolint:gosec
+		pipe.HIncrBy(ctx, dailyKey, reporterHex+":recv", int64(deltaRecv)) //nolint:gosec
+		// Keep combined total for backward compatibility
+		pipe.HIncrBy(ctx, dailyKey, "bandwidth", int64(delta)) //nolint:gosec
 		pipe.HSet(ctx, dailyKey, "updated_at", now.Unix())
 		pipe.Expire(ctx, dailyKey, 35*24*time.Hour)
 
@@ -514,7 +524,7 @@ func (s *redisStore) updateBandwidth(ctx context.Context, transportID string,
 		pipe.Expire(ctx, s.visorAllKey(), 400*24*time.Hour)
 
 		vDaily := s.visorBandwidthDailyKey(reporterHex, now)
-		pipe.HIncrBy(ctx, vDaily, "bandwidth", deltaI)
+		pipe.HIncrBy(ctx, vDaily, "bandwidth", int64(delta)) //nolint:gosec
 		pipe.HSet(ctx, vDaily, "updated_at", now.Unix())
 		pipe.Expire(ctx, vDaily, 35*24*time.Hour)
 	}
@@ -1108,18 +1118,53 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		if err != nil || len(result) == 0 {
 			continue
 		}
-		var bw uint64
-		if val, ok := result["bandwidth"]; ok {
-			fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
+
+		f := filtered[bk.idx]
+		edgeAHex := f.entry.Edges[0].Hex()
+		edgeBHex := f.entry.Edges[1].Hex()
+
+		// Try to read per-reporter sent/recv fields (new format)
+		var aSent, aRecv, bSent, bRecv uint64
+		hasPerEdge := false
+		if val, ok := result[edgeAHex+":sent"]; ok {
+			fmt.Sscanf(val, "%d", &aSent) //nolint:errcheck,gosec
+			hasPerEdge = true
 		}
-		if bw > 0 {
-			halfBW := bw / 2
+		if val, ok := result[edgeAHex+":recv"]; ok {
+			fmt.Sscanf(val, "%d", &aRecv) //nolint:errcheck,gosec
+			hasPerEdge = true
+		}
+		if val, ok := result[edgeBHex+":sent"]; ok {
+			fmt.Sscanf(val, "%d", &bSent) //nolint:errcheck,gosec
+			hasPerEdge = true
+		}
+		if val, ok := result[edgeBHex+":recv"]; ok {
+			fmt.Sscanf(val, "%d", &bRecv) //nolint:errcheck,gosec
+			hasPerEdge = true
+		}
+
+		if hasPerEdge && (aSent+aRecv+bSent+bRecv) > 0 {
 			dailyMetric := DailyEdgeBandwidth{
 				Date: bk.dateStr,
-				A:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
-				B:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
+				A:    &EdgeBandwidth{Sent: aSent, Recv: aRecv},
+				B:    &EdgeBandwidth{Sent: bSent, Recv: bRecv},
 			}
 			bwByEntry[bk.idx] = append(bwByEntry[bk.idx], dailyMetric)
+		} else {
+			// Fallback for old data: split combined total equally
+			var bw uint64
+			if val, ok := result["bandwidth"]; ok {
+				fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
+			}
+			if bw > 0 {
+				halfBW := bw / 2
+				dailyMetric := DailyEdgeBandwidth{
+					Date: bk.dateStr,
+					A:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
+					B:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
+				}
+				bwByEntry[bk.idx] = append(bwByEntry[bk.idx], dailyMetric)
+			}
 		}
 	}
 

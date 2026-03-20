@@ -27,6 +27,8 @@ func OpenScsi(name string) (*ScsiDevice, error) {
 
 	// see this comment to understand why we check for deviceType
 	// https://github.com/systemd/systemd/blob/58551e6ebc465227d0add8c714f9f38213b6878a/src/udev/ata_id/ata_id.c#L324-L344
+	// The lower 5 bits of Peripheral encode the device type (SPC-4 §6.4.2).
+	// 0x00 = Direct Access Block Device (hard disk / SSD); anything else is rejected.
 	deviceType := i.Peripheral & 0x1f
 	if deviceType != 0 {
 		unix.Close(fd)
@@ -90,13 +92,13 @@ func (d *ScsiDevice) Inquiry() (*ScsiInquiry, error) {
 func scsiInquiry(fd int) (*ScsiInquiry, error) {
 	var resp ScsiInquiry
 
-	respBuf := make([]byte, 36) // 36 is the min response size
+	respBuf := make([]byte, 36) // 36 bytes is the minimum standard INQUIRY response (SPC-4 §6.4.1)
 
 	cdb := cdb6{_SCSI_INQUIRY}
 	binary.BigEndian.PutUint16(cdb[3:5], uint16(len(respBuf)))
 
 	if err := scsiSendCdb(fd, cdb[:], respBuf); err != nil {
-		return &resp, err
+		return nil, err
 	}
 
 	if err := binary.Read(bytes.NewBuffer(respBuf), binary.BigEndian, &resp); err != nil {
@@ -116,9 +118,11 @@ func scsiInquiryVpd(fd int, page uint8, respBuf []byte) error {
 func (d *ScsiDevice) SerialNumber() (string, error) {
 	buf := make([]byte, 256)
 	if err := scsiInquiryVpd(d.fd, 0x80, buf); err != nil {
-		return "", nil
+		return "", err
 	}
 
+	// buf[1] is the VPD Page Code; 0x80 is the Unit Serial Number page.
+	// Verify the device returned the page we requested.
 	if buf[1] != 0x80 {
 		return "", fmt.Errorf("invalid INQUIRY return page: %0x", buf[1])
 	}
@@ -229,6 +233,7 @@ func scsiSendCdb(fd int, cdb []byte, respBuf []byte) error {
 		return err
 	}
 
+	// SG_INFO_OK_MASK masks the low 3 bits of info; SG_INFO_OK (0) means no error.
 	if hdr.info&_SG_INFO_OK_MASK != _SG_INFO_OK {
 		return sgioError{
 			deviceStatus: uint32(hdr.status),

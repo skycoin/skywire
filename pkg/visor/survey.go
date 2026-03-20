@@ -8,10 +8,9 @@ import (
 	"strings"
 	"time"
 
-	coincipher "github.com/skycoin/skycoin/src/cipher"
-
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	visconf "github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -24,13 +23,13 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 			if err == nil || true {
 				//remove any newline from rewardAddress string
 				rewardAddress := strings.TrimSuffix(string(rewardAddressBytes), "\n")
-				// //validate the skycoin address
-				cAddr, err := coincipher.DecodeBase58Address(rewardAddress)
+				// validate the skycoin address or xpub key
+				canonical, _, err := rewardconfig.ValidateRewardAddress(rewardAddress)
 				if err != nil {
-					log.WithError(err).Warn("Invalid skycoin reward address.")
+					log.WithError(err).Warn("Invalid reward address.")
 					return
 				}
-				log.Info("Skycoin reward address: ", cAddr.String())
+				log.Info("Reward address: ", canonical)
 				//generate the system survey
 				pathutil.EnsureDir(v.conf.LocalPath) //nolint:errcheck,gosec
 				survey, err := visconf.SystemSurvey()
@@ -39,7 +38,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 					return
 				}
 				survey.PubKey = v.conf.PK
-				survey.SkycoinAddress = cAddr.String()
+				survey.SkycoinAddress = canonical
 				survey.ServicesURLs.DmsgDiscovery = v.conf.Dmsg.Discovery
 				survey.ServicesURLs.TransportDiscovery = v.conf.Transport.Discovery
 				survey.ServicesURLs.AddressResolver = v.conf.Transport.AddressResolver

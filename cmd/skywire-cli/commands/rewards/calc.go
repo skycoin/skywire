@@ -677,12 +677,12 @@ Architectures:
 				fmt.Printf("days in the year: %d\n", daysThisYear)
 				fmt.Printf("this month's rewards: %.6f\n", monthReward)
 				fmt.Printf("reward per pool: %.6f\n", dayReward)
-				fmt.Printf("reward mode: presence + bandwidth (two pools)\n")
+				fmt.Printf("reward mode: presence + bandwidth\n")
 				fmt.Printf("\n--- Presence Pool (equal shares, IP/MAC dedup) ---\n")
 				fmt.Printf("qualifying visors: %d\n", len(nodesInfos1))
 				fmt.Printf("total presence shares: %.6f\n", totalPresenceShares)
 				if totalPresenceShares > 0 {
-					fmt.Printf("skycoin per presence share: %.6f\n", dayReward/totalPresenceShares)
+					fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalPresenceShares)
 				}
 				fmt.Printf("\n--- Bandwidth Pool (proportional to bytes) ---\n")
 				fmt.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
@@ -693,7 +693,7 @@ Architectures:
 				}
 				fmt.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
 				if totalBWShares > 0 {
-					fmt.Printf("skycoin per byte: %.12f\n", dayReward/totalBWShares)
+					fmt.Printf("Skycoin Per GB (Pool 2): %.6f\n", dayReward/totalBWShares*1024*1024*1024)
 				}
 				fmt.Printf("\nUnique mac addresses: %d\n", len(uniqueMac))
 				fmt.Printf("Unique IP Addresses: %d\n", len(uniqueIP))
@@ -730,7 +730,8 @@ Architectures:
 			if !h2 {
 				fmt.Println("Skycoin Address, Reward Amount")
 				for _, skyAddrReward := range sortedSkyAddrs {
-					fmt.Printf("%s, %.6f\n", skyAddrReward.SkyAddr, skyAddrReward.Reward)
+					resolved := resolveRewardAddress(skyAddrReward.SkyAddr)
+					fmt.Printf("%s, %.6f\n", resolved, skyAddrReward.Reward)
 				}
 			}
 		} else {
@@ -810,11 +811,36 @@ Architectures:
 			if !h2 {
 				fmt.Println("Skycoin Address, Reward Amount")
 				for _, skyAddrReward := range sortedSkyAddrs {
-					fmt.Printf("%s, %.6f\n", skyAddrReward.SkyAddr, skyAddrReward.Reward)
+					resolved := resolveRewardAddress(skyAddrReward.SkyAddr)
+					fmt.Printf("%s, %.6f\n", resolved, skyAddrReward.Reward)
 				}
 			}
 		}
 	},
+}
+
+// resolveRewardAddress resolves an xpub key to the next unused skycoin address
+// using skycoin-cli. Regular addresses are returned as-is.
+func resolveRewardAddress(addr string) string {
+	if !strings.HasPrefix(addr, "xpub") {
+		return addr
+	}
+	out, err := exec.Command("skycoin-cli", "nextAddress", addr).Output() //nolint:gosec
+	if err != nil {
+		log.Warnf("Failed to derive address from xpub %s...: %v", addr[:20], err)
+		return addr // fall back to xpub string — won't be sendable but won't lose data
+	}
+	// nextAddress output format: "address: <addr>\nchild_index: <n>\npublic_key: <pk>\n"
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "address: ") {
+			resolved := strings.TrimPrefix(line, "address: ")
+			log.Infof("Resolved xpub %s... → %s", addr[:20], resolved)
+			return resolved
+		}
+	}
+	log.Warnf("Could not parse nextAddress output for xpub %s...", addr[:20])
+	return addr
 }
 
 func mustExist(path string) {
