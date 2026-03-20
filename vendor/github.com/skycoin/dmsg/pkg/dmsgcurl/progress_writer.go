@@ -19,13 +19,18 @@ func (pw *ProgressWriter) Write(p []byte) (int, error) {
 
 	current := atomic.AddInt64(&pw.Current, int64(n))
 	total := atomic.LoadInt64(&pw.Total)
-	pc := fmt.Sprintf("%d%%", current*100/total)
 
-	fmt.Printf("Downloading: %d/%dB (%s)", current, total, pc)
-	if current != total {
+	if total <= 0 {
+		fmt.Printf("Downloading: %dB", current)
 		fmt.Print("\r")
 	} else {
-		fmt.Print("\n")
+		pc := fmt.Sprintf("%d%%", current*100/total)
+		fmt.Printf("Downloading: %d/%dB (%s)", current, total, pc)
+		if current != total {
+			fmt.Print("\r")
+		} else {
+			fmt.Print("\n")
+		}
 	}
 
 	return n, nil

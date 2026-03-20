@@ -22,12 +22,6 @@ func ListenAndServe(ctx context.Context, _ cipher.SecKey, a http.Handler, _ disc
 	if err != nil {
 		return fmt.Errorf("dmsg listen on port %d: %w", dmsgPort, err)
 	}
-	go func() {
-		<-ctx.Done()
-		if err := lis.Close(); err != nil {
-			log.WithError(err).Error()
-		}
-	}()
 
 	log.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
 		Debug("Serving...")
@@ -39,5 +33,18 @@ func ListenAndServe(ctx context.Context, _ cipher.SecKey, a http.Handler, _ disc
 		Handler:           a,
 	}
 
-	return srv.Serve(lis)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			if err := srv.Shutdown(context.Background()); err != nil {
+				log.WithError(err).Error()
+			}
+		case <-done:
+		}
+	}()
+
+	err = srv.Serve(lis)
+	close(done)
+	return err
 }

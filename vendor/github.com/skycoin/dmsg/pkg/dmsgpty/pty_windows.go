@@ -106,6 +106,7 @@ func (s *Pty) Start(name string, args []string, size *WinSize, env []string) err
 	)
 
 	if err != nil {
+		pty.Close() //nolint:errcheck
 		return err
 	}
 

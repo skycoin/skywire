@@ -230,12 +230,6 @@ func writeWSError(log logrus.FieldLogger, wsConn net.Conn, err error) {
 		log.WithError(err).Error("Failed to write error msg to ws conn.")
 	}
 	logWS(wsConn, "Stopped!")
-	for {
-		if _, err := wsConn.Write([]byte("\x00")); err != nil {
-			return
-		}
-		time.Sleep(10 * time.Second)
-	}
 }
 
 func writeError(log logrus.FieldLogger, w http.ResponseWriter, r *http.Request, err error, code int) {
@@ -284,6 +278,7 @@ type wsReader struct {
 	ctx    *http.Request
 	closed bool
 	mu     sync.Mutex
+	buf    []byte // buffered remainder from previous read
 }
 
 func newWSReader(ws *websocket.Conn, ptyC *PtyClient, log logrus.FieldLogger, r *http.Request) *wsReader {
@@ -301,6 +296,16 @@ func (wr *wsReader) Read(p []byte) (int, error) {
 		if wr.closed {
 			wr.mu.Unlock()
 			return 0, io.EOF
+		}
+		// Return buffered remainder from a previous read first.
+		if len(wr.buf) > 0 {
+			n := copy(p, wr.buf)
+			wr.buf = wr.buf[n:]
+			if len(wr.buf) == 0 {
+				wr.buf = nil
+			}
+			wr.mu.Unlock()
+			return n, nil
 		}
 		wr.mu.Unlock()
 
@@ -331,8 +336,13 @@ func (wr *wsReader) Read(p []byte) (int, error) {
 			}
 		}
 
-		// Regular data - copy to output buffer
+		// Regular data - copy to output buffer, save remainder
 		n := copy(p, data)
+		if n < len(data) {
+			wr.mu.Lock()
+			wr.buf = append([]byte(nil), data[n:]...)
+			wr.mu.Unlock()
+		}
 		return n, nil
 	}
 }

@@ -100,14 +100,15 @@ func (s *Server) Close() error {
 	if s == nil {
 		return nil
 	}
+	var err error
 	s.once.Do(func() {
 		close(s.done)
 		s.wg.Wait()
+		err = s.delEntry(context.Background())
+		if err != nil {
+			s.log.Warn("Cannot delete entry from db.")
+		}
 	})
-	err := s.delEntry(context.Background())
-	if err != nil {
-		s.log.Warn("Cannot delete entry from db.")
-	}
 	return nil
 }
 
@@ -159,20 +160,21 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 
 		s.wg.Add(1)
 		go func(conn net.Conn) {
+			defer s.wg.Done()
 			defer func() {
-				err := recover()
-				if err != nil {
+				if err := recover(); err != nil {
 					log.Warnf("panic in handleSession: %+v", err)
 				}
 			}()
 			s.handleSession(conn)
-			s.wg.Done()
 		}(conn)
 	}
 }
 
 func (s *Server) startUpdateEntryLoop(ctx context.Context) error {
 	err := netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
+		s.sessionsMx.Lock()
+		defer s.sessionsMx.Unlock()
 		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions, s.authPassphrase)
 	})
 	if err != nil {

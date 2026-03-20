@@ -23,6 +23,7 @@ var (
 // Pty runs a local pty.
 type Pty struct {
 	pty *os.File
+	cmd *exec.Cmd
 	mx  sync.RWMutex
 }
 
@@ -42,6 +43,11 @@ func (s *Pty) Stop() error {
 
 	err := s.pty.Close()
 	s.pty = nil
+	// Reap the child process to avoid zombies.
+	if s.cmd != nil {
+		_ = s.cmd.Wait() //nolint:errcheck
+		s.cmd = nil
+	}
 	return err
 }
 
@@ -96,6 +102,7 @@ func (s *Pty) Start(name string, args []string, size *WinSize, env []string) err
 	}
 
 	s.pty = f
+	s.cmd = cmd
 	return nil
 }
 

@@ -51,7 +51,7 @@ type API struct {
 
 // New returns a new API object, which can be started as a server
 func New(log logrus.FieldLogger, db store.Storer, m discmetrics.Metrics, testMode, enableLoadTesting, enableMetrics bool, dmsgAddr, authPassphrase string) *API {
-	if log != nil {
+	if log == nil {
 		log = logging.MustGetLogger("dmsg_disc")
 	}
 
@@ -358,6 +358,7 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 //	json serialized entry object
 func (a *API) delEntry() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close() //nolint:errcheck
 		entry := new(disc.Entry)
 		if err := json.NewDecoder(r.Body).Decode(entry); err != nil {
 			a.handleError(w, r, disc.ErrUnexpected)
@@ -526,7 +527,11 @@ func isLoopbackAddr(addr string) (bool, error) {
 		return true, nil
 	}
 
-	return net.ParseIP(host).IsLoopback(), nil
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false, nil
+	}
+	return ip.IsLoopback(), nil
 }
 
 // writeJSON writes a json object on a http.ResponseWriter with the given code.

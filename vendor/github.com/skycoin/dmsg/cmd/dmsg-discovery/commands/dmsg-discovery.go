@@ -375,8 +375,8 @@ Example:
 		go a.RunBackgroundTasks(ctx, log)
 		log.WithField("addr", addr).Info("Serving discovery API...")
 		go func() {
-			if err = listenAndServe(addr, a); err != nil {
-				log.Errorf("ListenAndServe: %v", err)
+			if listenErr := listenAndServe(addr, a); listenErr != nil {
+				log.Errorf("ListenAndServe: %v", listenErr)
 				cancel()
 			}
 		}()
@@ -408,8 +408,8 @@ Example:
 			go updateServers(ctx, a, dClient, dmsgDC, dmsgServerType, log)
 
 			go func() {
-				if err = dmsghttp.ListenAndServe(ctx, sk, a, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, log); err != nil {
-					log.Errorf("dmsghttp.ListenAndServe: %v", err)
+				if dmsgErr := dmsghttp.ListenAndServe(ctx, sk, a, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, log); dmsgErr != nil {
+					log.Errorf("dmsghttp.ListenAndServe: %v", dmsgErr)
 					cancel()
 				}
 			}()
@@ -467,7 +467,7 @@ func getServers(ctx context.Context, a *api.API, dmsgServerType string, log logr
 		case <-ctx.Done():
 			return []*disc.Entry{}
 		case <-ticker.C:
-			getServers(ctx, a, dmsgServerType, log)
+			return getServers(ctx, a, dmsgServerType, log)
 		}
 	}
 }
