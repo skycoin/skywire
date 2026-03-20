@@ -161,12 +161,12 @@ func (api *API) ServeDmsg(ctx context.Context) error {
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
-			if errors.Is(err, dmsg.ErrEntityClosed) {
+			if errors.Is(err, dmsg.ErrEntityClosed) || ctx.Err() != nil {
 				log.Debug("Dmsg client stopped serving")
 				return nil
 			}
-			log.WithError(err).Error("Failed to accept dmsg stream")
-			return err
+			log.WithError(err).Warn("Failed to accept dmsg stream, continuing...")
+			continue
 		}
 
 		remotePK := conn.RawRemoteAddr().PK
