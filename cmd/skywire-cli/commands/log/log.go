@@ -3,6 +3,8 @@ package clilog
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -186,7 +188,11 @@ var logCmd = &cobra.Command{
 							if vver != nil && vver.LessThan(fver) {
 								download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
 							} else {
-								download(ctx, log, httpC, "node-info", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
+								// Check survey checksum before downloading — skip if unchanged
+								// Falls back to full download if visor doesn't support checksum endpoint
+								if !surveyUnchanged(ctx, log, &httpC, key) {
+									download(ctx, log, httpC, "node-info", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
+								}
 							}
 						}
 						if !surveyOnly {
@@ -250,6 +256,51 @@ var logCmd = &cobra.Command{
 
 		log.Infof("Total Process Duration: %s", time.Since(start))
 	},
+}
+
+// surveyUnchanged checks if the remote survey checksum matches the local file.
+// Returns true if checksums match (survey unchanged), false otherwise.
+// Falls back to false (re-download) on any error including 404.
+func surveyUnchanged(ctx context.Context, log *logging.Logger, httpC *http.Client, pubkey string) bool {
+	// Check if local file exists
+	localPath := pubkey + "/node-info.json"
+	localData, err := os.ReadFile(localPath) //nolint:gosec
+	if err != nil || len(localData) == 0 {
+		return false
+	}
+
+	// Compute local checksum
+	localSum := sha256.Sum256(localData)
+	localHex := hex.EncodeToString(localSum[:])
+
+	// Fetch remote checksum
+	target := fmt.Sprintf("dmsg://%s:80/node-info/checksum", pubkey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := httpC.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusOK {
+		// 404 or any other error — visor doesn't support checksum endpoint, re-download
+		return false
+	}
+
+	var result struct {
+		SHA256 string `json:"sha256"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false
+	}
+
+	if result.SHA256 == localHex {
+		log.Debugf("Survey unchanged for visor %s (checksum match)", pubkey)
+		return true
+	}
+	return false
 }
 
 func download(ctx context.Context, log *logging.Logger, httpC http.Client, targetPath, fileName, pubkey string, maxSize int64) error {

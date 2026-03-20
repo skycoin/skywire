@@ -120,6 +120,9 @@ type Routing struct {
 	// When enabled, routes are calculated locally using cached TPD data.
 	// Can be overridden at runtime with --use-rf flag.
 	CalculateRoutes bool `json:"calculate_routes,omitempty"`
+	// MuxRoutes is the number of parallel routes to establish per connection.
+	// 0 or 1 = single route (default), >1 = route multiplexing across transports.
+	MuxRoutes int `json:"mux_routes,omitempty"`
 }
 
 // UptimeTracker configures uptime tracker.

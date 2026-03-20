@@ -31,6 +31,7 @@ type SkywireNetworker struct {
 	r         router.Router
 	porter    *netutil.Porter
 	isServing int32
+	MuxRoutes int // Number of parallel mux routes per connection (0 or 1 = disabled)
 }
 
 // NewSkywireNetworker constructs skywire networker.
@@ -68,6 +69,9 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 
 	if opts == nil {
 		opts = router.DefaultDialOptions()
+	}
+	if r.MuxRoutes > 1 && opts.MuxRoutes == 0 {
+		opts.MuxRoutes = r.MuxRoutes
 	}
 
 	conn, err = r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, opts)

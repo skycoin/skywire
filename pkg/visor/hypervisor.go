@@ -21,7 +21,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
-	coincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -1354,12 +1353,12 @@ func (hv *Hypervisor) putRewardAddress() http.HandlerFunc {
 			return
 		}
 
-		_, err := coincipher.DecodeBase58Address(reqBody.RewardAddress)
+		canonical, _, err := rewardconfig.ValidateRewardAddress(reqBody.RewardAddress)
 		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
 		}
-		pConf, err := ctx.API.SetRewardAddress(reqBody.RewardAddress)
+		pConf, err := ctx.API.SetRewardAddress(canonical)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return

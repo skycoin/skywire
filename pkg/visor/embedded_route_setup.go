@@ -29,7 +29,7 @@ type EmbeddedRouteSetup struct {
 // Serve starts the route setup-node listener on DmsgSetupPort.
 // This allows other visors to connect and request route setup.
 func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
-	const timeout = 30 * time.Second
+	const timeout = 2 * time.Minute
 
 	ers.log.WithField("dmsg_port", skyenv.DmsgSetupPort).Info("Starting embedded route setup-node listener")
 	lis, err := ers.dmsgC.Listen(skyenv.DmsgSetupPort)
@@ -86,8 +86,13 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 // CreateRouteGroup creates a route group by directly calling the setup-node logic.
 // This bypasses the need to dial a remote setup-node over dmsg.
 func (ers *EmbeddedRouteSetup) CreateRouteGroup(ctx context.Context, biRt routing.BidirectionalRoute) (routing.EdgeRules, error) {
+	const timeout = 2 * time.Minute
+
 	ers.log.WithField("src", biRt.Desc.SrcPK()).WithField("dst", biRt.Desc.DstPK()).
 		Debug("Creating route group via embedded setup-node")
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	dialer := router.WrapDmsgClient(ers.dmsgC)
 	metrics := setupmetrics.NewEmpty()

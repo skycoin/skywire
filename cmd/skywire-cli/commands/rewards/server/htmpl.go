@@ -34,6 +34,7 @@ func init() {
 	nl = append(nl, "  <a href='/stats'>network stats</a>")
 	nl = append(nl, "  <a href='/stats/version-history'>version history</a>")
 	nl = append(nl, "  <a href='/stats/bandwidth-history'>bandwidth history</a>")
+	nl = append(nl, "  <a href='/stats/visor-bandwidth'>visor bandwidth</a>")
 	nl = append(nl, "  <a href='/transport-graph'>transport graph</a>")
 
 	// Log collection section
@@ -57,6 +58,7 @@ func init() {
 	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/available_servers'>available servers</a>")
 	nl = append(nl, "  </div></details>")
 
+	nl = append(nl, "  <a href='/login'>login</a>")
 	nl = append(nl, "\n<br>\n")
 	navlinks = strings.Join(nl, "")
 
@@ -117,6 +119,7 @@ var htmlMainPageTemplate = `
   <a href='/stats'>network stats</a>
   <a href='/stats/version-history'>version history</a>
   <a href='/stats/bandwidth-history'>bandwidth history</a>
+  <a href='/stats/visor-bandwidth'>visor bandwidth</a>
   <a href='/transport-graph'>transport graph</a>
   <details><summary>logs</summary><div class='dropdown'>
     <a href='/log-collection'>overview</a>
@@ -133,6 +136,7 @@ var htmlMainPageTemplate = `
     <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/all_servers'>all servers</a>
     <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available servers</a>
   </div></details>
+  <a href='/login'>login</a>
   <details><summary>community</summary><div class='dropdown'>
     <a title='@skywire telegram' href='https://t.me/skywire'>skywire telegram</a>
     <a title='@skywire_reward telegram' href='https://t.me/skywire_reward'>reward notifications</a>
