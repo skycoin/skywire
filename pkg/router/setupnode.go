@@ -86,7 +86,11 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
-			return err
+			if ctx.Err() != nil {
+				return nil
+			}
+			log.WithError(err).Warn("Failed to accept dmsg stream, continuing...")
+			continue
 		}
 		gw := &SetupRPCGateway{
 			Metrics: m,
@@ -98,7 +102,9 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 		}
 		rpcS := rpc.NewServer()
 		if err := rpcS.Register(gw); err != nil {
-			return err
+			log.WithError(err).Error("Failed to register RPC gateway")
+			conn.Close() //nolint:errcheck,gosec
+			continue
 		}
 		go rpcS.ServeConn(conn)
 	}
