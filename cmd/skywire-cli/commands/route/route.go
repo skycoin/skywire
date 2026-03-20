@@ -150,6 +150,7 @@ func init() {
 		addRuleCmd,
 		findCmd,
 		calcCmd,
+		groupsCmd,
 	)
 	addRuleCmd.PersistentFlags().DurationVarP(&keepAlive, "keep-alive", "a", router.DefaultRouteKeepAlive, "timeout for rule expiration")
 	addRuleCmd.AddCommand(
@@ -501,4 +502,42 @@ func parseUint(cmdFlags *pflag.FlagSet, name, v string, bitSize int) uint64 {
 		internal.PrintFatalError(cmdFlags, fmt.Errorf("failed to parse <%s>: %v", name, err))
 	}
 	return i
+}
+
+var groupsCmd = &cobra.Command{
+	Use:   "groups",
+	Short: "List active route groups",
+	Long:  "\n    List active route groups with their consume and forward rules",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		rgs, err := rpcClient.RouteGroups()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get route groups: %w", err))
+		}
+		if len(rgs) == 0 {
+			fmt.Println("No active route groups")
+			return
+		}
+
+		var b bytes.Buffer
+		w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
+		fmt.Fprintln(w, "index\tlocal_pk\tremote_pk\tlocal_port\tremote_port\tfwd_id\tconsume_id") //nolint:errcheck
+		for i, rg := range rgs {
+			desc := rg.FwdRule.RouteDescriptor()
+			fmt.Fprintf(w, "%d\t%s\t%s\t%d\t%d\t%d\t%d\n", //nolint:errcheck
+				i,
+				desc.SrcPK(),
+				desc.DstPK(),
+				desc.SrcPort(),
+				desc.DstPort(),
+				rg.FwdRule.KeyRouteID(),
+				rg.ConsumeRule.KeyRouteID(),
+			)
+		}
+		internal.Catch(cmd.Flags(), w.Flush())
+		internal.PrintOutput(cmd.Flags(), rgs, b.String())
+	},
 }
