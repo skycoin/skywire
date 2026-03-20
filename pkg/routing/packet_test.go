@@ -42,13 +42,29 @@ func TestMakeKeepAlivePacket(t *testing.T) {
 }
 
 func TestMakeHandshakePacket(t *testing.T) {
-	packet := MakeHandshakePacket(4, true)
-	expected := []byte{0x3, 0x0, 0x0, 0x0, 0x4, 0x0, 0x1, 0x1}
+	packet := MakeHandshakePacket(4, true, CapMux)
+	// Header: type=3, routeID=4, payloadSize=3; Payload: encrypt=1, caps=0x0001 (LE)
+	expected := []byte{0x3, 0x0, 0x0, 0x0, 0x4, 0x0, 0x3, 0x1, 0x1, 0x0}
 
 	assert.Equal(t, expected, []byte(packet))
-	assert.Equal(t, uint16(1), packet.Size())
+	assert.Equal(t, uint16(3), packet.Size())
 	assert.Equal(t, RouteID(4), packet.RouteID())
-	assert.Equal(t, []byte{0x1}, packet.Payload())
+	assert.Equal(t, CapMux, packet.HandshakeCapabilities())
+}
+
+func TestMakeHandshakePacketNoCaps(t *testing.T) {
+	packet := MakeHandshakePacket(4, true, 0)
+	assert.Equal(t, uint16(0), packet.HandshakeCapabilities())
+}
+
+func TestMakeSequencedDataPacket(t *testing.T) {
+	data := []byte("hello")
+	packet, err := MakeSequencedDataPacket(7, 42, data)
+	assert.NoError(t, err)
+	assert.Equal(t, DataPacket, packet.Type())
+	assert.Equal(t, RouteID(7), packet.RouteID())
+	assert.Equal(t, uint32(42), packet.SequenceNumber())
+	assert.Equal(t, data, packet.DataPayloadAfterSeq())
 }
 
 func TestMakePingPacket(t *testing.T) {

@@ -2,6 +2,8 @@
 package logserver
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -69,6 +71,17 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 	// This survey endpoint generates the survey as a response
 	authRoute.GET("/node-info", func(c *gin.Context) {
 		c.JSON(http.StatusOK, *survey)
+	})
+
+	// Checksum endpoint for survey — allows collectors to skip re-downloading unchanged surveys
+	authRoute.GET("/node-info/checksum", func(c *gin.Context) {
+		data, err := json.Marshal(*survey)
+		if err != nil {
+			c.Writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		sum := sha256.Sum256(data)
+		c.JSON(http.StatusOK, gin.H{"sha256": hex.EncodeToString(sum[:])})
 	})
 
 	r.GET("/health", func(c *gin.Context) {
