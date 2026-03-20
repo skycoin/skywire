@@ -1316,3 +1316,165 @@ func renderTPDBandwidthTable(metrics []tpdTransportMetric) string {
 	sb.WriteString("</tbody></table>\n")
 	return sb.String()
 }
+
+// tpdNetworkSummary holds cached network-wide TPD metrics summary.
+type tpdNetworkSummary struct {
+	TotalTransports int            `json:"total_transports"`
+	LiveTransports  int            `json:"live_transports"`
+	ByType          map[string]int `json:"by_type"`
+	TotalBandwidth  uint64         `json:"total_bandwidth"`
+	AvgLatencyMs    float64        `json:"avg_latency_ms"`
+	LatencyCount    int            `json:"latency_count"`
+	UniqueVisors    int            `json:"unique_visors"`
+	LastUpdated     string         `json:"last_updated"`
+}
+
+const tpdSummaryCacheFile = "tpd_summary.json"
+const tpdSummaryCacheMaxAge = 5 * time.Minute
+
+// getTPDNetworkSummary returns cached TPD network summary, fetching fresh data
+// only if the cache is stale (on-demand caching).
+func getTPDNetworkSummary() (*tpdNetworkSummary, error) {
+	cachePath := filepath.Join(tempStatsPath, tpdSummaryCacheFile)
+
+	// Check if cache is fresh
+	info, err := os.Stat(cachePath)
+	if err == nil && time.Since(info.ModTime()) <= tpdSummaryCacheMaxAge {
+		data, err := os.ReadFile(cachePath) //nolint:gosec
+		if err == nil {
+			var summary tpdNetworkSummary
+			if json.Unmarshal(data, &summary) == nil {
+				return &summary, nil
+			}
+		}
+	}
+
+	// Cache is stale or missing — fetch fresh data
+	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
+	url := fmt.Sprintf("%s/metrics?days=1&bandwidth=true&latency=true&edges=true", tpdURL)
+
+	resp, err := http.Get(url) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("TPD request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("TPD returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read TPD response: %w", err)
+	}
+
+	var metrics []struct {
+		ID      string   `json:"id"`
+		Type    string   `json:"type"`
+		Live    bool     `json:"live"`
+		Edges   []string `json:"edges,omitempty"`
+		Latency *struct {
+			Avg int64 `json:"avg"`
+		} `json:"latency,omitempty"`
+		Daily []struct {
+			A *struct {
+				Sent uint64 `json:"sent"`
+				Recv uint64 `json:"recv"`
+			} `json:"a,omitempty"`
+			B *struct {
+				Sent uint64 `json:"sent"`
+				Recv uint64 `json:"recv"`
+			} `json:"b,omitempty"`
+		} `json:"daily"`
+	}
+	if err := json.Unmarshal(body, &metrics); err != nil {
+		return nil, fmt.Errorf("failed to parse TPD metrics: %w", err)
+	}
+
+	// Compute summary
+	summary := &tpdNetworkSummary{
+		TotalTransports: len(metrics),
+		ByType:          make(map[string]int),
+		LastUpdated:     time.Now().UTC().Format(time.RFC3339),
+	}
+
+	visors := make(map[string]bool)
+	var latencySum float64
+
+	for _, m := range metrics {
+		summary.ByType[m.Type]++
+		if m.Live {
+			summary.LiveTransports++
+		}
+		for _, edge := range m.Edges {
+			visors[edge] = true
+		}
+		if m.Latency != nil && m.Latency.Avg > 0 {
+			latencySum += float64(m.Latency.Avg) / 1000.0 // microseconds to ms
+			summary.LatencyCount++
+		}
+		for _, daily := range m.Daily {
+			if daily.A != nil && daily.B != nil {
+				aToB := daily.A.Sent
+				if daily.B.Recv < aToB {
+					aToB = daily.B.Recv
+				}
+				bToA := daily.A.Recv
+				if daily.B.Sent < bToA {
+					bToA = daily.B.Sent
+				}
+				summary.TotalBandwidth += aToB + bToA
+			} else if daily.A != nil {
+				summary.TotalBandwidth += daily.A.Sent + daily.A.Recv
+			} else if daily.B != nil {
+				summary.TotalBandwidth += daily.B.Sent + daily.B.Recv
+			}
+		}
+	}
+
+	summary.UniqueVisors = len(visors)
+	if summary.LatencyCount > 0 {
+		summary.AvgLatencyMs = latencySum / float64(summary.LatencyCount)
+	}
+
+	// Write to cache
+	cacheData, err := json.MarshalIndent(summary, "", "  ")
+	if err == nil {
+		os.WriteFile(cachePath, cacheData, 0600) //nolint:errcheck,gosec
+	}
+
+	return summary, nil
+}
+
+// renderTPDNetworkSummaryHTML renders the TPD network summary as HTML.
+func renderTPDNetworkSummaryHTML() string {
+	summary, err := getTPDNetworkSummary()
+	if err != nil {
+		return fmt.Sprintf("<p style='color: #FF6384;'>Error fetching TPD network summary: %v</p>", err)
+	}
+
+	l := "<h2>Transport Discovery Network Summary</h2>"
+	l += "<pre>"
+	l += fmt.Sprintf("Total Transports:  %d (%d live)\n", summary.TotalTransports, summary.LiveTransports)
+	l += fmt.Sprintf("Unique Visors:     %d\n", summary.UniqueVisors)
+
+	// Transport counts by type
+	l += "Transports by Type:\n"
+	for tpType, count := range summary.ByType {
+		l += fmt.Sprintf("  %-8s %d\n", tpType, count)
+	}
+
+	// Bandwidth
+	l += fmt.Sprintf("Network Bandwidth: %s (verified, 1 day)\n", formatBytesChart(summary.TotalBandwidth))
+
+	// Latency
+	if summary.LatencyCount > 0 {
+		l += fmt.Sprintf("Avg Latency:       %.1fms (across %d transports with data)\n", summary.AvgLatencyMs, summary.LatencyCount)
+	} else {
+		l += "Avg Latency:       no data\n"
+	}
+
+	l += "</pre>"
+	l += fmt.Sprintf("<p style='color: #888; font-size: 0.8em;'>Last updated: %s</p>", summary.LastUpdated)
+	return l
+}

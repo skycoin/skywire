@@ -427,6 +427,9 @@ func server(e error) {
 			l += navlinks
 			l += "<h1>Skywire Network Statistics</h1>"
 
+			// Transport Discovery Network Summary (on-demand cached)
+			l += renderTPDNetworkSummaryHTML()
+
 			// Uptime Tracker Version Stats
 			l += "<h2><a href='/stats/ut'>Uptime Tracker Version Statistics</a></h2>"
 			l += "<pre>"
