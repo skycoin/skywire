@@ -2924,20 +2924,32 @@ func (v *Visor) RouteGroups() ([]RouteGroupInfo, error) {
 
 	rules := v.router.Rules()
 	for _, consumeRule := range rules {
-		if consumeRule.Type() != routing.RuleReverse {
+		if consumeRule == nil || consumeRule.Type() != routing.RuleReverse {
 			continue
 		}
 
 		fwdRID := consumeRule.NextRouteID()
 		fwdRule, err := v.router.Rule(fwdRID)
-		if err != nil {
+		if err != nil || fwdRule == nil {
 			continue // forward rule may have been GC'd
 		}
 
-		routegroups = append(routegroups, RouteGroupInfo{
-			ConsumeRule: consumeRule,
-			FwdRule:     fwdRule,
-		})
+		desc := consumeRule.RouteDescriptor()
+		info := RouteGroupInfo{
+			ConsumeRuleID: consumeRule.KeyRouteID(),
+			FwdRuleID:     fwdRule.KeyRouteID(),
+			Desc: routing.RouteDescriptorFields{
+				DstPK:   desc.DstPK(),
+				SrcPK:   desc.SrcPK(),
+				DstPort: desc.DstPort(),
+				SrcPort: desc.SrcPort(),
+			},
+		}
+		if fwdRule.Summary() != nil && fwdRule.Summary().ForwardFields != nil {
+			info.FwdNextTpID = fwdRule.Summary().ForwardFields.NextTID.String()
+		}
+
+		routegroups = append(routegroups, info)
 	}
 
 	return routegroups, nil
