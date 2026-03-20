@@ -1219,12 +1219,7 @@ type routeGroupResp struct {
 }
 
 func makeRouteGroupResp(info RouteGroupInfo) routeGroupResp {
-	return routeGroupResp{
-		ConsumeRuleID: info.ConsumeRuleID,
-		FwdRuleID:     info.FwdRuleID,
-		Desc:          info.Desc,
-		FwdNextTpID:   info.FwdNextTpID,
-	}
+	return routeGroupResp(info)
 }
 
 func (hv *Hypervisor) getRouteGroups() http.HandlerFunc {

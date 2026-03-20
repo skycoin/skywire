@@ -2934,7 +2934,7 @@ func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 		func() {
 			defer func() { recover() }() //nolint:errcheck
 
-			if consumeRule == nil || len(consumeRule) == 0 || consumeRule.Type() != routing.RuleReverse {
+			if len(consumeRule) == 0 || consumeRule.Type() != routing.RuleReverse {
 				return
 			}
 
