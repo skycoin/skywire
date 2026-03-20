@@ -167,7 +167,7 @@ github.com/Microsoft/go-winio/pkg/guid
 # github.com/NYTimes/gziphandler v1.1.1
 ## explicit; go 1.11
 github.com/NYTimes/gziphandler
-# github.com/VictoriaMetrics/metrics v1.41.2
+# github.com/VictoriaMetrics/metrics v1.42.0
 ## explicit; go 1.24.0
 github.com/VictoriaMetrics/metrics
 # github.com/VividCortex/ewma v1.2.0
@@ -213,8 +213,8 @@ github.com/alecthomas/chroma/styles
 github.com/alecthomas/chroma/v2
 github.com/alecthomas/chroma/v2/formatters/html
 github.com/alecthomas/chroma/v2/lexers
-# github.com/anatol/smart.go v0.0.0-20260213010714-b8c428e1f7f2
-## explicit; go 1.25.0
+# github.com/anatol/smart.go v0.0.0-20260314002218-4abf60ecc43c
+## explicit; go 1.26
 github.com/anatol/smart.go
 # github.com/anthonynsimon/bild v0.14.0
 ## explicit; go 1.21
@@ -308,8 +308,8 @@ github.com/charmbracelet/bubbles/viewport
 # github.com/charmbracelet/bubbletea v1.3.10
 ## explicit; go 1.24.0
 github.com/charmbracelet/bubbletea
-# github.com/charmbracelet/colorprofile v0.4.2
-## explicit; go 1.24.2
+# github.com/charmbracelet/colorprofile v0.4.3
+## explicit; go 1.25.0
 github.com/charmbracelet/colorprofile
 # github.com/charmbracelet/lipgloss v1.1.0
 ## explicit; go 1.18
@@ -454,8 +454,8 @@ github.com/ericchiang/css
 # github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f
 ## explicit; go 1.16
 github.com/erikgeiser/coninput
-# github.com/fatih/color v1.18.0
-## explicit; go 1.17
+# github.com/fatih/color v1.19.0
+## explicit; go 1.25.0
 github.com/fatih/color
 # github.com/felixge/httpsnoop v1.0.4
 ## explicit; go 1.13
@@ -476,14 +476,13 @@ github.com/gabriel-vasile/mimetype/internal/scan
 # github.com/gdamore/encoding v1.0.1
 ## explicit; go 1.9
 github.com/gdamore/encoding
-# github.com/gdamore/tcell/v2 v2.8.1
-## explicit; go 1.12
+# github.com/gdamore/tcell/v2 v2.13.8
+## explicit; go 1.24.0
 github.com/gdamore/tcell/v2
 github.com/gdamore/tcell/v2/terminfo
 github.com/gdamore/tcell/v2/terminfo/a/aixterm
 github.com/gdamore/tcell/v2/terminfo/a/alacritty
 github.com/gdamore/tcell/v2/terminfo/a/ansi
-github.com/gdamore/tcell/v2/terminfo/b/beterm
 github.com/gdamore/tcell/v2/terminfo/base
 github.com/gdamore/tcell/v2/terminfo/c/cygwin
 github.com/gdamore/tcell/v2/terminfo/d/dtterm
@@ -492,7 +491,6 @@ github.com/gdamore/tcell/v2/terminfo/e/emacs
 github.com/gdamore/tcell/v2/terminfo/extended
 github.com/gdamore/tcell/v2/terminfo/f/foot
 github.com/gdamore/tcell/v2/terminfo/g/gnome
-github.com/gdamore/tcell/v2/terminfo/h/hpterm
 github.com/gdamore/tcell/v2/terminfo/k/konsole
 github.com/gdamore/tcell/v2/terminfo/k/kterm
 github.com/gdamore/tcell/v2/terminfo/l/linux
@@ -508,10 +506,6 @@ github.com/gdamore/tcell/v2/terminfo/v/vt220
 github.com/gdamore/tcell/v2/terminfo/v/vt320
 github.com/gdamore/tcell/v2/terminfo/v/vt400
 github.com/gdamore/tcell/v2/terminfo/v/vt420
-github.com/gdamore/tcell/v2/terminfo/v/vt52
-github.com/gdamore/tcell/v2/terminfo/w/wy50
-github.com/gdamore/tcell/v2/terminfo/w/wy60
-github.com/gdamore/tcell/v2/terminfo/w/wy99_ansi
 github.com/gdamore/tcell/v2/terminfo/x/xfce
 github.com/gdamore/tcell/v2/terminfo/x/xterm
 github.com/gdamore/tcell/v2/terminfo/x/xterm_ghostty
@@ -551,7 +545,7 @@ github.com/go-chi/cors
 # github.com/go-chi/httprate v0.15.0
 ## explicit; go 1.23.0
 github.com/go-chi/httprate
-# github.com/go-echarts/go-echarts/v2 v2.7.0
+# github.com/go-echarts/go-echarts/v2 v2.7.1
 ## explicit; go 1.18
 github.com/go-echarts/go-echarts/v2/charts
 github.com/go-echarts/go-echarts/v2/datasets
@@ -815,8 +809,8 @@ github.com/json-iterator/go
 # github.com/klauspost/cpuid/v2 v2.3.0
 ## explicit; go 1.22
 github.com/klauspost/cpuid/v2
-# github.com/klauspost/reedsolomon v1.13.2
-## explicit; go 1.23
+# github.com/klauspost/reedsolomon v1.13.3
+## explicit; go 1.24
 github.com/klauspost/reedsolomon
 # github.com/kyokomi/emoji/v2 v2.2.13
 ## explicit; go 1.14
@@ -825,14 +819,17 @@ github.com/kyokomi/emoji/v2
 ## explicit; go 1.18
 github.com/leodido/go-urn
 github.com/leodido/go-urn/scim/schema
-# github.com/lib/pq v1.11.2
+# github.com/lib/pq v1.12.0
 ## explicit; go 1.21
 github.com/lib/pq
 github.com/lib/pq/internal/pgpass
+github.com/lib/pq/internal/pgservice
 github.com/lib/pq/internal/pqsql
+github.com/lib/pq/internal/pqtime
 github.com/lib/pq/internal/pqutil
 github.com/lib/pq/internal/proto
 github.com/lib/pq/oid
+github.com/lib/pq/pqerror
 github.com/lib/pq/scram
 # github.com/lithammer/fuzzysearch v1.1.8
 ## explicit; go 1.15
@@ -852,7 +849,7 @@ github.com/mattn/go-isatty
 # github.com/mattn/go-localereader v0.0.1
 ## explicit
 github.com/mattn/go-localereader
-# github.com/mattn/go-runewidth v0.0.20
+# github.com/mattn/go-runewidth v0.0.21
 ## explicit; go 1.20
 github.com/mattn/go-runewidth
 # github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
@@ -977,8 +974,8 @@ github.com/rs/cors/internal
 ## explicit; go 1.23.0
 github.com/sagikazarmark/locafero
 github.com/sagikazarmark/locafero/internal/queue
-# github.com/sergi/go-diff v1.2.0
-## explicit; go 1.12
+# github.com/sergi/go-diff v1.4.0
+## explicit; go 1.13
 github.com/sergi/go-diff/diffmatchpatch
 # github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0
 ## explicit
@@ -993,7 +990,7 @@ github.com/shirou/gopsutil/v3/internal/common
 github.com/shirou/gopsutil/v3/mem
 github.com/shirou/gopsutil/v3/net
 github.com/shirou/gopsutil/v3/process
-# github.com/shoenig/go-m1cpu v0.1.7
+# github.com/shoenig/go-m1cpu v0.2.1
 ## explicit; go 1.20
 github.com/shoenig/go-m1cpu
 # github.com/shopspring/decimal v1.4.0
@@ -1049,7 +1046,7 @@ github.com/skycoin/hardware-wallet/firmware
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.4-0.20260318005924-e381a501582c
+# github.com/skycoin/skycoin v0.28.4-0.20260320140017-42c2cdc1efbe
 ## explicit; go 1.25.6
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/hardware-wallet/commands
@@ -1232,7 +1229,7 @@ github.com/xo/terminfo
 github.com/xtaci/kcp-go
 # github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
 ## explicit; go 1.13
-# github.com/xtaci/smux v1.5.56
+# github.com/xtaci/smux v1.5.57
 ## explicit; go 1.18
 github.com/xtaci/smux
 # github.com/xxxserxxx/gotop/v4 v4.2.1-0.20250927202203-54213c890e66
@@ -1248,7 +1245,7 @@ github.com/xxxserxxx/gotop/v4/widgets
 # github.com/xxxserxxx/lingo/v2 v2.0.1
 ## explicit; go 1.16
 github.com/xxxserxxx/lingo/v2
-# github.com/yuin/goldmark v1.7.16
+# github.com/yuin/goldmark v1.7.17
 ## explicit; go 1.22
 github.com/yuin/goldmark
 github.com/yuin/goldmark/ast
@@ -1347,11 +1344,11 @@ golang.org/x/crypto/sha3
 golang.org/x/crypto/tea
 golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
-# golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa
+# golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
 ## explicit; go 1.25.0
 golang.org/x/exp/maps
-# golang.org/x/image v0.36.0
-## explicit; go 1.24.0
+# golang.org/x/image v0.37.0
+## explicit; go 1.25.0
 golang.org/x/image/bmp
 golang.org/x/image/ccitt
 golang.org/x/image/draw
@@ -1363,8 +1360,8 @@ golang.org/x/image/tiff/lzw
 golang.org/x/image/vp8
 golang.org/x/image/vp8l
 golang.org/x/image/webp
-# golang.org/x/mod v0.33.0
-## explicit; go 1.24.0
+# golang.org/x/mod v0.34.0
+## explicit; go 1.25.0
 golang.org/x/mod/semver
 # golang.org/x/net v0.52.0
 ## explicit; go 1.25.0
@@ -1429,11 +1426,11 @@ golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 golang.org/x/text/width
-# golang.org/x/time v0.14.0
-## explicit; go 1.24.0
+# golang.org/x/time v0.15.0
+## explicit; go 1.25.0
 golang.org/x/time/rate
-# golang.org/x/tools v0.42.0
-## explicit; go 1.24.0
+# golang.org/x/tools v0.43.0
+## explicit; go 1.25.0
 golang.org/x/tools/go/ast/edge
 golang.org/x/tools/go/ast/inspector
 golang.org/x/tools/go/gcexportdata
@@ -1464,10 +1461,10 @@ golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
 # google.golang.org/genproto/googleapis/api v0.0.0-20260217215200-42d3e9bedb6d
 ## explicit; go 1.25.0
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20260319201613-d00831a3d3e7
 ## explicit; go 1.25.0
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.79.1
+# google.golang.org/grpc v1.79.3
 ## explicit; go 1.24.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes

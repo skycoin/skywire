@@ -91,10 +91,17 @@ This is designed to be run hourly by the reward service.`,
 
 		tpLog.Infof("Fetched transport stats for %d visors", len(stats))
 
-		// Filter visors with sufficient transports
+		// Filter visors with sufficient p2p transports (excluding dmsg)
+		// Only count transport types that represent direct peer-to-peer connections
 		var qualifying []string
 		for pk, counts := range stats {
-			if total, ok := counts["total"]; ok && total >= minTp {
+			p2pCount := 0
+			for tpType, count := range counts {
+				if tpType != "total" && tpType != "dmsg" {
+					p2pCount += count
+				}
+			}
+			if p2pCount >= minTp {
 				qualifying = append(qualifying, pk)
 			}
 		}
@@ -379,14 +386,13 @@ func fetchVisorBandwidthFromTPD(bwLog *logging.Logger, pkIPMap map[string]string
 			continue
 		}
 
-		// Calculate total bandwidth for this transport
+		// Calculate agreed bandwidth for this transport
+		// Use the minimum of what both edges report: min(A.Sent, B.Recv) + min(A.Recv, B.Sent)
+		// This ensures only bandwidth that both sides agree on is counted
 		var tpBW uint64
 		for _, d := range tp.Daily {
-			if d.A != nil {
-				tpBW += d.A.Sent + d.A.Recv
-			}
-			if d.B != nil {
-				tpBW += d.B.Sent + d.B.Recv
+			if d.A != nil && d.B != nil {
+				tpBW += minUint64(d.A.Sent, d.B.Recv) + minUint64(d.A.Recv, d.B.Sent)
 			}
 		}
 		if tpBW == 0 {
@@ -423,6 +429,13 @@ func fetchVisorBandwidthFromTPD(bwLog *logging.Logger, pkIPMap map[string]string
 	}
 
 	return result, nil
+}
+
+func minUint64(a, b uint64) uint64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // formatBytes converts bytes to a human-readable string
