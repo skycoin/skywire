@@ -139,6 +139,9 @@ type RouteGroup struct {
 	tpIndex    uint32         // round-robin index for transport selection (atomic)
 	reorderBuf *reorderBuffer // reorder buffer for incoming sequenced packets
 
+	// Adaptive transport weighting
+	tpSelector *transportSelector // weighted transport selection based on latency
+
 	// SACK retransmission fields
 	sackEnabled bool         // true when both peers advertised CapSACK
 	sackTracker *sackTracker // receiver: tracks received seqs for SACK generation
@@ -172,6 +175,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		handshakeProcessed: make(chan struct{}),
 		networkStats:       newNetworkStats(),
 		reorderBuf:         newReorderBuffer(64),
+		tpSelector:         newTransportSelector(),
 		sackTracker:        newSACKTracker(),
 		retxBuf:            newRetxBuffer(128),
 	}
@@ -447,8 +451,9 @@ func (rg *RouteGroup) rule() (routing.Rule, error) {
 }
 
 // nextTransport selects the next transport/rule pair. When mux is enabled and
-// multiple transports exist, uses round-robin. Otherwise returns index 0
-// (legacy single-transport behavior).
+// multiple transports exist, uses latency-weighted selection. Falls back to
+// round-robin when latency data is unavailable, and to index 0 for single
+// transport (legacy behavior).
 // NOTE: not thread-safe, caller must hold rg.mu.
 func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule, error) {
 	if len(rg.tps) == 0 {
@@ -468,6 +473,18 @@ func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule
 		return rg.tps[0], rg.fwd[0], nil
 	}
 
+	// Use weighted selector if available
+	if rg.tpSelector != nil && rg.tpSelector.Len() > 0 {
+		idx := rg.tpSelector.Select()
+		if idx < len(rg.tps) {
+			tp := rg.tps[idx]
+			if tp != nil && !tp.IsClosed() {
+				return tp, rg.fwd[idx], nil
+			}
+		}
+	}
+
+	// Fallback: round-robin with skip-dead
 	n := uint32(len(rg.tps))
 	start := atomic.AddUint32(&rg.tpIndex, 1) - 1
 	for i := uint32(0); i < n; i++ {
@@ -664,6 +681,13 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 		rg.logger.Warnf("Failed to send keepalive: %v", err)
 	} else {
 		atomic.StoreInt32(&rg.consecutiveWriteFailures, 0)
+	}
+
+	// Rebuild transport weights based on current latency measurements
+	if rg.muxEnabled && rg.tpSelector != nil && len(rg.tps) > 1 {
+		rg.mu.Lock()
+		rg.tpSelector.Rebuild(rg.tps)
+		rg.mu.Unlock()
 	}
 }
 
@@ -1175,8 +1199,12 @@ func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.M
 
 	rg.fwd = append(rg.fwd, forward)
 	rg.rvs = append(rg.rvs, reverse)
-
 	rg.tps = append(rg.tps, tp)
+
+	// Rebuild transport weights when transports change
+	if rg.tpSelector != nil && len(rg.tps) > 1 {
+		rg.tpSelector.Rebuild(rg.tps)
+	}
 }
 
 func chanClosed(ch chan struct{}) bool {
