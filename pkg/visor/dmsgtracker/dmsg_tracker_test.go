@@ -39,26 +39,30 @@ func TestDmsgTracker_Update(t *testing.T) {
 	cT, err := env.NewClient(&conf)
 	require.NoError(t, err)
 
-	// Retry tracker creation and update to handle transient dmsg session timing
-	// in CI environments. The single-server test environment can have brief
-	// connectivity gaps during session setup.
+	// Retry tracker creation and update to handle transient dmsg session
+	// timing in CI environments (especially macOS). Use a per-attempt
+	// context timeout to avoid blocking on the 20s handshake timeout.
 	var dt *DmsgTracker
-	for i := 0; i < 3; i++ {
-		dt, err = newDmsgTracker(context.TODO(), cT, cL.LocalPK())
+	for i := 0; i < 5; i++ {
+		attemptCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		dt, err = newDmsgTracker(attemptCtx, cT, cL.LocalPK())
+		cancel()
 		if err == nil {
 			break
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
 	}
 	require.NoError(t, err)
 
 	// act: attempt update with retry
-	for i := 0; i < 3; i++ {
-		err = dt.Update(context.TODO())
+	for i := 0; i < 5; i++ {
+		attemptCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		err = dt.Update(attemptCtx)
+		cancel()
 		if err == nil {
 			break
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
 	}
 	assert.NoError(t, err)
 
