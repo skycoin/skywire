@@ -120,7 +120,7 @@ func init() {
 					return nil
 				}
 				for _, pk := range list {
-					fmt.Fprintln(out, "  -", pk.Hex())
+					fmt.Fprintln(out, "  -", pk.Hex()) //nolint:errcheck
 				}
 				return nil
 			},
@@ -240,7 +240,7 @@ func init() {
 				if addr == "" {
 					fmt.Fprintln(out, "  doesn't listen") //nolint:errcheck
 				} else {
-					fmt.Fprintln(out, " "+addr)
+					fmt.Fprintln(out, " "+addr) //nolint:errcheck
 				}
 				return nil
 			},
@@ -334,7 +334,7 @@ func init() {
 				if addr == "" {
 					fmt.Fprintln(out, "  doesn't listen") //nolint:errcheck
 				} else {
-					fmt.Fprintln(out, " "+addr)
+					fmt.Fprintln(out, " "+addr) //nolint:errcheck
 				}
 				return nil
 			},
@@ -459,7 +459,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				fmt.Fprintln(out, " ", tree)
+				fmt.Fprintln(out, " ", tree) //nolint:errcheck
 				return nil
 			},
 		},
@@ -687,7 +687,7 @@ func execListFeeds(r *node.RPCClient) error {
 		return nil
 	}
 	for _, pk := range list {
-		fmt.Fprintln(out, "  -", pk.Hex())
+		fmt.Fprintln(out, "  -", pk.Hex()) //nolint:errcheck
 	}
 	return nil
 }
@@ -756,7 +756,7 @@ func execTCPAddress(r *node.RPCClient) error {
 	if addr == "" {
 		fmt.Fprintln(out, "  doesn't listen") //nolint:errcheck
 	} else {
-		fmt.Fprintln(out, " "+addr)
+		fmt.Fprintln(out, " "+addr) //nolint:errcheck
 	}
 	return nil
 }
@@ -805,7 +805,7 @@ func execUDPAddress(r *node.RPCClient) error {
 	if addr == "" {
 		fmt.Fprintln(out, "  doesn't listen") //nolint:errcheck
 	} else {
-		fmt.Fprintln(out, " "+addr)
+		fmt.Fprintln(out, " "+addr) //nolint:errcheck
 	}
 	return nil
 }
@@ -879,7 +879,7 @@ func execRootTree(r *node.RPCClient, parts []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(out, " ", tree)
+	fmt.Fprintln(out, " ", tree) //nolint:errcheck
 	return nil
 }
 
@@ -929,7 +929,7 @@ func printConnections(cs []string) {
 		return
 	}
 	for _, c := range cs {
-		fmt.Fprintln(out, " ", c)
+		fmt.Fprintln(out, " ", c) //nolint:errcheck
 	}
 }
 
@@ -974,32 +974,32 @@ func round(f float64) string {
 }
 
 func printStat(s *node.Stat) {
-	fmt.Fprintln(out, "  average filling duration:       ", s.Fillavg)
+	fmt.Fprintln(out, "  average filling duration:       ", s.Fillavg) //nolint:errcheck
 
-	fmt.Fprintln(out, "  CXDS RPS:                       ", round(s.CXDS.RPS))
-	fmt.Fprintln(out, "  CXDS WPS:                       ", round(s.CXDS.WPS))
+	fmt.Fprintln(out, "  CXDS RPS:                       ", round(s.CXDS.RPS)) //nolint:errcheck
+	fmt.Fprintln(out, "  CXDS WPS:                       ", round(s.CXDS.WPS)) //nolint:errcheck
 
-	fmt.Fprintln(out, "  cache RPS:                      ", round(s.Cache.RPS))
-	fmt.Fprintln(out, "  cache WPS:                      ", round(s.Cache.WPS))
+	fmt.Fprintln(out, "  cache RPS:                      ", round(s.Cache.RPS)) //nolint:errcheck
+	fmt.Fprintln(out, "  cache WPS:                      ", round(s.Cache.WPS)) //nolint:errcheck
 
-	fmt.Fprintln(out, "  average cache cleaning duration:", s.CacheCleaning)
+	fmt.Fprintln(out, "  average cache cleaning duration:", s.CacheCleaning) //nolint:errcheck
 
-	fmt.Fprintln(out, "  amount of cached objects:       ",
+	fmt.Fprintln(out, "  amount of cached objects:       ", //nolint:errcheck
 		s.CacheObjects.Amount.String())
-	fmt.Fprintln(out, "  volume of cached objects:       ",
+	fmt.Fprintln(out, "  volume of cached objects:       ", //nolint:errcheck
 		s.CacheObjects.Volume.String())
 
-	fmt.Fprintln(out, "  amount of all objects:          ",
+	fmt.Fprintln(out, "  amount of all objects:          ", //nolint:errcheck
 		s.AllObjects.Amount.String())
-	fmt.Fprintln(out, "  volume of all objects:          ",
+	fmt.Fprintln(out, "  volume of all objects:          ", //nolint:errcheck
 		s.AllObjects.Volume.String())
 
-	fmt.Fprintln(out, "  amount of used objects:         ",
+	fmt.Fprintln(out, "  amount of used objects:         ", //nolint:errcheck
 		s.UsedObjects.Amount.String())
-	fmt.Fprintln(out, "  volume of used objects:         ",
+	fmt.Fprintln(out, "  volume of used objects:         ", //nolint:errcheck
 		s.UsedObjects.Volume.String())
 
-	fmt.Fprintln(out, "  new Root objects per second:    ", s.RootsPerSecond)
+	fmt.Fprintln(out, "  new Root objects per second:    ", s.RootsPerSecond) //nolint:errcheck
 
 	if len(s.Feeds) == 0 {
 		fmt.Fprintln(out, "  no feeds") //nolint:errcheck
@@ -1007,7 +1007,7 @@ func printStat(s *node.Stat) {
 	}
 
 	for pk, fs := range s.Feeds {
-		fmt.Fprintln(out, " ", pk.Hex())
+		fmt.Fprintln(out, " ", pk.Hex()) //nolint:errcheck
 
 		if len(fs.Heads) == 0 {
 			fmt.Fprintln(out, "    no heads") //nolint:errcheck
@@ -1015,7 +1015,7 @@ func printStat(s *node.Stat) {
 		}
 
 		for nonce, hs := range fs.Heads {
-			fmt.Fprintln(out, "    ", nonce)
+			fmt.Fprintln(out, "    ", nonce) //nolint:errcheck
 
 			switch hs.Len {
 			case 0:
@@ -1034,9 +1034,9 @@ func printStat(s *node.Stat) {
 }
 
 func printRootStat(rs skyobject.RootStat) {
-	fmt.Fprintln(out, "      hash:", rs.Hash.Hex())
-	fmt.Fprintln(out, "      time:", rs.Time)
-	fmt.Fprintln(out, "      seq: ", rs.Seq)
+	fmt.Fprintln(out, "      hash:", rs.Hash.Hex()) //nolint:errcheck
+	fmt.Fprintln(out, "      time:", rs.Time) //nolint:errcheck
+	fmt.Fprintln(out, "      seq: ", rs.Seq) //nolint:errcheck
 }
 
 func printInteractiveHelp() {
