@@ -1808,6 +1808,31 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 	}
 	r.mx.Unlock()
 
+	// Handle ping/latency probe routes (port 46) directly without going through
+	// the accept channel. These are ephemeral routes from other visors measuring
+	// transport latency — they don't need to be delivered to any application.
+	// Processing them in-line prevents them from blocking application routes
+	// (proxy, VPN) in the accept queue, where each route blocks for up to the
+	// handshake timeout (30s).
+	if rules.Desc.DstPort() == routing.Port(skyenv.LatencyProbePort) || rules.Desc.SrcPort() == routing.Port(skyenv.LatencyProbePort) {
+		go func() {
+			nsConf := noise.Config{
+				LocalPK:   r.conf.PubKey,
+				LocalSK:   r.conf.SecKey,
+				RemotePK:  rules.Desc.SrcPK(),
+				Initiator: false,
+			}
+			nrg, err := r.saveRouteGroupRules(context.Background(), rules, nsConf)
+			if err != nil {
+				r.logger.WithError(err).Debug("Failed to setup ping route group (non-blocking)")
+				r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+				return
+			}
+			nrg.rg.startOffServiceLoops()
+		}()
+		return nil
+	}
+
 	select {
 	case <-r.done:
 		return io.ErrClosedPipe
