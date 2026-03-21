@@ -9,6 +9,11 @@ release:
     owner: skycoin
     name: skywire
 
+before:
+  hooks:
+    - go mod tidy
+    - go mod vendor
+
 builds:
   - id: skywire-amd64
     binary: skywire
@@ -23,7 +28,7 @@ builds:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc
       - PKG_CONFIG_PATH=/home/runner/work/skywire/skywire/musl-data/x86_64-linux-musl-cross/x86_64-linux-musl/lib/pkgconfig
-    main: .
+    main: ./cmd/release/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid=
   - id: skywire-386
     binary: skywire
@@ -38,7 +43,7 @@ builds:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/i686-linux-musl-cross/bin/i686-linux-musl-gcc
       - PKG_CONFIG_PATH=/home/runner/work/skywire/skywire/musl-data/i686-linux-musl-cross/i686-linux-musl/lib/pkgconfig
-    main: .
+    main: ./cmd/release/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid=
   - id: skywire-arm64
     binary: skywire
@@ -53,7 +58,7 @@ builds:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
       - PKG_CONFIG_PATH=/home/runner/work/skywire/skywire/musl-data/aarch64-linux-musl-cross/aarch64-linux-musl/lib/pkgconfig
-    main: .
+    main: ./cmd/release/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid=
   - id: skywire-arm
     binary: skywire
@@ -70,7 +75,7 @@ builds:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/bin/arm-linux-musleabi-gcc
       - PKG_CONFIG_PATH=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabi-cross/arm-linux-musleabi/lib/pkgconfig
-    main: .
+    main: ./cmd/release/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid=
   - id: skywire-armhf
     binary: skywire
@@ -87,7 +92,7 @@ builds:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/bin/arm-linux-musleabihf-gcc
       - PKG_CONFIG_PATH=/home/runner/work/skywire/skywire/musl-data/arm-linux-musleabihf-cross/arm-linux-musleabihf/lib/pkgconfig
-    main: .
+    main: ./cmd/release/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid=
   - id: skywire-riscv64
     binary: skywire
@@ -102,7 +107,7 @@ builds:
       - CGO_ENABLED=1
       - CC=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/bin/riscv64-linux-musl-gcc
       - PKG_CONFIG_PATH=/home/runner/work/skywire/skywire/musl-data/riscv64-linux-musl-cross/riscv64-linux-musl/lib/pkgconfig
-    main: .
+    main: ./cmd/release/
     ldflags: -s -w -linkmode external -extldflags '-static' -buildid=
 archives:
   - id: amd64

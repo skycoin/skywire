@@ -295,9 +295,21 @@ services:
     depends_on:
       - ar-redis
     restart: always
-    entrypoint: "/release/skywire svc ar --addr :9093 --pprof :6093 --redis redis://ar-redis:6379 --entry-timeout 2m --sk 1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a --dmsg-disc http://dmsg-discovery:9090"
+    entrypoint: "/release/skywire svc ar --addr :9093 --udp-addr :9093 --pprof :6093 --redis redis://ar-redis:6379 --entry-timeout 2m --sk 1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
+
+  stun-server:
+    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
+    hostname: stun-server
+    container_name: "stun-server"
+    networks:
+      visors:
+        ipv4_address: 173.0.0.17
+      intra:
+        ipv4_address: 174.0.0.17
+    restart: always
+    entrypoint: "/release/skywire svc stun --primary-ip 173.0.0.17 --secondary-ip 174.0.0.17 --port 3478 --alt-port 3479"
 
   transport-setup:
     privileged: true

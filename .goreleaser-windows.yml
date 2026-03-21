@@ -21,7 +21,7 @@ builds:
       - PKG_CONFIG_PATH=C:/msys64/mingw64/lib/pkgconfig
       - CGO_CFLAGS=-IC:/msys64/mingw64/include -IC:/msys64/mingw64/include/libusb-1.0
       - CGO_LDFLAGS=-LC:/msys64/mingw64/lib
-    main: .
+    main: ./cmd/release/
     ldflags: -s -w
 
   - id: skywire-386
@@ -32,7 +32,7 @@ builds:
       - 386
     env:
       - CGO_ENABLED=0
-    main: .
+    main: ./cmd/release/
     ldflags: -s -w
 
   - id: skywire-arm64
@@ -43,7 +43,7 @@ builds:
       - arm64
     env:
       - CGO_ENABLED=0
-    main: .
+    main: ./cmd/release/
     ldflags: -s -w
 
 archives:

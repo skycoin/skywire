@@ -20,6 +20,7 @@ import (
 	ss "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
 	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
+	cxo "github.com/skycoin/skywire/cmd/cxo/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	cliutil "github.com/skycoin/skywire/cmd/skywire-cli/commands/util"
 	services "github.com/skycoin/skywire/cmd/skywire-services/commands"
@@ -48,6 +49,7 @@ func init() {
 		scli.RootCmd,
 		services.RootCmd,
 		dmsg.RootCmd,
+		cxo.RootCmd,
 		appsCmd,
 		treeCmd,
 		docCmd,
