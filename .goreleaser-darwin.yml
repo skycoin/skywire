@@ -21,7 +21,7 @@ builds:
       - CGO_CFLAGS=-I/usr/local/include -I/opt/homebrew/include -I/opt/homebrew/opt/hidapi/include -I/opt/homebrew/opt/libusb/include
       - CGO_LDFLAGS=-L/usr/local/lib -L/opt/homebrew/lib -L/opt/homebrew/opt/hidapi/lib -L/opt/homebrew/opt/libusb/lib
     main: ./cmd/release/
-    ldflags: -s -w -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}}
+    ldflags: -s -w
 
 archives:
   - id: archive

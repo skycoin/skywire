@@ -22,7 +22,7 @@ builds:
       - CGO_CFLAGS=-IC:/msys64/mingw64/include -IC:/msys64/mingw64/include/libusb-1.0
       - CGO_LDFLAGS=-LC:/msys64/mingw64/lib
     main: ./cmd/release/
-    ldflags: -s -w -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}}
+    ldflags: -s -w
 
   - id: skywire-386
     binary: skywire
@@ -33,7 +33,7 @@ builds:
     env:
       - CGO_ENABLED=0
     main: ./cmd/release/
-    ldflags: -s -w -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}}
+    ldflags: -s -w
 
   - id: skywire-arm64
     binary: skywire
@@ -44,7 +44,7 @@ builds:
     env:
       - CGO_ENABLED=0
     main: ./cmd/release/
-    ldflags: -s -w -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=v{{.Version}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date={{.Date}}
+    ldflags: -s -w
 
 archives:
   - id: amd64

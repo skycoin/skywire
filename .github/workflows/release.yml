@@ -84,6 +84,8 @@ jobs:
 
       - name: Build skywire release binary
         env:
+          GOPROXY: direct
+          GOSUMDB: "off"
           CGO_ENABLED: "1"
           CC: ${{ github.workspace }}/musl-data/${{ matrix.toolchain }}-cross/bin/${{ matrix.toolchain }}-gcc
           PKG_CONFIG_PATH: ${{ github.workspace }}/musl-data/${{ matrix.toolchain }}-cross/${{ matrix.toolchain }}/lib/pkgconfig
@@ -91,16 +93,22 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
         run: |
-          VERSION="${{ github.ref_name }}"
-          COMMIT="$(git rev-parse --short HEAD)"
-          DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          go install -tags=cgo -trimpath \
+            -ldflags "-s -w -linkmode external -extldflags '-static' -buildid=" \
+            github.com/skycoin/skywire/cmd/release@${{ github.ref_name }}
 
-          go build -tags=cgo -trimpath \
-            -ldflags "-s -w -linkmode external -extldflags '-static' -buildid= \
-              -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=${VERSION} \
-              -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit=${COMMIT} \
-              -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date=${DATE}" \
-            -o bin/skywire ./cmd/release/
+          # Copy to workspace for archiving
+          mkdir -p bin
+          GOPATH_BIN="$(go env GOPATH)/bin"
+          if [ -f "${GOPATH_BIN}/linux_${{ matrix.goarch }}/release" ]; then
+            cp "${GOPATH_BIN}/linux_${{ matrix.goarch }}/release" bin/skywire
+          elif [ -f "${GOPATH_BIN}/release" ]; then
+            cp "${GOPATH_BIN}/release" bin/skywire
+          else
+            echo "Binary not found in expected locations"
+            find "${GOPATH_BIN}" -name "release*" -type f
+            exit 1
+          fi
 
           # Show version to verify (only works for amd64 on amd64 runner)
           if [ "${{ matrix.arch }}" = "amd64" ]; then
@@ -147,21 +155,17 @@ jobs:
 
       - name: Build skywire
         env:
+          GOPROXY: direct
+          GOSUMDB: "off"
           CGO_ENABLED: "1"
           CGO_CFLAGS: -I/usr/local/include -I/opt/homebrew/include -I/opt/homebrew/opt/hidapi/include -I/opt/homebrew/opt/libusb/include
           CGO_LDFLAGS: -L/usr/local/lib -L/opt/homebrew/lib -L/opt/homebrew/opt/hidapi/lib -L/opt/homebrew/opt/libusb/lib
         run: |
-          VERSION="${{ github.ref_name }}"
-          COMMIT="$(git rev-parse --short HEAD)"
-          DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          go install -trimpath -ldflags "-s -w" \
+            github.com/skycoin/skywire/cmd/release@${{ github.ref_name }}
 
-          go build -trimpath \
-            -ldflags "-s -w \
-              -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=${VERSION} \
-              -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit=${COMMIT} \
-              -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date=${DATE}" \
-            -o bin/skywire ./cmd/release/
-
+          mkdir -p bin
+          cp "$(go env GOPATH)/bin/release" bin/skywire
           ./bin/skywire --version
 
       - name: Create archive
@@ -217,21 +221,17 @@ jobs:
 
       - name: Build skywire
         env:
+          GOPROXY: direct
+          GOSUMDB: "off"
           CGO_ENABLED: "1"
           CGO_CFLAGS: -I/opt/homebrew/include -I/opt/homebrew/opt/hidapi/include -I/opt/homebrew/opt/libusb/include
           CGO_LDFLAGS: -L/opt/homebrew/lib -L/opt/homebrew/opt/hidapi/lib -L/opt/homebrew/opt/libusb/lib
         run: |
-          VERSION="${{ github.ref_name }}"
-          COMMIT="$(git rev-parse --short HEAD)"
-          DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          go install -trimpath -ldflags "-s -w" \
+            github.com/skycoin/skywire/cmd/release@${{ github.ref_name }}
 
-          go build -trimpath \
-            -ldflags "-s -w \
-              -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=${VERSION} \
-              -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit=${COMMIT} \
-              -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date=${DATE}" \
-            -o bin/skywire ./cmd/release/
-
+          mkdir -p bin
+          cp "$(go env GOPATH)/bin/release" bin/skywire
           ./bin/skywire --version
 
       - name: Create archive
@@ -296,21 +296,31 @@ jobs:
 
       - name: Build skywire
         env:
+          GOPROXY: direct
+          GOSUMDB: "off"
           CGO_ENABLED: "1"
           CGO_CFLAGS: -IC:/msys64/mingw64/include
           CGO_LDFLAGS: -LC:/msys64/mingw64/lib
           GOOS: windows
           GOARCH: ${{ matrix.goarch }}
         run: |
-          $VERSION = "${{ github.ref_name }}"
-          $COMMIT = git rev-parse --short HEAD
-          $DATE = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          go install -trimpath -ldflags "-s -w" github.com/skycoin/skywire/cmd/release@${{ github.ref_name }}
 
-          go build -trimpath `
-            -ldflags "-s -w -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.version=$VERSION -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.commit=$COMMIT -X github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date=$DATE" `
-            -o bin\skywire.exe .\cmd\release\
+          New-Item -ItemType Directory -Force -Path "bin"
+          $gopath = go env GOPATH
+          $crossPath = "$gopath\bin\windows_${{ matrix.goarch }}\release.exe"
+          $nativePath = "$gopath\bin\release.exe"
 
-          # Show version (works for amd64 on amd64 runner)
+          if (Test-Path $crossPath) {
+            Copy-Item $crossPath "bin\skywire.exe"
+          } elseif (Test-Path $nativePath) {
+            Copy-Item $nativePath "bin\skywire.exe"
+          } else {
+            Write-Error "Binary not found"
+            Get-ChildItem -Recurse "$gopath\bin" -Filter "release*"
+            exit 1
+          }
+
           if ("${{ matrix.arch }}" -eq "amd64") {
             & "bin\skywire.exe" --version
           }
