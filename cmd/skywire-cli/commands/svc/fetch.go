@@ -51,7 +51,7 @@ func fetchViaVisorOrDirect(cmd *cobra.Command, service, path, directURL string) 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer resp.Body.Close() //nolint:errcheck,gosec
 	return io.ReadAll(resp.Body)
 }
 
@@ -128,7 +128,7 @@ var tpdVisorStatsPK string
 
 func init() {
 	tpdVisorStatsCmd.Flags().StringVarP(&tpdVisorStatsPK, "pk", "p", "", "visor public key (required)")
-	tpdVisorStatsCmd.MarkFlagRequired("pk") //nolint:errcheck
+	tpdVisorStatsCmd.MarkFlagRequired("pk") //nolint:errcheck,gosec
 }
 
 var tpdVisorStatsCmd = &cobra.Command{
@@ -169,7 +169,7 @@ var tpdBandwidthTpID string
 
 func init() {
 	tpdBandwidthTpCmd.Flags().StringVarP(&tpdBandwidthTpID, "id", "i", "", "transport ID (required)")
-	tpdBandwidthTpCmd.MarkFlagRequired("id") //nolint:errcheck
+	tpdBandwidthTpCmd.MarkFlagRequired("id") //nolint:errcheck,gosec
 }
 
 var tpdBandwidthTpCmd = &cobra.Command{
@@ -188,7 +188,7 @@ var tpdVersionsPKs string
 
 func init() {
 	tpdVersionsPKCmd.Flags().StringVarP(&tpdVersionsPKs, "pks", "p", "", "comma-separated public keys (required)")
-	tpdVersionsPKCmd.MarkFlagRequired("pks") //nolint:errcheck
+	tpdVersionsPKCmd.MarkFlagRequired("pks") //nolint:errcheck,gosec
 }
 
 var tpdVersionsPKCmd = &cobra.Command{
@@ -207,7 +207,7 @@ var tpdMetricsVisorPKs string
 
 func init() {
 	tpdMetricsVisorCmd.Flags().StringVarP(&tpdMetricsVisorPKs, "pks", "p", "", "comma-separated public keys (required)")
-	tpdMetricsVisorCmd.MarkFlagRequired("pks") //nolint:errcheck
+	tpdMetricsVisorCmd.MarkFlagRequired("pks") //nolint:errcheck,gosec
 }
 
 var tpdMetricsVisorCmd = &cobra.Command{
@@ -226,7 +226,7 @@ var tpdMetricsTpIDs string
 
 func init() {
 	tpdMetricsTpCmd.Flags().StringVarP(&tpdMetricsTpIDs, "ids", "i", "", "comma-separated transport IDs (required)")
-	tpdMetricsTpCmd.MarkFlagRequired("ids") //nolint:errcheck
+	tpdMetricsTpCmd.MarkFlagRequired("ids") //nolint:errcheck,gosec
 }
 
 var tpdMetricsTpCmd = &cobra.Command{
@@ -285,7 +285,7 @@ var dmsgdServerClientsPK string
 
 func init() {
 	dmsgdServerClientsPKCmd.Flags().StringVarP(&dmsgdServerClientsPK, "pk", "p", "", "server public key (required)")
-	dmsgdServerClientsPKCmd.MarkFlagRequired("pk") //nolint:errcheck
+	dmsgdServerClientsPKCmd.MarkFlagRequired("pk") //nolint:errcheck,gosec
 }
 
 var dmsgdServerClientsPKCmd = &cobra.Command{
