@@ -3013,8 +3013,8 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 			continue
 		}
 
-		body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-		resp.Body.Close()                //nolint:errcheck
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
+		resp.Body.Close()                //nolint:errcheck,gosec
 
 		if resp.StatusCode != http.StatusOK {
 			entry.Status = fmt.Sprintf("ERROR(%d)", resp.StatusCode)
@@ -3075,7 +3075,7 @@ func (v *Visor) FetchServiceData(service, path string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch %s: %w", url, err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer resp.Body.Close() //nolint:errcheck,gosec
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
