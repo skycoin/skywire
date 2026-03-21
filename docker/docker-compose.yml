@@ -299,6 +299,18 @@ services:
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
+  stun-server:
+    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
+    hostname: stun-server
+    container_name: "stun-server"
+    networks:
+      visors:
+        ipv4_address: 173.0.0.17
+      intra:
+        ipv4_address: 174.0.0.17
+    restart: always
+    entrypoint: "/release/skywire svc stun --primary-ip 173.0.0.17 --secondary-ip 174.0.0.17 --port 3478 --alt-port 3479"
+
   transport-setup:
     privileged: true
     image: "${REGISTRY}/skywire:${DOCKER_TAG}"
