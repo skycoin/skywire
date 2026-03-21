@@ -56,28 +56,31 @@ jobs:
             toolchain: riscv64-linux-musl
             toolchain_file: riscv64-linux-musl-cross.tgz
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y wget tar libusb-1.0-0-dev
+        run: sudo apt-get update && sudo apt-get install -y wget tar libusb-1.0-0-dev autoconf automake libtool
 
       - name: Cache musl toolchain
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: musl-data
-          key: musl-${{ env.MUSL_RELEASE }}-${{ matrix.toolchain }}
+          key: musl-libusb-${{ env.MUSL_RELEASE }}-${{ matrix.toolchain }}
 
-      - name: Download musl toolchain
+      - name: Download musl toolchain and build libusb
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p musl-data
           wget -q "https://github.com/skycoin/skywire/releases/download/${{ env.MUSL_RELEASE }}/${{ matrix.toolchain_file }}"
           tar -xzf "${{ matrix.toolchain_file }}" -C ./musl-data
           rm "${{ matrix.toolchain_file }}"
+          ./ci_scripts/build-libusb-musl.sh ${{ matrix.arch }} ${{ matrix.toolchain }} ./musl-data/${{ matrix.toolchain }}-cross
 
       - name: Build skywire release binary
         env:
