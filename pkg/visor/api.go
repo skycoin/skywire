@@ -139,6 +139,8 @@ type API interface {
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
+	ServiceHealth() ([]ServiceHealthEntry, error)
+	FetchServiceData(service, path string) ([]byte, error)
 	SetMinHops(uint16) error
 	SetCalculateRoutes(enabled bool) error
 	GetCalculateRoutes() (bool, error)
@@ -2968,6 +2970,121 @@ func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 	}
 
 	return rgs, nil
+}
+
+// ServiceHealthEntry represents the health status of a deployment service.
+type ServiceHealthEntry struct {
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	Status    string `json:"status"`
+	Version   string `json:"version,omitempty"`
+	LatencyMs int64  `json:"latency_ms"`
+}
+
+// ServiceHealth checks the health of all configured deployment services.
+func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
+	services := map[string]string{
+		"Transport Discovery": v.conf.Transport.Discovery,
+		"Address Resolver":    v.conf.Transport.AddressResolver,
+		"Route Finder":        v.conf.Routing.RouteFinder,
+		"DMSG Discovery":      v.conf.Dmsg.Discovery,
+	}
+	if v.conf.UptimeTracker != nil {
+		services["Uptime Tracker"] = v.conf.UptimeTracker.Addr
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	var results []ServiceHealthEntry
+
+	for name, baseURL := range services {
+		if baseURL == "" {
+			continue
+		}
+		url := strings.TrimSuffix(baseURL, "/") + "/health"
+		entry := ServiceHealthEntry{Name: name, URL: baseURL}
+
+		start := time.Now()
+		resp, err := client.Get(url) //nolint:gosec
+		entry.LatencyMs = time.Since(start).Milliseconds()
+
+		if err != nil {
+			entry.Status = "DOWN"
+			results = append(results, entry)
+			continue
+		}
+
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
+		resp.Body.Close()                //nolint:errcheck,gosec
+
+		if resp.StatusCode != http.StatusOK {
+			entry.Status = fmt.Sprintf("ERROR(%d)", resp.StatusCode)
+			results = append(results, entry)
+			continue
+		}
+
+		var health map[string]interface{}
+		if json.Unmarshal(body, &health) == nil {
+			if bi, ok := health["build_info"].(map[string]interface{}); ok {
+				if ver, ok := bi["version"].(string); ok {
+					entry.Version = ver
+				}
+			}
+			if entry.Version == "" {
+				if ver, ok := health["version"].(string); ok {
+					entry.Version = ver
+				}
+			}
+		}
+		entry.Status = "OK"
+		results = append(results, entry)
+	}
+
+	return results, nil
+}
+
+// FetchServiceData fetches data from a deployment service endpoint via the visor's
+// configured URLs. service is one of: tpd, ut, sd, ar, rf, dmsgd.
+// path is the URL path (e.g., "/all-transports/stats").
+func (v *Visor) FetchServiceData(service, path string) ([]byte, error) {
+	baseURL := ""
+	switch service {
+	case "tpd":
+		baseURL = v.conf.Transport.Discovery
+	case "ut":
+		if v.conf.UptimeTracker != nil {
+			baseURL = v.conf.UptimeTracker.Addr
+		}
+	case "sd":
+		baseURL = v.conf.Launcher.ServiceDisc
+	case "ar":
+		baseURL = v.conf.Transport.AddressResolver
+	case "rf":
+		baseURL = v.conf.Routing.RouteFinder
+	case "dmsgd":
+		baseURL = v.conf.Dmsg.Discovery
+	default:
+		return nil, fmt.Errorf("unknown service: %s (valid: tpd, ut, sd, ar, rf, dmsgd)", service)
+	}
+	if baseURL == "" {
+		return nil, fmt.Errorf("service %s not configured", service)
+	}
+
+	url := strings.TrimSuffix(baseURL, "/") + path
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(url) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("fetch %s: %w", url, err)
+	}
+	defer resp.Body.Close() //nolint:errcheck,gosec
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("service returned %d: %s", resp.StatusCode, string(body))
+	}
+	return body, nil
 }
 
 // Reload implements API.
