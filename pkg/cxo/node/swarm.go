@@ -54,7 +54,7 @@ func peerToMsg(p Peer) msg.PeerInfo {
 }
 
 func (p *Peer) update(pi msg.PeerInfo) bool {
-	needUpdate := bytes.Compare(p.Metadata, pi.Metadata) != 0 ||
+	needUpdate := bytes.Compare(p.Metadata, pi.Metadata) != 0 || //nolint:staticcheck
 		p.TCPAddr != pi.TCPAddr ||
 		p.UDPAddr != pi.UDPAddr
 
@@ -400,8 +400,8 @@ func (s *Swarm) onPeerRemoved(p Peer) {
 
 func (s *Swarm) needConns() (uint64, bool) {
 	var (
-		connCap     = uint64(s.node.connCap())
-		pendConnCap = uint64(s.node.pendingConnCap())
+		connCap     = uint64(s.node.connCap())        //nolint:gosec,gofmt
+		pendConnCap = uint64(s.node.pendingConnCap()) //nolint:gosec
 		feedConns   = uint64(len(s.node.ConnectionsOfFeed(s.feed)))
 	)
 
@@ -463,9 +463,9 @@ func (s *Swarm) createOutgoingConns(count uint64) {
 			}
 
 			if err != nil {
-				s.incPeerRetryTimes(p.PubKey)
+				s.incPeerRetryTimes(p.PubKey) //nolint:errcheck,gosec
 			} else {
-				s.resetPeerRetryTimes(p.PubKey)
+				s.resetPeerRetryTimes(p.PubKey) //nolint:errcheck,gosec
 			}
 		}(peers[i])
 	}

@@ -58,7 +58,7 @@ func (t *TCP) Listen(address string) (err error) {
 	t.mx.Lock()
 	defer t.mx.Unlock()
 
-	if t.isListening == true {
+	if t.isListening == true { //nolint:staticcheck
 		return ErrAlreadyListen
 	}
 
@@ -146,7 +146,7 @@ func (t *TCP) acceptConn(fc *transport.Connection) {
 }
 
 // closeConn closes the connection and removes it from cache
-func (t *TCP) closeConn(addr string) error { //nolint:errcheck
+func (t *TCP) closeConn(addr string) error { //nolint:errcheck,gosec
 	t.mx.Lock()
 	defer t.mx.Unlock()
 
@@ -165,7 +165,7 @@ func (t *TCP) closeConn(addr string) error { //nolint:errcheck
 }
 
 // connections strings
-func (t *TCP) connections() (cs []string) {
+func (t *TCP) connections() (cs []string) { //nolint:unused
 	t.mx.Lock()
 	defer t.mx.Unlock()
 
@@ -215,7 +215,7 @@ func (u *UDP) addConn(c *Conn) {
 	u.cs[c.Address()] = c
 }
 
-func (u *UDP) delConn(c *Conn) {
+func (u *UDP) delConn(c *Conn) { //nolint:unused
 	u.mx.Lock()
 	defer u.mx.Unlock()
 
@@ -235,7 +235,7 @@ func (u *UDP) Listen(address string) (err error) {
 	u.mx.Lock()
 	defer u.mx.Unlock()
 
-	if u.isListening == true {
+	if u.isListening == true { //nolint:staticcheck
 		return ErrAlreadyListen
 	}
 
@@ -322,7 +322,7 @@ func (u *UDP) acceptConn(fc *transport.Connection) {
 }
 
 // closeConn closes the connection and removes it from cache
-func (u *UDP) closeConn(addr string) error { //nolint:errcheck
+func (u *UDP) closeConn(addr string) error { //nolint:errcheck,gosec
 	u.mx.Lock()
 	defer u.mx.Unlock()
 
@@ -341,7 +341,7 @@ func (u *UDP) closeConn(addr string) error { //nolint:errcheck
 }
 
 // connections strings
-func (u *UDP) connections() (cs []string) {
+func (u *UDP) connections() (cs []string) { //nolint:unused
 	u.mx.Lock()
 	defer u.mx.Unlock()
 

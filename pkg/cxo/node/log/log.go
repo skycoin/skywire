@@ -149,7 +149,7 @@ type logger struct {
 // NewLogger create new Logger using given Config.
 // By default flags of the Logger is log.Lshortfile|log.Ltime
 func NewLogger(c Config) Logger {
-	if c.Debug == false {
+	if c.Debug == false { //nolint:staticcheck
 		c.Pins = No // don't show debug logs
 	}
 	if c.Output == nil {
@@ -164,21 +164,21 @@ func NewLogger(c Config) Logger {
 func (l *logger) Debug(pin Pin, args ...interface{}) {
 	if pin&l.pins != 0 {
 		args = append([]interface{}{"[DBG] "}, args...)
-		l.Output(2, fmt.Sprint(args...)) //nolint:errcheck
+		l.Output(2, fmt.Sprint(args...)) //nolint:errcheck,gosec
 	}
 }
 
 func (l *logger) Debugln(pin Pin, args ...interface{}) {
 	if pin&l.pins != 0 {
 		args = append([]interface{}{"[DBG]"}, args...)
-		l.Output(2, fmt.Sprintln(args...)) //nolint:errcheck
+		l.Output(2, fmt.Sprintln(args...)) //nolint:errcheck,gosec
 	}
 }
 
 func (l *logger) Debugf(pin Pin, format string, args ...interface{}) {
 	if pin&l.pins != 0 {
 		format = "[DBG] " + format
-		l.Output(2, fmt.Sprintf(format, args...)) //nolint:errcheck
+		l.Output(2, fmt.Sprintf(format, args...)) //nolint:errcheck,gosec
 	}
 }
 
@@ -187,7 +187,7 @@ func (l *logger) Error(err error, args ...interface{}) {
 		"[ERR] ",
 		fmt.Sprintf("err=%s ", err),
 	}
-	l.Output(2, fmt.Sprint(append(errArgs, args...))) //nolint:errcheck
+	l.Output(2, fmt.Sprint(append(errArgs, args...))) //nolint:errcheck,gosec
 }
 
 func (l *logger) Errorln(err error, args ...interface{}) {
@@ -195,12 +195,12 @@ func (l *logger) Errorln(err error, args ...interface{}) {
 		"[ERR] ",
 		fmt.Sprintf("err=%s ", err),
 	}
-	l.Output(2, fmt.Sprint(append(errArgs, args...))) //nolint:errcheck
+	l.Output(2, fmt.Sprint(append(errArgs, args...))) //nolint:errcheck,gosec
 }
 
 func (l *logger) Errorf(err error, format string, args ...interface{}) {
 	format = "[ERR] " + fmt.Sprintf("err=%s ", err) + format
-	l.Output(2, fmt.Sprintf(format, args...)) //nolint:errcheck
+	l.Output(2, fmt.Sprintf(format, args...)) //nolint:errcheck,gosec
 }
 
 func (l *logger) Pins() Pin {

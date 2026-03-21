@@ -50,7 +50,7 @@ func newNodeHead(nf *nodeFeed) (n *nodeHead) {
 }
 
 // (api)
-func (n *nodeHead) closeByError(err error) {
+func (n *nodeHead) closeByError(err error) { //nolint:unused
 
 	select {
 	case n.errq <- err:
@@ -395,7 +395,7 @@ func (f *fillHead) handleFillingResult(err error) {
 
 	if err == nil {
 		f.node().onRootFilled(f.r.r)     // callback
-		f.favg.Add(time.Now().Sub(f.tp)) // average time
+		f.favg.Add(time.Now().Sub(f.tp)) //nolint:staticcheck // average time
 		f.cs.moveForward(f.r.r.Seq + 1)  // move forward
 	} else {
 		f.node().onFillingBreaks(f.r.r, err) // callback
@@ -420,7 +420,7 @@ func (f *fillHead) handleFillingResult(err error) {
 
 func (f *fillHead) triggerRequest() {
 
-	if fatal := f.tryRequest(); fatal == true {
+	if fatal := f.tryRequest(); fatal == true { //nolint:staticcheck
 		if f.f != nil {
 			f.f.Fail(ErrNoConnectionsToFillFrom)
 		}
@@ -433,23 +433,23 @@ func (f *fillHead) triggerRequest() {
 func (f *fillHead) tryRequest() (fatal bool) {
 
 	if f.rqo.Len() == 0 {
-		return // no objects to request
+		return fatal // no objects to request
 	}
 
 	if f.fc.Len() == 0 {
 		fatal = (f.requesting == 0)
-		return // no connections to request from
+		return fatal // no connections to request from
 	}
 
 	var c = f.fc.Remove(f.fc.Front()).(*Conn) // unshift
 
 	// the c can be removed from the head, let's check it out
 
-	for _, ok := f.cs[c]; ok == false; _, ok = f.cs[c] {
+	for _, ok := f.cs[c]; ok == false; _, ok = f.cs[c] { //nolint:staticcheck
 
 		if f.fc.Len() == 0 {
 			fatal = (f.requesting == 0)
-			return // no connections
+			return fatal // no connections
 		}
 
 		c = f.fc.Remove(f.fc.Front()).(*Conn) // unshift next
@@ -465,7 +465,7 @@ func (f *fillHead) tryRequest() (fatal bool) {
 	f.await.Add(1) // nodeHead.await
 	go f.request(c, f.r.r.Seq, key)
 
-	return
+	return fatal
 }
 
 // code readability
@@ -533,7 +533,7 @@ func (k knownRoots) addKnown(c *Conn, seq uint64) {
 
 	var known, ok = k[c]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		k[c] = []uint64{seq}
 		return
 	}
@@ -626,7 +626,7 @@ func (k knownRoots) buildConnsList(seq uint64) (l *list.List) {
 }
 
 type headInfo struct {
-	nonce uint64 // nonce of the head
+	nonce uint64 //nolint:unused // nonce of the head
 
 	fillingRoot    bool   // has filling Root
 	fillingRootSeq uint64 // its seq
@@ -641,7 +641,7 @@ type headInfo struct {
 }
 
 // (api) request, can return nil
-func (n *nodeHead) info() (hi *headInfo) {
+func (n *nodeHead) info() (hi *headInfo) { //nolint:unused
 
 	select {
 	case n.inforq <- struct{}{}:
@@ -664,13 +664,13 @@ func (n *nodeHead) handleInfo(f *fillHead) {
 
 	ni.fillingRoot = (f.r.r != nil)
 
-	if ni.fillingRoot == true {
+	if ni.fillingRoot == true { //nolint:staticcheck
 		ni.fillingRootSeq = f.r.r.Seq
 	}
 
 	ni.pendingRoot = (f.p.r != nil)
 
-	if ni.pendingRoot == true {
+	if ni.pendingRoot == true { //nolint:staticcheck
 		ni.pendingRootSeq = f.r.r.Seq
 	}
 

@@ -30,7 +30,7 @@ func Test_preview(t *testing.T) {
 	defer sn.Close() //nolint:errcheck,gosec
 	defer rn.Close() //nolint:errcheck,gosec
 
-	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck
+	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck,gosec
 
 	assertNil(t, sn.Share(pk))
 	assertNil(t, rn.Share(pk))
@@ -79,14 +79,14 @@ func Test_preview(t *testing.T) {
 
 			if len(r.Refs) != 2 {
 				t.Error("wrong Root.Refs length")
-				return
+				return subscribe
 			}
 
 			var usr User
 
 			if err := r.Refs[0].Value(pp, &usr); err != nil {
 				t.Error(err)
-				return
+				return subscribe
 			}
 
 			if usr.Name != "Alice" {
@@ -101,7 +101,7 @@ func Test_preview(t *testing.T) {
 
 			if err := r.Refs[1].Value(pp, &feed); err != nil {
 				t.Error(err)
-				return
+				return subscribe
 			}
 
 			if ln, err := feed.Posts.Len(pp); err != nil {
@@ -139,7 +139,7 @@ func Test_preview_refs(t *testing.T) {
 	defer sn.Close() //nolint:errcheck,gosec
 	defer rn.Close() //nolint:errcheck,gosec
 
-	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck
+	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck,gosec
 
 	assertNil(t, sn.Share(pk))
 	assertNil(t, rn.Share(pk))
@@ -204,14 +204,14 @@ func Test_preview_refs(t *testing.T) {
 
 			if len(r.Refs) != 2 {
 				t.Error("wrong Root.Refs length")
-				return
+				return subscribe
 			}
 
 			var usr User
 
 			if err := r.Refs[0].Value(pp, &usr); err != nil {
 				t.Error(err)
-				return
+				return subscribe
 			}
 
 			if usr.Name != "Alice" {
@@ -226,7 +226,7 @@ func Test_preview_refs(t *testing.T) {
 
 			if err := r.Refs[1].Value(pp, &feed); err != nil {
 				t.Error(err)
-				return
+				return subscribe
 			}
 
 			if ln, err := feed.Posts.Len(pp); err != nil {

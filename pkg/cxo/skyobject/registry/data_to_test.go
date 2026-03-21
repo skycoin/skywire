@@ -19,7 +19,7 @@ func getTestUsers(n int) (users []interface{}) {
 
 		var usr = TestUser{
 			Name:   fmt.Sprintf("Alice #%d", i+15),
-			Age:    uint32(i),
+			Age:    uint32(i), //nolint:gosec
 			Hidden: []byte("seecret"),
 		}
 

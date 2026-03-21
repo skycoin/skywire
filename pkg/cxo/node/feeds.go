@@ -61,7 +61,7 @@ type nodeFeeds struct {
 	rrq chan connRoot // received root
 
 	await  sync.WaitGroup // wait the handle
-	closeo sync.Once      // once
+	closeo sync.Once      //nolint:unused // once
 	closeq chan struct{}  // terminate
 }
 
@@ -114,10 +114,10 @@ func newNodeFeeds(node *Node) (n *nodeFeeds) {
 	n.await.Add(1)
 	go n.handle()
 
-	return
+	return n
 }
 
-func (n *nodeFeeds) close() {
+func (n *nodeFeeds) close() { //nolint:unused
 	n.closeo.Do(func() {
 		close(n.closeq)
 	})
@@ -244,7 +244,7 @@ func (n *nodeFeeds) handleAddFeed(pk cipher.PubKey) {
 
 	var ok bool
 
-	if _, ok = n.fs[pk]; ok == false {
+	if _, ok = n.fs[pk]; ok == false { //nolint:staticcheck
 		n.fs[pk] = newNodeFeed(n, pk)
 		n.fl = nil
 	}
@@ -252,7 +252,7 @@ func (n *nodeFeeds) handleAddFeed(pk cipher.PubKey) {
 	// or, already have the feed
 
 	select {
-	case n.addb <- (ok == false):
+	case n.addb <- (ok == false): //nolint:staticcheck
 	case <-n.closeq:
 	}
 
@@ -279,7 +279,7 @@ func (n *nodeFeeds) handleDelFeed(pk cipher.PubKey) {
 
 	var nf, ok = n.fs[pk]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return // doesn't have the feed, nothing to delete
 	}
 
@@ -314,7 +314,7 @@ func (n *nodeFeeds) handleAddConnFeed(cf connFeed) {
 
 	var nf, ok = n.fs[cf.f]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		nf = newNodeFeed(n, cf.f)
 		n.fs[cf.f] = nf
 	}
@@ -341,7 +341,7 @@ func (n *nodeFeeds) handleDelConnFeed(cf connFeed) {
 
 	var nf, ok = n.fs[cf.f]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return // no such feed
 	}
 
@@ -356,7 +356,7 @@ func (n *nodeFeeds) handleDelConnFeed(cf connFeed) {
 			continue // avoid map lookup
 		}
 
-		if nf.hasConn(cf.c) == true {
+		if nf.hasConn(cf.c) == true { //nolint:staticcheck
 			return
 		}
 
@@ -381,7 +381,7 @@ func (n *nodeFeeds) handleBroadcastRoot(cr connRoot) {
 
 	var nf, ok = n.fs[cr.r.Pub]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return
 	}
 
@@ -424,7 +424,7 @@ func (n *nodeFeeds) handleReceivedRoot(cr connRoot) {
 
 	var nf, ok = n.fs[cr.r.Pub]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return // no such feed (drop the Root)
 	}
 
@@ -476,7 +476,7 @@ func (n *nodeFeeds) handleList() {
 	case n.listrn <- n.fl:
 	case <-n.closeq:
 	}
-	return
+	return //nolint:staticcheck
 
 }
 
@@ -508,7 +508,7 @@ func (n *nodeFeeds) handleFeedsOfConnection(c *Conn) {
 			continue
 		}
 
-		if _, ok := nf.cs[c]; ok == true {
+		if _, ok := nf.cs[c]; ok == true { //nolint:staticcheck
 			feeds = append(feeds, pk)
 		}
 
@@ -518,7 +518,7 @@ func (n *nodeFeeds) handleFeedsOfConnection(c *Conn) {
 	case n.fcrn <- feeds:
 	case <-n.closeq:
 	}
-	return
+	return //nolint:staticcheck
 
 }
 
@@ -546,7 +546,7 @@ func (n *nodeFeeds) handleConnectionsOfFeed(pk cipher.PubKey) {
 
 	var nf, ok = n.fs[pk]
 
-	if ok == true {
+	if ok == true { //nolint:staticcheck
 
 		for c := range nf.cs {
 			cs = append(cs, c)
@@ -558,7 +558,7 @@ func (n *nodeFeeds) handleConnectionsOfFeed(pk cipher.PubKey) {
 	case n.cfrn <- cs:
 	case <-n.closeq:
 	}
-	return
+	return //nolint:staticcheck
 
 }
 
@@ -584,7 +584,7 @@ func (n *nodeFeeds) handleHasConnFeed(cf connFeed) {
 
 	var nf, ok = n.fs[cf.f]
 
-	if ok == true {
+	if ok == true { //nolint:staticcheck
 		_, ok = nf.cs[cf.c]
 	}
 
@@ -592,7 +592,7 @@ func (n *nodeFeeds) handleHasConnFeed(cf connFeed) {
 	case n.hascfrn <- ok:
 	case <-n.closeq:
 	}
-	return
+	return //nolint:staticcheck
 
 }
 
@@ -622,6 +622,6 @@ func (n *nodeFeeds) handleHasFeed(pk cipher.PubKey) {
 	case n.hasfrn <- ok:
 	case <-n.closeq:
 	}
-	return
+	return //nolint:staticcheck
 
 }

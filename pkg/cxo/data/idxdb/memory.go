@@ -1,7 +1,7 @@
 package idxdb
 
 import (
-	"io/ioutil"
+	"io/ioutil" //nolint:staticcheck
 	"os"
 
 	"github.com/skycoin/skywire/pkg/cxo/data"
@@ -21,8 +21,8 @@ func NewMemeoryDB() (idx data.IdxDB) {
 	if err != nil {
 		panic(err)
 	}
-	fl.Close() //nolint:errcheck,gosec
-	os.Remove(fl.Name())
+	fl.Close()           //nolint:errcheck,gosec,gofmt
+	os.Remove(fl.Name()) //nolint:errcheck,gosec
 	// the NewDriveIdxDB uses os.Stat for internals
 	// the removing is not as safe, but any problem
 	// can occurs in < 1% of cases
@@ -35,6 +35,6 @@ func NewMemeoryDB() (idx data.IdxDB) {
 
 func (m *memoryDB) Close() (err error) {
 	err = m.driveDB.Close() //nolint:errcheck,gosec
-	os.Remove(m.name)
+	os.Remove(m.name)       //nolint:errcheck,gosec,gofmt
 	return
 }

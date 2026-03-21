@@ -100,9 +100,9 @@ func (c *Conn) run() {
 
 	// Remove connection from transport's cache and close connection.
 	if c.IsTCP() {
-		c.n.tcp.closeConn(c.Address()) //nolint:errcheck
+		c.n.tcp.closeConn(c.Address()) //nolint:errcheck,gosec
 	} else {
-		c.n.udp.closeConn(c.Address()) //nolint:errcheck
+		c.n.udp.closeConn(c.Address()) //nolint:errcheck,gosec
 	}
 
 	// In connection is closed in case of error, decide which one to pass to OnDisconnect.
@@ -151,7 +151,7 @@ func (c *Conn) IsIncoming() (ok bool) {
 
 // IsOutgoing is inverse of the IsIncoming
 func (c *Conn) IsOutgoing() (ok bool) {
-	return c.incoming == false
+	return c.incoming == false //nolint:staticcheck
 }
 
 // Node returns related Node
@@ -172,13 +172,13 @@ func (c *Conn) Feeds() (feeds []cipher.PubKey) {
 }
 
 func connString(isIncoming, isTCP bool, addr string) (s string) {
-	if isIncoming == true {
+	if isIncoming == true { //nolint:staticcheck
 		s = "↓ "
 	} else {
 		s = "↑ "
 	}
 
-	if isTCP == true {
+	if isTCP == true { //nolint:staticcheck
 		s += "tcp://"
 	} else {
 		s += "udp://"
@@ -231,7 +231,7 @@ func (c *Conn) RemoteFeeds() (feeds []cipher.PubKey, err error) {
 }
 
 func (c *Conn) sendRoot(r *registry.Root) {
-	c.sendMsg(c.nextSeq(), 0, &msg.Root{ //nolint:errcheck
+	c.sendMsg(c.nextSeq(), 0, &msg.Root{ //nolint:errcheck,gosec
 		Feed:  r.Pub,
 		Nonce: r.Nonce,
 		Seq:   r.Seq,
@@ -271,13 +271,13 @@ func (c *Conn) Subscribe(feed cipher.PubKey) (err error) {
 	// add the feed to node
 
 	if err = c.n.Share(feed); err != nil {
-		return
+		return err
 	}
 
 	var reply msg.Msg
 
 	if reply, err = c.sendRequest(&msg.Sub{Feed: feed}); err != nil {
-		return
+		return err
 	}
 
 	switch x := reply.(type) {
@@ -294,17 +294,17 @@ func (c *Conn) Subscribe(feed cipher.PubKey) (err error) {
 	}
 
 	if err != nil {
-		return
+		return err
 	}
 
 	c.n.fs.addConnFeed(c, feed)
 	c.sendLastRoot(feed)
-	return
+	return err
 }
 
 // just send the messege
 func (c *Conn) unsubscribe(pk cipher.PubKey) {
-	c.sendMsg(c.nextSeq(), 0, &msg.Unsub{ //nolint:errcheck
+	c.sendMsg(c.nextSeq(), 0, &msg.Unsub{ //nolint:errcheck,gosec
 		Feed: pk,
 	})
 }
@@ -313,7 +313,7 @@ func (c *Conn) unsubscribe(pk cipher.PubKey) {
 func (c *Conn) Unsubscribe(feed cipher.PubKey) {
 	c.n.fs.delConnFeed(c, feed)
 	c.unsubscribe(feed) // notify peer
-	return
+	return              //nolint:staticcheck,gofmt
 }
 
 // PreviewFunc used by (*Conn).Preview method. The function
@@ -337,7 +337,7 @@ func (c *Conn) Preview(
 
 	var reply msg.Msg
 	if reply, err = c.sendRequest(&msg.RqPreview{Feed: feed}); err != nil {
-		return
+		return err
 	}
 
 	var r *registry.Root
@@ -347,7 +347,7 @@ func (c *Conn) Preview(
 		return errors.New("error: " + x.Err)
 	case *msg.Root:
 		if r, err = c.n.c.PreviewRoot(x.Feed, x.Sig, x.Value); err != nil {
-			return
+			return err
 		}
 	default:
 		return fmt.Errorf("invalid msg type received: %T", reply)
@@ -355,14 +355,14 @@ func (c *Conn) Preview(
 
 	var p *skyobject.Preview
 	if p, err = c.n.c.Preview(r, c.getter()); err != nil {
-		return
+		return err
 	}
 
-	if previewFunc(p, r) == true {
+	if previewFunc(p, r) == true { //nolint:staticcheck
 		err = c.Subscribe(feed)
 	}
 
-	return
+	return err
 }
 
 // implements skyobject.Getter
@@ -451,7 +451,7 @@ func (c *Conn) receiveMsg() error {
 	for {
 		select {
 		case raw, ok := <-receiveq:
-			if ok == false {
+			if ok == false { //nolint:staticcheck
 				return errors.New("connection closed")
 			}
 
@@ -475,7 +475,7 @@ func (c *Conn) receiveMsg() error {
 			c.n.Debugf(MsgReceivePin, "[%s] receive %T", c.String(), msg)
 
 			// Handle message.
-			if rq, ok := c.isResponse(rseq); ok == true {
+			if rq, ok := c.isResponse(rseq); ok == true { //nolint:staticcheck
 				rq <- msg
 				continue
 			}
@@ -512,7 +512,7 @@ func (c *Conn) delRequest(seq uint32) {
 }
 
 func (c *Conn) responseTimeout() (rt time.Duration) {
-	if c.IsTCP() == true {
+	if c.IsTCP() == true { //nolint:staticcheck
 		rt = c.n.config.TCP.ResponseTimeout
 	} else {
 		rt = c.n.config.UDP.ResponseTimeout
@@ -544,11 +544,11 @@ func (c *Conn) sendRequest(m msg.Msg) (reply msg.Msg, err error) {
 	c.addRequest(seq, rq)
 	defer c.delRequest(seq)
 
-	c.sendMsg(seq, 0, m) //nolint:errcheck
+	c.sendMsg(seq, 0, m) //nolint:errcheck,gosec
 
 	select {
 	case reply = <-rq:
-		return
+		return reply, err
 
 	case <-tc:
 		return nil, ErrTimeout
@@ -560,11 +560,11 @@ func (c *Conn) sendRequest(m msg.Msg) (reply msg.Msg, err error) {
 }
 
 func (c *Conn) sendErr(rseq uint32, err error) {
-	c.sendMsg(c.nextSeq(), rseq, &msg.Err{Err: err.Error()}) //nolint:errcheck
+	c.sendMsg(c.nextSeq(), rseq, &msg.Err{Err: err.Error()}) //nolint:errcheck,gosec
 }
 
 func (c *Conn) sendOk(rseq uint32) {
-	c.sendMsg(c.nextSeq(), rseq, &msg.Ok{}) //nolint:errcheck
+	c.sendMsg(c.nextSeq(), rseq, &msg.Ok{}) //nolint:errcheck,gosec
 }
 
 // handle messeges except responses and handshakes
@@ -597,7 +597,7 @@ func (c *Conn) handle(seq uint32, m msg.Msg) (err error) {
 	case *msg.RqObject: // <- RqO (key, prefetch)
 		c.await.Add(1)
 		go c.handleRqObject(seq, x)
-		return
+		return err
 
 	// preview
 
@@ -628,7 +628,7 @@ func (c *Conn) handle(seq uint32, m msg.Msg) (err error) {
 
 	}
 
-	return
+	return err
 
 }
 
@@ -645,9 +645,9 @@ func (c *Conn) handleSub(seq uint32, sub *msg.Sub) (_ error) {
 	}
 
 	// check first
-	if c.n.fs.hasConnFeed(c, sub.Feed) == true {
+	if c.n.fs.hasConnFeed(c, sub.Feed) == true { //nolint:staticcheck
 		c.sendOk(seq) // already subscribed
-		return
+		return nil
 	}
 
 	// callback
@@ -656,16 +656,16 @@ func (c *Conn) handleSub(seq uint32, sub *msg.Sub) (_ error) {
 	// reject subscription by callback
 	if reject != nil {
 		c.sendErr(seq, reject)
-		return
+		return nil
 	}
 
 	// the callback can subscibe the node to the feed,
 	// and anyway we can't subscribe to a feed we don't
 	// share
 
-	if c.n.fs.hasFeed(sub.Feed) == false {
+	if c.n.fs.hasFeed(sub.Feed) == false { //nolint:staticcheck
 		c.sendErr(seq, errors.New("do not share the feed"))
-		return
+		return nil
 	}
 
 	// ok
@@ -675,11 +675,11 @@ func (c *Conn) handleSub(seq uint32, sub *msg.Sub) (_ error) {
 
 	c.sendLastRoot(sub.Feed) // and push last Root
 
-	return
+	return nil
 }
 
 // unsubscribe (no reply)
-func (c *Conn) handleUnsub(seq uint32, unsub *msg.Unsub) (err error) {
+func (c *Conn) handleUnsub(seq uint32, unsub *msg.Unsub) (err error) { //nolint:unparam
 
 	c.n.Debugf(MsgReceivePin, "[%s] handleUnsub %s",
 		c.String(), unsub.Feed.Hex()[:7])
@@ -693,16 +693,16 @@ func (c *Conn) handleUnsub(seq uint32, unsub *msg.Unsub) (err error) {
 }
 
 // request list of feeds
-func (c *Conn) handleRqList(seq uint32, rq *msg.RqList) (_ error) {
+func (c *Conn) handleRqList(seq uint32, rq *msg.RqList) (_ error) { //nolint:unparam
 
 	c.n.Debugf(MsgReceivePin, "[%s] handleRqList", c.String())
 
-	if c.n.config.Public == false {
+	if c.n.config.Public == false { //nolint:staticcheck
 		c.sendErr(seq, ErrNotPublic)
 		return
 	}
 
-	c.sendMsg(c.nextSeq(), seq, &msg.List{ //nolint:errcheck
+	c.sendMsg(c.nextSeq(), seq, &msg.List{ //nolint:errcheck,gosec
 		Feeds: c.n.Feeds(),
 	})
 
@@ -722,7 +722,7 @@ func (c *Conn) handleRoot(root *msg.Root) (_ error) {
 	switch err {
 	case data.ErrNoSuchFeed:
 
-		return // unexpected Root
+		return nil // unexpected Root
 
 	case data.ErrNoSuchHead, data.ErrNotFound:
 
@@ -731,7 +731,7 @@ func (c *Conn) handleRoot(root *msg.Root) (_ error) {
 	default: // nil (found)
 
 		if last >= root.Seq {
-			return // we have newer one
+			return nil // we have newer one
 		}
 
 	}
@@ -742,18 +742,18 @@ func (c *Conn) handleRoot(root *msg.Root) (_ error) {
 
 	if err != nil {
 		c.n.Printf("[ERR] [%s] received Root error: %s", c.String(), err)
-		return // keep connection ?
+		return nil // keep connection ?
 	}
 
 	// do nothing, because the Node already have this Root
-	if r.IsFull == true {
-		return
+	if r.IsFull == true { //nolint:staticcheck
+		return nil
 	}
 
 	// fill the Root only if the node and the connection
 	// subscribed to feed of the Root
 	c.n.fs.receivedRoot(c, r)
-	return
+	return nil
 }
 
 // async
@@ -778,7 +778,7 @@ func (c *Conn) handleRqObject(seq uint32, rq *msg.RqObject) {
 	select {
 	case obj := <-gc:
 		// got
-		c.sendMsg(c.nextSeq(), seq, &msg.Object{Value: obj.Val}) //nolint:errcheck
+		c.sendMsg(c.nextSeq(), seq, &msg.Object{Value: obj.Val}) //nolint:errcheck,gosec
 		return
 	default:
 		// wait
@@ -793,14 +793,14 @@ func (c *Conn) handleRqObject(seq uint32, rq *msg.RqObject) {
 
 	select {
 	case obj := <-gc:
-		c.sendMsg(c.nextSeq(), seq, &msg.Object{Value: obj.Val}) //nolint:errcheck
+		c.sendMsg(c.nextSeq(), seq, &msg.Object{Value: obj.Val}) //nolint:errcheck,gosec
 	case <-tc:
-		c.sendMsg(c.nextSeq(), seq, &msg.Err{}) // timeout //nolint:errcheck
+		c.sendMsg(c.nextSeq(), seq, &msg.Err{}) //nolint:errcheck,gosec // timeout
 	case <-c.closeq:
 		// closed
 	}
 
-	return
+	return //nolint:staticcheck
 }
 
 func (c *Conn) handleRqPreview(seq uint32, rqp *msg.RqPreview) (_ error) {
@@ -811,11 +811,11 @@ func (c *Conn) handleRqPreview(seq uint32, rqp *msg.RqPreview) (_ error) {
 	var r, err = c.n.c.LastRoot(rqp.Feed, c.n.c.ActiveHead(rqp.Feed))
 
 	if err != nil {
-		c.sendMsg(c.nextSeq(), seq, &msg.Err{Err: err.Error()}) //nolint:errcheck
+		c.sendMsg(c.nextSeq(), seq, &msg.Err{Err: err.Error()}) //nolint:errcheck,gosec
 		return
 	}
 
-	c.sendMsg(c.nextSeq(), seq, &msg.Root{ //nolint:errcheck
+	c.sendMsg(c.nextSeq(), seq, &msg.Root{ //nolint:errcheck,gosec
 		Feed:  r.Pub,
 		Nonce: r.Nonce,
 		Seq:   r.Seq,
@@ -835,7 +835,7 @@ func (c *Conn) handleRqPeers(seq uint32, rqp *msg.RqPeers) error {
 
 	s, ok := c.n.InSwarm(rqp.Feed)
 	if !ok {
-		c.sendMsg(c.nextSeq(), seq, &msg.Err{Err: "not in swarm"}) //nolint:errcheck
+		c.sendMsg(c.nextSeq(), seq, &msg.Err{Err: "not in swarm"}) //nolint:errcheck,gosec
 		return errors.New("node in not in swarm")
 	}
 
@@ -844,7 +844,7 @@ func (c *Conn) handleRqPeers(seq uint32, rqp *msg.RqPeers) error {
 	c.n.Debugf(PEXPin, "sending info about %d peers of feed %s to peer %s, addr %s",
 		len(peers), rqp.Feed.Hex()[:8], c.PeerID().Hex()[:8], c.Address())
 
-	c.sendMsg(c.nextSeq(), seq, &msg.Peers{ //nolint:errcheck
+	c.sendMsg(c.nextSeq(), seq, &msg.Peers{ //nolint:errcheck,gosec
 		Feed: rqp.Feed,
 		List: peers,
 	})

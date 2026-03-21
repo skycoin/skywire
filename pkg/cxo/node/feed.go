@@ -52,13 +52,13 @@ func (n *nodeFeed) receivedRoot(cr connRoot) {
 
 	// do we have the connection?
 
-	if _, ok := n.cs[cr.c]; ok == false {
+	if _, ok := n.cs[cr.c]; ok == false { //nolint:staticcheck
 		return // the connection is not subscribed to the feed
 	}
 
 	var nh, ok = n.hs[cr.r.Nonce]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 
 		// max heads limit
 		if mh := n.node().config.MaxHeads; mh > 0 && len(n.ho) == mh {

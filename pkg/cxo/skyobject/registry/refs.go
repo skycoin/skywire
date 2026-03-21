@@ -78,7 +78,7 @@ func (r *Refs) Short() string {
 func (r *Refs) initialize(pack Pack) (err error) {
 
 	if r.refsNode != nil && r.mods != 0 {
-		return // already initialized
+		return err // already initialized
 	}
 
 	// r.refsNode.hash is always blank
@@ -98,12 +98,12 @@ func (r *Refs) initialize(pack Pack) (err error) {
 	}
 
 	if r.Hash == (cipher.SHA256{}) {
-		return // blank Refs, don't need to load
+		return err // blank Refs, don't need to load
 	}
 
 	var er encodedRefs
 	if err = get(pack, r.Hash, &er); err != nil {
-		return // get or decoding error
+		return err // get or decoding error
 	}
 
 	r.depth = int(er.Depth)
@@ -341,7 +341,7 @@ func (r *Refs) IndexOfHash(
 ) {
 
 	if err = r.initialize(pack); err != nil {
-		return
+		return i, err
 	}
 
 	if r.flags&HashTableIndex != 0 {
@@ -361,11 +361,11 @@ func (r *Refs) IndexOfHash(
 		return // continue
 	})
 
-	if err == nil && found == false {
+	if err == nil && found == false { //nolint:staticcheck
 		err = ErrNotFound
 	}
 
-	return
+	return i, err
 }
 
 // indicesOfHashUsingHashTable finds indices of all elements by given hash
@@ -537,7 +537,7 @@ func (r *Refs) encode() []byte {
 
 	er.Degree = uint32(r.degree) //nolint:gosec
 	er.Depth = uint32(r.depth)   //nolint:gosec
-	er.Length = uint32(r.length)
+	er.Length = uint32(r.length) //nolint:gosec
 
 	if r.depth == 0 {
 
@@ -566,7 +566,7 @@ func (r *Refs) encode() []byte {
 // otherwise set Refs.mods contentMod flag and return
 func (r *Refs) updateHashIfNeed(pack Pack, need bool) (err error) {
 
-	if need == false {
+	if need == false { //nolint:staticcheck
 		r.mods |= contentMod // but not saved
 		return
 	}
@@ -649,7 +649,7 @@ func (r *Refs) SetValueByIndex(
 
 	var hash cipher.SHA256
 
-	if isNil(obj) == false {
+	if isNil(obj) == false { //nolint:staticcheck
 		if hash, err = pack.Add(encoder.Serialize(obj)); err != nil {
 			return
 		}
@@ -729,7 +729,7 @@ func (r *Refs) deleteByHashUsingHashTable(
 
 	for _, el := range els {
 		if err = r.deleteElement(pack, el, one); err != nil {
-			return // error
+			return err // error
 		}
 	}
 
@@ -739,18 +739,18 @@ func (r *Refs) deleteByHashUsingHashTable(
 
 	// if not lazy
 	if r.flags&LazyUpdating == 0 {
-		if one == true {
+		if one == true { //nolint:staticcheck
 			err = r.updateHash(pack)
 		} else {
 			err = r.walkUpdating(pack)
 		}
 		if err != nil {
-			return
+			return err
 		}
 	}
 
 	r.rewindIterators() // for iterators
-	return
+	return err
 }
 
 // DeleteByHash deletes all elements by given hash, reducing length of the
@@ -768,7 +768,7 @@ func (r *Refs) DeleteByHash(
 ) {
 
 	if err = r.initialize(pack); err != nil {
-		return
+		return err
 	}
 
 	if r.flags&HashTableIndex != 0 {
@@ -792,11 +792,11 @@ func (r *Refs) DeleteByHash(
 		return // continue
 	})
 
-	if err == nil && deleted == false {
+	if err == nil && deleted == false { //nolint:staticcheck
 		err = ErrNotFound
 	}
 
-	return
+	return err
 }
 
 // TODO (kostyarin): implement the DeleteSliceByIndices
@@ -838,7 +838,7 @@ func (r *Refs) stopIteration() {
 // the true forces an iterator to find next element from root;
 // see also Refs.rewindIterators method
 func (r *Refs) isFindingIteratorsIndexFromRootRequired() (yep bool) {
-	if r.iterators[len(r.iterators)-1] == true {
+	if r.iterators[len(r.iterators)-1] == true { //nolint:staticcheck
 		if len(r.iterators) > 1 {
 			r.iterators[len(r.iterators)-2] = true // pass to next
 		}
@@ -867,19 +867,19 @@ func (r *Refs) ascendFrom(
 ) {
 
 	if err = r.initialize(pack); err != nil {
-		return
+		return err
 	}
 
 	if from == 0 && r.length == 0 {
-		return // nothing to iterate
+		return err // nothing to iterate
 	}
 
 	if err = validateIndex(from, r.length); err != nil {
-		return
+		return err
 	}
 
 	if r.length == 0 {
-		return // empty Refs
+		return err // empty Refs
 	}
 
 	r.startIteration()
@@ -902,7 +902,7 @@ func (r *Refs) ascendFrom(
 			ascendFunc)
 
 		// so, we need to find next element from root of the Refs
-		if rewind == true {
+		if rewind == true { //nolint:staticcheck
 			i += pass // shift the i to don't repeat elements
 			continue  // find next index from root of the Refs
 		}
@@ -918,7 +918,7 @@ func (r *Refs) ascendFrom(
 		err = nil // clear the ErrStopIteration
 	}
 
-	return
+	return err
 }
 
 // Ascend iterates over all values ascending order until
@@ -970,11 +970,11 @@ func (r *Refs) descendFrom(
 	// the Refs are already initialized by Descend or DescendFrom methods
 
 	if err = validateIndex(from, r.length); err != nil {
-		return
+		return err
 	}
 
 	if r.length == 0 {
-		return // empty Refs
+		return err // empty Refs
 	}
 
 	r.startIteration()
@@ -997,7 +997,7 @@ func (r *Refs) descendFrom(
 			descendFunc)
 
 		// so, we need to find next element from root of the Refs
-		if rewind == true {
+		if rewind == true { //nolint:staticcheck
 			i -= pass // shift the i to don't repeat elements
 
 			// if the length has been changed
@@ -1017,7 +1017,7 @@ func (r *Refs) descendFrom(
 		err = nil // clear the ErrStopIteration
 	}
 
-	return
+	return err
 
 }
 
@@ -1229,25 +1229,25 @@ func (r *Refs) Slice(
 	// https://play.golang.org/p/4tP7_MuCN9
 
 	if err = r.initialize(pack); err != nil {
-		return
+		return slice, err
 	}
 
 	if err = validateSliceIndices(i, j, r.length); err != nil {
-		return
+		return slice, err
 	}
 
 	var ln = j - i                         // length of the new slice
 	slice = newRefs(r.degree, r.flags, ln) // create
 
 	if ln == 0 {
-		return // done (new blank Refs has been created)
+		return slice, err // done (new blank Refs has been created)
 	}
 
 	err = r.AscendFrom(pack, i, slice.appnedCreatingSliceFunc(j))
 
 	if err != nil {
 		slice = nil // for GC
-		return      // error
+		return slice, err
 	}
 
 	// the slice contains all necessary elements, but
@@ -1255,10 +1255,10 @@ func (r *Refs) Slice(
 
 	if err = slice.walkUpdatingSlice(pack); err != nil {
 		slice = nil // GC
-		return      // error
+		return slice, err
 	}
 
-	return // done
+	return slice, err // done
 }
 
 // hasEnoughFreeSpaceOnTail look for tail
@@ -1354,11 +1354,11 @@ func (r *Refs) appnedFunc(
 		// TODO (kostyarin): LazyUpdating
 
 		err = r.updateHashIfNeed(pack, true)
-		return
+		return err
 
 	}
 
-	return
+	return iter, fini
 }
 
 // walkUpdating walks through the refs
@@ -1398,27 +1398,27 @@ func (r *Refs) Append(
 	// init
 
 	if err = r.initialize(pack); err != nil {
-		return
+		return err
 	}
 
 	if err = refs.initialize(pack); err != nil {
-		return
+		return err
 	}
 
 	if refs.length == 0 {
-		return // short curcit if the refs is blank
+		return err // short curcit if the refs is blank
 	}
 
 	// ok, let's find free space on tail of this Refs (r)
 
 	var canFit bool
 	if canFit, err = r.hasEnoughFreeSpaceOnTail(pack, refs.length); err != nil {
-		return // loading error
+		return err // loading error
 	}
 
 	// So, can this Refs fit new elements without rebuilding?
 
-	if canFit == false { // have to be rebuilt
+	if canFit == false { //nolint:staticcheck // have to be rebuilt
 
 		// we have to rebuild this Refs increasing its depth to fit new elements
 
@@ -1439,22 +1439,22 @@ func (r *Refs) Append(
 
 		// (2) copy
 		if err = r.Ascend(pack, acsf); err != nil {
-			return // error
+			return err // error
 		}
 
 		// (3) copy
 		if err = refs.Ascend(pack, acsf); err != nil {
-			return // error
+			return err // error
 		}
 
 		// set length and hash fields and laodedMod flag
 		if err = nr.walkUpdatingSlice(pack); err != nil {
-			return // error
+			return err // error
 		}
 
 		*r = *nr // replace this Refs with new extended
 
-		return // done
+		return err // done
 
 	}
 
@@ -1463,14 +1463,14 @@ func (r *Refs) Append(
 	var af, fini = r.appnedFunc(pack)
 
 	if err = refs.Ascend(pack, af); err != nil {
-		return // error
+		return err // error
 	}
 
 	if err = fini(); err != nil {
-		return
+		return err
 	}
 
-	return // done
+	return err // done
 
 }
 
@@ -1485,7 +1485,7 @@ func (r *Refs) AppendValues(
 ) {
 
 	if len(values) == 0 {
-		return // short curcit (nothing to append)
+		return err // short curcit (nothing to append)
 	}
 
 	var (
@@ -1495,14 +1495,14 @@ func (r *Refs) AppendValues(
 
 	for _, val := range values {
 
-		if isNil(val) == true {
+		if isNil(val) == true { //nolint:staticcheck
 
 			hash = cipher.SHA256{}
 
 		} else {
 
 			if hash, err = pack.Add(encoder.Serialize(val)); err != nil {
-				return
+				return err
 			}
 
 		}
@@ -1532,23 +1532,23 @@ func (r *Refs) AppendHashes(
 ) {
 
 	if len(hashes) == 0 {
-		return // short curcit (nothing to append)
+		return err // short curcit (nothing to append)
 	}
 
 	if err = r.initialize(pack); err != nil {
-		return // ititialization failed
+		return err // ititialization failed
 	}
 
 	// ok, let's find free space on tail of this Refs (r)
 
 	var canFit bool
 	if canFit, err = r.hasEnoughFreeSpaceOnTail(pack, len(hashes)); err != nil {
-		return // loading error
+		return err // loading error
 	}
 
 	// So, can this Refs fit new elements without rebuilding?
 
-	if canFit == false { // have to be rebuilt
+	if canFit == false { //nolint:staticcheck // have to be rebuilt
 
 		// we have to rebuild this Refs increasing its depth to fit new elements
 
@@ -1571,27 +1571,27 @@ func (r *Refs) AppendHashes(
 
 		// (2) copy
 		if err = r.Ascend(pack, acsf); err != nil {
-			return // error
+			return err // error
 		}
 
 		// (3) copy
 		for i, hash := range hashes {
 
 			if err = acsf(i, hash); err != nil {
-				return
+				return err
 			}
 
 		}
 
 		// set length and hash fields and laodedMod flag
 		if err = nr.walkUpdatingSlice(pack); err != nil {
-			return // error
+			return err // error
 		}
 
 		nr.iterators = r.iterators // copy iterators
 		*r = *nr                   // replace this Refs with new extended
 
-		return // done
+		return err // done
 
 	}
 
@@ -1602,16 +1602,16 @@ func (r *Refs) AppendHashes(
 	for i, hash := range hashes {
 
 		if err = af(i, hash); err != nil {
-			return
+			return err
 		}
 
 	}
 
 	if err = fini(); err != nil {
-		return // error
+		return err // error
 	}
 
-	return // done
+	return err // done
 
 }
 
@@ -1644,7 +1644,7 @@ func (r *Refs) Rebuild(
 	}
 
 	if err = r.initialize(pack); err != nil {
-		return
+		return err
 	}
 
 	// TODO (kostyarin): origin mod
@@ -1658,14 +1658,14 @@ func (r *Refs) Rebuild(
 		// the Slice includes walkUpdating steps
 		var slice *Refs
 		if slice, err = r.Slice(pack, 0, r.length); err != nil {
-			return
+			return err
 		}
 		*r = *slice // replace
 	} else {
 		err = r.walkUpdating(pack)
 	}
 
-	return
+	return err
 }
 
 // Tree returns string that represents the Refs tree.
@@ -1683,16 +1683,16 @@ func (r *Refs) Tree(
 	err error, //      : loading error
 ) {
 
-	if forceLoad == true {
+	if forceLoad == true { //nolint:staticcheck
 		if err = r.initialize(pack); err != nil {
-			return
+			return tree, err
 		}
 	}
 
 	var gtName string
 	gtName = "[](refs) " + r.Short()
 
-	if forceLoad == true || (r.refsNode != nil && r.mods&loadedMod != 0) {
+	if forceLoad == true || (r.refsNode != nil && r.mods&loadedMod != 0) { //nolint:staticcheck
 		gtName += fmt.Sprintf(" length: %d, degree: %d, depth: %d",
 			r.length, r.degree, r.depth)
 	} else {
@@ -1701,12 +1701,12 @@ func (r *Refs) Tree(
 
 	gt := gotree.New(gtName)
 
-	if forceLoad == true || (r.refsNode != nil && r.mods&loadedMod != 0) {
+	if forceLoad == true || (r.refsNode != nil && r.mods&loadedMod != 0) { //nolint:staticcheck
 		err = r.addTreeNode(gt, pack, forceLoad, r.refsNode, r.depth)
 	}
 
 	tree = gt.Print()
-	return
+	return tree, err
 }
 
 func (r *Refs) addTreeNode(
@@ -1725,27 +1725,27 @@ func (r *Refs) addTreeNode(
 
 		if len(rn.leafs) == 0 {
 			parent.Add("(empty)")
-			return
+			return err
 		}
 
 		for _, el := range rn.leafs {
 			parent.Add(el.Hash.Hex()[:7]) // short
 		}
 
-		return
+		return err
 	}
 
 	// else if depth > 0
 
 	for _, br := range rn.branches {
 
-		if forceLoad == true {
+		if forceLoad == true { //nolint:staticcheck
 			if err = r.loadNodeIfNeed(pack, br, depth-1); err != nil {
-				return
+				return err
 			}
 		}
 
-		if br.isLoaded() == false {
+		if br.isLoaded() == false { //nolint:staticcheck
 			parent.Add(br.hash.Hex()[:7] + " (not loaded)")
 			continue
 		}
@@ -1754,12 +1754,12 @@ func (r *Refs) addTreeNode(
 		err = r.addTreeNode(item, pack, forceLoad, br, depth-1)
 
 		if err != nil {
-			return
+			return err
 		}
 
 		parent.AddTree(item)
 
 	}
 
-	return
+	return err
 }

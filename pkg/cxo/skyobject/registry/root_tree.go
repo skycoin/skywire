@@ -46,14 +46,14 @@ func (r *Root) Tree(pack Pack) (tree string, err error) {
 
 func rootTreeDynamic(d *Dynamic, pack Pack) (it gotree.Tree) {
 
-	if d.IsValid() == false {
+	if d.IsValid() == false { //nolint:staticcheck
 		it = gotree.New("*(dynamic) err: " + ErrInvalidDynamicReference.Error())
-		return
+		return it
 	}
 
-	if d.IsBlank() == true {
+	if d.IsBlank() == true { //nolint:staticcheck
 		it = gotree.New("*(dynamic) nil")
-		return
+		return it
 	}
 
 	var (
@@ -63,18 +63,18 @@ func rootTreeDynamic(d *Dynamic, pack Pack) (it gotree.Tree) {
 
 	if sch, err = pack.Registry().SchemaByReference(d.Schema); err != nil {
 		it = gotree.New("*(dynamic) err: " + err.Error())
-		return
+		return it
 	}
 
 	if d.Hash == (cipher.SHA256{}) {
 		it = gotree.New(fmt.Sprintf("*(dynamic) nil (type %s)", sch.String()))
-		return
+		return it
 	}
 
 	it = gotree.New("*(dynamic) " + d.Short())
 	it.AddTree(rootTreeHash(pack, sch, d.Hash))
 
-	return
+	return it
 }
 
 func rootTreeHash(
@@ -106,7 +106,7 @@ func rootTreeData(
 	it gotree.Tree,
 ) {
 
-	if sch.IsReference() == true {
+	if sch.IsReference() == true { //nolint:staticcheck
 		return rootTreeReferences(pack, sch, val)
 	}
 
@@ -147,7 +147,7 @@ func rootTreeData(
 
 	}
 
-	return
+	return it
 }
 
 func rootTreeReferences(
@@ -177,7 +177,7 @@ func rootTreeReferences(
 
 		if _, err = encoder.DeserializeRaw(val, &dr); err != nil {
 			it = gotree.New("*(dynamic) err: " + err.Error())
-			return
+			return it
 		}
 
 		return rootTreeDynamic(&dr, pack)
@@ -191,7 +191,7 @@ func rootTreeReferences(
 		))
 	}
 
-	return
+	return it
 }
 
 func rootTreeValue(sch Schema, val interface{}) (it gotree.Tree) {
@@ -257,7 +257,7 @@ func rootTreeInt(sch Schema, val []byte) (it gotree.Tree) {
 
 	if err != nil {
 		it = gotree.New("(err) " + err.Error())
-		return
+		return it
 	}
 
 	return rootTreeValue(sch, x)
@@ -296,7 +296,7 @@ func rootTreeUint(sch Schema, val []byte) (it gotree.Tree) {
 	}
 	if err != nil {
 		it = gotree.New("(err) " + err.Error())
-		return
+		return it
 	}
 
 	return rootTreeValue(sch, x)
@@ -361,7 +361,7 @@ func rootTreeSlice(pack Pack, sch Schema, val []byte) (it gotree.Tree) {
 	if el = sch.Elem(); el == nil {
 		it = gotree.New(fmt.Sprintf("(err) invalid schema %q: nil-element",
 			sch.String()))
-		return
+		return it
 	}
 
 	// special case for []byte
@@ -370,11 +370,11 @@ func rootTreeSlice(pack Pack, sch Schema, val []byte) (it gotree.Tree) {
 		var x []byte
 		if _, err = encoder.DeserializeRaw(val, &x); err != nil {
 			it = gotree.New("(err) " + err.Error())
-			return
+			return it
 		}
 
 		it = gotree.New("([]byte) " + hex.EncodeToString(x))
-		return
+		return it
 	}
 
 	var (
@@ -405,7 +405,7 @@ func rootTreeSlice(pack Pack, sch Schema, val []byte) (it gotree.Tree) {
 
 		if ln, err = getLength(val); err != nil {
 			it = gotree.New(itName + " (err) " + err.Error())
-			return
+			return it
 		}
 
 		itName += fmt.Sprintf(" (length %d)", ln)
@@ -425,7 +425,7 @@ func rootTreeSlice(pack Pack, sch Schema, val []byte) (it gotree.Tree) {
 				it.Add(fmt.Sprintf(
 					"(err) unexpected end of %s at %d element",
 					sch.Kind().String(), k))
-				return
+				return it
 			}
 
 			it.AddTree(rootTreeData(pack, el, val[shift:shift+s]))
@@ -441,11 +441,11 @@ func rootTreeSlice(pack Pack, sch Schema, val []byte) (it gotree.Tree) {
 				it.Add(fmt.Sprintf(
 					"(err) unexpected end of %s at %d element",
 					sch.Kind().String(), k))
-				return
+				return it
 			}
 
 			if m, err = el.Size(val[shift:]); err != nil {
-				return
+				return it
 			}
 
 			it.AddTree(rootTreeData(pack, el, val[shift:shift+m]))
@@ -455,7 +455,7 @@ func rootTreeSlice(pack Pack, sch Schema, val []byte) (it gotree.Tree) {
 
 	}
 
-	return
+	return it
 }
 
 func rootTreeStruct(
@@ -486,13 +486,13 @@ func rootTreeStruct(
 				sch.String(),
 				f.Name(),
 				f.Schema().String()))
-			return
+			return it
 
 		}
 
 		if s, err = f.Schema().Size(val[shift:]); err != nil {
 			it.Add("(err) " + err.Error())
-			return
+			return it
 		}
 
 		fit := rootTreeData(pack, f.Schema(), val[shift:shift+s])
@@ -505,7 +505,7 @@ func rootTreeStruct(
 
 	}
 
-	return
+	return it
 }
 
 func rootTreeRef(pack Pack, sch Schema, val []byte) (it gotree.Tree) {
@@ -523,23 +523,23 @@ func rootTreeRef(pack Pack, sch Schema, val []byte) (it gotree.Tree) {
 			sch,
 		))
 
-		return
+		return it
 	}
 
 	if _, err = encoder.DeserializeRaw(val, &ref); err != nil {
 		it = gotree.New(fmt.Sprintf("*(%s) err: %s", el.String(), err.Error()))
-		return
+		return it
 	}
 
 	if ref.Hash == (cipher.SHA256{}) {
 		it = gotree.New(fmt.Sprintf("*(%s) nil", el.String()))
-		return
+		return it
 	}
 
 	it = gotree.New(fmt.Sprintf("*(%s) %s", el.String(), ref.Short()))
 	it.AddTree(rootTreeHash(pack, el, ref.Hash))
 
-	return
+	return it
 }
 
 func rootTreeRefs(pack Pack, sch Schema, val []byte) (it gotree.Tree) {
@@ -552,12 +552,12 @@ func rootTreeRefs(pack Pack, sch Schema, val []byte) (it gotree.Tree) {
 
 	if el = sch.Elem(); el == nil {
 		it = gotree.New("[]*(<refs>) err: missing schema of element")
-		return
+		return it
 	}
 
 	if _, err = encoder.DeserializeRaw(val, &refs); err != nil {
 		it = gotree.New(fmt.Sprintf("[]*(-----) %s err: %s", el.String(), err.Error()))
-		return
+		return it
 	}
 
 	// initialize first
@@ -566,14 +566,14 @@ func rootTreeRefs(pack Pack, sch Schema, val []byte) (it gotree.Tree) {
 	if ln, err = refs.Len(pack); err != nil {
 		it = gotree.New(fmt.Sprintf("[]*(%s) %s err: %s", el.String(), refs.Short(),
 			err.Error()))
-		return
+		return it
 	}
 
 	// can be blank
 
 	if ln == 0 {
 		it = gotree.New(fmt.Sprintf("[]*(%s) %s nil", el.String(), refs.Short()))
-		return
+		return it
 	}
 
 	it = gotree.New(fmt.Sprintf("[]*(%s) %s length: %d", el.String(), refs.Short(),
@@ -599,5 +599,5 @@ func rootTreeRefs(pack Pack, sch Schema, val []byte) (it gotree.Tree) {
 		it.Add("err: " + err.Error())
 	}
 
-	return
+	return it
 }

@@ -41,7 +41,7 @@ func (u *Unpack) Set(key cipher.SHA256, val []byte) (err error) {
 
 	var ui, ok = u.m[key]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		ui = new(unpackItem)
 		u.m[key] = ui
 	}
@@ -146,24 +146,24 @@ func (c *Container) Save(up *Unpack, r *registry.Root) (err error) {
 		) {
 
 			if hash == (cipher.SHA256{}) {
-				return
+				return deepper, err
 			}
 
 			// go deepper only if the object was created
 
 			var ui, ok = up.m[hash]
 
-			if ok == false {
+			if ok == false { //nolint:staticcheck
 				// this object was not created, then it already
 				// exists in the CXDS, and we have to increment
 				// rc of the object
 
 				if _, err = c.Inc(hash, 1); err != nil {
-					return
+					return deepper, err
 				}
 				up.m[hash] = &unpackItem{inc: 1, dec: 1} // for Close
 
-				return // false, nil
+				return deepper, err // false, nil
 			}
 
 			// here we reduce the ui.inc; if end-user saves an
@@ -181,12 +181,12 @@ func (c *Container) Save(up *Unpack, r *registry.Root) (err error) {
 
 			ui.dec++ // used
 			deepper = ui.created
-			return
+			return deepper, err
 
 		})
 
 		if err != nil {
-			return
+			return err
 		}
 
 	}
@@ -194,7 +194,7 @@ func (c *Container) Save(up *Unpack, r *registry.Root) (err error) {
 	// ok, let's save the Root
 
 	// check out Index first (has feed)
-	if c.HasFeed(r.Pub) == false {
+	if c.HasFeed(r.Pub) == false { //nolint:staticcheck
 		return data.ErrNoSuchFeed
 	}
 
@@ -202,19 +202,19 @@ func (c *Container) Save(up *Unpack, r *registry.Root) (err error) {
 	var val []byte
 
 	if val, err = c.Index.saveRoot(up, r); err != nil {
-		return
+		return err
 	}
 
 	// save the Root in CXDS
 
 	if err = up.Set(r.Hash, val); err != nil {
-		return
+		return err
 	}
 
 	// save registry
 
 	if err = up.Set(cipher.SHA256(r.Reg), up.Registry().Encode()); err != nil {
-		return
+		return err
 	}
 
 	// make rc of related objects actual
@@ -230,7 +230,7 @@ func (c *Container) Save(up *Unpack, r *registry.Root) (err error) {
 		if inc < 0 {
 			// decrement
 			if _, err = c.Inc(key, inc); err != nil {
-				return // leave the CXDS broken if an error occurred
+				return err // leave the CXDS broken if an error occurred
 			}
 		}
 
@@ -238,7 +238,7 @@ func (c *Container) Save(up *Unpack, r *registry.Root) (err error) {
 
 	}
 
-	return
+	return err
 }
 
 func (i *Index) saveRoot(
@@ -255,14 +255,14 @@ func (i *Index) saveRoot(
 	// val []byte --> encoded Root
 	var dr = new(data.Root)
 
-	err = i.c.db.IdxDB().Tx(func(fs data.Feeds) (err error) { //nolint:errcheck
+	err = i.c.db.IdxDB().Tx(func(fs data.Feeds) (err error) { //nolint:errcheck,gosec
 		var hs data.Heads
 		if hs, err = fs.Heads(r.Pub); err != nil {
-			return // no such feed
+			return err // no such feed
 		}
 		var roots data.Roots
 		if roots, err = hs.Add(r.Nonce); err != nil {
-			return
+			return err
 		}
 
 		var (
@@ -278,7 +278,7 @@ func (i *Index) saveRoot(
 		})
 
 		if err != nil {
-			return
+			return err
 		}
 
 		if lastHash != (cipher.SHA256{}) {
@@ -313,11 +313,11 @@ func (i *Index) saveRoot(
 	})
 
 	if err != nil {
-		return
+		return val, err
 	}
 
 	i.addSavedRoot(r, dr)
-	return
+	return val, err
 }
 
 /*

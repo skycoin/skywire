@@ -11,7 +11,7 @@ import (
 func (c *Conn) handshake() error {
 	c.n.Debugf(ConnHskPin, "[%s] handshake", c.String())
 
-	if c.incoming == true {
+	if c.incoming == true { //nolint:staticcheck
 		return c.acceptHandshake()
 	} else {
 		return c.performHandshake()
@@ -30,7 +30,7 @@ func (c *Conn) performHandshake() error {
 			NodeID:   c.n.idpk,
 		}
 	)
-	if err := c.sendMsg(seq, 0, syn); err != nil { //nolint:errcheck
+	if err := c.sendMsg(seq, 0, syn); err != nil { //nolint:errcheck,gosec
 		return err
 	}
 
@@ -40,7 +40,7 @@ func (c *Conn) performHandshake() error {
 		rt time.Duration
 		tm *time.Timer
 	)
-	if c.IsTCP() == true {
+	if c.IsTCP() == true { //nolint:staticcheck
 		rt = c.n.config.TCP.ResponseTimeout
 	} else {
 		rt = c.n.config.UDP.ResponseTimeout
@@ -100,7 +100,7 @@ func (c *Conn) acceptHandshake() (err error) {
 		rt time.Duration
 		tm *time.Timer
 	)
-	if c.IsTCP() == true {
+	if c.IsTCP() == true { //nolint:staticcheck
 		rt = c.n.config.TCP.ResponseTimeout
 	} else {
 		rt = c.n.config.UDP.ResponseTimeout
@@ -137,7 +137,7 @@ func (c *Conn) acceptHandshake() (err error) {
 					Err: err.Error(),
 				}
 			)
-			if sendErr := c.sendMsg(c.nextSeq(), seq, errMsg); sendErr != nil { //nolint:errcheck
+			if sendErr := c.sendMsg(c.nextSeq(), seq, errMsg); sendErr != nil { //nolint:errcheck,gosec
 				c.n.Error(sendErr, "failed to send err message")
 			}
 
@@ -153,7 +153,7 @@ func (c *Conn) acceptHandshake() (err error) {
 					Err: err.Error(),
 				}
 			)
-			if sendErr := c.sendMsg(c.nextSeq(), seq, errMsg); sendErr != nil { //nolint:errcheck
+			if sendErr := c.sendMsg(c.nextSeq(), seq, errMsg); sendErr != nil { //nolint:errcheck,gosec
 				c.n.Error(sendErr, "faield to send err message")
 			}
 
@@ -164,7 +164,7 @@ func (c *Conn) acceptHandshake() (err error) {
 		ack := &msg.Ack{
 			NodeID: c.n.idpk,
 		}
-		if err := c.sendMsg(c.nextSeq(), seq, ack); err != nil { //nolint:errcheck
+		if err := c.sendMsg(c.nextSeq(), seq, ack); err != nil { //nolint:errcheck,gosec
 			return fmt.Errorf("failed to send ack message: %s", err)
 		}
 

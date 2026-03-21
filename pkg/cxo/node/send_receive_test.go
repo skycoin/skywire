@@ -81,7 +81,7 @@ func assertNil(t *testing.T, err error) {
 }
 
 func onRootFilledToChannel(
-	chanBufferSize int, //                   :
+	chanBufferSize int, //nolint:unparam //                   :
 ) (
 	channel chan *registry.Root, //          :
 	callback func(*Node, *registry.Root), // :
@@ -91,7 +91,7 @@ func onRootFilledToChannel(
 
 	callback = func(_ *Node, r *registry.Root) {
 		channel <- r
-		return
+		return //nolint:staticcheck
 	}
 	return
 }
@@ -144,7 +144,7 @@ func Test_send_receive(t *testing.T) {
 	defer sn.Close() //nolint:errcheck,gosec
 	defer rn.Close() //nolint:errcheck,gosec
 
-	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck
+	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck,gosec
 
 	assertNil(t, sn.Share(pk))
 	assertNil(t, rn.Share(pk))
@@ -283,7 +283,7 @@ func Test_send_receive_refs(t *testing.T) {
 	defer sn.Close() //nolint:errcheck,gosec
 	defer rn.Close() //nolint:errcheck,gosec
 
-	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck
+	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck,gosec
 
 	assertNil(t, sn.Share(pk))
 	assertNil(t, rn.Share(pk))

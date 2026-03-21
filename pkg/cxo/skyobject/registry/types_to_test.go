@@ -141,7 +141,7 @@ func testTypes() (ts []testType) {
 		{"test.Man", TestMan{"kostyarin", "logrusorgru"}},
 	}
 
-	return
+	return ts
 }
 
 func testRegistry() (reg *Registry) {

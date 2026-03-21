@@ -471,14 +471,14 @@ func Decode(p []byte) (msg Msg, err error) {
 
 	if len(p) < 1 {
 		err = ErrEmptyMessage
-		return
+		return msg, err
 	}
 
 	var mt = Type(p[0])
 
 	if mt <= 0 || int(mt) >= len(forwardRegistry) {
 		err = InvalidTypeError{mt}
-		return
+		return msg, err
 	}
 
 	var (
@@ -489,14 +489,14 @@ func Decode(p []byte) (msg Msg, err error) {
 	)
 
 	if n, err = encoder.DeserializeRawToValue(p[1:], val); err != nil {
-		return
+		return msg, err
 	}
 
 	if n+1 != uint64(len(p)) {
 		err = ErrIncomplieDecoding
-		return
+		return msg, err
 	}
 
 	msg = val.Interface().(Msg)
-	return
+	return msg, err
 }

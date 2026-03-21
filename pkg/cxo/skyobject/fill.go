@@ -58,7 +58,7 @@ func (f *Filler) get(
 		if inc > 0 {
 			rc = f.inc(key, rc) // ++
 		}
-		return
+		return val, rc, err
 	}
 
 	if err != data.ErrNotFound {
@@ -70,18 +70,18 @@ func (f *Filler) get(
 	// not found
 	var gc = make(chan Object, 1) // wait for the object
 
-	f.c.Want(key, gc, inc)    //nolint:errcheck
+	f.c.Want(key, gc, inc)    //nolint:errcheck,gosec
 	defer f.c.Unwant(key, gc) // to be memory safe
 
 	// requset the object using the rq channel
-	if f.requset(key) == false {
-		return
+	if f.requset(key) == false { //nolint:staticcheck
+		return val, rc, err
 	}
 
 	select {
 	case obj := <-gc:
 		if err = obj.Err; err != nil {
-			return
+			return val, rc, err
 		}
 		val = obj.Val
 		if inc > 0 {
@@ -93,7 +93,7 @@ func (f *Filler) get(
 		err = ErrTerminated
 	}
 
-	return
+	return val, rc, err
 }
 
 // Pre used to prerequest an item to get it late. The Get increments
@@ -127,7 +127,7 @@ func (f *Filler) Get(key cipher.SHA256) (val []byte, rc int, err error) {
 
 	var inc = 1
 
-	if f.isPrerequested(key) == true {
+	if f.isPrerequested(key) == true { //nolint:staticcheck
 		inc = 0 // prerequested
 	}
 
@@ -160,7 +160,7 @@ func (f *Filler) inc(key cipher.SHA256, drc int) (rc int) {
 
 	var finc, ok = f.incs[key]
 
-	if ok == true {
+	if ok == true { //nolint:staticcheck
 		rc++
 	}
 
@@ -256,7 +256,7 @@ func (f *Filler) acquire() (parall bool) {
 // Go performs some task dependig on parallelism.
 func (f *Filler) Go(fn func()) {
 
-	if f.acquire() == true {
+	if f.acquire() == true { //nolint:staticcheck
 
 		// parallel
 
@@ -283,7 +283,7 @@ func (f *Filler) Run() (err error) {
 	// save Root
 
 	if _, err = f.c.Set(f.r.Hash, f.r.Encode(), 1); err != nil {
-		return
+		return err
 	}
 
 	f.inc(f.r.Hash, 0) // increment
@@ -298,7 +298,7 @@ func (f *Filler) Run() (err error) {
 	}()
 
 	if err = f.getRegistry(); err != nil {
-		return
+		return err
 	}
 
 	for _, dr := range f.r.Refs {
@@ -326,7 +326,7 @@ func (f *Filler) Run() (err error) {
 
 	f.Close() //nolint:errcheck,gosec
 
-	return
+	return err
 }
 
 func (f *Filler) getRegistry() (err error) {

@@ -9,7 +9,7 @@ import (
 )
 
 func addFeed(t *testing.T, idx data.IdxDB, pk cipher.PubKey) {
-	err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+	err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 		return feeds.Add(pk)
 	})
 	if err != nil {
@@ -26,7 +26,7 @@ func newRoot(seed string, sk cipher.SecKey) (r *data.Root) {
 	r.Seq = 0
 	r.Prev = cipher.SHA256{}
 	r.Hash = cipher.SumSHA256([]byte(seed))
-	r.Sig, _ = cipher.SignHash(r.Hash, sk)
+	r.Sig, _ = cipher.SignHash(r.Hash, sk) //nolint:errcheck,gosec
 	return
 }
 
@@ -37,7 +37,7 @@ func addRoot(
 	nonce uint64,
 	r *data.Root,
 ) {
-	err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+	err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 		var hs data.Heads
 		if hs, err = feeds.Heads(pk); err != nil {
 			return
@@ -65,7 +65,7 @@ func RootsAscend(t *testing.T, idx data.IdxDB) {
 	}
 
 	t.Run("empty feed", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -108,7 +108,7 @@ func RootsAscend(t *testing.T, idx data.IdxDB) {
 	}
 
 	t.Run("ascend", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -144,7 +144,7 @@ func RootsAscend(t *testing.T, idx data.IdxDB) {
 	})
 
 	t.Run("stop iteration", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -176,7 +176,7 @@ func RootsAscend(t *testing.T, idx data.IdxDB) {
 	r3.Seq, r3.Prev = 2, cipher.SumSHA256([]byte("random"))
 
 	t.Run("mutate add", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -209,7 +209,7 @@ func RootsAscend(t *testing.T, idx data.IdxDB) {
 	})
 
 	t.Run("mutate del", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -256,7 +256,7 @@ func RootsDescend(t *testing.T, idx data.IdxDB) {
 	}
 
 	t.Run("empty feed", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -300,7 +300,7 @@ func RootsDescend(t *testing.T, idx data.IdxDB) {
 	}
 
 	t.Run("descend", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -336,7 +336,7 @@ func RootsDescend(t *testing.T, idx data.IdxDB) {
 	})
 
 	t.Run("stop iteration", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -366,7 +366,7 @@ func RootsDescend(t *testing.T, idx data.IdxDB) {
 	r1 := newRoot("w", sk)
 
 	t.Run("mutate add", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -399,7 +399,7 @@ func RootsDescend(t *testing.T, idx data.IdxDB) {
 	})
 
 	t.Run("mutate del", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -447,7 +447,7 @@ func RootsSet(t *testing.T, idx data.IdxDB) {
 	r := newRoot("r", sk)
 
 	t.Run("create", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -480,7 +480,7 @@ func RootsSet(t *testing.T, idx data.IdxDB) {
 	})
 
 	t.Run("update", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -532,7 +532,7 @@ func RootsGet(t *testing.T, idx data.IdxDB) {
 	}
 
 	t.Run("not found", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -565,7 +565,7 @@ func RootsHas(t *testing.T, idx data.IdxDB) {
 	}
 
 	t.Run("not found", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -577,7 +577,7 @@ func RootsHas(t *testing.T, idx data.IdxDB) {
 			var ok bool
 			if ok, err = rs.Has(0); err != nil {
 				t.Error(err)
-			} else if ok == true {
+			} else if ok == true { //nolint:staticcheck
 				t.Error("has unexisting root")
 			}
 			return
@@ -590,7 +590,7 @@ func RootsHas(t *testing.T, idx data.IdxDB) {
 	addRoot(t, idx, pk, nonce, newRoot("seed", sk))
 
 	t.Run("has", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return
@@ -602,7 +602,7 @@ func RootsHas(t *testing.T, idx data.IdxDB) {
 			var ok bool
 			if ok, err = rs.Has(0); err != nil {
 				t.Error(err)
-			} else if ok == false {
+			} else if ok == false { //nolint:staticcheck
 				t.Error("missing root")
 			}
 			return

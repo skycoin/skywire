@@ -11,7 +11,7 @@ import (
 
 const testFileName string = "test.db.goignore"
 
-var errTestError = errors.New("test error")
+var errTestError = errors.New("test error") //nolint:unused
 
 func testNewDriveIdxDB(t *testing.T) (idx data.IdxDB) {
 	var err error

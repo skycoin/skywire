@@ -42,7 +42,7 @@ type driveCXDS struct {
 // or creates new by given file name. Underlying
 // database is boltdb (github.com/boltdb/bolt).
 // E.g. this stores data on disk
-func NewDriveCXDS(fileName string) (ds data.CXDS, err error) { //nolint:nakedret
+func NewDriveCXDS(fileName string) (ds data.CXDS, err error) {
 
 	var created bool // true if the file does not exist
 
@@ -55,15 +55,15 @@ func NewDriveCXDS(fileName string) (ds data.CXDS, err error) { //nolint:nakedret
 	})
 
 	if err != nil {
-		return
+		return ds, err
 	}
 
 	defer func() {
 
 		if err != nil {
-			b.Close() // close
-			if created == true {
-				os.Remove(fileName) // clean up
+			b.Close()            //nolint:errcheck,gosec // close
+			if created == true { //nolint:staticcheck
+				os.Remove(fileName) //nolint:errcheck,gosec // clean up
 			}
 		}
 
@@ -80,18 +80,18 @@ func NewDriveCXDS(fileName string) (ds data.CXDS, err error) { //nolint:nakedret
 
 			// if the file has not been created, then
 			// this DB file seems outdated (version 0)
-			if created == false {
+			if created == false { //nolint:staticcheck
 				return ErrMissingMetaInfo // report
 			}
 
 			// create the bucket and put meta information
 			if info, err = tx.CreateBucket(metaBucket); err != nil {
-				return
+				return err
 			}
 
 			// put version
 			if err = info.Put(versionKey, versionBytes()); err != nil {
-				return
+				return err
 			}
 
 			// put stat
@@ -118,30 +118,30 @@ func NewDriveCXDS(fileName string) (ds data.CXDS, err error) { //nolint:nakedret
 		}
 
 		_, err = tx.CreateBucketIfNotExists(objsBucket)
-		return
+		return err
 
 	})
 
 	if err != nil {
-		return
+		return ds, err
 	}
 
 	var dr = &driveCXDS{b: b} // wrap
 
 	// stat
 
-	if saveStat == true {
+	if saveStat == true { //nolint:staticcheck
 		err = dr.saveStat()
 	} else {
 		err = dr.loadStat()
 	}
 
 	if err != nil {
-		return
+		return ds, err
 	}
 
 	ds = dr
-	return
+	return ds, err
 }
 
 func (d *driveCXDS) loadStat() (err error) {
@@ -188,7 +188,7 @@ func (d *driveCXDS) loadStat() (err error) {
 
 		d.volumeUsed = int(decodeUint32(val))
 
-		return
+		return err
 
 	})
 
@@ -205,32 +205,32 @@ func (d *driveCXDS) saveStat() (err error) {
 
 		// amount all
 
-		err = info.Put(amountAllKey, encodeUint32(uint32(d.amountAll)))
+		err = info.Put(amountAllKey, encodeUint32(uint32(d.amountAll))) //nolint:gosec
 
 		if err != nil {
-			return
+			return err
 		}
 
 		// amount used
 
-		err = info.Put(amountUsedKey, encodeUint32(uint32(d.amountUsed)))
+		err = info.Put(amountUsedKey, encodeUint32(uint32(d.amountUsed))) //nolint:gosec
 
 		if err != nil {
-			return
+			return err
 		}
 
 		// volume all
 
-		err = info.Put(volumeAllKey, encodeUint32(uint32(d.volumeAll)))
+		err = info.Put(volumeAllKey, encodeUint32(uint32(d.volumeAll))) //nolint:gosec
 
 		if err != nil {
-			return
+			return err
 		}
 
 		// volume used
 
-		err = info.Put(volumeUsedKey, encodeUint32(uint32(d.volumeUsed)))
-		return
+		err = info.Put(volumeUsedKey, encodeUint32(uint32(d.volumeUsed))) //nolint:gosec
+		return err
 
 	})
 
@@ -272,7 +272,7 @@ func (d *driveCXDS) incr(
 	switch {
 	case inc == 0:
 		nrc = rc // all done (no changes)
-		return
+		return nrc, err
 	case inc < 0:
 		inc = -inc // change its sign
 		if uinc := uint32(inc); uinc >= rc {
@@ -281,7 +281,7 @@ func (d *driveCXDS) incr(
 			nrc = rc - uinc // reduce (rc > 0)
 		}
 	case inc > 0:
-		nrc = rc + uint32(inc) // increase the rc
+		nrc = rc + uint32(inc) //nolint:gosec // increase the rc
 	}
 
 	var repl = make([]byte, 4, 4+len(val))
@@ -293,7 +293,7 @@ func (d *driveCXDS) incr(
 		d.av(rc, nrc, len(val))
 	}
 
-	return
+	return nrc, err
 }
 
 // Get value by key changing or
@@ -323,7 +323,7 @@ func (d *driveCXDS) Get(
 		copy(val, got[4:])
 
 		rc, err = d.incr(o, key[:], val, rc, inc)
-		return
+		return err
 	}
 
 	if inc == 0 {
@@ -332,7 +332,7 @@ func (d *driveCXDS) Get(
 		err = d.b.Update(tx) // some changes
 	}
 
-	return
+	return val, rc, err
 }
 
 func panicf(format string, args ...interface{}) {
@@ -363,7 +363,7 @@ func (d *driveCXDS) Set(
 
 	if len(val) == 0 {
 		err = ErrEmptyValue
-		return
+		return rc, err
 	}
 
 	err = d.b.Update(func(tx *bolt.Tx) (err error) {
@@ -379,14 +379,14 @@ func (d *driveCXDS) Set(
 			d.addAll(len(val))
 
 			rc, err = d.incr(o, key[:], val, 0, 1)
-			return
+			return err
 		}
 
 		rc, err = d.incr(o, key[:], got[4:], getRefsCount(got), inc)
-		return
+		return err
 	})
 
-	return
+	return rc, err
 }
 
 // Inc changes references counter
@@ -412,11 +412,11 @@ func (d *driveCXDS) Inc(
 		rc = getRefsCount(got)
 
 		if inc == 0 {
-			return // done
+			return nil // done
 		}
 
 		rc, err = d.incr(o, key[:], got[4:], rc, inc)
-		return
+		return nil
 	}
 
 	if inc == 0 {
@@ -425,7 +425,7 @@ func (d *driveCXDS) Inc(
 		err = d.b.Update(tx) // changes required
 	}
 
-	return
+	return rc, err
 }
 
 func (d *driveCXDS) del(rc uint32, vol int) {
@@ -530,12 +530,12 @@ func (d *driveCXDS) IterateDel(
 				if err == data.ErrStopIteration {
 					err = nil
 				}
-				return
+				return err
 			}
 
-			if del == true {
+			if del == true { //nolint:staticcheck
 				if err = c.Delete(); err != nil {
-					return
+					return err
 				}
 
 				d.del(rc, len(v)-4) // stat
@@ -544,11 +544,11 @@ func (d *driveCXDS) IterateDel(
 			incSlice(key[:]) // next
 		}
 
-		return
+		return err
 
 	})
 
-	return
+	return err
 }
 
 // Amount of objects
@@ -570,15 +570,15 @@ func (d *driveCXDS) Volume() (all, used int) {
 // Close DB
 func (d *driveCXDS) Close() (err error) {
 
-	if err = d.saveStat(); err != nil && err != bolt.ErrDatabaseNotOpen {
-		d.b.Close() // drop error
+	if err = d.saveStat(); err != nil && err != bolt.ErrDatabaseNotOpen { //nolint:staticcheck
+		d.b.Close() //nolint:errcheck,gosec // drop error
 		return
 	}
 
 	return d.b.Close() //nolint:errcheck,gosec
 }
 
-func copySlice(in []byte) (got []byte) {
+func copySlice(in []byte) (got []byte) { //nolint:unused
 	got = make([]byte, len(in))
 	copy(got, in)
 	return

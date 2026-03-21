@@ -51,11 +51,11 @@ func (d *Dynamic) Value(
 	err error, //       : get or decode error
 ) {
 
-	if false == d.IsValid() {
+	if false == d.IsValid() { //nolint:staticcheck
 		return ErrInvalidDynamicReference
 	}
 
-	if true == d.IsBlank() {
+	if true == d.IsBlank() { //nolint:staticcheck
 		return ErrReferenceRepresentsNil
 	}
 
@@ -73,7 +73,7 @@ func (d *Dynamic) SetValue(
 	err error, //       : saving error
 ) {
 
-	if true == isNil(obj) {
+	if true == isNil(obj) { //nolint:staticcheck
 		d.Clear()
 		return
 	}
@@ -110,7 +110,7 @@ func (d *Dynamic) Walk(
 		panic("walkFunc is nil") // for developers
 	}
 
-	if d.IsValid() == false {
+	if d.IsValid() == false { //nolint:staticcheck
 		return ErrInvalidDynamicReference
 	}
 
@@ -119,15 +119,15 @@ func (d *Dynamic) Walk(
 		if err == ErrStopIteration {
 			err = nil // suppress this error
 		}
-		return
+		return err
 	}
 
-	if deepper == false {
-		return
+	if deepper == false { //nolint:staticcheck
+		return err
 	}
 
 	if d.Hash == (cipher.SHA256{}) {
-		return
+		return err
 	}
 
 	var reg *Registry
@@ -137,7 +137,7 @@ func (d *Dynamic) Walk(
 
 	var sch Schema
 	if sch, err = reg.SchemaByReference(d.Schema); err != nil {
-		return
+		return err
 	}
 
 	err = walkSchemaHash(pack, sch, d.Hash, walkFunc)
@@ -146,18 +146,18 @@ func (d *Dynamic) Walk(
 		err = nil // suppress this error
 	}
 
-	return
+	return err
 }
 
 // Split used by the node package to fill the Dynamic.
 func (d *Dynamic) Split(s Splitter) {
 
-	if d.IsValid() == false {
+	if d.IsValid() == false { //nolint:staticcheck
 		s.Fail(ErrInvalidDynamicReference)
 		return
 	}
 
-	if d.IsBlank() == true {
+	if d.IsBlank() == true { //nolint:staticcheck
 		return // nothing to split
 	}
 

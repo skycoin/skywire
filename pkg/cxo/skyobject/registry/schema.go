@@ -217,8 +217,8 @@ func (r *referenceSchema) Size(p []byte) (n int, err error) {
 }
 
 func (r *referenceSchema) encodedSchema() (x encodedSchema) {
-	x.Kind = uint32(r.kind) //nolint:gosec
-	x.ReferenceType = uint32(r.typ)
+	x.Kind = uint32(r.kind)         //nolint:gosec
+	x.ReferenceType = uint32(r.typ) //nolint:gosec
 	// the schema of the Elem is registered allways
 	if r.typ != ReferenceTypeDynamic {
 		x.Elem = (&schema{
@@ -337,7 +337,7 @@ func (a *arraySchema) Size(p []byte) (n int, err error) {
 
 func (a *arraySchema) encodedSchema() (x encodedSchema) {
 	x = a.sliceSchema.encodedSchema()
-	x.Len = uint32(a.length)
+	x.Len = uint32(a.length) //nolint:gosec
 	return
 }
 

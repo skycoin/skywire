@@ -49,7 +49,7 @@ func TestRefs_Ascend(t *testing.T) {
 
 		users []cipher.SHA256
 
-		clear = func(t *testing.T, r *Refs, degree Degree) {
+		clear = func(t *testing.T, r *Refs, degree Degree) { //nolint:unparam
 			pack.ClearFlags(^0)          // clear flags of pack
 			refs.Clear()                 // clear the Refs making it Refs{}
 			if degree != pack.Degree() { // if it's not default
@@ -142,7 +142,7 @@ func TestRefs_Ascend(t *testing.T) {
 			t.Run(fmt.Sprintf("load %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset() // reset the refs
+					refs.Reset() //nolint:errcheck,gosec // reset the refs
 
 					testRefsAscend(t, &refs, pack, users)
 					logRefsTree(t, &refs, pack, false)
@@ -152,7 +152,7 @@ func TestRefs_Ascend(t *testing.T) {
 			t.Run(fmt.Sprintf("load entire %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset()              // reset the refs
+					refs.Reset()              //nolint:errcheck,gosec // reset the refs
 					pack.AddFlags(EntireRefs) // load entire Refs
 
 					testRefsAscend(t, &refs, pack, users)
@@ -163,7 +163,7 @@ func TestRefs_Ascend(t *testing.T) {
 			t.Run(fmt.Sprintf("hash table index %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset() //nolint:errcheck
+					refs.Reset() //nolint:errcheck,gosec //nolint:errcheck,gosec
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)
@@ -263,7 +263,7 @@ func TestRefs_AscendFrom(t *testing.T) {
 
 		users []cipher.SHA256
 
-		clear = func(t *testing.T, r *Refs, degree Degree) {
+		clear = func(t *testing.T, r *Refs, degree Degree) { //nolint:unparam
 			pack.ClearFlags(^0)          // clear flags of pack
 			refs.Clear()                 // clear the Refs making it Refs{}
 			if degree != pack.Degree() { // if it's not default
@@ -357,7 +357,7 @@ func TestRefs_AscendFrom(t *testing.T) {
 			t.Run(fmt.Sprintf("load %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset() // reset the refs
+					refs.Reset() //nolint:errcheck,gosec //nolint:errcheck // reset the refs
 
 					testRefsAscendFrom(t, &refs, pack, users)
 					logRefsTree(t, &refs, pack, false)
@@ -367,7 +367,7 @@ func TestRefs_AscendFrom(t *testing.T) {
 			t.Run(fmt.Sprintf("load entire %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset()              // reset the refs
+					refs.Reset()              //nolint:errcheck,gosec              //nolint:errcheck // reset the refs
 					pack.AddFlags(EntireRefs) // load entire Refs
 
 					testRefsAscendFrom(t, &refs, pack, users)
@@ -378,7 +378,7 @@ func TestRefs_AscendFrom(t *testing.T) {
 			t.Run(fmt.Sprintf("hash table index %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset() //nolint:errcheck
+					refs.Reset() //nolint:errcheck,gosec //nolint:errcheck,gosec
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)
@@ -468,7 +468,7 @@ func TestRefs_Descend(t *testing.T) {
 
 		users []cipher.SHA256
 
-		clear = func(t *testing.T, r *Refs, degree Degree) {
+		clear = func(t *testing.T, r *Refs, degree Degree) { //nolint:unparam
 			pack.ClearFlags(^0)          // clear flags of pack
 			refs.Clear()                 // clear the Refs making it Refs{}
 			if degree != pack.Degree() { // if it's not default
@@ -561,7 +561,9 @@ func TestRefs_Descend(t *testing.T) {
 			t.Run(fmt.Sprintf("load %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset() // reset the refs
+					if err := refs.Reset(); err != nil {
+						t.Fatal(err)
+					} // reset the refs
 
 					testRefsDescend(t, &refs, pack, users)
 					logRefsTree(t, &refs, pack, false)
@@ -571,7 +573,7 @@ func TestRefs_Descend(t *testing.T) {
 			t.Run(fmt.Sprintf("load entire %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset()              // reset the refs
+					refs.Reset()              //nolint:errcheck,gosec              //nolint:errcheck // reset the refs
 					pack.AddFlags(EntireRefs) // load entire Refs
 
 					testRefsDescend(t, &refs, pack, users)
@@ -582,7 +584,7 @@ func TestRefs_Descend(t *testing.T) {
 			t.Run(fmt.Sprintf("hash table index %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset() //nolint:errcheck
+					refs.Reset() //nolint:errcheck,gosec //nolint:errcheck,gosec
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)
@@ -693,7 +695,7 @@ func TestRefs_DescendFrom(t *testing.T) {
 
 		users []cipher.SHA256
 
-		clear = func(t *testing.T, r *Refs, degree Degree) {
+		clear = func(t *testing.T, r *Refs, degree Degree) { //nolint:unparam
 			pack.ClearFlags(^0)          // clear flags of pack
 			refs.Clear()                 // clear the Refs making it Refs{}
 			if degree != pack.Degree() { // if it's not default
@@ -784,7 +786,9 @@ func TestRefs_DescendFrom(t *testing.T) {
 
 					t.Skip("skip")
 
-					refs.Reset() // reset the refs
+					if err := refs.Reset(); err != nil {
+						t.Fatal(err)
+					} // reset the refs
 
 					testRefsDescendFrom(t, &refs, pack, users)
 					logRefsTree(t, &refs, pack, false)
@@ -796,7 +800,9 @@ func TestRefs_DescendFrom(t *testing.T) {
 
 					t.Skip("skip")
 
-					refs.Reset()              // reset the refs
+					if err := refs.Reset(); err != nil {
+						t.Fatal(err)
+					} // reset the refs
 					pack.AddFlags(EntireRefs) // load entire Refs
 
 					testRefsDescendFrom(t, &refs, pack, users)
@@ -809,7 +815,7 @@ func TestRefs_DescendFrom(t *testing.T) {
 
 					t.Skip("skip")
 
-					refs.Reset() //nolint:errcheck
+					refs.Reset() //nolint:errcheck,gosec //nolint:errcheck,gosec
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)

@@ -37,7 +37,7 @@ func NewDriveIdxDB(fileName string) (idx data.IdxDB, err error) {
 	})
 
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	err = b.Update(func(tx *bolt.Tx) (err error) {
@@ -49,18 +49,18 @@ func NewDriveIdxDB(fileName string) (idx data.IdxDB, err error) {
 
 			// if the file has not been created, then
 			// this DB file seems outdated (version 0)
-			if created == false {
+			if created == false { //nolint:staticcheck
 				return ErrMissingMetaInfo // report
 			}
 
 			// create the bucket and put meta information
 			if info, err = tx.CreateBucket(metaBucket); err != nil {
-				return
+				return err
 			}
 
 			// put version
 			if err = info.Put(versionKey, versionBytes()); err != nil {
-				return
+				return err
 			}
 
 		} else {
@@ -83,16 +83,16 @@ func NewDriveIdxDB(fileName string) (idx data.IdxDB, err error) {
 		}
 
 		_, err = tx.CreateBucketIfNotExists(feedsBucket)
-		return
+		return err
 	})
 
 	if err != nil {
 		b.Close() //nolint:errcheck,gosec
-		return
+		return nil, err
 	}
 
 	idx = &driveDB{b}
-	return
+	return idx, err
 }
 
 // Tx performs ACID-transaction
@@ -323,7 +323,7 @@ func (d *driveRoots) Descend(iterateFunc data.IterateRootsFunc) (err error) {
 func (d *driveRoots) Set(r *data.Root) (err error) {
 
 	if err = r.Validate(); err != nil {
-		return
+		return err
 	}
 
 	var val, seqb []byte

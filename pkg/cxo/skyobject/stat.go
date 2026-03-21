@@ -91,24 +91,24 @@ func (c *Container) Stat() (s *Stat) {
 
 	var amount, volume = c.amountVolume() // of cache
 
-	s.CacheObjects.Amount = statutil.Amount(amount)
-	s.CacheObjects.Volume = statutil.Volume(volume)
+	s.CacheObjects.Amount = statutil.Amount(amount) //nolint:gosec
+	s.CacheObjects.Volume = statutil.Volume(volume) //nolint:gosec
 
 	var all, used = c.db.CXDS().Amount()
 
-	s.AllObjects.Amount = statutil.Amount(all)
-	s.UsedObjects.Amount = statutil.Amount(used)
+	s.AllObjects.Amount = statutil.Amount(all)   //nolint:gosec
+	s.UsedObjects.Amount = statutil.Amount(used) //nolint:gosec
 
 	all, used = c.db.CXDS().Volume()
 
-	s.AllObjects.Volume = statutil.Volume(all)
-	s.UsedObjects.Volume = statutil.Volume(used)
+	s.AllObjects.Volume = statutil.Volume(all)   //nolint:gosec
+	s.UsedObjects.Volume = statutil.Volume(used) //nolint:gosec
 
 	s.RootsPerSecond = c.Index.stat.rootsPerSecond()
 
 	s.Feeds = c.Index.feedsStat()
 
-	return
+	return s
 }
 
 func (i *Index) feedsStat() (s map[cipher.PubKey]FeedStat) {
@@ -119,7 +119,7 @@ func (i *Index) feedsStat() (s map[cipher.PubKey]FeedStat) {
 	s = make(map[cipher.PubKey]FeedStat)
 
 	// ignore error
-	i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+	i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 
 		//
 		// range feeds
@@ -163,7 +163,7 @@ func (i *Index) feedsStat() (s map[cipher.PubKey]FeedStat) {
 
 				if sh.Len > 1 {
 
-					roots.Ascend(func(dr *data.Root) (err error) { //nolint:errcheck
+					roots.Ascend(func(dr *data.Root) (err error) { //nolint:errcheck,gosec
 
 						sh.First.Seq = dr.Seq
 						sh.First.Time = time.Unix(0, dr.Time)
@@ -196,9 +196,9 @@ func (i *Index) feedsStat() (s map[cipher.PubKey]FeedStat) {
 		// end
 		//
 
-		return
+		return err
 	})
 
-	return
+	return s
 
 }

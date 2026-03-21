@@ -35,7 +35,7 @@ func (r *Ref) String() string {
 // Value of the Ref
 func (r *Ref) Value(pack Pack, obj interface{}) (err error) {
 
-	if true == r.IsBlank() {
+	if true == r.IsBlank() { //nolint:staticcheck
 		return ErrReferenceRepresentsNil
 	}
 
@@ -58,7 +58,7 @@ func (r *Ref) SetValue(
 	err error, //       : error if any
 ) {
 
-	if true == isNil(obj) {
+	if true == isNil(obj) { //nolint:staticcheck
 		r.Clear()
 		return
 	}
@@ -105,7 +105,7 @@ func (r *Ref) Walk(
 ) {
 
 	var deepper bool
-	if deepper, err = walkFunc(r.Hash, 0); err != nil || deepper == false {
+	if deepper, err = walkFunc(r.Hash, 0); err != nil || deepper == false { //nolint:staticcheck
 		return
 	}
 

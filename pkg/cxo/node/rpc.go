@@ -27,12 +27,12 @@ func (n *Node) newRPC() (r *rpcServer) {
 
 func (r *rpcServer) Listen(address string) (err error) {
 
-	r.r.RegisterName("node", &RPC{r.n})
+	r.r.RegisterName("node", &RPC{r.n}) //nolint:errcheck,gosec
 
-	r.r.RegisterName("tcp", &TCPRPC{r.n})
-	r.r.RegisterName("udp", &UDPRPC{r.n})
+	r.r.RegisterName("tcp", &TCPRPC{r.n}) //nolint:errcheck,gosec
+	r.r.RegisterName("udp", &UDPRPC{r.n}) //nolint:errcheck,gosec
 
-	r.r.RegisterName("root", &RootRPC{r.n})
+	r.r.RegisterName("root", &RootRPC{r.n}) //nolint:errcheck,gosec
 
 	if r.l, err = net.Listen("tcp", address); err != nil {
 		return

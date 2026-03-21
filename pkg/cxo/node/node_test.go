@@ -135,7 +135,7 @@ func assertIDs(t *testing.T, cs []*Conn, ids ...cipher.PubKey) {
 }
 
 func onRootReceivedToChannel(
-	chanBufferSize int, //                         :
+	chanBufferSize int, //nolint:unparam //                         :
 ) (
 	channel chan *registry.Root, //                :
 	callback func(*Conn, *registry.Root) error, // :
@@ -197,7 +197,7 @@ func TestNode_Publish(t *testing.T) {
 
 	// feed and owner
 
-	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck
+	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck,gosec
 
 	assertNil(t, ln.Share(pk))
 
@@ -384,9 +384,9 @@ func TestNode_Share(t *testing.T) {
 
 		err error
 
-		pk1, _ = cipher.GenerateKeyPair() //nolint:errcheck
-		pk2, _ = cipher.GenerateKeyPair() //nolint:errcheck
-		pk3, _ = cipher.GenerateKeyPair() //nolint:errcheck
+		pk1, _ = cipher.GenerateKeyPair() //nolint:errcheck,gosec
+		pk2, _ = cipher.GenerateKeyPair() //nolint:errcheck,gosec
+		pk3, _ = cipher.GenerateKeyPair() //nolint:errcheck,gosec
 	)
 
 	defer n.Close() //nolint:errcheck,gosec

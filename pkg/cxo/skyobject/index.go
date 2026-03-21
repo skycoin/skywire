@@ -58,7 +58,7 @@ type Index struct {
 	feedsl []cipher.PubKey // change on write
 
 	stat   *indexStat
-	closeo sync.Once // close once //nolint:unused
+	closeo sync.Once //nolint:unused // close once
 }
 
 func (i *Index) load(c *Container) (err error) {
@@ -69,7 +69,7 @@ func (i *Index) load(c *Container) (err error) {
 	i.feeds = make(map[cipher.PubKey]*indexHeads)
 	i.c = c
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 
 		// range feeds
 
@@ -77,7 +77,7 @@ func (i *Index) load(c *Container) (err error) {
 
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
-				return
+				return err
 			}
 
 			// range heads
@@ -88,7 +88,7 @@ func (i *Index) load(c *Container) (err error) {
 
 				var rs data.Roots
 				if rs, err = hs.Roots(nonce); err != nil {
-					return
+					return err
 				}
 
 				// get last
@@ -101,7 +101,7 @@ func (i *Index) load(c *Container) (err error) {
 				})
 
 				if err != nil {
-					return
+					return err
 				}
 
 				feedMap.h[nonce] = ir // head (or nil)
@@ -113,27 +113,27 @@ func (i *Index) load(c *Container) (err error) {
 
 				}
 
-				return
+				return err
 			})
 
 			if err != nil {
-				return
+				return err
 			}
 
 			i.feeds[pk] = feedMap
 
-			return
+			return err
 		})
 
 	})
 
 	if err != nil {
-		return
+		return err
 	}
 
 	i.loadTime = time.Now().UnixNano()
 
-	return
+	return err
 }
 
 // call under lock
@@ -147,11 +147,11 @@ func (i *Index) lastRoot(
 
 	var hs, ok = i.feeds[pk]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return nil, data.ErrNoSuchFeed
 	}
 
-	if dr, ok = hs.h[nonce]; ok == false {
+	if dr, ok = hs.h[nonce]; ok == false { //nolint:staticcheck
 		return nil, data.ErrNoSuchHead
 	}
 
@@ -172,7 +172,7 @@ func (i *Index) AddFeed(pk cipher.PubKey) (err error) {
 		return // alrady has
 	}
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 		return feeds.Add(pk)
 	})
 
@@ -186,7 +186,7 @@ func (i *Index) AddFeed(pk cipher.PubKey) (err error) {
 	// used by end-user
 	i.feedsl = nil
 
-	if _, ok := i.feeds[pk]; ok == false {
+	if _, ok := i.feeds[pk]; ok == false { //nolint:staticcheck
 		i.feeds[pk] = newIndexHeads() // add to Index
 	}
 
@@ -207,11 +207,11 @@ func (i *Index) findRoot(
 
 	var hs, ok = i.feeds[pk]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return nil, data.ErrNoSuchFeed
 	}
 
-	if dr, ok = hs.h[nonce]; ok == false {
+	if dr, ok = hs.h[nonce]; ok == false { //nolint:staticcheck
 		return nil, data.ErrNoSuchHead
 	}
 
@@ -220,12 +220,12 @@ func (i *Index) findRoot(
 	}
 
 	if dr.Seq == seq {
-		return // found (the last)
+		return dr, err // found (the last)
 	}
 
 	// take a look the IdxDB
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 		var heads data.Heads
 		if heads, err = feeds.Heads(pk); err != nil {
 			return
@@ -238,7 +238,7 @@ func (i *Index) findRoot(
 		return
 	})
 
-	return
+	return dr, err
 
 }
 
@@ -326,7 +326,7 @@ func (i *Index) ReceivedRoot(
 
 func (i *Index) addRoot(r *registry.Root) (alreadyHave bool, err error) {
 
-	if r.IsFull == false {
+	if r.IsFull == false { //nolint:staticcheck
 		return false, errors.New("can't add non-full Root: " + r.Short())
 	}
 
@@ -350,15 +350,15 @@ func (i *Index) addRoot(r *registry.Root) (alreadyHave bool, err error) {
 	case err == nil:
 		ir.Access = time.Now().UnixNano()
 		alreadyHave = true
-		return
+		return alreadyHave, err
 	case err == data.ErrNotFound || err == data.ErrNoSuchHead:
 	default:
-		return // an error (data.ErrNoSuchFeed or another)
+		return alreadyHave, err // an error (data.ErrNoSuchFeed or another)
 	}
 
 	// save in the IdxDB
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 
 		var hs data.Heads
 		if hs, err = feeds.Heads(r.Pub); err != nil {
@@ -389,13 +389,13 @@ func (i *Index) addRoot(r *registry.Root) (alreadyHave bool, err error) {
 	})
 
 	if err != nil {
-		return
+		return alreadyHave, err
 	}
 
 	if ir != nil && r.Seq < ir.Seq {
 		// don't add to the Index the fucking, old,
 		// outdated, never need, nobody need Root
-		return
+		return alreadyHave, err
 	}
 
 	// add to the Index
@@ -414,7 +414,7 @@ func (i *Index) addRoot(r *registry.Root) (alreadyHave bool, err error) {
 	// add to stat
 	i.stat.addRoot()
 
-	return
+	return alreadyHave, err
 
 }
 
@@ -436,7 +436,7 @@ func (i *Index) addSavedRoot(r *registry.Root, dr *data.Root) {
 	// add to stat
 	i.stat.addRoot()
 
-	return
+	return //nolint:staticcheck
 }
 
 // AddRoot to DB. The method doesn't create feed of the root
@@ -476,7 +476,7 @@ func (i *Index) ActiveHead(pk cipher.PubKey) (nonce uint64) {
 
 	var hs, ok = i.feeds[pk]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return
 	}
 
@@ -494,7 +494,7 @@ func (i *Index) Heads(pk cipher.PubKey) (heads []uint64, err error) {
 
 	var hs, ok = i.feeds[pk]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return nil, data.ErrNoSuchFeed
 	}
 
@@ -577,13 +577,13 @@ func (i *Index) delFeed(
 
 	var hs, ok = i.feeds[pk]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return nil, data.ErrNoSuchFeed
 	}
 
 	// delete from IdxDB first
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 
 		var heads data.Heads
 		if heads, err = feeds.Heads(pk); err != nil {
@@ -597,7 +597,7 @@ func (i *Index) delFeed(
 				return
 			}
 
-			err = roots.Ascend(func(dr *data.Root) (err error) { //nolint:errcheck
+			err = roots.Ascend(func(dr *data.Root) (err error) { //nolint:errcheck,gosec
 				rhs = append(rhs, dr.Hash)
 				return
 			})
@@ -620,7 +620,7 @@ func (i *Index) delFeed(
 	delete(i.feeds, pk)
 	i.feedsl = nil // clear the list
 
-	return
+	return rhs, err
 }
 
 // with lock
@@ -667,17 +667,17 @@ func (i *Index) delHead(
 
 	var hs, ok = i.feeds[pk]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return nil, data.ErrNoSuchFeed
 	}
 
-	if _, ok = hs.h[nonce]; ok == false {
+	if _, ok = hs.h[nonce]; ok == false { //nolint:staticcheck
 		return nil, data.ErrNoSuchHead
 	}
 
 	// delete from IdxDB first
 
-	err = i.c.db.IdxDB().Tx(func(feed data.Feeds) (err error) { //nolint:errcheck
+	err = i.c.db.IdxDB().Tx(func(feed data.Feeds) (err error) { //nolint:errcheck,gosec
 
 		var hs data.Heads
 		if hs, err = feed.Heads(pk); err != nil {
@@ -689,7 +689,7 @@ func (i *Index) delHead(
 			return
 		}
 
-		err = roots.Ascend(func(dr *data.Root) (err error) { //nolint:errcheck
+		err = roots.Ascend(func(dr *data.Root) (err error) { //nolint:errcheck,gosec
 			rhs = append(rhs, dr.Hash)
 			return
 		})
@@ -709,7 +709,7 @@ func (i *Index) delHead(
 
 	delete(hs.h, nonce)
 
-	return
+	return rhs, err
 
 }
 
@@ -768,15 +768,15 @@ func (i *Index) delRoot(
 
 	var hs, ok = i.feeds[pk]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		err = data.ErrNoSuchFeed
-		return
+		return rootHash, err
 	}
 
 	var ir *data.Root
-	if ir, ok = hs.h[nonce]; ok == false {
+	if ir, ok = hs.h[nonce]; ok == false { //nolint:staticcheck
 		err = data.ErrNoSuchHead
-		return
+		return rootHash, err
 	}
 
 	// remove from IdxDB first
@@ -786,21 +786,21 @@ func (i *Index) delRoot(
 		removed  bool // last Root removed and head is clean
 	)
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 
 		var hs data.Heads
 		if hs, err = feeds.Heads(pk); err != nil {
-			return
+			return err
 		}
 
 		var rs data.Roots
 		if rs, err = hs.Roots(nonce); err != nil {
-			return
+			return err
 		}
 
 		var dr *data.Root
 		if dr, err = rs.Get(seq); err != nil {
-			return // DB failure or  'not found'
+			return err // DB failure or  'not found'
 		}
 
 		// keep hash of the Root to remove
@@ -813,7 +813,7 @@ func (i *Index) delRoot(
 		// for fast access
 
 		if err = rs.Del(seq); err != nil || seq != ir.Seq {
-			return
+			return err
 		}
 
 		removed, replaced = true, true
@@ -825,17 +825,17 @@ func (i *Index) delRoot(
 			return data.ErrStopIteration
 		})
 
-		return
+		return err
 
 	})
 
 	if err != nil {
-		return // DB failure
+		return rootHash, err // DB failure
 	}
 
-	if removed == true {
+	if removed == true { //nolint:staticcheck
 		hs.h[nonce] = nil // blank head
-	} else if replaced == true {
+	} else if replaced == true { //nolint:staticcheck
 		hs.h[nonce] = ir
 	}
 
@@ -844,7 +844,7 @@ func (i *Index) delRoot(
 		hs.setActive()
 	}
 
-	return
+	return rootHash, err
 }
 
 // delRootLock is delRoot with lock
@@ -873,7 +873,7 @@ func (i *Index) delPackWalkFunc(
 
 	var dpack *delPack
 	if dpack, err = i.c.getDelPack(r); err != nil {
-		return
+		return pack, walkFunc, err
 	}
 
 	walkFunc = func(
@@ -893,7 +893,7 @@ func (i *Index) delPackWalkFunc(
 		// if it will be deleted by the -1
 
 		if val, rc, err = i.c.getNoCache(hash, -1); err != nil {
-			return
+			return deepper, err
 		}
 
 		// keep last if it was deleted
@@ -905,13 +905,13 @@ func (i *Index) delPackWalkFunc(
 		}
 
 		// we are going deepper only if value has been deleted by the Get
-		return
+		return deepper, err
 
 	}
 
 	pack = dpack
 
-	return
+	return pack, walkFunc, err
 }
 
 // delRootRelatedValues decrements all values related to
@@ -987,7 +987,7 @@ func (i *Index) HasHead(pk cipher.PubKey, nonce uint64) (yep bool) {
 
 	var hs *indexHeads
 
-	if hs, yep = i.feeds[pk]; yep == false {
+	if hs, yep = i.feeds[pk]; yep == false { //nolint:staticcheck
 		return
 	}
 
@@ -1009,34 +1009,34 @@ func (i *Index) AddHead(pk cipher.PubKey, nonce uint64) (err error) {
 
 	var hs, ok = i.feeds[pk]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return data.ErrNoSuchFeed
 	}
 
 	if _, ok = hs.h[nonce]; ok {
-		return // already exists
+		return err // already exists
 	}
 
 	// add to DB
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 		var heads data.Heads
 		if heads, err = feeds.Heads(pk); err != nil {
-			return
+			return err
 		}
 
 		_, err = heads.Add(nonce)
-		return
+		return err
 	})
 
 	if err != nil {
-		return
+		return err
 	}
 
 	// add to the Index
 
 	i.feeds[pk] = newIndexHeads()
-	return
+	return err
 
 }
 
@@ -1071,12 +1071,12 @@ func (i *Index) dataRoot(
 
 	var hs, ok = i.feeds[pk]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return nil, data.ErrNoSuchFeed
 	}
 
 	var last *data.Root
-	if last, ok = hs.h[nonce]; ok == false {
+	if last, ok = hs.h[nonce]; ok == false { //nolint:staticcheck
 		return nil, data.ErrNoSuchHead
 	}
 
@@ -1090,7 +1090,7 @@ func (i *Index) dataRoot(
 
 	// take a look DB
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck,gosec
 		var heads data.Heads
 		if heads, err = feeds.Heads(pk); err != nil {
 			return
@@ -1103,7 +1103,7 @@ func (i *Index) dataRoot(
 		return
 	})
 
-	return
+	return dr, err
 }
 
 // Root of feed-head  by seq number

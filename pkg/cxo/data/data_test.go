@@ -10,7 +10,7 @@ import (
 
 func testRoot(s string) (r *Root) {
 
-	_, sk, _ := cipher.GenerateDeterministicKeyPair([]byte("test")) //nolint:errcheck
+	_, sk, _ := cipher.GenerateDeterministicKeyPair([]byte("test")) //nolint:errcheck,gosec
 
 	r = new(Root)
 	r.Access = 996
@@ -21,7 +21,7 @@ func testRoot(s string) (r *Root) {
 	r.Prev = cipher.SHA256{}
 
 	r.Hash = cipher.SumSHA256([]byte(s))
-	r.Sig, _ = cipher.SignHash(r.Hash, sk) //nolint:errcheck
+	r.Sig, _ = cipher.SignHash(r.Hash, sk) //nolint:errcheck,gosec
 	return
 }
 
@@ -29,7 +29,7 @@ func TestRoot_Encode(t *testing.T) {
 	// Encode() (p []byte)
 
 	r := testRoot("ha-ha")
-	if bytes.Compare(r.Encode(), encoder.Serialize(r)) != 0 {
+	if bytes.Compare(r.Encode(), encoder.Serialize(r)) != 0 { //nolint:staticcheck
 		t.Error("wrong")
 	}
 }

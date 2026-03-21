@@ -198,7 +198,7 @@ func TestDecodeRegistry(t *testing.T) {
 		t.Fatal("can't decode Registry:", err)
 	}
 
-	if bytes.Compare(d.Encode(), reg.Encode()) != 0 {
+	if bytes.Compare(d.Encode(), reg.Encode()) != 0 { //nolint:staticcheck
 		t.Error("different")
 	}
 

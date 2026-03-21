@@ -80,12 +80,12 @@ func testRefsAppendHashesCheck(
 	}
 
 	if shift > 0 {
-		hashes = append(hashes, hashes...) // stub for now //nolint:ineffassign
+		hashes = append(hashes, hashes...) //nolint:ineffassign,staticcheck // stub for now
 	}
 
 	logRefsTree(t, r, pack, false)
 
-	return
+	return nl
 
 }
 
@@ -214,7 +214,7 @@ func TestRefs_AppendHashes(t *testing.T) {
 
 					testRefsAppendHashesCheck(t, &refs, pack, 0, users[:k+1])
 
-					refs.Reset() // keep degree
+					refs.Reset() //nolint:errcheck,gosec // keep degree
 
 				}
 
@@ -234,7 +234,7 @@ func TestRefs_AppendHashes(t *testing.T) {
 
 					testRefsAppendHashesCheck(t, &refs, pack, 0, users[:k+1])
 
-					refs.Reset() // keep degree
+					refs.Reset() //nolint:errcheck,gosec // keep degree
 
 				}
 
@@ -260,7 +260,7 @@ func TestRefs_AppendHashes(t *testing.T) {
 					testRefsHashTableIndex(t, &refs, users[:k+1])
 					testRefsAppendHashesCheck(t, &refs, pack, 0, users[:k+1])
 
-					refs.Reset() // keep degree
+					refs.Reset() //nolint:errcheck,gosec // keep degree
 
 				}
 

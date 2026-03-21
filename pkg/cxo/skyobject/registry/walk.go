@@ -28,7 +28,7 @@ func walkSchemaHash(
 	// go deepper and we can skip all bleow the
 	// check
 
-	if sch.HasReferences() == false {
+	if sch.HasReferences() == false { //nolint:staticcheck
 		return // nothing to walk through
 	}
 
@@ -54,7 +54,7 @@ func walkSchemaData(
 ) {
 
 	// the object represents Ref, Refs or Dynamic
-	if sch.IsReference() == true {
+	if sch.IsReference() == true { //nolint:staticcheck
 		return walkSchemaReference(pack, sch, val, walkFunc)
 	}
 
@@ -91,7 +91,7 @@ func walkSchemaReference(
 
 		var ref Ref
 		if _, err = encoder.DeserializeRaw(val, &ref); err != nil {
-			return
+			return err
 		}
 
 		return ref.Walk(pack, el, walkFunc)
@@ -105,7 +105,7 @@ func walkSchemaReference(
 
 		var refs Refs
 		if _, err = encoder.DeserializeRaw(val, &refs); err != nil {
-			return
+			return err
 		}
 
 		return refs.Walk(pack, el, walkFunc)
@@ -114,7 +114,7 @@ func walkSchemaReference(
 
 		var dr Dynamic
 		if _, err = encoder.DeserializeRaw(val, &dr); err != nil {
-			return
+			return err
 		}
 		return dr.Walk(pack, walkFunc)
 
@@ -187,7 +187,7 @@ func walkArraySlice(
 	// array or slice even if it contains references
 
 	if ln == 0 {
-		return
+		return err
 	}
 
 	var shift, m int
@@ -197,11 +197,11 @@ func walkArraySlice(
 		if shift > len(val) {
 			err = fmt.Errorf("unexpected end of encoded  array or slice "+
 				"of <%s>, length: %d, index: %d", el, ln, i)
-			return
+			return err
 		}
 
 		if m, err = el.Size(val[shift:]); err != nil {
-			return
+			return err
 		}
 
 		// if we are here, then the el contains references
@@ -211,14 +211,14 @@ func walkArraySlice(
 		err = walkSchemaData(pack, el, val[shift:shift+m], walkFunc)
 
 		if err != nil {
-			return
+			return err
 		}
 
 		shift += m
 
 	}
 
-	return
+	return err
 
 }
 
@@ -242,15 +242,15 @@ func walkStruct(
 				i,
 				fl.Name(),
 				fl.Schema().String())
-			return
+			return err
 		}
 
 		if s, err = fl.Schema().Size(val[shift:]); err != nil {
-			return
+			return err
 		}
 
 		// skip all fields that doesn't contains references
-		if fl.Schema().HasReferences() == false {
+		if fl.Schema().HasReferences() == false { //nolint:staticcheck
 			shift += s
 			continue
 		}
@@ -258,13 +258,13 @@ func walkStruct(
 		err = walkSchemaData(pack, fl.Schema(), val[shift:shift+s], walkFunc)
 
 		if err != nil {
-			return
+			return err
 		}
 
 		shift += s
 
 	}
 
-	return
+	return err
 
 }

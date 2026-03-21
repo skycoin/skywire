@@ -53,36 +53,36 @@ func NewContainer(conf *Config) (c *Container, err error) {
 	c.conf = conf // keep
 
 	if err = c.createDB(conf); err != nil {
-		return
+		return c, err
 	}
 
 	defer func() {
 		if err != nil {
-			c.db.Close()         // ignore error
+			c.db.Close()         //nolint:errcheck,gosec // ignore error
 			c.Cache.stat.Close() // release resources
 		}
 	}()
 
 	// check size of objects
 	if err = c.checkSize(); err != nil {
-		return
+		return c, err
 	}
 
 	// initialize cache
 	c.initCache()
 
 	if err = c.Index.load(c); err != nil {
-		return
+		return c, err
 	}
 
-	return // done
+	return c, err // done
 }
 
 func (c *Container) createDB(conf *Config) (err error) {
 
 	if conf.DataDir != "" {
 		if err = mkdirp(conf.DataDir); err != nil {
-			return
+			return err
 		}
 	}
 
@@ -93,7 +93,7 @@ func (c *Container) createDB(conf *Config) (err error) {
 		c.cxPath, c.idxPath = "<used provided DB>", "<used provided DB>"
 		db = conf.DB
 
-	} else if conf.InMemoryDB == true {
+	} else if conf.InMemoryDB == true { //nolint:staticcheck
 
 		c.cxPath, c.idxPath = "<in memory>", "<in memory>"
 		db = data.NewDB(cxds.NewMemoryCXDS(), idxdb.NewMemeoryDB())
@@ -112,12 +112,12 @@ func (c *Container) createDB(conf *Config) (err error) {
 		var idx data.IdxDB
 
 		if cx, err = cxds.NewDriveCXDS(c.cxPath); err != nil {
-			return
+			return err
 		}
 
 		if idx, err = idxdb.NewDriveIdxDB(c.idxPath); err != nil {
 			cx.Close() //nolint:errcheck,gosec
-			return
+			return err
 		}
 
 		db = data.NewDB(cx, idx)
@@ -126,10 +126,10 @@ func (c *Container) createDB(conf *Config) (err error) {
 
 	c.db = db
 
-	return
+	return err
 }
 
-type rcs struct {
+type rcs struct { //nolint:unused
 	rc uint32 // saved rc (DB)
 	cc uint32 // correct rc (determined by walking)
 }
@@ -149,7 +149,7 @@ func (c *Container) getHashRCs() (cr *cxdsRCs, err error) { //nolint:unused
 		func(hash cipher.SHA256, rc uint32, val []byte) (err error) {
 
 			cr.amount++                   // stat
-			cr.volume += uint32(len(val)) // stat
+			cr.volume += uint32(len(val)) //nolint:gosec // stat
 
 			cr.hr[hash] = rcs{rc: rc}
 			return
@@ -176,21 +176,21 @@ func (c *Container) initRoot(cr *cxdsRCs, rootHash cipher.SHA256) (err error) { 
 
 	var val []byte
 	if val, _, err = c.Get(rootHash, 0); err != nil {
-		return
+		return err
 	}
 
 	var r *registry.Root
 	if r, err = registry.DecodeRoot(val); err != nil {
-		return
+		return err
 	}
 
 	if val, _, err = c.Get(cipher.SHA256(r.Reg), 0); err != nil {
-		return
+		return err
 	}
 
 	var reg *registry.Registry
 	if reg, err = registry.DecodeRegistry(val); err != nil {
-		return
+		return err
 	}
 
 	var pack = c.getPack(reg)
@@ -205,7 +205,7 @@ func (c *Container) initRoot(cr *cxdsRCs, rootHash cipher.SHA256) (err error) { 
 		) {
 
 			var rc, ok = cr.hr[hash]
-			if ok == false {
+			if ok == false { //nolint:staticcheck
 				err = data.ErrNotFound
 				return
 			}
@@ -216,13 +216,13 @@ func (c *Container) initRoot(cr *cxdsRCs, rootHash cipher.SHA256) (err error) { 
 
 		})
 
-	return
+	return err
 
 }
 
 func (c *Container) checkSize() (err error) {
 
-	if c.conf.CheckSizes == false {
+	if c.conf.CheckSizes == false { //nolint:staticcheck
 		return
 	}
 
@@ -354,7 +354,7 @@ func (c *Container) Close() (err error) {
 	if err = c.Cache.Close(); err == nil {
 		err = c.db.Close() //nolint:errcheck,gosec
 	} else {
-		c.db.Close() // ignore error
+		c.db.Close() //nolint:errcheck,gosec // ignore error
 	}
 
 	return

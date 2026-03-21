@@ -16,7 +16,7 @@ const Tag = "skyobject"
 
 // A Registry represents types registry
 type Registry struct {
-	done bool // stop registration and use //nolint:unused
+	done bool //nolint:unused // stop registration and use
 
 	ref RegistryRef // reference to the registry
 
@@ -289,7 +289,7 @@ func decodeSchema(b []byte) (s Schema, err error) {
 
 	var x encodedSchema
 	if _, err = encoder.DeserializeRaw(b, &x); err != nil {
-		return
+		return s, err
 	}
 	// is reference
 	switch ReferenceType(x.ReferenceType) {
@@ -300,15 +300,15 @@ func decodeSchema(b []byte) (s Schema, err error) {
 		rs.typ = ReferenceType(x.ReferenceType)
 		if rs.typ != ReferenceTypeDynamic {
 			if rs.elem, err = decodeSchema(x.Elem); err != nil {
-				return
+				return s, err
 			}
 		}
 		s = &rs
-		return
+		return s, err
 	case ReferenceTypeNone: // not a reference
 	default:
 		err = ErrInvalidEncodedSchema
-		return
+		return s, err
 	}
 
 	sc := schema{
@@ -321,7 +321,7 @@ func decodeSchema(b []byte) (s Schema, err error) {
 		ss := sliceSchema{}
 		ss.schema = sc
 		if ss.elem, err = decodeSchema(x.Elem); err != nil {
-			return
+			return s, err
 		}
 		s = &ss
 	case reflect.Array:
@@ -329,7 +329,7 @@ func decodeSchema(b []byte) (s Schema, err error) {
 		as.schema = sc
 		as.length = int(x.Len)
 		if as.elem, err = decodeSchema(x.Elem); err != nil {
-			return
+			return s, err
 		}
 		s = &as
 	case reflect.Struct:
@@ -338,7 +338,7 @@ func decodeSchema(b []byte) (s Schema, err error) {
 		var f Field
 		for _, ef := range x.Fields {
 			if f, err = decodeField(ef); err != nil {
-				return
+				return s, err
 			}
 			ss.fields = append(ss.fields, f)
 		}
@@ -347,7 +347,7 @@ func decodeSchema(b []byte) (s Schema, err error) {
 		s = &sc
 	}
 
-	return
+	return s, err
 }
 
 func decodeField(b []byte) (f Field, err error) {

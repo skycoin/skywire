@@ -68,7 +68,7 @@ func (r *Refs) loadLeafs(
 
 	rn.mods |= loadedMod // use flag to mark as loaded
 
-	return
+	return //nolint:staticcheck
 }
 
 // laod branch, setting hash and upper fields and loading
@@ -193,7 +193,7 @@ func (r *Refs) loadNodeIfNeed(
 	err error, //    : get, decoding or 'invalid refs' error
 ) {
 
-	if rn.isLoaded() == true {
+	if rn.isLoaded() == true { //nolint:staticcheck
 		return // already loaded
 	}
 
@@ -209,7 +209,7 @@ func (r *refsNode) encode(depth int) []byte {
 
 	var ern encodedRefsNode
 
-	ern.Length = uint32(r.length)
+	ern.Length = uint32(r.length) //nolint:gosec
 
 	if depth == 0 {
 
@@ -322,7 +322,7 @@ func (r *Refs) elementByIndex(
 	for _, br = range rn.branches {
 
 		if err = r.loadNodeIfNeed(pack, br, depth-1); err != nil {
-			return
+			return el, err
 		}
 
 		if i >= br.length {
@@ -355,7 +355,7 @@ func (r *refsNode) updateHash(
 	var hash = cipher.SumSHA256(val)
 
 	if hash == r.hash {
-		return // the hash is the same
+		return err // the hash is the same
 	}
 
 	// don't save if the node is part of the Refs
@@ -365,7 +365,7 @@ func (r *refsNode) updateHash(
 
 		// save the node
 		if err = pack.Set(hash, val); err != nil {
-			return
+			return err
 		}
 
 		// ignore the field if the node is
@@ -377,7 +377,7 @@ func (r *refsNode) updateHash(
 	}
 
 	r.mods &^= contentMod // clear the flag if it has been set
-	return
+	return err
 }
 
 // updateHashIfNeed updates hash by given condition
@@ -389,7 +389,7 @@ func (r *refsNode) updateHashIfNeed(
 	err error, // : error if any
 ) {
 
-	if need == false {
+	if need == false { //nolint:staticcheck
 		r.mods |= contentMod // modified, but not saved
 		return
 	}
@@ -495,19 +495,19 @@ func (r *Refs) deleteElementByIndex(
 				rn.length--                // decrement length
 
 				if rn.length == 0 {
-					return // don't update hash if the length is zero
+					return err // don't update hash if the length is zero
 				}
 
 				if rn.upper == nil {
 					// don't update node hash, because the rn is Refs.refsNode;
 					// the Refs should be updated after
-					return
+					return err
 				}
 
 				err = rn.updateHashIfNeed(pack, depth,
 					r.flags&LazyUpdating == 0)
 
-				return // deleted
+				return err // deleted
 			}
 
 		}
@@ -521,7 +521,7 @@ func (r *Refs) deleteElementByIndex(
 	for j, br = range rn.branches {
 
 		if err = r.loadNodeIfNeed(pack, br, depth-1); err != nil {
-			return
+			return err
 		}
 
 		if i >= br.length {
@@ -535,7 +535,7 @@ func (r *Refs) deleteElementByIndex(
 	// keep j for now
 
 	if err = r.deleteElementByIndex(pack, br, i, depth-1); err != nil {
-		return // an error
+		return err // an error
 	}
 
 	if br.length == 0 {
@@ -545,13 +545,13 @@ func (r *Refs) deleteElementByIndex(
 	rn.length--
 
 	if rn.length == 0 {
-		return // don't update hash of the rn if its length is zeros
+		return err // don't update hash of the rn if its length is zeros
 	}
 
 	if rn.upper == nil {
 		// don't update hash if the upepr is nil, because the rn is
 		// Refs.refsNode that should be processed after
-		return
+		return err
 	}
 
 	return rn.updateHashIfNeed(pack, depth, r.flags&LazyUpdating == 0)
@@ -587,7 +587,7 @@ func (r *Refs) deleteElement(
 	)
 
 	if i, err = up.elementIndex(el); err != nil {
-		return // invalid state
+		return err // invalid state
 	}
 
 	up.deleteElementByIndex(i)
@@ -597,16 +597,16 @@ func (r *Refs) deleteElement(
 		up.length--
 		up.mods |= contentMod
 
-		if update == true {
+		if update == true { //nolint:staticcheck
 			err = up.updateHashIfNeed(pack, depth, update)
 			if err != nil {
-				return
+				return err
 			}
 		}
 
 	}
 
-	return
+	return err
 }
 
 //
@@ -660,7 +660,7 @@ func (r *Refs) ascendNodeLeafs(
 		// here i == shift + j
 
 		if err = ascendFunc(i, el.Hash); err != nil {
-			return
+			return pass, rewind, err
 		}
 
 		pass++ // one more element has been processed
@@ -669,7 +669,7 @@ func (r *Refs) ascendNodeLeafs(
 		if rewind = r.isFindingIteratorsIndexFromRootRequired(); rewind {
 			// we need to find next element from root of the Refs,
 			// because the ascendFunc changes length of the Refs tree
-			return
+			return pass, rewind, err
 		}
 
 		i++ // increment current absolute index
@@ -677,7 +677,7 @@ func (r *Refs) ascendNodeLeafs(
 		// no changes required, continue
 	}
 
-	return
+	return pass, rewind, err
 }
 
 // ascendNodeBranches iterate element of the ndoe
@@ -699,7 +699,7 @@ func (r *Refs) ascendNodeBranches(
 	for _, br := range rn.branches {
 
 		if err = r.loadNodeIfNeed(pack, br, depth-1); err != nil {
-			return
+			return pass, rewind, err
 		}
 
 		if shift+br.length < i {
@@ -712,8 +712,8 @@ func (r *Refs) ascendNodeBranches(
 
 		pass += subpass // process elements
 
-		if err != nil || rewind == true {
-			return // some error or changes
+		if err != nil || rewind == true { //nolint:staticcheck
+			return pass, rewind, err // some error or changes
 		}
 
 		// these are local variables and incrementing has meaning only
@@ -725,7 +725,7 @@ func (r *Refs) ascendNodeBranches(
 		// continue (next branch)
 	}
 
-	return // done
+	return pass, rewind, err // done
 }
 
 //
@@ -786,7 +786,7 @@ func (r *Refs) descendNodeLeafs(
 		// here i == shift
 
 		if err = descendFunc(i, el.Hash); err != nil {
-			return
+			return pass, rewind, err
 		}
 
 		pass++ // processed elements
@@ -795,7 +795,7 @@ func (r *Refs) descendNodeLeafs(
 		if rewind = r.isFindingIteratorsIndexFromRootRequired(); rewind {
 			// we need to find next element from root of the Refs,
 			// because the descendFunc changes length of the Refs
-			return
+			return pass, rewind, err
 		}
 
 		i--     // current absolute index
@@ -804,7 +804,7 @@ func (r *Refs) descendNodeLeafs(
 		// no changes required, continue
 	}
 
-	return // done
+	return pass, rewind, err // done
 }
 
 // descendNodeBranches iterate over elements of the node
@@ -829,7 +829,7 @@ func (r *Refs) descendNodeBranches(
 		var br = rn.branches[k] // current branch
 
 		if err = r.loadNodeIfNeed(pack, br, depth-1); err != nil {
-			return
+			return pass, rewind, err
 		}
 
 		if shift-br.length > i {
@@ -842,8 +842,8 @@ func (r *Refs) descendNodeBranches(
 
 		pass += subpass // process elements
 
-		if err != nil || rewind == true {
-			return // some error or changes
+		if err != nil || rewind == true { //nolint:staticcheck
+			return pass, rewind, err // some error or changes
 		}
 
 		// these are local variables and decrementing has
@@ -855,7 +855,7 @@ func (r *Refs) descendNodeBranches(
 		// continue
 	}
 
-	return // done
+	return pass, rewind, err // done
 }
 
 //
@@ -989,7 +989,7 @@ func (r *Refs) walkUpdatingSliceNode(
 		for _, br := range rn.branches {
 
 			if err = r.walkUpdatingSliceNode(pack, br, depth-1); err != nil {
-				return // some error
+				return err // some error
 			}
 
 			length += br.length
@@ -1024,7 +1024,7 @@ func (r *Refs) freeSpaceOnTailNode(
 	if depth == 0 {
 
 		fsotn = int(r.degree) - len(rn.leafs)
-		return
+		return fsotn, err
 
 	}
 
@@ -1036,18 +1036,18 @@ func (r *Refs) freeSpaceOnTailNode(
 	fsotn = pow(int(r.degree), depth) * (int(r.degree) - len(rn.branches))
 
 	if fsotn >= fit {
-		return // at least
+		return fsotn, err // at least
 	}
 
 	if len(rn.branches) == 0 {
-		return // done (no branches to check out the last)
+		return fsotn, err // done (no branches to check out the last)
 	}
 
 	var last = rn.branches[len(rn.branches)-1] // the last branch
 
 	// load the last if need
 	if err = r.loadNodeIfNeed(pack, last, depth-1); err != nil {
-		return
+		return fsotn, err
 	}
 
 	var fsotnl int // fsotn of the last
@@ -1055,12 +1055,12 @@ func (r *Refs) freeSpaceOnTailNode(
 	fsotnl, err = r.freeSpaceOnTailNode(pack, last, depth-1, fit-fsotn)
 
 	if err != nil {
-		return
+		return fsotn, err
 	}
 
 	fsotn += fsotnl
 
-	return // done
+	return fsotn, err // done
 
 }
 
@@ -1120,7 +1120,7 @@ func (r *Refs) appendNodeGoUp(
 
 		// else -> increased
 		if err = ap.rn.updateHashIfNeed(pack, ap.depth, true); err != nil {
-			return // saving error
+			return err // saving error
 		}
 
 		return r.appendNodeGoUp(pack, ap, hash) // go up
@@ -1165,7 +1165,7 @@ func (r *Refs) appendNode(
 
 			// TODO (kostyarin): LazyUpdating
 			if err = ap.rn.updateHashIfNeed(pack, ap.depth, true); err != nil {
-				return // saving error
+				return err // saving error
 			}
 
 			return r.appendNodeGoUp(pack, ap, hash) // go up
@@ -1226,7 +1226,7 @@ func (r *Refs) appendNode(
 		// load the last if need
 
 		if err = r.loadNodeIfNeed(pack, ap.rn, ap.depth); err != nil {
-			return
+			return err
 		}
 
 	}
@@ -1258,7 +1258,7 @@ func (r *Refs) walkUpdatingNode(
 ) {
 
 	if rn.mods&loadedMod == 0 || rn.mods&contentMod == 0 {
-		return // the node in actual state
+		return err // the node in actual state
 	}
 
 	// length of a node that contains leafs is already in actual state
@@ -1272,7 +1272,7 @@ func (r *Refs) walkUpdatingNode(
 			br = rn.branches[i]
 
 			if err = r.walkUpdatingNode(pack, br, depth-1); err != nil {
-				return // some error
+				return err // some error
 			}
 
 			// remove blank
@@ -1290,5 +1290,5 @@ func (r *Refs) walkUpdatingNode(
 		err = rn.updateHash(pack, depth) // only if it's not blank now
 	}
 
-	return
+	return err
 }

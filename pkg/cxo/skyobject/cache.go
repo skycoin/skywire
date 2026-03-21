@@ -114,7 +114,7 @@ type Cache struct {
 
 	stat *cxdsStat
 
-	closeo sync.Once
+	closeo sync.Once //nolint:unused
 }
 
 // initialize the Cache
@@ -149,7 +149,7 @@ func (c *Cache) amountVolume() (a, v int) {
 }
 
 // reset the Cache
-func (c *Cache) reset() {
+func (c *Cache) reset() { //nolint:unused
 	c.is = nil
 	c.rs = nil
 	c.stat.Close() //nolint:errcheck,gosec
@@ -166,7 +166,7 @@ func (c *Cache) addRegistryToCache(r *registry.Registry) {
 
 	// if it already exists
 
-	if ir, ok := c.rs[r.Reference()]; ok == true {
+	if ir, ok := c.rs[r.Reference()]; ok == true { //nolint:staticcheck
 		ir.touch(c.c.conf.CachePolicy)
 		return
 	}
@@ -228,28 +228,28 @@ func (c *Cache) Registry(
 
 	// check out cache first
 
-	if ir, ok := c.rs[rr]; ok == true {
+	if ir, ok := c.rs[rr]; ok == true { //nolint:staticcheck
 		r = ir.r
 		ir.touch(c.c.conf.CachePolicy)
-		return
+		return r, err
 	}
 
 	// get from DB and add to cache after
 
 	var val []byte
 	if val, _, err = c.get(cipher.SHA256(rr), 0); err != nil {
-		return
+		return r, err
 	}
 
 	if r, err = registry.DecodeRegistry(val); err != nil {
-		return
+		return r, err
 	}
 
 	if c.c.conf.CacheRegistries >= 0 {
 		c.addRegistryToCache(r)
 	}
 
-	return
+	return r, err
 }
 
 // Clsoe the Cache returning DB error
@@ -263,7 +263,7 @@ func (c *Cache) Close() (err error) {
 	for key, it := range c.is {
 
 		// make wanted items filling
-		if it.isWanted() == true {
+		if it.isWanted() == true { //nolint:staticcheck
 			for _, winc := range it.fwant {
 				it.fc += winc
 			}
@@ -273,7 +273,7 @@ func (c *Cache) Close() (err error) {
 		it.cc -= it.fc // remove all fincs
 		it.fc = 0
 
-		if err = c.delete(key, it); err != nil { //nolint:errcheck
+		if err = c.delete(key, it); err != nil { //nolint:errcheck,gosec
 			return
 		}
 
@@ -297,7 +297,7 @@ func (c *Cache) delete(key cipher.SHA256, it *item) (err error) {
 		c.stat.addWritingDBRequest() // write DB
 
 		if err != nil {
-			return
+			return err
 		}
 
 	}
@@ -307,7 +307,7 @@ func (c *Cache) delete(key cipher.SHA256, it *item) (err error) {
 
 	if it.fc == 0 {
 		delete(c.is, key)
-		return
+		return err
 	}
 
 	// keep the item if the fc is not zero,
@@ -318,7 +318,7 @@ func (c *Cache) delete(key cipher.SHA256, it *item) (err error) {
 	it.cc = 0
 	it.cachePoints = 0
 
-	return
+	return err
 }
 
 // clean the Cache down to lower boundary
@@ -326,7 +326,7 @@ func (c *Cache) cleanDown(vol int) (err error) {
 
 	// stat (average cleaning time)
 	var tp = time.Now()
-	defer func() { c.stat.addCacheCleaning(time.Now().Sub(tp)) }()
+	defer func() { c.stat.addCacheCleaning(time.Now().Sub(tp)) }() //nolint:staticcheck
 
 	type rankItem struct {
 		key cipher.SHA256
@@ -337,12 +337,12 @@ func (c *Cache) cleanDown(vol int) (err error) {
 
 	for key, it := range c.is {
 
-		if it.isWanted() == true {
-			return // skip wanted
+		if it.isWanted() == true { //nolint:staticcheck
+			return err // skip wanted
 		}
 
-		if it.isFilling() == true {
-			return // skip filling (where val is nil)
+		if it.isFilling() == true { //nolint:staticcheck
+			return err // skip filling (where val is nil)
 		}
 
 		rank = append(rank, &rankItem{key, it})
@@ -372,8 +372,8 @@ func (c *Cache) cleanDown(vol int) (err error) {
 			}
 
 			// delete item from the Cache
-			if err = c.delete(ri.key, ri.it); err != nil { //nolint:errcheck
-				return // fail on first error
+			if err = c.delete(ri.key, ri.it); err != nil { //nolint:errcheck,gosec
+				return err // fail on first error
 			}
 
 			rank[i].it = nil // GC
@@ -387,7 +387,7 @@ func (c *Cache) cleanDown(vol int) (err error) {
 	// clean by volume if need
 
 	if c.volume+vol < c.c.conf.CacheMaxVolume {
-		return // enough
+		return err // enough
 	}
 
 	for i, ri := range rank {
@@ -396,15 +396,15 @@ func (c *Cache) cleanDown(vol int) (err error) {
 			break
 		}
 
-		if err = c.delete(ri.key, ri.it); err != nil { //nolint:errcheck
-			return // fail on first error
+		if err = c.delete(ri.key, ri.it); err != nil { //nolint:errcheck,gosec
+			return err // fail on first error
 		}
 
 		rank[i].it = nil // GC
 
 	}
 
-	return
+	return err
 }
 
 // create regular item in the cache
@@ -416,16 +416,16 @@ func (c *Cache) putItem(
 	err error,
 ) {
 
-	if c.enable == false {
-		return
+	if c.enable == false { //nolint:staticcheck
+		return err
 	}
 
 	if len(val) > c.c.conf.CacheMaxItemSize {
-		return
+		return err
 	}
 
 	if rc == 0 {
-		return // don't cache stale values
+		return err // don't cache stale values
 	}
 
 	switch {
@@ -433,7 +433,7 @@ func (c *Cache) putItem(
 		c.volume+len(val) > c.c.conf.CacheMaxVolume:
 
 		if err = c.cleanDown(len(val)); err != nil {
-			return
+			return err
 		}
 
 	}
@@ -446,7 +446,7 @@ func (c *Cache) putItem(
 	c.amount++
 	c.volume += len(val)
 
-	return
+	return err
 }
 
 // create item with fc > 0; e.g.
@@ -459,16 +459,16 @@ func (c *Cache) putFillingItem(
 	err error,
 ) {
 
-	if c.enable == false {
-		return
+	if c.enable == false { //nolint:staticcheck
+		return err
 	}
 
 	if len(val) > c.c.conf.CacheMaxItemSize {
-		return
+		return err
 	}
 
 	if rc == 0 {
-		return // don't cache stale values
+		return err // don't cache stale values
 	}
 
 	switch {
@@ -476,7 +476,7 @@ func (c *Cache) putFillingItem(
 		c.volume+len(val) > c.c.conf.CacheMaxVolume:
 
 		if err = c.cleanDown(len(val)); err != nil {
-			return
+			return err
 		}
 
 	}
@@ -490,7 +490,7 @@ func (c *Cache) putFillingItem(
 	c.amount++
 	c.volume += len(val)
 
-	return
+	return err
 }
 
 func incr(cc, inc int) (dcc int) {
@@ -561,14 +561,14 @@ func (c *Cache) getNoCache(
 
 	var it, ok = c.is[key]
 
-	if ok == true {
-		if it.isWanted() == true {
+	if ok == true { //nolint:staticcheck
+		if it.isWanted() == true { //nolint:staticcheck
 			return nil, 0, data.ErrNotFound
 		}
 
 		// nothing wrong with caching a filling item
 
-		if it.isFilling() == true {
+		if it.isFilling() == true { //nolint:staticcheck
 			return c.getFilling(key, inc, it)
 		}
 
@@ -577,13 +577,13 @@ func (c *Cache) getNoCache(
 
 		// remove item if it's cc is zero
 		if it.cc = incr(it.cc, inc); it.cc == 0 {
-			c.delete(key, it) //nolint:errcheck
+			c.delete(key, it) //nolint:errcheck,gosec
 		} else {
 			c.stat.addCacheGet(inc) // effective cache get
 		}
 
 		rc = it.cc - it.fc // hard rc
-		return
+		return val, rc, err
 	}
 
 	// not found in the Cache
@@ -593,13 +593,13 @@ func (c *Cache) getNoCache(
 	c.stat.addDBGet(inc)
 
 	if err != nil {
-		return
+		return val, rc, err
 	}
 
 	rc = int(urc) // hard rc
 
 	// don't put to cache
-	return
+	return val, rc, err
 }
 
 // under lock
@@ -614,12 +614,12 @@ func (c *Cache) get(
 
 	var it, ok = c.is[key]
 
-	if ok == true {
-		if it.isWanted() == true {
+	if ok == true { //nolint:staticcheck
+		if it.isWanted() == true { //nolint:staticcheck
 			return nil, 0, data.ErrNotFound
 		}
 
-		if it.isFilling() == true {
+		if it.isFilling() == true { //nolint:staticcheck
 			return c.getFilling(key, inc, it)
 		}
 
@@ -628,7 +628,7 @@ func (c *Cache) get(
 
 		// remove item if it's cc is zero
 		if it.cc = incr(it.cc, inc); it.cc == 0 {
-			c.delete(key, it) //nolint:errcheck
+			c.delete(key, it) //nolint:errcheck,gosec
 		} else {
 			c.stat.addCacheGet(inc) // effective cache get
 			it.touch(c.c.conf.CachePolicy)
@@ -636,7 +636,7 @@ func (c *Cache) get(
 
 		rc = it.cc - it.fc // hard rc
 
-		return
+		return val, rc, err
 	}
 
 	// not found in the Cache
@@ -646,13 +646,13 @@ func (c *Cache) get(
 	c.stat.addDBGet(inc)
 
 	if err != nil {
-		return
+		return val, rc, err
 	}
 
 	rc = int(urc) // hard rc
 
 	err = c.putItem(key, val, rc)
-	return
+	return val, rc, err
 }
 
 // IsCached returns true if items with given key is cached.
@@ -732,7 +732,7 @@ func (c *Cache) setWanted(
 		}
 
 		delete(c.is, key) // force
-		return
+		return rc, err
 	}
 
 	var wincs int // incs of wants (add to fc after)
@@ -748,7 +748,7 @@ func (c *Cache) setWanted(
 	c.stat.addWritingDBRequest()
 
 	if err != nil {
-		return // DB failure
+		return rc, err // DB failure
 	}
 
 	rc = int(urc) - (wincs + it.fc) // hard rc
@@ -764,12 +764,12 @@ func (c *Cache) setWanted(
 	it.fc += wincs // incs of fillers (of wanters)
 
 	err = c.putFillingItem(val, int(urc), it)
-	return
+	return rc, err
 }
 
 func (c *Cache) setFilling(
 	key cipher.SHA256,
-	val []byte,
+	val []byte, //nolint:unparam
 	inc int,
 	it *item,
 ) (
@@ -813,29 +813,29 @@ func (c *Cache) Set(
 
 	var it, ok = c.is[key]
 
-	if ok == true {
+	if ok == true { //nolint:staticcheck
 
-		if it.isWanted() == true {
+		if it.isWanted() == true { //nolint:staticcheck
 			return c.setWanted(key, val, inc, it)
 		}
 
-		if it.isFilling() == true {
+		if it.isFilling() == true { //nolint:staticcheck
 			return c.setFilling(key, val, inc, it)
 		}
 
 		// the delete below can clean the it.val
-		val = it.val //nolint:ineffassign
+		val = it.val //nolint:ineffassign,staticcheck
 
 		// remove item if it's cc is zero
 		if it.cc = incr(it.cc, inc); it.cc == 0 {
-			c.delete(key, it) // not effective cache set //nolint:errcheck
+			c.delete(key, it) //nolint:errcheck,gosec // not effective cache set //nolint:gosec
 		} else {
 			c.stat.addWritingCacheRequest() // effective cache set
 			it.touch(c.c.conf.CachePolicy)
 		}
 
 		rc = it.cc - it.fc // hard rc
-		return
+		return rc, err
 
 	}
 
@@ -843,7 +843,7 @@ func (c *Cache) Set(
 
 	if len(val) > c.c.conf.MaxObjectSize {
 		err = &ObjectIsTooLargeError{key}
-		return
+		return rc, err
 	}
 
 	var urc uint32
@@ -851,12 +851,12 @@ func (c *Cache) Set(
 	c.stat.addWritingDBRequest()
 
 	if err != nil {
-		return
+		return rc, err
 	}
 
 	rc = int(urc)
 	err = c.putItem(key, val, rc)
-	return
+	return rc, err
 }
 
 func (c *Cache) incFilling(
@@ -873,7 +873,7 @@ func (c *Cache) incFilling(
 		val []byte
 	)
 
-	if c.enable == true {
+	if c.enable == true { //nolint:staticcheck
 		val, urc, err = c.db().Get(key, inc)
 	} else {
 		urc, err = c.db().Inc(key, inc)
@@ -900,17 +900,17 @@ func (c *Cache) incItem(
 	err error, //         :
 ) {
 
-	if it.isWanted() == true {
+	if it.isWanted() == true { //nolint:staticcheck
 		return 0, data.ErrNotFound
 	}
 
-	if it.isFilling() == true {
+	if it.isFilling() == true { //nolint:staticcheck
 		return c.incFilling(key, inc, it)
 	}
 
 	// remove item if it's cc is zero
 	if it.cc = incr(it.cc, inc); it.cc == 0 {
-		c.delete(key, it) //nolint:errcheck
+		c.delete(key, it) //nolint:errcheck,gosec,gosec
 	} else {
 		c.stat.addCacheGet(inc) // effective cache get
 		it.touch(c.c.conf.CachePolicy)
@@ -931,7 +931,7 @@ func (c *Cache) inc(
 
 	var it, ok = c.is[key]
 
-	if ok == true {
+	if ok == true { //nolint:staticcheck
 		return c.incItem(key, inc, it)
 	}
 
@@ -944,7 +944,7 @@ func (c *Cache) inc(
 		val []byte
 	)
 
-	if c.enable == true {
+	if c.enable == true { //nolint:staticcheck
 		val, urc, err = c.db().Get(key, inc)
 	} else {
 		urc, err = c.db().Inc(key, inc)
@@ -953,11 +953,11 @@ func (c *Cache) inc(
 	c.stat.addDBGet(inc)
 
 	if err != nil {
-		return
+		return rc, err
 	}
 
 	err = c.putItem(key, val, int(urc))
-	return
+	return rc, err
 
 }
 
@@ -1004,14 +1004,14 @@ func (c *Cache) Want(
 
 	var it, ok = c.is[key]
 
-	if ok == true {
+	if ok == true { //nolint:staticcheck
 
-		if it.isWanted() == true {
+		if it.isWanted() == true { //nolint:staticcheck
 			it.fwant[gc] += inc
-			return
+			return err
 		}
 
-		if it.isFilling() == true { // but not wanted
+		if it.isFilling() == true { //nolint:staticcheck // but not wanted
 
 			var (
 				val []byte
@@ -1025,7 +1025,7 @@ func (c *Cache) Want(
 					err = nil                                 // clear
 				}
 
-				return // DB failure or nil (not found)
+				return err // DB failure or nil (not found)
 			}
 
 			// found
@@ -1036,7 +1036,7 @@ func (c *Cache) Want(
 			it.fc += inc
 			sendWanted(gc, Object{key, val, rc - inc, nil})
 
-			return
+			return err
 		}
 
 		// regular item in the cache
@@ -1051,7 +1051,7 @@ func (c *Cache) Want(
 		}
 
 		it.touch(c.c.conf.CachePolicy)
-		return
+		return err
 
 	}
 
@@ -1075,7 +1075,7 @@ func (c *Cache) Want(
 			err = nil // clear
 		}
 
-		return // DB failure or 'not found'
+		return err // DB failure or 'not found'
 	}
 
 	// found
@@ -1089,7 +1089,7 @@ func (c *Cache) Want(
 	c.is[key] = it
 
 	err = c.putFillingItem(val, int(urc), it)
-	return
+	return err
 }
 
 // Unwant used to unsibscribe after the Want, if,
@@ -1131,11 +1131,11 @@ func (c *Cache) SetWanted(
 
 	var it, ok = c.is[key]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return
 	}
 
-	if it.isWanted() == false {
+	if it.isWanted() == false { //nolint:staticcheck
 		return
 	}
 
@@ -1168,12 +1168,12 @@ func (c *Cache) Finc(
 
 	var it, ok = c.is[key]
 
-	if ok == false {
-		return
+	if ok == false { //nolint:staticcheck
+		return err
 	}
 
 	if it.fc == 0 {
-		return // not a filling item
+		return err // not a filling item
 	}
 
 	// apply
@@ -1183,7 +1183,7 @@ func (c *Cache) Finc(
 		it.fc -= inc
 
 		if it.fc > 0 {
-			return
+			return err
 		}
 
 		if it.fc < 0 {
@@ -1194,8 +1194,8 @@ func (c *Cache) Finc(
 
 		// else, the fc is 0 (remove if it's filling)
 
-		if it.isWanted() == true {
-			return // can't remove wanted item
+		if it.isWanted() == true { //nolint:staticcheck
+			return err // can't remove wanted item
 		}
 
 		if len(it.val) == 0 { // filling item (filling only)
@@ -1206,7 +1206,7 @@ func (c *Cache) Finc(
 
 		// keep
 		it.touch(c.c.conf.CachePolicy)
-		return
+		return err
 	}
 
 	// reject
@@ -1221,5 +1221,5 @@ func (c *Cache) Finc(
 	// incItem removes it
 
 	_, err = c.incItem(key, inc, it) // in db
-	return
+	return err
 }

@@ -100,9 +100,9 @@ func (r *Refs) Walk(
 	var resetRequired bool
 
 	defer func() {
-		if resetRequired == true {
+		if resetRequired == true { //nolint:staticcheck
 			if err != nil {
-				r.Reset() // ignore the error (can't happen)
+				r.Reset() //nolint:errcheck,gosec // ignore the error (can't happen)
 			} else {
 				err = r.Reset()
 			}
@@ -118,7 +118,7 @@ func (r *Refs) Walk(
 			// to get actual hashes of nodes
 
 			if err = r.walkUpdating(pack); err != nil {
-				return // an error
+				return err // an error
 			}
 
 			if r.Hash == (cipher.SHA256{}) {
@@ -145,7 +145,7 @@ func (r *Refs) Walk(
 
 		// and initialize
 		if err = r.initialize(pack); err != nil {
-			return
+			return err
 		}
 
 	}
@@ -158,9 +158,9 @@ func (r *Refs) Walk(
 		if err == ErrStopIteration {
 			err = nil
 		}
-		return
-	} else if deepper == false {
-		return // done
+		return err
+	} else if deepper == false { //nolint:staticcheck
+		return err // done
 	}
 
 	// walk from nodes
@@ -170,7 +170,7 @@ func (r *Refs) Walk(
 		err = nil
 	}
 
-	return
+	return err
 
 }
 
@@ -197,9 +197,9 @@ func (r *Refs) walkNode(
 				if err == ErrStopIteration {
 					err = nil
 				}
-				return
+				return err
 
-			} else if deepper == true {
+			} else if deepper == true { //nolint:staticcheck
 
 				err = walkSchemaHash(pack, sch, leaf.Hash, walkFunc)
 
@@ -207,7 +207,7 @@ func (r *Refs) walkNode(
 					if err == ErrStopIteration {
 						err = nil
 					}
-					return
+					return err
 				}
 
 			}
@@ -229,28 +229,28 @@ func (r *Refs) walkNode(
 			if err == ErrStopIteration {
 				err = nil
 			}
-			return
-		} else if deepper == false {
+			return err
+		} else if deepper == false { //nolint:staticcheck
 			continue // let's look at the next brnahc
 		}
 
 		// ok, let's load the branch if need and walk through it
 
 		if err = r.loadNodeIfNeed(pack, br, depth-1); err != nil {
-			return
+			return err
 		}
 
 		if err = r.walkNode(pack, sch, br, depth-1, walkFunc); err != nil {
 			if err == ErrStopIteration {
 				err = nil
 			}
-			return
+			return err
 		}
 
 		// continue
 
 	}
 
-	return
+	return err
 
 }

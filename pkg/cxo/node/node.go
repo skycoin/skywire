@@ -58,7 +58,7 @@ type Node struct {
 
 	config             *Config // keep config
 	maxFillingParallel int     // copy of c.Config().MaxFillingParallel
-	rollAvgSamples     int     // copy of c.Config().RollAvgSamples
+	rollAvgSamples     int     //nolint:unused // copy of c.Config().RollAvgSamples
 
 	//
 	// stat
@@ -121,7 +121,7 @@ func NewNodeContainer(
 	}
 
 	if err = conf.Validate(); err != nil {
-		return // invalid
+		return n, err // invalid
 	}
 
 	n = new(Node)
@@ -168,14 +168,14 @@ func NewNodeContainer(
 	if conf.TCP.Listen != "" {
 		if err = n.TCP().Listen(conf.TCP.Listen); err != nil {
 			n.Close() //nolint:errcheck,gosec
-			return
+			return n, err
 		}
 	}
 
 	if conf.UDP.Listen != "" {
 		if err = n.UDP().Listen(conf.UDP.Listen); err != nil {
 			n.Close() //nolint:errcheck,gosec
-			return
+			return n, err
 		}
 	}
 
@@ -187,14 +187,14 @@ func NewNodeContainer(
 
 		if err = n.rpc.Listen(conf.RPC); err != nil {
 			n.Close() //nolint:errcheck,gosec
-			return
+			return n, err
 		}
 
 	}
 
 	// TODO (kostyarin): pings (move to connection)
 
-	return
+	return n, err
 }
 
 // ID retursn identifier of the Node. The identifier
@@ -276,7 +276,7 @@ func (n *Node) TCP() (tcp *TCP) {
 // don't create TCP in background
 // returning nil, if the TCP doesn't
 // exist
-func (n *Node) getUDP() (u *UDP) {
+func (n *Node) getUDP() (u *UDP) { //nolint:unused
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -545,7 +545,7 @@ func (n *Node) onSubscribeRemote(c *Conn, feed cipher.PubKey) (reject error) {
 	return
 }
 
-func (n *Node) onUnsubscribeRemote(c *Conn, feed cipher.PubKey) {
+func (n *Node) onUnsubscribeRemote(c *Conn, feed cipher.PubKey) { //nolint:unused
 
 	if ousr := n.config.OnUnsubscribeRemote; ousr != nil {
 		ousr(c, feed)
@@ -589,7 +589,7 @@ func (n *Node) onFillingBreaks(r *registry.Root, reason error) {
 }
 
 // has connection to peer with given id (pk)
-func (n *Node) hasPeer(id cipher.PubKey) (c *Conn, yep bool) {
+func (n *Node) hasPeer(id cipher.PubKey) (c *Conn, yep bool) { //nolint:unparam
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
@@ -653,7 +653,7 @@ func (n *Node) Close() (err error) {
 
 	})
 
-	return
+	return err
 }
 
 func (n *Node) JoinSwarm(

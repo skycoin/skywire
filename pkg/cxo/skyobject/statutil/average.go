@@ -30,7 +30,7 @@ func (d *Duration) Add(dur time.Duration) (avg time.Duration) {
 
 // AddStartTime is Add(time.Now().Sub(tp))
 func (d *Duration) AddStartTime(tp time.Time) (avg time.Duration) {
-	return d.Add(time.Now().Sub(tp))
+	return d.Add(time.Now().Sub(tp)) //nolint:staticcheck
 }
 
 // NewDuration creates new Duration using
@@ -68,7 +68,7 @@ func NewDuration(n int) (d *Duration) {
 		return d.last
 	}
 
-	return
+	return d
 }
 
 // Float represents rolling (moving) average of float64
@@ -129,5 +129,5 @@ func NewFloat(n int) (f *Float) {
 		return average
 	}
 
-	return
+	return f
 }

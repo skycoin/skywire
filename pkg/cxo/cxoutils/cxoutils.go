@@ -28,13 +28,13 @@ import (
 //
 // If a feed contains more then one head, then the method
 // keeps last n-th Root objects of every head.
-func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) { //nolint:nakedret
+func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) {
 
 	for _, pk := range c.Feeds() {
 
 		var heads []uint64
 		if heads, err = c.Heads(pk); err != nil {
-			return
+			return err
 		}
 
 	HeadLoop:
@@ -49,7 +49,7 @@ func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) { //nol
 				continue
 			}
 
-			var goDown = seq - uint64(keepLast) // positive
+			var goDown = seq - uint64(keepLast) //nolint:gosec // positive
 
 			for ; goDown > 0; goDown-- {
 
@@ -58,7 +58,7 @@ func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) { //nol
 						err = nil // clear error
 						continue HeadLoop
 					}
-					return // a failure (CXDS not found error?)
+					return err // a failure (CXDS not found error?)
 				}
 
 			}
@@ -70,7 +70,7 @@ func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) { //nol
 					continue HeadLoop
 				}
 
-				return
+				return err
 			}
 
 			// continue HeadLoop
@@ -79,7 +79,7 @@ func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) { //nol
 
 	} // feed loop
 
-	return
+	return err
 }
 
 // RemoveObjects with rc == 0 from CXDS
@@ -89,7 +89,7 @@ func RemoveObjects(c *skyobject.Container) (err error) {
 
 	err = db.IterateDel(
 		func(key cipher.SHA256, rc uint32, _ []byte) (bool, error) {
-			return (rc == 0) && (c.IsCached(key) == false), nil
+			return (rc == 0) && (c.IsCached(key) == false), nil //nolint:staticcheck
 		})
 
 	return

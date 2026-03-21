@@ -35,7 +35,7 @@ func (d *DB) CXDS() CXDS {
 // Close the DB and all underlying
 func (d *DB) Close() (err error) {
 	if err = d.cxds.Close(); err != nil {
-		d.idxdb.Close() // drop error
+		d.idxdb.Close() //nolint:errcheck,gosec // drop error
 	} else {
 		err = d.idxdb.Close() // use this error
 	}

@@ -39,10 +39,10 @@ func getRefsCount(val []byte) (rc uint32) {
 
 func setRefsCount(val []byte, rc uint32) {
 	binary.BigEndian.PutUint32(val, rc)
-	return
+	return //nolint:staticcheck
 }
 
-func getHash(val []byte) (key cipher.SHA256) {
+func getHash(val []byte) (key cipher.SHA256) { //nolint:unused
 	return cipher.SumSHA256(val)
 }
 
@@ -52,7 +52,7 @@ func versionBytes() []byte {
 	return encodeUint32(uint32(Version))
 }
 
-func encodeUint32(u uint32) (ub []byte) {
+func encodeUint32(u uint32) (ub []byte) { //nolint:unparam
 	ub = make([]byte, 4)
 	binary.BigEndian.PutUint32(ub, uint32(Version))
 	return

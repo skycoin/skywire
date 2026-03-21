@@ -111,12 +111,12 @@ func splitSchemaData(
 	val []byte, // : encoded object
 ) {
 
-	if sch.HasReferences() == false {
+	if sch.HasReferences() == false { //nolint:staticcheck
 		return // no references, no walking
 	}
 
 	// the object represents Ref, Refs or Dynamic
-	if sch.IsReference() == true {
+	if sch.IsReference() == true { //nolint:staticcheck
 		splitSchemaReference(s, sch, val)
 		return
 	}
@@ -275,7 +275,7 @@ func splitArraySlice(
 
 	}
 
-	return
+	return //nolint:staticcheck
 
 }
 

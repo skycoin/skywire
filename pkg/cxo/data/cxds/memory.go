@@ -62,7 +62,7 @@ func (m *memoryCXDS) incr(
 	switch {
 	case inc == 0:
 		nrc = rc // no changes
-		return
+		return nrc
 	case inc < 0:
 		inc = -inc // change the sign
 
@@ -72,14 +72,14 @@ func (m *memoryCXDS) incr(
 			nrc = rc - uinc
 		}
 	case inc > 0:
-		nrc = rc + uint32(inc)
+		nrc = rc + uint32(inc) //nolint:gosec
 	}
 
 	mo.rc = nrc
 	m.kvs[key] = mo
 
 	m.av(rc, nrc, len(mo.val))
-	return
+	return nrc
 
 }
 
@@ -126,7 +126,7 @@ func (m *memoryCXDS) Set(
 
 	if len(val) == 0 {
 		err = ErrEmptyValue
-		return
+		return rc, err
 	}
 
 	m.mx.Lock()
@@ -134,7 +134,7 @@ func (m *memoryCXDS) Set(
 
 	if mo, ok := m.kvs[key]; ok {
 		rc = m.incr(key, mo, mo.rc, inc)
-		return
+		return rc, err
 	}
 
 	// created
@@ -145,10 +145,10 @@ func (m *memoryCXDS) Set(
 	m.amountUsed++
 	m.volumeUsed += len(val)
 
-	rc = uint32(inc)
+	rc = uint32(inc) //nolint:gosec
 	m.kvs[key] = memoryObject{rc, val}
 
-	return
+	return rc, err
 }
 
 // Inc changes rc
@@ -184,7 +184,7 @@ func (m *memoryCXDS) Del(key cipher.SHA256) (_ error) {
 
 	var mo, ok = m.kvs[key]
 
-	if ok == false {
+	if ok == false { //nolint:staticcheck
 		return // not found
 	}
 
@@ -236,7 +236,7 @@ func (m *memoryCXDS) IterateDel(
 			}
 			return
 		}
-		if del == true {
+		if del == true { //nolint:staticcheck
 			delete(m.kvs, k)
 			if mo.rc > 0 {
 				m.amountUsed--

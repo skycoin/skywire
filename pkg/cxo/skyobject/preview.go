@@ -28,7 +28,7 @@ type Preview struct {
 	m map[cipher.SHA256][]byte // hash -> value (TODO: keep in memory?)
 	g Getter                   // get from remote peer
 	r *registry.Root           // root for Preview
-	c *Container               // back reference to access DB and get Registry //nolint:unused
+	c *Container               //nolint:unused // back reference to access DB and get Registry
 
 	*Pack // with Registry
 }
@@ -86,18 +86,18 @@ func (c *Container) Preview(
 	if reg, err = c.Registry(r.Reg); err != nil {
 
 		if err != data.ErrNotFound {
-			return // DB failure
+			return pack, err // DB failure
 		}
 
 		// not found, let's get it using the Getter
 
 		var val []byte
 		if val, err = g.Get(cipher.SHA256(r.Reg)); err != nil {
-			return // can't receive
+			return pack, err // can't receive
 		}
 
 		if reg, err = registry.DecodeRegistry(val); err != nil {
-			return // invalid data received
+			return pack, err // invalid data received
 		}
 
 		// got it, let's continue
@@ -106,6 +106,6 @@ func (c *Container) Preview(
 
 	pack.Pack = c.getPack(reg)
 
-	return
+	return pack, err
 
 }

@@ -10,7 +10,7 @@ import (
 
 const testFileName = "test.db.go.ignore"
 
-func testShouldNotPanic(t *testing.T) {
+func testShouldNotPanic(t *testing.T) { //nolint:unused
 	if pc := recover(); pc != nil {
 		t.Error("unexpected panic:", pc)
 	}

@@ -67,7 +67,7 @@ func (r *Refs) Split(s Splitter, el Schema) {
 
 	// first of all, check the Refs.Hash
 
-	if r.splitHash(&fp, r.Hash) == false {
+	if r.splitHash(&fp, r.Hash) == false { //nolint:staticcheck
 		return
 	}
 
@@ -111,7 +111,7 @@ func (r *Refs) splitNode(
 	var toSplit []*refsNode // data-race protection
 
 	for _, br := range rn.branches {
-		if r.splitHash(fp, br.hash) == false {
+		if r.splitHash(fp, br.hash) == false { //nolint:staticcheck
 			continue
 		}
 
