@@ -229,12 +229,9 @@ func testVPNRemoveTransport(t *testing.T, env *TestEnv) {
 	require.NoError(t, err)
 	require.NotEqual(t, "", serverTUNIP)
 
-	err = env.VisorRemoveTransport(Transport{
-		FromVisorHostName: visorVPNClient,
-		ToVisorHostName:   visorVPNServer,
-		Type:              types.DMSG,
-	})
-
+	// Remove ALL transports to the server (not just DMSG) since the visor
+	// may have established additional transports via public autoconnect
+	err = env.RemoveAllTransports(visorVPNClient)
 	require.NoError(t, err)
 
 	// Wait for VPN client to detect transport loss and disconnect
