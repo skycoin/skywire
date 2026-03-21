@@ -517,6 +517,13 @@ func (rc *rpcClient) RouteGroups() ([]RouteGroupInfo, error) {
 	return routegroups, err
 }
 
+// FetchServiceData calls FetchServiceData.
+func (rc *rpcClient) FetchServiceData(service, path string) ([]byte, error) {
+	var data []byte
+	err := rc.Call("FetchServiceData", &FetchServiceDataIn{Service: service, Path: path}, &data)
+	return data, err
+}
+
 // ServiceHealth calls ServiceHealth.
 func (rc *rpcClient) ServiceHealth() ([]ServiceHealthEntry, error) {
 	var entries []ServiceHealthEntry
@@ -1653,6 +1660,11 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	}
 
 	return routeGroups, nil
+}
+
+// FetchServiceData implements API.
+func (mc *mockRPCClient) FetchServiceData(_, _ string) ([]byte, error) {
+	return nil, nil
 }
 
 // ServiceHealth implements API.

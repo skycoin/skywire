@@ -140,6 +140,7 @@ type API interface {
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
 	ServiceHealth() ([]ServiceHealthEntry, error)
+	FetchServiceData(service, path string) ([]byte, error)
 	SetMinHops(uint16) error
 	SetCalculateRoutes(enabled bool) error
 	GetCalculateRoutes() (bool, error)
@@ -3039,6 +3040,51 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 	}
 
 	return results, nil
+}
+
+// FetchServiceData fetches data from a deployment service endpoint via the visor's
+// configured URLs. service is one of: tpd, ut, sd, ar, rf, dmsgd.
+// path is the URL path (e.g., "/all-transports/stats").
+func (v *Visor) FetchServiceData(service, path string) ([]byte, error) {
+	baseURL := ""
+	switch service {
+	case "tpd":
+		baseURL = v.conf.Transport.Discovery
+	case "ut":
+		if v.conf.UptimeTracker != nil {
+			baseURL = v.conf.UptimeTracker.Addr
+		}
+	case "sd":
+		baseURL = v.conf.Launcher.ServiceDisc
+	case "ar":
+		baseURL = v.conf.Transport.AddressResolver
+	case "rf":
+		baseURL = v.conf.Routing.RouteFinder
+	case "dmsgd":
+		baseURL = v.conf.Dmsg.Discovery
+	default:
+		return nil, fmt.Errorf("unknown service: %s (valid: tpd, ut, sd, ar, rf, dmsgd)", service)
+	}
+	if baseURL == "" {
+		return nil, fmt.Errorf("service %s not configured", service)
+	}
+
+	url := strings.TrimSuffix(baseURL, "/") + path
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(url) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("fetch %s: %w", url, err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("service returned %d: %s", resp.StatusCode, string(body))
+	}
+	return body, nil
 }
 
 // Reload implements API.

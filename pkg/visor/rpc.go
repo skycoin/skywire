@@ -670,6 +670,20 @@ func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 	return err
 }
 
+// FetchServiceDataIn is the input for FetchServiceData RPC.
+type FetchServiceDataIn struct {
+	Service string
+	Path    string
+}
+
+// FetchServiceData proxies a GET request to a deployment service.
+func (r *RPC) FetchServiceData(in *FetchServiceDataIn, out *[]byte) (err error) {
+	defer rpcutil.LogCall(r.log, "FetchServiceData", in)(out, &err)
+	data, err := r.visor.FetchServiceData(in.Service, in.Path)
+	*out = data
+	return err
+}
+
 // ServiceHealth checks all deployment services.
 func (r *RPC) ServiceHealth(_ *struct{}, out *[]ServiceHealthEntry) (err error) {
 	defer rpcutil.LogCall(r.log, "ServiceHealth", nil)(out, &err)
