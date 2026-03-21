@@ -11,9 +11,13 @@ import (
 
 	"github.com/spf13/cobra"
 
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/deployment"
+	skyvisor "github.com/skycoin/skywire/pkg/visor"
 )
+
+var directQuery bool
 
 // RootCmd is the svc command
 var RootCmd = &cobra.Command{
@@ -23,88 +27,107 @@ var RootCmd = &cobra.Command{
 }
 
 func init() {
+	healthCmd.Flags().BoolVar(&directQuery, "direct", false, "query services directly instead of via visor RPC")
+	healthCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	RootCmd.AddCommand(healthCmd)
-}
-
-type serviceHealth struct {
-	Name    string `json:"name"`
-	URL     string `json:"url"`
-	Status  string `json:"status"`
-	Version string `json:"version,omitempty"`
-	Latency string `json:"latency,omitempty"`
 }
 
 var healthCmd = &cobra.Command{
 	Use:   "health",
 	Short: "Check health of all deployment services",
-	Long:  "\n    Check the /health endpoint of all skywire deployment services",
+	Long: `    Check the /health endpoint of all skywire deployment services.
+
+    By default queries via the local visor RPC (uses visor's configured URLs).
+    Use --direct to query services directly from the CLI.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		services := map[string]string{
-			"Transport Discovery": deployment.Prod.TransportDiscovery,
-			"DMSG Discovery":      deployment.Prod.DmsgDiscovery,
-			"Address Resolver":    deployment.Prod.AddressResolver,
-			"Route Finder":        deployment.Prod.RouteFinder,
-			"Uptime Tracker":      deployment.Prod.UptimeTracker,
-			"Service Discovery":   deployment.Prod.ServiceDiscovery,
-		}
+		var results []skyvisor.ServiceHealthEntry
 
-		client := &http.Client{Timeout: 10 * time.Second}
-		var results []serviceHealth
-
-		for name, baseURL := range services {
-			if baseURL == "" {
-				continue
-			}
-			url := strings.TrimSuffix(baseURL, "/") + "/health"
-			result := serviceHealth{Name: name, URL: baseURL}
-
-			start := time.Now()
-			resp, err := client.Get(url) //nolint:gosec
-			latency := time.Since(start)
-			result.Latency = fmt.Sprintf("%dms", latency.Milliseconds())
-
-			if err != nil {
-				result.Status = "DOWN"
-				results = append(results, result)
-				continue
-			}
-			defer resp.Body.Close() //nolint:errcheck
-
-			if resp.StatusCode != http.StatusOK {
-				result.Status = fmt.Sprintf("ERROR(%d)", resp.StatusCode)
-				results = append(results, result)
-				continue
-			}
-
-			body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-			var health map[string]interface{}
-			if json.Unmarshal(body, &health) == nil {
-				if bi, ok := health["build_info"].(map[string]interface{}); ok {
-					if v, ok := bi["version"].(string); ok {
-						result.Version = v
-					}
-				}
-				// Some services put version at top level
-				if result.Version == "" {
-					if v, ok := health["version"].(string); ok {
-						result.Version = v
-					}
+		if !directQuery {
+			// Try via visor RPC first
+			rpcClient, err := clirpc.Client(cmd.Flags())
+			if err == nil {
+				results, err = rpcClient.ServiceHealth()
+				if err == nil && len(results) > 0 {
+					printHealthResults(cmd, results)
+					return
 				}
 			}
-			result.Status = "OK"
-			results = append(results, result)
+			// Fall through to direct query
+			fmt.Println("(visor not available, querying services directly)")
 		}
 
-		// Print results
-		for _, r := range results {
-			status := r.Status
-			ver := ""
-			if r.Version != "" {
-				ver = " (" + r.Version + ")"
-			}
-			fmt.Printf("%-22s %-6s %s%s\n", r.Name, status, r.Latency, ver)
-		}
-
-		internal.PrintOutput(cmd.Flags(), results, "")
+		// Direct query fallback
+		results = queryServicesDirect()
+		printHealthResults(cmd, results)
 	},
+}
+
+func printHealthResults(cmd *cobra.Command, results []skyvisor.ServiceHealthEntry) {
+	for _, r := range results {
+		ver := ""
+		if r.Version != "" {
+			ver = " (" + r.Version + ")"
+		}
+		fmt.Printf("%-22s %-6s %dms%s\n", r.Name, r.Status, r.LatencyMs, ver)
+	}
+	internal.PrintOutput(cmd.Flags(), results, "")
+}
+
+func queryServicesDirect() []skyvisor.ServiceHealthEntry {
+	services := map[string]string{
+		"Transport Discovery": deployment.Prod.TransportDiscovery,
+		"DMSG Discovery":      deployment.Prod.DmsgDiscovery,
+		"Address Resolver":    deployment.Prod.AddressResolver,
+		"Route Finder":        deployment.Prod.RouteFinder,
+		"Uptime Tracker":      deployment.Prod.UptimeTracker,
+		"Service Discovery":   deployment.Prod.ServiceDiscovery,
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	var results []skyvisor.ServiceHealthEntry
+
+	for name, baseURL := range services {
+		if baseURL == "" {
+			continue
+		}
+		url := strings.TrimSuffix(baseURL, "/") + "/health"
+		entry := skyvisor.ServiceHealthEntry{Name: name, URL: baseURL}
+
+		start := time.Now()
+		resp, err := client.Get(url) //nolint:gosec
+		entry.LatencyMs = time.Since(start).Milliseconds()
+
+		if err != nil {
+			entry.Status = "DOWN"
+			results = append(results, entry)
+			continue
+		}
+
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+		resp.Body.Close()                //nolint:errcheck
+
+		if resp.StatusCode != http.StatusOK {
+			entry.Status = fmt.Sprintf("ERROR(%d)", resp.StatusCode)
+			results = append(results, entry)
+			continue
+		}
+
+		var health map[string]interface{}
+		if json.Unmarshal(body, &health) == nil {
+			if bi, ok := health["build_info"].(map[string]interface{}); ok {
+				if v, ok := bi["version"].(string); ok {
+					entry.Version = v
+				}
+			}
+			if entry.Version == "" {
+				if v, ok := health["version"].(string); ok {
+					entry.Version = v
+				}
+			}
+		}
+		entry.Status = "OK"
+		results = append(results, entry)
+	}
+
+	return results
 }

@@ -670,6 +670,14 @@ func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 	return err
 }
 
+// ServiceHealth checks all deployment services.
+func (r *RPC) ServiceHealth(_ *struct{}, out *[]ServiceHealthEntry) (err error) {
+	defer rpcutil.LogCall(r.log, "ServiceHealth", nil)(out, &err)
+	entries, err := r.visor.ServiceHealth()
+	*out = entries
+	return err
+}
+
 /*
 	<<< VISOR MANAGEMENT >>>
 */

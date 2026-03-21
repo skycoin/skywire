@@ -139,6 +139,7 @@ type API interface {
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
+	ServiceHealth() ([]ServiceHealthEntry, error)
 	SetMinHops(uint16) error
 	SetCalculateRoutes(enabled bool) error
 	GetCalculateRoutes() (bool, error)
@@ -2968,6 +2969,76 @@ func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 	}
 
 	return rgs, nil
+}
+
+// ServiceHealthEntry represents the health status of a deployment service.
+type ServiceHealthEntry struct {
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	Status    string `json:"status"`
+	Version   string `json:"version,omitempty"`
+	LatencyMs int64  `json:"latency_ms"`
+}
+
+// ServiceHealth checks the health of all configured deployment services.
+func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
+	services := map[string]string{
+		"Transport Discovery": v.conf.Transport.Discovery,
+		"Address Resolver":    v.conf.Transport.AddressResolver,
+		"Route Finder":        v.conf.Routing.RouteFinder,
+		"DMSG Discovery":      v.conf.Dmsg.Discovery,
+	}
+	if v.conf.UptimeTracker != nil {
+		services["Uptime Tracker"] = v.conf.UptimeTracker.Addr
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	var results []ServiceHealthEntry
+
+	for name, baseURL := range services {
+		if baseURL == "" {
+			continue
+		}
+		url := strings.TrimSuffix(baseURL, "/") + "/health"
+		entry := ServiceHealthEntry{Name: name, URL: baseURL}
+
+		start := time.Now()
+		resp, err := client.Get(url) //nolint:gosec
+		entry.LatencyMs = time.Since(start).Milliseconds()
+
+		if err != nil {
+			entry.Status = "DOWN"
+			results = append(results, entry)
+			continue
+		}
+
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+		resp.Body.Close()                //nolint:errcheck
+
+		if resp.StatusCode != http.StatusOK {
+			entry.Status = fmt.Sprintf("ERROR(%d)", resp.StatusCode)
+			results = append(results, entry)
+			continue
+		}
+
+		var health map[string]interface{}
+		if json.Unmarshal(body, &health) == nil {
+			if bi, ok := health["build_info"].(map[string]interface{}); ok {
+				if ver, ok := bi["version"].(string); ok {
+					entry.Version = ver
+				}
+			}
+			if entry.Version == "" {
+				if ver, ok := health["version"].(string); ok {
+					entry.Version = ver
+				}
+			}
+		}
+		entry.Status = "OK"
+		results = append(results, entry)
+	}
+
+	return results, nil
 }
 
 // Reload implements API.

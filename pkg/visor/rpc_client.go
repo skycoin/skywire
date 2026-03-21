@@ -517,6 +517,13 @@ func (rc *rpcClient) RouteGroups() ([]RouteGroupInfo, error) {
 	return routegroups, err
 }
 
+// ServiceHealth calls ServiceHealth.
+func (rc *rpcClient) ServiceHealth() ([]ServiceHealthEntry, error) {
+	var entries []ServiceHealthEntry
+	err := rc.Call("ServiceHealth", &struct{}{}, &entries)
+	return entries, err
+}
+
 // Reload calls Reload.
 func (rc *rpcClient) Reload() error {
 	return rc.Call("Reload", &struct{}{}, &struct{}{})
@@ -1646,6 +1653,11 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	}
 
 	return routeGroups, nil
+}
+
+// ServiceHealth implements API.
+func (mc *mockRPCClient) ServiceHealth() ([]ServiceHealthEntry, error) {
+	return nil, nil
 }
 
 // Reload implements API.
