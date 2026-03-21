@@ -56,9 +56,7 @@ jobs:
             toolchain: riscv64-linux-musl
             toolchain_file: riscv64-linux-musl-cross.tgz
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
@@ -66,21 +64,28 @@ jobs:
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y wget tar libusb-1.0-0-dev autoconf automake libtool
 
+      - name: Fetch build-libusb-musl.sh
+        run: |
+          curl -sL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/ci_scripts/build-libusb-musl.sh" -o build-libusb-musl.sh
+          chmod +x build-libusb-musl.sh
+
       - name: Cache musl toolchain
         id: cache-toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: musl-data
-          key: musl-libusb-${{ env.MUSL_RELEASE }}-${{ matrix.toolchain }}
+          key: musl-${{ env.MUSL_RELEASE }}-${{ matrix.toolchain }}
 
-      - name: Download musl toolchain and build libusb
+      - name: Download musl toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p musl-data
           wget -q "https://github.com/skycoin/skywire/releases/download/${{ env.MUSL_RELEASE }}/${{ matrix.toolchain_file }}"
           tar -xzf "${{ matrix.toolchain_file }}" -C ./musl-data
           rm "${{ matrix.toolchain_file }}"
-          ./ci_scripts/build-libusb-musl.sh ${{ matrix.arch }} ${{ matrix.toolchain }} ./musl-data/${{ matrix.toolchain }}-cross
+
+      - name: Build libusb for musl target
+        run: ./build-libusb-musl.sh ${{ matrix.arch }} ${{ matrix.toolchain }} ./musl-data/${{ matrix.toolchain }}-cross
 
       - name: Build skywire release binary
         env:
@@ -138,7 +143,7 @@ jobs:
     needs: create-release
     runs-on: macos-15-intel
     steps:
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
@@ -201,7 +206,7 @@ jobs:
     needs: create-release
     runs-on: macos-latest
     steps:
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
@@ -275,7 +280,7 @@ jobs:
             wix_arch: x86
             wintun_arch: x86
     steps:
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
