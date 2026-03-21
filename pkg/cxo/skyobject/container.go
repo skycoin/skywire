@@ -134,14 +134,14 @@ type rcs struct {
 	cc uint32 // correct rc (determined by walking)
 }
 
-type cxdsRCs struct {
+type cxdsRCs struct { //nolint:unused
 	hr map[cipher.SHA256]rcs // hash -> {rc, actual rc}
 
 	amount uint32 // stat
 	volume uint32 // stat
 }
 
-func (c *Container) getHashRCs() (cr *cxdsRCs, err error) {
+func (c *Container) getHashRCs() (cr *cxdsRCs, err error) { //nolint:unused
 	cr = new(cxdsRCs)
 	cr.hr = make(map[cipher.SHA256]rcs)
 
@@ -172,7 +172,7 @@ func (c *Container) getPack(reg *registry.Registry) (pack *Pack) {
 	return
 }
 
-func (c *Container) initRoot(cr *cxdsRCs, rootHash cipher.SHA256) (err error) {
+func (c *Container) initRoot(cr *cxdsRCs, rootHash cipher.SHA256) (err error) { //nolint:unused
 
 	var val []byte
 	if val, _, err = c.Get(rootHash, 0); err != nil {
@@ -365,6 +365,6 @@ func fatal(args ...interface{}) {
 	log.Fatalln(args...)
 }
 
-func fatalf(format string, args ...interface{}) {
+func fatalf(format string, args ...interface{}) { //nolint:unused
 	log.Fatalf(format, args...)
 }

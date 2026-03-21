@@ -28,7 +28,7 @@ type Preview struct {
 	m map[cipher.SHA256][]byte // hash -> value (TODO: keep in memory?)
 	g Getter                   // get from remote peer
 	r *registry.Root           // root for Preview
-	c *Container               // back reference to access DB and get Registry
+	c *Container               // back reference to access DB and get Registry //nolint:unused
 
 	*Pack // with Registry
 }

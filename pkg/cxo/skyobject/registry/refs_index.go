@@ -12,7 +12,7 @@ func (r refsIndex) addElementToIndex(re *refsElement) {
 }
 
 // delete all elements from the index by given hash
-func (r refsIndex) delFromIndex(hash cipher.SHA256) (res []*refsElement) {
+func (r refsIndex) delFromIndex(hash cipher.SHA256) (res []*refsElement) { //nolint:unused
 	res = r[hash]
 	delete(r, hash)
 	return

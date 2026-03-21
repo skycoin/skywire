@@ -58,7 +58,7 @@ type Index struct {
 	feedsl []cipher.PubKey // change on write
 
 	stat   *indexStat
-	closeo sync.Once // close once
+	closeo sync.Once // close once //nolint:unused
 }
 
 func (i *Index) load(c *Container) (err error) {

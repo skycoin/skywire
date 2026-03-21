@@ -58,7 +58,7 @@ type Schema interface {
 	fmt.Stringer // String() string
 }
 
-var nilSchema Schema = &schema{kind: reflect.Invalid}
+var nilSchema Schema = &schema{kind: reflect.Invalid} //nolint:unused
 
 // schema core
 

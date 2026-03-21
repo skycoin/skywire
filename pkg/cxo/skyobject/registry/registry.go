@@ -16,7 +16,7 @@ const Tag = "skyobject"
 
 // A Registry represents types registry
 type Registry struct {
-	done bool // stop registration and use
+	done bool // stop registration and use //nolint:unused
 
 	ref RegistryRef // reference to the registry
 
