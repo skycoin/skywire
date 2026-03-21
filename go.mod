@@ -1,6 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.26
+go 1.26.1
 
 require (
 	cogentcore.org/core v0.3.21
@@ -42,7 +42,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/skycoin/dmsg v1.3.29-0.20260320173710-e5ee528c2dcc
-	github.com/skycoin/skycoin v0.28.4-0.20260320181518-fa4dc2004196
+	github.com/skycoin/skycoin v0.28.4-alpha4.0.20260321194956-04c9e59695bc
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -65,6 +65,7 @@ require (
 )
 
 require (
+	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/ccding/go-stun v0.1.5
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
@@ -74,6 +75,8 @@ require (
 	github.com/gdamore/tcell/v2 v2.13.8
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/itchyny/gojq v0.12.18
+	github.com/kr/pretty v0.3.1
+	github.com/peterh/liner v1.2.2
 	github.com/pgavlin/femto v0.0.0-20201224065653-0c9d20f9cac4
 	github.com/rivo/tview v0.42.0
 	github.com/soheilhy/cmux v0.1.5
@@ -93,10 +96,12 @@ require (
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/zyedidia/micro v1.4.1 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect

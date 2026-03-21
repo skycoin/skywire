@@ -103,7 +103,9 @@
   "log_level": "debug",
   "local_path": "./local",
   "dmsghttp_server_path": "./local/custom",
-  "stun_servers": null,
+  "stun_servers": [
+    "173.0.0.17:3478"
+  ],
   "shutdown_timeout": "30s",
   "is_public": false,
   "geoip": "http://ip.skycoin.com",

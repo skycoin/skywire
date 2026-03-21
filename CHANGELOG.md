@@ -6,6 +6,54 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.38
+
+### Route Multiplexing
+-   Implement packet-level route multiplexing across multiple transports (Phase 1-3)
+-   Capability negotiation via extended handshake (CapMux, CapSACK)
+-   Sequenced DataPackets with reorder buffer for out-of-order delivery
+-   SACK (Selective Acknowledgment) bitmap for fast retransmission
+-   Adaptive transport weighting by latency (faster transports get more packets)
+-   Exclude DMSG from mux routes (relay not suitable for multiplexing)
+
+### Routing & Connectivity
+-   Increase route keepalive to 2m and handshake timeout to 30s for high-load visors
+-   Handle ping/latency routes directly in IntroduceRules, bypass accept queue
+-   Fix accept loop crash on stale routes with missing transports
+-   Fix 4 additional accept loop crashes in setupnode, embedded_tps, rpc_gateway, hypervisor
+-   Fix accept loop spin on shutdown (treat closed connection as shutdown signal)
+-   Add 10s timeout for ping route handshakes to limit goroutine lifetime
+-   Add 5-minute deadline on CLI RPC connections to prevent hung methods
+-   Retry latency probe with exponential backoff on failure
+
+### CLI & Service Commands
+-   Add `skywire cli route groups` to list active route groups
+-   Add `skywire cli svc health` to check all deployment services (via visor RPC)
+-   Add `skywire cli svc tpd` subcommands: stats, per-key-stats, visor-stats, versions, bandwidth, metrics-visor, metrics-tp
+-   Add `skywire cli svc dmsgd` subcommands: all-servers, server-clients, clients
+-   Add `skywire cli svc ar` for address resolver transport lists
+-   Add `skywire cli tp metrics` sent/recv columns, transport count, tree view, latency display
+-   Add generic FetchServiceData RPC for proxying service queries through visor
+
+### Reward System
+-   Add opt-in login chain auto-setup for blockchain-based wallet authentication
+-   Add fiber node reverse proxy for skycoin-web thin client
+-   Add TPD network summary to /stats page with on-demand caching
+-   Update mainnet rules: version v1.3.36 cutoff, rewrite transport/latency sections
+
+### CXO Integration
+-   Integrate CXO P2P content-addressable object distribution system
+-   Add `skywire cxo daemon` and `skywire cxo cli` commands
+
+### Release & Infrastructure
+-   Update release workflow to build from cmd/release/ (hardware wallet support)
+-   Update Docker base image to golang:1.26-alpine
+-   Add paths-ignore to CI workflow for documentation changes
+-   Add STUN server to E2E docker-compose for SUDPH testing
+-   Fix AR UDP port mismatch in E2E environment
+-   Add E2E test for route multiplexing
+-   Update skycoin vendor to v0.28.4-alpha4
+
 ## 1.3.35
 
 -   Fix dmsgtracker fails to connect  [#2188](https://github.com/skycoin/skywire/pull/2188)

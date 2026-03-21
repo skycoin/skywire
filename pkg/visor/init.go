@@ -2156,11 +2156,15 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 					rpcLog.Debugf("CLI RPC conn #%d closed after %s (active: %d)", id, time.Since(startTime).Round(time.Millisecond), stats.activeConns)
 				}()
 
-				// Set read/write deadlines to prevent hung connections
+				// Set keepalive and deadline to prevent hung connections.
+				// If an RPC method hangs (e.g., iterating corrupt routing rules),
+				// the deadline ensures the connection is killed after the timeout
+				// rather than blocking a connection slot forever.
 				if tc, ok := c.(*net.TCPConn); ok {
 					tc.SetKeepAlive(true)                   //nolint:errcheck,gosec
 					tc.SetKeepAlivePeriod(30 * time.Second) //nolint:errcheck,gosec
 				}
+				c.SetDeadline(time.Now().Add(5 * time.Minute)) //nolint:errcheck,gosec
 
 				rpcS.ServeConn(c)
 			}(conn, thisConnID)
