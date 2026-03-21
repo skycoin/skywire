@@ -58,6 +58,7 @@ linters:
       - third_party$
       - builtin$
       - examples$
+      - pkg/cxo/  # Ported legacy CXO library — has its own test coverage
     rules:
       - linters:
           - misspell
