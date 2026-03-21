@@ -76,7 +76,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				pk, err := pubKeyFromHex(args[0])
 				if err != nil {
 					return err
@@ -93,7 +93,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				pk, err := pubKeyFromHex(args[0])
 				if err != nil {
 					return err
@@ -110,13 +110,13 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				list, err := r.Node().Feeds()
 				if err != nil {
 					return err
 				}
 				if len(list) == 0 {
-					fmt.Fprintln(out, "  no feeds are shared")
+					fmt.Fprintln(out, "  no feeds are shared") //nolint:errcheck
 					return nil
 				}
 				for _, pk := range list {
@@ -134,7 +134,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				pk, err := pubKeyFromHex(args[0])
 				if err != nil {
 					return err
@@ -144,9 +144,9 @@ func init() {
 					return err
 				}
 				if yep {
-					fmt.Fprintln(out, "  yes, it is")
+					fmt.Fprintln(out, "  yes, it is") //nolint:errcheck
 				} else {
-					fmt.Fprintln(out, "  no, it is not")
+					fmt.Fprintln(out, "  no, it is not") //nolint:errcheck
 				}
 				return nil
 			},
@@ -172,7 +172,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				return r.TCP().Connect(args[0])
 			},
 		},
@@ -185,7 +185,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				return r.TCP().Disconnect(args[0])
 			},
 		},
@@ -198,7 +198,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				pk, err := pubKeyFromHex(args[1])
 				if err != nil {
 					return err
@@ -215,7 +215,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				pk, err := pubKeyFromHex(args[1])
 				if err != nil {
 					return err
@@ -232,13 +232,13 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				addr, err := r.TCP().Address()
 				if err != nil {
 					return err
 				}
 				if addr == "" {
-					fmt.Fprintln(out, "  doesn't listen")
+					fmt.Fprintln(out, "  doesn't listen") //nolint:errcheck
 				} else {
 					fmt.Fprintln(out, " "+addr)
 				}
@@ -266,7 +266,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				return r.UDP().Connect(args[0])
 			},
 		},
@@ -279,7 +279,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				return r.UDP().Disconnect(args[0])
 			},
 		},
@@ -292,7 +292,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				pk, err := pubKeyFromHex(args[1])
 				if err != nil {
 					return err
@@ -309,7 +309,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				pk, err := pubKeyFromHex(args[1])
 				if err != nil {
 					return err
@@ -326,13 +326,13 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				addr, err := r.UDP().Address()
 				if err != nil {
 					return err
 				}
 				if addr == "" {
-					fmt.Fprintln(out, "  doesn't listen")
+					fmt.Fprintln(out, "  doesn't listen") //nolint:errcheck
 				} else {
 					fmt.Fprintln(out, " "+addr)
 				}
@@ -360,7 +360,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				cs, err := r.Node().Connections()
 				if err != nil {
 					return err
@@ -378,7 +378,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				pk, err := pubKeyFromHex(args[0])
 				if err != nil {
 					return err
@@ -412,7 +412,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				pk, err := pubKeyFromHex(args[0])
 				if err != nil {
 					return err
@@ -442,7 +442,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				pk, err := pubKeyFromHex(args[0])
 				if err != nil {
 					return err
@@ -472,7 +472,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				defer r.Close()
+				defer r.Close() //nolint:errcheck,gosec
 				pk, err := pubKeyFromHex(args[0])
 				if err != nil {
 					return err
@@ -499,7 +499,7 @@ var statCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer r.Close()
+		defer r.Close() //nolint:errcheck,gosec
 		s, err := r.Node().Stat()
 		if err != nil {
 			return err
@@ -522,7 +522,7 @@ func runInteractive(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	defer r.Close()
+	defer r.Close() //nolint:errcheck,gosec
 
 	if execCmd != "" {
 		if err := executeInteractiveCommand(r, execCmd); err != nil {
@@ -533,7 +533,7 @@ func runInteractive(cmd *cobra.Command, args []string) {
 	}
 
 	line := liner.NewLiner()
-	defer line.Close()
+	defer line.Close() //nolint:errcheck,gosec
 
 	line.SetCtrlCAborts(true)
 
@@ -561,8 +561,8 @@ func runInteractive(cmd *cobra.Command, args []string) {
 	}
 	defer saveHistory(line)
 
-	fmt.Fprintln(out, "enter 'help' to get help, use 'tab' to complete command")
-	fmt.Fprintln(out, "tip: use subcommands directly (e.g., skywire cxo cli feed list)")
+	fmt.Fprintln(out, "enter 'help' to get help, use 'tab' to complete command")         //nolint:errcheck
+	fmt.Fprintln(out, "tip: use subcommands directly (e.g., skywire cxo cli feed list)") //nolint:errcheck
 
 	for {
 		input, err := line.Prompt("> ")
@@ -580,7 +580,7 @@ func runInteractive(cmd *cobra.Command, args []string) {
 		}
 
 		if input == "quit" || input == "exit" {
-			fmt.Fprintln(out, "cya")
+			fmt.Fprintln(out, "cya") //nolint:errcheck
 			return
 		}
 
@@ -683,7 +683,7 @@ func execListFeeds(r *node.RPCClient) error {
 		return err
 	}
 	if len(list) == 0 {
-		fmt.Fprintln(out, "  no feeds are shared")
+		fmt.Fprintln(out, "  no feeds are shared") //nolint:errcheck
 		return nil
 	}
 	for _, pk := range list {
@@ -705,9 +705,9 @@ func execIsSharing(r *node.RPCClient, parts []string) error {
 		return err
 	}
 	if yep {
-		fmt.Fprintln(out, "  yes, it is")
+		fmt.Fprintln(out, "  yes, it is") //nolint:errcheck
 	} else {
-		fmt.Fprintln(out, "  no, it is not")
+		fmt.Fprintln(out, "  no, it is not") //nolint:errcheck
 	}
 	return nil
 }
@@ -754,7 +754,7 @@ func execTCPAddress(r *node.RPCClient) error {
 		return err
 	}
 	if addr == "" {
-		fmt.Fprintln(out, "  doesn't listen")
+		fmt.Fprintln(out, "  doesn't listen") //nolint:errcheck
 	} else {
 		fmt.Fprintln(out, " "+addr)
 	}
@@ -803,7 +803,7 @@ func execUDPAddress(r *node.RPCClient) error {
 		return err
 	}
 	if addr == "" {
-		fmt.Fprintln(out, "  doesn't listen")
+		fmt.Fprintln(out, "  doesn't listen") //nolint:errcheck
 	} else {
 		fmt.Fprintln(out, " "+addr)
 	}
@@ -925,7 +925,7 @@ func pubKeyFromHex(pks string) (pk cipher.PubKey, err error) {
 
 func printConnections(cs []string) {
 	if len(cs) == 0 {
-		fmt.Fprintln(out, "  no connections")
+		fmt.Fprintln(out, "  no connections") //nolint:errcheck
 		return
 	}
 	for _, c := range cs {
@@ -938,7 +938,7 @@ func printRoot(z *registry.Root) {
 	for _, dr := range z.Refs {
 		refs = append(refs, dr.Short())
 	}
-	fmt.Fprintf(out, `  root  %s
+	_, _ = fmt.Fprintf(out, `  root  %s
 
     refs:       %#v
 
@@ -1001,7 +1001,7 @@ func printStat(s *node.Stat) {
 	fmt.Fprintln(out, "  new Root objects per second:    ", s.RootsPerSecond)
 
 	if len(s.Feeds) == 0 {
-		fmt.Fprintln(out, "  no feeds")
+		fmt.Fprintln(out, "  no feeds") //nolint:errcheck
 		return
 	}
 
@@ -1009,7 +1009,7 @@ func printStat(s *node.Stat) {
 		fmt.Fprintln(out, " ", pk.Hex())
 
 		if len(fs.Heads) == 0 {
-			fmt.Fprintln(out, "    no heads")
+			fmt.Fprintln(out, "    no heads") //nolint:errcheck
 			continue
 		}
 
@@ -1018,14 +1018,14 @@ func printStat(s *node.Stat) {
 
 			switch hs.Len {
 			case 0:
-				fmt.Fprintln(out, "      no root objects")
+				fmt.Fprintln(out, "      no root objects") //nolint:errcheck
 			case 1:
-				fmt.Fprintln(out, "      last Root")
+				fmt.Fprintln(out, "      last Root") //nolint:errcheck
 				printRootStat(hs.Last)
 			default:
-				fmt.Fprintln(out, "      first Root")
+				fmt.Fprintln(out, "      first Root") //nolint:errcheck
 				printRootStat(hs.First)
-				fmt.Fprintln(out, "      last Root")
+				fmt.Fprintln(out, "      last Root") //nolint:errcheck
 				printRootStat(hs.Last)
 			}
 		}
@@ -1039,7 +1039,7 @@ func printRootStat(rs skyobject.RootStat) {
 }
 
 func printInteractiveHelp() {
-	fmt.Fprint(out, `
+	_, _ = fmt.Fprint(out, `
 
   share feed <public key>
     start sharing given feed
@@ -1094,39 +1094,32 @@ func printInteractiveHelp() {
 `)
 }
 
-func histroyFilePath() (string, error) {
-	return filepath.Join(skyobject.DataDir(), historyFile), nil
+func histroyFilePath() string {
+	return filepath.Join(skyobject.DataDir(), historyFile)
 }
 
 func loadHistory(line *liner.State) error {
-	hf, err := histroyFilePath()
-	if err != nil {
-		return err
-	}
-	fl, err := os.Open(hf)
+	hf := histroyFilePath()
+	fl, err := os.Open(hf) //nolint:gosec
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		return err
 	}
-	defer fl.Close()
+	defer fl.Close() //nolint:errcheck,gosec
 	_, err = line.ReadHistory(fl)
 	return err
 }
 
 func saveHistory(line *liner.State) {
-	hf, err := histroyFilePath()
+	hf := histroyFilePath()
+	fl, err := os.Create(hf) //nolint:gosec
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error saving history:", err)
 		return
 	}
-	fl, err := os.Create(hf)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error saving history:", err)
-		return
-	}
-	defer fl.Close()
+	defer fl.Close() //nolint:errcheck,gosec
 	if _, err = line.WriteHistory(fl); err != nil {
 		fmt.Fprintln(os.Stderr, "error saving history:", err)
 	}
