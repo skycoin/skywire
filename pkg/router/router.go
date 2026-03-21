@@ -1816,15 +1816,19 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 	// handshake timeout (30s).
 	if rules.Desc.DstPort() == routing.Port(skyenv.LatencyProbePort) || rules.Desc.SrcPort() == routing.Port(skyenv.LatencyProbePort) {
 		go func() {
+			// Short timeout for ping routes — they're ephemeral and if the
+			// handshake doesn't complete quickly, the ping will fail anyway.
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
 			nsConf := noise.Config{
 				LocalPK:   r.conf.PubKey,
 				LocalSK:   r.conf.SecKey,
 				RemotePK:  rules.Desc.SrcPK(),
 				Initiator: false,
 			}
-			nrg, err := r.saveRouteGroupRules(context.Background(), rules, nsConf)
+			nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf)
 			if err != nil {
-				r.logger.WithError(err).Debug("Failed to setup ping route group (non-blocking)")
 				r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
 				return
 			}
