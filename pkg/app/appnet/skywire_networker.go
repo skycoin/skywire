@@ -170,8 +170,8 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 
 		conn, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
-			// Check if context was canceled (normal shutdown)
-			if ctx.Err() != nil {
+			// Check if shutting down (context canceled or connection closed)
+			if ctx.Err() != nil || strings.Contains(err.Error(), "use of closed network connection") {
 				log.WithError(err).Debug("Stopped accepting routes.")
 				return err
 			}

@@ -19,7 +19,7 @@ builds:
       - CGO_ENABLED=1
       - CGO_CFLAGS=-I/usr/local/include
       - CGO_LDFLAGS=-L/usr/local/lib
-    main: .
+    main: ./cmd/release/
     ldflags: -s -w
 
 archives:
