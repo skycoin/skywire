@@ -938,7 +938,8 @@ func printRoot(z *registry.Root) {
 	for _, dr := range z.Refs {
 		refs = append(refs, dr.Short())
 	}
-	_, _ = fmt.Fprintf(out, `  root  %s
+	//nolint:errcheck
+	fmt.Fprintf(out, `  root  %s
 
     refs:       %#v
 
@@ -1039,7 +1040,8 @@ func printRootStat(rs skyobject.RootStat) {
 }
 
 func printInteractiveHelp() {
-	_, _ = fmt.Fprint(out, `
+	//nolint:errcheck
+	fmt.Fprint(out, `
 
   share feed <public key>
     start sharing given feed
