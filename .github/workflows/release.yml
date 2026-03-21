@@ -288,7 +288,8 @@ jobs:
       - name: Install Requirements
         shell: pwsh
         run: |
-          C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm mingw-w64-x86_64-libusb mingw-w64-x86_64-hidapi"
+          C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm mingw-w64-x86_64-libusb mingw-w64-x86_64-hidapi mingw-w64-x86_64-pkg-config"
+          echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Fetch Windows installer files
         shell: pwsh
@@ -304,10 +305,11 @@ jobs:
           GOPROXY: direct
           GOSUMDB: "off"
           CGO_ENABLED: "1"
-          CGO_CFLAGS: -IC:/msys64/mingw64/include
+          CGO_CFLAGS: -IC:/msys64/mingw64/include -IC:/msys64/mingw64/include/libusb-1.0
           CGO_LDFLAGS: -LC:/msys64/mingw64/lib
           GOOS: windows
           GOARCH: ${{ matrix.goarch }}
+        shell: pwsh
         run: |
           go install -trimpath -ldflags "-s -w" ${{ env.MODULE }}/cmd/release@${{ github.ref_name }}
 
