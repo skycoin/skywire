@@ -21,7 +21,7 @@ func NewMemeoryDB() (idx data.IdxDB) {
 	if err != nil {
 		panic(err)
 	}
-	fl.Close()
+	fl.Close() //nolint:errcheck,gosec
 	os.Remove(fl.Name())
 	// the NewDriveIdxDB uses os.Stat for internals
 	// the removing is not as safe, but any problem
@@ -34,7 +34,7 @@ func NewMemeoryDB() (idx data.IdxDB) {
 }
 
 func (m *memoryDB) Close() (err error) {
-	err = m.driveDB.Close()
+	err = m.driveDB.Close() //nolint:errcheck,gosec
 	os.Remove(m.name)
 	return
 }

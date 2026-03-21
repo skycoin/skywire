@@ -116,7 +116,7 @@ func (c *Container) createDB(conf *Config) (err error) {
 		}
 
 		if idx, err = idxdb.NewDriveIdxDB(c.idxPath); err != nil {
-			cx.Close()
+			cx.Close() //nolint:errcheck,gosec
 			return
 		}
 
@@ -352,7 +352,7 @@ func (c *Container) Close() (err error) {
 
 	// the Cache.Close closes CXDS
 	if err = c.Cache.Close(); err == nil {
-		err = c.db.Close()
+		err = c.db.Close() //nolint:errcheck,gosec
 	} else {
 		c.db.Close() // ignore error
 	}

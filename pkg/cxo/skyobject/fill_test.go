@@ -68,7 +68,7 @@ func Test_fillinng(t *testing.T) {
 
 	var (
 		sc, rc = getTestContainer(), getTestContainer()
-		pk, sk = cipher.GenerateKeyPair()
+		pk, sk = cipher.GenerateKeyPair() //nolint:errcheck
 	)
 
 	assertNil(t, sc.AddFeed(pk))

@@ -30,7 +30,7 @@ func getTestNodeNotListen(prefix string) (n *Node) {
 func TestNode_ID(t *testing.T) {
 
 	var n = getTestNodeNotListen("test")
-	defer n.Close()
+	defer n.Close() //nolint:errcheck,gosec
 
 	if n.ID() == (cipher.PubKey{}) {
 		t.Error("blank node ID")
@@ -47,7 +47,7 @@ func TestNode_Config(t *testing.T) {
 	)
 
 	assertNil(t, err)
-	defer n.Close()
+	defer n.Close() //nolint:errcheck,gosec
 
 	assertTrue(t, n.Config() == conf, "wrong config")
 
@@ -60,7 +60,7 @@ func TestNode_Config(t *testing.T) {
 
 	n, err = NewNodeContainer(conf, c)
 	assertNil(t, err)
-	defer n.Close()
+	defer n.Close() //nolint:errcheck,gosec
 
 	if nc := n.Config(); nc != conf {
 		t.Error("wrong node config")
@@ -82,7 +82,7 @@ func TestNode_Container(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer n.Close()
+	defer n.Close() //nolint:errcheck,gosec
 
 	if n.Container() == nil {
 		t.Error("missing container")
@@ -99,7 +99,7 @@ func TestNode_Container(t *testing.T) {
 	if n, err = NewNodeContainer(config, c); err != nil {
 		t.Fatal(err)
 	}
-	defer n.Close()
+	defer n.Close() //nolint:errcheck,gosec
 
 	if n.Container() != c {
 		t.Error("wrong container")
@@ -168,7 +168,7 @@ func TestNode_Publish(t *testing.T) {
 		uc1 = getTestConfigNotListen("uc1") // not subscribed
 	)
 
-	defer ln.Close()
+	defer ln.Close() //nolint:errcheck,gosec
 
 	// handle received roots
 
@@ -185,19 +185,19 @@ func TestNode_Publish(t *testing.T) {
 
 	sn1, err = NewNode(sc1)
 	assertNil(t, err)
-	defer sn1.Close()
+	defer sn1.Close() //nolint:errcheck,gosec
 
 	sn2, err = NewNode(sc2)
 	assertNil(t, err)
-	defer sn2.Close()
+	defer sn2.Close() //nolint:errcheck,gosec
 
 	un1, err = NewNode(uc1)
 	assertNil(t, err)
-	defer un1.Close()
+	defer un1.Close() //nolint:errcheck,gosec
 
 	// feed and owner
 
-	var pk, sk = cipher.GenerateKeyPair()
+	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck
 
 	assertNil(t, ln.Share(pk))
 
@@ -313,7 +313,7 @@ func TestNode_Publish(t *testing.T) {
 	// un1
 	c, err = un1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
-	c.Close()
+	c.Close() //nolint:errcheck,gosec
 
 	<-time.After(TM)
 
@@ -325,7 +325,7 @@ func TestNode_Publish(t *testing.T) {
 	// sn2
 	c, err = sn2.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
-	c.Close()
+	c.Close() //nolint:errcheck,gosec
 
 	<-time.After(TM)
 
@@ -337,7 +337,7 @@ func TestNode_Publish(t *testing.T) {
 	// sn1
 	c, err = sn1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
-	c.Close()
+	c.Close() //nolint:errcheck,gosec
 
 	<-time.After(TM)
 
@@ -384,12 +384,12 @@ func TestNode_Share(t *testing.T) {
 
 		err error
 
-		pk1, _ = cipher.GenerateKeyPair()
-		pk2, _ = cipher.GenerateKeyPair()
-		pk3, _ = cipher.GenerateKeyPair()
+		pk1, _ = cipher.GenerateKeyPair() //nolint:errcheck
+		pk2, _ = cipher.GenerateKeyPair() //nolint:errcheck
+		pk3, _ = cipher.GenerateKeyPair() //nolint:errcheck
 	)
 
-	defer n.Close()
+	defer n.Close() //nolint:errcheck,gosec
 
 	if err = n.Container().AddFeed(pk1); err != nil {
 		t.Fatal(err)

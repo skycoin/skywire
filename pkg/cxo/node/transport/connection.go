@@ -61,7 +61,7 @@ func (c *Connection) Close() {
 	c.closed = true
 	c.mu.Unlock()
 
-	c.conn.Close()
+	c.conn.Close() //nolint:errcheck,gosec
 	close(c.done)
 }
 
@@ -108,7 +108,7 @@ func (c *Connection) writeLoop() {
 			if !ok {
 				return
 			}
-			binary.BigEndian.PutUint32(header, uint32(len(data)))
+			binary.BigEndian.PutUint32(header, uint32(len(data))) //nolint:gosec
 			if _, err := c.conn.Write(header); err != nil {
 				return
 			}

@@ -321,7 +321,7 @@ func TestRefs_Init(t *testing.T) {
 
 		t.Run(fmt.Sprintf("hash table index %d", length), func(t *testing.T) {
 
-			refs.Reset()
+			refs.Reset() //nolint:errcheck
 
 			pack.ClearFlags(EntireRefs)
 			pack.AddFlags(HashTableIndex)
@@ -488,7 +488,7 @@ func TestRefs_Len(t *testing.T) {
 
 		t.Run(fmt.Sprintf("hash table index %d", length), func(t *testing.T) {
 
-			refs.Reset()
+			refs.Reset() //nolint:errcheck
 
 			pack.ClearFlags(EntireRefs)
 			pack.AddFlags(HashTableIndex)
@@ -657,7 +657,7 @@ func TestRefs_Depth(t *testing.T) {
 
 		t.Run(fmt.Sprintf("hash table index %d", length), func(t *testing.T) {
 
-			refs.Reset()
+			refs.Reset() //nolint:errcheck
 
 			pack.ClearFlags(EntireRefs)
 			pack.AddFlags(HashTableIndex)
@@ -744,7 +744,7 @@ func TestRefs_Degree(t *testing.T) {
 
 				clear(t, &refs, degree)
 
-				refs.Reset()
+				refs.Reset() //nolint:errcheck
 
 				if dg, err = refs.Degree(pack); err != nil {
 					t.Error(err)
@@ -857,7 +857,7 @@ func TestRefs_Degree(t *testing.T) {
 			t.Run(fmt.Sprintf("hash table index %d", length),
 				func(t *testing.T) {
 
-					refs.Reset()
+					refs.Reset() //nolint:errcheck
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)
@@ -1050,7 +1050,7 @@ func TestRefs_HasHash(t *testing.T) {
 			t.Run(fmt.Sprintf("hash table index %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset()
+					refs.Reset() //nolint:errcheck
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)
@@ -1227,7 +1227,7 @@ func TestRefs_ValueByHash(t *testing.T) {
 			t.Run(fmt.Sprintf("hash table index %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset()
+					refs.Reset() //nolint:errcheck
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)
@@ -1395,7 +1395,7 @@ func TestRefs_IndexOfHash(t *testing.T) {
 			t.Run(fmt.Sprintf("hash table index %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset()
+					refs.Reset() //nolint:errcheck
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)
@@ -1613,7 +1613,7 @@ func TestRefs_IndicesByHash(t *testing.T) {
 			t.Run(fmt.Sprintf("hash table index %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset()
+					refs.Reset() //nolint:errcheck
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)
@@ -1799,7 +1799,7 @@ func TestRefs_HashByIndex(t *testing.T) {
 			t.Run(fmt.Sprintf("hash table index %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset()
+					refs.Reset() //nolint:errcheck
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)
@@ -1930,9 +1930,9 @@ func testRefsFlags() []Flags {
 }
 
 func hashByNumber(u uint64) (h cipher.SHA256) {
-	h[0] = uint8(u >> 0)
-	h[1] = uint8(u >> 8)
-	h[2] = uint8(u >> 16)
+	h[0] = uint8(u >> 0)  //nolint:gosec
+	h[1] = uint8(u >> 8)  //nolint:gosec
+	h[2] = uint8(u >> 16) //nolint:gosec
 	h[3] = uint8(u >> 24)
 
 	h[4] = uint8(u >> 32)
@@ -1984,7 +1984,7 @@ func TestRefs_SetHashByIndex(t *testing.T) {
 				for i := 0; i < length; i++ {
 
 					// loaded
-					hash = hashByNumber(uint64(i))
+					hash = hashByNumber(uint64(i)) //nolint:gosec
 					testRefsSetHashByIndex(t, &r, pack, i, hash)
 
 					if t.Failed() {
@@ -1993,8 +1993,8 @@ func TestRefs_SetHashByIndex(t *testing.T) {
 					}
 
 					// load
-					r.Reset() // reset (make it unloaded)
-					hash = hashByNumber(uint64(length + i))
+					r.Reset()                               // reset (make it unloaded)
+					hash = hashByNumber(uint64(length + i)) //nolint:gosec
 					testRefsSetHashByIndex(t, &r, pack, i, hash)
 
 					if t.Failed() {
@@ -2172,7 +2172,7 @@ func TestRefs_DeleteByIndex(t *testing.T) {
 						t.Fatal(err)
 					}
 
-					r.Reset()
+					r.Reset() //nolint:errcheck
 					for i := 0; i < length && t.Failed() == false; i++ {
 						testRefsDeleteByIndex(t, &r, pack, 0)
 					}
@@ -2184,7 +2184,7 @@ func TestRefs_DeleteByIndex(t *testing.T) {
 						t.Fatal(err)
 					}
 
-					r.Reset()
+					r.Reset() //nolint:errcheck
 					for i := length - 1; i >= 0 && t.Failed() == false; i-- {
 						testRefsDeleteByIndex(t, &r, pack, i)
 					}
@@ -2479,14 +2479,14 @@ func TestRefs_Slice(t *testing.T) {
 
 				t.Run("head (load)", func(t *testing.T) {
 					for j := 0; j < len(users) && t.Failed() == false; j++ {
-						r.Reset()
+						r.Reset() //nolint:errcheck
 						testRefsSlice(t, &r, pack, users, 0, j)
 					}
 				})
 
 				t.Run("tail (load)", func(t *testing.T) {
 					for i := 0; i < len(users) && t.Failed() == false; i++ {
-						r.Reset()
+						r.Reset() //nolint:errcheck
 						testRefsSlice(t, &r, pack, users, i, len(users))
 					}
 				})

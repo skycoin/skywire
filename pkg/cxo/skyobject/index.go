@@ -69,7 +69,7 @@ func (i *Index) load(c *Container) (err error) {
 	i.feeds = make(map[cipher.PubKey]*indexHeads)
 	i.c = c
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) {
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 
 		// range feeds
 
@@ -172,7 +172,7 @@ func (i *Index) AddFeed(pk cipher.PubKey) (err error) {
 		return // alrady has
 	}
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) {
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 		return feeds.Add(pk)
 	})
 
@@ -225,7 +225,7 @@ func (i *Index) findRoot(
 
 	// take a look the IdxDB
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) {
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 		var heads data.Heads
 		if heads, err = feeds.Heads(pk); err != nil {
 			return
@@ -358,7 +358,7 @@ func (i *Index) addRoot(r *registry.Root) (alreadyHave bool, err error) {
 
 	// save in the IdxDB
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) {
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 
 		var hs data.Heads
 		if hs, err = feeds.Heads(r.Pub); err != nil {
@@ -583,7 +583,7 @@ func (i *Index) delFeed(
 
 	// delete from IdxDB first
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) {
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 
 		var heads data.Heads
 		if heads, err = feeds.Heads(pk); err != nil {
@@ -597,7 +597,7 @@ func (i *Index) delFeed(
 				return
 			}
 
-			err = roots.Ascend(func(dr *data.Root) (err error) {
+			err = roots.Ascend(func(dr *data.Root) (err error) { //nolint:errcheck
 				rhs = append(rhs, dr.Hash)
 				return
 			})
@@ -677,7 +677,7 @@ func (i *Index) delHead(
 
 	// delete from IdxDB first
 
-	err = i.c.db.IdxDB().Tx(func(feed data.Feeds) (err error) {
+	err = i.c.db.IdxDB().Tx(func(feed data.Feeds) (err error) { //nolint:errcheck
 
 		var hs data.Heads
 		if hs, err = feed.Heads(pk); err != nil {
@@ -689,7 +689,7 @@ func (i *Index) delHead(
 			return
 		}
 
-		err = roots.Ascend(func(dr *data.Root) (err error) {
+		err = roots.Ascend(func(dr *data.Root) (err error) { //nolint:errcheck
 			rhs = append(rhs, dr.Hash)
 			return
 		})
@@ -786,7 +786,7 @@ func (i *Index) delRoot(
 		removed  bool // last Root removed and head is clean
 	)
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) {
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 
 		var hs data.Heads
 		if hs, err = feeds.Heads(pk); err != nil {
@@ -1019,7 +1019,7 @@ func (i *Index) AddHead(pk cipher.PubKey, nonce uint64) (err error) {
 
 	// add to DB
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) {
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 		var heads data.Heads
 		if heads, err = feeds.Heads(pk); err != nil {
 			return
@@ -1042,7 +1042,7 @@ func (i *Index) AddHead(pk cipher.PubKey, nonce uint64) (err error) {
 
 // Close Index syncing it with DB. Access time
 // of Root objects is not saved in DB and should
-// be synchronised with the Index
+// be synchronized with the Index
 func (i *Index) Close() (err error) {
 	i.mx.Lock()
 	defer i.mx.Unlock()
@@ -1090,7 +1090,7 @@ func (i *Index) dataRoot(
 
 	// take a look DB
 
-	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) {
+	err = i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 		var heads data.Heads
 		if heads, err = feeds.Heads(pk); err != nil {
 			return

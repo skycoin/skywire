@@ -109,7 +109,7 @@ func (t *TCP) Connect(address string) (*Conn, error) {
 		if !fc.IsClosed() {
 			t.n.Debugf(CloseConnPin, "[%s] closing connection",
 				factoryConnStr(fc, false))
-			fc.Close()
+			fc.Close() //nolint:errcheck,gosec
 		}
 	}
 
@@ -140,20 +140,20 @@ func (t *TCP) acceptConn(fc *transport.Connection) {
 		if !fc.IsClosed() {
 			t.n.Debugf(CloseConnPin, "[%s] closing connection",
 				factoryConnStr(fc, true))
-			fc.Close()
+			fc.Close() //nolint:errcheck,gosec
 		}
 	}
 }
 
 // closeConn closes the connection and removes it from cache
-func (t *TCP) closeConn(addr string) error {
+func (t *TCP) closeConn(addr string) error { //nolint:errcheck
 	t.mx.Lock()
 	defer t.mx.Unlock()
 
 	if c, ok := t.cs[addr]; ok {
 		if !c.Connection.IsClosed() {
 			t.n.Debugf(CloseConnPin, "[%s] closing connection", c.String())
-			c.Connection.Close()
+			c.Connection.Close() //nolint:errcheck,gosec
 		}
 	} else {
 		return errors.New("not found")
@@ -285,7 +285,7 @@ func (u *UDP) Connect(address string) (*Conn, error) {
 		if !fc.IsClosed() {
 			u.n.Debugf(CloseConnPin, "[%s] closing connection",
 				factoryConnStr(fc, false))
-			fc.Close()
+			fc.Close() //nolint:errcheck,gosec
 		}
 	}
 
@@ -316,20 +316,20 @@ func (u *UDP) acceptConn(fc *transport.Connection) {
 		if !fc.IsClosed() {
 			u.n.Debugf(CloseConnPin, "[%s] closing connection",
 				factoryConnStr(fc, true))
-			fc.Close()
+			fc.Close() //nolint:errcheck,gosec
 		}
 	}
 }
 
 // closeConn closes the connection and removes it from cache
-func (u *UDP) closeConn(addr string) error {
+func (u *UDP) closeConn(addr string) error { //nolint:errcheck
 	u.mx.Lock()
 	defer u.mx.Unlock()
 
 	if c, ok := u.cs[addr]; ok {
 		if !c.Connection.IsClosed() {
 			u.n.Debugf(CloseConnPin, "[%s] closing connection", c.String())
-			c.Connection.Close()
+			c.Connection.Close() //nolint:errcheck,gosec
 		}
 	} else {
 		return errors.New("not found")

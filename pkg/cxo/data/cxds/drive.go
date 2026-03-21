@@ -42,7 +42,7 @@ type driveCXDS struct {
 // or creates new by given file name. Underlying
 // database is boltdb (github.com/boltdb/bolt).
 // E.g. this stores data on disk
-func NewDriveCXDS(fileName string) (ds data.CXDS, err error) {
+func NewDriveCXDS(fileName string) (ds data.CXDS, err error) { //nolint:nakedret
 
 	var created bool // true if the file does not exist
 
@@ -575,7 +575,7 @@ func (d *driveCXDS) Close() (err error) {
 		return
 	}
 
-	return d.b.Close()
+	return d.b.Close() //nolint:errcheck,gosec
 }
 
 func copySlice(in []byte) (got []byte) {

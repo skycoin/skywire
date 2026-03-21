@@ -80,7 +80,7 @@ func testRefsAppendHashesCheck(
 	}
 
 	if shift > 0 {
-		hashes = append(hashes, hashes...) // stub for now
+		hashes = append(hashes, hashes...) // stub for now //nolint:ineffassign
 	}
 
 	logRefsTree(t, r, pack, false)

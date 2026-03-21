@@ -14,8 +14,8 @@ func TestFeeds_Add(t *testing.T) {
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
-		defer os.Remove(testFileName)
-		defer idx.Close()
+		defer os.Remove(testFileName) //nolint:errcheck,gosec
+		defer idx.Close()             //nolint:errcheck,gosec
 		tests.FeedsAdd(t, idx)
 	})
 
@@ -28,8 +28,8 @@ func TestFeeds_Del(t *testing.T) {
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
-		defer os.Remove(testFileName)
-		defer idx.Close()
+		defer os.Remove(testFileName) //nolint:errcheck,gosec
+		defer idx.Close()             //nolint:errcheck,gosec
 		tests.FeedsDel(t, idx)
 	})
 
@@ -42,8 +42,8 @@ func TestFeeds_Iterate(t *testing.T) {
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
-		defer os.Remove(testFileName)
-		defer idx.Close()
+		defer os.Remove(testFileName) //nolint:errcheck,gosec
+		defer idx.Close()             //nolint:errcheck,gosec
 		tests.FeedsIterate(t, idx)
 	})
 
@@ -56,8 +56,8 @@ func TestFeeds_Has(t *testing.T) {
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
-		defer os.Remove(testFileName)
-		defer idx.Close()
+		defer os.Remove(testFileName) //nolint:errcheck,gosec
+		defer idx.Close()             //nolint:errcheck,gosec
 		tests.FeedsHas(t, idx)
 	})
 
@@ -70,8 +70,8 @@ func TestFeeds_Heads(t *testing.T) {
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
-		defer os.Remove(testFileName)
-		defer idx.Close()
+		defer os.Remove(testFileName) //nolint:errcheck,gosec
+		defer idx.Close()             //nolint:errcheck,gosec
 		tests.FeedsHeads(t, idx)
 	})
 

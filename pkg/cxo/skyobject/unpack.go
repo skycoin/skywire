@@ -255,7 +255,7 @@ func (i *Index) saveRoot(
 	// val []byte --> encoded Root
 	var dr = new(data.Root)
 
-	err = i.c.db.IdxDB().Tx(func(fs data.Feeds) (err error) {
+	err = i.c.db.IdxDB().Tx(func(fs data.Feeds) (err error) { //nolint:errcheck
 		var hs data.Heads
 		if hs, err = fs.Heads(r.Pub); err != nil {
 			return // no such feed

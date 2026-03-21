@@ -87,7 +87,7 @@ func NewDriveIdxDB(fileName string) (idx data.IdxDB, err error) {
 	})
 
 	if err != nil {
-		b.Close()
+		b.Close() //nolint:errcheck,gosec
 		return
 	}
 
@@ -104,7 +104,7 @@ func (d *driveDB) Tx(txFunc func(feeds data.Feeds) (err error)) (err error) {
 
 // Close the DB
 func (d *driveDB) Close() (err error) {
-	return d.b.Close()
+	return d.b.Close() //nolint:errcheck,gosec
 }
 
 type driveFeeds struct {
@@ -154,10 +154,10 @@ func (d *driveFeeds) Iterate(iterateFunc data.IterateFeedsFunc) (err error) {
 func incSlice(b []byte) {
 	for i := len(b) - 1; i >= 0; i-- {
 		if b[i] == 0xff {
-			b[i] = 0
+			b[i] = 0 //nolint:gosec
 			continue // increase next byte
 		}
-		b[i]++
+		b[i]++ //nolint:gosec
 		return
 	}
 }

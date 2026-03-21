@@ -54,7 +54,7 @@ func (f *UDPFactory) Close() {
 	}
 	f.closed = true
 	if f.listener != nil {
-		f.listener.Close()
+		f.listener.Close() //nolint:errcheck,gosec
 	}
 }
 

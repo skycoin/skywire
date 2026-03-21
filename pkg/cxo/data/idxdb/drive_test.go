@@ -8,14 +8,14 @@ import (
 func TestNewDriveIdxDB(t *testing.T) {
 
 	t.Run("cant open", func(t *testing.T) {
-		defer os.Remove(testFileName)
+		defer os.Remove(testFileName) //nolint:errcheck,gosec
 
 		fl, err := os.Create(testFileName)
 		if err != nil {
 			t.Error(err)
 			return
 		}
-		defer fl.Close()
+		defer fl.Close() //nolint:errcheck,gosec
 
 		if _, err := fl.Write([]byte("Abra-Cadabra")); err != nil {
 			t.Error(err)
@@ -24,7 +24,7 @@ func TestNewDriveIdxDB(t *testing.T) {
 
 		if idx, err := NewDriveIdxDB(testFileName); err == nil {
 			t.Error("missing error")
-			idx.Close()
+			idx.Close() //nolint:errcheck,gosec
 		}
 	})
 

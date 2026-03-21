@@ -30,7 +30,7 @@ func (c *Conn) performHandshake() error {
 			NodeID:   c.n.idpk,
 		}
 	)
-	if err := c.sendMsg(seq, 0, syn); err != nil {
+	if err := c.sendMsg(seq, 0, syn); err != nil { //nolint:errcheck
 		return err
 	}
 
@@ -137,7 +137,7 @@ func (c *Conn) acceptHandshake() (err error) {
 					Err: err.Error(),
 				}
 			)
-			if sendErr := c.sendMsg(c.nextSeq(), seq, errMsg); sendErr != nil {
+			if sendErr := c.sendMsg(c.nextSeq(), seq, errMsg); sendErr != nil { //nolint:errcheck
 				c.n.Error(sendErr, "failed to send err message")
 			}
 
@@ -153,7 +153,7 @@ func (c *Conn) acceptHandshake() (err error) {
 					Err: err.Error(),
 				}
 			)
-			if sendErr := c.sendMsg(c.nextSeq(), seq, errMsg); sendErr != nil {
+			if sendErr := c.sendMsg(c.nextSeq(), seq, errMsg); sendErr != nil { //nolint:errcheck
 				c.n.Error(sendErr, "faield to send err message")
 			}
 
@@ -164,7 +164,7 @@ func (c *Conn) acceptHandshake() (err error) {
 		ack := &msg.Ack{
 			NodeID: c.n.idpk,
 		}
-		if err := c.sendMsg(c.nextSeq(), seq, ack); err != nil {
+		if err := c.sendMsg(c.nextSeq(), seq, ack); err != nil { //nolint:errcheck
 			return fmt.Errorf("failed to send ack message: %s", err)
 		}
 

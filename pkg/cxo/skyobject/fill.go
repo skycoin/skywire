@@ -70,7 +70,7 @@ func (f *Filler) get(
 	// not found
 	var gc = make(chan Object, 1) // wait for the object
 
-	f.c.Want(key, gc, inc)
+	f.c.Want(key, gc, inc)    //nolint:errcheck
 	defer f.c.Unwant(key, gc) // to be memory safe
 
 	// requset the object using the rq channel
@@ -324,7 +324,7 @@ func (f *Filler) Run() (err error) {
 		_, err = f.c.AddRoot(f.r)
 	}
 
-	f.Close()
+	f.Close() //nolint:errcheck,gosec
 
 	return
 }

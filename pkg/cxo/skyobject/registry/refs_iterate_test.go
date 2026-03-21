@@ -163,7 +163,7 @@ func TestRefs_Ascend(t *testing.T) {
 			t.Run(fmt.Sprintf("hash table index %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset()
+					refs.Reset() //nolint:errcheck
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)
@@ -378,7 +378,7 @@ func TestRefs_AscendFrom(t *testing.T) {
 			t.Run(fmt.Sprintf("hash table index %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset()
+					refs.Reset() //nolint:errcheck
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)
@@ -582,7 +582,7 @@ func TestRefs_Descend(t *testing.T) {
 			t.Run(fmt.Sprintf("hash table index %d:%d", length, degree),
 				func(t *testing.T) {
 
-					refs.Reset()
+					refs.Reset() //nolint:errcheck
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)
@@ -809,7 +809,7 @@ func TestRefs_DescendFrom(t *testing.T) {
 
 					t.Skip("skip")
 
-					refs.Reset()
+					refs.Reset() //nolint:errcheck
 
 					pack.ClearFlags(EntireRefs)
 					pack.AddFlags(HashTableIndex)

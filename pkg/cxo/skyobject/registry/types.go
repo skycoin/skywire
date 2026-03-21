@@ -8,7 +8,7 @@ import (
 // of the Registry to reflect.Type and inversed way
 type Types struct {
 	Direct  map[string]reflect.Type // registered name -> refelect.Type
-	Inverse map[reflect.Type]string // refelct.Type -> registered name
+	Inverse map[reflect.Type]string // reflect.Type -> registered name
 }
 
 // SchemaName returns schema name of given object

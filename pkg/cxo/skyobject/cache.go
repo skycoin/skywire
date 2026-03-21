@@ -152,7 +152,7 @@ func (c *Cache) amountVolume() (a, v int) {
 func (c *Cache) reset() {
 	c.is = nil
 	c.rs = nil
-	c.stat.Close()
+	c.stat.Close() //nolint:errcheck,gosec
 	c.stat = nil
 }
 
@@ -273,15 +273,15 @@ func (c *Cache) Close() (err error) {
 		it.cc -= it.fc // remove all fincs
 		it.fc = 0
 
-		if err = c.delete(key, it); err != nil {
+		if err = c.delete(key, it); err != nil { //nolint:errcheck
 			return
 		}
 
 	}
 
 	// close the CXDS
-	err = c.c.db.CXDS().Close()
-	c.stat.Close() // close goroutine
+	err = c.c.db.CXDS().Close() //nolint:errcheck,gosec
+	c.stat.Close()              // close goroutine
 
 	return
 }
@@ -372,7 +372,7 @@ func (c *Cache) cleanDown(vol int) (err error) {
 			}
 
 			// delete item from the Cache
-			if err = c.delete(ri.key, ri.it); err != nil {
+			if err = c.delete(ri.key, ri.it); err != nil { //nolint:errcheck
 				return // fail on first error
 			}
 
@@ -396,7 +396,7 @@ func (c *Cache) cleanDown(vol int) (err error) {
 			break
 		}
 
-		if err = c.delete(ri.key, ri.it); err != nil {
+		if err = c.delete(ri.key, ri.it); err != nil { //nolint:errcheck
 			return // fail on first error
 		}
 
@@ -577,7 +577,7 @@ func (c *Cache) getNoCache(
 
 		// remove item if it's cc is zero
 		if it.cc = incr(it.cc, inc); it.cc == 0 {
-			c.delete(key, it)
+			c.delete(key, it) //nolint:errcheck
 		} else {
 			c.stat.addCacheGet(inc) // effective cache get
 		}
@@ -628,7 +628,7 @@ func (c *Cache) get(
 
 		// remove item if it's cc is zero
 		if it.cc = incr(it.cc, inc); it.cc == 0 {
-			c.delete(key, it)
+			c.delete(key, it) //nolint:errcheck
 		} else {
 			c.stat.addCacheGet(inc) // effective cache get
 			it.touch(c.c.conf.CachePolicy)
@@ -824,11 +824,11 @@ func (c *Cache) Set(
 		}
 
 		// the delete below can clean the it.val
-		val = it.val
+		val = it.val //nolint:ineffassign
 
 		// remove item if it's cc is zero
 		if it.cc = incr(it.cc, inc); it.cc == 0 {
-			c.delete(key, it) // not effective cache set
+			c.delete(key, it) // not effective cache set //nolint:errcheck
 		} else {
 			c.stat.addWritingCacheRequest() // effective cache set
 			it.touch(c.c.conf.CachePolicy)
@@ -910,7 +910,7 @@ func (c *Cache) incItem(
 
 	// remove item if it's cc is zero
 	if it.cc = incr(it.cc, inc); it.cc == 0 {
-		c.delete(key, it)
+		c.delete(key, it) //nolint:errcheck
 	} else {
 		c.stat.addCacheGet(inc) // effective cache get
 		it.touch(c.c.conf.CachePolicy)

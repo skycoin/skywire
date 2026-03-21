@@ -34,8 +34,8 @@ func TestIdxDB_Close(t *testing.T) {
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
-		defer os.Remove(testFileName)
-		defer idx.Close()
+		defer os.Remove(testFileName) //nolint:errcheck,gosec
+		defer idx.Close()             //nolint:errcheck,gosec
 
 		tests.IdxDBClose(t, idx)
 	})

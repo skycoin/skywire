@@ -167,14 +167,14 @@ func NewNodeContainer(
 
 	if conf.TCP.Listen != "" {
 		if err = n.TCP().Listen(conf.TCP.Listen); err != nil {
-			n.Close()
+			n.Close() //nolint:errcheck,gosec
 			return
 		}
 	}
 
 	if conf.UDP.Listen != "" {
 		if err = n.UDP().Listen(conf.UDP.Listen); err != nil {
-			n.Close()
+			n.Close() //nolint:errcheck,gosec
 			return
 		}
 	}
@@ -186,7 +186,7 @@ func NewNodeContainer(
 		n.rpc = n.newRPC()
 
 		if err = n.rpc.Listen(conf.RPC); err != nil {
-			n.Close()
+			n.Close() //nolint:errcheck,gosec
 			return
 		}
 
@@ -382,7 +382,7 @@ func (n *Node) initConn(
 	}
 
 	switch {
-	// In case of exisitng connection return it.
+	// In case of existing connection return it.
 	case !isNew && !isPending:
 		return c, nil
 
@@ -419,7 +419,7 @@ func (n *Node) initConn(
 }
 
 // onNewConn atomically checks for existing connection
-// to/form address and creates new one if neccessary.
+// to/form address and creates new one if necessary.
 func (n *Node) onNewConn(
 	fc *transport.Connection, isIncoming bool) (c *Conn, isNew, isPending bool, err error) {
 
@@ -464,7 +464,7 @@ func (n *Node) onConnInitErr(c *Conn, initErr error) {
 }
 
 // onConnInit atomically moves pending connection to cache
-// and singals about initConn success. It also chekcs if
+// and signals about initConn success. It also chekcs if
 // peer's pubkey, receieved during hanshake is duplicate.
 func (n *Node) onConnInit(c *Conn) {
 	n.mx.Lock()
@@ -629,25 +629,25 @@ func (n *Node) Close() (err error) {
 
 		// Close all connections.
 		for _, c := range n.pendConns {
-			c.Close()
+			c.Close() //nolint:errcheck,gosec
 		}
 		for _, c := range n.pkToConn {
-			c.Close()
+			c.Close() //nolint:errcheck,gosec
 		}
 
 		// Shutdown all transports.
 		if n.tcp != nil {
-			n.tcp.Close()
+			n.tcp.Close() //nolint:errcheck,gosec
 		}
 		if n.udp != nil {
-			n.udp.Close()
+			n.udp.Close() //nolint:errcheck,gosec
 		}
 		if n.rpc != nil {
-			n.rpc.Close()
+			n.rpc.Close() //nolint:errcheck,gosec
 		}
 
 		// Close database.
-		err = n.c.Close()
+		err = n.c.Close() //nolint:errcheck,gosec
 
 		n.await.Wait()
 

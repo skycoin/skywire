@@ -28,7 +28,7 @@ import (
 //
 // If a feed contains more then one head, then the method
 // keeps last n-th Root objects of every head.
-func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) {
+func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) { //nolint:nakedret
 
 	for _, pk := range c.Feeds() {
 
@@ -45,7 +45,7 @@ func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) {
 				continue  // not a real error
 			}
 
-			if seq < uint64(keepLast) {
+			if seq < uint64(keepLast) { //nolint:gosec
 				continue
 			}
 

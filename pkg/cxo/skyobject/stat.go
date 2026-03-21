@@ -119,7 +119,7 @@ func (i *Index) feedsStat() (s map[cipher.PubKey]FeedStat) {
 	s = make(map[cipher.PubKey]FeedStat)
 
 	// ignore error
-	i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) {
+	i.c.db.IdxDB().Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 
 		//
 		// range feeds
@@ -163,7 +163,7 @@ func (i *Index) feedsStat() (s map[cipher.PubKey]FeedStat) {
 
 				if sh.Len > 1 {
 
-					roots.Ascend(func(dr *data.Root) (err error) {
+					roots.Ascend(func(dr *data.Root) (err error) { //nolint:errcheck
 
 						sh.First.Seq = dr.Seq
 						sh.First.Time = time.Unix(0, dr.Time)

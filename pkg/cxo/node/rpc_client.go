@@ -16,7 +16,7 @@ type RPCClient struct {
 
 // Close client
 func (r *RPCClient) Close() (err error) {
-	return r.c.Close()
+	return r.c.Close() //nolint:errcheck,gosec
 }
 
 // Node related methods

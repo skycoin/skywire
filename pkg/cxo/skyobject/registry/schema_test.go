@@ -294,7 +294,7 @@ func TestSchema_Len(t *testing.T) {
 
 			t.Log(tt.Name, ">", fl.Name())
 
-			var rf = rt.FieldByIndex([]int{i}).Type // refelct.Type of the field
+			var rf = rt.FieldByIndex([]int{i}).Type // reflect.Type of the field
 
 			if kind := fl.Kind(); kind == reflect.Array {
 
@@ -346,7 +346,7 @@ func TestSchema_Fields(t *testing.T) {
 
 			t.Log(tt.Name, ">", fl.Name())
 
-			var rf = rt.FieldByIndex([]int{i}) // refelct.StructField
+			var rf = rt.FieldByIndex([]int{i}) // reflect.StructField
 
 			// ccompare names
 
@@ -403,7 +403,7 @@ func TestSchema_Elem(t *testing.T) {
 
 			t.Log(tt.Name, ">", fl.Name())
 
-			var rf = rt.FieldByIndex([]int{i}) // refelct.StructField
+			var rf = rt.FieldByIndex([]int{i}) // reflect.StructField
 
 			// Ref, Refs, array of slice
 

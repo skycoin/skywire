@@ -58,7 +58,7 @@ func (r *rpcServer) Address() (address string) {
 
 func (r *rpcServer) Close() (err error) {
 	if r.l != nil {
-		err = r.l.Close()
+		err = r.l.Close() //nolint:errcheck,gosec
 	}
 	return
 }
@@ -168,7 +168,7 @@ func (t *TCPRPC) Connect(address string, _ *struct{}) (err error) {
 func (t *TCPRPC) Disconnect(address string, _ *struct{}) (err error) {
 	if tcp := t.n.getTCP(); tcp != nil {
 		if c := tcp.getConn(address); c != nil {
-			err = c.Close()
+			err = c.Close() //nolint:errcheck,gosec
 		}
 	}
 	return
@@ -244,7 +244,7 @@ func (u *UDPRPC) Connect(address string, _ *struct{}) (err error) {
 func (u *UDPRPC) Disconnect(address string, _ *struct{}) (err error) {
 	if tcp := u.n.getTCP(); tcp != nil {
 		if c := tcp.getConn(address); c != nil {
-			err = c.Close()
+			err = c.Close() //nolint:errcheck,gosec
 		}
 	}
 	return

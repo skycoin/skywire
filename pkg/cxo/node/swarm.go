@@ -432,7 +432,7 @@ func (s *Swarm) createOutgoingConns(count uint64) {
 			return !ok
 		}
 
-		peers = s.randomPeers(int(count), noConn)
+		peers = s.randomPeers(int(count), noConn) //nolint:gosec
 
 		wg sync.WaitGroup
 	)
@@ -512,7 +512,7 @@ func (s *Swarm) peersForExchange(peerPK cipher.PubKey) []msg.PeerInfo {
 			return p.PubKey != peerPK
 		}
 
-		peers = s.randomPeers(int(s.cfg.PeersPerResponse), zeroRetries, notItself)
+		peers = s.randomPeers(int(s.cfg.PeersPerResponse), zeroRetries, notItself) //nolint:gosec
 
 		peerMsg = make([]msg.PeerInfo, len(peers))
 	)

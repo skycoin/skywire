@@ -28,14 +28,14 @@ func TestNewDriveCXDS(t *testing.T) {
 	// NewDriveCXDS(filePath string) (ds *DriveCXDS, err error)
 
 	ds := testDriveDS(t)
-	defer ds.Close()
+	defer ds.Close() //nolint:errcheck,gosec
 }
 
 func TestNewMemoryCXDS(t *testing.T) {
 	// NewMemoryCXDS() (ds *MemoryCXDS, err error)
 
 	ds := NewMemoryCXDS()
-	defer ds.Close()
+	defer ds.Close() //nolint:errcheck,gosec
 }
 
 func TestCXDS_Get(t *testing.T) {
@@ -47,8 +47,8 @@ func TestCXDS_Get(t *testing.T) {
 
 	t.Run("drive", func(t *testing.T) {
 		ds := testDriveDS(t)
-		defer os.Remove(testFileName)
-		defer ds.Close()
+		defer os.Remove(testFileName) //nolint:errcheck,gosec
+		defer ds.Close()              //nolint:errcheck,gosec
 		tests.CXDSGet(t, ds)
 	})
 }
@@ -62,8 +62,8 @@ func TestCXDS_Set(t *testing.T) {
 
 	t.Run("drive", func(t *testing.T) {
 		ds := testDriveDS(t)
-		defer os.Remove(testFileName)
-		defer ds.Close()
+		defer os.Remove(testFileName) //nolint:errcheck,gosec
+		defer ds.Close()              //nolint:errcheck,gosec
 		tests.CXDSSet(t, ds)
 	})
 }
@@ -77,8 +77,8 @@ func TestCXDS_Inc(t *testing.T) {
 
 	t.Run("drive", func(t *testing.T) {
 		ds := testDriveDS(t)
-		defer os.Remove(testFileName)
-		defer ds.Close()
+		defer os.Remove(testFileName) //nolint:errcheck,gosec
+		defer ds.Close()              //nolint:errcheck,gosec
 		tests.CXDSInc(t, ds)
 	})
 }
@@ -92,8 +92,8 @@ func TestCXDS_Close(t *testing.T) {
 
 	t.Run("drive", func(t *testing.T) {
 		ds := testDriveDS(t)
-		defer os.Remove(testFileName)
-		defer ds.Close()
+		defer os.Remove(testFileName) //nolint:errcheck,gosec
+		defer ds.Close()              //nolint:errcheck,gosec
 		tests.CXDSClose(t, ds)
 	})
 }

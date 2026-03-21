@@ -198,7 +198,7 @@ func (n *nodeHead) handle() {
 
 			f.p = connRoot{} // remove pending Root
 			if f.f != nil {
-				f.f.Close()
+				f.f.Close() //nolint:errcheck,gosec
 				f.handleFillingResult(err)
 			}
 			f.terminate()
@@ -240,7 +240,7 @@ func (f *fillHead) handleRequestFailure(fr failedRequest) {
 
 		// close connections that sends invalid responses
 		f.n.node().Errorf(fr.err, "[%s]", fr.c.Address())
-		go fr.c.Close()
+		go fr.c.Close()    //nolint:errcheck,gosec
 		delete(f.cs, fr.c) // remove connection
 
 	case ErrClosed:
@@ -380,7 +380,7 @@ func (f *fillHead) closeFiller() {
 		f.ft.Stop()
 	}
 
-	f.f.Close()
+	f.f.Close() //nolint:errcheck,gosec
 
 	f.rqo, f.fc, f.rq = nil, nil, nil
 

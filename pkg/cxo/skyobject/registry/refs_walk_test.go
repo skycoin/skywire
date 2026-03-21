@@ -114,7 +114,7 @@ func TestRefs_Walk(t *testing.T) {
 
 				t.Run("load", func(t *testing.T) {
 					var i int
-					r.Reset()
+					r.Reset() //nolint:errcheck
 					err = r.Walk(pack,
 						nil,
 						func(

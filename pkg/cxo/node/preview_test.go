@@ -27,10 +27,10 @@ func Test_preview(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	defer sn.Close()
-	defer rn.Close()
+	defer sn.Close() //nolint:errcheck,gosec
+	defer rn.Close() //nolint:errcheck,gosec
 
-	var pk, sk = cipher.GenerateKeyPair()
+	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck
 
 	assertNil(t, sn.Share(pk))
 	assertNil(t, rn.Share(pk))
@@ -136,10 +136,10 @@ func Test_preview_refs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	defer sn.Close()
-	defer rn.Close()
+	defer sn.Close() //nolint:errcheck,gosec
+	defer rn.Close() //nolint:errcheck,gosec
 
-	var pk, sk = cipher.GenerateKeyPair()
+	var pk, sk = cipher.GenerateKeyPair() //nolint:errcheck
 
 	assertNil(t, sn.Share(pk))
 	assertNil(t, rn.Share(pk))

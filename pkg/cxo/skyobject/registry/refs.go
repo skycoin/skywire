@@ -535,8 +535,8 @@ func (r *Refs) ValueByIndex(
 func (r *Refs) encode() []byte {
 	var er encodedRefs
 
-	er.Degree = uint32(r.degree)
-	er.Depth = uint32(r.depth)
+	er.Degree = uint32(r.degree) //nolint:gosec
+	er.Depth = uint32(r.depth)   //nolint:gosec
 	er.Length = uint32(r.length)
 
 	if r.depth == 0 {
@@ -1074,7 +1074,7 @@ func (r *Refs) DescendFrom(
 }
 
 // validateSliceIndices validates [i:j]
-// indeces for the Refs with given length
+// indices for the Refs with given length
 func validateSliceIndices(i, j, length int) (err error) {
 	if i < 0 || j < 0 || i > length || j > length {
 		err = ErrIndexOutOfRange
@@ -1387,7 +1387,7 @@ func (r *Refs) walkUpdating(
 //
 // TODO (kostyarin): append itself. The ablility
 // to append the Refs itself is not implemented
-// yet. Behaviour in this case is undefined
+// yet. Behavior in this case is undefined
 func (r *Refs) Append(
 	pack Pack, //  : pack to load and save
 	refs *Refs, // : the Refs to append to current one

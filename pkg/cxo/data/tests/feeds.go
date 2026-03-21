@@ -26,7 +26,7 @@ func FeedsAdd(t *testing.T, idx data.IdxDB) {
 	var pk, _ = cipher.GenerateKeyPair()
 
 	t.Run("add", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) {
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 			if err = feeds.Add(pk); err != nil {
 				return
 			}
@@ -43,7 +43,7 @@ func FeedsAdd(t *testing.T, idx data.IdxDB) {
 	}
 
 	t.Run("twice", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) {
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 			if err = feeds.Add(pk); err != nil {
 				return
 			}
@@ -66,7 +66,7 @@ func FeedsDel(t *testing.T, idx data.IdxDB) {
 
 	// not found
 	t.Run("not found", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (_ error) {
+		err := idx.Tx(func(feeds data.Feeds) (_ error) { //nolint:errcheck
 			if err := feeds.Del(pk); err == nil {
 				t.Error("missing error")
 			} else if err != data.ErrNoSuchFeed {
@@ -85,7 +85,7 @@ func FeedsDel(t *testing.T, idx data.IdxDB) {
 
 	// delete
 	t.Run("delete", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) {
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 			if err = feeds.Del(pk); err != nil {
 				return
 			}
@@ -103,7 +103,7 @@ func FeedsDel(t *testing.T, idx data.IdxDB) {
 func FeedsIterate(t *testing.T, idx data.IdxDB) {
 
 	t.Run("no feeds", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) {
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 			var called int
 			err = feeds.Iterate(func(pk cipher.PubKey) (err error) {
 				called++
@@ -137,7 +137,7 @@ func FeedsIterate(t *testing.T, idx data.IdxDB) {
 	}
 
 	t.Run("iterate", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) {
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 			var called int
 			err = feeds.Iterate(func(pk cipher.PubKey) (err error) {
 				if _, ok := pks[pk]; !ok {
@@ -165,7 +165,7 @@ func FeedsIterate(t *testing.T, idx data.IdxDB) {
 	})
 
 	t.Run("stop iteration", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) {
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 			var called int
 			err = feeds.Iterate(func(pk cipher.PubKey) (err error) {
 				called++
@@ -190,7 +190,7 @@ func FeedsIterate(t *testing.T, idx data.IdxDB) {
 
 	t.Run("mutate add", func(t *testing.T) {
 		var called int
-		err := idx.Tx(func(feeds data.Feeds) (err error) {
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 			err = feeds.Iterate(func(pk cipher.PubKey) (err error) {
 				called++
 				if called == 1 {
@@ -213,7 +213,7 @@ func FeedsIterate(t *testing.T, idx data.IdxDB) {
 
 	t.Run("mutate delete", func(t *testing.T) {
 		var called int
-		err := idx.Tx(func(feeds data.Feeds) (err error) {
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 			err = feeds.Iterate(func(pk cipher.PubKey) (err error) {
 				called++
 				if called == 1 {
@@ -242,7 +242,7 @@ func FeedsHas(t *testing.T, idx data.IdxDB) {
 	var pk, _ = cipher.GenerateKeyPair()
 
 	t.Run("not exist", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (_ error) {
+		err := idx.Tx(func(feeds data.Feeds) (_ error) { //nolint:errcheck
 			feedsHas(t, feeds, pk, false)
 			return
 		})
@@ -256,7 +256,7 @@ func FeedsHas(t *testing.T, idx data.IdxDB) {
 	}
 
 	t.Run("exists", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (_ error) {
+		err := idx.Tx(func(feeds data.Feeds) (_ error) { //nolint:errcheck
 			feedsHas(t, feeds, pk, true)
 			return
 		})
@@ -268,7 +268,7 @@ func FeedsHas(t *testing.T, idx data.IdxDB) {
 }
 
 func addHead(t *testing.T, idx data.IdxDB, pk cipher.PubKey, nonce uint64) {
-	err := idx.Tx(func(fs data.Feeds) (err error) {
+	err := idx.Tx(func(fs data.Feeds) (err error) { //nolint:errcheck
 		var hs data.Heads
 		if hs, err = fs.Heads(pk); err != nil {
 			return
@@ -292,7 +292,7 @@ func FeedsHeads(t *testing.T, idx data.IdxDB) {
 	var pk, _ = cipher.GenerateKeyPair()
 
 	t.Run("no such feed", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) {
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err == nil {
 				t.Error("missng data.ErrNoSuchFeed")
@@ -313,7 +313,7 @@ func FeedsHeads(t *testing.T, idx data.IdxDB) {
 	}
 
 	t.Run("empty", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) {
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return // bubble the err up
@@ -333,7 +333,7 @@ func FeedsHeads(t *testing.T, idx data.IdxDB) {
 	}
 
 	t.Run("heads", func(t *testing.T) {
-		err := idx.Tx(func(feeds data.Feeds) (err error) {
+		err := idx.Tx(func(feeds data.Feeds) (err error) { //nolint:errcheck
 			var hs data.Heads
 			if hs, err = feeds.Heads(pk); err != nil {
 				return // bubble the err up

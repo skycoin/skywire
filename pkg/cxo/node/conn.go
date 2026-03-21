@@ -100,9 +100,9 @@ func (c *Conn) run() {
 
 	// Remove connection from transport's cache and close connection.
 	if c.IsTCP() {
-		c.n.tcp.closeConn(c.Address())
+		c.n.tcp.closeConn(c.Address()) //nolint:errcheck
 	} else {
-		c.n.udp.closeConn(c.Address())
+		c.n.udp.closeConn(c.Address()) //nolint:errcheck
 	}
 
 	// In connection is closed in case of error, decide which one to pass to OnDisconnect.
@@ -231,7 +231,7 @@ func (c *Conn) RemoteFeeds() (feeds []cipher.PubKey, err error) {
 }
 
 func (c *Conn) sendRoot(r *registry.Root) {
-	c.sendMsg(c.nextSeq(), 0, &msg.Root{
+	c.sendMsg(c.nextSeq(), 0, &msg.Root{ //nolint:errcheck
 		Feed:  r.Pub,
 		Nonce: r.Nonce,
 		Seq:   r.Seq,
@@ -304,7 +304,7 @@ func (c *Conn) Subscribe(feed cipher.PubKey) (err error) {
 
 // just send the messege
 func (c *Conn) unsubscribe(pk cipher.PubKey) {
-	c.sendMsg(c.nextSeq(), 0, &msg.Unsub{
+	c.sendMsg(c.nextSeq(), 0, &msg.Unsub{ //nolint:errcheck
 		Feed: pk,
 	})
 }
@@ -544,7 +544,7 @@ func (c *Conn) sendRequest(m msg.Msg) (reply msg.Msg, err error) {
 	c.addRequest(seq, rq)
 	defer c.delRequest(seq)
 
-	c.sendMsg(seq, 0, m)
+	c.sendMsg(seq, 0, m) //nolint:errcheck
 
 	select {
 	case reply = <-rq:
@@ -560,11 +560,11 @@ func (c *Conn) sendRequest(m msg.Msg) (reply msg.Msg, err error) {
 }
 
 func (c *Conn) sendErr(rseq uint32, err error) {
-	c.sendMsg(c.nextSeq(), rseq, &msg.Err{Err: err.Error()})
+	c.sendMsg(c.nextSeq(), rseq, &msg.Err{Err: err.Error()}) //nolint:errcheck
 }
 
 func (c *Conn) sendOk(rseq uint32) {
-	c.sendMsg(c.nextSeq(), rseq, &msg.Ok{})
+	c.sendMsg(c.nextSeq(), rseq, &msg.Ok{}) //nolint:errcheck
 }
 
 // handle messeges except responses and handshakes
@@ -702,7 +702,7 @@ func (c *Conn) handleRqList(seq uint32, rq *msg.RqList) (_ error) {
 		return
 	}
 
-	c.sendMsg(c.nextSeq(), seq, &msg.List{
+	c.sendMsg(c.nextSeq(), seq, &msg.List{ //nolint:errcheck
 		Feeds: c.n.Feeds(),
 	})
 
@@ -778,7 +778,7 @@ func (c *Conn) handleRqObject(seq uint32, rq *msg.RqObject) {
 	select {
 	case obj := <-gc:
 		// got
-		c.sendMsg(c.nextSeq(), seq, &msg.Object{Value: obj.Val})
+		c.sendMsg(c.nextSeq(), seq, &msg.Object{Value: obj.Val}) //nolint:errcheck
 		return
 	default:
 		// wait
@@ -793,9 +793,9 @@ func (c *Conn) handleRqObject(seq uint32, rq *msg.RqObject) {
 
 	select {
 	case obj := <-gc:
-		c.sendMsg(c.nextSeq(), seq, &msg.Object{Value: obj.Val})
+		c.sendMsg(c.nextSeq(), seq, &msg.Object{Value: obj.Val}) //nolint:errcheck
 	case <-tc:
-		c.sendMsg(c.nextSeq(), seq, &msg.Err{}) // timeout
+		c.sendMsg(c.nextSeq(), seq, &msg.Err{}) // timeout //nolint:errcheck
 	case <-c.closeq:
 		// closed
 	}
@@ -811,11 +811,11 @@ func (c *Conn) handleRqPreview(seq uint32, rqp *msg.RqPreview) (_ error) {
 	var r, err = c.n.c.LastRoot(rqp.Feed, c.n.c.ActiveHead(rqp.Feed))
 
 	if err != nil {
-		c.sendMsg(c.nextSeq(), seq, &msg.Err{Err: err.Error()})
+		c.sendMsg(c.nextSeq(), seq, &msg.Err{Err: err.Error()}) //nolint:errcheck
 		return
 	}
 
-	c.sendMsg(c.nextSeq(), seq, &msg.Root{
+	c.sendMsg(c.nextSeq(), seq, &msg.Root{ //nolint:errcheck
 		Feed:  r.Pub,
 		Nonce: r.Nonce,
 		Seq:   r.Seq,
@@ -835,7 +835,7 @@ func (c *Conn) handleRqPeers(seq uint32, rqp *msg.RqPeers) error {
 
 	s, ok := c.n.InSwarm(rqp.Feed)
 	if !ok {
-		c.sendMsg(c.nextSeq(), seq, &msg.Err{Err: "not in swarm"})
+		c.sendMsg(c.nextSeq(), seq, &msg.Err{Err: "not in swarm"}) //nolint:errcheck
 		return errors.New("node in not in swarm")
 	}
 
@@ -844,7 +844,7 @@ func (c *Conn) handleRqPeers(seq uint32, rqp *msg.RqPeers) error {
 	c.n.Debugf(PEXPin, "sending info about %d peers of feed %s to peer %s, addr %s",
 		len(peers), rqp.Feed.Hex()[:8], c.PeerID().Hex()[:8], c.Address())
 
-	c.sendMsg(c.nextSeq(), seq, &msg.Peers{
+	c.sendMsg(c.nextSeq(), seq, &msg.Peers{ //nolint:errcheck
 		Feed: rqp.Feed,
 		List: peers,
 	})

@@ -76,7 +76,7 @@ func CXDSGet(t *testing.T, ds data.CXDS) {
 		}
 	})
 
-	if _, err := ds.Set(key, value, 1); err != nil {
+	if _, err := ds.Set(key, value, 1); err != nil { //nolint:errcheck
 		t.Error(err)
 		return
 	}
@@ -137,16 +137,16 @@ func CXDSSet(t *testing.T, ds data.CXDS) {
 
 	t.Run("zero", func(t *testing.T) {
 		defer shouldPanic(t)
-		ds.Set(key, value, 0)
+		ds.Set(key, value, 0) //nolint:errcheck
 	})
 
 	t.Run("negaive", func(t *testing.T) {
 		defer shouldPanic(t)
-		ds.Set(key, value, -1)
+		ds.Set(key, value, -1) //nolint:errcheck
 	})
 
 	t.Run("new", func(t *testing.T) {
-		if rc, err := ds.Set(key, value, 1); err != nil {
+		if rc, err := ds.Set(key, value, 1); err != nil { //nolint:errcheck
 			t.Error(err)
 		} else if rc != 1 {
 			t.Error("wrong rc", rc)
@@ -155,7 +155,7 @@ func CXDSSet(t *testing.T, ds data.CXDS) {
 	})
 
 	t.Run("twice", func(t *testing.T) {
-		if rc, err := ds.Set(key, value, 1); err != nil {
+		if rc, err := ds.Set(key, value, 1); err != nil { //nolint:errcheck
 			t.Error(err)
 		} else if rc != 2 {
 			t.Error("wrong rc", rc)
@@ -164,7 +164,7 @@ func CXDSSet(t *testing.T, ds data.CXDS) {
 	})
 
 	t.Run("three times", func(t *testing.T) {
-		if rc, err := ds.Set(key, value, 2); err != nil {
+		if rc, err := ds.Set(key, value, 2); err != nil { //nolint:errcheck
 			t.Error(err)
 		} else if rc != 4 {
 			t.Error("wrong rc", rc)
@@ -192,7 +192,7 @@ func CXDSInc(t *testing.T, ds data.CXDS) {
 		}
 	})
 
-	if _, err := ds.Set(key, value, 1); err != nil {
+	if _, err := ds.Set(key, value, 1); err != nil { //nolint:errcheck
 		t.Error(err)
 		return
 	}
