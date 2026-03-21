@@ -73,7 +73,7 @@ func runDaemon(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer n.Close()
+	defer n.Close() //nolint:errcheck,gosec
 
 	waitInterrupt()
 }

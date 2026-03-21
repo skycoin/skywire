@@ -58,6 +58,8 @@ linters:
       - third_party$
       - builtin$
       - examples$
+      - cmd/cxo/
+      - pkg/cxo/
     rules:
       - linters:
           - misspell
