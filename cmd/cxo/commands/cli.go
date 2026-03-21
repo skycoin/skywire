@@ -1035,8 +1035,8 @@ func printStat(s *node.Stat) {
 
 func printRootStat(rs skyobject.RootStat) {
 	fmt.Fprintln(out, "      hash:", rs.Hash.Hex()) //nolint:errcheck
-	fmt.Fprintln(out, "      time:", rs.Time) //nolint:errcheck
-	fmt.Fprintln(out, "      seq: ", rs.Seq) //nolint:errcheck
+	fmt.Fprintln(out, "      time:", rs.Time)       //nolint:errcheck
+	fmt.Fprintln(out, "      seq: ", rs.Seq)        //nolint:errcheck
 }
 
 func printInteractiveHelp() {
