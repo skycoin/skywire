@@ -6,7 +6,8 @@ on:
 
 env:
   GO_VERSION: '1.26'
-  MUSL_RELEASE: 'v1.3.29'  # Release containing musl toolchains
+  MUSL_RELEASE: 'v1.3.29'
+  MODULE: github.com/skycoin/skywire
 
 jobs:
   create-release:
@@ -55,10 +56,6 @@ jobs:
             toolchain: riscv64-linux-musl
             toolchain_file: riscv64-linux-musl-cross.tgz
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -95,9 +92,8 @@ jobs:
         run: |
           go install -tags=cgo -trimpath \
             -ldflags "-s -w -linkmode external -extldflags '-static' -buildid=" \
-            github.com/skycoin/skywire/cmd/release@${{ github.ref_name }}
+            ${{ env.MODULE }}/cmd/release@${{ github.ref_name }}
 
-          # Copy to workspace for archiving
           mkdir -p bin
           GOPATH_BIN="$(go env GOPATH)/bin"
           if [ -f "${GOPATH_BIN}/linux_${{ matrix.goarch }}/release" ]; then
@@ -110,7 +106,6 @@ jobs:
             exit 1
           fi
 
-          # Show version to verify (only works for amd64 on amd64 runner)
           if [ "${{ matrix.arch }}" = "amd64" ]; then
             ./bin/skywire --version || true
           fi
@@ -123,7 +118,6 @@ jobs:
           cd dist
           tar -czvf "${ARCHIVE_NAME}.tar.gz" skywire
           sha256sum "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
-          rm skywire
 
       - name: Upload to release
         env:
@@ -137,12 +131,8 @@ jobs:
 
   darwin-amd64:
     needs: create-release
-    runs-on: macos-15-intel  # Intel runner
+    runs-on: macos-15-intel
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -162,7 +152,7 @@ jobs:
           CGO_LDFLAGS: -L/usr/local/lib -L/opt/homebrew/lib -L/opt/homebrew/opt/hidapi/lib -L/opt/homebrew/opt/libusb/lib
         run: |
           go install -trimpath -ldflags "-s -w" \
-            github.com/skycoin/skywire/cmd/release@${{ github.ref_name }}
+            ${{ env.MODULE }}/cmd/release@${{ github.ref_name }}
 
           mkdir -p bin
           cp "$(go env GOPATH)/bin/release" bin/skywire
@@ -203,12 +193,8 @@ jobs:
 
   darwin-arm64:
     needs: create-release
-    runs-on: macos-latest  # ARM64
+    runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -228,7 +214,7 @@ jobs:
           CGO_LDFLAGS: -L/opt/homebrew/lib -L/opt/homebrew/opt/hidapi/lib -L/opt/homebrew/opt/libusb/lib
         run: |
           go install -trimpath -ldflags "-s -w" \
-            github.com/skycoin/skywire/cmd/release@${{ github.ref_name }}
+            ${{ env.MODULE }}/cmd/release@${{ github.ref_name }}
 
           mkdir -p bin
           cp "$(go env GOPATH)/bin/release" bin/skywire
@@ -282,8 +268,6 @@ jobs:
             wix_arch: x86
             wintun_arch: x86
     steps:
-      - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -293,6 +277,15 @@ jobs:
         shell: pwsh
         run: |
           C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm mingw-w64-x86_64-libusb mingw-w64-x86_64-hidapi"
+
+      - name: Fetch Windows installer files
+        shell: pwsh
+        run: |
+          $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/scripts/win_installer"
+          New-Item -ItemType Directory -Force -Path "scripts\win_installer"
+          Invoke-WebRequest "$base/Product.wxs" -OutFile "scripts\win_installer\Product.wxs"
+          Invoke-WebRequest "$base/UI.wxs" -OutFile "scripts\win_installer\UI.wxs"
+          Invoke-WebRequest "$base/skywire.bat" -OutFile "scripts\win_installer\skywire.bat"
 
       - name: Build skywire
         env:
@@ -304,7 +297,7 @@ jobs:
           GOOS: windows
           GOARCH: ${{ matrix.goarch }}
         run: |
-          go install -trimpath -ldflags "-s -w" github.com/skycoin/skywire/cmd/release@${{ github.ref_name }}
+          go install -trimpath -ldflags "-s -w" ${{ env.MODULE }}/cmd/release@${{ github.ref_name }}
 
           New-Item -ItemType Directory -Force -Path "bin"
           $gopath = go env GOPATH
@@ -383,7 +376,7 @@ jobs:
     needs: [linux, darwin-amd64, darwin-arm64, windows]
     runs-on: ubuntu-latest
     steps:
-      - name: Download all artifacts
+      - name: Download all checksums and create combined file
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
