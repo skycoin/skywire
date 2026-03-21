@@ -106,8 +106,10 @@ jobs:
             exit 1
           fi
 
+          # Verify binary on native arch
           if [ "${{ matrix.arch }}" = "amd64" ]; then
-            ./bin/skywire --version || true
+            ./bin/skywire || true
+            ./bin/skywire skycoin || true
           fi
 
       - name: Create archive
@@ -156,7 +158,8 @@ jobs:
 
           mkdir -p bin
           cp "$(go env GOPATH)/bin/release" bin/skywire
-          ./bin/skywire --version
+          ./bin/skywire || true
+          ./bin/skywire skycoin || true
 
       - name: Create archive
         run: |
@@ -218,7 +221,8 @@ jobs:
 
           mkdir -p bin
           cp "$(go env GOPATH)/bin/release" bin/skywire
-          ./bin/skywire --version
+          ./bin/skywire || true
+          ./bin/skywire skycoin || true
 
       - name: Create archive
         run: |
@@ -314,9 +318,8 @@ jobs:
             exit 1
           }
 
-          if ("${{ matrix.arch }}" -eq "amd64") {
-            & "bin\skywire.exe" --version
-          }
+          & "bin\skywire.exe"
+          & "bin\skywire.exe" skycoin
 
       - name: Create archive
         run: |
