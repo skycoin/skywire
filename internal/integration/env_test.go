@@ -778,6 +778,34 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 		const sudphRetries = 3
 		_, err = env.VisorTpAddWithRetry(tp.FromVisorHostName, toPK, tp.Type, sudphRetries)
 		if err != nil {
+			// Dump diagnostic info for SUDPH failure
+			t.Logf("=== SUDPH DIAGNOSTICS ===")
+			for _, visor := range []string{tp.FromVisorHostName, tp.ToVisorHostName} {
+				logs, logErr := env.ReadLog(visor)
+				if logErr == nil {
+					// Search for SUDPH-related log lines
+					for _, line := range strings.Split(logs, "\n") {
+						lower := strings.ToLower(line)
+						if strings.Contains(lower, "sudph") || strings.Contains(lower, "udp") ||
+							strings.Contains(lower, "bind") || strings.Contains(lower, "address_resolver") ||
+							strings.Contains(lower, "address-resolver") {
+							t.Logf("[%s] %s", visor, line)
+						}
+					}
+				}
+			}
+			// Also check AR logs
+			arLogs, arErr := env.ReadLog("address-resolver")
+			if arErr == nil {
+				for _, line := range strings.Split(arLogs, "\n") {
+					lower := strings.ToLower(line)
+					if strings.Contains(lower, "udp") || strings.Contains(lower, "listen") ||
+						strings.Contains(lower, "fatal") || strings.Contains(lower, "error") {
+						t.Logf("[AR] %s", line)
+					}
+				}
+			}
+			t.Logf("=== END SUDPH DIAGNOSTICS ===")
 			t.Skipf("Skipping SUDPH transport test after %d retries: %v", sudphRetries, err)
 		}
 	} else {
