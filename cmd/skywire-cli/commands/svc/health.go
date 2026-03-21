@@ -103,8 +103,8 @@ func queryServicesDirect() []skyvisor.ServiceHealthEntry {
 			continue
 		}
 
-		body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-		resp.Body.Close()                //nolint:errcheck
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
+		resp.Body.Close()                //nolint:errcheck,gosec
 
 		if resp.StatusCode != http.StatusOK {
 			entry.Status = fmt.Sprintf("ERROR(%d)", resp.StatusCode)
