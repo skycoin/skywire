@@ -275,10 +275,17 @@ jobs:
             goarch: amd64
             wix_arch: x64
             wintun_arch: amd64
+            cgo_enabled: "1"
           - arch: "386"
             goarch: "386"
             wix_arch: x86
             wintun_arch: x86
+            cgo_enabled: "0"
+          - arch: arm64
+            goarch: arm64
+            wix_arch: x64
+            wintun_arch: arm64
+            cgo_enabled: "0"
     steps:
       - uses: actions/setup-go@v6
         with:
@@ -286,12 +293,14 @@ jobs:
           cache: false
 
       - name: Install Requirements
+        if: matrix.cgo_enabled == '1'
         shell: pwsh
         run: |
           C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm mingw-w64-x86_64-libusb mingw-w64-x86_64-hidapi mingw-w64-x86_64-pkg-config"
           echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Fetch Windows installer files
+        if: matrix.arch != 'arm64'
         shell: pwsh
         run: |
           $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/scripts/win_installer"
@@ -304,14 +313,14 @@ jobs:
         env:
           GOPROXY: direct
           GOSUMDB: "off"
-          CGO_ENABLED: "1"
+          CGO_ENABLED: ${{ matrix.cgo_enabled }}
           CGO_CFLAGS: -IC:/msys64/mingw64/include -IC:/msys64/mingw64/include/libusb-1.0
           CGO_LDFLAGS: -LC:/msys64/mingw64/lib
           GOOS: windows
           GOARCH: ${{ matrix.goarch }}
         shell: pwsh
         run: |
-          go install -trimpath -ldflags "-s -w" ${{ env.MODULE }}/cmd/release@${{ github.ref_name }}
+          go install -trimpath -ldflags "-s -w" "${{ env.MODULE }}/cmd/release@${{ github.ref_name }}"
 
           New-Item -ItemType Directory -Force -Path "bin"
           $gopath = go env GOPATH
@@ -328,18 +337,25 @@ jobs:
             exit 1
           }
 
-          & "bin\skywire.exe"
-          & "bin\skywire.exe" skycoin
+          # Verify binary (amd64 and 386 can run on amd64 runner)
+          if ("${{ matrix.arch }}" -ne "arm64") {
+            & "bin\skywire.exe"
+            & "bin\skywire.exe" skycoin
+          }
 
       - name: Create archive
+        shell: pwsh
         run: |
           $ARCHIVE_NAME = "skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}"
           New-Item -ItemType Directory -Force -Path "dist"
           Copy-Item "bin\skywire.exe" "dist\"
           Compress-Archive -Path "dist\skywire.exe" -DestinationPath "dist\$ARCHIVE_NAME.zip"
           Get-FileHash "dist\$ARCHIVE_NAME.zip" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $ARCHIVE_NAME.zip" } > "dist\$ARCHIVE_NAME.zip.sha256"
+          Remove-Item "dist\skywire.exe"
 
       - name: Create MSI installer
+        if: matrix.arch != 'arm64'
+        shell: pwsh
         run: |
           $MSI_NAME = "skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}"
           $VERSION = "${{ github.ref_name }}" -replace '(^v|-.+$)', ''
@@ -376,14 +392,19 @@ jobs:
       - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
         run: |
-          gh release upload "${{ github.ref_name }}" `
-            "dist\skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}.zip" `
-            "dist\skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}.zip.sha256" `
-            "dist\skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}.msi" `
-            "dist\skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}.msi.sha256" `
-            --repo ${{ github.repository }} `
-            --clobber
+          $files = @(
+            "dist\skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}.zip",
+            "dist\skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}.zip.sha256"
+          )
+          $msi = "dist\skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}.msi"
+          $msiSha = "dist\skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}.msi.sha256"
+          if (Test-Path $msi) {
+            $files += $msi
+            $files += $msiSha
+          }
+          gh release upload "${{ github.ref_name }}" @files --repo ${{ github.repository }} --clobber
 
   create-checksums:
     needs: [linux, darwin-amd64, darwin-arm64, windows]
