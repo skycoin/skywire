@@ -141,6 +141,7 @@ type API interface {
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
+	ActiveRoutes() ([]AppRouteStatus, error)
 	ServiceHealth() ([]ServiceHealthEntry, error)
 	FetchServiceData(service, path string) ([]byte, error)
 	SetMinHops(uint16) error
@@ -2944,6 +2945,47 @@ func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
 	}
 
 	return results, nil
+}
+
+// AppRouteStatus combines route status with the app that owns it.
+type AppRouteStatus struct {
+	AppName string             `json:"app_name"`
+	Route   router.RouteStatus `json:"route"`
+}
+
+// ActiveRoutes implements API.
+// Returns all active routes with their app associations and live stats.
+func (v *Visor) ActiveRoutes() ([]AppRouteStatus, error) {
+	if v.router == nil {
+		return nil, nil
+	}
+
+	statuses := v.router.ActiveRouteStatuses()
+
+	// Build port → app name map
+	portToApp := make(map[routing.Port]string)
+	if v.procM != nil {
+		v.procM.Range(func(name string, _ *appserver.Proc) bool {
+			if port, err := v.procM.GetAppPort(name); err == nil && port != 0 {
+				portToApp[port] = name
+			}
+			return true
+		})
+	}
+
+	result := make([]AppRouteStatus, 0, len(statuses))
+	for _, s := range statuses {
+		appName := portToApp[s.LocalPort]
+		if appName == "" {
+			appName = fmt.Sprintf("port:%d", s.LocalPort)
+		}
+		result = append(result, AppRouteStatus{
+			AppName: appName,
+			Route:   s,
+		})
+	}
+
+	return result, nil
 }
 
 // RoutingRule implements API.

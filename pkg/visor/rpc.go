@@ -829,6 +829,16 @@ func (r *RPC) SetMuxMode(mode *string, _ *struct{}) (err error) {
 	return err
 }
 
+// ActiveRoutes returns all active routes with app associations and live stats
+func (r *RPC) ActiveRoutes(_ *struct{}, out *[]AppRouteStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "ActiveRoutes", nil)(out, &err)
+	routes, err := r.visor.ActiveRoutes()
+	if routes != nil {
+		*out = routes
+	}
+	return err
+}
+
 // FilterServersIn is input for VPNServers and ProxyServers
 type FilterServersIn struct {
 	Version string

@@ -156,6 +156,7 @@ type Router interface {
 	SetMuxRoutes(int)
 	SetMuxMode(WeightMode)
 	GetLastRouteCalcTime() time.Duration
+	ActiveRouteStatuses() []RouteStatus
 
 	// Routing table related methods
 	RoutesCount() int

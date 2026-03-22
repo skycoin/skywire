@@ -351,6 +351,15 @@ func (_m *MockRouter) SetMuxMode(_a0 WeightMode) {
 	_m.Called(_a0)
 }
 
+// ActiveRouteStatuses provides a mock function with no fields
+func (_m *MockRouter) ActiveRouteStatuses() []RouteStatus {
+	ret := _m.Called()
+	if r, ok := ret.Get(0).([]RouteStatus); ok {
+		return r
+	}
+	return nil
+}
+
 // GetLastRouteCalcTime provides a mock function with no fields
 func (_m *MockRouter) GetLastRouteCalcTime() time.Duration {
 	ret := _m.Called()

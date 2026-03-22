@@ -496,6 +496,13 @@ func (rc *rpcClient) SetMuxMode(mode string) error {
 	return rc.Call("SetMuxMode", &mode, &struct{}{})
 }
 
+// ActiveRoutes returns all active routes with app associations and live stats.
+func (rc *rpcClient) ActiveRoutes() ([]AppRouteStatus, error) {
+	var routes []AppRouteStatus
+	err := rc.Call("ActiveRoutes", &struct{}{}, &routes)
+	return routes, err
+}
+
 // RoutingRules calls RoutingRules.
 func (rc *rpcClient) RoutingRules() ([]routing.Rule, error) {
 	entries := make([]routing.Rule, 0)
@@ -1620,6 +1627,10 @@ func (mc *mockRPCClient) SetMuxRoutes(_ int) error {
 
 func (mc *mockRPCClient) SetMuxMode(_ string) error {
 	return nil
+}
+
+func (mc *mockRPCClient) ActiveRoutes() ([]AppRouteStatus, error) {
+	return nil, nil
 }
 
 // RoutingRules implements API.
