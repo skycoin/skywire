@@ -275,7 +275,7 @@ jobs:
             goarch: amd64
             wix_arch: x64
             wintun_arch: amd64
-            cgo_enabled: "1"
+            cgo_enabled: "0"
           - arch: "386"
             goarch: "386"
             wix_arch: x86
