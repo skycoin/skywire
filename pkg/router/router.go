@@ -153,6 +153,8 @@ type Router interface {
 	SetMinHop(uint16)
 	SetExistingTPOnly(bool)
 	SetForceLocalRoutes(bool)
+	SetMuxRoutes(int)
+	SetMuxMode(WeightMode)
 	GetLastRouteCalcTime() time.Duration
 
 	// Routing table related methods
@@ -193,6 +195,8 @@ type router struct {
 	existingTpOnlyMu   sync.Mutex       // protects existingTpOnly
 	forceLocalRoutes   bool             // when true, skip route finder and use local route calculation
 	forceLocalRoutesMu sync.Mutex       // protects forceLocalRoutes
+	muxRoutes          int              // number of parallel mux routes (0 or 1 = disabled)
+	muxMode            WeightMode       // default weight mode for new mux connections
 	lastRouteCalcTime  time.Duration    // last route calculation time (for local routes)
 	lastRouteCalcMu    sync.Mutex       // protects lastRouteCalcTime
 }
@@ -1700,6 +1704,29 @@ func (r *router) SetForceLocalRoutes(enabled bool) {
 	defer r.forceLocalRoutesMu.Unlock()
 	r.forceLocalRoutes = enabled
 	r.logger.Infof("SetForceLocalRoutes: %v", enabled)
+}
+
+// SetMuxRoutes sets the number of parallel mux routes for new connections.
+func (r *router) SetMuxRoutes(n int) {
+	r.muxRoutes = n
+	r.logger.Infof("SetMuxRoutes: %v", n)
+}
+
+// SetMuxMode sets the weight distribution mode for mux transport selection.
+// Propagates to all active route groups with mux enabled.
+func (r *router) SetMuxMode(mode WeightMode) {
+	r.muxMode = mode
+	// Propagate to active route groups
+	r.mx.Lock()
+	for _, nrg := range r.rgsNs {
+		rg := nrg.rg
+		if rg.mux != nil && rg.mux.tpSelector != nil {
+			rg.mux.tpSelector.SetMode(mode)
+			rg.mux.tpSelector.Rebuild(rg.tps)
+		}
+	}
+	r.mx.Unlock()
+	r.logger.Infof("SetMuxMode: %v", mode)
 }
 
 // GetLastRouteCalcTime returns the time it took to calculate the last local route.

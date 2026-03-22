@@ -113,6 +113,8 @@ type API interface {
 	//transport settings
 	SetExistingTPOnly(enabled bool) error
 	SetForceLocalRoutes(enabled bool) error
+	SetMuxRoutes(n int) error
+	SetMuxMode(mode string) error
 
 	//transports
 	TransportTypes() ([]string, error)
@@ -1412,6 +1414,49 @@ func (v *Visor) SetForceLocalRoutes(enabled bool) error {
 	}
 	v.router.SetForceLocalRoutes(enabled)
 	v.log.Infof("SetForceLocalRoutes: %v", enabled)
+	return nil
+}
+
+// SetMuxRoutes implements API.
+// Sets the number of parallel mux routes for new connections at runtime.
+// Also persists to the visor config file.
+func (v *Visor) SetMuxRoutes(n int) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+	v.router.SetMuxRoutes(n)
+	// Also update the networker so future app dials use the new value
+	if skyN, err := appnet.ResolveNetworker(appnet.TypeSkynet); err == nil {
+		if sn, ok := skyN.(*appnet.SkywireNetworker); ok {
+			sn.MuxRoutes = n
+		}
+	}
+	// Persist to config
+	v.conf.Routing.MuxRoutes = n
+	if err := v.conf.Flush(); err != nil {
+		v.log.WithError(err).Warn("Failed to persist mux_routes to config")
+	}
+	v.log.Infof("SetMuxRoutes: %v", n)
+	return nil
+}
+
+// SetMuxMode implements API.
+// Sets the weight distribution mode for mux transport selection.
+func (v *Visor) SetMuxMode(mode string) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+	var m router.WeightMode
+	switch mode {
+	case "auto":
+		m = router.WeightModeAuto
+	case "equal":
+		m = router.WeightModeEqual
+	default:
+		return fmt.Errorf("unknown mux mode %q (use \"auto\" or \"equal\")", mode)
+	}
+	v.router.SetMuxMode(m)
+	v.log.Infof("SetMuxMode: %v", mode)
 	return nil
 }
 

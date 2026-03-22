@@ -486,6 +486,16 @@ func (rc *rpcClient) SetForceLocalRoutes(enabled bool) error {
 	return rc.Call("SetForceLocalRoutes", &enabled, &struct{}{})
 }
 
+// SetMuxRoutes sets the number of parallel mux routes for new connections.
+func (rc *rpcClient) SetMuxRoutes(n int) error {
+	return rc.Call("SetMuxRoutes", &n, &struct{}{})
+}
+
+// SetMuxMode sets the weight distribution mode for mux transport selection.
+func (rc *rpcClient) SetMuxMode(mode string) error {
+	return rc.Call("SetMuxMode", &mode, &struct{}{})
+}
+
 // RoutingRules calls RoutingRules.
 func (rc *rpcClient) RoutingRules() ([]routing.Rule, error) {
 	entries := make([]routing.Rule, 0)
@@ -1601,6 +1611,14 @@ func (mc *mockRPCClient) SetExistingTPOnly(_ bool) error {
 }
 
 func (mc *mockRPCClient) SetForceLocalRoutes(_ bool) error {
+	return nil
+}
+
+func (mc *mockRPCClient) SetMuxRoutes(_ int) error {
+	return nil
+}
+
+func (mc *mockRPCClient) SetMuxMode(_ string) error {
 	return nil
 }
 
