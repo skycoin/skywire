@@ -611,12 +611,66 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 		atomic.StoreInt32(&rg.consecutiveWriteFailures, 0)
 	}
 
-	// Rebuild transport weights based on current latency measurements
-	if rg.mux != nil && len(rg.tps) > 1 {
+	// Prune dead transports and rebuild weights
+	if rg.mux != nil {
 		rg.mu.Lock()
-		rg.mux.rebuildWeights(rg.tps)
+		rg.pruneDeadTransports()
+		if len(rg.tps) > 1 {
+			rg.mux.rebuildWeights(rg.tps)
+		}
 		rg.mu.Unlock()
 	}
+}
+
+// pruneDeadTransports removes closed transports from the mux.
+// Cleans up the corresponding forward/reverse rules from the routing table.
+// Must be called with rg.mu held.
+func (rg *RouteGroup) pruneDeadTransports() {
+	if len(rg.tps) <= 1 {
+		return // Don't prune the last transport
+	}
+
+	aliveTps := make([]*transport.ManagedTransport, 0, len(rg.tps))
+	aliveFwd := make([]routing.Rule, 0, len(rg.fwd))
+	aliveRvs := make([]routing.Rule, 0, len(rg.rvs))
+	var deadRuleIDs []routing.RouteID
+
+	for i, tp := range rg.tps {
+		if tp != nil && !tp.IsClosed() {
+			aliveTps = append(aliveTps, tp)
+			if i < len(rg.fwd) {
+				aliveFwd = append(aliveFwd, rg.fwd[i])
+			}
+			if i < len(rg.rvs) {
+				aliveRvs = append(aliveRvs, rg.rvs[i])
+			}
+		} else {
+			if i < len(rg.fwd) {
+				deadRuleIDs = append(deadRuleIDs, rg.fwd[i].KeyRouteID())
+			}
+			if i < len(rg.rvs) {
+				deadRuleIDs = append(deadRuleIDs, rg.rvs[i].KeyRouteID())
+			}
+			if tp != nil {
+				rg.logger.Infof("Pruning dead mux transport %v", tp.Entry.ID)
+			}
+		}
+	}
+
+	if len(aliveTps) == len(rg.tps) {
+		return // Nothing was pruned
+	}
+
+	// Clean up dead rules from routing table
+	if len(deadRuleIDs) > 0 {
+		rg.rt.DelRules(deadRuleIDs)
+	}
+
+	rg.tps = aliveTps
+	rg.fwd = aliveFwd
+	rg.rvs = aliveRvs
+
+	rg.logger.Infof("Pruned dead transports: %d alive, %d removed", len(aliveTps), len(deadRuleIDs)/2)
 }
 
 func (rg *RouteGroup) sendKeepAlive() error {
@@ -624,28 +678,40 @@ func (rg *RouteGroup) sendKeepAlive() error {
 	defer rg.mu.Unlock()
 
 	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
-		// if no transports, no rules, then no keepalive
 		return nil
 	}
 
-	// Use a timeout context to prevent blocking forever on dead transports
-	// while holding rg.mu (same deadlock pattern as broadcastClosePackets).
 	ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
 	defer cancel()
+
+	// Track successes — in mux mode, only fail if ALL transports are dead.
+	// A single dead transport in a mux group should not kill the entire connection.
+	anySuccess := false
+	var lastErr error
 
 	for i := 0; i < len(rg.tps); i++ {
 		tp := rg.tps[i]
 		rule := rg.fwd[i]
 
-		if tp == nil {
+		if tp == nil || tp.IsClosed() {
 			continue
 		}
 
 		packet := routing.MakeKeepAlivePacket(rule.NextRouteID())
 
 		if err := rg.writePacket(ctx, tp, packet, rule.KeyRouteID()); err != nil {
-			return err
+			lastErr = err
+			rg.logger.Debugf("Keepalive failed on transport %v: %v", tp.Entry.ID, err)
+			continue
 		}
+		anySuccess = true
+	}
+
+	if !anySuccess {
+		if lastErr != nil {
+			return lastErr
+		}
+		return ErrNoSuitableTransport
 	}
 
 	return nil
