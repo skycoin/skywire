@@ -462,7 +462,8 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 */
 
 // WritePacket writes a packet to the remote.
-func (mt *ManagedTransport) WritePacket(_ context.Context, packet routing.Packet) error {
+// Respects context cancellation to prevent blocking forever on dead transports.
+func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Packet) error {
 	mt.transportMx.Lock()
 	defer mt.transportMx.Unlock()
 
@@ -470,15 +471,32 @@ func (mt *ManagedTransport) WritePacket(_ context.Context, packet routing.Packet
 		return fmt.Errorf("write packet: cannot write to transport, transport is not set up")
 	}
 
-	n, err := mt.transport.Write(packet)
-	if err != nil {
-		mt.close()
-		return err
+	// Run the write in a goroutine so we can respect context cancellation.
+	// Without this, a dead transport's Write blocks forever, deadlocking
+	// the route group close path and the rules GC goroutine.
+	type writeResult struct {
+		n   int
+		err error
 	}
-	if n > routing.PacketHeaderSize {
-		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint: gosec
+	ch := make(chan writeResult, 1)
+	go func() {
+		n, err := mt.transport.Write(packet)
+		ch <- writeResult{n, err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case res := <-ch:
+		if res.err != nil {
+			mt.close()
+			return res.err
+		}
+		if res.n > routing.PacketHeaderSize {
+			mt.logSent(uint64(res.n - routing.PacketHeaderSize)) //nolint:gosec
+		}
+		return nil
 	}
-	return nil
 }
 
 // WARNING: Not thread safe.

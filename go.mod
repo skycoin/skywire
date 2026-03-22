@@ -42,7 +42,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/skycoin/dmsg v1.3.29-0.20260320173710-e5ee528c2dcc
-	github.com/skycoin/skycoin v0.28.4
+	github.com/skycoin/skycoin v0.28.5-0.20260322212637-59485c4ebeb2
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
