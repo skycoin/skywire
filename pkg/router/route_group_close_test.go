@@ -72,7 +72,7 @@ func createTestRouteGroupWithBlockingTransport(t *testing.T) (*RouteGroup, *bloc
 
 	tpID := uuid.New()
 	fwdRule := routing.ForwardRule(DefaultRouteKeepAlive, 1, 2, tpID, pk2, pk1, 1, 2)
-	rt.SaveRule(fwdRule) //nolint:errcheck
+	rt.SaveRule(fwdRule) //nolint:errcheck,gosec
 
 	conn := newBlockingTransport()
 	mt := transport.NewManagedTransportForTest(conn)
@@ -114,7 +114,7 @@ func TestRouteGroupCloseDeadTransport(t *testing.T) {
 func TestRouteGroupCloseNoGoroutineLeak(t *testing.T) {
 	rg, _ := createTestRouteGroupWithBlockingTransport(t)
 
-	rg.Close() //nolint:errcheck
+	rg.Close() //nolint:errcheck,gosec
 
 	time.Sleep(200 * time.Millisecond)
 
@@ -142,7 +142,7 @@ func TestGCDoesNotDeadlockOnStuckClose(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		rg.Close() //nolint:errcheck
+		rg.Close() //nolint:errcheck,gosec
 	}()
 
 	// Wait for write to actually block
@@ -150,7 +150,7 @@ func TestGCDoesNotDeadlockOnStuckClose(t *testing.T) {
 
 	gcDone := make(chan struct{})
 	go func() {
-		rg.Close() //nolint:errcheck
+		rg.Close() //nolint:errcheck,gosec
 		close(gcDone)
 	}()
 
@@ -204,7 +204,7 @@ func TestSendHandshakeDeadTransport(t *testing.T) {
 }
 
 // TestWritePacketRespectsContext verifies that WritePacket on ManagedTransport
-// returns when the context is cancelled, even if the underlying Write blocks.
+// returns when the context is canceled, even if the underlying Write blocks.
 func TestWritePacketRespectsContext(t *testing.T) {
 	conn := newBlockingTransport()
 	mt := transport.NewManagedTransportForTest(conn)
@@ -247,7 +247,7 @@ func TestConcurrentKeepAliveAndClose(t *testing.T) {
 	// Now try to Close — should not deadlock
 	closeDone := make(chan struct{})
 	go func() {
-		rg.Close() //nolint:errcheck
+		rg.Close() //nolint:errcheck,gosec
 		close(closeDone)
 	}()
 
