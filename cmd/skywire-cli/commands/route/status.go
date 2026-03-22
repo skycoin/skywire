@@ -81,7 +81,7 @@ var statusCmd = &cobra.Command{
 				}
 			}
 		}
-		w.Flush() //nolint:errcheck
+		w.Flush() //nolint:errcheck,gosec
 	},
 }
 
