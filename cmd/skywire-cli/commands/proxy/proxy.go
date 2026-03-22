@@ -66,6 +66,7 @@ func init() {
 		statusCmd,
 		listCmd,
 		testCmd,
+		proxyRouteCmd,
 	)
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
 	startCmd.Flags().StringVarP(&addr, "addr", "a", visorconfig.SkysocksClientAddr, "address of proxy for use")

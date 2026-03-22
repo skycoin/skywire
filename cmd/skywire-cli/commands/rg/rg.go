@@ -1,5 +1,5 @@
-// Package cliroute cmd/skywire-cli/commands/route/status.go
-package cliroute
+// Package clirg cmd/skywire-cli/commands/rg/rg.go
+package clirg
 
 import (
 	"encoding/json"
@@ -16,14 +16,21 @@ import (
 
 var statusJSON bool
 
-func init() {
-	routeCmd.AddCommand(statusCmd)
-	statusCmd.Flags().BoolVar(&statusJSON, "json", false, "output as JSON")
+// RootCmd is the root command for route group operations.
+var RootCmd = &cobra.Command{
+	Use:   "rg",
+	Short: "Route group management",
+	Long:  "View active route groups, their associated apps, and live traffic stats.",
 }
 
-var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Show active routes with app associations and live stats",
+func init() {
+	RootCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	RootCmd.AddCommand(listCmd)
+}
+
+var listCmd = &cobra.Command{
+	Use:   "ls",
+	Short: "List active route groups with app associations and live stats",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -42,12 +49,12 @@ var statusCmd = &cobra.Command{
 		}
 
 		if len(routes) == 0 {
-			fmt.Println("No active routes")
+			fmt.Println("No active route groups")
 			return
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "APP\tREMOTE\tPORTS\tLATENCY\tTX\tRX\tUP\tDOWN\tROUTES\tMUX") //nolint:errcheck
+		fmt.Fprintln(w, "APP\tREMOTE\tPORTS\tLATENCY\tTX\tRX\tUP\tDOWN\tROUTES\tMUX") //nolint:errcheck,gosec
 		for _, r := range routes {
 			remote := r.Route.RemotePK.String()[:8] + ".."
 			ports := fmt.Sprintf("%d:%d", r.Route.LocalPort, r.Route.RemotePort)
@@ -65,10 +72,10 @@ var statusCmd = &cobra.Command{
 				mux = "yes"
 			}
 
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n", //nolint:errcheck
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n", //nolint:errcheck,gosec
 				r.AppName, remote, ports, latency, tx, rx, up, down, nRoutes, mux)
 
-			// Show transport details if there are multiple
+			// Show transport details for mux routes
 			if nRoutes > 1 {
 				for _, tp := range r.Route.Transports {
 					tpID := tp.ID.String()[:8] + ".."
@@ -76,13 +83,17 @@ var statusCmd = &cobra.Command{
 					if tp.Latency > 0 {
 						lat = fmt.Sprintf("%.0fms", tp.Latency)
 					}
-					fmt.Fprintf(w, "  └─\t%s\t%s\t%s\t\t\t\t\t%d\t\n", //nolint:errcheck
+					fmt.Fprintf(w, "  └─\t%s\t%s\t%s\t\t\t\t\t%d\t\n", //nolint:errcheck,gosec
 						tpID, tp.Type, lat, tp.FwdRuleID)
 				}
 			}
 		}
 		w.Flush() //nolint:errcheck,gosec
 	},
+}
+
+func init() {
+	listCmd.Flags().BoolVar(&statusJSON, "json", false, "output as JSON")
 }
 
 func formatBytes(b uint64) string {

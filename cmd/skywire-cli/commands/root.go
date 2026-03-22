@@ -23,6 +23,7 @@ import (
 	clipv "github.com/skycoin/skywire/cmd/skywire-cli/commands/pv"
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
 	clirewards "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards"
+	clirg "github.com/skycoin/skywire/cmd/skywire-cli/commands/rg"
 	cliroute "github.com/skycoin/skywire/cmd/skywire-cli/commands/route"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	clisd "github.com/skycoin/skywire/cmd/skywire-cli/commands/sd"
@@ -54,6 +55,7 @@ func init() {
 		clirewards.RootCmd,
 		clisurvey.RootCmd,
 		cliroute.RootCmd,
+		clirg.RootCmd,
 		clitp.RootCmd,
 		clitps.RootCmd,
 		climdisc.RootCmd,
