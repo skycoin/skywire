@@ -527,10 +527,10 @@ var stopCmd = &cobra.Command{
 		err = r.Node().Shutdown()
 		if err != nil {
 			// Connection reset is expected since the server is shutting down
-			fmt.Fprintln(out, "Shutdown signal sent")
+			fmt.Fprintln(out, "Shutdown signal sent") //nolint:errcheck
 			return nil
 		}
-		fmt.Fprintln(out, "Shutdown signal sent")
+		fmt.Fprintln(out, "Shutdown signal sent") //nolint:errcheck
 		return nil
 	},
 }

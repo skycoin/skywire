@@ -35,9 +35,9 @@ var kvCreateCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(out, "Feed:   %s\n", result.Feed.Hex())
-		fmt.Fprintf(out, "Secret: %s\n", hex.EncodeToString(result.Secret[:]))
-		fmt.Fprintln(out, "\nSave the secret key — you need it to write to this store.")
+		fmt.Fprintf(out, "Feed:   %s\n", result.Feed.Hex())   //nolint:errcheck
+		fmt.Fprintf(out, "Secret: %s\n", hex.EncodeToString(result.Secret[:])) //nolint:errcheck
+		fmt.Fprintln(out, "\nSave the secret key — you need it to write to this store.") //nolint:errcheck
 		return nil
 	},
 }
@@ -152,7 +152,7 @@ var kvListCmd = &cobra.Command{
 			return err
 		}
 
-		jsonFlag, _ := cmd.Flags().GetBool("json")
+		jsonFlag, _ := cmd.Flags().GetBool("json") //nolint:errcheck
 		if jsonFlag {
 			enc := json.NewEncoder(out)
 			enc.SetIndent("", "  ")
@@ -160,14 +160,14 @@ var kvListCmd = &cobra.Command{
 		}
 
 		if len(entries) == 0 {
-			fmt.Fprintln(out, "(empty)")
+			fmt.Fprintln(out, "(empty)") //nolint:errcheck
 			return nil
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "KEY\tVALUE")
+		fmt.Fprintln(w, "KEY\tVALUE")    //nolint:errcheck
 		for _, e := range entries {
-			fmt.Fprintf(w, "%s\t%s\n", e.Key, e.Value)
+			fmt.Fprintf(w, "%s\t%s\n", e.Key, e.Value) //nolint:errcheck
 		}
 		return w.Flush()
 	},
