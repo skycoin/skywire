@@ -839,6 +839,24 @@ func (r *RPC) ActiveRoutes(_ *struct{}, out *[]AppRouteStatus) (err error) {
 	return err
 }
 
+// MuxRouteInput is input for AddMuxRoute and RemoveMuxRoute
+type MuxRouteInput struct {
+	AppName     string
+	TransportID uuid.UUID
+}
+
+// AddMuxRoute adds a mux route to an app's active connection
+func (r *RPC) AddMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "AddMuxRoute", in)(nil, &err)
+	return r.visor.AddMuxRoute(in.AppName, in.TransportID)
+}
+
+// RemoveMuxRoute removes a mux route from an app's active connection
+func (r *RPC) RemoveMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoveMuxRoute", in)(nil, &err)
+	return r.visor.RemoveMuxRoute(in.AppName, in.TransportID)
+}
+
 // FilterServersIn is input for VPNServers and ProxyServers
 type FilterServersIn struct {
 	Version string

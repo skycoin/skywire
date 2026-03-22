@@ -142,6 +142,8 @@ type API interface {
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
 	ActiveRoutes() ([]AppRouteStatus, error)
+	AddMuxRoute(appName string, tpID uuid.UUID) error
+	RemoveMuxRoute(appName string, tpID uuid.UUID) error
 	ServiceHealth() ([]ServiceHealthEntry, error)
 	FetchServiceData(service, path string) ([]byte, error)
 	SetMinHops(uint16) error
@@ -2986,6 +2988,59 @@ func (v *Visor) ActiveRoutes() ([]AppRouteStatus, error) {
 	}
 
 	return result, nil
+}
+
+// findRouteDescForApp finds the route descriptor for a running app by matching its port.
+func (v *Visor) findRouteDescForApp(appName string) (routing.RouteDescriptor, error) {
+	var desc routing.RouteDescriptor
+
+	if v.procM == nil {
+		return desc, errors.New("process manager not available")
+	}
+	port, err := v.procM.GetAppPort(appName)
+	if err != nil {
+		return desc, fmt.Errorf("app %q not found or not running: %w", appName, err)
+	}
+
+	// Find the route group whose local port matches the app's port
+	statuses := v.router.ActiveRouteStatuses()
+	for _, s := range statuses {
+		if s.LocalPort == port {
+			return routing.NewRouteDescriptor(s.RemotePK, s.LocalPK, s.RemotePort, s.LocalPort), nil
+		}
+	}
+
+	return desc, fmt.Errorf("no active route found for app %q on port %d", appName, port)
+}
+
+// AddMuxRoute implements API.
+// Adds a new mux route to the specified app's active route group.
+func (v *Visor) AddMuxRoute(appName string, tpID uuid.UUID) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+
+	desc, err := v.findRouteDescForApp(appName)
+	if err != nil {
+		return err
+	}
+
+	return v.router.AddMuxRouteByTransport(desc, tpID)
+}
+
+// RemoveMuxRoute implements API.
+// Removes a mux route using the specified transport from the app's route group.
+func (v *Visor) RemoveMuxRoute(appName string, tpID uuid.UUID) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+
+	desc, err := v.findRouteDescForApp(appName)
+	if err != nil {
+		return err
+	}
+
+	return v.router.RemoveMuxRouteByTransport(desc, tpID)
 }
 
 // RoutingRule implements API.

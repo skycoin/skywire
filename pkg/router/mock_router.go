@@ -351,6 +351,18 @@ func (_m *MockRouter) SetMuxMode(_a0 WeightMode) {
 	_m.Called(_a0)
 }
 
+// AddMuxRouteByTransport provides a mock function
+func (_m *MockRouter) AddMuxRouteByTransport(_a0 routing.RouteDescriptor, _a1 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1)
+	return ret.Error(0)
+}
+
+// RemoveMuxRouteByTransport provides a mock function
+func (_m *MockRouter) RemoveMuxRouteByTransport(_a0 routing.RouteDescriptor, _a1 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1)
+	return ret.Error(0)
+}
+
 // ActiveRouteStatuses provides a mock function with no fields
 func (_m *MockRouter) ActiveRouteStatuses() []RouteStatus {
 	ret := _m.Called()
