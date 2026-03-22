@@ -628,6 +628,11 @@ func (rg *RouteGroup) sendKeepAlive() error {
 		return nil
 	}
 
+	// Use a timeout context to prevent blocking forever on dead transports
+	// while holding rg.mu (same deadlock pattern as broadcastClosePackets).
+	ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
+	defer cancel()
+
 	for i := 0; i < len(rg.tps); i++ {
 		tp := rg.tps[i]
 		rule := rg.fwd[i]
@@ -638,7 +643,7 @@ func (rg *RouteGroup) sendKeepAlive() error {
 
 		packet := routing.MakeKeepAlivePacket(rule.NextRouteID())
 
-		if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
+		if err := rg.writePacket(ctx, tp, packet, rule.KeyRouteID()); err != nil {
 			return err
 		}
 	}
@@ -651,9 +656,11 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 	defer rg.mu.Unlock()
 
 	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
-		// if no transports, no rules, then no keepalive
 		return nil
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
+	defer cancel()
 
 	for i := 0; i < len(rg.tps); i++ {
 		tp := rg.tps[i]
@@ -665,7 +672,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		rule := rg.fwd[i]
 		packet := routing.MakeHandshakePacket(rule.NextRouteID(), encrypt, routing.CapMux|routing.CapSACK)
 
-		err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+		err := rg.writePacket(ctx, tp, packet, rule.KeyRouteID())
 		if err == nil {
 			rg.logger.Debugf("Sent handshake via transport %v", tp.Entry.ID)
 			return nil
@@ -678,7 +685,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 	return ErrNoSuitableTransport
 }
 
-func (rg *RouteGroup) sendError(rule routing.Rule, tp *transport.ManagedTransport) error {
+func (rg *RouteGroup) sendError(ctx context.Context, rule routing.Rule, tp *transport.ManagedTransport) error {
 	errPayload := rg.GetError()
 	if errPayload == nil {
 		return nil
@@ -693,7 +700,7 @@ func (rg *RouteGroup) sendError(rule routing.Rule, tp *transport.ManagedTranspor
 		return err
 	}
 
-	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+	return rg.writePacket(ctx, tp, packet, rule.KeyRouteID())
 }
 
 // Close closes a RouteGroup with the specified close `code`:
@@ -1068,7 +1075,7 @@ func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
 			continue
 		}
 
-		if err := rg.sendError(rg.fwd[i], rg.tps[i]); err != nil {
+		if err := rg.sendError(ctx, rg.fwd[i], rg.tps[i]); err != nil {
 			rg.logger.WithError(err).Errorf("Failed to send error packet to %s", rg.tps[i].Remote())
 		}
 

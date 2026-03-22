@@ -1,12 +1,14 @@
 package router
 
 import (
+	"context"
 	"net"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -160,4 +162,99 @@ func TestGCDoesNotDeadlockOnStuckClose(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+// TestSendKeepAliveDeadTransport verifies that sendKeepAlive() doesn't block
+// forever when a transport is dead. Previously it used context.Background()
+// while holding rg.mu, causing the same deadlock pattern as broadcastClosePackets.
+func TestSendKeepAliveDeadTransport(t *testing.T) {
+	rg, _ := createTestRouteGroupWithBlockingTransport(t)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- rg.sendKeepAlive()
+	}()
+
+	select {
+	case err := <-done:
+		require.Error(t, err) // should return context deadline exceeded
+		t.Logf("sendKeepAlive returned: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("sendKeepAlive() deadlocked on dead transport")
+	}
+}
+
+// TestSendHandshakeDeadTransport verifies that sendHandshake() doesn't block
+// forever when a transport is dead.
+func TestSendHandshakeDeadTransport(t *testing.T) {
+	rg, _ := createTestRouteGroupWithBlockingTransport(t)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- rg.sendHandshake(true)
+	}()
+
+	select {
+	case err := <-done:
+		require.Error(t, err) // should return context deadline exceeded or ErrNoSuitableTransport
+		t.Logf("sendHandshake returned: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("sendHandshake() deadlocked on dead transport")
+	}
+}
+
+// TestWritePacketRespectsContext verifies that WritePacket on ManagedTransport
+// returns when the context is cancelled, even if the underlying Write blocks.
+func TestWritePacketRespectsContext(t *testing.T) {
+	conn := newBlockingTransport()
+	mt := transport.NewManagedTransportForTest(conn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	packet := routing.MakeKeepAlivePacket(1)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- mt.WritePacket(ctx, packet)
+	}()
+
+	select {
+	case err := <-done:
+		require.Error(t, err)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(5 * time.Second):
+		t.Fatal("WritePacket did not respect context cancellation")
+	}
+}
+
+// TestConcurrentKeepAliveAndClose verifies that sendKeepAlive and Close
+// don't deadlock when called concurrently with a dead transport.
+func TestConcurrentKeepAliveAndClose(t *testing.T) {
+	rg, conn := createTestRouteGroupWithBlockingTransport(t)
+
+	// Start keepalive — it will block on the dead transport
+	kaStarted := make(chan struct{})
+	go func() {
+		close(kaStarted)
+		rg.sendKeepAlive() //nolint:errcheck
+	}()
+	<-kaStarted
+
+	// Wait for the write to actually block
+	<-conn.writeCh
+
+	// Now try to Close — should not deadlock
+	closeDone := make(chan struct{})
+	go func() {
+		rg.Close() //nolint:errcheck
+		close(closeDone)
+	}()
+
+	select {
+	case <-closeDone:
+		t.Log("Close completed while keepalive was stuck — no deadlock")
+	case <-time.After(15 * time.Second):
+		t.Fatal("Close deadlocked while keepalive held rg.mu on dead transport")
+	}
 }
