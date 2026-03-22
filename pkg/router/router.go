@@ -1973,11 +1973,21 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 			log.Debug("Noise route group already closed. Nothing to be done.")
 			return
 		}
-		if err := nrg.Close(); err != nil {
-			log.WithError(err).Error("Failed to close noise route group.")
-			return
+		// Close in a goroutine with a timeout to prevent the GC from deadlocking
+		// if the route group's close path blocks on a dead transport.
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			if err := nrg.Close(); err != nil {
+				log.WithError(err).Error("Failed to close noise route group.")
+			}
+		}()
+		select {
+		case <-done:
+			log.Debug("Noise route group closed.")
+		case <-time.After(10 * time.Second):
+			log.Error("Timed out closing noise route group, abandoning.")
 		}
-		log.Debug("Noise route group closed.")
 		return
 	}
 
@@ -1988,11 +1998,19 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 			log.Debug("Raw route group already closed. Nothing to be done.")
 			return
 		}
-		if err := rg.Close(); err != nil {
-			log.WithError(err).Error("Failed to close raw route group.")
-			return
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			if err := rg.Close(); err != nil {
+				log.WithError(err).Error("Failed to close raw route group.")
+			}
+		}()
+		select {
+		case <-done:
+			log.Debug("Raw route group closed.")
+		case <-time.After(10 * time.Second):
+			log.Error("Timed out closing raw route group, abandoning.")
 		}
-		log.Debug("Raw route group closed.")
 		return
 	}
 

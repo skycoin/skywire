@@ -1057,6 +1057,12 @@ func (rg *RouteGroup) MeasureLatency(ctx context.Context, count int) (min, max, 
 }
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
+	// Use a timeout context to prevent blocking forever on dead transports.
+	// Without this, a dead transport causes writePacket to block indefinitely,
+	// holding rg.mu and deadlocking the GC goroutine.
+	ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
+	defer cancel()
+
 	for i := 0; i < len(rg.tps) && i < len(rg.fwd); i++ {
 		if rg.tps[i] == nil || rg.fwd[i] == nil {
 			continue
@@ -1067,30 +1073,46 @@ func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
 		}
 
 		packet := routing.MakeClosePacket(rg.fwd[i].NextRouteID(), code)
-		if err := rg.writePacket(context.Background(), rg.tps[i], packet, rg.fwd[i].KeyRouteID()); err != nil {
+		if err := rg.writePacket(ctx, rg.tps[i], packet, rg.fwd[i].KeyRouteID()); err != nil {
 			rg.logger.WithError(err).Errorf("Failed to send close packet to %s", rg.tps[i].Remote())
 		}
 	}
 }
 
 func (rg *RouteGroup) waitForCloseRouteGroup(waitTimeout time.Duration) error {
-	closeCtx, closeCancel := context.WithTimeout(context.Background(), waitTimeout)
-	defer closeCancel()
-
 	closeDoneCh := make(chan struct{})
 	go func() {
-		// wait till all remotes respond to close procedure
 		rg.closeDone.Wait()
 		close(closeDoneCh)
 	}()
 
 	select {
-	case <-closeCtx.Done():
-		return fmt.Errorf("close route group timed out: %w", closeCtx.Err())
+	case <-time.After(waitTimeout):
+		// Force-complete outstanding WaitGroup entries so the goroutine above
+		// can exit. Without this, each timed-out close leaks a goroutine
+		// permanently blocked on closeDone.Wait().
+		rg.forceCompleteCloseDone()
+		// Wait briefly for the goroutine to notice and exit
+		select {
+		case <-closeDoneCh:
+		case <-time.After(100 * time.Millisecond):
+		}
+		return fmt.Errorf("close route group timed out after %v", waitTimeout)
 	case <-closeDoneCh:
+		return nil
 	}
+}
 
-	return nil
+// forceCompleteCloseDone drains the closeDone WaitGroup by calling Done()
+// for each outstanding entry. Uses recover to catch panics from calling
+// Done() more times than Add() (in case some responses arrived).
+func (rg *RouteGroup) forceCompleteCloseDone() {
+	for i := 0; i < len(rg.tps); i++ {
+		func() {
+			defer func() { recover() }() //nolint:errcheck
+			rg.closeDone.Done()
+		}()
+	}
 }
 
 func (rg *RouteGroup) isCloseInitiator() bool {
