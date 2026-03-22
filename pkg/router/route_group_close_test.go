@@ -237,7 +237,7 @@ func TestConcurrentKeepAliveAndClose(t *testing.T) {
 	kaStarted := make(chan struct{})
 	go func() {
 		close(kaStarted)
-		rg.sendKeepAlive() //nolint:errcheck
+		rg.sendKeepAlive() //nolint:errcheck,gosec
 	}()
 	<-kaStarted
 
