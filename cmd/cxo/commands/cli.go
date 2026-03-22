@@ -40,7 +40,7 @@ var cliCmd = &cobra.Command{
 }
 
 func init() {
-	cliCmd.Flags().StringVarP(&rpcAddress, "address", "a", defaultAddr,
+	cliCmd.PersistentFlags().StringVarP(&rpcAddress, "address", "a", defaultAddr,
 		"RPC address to connect to")
 	cliCmd.Flags().StringVarP(&execCmd, "exec", "e", "",
 		"execute command and exit")
@@ -52,6 +52,8 @@ func init() {
 	cliCmd.AddCommand(connCmd)
 	cliCmd.AddCommand(rootObjCmd)
 	cliCmd.AddCommand(statCmd)
+	cliCmd.AddCommand(kvCmd)
+	cliCmd.AddCommand(stopCmd)
 }
 
 func getCLIRPCClient() (*node.RPCClient, error) {
@@ -505,6 +507,30 @@ var statCmd = &cobra.Command{
 			return err
 		}
 		printStat(s)
+		return nil
+	},
+}
+
+// --- Stop command ---
+
+var stopCmd = &cobra.Command{
+	Use:   "stop",
+	Short: "Stop the CXO daemon",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		r, err := getCLIRPCClient()
+		if err != nil {
+			return err
+		}
+		defer r.Close() //nolint:errcheck
+		// Shutdown may close the connection before replying
+		err = r.Node().Shutdown()
+		if err != nil {
+			// Connection reset is expected since the server is shutting down
+			fmt.Fprintln(out, "Shutdown signal sent")
+			return nil
+		}
+		fmt.Fprintln(out, "Shutdown signal sent")
 		return nil
 	},
 }
