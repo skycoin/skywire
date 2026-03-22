@@ -13,6 +13,7 @@ import (
 	"github.com/pterm/pterm/putils"
 	"github.com/spf13/cobra"
 
+	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clicompletion "github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
 	clidmsg "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsg"
@@ -37,7 +38,6 @@ import (
 	cliutil "github.com/skycoin/skywire/cmd/skywire-cli/commands/util"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
-	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 )

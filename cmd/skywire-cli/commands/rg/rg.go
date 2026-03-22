@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
 var statusJSON bool

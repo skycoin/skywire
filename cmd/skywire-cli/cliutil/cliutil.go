@@ -1,5 +1,5 @@
-// Package internal contain functions used internally by different skywire-cli subcommands
-package internal
+// Package cliutil contains functions used by different skywire-cli subcommands
+package cliutil
 
 import (
 	"bytes"
