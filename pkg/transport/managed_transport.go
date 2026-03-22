@@ -211,6 +211,8 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 		case <-mt.done:
 			return
 		case readCh <- p:
+		case <-time.After(30 * time.Second):
+			log.Warn("Dropping packet: readCh full for 30s (application not reading)")
 		}
 	}
 }
@@ -503,9 +505,9 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	log := mt.log.WithField("func", "readPacket")
 
-	var transport network.Transport
+	var tp network.Transport
 	for {
-		if transport = mt.getTransport(); transport != nil {
+		if tp = mt.getTransport(); tp != nil {
 			break
 		}
 		select {
@@ -517,14 +519,22 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 
 	log.Trace("Awaiting packet...")
 
+	// Set a read deadline to prevent blocking forever on a half-open TCP connection.
+	// Without this, a dead transport causes the readLoop goroutine to leak permanently.
+	// The deadline is refreshed on each read attempt; successful reads reset it.
+	const readTimeout = 3 * time.Minute
+	if err = tp.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+		log.WithError(err).Debug("Failed to set read deadline")
+	}
+
 	h := make(routing.Packet, routing.PacketHeaderSize)
-	if _, err = io.ReadFull(transport, h); err != nil {
+	if _, err = io.ReadFull(tp, h); err != nil {
 		log.WithError(err).Debugf("Failed to read packet header.")
 		return nil, err
 	}
 	log.WithField("header_len", len(h)).WithField("header_raw", h).Trace("Read packet header.")
 	p := make([]byte, h.Size())
-	if _, err = io.ReadFull(transport, p); err != nil {
+	if _, err = io.ReadFull(tp, p); err != nil {
 		log.WithError(err).Debugf("Failed to read packet payload.")
 		return nil, err
 	}
@@ -532,7 +542,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 
 	packet = append(h, p...)
 	if n := len(packet); n > routing.PacketHeaderSize {
-		mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint: gosec
+		mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
 	}
 
 	log.WithField("type", packet.Type().String()).

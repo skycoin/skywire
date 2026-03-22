@@ -722,6 +722,14 @@ func (r *router) Serve(ctx context.Context) error {
 
 func (r *router) serveTransportManager(ctx context.Context) {
 	for {
+		// Check context before blocking on ReadPacket
+		select {
+		case <-ctx.Done():
+			r.logger.Debug("Context cancelled, stopping transport manager serve loop")
+			return
+		default:
+		}
+
 		packet, err := r.tm.ReadPacket()
 		if err != nil {
 			if err == transport.ErrNotServing {
@@ -746,6 +754,14 @@ func (r *router) serveTransportManager(ctx context.Context) {
 
 func (r *router) serveSetup() {
 	for {
+		// Check shutdown before blocking on AcceptStream
+		select {
+		case <-r.done:
+			r.logger.Debug("Router closed, stopping setup serve loop")
+			return
+		default:
+		}
+
 		conn, err := r.sl.AcceptStream()
 		if err != nil {
 			log := r.logger.WithError(err)

@@ -823,6 +823,8 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 			case <-rg.closed:
 				return io.ErrClosedPipe
 			case rg.readCh <- d:
+			case <-time.After(30 * time.Second):
+				rg.logger.Warn("Dropping packet: readCh full for 30s (application not reading)")
 			}
 		}
 		return nil
@@ -833,6 +835,8 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 	case <-rg.closed:
 		return io.ErrClosedPipe
 	case rg.readCh <- packet.Payload():
+	case <-time.After(30 * time.Second):
+		rg.logger.Warn("Dropping packet: readCh full for 30s (application not reading)")
 	}
 
 	return nil
