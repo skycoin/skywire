@@ -725,7 +725,7 @@ func (r *router) serveTransportManager(ctx context.Context) {
 		// Check context before blocking on ReadPacket
 		select {
 		case <-ctx.Done():
-			r.logger.Debug("Context cancelled, stopping transport manager serve loop")
+			r.logger.Debug("Context canceled, stopping transport manager serve loop")
 			return
 		default:
 		}
