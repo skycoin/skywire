@@ -35,8 +35,8 @@ var kvCreateCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(out, "Feed:   %s\n", result.Feed.Hex())   //nolint:errcheck
-		fmt.Fprintf(out, "Secret: %s\n", hex.EncodeToString(result.Secret[:])) //nolint:errcheck
+		fmt.Fprintf(out, "Feed:   %s\n", result.Feed.Hex())                              //nolint:errcheck
+		fmt.Fprintf(out, "Secret: %s\n", hex.EncodeToString(result.Secret[:]))           //nolint:errcheck
 		fmt.Fprintln(out, "\nSave the secret key — you need it to write to this store.") //nolint:errcheck
 		return nil
 	},
@@ -66,7 +66,7 @@ var kvPutCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintln(out, "OK")
+		fmt.Fprintln(out, "OK") //nolint:errcheck
 		return nil
 	},
 }
@@ -96,7 +96,7 @@ var kvGetCmd = &cobra.Command{
 			return fmt.Errorf("key %q not found", args[1])
 		}
 
-		fmt.Fprintln(out, value)
+		fmt.Fprintln(out, value) //nolint:errcheck
 		return nil
 	},
 }
@@ -125,7 +125,7 @@ var kvDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintln(out, "OK")
+		fmt.Fprintln(out, "OK") //nolint:errcheck
 		return nil
 	},
 }
@@ -165,7 +165,7 @@ var kvListCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "KEY\tVALUE")    //nolint:errcheck
+		fmt.Fprintln(w, "KEY\tVALUE") //nolint:errcheck
 		for _, e := range entries {
 			fmt.Fprintf(w, "%s\t%s\n", e.Key, e.Value) //nolint:errcheck
 		}
