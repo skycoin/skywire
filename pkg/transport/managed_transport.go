@@ -445,10 +445,9 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 		if err != nil {
 			mt.log.WithField("tp-id", mt.Entry.ID).WithError(err).Debug("Error deleting transport")
 		}
-		if netErr, ok := err.(net.Error); ok && netErr.Temporary() { // nolint
+		if _, ok := err.(net.Error); ok {
 			mt.log.
 				WithError(err).
-				WithField("timeout", true).
 				Warn("Failed to update transport status.")
 			return err
 		}

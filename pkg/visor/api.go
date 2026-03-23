@@ -584,7 +584,7 @@ func (v *Visor) DeleteRewardAddress() error {
 	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
 	err := os.Remove(path)
 	if err != nil {
-		return fmt.Errorf("Error deleting file. err=%v", err)
+		return fmt.Errorf("error deleting file. err=%v", err)
 	}
 	return nil
 }
@@ -780,11 +780,11 @@ func (v *Visor) FetchUptimeTrackerData(pk string) ([]byte, error) {
 	if pk != "" {
 		err := pubkey.Set(pk)
 		if err != nil {
-			return body, fmt.Errorf("Invalid or missing public key")
+			return body, fmt.Errorf("invalid or missing public key")
 		}
 	}
 	if v.uptimeTracker == nil {
-		return body, fmt.Errorf("Uptime tracker module not available")
+		return body, fmt.Errorf("uptime tracker module not available")
 	}
 	return v.uptimeTracker.FetchUptimes(context.TODO(), pk)
 }
@@ -806,7 +806,7 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 	for index, app := range v.conf.Launcher.Apps {
 		if app.Name == visorconfig.SkysocksClientName {
 			if v.GetSkysocksClientAddress() == "" && serverKey == "" {
-				return errors.New("Skysocks server pub key is missing")
+				return errors.New("skysocks server pub key is missing")
 			}
 
 			if serverKey != "" {
@@ -3401,10 +3401,10 @@ func (v *Visor) RegisterHTTPPort(localPort int) error {
 	defer v.allowedMX.Unlock()
 	ok := isPortAvailable(v.log, localPort)
 	if ok {
-		return fmt.Errorf("No connection on local port :%v", localPort)
+		return fmt.Errorf("no connection on local port :%v", localPort)
 	}
 	if v.allowedPorts[localPort] {
-		return fmt.Errorf("Port :%v already registered", localPort)
+		return fmt.Errorf("port :%v already registered", localPort)
 	}
 	v.allowedPorts[localPort] = true
 	return nil
@@ -3415,7 +3415,7 @@ func (v *Visor) DeregisterHTTPPort(localPort int) error {
 	v.allowedMX.Lock()
 	defer v.allowedMX.Unlock()
 	if !v.allowedPorts[localPort] {
-		return fmt.Errorf("Port :%v not registered", localPort)
+		return fmt.Errorf("port :%v not registered", localPort)
 	}
 	delete(v.allowedPorts, localPort)
 	return nil

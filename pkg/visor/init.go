@@ -1032,14 +1032,14 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	ok := isPortRegistered(cMsg.Port, v)
 	if !ok {
 		log.Errorf("Port :%v not registered", cMsg.Port)
-		sendError(log, remoteConn, fmt.Errorf("Port :%v not registered", cMsg.Port))
+		sendError(log, remoteConn, fmt.Errorf("port :%v not registered", cMsg.Port))
 		return
 	}
 
 	ok = isPortAvailable(log, cMsg.Port)
 	if ok {
 		log.Errorf("Failed to dial port %v", cMsg.Port)
-		sendError(log, remoteConn, fmt.Errorf("Failed to dial port %v", cMsg.Port))
+		sendError(log, remoteConn, fmt.Errorf("failed to dial port %v", cMsg.Port))
 		return
 	}
 

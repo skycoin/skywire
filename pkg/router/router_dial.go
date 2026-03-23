@@ -42,7 +42,7 @@ func (r *router) DialRoutes(
 
 	if r.conf.MinHops == 0 {
 		r.logger.Error("Routing disabled. (minhop=0)")
-		return nil, fmt.Errorf("Routing disabled. (minhop=0)")
+		return nil, fmt.Errorf("routing disabled. (minhop=0)")
 	}
 
 	lPK := r.conf.PubKey
