@@ -154,54 +154,8 @@ func (r *router) DialRoutes(
 
 		r.logger.Debugf("Created new routes to %s on port %d", rPK, lPort)
 
-		// Attempt additional mux routes if requested and mux was negotiated
-		muxCount := 1
-		if opts != nil && opts.MuxRoutes > 1 {
-			muxCount = opts.MuxRoutes
-		}
-		if muxCount > 1 && nrg.rg.mux != nil {
-			// Collect transport IDs already in use
-			excludeIDs := []uuid.UUID{rules.Forward.NextTransportID()}
-
-			for i := 1; i < muxCount; i++ {
-				muxOpts := &DialOptions{
-					MinForwardRts:       1,
-					MaxForwardRts:       1,
-					MinConsumeRts:       1,
-					MaxConsumeRts:       1,
-					Retries:             1,
-					ExcludeTransportIDs: excludeIDs,
-					ExcludeDMSG:         true, // DMSG is a relay, not suitable for multiplexing
-				}
-
-				muxFwd, muxRev, err := r.fetchBestRoutes(ctx, lPK, rPK, muxOpts)
-				if err != nil {
-					r.logger.Debugf("Mux route %d/%d: no additional route found: %v", i+1, muxCount, err)
-					break
-				}
-
-				muxReq := routing.BidirectionalRoute{
-					Desc:      forwardDesc,
-					KeepAlive: DefaultRouteKeepAlive,
-					Forward:   muxFwd,
-					Reverse:   muxRev,
-				}
-
-				muxRules, _, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, muxReq)
-				if err != nil {
-					r.logger.Debugf("Mux route %d/%d: setup failed: %v", i+1, muxCount, err)
-					break
-				}
-
-				if err := r.appendRouteToGroup(nrg, muxRules); err != nil {
-					r.logger.Debugf("Mux route %d/%d: append failed: %v", i+1, muxCount, err)
-					break
-				}
-
-				excludeIDs = append(excludeIDs, muxRules.Forward.NextTransportID())
-				r.logger.Infof("Mux route %d/%d established via transport %s", i+1, muxCount, muxRules.Forward.NextTransportID())
-			}
-		}
+		// Establish additional mux routes if requested
+		r.establishMuxRoutes(ctx, nrg, opts, forwardDesc, rules.Forward.NextTransportID())
 
 		// reset MinHops default value if changed before
 		if defaultMinHops != 1 {
@@ -685,4 +639,65 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 	}
 
 	return nil, nil, errors.New("no route found through local transports")
+}
+
+// establishMuxRoutes attempts to establish additional parallel routes for a mux-enabled
+// route group. Called after the primary route is established in DialRoutes.
+func (r *router) establishMuxRoutes(
+	ctx context.Context,
+	nrg *NoiseRouteGroup,
+	opts *DialOptions,
+	forwardDesc routing.RouteDescriptor,
+	primaryTpID uuid.UUID,
+) {
+	muxCount := 1
+	if opts != nil && opts.MuxRoutes > 1 {
+		muxCount = opts.MuxRoutes
+	}
+	if muxCount <= 1 || nrg.rg.mux == nil {
+		return
+	}
+
+	lPK := forwardDesc.SrcPK()
+	rPK := forwardDesc.DstPK()
+	excludeIDs := []uuid.UUID{primaryTpID}
+
+	for i := 1; i < muxCount; i++ {
+		muxOpts := &DialOptions{
+			MinForwardRts:       1,
+			MaxForwardRts:       1,
+			MinConsumeRts:       1,
+			MaxConsumeRts:       1,
+			Retries:             1,
+			ExcludeTransportIDs: excludeIDs,
+			ExcludeDMSG:         true,
+		}
+
+		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, lPK, rPK, muxOpts)
+		if err != nil {
+			r.logger.Debugf("Mux route %d/%d: no additional route found: %v", i+1, muxCount, err)
+			break
+		}
+
+		muxReq := routing.BidirectionalRoute{
+			Desc:      forwardDesc,
+			KeepAlive: DefaultRouteKeepAlive,
+			Forward:   muxFwd,
+			Reverse:   muxRev,
+		}
+
+		muxRules, _, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, muxReq)
+		if err != nil {
+			r.logger.Debugf("Mux route %d/%d: setup failed: %v", i+1, muxCount, err)
+			break
+		}
+
+		if err := r.appendRouteToGroup(nrg, muxRules); err != nil {
+			r.logger.Debugf("Mux route %d/%d: append failed: %v", i+1, muxCount, err)
+			break
+		}
+
+		excludeIDs = append(excludeIDs, muxRules.Forward.NextTransportID())
+		r.logger.Infof("Mux route %d/%d established via transport %s", i+1, muxCount, muxRules.Forward.NextTransportID())
+	}
 }
