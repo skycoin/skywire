@@ -83,9 +83,9 @@ func createMuxRouteGroup(t *testing.T, nTransports int) (*RouteGroup, []*transpo
 	for i := 0; i < nTransports; i++ {
 		tpID := uuid.New()
 		fwd := routing.ForwardRule(DefaultRouteKeepAlive, routing.RouteID(i+1), routing.RouteID(i+100), tpID, pk2, pk1, 1, 2) //nolint:gosec
-		rvs := routing.ConsumeRule(DefaultRouteKeepAlive, routing.RouteID(i+100), pk1, pk2, 2, 1)                        //nolint:gosec
-		rt.SaveRule(fwd) //nolint:errcheck,gosec
-		rt.SaveRule(rvs) //nolint:errcheck,gosec
+		rvs := routing.ConsumeRule(DefaultRouteKeepAlive, routing.RouteID(i+100), pk1, pk2, 2, 1)                             //nolint:gosec
+		rt.SaveRule(fwd)                                                                                                      //nolint:errcheck,gosec
+		rt.SaveRule(rvs)                                                                                                      //nolint:errcheck,gosec
 
 		conn := newWorkingTransport()
 		mt := transport.NewManagedTransportForTest(conn)
