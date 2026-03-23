@@ -42,7 +42,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/skycoin/dmsg v1.3.29-0.20260320173710-e5ee528c2dcc
-	github.com/skycoin/skycoin v0.28.5-alpha1.0.20260323013819-e0a3cfeb5ef5
+	github.com/skycoin/skycoin v0.28.5-alpha1.0.20260323015226-90b668188f85
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -287,10 +287,8 @@ require (
 //replace github.com/skycoin/dmsg => ../dmsg
 //replace github.com/skycoin/skycoin => ../skycoin
 
-// Below should reflect current versions of the following deps
 // To update deps to specific commit hash:
-// 1) Uncomment one of the following lines and substituite version with desired commit hash:
-//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.2
+// 1) Uncomment one of the following lines and substitute version with desired commit hash:
 //replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251231130430-f3155f3ddf60
 //replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
 // 2) Run `go mod tidy && go mod vendor`
@@ -298,7 +296,3 @@ require (
 // 4) Re-comment the uncommented replace directive above
 // 5) Save this file.
 // 6) Run `go mod tidy && go mod vendor`
-
-//exclude google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd
-
-//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20260306014431-8cb737739a60
