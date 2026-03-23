@@ -4,10 +4,7 @@ package commands
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -20,10 +17,9 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/dmsg/internal/cli"
-	"github.com/skycoin/dmsg/internal/flags"
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsgclient"
 )
 
 var (
@@ -35,7 +31,7 @@ var (
 )
 
 func init() {
-	flags.InitFlags(RootCmd)
+	dmsgclient.InitFlags(RootCmd)
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
 	RootCmd.Flags().IntVarP(&waitTime, "wait", "w", 0, "wait time in seconds before disconnecting\n\r\033[0m")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r\033[0m")
@@ -43,9 +39,7 @@ func init() {
 
 // RootCmd contains the root dmsgcurl command
 var RootCmd = &cobra.Command{
-	Use: func() string {
-		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
-	}(),
+	Use:   dmsgclient.ExecName(),
 	Short: "DMSG Dial network test utility",
 	Long: calvin.AsciiFont("dmsgdial") + `
 DMSG Dial network test utility
@@ -126,15 +120,15 @@ Default mode of operation is dmsghttp:
 		defer cancel()
 
 		var dmsgClients []*dmsg.Client
-		if flags.UseDC {
+		if dmsgclient.UseDC {
 			dlog.Debug("Starting DMSG direct clients.")
 			for _, server := range dmsg.Prod.DmsgServers {
-				if len(dmsgClients) >= flags.DmsgSessions {
+				if len(dmsgClients) >= dmsgclient.DmsgSessions {
 					break
 				}
 				dest := dpk.String()
 
-				dmsgDC, closeFn, err := cli.StartDmsgDirectWithServers(ctx, dlog, pk, sk, "", []*disc.Entry{&server}, flags.DmsgSessions, dest)
+				dmsgDC, closeFn, err := dmsgclient.StartDmsgDirectWithServers(ctx, dlog, pk, sk, "", []*disc.Entry{&server}, dmsgclient.DmsgSessions, dest)
 				if err != nil {
 					dlog.WithError(err).Error("Failed to start DMSG direct client. Skipping server...")
 					continue
@@ -144,7 +138,7 @@ Default mode of operation is dmsghttp:
 				dmsgClients = append(dmsgClients, dmsgDC)
 			}
 		} else {
-			dmsgC, closeDmsg, err := cli.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, pk.String())
+			dmsgC, closeDmsg, err := dmsgclient.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, pk.String())
 			if err != nil {
 				dlog.WithError(err).Error("Error connecting to dmsg network")
 				return
@@ -186,7 +180,5 @@ Default mode of operation is dmsghttp:
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	dmsgclient.Execute(RootCmd)
 }

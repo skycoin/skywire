@@ -611,12 +611,66 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 		atomic.StoreInt32(&rg.consecutiveWriteFailures, 0)
 	}
 
-	// Rebuild transport weights based on current latency measurements
-	if rg.mux != nil && len(rg.tps) > 1 {
+	// Prune dead transports and rebuild weights
+	if rg.mux != nil {
 		rg.mu.Lock()
-		rg.mux.rebuildWeights(rg.tps)
+		rg.pruneDeadTransports()
+		if len(rg.tps) > 1 {
+			rg.mux.rebuildWeights(rg.tps)
+		}
 		rg.mu.Unlock()
 	}
+}
+
+// pruneDeadTransports removes closed transports from the mux.
+// Cleans up the corresponding forward/reverse rules from the routing table.
+// Must be called with rg.mu held.
+func (rg *RouteGroup) pruneDeadTransports() {
+	if len(rg.tps) <= 1 {
+		return // Don't prune the last transport
+	}
+
+	aliveTps := make([]*transport.ManagedTransport, 0, len(rg.tps))
+	aliveFwd := make([]routing.Rule, 0, len(rg.fwd))
+	aliveRvs := make([]routing.Rule, 0, len(rg.rvs))
+	var deadRuleIDs []routing.RouteID
+
+	for i, tp := range rg.tps {
+		if tp != nil && !tp.IsClosed() {
+			aliveTps = append(aliveTps, tp)
+			if i < len(rg.fwd) {
+				aliveFwd = append(aliveFwd, rg.fwd[i])
+			}
+			if i < len(rg.rvs) {
+				aliveRvs = append(aliveRvs, rg.rvs[i])
+			}
+		} else {
+			if i < len(rg.fwd) {
+				deadRuleIDs = append(deadRuleIDs, rg.fwd[i].KeyRouteID())
+			}
+			if i < len(rg.rvs) {
+				deadRuleIDs = append(deadRuleIDs, rg.rvs[i].KeyRouteID())
+			}
+			if tp != nil {
+				rg.logger.Infof("Pruning dead mux transport %v", tp.Entry.ID)
+			}
+		}
+	}
+
+	if len(aliveTps) == len(rg.tps) {
+		return // Nothing was pruned
+	}
+
+	// Clean up dead rules from routing table
+	if len(deadRuleIDs) > 0 {
+		rg.rt.DelRules(deadRuleIDs)
+	}
+
+	rg.tps = aliveTps
+	rg.fwd = aliveFwd
+	rg.rvs = aliveRvs
+
+	rg.logger.Infof("Pruned dead transports: %d alive, %d removed", len(aliveTps), len(deadRuleIDs)/2)
 }
 
 func (rg *RouteGroup) sendKeepAlive() error {
@@ -624,23 +678,40 @@ func (rg *RouteGroup) sendKeepAlive() error {
 	defer rg.mu.Unlock()
 
 	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
-		// if no transports, no rules, then no keepalive
 		return nil
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
+	defer cancel()
+
+	// Track successes — in mux mode, only fail if ALL transports are dead.
+	// A single dead transport in a mux group should not kill the entire connection.
+	anySuccess := false
+	var lastErr error
 
 	for i := 0; i < len(rg.tps); i++ {
 		tp := rg.tps[i]
 		rule := rg.fwd[i]
 
-		if tp == nil {
+		if tp == nil || tp.IsClosed() {
 			continue
 		}
 
 		packet := routing.MakeKeepAlivePacket(rule.NextRouteID())
 
-		if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
-			return err
+		if err := rg.writePacket(ctx, tp, packet, rule.KeyRouteID()); err != nil {
+			lastErr = err
+			rg.logger.Debugf("Keepalive failed on transport %v: %v", tp.Entry.ID, err)
+			continue
 		}
+		anySuccess = true
+	}
+
+	if !anySuccess {
+		if lastErr != nil {
+			return lastErr
+		}
+		return ErrNoSuitableTransport
 	}
 
 	return nil
@@ -651,9 +722,11 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 	defer rg.mu.Unlock()
 
 	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
-		// if no transports, no rules, then no keepalive
 		return nil
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
+	defer cancel()
 
 	for i := 0; i < len(rg.tps); i++ {
 		tp := rg.tps[i]
@@ -665,7 +738,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		rule := rg.fwd[i]
 		packet := routing.MakeHandshakePacket(rule.NextRouteID(), encrypt, routing.CapMux|routing.CapSACK)
 
-		err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+		err := rg.writePacket(ctx, tp, packet, rule.KeyRouteID())
 		if err == nil {
 			rg.logger.Debugf("Sent handshake via transport %v", tp.Entry.ID)
 			return nil
@@ -678,7 +751,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 	return ErrNoSuitableTransport
 }
 
-func (rg *RouteGroup) sendError(rule routing.Rule, tp *transport.ManagedTransport) error {
+func (rg *RouteGroup) sendError(ctx context.Context, rule routing.Rule, tp *transport.ManagedTransport) error {
 	errPayload := rg.GetError()
 	if errPayload == nil {
 		return nil
@@ -693,7 +766,7 @@ func (rg *RouteGroup) sendError(rule routing.Rule, tp *transport.ManagedTranspor
 		return err
 	}
 
-	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+	return rg.writePacket(ctx, tp, packet, rule.KeyRouteID())
 }
 
 // Close closes a RouteGroup with the specified close `code`:
@@ -816,6 +889,8 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 			case <-rg.closed:
 				return io.ErrClosedPipe
 			case rg.readCh <- d:
+			case <-time.After(30 * time.Second):
+				rg.logger.Warn("Dropping packet: readCh full for 30s (application not reading)")
 			}
 		}
 		return nil
@@ -826,6 +901,8 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 	case <-rg.closed:
 		return io.ErrClosedPipe
 	case rg.readCh <- packet.Payload():
+	case <-time.After(30 * time.Second):
+		rg.logger.Warn("Dropping packet: readCh full for 30s (application not reading)")
 	}
 
 	return nil
@@ -1057,40 +1134,62 @@ func (rg *RouteGroup) MeasureLatency(ctx context.Context, count int) (min, max, 
 }
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
+	// Use a timeout context to prevent blocking forever on dead transports.
+	// Without this, a dead transport causes writePacket to block indefinitely,
+	// holding rg.mu and deadlocking the GC goroutine.
+	ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
+	defer cancel()
+
 	for i := 0; i < len(rg.tps) && i < len(rg.fwd); i++ {
 		if rg.tps[i] == nil || rg.fwd[i] == nil {
 			continue
 		}
 
-		if err := rg.sendError(rg.fwd[i], rg.tps[i]); err != nil {
+		if err := rg.sendError(ctx, rg.fwd[i], rg.tps[i]); err != nil {
 			rg.logger.WithError(err).Errorf("Failed to send error packet to %s", rg.tps[i].Remote())
 		}
 
 		packet := routing.MakeClosePacket(rg.fwd[i].NextRouteID(), code)
-		if err := rg.writePacket(context.Background(), rg.tps[i], packet, rg.fwd[i].KeyRouteID()); err != nil {
+		if err := rg.writePacket(ctx, rg.tps[i], packet, rg.fwd[i].KeyRouteID()); err != nil {
 			rg.logger.WithError(err).Errorf("Failed to send close packet to %s", rg.tps[i].Remote())
 		}
 	}
 }
 
 func (rg *RouteGroup) waitForCloseRouteGroup(waitTimeout time.Duration) error {
-	closeCtx, closeCancel := context.WithTimeout(context.Background(), waitTimeout)
-	defer closeCancel()
-
 	closeDoneCh := make(chan struct{})
 	go func() {
-		// wait till all remotes respond to close procedure
 		rg.closeDone.Wait()
 		close(closeDoneCh)
 	}()
 
 	select {
-	case <-closeCtx.Done():
-		return fmt.Errorf("close route group timed out: %w", closeCtx.Err())
+	case <-time.After(waitTimeout):
+		// Force-complete outstanding WaitGroup entries so the goroutine above
+		// can exit. Without this, each timed-out close leaks a goroutine
+		// permanently blocked on closeDone.Wait().
+		rg.forceCompleteCloseDone()
+		// Wait briefly for the goroutine to notice and exit
+		select {
+		case <-closeDoneCh:
+		case <-time.After(100 * time.Millisecond):
+		}
+		return fmt.Errorf("close route group timed out after %v", waitTimeout)
 	case <-closeDoneCh:
+		return nil
 	}
+}
 
-	return nil
+// forceCompleteCloseDone drains the closeDone WaitGroup by calling Done()
+// for each outstanding entry. Uses recover to catch panics from calling
+// Done() more times than Add() (in case some responses arrived).
+func (rg *RouteGroup) forceCompleteCloseDone() {
+	for i := 0; i < len(rg.tps); i++ {
+		func() {
+			defer func() { recover() }() //nolint:errcheck
+			rg.closeDone.Done()
+		}()
+	}
 }
 
 func (rg *RouteGroup) isCloseInitiator() bool {

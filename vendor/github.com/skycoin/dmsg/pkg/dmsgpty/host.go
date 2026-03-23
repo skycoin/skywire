@@ -237,11 +237,11 @@ func handleProxy(h *Host) handleFunc {
 		// Get query values.
 		var pk cipher.PubKey
 		if err := pk.Set(q.Get("pk")); err != nil {
-			return fmt.Errorf("invalid query value 'pk': %v", err)
+			return fmt.Errorf("invalid query value 'pk': %w", err)
 		}
 		var port uint16
 		if _, err := fmt.Sscan(q.Get("port"), &port); err != nil {
-			return fmt.Errorf("invalid query value 'port': %v", err)
+			return fmt.Errorf("invalid query value 'port': %w", err)
 		}
 
 		// Proxy request.

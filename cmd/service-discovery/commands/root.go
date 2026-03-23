@@ -20,8 +20,8 @@ import (
 	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/internal/sdmetrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/api"
+	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"

@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
+	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 )
 
 var sourcerun bool

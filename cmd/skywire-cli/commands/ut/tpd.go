@@ -10,7 +10,7 @@ import (
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/deployment"
 )
 

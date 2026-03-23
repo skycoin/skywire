@@ -23,8 +23,8 @@ import (
 	"github.com/tidwall/pretty"
 	"golang.org/x/net/proxy"
 
+	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -66,6 +66,7 @@ func init() {
 		statusCmd,
 		listCmd,
 		testCmd,
+		proxyRouteCmd,
 	)
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
 	startCmd.Flags().StringVarP(&addr, "addr", "a", visorconfig.SkysocksClientAddr, "address of proxy for use")
@@ -78,6 +79,8 @@ func init() {
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 	startCmd.Flags().BoolVar(&existingTpOnly, "existing-tp", false, "only use existing transports, don't create new ones")
 	startCmd.Flags().BoolVar(&forceLocalRoutes, "local-route", false, "calculate routes locally instead of using route finder")
+	startCmd.Flags().IntVar(&muxRoutes, "mux", 0, "number of parallel mux routes (0=disabled, 2+=enabled)")
+	startCmd.Flags().StringVar(&muxMode, "mux-mode", "auto", "mux weight distribution mode: auto (latency-based) or equal (round-robin)")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
 	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 	dep := getDeployment()
@@ -134,6 +137,20 @@ var startCmd = &cobra.Command{
 		if forceLocalRoutes {
 			if err := rpcClient.SetForceLocalRoutes(true); err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set force local routes mode: %w", err))
+			}
+		}
+
+		// If --mux flag is set, enable route multiplexing
+		if muxRoutes > 1 {
+			if err := rpcClient.SetMuxRoutes(muxRoutes); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set mux routes: %w", err))
+			}
+		}
+
+		// Set mux weight mode if specified
+		if muxMode != "" && muxMode != "auto" {
+			if err := rpcClient.SetMuxMode(muxMode); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set mux mode: %w", err))
 			}
 		}
 

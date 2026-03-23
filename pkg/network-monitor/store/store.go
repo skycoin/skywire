@@ -3,7 +3,7 @@ package store
 import (
 	"errors"
 
-	"github.com/skycoin/skywire/internal/nm"
+	nm "github.com/skycoin/skywire/pkg/network-monitor/types"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
 )
 

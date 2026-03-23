@@ -8,6 +8,17 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
+// WeightMode controls how the transport selector distributes packets.
+type WeightMode int
+
+const (
+	// WeightModeAuto uses latency-based weighting (faster transports get more packets).
+	// Falls back to equal round-robin when no latency data is available.
+	WeightModeAuto WeightMode = iota
+	// WeightModeEqual distributes packets equally across all transports (round-robin).
+	WeightModeEqual
+)
+
 // transportSelector implements weighted transport selection based on latency.
 // Faster transports (lower latency) get proportionally more packets.
 // Falls back to equal-weight round-robin when latency data is unavailable.
@@ -15,10 +26,27 @@ type transportSelector struct {
 	mu       sync.RWMutex
 	schedule []int // pre-computed selection sequence of transport indices
 	counter  uint32
+	mode     WeightMode
 }
 
 func newTransportSelector() *transportSelector {
-	return &transportSelector{}
+	return &transportSelector{mode: WeightModeAuto}
+}
+
+// SetMode changes the weight mode and returns the previous mode.
+func (ts *transportSelector) SetMode(mode WeightMode) WeightMode {
+	ts.mu.Lock()
+	prev := ts.mode
+	ts.mode = mode
+	ts.mu.Unlock()
+	return prev
+}
+
+// Mode returns the current weight mode.
+func (ts *transportSelector) Mode() WeightMode {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	return ts.mode
 }
 
 // Rebuild recomputes the selection schedule from the current transport latencies.
@@ -39,8 +67,22 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 		return
 	}
 
-	// Compute weight for each transport based on inverse latency.
-	// Weight = 1000 / latency_ms. Unknown latency (0) gets weight 1.
+	// Equal mode: always round-robin regardless of latency
+	if ts.mode == WeightModeEqual {
+		schedule := make([]int, 0, n)
+		for i, tp := range tps {
+			if tp != nil && !tp.IsClosed() {
+				schedule = append(schedule, i)
+			}
+		}
+		if len(schedule) == 0 {
+			schedule = []int{0}
+		}
+		ts.schedule = schedule
+		return
+	}
+
+	// Auto mode: weight by inverse latency
 	weights := make([]int, n)
 	maxLatency := 0.0
 	hasLatency := false

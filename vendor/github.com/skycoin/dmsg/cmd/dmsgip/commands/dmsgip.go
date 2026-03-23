@@ -4,11 +4,8 @@ package commands
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -18,8 +15,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
-	"github.com/skycoin/dmsg/internal/cli"
 	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsgclient"
 )
 
 var (
@@ -51,9 +48,7 @@ func init() {
 
 // RootCmd contains the root dmsgcurl command
 var RootCmd = &cobra.Command{
-	Use: func() string {
-		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
-	}(),
+	Use:   dmsgclient.ExecName(),
 	Short: "DMSG IP utility",
 	Long: calvin.AsciiFont("dmsgip") + `
 	DMSG IP utility`,
@@ -116,7 +111,7 @@ var RootCmd = &cobra.Command{
 			ctx = context.WithValue(context.Background(), "socks5_proxy", proxyAddr) //nolint
 		}
 
-		dmsgC, closeDmsg, err := cli.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, pk.String())
+		dmsgC, closeDmsg, err := dmsgclient.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, pk.String())
 
 		if err != nil {
 			dlog.WithError(err).Debug("Error connecting to dmsg network")
@@ -135,7 +130,5 @@ var RootCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	dmsgclient.Execute(RootCmd)
 }
