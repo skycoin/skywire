@@ -91,15 +91,3 @@ func DefaultLocalRunners() RunnersConfig {
 		SkywireVisor:       "skywire-visor {{.Name}}.json --tag {{.Name}}",
 	}
 }
-
-// DefaultSourceRunners returns set of default runners on localhost from source
-func DefaultSourceRunners() RunnersConfig {
-	return RunnersConfig{
-		DmsgDiscovery:      "go run ./cmd/dmsg-discovery --tag {{.Name}}",
-		DmsgServer:         "go run ./cmd/dmsg-server {{.Name}}.json --tag {{.Name}}",
-		TransportDiscovery: "go run ./cmd/transport-discovery {{.Name}}.json --tag {{.Name}}",
-		RouteFinder:        "go run ./cmd/route-finder --tag {{.Name}}",
-		SetupNode:          "go run ./cmd/setup-node {{.Name}}.json --tag {{.Name}}",
-		SkywireVisor:       "go run ./cmd/skywire-visor {{.Name}}.json --tag {{.Name}}",
-	}
-}

@@ -104,13 +104,6 @@ func readSysTrayIcon() (contents []byte, err error) {
 	return contents, err
 }
 
-// SetStopVisorFn sets function to stop running
-func SetStopVisorFn(fn func()) {
-	stopVisorFnMx.Lock()
-	stopVisorFn = fn
-	stopVisorFnMx.Unlock()
-}
-
 // Stop stops visor and quits GUI app.
 func Stop() {
 	if !atomic.CompareAndSwapInt32(&guiStopped, 0, 1) {
