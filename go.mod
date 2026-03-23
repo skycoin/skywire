@@ -282,17 +282,3 @@ require (
 
 // issues with gotop on riscv64
 //replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
-
-// Uncomment for tests with local sources
-//replace github.com/skycoin/dmsg => ../dmsg
-//replace github.com/skycoin/skycoin => ../skycoin
-
-// To update deps to specific commit hash:
-// 1) Uncomment one of the following lines and substitute version with desired commit hash:
-//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251231130430-f3155f3ddf60
-//replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
-// 2) Run `go mod tidy && go mod vendor`
-// 3) Copy the populated version string to the correct place in require(...) above - replacing the specified version string
-// 4) Re-comment the uncommented replace directive above
-// 5) Save this file.
-// 6) Run `go mod tidy && go mod vendor`
