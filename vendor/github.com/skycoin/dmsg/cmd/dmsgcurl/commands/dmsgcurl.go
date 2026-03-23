@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -25,10 +24,9 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
-	"github.com/skycoin/dmsg/internal/cli"
-	"github.com/skycoin/dmsg/internal/flags"
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsgclient"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 )
 
@@ -50,7 +48,7 @@ var (
 
 func init() {
 	RootCmd.Flags().SortFlags = false
-	flags.InitFlags(RootCmd)
+	dmsgclient.InitFlags(RootCmd)
 	RootCmd.Flags().StringVarP(&proxyAddr, "proxy", "p", proxyAddr, "connect to DMSG via proxy (i.e. '127.0.0.1:1080')")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "fatal", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
 	RootCmd.Flags().StringVarP(&dmsgcurlData, "data", "d", "", "dmsghttp POST data")
@@ -83,8 +81,8 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
-		if flags.DmsgHTTPPath != "" {
-			dmsg.DmsghttpJSON, err = os.ReadFile(flags.DmsgHTTPPath) //nolint
+		if dmsgclient.DmsgHTTPPath != "" {
+			dmsg.DmsghttpJSON, err = os.ReadFile(dmsgclient.DmsgHTTPPath) //nolint
 			if err != nil {
 				dlog.WithError(err).Fatal("Failed to read specified dmsghttp-config")
 			}
@@ -169,16 +167,16 @@ func handleRequest(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, http
 	defer func() { closeAndCleanFile(file, err) }()
 	var httpC http.Client
 
-	if flags.UseDC {
+	if dmsgclient.UseDC {
 		var dmsgClients []*dmsg.Client
 
 		dlog.Debug("Starting DMSG direct clients.")
 		for _, server := range dmsg.Prod.DmsgServers {
-			if len(dmsgClients) >= flags.DmsgSessions {
+			if len(dmsgClients) >= dmsgclient.DmsgSessions {
 				break
 			}
 
-			dmsgDC, closeFn, err := cli.StartDmsgDirectWithServers(ctx, dlog, pk, sk, "", []*disc.Entry{&server}, flags.DmsgSessions, dmsg.ExtractPKFromDmsgAddr(parsedURL.String()))
+			dmsgDC, closeFn, err := dmsgclient.StartDmsgDirectWithServers(ctx, dlog, pk, sk, "", []*disc.Entry{&server}, dmsgclient.DmsgSessions, dmsg.ExtractPKFromDmsgAddr(parsedURL.String()))
 			if err != nil {
 				dlog.WithError(err).Error("Failed to start DMSG direct client. Skipping server...")
 				continue
@@ -194,10 +192,10 @@ func handleRequest(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, http
 
 		// Build HTTP client with fallback round tripper
 		httpC = http.Client{
-			Transport: cli.NewFallbackRoundTripper(ctx, dmsgClients),
+			Transport: dmsgclient.NewFallbackRoundTripper(ctx, dmsgClients),
 		}
 	} else {
-		dmsgC, closeDmsg, err := cli.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, parsedURL.String())
+		dmsgC, closeDmsg, err := dmsgclient.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, parsedURL.String())
 		if err != nil || dmsgC == nil {
 			dlog.WithError(err).Debug("Error initializing DMSG client")
 			return curlError{
@@ -391,9 +389,5 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 
 // Execute executes the RootCmd
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		// WHY WON'T THIS PRINT??
-		dlog.WithError(err).Debug("An error occurred\n")
-		log.Fatal("Failed to execute command: ", err)
-	}
+	dmsgclient.Execute(RootCmd)
 }

@@ -20,8 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
-	"github.com/skycoin/dmsg/internal/cli"
-	"github.com/skycoin/dmsg/internal/flags"
+	"github.com/skycoin/dmsg/pkg/dmsgclient"
 )
 
 const dwsenv = "DMSGWEBSRV"
@@ -42,7 +41,7 @@ func init() {
 	pk, _ = sk.PubKey() //nolint
 
 	RootCmd.AddCommand(srvCmd)
-	flags.InitFlags(srvCmd)
+	dmsgclient.InitFlags(srvCmd)
 	srvCmd.Flags().UintSliceVarP(&localPort, "lport", "p", localPort, "local application interface port(s)\033[0m\n\r")
 	srvCmd.Flags().UintSliceVarP(&dmsgPort, "dport", "d", dmsgPort, "DMSG port(s) to serve\033[0m\n\r")
 	srvCmd.Flags().StringSliceVarP(&wl, "wl", "w", wl, "whitelisted keys for DMSG authenticated routes"+func() string {
@@ -84,7 +83,7 @@ var srvCmd = &cobra.Command{
 		}
 		dlog = logging.MustGetLogger("dmsgwebsrv")
 
-		err = flags.InitConfig()
+		err = dmsgclient.InitConfig()
 		if err != nil {
 			dlog.WithError(err).Fatal("Failed to read specified dmsghttp-config")
 		}
@@ -133,7 +132,7 @@ func server() {
 		ctx = context.WithValue(ctx, "socks5_proxy", proxyAddr) //nolint
 	}
 
-	dmsgC, closeDmsg, err = cli.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, "")
+	dmsgC, closeDmsg, err = dmsgclient.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, "")
 	if err != nil {
 		dlog.WithError(err).Error("Error connecting to dmsg network")
 		return
@@ -173,7 +172,12 @@ func proxyHTTPConnections(ctx context.Context, localPort uint, listener net.List
 	authRoute.Any("/*path", func(c *gin.Context) {
 		targetURL := fmt.Sprintf("http://127.0.0.1:%d%s?%s", localPort, c.Request.URL.Path, c.Request.URL.RawQuery)
 		proxy := httputil.ReverseProxy{Director: func(req *http.Request) {
-			req.URL, _ = url.Parse(targetURL) //nolint
+			parsed, err := url.Parse(targetURL)
+			if err != nil {
+				dlog.Errorf("failed to parse target URL %q: %v", targetURL, err)
+				return
+			}
+			req.URL = parsed
 			req.Host = req.URL.Host
 		}}
 		proxy.ServeHTTP(c.Writer, c.Request)
@@ -189,7 +193,7 @@ func proxyHTTPConnections(ctx context.Context, localPort uint, listener net.List
 	}
 
 	// Graceful shutdown on context cancellation
-	go func() {
+	go func() { //nolint:gosec
 		<-ctx.Done()
 		if err := server.Shutdown(context.Background()); err != nil {
 			dlog.Errorf("HTTP server shutdown error: %v", err)
@@ -278,6 +282,9 @@ func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Liste
 				if err2 != nil {
 					dlog.WithError(err2).Warn("Error on io.Copy(localConn, dmsgConn)")
 				}
+				// Close both to unblock the goroutine
+				dmsgConn.Close()  //nolint
+				localConn.Close() //nolint
 
 				connMutex.Lock()
 				delete(activeConns, dmsgConn)

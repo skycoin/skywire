@@ -4,6 +4,7 @@ package dmsg
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -236,6 +237,9 @@ func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType stri
 
 	c.sessionsMx.Lock()
 	srvPKs := make([]cipher.PubKey, 0, len(c.sessions))
+	for pk := range c.sessions {
+		srvPKs = append(srvPKs, pk)
+	}
 	c.sessionsMx.Unlock()
 
 	_, err = c.dc.Entry(ctx, c.pk)
@@ -352,7 +356,7 @@ func (c *EntityCommon) delEntry(ctx context.Context) (err error) {
 func getServerEntry(ctx context.Context, dc disc.APIClient, srvPK cipher.PubKey) (*disc.Entry, error) {
 	entry, err := dc.Entry(ctx, srvPK)
 	if err != nil {
-		return nil, ErrDiscEntryNotFound
+		return nil, fmt.Errorf("%w: %v", ErrDiscEntryNotFound, err)
 	}
 	if entry.Server == nil {
 		return nil, ErrDiscEntryIsNotServer
@@ -363,7 +367,7 @@ func getServerEntry(ctx context.Context, dc disc.APIClient, srvPK cipher.PubKey)
 func getClientEntry(ctx context.Context, dc disc.APIClient, clientPK cipher.PubKey) (*disc.Entry, error) {
 	entry, err := dc.Entry(ctx, clientPK)
 	if err != nil {
-		return nil, ErrDiscEntryNotFound
+		return nil, fmt.Errorf("%w: %v", ErrDiscEntryNotFound, err)
 	}
 	if entry.Client == nil {
 		return nil, ErrDiscEntryIsNotClient

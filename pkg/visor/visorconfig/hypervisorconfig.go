@@ -13,7 +13,6 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
 const (
@@ -88,20 +87,6 @@ func GenerateWorkDirConfig(testenv bool) HypervisorConfig {
 	}
 	c := MakeConfig(testenv)
 	c.DBPath = filepath.Join(dir, "users.db")
-	return c
-}
-
-// GenerateHomeConfig generates a config with default values and uses db from user's home folder.
-func GenerateHomeConfig(testenv bool) HypervisorConfig {
-	c := MakeConfig(testenv)
-	c.DBPath = filepath.Join(pathutil.HomeDir(), HypervisorDB)
-	return c
-}
-
-// GenerateLocalConfig generates a config with default values and uses db from shared folder.
-func GenerateLocalConfig(testenv bool) HypervisorConfig {
-	c := MakeConfig(testenv)
-	c.DBPath = "/usr/local/skycoin/hypervisor/users.db"
 	return c
 }
 

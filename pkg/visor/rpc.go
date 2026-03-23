@@ -815,6 +815,48 @@ func (r *RPC) SetForceLocalRoutes(enabled *bool, _ *struct{}) (err error) {
 	return err
 }
 
+// SetMuxRoutes sets the number of parallel mux routes for new connections
+func (r *RPC) SetMuxRoutes(n *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMuxRoutes", *n)(nil, &err)
+	err = r.visor.SetMuxRoutes(*n)
+	return err
+}
+
+// SetMuxMode sets the weight distribution mode for mux transport selection
+func (r *RPC) SetMuxMode(mode *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMuxMode", *mode)(nil, &err)
+	err = r.visor.SetMuxMode(*mode)
+	return err
+}
+
+// ActiveRoutes returns all active routes with app associations and live stats
+func (r *RPC) ActiveRoutes(_ *struct{}, out *[]AppRouteStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "ActiveRoutes", nil)(out, &err)
+	routes, err := r.visor.ActiveRoutes()
+	if routes != nil {
+		*out = routes
+	}
+	return err
+}
+
+// MuxRouteInput is input for AddMuxRoute and RemoveMuxRoute
+type MuxRouteInput struct {
+	AppName     string
+	TransportID uuid.UUID
+}
+
+// AddMuxRoute adds a mux route to an app's active connection
+func (r *RPC) AddMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "AddMuxRoute", in)(nil, &err)
+	return r.visor.AddMuxRoute(in.AppName, in.TransportID)
+}
+
+// RemoveMuxRoute removes a mux route from an app's active connection
+func (r *RPC) RemoveMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoveMuxRoute", in)(nil, &err)
+	return r.visor.RemoveMuxRoute(in.AppName, in.TransportID)
+}
+
 // FilterServersIn is input for VPNServers and ProxyServers
 type FilterServersIn struct {
 	Version string

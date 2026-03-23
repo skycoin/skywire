@@ -165,14 +165,6 @@ func (v1 *V1) Flush() error {
 	return v1.Common.flush(v1)
 }
 
-// Reload reloads the config from file (if exists).
-func Reload() (*V1, error) {
-	if VisorConfigFile == Stdin {
-		return nil, nil
-	}
-	return ReadFile(VisorConfigFile)
-}
-
 // UpdateAppAutostart modifies a single app's autostart value within the config and also the given
 //
 // The updated config gets flushed to file if there are any changes.

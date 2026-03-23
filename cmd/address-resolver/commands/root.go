@@ -21,8 +21,8 @@ import (
 	"github.com/xtaci/kcp-go"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/internal/armetrics"
 	"github.com/skycoin/skywire/pkg/address-resolver/api"
+	armetrics "github.com/skycoin/skywire/pkg/address-resolver/metrics"
 	"github.com/skycoin/skywire/pkg/address-resolver/store"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"

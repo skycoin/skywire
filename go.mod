@@ -41,8 +41,8 @@ require (
 	github.com/pterm/pterm v0.12.83
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
-	github.com/skycoin/dmsg v1.3.29-0.20260320173710-e5ee528c2dcc
-	github.com/skycoin/skycoin v0.28.4
+	github.com/skycoin/dmsg v1.3.29-0.20260323132513-964219fd8e0d
+	github.com/skycoin/skycoin v0.28.5-alpha1.0.20260323015226-90b668188f85
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -186,7 +186,7 @@ require (
 	github.com/itchyny/timefmt-go v0.1.7 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.8.0 // indirect
+	github.com/jackc/pgx/v5 v5.9.1 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jaypipes/pcidb v1.1.1 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade // indirect
@@ -279,26 +279,3 @@ require (
 // [error] The go.mod file for the module providing named packages contains one or
 //	more replace directives. It must not contain directives that would cause
 //	it to be interpreted differently than if it were the main module.
-
-// issues with gotop on riscv64
-//replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
-
-// Uncomment for tests with local sources
-//replace github.com/skycoin/dmsg => ../dmsg
-//replace github.com/skycoin/skycoin => ../skycoin
-
-// Below should reflect current versions of the following deps
-// To update deps to specific commit hash:
-// 1) Uncomment one of the following lines and substituite version with desired commit hash:
-//replace github.com/skycoin/skycoin => github.com/skycoin/skycoin v0.28.2
-//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20251231130430-f3155f3ddf60
-//replace cogentcore.org/core => cogentcore.org/core v0.3.12-0.20250715225941-3f13ea4e1cbd
-// 2) Run `go mod tidy && go mod vendor`
-// 3) Copy the populated version string to the correct place in require(...) above - replacing the specified version string
-// 4) Re-comment the uncommented replace directive above
-// 5) Save this file.
-// 6) Run `go mod tidy && go mod vendor`
-
-//exclude google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd
-
-//replace github.com/skycoin/dmsg => github.com/skycoin/dmsg v1.3.29-0.20260306014431-8cb737739a60
