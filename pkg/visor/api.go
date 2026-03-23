@@ -547,7 +547,7 @@ func (v *Visor) RuntimeStats() (*RuntimeStatsInfo, error) {
 
 // SetRewardAddress implements API.
 func (v *Visor) SetRewardAddress(p string) (string, error) {
-	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
+	path := v.conf.LocalPath + "/" + skyenv.RewardFile
 	err := os.WriteFile(path, []byte(p), 0600)
 	if err != nil {
 		return p, fmt.Errorf("failed to write config to file. err=%v", err)
@@ -559,7 +559,7 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 
 // GetRewardAddress implements API.
 func (v *Visor) GetRewardAddress() (string, error) {
-	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
+	path := v.conf.LocalPath + "/" + skyenv.RewardFile
 	_, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		file, err := os.Create(filepath.Clean(path))
@@ -581,7 +581,7 @@ func (v *Visor) GetRewardAddress() (string, error) {
 // DeleteRewardAddress implements API.
 func (v *Visor) DeleteRewardAddress() error {
 
-	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
+	path := v.conf.LocalPath + "/" + skyenv.RewardFile
 	err := os.Remove(path)
 	if err != nil {
 		return fmt.Errorf("error deleting file. err=%v", err)
@@ -630,7 +630,7 @@ func (v *Visor) StartAppWithMode(appName, launcherMode string) error {
 	}
 	var envs []string
 	var err error
-	if appName == visorconfig.VPNClientName {
+	if appName == skyenv.VPNClientName {
 		// todo: can we use some kind of app start hook that will be used for both autostart
 		// and start? Reason: this is also called in init for autostart
 
@@ -734,7 +734,7 @@ func (v *Visor) StartVPNClientWithMode(pk cipher.PubKey, launcherMode string) er
 	}
 
 	for index, app := range v.conf.Launcher.Apps {
-		if app.Name == visorconfig.VPNClientName {
+		if app.Name == skyenv.VPNClientName {
 			// we set the args in memory and pass it in `v.appL.StartAppWithMode`
 			// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 			// but the args are set in the config
@@ -751,7 +751,7 @@ func (v *Visor) StartVPNClientWithMode(pk cipher.PubKey, launcherMode string) er
 
 			// check process manager availability
 			if v.procM != nil {
-				return v.appL.StartAppWithMode(visorconfig.VPNClientName, v.conf.Launcher.Apps[index].Args, envs, launcherMode)
+				return v.appL.StartAppWithMode(skyenv.VPNClientName, v.conf.Launcher.Apps[index].Args, envs, launcherMode)
 			}
 			return ErrProcNotAvailable
 		}
@@ -804,7 +804,7 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 	}
 
 	for index, app := range v.conf.Launcher.Apps {
-		if app.Name == visorconfig.SkysocksClientName {
+		if app.Name == skyenv.SkysocksClientName {
 			if v.GetSkysocksClientAddress() == "" && serverKey == "" {
 				return errors.New("skysocks server pub key is missing")
 			}
@@ -814,24 +814,24 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 				if err := pk.Set(serverKey); err != nil {
 					return err
 				}
-				if err := v.SetAppPK(visorconfig.SkysocksClientName, pk); err != nil {
+				if err := v.SetAppPK(skyenv.SkysocksClientName, pk); err != nil {
 					return err
 				}
 				// we set the args in memory and pass it in `v.appL.StartApp`
 				// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 				// but the args are set in the config
-				v.conf.Launcher.Apps[index].Args = []string{"app", "skysocks-client", "--srv", pk.Hex(), "--addr", visorconfig.SkysocksClientAddr}
+				v.conf.Launcher.Apps[index].Args = []string{"app", "skysocks-client", "--srv", pk.Hex(), "--addr", skyenv.SkysocksClientAddr}
 			} else {
 				var pk cipher.PubKey
 				if err := pk.Set(v.GetSkysocksClientAddress()); err != nil {
 					return err
 				}
-				v.conf.Launcher.Apps[index].Args = []string{"app", "skysocks-client", "--srv", pk.Hex(), "--addr", visorconfig.SkysocksClientAddr}
+				v.conf.Launcher.Apps[index].Args = []string{"app", "skysocks-client", "--srv", pk.Hex(), "--addr", skyenv.SkysocksClientAddr}
 			}
 
 			// check process manager availability
 			if v.procM != nil {
-				return v.appL.StartApp(visorconfig.SkysocksClientName, v.conf.Launcher.Apps[index].Args, envs)
+				return v.appL.StartApp(skyenv.SkysocksClientName, v.conf.Launcher.Apps[index].Args, envs)
 			}
 			return ErrProcNotAvailable
 		}
@@ -848,7 +848,7 @@ func (v *Visor) StopSkysocksClients() error {
 	if v.procM != nil {
 		for _, app := range v.conf.Launcher.Apps {
 			for _, args := range app.Args {
-				if args == visorconfig.SkysocksClientName {
+				if args == skyenv.SkysocksClientName {
 					if _, err := v.appL.StopApp(app.Name); err != nil { //nolint:errcheck,gosec
 						v.log.WithError(err).Warnf("Failed to stop app %s", app.Name)
 					}
@@ -923,9 +923,9 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 	}
 	allowedToChangePassword := func(appName string) bool {
 		allowedApps := map[string]struct{}{
-			visorconfig.SkysocksName:  {},
-			visorconfig.VPNClientName: {},
-			visorconfig.VPNServerName: {},
+			skyenv.SkysocksName:  {},
+			skyenv.VPNClientName: {},
+			skyenv.VPNServerName: {},
 		}
 
 		_, ok := allowedApps[appName]
@@ -957,7 +957,7 @@ func (v *Visor) SetAppNetworkInterface(appName, netifc string) error {
 		return ErrAppLauncherNotAvailable
 	}
 
-	if visorconfig.VPNServerName != appName {
+	if skyenv.VPNServerName != appName {
 		return fmt.Errorf("app %s is not allowed to set network interface", appName)
 	}
 
@@ -982,7 +982,7 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 		return ErrAppLauncherNotAvailable
 	}
 
-	if appName != visorconfig.VPNClientName {
+	if appName != skyenv.VPNClientName {
 		return fmt.Errorf("app %s is not allowed to set killswitch", appName)
 	}
 
@@ -1002,7 +1002,7 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 
 // SetAppSecure implements API.
 func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
-	if appName != visorconfig.VPNServerName {
+	if appName != skyenv.VPNServerName {
 		return fmt.Errorf("app %s is not allowed to change 'secure' parameter", appName)
 	}
 
@@ -1026,7 +1026,7 @@ func (v *Visor) SetAppAddress(appName string, address string) error {
 		return ErrAppLauncherNotAvailable
 	}
 
-	if appName != visorconfig.SkychatName {
+	if appName != skyenv.SkychatName {
 		return fmt.Errorf("app %s is not allowed to set addr", appName)
 	}
 
@@ -1063,8 +1063,8 @@ func (v *Visor) SetAppAddress(appName string, address string) error {
 func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	allowedToChangePK := func(appName string) bool {
 		allowedApps := map[string]struct{}{
-			visorconfig.SkysocksClientName: {},
-			visorconfig.VPNClientName:      {},
+			skyenv.SkysocksClientName: {},
+			skyenv.VPNClientName:      {},
 		}
 
 		_, ok := allowedApps[appName]
@@ -2108,7 +2108,7 @@ func (v *Visor) DialDmsgPing(pk cipher.PubKey) error {
 	v.log.WithField("remote", pk.String()[:16]+"...").
 		Debug("Dialing DMSG ping via default server selection")
 
-	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: visorconfig.DmsgPingPort})
+	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: skyenv.DmsgPingPort})
 	if err != nil {
 		return fmt.Errorf("failed to dial dmsg ping: %w", err)
 	}
@@ -2154,7 +2154,7 @@ func (v *Visor) DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) 
 		return fmt.Errorf("no session with dmsg server %s", serverPK)
 	}
 
-	stream, err := session.DialStream(dmsg.Addr{PK: pk, Port: visorconfig.DmsgPingPort})
+	stream, err := session.DialStream(dmsg.Addr{PK: pk, Port: skyenv.DmsgPingPort})
 	if err != nil {
 		return fmt.Errorf("failed to dial dmsg ping via server %s: %w", serverPK, err)
 	}
@@ -2187,7 +2187,7 @@ func (v *Visor) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
 		Debug("Dialing remote visor RPC over DMSG")
 
 	// Dial to the hypervisor/RPC port
-	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: visorconfig.DmsgHypervisorPort})
+	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: skyenv.DmsgHypervisorPort})
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial dmsg RPC: %w", err)
 	}
@@ -2778,7 +2778,7 @@ func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
 	}
 
 	// Get the skysocks-client address from config
-	socksAddr := visorconfig.SkysocksClientAddr
+	socksAddr := skyenv.SkysocksClientAddr
 
 	for _, serverPK := range conf.Servers {
 		result := ProxyTestResult{
@@ -3265,7 +3265,7 @@ func (v *Visor) PublicAutoconnectStatus() (bool, error) {
 // GetVPNClientAddress get PK address of server set on vpn-client
 func (v *Visor) GetVPNClientAddress() string {
 	for _, v := range v.conf.Launcher.Apps {
-		if v.Name == visorconfig.VPNClientName {
+		if v.Name == skyenv.VPNClientName {
 			for index := range v.Args {
 				if v.Args[index] == "--srv" && index+1 < len(v.Args) {
 					return v.Args[index+1]
@@ -3279,7 +3279,7 @@ func (v *Visor) GetVPNClientAddress() string {
 // GetSkysocksClientAddress get PK address of server set on skysocks-client
 func (v *Visor) GetSkysocksClientAddress() string {
 	for _, v := range v.conf.Launcher.Apps {
-		if v.Name == visorconfig.SkysocksClientAddr {
+		if v.Name == skyenv.SkysocksClientAddr {
 			for index := range v.Args {
 				if v.Args[index] == "--srv" && index+1 < len(v.Args) {
 					return v.Args[index+1]
@@ -3694,10 +3694,10 @@ func (v *Visor) StartUIServer(addr string) error {
 
 	srv := &http.Server{
 		Handler:           tpvizServer.Handler(),
-		ReadTimeout:       visorconfig.HTTPReadTimeout,
-		WriteTimeout:      visorconfig.HTTPWriteTimeout,
-		IdleTimeout:       visorconfig.HTTPIdleTimeout,
-		ReadHeaderTimeout: visorconfig.HTTPReadHeaderTimeout,
+		ReadTimeout:       skyenv.HTTPReadTimeout,
+		WriteTimeout:      skyenv.HTTPWriteTimeout,
+		IdleTimeout:       skyenv.HTTPIdleTimeout,
+		ReadHeaderTimeout: skyenv.HTTPReadHeaderTimeout,
 	}
 
 	go func() {

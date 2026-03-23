@@ -26,7 +26,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/visor"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func init() {
@@ -201,7 +200,7 @@ var statusCmd = &cobra.Command{
 }
 
 var (
-	serverPort       = visorconfig.VPNServerPort
+	serverPort       = skyenv.VPNServerPort
 	serverPortString = fmt.Sprintf("%v", serverPort)
 )
 

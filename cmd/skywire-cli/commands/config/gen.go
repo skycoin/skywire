@@ -123,7 +123,7 @@ func init() {
 	genConfigCmd.Flags().StringVar(&transportSetupPKs, "tpsetup", scriptExecArray("${TPSETUPPKS[@]}"), msg)
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
 
-	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", visorconfig.OS, "(linux / mac / win) paths")
+	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
 	gHiddenFlags = append(gHiddenFlags, "os")
 	genConfigCmd.Flags().BoolVarP(&isDisplayNodeIP, "publicip", "l", scriptExecBool("${DISPLAYNODEIP:-false}"), "display visor ip in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "publicip")
@@ -138,19 +138,19 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
 	msg = "output config"
 	if scriptExecString("${OUTPUT}") == "" {
-		msg += ": " + visorconfig.ConfigName
+		msg += ": " + skyenv.ConfigName
 	}
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", scriptExecString("${OUTPUT}"), msg+"")
-	if visorconfig.OS == "win" {
+	if skyenv.OS == "win" {
 		pText = "use .msi installation path: "
 	}
-	if visorconfig.OS == "linux" {
+	if skyenv.OS == "linux" {
 		pText = "use path for package: "
 	}
-	if visorconfig.OS == "mac" {
+	if skyenv.OS == "mac" {
 		pText = "use mac installation path: "
 	}
-	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", scriptExecBool("${PKGENV:-false}"), pText+visorconfig.SkywirePath+"")
+	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", scriptExecBool("${PKGENV:-false}"), pText+skyenv.SkywirePath+"")
 	homepath := visorconfig.HomePath()
 	if homepath != "" {
 
@@ -229,7 +229,7 @@ var genConfigCmd = &cobra.Command{
 	Use:   "gen",
 	Short: "Generate a config file",
 	Long: func() string {
-		if visorconfig.OS == "linux" {
+		if skyenv.OS == "linux" {
 			if skyenvfile == "" {
 				return `Generate a config file
 
@@ -256,7 +256,7 @@ var genConfigCmd = &cobra.Command{
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		log := logger
 		if isEnvs {
-			if visorconfig.OS == "windows" {
+			if skyenv.OS == "windows" {
 				envfile = envfileWindows
 			} else {
 				envfile = envfileLinux
@@ -278,7 +278,7 @@ var genConfigCmd = &cobra.Command{
 		//set default output filename
 		if output == "" {
 			isOutUnset = true
-			confPath = visorconfig.ConfigName
+			confPath = skyenv.ConfigName
 			output = confPath
 		} else {
 			confPath = output
@@ -326,12 +326,12 @@ var genConfigCmd = &cobra.Command{
 		// skywire-cli config gen -p
 		if !isStdout && isOutUnset {
 			if isPkgEnv {
-				configName = visorconfig.ConfigJSON
+				configName = skyenv.ConfigJSON
 				confPath = visorconfig.SkywireConfig()
 				output = confPath
 			}
 			if isUsrEnv {
-				confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
+				confPath = visorconfig.HomePath() + "/" + skyenv.ConfigName
 				output = confPath
 			}
 		}
@@ -344,7 +344,7 @@ var genConfigCmd = &cobra.Command{
 		}
 		//don't write file with stdout
 		if !isStdout {
-			if visorconfig.OS == "linux" {
+			if skyenv.OS == "linux" {
 				//warn when writing config as root to non root owned dir & fail on the reverse instance
 				if _, err = exec.LookPath("stat"); err == nil {
 					confPath1, _ := filepath.Split(confPath)
@@ -368,8 +368,8 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 		}
-		if isPkgEnv && configServicePath == visorconfig.SERVICESName {
-			configServicePath = visorconfig.SkywirePath + "/" + visorconfig.SERVICESName
+		if isPkgEnv && configServicePath == skyenv.SERVICESName {
+			configServicePath = skyenv.SkywirePath + "/" + skyenv.SERVICESName
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
@@ -532,7 +532,7 @@ var genConfigCmd = &cobra.Command{
 		if isDmsgHTTP {
 			// TODO
 			//if isUsrEnv {
-			//	dmsgHTTPPath = homepath + "/" + visorconfig.DMSGHTTPName
+			//	dmsgHTTPPath = homepath + "/" + skyenv.DMSGHTTPName
 			//}
 			dmsghttpConfigData := deployment.DmsghttpJSON
 			if dmsgHTTPPath != "" {
@@ -546,7 +546,7 @@ var genConfigCmd = &cobra.Command{
 			// Decode JSON data
 			err = json.Unmarshal(dmsghttpConfigData, &dmsgHTTPServersList)
 			if err != nil {
-				log.WithError(err).Fatal("Failed to unmarshal " + visorconfig.DMSGHTTPName)
+				log.WithError(err).Fatal("Failed to unmarshal " + skyenv.DMSGHTTPName)
 			}
 		}
 
@@ -604,11 +604,11 @@ var genConfigCmd = &cobra.Command{
 		conf.Transport = &visorconfig.Transport{
 			Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
 			AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
-			PublicAutoconnect: visorconfig.PublicAutoconnect,
+			PublicAutoconnect: skyenv.PublicAutoconnect,
 			TransportSetupPKs: services.TransportSetupPKs,
 			LogStore: &visorconfig.LogStore{
 				Type:             visorconfig.FileLogStore,
-				Location:         visorconfig.LocalPath + "/" + visorconfig.TpLogStore,
+				Location:         skyenv.LocalPath + "/" + skyenv.TpLogStore,
 				RotationInterval: visorconfig.DefaultLogRotationInterval,
 			},
 			SudphPort:   sudphPort,
@@ -637,29 +637,29 @@ var genConfigCmd = &cobra.Command{
 		conf.Launcher = &visorconfig.Launcher{
 			ServiceDisc:   services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
 			Apps:          nil,
-			ServerAddr:    visorconfig.AppSrvAddr,
-			BinPath:       visorconfig.AppBinPath,
+			ServerAddr:    skyenv.AppSrvAddr,
+			BinPath:       skyenv.AppBinPath,
 			DisplayNodeIP: isDisplayNodeIP,
 		}
 		conf.UptimeTracker = &visorconfig.UptimeTracker{
 			Addr: services.UptimeTracker, //utilenv.UptimeTrackerAddr,
 		}
-		conf.CLIAddr = visorconfig.RPCAddr
+		conf.CLIAddr = skyenv.RPCAddr
 		conf.LogLevel = logLevel
-		conf.LocalPath = visorconfig.LocalPath
-		conf.DmsgHTTPServerPath = visorconfig.LocalPath + "/" + visorconfig.Custom
+		conf.LocalPath = skyenv.LocalPath
+		conf.DmsgHTTPServerPath = skyenv.LocalPath + "/" + skyenv.Custom
 		conf.StunServers = services.StunServers //utilenv.GetStunServers()
 		conf.ShutdownTimeout = visorconfig.DefaultTimeout
-		conf.GeoIP = visorconfig.GeoIP
+		conf.GeoIP = skyenv.GeoIP
 
 		conf.Dmsgpty = &visorconfig.Dmsgpty{
-			DmsgPort: visorconfig.DmsgPtyPort,
-			CLINet:   visorconfig.DmsgPtyCLINet,
+			DmsgPort: skyenv.DmsgPtyPort,
+			CLINet:   skyenv.DmsgPtyCLINet,
 			CLIAddr:  dmsgpty.DefaultCLIAddr(),
 		}
 
 		conf.STCP = &network.STCPConfig{
-			ListeningAddress: visorconfig.STCPAddr,
+			ListeningAddress: skyenv.STCPAddr,
 			PKTable:          nil,
 		}
 
@@ -703,7 +703,7 @@ var genConfigCmd = &cobra.Command{
 		conf.IsPublic = isPublic
 		if isPublic {
 			conf.PublicVisorConfig = &visorconfig.PublicVisorConfig{
-				RegistrationTimeout: visorconfig.Duration(visorconfig.PublicVisorRegistrationTimeout),
+				RegistrationTimeout: visorconfig.Duration(skyenv.PublicVisorRegistrationTimeout),
 				MaxTransports:       visorconfig.PublicVisorMaxTransports,
 			}
 		}
@@ -754,9 +754,9 @@ var genConfigCmd = &cobra.Command{
 		if isPkgEnv {
 			pkgConfig := visorconfig.PackageConfig()
 			conf.LocalPath = pkgConfig.LocalPath
-			conf.DmsgHTTPServerPath = pkgConfig.LocalPath + "/" + visorconfig.Custom
+			conf.DmsgHTTPServerPath = pkgConfig.LocalPath + "/" + skyenv.Custom
 			conf.Launcher.BinPath = pkgConfig.LauncherBinPath
-			conf.Transport.LogStore.Location = pkgConfig.LocalPath + "/" + visorconfig.TpLogStore
+			conf.Transport.LogStore.Location = pkgConfig.LocalPath + "/" + skyenv.TpLogStore
 			if conf.Hypervisor != nil {
 				conf.Hypervisor.EnableAuth = pkgConfig.Hypervisor.EnableAuth
 				conf.Hypervisor.DBPath = pkgConfig.Hypervisor.DbPath
@@ -766,9 +766,9 @@ var genConfigCmd = &cobra.Command{
 		if isUsr {
 			usrConfig := visorconfig.UserConfig()
 			conf.LocalPath = usrConfig.LocalPath
-			conf.DmsgHTTPServerPath = usrConfig.LocalPath + "/" + visorconfig.Custom
+			conf.DmsgHTTPServerPath = usrConfig.LocalPath + "/" + skyenv.Custom
 			conf.Launcher.BinPath = usrConfig.LauncherBinPath
-			conf.Transport.LogStore.Location = usrConfig.LocalPath + "/" + visorconfig.TpLogStore
+			conf.Transport.LogStore.Location = usrConfig.LocalPath + "/" + skyenv.TpLogStore
 			if conf.Hypervisor != nil {
 				conf.Hypervisor.EnableAuth = usrConfig.Hypervisor.EnableAuth
 				conf.Hypervisor.DBPath = usrConfig.Hypervisor.DbPath
@@ -779,38 +779,38 @@ var genConfigCmd = &cobra.Command{
 			// External apps configuration (apps run as separate processes)
 			conf.Launcher.Apps = []appserver.AppConfig{
 				{
-					Name:      visorconfig.VPNClientName,
+					Name:      skyenv.VPNClientName,
 					Binary:    "skywire",
 					AutoStart: false,
 					Port:      routing.Port(skyenv.VPNClientPort),
 					Args:      append([]string{"app", "vpn-client"}, "--dns", dnsServer),
 				},
 				{
-					Name:      visorconfig.SkychatName,
+					Name:      skyenv.SkychatName,
 					Binary:    "skywire",
 					AutoStart: true,
 					Port:      routing.Port(skyenv.SkychatPort),
-					Args:      append([]string{"app", "skychat"}, "--addr", visorconfig.SkychatAddr),
+					Args:      append([]string{"app", "skychat"}, "--addr", skyenv.SkychatAddr),
 				},
 				{
-					Name:      visorconfig.SkysocksName,
+					Name:      skyenv.SkysocksName,
 					Binary:    "skywire",
 					AutoStart: true,
-					Port:      routing.Port(visorconfig.SkysocksPort),
+					Port:      routing.Port(skyenv.SkysocksPort),
 					Args:      []string{"app", "skysocks"},
 				},
 				{
-					Name:      visorconfig.SkysocksClientName,
+					Name:      skyenv.SkysocksClientName,
 					Binary:    "skywire",
 					AutoStart: false,
-					Port:      routing.Port(visorconfig.SkysocksClientPort),
-					Args:      append([]string{"app", "skysocks-client"}, "--addr", visorconfig.SkysocksClientAddr),
+					Port:      routing.Port(skyenv.SkysocksClientPort),
+					Args:      append([]string{"app", "skysocks-client"}, "--addr", skyenv.SkysocksClientAddr),
 				},
 				{
-					Name:      visorconfig.VPNServerName,
+					Name:      skyenv.VPNServerName,
 					Binary:    "skywire",
 					AutoStart: isVpnServerEnable,
-					Port:      routing.Port(visorconfig.VPNServerPort),
+					Port:      routing.Port(skyenv.VPNServerPort),
 					Args:      []string{"app", "vpn-server"},
 				},
 			}
@@ -818,34 +818,34 @@ var genConfigCmd = &cobra.Command{
 			// Internal apps configuration (default - apps run within visor process)
 			conf.Launcher.Apps = []appserver.AppConfig{
 				{
-					Name:      visorconfig.VPNClientName,
+					Name:      skyenv.VPNClientName,
 					AutoStart: false,
 					Port:      routing.Port(skyenv.VPNClientPort),
 					Args:      []string{"--dns", dnsServer},
 				},
 				{
-					Name:      visorconfig.SkychatName,
+					Name:      skyenv.SkychatName,
 					AutoStart: true,
 					Port:      routing.Port(skyenv.SkychatPort),
-					Args:      []string{"--addr", visorconfig.SkychatAddr},
+					Args:      []string{"--addr", skyenv.SkychatAddr},
 				},
 				{
-					Name:      visorconfig.SkysocksName,
+					Name:      skyenv.SkysocksName,
 					AutoStart: true,
-					Port:      routing.Port(visorconfig.SkysocksPort),
+					Port:      routing.Port(skyenv.SkysocksPort),
 					Args:      []string{},
 				},
 				{
-					Name:      visorconfig.SkysocksClientName,
+					Name:      skyenv.SkysocksClientName,
 					AutoStart: false,
-					Port:      routing.Port(visorconfig.SkysocksClientPort),
-					Args:      []string{"--addr", visorconfig.SkysocksClientAddr},
+					Port:      routing.Port(skyenv.SkysocksClientPort),
+					Args:      []string{"--addr", skyenv.SkysocksClientAddr},
 				},
 				{
-					Name:      visorconfig.VPNServerName,
+					Name:      skyenv.VPNServerName,
 					AutoStart: isVpnServerEnable,
 					Args:      []string{},
-					Port:      routing.Port(visorconfig.VPNServerPort),
+					Port:      routing.Port(skyenv.VPNServerPort),
 				},
 			}
 		}

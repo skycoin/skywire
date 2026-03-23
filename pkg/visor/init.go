@@ -490,7 +490,7 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		v.tpM.InitDmsgClient(ctx, dmsgC)
 	}
 	// dmsgctrl setup
-	cl, err := dmsgC.Listen(visorconfig.DmsgCtrlPort)
+	cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
 	if err != nil {
 		return err
 	}
@@ -552,10 +552,10 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// Increased timeouts for dmsg latency characteristics
 	// DMSG has higher latency than direct TCP due to multi-hop routing
 	srv := &http.Server{
-		ReadTimeout:       visorconfig.HTTPReadTimeout,
-		WriteTimeout:      visorconfig.HTTPWriteTimeout,
-		IdleTimeout:       visorconfig.HTTPIdleTimeout,
-		ReadHeaderTimeout: visorconfig.HTTPReadHeaderTimeout,
+		ReadTimeout:       skyenv.HTTPReadTimeout,
+		WriteTimeout:      skyenv.HTTPWriteTimeout,
+		IdleTimeout:       skyenv.HTTPIdleTimeout,
+		ReadHeaderTimeout: skyenv.HTTPReadHeaderTimeout,
 		Handler:           lsAPI,
 	}
 
@@ -1376,7 +1376,7 @@ func initDmsgPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 	case <-dmsgC.Ready():
 	}
 
-	lis, err := dmsgC.Listen(visorconfig.DmsgPingPort)
+	lis, err := dmsgC.Listen(skyenv.DmsgPingPort)
 	if err != nil {
 		return err
 	}
@@ -1397,7 +1397,7 @@ func initDmsgPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}()
 
-	log.WithField("port", visorconfig.DmsgPingPort).Info("Dmsg ping listener started")
+	log.WithField("port", skyenv.DmsgPingPort).Info("Dmsg ping listener started")
 	return nil
 }
 
@@ -1788,8 +1788,8 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	}
 
 	err = launch.AutoStart(launcher.EnvMap{
-		visorconfig.VPNClientName: vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs()),
-		visorconfig.VPNServerName: vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, nil),
+		skyenv.VPNClientName: vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs()),
+		skyenv.VPNServerName: vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, nil),
 	})
 
 	if err != nil {
@@ -2194,7 +2194,7 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 	for hvPK, hvErrs := range hvErrs {
 		log := v.MasterLogger().PackageLogger("hypervisor_client").WithField("hypervisor_pk", hvPK)
 
-		addr := dmsg.Addr{PK: hvPK, Port: visorconfig.DmsgHypervisorPort}
+		addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
 		rpcS, err := newRPCServer(v, addr.PK.String()[:shortHashLen])
 		if err != nil {
 			err := fmt.Errorf("failed to start RPC server for hypervisor %s: %w", hvPK, err)
@@ -3547,10 +3547,10 @@ func initUIServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	srv := &http.Server{
 		Handler:           tpvizServer.Handler(),
-		ReadTimeout:       visorconfig.HTTPReadTimeout,
-		WriteTimeout:      visorconfig.HTTPWriteTimeout,
-		IdleTimeout:       visorconfig.HTTPIdleTimeout,
-		ReadHeaderTimeout: visorconfig.HTTPReadHeaderTimeout,
+		ReadTimeout:       skyenv.HTTPReadTimeout,
+		WriteTimeout:      skyenv.HTTPWriteTimeout,
+		IdleTimeout:       skyenv.HTTPIdleTimeout,
+		ReadHeaderTimeout: skyenv.HTTPReadHeaderTimeout,
 	}
 
 	wg := new(sync.WaitGroup)
@@ -3599,10 +3599,10 @@ func initUIServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 			dmsgSrv := &http.Server{
 				Handler:           handler,
-				ReadTimeout:       visorconfig.HTTPReadTimeout,
-				WriteTimeout:      visorconfig.HTTPWriteTimeout,
-				IdleTimeout:       visorconfig.HTTPIdleTimeout,
-				ReadHeaderTimeout: visorconfig.HTTPReadHeaderTimeout,
+				ReadTimeout:       skyenv.HTTPReadTimeout,
+				WriteTimeout:      skyenv.HTTPWriteTimeout,
+				IdleTimeout:       skyenv.HTTPIdleTimeout,
+				ReadHeaderTimeout: skyenv.HTTPReadHeaderTimeout,
 			}
 
 			wg.Add(1)

@@ -11,12 +11,13 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
-	rewardFile           string = visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile
+	rewardFile           string = visorconfig.PackageConfig().LocalPath + "/" + skyenv.RewardFile
 	rewardAddress        string
 	defaultRewardAddress string
 	output               string
@@ -109,7 +110,7 @@ var rewardCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		//set default output file
 		if output == "" {
-			output = visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile
+			output = visorconfig.PackageConfig().LocalPath + "/" + skyenv.RewardFile
 		}
 		if isDeleteFile {
 			_, err := os.Stat(output)
