@@ -279,6 +279,3 @@ require (
 // [error] The go.mod file for the module providing named packages contains one or
 //	more replace directives. It must not contain directives that would cause
 //	it to be interpreted differently than if it were the main module.
-
-// issues with gotop on riscv64
-//replace github.com/xxxserxxx/gotop/v4 => github.com/ersonp/gotop/v4 v4.2.1
