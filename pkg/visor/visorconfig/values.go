@@ -2,10 +2,8 @@
 package visorconfig
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/bitfield/script"
@@ -13,7 +11,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 var (
@@ -282,32 +279,6 @@ type Hypervisor struct {
 	EnableAuth bool   `json:"enable_auth"`
 }
 
-// DmsgPtyWhiteList gets dmsgpty whitelist path for installed Skywire.
-func DmsgPtyWhiteList() string {
-	return filepath.Join(SkywirePath, "dmsgpty", "whitelist.json")
-}
-
-// MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.
-func MustPK(pk string) cipher.PubKey {
-	var sPK cipher.PubKey
-	if err := sPK.UnmarshalText([]byte(pk)); err != nil {
-		fmt.Printf("invalid public key: %s", pk)
-		panic(err)
-	}
-
-	return sPK
-}
-
-// MustPKs unmarshals comma separated list of string PKs to []cipher.PubKey. It panics if unmarshaling fails.
-func MustPKs(pks string) []cipher.PubKey {
-	var sPKs cipher.PubKeys
-	if err := sPKs.Set(pks); err != nil {
-		fmt.Printf("invalid public key or keys: %s", pks)
-		panic(err)
-	}
-	return []cipher.PubKey(sPKs)
-}
-
 // Version gets the version of the installation for the config
 func Version() string {
 	u := buildinfo.Version()
@@ -331,14 +302,6 @@ func Version() string {
 func HomePath() string {
 	dir, _ := os.UserHomeDir() //nolint:errcheck
 	return dir
-}
-
-// Config returns either UserConfig or PackageConfig based on permissions
-func Config() skyenv.PkgConfig {
-	if IsRoot() {
-		return skyenv.PackageConfig()
-	}
-	return UserConfig()
 }
 
 var (

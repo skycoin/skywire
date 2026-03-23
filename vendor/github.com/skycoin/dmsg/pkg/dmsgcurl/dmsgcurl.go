@@ -60,7 +60,7 @@ func (dg *DmsgCurl) String() string {
 	}
 	j, err := jsonite.Marshal(m)
 	if err != nil {
-		panic(err)
+		return fmt.Sprintf("<error: %v>", err)
 	}
 	return string(j)
 }
@@ -195,7 +195,7 @@ func parseOutputFile(name string, urlPath string) (*os.File, error) {
 // StartDmsg create dsmg client instance
 func (dg *DmsgCurl) StartDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey) (dmsgC *dmsg.Client, stop func(), err error) {
 	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dg.dmsgF.Disc, &http.Client{}, log), &dmsg.Config{MinSessions: dg.dmsgF.Sessions})
-	go dmsgC.Serve(context.Background())
+	go dmsgC.Serve(ctx)
 
 	stop = func() {
 		err := dmsgC.Close()

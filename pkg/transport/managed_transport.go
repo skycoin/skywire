@@ -211,6 +211,8 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 		case <-mt.done:
 			return
 		case readCh <- p:
+		case <-time.After(30 * time.Second):
+			log.Warn("Dropping packet: readCh full for 30s (application not reading)")
 		}
 	}
 }
@@ -443,10 +445,9 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 		if err != nil {
 			mt.log.WithField("tp-id", mt.Entry.ID).WithError(err).Debug("Error deleting transport")
 		}
-		if netErr, ok := err.(net.Error); ok && netErr.Temporary() { // nolint
+		if _, ok := err.(net.Error); ok {
 			mt.log.
 				WithError(err).
-				WithField("timeout", true).
 				Warn("Failed to update transport status.")
 			return err
 		}
@@ -462,32 +463,54 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 */
 
 // WritePacket writes a packet to the remote.
-func (mt *ManagedTransport) WritePacket(_ context.Context, packet routing.Packet) error {
+// Respects context cancellation to prevent blocking forever on dead transports.
+func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Packet) error {
 	mt.transportMx.Lock()
-	defer mt.transportMx.Unlock()
 
 	if mt.transport == nil {
+		mt.transportMx.Unlock()
 		return fmt.Errorf("write packet: cannot write to transport, transport is not set up")
 	}
 
-	n, err := mt.transport.Write(packet)
-	if err != nil {
-		mt.close()
-		return err
+	// Run the write in a goroutine so we can respect context cancellation.
+	// Without this, a dead transport's Write blocks forever, deadlocking
+	// the route group close path and the rules GC goroutine.
+	type writeResult struct {
+		n   int
+		err error
 	}
-	if n > routing.PacketHeaderSize {
-		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint: gosec
+	ch := make(chan writeResult, 1)
+	go func() {
+		n, err := mt.transport.Write(packet)
+		ch <- writeResult{n, err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		mt.transportMx.Unlock()
+		return ctx.Err()
+	case res := <-ch:
+		if res.err != nil {
+			// Release the lock BEFORE calling close, which also acquires it
+			mt.transportMx.Unlock()
+			mt.close()
+			return res.err
+		}
+		if res.n > routing.PacketHeaderSize {
+			mt.logSent(uint64(res.n - routing.PacketHeaderSize)) //nolint:gosec
+		}
+		mt.transportMx.Unlock()
+		return nil
 	}
-	return nil
 }
 
 // WARNING: Not thread safe.
 func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	log := mt.log.WithField("func", "readPacket")
 
-	var transport network.Transport
+	var tp network.Transport
 	for {
-		if transport = mt.getTransport(); transport != nil {
+		if tp = mt.getTransport(); tp != nil {
 			break
 		}
 		select {
@@ -499,14 +522,22 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 
 	log.Trace("Awaiting packet...")
 
+	// Set a read deadline to prevent blocking forever on a half-open TCP connection.
+	// Without this, a dead transport causes the readLoop goroutine to leak permanently.
+	// The deadline is refreshed on each read attempt; successful reads reset it.
+	const readTimeout = 3 * time.Minute
+	if err = tp.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+		log.WithError(err).Debug("Failed to set read deadline")
+	}
+
 	h := make(routing.Packet, routing.PacketHeaderSize)
-	if _, err = io.ReadFull(transport, h); err != nil {
+	if _, err = io.ReadFull(tp, h); err != nil {
 		log.WithError(err).Debugf("Failed to read packet header.")
 		return nil, err
 	}
 	log.WithField("header_len", len(h)).WithField("header_raw", h).Trace("Read packet header.")
 	p := make([]byte, h.Size())
-	if _, err = io.ReadFull(transport, p); err != nil {
+	if _, err = io.ReadFull(tp, p); err != nil {
 		log.WithError(err).Debugf("Failed to read packet payload.")
 		return nil, err
 	}
@@ -514,7 +545,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 
 	packet = append(h, p...)
 	if n := len(packet); n > routing.PacketHeaderSize {
-		mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint: gosec
+		mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
 	}
 
 	log.WithField("type", packet.Type().String()).

@@ -2,18 +2,15 @@
 package commands
 
 import (
-	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/dmsg/pkg/dmsgclient"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 )
 
@@ -34,9 +31,7 @@ func init() {
 
 // RootCmd contains commands to start a dmsgpty-ui server for a dmsgpty-host
 var RootCmd = &cobra.Command{
-	Use: func() string {
-		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
-	}(),
+	Use:   dmsgclient.ExecName(),
 	Short: "DMSG pseudoterminal GUI",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐┌─┐┌┬┐┬ ┬   ┬ ┬┬
@@ -71,7 +66,5 @@ var RootCmd = &cobra.Command{
 
 // Execute executes the root command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+	dmsgclient.Execute(RootCmd)
 }

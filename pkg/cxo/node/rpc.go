@@ -33,6 +33,7 @@ func (r *rpcServer) Listen(address string) (err error) {
 	r.r.RegisterName("udp", &UDPRPC{r.n}) //nolint:errcheck,gosec
 
 	r.r.RegisterName("root", &RootRPC{r.n}) //nolint:errcheck,gosec
+	r.r.RegisterName("kv", newKVRPC(r.n))   //nolint:errcheck,gosec
 
 	if r.l, err = net.Listen("tcp", address); err != nil {
 		return
@@ -150,6 +151,12 @@ func (r *RPC) Config(_ struct{}, config *Config) (err error) {
 func (r *RPC) Stat(_ struct{}, stat *Stat) (err error) {
 	*stat = *r.n.Stat()
 	return
+}
+
+// Shutdown gracefully stops the node
+func (r *RPC) Shutdown(_ struct{}, _ *struct{}) error {
+	go r.n.Close() //nolint:errcheck
+	return nil
 }
 
 // A TCPRPC represents RPC object

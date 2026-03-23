@@ -4,11 +4,8 @@ package commands
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -16,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
+	dmsgcli "github.com/skycoin/dmsg/pkg/dmsgclient"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 )
 
@@ -43,9 +41,7 @@ func init() {
 
 // RootCmd contains commands for dmsgpty-cli; which interacts with the dmsgpty-host instance (i.e. skywire-visor)
 var RootCmd = &cobra.Command{
-	Use: func() string {
-		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
-	}(),
+	Use:   dmsgcli.ExecName(),
 	Short: "DMSG pseudoterminal command line interface",
 	Long: calvin.AsciiFont("dmsgpty-cli") + `
 	DMSG pseudoterminal command line interface`,
@@ -121,7 +117,5 @@ var RootCmd = &cobra.Command{
 
 // Execute executes the root command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal(err)
-	}
+	dmsgcli.Execute(RootCmd)
 }
