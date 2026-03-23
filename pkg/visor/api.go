@@ -2908,15 +2908,22 @@ func (v *Visor) ActiveRoutes() ([]AppRouteStatus, error) {
 
 	statuses := v.router.ActiveRouteStatuses()
 
-	// Build port → app name map
+	// Build port → app name map.
+	// Collect names first, then look up ports outside the Range callback
+	// to avoid RWMutex deadlock (Range holds RLock, GetAppPort also needs RLock,
+	// but a pending writer between them causes deadlock).
 	portToApp := make(map[routing.Port]string)
 	if v.procM != nil {
+		var names []string
 		v.procM.Range(func(name string, _ *appserver.Proc) bool {
+			names = append(names, name)
+			return true
+		})
+		for _, name := range names {
 			if port, err := v.procM.GetAppPort(name); err == nil && port != 0 {
 				portToApp[port] = name
 			}
-			return true
-		})
+		}
 	}
 
 	result := make([]AppRouteStatus, 0, len(statuses))
