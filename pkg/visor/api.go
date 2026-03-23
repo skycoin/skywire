@@ -1800,36 +1800,37 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 		return nil, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
 	}
 
+	return doPingRoundTrips(pingEntry.conn, conf)
+}
+
+// doPingRoundTrips performs the ping protocol: send size, read ack, send data, read echo.
+// Shared by Ping() and DmsgPing() which differ only in connection lookup.
+func doPingRoundTrips(conn net.Conn, conf PingConfig) ([]time.Duration, error) {
 	latencies := []time.Duration{}
 	data := make([]byte, conf.PcktSize*1024)
 
 	for i := 1; i <= conf.Tries; i++ {
-		conn := pingEntry.conn
 		msg := PingMsg{
 			Timestamp: time.Now(),
 			PingPk:    conf.PK,
 			Data:      data,
 		}
-		ping, err := json.Marshal(msg)
+		pingData, err := json.Marshal(msg)
 		if err != nil {
 			return latencies, err
 		}
-		pingSizeMsg := PingSizeMsg{
-			Size: len(ping),
-		}
-		size, err := json.Marshal(pingSizeMsg)
+		sizeMsg := PingSizeMsg{Size: len(pingData)}
+		size, err := json.Marshal(sizeMsg)
 		if err != nil {
 			return latencies, err
 		}
 
 		start := time.Now()
 
-		// Send size message
 		if _, err = conn.Write(size); err != nil {
 			return latencies, fmt.Errorf("write size: %w", err)
 		}
 
-		// Read "ok" ack with timeout
 		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 		buf := make([]byte, 32*1024)
 		if _, err = conn.Read(buf); err != nil {
@@ -1837,13 +1838,11 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 			return latencies, fmt.Errorf("read ack: %w", err)
 		}
 
-		// Send ping data
-		if _, err = conn.Write(ping); err != nil {
+		if _, err = conn.Write(pingData); err != nil {
 			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 			return latencies, fmt.Errorf("write ping: %w", err)
 		}
 
-		// Read echo response with timeout
 		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 		if _, err = conn.Read(buf); err != nil {
 			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
@@ -1851,8 +1850,7 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 		}
 		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 
-		rtt := time.Since(start)
-		latencies = append(latencies, rtt)
+		latencies = append(latencies, time.Since(start))
 	}
 	return latencies, nil
 }
@@ -2282,61 +2280,7 @@ func (v *Visor) DmsgPing(conf PingConfig) ([]time.Duration, error) {
 		return nil, fmt.Errorf("no dmsg ping connection for %s, call DialDmsgPing first", conf.PK)
 	}
 
-	latencies := []time.Duration{}
-	data := make([]byte, conf.PcktSize*1024)
-
-	for i := 1; i <= conf.Tries; i++ {
-		conn := pingEntry.conn
-		msg := PingMsg{
-			Timestamp: time.Now(),
-			PingPk:    conf.PK,
-			Data:      data,
-		}
-		pingData, err := json.Marshal(msg)
-		if err != nil {
-			return latencies, err
-		}
-		pingSizeMsg := PingSizeMsg{
-			Size: len(pingData),
-		}
-		size, err := json.Marshal(pingSizeMsg)
-		if err != nil {
-			return latencies, err
-		}
-
-		start := time.Now()
-
-		// Send size message
-		if _, err = conn.Write(size); err != nil {
-			return latencies, fmt.Errorf("write size: %w", err)
-		}
-
-		// Read "ok" ack with timeout
-		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
-		buf := make([]byte, 32*1024)
-		if _, err = conn.Read(buf); err != nil {
-			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-			return latencies, fmt.Errorf("read ack: %w", err)
-		}
-
-		// Send ping data
-		if _, err = conn.Write(pingData); err != nil {
-			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-			return latencies, fmt.Errorf("write ping: %w", err)
-		}
-
-		// Read echo response with timeout
-		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
-		if _, err = conn.Read(buf); err != nil {
-			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-			return latencies, fmt.Errorf("read echo: %w", err)
-		}
-		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-
-		rtt := time.Since(start)
-		latencies = append(latencies, rtt)
-	}
-	return latencies, nil
+	return doPingRoundTrips(pingEntry.conn, conf)
 }
 
 // DmsgPingViaServer implements API. Performs a ping through a specific DMSG server.
