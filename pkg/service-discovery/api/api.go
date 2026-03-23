@@ -17,7 +17,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire/internal/sdmetrics"
+	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"

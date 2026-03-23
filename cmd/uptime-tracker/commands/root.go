@@ -21,8 +21,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/internal/pg"
-	"github.com/skycoin/skywire/internal/utmetrics"
+	"github.com/skycoin/skywire/pkg/pg"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -35,6 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/tcpproxy"
 	"github.com/skycoin/skywire/pkg/uptime-tracker/api"
+	utmetrics "github.com/skycoin/skywire/pkg/uptime-tracker/metrics"
 	"github.com/skycoin/skywire/pkg/uptime-tracker/store"
 )
 

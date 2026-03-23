@@ -113,6 +113,8 @@ type API interface {
 	//transport settings
 	SetExistingTPOnly(enabled bool) error
 	SetForceLocalRoutes(enabled bool) error
+	SetMuxRoutes(n int) error
+	SetMuxMode(mode string) error
 
 	//transports
 	TransportTypes() ([]string, error)
@@ -139,6 +141,9 @@ type API interface {
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
+	ActiveRoutes() ([]AppRouteStatus, error)
+	AddMuxRoute(appName string, tpID uuid.UUID) error
+	RemoveMuxRoute(appName string, tpID uuid.UUID) error
 	ServiceHealth() ([]ServiceHealthEntry, error)
 	FetchServiceData(service, path string) ([]byte, error)
 	SetMinHops(uint16) error
@@ -579,7 +584,7 @@ func (v *Visor) DeleteRewardAddress() error {
 	path := v.conf.LocalPath + "/" + visorconfig.RewardFile
 	err := os.Remove(path)
 	if err != nil {
-		return fmt.Errorf("Error deleting file. err=%v", err)
+		return fmt.Errorf("error deleting file. err=%v", err)
 	}
 	return nil
 }
@@ -775,11 +780,11 @@ func (v *Visor) FetchUptimeTrackerData(pk string) ([]byte, error) {
 	if pk != "" {
 		err := pubkey.Set(pk)
 		if err != nil {
-			return body, fmt.Errorf("Invalid or missing public key")
+			return body, fmt.Errorf("invalid or missing public key")
 		}
 	}
 	if v.uptimeTracker == nil {
-		return body, fmt.Errorf("Uptime tracker module not available")
+		return body, fmt.Errorf("uptime tracker module not available")
 	}
 	return v.uptimeTracker.FetchUptimes(context.TODO(), pk)
 }
@@ -801,7 +806,7 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 	for index, app := range v.conf.Launcher.Apps {
 		if app.Name == visorconfig.SkysocksClientName {
 			if v.GetSkysocksClientAddress() == "" && serverKey == "" {
-				return errors.New("Skysocks server pub key is missing")
+				return errors.New("skysocks server pub key is missing")
 			}
 
 			if serverKey != "" {
@@ -1415,6 +1420,49 @@ func (v *Visor) SetForceLocalRoutes(enabled bool) error {
 	return nil
 }
 
+// SetMuxRoutes implements API.
+// Sets the number of parallel mux routes for new connections at runtime.
+// Also persists to the visor config file.
+func (v *Visor) SetMuxRoutes(n int) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+	v.router.SetMuxRoutes(n)
+	// Also update the networker so future app dials use the new value
+	if skyN, err := appnet.ResolveNetworker(appnet.TypeSkynet); err == nil {
+		if sn, ok := skyN.(*appnet.SkywireNetworker); ok {
+			sn.MuxRoutes = n
+		}
+	}
+	// Persist to config
+	v.conf.Routing.MuxRoutes = n
+	if err := v.conf.Flush(); err != nil {
+		v.log.WithError(err).Warn("Failed to persist mux_routes to config")
+	}
+	v.log.Infof("SetMuxRoutes: %v", n)
+	return nil
+}
+
+// SetMuxMode implements API.
+// Sets the weight distribution mode for mux transport selection.
+func (v *Visor) SetMuxMode(mode string) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+	var m router.WeightMode
+	switch mode {
+	case "auto":
+		m = router.WeightModeAuto
+	case "equal":
+		m = router.WeightModeEqual
+	default:
+		return fmt.Errorf("unknown mux mode %q (use \"auto\" or \"equal\")", mode)
+	}
+	v.router.SetMuxMode(m)
+	v.log.Infof("SetMuxMode: %v", mode)
+	return nil
+}
+
 // TransportTypes implements API.
 func (v *Visor) TransportTypes() ([]string, error) {
 	var types []string
@@ -1752,36 +1800,37 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 		return nil, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
 	}
 
+	return doPingRoundTrips(pingEntry.conn, conf)
+}
+
+// doPingRoundTrips performs the ping protocol: send size, read ack, send data, read echo.
+// Shared by Ping() and DmsgPing() which differ only in connection lookup.
+func doPingRoundTrips(conn net.Conn, conf PingConfig) ([]time.Duration, error) {
 	latencies := []time.Duration{}
 	data := make([]byte, conf.PcktSize*1024)
 
 	for i := 1; i <= conf.Tries; i++ {
-		conn := pingEntry.conn
 		msg := PingMsg{
 			Timestamp: time.Now(),
 			PingPk:    conf.PK,
 			Data:      data,
 		}
-		ping, err := json.Marshal(msg)
+		pingData, err := json.Marshal(msg)
 		if err != nil {
 			return latencies, err
 		}
-		pingSizeMsg := PingSizeMsg{
-			Size: len(ping),
-		}
-		size, err := json.Marshal(pingSizeMsg)
+		sizeMsg := PingSizeMsg{Size: len(pingData)}
+		size, err := json.Marshal(sizeMsg)
 		if err != nil {
 			return latencies, err
 		}
 
 		start := time.Now()
 
-		// Send size message
 		if _, err = conn.Write(size); err != nil {
 			return latencies, fmt.Errorf("write size: %w", err)
 		}
 
-		// Read "ok" ack with timeout
 		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 		buf := make([]byte, 32*1024)
 		if _, err = conn.Read(buf); err != nil {
@@ -1789,13 +1838,11 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 			return latencies, fmt.Errorf("read ack: %w", err)
 		}
 
-		// Send ping data
-		if _, err = conn.Write(ping); err != nil {
+		if _, err = conn.Write(pingData); err != nil {
 			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 			return latencies, fmt.Errorf("write ping: %w", err)
 		}
 
-		// Read echo response with timeout
 		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 		if _, err = conn.Read(buf); err != nil {
 			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
@@ -1803,8 +1850,7 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 		}
 		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 
-		rtt := time.Since(start)
-		latencies = append(latencies, rtt)
+		latencies = append(latencies, time.Since(start))
 	}
 	return latencies, nil
 }
@@ -2234,61 +2280,7 @@ func (v *Visor) DmsgPing(conf PingConfig) ([]time.Duration, error) {
 		return nil, fmt.Errorf("no dmsg ping connection for %s, call DialDmsgPing first", conf.PK)
 	}
 
-	latencies := []time.Duration{}
-	data := make([]byte, conf.PcktSize*1024)
-
-	for i := 1; i <= conf.Tries; i++ {
-		conn := pingEntry.conn
-		msg := PingMsg{
-			Timestamp: time.Now(),
-			PingPk:    conf.PK,
-			Data:      data,
-		}
-		pingData, err := json.Marshal(msg)
-		if err != nil {
-			return latencies, err
-		}
-		pingSizeMsg := PingSizeMsg{
-			Size: len(pingData),
-		}
-		size, err := json.Marshal(pingSizeMsg)
-		if err != nil {
-			return latencies, err
-		}
-
-		start := time.Now()
-
-		// Send size message
-		if _, err = conn.Write(size); err != nil {
-			return latencies, fmt.Errorf("write size: %w", err)
-		}
-
-		// Read "ok" ack with timeout
-		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
-		buf := make([]byte, 32*1024)
-		if _, err = conn.Read(buf); err != nil {
-			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-			return latencies, fmt.Errorf("read ack: %w", err)
-		}
-
-		// Send ping data
-		if _, err = conn.Write(pingData); err != nil {
-			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-			return latencies, fmt.Errorf("write ping: %w", err)
-		}
-
-		// Read echo response with timeout
-		conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
-		if _, err = conn.Read(buf); err != nil {
-			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-			return latencies, fmt.Errorf("read echo: %w", err)
-		}
-		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
-
-		rtt := time.Since(start)
-		latencies = append(latencies, rtt)
-	}
-	return latencies, nil
+	return doPingRoundTrips(pingEntry.conn, conf)
 }
 
 // DmsgPingViaServer implements API. Performs a ping through a specific DMSG server.
@@ -2901,6 +2893,100 @@ func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
 	return results, nil
 }
 
+// AppRouteStatus combines route status with the app that owns it.
+type AppRouteStatus struct {
+	AppName string             `json:"app_name"`
+	Route   router.RouteStatus `json:"route"`
+}
+
+// ActiveRoutes implements API.
+// Returns all active routes with their app associations and live stats.
+func (v *Visor) ActiveRoutes() ([]AppRouteStatus, error) {
+	if v.router == nil {
+		return nil, nil
+	}
+
+	statuses := v.router.ActiveRouteStatuses()
+
+	// Build port → app name map
+	portToApp := make(map[routing.Port]string)
+	if v.procM != nil {
+		v.procM.Range(func(name string, _ *appserver.Proc) bool {
+			if port, err := v.procM.GetAppPort(name); err == nil && port != 0 {
+				portToApp[port] = name
+			}
+			return true
+		})
+	}
+
+	result := make([]AppRouteStatus, 0, len(statuses))
+	for _, s := range statuses {
+		appName := portToApp[s.LocalPort]
+		if appName == "" {
+			appName = fmt.Sprintf("port:%d", s.LocalPort)
+		}
+		result = append(result, AppRouteStatus{
+			AppName: appName,
+			Route:   s,
+		})
+	}
+
+	return result, nil
+}
+
+// findRouteDescForApp finds the route descriptor for a running app by matching its port.
+func (v *Visor) findRouteDescForApp(appName string) (routing.RouteDescriptor, error) {
+	var desc routing.RouteDescriptor
+
+	if v.procM == nil {
+		return desc, errors.New("process manager not available")
+	}
+	port, err := v.procM.GetAppPort(appName)
+	if err != nil {
+		return desc, fmt.Errorf("app %q not found or not running: %w", appName, err)
+	}
+
+	// Find the route group whose local port matches the app's port
+	statuses := v.router.ActiveRouteStatuses()
+	for _, s := range statuses {
+		if s.LocalPort == port {
+			return routing.NewRouteDescriptor(s.RemotePK, s.LocalPK, s.RemotePort, s.LocalPort), nil
+		}
+	}
+
+	return desc, fmt.Errorf("no active route found for app %q on port %d", appName, port)
+}
+
+// AddMuxRoute implements API.
+// Adds a new mux route to the specified app's active route group.
+func (v *Visor) AddMuxRoute(appName string, tpID uuid.UUID) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+
+	desc, err := v.findRouteDescForApp(appName)
+	if err != nil {
+		return err
+	}
+
+	return v.router.AddMuxRouteByTransport(desc, tpID)
+}
+
+// RemoveMuxRoute implements API.
+// Removes a mux route using the specified transport from the app's route group.
+func (v *Visor) RemoveMuxRoute(appName string, tpID uuid.UUID) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+
+	desc, err := v.findRouteDescForApp(appName)
+	if err != nil {
+		return err
+	}
+
+	return v.router.RemoveMuxRouteByTransport(desc, tpID)
+}
+
 // RoutingRule implements API.
 func (v *Visor) RoutingRule(key routing.RouteID) (routing.Rule, error) {
 	return v.router.Rule(key)
@@ -3259,10 +3345,10 @@ func (v *Visor) RegisterHTTPPort(localPort int) error {
 	defer v.allowedMX.Unlock()
 	ok := isPortAvailable(v.log, localPort)
 	if ok {
-		return fmt.Errorf("No connection on local port :%v", localPort)
+		return fmt.Errorf("no connection on local port :%v", localPort)
 	}
 	if v.allowedPorts[localPort] {
-		return fmt.Errorf("Port :%v already registered", localPort)
+		return fmt.Errorf("port :%v already registered", localPort)
 	}
 	v.allowedPorts[localPort] = true
 	return nil
@@ -3273,7 +3359,7 @@ func (v *Visor) DeregisterHTTPPort(localPort int) error {
 	v.allowedMX.Lock()
 	defer v.allowedMX.Unlock()
 	if !v.allowedPorts[localPort] {
-		return fmt.Errorf("Port :%v not registered", localPort)
+		return fmt.Errorf("port :%v not registered", localPort)
 	}
 	delete(v.allowedPorts, localPort)
 	return nil

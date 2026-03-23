@@ -3,21 +3,12 @@ package visorconfig
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
-	coinCipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsgc"
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -131,172 +122,6 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	}
 	conf.GeoIP = GeoIP
 	return conf
-}
-
-// MakeDefaultConfig returns the default visor config from a given secret key (if specified).
-// The config's 'sk' field will be nil if not specified.
-// Generated config will be saved to 'confPath'.
-// This function always returns the latest config version.
-// TODO: fix gocyclo error.
-//
-//gocyclo:ignore
-func MakeDefaultConfig(log *logging.MasterLogger, sk *cipher.SecKey, usrEnv bool, pkgEnv bool, testEnv bool, dmsgHTTP bool, hypervisor bool, confPath, hypervisorPKs string, services *Services) (*V1, error) {
-	if usrEnv && pkgEnv {
-		log.Fatal("usrEnv and pkgEnv are mutually exclusive")
-	}
-	cc, err := NewCommon(log, confPath, sk)
-	if err != nil {
-		return nil, err
-	}
-	dnsServer := ""
-	var dmsgHTTPServersList *DmsgHTTPServers
-	var envServices deployment.EnvServices
-	var svcs deployment.Services
-	if err := json.Unmarshal(deployment.ServicesJSON, &envServices); err != nil {
-		return nil, nil
-	}
-	if !testEnv {
-		if err := json.Unmarshal(envServices.Prod, &svcs); err != nil {
-			dnsServer = svcs.DNSServer
-		}
-	} else {
-		if err := json.Unmarshal(envServices.Test, &svcs); err != nil {
-			dnsServer = svcs.DNSServer
-		}
-	}
-	if services != nil {
-		if services.DNSServer != "" {
-			dnsServer = services.DNSServer
-		}
-	}
-
-	if dmsgHTTP {
-		dmsgHTTPPath := DMSGHTTPName
-		if pkgEnv {
-			dmsgHTTPPath = SkywirePath + "/" + DMSGHTTPName
-		}
-		serversListJSON, err := os.ReadFile(filepath.Clean(dmsgHTTPPath))
-		if err != nil {
-			log.WithError(err).Fatal("Failed to read dmsghttp-config.json file.")
-		}
-		err = json.Unmarshal(serversListJSON, &dmsgHTTPServersList)
-		if err != nil {
-			log.WithError(err).Fatal("Error during parsing servers list")
-		}
-	}
-	// Actual config generation.
-	conf := MakeBaseConfig(cc, testEnv, dmsgHTTP, services, dmsgHTTPServersList)
-
-	conf.Launcher.Apps = makeDefaultLauncherAppsConfig(dnsServer)
-
-	conf.Hypervisors = make([]cipher.PubKey, 0)
-
-	// Manipulate Hypervisor PKs
-	if hypervisorPKs != "" {
-		keys := strings.Split(hypervisorPKs, ",")
-		for _, key := range keys {
-			if key != "" {
-				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
-				if err != nil {
-					log.WithError(err).Fatalf("Failed to parse hypervisor public key: %s.", key)
-				}
-				conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
-
-				// Compare key value and visor PK, if same, then this visor should be hypervisor
-				if key == conf.PK.Hex() {
-					hypervisor = true
-					conf.Hypervisors = []cipher.PubKey{}
-					break
-				}
-			}
-		}
-	}
-	if hypervisor {
-		config := GenerateWorkDirConfig(false)
-		conf.Hypervisor = &config
-	}
-	if pkgEnv {
-		pkgConfig := PackageConfig()
-		conf.LocalPath = pkgConfig.LocalPath
-		conf.DmsgHTTPServerPath = pkgConfig.LocalPath + "/" + Custom
-		conf.Launcher.BinPath = pkgConfig.LauncherBinPath
-		conf.Transport.LogStore.Location = pkgConfig.LocalPath + "/" + TpLogStore
-		if conf.Hypervisor != nil {
-			conf.Hypervisor.EnableAuth = pkgConfig.Hypervisor.EnableAuth
-			conf.Hypervisor.DBPath = pkgConfig.Hypervisor.DbPath
-		}
-	}
-	if usrEnv {
-		usrConfig := UserConfig()
-		conf.LocalPath = usrConfig.LocalPath
-		conf.DmsgHTTPServerPath = usrConfig.LocalPath + "/" + Custom
-		conf.Launcher.BinPath = usrConfig.LauncherBinPath
-		conf.Transport.LogStore.Location = usrConfig.LocalPath + "/" + TpLogStore
-		if conf.Hypervisor != nil {
-			conf.Hypervisor.EnableAuth = usrConfig.Hypervisor.EnableAuth
-			conf.Hypervisor.DBPath = usrConfig.Hypervisor.DbPath
-		}
-	}
-	return conf, nil
-}
-
-// SetDefaultTestingValues mutates configuration to use testing values
-// makeDefaultLauncherAppsConfig creates default launcher config for apps,
-// for package based installation in other platform (Darwin, Windows) it only includes
-// the shipped apps for that platforms
-func makeDefaultLauncherAppsConfig(dnsServer string) []appserver.AppConfig {
-	defaultConfig := []appserver.AppConfig{
-		{
-			Name:      VPNClientName,
-			Binary:    "skywire",
-			AutoStart: false,
-			Port:      routing.Port(skyenv.VPNClientPort),
-			Args:      []string{"app", "vpn-client", "--dns", dnsServer},
-		},
-		{
-			Name:      SkychatName,
-			Binary:    "skywire",
-			AutoStart: true,
-			Port:      routing.Port(skyenv.SkychatPort),
-			Args:      []string{"app", "skychat", "--addr", SkychatAddr},
-		},
-		{
-			Name:      SkysocksName,
-			Binary:    "skywire",
-			AutoStart: true,
-			Port:      routing.Port(skyenv.SkysocksPort),
-			Args:      []string{"app", "skysocks"},
-		},
-		{
-			Name:      SkysocksClientName,
-			Binary:    "skywire",
-			AutoStart: false,
-			Port:      routing.Port(skyenv.SkysocksClientPort),
-			Args:      []string{"app", "skysocks-client", "--addr", SkysocksClientAddr},
-		},
-		{
-			Name:      VPNServerName,
-			Binary:    "skywire",
-			AutoStart: false,
-			Port:      routing.Port(skyenv.VPNServerPort),
-			Args:      []string{"app", "vpn-server"},
-		},
-		{
-			Name:      SkynetAppName,
-			Binary:    "skywire",
-			AutoStart: false,
-			Port:      routing.Port(skyenv.SkynetAppPort),
-			Args:      []string{"app", "skynet"},
-		},
-		{
-			Name:      SkynetClientName,
-			Binary:    "skywire",
-			AutoStart: false,
-			Port:      routing.Port(skyenv.SkynetClientPort),
-			Args:      []string{"app", "skynet-client"},
-		},
-	}
-	return defaultConfig
 }
 
 // DmsgHTTPServers struct use to unmarshal dmsghttp file

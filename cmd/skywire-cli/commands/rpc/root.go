@@ -13,7 +13,7 @@ import (
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/spf13/pflag"
 
-	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
