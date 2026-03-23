@@ -1,4 +1,4 @@
-// Package api internal/dmsg-discovery/api/api.go
+// Package api pkg/discovery/api/api.go
 package api
 
 import (
@@ -19,9 +19,9 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/networkmonitor"
 
-	"github.com/skycoin/dmsg/internal/discmetrics"
-	"github.com/skycoin/dmsg/internal/dmsg-discovery/store"
 	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/disc/metrics"
+	"github.com/skycoin/dmsg/pkg/discovery/store"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 )
 
@@ -37,7 +37,7 @@ const maxGetAvailableServersResult = 512
 // API represents the api of the dmsg-discovery service`
 type API struct {
 	http.Handler
-	metrics                     discmetrics.Metrics
+	metrics                     metrics.Metrics
 	db                          store.Storer
 	reqsInFlightCountMiddleware *metricsutil.RequestsInFlightCountMiddleware
 	testMode                    bool
@@ -50,7 +50,7 @@ type API struct {
 }
 
 // New returns a new API object, which can be started as a server
-func New(log logrus.FieldLogger, db store.Storer, m discmetrics.Metrics, testMode, enableLoadTesting, enableMetrics bool, dmsgAddr, authPassphrase string) *API {
+func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, enableLoadTesting, enableMetrics bool, dmsgAddr, authPassphrase string) *API {
 	if log == nil {
 		log = logging.MustGetLogger("dmsg_disc")
 	}

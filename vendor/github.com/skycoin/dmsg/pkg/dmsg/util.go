@@ -25,12 +25,12 @@ func isClosed(done chan struct{}) bool {
 
 /* Gob IO */
 
-func encodeGob(v interface{}) []byte {
+func encodeGob(v interface{}) ([]byte, error) {
 	var b bytes.Buffer
 	if err := gob.NewEncoder(&b).Encode(v); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return b.Bytes()
+	return b.Bytes(), nil
 }
 
 func decodeGob(v interface{}, b []byte) error {

@@ -1,5 +1,5 @@
-// Package discmetrics internal/discmetrics/metrics.go
-package discmetrics
+// Package metrics pkg/disc/metrics/metrics.go
+package metrics
 
 // Metrics collects metrics for metrics tracking system.
 type Metrics interface {

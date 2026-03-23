@@ -1015,8 +1015,8 @@ github.com/shopspring/decimal
 ## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20260320173710-e5ee528c2dcc
-## explicit; go 1.25.6
+# github.com/skycoin/dmsg v1.3.29-0.20260323132513-964219fd8e0d
+## explicit; go 1.26.1
 github.com/skycoin/dmsg/cmd/conf/commands
 github.com/skycoin/dmsg/cmd/dial/commands
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
@@ -1032,17 +1032,14 @@ github.com/skycoin/dmsg/cmd/dmsgpty-cli/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-host/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-ui/commands
 github.com/skycoin/dmsg/cmd/dmsgweb/commands
-github.com/skycoin/dmsg/internal/cli
-github.com/skycoin/dmsg/internal/discmetrics
-github.com/skycoin/dmsg/internal/dmsg-discovery/api
-github.com/skycoin/dmsg/internal/dmsg-discovery/store
-github.com/skycoin/dmsg/internal/dmsg-server/api
-github.com/skycoin/dmsg/internal/flags
-github.com/skycoin/dmsg/internal/fsutil
-github.com/skycoin/dmsg/internal/servermetrics
 github.com/skycoin/dmsg/pkg/direct
 github.com/skycoin/dmsg/pkg/disc
+github.com/skycoin/dmsg/pkg/disc/metrics
+github.com/skycoin/dmsg/pkg/discovery/api
+github.com/skycoin/dmsg/pkg/discovery/store
 github.com/skycoin/dmsg/pkg/dmsg
+github.com/skycoin/dmsg/pkg/dmsg/metrics
+github.com/skycoin/dmsg/pkg/dmsgclient
 github.com/skycoin/dmsg/pkg/dmsgctrl
 github.com/skycoin/dmsg/pkg/dmsgcurl
 github.com/skycoin/dmsg/pkg/dmsghttp

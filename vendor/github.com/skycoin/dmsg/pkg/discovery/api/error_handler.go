@@ -1,4 +1,4 @@
-// Package api internal/dmsg-discovery/api/error_handler.go
+// Package api pkg/discovery/api/error_handler.go
 package api
 
 import (

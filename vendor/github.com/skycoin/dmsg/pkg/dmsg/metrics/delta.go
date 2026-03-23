@@ -1,5 +1,5 @@
-// Package servermetrics internal/servermetrics/delta.go
-package servermetrics
+// Package metrics pkg/dmsg/metrics/delta.go
+package metrics
 
 // DeltaType represents a change in metrics gauge.
 type DeltaType int

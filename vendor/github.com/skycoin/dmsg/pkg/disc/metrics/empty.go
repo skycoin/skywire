@@ -1,5 +1,5 @@
-// Package discmetrics internal/discmetrics/empty.go
-package discmetrics
+// Package metrics pkg/disc/metrics/empty.go
+package metrics
 
 // NewEmpty constructs new empty metrics.
 func NewEmpty() Empty {

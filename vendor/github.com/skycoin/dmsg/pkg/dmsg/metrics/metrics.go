@@ -1,5 +1,5 @@
-// Package servermetrics internal/servermetrics/metrics.go
-package servermetrics
+// Package metrics pkg/dmsg/metrics/metrics.go
+package metrics
 
 // Metrics collects metrics for metrics tracking system.
 type Metrics interface {

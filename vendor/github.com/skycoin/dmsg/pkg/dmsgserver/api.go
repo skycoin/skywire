@@ -1,5 +1,5 @@
-// Package api internal/dmsg-server/api/api.go
-package api
+// Package dmsgserver pkg/dmsgserver/api.go
+package dmsgserver
 
 import (
 	"context"
@@ -19,13 +19,13 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 
-	"github.com/skycoin/dmsg/internal/servermetrics"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsg/metrics"
 )
 
-// API main object of the server
-type API struct {
-	metrics         servermetrics.Metrics
+// ServerAPI main object of the server
+type ServerAPI struct {
+	metrics         metrics.Metrics
 	startedAt       time.Time
 	dmsgServer      *dmsg.Server
 	sMu             sync.Mutex
@@ -36,9 +36,9 @@ type API struct {
 	router          *chi.Mux
 }
 
-// New returns a new API object, which can be started as a server
-func New(r *chi.Mux, log *logging.Logger, m servermetrics.Metrics) *API {
-	api := &API{
+// NewServerAPI returns a new ServerAPI object, which can be started as a server
+func NewServerAPI(r *chi.Mux, log *logging.Logger, m metrics.Metrics) *ServerAPI {
+	api := &ServerAPI{
 		metrics:         m,
 		startedAt:       time.Now(),
 		minuteDecValues: make(map[*dmsg.SessionCommon]uint64),
@@ -53,7 +53,7 @@ func New(r *chi.Mux, log *logging.Logger, m servermetrics.Metrics) *API {
 }
 
 // RunBackgroundTasks is function which runs periodic tasks of dmsg-server.
-func (a *API) RunBackgroundTasks(ctx context.Context) {
+func (a *ServerAPI) RunBackgroundTasks(ctx context.Context) {
 	ticker := time.NewTicker(time.Second * 10)
 	//tickerEverySecond := time.NewTicker(time.Second * 1)
 	tickerEveryMinute := time.NewTicker(time.Second * 60)
@@ -75,13 +75,15 @@ func (a *API) RunBackgroundTasks(ctx context.Context) {
 	}
 }
 
-// SetDmsgServer saves srv in the API
-func (a *API) SetDmsgServer(srv *dmsg.Server) {
+// SetDmsgServer saves srv in the ServerAPI
+func (a *ServerAPI) SetDmsgServer(srv *dmsg.Server) {
+	a.sMu.Lock()
 	a.dmsgServer = srv
+	a.sMu.Unlock()
 }
 
 // ListenAndServe runs dmsg Serve function alongside health endpoint
-func (a *API) ListenAndServe(lAddr, pAddr, httpAddr string) error {
+func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr string) error {
 	errCh := make(chan error, 2)
 
 	dmsgLn, err := net.Listen("tcp", lAddr)
@@ -115,12 +117,12 @@ func (a *API) ListenAndServe(lAddr, pAddr, httpAddr string) error {
 }
 
 // Close closes connection to both http server and dmsg server
-func (a *API) Close() error {
+func (a *ServerAPI) Close() error {
 	return a.dmsgServer.Close()
 }
 
 // Health serves health page
-func (a *API) health(w http.ResponseWriter, r *http.Request) {
+func (a *ServerAPI) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	a.writeJSON(w, r, http.StatusOK, httputil.HealthCheckResponse{
 		BuildInfo: info,
@@ -129,7 +131,7 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeJSON writes a json object on a http.ResponseWriter with the given code.
-func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) {
+func (a *ServerAPI) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) {
 	jsonObject, err := json.Marshal(object)
 	if err != nil {
 		a.log(r).Warnf("Failed to encode json response: %s", err)
@@ -144,19 +146,19 @@ func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object
 	}
 }
 
-func (a *API) log(r *http.Request) logrus.FieldLogger {
+func (a *ServerAPI) log(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
 }
 
 // UpdateInternalState is background function which updates numbers of clients.
-func (a *API) updateInternalState() {
+func (a *ServerAPI) updateInternalState() {
 	if a.dmsgServer != nil {
 		a.metrics.SetClientsCount(int64(len(a.dmsgServer.GetSessions())))
 	}
 }
 
 // UpdateAverageNumberOfPacketsPerMinute is function which needs to called every minute.
-func (a *API) updateAverageNumberOfPacketsPerMinute() {
+func (a *ServerAPI) updateAverageNumberOfPacketsPerMinute() {
 	if a.dmsgServer != nil {
 		a.sMu.Lock()
 		defer a.sMu.Unlock()
@@ -176,7 +178,7 @@ func (a *API) updateAverageNumberOfPacketsPerMinute() {
 
 // TODO (darkrengarius): reimplement efficiently
 /*// UpdateAverageNumberOfPacketsPerSecond is function which needs to called every second.
-func (a *API) updateAverageNumberOfPacketsPerSecond() {
+func (a *ServerAPI) updateAverageNumberOfPacketsPerSecond() {
 	if a.dmsgServer != nil {
 		newDecValues, newEncValues, average := calculateThroughput(
 			a.dmsgServer.GetSessions(),

@@ -1,5 +1,5 @@
-// Package servermetrics internal/servermetrics/empty.go
-package servermetrics
+// Package metrics pkg/dmsg/metrics/empty.go
+package metrics
 
 // NewEmpty constructs new empty metrics.
 func NewEmpty() Empty {

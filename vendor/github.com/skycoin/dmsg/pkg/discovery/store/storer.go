@@ -1,4 +1,4 @@
-// Package store internal/dmsg-discovery/store/storer.go
+// Package store pkg/discovery/store/storer.go
 package store
 
 import (
@@ -19,9 +19,8 @@ var (
 	ErrTooFewArgs = errors.New("too few args")
 )
 
-// Storer is an interface which allows to implement different kinds of stores
-// and choose which one to use in the server
-type Storer interface {
+// EntryStore provides basic CRUD for discovery entries.
+type EntryStore interface {
 	// Entry obtains a single dmsg instance entry.
 	Entry(ctx context.Context, staticPubKey cipher.PubKey) (*disc.Entry, error)
 
@@ -31,18 +30,21 @@ type Storer interface {
 
 	// DelEntry delete's an entry.
 	DelEntry(ctx context.Context, staticPubKey cipher.PubKey) error
+}
 
+// ServerLister provides server enumeration.
+type ServerLister interface {
 	// AvailableServers discovers available dmsg servers.
 	AvailableServers(ctx context.Context, maxCount int) ([]*disc.Entry, error)
 
 	// AllServers discovers available dmsg servers.
 	AllServers(ctx context.Context) ([]*disc.Entry, error)
+}
 
+// EntryEnumerator provides bulk entry access.
+type EntryEnumerator interface {
 	// CountEntries returns numbers of servers and clients.
 	CountEntries(ctx context.Context) (int64, int64, error)
-
-	// RemoveOldServerEntries check and remove old server entries that left on redis because of unexpected server shutdown
-	RemoveOldServerEntries(ctx context.Context) error
 
 	// AllEntries returns all clients PKs.
 	AllEntries(ctx context.Context) ([]string, error)
@@ -52,6 +54,17 @@ type Storer interface {
 
 	// AllClientEntries returns all full client entries.
 	AllClientEntries(ctx context.Context) ([]*disc.Entry, error)
+}
+
+// Storer is an interface which allows to implement different kinds of stores
+// and choose which one to use in the server
+type Storer interface {
+	EntryStore
+	ServerLister
+	EntryEnumerator
+
+	// RemoveOldServerEntries check and remove old server entries that left on redis because of unexpected server shutdown
+	RemoveOldServerEntries(ctx context.Context) error
 }
 
 // Config configures the Store object.

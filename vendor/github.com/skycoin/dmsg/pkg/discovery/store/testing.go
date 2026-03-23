@@ -1,4 +1,4 @@
-// Package store internal/dmsg-discovery/store/testing.go
+// Package store pkg/discovery/store/testing.go
 package store
 
 import (

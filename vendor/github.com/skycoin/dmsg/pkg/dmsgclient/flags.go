@@ -1,5 +1,5 @@
-// Package flags internal/flags/flags.go
-package flags
+// Package dmsgclient pkg/dmsgclient/flags.go
+package dmsgclient
 
 import (
 	"os"

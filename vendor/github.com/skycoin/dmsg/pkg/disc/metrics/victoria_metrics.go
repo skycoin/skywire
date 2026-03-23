@@ -1,5 +1,5 @@
-// Package discmetrics internal/discmetrics/victoria_metrics.go
-package discmetrics
+// Package metrics pkg/disc/metrics/victoria_metrics.go
+package metrics
 
 import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
