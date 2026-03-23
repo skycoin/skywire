@@ -1061,7 +1061,7 @@ github.com/skycoin/hardware-wallet/firmware
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.5-0.20260322212637-59485c4ebeb2
+# github.com/skycoin/skycoin v0.28.5-alpha1.0.20260323013819-e0a3cfeb5ef5
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/hardware-wallet/commands
@@ -1082,7 +1082,7 @@ github.com/skycoin/skycoin/src/cipher/bip39
 github.com/skycoin/skycoin/src/cipher/bip39/wordlists
 github.com/skycoin/skycoin/src/cipher/bip44
 github.com/skycoin/skycoin/src/cipher/chacha20poly1305
-github.com/skycoin/skycoin/src/cipher/chacha20poly1305/internal/chacha20
+github.com/skycoin/skycoin/src/cipher/chacha20poly1305/chacha20
 github.com/skycoin/skycoin/src/cipher/crypto
 github.com/skycoin/skycoin/src/cipher/encoder
 github.com/skycoin/skycoin/src/cipher/encrypt
