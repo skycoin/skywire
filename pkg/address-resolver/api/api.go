@@ -530,11 +530,14 @@ func (a *API) ListenUDP(listener net.Listener) {
 func (a *API) sudphConnHandshake(conn net.Conn) {
 	remoteAddr := conn.RemoteAddr().String()
 
-	//	hs := handshake.ResponderHandshake(func(f2 handshake.Frame2) error { return nil })
 	hs := handshake.ResponderHandshake(func(_ handshake.Frame2) error { return nil })
 
 	wrapped, err := network.DoHandshake(conn, hs, types.SUDPH, a.log)
 	if err != nil {
+		// Close the connection on handshake failure to prevent KCP session goroutine leak.
+		if closeErr := conn.Close(); closeErr != nil {
+			a.log.WithError(closeErr).Debug("Failed to close connection after handshake failure")
+		}
 		return
 	}
 
@@ -566,7 +569,10 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 	oldConn, ok := a.udpConn(pk)
 	if ok {
 		a.log.Infof("New connection from %v, closing old one", pk)
-
+		// Remove the old connection from the map BEFORE closing it.
+		// This prevents the old goroutine's deferred cleanupUDPConn from
+		// deleting the NEW connection that we're about to store.
+		a.deleteUDPConn(pk)
 		if err := oldConn.Close(); err != nil {
 			a.log.WithError(err).Warnf("Failed to close old connection")
 		}
@@ -654,9 +660,16 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 	}(pk, remoteAddr, conn)
 }
 
-// cleanupUDPConn removes the connection from the map and closes it.
+// cleanupUDPConn removes the connection from the map (if it's still the same one)
+// and closes it. The identity check prevents a replaced connection's goroutine
+// from accidentally removing the new connection from the map.
 func (a *API) cleanupUDPConn(pk cipher.PubKey, conn net.Conn) {
-	a.deleteUDPConn(pk)
+	a.udpConnsMu.Lock()
+	if current, ok := a.udpConns[pk]; ok && current == conn {
+		delete(a.udpConns, pk)
+	}
+	a.udpConnsMu.Unlock()
+
 	if err := conn.Close(); err != nil {
 		a.log.WithError(err).Debugf("Failed to close SUDPH connection for %v", pk)
 	}
