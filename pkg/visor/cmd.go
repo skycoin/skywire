@@ -5,18 +5,15 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -25,9 +22,7 @@ var (
 	userconfigexists bool
 	//	isAutoPeer           bool
 	//	autoPeerIP           string
-	stopVisorWg          sync.WaitGroup //nolint:unused
 	launchBrowser        bool
-	logger               = logging.MustGetLogger("skywire-visor") //nolint:unused
 	logLvl               string
 	pprofMode            string
 	pprofAddr            string
@@ -45,7 +40,6 @@ var (
 	useCsrf              bool
 	pkg                  bool
 	usr                  bool
-	localIPs             []net.IP //  nolint:unused
 	runAsSystray         bool
 	// root indicates process is run with root permissions
 	root bool // nolint:unused

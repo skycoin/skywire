@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -24,10 +23,10 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
-	"github.com/skycoin/dmsg/internal/cli"
-	"github.com/skycoin/dmsg/internal/flags"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsgclient"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/skycoin/dmsg/pkg/ioutil"
 )
 
 type customResolver struct{}
@@ -64,7 +63,7 @@ func init() {
 	}
 	pk, _ = sk.PubKey() //nolint
 
-	flags.InitFlags(RootCmd)
+	dmsgclient.InitFlags(RootCmd)
 	RootCmd.Flags().StringVarP(&filterDomainSuffix, "filter", "f", ".dmsg", "domain suffix to filter\033[0m\n\r")
 	RootCmd.Flags().UintVarP(&proxyPort, "socks", "q", proxyPort, "port to serve the socks5 proxy\033[0m\n\r")
 	RootCmd.Flags().StringVarP(&addProxy, "addproxy", "r", addProxy, "configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)\033[0m\n\r")
@@ -80,9 +79,7 @@ func init() {
 
 // RootCmd contains the root command for dmsgweb
 var RootCmd = &cobra.Command{
-	Use: func() string {
-		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
-	}(),
+	Use:   dmsgclient.ExecName(),
 	Short: "DMSG resolving proxy & browser client",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐┬ ┬┌─┐┌┐
@@ -113,15 +110,15 @@ dmsgweb conf file detected: ` + dwcfg
 		}
 		dlog = logging.MustGetLogger("dmsgweb")
 
-		err = flags.InitConfig()
+		err = dmsgclient.InitConfig()
 		if err != nil {
 			dlog.WithError(err).Fatal("Failed to read specified dmsghttp-config")
 		}
 
-		if flags.DmsgDiscURL == "" {
+		if dmsgclient.DmsgDiscURL == "" {
 			dlog.Fatal("Dmsg Discovery Server URL not specified")
 		}
-		if flags.DmsgDiscURL == "" {
+		if dmsgclient.DmsgDiscAddr == "" {
 			dlog.Fatal("Dmsg Discovery Server dmsg address not specified")
 		}
 
@@ -222,7 +219,7 @@ dmsgweb conf file detected: ` + dwcfg
 			ctx = context.WithValue(ctx, "socks5_proxy", proxyAddr) //nolint
 		}
 
-		dmsgC, closeDmsg, err = cli.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, "")
+		dmsgC, closeDmsg, err = dmsgclient.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, "")
 		if err != nil {
 			dlog.WithError(err).Error("Error connecting to dmsg network")
 			return
@@ -271,12 +268,13 @@ dmsgweb conf file detected: ` + dwcfg
 
 			wg.Add(1)
 			go func() {
+				defer wg.Done()
+				defer server.Close() //nolint:errcheck
 				dlog.Debug("Serving SOCKS5 proxy on " + socksAddr)
 				err := server.ListenAndServe("tcp", socksAddr)
 				if err != nil {
 					dlog.WithError(err).Fatal("Failed to start SOCKS5 server")
 				}
-				defer server.Close() //nolint
 				dlog.Debug("Stopped serving SOCKS5 proxy on " + socksAddr)
 			}()
 		}
@@ -316,7 +314,7 @@ func proxyTCPConn(n int) {
 	if err != nil {
 		dlog.WithError(err).Fatal(fmt.Sprintf("Failed to start TCP listener on port: %v", thiswebport))
 	}
-	defer listener.Close() //nolint
+	defer ioutil.CloseQuietly(listener, dlog)
 	dlog.Debug("Serving TCP on 127.0.0.1:", thiswebport)
 	if dmsgC == nil {
 		dlog.Fatal("dmsgC is nil")
@@ -330,7 +328,7 @@ func proxyTCPConn(n int) {
 		}
 
 		go func(conn net.Conn, n int, dmsgC *dmsg.Client) {
-			defer conn.Close() //nolint
+			defer ioutil.CloseQuietly(conn, dlog)
 			dp, ok := safecast.To[uint16](dmsgPorts[n])
 			if !ok {
 				dlog.Fatal("uint16 overflow when converting dmsg port")
@@ -342,7 +340,7 @@ func proxyTCPConn(n int) {
 				return
 			}
 
-			defer dmsgConn.Close() //nolint
+			defer ioutil.CloseQuietly(dmsgConn, dlog)
 
 			var wg sync.WaitGroup
 			wg.Add(2)
@@ -416,7 +414,7 @@ func proxyHTTPConn(n int) {
 			dlog.WithError(err).Warn("Failed to connect to HTTP server")
 			return
 		}
-		defer resp.Body.Close() //nolint
+		defer ioutil.CloseQuietly(resp.Body, dlog)
 
 		for header, values := range resp.Header {
 			for _, value := range values {
@@ -432,6 +430,7 @@ func proxyHTTPConn(n int) {
 	})
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		var thiswebport uint
 		if n == -1 {
 			thiswebport = webPort[0]
@@ -441,7 +440,6 @@ func proxyHTTPConn(n int) {
 		dlog.Debug(fmt.Sprintf("Serving http on: http://127.0.0.1:%v", thiswebport))
 		r.Run(":" + fmt.Sprintf("%v", thiswebport)) //nolint
 		dlog.Debug(fmt.Sprintf("Stopped serving http on: http://127.0.0.1:%v", thiswebport))
-		wg.Done()
 	}()
 }
 

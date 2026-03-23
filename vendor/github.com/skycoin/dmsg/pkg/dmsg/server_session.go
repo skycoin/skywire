@@ -11,22 +11,22 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/xtaci/smux"
 
-	"github.com/skycoin/dmsg/internal/servermetrics"
+	"github.com/skycoin/dmsg/pkg/dmsg/metrics"
 	"github.com/skycoin/dmsg/pkg/noise"
 )
 
 // ServerSession represents a session from the perspective of a dmsg server.
 type ServerSession struct {
 	*SessionCommon
-	m servermetrics.Metrics
+	m metrics.Metrics
 }
 
-func makeServerSession(m servermetrics.Metrics, entity *EntityCommon, conn net.Conn) (ServerSession, error) {
+func makeServerSession(m metrics.Metrics, entity *EntityCommon, conn net.Conn) (ServerSession, error) {
 	var sSes ServerSession
 	sSes.SessionCommon = new(SessionCommon)
 	sSes.nMap = make(noise.NonceMap)
 	if err := sSes.SessionCommon.initServer(entity, conn); err != nil {
-		m.RecordSession(servermetrics.DeltaFailed) // record failed connection
+		m.RecordSession(metrics.DeltaFailed) // record failed connection
 		return sSes, err
 	}
 	sSes.m = m
@@ -43,8 +43,8 @@ func (ss *ServerSession) Close() error {
 
 // Serve serves the session.
 func (ss *ServerSession) Serve() {
-	ss.m.RecordSession(servermetrics.DeltaConnect)          // record successful connection
-	defer ss.m.RecordSession(servermetrics.DeltaDisconnect) // record disconnection
+	ss.m.RecordSession(metrics.DeltaConnect)          // record successful connection
+	defer ss.m.RecordSession(metrics.DeltaDisconnect) // record disconnection
 	if ss.sm.smux != nil {
 		for {
 			sStr, err := ss.sm.smux.AcceptStream()
@@ -123,7 +123,7 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 	// Read request.
 	req, err := readRequest()
 	if err != nil {
-		ss.m.RecordStream(servermetrics.DeltaFailed) // record failed stream
+		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 		return err
 	}
 
@@ -137,7 +137,7 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 
 		ip, err := addrToIP(addr)
 		if err != nil {
-			ss.m.RecordStream(servermetrics.DeltaFailed) // record failed stream
+			ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 			return err
 		}
 
@@ -146,10 +146,14 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 			Accepted: true,
 			IP:       ip,
 		}
-		obj := MakeSignedStreamResponse(&resp, ss.entity.LocalSK())
+		obj, err := MakeSignedStreamResponse(&resp, ss.entity.LocalSK())
+		if err != nil {
+			ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
+			return err
+		}
 
 		if err := ss.writeObject(yStr, obj); err != nil {
-			ss.m.RecordStream(servermetrics.DeltaFailed) // record failed stream
+			ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 			return err
 		}
 		log.Debug("Wrote IP stream response.")
@@ -159,7 +163,7 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 	// Obtain next session.
 	ss2, ok := ss.entity.serverSession(req.DstAddr.PK)
 	if !ok {
-		ss.m.RecordStream(servermetrics.DeltaFailed) // record failed stream
+		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 		return ErrReqNoNextSession
 	}
 	log.Debug("Obtained next session.")
@@ -167,22 +171,22 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 	// Forward request and obtain/check response.
 	yStr2, resp, err := ss2.forwardRequest(req)
 	if err != nil {
-		ss.m.RecordStream(servermetrics.DeltaFailed) // record failed stream
+		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 		return err
 	}
 	log.Debug("Forwarded stream request.")
 
 	// Forward response.
 	if err := ss.writeObject(yStr, resp); err != nil {
-		ss.m.RecordStream(servermetrics.DeltaFailed) // record failed stream
+		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 		return err
 	}
 	log.Debug("Forwarded stream response.")
 
 	// Serve stream.
 	log.Info("Serving stream.")
-	ss.m.RecordStream(servermetrics.DeltaConnect)          // record successful stream
-	defer ss.m.RecordStream(servermetrics.DeltaDisconnect) // record disconnection
+	ss.m.RecordStream(metrics.DeltaConnect)          // record successful stream
+	defer ss.m.RecordStream(metrics.DeltaDisconnect) // record disconnection
 	return netutil.CopyReadWriteCloser(yStr, yStr2)
 }
 

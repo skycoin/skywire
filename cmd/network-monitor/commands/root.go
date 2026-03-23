@@ -20,9 +20,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
-	"github.com/skycoin/skywire/internal/nm"
 	"github.com/skycoin/skywire/pkg/network-monitor/api"
 	"github.com/skycoin/skywire/pkg/network-monitor/store"
+	nm "github.com/skycoin/skywire/pkg/network-monitor/types"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"

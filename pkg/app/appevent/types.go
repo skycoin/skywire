@@ -1,14 +1,6 @@
 // Package appevent pkg/app/appevent/types.go
 package appevent
 
-// AllTypes returns all event types.
-func AllTypes() map[string]bool {
-	return map[string]bool{
-		TCPDial:  true,
-		TCPClose: true,
-	}
-}
-
 // TCPDial represents a dial event.
 const TCPDial = "tcp_dial"
 

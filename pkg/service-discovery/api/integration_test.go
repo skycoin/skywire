@@ -13,7 +13,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/internal/sdmetrics"
+	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"

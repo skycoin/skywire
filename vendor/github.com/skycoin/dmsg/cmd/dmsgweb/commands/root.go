@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/proxy"
 
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsgclient"
 )
 
 var (
@@ -55,9 +56,7 @@ var (
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	dmsgclient.Execute(RootCmd)
 }
 
 func printEnvs(envfile string) {

@@ -555,8 +555,8 @@ github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsI
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761/go.mod h1:5TJZWKEWniPve33vlWYSoGYefn3gLQRzjfDlhSJ9ZKM=
-github.com/jackc/pgx/v5 v5.8.0 h1:TYPDoleBBme0xGSAX3/+NujXXtpZn9HBONkQC7IEZSo=
-github.com/jackc/pgx/v5 v5.8.0/go.mod h1:QVeDInX2m9VyzvNeiCJVjCkNFqzsNb43204HshNSZKw=
+github.com/jackc/pgx/v5 v5.9.1 h1:uwrxJXBnx76nyISkhr33kQLlUqjv7et7b9FjCen/tdc=
+github.com/jackc/pgx/v5 v5.9.1/go.mod h1:mal1tBGAFfLHvZzaYh77YS/eC6IX9OWbRV1QIIM0Jn4=
 github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo=
 github.com/jackc/puddle/v2 v2.2.2/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
 github.com/james-barrow/golang-ipc v1.2.4 h1:d4NXRQxq6OWviWU8uAaob8R0YZGy/PhAkXGLpBNpkA4=
@@ -812,8 +812,8 @@ github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrf
 github.com/sirupsen/logrus v1.9.0/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/sirupsen/logrus v1.9.4 h1:TsZE7l11zFCLZnZ+teH4Umoq5BhEIfIzfRDZ1Uzql2w=
 github.com/sirupsen/logrus v1.9.4/go.mod h1:ftWc9WdOfJ0a92nsE2jF5u5ZwH8Bv2zdeOC42RjbV2g=
-github.com/skycoin/dmsg v1.3.29-0.20260320173710-e5ee528c2dcc h1:sUpmisDXBg3cKfZjvlX2kThGIHjd0Pg4voBxdhiET9s=
-github.com/skycoin/dmsg v1.3.29-0.20260320173710-e5ee528c2dcc/go.mod h1:5EIwtsJgR0RSndqKrKz/yY3MSu2NU5k7hOz2NWDiF44=
+github.com/skycoin/dmsg v1.3.29-0.20260323132513-964219fd8e0d h1:ZNdkDAXt0wo9uqQ/nJjLkY++rTFRWFJQHdMUYB28yv8=
+github.com/skycoin/dmsg v1.3.29-0.20260323132513-964219fd8e0d/go.mod h1:w4wa8ZnqzafF7Gtm9ocdiU/5NgRFJYXg6V0BQFM7n3s=
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9 h1:DElGw1Fhj4amuW1KM5q8Xowosb3RiOQce0lDJw0Qv0Y=
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9/go.mod h1:OQz8NXVJUWEw7PWYASZ/1BIw5GXgVMTGvrCGDlZa9+k=
 github.com/skycoin/hardware-wallet-protob v0.0.0-20250805154629-410561e1bc2f h1:wKpqEhubs7kKtb7nqU4V8zkTxwnnwcB2797elV2z1t8=
@@ -822,8 +822,8 @@ github.com/skycoin/hardware-wallet/firmware v0.0.0-20260117000250-43c66b2bf1d2 h
 github.com/skycoin/hardware-wallet/firmware v0.0.0-20260117000250-43c66b2bf1d2/go.mod h1:XxSbk28CuQk5in9+tr7ns6AP282s5JP5pgr6axuJhgo=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0duwyG+7WliWz5u9kgk1h5MnLuA=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6/go.mod h1:UXghlricA7J3aRD/k7p/zBObQfmBawwCxIVPVjz2Q3o=
-github.com/skycoin/skycoin v0.28.4 h1:6ZTj45DFCct6/PbWy6RWWwTQ3reAjwYlup/OJEKX7JA=
-github.com/skycoin/skycoin v0.28.4/go.mod h1:9bVaekPl6pxRi+4Q3lJqvuR7BWb3vFQbJeEdpl/4aRQ=
+github.com/skycoin/skycoin v0.28.5-alpha1.0.20260323015226-90b668188f85 h1:IiU8PjIzg/BlTpSXXgq1pVCEbKnDfGMnUAqgwwjNt4s=
+github.com/skycoin/skycoin v0.28.5-alpha1.0.20260323015226-90b668188f85/go.mod h1:tgVxjBBV4/OxVBDrcpsVK0q/awGxqBjwTUPDBMh9ZcA=
 github.com/soheilhy/cmux v0.1.5 h1:jjzc5WVemNEDTLwv9tlmemhC73tI08BNOIGwBOo10Js=
 github.com/soheilhy/cmux v0.1.5/go.mod h1:T7TcVDs9LWfQgPlPsdngu6I6QIoyIFZDDC6sNE1GqG0=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=

@@ -118,6 +118,8 @@ var (
 	// existing transport flag
 	existingTpOnly   bool
 	forceLocalRoutes bool
+	muxRoutes        int
+	muxMode          string
 	// multi-hop testing
 	viaVisor string
 	testEnv  bool

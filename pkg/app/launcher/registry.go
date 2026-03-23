@@ -25,12 +25,3 @@ func GetApp(name string) (AppFunc, bool) {
 	fn, ok := appRegistry[name]
 	return fn, ok
 }
-
-// ListApps returns a list of all registered app names.
-func ListApps() []string {
-	apps := make([]string, 0, len(appRegistry))
-	for name := range appRegistry {
-		apps = append(apps, name)
-	}
-	return apps
-}

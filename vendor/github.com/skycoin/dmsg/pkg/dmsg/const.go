@@ -4,6 +4,7 @@ package dmsg
 import (
 	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math/big"
 	"regexp"
@@ -93,7 +94,10 @@ func InitConfig() error {
 	if err != nil {
 		return err
 	}
-	Prod.DmsgServers = shuffleServers(Prod.DmsgServers)
+	Prod.DmsgServers, err = shuffleServers(Prod.DmsgServers)
+	if err != nil {
+		return err
+	}
 	err = json.Unmarshal(envServices.Test, &Test)
 	if err != nil {
 		return err
@@ -101,15 +105,15 @@ func InitConfig() error {
 	return nil
 }
 
-func shuffleServers(in []disc.Entry) []disc.Entry {
+func shuffleServers(in []disc.Entry) ([]disc.Entry, error) {
 	n := len(in)
 	for i := n - 1; i > 0; i-- {
 		jBig, err := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
 		if err != nil {
-			panic(err)
+			return nil, fmt.Errorf("shuffleServers: %w", err)
 		}
 		j := int(jBig.Int64())
 		in[i], in[j] = in[j], in[i]
 	}
-	return in
+	return in, nil
 }

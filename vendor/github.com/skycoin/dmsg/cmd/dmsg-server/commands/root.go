@@ -2,17 +2,12 @@
 package commands
 
 import (
-	"fmt"
-	"log"
-	"os"
-	"path/filepath"
-	"strings"
-
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/dmsg/cmd/dmsg-server/commands/config"
 	"github.com/skycoin/dmsg/cmd/dmsg-server/commands/start"
+	"github.com/skycoin/dmsg/pkg/dmsgclient"
 )
 
 func init() {
@@ -25,9 +20,7 @@ func init() {
 
 // RootCmd contains the root dmsg-server command
 var RootCmd = &cobra.Command{
-	Use: func() string {
-		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
-	}(),
+	Use:   dmsgclient.ExecName(),
 	Short: "DMSG Server",
 	Long: `
 	┌┬┐┌┬┐┌─┐┌─┐   ┌─┐┌─┐┬─┐┬  ┬┌─┐┬─┐
@@ -50,7 +43,5 @@ Example:
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	dmsgclient.Execute(RootCmd)
 }

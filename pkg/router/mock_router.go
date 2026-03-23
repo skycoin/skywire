@@ -341,6 +341,37 @@ func (_m *MockRouter) SetForceLocalRoutes(_a0 bool) {
 	_m.Called(_a0)
 }
 
+// SetMuxRoutes provides a mock function with given fields: _a0
+func (_m *MockRouter) SetMuxRoutes(_a0 int) {
+	_m.Called(_a0)
+}
+
+// SetMuxMode provides a mock function with given fields: _a0
+func (_m *MockRouter) SetMuxMode(_a0 WeightMode) {
+	_m.Called(_a0)
+}
+
+// AddMuxRouteByTransport provides a mock function
+func (_m *MockRouter) AddMuxRouteByTransport(_a0 routing.RouteDescriptor, _a1 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1)
+	return ret.Error(0)
+}
+
+// RemoveMuxRouteByTransport provides a mock function
+func (_m *MockRouter) RemoveMuxRouteByTransport(_a0 routing.RouteDescriptor, _a1 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1)
+	return ret.Error(0)
+}
+
+// ActiveRouteStatuses provides a mock function with no fields
+func (_m *MockRouter) ActiveRouteStatuses() []RouteStatus {
+	ret := _m.Called()
+	if r, ok := ret.Get(0).([]RouteStatus); ok {
+		return r
+	}
+	return nil
+}
+
 // GetLastRouteCalcTime provides a mock function with no fields
 func (_m *MockRouter) GetLastRouteCalcTime() time.Duration {
 	ret := _m.Called()
