@@ -9,7 +9,6 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
-	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -97,12 +96,4 @@ func (d *setupNodeDialer) Dial(
 	}
 
 	return resp, connectedNode, nil
-}
-
-// DirectRouteSetup creates a route group directly using the provided dmsg client,
-// bypassing the setup-node RPC call. This is useful for local setup-node integration.
-func DirectRouteSetup(ctx context.Context, dmsgC *dmsg.Client, biRt routing.BidirectionalRoute) (routing.EdgeRules, error) {
-	dialer := WrapDmsgClient(dmsgC)
-	metrics := setupmetrics.NewEmpty()
-	return CreateRouteGroup(ctx, dialer, biRt, metrics)
 }

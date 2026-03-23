@@ -137,14 +137,17 @@ func (tm *Manager) Serve(ctx context.Context) {
 func (tm *Manager) runReconnectPersistent(ctx context.Context) {
 	defer tm.wg.Done()
 	ticker := time.NewTicker(reconnectPhaseDelay)
+	defer ticker.Stop()
 	tm.reconnectPersistent(ctx)
 	for {
 		select {
 		case <-ticker.C:
 			tm.reconnectPersistent(ctx)
-			// wait full timeout no matter how long the last phase took
-			ticker = time.NewTicker(reconnectPhaseDelay)
+			// Reset to wait full timeout no matter how long the last phase took.
+			// Using Reset instead of creating a new ticker avoids leaking the old one.
+			ticker.Reset(reconnectPhaseDelay)
 		case <-tm.done:
+			return
 		case <-ctx.Done():
 			return
 		}

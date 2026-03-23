@@ -84,7 +84,7 @@ func (ui *UI) writeBanner(w io.Writer, uiAddr string, sID int32) error {
 `
 	var b bytes.Buffer
 	if _, err := fmt.Fprintf(&b, format, ui.dialer.AddrString(), uiAddr, sID); err != nil {
-		panic(err)
+		return err
 	}
 	for {
 		line, err := b.ReadBytes('\n')

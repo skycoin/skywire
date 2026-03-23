@@ -36,7 +36,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -68,6 +67,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
+	"github.com/skycoin/skywire/pkg/vpn"
 )
 
 type visorCtxKey int
@@ -1032,14 +1032,14 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	ok := isPortRegistered(cMsg.Port, v)
 	if !ok {
 		log.Errorf("Port :%v not registered", cMsg.Port)
-		sendError(log, remoteConn, fmt.Errorf("Port :%v not registered", cMsg.Port))
+		sendError(log, remoteConn, fmt.Errorf("port :%v not registered", cMsg.Port))
 		return
 	}
 
 	ok = isPortAvailable(log, cMsg.Port)
 	if ok {
 		log.Errorf("Failed to dial port %v", cMsg.Port)
-		sendError(log, remoteConn, fmt.Errorf("Failed to dial port %v", cMsg.Port))
+		sendError(log, remoteConn, fmt.Errorf("failed to dial port %v", cMsg.Port))
 		return
 	}
 

@@ -39,6 +39,11 @@ func (r *RPCClient) Root() (t *RPCClientRoot) {
 	return &RPCClientRoot{r}
 }
 
+// KV store related methods
+func (r *RPCClient) KV() (t *RPCClientKV) {
+	return &RPCClientKV{r}
+}
+
 // NewRPCClient creates RPC client connected to RPC server with
 // given address
 func NewRPCClient(address string) (rc *RPCClient, err error) {
@@ -104,6 +109,11 @@ func (r *RPCClientNode) Config() (config *Config, err error) {
 		return
 	}
 	return &c, nil
+}
+
+// Shutdown gracefully stops the node
+func (r *RPCClientNode) Shutdown() error {
+	return r.r.c.Call("node.Shutdown", struct{}{}, &struct{}{})
 }
 
 // Stat obtains statistic of the Node
@@ -261,4 +271,49 @@ func (r *RPCClientRoot) Last(
 		return
 	}
 	return &x, nil
+}
+
+// RPCClientKV implements RPC methods for the KV store.
+type RPCClientKV struct {
+	r *RPCClient
+}
+
+// Create creates a new KV store and returns the feed keypair.
+func (r *RPCClientKV) Create() (result KVCreateResult, err error) {
+	err = r.r.c.Call("kv.Create", struct{}{}, &result)
+	return
+}
+
+// Put sets a key-value pair.
+func (r *RPCClientKV) Put(feed cipher.PubKey, secret cipher.SecKey, key, value string) error {
+	return r.r.c.Call("kv.Put", KVPutInput{
+		Feed:   feed,
+		Secret: secret,
+		Key:    key,
+		Value:  value,
+	}, &struct{}{})
+}
+
+// Get retrieves a value by key.
+func (r *RPCClientKV) Get(feed cipher.PubKey, key string) (value string, found bool, err error) {
+	var result KVGetResult
+	if err = r.r.c.Call("kv.Get", KVGetInput{Feed: feed, Key: key}, &result); err != nil {
+		return
+	}
+	return result.Value, result.Found, nil
+}
+
+// Delete removes a key.
+func (r *RPCClientKV) Delete(feed cipher.PubKey, secret cipher.SecKey, key string) error {
+	return r.r.c.Call("kv.Delete", KVDeleteInput{
+		Feed:   feed,
+		Secret: secret,
+		Key:    key,
+	}, &struct{}{})
+}
+
+// List returns all entries in a feed's KV store.
+func (r *RPCClientKV) List(feed cipher.PubKey) (entries []KVEntry, err error) {
+	err = r.r.c.Call("kv.List", feed, &entries)
+	return
 }

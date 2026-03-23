@@ -102,21 +102,33 @@ const sigLen = len(cipher.Sig{})
 type SignedObject []byte
 
 // MakeSignedStreamRequest encodes and signs a StreamRequest into a SignedObject format.
-func MakeSignedStreamRequest(req *StreamRequest, sk cipher.SecKey) SignedObject {
-	obj := encodeGob(req)
-	sig := SignBytes(obj, sk)
+func MakeSignedStreamRequest(req *StreamRequest, sk cipher.SecKey) (SignedObject, error) {
+	obj, err := encodeGob(req)
+	if err != nil {
+		return nil, fmt.Errorf("dmsg: encode stream request: %w", err)
+	}
+	sig, err := SignBytes(obj, sk)
+	if err != nil {
+		return nil, err
+	}
 	signedObj := append(sig[:], obj...)
 	req.raw = signedObj
-	return signedObj
+	return signedObj, nil
 }
 
 // MakeSignedStreamResponse encodes and signs a StreamResponse into a SignedObject format.
-func MakeSignedStreamResponse(resp *StreamResponse, sk cipher.SecKey) SignedObject {
-	obj := encodeGob(resp)
-	sig := SignBytes(obj, sk)
+func MakeSignedStreamResponse(resp *StreamResponse, sk cipher.SecKey) (SignedObject, error) {
+	obj, err := encodeGob(resp)
+	if err != nil {
+		return nil, fmt.Errorf("dmsg: encode stream response: %w", err)
+	}
+	sig, err := SignBytes(obj, sk)
+	if err != nil {
+		return nil, err
+	}
 	signedObj := append(sig[:], obj...)
 	resp.raw = signedObj
-	return signedObj
+	return signedObj, nil
 }
 
 // Valid returns true if the SignedObject has a valid length.
@@ -237,10 +249,10 @@ func (resp StreamResponse) Verify(req StreamRequest) error {
 }
 
 // SignBytes signs the provided bytes with the given secret key.
-func SignBytes(b []byte, sk cipher.SecKey) cipher.Sig {
+func SignBytes(b []byte, sk cipher.SecKey) (cipher.Sig, error) {
 	sig, err := cipher.SignPayload(b, sk)
 	if err != nil {
-		panic(fmt.Errorf("dmsg: unexpected error occurred during StreamDialObject.Sign(): %v", err))
+		return cipher.Sig{}, fmt.Errorf("dmsg: error during sign: %w", err)
 	}
-	return sig
+	return sig, nil
 }

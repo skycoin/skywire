@@ -13,8 +13,8 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/xtaci/smux"
 
-	"github.com/skycoin/dmsg/internal/servermetrics"
 	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsg/metrics"
 )
 
 // ServerConfig configues the Server
@@ -36,7 +36,7 @@ func DefaultServerConfig() *ServerConfig {
 type Server struct {
 	EntityCommon
 
-	m servermetrics.Metrics
+	m metrics.Metrics
 
 	ready     chan struct{} // Closed once dmsg.Server is serving.
 	readyOnce sync.Once
@@ -56,12 +56,12 @@ type Server struct {
 }
 
 // NewServer creates a new dmsg server entity.
-func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *ServerConfig, m servermetrics.Metrics) *Server {
+func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *ServerConfig, m metrics.Metrics) *Server {
 	if conf == nil {
 		conf = DefaultServerConfig()
 	}
 	if m == nil {
-		m = servermetrics.NewEmpty()
+		m = metrics.NewEmpty()
 	}
 	log := logging.MustGetLogger("dmsg_server")
 
@@ -100,16 +100,16 @@ func (s *Server) Close() error {
 	if s == nil {
 		return nil
 	}
-	var err error
+	var closeErr error
 	s.once.Do(func() {
 		close(s.done)
 		s.wg.Wait()
-		err = s.delEntry(context.Background())
-		if err != nil {
+		closeErr = s.delEntry(context.Background())
+		if closeErr != nil {
 			s.log.Warn("Cannot delete entry from db.")
 		}
 	})
-	return nil
+	return closeErr
 }
 
 // Serve serves the server.
@@ -247,6 +247,7 @@ func (s *Server) handleSession(conn net.Conn) {
 		dSes.sm.smux, err = smux.Server(conn, smux.DefaultConfig())
 		if err != nil {
 			dSes.sm.mutx.Unlock()
+			conn.Close() //nolint:errcheck,gosec
 			cancel()
 			return
 		}
@@ -256,6 +257,7 @@ func (s *Server) handleSession(conn net.Conn) {
 		dSes.sm.yamux, err = yamux.Server(conn, yamux.DefaultConfig())
 		if err != nil {
 			dSes.sm.mutx.Unlock()
+			conn.Close() //nolint:errcheck,gosec
 			cancel()
 			return
 		}
