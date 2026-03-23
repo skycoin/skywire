@@ -7,6 +7,17 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
+// CloseForTest closes the ManagedTransport's done channel, marking it as closed.
+// This is for tests that need to simulate a closed transport without going
+// through the full close() path which requires a discovery client.
+func (mt *ManagedTransport) CloseForTest() {
+	select {
+	case <-mt.done:
+	default:
+		close(mt.done)
+	}
+}
+
 // NewManagedTransportForTest creates a minimal ManagedTransport for testing.
 // Only the transport field and basic channels are initialized.
 // Uses a no-op queueDeletion to avoid nil pointer on close.

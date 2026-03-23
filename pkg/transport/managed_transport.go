@@ -467,9 +467,9 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 // Respects context cancellation to prevent blocking forever on dead transports.
 func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Packet) error {
 	mt.transportMx.Lock()
-	defer mt.transportMx.Unlock()
 
 	if mt.transport == nil {
+		mt.transportMx.Unlock()
 		return fmt.Errorf("write packet: cannot write to transport, transport is not set up")
 	}
 
@@ -488,15 +488,19 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 
 	select {
 	case <-ctx.Done():
+		mt.transportMx.Unlock()
 		return ctx.Err()
 	case res := <-ch:
 		if res.err != nil {
+			// Release the lock BEFORE calling close, which also acquires it
+			mt.transportMx.Unlock()
 			mt.close()
 			return res.err
 		}
 		if res.n > routing.PacketHeaderSize {
 			mt.logSent(uint64(res.n - routing.PacketHeaderSize)) //nolint:gosec
 		}
+		mt.transportMx.Unlock()
 		return nil
 	}
 }
