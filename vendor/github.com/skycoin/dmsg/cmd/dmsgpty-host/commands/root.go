@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +23,7 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsgclient"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 )
 
@@ -72,9 +72,7 @@ func init() {
 
 // RootCmd contains commands for dmsgpty-host
 var RootCmd = &cobra.Command{
-	Use: func() string {
-		return strings.Split(filepath.Base(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", os.Args), "[", ""), "]", "")), " ")[0]
-	}(),
+	Use:   dmsgclient.ExecName(),
 	Short: "DMSG host for pseudoterminal command line interface",
 	Long: calvin.AsciiFont("dmsgpty-host") + `
 	DMSG host for pseudoterminal (pty) command line interface`,
@@ -160,9 +158,7 @@ var RootCmd = &cobra.Command{
 
 // Execute executes the root command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+	dmsgclient.Execute(RootCmd)
 }
 
 func configFromJSON(conf dmsgpty.Config) (dmsgpty.Config, error) {

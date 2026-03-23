@@ -103,7 +103,7 @@ func (cli *CLI) prepareConn() (net.Conn, error) {
 
 	conn, err := net.Dial(cli.Net, cli.Addr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to dmsgpty-host: %v", err)
+		return nil, fmt.Errorf("failed to connect to dmsgpty-host: %w", err)
 	}
 	return conn, nil
 }
@@ -121,7 +121,7 @@ func (cli *CLI) servePty(ctx context.Context, ptyC *PtyClient, cmd string, args 
 	env := cli.captureEnv()
 
 	if err := ptyC.Start(cmd, env, args...); err != nil {
-		return fmt.Errorf("failed to start command on pty: %v", err)
+		return fmt.Errorf("failed to start command on pty: %w", err)
 	}
 
 	// Window resize loop.

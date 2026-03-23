@@ -17,7 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 
-	"github.com/skycoin/skywire/internal/armetrics"
+	armetrics "github.com/skycoin/skywire/pkg/address-resolver/metrics"
 	"github.com/skycoin/skywire/pkg/address-resolver/store"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"

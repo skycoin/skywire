@@ -743,8 +743,8 @@ github.com/jackc/pgpassfile
 # github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
 ## explicit; go 1.14
 github.com/jackc/pgservicefile
-# github.com/jackc/pgx/v5 v5.8.0
-## explicit; go 1.24.0
+# github.com/jackc/pgx/v5 v5.9.1
+## explicit; go 1.25.0
 github.com/jackc/pgx/v5
 github.com/jackc/pgx/v5/internal/iobufpool
 github.com/jackc/pgx/v5/internal/pgio
@@ -1015,8 +1015,8 @@ github.com/shopspring/decimal
 ## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20260320173710-e5ee528c2dcc
-## explicit; go 1.25.6
+# github.com/skycoin/dmsg v1.3.29-0.20260323132513-964219fd8e0d
+## explicit; go 1.26.1
 github.com/skycoin/dmsg/cmd/conf/commands
 github.com/skycoin/dmsg/cmd/dial/commands
 github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
@@ -1032,17 +1032,14 @@ github.com/skycoin/dmsg/cmd/dmsgpty-cli/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-host/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-ui/commands
 github.com/skycoin/dmsg/cmd/dmsgweb/commands
-github.com/skycoin/dmsg/internal/cli
-github.com/skycoin/dmsg/internal/discmetrics
-github.com/skycoin/dmsg/internal/dmsg-discovery/api
-github.com/skycoin/dmsg/internal/dmsg-discovery/store
-github.com/skycoin/dmsg/internal/dmsg-server/api
-github.com/skycoin/dmsg/internal/flags
-github.com/skycoin/dmsg/internal/fsutil
-github.com/skycoin/dmsg/internal/servermetrics
 github.com/skycoin/dmsg/pkg/direct
 github.com/skycoin/dmsg/pkg/disc
+github.com/skycoin/dmsg/pkg/disc/metrics
+github.com/skycoin/dmsg/pkg/discovery/api
+github.com/skycoin/dmsg/pkg/discovery/store
 github.com/skycoin/dmsg/pkg/dmsg
+github.com/skycoin/dmsg/pkg/dmsg/metrics
+github.com/skycoin/dmsg/pkg/dmsgclient
 github.com/skycoin/dmsg/pkg/dmsgctrl
 github.com/skycoin/dmsg/pkg/dmsgcurl
 github.com/skycoin/dmsg/pkg/dmsghttp
@@ -1061,7 +1058,7 @@ github.com/skycoin/hardware-wallet/firmware
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.4
+# github.com/skycoin/skycoin v0.28.5-alpha1.0.20260323015226-90b668188f85
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/hardware-wallet/commands
@@ -1082,7 +1079,7 @@ github.com/skycoin/skycoin/src/cipher/bip39
 github.com/skycoin/skycoin/src/cipher/bip39/wordlists
 github.com/skycoin/skycoin/src/cipher/bip44
 github.com/skycoin/skycoin/src/cipher/chacha20poly1305
-github.com/skycoin/skycoin/src/cipher/chacha20poly1305/internal/chacha20
+github.com/skycoin/skycoin/src/cipher/chacha20poly1305/chacha20
 github.com/skycoin/skycoin/src/cipher/crypto
 github.com/skycoin/skycoin/src/cipher/encoder
 github.com/skycoin/skycoin/src/cipher/encrypt

@@ -111,7 +111,8 @@ func (l *Listener) close() (closed bool) {
 		close(l.done)
 		for {
 			select {
-			case <-l.accept:
+			case stream := <-l.accept:
+				stream.Close() //nolint:errcheck,gosec
 			default:
 				close(l.accept)
 				return

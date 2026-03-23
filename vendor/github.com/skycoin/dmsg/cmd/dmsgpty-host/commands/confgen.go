@@ -3,10 +3,10 @@ package commands
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/dmsg/internal/fsutil"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 )
 
@@ -39,12 +39,10 @@ var confgenCmd = &cobra.Command{
 			return dmsgpty.WriteConfig(conf, confPath)
 		}
 
-		exists, err := fsutil.Exists(confPath)
-		if err != nil {
-			return fmt.Errorf("failed to check if config file exists: %w", err)
-		}
-		if exists {
+		if _, err := os.Stat(confPath); err == nil {
 			return fmt.Errorf("config file %s already exists", confPath)
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to check if config file exists: %w", err)
 		}
 
 		return dmsgpty.WriteConfig(conf, confPath)

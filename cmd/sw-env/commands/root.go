@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cfg "github.com/skycoin/skywire/internal/config"
+	cfg "github.com/skycoin/skywire/pkg/serviceconfig"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 )

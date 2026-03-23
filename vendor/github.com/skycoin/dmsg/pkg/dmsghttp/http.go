@@ -34,7 +34,7 @@ func ListenAndServe(ctx context.Context, _ cipher.SecKey, a http.Handler, _ disc
 	}
 
 	done := make(chan struct{})
-	go func() {
+	go func() { //nolint:gosec
 		select {
 		case <-ctx.Done():
 			if err := srv.Shutdown(context.Background()); err != nil {

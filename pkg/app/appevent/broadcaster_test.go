@@ -33,7 +33,7 @@ func TestBroadcaster_Broadcast(t *testing.T) {
 		evs := make([]*Event, 0, n)
 		i := 0
 		for {
-			for t := range AllTypes() {
+			for _, t := range []string{TCPDial, TCPClose} {
 				evs = append(evs, NewEvent(t, struct{}{}))
 				if i++; i == n {
 					return evs
@@ -75,7 +75,7 @@ func TestBroadcaster_Broadcast(t *testing.T) {
 		events := makeEvents(nEvents)
 		results := make([][]*Event, nClients)
 		for i := 0; i < nClients; i++ {
-			bc.AddClient(makeMockClient(AllTypes(), &results[i]))
+			bc.AddClient(makeMockClient(map[string]bool{TCPDial: true, TCPClose: true}, &results[i]))
 		}
 
 		// Act: broadcast events.

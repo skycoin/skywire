@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	dmsg "github.com/skycoin/dmsg/cmd/dmsg/commands"
-	skyhw "github.com/skycoin/skycoin/cmd/hardware-wallet/commands"
 	skycoin "github.com/skycoin/skycoin/cmd/skycoin-wallet/commands"
 	"github.com/spf13/cobra"
 
@@ -46,11 +45,6 @@ func init() {
 		snc.RootCmd,
 	)
 
-	// Add hardware wallet to skycoin commands
-	skycoin.RootCmd.AddCommand(
-		skyhw.RootCmd,
-	)
-
 	// Root command
 	RootCmd.AddCommand(
 		visor.RootCmd,
@@ -80,10 +74,6 @@ func init() {
 	skycoin.RootCmd.Use = "skycoin"
 	skycoin.RootCmd.Short = "skycoin daemon & cli"
 	skycoin.RootCmd.Version = buildinfo.DepVersion("github.com/skycoin/skycoin")
-	skyhw.RootCmd.Use = "skyhw"
-	skyhw.RootCmd.Short = "skycoin hardware wallet utilities"
-	skyhw.RootCmd.Version = buildinfo.DepVersion("github.com/skycoin/skycoin")
-
 	if fmt.Sprintf("%v", buildinfo.DebugBuildInfo()) != "" {
 		RootCmd.Flags().BoolVarP(&di, "info", "d", false, "print runtime/debug.BuildInfo")
 	}

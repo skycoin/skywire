@@ -17,14 +17,24 @@ import (
 
 var json = jsoniter.ConfigFastest
 
-// APIClient implements dmsg discovery API client.
-type APIClient interface {
+// EntryReader provides read-only access to discovery entries.
+type EntryReader interface {
 	Entry(context.Context, cipher.PubKey) (*Entry, error)
+	AvailableServers(context.Context) ([]*Entry, error)
+	AllServers(context.Context) ([]*Entry, error)
+}
+
+// EntryWriter provides write access to discovery entries.
+type EntryWriter interface {
 	PostEntry(context.Context, *Entry) error
 	PutEntry(context.Context, cipher.SecKey, *Entry) error
 	DelEntry(context.Context, *Entry) error
-	AvailableServers(context.Context) ([]*Entry, error)
-	AllServers(context.Context) ([]*Entry, error)
+}
+
+// APIClient implements dmsg discovery API client.
+type APIClient interface {
+	EntryReader
+	EntryWriter
 	AllEntries(ctx context.Context) ([]string, error)
 	AllClientsByServer(ctx context.Context) (map[string][]*Entry, error)
 	ClientsByServer(ctx context.Context, serverPK cipher.PubKey) ([]*Entry, error)

@@ -102,7 +102,10 @@ func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 		DstAddr:   s.rAddr,
 		NoiseMsg:  nsMsg,
 	}
-	obj := MakeSignedStreamRequest(&req, s.ses.localSK())
+	obj, err := MakeSignedStreamRequest(&req, s.ses.localSK())
+	if err != nil {
+		return req, err
+	}
 
 	// Write request.
 	if s.sStr != nil {
@@ -131,7 +134,10 @@ func (s *Stream) writeIPRequest(rAddr Addr) (req StreamRequest, err error) {
 		DstAddr:   s.rAddr,
 		IPinfo:    true,
 	}
-	obj := MakeSignedStreamRequest(&req, s.ses.localSK())
+	obj, err := MakeSignedStreamRequest(&req, s.ses.localSK())
+	if err != nil {
+		return req, err
+	}
 
 	// Write request.
 	if s.sStr != nil {
@@ -196,7 +202,10 @@ func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
 		Accepted: true,
 		NoiseMsg: nsMsg,
 	}
-	obj := MakeSignedStreamResponse(&resp, s.ses.localSK())
+	obj, err := MakeSignedStreamResponse(&resp, s.ses.localSK())
+	if err != nil {
+		return err
+	}
 
 	if s.sStr != nil {
 		if err := s.ses.writeObject(s.sStr, obj); err != nil {

@@ -4,7 +4,7 @@ package store
 import (
 	"sync"
 
-	"github.com/skycoin/skywire/internal/nm"
+	nm "github.com/skycoin/skywire/pkg/network-monitor/types"
 )
 
 type memStore struct {

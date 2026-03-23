@@ -21,10 +21,10 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/dmsg/internal/dmsg-server/api"
-	"github.com/skycoin/dmsg/internal/servermetrics"
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsg/metrics"
+	"github.com/skycoin/dmsg/pkg/dmsgclient"
 	"github.com/skycoin/dmsg/pkg/dmsgserver"
 )
 
@@ -109,11 +109,11 @@ var RootCmd = &cobra.Command{
 			conf.HTTPAddress = ":" + httpPort
 		}
 
-		var m servermetrics.Metrics
+		var m metrics.Metrics
 		if sf.MetricsAddr == "" {
-			m = servermetrics.NewEmpty()
+			m = metrics.NewEmpty()
 		} else {
-			m = servermetrics.NewVictoriaMetrics()
+			m = metrics.NewVictoriaMetrics()
 		}
 
 		metricsutil.ServeHTTPMetrics(log, sf.MetricsAddr)
@@ -124,7 +124,7 @@ var RootCmd = &cobra.Command{
 		r.Use(middleware.Logger)
 		r.Use(middleware.Recoverer)
 
-		api := api.New(r, log, m)
+		srvAPI := dmsgserver.NewServerAPI(r, log, m)
 
 		srvConf := dmsg.ServerConfig{
 			MaxSessions:    conf.MaxSessions,
@@ -134,16 +134,16 @@ var RootCmd = &cobra.Command{
 		srv := dmsg.NewServer(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.Discovery, &http.Client{}, log), &srvConf, m)
 		srv.SetLogger(log)
 
-		api.SetDmsgServer(srv)
-		defer func() { log.WithError(api.Close()).Info("Closed server.") }()
+		srvAPI.SetDmsgServer(srv)
+		defer func() { log.WithError(srvAPI.Close()).Info("Closed server.") }()
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
 
-		go api.RunBackgroundTasks(ctx)
+		go srvAPI.RunBackgroundTasks(ctx)
 		log.WithField("addr", conf.HTTPAddress).Info("Serving server API...")
 		go func() {
-			if err := api.ListenAndServe(conf.LocalAddress, conf.PublicAddress, conf.HTTPAddress); err != nil {
+			if err := srvAPI.ListenAndServe(conf.LocalAddress, conf.PublicAddress, conf.HTTPAddress); err != nil {
 				log.Errorf("Serve: %v", err)
 				cancel()
 			}
@@ -155,9 +155,7 @@ var RootCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	dmsgclient.Execute(RootCmd)
 }
 
 func configNotFound() (io.ReadCloser, error) {
