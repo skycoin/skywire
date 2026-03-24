@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/rpc"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -33,6 +34,14 @@ func NewClient(ctx context.Context, dialer network.Dialer, rPK cipher.PubKey) (*
 	if err != nil {
 		return nil, fmt.Errorf("dial %v@%v: %w", rPK, skyenv.DmsgAwaitSetupPort, err)
 	}
+
+	// Set a deadline on the underlying connection to prevent stale DMSG streams
+	// from accumulating when the remote visor is dead. Without this, RPC calls
+	// over dead streams block forever, leaking goroutines and ephemeral ports.
+	if conn, ok := s.(interface{ SetDeadline(time.Time) error }); ok {
+		conn.SetDeadline(time.Now().Add(2 * time.Minute)) //nolint:errcheck
+	}
+
 	return NewClientFromRaw(s, rPK), nil
 }
 
