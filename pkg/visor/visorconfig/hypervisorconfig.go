@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
@@ -121,17 +122,17 @@ func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 			c.DmsgDiscovery = services.DmsgDiscovery
 		}
 		if c.DmsgPort == 0 {
-			c.DmsgPort = DmsgHypervisorPort
+			c.DmsgPort = skyenv.DmsgHypervisorPort
 		}
 		if c.HTTPAddr == "" {
 			c.HTTPAddr = httpAddr
 		}
 		c.Cookies.FillDefaults()
 		c.TPViz.Enable = true
-		c.EnableAuth = EnableAuth
-		c.EnableTLS = EnableTLS
-		c.TLSCertFile = TLSCert
-		c.TLSKeyFile = TLSKey
+		c.EnableAuth = skyenv.EnableAuth
+		c.EnableTLS = skyenv.EnableTLS
+		c.TLSCertFile = skyenv.TLSCert
+		c.TLSKeyFile = skyenv.TLSKey
 
 	}
 }

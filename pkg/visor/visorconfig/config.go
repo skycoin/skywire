@@ -9,6 +9,7 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -47,10 +48,10 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.Transport = &Transport{
 		Discovery:         services.TransportDiscovery,
 		AddressResolver:   services.AddressResolver,
-		PublicAutoconnect: PublicAutoconnect,
+		PublicAutoconnect: skyenv.PublicAutoconnect,
 		LogStore: &LogStore{
 			Type:             FileLogStore,
-			Location:         LocalPath + "/" + TpLogStore,
+			Location:         skyenv.LocalPath + "/" + skyenv.TpLogStore,
 			RotationInterval: DefaultLogRotationInterval,
 		},
 		SudphPort: 0,
@@ -65,28 +66,28 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.Launcher = &Launcher{
 		ServiceDisc:   services.ServiceDiscovery,
 		Apps:          nil,
-		ServerAddr:    AppSrvAddr,
-		BinPath:       AppBinPath,
+		ServerAddr:    skyenv.AppSrvAddr,
+		BinPath:       skyenv.AppBinPath,
 		DisplayNodeIP: false,
 	}
 	conf.UptimeTracker = &UptimeTracker{
 		Addr: services.UptimeTracker,
 	}
-	conf.CLIAddr = RPCAddr
-	conf.LogLevel = LogLevel
-	conf.LocalPath = LocalPath
-	conf.DmsgHTTPServerPath = LocalPath + "/" + Custom
+	conf.CLIAddr = skyenv.RPCAddr
+	conf.LogLevel = skyenv.LogLevel
+	conf.LocalPath = skyenv.LocalPath
+	conf.DmsgHTTPServerPath = skyenv.LocalPath + "/" + skyenv.Custom
 	conf.StunServers = services.StunServers
 	conf.ShutdownTimeout = DefaultTimeout
 
 	conf.Dmsgpty = &Dmsgpty{
-		DmsgPort: DmsgPtyPort,
-		CLINet:   DmsgPtyCLINet,
+		DmsgPort: skyenv.DmsgPtyPort,
+		CLINet:   skyenv.DmsgPtyCLINet,
 		CLIAddr:  dmsgpty.DefaultCLIAddr(),
 	}
 
 	conf.STCP = &network.STCPConfig{
-		ListeningAddress: STCPAddr,
+		ListeningAddress: skyenv.STCPAddr,
 		PKTable:          nil,
 	}
 	// Initialize log server config (disabled by default - set local_addr to enable)
@@ -115,12 +116,12 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 			}
 		}
 	}
-	conf.IsPublic = IsPublic
+	conf.IsPublic = skyenv.IsPublic
 	conf.PublicVisorConfig = &PublicVisorConfig{
-		RegistrationTimeout: Duration(PublicVisorRegistrationTimeout),
+		RegistrationTimeout: Duration(skyenv.PublicVisorRegistrationTimeout),
 		MaxTransports:       PublicVisorMaxTransports,
 	}
-	conf.GeoIP = GeoIP
+	conf.GeoIP = skyenv.GeoIP
 	return conf
 }
 

@@ -27,9 +27,20 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+)
+
+// Default timeouts
+const (
+	servicesFetchTimeout = 15 * time.Second
+)
+
+// Default file permissions
+const (
+	configFilePerms = 0600
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor
@@ -73,43 +84,62 @@ func init() {
 	genConfigCmd.Flags().SortFlags = false
 	RootCmd.AddCommand(genConfigCmd, genKeysCmd, checkPKCmd)
 
+	// Output flags
+	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout")
+	gHiddenFlags = append(gHiddenFlags, "stdout")
+	genConfigCmd.Flags().BoolVarP(&isSquash, "squash", "N", false, "output config without whitespace or newlines")
+	gHiddenFlags = append(gHiddenFlags, "squash")
+	msg = "output config"
+	if scriptExecString("${OUTPUT}") == "" {
+		msg += ": " + skyenv.ConfigName
+	}
+	genConfigCmd.Flags().StringVarP(&output, "out", "o", scriptExecString("${OUTPUT}"), msg+"")
+	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal :: show errors with -n flag")
+	gHiddenFlags = append(gHiddenFlags, "hide")
+	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
+
+	// Config generation flags
+	genConfigCmd.Flags().BoolVarP(&isForce, "force", "f", false, "remove pre-existing config")
+	gHiddenFlags = append(gHiddenFlags, "force")
+	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys")
+	genConfigCmd.Flags().BoolVarP(&isRetainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
+	gHiddenFlags = append(gHiddenFlags, "retainhv")
+
+	// Network and deployment flags
 	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", scriptExecArray(fmt.Sprintf("${SVCCONFADDR[@]-%s}", serviceConfURL)), "services conf url\n\r")
 	gHiddenFlags = append(gHiddenFlags, "url")
-	genConfigCmd.Flags().StringVar(&logLevel, "loglvl", scriptExecString("${LOGLVL:-info}"), "level of logging in config")
-	gHiddenFlags = append(gHiddenFlags, "loglvl")
-	genConfigCmd.Flags().BoolVarP(&isBestProtocol, "bestproto", "b", scriptExecBool("${BESTPROTO:-false}"), "best protocol (dmsg | direct) based on location") //this will also disable public autoconnect based on location
-	genConfigCmd.Flags().BoolVarP(&isDisableAuth, "noauth", "c", false, "disable authentication for hypervisor UI")
-	gHiddenFlags = append(gHiddenFlags, "noauth")
+	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment")
+	gHiddenFlags = append(gHiddenFlags, "testenv")
 	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use dmsg connection to skywire services")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
 	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString("${DMSGCONF}"), "dmsghttp-config path")
 	gHiddenFlags = append(gHiddenFlags, "dmsgconf")
+	genConfigCmd.Flags().BoolVarP(&isBestProtocol, "bestproto", "b", scriptExecBool("${BESTPROTO:-false}"), "best protocol (dmsg | direct) based on location") //this will also disable public autoconnect based on location
+	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
+	gHiddenFlags = append(gHiddenFlags, "nofetch")
+	//TODO: visorconfig.SvcConfName
+	genConfigCmd.Flags().StringVarP(&configServicePath, "svcconf", "S", scriptExecString("${SVCCONF}"), "fallback service configuration file")
+	gHiddenFlags = append(gHiddenFlags, "svcconf")
+	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for services")
+	gHiddenFlags = append(gHiddenFlags, "nodefaults")
+
+	// DMSG flags
 	genConfigCmd.Flags().IntVar(&minDmsgSess, "minsess", scriptExecInt("${MINDMSGSESS:-2}"), "number of dmsg servers to connect to (0 = unlimited)")
 	gHiddenFlags = append(gHiddenFlags, "minsess")
-	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI")
-	gHiddenFlags = append(gHiddenFlags, "auth")
-	genConfigCmd.Flags().BoolVarP(&isForce, "force", "f", false, "remove pre-existing config")
-	gHiddenFlags = append(gHiddenFlags, "force")
-	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable")
-	gHiddenFlags = append(gHiddenFlags, "disableapps")
-	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", scriptExecBool("${ISHYPERVISOR:-false}"), "local hypervisor configuration")
-	msg = "list of public keys to add as hypervisor"
-	if scriptExecArray("${HYPERVISORPKS[@]}") != "" {
-		msg += "\n\r"
-	}
-	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", scriptExecArray("${HYPERVISORPKS[@]}"), msg)
-	msg = "add dmsgpty whitelist PKs"
-	if scriptExecArray("${DMSGPTYPKS[@]}") != "" {
-		msg += "\n\r"
-	}
-	genConfigCmd.Flags().StringVar(&dmsgptyWlPKs, "dmsgpty", scriptExecArray("${DMSGPTYPKS[@]}"), msg)
-	msg = "add survey whitelist PKs"
-	if scriptExecArray("${SURVEYPKS[@]}") != "" {
-		msg += "\n\r"
-	}
 
-	genConfigCmd.Flags().StringVar(&surveyWhitelistPKs, "survey", scriptExecArray("${SURVEYPKS[@]}"), msg)
-	gHiddenFlags = append(gHiddenFlags, "survey")
+	// Transport flags
+	genConfigCmd.Flags().BoolVarP(&disablePublicAutoConn, "autoconn", "y", scriptExecBool("${DISABLEPUBLICAUTOCONN:-false}"), "disable autoconnect to public visors")
+	gHiddenFlags = append(gHiddenFlags, "hide")
+	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", scriptExecBool("${VISORISPUBLIC:-false}"), "publicize visor in service discovery")
+	gHiddenFlags = append(gHiddenFlags, "public")
+	genConfigCmd.Flags().IntVar(&stcprPort, "stcpr", scriptExecInt("${STCPRPORT:-0}"), "set tcp transport listening port - 0 for random")
+	gHiddenFlags = append(gHiddenFlags, "stcpr")
+	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "set udp transport listening port - 0 for random")
+	gHiddenFlags = append(gHiddenFlags, "sudph")
+	genConfigCmd.Flags().BoolVar(&enableSyncTPDData, "sync-tpd-data", scriptExecBool("${SYNCTPDDATA:-false}"), "enable transport discovery data sync (bandwidth/latency)")
+	gHiddenFlags = append(gHiddenFlags, "sync-tpd-data")
+
+	// Routing flags
 	msg = "add route setup node PKs"
 	if scriptExecArray("${ROUTESETUPPKS[@]}") != "" {
 		msg += "\n\r"
@@ -122,73 +152,52 @@ func init() {
 	}
 	genConfigCmd.Flags().StringVar(&transportSetupPKs, "tpsetup", scriptExecArray("${TPSETUPPKS[@]}"), msg)
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
+	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup node")
+	gHiddenFlags = append(gHiddenFlags, "sn")
+	genConfigCmd.Flags().BoolVar(&enableCalculateRoutes, "calculate-routes", scriptExecBool("${CALCULATEROUTES:-false}"), "enable local route calculation")
+	gHiddenFlags = append(gHiddenFlags, "calculate-routes")
 
-	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", visorconfig.OS, "(linux / mac / win) paths")
-	gHiddenFlags = append(gHiddenFlags, "os")
+	// Hypervisor and security flags
+	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", scriptExecBool("${ISHYPERVISOR:-false}"), "local hypervisor configuration")
+	msg = "list of public keys to add as hypervisor"
+	if scriptExecArray("${HYPERVISORPKS[@]}") != "" {
+		msg += "\n\r"
+	}
+	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", scriptExecArray("${HYPERVISORPKS[@]}"), msg)
+	genConfigCmd.Flags().BoolVarP(&isDisableAuth, "noauth", "c", false, "disable authentication for hypervisor UI")
+	gHiddenFlags = append(gHiddenFlags, "noauth")
+	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI")
+	gHiddenFlags = append(gHiddenFlags, "auth")
+
+	// Dmsgpty and survey whitelist flags
+	msg = "add dmsgpty whitelist PKs"
+	if scriptExecArray("${DMSGPTYPKS[@]}") != "" {
+		msg += "\n\r"
+	}
+	genConfigCmd.Flags().StringVar(&dmsgptyWlPKs, "dmsgpty", scriptExecArray("${DMSGPTYPKS[@]}"), msg)
+	msg = "add survey whitelist PKs"
+	if scriptExecArray("${SURVEYPKS[@]}") != "" {
+		msg += "\n\r"
+	}
+
+	genConfigCmd.Flags().StringVar(&surveyWhitelistPKs, "survey", scriptExecArray("${SURVEYPKS[@]}"), msg)
+	gHiddenFlags = append(gHiddenFlags, "survey")
+
+	// App flags
 	genConfigCmd.Flags().BoolVarP(&isDisplayNodeIP, "publicip", "l", scriptExecBool("${DISPLAYNODEIP:-false}"), "display visor ip in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "publicip")
 	genConfigCmd.Flags().BoolVarP(&addExampleApps, "example-apps", "m", false, "add example apps to the config")
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
 	genConfigCmd.Flags().BoolVar(&externalApps, "external-apps", false, "configure launcher apps as external processes")
 	gHiddenFlags = append(gHiddenFlags, "external-apps")
-	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout")
-	gHiddenFlags = append(gHiddenFlags, "stdout")
-	genConfigCmd.Flags().BoolVarP(&isSquash, "squash", "N", false, "output config without whitespace or newlines")
-	gHiddenFlags = append(gHiddenFlags, "squash")
-	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
-	msg = "output config"
-	if scriptExecString("${OUTPUT}") == "" {
-		msg += ": " + visorconfig.ConfigName
-	}
-	genConfigCmd.Flags().StringVarP(&output, "out", "o", scriptExecString("${OUTPUT}"), msg+"")
-	if visorconfig.OS == "win" {
-		pText = "use .msi installation path: "
-	}
-	if visorconfig.OS == "linux" {
-		pText = "use path for package: "
-	}
-	if visorconfig.OS == "mac" {
-		pText = "use mac installation path: "
-	}
-	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", scriptExecBool("${PKGENV:-false}"), pText+visorconfig.SkywirePath+"")
-	homepath := visorconfig.HomePath()
-	if homepath != "" {
-
-		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", scriptExecBool("${USRENV:-false}"), "use paths for user space: "+homepath+"")
-	}
-	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys")
-	if scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}") != "0000000000000000000000000000000000000000000000000000000000000000" {
-		//nolint:errcheck,gosec
-		sk.Set(scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}"))
-	}
-	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
-	gHiddenFlags = append(gHiddenFlags, "sk")
-	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment")
-	gHiddenFlags = append(gHiddenFlags, "testenv")
-	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${VPNSERVER:-true}"), "autostart vpn server (default: true)")
-	gHiddenFlags = append(gHiddenFlags, "servevpn")
-	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal :: show errors with -n flag")
-	gHiddenFlags = append(gHiddenFlags, "hide")
-	genConfigCmd.Flags().BoolVarP(&isRetainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
-	gHiddenFlags = append(gHiddenFlags, "retainhv")
-	genConfigCmd.Flags().BoolVarP(&disablePublicAutoConn, "autoconn", "y", scriptExecBool("${DISABLEPUBLICAUTOCONN:-false}"), "disable autoconnect to public visors")
-	gHiddenFlags = append(gHiddenFlags, "hide")
-	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", scriptExecBool("${VISORISPUBLIC:-false}"), "publicize visor in service discovery")
-	gHiddenFlags = append(gHiddenFlags, "public")
-	genConfigCmd.Flags().IntVar(&stcprPort, "stcpr", scriptExecInt("${STCPRPORT:-0}"), "set tcp transport listening port - 0 for random")
-	gHiddenFlags = append(gHiddenFlags, "stcpr")
-	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "set udp transport listening port - 0 for random")
-	gHiddenFlags = append(gHiddenFlags, "sudph")
+	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable")
+	gHiddenFlags = append(gHiddenFlags, "disableapps")
 	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path for visor native apps")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
-	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
-	gHiddenFlags = append(gHiddenFlags, "proxyclientpk")
-	genConfigCmd.Flags().BoolVar(&enableProxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client")
-	gHiddenFlags = append(gHiddenFlags, "startproxyclient")
-	genConfigCmd.Flags().BoolVar(&disableProxyServerAutostart, "noproxyserver", scriptExecBool("${NOPROXYSERVER:-false}"), "disable autostart of proxy server")
-	gHiddenFlags = append(gHiddenFlags, "noproxyserver")
-	genConfigCmd.Flags().StringVar(&proxyServerWhitelist, "proxywl", scriptExecString("${PROXYSERVERWL}"), "comma-separated list of public keys allowed to connect to proxy server (empty = allow all)")
-	gHiddenFlags = append(gHiddenFlags, "proxywl")
+	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${VPNSERVER:-true}"), "autostart vpn server (default: true)")
+	gHiddenFlags = append(gHiddenFlags, "servevpn")
+
+	// VPN flags
 	// TODO: VPN client killswitch should be handled as boolean, not string
 	genConfigCmd.Flags().StringVar(&setVPNClientKillswitch, "killsw", scriptExecString("${VPNKS}"), "vpn client killswitch")
 	gHiddenFlags = append(gHiddenFlags, "killsw")
@@ -200,21 +209,49 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "secure")
 	genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", scriptExecString("${VPNSEVERNETIFC}"), "VPN Server network interface (detected: "+getInterfaceNames()+")")
 	gHiddenFlags = append(gHiddenFlags, "netifc")
-	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
-	gHiddenFlags = append(gHiddenFlags, "nofetch")
-	//TODO: visorconfig.SvcConfName
-	genConfigCmd.Flags().StringVarP(&configServicePath, "svcconf", "S", scriptExecString("${SVCCONF}"), "fallback service configuration file")
-	gHiddenFlags = append(gHiddenFlags, "svcconf")
-	genConfigCmd.Flags().BoolVar(&noDefaults, "nodefaults", false, "do not use hardcoded defaults for services")
-	gHiddenFlags = append(gHiddenFlags, "nodefaults")
-	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup node")
-	gHiddenFlags = append(gHiddenFlags, "sn")
+
+	// Proxy flags
+	genConfigCmd.Flags().StringVar(&addSkysocksClientSrv, "proxyclientpk", scriptExecString("${PROXYCLIENTPK}"), "set server public key for proxy client")
+	gHiddenFlags = append(gHiddenFlags, "proxyclientpk")
+	genConfigCmd.Flags().BoolVar(&enableProxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client")
+	gHiddenFlags = append(gHiddenFlags, "startproxyclient")
+	genConfigCmd.Flags().BoolVar(&disableProxyServerAutostart, "noproxyserver", scriptExecBool("${NOPROXYSERVER:-false}"), "disable autostart of proxy server")
+	gHiddenFlags = append(gHiddenFlags, "noproxyserver")
+	genConfigCmd.Flags().StringVar(&proxyServerWhitelist, "proxywl", scriptExecString("${PROXYSERVERWL}"), "comma-separated list of public keys allowed to connect to proxy server (empty = allow all)")
+	gHiddenFlags = append(gHiddenFlags, "proxywl")
+
+	// Path and environment flags
+	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
+	gHiddenFlags = append(gHiddenFlags, "os")
+	if skyenv.OS == "win" {
+		pText = "use .msi installation path: "
+	}
+	if skyenv.OS == "linux" {
+		pText = "use path for package: "
+	}
+	if skyenv.OS == "mac" {
+		pText = "use mac installation path: "
+	}
+	genConfigCmd.Flags().BoolVarP(&isPkgEnv, "pkg", "p", scriptExecBool("${PKGENV:-false}"), pText+skyenv.SkywirePath+"")
+	homepath := visorconfig.HomePath()
+	if homepath != "" {
+
+		genConfigCmd.Flags().BoolVarP(&isUsrEnv, "user", "u", scriptExecBool("${USRENV:-false}"), "use paths for user space: "+homepath+"")
+	}
+	genConfigCmd.Flags().StringVar(&logLevel, "loglvl", scriptExecString("${LOGLVL:-info}"), "level of logging in config")
+	gHiddenFlags = append(gHiddenFlags, "loglvl")
+
+	// Secret key flag
+	if scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}") != "0000000000000000000000000000000000000000000000000000000000000000" {
+		//nolint:errcheck,gosec
+		sk.Set(scriptExecString("${SK:-0000000000000000000000000000000000000000000000000000000000000000}"))
+	}
+	genConfigCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
+	gHiddenFlags = append(gHiddenFlags, "sk")
+
+	// Version and misc flags
 	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override")
 	gHiddenFlags = append(gHiddenFlags, "version")
-	genConfigCmd.Flags().BoolVar(&enableCalculateRoutes, "calculate-routes", scriptExecBool("${CALCULATEROUTES:-false}"), "enable local route calculation")
-	gHiddenFlags = append(gHiddenFlags, "calculate-routes")
-	genConfigCmd.Flags().BoolVar(&enableSyncTPDData, "sync-tpd-data", scriptExecBool("${SYNCTPDDATA:-false}"), "enable transport discovery data sync (bandwidth/latency)")
-	gHiddenFlags = append(gHiddenFlags, "sync-tpd-data")
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 
 	//show all flags on help
@@ -229,7 +266,7 @@ var genConfigCmd = &cobra.Command{
 	Use:   "gen",
 	Short: "Generate a config file",
 	Long: func() string {
-		if visorconfig.OS == "linux" {
+		if skyenv.OS == "linux" {
 			if skyenvfile == "" {
 				return `Generate a config file
 
@@ -256,7 +293,7 @@ var genConfigCmd = &cobra.Command{
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		log := logger
 		if isEnvs {
-			if visorconfig.OS == "windows" {
+			if skyenv.OS == "windows" {
 				envfile = envfileWindows
 			} else {
 				envfile = envfileLinux
@@ -278,7 +315,7 @@ var genConfigCmd = &cobra.Command{
 		//set default output filename
 		if output == "" {
 			isOutUnset = true
-			confPath = visorconfig.ConfigName
+			confPath = skyenv.ConfigName
 			output = confPath
 		} else {
 			confPath = output
@@ -326,12 +363,12 @@ var genConfigCmd = &cobra.Command{
 		// skywire-cli config gen -p
 		if !isStdout && isOutUnset {
 			if isPkgEnv {
-				configName = visorconfig.ConfigJSON
+				configName = skyenv.ConfigJSON
 				confPath = visorconfig.SkywireConfig()
 				output = confPath
 			}
 			if isUsrEnv {
-				confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
+				confPath = visorconfig.HomePath() + "/" + skyenv.ConfigName
 				output = confPath
 			}
 		}
@@ -344,7 +381,7 @@ var genConfigCmd = &cobra.Command{
 		}
 		//don't write file with stdout
 		if !isStdout {
-			if visorconfig.OS == "linux" {
+			if skyenv.OS == "linux" {
 				//warn when writing config as root to non root owned dir & fail on the reverse instance
 				if _, err = exec.LookPath("stat"); err == nil {
 					confPath1, _ := filepath.Split(confPath)
@@ -368,8 +405,8 @@ var genConfigCmd = &cobra.Command{
 				}
 			}
 		}
-		if isPkgEnv && configServicePath == visorconfig.SERVICESName {
-			configServicePath = visorconfig.SkywirePath + "/" + visorconfig.SERVICESName
+		if isPkgEnv && configServicePath == skyenv.SERVICESName {
+			configServicePath = skyenv.SkywirePath + "/" + skyenv.SERVICESName
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
@@ -388,117 +425,12 @@ var genConfigCmd = &cobra.Command{
 			isDmsgHTTP = true
 		}
 
-		if !noFetch && !isDmsgHTTP {
-			client := http.Client{Timeout: 15 * time.Second}
-			if serviceConfURL == "" {
-				serviceConfURL = "http://"
-			}
-			if !isStdout {
-				log.Infof("Fetching service endpoints from %s", serviceConfURL)
-			}
-			res, err := client.Get(serviceConfURL)
-			if err != nil {
-				if !isStdout {
-					log.WithError(err).Error("Failed to fetch servers")
-					log.Warn("Falling back on services-config.json")
-				}
-				body := deployment.ServicesJSON
-				if configServicePath != "" {
-					body, err = os.ReadFile(configServicePath)
-					if err != nil {
-						if !isStdout {
-							log.WithError(err).Error("Failed to read config service from file")
-							log.Warn("Falling back on hardcoded servers")
-						}
-						return
-					}
-				}
-				if err := json.Unmarshal(body, &servicesConfig); err != nil {
-					if !isStdout {
-						log.WithError(err).Error("Failed to unmarshal services-config.json file")
-						log.Warn("Falling back on hardcoded servers")
-					}
-					return
-				}
-				services = servicesConfig.Prod
-				if isTestEnv {
-					services = servicesConfig.Test
-				}
-			} else {
-				defer res.Body.Close() //nolint:errcheck,gosec
-				body, err := io.ReadAll(res.Body)
-				if err != nil {
-					log.WithError(err).Error("Failed to read HTTP response")
-					return
-				}
-				if err := json.Unmarshal(body, &services); err != nil {
-					if !isStdout {
-						log.WithError(err).Error("Failed to unmarshal JSON response to services struct")
-						log.Warn("Falling back on hardcoded servers")
-					}
-					return
-				} else if !isStdout {
-					log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
-				}
-			}
-		} else {
-			body := deployment.ServicesJSON
-			if configServicePath != "" {
-				body, err = os.ReadFile(configServicePath)
-				if err != nil {
-					if !isStdout {
-						log.WithError(err).Error("Failed to read config service from file")
-						log.Warn("Falling back on hardcoded servers")
-					}
-					return
-				}
-			}
-			if err := json.Unmarshal(body, &servicesConfig); err != nil {
-				if !isStdout {
-					log.WithError(err).Error("Failed to unmarshal services-config.json file")
-					log.Warn("Falling back on hardcoded servers")
-				}
-				return
-			}
-			services = servicesConfig.Prod
-			if isTestEnv {
-				services = servicesConfig.Test
-			}
-		}
+		fetchServiceConfig(log)
 
 		// reset the state of isStdout
 		isStdout = wasStdout
-		// Read in old config and obtain old secret key or generate a new random secret key
-		// and obtain old hypervisors (if any)
-		var oldConf visorconfig.V1
-		if isRegen {
-			// Read the JSON configuration file
-			oldConfJSON, err := os.ReadFile(confPath)
-			if err != nil {
-				if !isStdout || isStdout && isHide {
-					log.Errorf("Failed to read config file: %v", err)
-				}
-			} else {
-				// Decode JSON data
-				err = json.Unmarshal(oldConfJSON, &oldConf)
-				if err != nil {
-					if !isStdout || isStdout && isHide {
-						log.WithError(err).Fatal("Failed to unmarshal old config json")
-					}
-					_, sk = cipher.GenerateKeyPair()
-				} else {
-					sk = oldConf.SK
-					if isRetainHypervisors {
-						for _, j := range oldConf.Hypervisors {
-							hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
-						}
-						for _, j := range oldConf.Dmsgpty.Whitelist {
-							dmsgptyWlPKs = dmsgptyWlPKs + "," + fmt.Sprintf("\t%s\n", j)
-						}
-					}
-				}
-			}
-		}
+
+		readExistingConfig(log)
 
 		//generate the common config containing public & secret keys
 		u := buildinfo.Version()
@@ -529,508 +461,709 @@ var genConfigCmd = &cobra.Command{
 			dnsServer = services.DNSServer
 		}
 
-		if isDmsgHTTP {
-			// TODO
-			//if isUsrEnv {
-			//	dmsgHTTPPath = homepath + "/" + visorconfig.DMSGHTTPName
-			//}
-			dmsghttpConfigData := deployment.DmsghttpJSON
-			if dmsgHTTPPath != "" {
-				// Read the JSON configuration file
-				dmsghttpConfigData, err = os.ReadFile(dmsgHTTPPath)
-				if err != nil {
-					log.Fatalf("Failed to read config file: %v", err)
-				}
-			}
+		configureDMSGHTTP(log, err)
 
-			// Decode JSON data
-			err = json.Unmarshal(dmsghttpConfigData, &dmsgHTTPServersList)
+		configureServices(log)
+
+		configureDMSG()
+
+		configureTransports()
+
+		configureRouting()
+
+		configureLauncher(log)
+
+		configureHypervisor(log)
+
+		configureApps(log)
+
+		applyOverrides()
+
+		writeConfigOutput(log)
+	},
+}
+
+// logIfNotStdout logs an error with a message only when output is not stdout.
+func logIfNotStdout(log *logging.Logger, err error, msg string) {
+	if !isStdout {
+		log.WithError(err).Error(msg)
+	}
+}
+
+// fetchServiceConfig fetches service endpoints from the configured URL
+// or falls back to a local file or hardcoded defaults.
+func fetchServiceConfig(log *logging.Logger) {
+	var err error
+	if !noFetch && !isDmsgHTTP {
+		client := http.Client{Timeout: servicesFetchTimeout}
+		if serviceConfURL == "" {
+			serviceConfURL = "http://"
+		}
+		if !isStdout {
+			log.Infof("Fetching service endpoints from %s", serviceConfURL)
+		}
+		res, err := client.Get(serviceConfURL)
+		if err != nil {
+			logIfNotStdout(log, err, "Failed to fetch servers")
+			if !isStdout {
+				log.Warn("Falling back on services-config.json")
+			}
+			loadServicesFromFile(log)
+			return
+		}
+		defer res.Body.Close() //nolint:errcheck,gosec
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			log.WithError(err).Error("Failed to read HTTP response")
+			return
+		}
+		if err := json.Unmarshal(body, &services); err != nil {
+			logIfNotStdout(log, err, "Failed to unmarshal JSON response to services struct")
+			if !isStdout {
+				log.Warn("Falling back on hardcoded servers")
+			}
+			return
+		} else if !isStdout {
+			log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+		}
+	} else {
+		body := deployment.ServicesJSON
+		if configServicePath != "" {
+			body, err = os.ReadFile(configServicePath)
 			if err != nil {
-				log.WithError(err).Fatal("Failed to unmarshal " + visorconfig.DMSGHTTPName)
-			}
-		}
-
-		//fall back on  defaults
-		var routeSetupPKs cipher.PubKeys
-		var tpSetupPKs cipher.PubKeys
-		var surveyWlPKs cipher.PubKeys
-		// If nothing was fetched
-		if services.SurveyWhitelist == nil {
-			// By default
-			log.Error("Services were not fetched from default conf service URL")
-
-		}
-		//if the flag is not empty
-		if surveyWhitelistPKs != "" {
-			// validate public keys set via flag / fail explicitly on errors
-			if err := surveyWlPKs.Set(surveyWhitelistPKs); err != nil {
-				log.Fatalf("bad key set for survey whitelist flag: %v", err)
-			}
-		}
-		services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWlPKs...)
-
-		if services.DmsgDiscovery == "" {
-			log.Fatalf("Dmsg Discovery not set")
-		}
-		if services.TransportDiscovery == "" {
-			log.Fatalf("Transport Discovery not set")
-		}
-		if routeSetupNodes != "" {
-			if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
-				log.Fatalf("bad key set for route setup node flag: %v", err)
-			}
-		}
-		services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
-		if services.RouteSetupNodes == nil {
-			log.Fatalf("Route Setup node not set")
-		}
-		if transportSetupPKs != "" {
-			if err := tpSetupPKs.Set(transportSetupPKs); err != nil {
-				log.Fatalf("bad key set for transport setup node flag: %v", err)
-			}
-		}
-		services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
-		if services.TransportSetupPKs == nil {
-			log.Fatalf("Route Setup node not set")
-		}
-
-		conf.Dmsg = &dmsgc.DmsgConfig{
-			Discovery:            services.DmsgDiscovery,
-			SessionsCount:        minDmsgSess,
-			Servers:              []*disc.Entry{},
-			ConnectedServersType: "all",
-			Protocol:             "yamux",
-		}
-		conf.Transport = &visorconfig.Transport{
-			Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
-			AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
-			PublicAutoconnect: visorconfig.PublicAutoconnect,
-			TransportSetupPKs: services.TransportSetupPKs,
-			LogStore: &visorconfig.LogStore{
-				Type:             visorconfig.FileLogStore,
-				Location:         visorconfig.LocalPath + "/" + visorconfig.TpLogStore,
-				RotationInterval: visorconfig.DefaultLogRotationInterval,
-			},
-			SudphPort:   sudphPort,
-			StcprPort:   stcprPort,
-			SyncTPDData: enableSyncTPDData,
-		}
-		conf.Routing = &visorconfig.Routing{
-			RouteFinder:        services.RouteFinder,     //utilenv.RouteFinderAddr,
-			RouteSetupNodes:    services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
-			RouteFinderTimeout: visorconfig.DefaultTimeout,
-			MinHops:            1,
-			CalculateRoutes:    enableCalculateRoutes,
-		}
-
-		if oldConf.Routing != nil {
-			if oldConf.Routing.MinHops != 0 {
-				conf.Routing.MinHops = oldConf.Routing.MinHops
-			}
-		}
-		if oldConf.Dmsg != nil {
-			if oldConf.Dmsg.Protocol != "" {
-				conf.Dmsg.Protocol = oldConf.Dmsg.Protocol
-			}
-		}
-
-		conf.Launcher = &visorconfig.Launcher{
-			ServiceDisc:   services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
-			Apps:          nil,
-			ServerAddr:    visorconfig.AppSrvAddr,
-			BinPath:       visorconfig.AppBinPath,
-			DisplayNodeIP: isDisplayNodeIP,
-		}
-		conf.UptimeTracker = &visorconfig.UptimeTracker{
-			Addr: services.UptimeTracker, //utilenv.UptimeTrackerAddr,
-		}
-		conf.CLIAddr = visorconfig.RPCAddr
-		conf.LogLevel = logLevel
-		conf.LocalPath = visorconfig.LocalPath
-		conf.DmsgHTTPServerPath = visorconfig.LocalPath + "/" + visorconfig.Custom
-		conf.StunServers = services.StunServers //utilenv.GetStunServers()
-		conf.ShutdownTimeout = visorconfig.DefaultTimeout
-		conf.GeoIP = visorconfig.GeoIP
-
-		conf.Dmsgpty = &visorconfig.Dmsgpty{
-			DmsgPort: visorconfig.DmsgPtyPort,
-			CLINet:   visorconfig.DmsgPtyCLINet,
-			CLIAddr:  dmsgpty.DefaultCLIAddr(),
-		}
-
-		conf.STCP = &network.STCPConfig{
-			ListeningAddress: visorconfig.STCPAddr,
-			PKTable:          nil,
-		}
-
-		// UI Server configuration (disabled by default)
-		conf.UIServer = &visorconfig.UIServer{
-			Enable:    false,
-			LocalAddr: "localhost:8081",
-			DmsgPort:  81,
-		}
-
-		// Log Server configuration (localhost serving disabled by default)
-		// Set local_addr to e.g. "localhost:8002" to enable localhost serving without auth
-		conf.LogServer = &visorconfig.LogServer{
-			LocalAddr: "",
-		}
-
-		// Use dmsg urls for services and add dmsg-servers
-		if isDmsgHTTP {
-			if dmsgHTTPServersList != nil {
-				if isTestEnv {
-					conf.Dmsg.Servers = dmsgHTTPServersList.Test.DMSGServers
-					conf.Dmsg.Discovery = dmsgHTTPServersList.Test.DMSGDiscovery
-					conf.Transport.AddressResolver = dmsgHTTPServersList.Test.AddressResolver
-					conf.Transport.Discovery = dmsgHTTPServersList.Test.TransportDiscovery
-					conf.UptimeTracker.Addr = dmsgHTTPServersList.Test.UptimeTracker
-					conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
-					conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
-				} else {
-					conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
-					conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
-					conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
-					conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
-					conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
-					conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
-					conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
+				logIfNotStdout(log, err, "Failed to read config service from file")
+				if !isStdout {
+					log.Warn("Falling back on hardcoded servers")
 				}
+				return
 			}
 		}
+		if err := json.Unmarshal(body, &servicesConfig); err != nil {
+			logIfNotStdout(log, err, "Failed to unmarshal services-config.json file")
+			if !isStdout {
+				log.Warn("Falling back on hardcoded servers")
+			}
+			return
+		}
+		services = servicesConfig.Prod
+		if isTestEnv {
+			services = servicesConfig.Test
+		}
+	}
+}
 
-		// Configure public visor
-		conf.IsPublic = isPublic
-		if isPublic {
-			conf.PublicVisorConfig = &visorconfig.PublicVisorConfig{
-				RegistrationTimeout: visorconfig.Duration(visorconfig.PublicVisorRegistrationTimeout),
-				MaxTransports:       visorconfig.PublicVisorMaxTransports,
+// loadServicesFromFile reads service config from a file or embedded defaults.
+func loadServicesFromFile(log *logging.Logger) {
+	body := deployment.ServicesJSON
+	if configServicePath != "" {
+		var err error
+		body, err = os.ReadFile(configServicePath)
+		if err != nil {
+			logIfNotStdout(log, err, "Failed to read config service from file")
+			if !isStdout {
+				log.Warn("Falling back on hardcoded servers")
 			}
+			return
 		}
+	}
+	if err := json.Unmarshal(body, &servicesConfig); err != nil {
+		logIfNotStdout(log, err, "Failed to unmarshal services-config.json file")
+		if !isStdout {
+			log.Warn("Falling back on hardcoded servers")
+		}
+		return
+	}
+	services = servicesConfig.Prod
+	if isTestEnv {
+		services = servicesConfig.Test
+	}
+}
 
-		// Manipulate Hypervisor PKs
-		conf.Hypervisors = make([]cipher.PubKey, 0)
-		if hypervisorPKs != "" {
-			keys := strings.Split(hypervisorPKs, ",")
-			for _, key := range keys {
-				if key != "" {
-					keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
-					if err != nil {
-						log.WithError(err).Fatalf("Failed to parse hypervisor public key: %s.", key)
-					}
-					if key != conf.PK.Hex() {
-						conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
-					} else {
-						// setting the same public key as the current visor for a remote hypervisor is a weird misconfiguration
-						// the intention was likely to configure this visor as the hypervisor
-						isHypervisor = true
-					}
-				}
-			}
-		}
-		// Local hypervisor setting
-		if isHypervisor {
-			config := visorconfig.GenerateWorkDirConfig(false)
-			conf.Hypervisor = &config
-		}
-
-		// Manipulate dmsgpty whitelist PKs
-		conf.Dmsgpty.Whitelist = make([]cipher.PubKey, 0)
-		if dmsgptyWlPKs != "" {
-			keys := strings.Split(dmsgptyWlPKs, ",")
-			for _, key := range keys {
-				if key != "" {
-					keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
-					if err != nil {
-						log.WithError(err).Fatalf("Failed to parse Dmsgpty Whitelist public key: %s.", key)
-					}
-					conf.Dmsgpty.Whitelist = append(conf.Dmsgpty.Whitelist, cipher.PubKey(keyParsed))
-				}
-			}
-		}
-		// set survey collection whitelist - will include by default hypervisors & dmsgpty whitelisted keys
-		conf.SurveyWhitelist = services.SurveyWhitelist
-		// set package-specific config paths
-		if isPkgEnv {
-			pkgConfig := visorconfig.PackageConfig()
-			conf.LocalPath = pkgConfig.LocalPath
-			conf.DmsgHTTPServerPath = pkgConfig.LocalPath + "/" + visorconfig.Custom
-			conf.Launcher.BinPath = pkgConfig.LauncherBinPath
-			conf.Transport.LogStore.Location = pkgConfig.LocalPath + "/" + visorconfig.TpLogStore
-			if conf.Hypervisor != nil {
-				conf.Hypervisor.EnableAuth = pkgConfig.Hypervisor.EnableAuth
-				conf.Hypervisor.DBPath = pkgConfig.Hypervisor.DbPath
-			}
-		}
-		// set config paths for the user space
-		if isUsr {
-			usrConfig := visorconfig.UserConfig()
-			conf.LocalPath = usrConfig.LocalPath
-			conf.DmsgHTTPServerPath = usrConfig.LocalPath + "/" + visorconfig.Custom
-			conf.Launcher.BinPath = usrConfig.LauncherBinPath
-			conf.Transport.LogStore.Location = usrConfig.LocalPath + "/" + visorconfig.TpLogStore
-			if conf.Hypervisor != nil {
-				conf.Hypervisor.EnableAuth = usrConfig.Hypervisor.EnableAuth
-				conf.Hypervisor.DBPath = usrConfig.Hypervisor.DbPath
-			}
-		}
-		// App config settings
-		if externalApps {
-			// External apps configuration (apps run as separate processes)
-			conf.Launcher.Apps = []appserver.AppConfig{
-				{
-					Name:      visorconfig.VPNClientName,
-					Binary:    "skywire",
-					AutoStart: false,
-					Port:      routing.Port(skyenv.VPNClientPort),
-					Args:      append([]string{"app", "vpn-client"}, "--dns", dnsServer),
-				},
-				{
-					Name:      visorconfig.SkychatName,
-					Binary:    "skywire",
-					AutoStart: true,
-					Port:      routing.Port(skyenv.SkychatPort),
-					Args:      append([]string{"app", "skychat"}, "--addr", visorconfig.SkychatAddr),
-				},
-				{
-					Name:      visorconfig.SkysocksName,
-					Binary:    "skywire",
-					AutoStart: true,
-					Port:      routing.Port(visorconfig.SkysocksPort),
-					Args:      []string{"app", "skysocks"},
-				},
-				{
-					Name:      visorconfig.SkysocksClientName,
-					Binary:    "skywire",
-					AutoStart: false,
-					Port:      routing.Port(visorconfig.SkysocksClientPort),
-					Args:      append([]string{"app", "skysocks-client"}, "--addr", visorconfig.SkysocksClientAddr),
-				},
-				{
-					Name:      visorconfig.VPNServerName,
-					Binary:    "skywire",
-					AutoStart: isVpnServerEnable,
-					Port:      routing.Port(visorconfig.VPNServerPort),
-					Args:      []string{"app", "vpn-server"},
-				},
+// readExistingConfig reads an old config file when regenerating, preserving
+// the secret key and optionally hypervisor/dmsgpty whitelist keys.
+func readExistingConfig(log *logging.Logger) {
+	var oldConf visorconfig.V1
+	if isRegen {
+		// Read the JSON configuration file
+		oldConfJSON, err := os.ReadFile(confPath)
+		if err != nil {
+			if !isStdout || isStdout && isHide {
+				log.Errorf("Failed to read config file: %v", err)
 			}
 		} else {
-			// Internal apps configuration (default - apps run within visor process)
-			conf.Launcher.Apps = []appserver.AppConfig{
-				{
-					Name:      visorconfig.VPNClientName,
-					AutoStart: false,
-					Port:      routing.Port(skyenv.VPNClientPort),
-					Args:      []string{"--dns", dnsServer},
-				},
-				{
-					Name:      visorconfig.SkychatName,
-					AutoStart: true,
-					Port:      routing.Port(skyenv.SkychatPort),
-					Args:      []string{"--addr", visorconfig.SkychatAddr},
-				},
-				{
-					Name:      visorconfig.SkysocksName,
-					AutoStart: true,
-					Port:      routing.Port(visorconfig.SkysocksPort),
-					Args:      []string{},
-				},
-				{
-					Name:      visorconfig.SkysocksClientName,
-					AutoStart: false,
-					Port:      routing.Port(visorconfig.SkysocksClientPort),
-					Args:      []string{"--addr", visorconfig.SkysocksClientAddr},
-				},
-				{
-					Name:      visorconfig.VPNServerName,
-					AutoStart: isVpnServerEnable,
-					Args:      []string{},
-					Port:      routing.Port(visorconfig.VPNServerPort),
-				},
-			}
-		}
-
-		// Disable apps --disable-apps flag
-		if disableApps != "" {
-			apps := strings.Split(disableApps, ",")
-			appsSlice := make(map[string]bool)
-			for _, app := range apps {
-				appsSlice[app] = true
-			}
-			var newConfLauncherApps []appserver.AppConfig
-			for _, app := range conf.Launcher.Apps {
-				if _, ok := appsSlice[app.Name]; !ok {
-					newConfLauncherApps = append(newConfLauncherApps, app)
-				}
-			}
-			conf.Launcher.Apps = newConfLauncherApps
-		}
-		// add example applications to the config
-		if addExampleApps {
-			exampleApps := []appserver.AppConfig{
-				{
-					Name:      skyenv.ExampleServerName,
-					AutoStart: false,
-					Port:      routing.Port(skyenv.ExampleServerPort),
-				},
-			}
-			newConfLauncherApps := append(conf.Launcher.Apps, exampleApps...)
-			conf.Launcher.Apps = newConfLauncherApps
-		}
-
-		if addVPNServerWhitelist != "" {
-			changeAppsConfig(conf, "vpn-server", "--whitelist", addVPNServerWhitelist)
-		}
-		if setVPNServerNetIfc != "" {
-			changeAppsConfig(conf, "vpn-server", "--netifc", setVPNServerNetIfc)
-		}
-		switch setVPNServerSecure {
-		case "true":
-			changeAppsConfig(conf, "vpn-server", "--secure", setVPNServerSecure)
-		case "false":
-			changeAppsConfig(conf, "vpn-server", "--secure", setVPNServerSecure)
-		}
-		switch setVPNServerAutostart {
-		case "true":
-			for i, app := range conf.Launcher.Apps {
-				if app.Name == "vpn-server" {
-					conf.Launcher.Apps[i].AutoStart = true
-				}
-			}
-		case "false":
-			for i, app := range conf.Launcher.Apps {
-				if app.Name == "vpn-server" {
-					conf.Launcher.Apps[i].AutoStart = false
-				}
-			}
-		}
-
-		switch setVPNClientKillswitch {
-		case "true":
-			changeAppsConfig(conf, "vpn-client", "--killswitch", setVPNClientKillswitch)
-		case "false":
-			changeAppsConfig(conf, "vpn-client", "--killswitch", setVPNClientKillswitch)
-		}
-		if addVPNClientSrv != "" {
-			keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(addVPNClientSrv))
+			// Decode JSON data
+			err = json.Unmarshal(oldConfJSON, &oldConf)
 			if err != nil {
-				log.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", addVPNClientSrv)
-			}
-			changeAppsConfig(conf, "vpn-client", "--srv", keyParsed.Hex())
-		}
-		if addSkysocksClientSrv != "" {
-			keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(addSkysocksClientSrv))
-			if err != nil {
-				logger.WithError(err).Fatalf("Failed to parse public key: %s.", addSkysocksClientSrv)
-			}
-			changeAppsConfig(conf, "skysocks-client", "--srv", keyParsed.Hex())
-		}
-		if proxyServerWhitelist != "" {
-			changeAppsConfig(conf, "skysocks", "--whitelist", proxyServerWhitelist)
-		}
-
-		if disableProxyServerAutostart {
-			for i, app := range conf.Launcher.Apps {
-				if app.Name == "skysocks" {
-					conf.Launcher.Apps[i].AutoStart = false
+				if !isStdout || isStdout && isHide {
+					log.WithError(err).Fatal("Failed to unmarshal old config json")
+				}
+				_, sk = cipher.GenerateKeyPair()
+			} else {
+				sk = oldConf.SK
+				if isRetainHypervisors {
+					for _, j := range oldConf.Hypervisors {
+						hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
+					}
+					for _, j := range oldConf.Dmsgpty.Whitelist {
+						dmsgptyWlPKs = dmsgptyWlPKs + "," + fmt.Sprintf("\t%s\n", j)
+					}
 				}
 			}
 		}
-		if enableProxyClientAutostart {
-			for i, app := range conf.Launcher.Apps {
-				if app.Name == "skysocks-client" {
-					conf.Launcher.Apps[i].AutoStart = true
-				}
+	}
+	// Store oldConf for later use in configureRouting and configureDMSG
+	oldConfCache = &oldConf
+}
+
+// oldConfCache holds the previously-read config for use across configure* functions.
+var oldConfCache *visorconfig.V1
+
+// configureDMSGHTTP loads dmsghttp server list when dmsghttp mode is enabled.
+func configureDMSGHTTP(log *logging.Logger, outerErr error) {
+	_ = outerErr
+	if isDmsgHTTP {
+		// TODO
+		//if isUsrEnv {
+		//	dmsgHTTPPath = homepath + "/" + skyenv.DMSGHTTPName
+		//}
+		dmsghttpConfigData := deployment.DmsghttpJSON
+		if dmsgHTTPPath != "" {
+			var err error
+			// Read the JSON configuration file
+			dmsghttpConfigData, err = os.ReadFile(dmsgHTTPPath)
+			if err != nil {
+				log.Fatalf("Failed to read config file: %v", err)
 			}
-		}
-		if isHypervisor {
-			// Disable hypervisor UI authentication --disable-auth flag
-			if isDisableAuth {
-				conf.Hypervisor.EnableAuth = false
-			}
-			// Enable hypervisor UI authentication --enable-auth flag
-			if isEnableAuth {
-				conf.Hypervisor.EnableAuth = true
-			}
-		}
-		// Enable hypervisor UI authentication on windows & macos
-		if (selectedOS == "win") || (selectedOS == "mac") {
-			if isHypervisor {
-				conf.Hypervisor.EnableAuth = true
-			}
-		}
-		// set bin_path for apps from flag
-		if binPath != "" {
-			conf.Launcher.BinPath = binPath
-		}
-		// set version of the config file from flag - testing override
-		if ver != "" {
-			conf.Common.Version = ver
-		}
-		// Disable autoconnect to public visors
-		if disablePublicAutoConn {
-			conf.Transport.PublicAutoconnect = false
-		}
-		// Enable the display of the visor's ip address in service discovery services
-		if isDisplayNodeIP {
-			conf.Launcher.DisplayNodeIP = true
 		}
 
-		//don't write file with stdout
-		if !isStdout {
-			// Marshal the modified config to JSON with indentation
-			jsonData, err := json.MarshalIndent(conf, "", "  ")
-			if err != nil {
-				log.WithError(err).Fatal("Failed to marshal config to indented JSON")
+		// Decode JSON data
+		err := json.Unmarshal(dmsghttpConfigData, &dmsgHTTPServersList)
+		if err != nil {
+			log.WithError(err).Fatal("Failed to unmarshal " + skyenv.DMSGHTTPName)
+		}
+	}
+}
+
+// configureServices validates and merges service endpoints from flags and
+// fetched data (survey whitelist, route setup nodes, transport setup PKs).
+func configureServices(log *logging.Logger) {
+	//fall back on  defaults
+	var routeSetupPKs cipher.PubKeys
+	var tpSetupPKs cipher.PubKeys
+	var surveyWlPKs cipher.PubKeys
+	// If nothing was fetched
+	if services.SurveyWhitelist == nil {
+		// By default
+		log.Error("Services were not fetched from default conf service URL")
+
+	}
+	//if the flag is not empty
+	if surveyWhitelistPKs != "" {
+		// validate public keys set via flag / fail explicitly on errors
+		if err := surveyWlPKs.Set(surveyWhitelistPKs); err != nil {
+			log.Fatalf("bad key set for survey whitelist flag: %v", err)
+		}
+	}
+	services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWlPKs...)
+
+	if services.DmsgDiscovery == "" {
+		log.Fatalf("Dmsg Discovery not set")
+	}
+	if services.TransportDiscovery == "" {
+		log.Fatalf("Transport Discovery not set")
+	}
+	if routeSetupNodes != "" {
+		if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
+			log.Fatalf("bad key set for route setup node flag: %v", err)
+		}
+	}
+	services.RouteSetupNodes = append(services.RouteSetupNodes, routeSetupPKs...)
+	if services.RouteSetupNodes == nil {
+		log.Fatalf("Route Setup node not set")
+	}
+	if transportSetupPKs != "" {
+		if err := tpSetupPKs.Set(transportSetupPKs); err != nil {
+			log.Fatalf("bad key set for transport setup node flag: %v", err)
+		}
+	}
+	services.TransportSetupPKs = append(services.TransportSetupPKs, tpSetupPKs...)
+	if services.TransportSetupPKs == nil {
+		log.Fatalf("Route Setup node not set")
+	}
+}
+
+// configureDMSG sets up the DMSG configuration on conf, preserving protocol
+// from a previous config if regenerating.
+func configureDMSG() {
+	conf.Dmsg = &dmsgc.DmsgConfig{
+		Discovery:            services.DmsgDiscovery,
+		SessionsCount:        minDmsgSess,
+		Servers:              []*disc.Entry{},
+		ConnectedServersType: "all",
+		Protocol:             "yamux",
+	}
+	if oldConfCache != nil && oldConfCache.Dmsg != nil {
+		if oldConfCache.Dmsg.Protocol != "" {
+			conf.Dmsg.Protocol = oldConfCache.Dmsg.Protocol
+		}
+	}
+}
+
+// configureTransports sets up transport configuration on conf.
+func configureTransports() {
+	conf.Transport = &visorconfig.Transport{
+		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
+		AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
+		PublicAutoconnect: skyenv.PublicAutoconnect,
+		TransportSetupPKs: services.TransportSetupPKs,
+		LogStore: &visorconfig.LogStore{
+			Type:             visorconfig.FileLogStore,
+			Location:         skyenv.LocalPath + "/" + skyenv.TpLogStore,
+			RotationInterval: visorconfig.DefaultLogRotationInterval,
+		},
+		SudphPort:   sudphPort,
+		StcprPort:   stcprPort,
+		SyncTPDData: enableSyncTPDData,
+	}
+}
+
+// configureRouting sets up routing configuration on conf, preserving MinHops
+// from a previous config if regenerating.
+func configureRouting() {
+	conf.Routing = &visorconfig.Routing{
+		RouteFinder:        services.RouteFinder,     //utilenv.RouteFinderAddr,
+		RouteSetupNodes:    services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
+		RouteFinderTimeout: visorconfig.DefaultTimeout,
+		MinHops:            1,
+		CalculateRoutes:    enableCalculateRoutes,
+	}
+
+	if oldConfCache != nil && oldConfCache.Routing != nil {
+		if oldConfCache.Routing.MinHops != 0 {
+			conf.Routing.MinHops = oldConfCache.Routing.MinHops
+		}
+	}
+}
+
+// configureLauncher sets up the app launcher, dmsgpty, STCP, UI server,
+// log server, and other base config fields. It also applies dmsghttp
+// overrides if enabled.
+func configureLauncher(log *logging.Logger) {
+	_ = log
+	conf.Launcher = &visorconfig.Launcher{
+		ServiceDisc:   services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
+		Apps:          nil,
+		ServerAddr:    skyenv.AppSrvAddr,
+		BinPath:       skyenv.AppBinPath,
+		DisplayNodeIP: isDisplayNodeIP,
+	}
+	conf.UptimeTracker = &visorconfig.UptimeTracker{
+		Addr: services.UptimeTracker, //utilenv.UptimeTrackerAddr,
+	}
+	conf.CLIAddr = skyenv.RPCAddr
+	conf.LogLevel = logLevel
+	conf.LocalPath = skyenv.LocalPath
+	conf.DmsgHTTPServerPath = skyenv.LocalPath + "/" + skyenv.Custom
+	conf.StunServers = services.StunServers //utilenv.GetStunServers()
+	conf.ShutdownTimeout = visorconfig.DefaultTimeout
+	conf.GeoIP = skyenv.GeoIP
+
+	conf.Dmsgpty = &visorconfig.Dmsgpty{
+		DmsgPort: skyenv.DmsgPtyPort,
+		CLINet:   skyenv.DmsgPtyCLINet,
+		CLIAddr:  dmsgpty.DefaultCLIAddr(),
+	}
+
+	conf.STCP = &network.STCPConfig{
+		ListeningAddress: skyenv.STCPAddr,
+		PKTable:          nil,
+	}
+
+	// UI Server configuration (disabled by default)
+	conf.UIServer = &visorconfig.UIServer{
+		Enable:    false,
+		LocalAddr: "localhost:8081",
+		DmsgPort:  81,
+	}
+
+	// Log Server configuration (localhost serving disabled by default)
+	// Set local_addr to e.g. "localhost:8002" to enable localhost serving without auth
+	conf.LogServer = &visorconfig.LogServer{
+		LocalAddr: "",
+	}
+
+	// Use dmsg urls for services and add dmsg-servers
+	if isDmsgHTTP {
+		if dmsgHTTPServersList != nil {
+			if isTestEnv {
+				conf.Dmsg.Servers = dmsgHTTPServersList.Test.DMSGServers
+				conf.Dmsg.Discovery = dmsgHTTPServersList.Test.DMSGDiscovery
+				conf.Transport.AddressResolver = dmsgHTTPServersList.Test.AddressResolver
+				conf.Transport.Discovery = dmsgHTTPServersList.Test.TransportDiscovery
+				conf.UptimeTracker.Addr = dmsgHTTPServersList.Test.UptimeTracker
+				conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
+				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
+			} else {
+				conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
+				conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
+				conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
+				conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
+				conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
+				conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
+				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
 			}
-			if snConfig {
-				jsonData, err = script.Echo(string(jsonData)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: .transport.discovery, log_level: .log_level}").Bytes()
+		}
+	}
+
+	// Configure public visor
+	conf.IsPublic = isPublic
+	if isPublic {
+		conf.PublicVisorConfig = &visorconfig.PublicVisorConfig{
+			RegistrationTimeout: visorconfig.Duration(skyenv.PublicVisorRegistrationTimeout),
+			MaxTransports:       visorconfig.PublicVisorMaxTransports,
+		}
+	}
+}
+
+// configureHypervisor sets up hypervisor PKs, dmsgpty whitelist, survey
+// whitelist, and package/user-specific config paths.
+func configureHypervisor(log *logging.Logger) {
+	// Manipulate Hypervisor PKs
+	conf.Hypervisors = make([]cipher.PubKey, 0)
+	if hypervisorPKs != "" {
+		keys := strings.Split(hypervisorPKs, ",")
+		for _, key := range keys {
+			if key != "" {
+				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
 				if err != nil {
-					log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+					log.WithError(err).Fatalf("Failed to parse hypervisor public key: %s.", key)
+				}
+				if key != conf.PK.Hex() {
+					conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
+				} else {
+					// setting the same public key as the current visor for a remote hypervisor is a weird misconfiguration
+					// the intention was likely to configure this visor as the hypervisor
+					isHypervisor = true
 				}
 			}
-			// Write the JSON data back to the file
-			err = os.WriteFile(confPath, jsonData, 0600)
-			if err != nil {
-				log.Fatalf("Failed to write config file: %v", err)
+		}
+	}
+	// Local hypervisor setting
+	if isHypervisor {
+		config := visorconfig.GenerateWorkDirConfig(false)
+		conf.Hypervisor = &config
+	}
+
+	// Manipulate dmsgpty whitelist PKs
+	conf.Dmsgpty.Whitelist = make([]cipher.PubKey, 0)
+	if dmsgptyWlPKs != "" {
+		keys := strings.Split(dmsgptyWlPKs, ",")
+		for _, key := range keys {
+			if key != "" {
+				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
+				if err != nil {
+					log.WithError(err).Fatalf("Failed to parse Dmsgpty Whitelist public key: %s.", key)
+				}
+				conf.Dmsgpty.Whitelist = append(conf.Dmsgpty.Whitelist, cipher.PubKey(keyParsed))
 			}
 		}
-		// Print results.
-		j, err := json.MarshalIndent(conf, "", "\t")
+	}
+	// set survey collection whitelist - will include by default hypervisors & dmsgpty whitelisted keys
+	conf.SurveyWhitelist = services.SurveyWhitelist
+	// set package-specific config paths
+	if isPkgEnv {
+		pkgConfig := visorconfig.PackageConfig()
+		conf.LocalPath = pkgConfig.LocalPath
+		conf.DmsgHTTPServerPath = pkgConfig.LocalPath + "/" + skyenv.Custom
+		conf.Launcher.BinPath = pkgConfig.LauncherBinPath
+		conf.Transport.LogStore.Location = pkgConfig.LocalPath + "/" + skyenv.TpLogStore
+		if conf.Hypervisor != nil {
+			conf.Hypervisor.EnableAuth = pkgConfig.Hypervisor.EnableAuth
+			conf.Hypervisor.DBPath = pkgConfig.Hypervisor.DbPath
+		}
+	}
+	// set config paths for the user space
+	if isUsr {
+		usrConfig := visorconfig.UserConfig()
+		conf.LocalPath = usrConfig.LocalPath
+		conf.DmsgHTTPServerPath = usrConfig.LocalPath + "/" + skyenv.Custom
+		conf.Launcher.BinPath = usrConfig.LauncherBinPath
+		conf.Transport.LogStore.Location = usrConfig.LocalPath + "/" + skyenv.TpLogStore
+		if conf.Hypervisor != nil {
+			conf.Hypervisor.EnableAuth = usrConfig.Hypervisor.EnableAuth
+			conf.Hypervisor.DBPath = usrConfig.Hypervisor.DbPath
+		}
+	}
+}
+
+// configureApps sets up launcher app configurations (internal or external),
+// handles app disable/enable flags, and configures VPN/proxy app settings.
+func configureApps(log *logging.Logger) {
+	// App config settings
+	if externalApps {
+		// External apps configuration (apps run as separate processes)
+		conf.Launcher.Apps = []appserver.AppConfig{
+			{
+				Name:      skyenv.VPNClientName,
+				Binary:    "skywire",
+				AutoStart: false,
+				Port:      routing.Port(skyenv.VPNClientPort),
+				Args:      append([]string{"app", "vpn-client"}, "--dns", dnsServer),
+			},
+			{
+				Name:      skyenv.SkychatName,
+				Binary:    "skywire",
+				AutoStart: true,
+				Port:      routing.Port(skyenv.SkychatPort),
+				Args:      append([]string{"app", "skychat"}, "--addr", skyenv.SkychatAddr),
+			},
+			{
+				Name:      skyenv.SkysocksName,
+				Binary:    "skywire",
+				AutoStart: true,
+				Port:      routing.Port(skyenv.SkysocksPort),
+				Args:      []string{"app", "skysocks"},
+			},
+			{
+				Name:      skyenv.SkysocksClientName,
+				Binary:    "skywire",
+				AutoStart: false,
+				Port:      routing.Port(skyenv.SkysocksClientPort),
+				Args:      append([]string{"app", "skysocks-client"}, "--addr", skyenv.SkysocksClientAddr),
+			},
+			{
+				Name:      skyenv.VPNServerName,
+				Binary:    "skywire",
+				AutoStart: isVpnServerEnable,
+				Port:      routing.Port(skyenv.VPNServerPort),
+				Args:      []string{"app", "vpn-server"},
+			},
+		}
+	} else {
+		// Internal apps configuration (default - apps run within visor process)
+		conf.Launcher.Apps = []appserver.AppConfig{
+			{
+				Name:      skyenv.VPNClientName,
+				AutoStart: false,
+				Port:      routing.Port(skyenv.VPNClientPort),
+				Args:      []string{"--dns", dnsServer},
+			},
+			{
+				Name:      skyenv.SkychatName,
+				AutoStart: true,
+				Port:      routing.Port(skyenv.SkychatPort),
+				Args:      []string{"--addr", skyenv.SkychatAddr},
+			},
+			{
+				Name:      skyenv.SkysocksName,
+				AutoStart: true,
+				Port:      routing.Port(skyenv.SkysocksPort),
+				Args:      []string{},
+			},
+			{
+				Name:      skyenv.SkysocksClientName,
+				AutoStart: false,
+				Port:      routing.Port(skyenv.SkysocksClientPort),
+				Args:      []string{"--addr", skyenv.SkysocksClientAddr},
+			},
+			{
+				Name:      skyenv.VPNServerName,
+				AutoStart: isVpnServerEnable,
+				Args:      []string{},
+				Port:      routing.Port(skyenv.VPNServerPort),
+			},
+		}
+	}
+
+	// Disable apps --disable-apps flag
+	if disableApps != "" {
+		apps := strings.Split(disableApps, ",")
+		appsSlice := make(map[string]bool)
+		for _, app := range apps {
+			appsSlice[app] = true
+		}
+		var newConfLauncherApps []appserver.AppConfig
+		for _, app := range conf.Launcher.Apps {
+			if _, ok := appsSlice[app.Name]; !ok {
+				newConfLauncherApps = append(newConfLauncherApps, app)
+			}
+		}
+		conf.Launcher.Apps = newConfLauncherApps
+	}
+	// add example applications to the config
+	if addExampleApps {
+		exampleApps := []appserver.AppConfig{
+			{
+				Name:      skyenv.ExampleServerName,
+				AutoStart: false,
+				Port:      routing.Port(skyenv.ExampleServerPort),
+			},
+		}
+		newConfLauncherApps := append(conf.Launcher.Apps, exampleApps...)
+		conf.Launcher.Apps = newConfLauncherApps
+	}
+
+	if addVPNServerWhitelist != "" {
+		changeAppsConfig(conf, "vpn-server", "--whitelist", addVPNServerWhitelist)
+	}
+	if setVPNServerNetIfc != "" {
+		changeAppsConfig(conf, "vpn-server", "--netifc", setVPNServerNetIfc)
+	}
+	switch setVPNServerSecure {
+	case "true":
+		changeAppsConfig(conf, "vpn-server", "--secure", setVPNServerSecure)
+	case "false":
+		changeAppsConfig(conf, "vpn-server", "--secure", setVPNServerSecure)
+	}
+	switch setVPNServerAutostart {
+	case "true":
+		for i, app := range conf.Launcher.Apps {
+			if app.Name == "vpn-server" {
+				conf.Launcher.Apps[i].AutoStart = true
+			}
+		}
+	case "false":
+		for i, app := range conf.Launcher.Apps {
+			if app.Name == "vpn-server" {
+				conf.Launcher.Apps[i].AutoStart = false
+			}
+		}
+	}
+
+	switch setVPNClientKillswitch {
+	case "true":
+		changeAppsConfig(conf, "vpn-client", "--killswitch", setVPNClientKillswitch)
+	case "false":
+		changeAppsConfig(conf, "vpn-client", "--killswitch", setVPNClientKillswitch)
+	}
+	if addVPNClientSrv != "" {
+		keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(addVPNClientSrv))
+		if err != nil {
+			log.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", addVPNClientSrv)
+		}
+		changeAppsConfig(conf, "vpn-client", "--srv", keyParsed.Hex())
+	}
+	if addSkysocksClientSrv != "" {
+		keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(addSkysocksClientSrv))
+		if err != nil {
+			logger.WithError(err).Fatalf("Failed to parse public key: %s.", addSkysocksClientSrv)
+		}
+		changeAppsConfig(conf, "skysocks-client", "--srv", keyParsed.Hex())
+	}
+	if proxyServerWhitelist != "" {
+		changeAppsConfig(conf, "skysocks", "--whitelist", proxyServerWhitelist)
+	}
+
+	if disableProxyServerAutostart {
+		for i, app := range conf.Launcher.Apps {
+			if app.Name == "skysocks" {
+				conf.Launcher.Apps[i].AutoStart = false
+			}
+		}
+	}
+	if enableProxyClientAutostart {
+		for i, app := range conf.Launcher.Apps {
+			if app.Name == "skysocks-client" {
+				conf.Launcher.Apps[i].AutoStart = true
+			}
+		}
+	}
+	if isHypervisor {
+		// Disable hypervisor UI authentication --disable-auth flag
+		if isDisableAuth {
+			conf.Hypervisor.EnableAuth = false
+		}
+		// Enable hypervisor UI authentication --enable-auth flag
+		if isEnableAuth {
+			conf.Hypervisor.EnableAuth = true
+		}
+	}
+	// Enable hypervisor UI authentication on windows & macos
+	if (selectedOS == "win") || (selectedOS == "mac") {
+		if isHypervisor {
+			conf.Hypervisor.EnableAuth = true
+		}
+	}
+}
+
+// applyOverrides applies final flag-driven overrides to the config
+// (bin_path, version, autoconnect, display IP).
+func applyOverrides() {
+	// set bin_path for apps from flag
+	if binPath != "" {
+		conf.Launcher.BinPath = binPath
+	}
+	// set version of the config file from flag - testing override
+	if ver != "" {
+		conf.Common.Version = ver
+	}
+	// Disable autoconnect to public visors
+	if disablePublicAutoConn {
+		conf.Transport.PublicAutoconnect = false
+	}
+	// Enable the display of the visor's ip address in service discovery services
+	if isDisplayNodeIP {
+		conf.Launcher.DisplayNodeIP = true
+	}
+}
+
+// writeConfigOutput marshals the config to JSON and writes it to a file
+// or stdout depending on flags.
+func writeConfigOutput(log *logging.Logger) {
+	//don't write file with stdout
+	if !isStdout {
+		// Marshal the modified config to JSON with indentation
+		jsonData, err := json.MarshalIndent(conf, "", "  ")
 		if err != nil {
 			log.WithError(err).Fatal("Failed to marshal config to indented JSON")
 		}
 		if snConfig {
-			j, err = script.Echo(string(j)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: .transport.discovery, log_level: .log_level}").Bytes()
+			jsonData, err = script.Echo(string(jsonData)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: .transport.discovery, log_level: .log_level}").Bytes()
 			if err != nil {
 				log.Fatalf("Failed to convert config to setup-node config format: %v", err)
 			}
-			var data any
-			if err = json.Unmarshal(j, &data); err != nil {
-				log.Fatalf("Failed to convert config to setup-node config format: %v", err)
-			}
-			j, err = json.MarshalIndent(data, "", "    ")
-			if err != nil {
-				log.WithError(err).Fatal("Failed to marshal config to indented JSON")
-			}
 		}
-		//print config to stdout, omit logging messages, exit
-		if isStdout {
-			if isSquash {
-				script.Echo(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(j), " ", ""), "\n", ""), "\t", "")).Stdout() //nolint:errcheck,gosec
-				return
-			}
-			script.Echo(string(j)).Stdout() //nolint:errcheck,gosec
+		// Write the JSON data back to the file
+		err = os.WriteFile(confPath, jsonData, configFilePerms)
+		if err != nil {
+			log.Fatalf("Failed to write config file: %v", err)
+		}
+	}
+	// Print results.
+	j, err := json.MarshalIndent(conf, "", "\t")
+	if err != nil {
+		log.WithError(err).Fatal("Failed to marshal config to indented JSON")
+	}
+	if snConfig {
+		j, err = script.Echo(string(j)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: .transport.discovery, log_level: .log_level}").Bytes()
+		if err != nil {
+			log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+		}
+		var data any
+		if err = json.Unmarshal(j, &data); err != nil {
+			log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+		}
+		j, err = json.MarshalIndent(data, "", "    ")
+		if err != nil {
+			log.WithError(err).Fatal("Failed to marshal config to indented JSON")
+		}
+	}
+	//print config to stdout, omit logging messages, exit
+	if isStdout {
+		if isSquash {
+			script.Echo(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(j), " ", ""), "\n", ""), "\t", "")).Stdout() //nolint:errcheck,gosec
 			return
 		}
-		//hide the printing of the config to the terminal
-		if isHide {
-			log.Infof("Updated file '%s'\n", output)
-			return
-		}
-		//default behavior
-		log.Infof("Updated file '%s' to:\n%s\n", output, j)
-	},
+		script.Echo(string(j)).Stdout() //nolint:errcheck,gosec
+		return
+	}
+	//hide the printing of the config to the terminal
+	if isHide {
+		log.Infof("Updated file '%s'\n", output)
+		return
+	}
+	//default behavior
+	log.Infof("Updated file '%s' to:\n%s\n", output, j)
 }
 
 func getInterfaceNames() string { //nolint Note: pending implementation for config gen
@@ -1064,308 +1197,3 @@ func getInterfaceNames() string { //nolint Note: pending implementation for conf
 
 	return strings.Join(interfaceNames, ", ")
 }
-
-const envfileLinux = `#
-# /etc/skywire.conf
-#
-#########################################################################
-#	SKYWIRE CONFIG TEMPLATE
-#		Defaults for booleans are false
-#		Uncomment to change default value
-#########################################################################
-
-### Installation path ###################################################
-
-#--	Default config paths for the installer or package (system paths)
-#PKGENV=true
-
-#--	Default config paths for the current userspace
-#USRENV=true
-
-#--	service conf path override
-#SVCCONF="services-config.json"
-
-#--	dmsghttp config path override
-#DMSGCONF="dmsghttp-config.json"
-
-#--	Output path of the config file
-#OUTPUT='./skywire-config.json'
-
-#--	Set app bin_path
-#BINPATH='./apps'
-
-### Deployment ##########################################################
-
-#--	Set custom service conf URLs
-#SVCCONFADDR=('')
-
-#--	Use test deployment
-#TESTENV=true
-
-#--	Use dmsghttp to connect to the production deployment ; overrides BESTPROTO=true
-#DMSGHTTP=true
-
-#--	Number of dmsg serverts to connect to (0 unlimits)
-#MINDMSGSESS=8
-
-#--	Automatically determine the best protocol (dmsg or http)
-#	based on location to connect to the deployment servers
-#BESTPROTO=true
-
-### Transports ##########################################################
-
-#--	Other Visors will automatically establish transports to this visor
-#	requires port forwarding or public ip
-#VISORISPUBLIC=true
-
-#--	Disable auto-transports to public visors from this visor
-#DISABLEPUBLICAUTOCONN=true
-
-#-- Add transport setup public keys
-#TPSETUPPKS('')
-
-#--	Enable transport discovery data sync (bandwidth/latency)
-#SYNCTPDDATA=true
-
-### Ports ###############################################################
-
-#- set port for UDP connections / SUDPH transports
-#SUDPHPORT=0
-
-#- set port for TCP connections / STCPR or STCP transports
-#STCPRPORT=0
-
-### Routing #############################################################
-
-#-- Add route setup-node public keys
-#ROUTESETUPPKS('')
-
-#--	Enable local route calculation (instead of using route finder)
-#CALCULATEROUTES=true
-
-### Remote Access #######################################################
-
-#--	Set remote hypervisor public keys
-#HYPERVISORPKS=('')
-
-#--	Grant access to pseudoterminal (pty) for public keys
-#DMSGPTYPKS('')
-
-### Survey Access #######################################################
-
-#--	Grant access for survey collection to these public keys
-#SURVEYPKS('')
-
-### Hypervisor UI #######################################################
-
-#--	Start the hypervisor interface for this visor
-#ISHYPERVISOR=true
-
-### Apps ################################################################
-
-#--	Display the node ip in the service discovery
-#	for any public services this visor is running
-#DISPLAYNODEIP=true
-
-#--	Disable vpn server autostart for this visor
-#VPNSERVER=false
-
-#--	Set server public key for proxy client to connect to
-#PROXYCLIENTPK=''
-
-#--	Enable autostart of the proxy client
-#STARTPROXYCLIENT=true
-
-#--	Disable autostart of proxy server
-#NOPROXYSERVER=true
-
-#--	Set a password for the proxy server
-#PROXYSEVERPASS=''
-
-#--	Password for the proxy client to access the server
-# (if password is set for the server)
-#PROXYCLIENTPASS=''
-
-#--	Set VPN client killswitch
-#VPNKS=true
-
-#--	Set vpn server public key for the vpn client to use
-#ADDVPNPK=''
-
-#--	Password for vpn client to access the server
-# (if password is set for the server)
-#VPNCLIENTPASS=''
-
-#--	Set password to the vpn server
-#VPNSEVERPASS=''
-
-#--	Change secure mode status of vpn server
-#VPNSEVERSECURE=''
-
-#--	Set VPN Server network interface - i.e. eth0
-#VPNSEVERNETIFC=''
-
-### Miscellaneous #######################################################
-
-#--	Set secret key
-#SK=''
-
-#--	Custom config version override
-#VERSION=''
-
-#--	Set visor runtime log level.
-#	Default is info ; uncomment for debug logging
-#LOGLVL=debug
-
-`
-
-const envfileWindows = `#
-# C:\ProgramData\skywire.conf
-#
-#########################################################################
-#	SKYWIRE CONFIG TEMPLATE
-#		Defaults for booleans are false
-#		Uncomment to change default value
-#########################################################################
-
-### Installation path ###################################################
-
-#--	Default config paths for the installer or package (system paths)
-#$PKGENV=$true
-
-#--	Default config paths for the current userspace
-#$USRENV=$true
-
-#--	service conf path override
-#$SVCCONF="services-config.json"
-
-#--	dmsghttp config path override
-#$DMSGCONF="dmsghttp-config.json"
-
-#--	Output path of the config file
-#$OUTPUT='C:\\ProgramData\\skywire-config.json'
-
-#--	Set app bin_path
-#$BINPATH='C:\\ProgramData\\apps'
-
-### Deployment ##########################################################
-
-#--	Set custom service conf URLs
-#$SVCCONFADDR=@('')
-
-#--	Use test deployment
-#$TESTENV=$true
-
-#--	Use dmsghttp to connect to the production deployment ; overrides BESTPROTO=$true
-#$DMSGHTTP=$true
-
-#--	Number of dmsg servers to connect to (0 unlimits)
-#$MINDMSGSESS=8
-
-#--	Automatically determine the best protocol (dmsg or http)
-#	based on location to connect to the deployment servers
-#$BESTPROTO=$true
-
-### Transports ##########################################################
-
-#--	Other Visors will automatically establish transports to this visor
-#	requires port forwarding or public IP
-#$VISORISPUBLIC=$true
-
-#--	Disable auto-transports to public visors from this visor
-#$DISABLEPUBLICAUTOCONN=$true
-
-#--	Add transport setup public keys
-#$TPSETUPPKS=@('')
-
-#--	Enable transport discovery data sync (bandwidth/latency)
-#$SYNCTPDDATA=$true
-
-### Ports ###############################################################
-
-#- set port for UDP connections / SUDPH transports
-#$SUDPHPORT=0
-
-#- set port for TCP connections / STCPR or STCP transports
-#$STCPRPORT=0
-
-### Routing #############################################################
-
-#--	Add route setup-node public keys
-#$ROUTESETUPPKS=@('')
-
-#--	Enable local route calculation (instead of using route finder)
-#$CALCULATEROUTES=$true
-
-### Remote Access #######################################################
-
-#--	Set remote hypervisor public keys
-#$HYPERVISORPKS=@('')
-
-#--	Grant access to pseudoterminal (pty) for public keys
-#$DMSGPTYPKS=@('')
-
-### Survey Access #######################################################
-
-#--	Grant access for survey collection to these public keys
-#$SURVEYPKS=@('')
-
-### Hypervisor UI #######################################################
-
-#--	Start the hypervisor interface for this visor
-#$ISHYPERVISOR=$true
-
-### Apps ################################################################
-
-#--	Display the node IP in the service discovery
-#	for any public services this visor is running
-#$DISPLAYNODEIP=$true
-
-#--	Disable VPN server autostart for this visor
-#$VPNSERVER=$false
-
-#--	Set server public key for proxy client to connect to
-#$PROXYCLIENTPK=''
-
-#--	Enable autostart of the proxy client
-#$STARTPROXYCLIENT=$true
-
-#--	Disable autostart of proxy server
-#$NOPROXYSERVER=$true
-
-#--	Set a password for the proxy server
-#$PROXYSEVERPASS=''
-
-#--	Password for the proxy client to access the server (if password is set for the server)
-#$PROXYCLIENTPASS=''
-
-#--	Set VPN client killswitch
-#$VPNKS=$true
-
-#--	Set VPN server public key for the VPN client to use
-#$ADDVPNPK=''
-
-#--	Password for VPN client to access the server (if password is set for the server)
-#$VPNCLIENTPASS=''
-
-#--	Set password to the VPN server
-#$VPNSEVERPASS=''
-
-#--	Change secure mode status of VPN server
-#$VPNSEVERSECURE=''
-
-#--	Set VPN Server network interface, e.g., 'Ethernet'
-#$VPNSEVERNETIFC=''
-
-### Miscellaneous #######################################################
-
-#--	Set secret key
-#$SK=''
-
-#--	Custom config version override
-#$VERSION=''
-
-#--	Set visor runtime log level.
-#	Default is info ; uncomment for debug logging
-#$LOGLVL='debug'
-`

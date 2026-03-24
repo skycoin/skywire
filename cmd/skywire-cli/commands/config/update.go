@@ -14,6 +14,7 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -40,14 +41,14 @@ func init() {
 	uHiddenFlags = append(uHiddenFlags, "input")
 	updateCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "config file to output")
 	if isRoot {
-		if _, err := os.Stat(visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON); err == nil {
-			updateCmd.PersistentFlags().BoolVarP(&isPkg, "pkg", "p", false, "update package config "+visorconfig.SkywirePath+"/"+visorconfig.ConfigJSON)
+		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.ConfigJSON); err == nil {
+			updateCmd.PersistentFlags().BoolVarP(&isPkg, "pkg", "p", false, "update package config "+skyenv.SkywirePath+"/"+skyenv.ConfigJSON)
 			uHiddenFlags = append(uHiddenFlags, "pkg")
 		}
 	}
 	if !isRoot {
-		if _, err := os.Stat(visorconfig.HomePath() + "/" + visorconfig.ConfigName); err == nil {
-			updateCmd.PersistentFlags().BoolVarP(&isUsr, "user", "u", false, "update config at: $HOME/"+visorconfig.ConfigName)
+		if _, err := os.Stat(visorconfig.HomePath() + "/" + skyenv.ConfigName); err == nil {
+			updateCmd.PersistentFlags().BoolVarP(&isUsr, "user", "u", false, "update config at: $HOME/"+skyenv.ConfigName)
 		}
 	}
 
@@ -217,7 +218,7 @@ func initUpdate() (conf *visorconfig.V1) {
 func checkConfig() {
 	//set default output filename
 	if output == "" {
-		output = visorconfig.ConfigName
+		output = skyenv.ConfigName
 	}
 	var err error
 	if output, err = filepath.Abs(output); err != nil {
@@ -241,12 +242,12 @@ func setDefaults() {
 		output = input
 	}
 	if isPkg {
-		output = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
-		input = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
+		output = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
+		input = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
 	}
 	if isUsr {
-		output = visorconfig.HomePath() + "/" + visorconfig.ConfigName
-		input = visorconfig.HomePath() + "/" + visorconfig.ConfigName
+		output = visorconfig.HomePath() + "/" + skyenv.ConfigName
+		input = visorconfig.HomePath() + "/" + skyenv.ConfigName
 	}
 
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -117,7 +118,7 @@ type servicesConf struct {
 }
 
 func scriptExecString(s string) string {
-	if visorconfig.OS == "windows" {
+	if skyenv.OS == "windows" {
 		var variable, defaultvalue string
 		if strings.Contains(s, ":-") {
 			parts := strings.SplitN(s, ":-", 2)
@@ -144,7 +145,7 @@ func scriptExecString(s string) string {
 }
 
 func scriptExecBool(s string) bool {
-	if visorconfig.OS == "windows" {
+	if skyenv.OS == "windows" {
 		var variable string
 		if strings.Contains(s, ":-") {
 			parts := strings.SplitN(s, ":-", 2)
@@ -176,7 +177,7 @@ func scriptExecBool(s string) bool {
 }
 
 func scriptExecArray(s string) string {
-	if visorconfig.OS == "windows" {
+	if skyenv.OS == "windows" {
 		variable := s
 		if strings.Contains(variable, "[@]}") {
 			variable = strings.TrimRight(variable, "[@]}")
@@ -198,7 +199,7 @@ func scriptExecArray(s string) string {
 }
 
 func scriptExecInt(s string) int {
-	if visorconfig.OS == "windows" {
+	if skyenv.OS == "windows" {
 		var variable string
 		if strings.Contains(s, ":-") {
 			parts := strings.SplitN(s, ":-", 2)

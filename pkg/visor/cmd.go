@@ -13,6 +13,7 @@ import (
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -58,12 +59,12 @@ func init() {
 	root = visorconfig.IsRoot()
 	RootCmd.Flags().SortFlags = false
 	//the default is not set to fix the aesthetic of the help command
-	RootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+visorconfig.ConfigName)
+	RootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+skyenv.ConfigName)
 	RootCmd.Flags().StringVarP(&confArg, "confarg", "C", "", "supply config as argument")
 	hiddenflags = append(hiddenflags, "confarg")
 	RootCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
 	hiddenflags = append(hiddenflags, "stdin")
-	if ((visorconfig.OS == "linux") && !root) || ((visorconfig.OS == "mac") && !root) || (visorconfig.OS == "win") {
+	if ((skyenv.OS == "linux") && !root) || ((skyenv.OS == "mac") && !root) || (skyenv.OS == "win") {
 		RootCmd.Flags().BoolVarP(&launchBrowser, "browser", "b", false, "open hypervisor ui in default web browser")
 		hiddenflags = append(hiddenflags, "browser")
 	}
@@ -71,17 +72,17 @@ func init() {
 	hiddenflags = append(hiddenflags, "dmsg-server")
 	//only show flags for configs which exist
 
-	if _, err := os.Stat(visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON); err == nil {
+	if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.ConfigJSON); err == nil {
 		pkgconfigexists = true
 	}
-	if _, err := os.Stat(visorconfig.HomePath() + "/" + visorconfig.ConfigName); err == nil {
+	if _, err := os.Stat(visorconfig.HomePath() + "/" + skyenv.ConfigName); err == nil {
 		userconfigexists = true
 	}
 	if root && pkgconfigexists {
-		RootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+visorconfig.SkywirePath+"/"+visorconfig.ConfigJSON)
+		RootCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.ConfigJSON)
 	}
 	if !root && userconfigexists {
-		RootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+visorconfig.ConfigName)
+		RootCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: $HOME/"+skyenv.ConfigName)
 	}
 	var reason string
 	if RootCmd.Flags().Lookup("user") == nil {
@@ -199,15 +200,15 @@ var RootCmd = &cobra.Command{
 				}
 				//use package config /opt/skywire/skywire.json
 				if pkg {
-					confPath = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
+					confPath = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
 				}
 				//userspace config in $HOME/.skywire/skywire-config.json
 				if usr {
-					confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
+					confPath = visorconfig.HomePath() + "/" + skyenv.ConfigName
 				}
 				if confPath == "" {
 					//default config in current dir ./skywire-config.json
-					confPath = visorconfig.ConfigName
+					confPath = skyenv.ConfigName
 				}
 				//enforce .json extension
 				if !strings.HasSuffix(confPath, ".json") {
@@ -225,7 +226,7 @@ var RootCmd = &cobra.Command{
 			hypervisorUI = true
 		}
 		//warn about creating files & directories as root in non root-owned dir
-		if visorconfig.OS == "linux" {
+		if skyenv.OS == "linux" {
 			//`stat` command on linux will give file ownership whereas os.Stat() does not
 			if _, err := exec.LookPath("stat"); err == nil {
 				c, _ := filepath.Split(confPath)
@@ -249,7 +250,7 @@ var RootCmd = &cobra.Command{
 			}
 		}
 		if runAsSystray {
-			if visorconfig.OS == "linux" {
+			if skyenv.OS == "linux" {
 				if root {
 					log.Warn("Systray cannot start in userspace when visor is run as root")
 				}
