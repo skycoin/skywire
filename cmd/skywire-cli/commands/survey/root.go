@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -37,21 +38,21 @@ var (
 
 func init() {
 	surveyCmd.Flags().SortFlags = false
-	surveyCmd.Flags().StringVarP(&confPath, "config", "c", "", "optionl config file to use (i.e.: "+visorconfig.ConfigName+")")
+	surveyCmd.Flags().StringVarP(&confPath, "config", "c", "", "optionl config file to use (i.e.: "+skyenv.ConfigName+")")
 	surveyCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDiscURL, "value of dmsg discovery")
 	//	surveyCmd.Flags().StringVarP(&confArg, "confarg", "C", "", "supply config as argument")
 	//	surveyCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
-	if _, err := os.Stat(visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON); err == nil {
+	if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.ConfigJSON); err == nil {
 		pkgconfigexists = true
 	}
-	if _, err := os.Stat(visorconfig.HomePath() + "/" + visorconfig.ConfigName); err == nil {
+	if _, err := os.Stat(visorconfig.HomePath() + "/" + skyenv.ConfigName); err == nil {
 		userconfigexists = true
 	}
 	if pkgconfigexists {
-		surveyCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+visorconfig.SkywirePath+"/"+visorconfig.ConfigJSON)
+		surveyCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config "+skyenv.SkywirePath+"/"+skyenv.ConfigJSON)
 	}
 	if userconfigexists {
-		surveyCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: "+visorconfig.HomePath()+"/"+visorconfig.ConfigName)
+		surveyCmd.Flags().BoolVarP(&usr, "user", "u", false, "use config at: "+visorconfig.HomePath()+"/"+skyenv.ConfigName)
 	}
 }
 
@@ -65,10 +66,10 @@ var surveyCmd = &cobra.Command{
 	Long:                  "print the system survey",
 	Run: func(cmd *cobra.Command, _ []string) {
 		if pkg {
-			confPath = visorconfig.SkywirePath + "/" + visorconfig.ConfigJSON
+			confPath = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
 		}
 		if usr {
-			confPath = visorconfig.HomePath() + "/" + visorconfig.ConfigName
+			confPath = visorconfig.HomePath() + "/" + skyenv.ConfigName
 		}
 
 		if confPath != "" {
@@ -89,7 +90,7 @@ var surveyCmd = &cobra.Command{
 		if err != nil {
 			internal.Catch(cmd.Flags(), fmt.Errorf("Failed to generate system survey: %v", err))
 		}
-		skyaddr, err := os.ReadFile(visorconfig.PackageConfig().LocalPath + "/" + visorconfig.RewardFile)
+		skyaddr, err := os.ReadFile(visorconfig.PackageConfig().LocalPath + "/" + skyenv.RewardFile)
 		if err == nil {
 			survey.SkycoinAddress = string(skyaddr)
 		}

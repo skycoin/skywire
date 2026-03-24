@@ -29,10 +29,10 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	services "github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/visor"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // proxyTestClient is a minimal interface for proxy testing
@@ -69,7 +69,7 @@ func init() {
 		proxyRouteCmd,
 	)
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
-	startCmd.Flags().StringVarP(&addr, "addr", "a", visorconfig.SkysocksClientAddr, "address of proxy for use")
+	startCmd.Flags().StringVarP(&addr, "addr", "a", skyenv.SkysocksClientAddr, "address of proxy for use")
 	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of skysocks client")
 	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 0, "timeout for starting proxy")
 	startCmd.Flags().StringVar(&httpAddr, "http", "", "address for http proxy")
@@ -376,7 +376,7 @@ var statusCmd = &cobra.Command{
 }
 
 var (
-	serverPort       = visorconfig.SkysocksPort
+	serverPort       = skyenv.SkysocksPort
 	serverPortString = fmt.Sprintf("%v", serverPort)
 )
 

@@ -3,6 +3,7 @@ package netutil
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"sync"
@@ -76,28 +77,39 @@ func (p *Porter) ReserveChild(port, subPort uint16, v interface{}) (bool, func()
 	return true, p.makeChildFreer(port, subPort)
 }
 
+// ErrEphemeralPortSpace is returned when no ephemeral ports are available.
+var ErrEphemeralPortSpace = errors.New("ephemeral port space exhausted")
+
 // ReserveEphemeral reserves a new ephemeral port.
 // It returns the reserved ephemeral port, a function to clear the reservation and an error (if any).
+// Returns ErrEphemeralPortSpace if all ephemeral ports (minEph through 65535) are occupied.
 func (p *Porter) ReserveEphemeral(ctx context.Context, v interface{}) (uint16, func(), error) {
 	p.Lock()
 	defer p.Unlock()
 
-	for {
+	// Scan at most the full ephemeral range (minEph..65535).
+	// The old code had no bound, spinning forever when all ports were taken
+	// while holding the mutex — burning 100% CPU on map lookups.
+	maxRange := uint32(65535-p.minEph) + 1
+	for i := uint32(0); i < maxRange; i++ {
+		select {
+		case <-ctx.Done():
+			return 0, nil, ctx.Err()
+		default:
+		}
+
 		p.eph++
 		if p.eph < p.minEph {
 			p.eph = p.minEph
 		}
 		if _, ok := p.ports[p.eph]; ok {
-			select {
-			case <-ctx.Done():
-				return 0, nil, ctx.Err()
-			default:
-				continue
-			}
+			continue
 		}
 		p.ports[p.eph] = PorterValue{Value: v}
 		return p.eph, p.makePortFreer(p.eph), nil
 	}
+
+	return 0, nil, ErrEphemeralPortSpace
 }
 
 // PortValue returns the value stored under a given port.

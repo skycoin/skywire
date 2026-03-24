@@ -25,12 +25,12 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skysocks"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -50,7 +50,7 @@ var (
 
 func init() {
 	launcher.RegisterApp("skysocks-client", RunSkysocksClient)
-	RootCmd.Flags().StringVar(&addr, "addr", visorconfig.SkysocksClientAddr, "Client address to listen on")
+	RootCmd.Flags().StringVar(&addr, "addr", skyenv.SkysocksClientAddr, "Client address to listen on")
 	RootCmd.Flags().StringVar(&serverPK, "srv", "", "PubKey of the server to connect to")
 	RootCmd.Flags().StringVar(&httpAddr, "http", "", "http proxy mode")
 	RootCmd.Flags().Int64Var(&tries, "tries", 3, "number of tries")
@@ -81,7 +81,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	// Parse flags when called via internal launcher
 	if len(args) > 0 {
 		fs := pflag.NewFlagSet("skysocks-client", pflag.ContinueOnError)
-		fs.StringVar(&addr, "addr", visorconfig.SkysocksClientAddr, "Client address")
+		fs.StringVar(&addr, "addr", skyenv.SkysocksClientAddr, "Client address")
 		fs.StringVar(&serverPK, "srv", "", "PubKey of server")
 		fs.StringVar(&httpAddr, "http", "", "http proxy mode")
 		fs.Int64Var(&tries, "tries", 3, "number of tries")
@@ -141,7 +141,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		return err
 	}
 	if runtime.GOOS == "windows" {
-		ipcClient, err := ipc.StartClient(visorconfig.SkysocksClientName, nil)
+		ipcClient, err := ipc.StartClient(skyenv.SkysocksClientName, nil)
 		if err != nil {
 			setAppErr(appCl, log, err)
 			log.WithError(err).Error("Error creating ipc server for skysocks")

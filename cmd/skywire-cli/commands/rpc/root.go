@@ -19,7 +19,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -125,8 +124,8 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	}
 
 	// Dial visor over dmsg
-	addr := dmsg.Addr{PK: visorPubKey, Port: visorconfig.DmsgHypervisorPort}
-	logger.Infof("Dialing visor %s over dmsg on port %d...", visorPubKey, visorconfig.DmsgHypervisorPort)
+	addr := dmsg.Addr{PK: visorPubKey, Port: skyenv.DmsgHypervisorPort}
+	logger.Infof("Dialing visor %s over dmsg on port %d...", visorPubKey, skyenv.DmsgHypervisorPort)
 
 	conn, err := dmsgC.Dial(ctx, addr)
 	if err != nil {

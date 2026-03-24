@@ -8,7 +8,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
@@ -32,6 +32,6 @@ var (
 		Err: router.ErrSetupNode.Error(),
 	}
 	errErrServerOffline = appserver.RPCErr{
-		Err: appnet.ErrServiceOffline(visorconfig.VPNServerPort).Error(),
+		Err: appnet.ErrServiceOffline(skyenv.VPNServerPort).Error(),
 	}
 )

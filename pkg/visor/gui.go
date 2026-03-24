@@ -26,6 +26,7 @@ import (
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -187,7 +188,7 @@ func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *log
 func vpnStatusBtn(rpcClient API) {
 	for {
 		vpnStatusMx.Lock()
-		stats, _ := rpcClient.GetAppConnectionsSummary(visorconfig.VPNClientName) //nolint:errcheck
+		stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName) //nolint:errcheck
 		if len(stats) == 1 {
 			if stats[0].IsAlive {
 				if vpnLastStatus != 1 {
@@ -243,24 +244,24 @@ func serversBtn(servers []*systray.MenuItem, rpcClient API) {
 			continue
 		}
 
-		rpcClient.StopApp(visorconfig.VPNClientName)      //nolint:errcheck,gosec
-		rpcClient.SetAppPK(visorconfig.VPNClientName, pk) //nolint:errcheck,gosec
+		rpcClient.StopApp(skyenv.VPNClientName)      //nolint:errcheck,gosec
+		rpcClient.SetAppPK(skyenv.VPNClientName, pk) //nolint:errcheck,gosec
 		vpnStatusMx.Lock()
 		vpnLastStatus = 3
 		vpnStatusMx.Unlock()
-		rpcClient.StartApp(visorconfig.VPNClientName) //nolint:errcheck,gosec
+		rpcClient.StartApp(skyenv.VPNClientName) //nolint:errcheck,gosec
 	}
 }
 
 func handleVPNButton(rpcClient API) {
-	stats, _ := rpcClient.GetAppConnectionsSummary(visorconfig.VPNClientName) //nolint:errcheck
+	stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName) //nolint:errcheck
 	if len(stats) == 1 {
-		rpcClient.StopApp(visorconfig.VPNClientName) //nolint:errcheck,gosec
+		rpcClient.StopApp(skyenv.VPNClientName) //nolint:errcheck,gosec
 	} else {
 		vpnStatusMx.Lock()
 		vpnLastStatus = 3
 		vpnStatusMx.Unlock()
-		rpcClient.StartApp(visorconfig.VPNClientName) //nolint:errcheck,gosec
+		rpcClient.StartApp(skyenv.VPNClientName) //nolint:errcheck,gosec
 	}
 }
 
@@ -483,7 +484,7 @@ func getHVAddr(conf *visorconfig.V1) string {
 func isVPNExists(vc *visorconfig.V1) bool {
 	status := false
 	for _, app := range vc.Launcher.Apps {
-		if app.Name == visorconfig.VPNClientName {
+		if app.Name == skyenv.VPNClientName {
 			status = true
 		}
 	}

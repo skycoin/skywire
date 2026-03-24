@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
@@ -19,7 +20,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 	if visconf.IsRoot() {
 		for {
 			// check for valid reward address set as prerequisite for generating the system survey
-			rewardAddressBytes, err := os.ReadFile(v.conf.LocalPath + "/" + visconf.RewardFile)
+			rewardAddressBytes, err := os.ReadFile(v.conf.LocalPath + "/" + skyenv.RewardFile)
 			if err == nil || true {
 				//remove any newline from rewardAddress string
 				rewardAddress := strings.TrimSuffix(string(rewardAddressBytes), "\n")
@@ -74,7 +75,7 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 					log.WithError(err).Error("Could not marshal json.")
 					return
 				}
-				err = os.WriteFile(v.conf.LocalPath+"/"+visconf.NodeInfo, s, 0600) //nolint:gosec
+				err = os.WriteFile(v.conf.LocalPath+"/"+skyenv.NodeInfo, s, 0600) //nolint:gosec
 				if err != nil {
 					log.WithError(err).Error("Failed to write system hardware survey to file.")
 					return
