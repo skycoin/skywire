@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
@@ -159,7 +160,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		visorConn := &Conn{
 			Addr:  addr,
 			SrvPK: conn.ServerPK(),
-			API:   NewRPCClient(log, conn, RPCPrefix, visorconfig.RPCTimeout),
+			API:   NewRPCClient(log, conn, RPCPrefix, skyenv.RPCTimeout),
 			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
 		if hv.visor.isDTMReady() {
@@ -805,7 +806,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 					return
 				}
 				appStatus := appserver.AppDetailedStatusStarting
-				if ctx.App.Name == visorconfig.VPNClientName {
+				if ctx.App.Name == skyenv.VPNClientName {
 					appStatus = appserver.AppDetailedStatusVPNConnecting
 				}
 				if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, appStatus); err != nil {
@@ -1622,7 +1623,7 @@ type dmsgPtyUI struct {
 }
 
 func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
-	ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: visorconfig.DmsgPtyPort})
+	ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: skyenv.DmsgPtyPort})
 	return &dmsgPtyUI{
 		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
 	}
