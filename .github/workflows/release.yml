@@ -275,17 +275,14 @@ jobs:
             goarch: amd64
             wix_arch: x64
             wintun_arch: amd64
-            cgo_enabled: "1"
           - arch: "386"
             goarch: "386"
             wix_arch: x86
             wintun_arch: x86
-            cgo_enabled: "0"
           - arch: arm64
             goarch: arm64
             wix_arch: x64
             wintun_arch: arm64
-            cgo_enabled: "0"
     steps:
       - uses: actions/setup-go@v6
         with:
@@ -316,19 +313,19 @@ jobs:
         env:
           GOPROXY: direct
           GOSUMDB: "off"
-          CGO_ENABLED: ${{ matrix.cgo_enabled }}
-          CGO_CFLAGS: -IC:/msys64/mingw64/include -IC:/msys64/mingw64/include/libusb-1.0
-          CGO_LDFLAGS: -LC:/msys64/mingw64/lib
           GOOS: windows
           GOARCH: ${{ matrix.goarch }}
         shell: pwsh
         run: |
-          go install -trimpath -ldflags "-s -w" "${{ env.MODULE }}/cmd/release@${{ github.ref_name }}"
+          # Compile from repo root (not cmd/release) because cmd/release imports
+          # hardware wallet which requires libusb/libhidapi DLLs on Windows.
+          # The hw wallet is built separately below with the required DLLs.
+          go install -trimpath -ldflags "-s -w" "${{ env.MODULE }}@${{ github.ref_name }}"
 
           New-Item -ItemType Directory -Force -Path "bin"
           $gopath = go env GOPATH
-          $crossPath = "$gopath\bin\windows_${{ matrix.goarch }}\release.exe"
-          $nativePath = "$gopath\bin\release.exe"
+          $crossPath = "$gopath\bin\windows_${{ matrix.goarch }}\skywire.exe"
+          $nativePath = "$gopath\bin\skywire.exe"
 
           if (Test-Path $crossPath) {
             Copy-Item $crossPath "bin\skywire.exe"
@@ -336,7 +333,7 @@ jobs:
             Copy-Item $nativePath "bin\skywire.exe"
           } else {
             Write-Error "Binary not found"
-            Get-ChildItem -Recurse "$gopath\bin" -Filter "release*"
+            Get-ChildItem -Recurse "$gopath\bin" -Filter "skywire*"
             exit 1
           }
 
