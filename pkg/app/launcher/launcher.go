@@ -206,9 +206,17 @@ func (l *AppLauncher) AppState(name string) (*appserver.AppState, bool) {
 
 // AppStates returns list of AppStates for all registered apps.
 func (l *AppLauncher) AppStates() []*appserver.AppState {
-	var states []*appserver.AppState
+	// Collect app names under lock to avoid race on l.apps map
+	l.mx.Lock()
+	names := make([]string, 0, len(l.apps))
 	for _, app := range l.apps {
-		state, _ := l.AppState(app.Name)
+		names = append(names, app.Name)
+	}
+	l.mx.Unlock()
+
+	var states []*appserver.AppState
+	for _, name := range names {
+		state, _ := l.AppState(name)
 		states = append(states, state)
 	}
 	return states

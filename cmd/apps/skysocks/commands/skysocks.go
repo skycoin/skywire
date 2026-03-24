@@ -19,11 +19,11 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skysocks"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -117,7 +117,7 @@ func RunSkysocks(ctx context.Context, args []string) error {
 	appCl.Log().Info("Starting serving proxy server")
 
 	if runtime.GOOS == "windows" {
-		ipcClient, err := ipc.StartClient(visorconfig.SkysocksName, nil)
+		ipcClient, err := ipc.StartClient(skyenv.SkysocksName, nil)
 		if err != nil {
 			setAppError(appCl, err)
 			appCl.Log().Errorf("Error creating ipc server for skysocks: %v", err)
