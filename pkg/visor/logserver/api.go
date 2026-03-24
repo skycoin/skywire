@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
@@ -66,7 +67,7 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 	}
 
 	// serve the file with the reward address - only exists if the reward address is set
-	authRoute.StaticFile("/"+visorconfig.RewardFile, filepath.Join(localPath, visorconfig.RewardFile)) // "/reward.txt"
+	authRoute.StaticFile("/"+skyenv.RewardFile, filepath.Join(localPath, skyenv.RewardFile)) // "/reward.txt"
 
 	// This survey endpoint generates the survey as a response
 	authRoute.GET("/node-info", func(c *gin.Context) {
