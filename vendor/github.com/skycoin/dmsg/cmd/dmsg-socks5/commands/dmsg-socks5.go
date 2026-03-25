@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/spf13/cobra"
 
+	dmsgcmdutil "github.com/skycoin/dmsg/pkg/cmdutil"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgclient"
 )
@@ -34,6 +35,8 @@ var (
 	dlog         *logging.Logger
 	dmsgHTTPPath string
 	err          error
+	pprofMode    string
+	pprofAddr    string
 )
 
 // Execute executes root CLI command.
@@ -55,6 +58,8 @@ func init() {
 		sk.Set(os.Getenv("DMSGSK")) //nolint
 	}
 	serveCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
+	serveCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
+	serveCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 
 	proxyCmd.Flags().IntVarP(&proxyPort, "port", "p", 1081, "TCP port to serve SOCKS5 proxy locally\033[0m\n\r")
 	proxyCmd.Flags().Uint16VarP(&dmsgPort, "dport", "q", 1081, "dmsg port to connect to socks5 server\033[0m\n\r")
@@ -66,6 +71,8 @@ func init() {
 		sk.Set(os.Getenv("DMSGSK")) //nolint
 	}
 	proxyCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
+	proxyCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
+	proxyCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 
 }
 
@@ -93,6 +100,8 @@ var serveCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Run: func(_ *cobra.Command, _ []string) {
 		dlog = logging.MustGetLogger("dmsg-proxy")
+		stopPProf := dmsgcmdutil.InitPProf(dlog, pprofMode, pprofAddr)
+		defer stopPProf()
 
 		if dmsgHTTPPath != "" {
 			dmsg.DmsghttpJSON, err = os.ReadFile(dmsgHTTPPath) //nolint
@@ -204,6 +213,8 @@ var proxyCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Run: func(_ *cobra.Command, _ []string) {
 		dlog = logging.MustGetLogger("dmsg-proxy-client")
+		stopPProf := dmsgcmdutil.InitPProf(dlog, pprofMode, pprofAddr)
+		defer stopPProf()
 
 		if dmsgHTTPPath != "" {
 			dmsg.DmsghttpJSON, err = os.ReadFile(dmsgHTTPPath) //nolint
