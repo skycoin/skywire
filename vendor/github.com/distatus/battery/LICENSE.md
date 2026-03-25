@@ -1,5 +1,4 @@
-MIT License
-
+battery
 Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
 
 Permission is hereby granted, free of charge, to any person obtaining
