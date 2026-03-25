@@ -41,8 +41,8 @@ require (
 	github.com/pterm/pterm v0.12.83
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
-	github.com/skycoin/dmsg v1.3.29-0.20260323132513-964219fd8e0d
-	github.com/skycoin/skycoin v0.28.5
+	github.com/skycoin/dmsg v1.3.29-0.20260325015104-740a7b917e01
+	github.com/skycoin/skycoin v0.28.6-0.20260325014814-f48988877c68
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -145,7 +145,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/disintegration/imaging v1.6.2 // indirect
-	github.com/distatus/battery v0.11.0 // indirect; indirect ; pin to v0.10.0 for gotop compatibility (v0.11.0 has breaking API change)
+	github.com/distatus/battery v0.10.0 // indirect; pin to v0.10.0 for gotop compatibility
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect

@@ -52,6 +52,8 @@ var (
 	rawTCP             []bool
 	httpClient         *http.Client //nolint unused
 	dialer             proxy.Dialer = proxy.Direct
+	pprofMode          string
+	pprofAddr          string
 )
 
 // Execute executes root CLI command.

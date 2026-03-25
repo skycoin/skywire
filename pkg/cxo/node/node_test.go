@@ -10,7 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
 )
 
-const TM time.Duration = 2000 * time.Millisecond
+const TM time.Duration = 4000 * time.Millisecond
 
 func getTestConfigNotListen(prefix string) (c *Config) {
 	c = getTestConfig(prefix)

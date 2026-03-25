@@ -397,8 +397,8 @@ github.com/dgryski/go-rendezvous
 # github.com/disintegration/imaging v1.6.2
 ## explicit
 github.com/disintegration/imaging
-# github.com/distatus/battery v0.11.0
-## explicit; go 1.18
+# github.com/distatus/battery v0.10.0
+## explicit; go 1.13
 github.com/distatus/battery
 # github.com/distribution/reference v0.6.0
 ## explicit; go 1.20
@@ -1014,7 +1014,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20260323132513-964219fd8e0d
+# github.com/skycoin/dmsg v1.3.29-0.20260325015104-740a7b917e01
 ## explicit; go 1.26.1
 github.com/skycoin/dmsg/cmd/conf/commands
 github.com/skycoin/dmsg/cmd/dial/commands
@@ -1031,6 +1031,7 @@ github.com/skycoin/dmsg/cmd/dmsgpty-cli/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-host/commands
 github.com/skycoin/dmsg/cmd/dmsgpty-ui/commands
 github.com/skycoin/dmsg/cmd/dmsgweb/commands
+github.com/skycoin/dmsg/pkg/cmdutil
 github.com/skycoin/dmsg/pkg/direct
 github.com/skycoin/dmsg/pkg/disc
 github.com/skycoin/dmsg/pkg/disc/metrics
@@ -1057,7 +1058,7 @@ github.com/skycoin/hardware-wallet/firmware
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.5
+# github.com/skycoin/skycoin v0.28.6-0.20260325014814-f48988877c68
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/hardware-wallet/commands

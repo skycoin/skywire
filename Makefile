@@ -573,13 +573,13 @@ integration-env-clean: #clean
 
 update-dep: #update vendor deps
 	go get -v -u ./...
-	echo "hold distatus/battery@v0.10.0"
+	echo "hold distatus/battery@v0.10.0 (v0.11.0 breaks gotop)"
 	go get github.com/distatus/battery@v0.10.0
 	go mod tidy
 	go mod vendor
 	git add go.mod go.sum vendor
-	git commit -m "update deps"
-	git push
+	git diff --cached --quiet || git commit -m "update deps"
+	git diff --cached --quiet || git push
 
 ## Sync local develop branch with upstream skycoin/skywire develop.
 ## Requires: origin = your fork, upstream = skycoin/skywire

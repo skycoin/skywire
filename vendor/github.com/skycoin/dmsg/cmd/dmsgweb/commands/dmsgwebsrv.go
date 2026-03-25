@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
+	dmsgcmdutil "github.com/skycoin/dmsg/pkg/cmdutil"
 	"github.com/skycoin/dmsg/pkg/dmsgclient"
 )
 
@@ -60,6 +61,8 @@ func init() {
 	srvCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
 	srvCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file")
 	srvCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
+	srvCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
+	srvCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 	srvCmd.CompletionOptions.DisableDefaultCmd = true
 }
 
@@ -114,6 +117,9 @@ var srvCmd = &cobra.Command{
 }
 
 func server() {
+	stopPProf := dmsgcmdutil.InitPProf(dlog, pprofMode, pprofAddr)
+	defer stopPProf()
+
 	ctx, cancel := cmdutil.SignalContext(context.Background(), dlog)
 	defer cancel()
 
