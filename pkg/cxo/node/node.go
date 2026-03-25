@@ -49,8 +49,9 @@ type Node struct {
 	//
 
 	// listen and connect
-	tcp *TCP
-	udp *UDP
+	tcp  *TCP
+	udp  *UDP
+	dmsg *DMSG // optional DMSG transport
 
 	//
 	// other
@@ -178,6 +179,9 @@ func NewNodeContainer(
 			return n, err
 		}
 	}
+
+	// DMSG transport (set externally via SetDMSG before or after node creation)
+	// The DMSG factory and listener are managed by the caller who owns the dmsg.Client.
 
 	// rpc
 
@@ -314,6 +318,33 @@ func (n *Node) createUDP() {
 
 	n.udp = newUDP(n)
 
+}
+
+// DMSG returns the DMSG transport of the Node, or nil if not configured.
+func (n *Node) DMSG() *DMSG {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+	return n.dmsg
+}
+
+// SetDMSG sets the DMSG transport for this node.
+// Must be called before Listen/Connect operations on the DMSG transport.
+func (n *Node) SetDMSG(d *DMSG) {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+	n.dmsg = d
+}
+
+// EnableDMSG creates and starts a DMSG transport on this node using the given
+// DMSG factory. It starts listening for incoming CXO connections over DMSG.
+func (n *Node) EnableDMSG(factory *transport.DMSGFactory) error {
+	d := newDMSG(n, factory)
+	if err := d.Listen(); err != nil {
+		return err
+	}
+	n.SetDMSG(d)
+	n.Debugf(NewInConnPin, "CXO DMSG transport enabled on %s", d.Address())
+	return nil
 }
 
 func (n *Node) onConnect(c *Conn) error {
@@ -641,6 +672,9 @@ func (n *Node) Close() (err error) {
 		}
 		if n.udp != nil {
 			n.udp.Close() //nolint:errcheck,gosec
+		}
+		if n.dmsg != nil {
+			n.dmsg.Close()
 		}
 		if n.rpc != nil {
 			n.rpc.Close() //nolint:errcheck,gosec

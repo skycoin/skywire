@@ -48,6 +48,7 @@ var (
 	routeSetupNodes             string
 	transportSetupPKs           string
 	isDmsgHTTP                  bool
+	isHTTPOnly                  bool
 	minDmsgSess                 int
 	isVpnServerEnable           bool
 	isDisableAuth               bool

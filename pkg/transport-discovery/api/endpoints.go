@@ -39,6 +39,8 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 			api.writeError(w, r, err)
 			return
 		}
+		// Publish to CXO subscribers
+		api.publishTransportToCXO(entry.Entry)
 	}
 
 	// Check if sync=true query param is set - return all transports for local route calculation
@@ -266,6 +268,9 @@ func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Remove from CXO feed
+	api.unpublishTransportFromCXO(id.String())
+
 	w.WriteHeader(http.StatusOK)
 	if _, err = w.Write([]byte("transport deleted")); err != nil {
 		api.writeError(w, r, err)
@@ -318,6 +323,7 @@ func (api *API) deleteTransportsBatch(w http.ResponseWriter, r *http.Request) {
 			skipped++
 			continue
 		}
+		api.unpublishTransportFromCXO(id.String())
 		deleted++
 	}
 
@@ -378,6 +384,7 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 			api.writeError(w, r, err)
 			continue
 		}
+		api.unpublishTransportFromCXO(id.String())
 	}
 
 	api.log(r).WithFields(logrus.Fields{"Number of Transports": len(tps), "Transports": tps}).Info("Deregistration process completed.")

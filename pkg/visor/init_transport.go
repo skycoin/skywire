@@ -18,6 +18,7 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
+	"github.com/skycoin/skywire/pkg/cxo/subscriber"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
@@ -38,7 +39,19 @@ import (
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	httpC, err := getHTTPClient(ctx, v, conf.AddressResolver)
+	// Try DMSG-HTTP first for address resolver if configured
+	arURL := conf.AddressResolver
+	if conf.AddressResolverDmsg != "" && v.dmsgC != nil {
+		if dmsgC, err := getHTTPClient(ctx, v, conf.AddressResolverDmsg); err == nil {
+			arURL = conf.AddressResolverDmsg
+			_ = dmsgC // URL is enough, getHTTPClient sets up DMSG routing
+			log.Info("Using DMSG-HTTP for address resolver")
+		} else {
+			log.WithError(err).Warn("DMSG-HTTP address resolver failed, using plain HTTP")
+		}
+	}
+
+	httpC, err := getHTTPClient(ctx, v, arURL)
 	if err != nil {
 		return err
 	}
@@ -226,6 +239,11 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if err != nil {
 		err := fmt.Errorf("failed to create transport discovery client: %w", err)
 		return err
+	}
+
+	// Wrap TPD client with CXO subscriber if DMSG is available and a CXO feed PK is configured
+	if v.conf.Transport.CXOFeedPK != "" && v.dmsgC != nil {
+		tpdC = wrapTPDWithCXO(ctx, v, tpdC, log)
 	}
 
 	var logS transport.LogStore
@@ -832,30 +850,79 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
+// wrapTPDWithCXO creates a CXO subscriber for the TPD feed and wraps the
+// HTTP client with a CXO-aware client that checks the local cache first.
+func wrapTPDWithCXO(ctx context.Context, v *Visor, httpClient transport.DiscoveryClient, log *logging.Logger) transport.DiscoveryClient {
+	var feedPK cipher.PubKey
+	if err := feedPK.Set(v.conf.Transport.CXOFeedPK); err != nil {
+		log.WithError(err).Warn("Invalid CXO feed PK, continuing without CXO")
+		return httpClient
+	}
+
+	subConf := subscriber.DefaultConfig()
+	subConf.Logger = v.MasterLogger().PackageLogger("cxo-tpd-sub")
+
+	sub, err := subscriber.New(v.dmsgC, feedPK, subConf)
+	if err != nil {
+		log.WithError(err).Warn("Failed to create CXO subscriber, continuing without CXO")
+		return httpClient
+	}
+
+	// Connect to the TPD's CXO feed over DMSG
+	if err := sub.Connect(feedPK); err != nil {
+		log.WithError(err).Warn("Failed to connect to TPD CXO feed, continuing without CXO")
+		sub.Close() //nolint:errcheck,gosec
+		return httpClient
+	}
+
+	log.Infof("Connected to TPD CXO feed: %s", feedPK)
+
+	// Close subscriber when context is done
+	go func() {
+		<-ctx.Done()
+		sub.Close() //nolint:errcheck,gosec
+	}()
+
+	return tpdclient.NewCXOClient(httpClient, sub, v.MasterLogger().PackageLogger("tpd-cxo"))
+}
+
 func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transport.DiscoveryClient, error) {
 	const (
 		initBO = 1 * time.Second
 		maxBO  = 10 * time.Second
-		// trying till success
 		tries  = 0
 		factor = 1
 	)
 
 	conf := v.conf.Transport
 
-	httpC, err := getHTTPClient(ctx, v, conf.Discovery)
-	if err != nil {
-		return nil, err
-	}
-
-	// only needed for dmsghttp
 	pIP, err := getPublicIP(v, conf.AddressResolver)
 	if err != nil {
 		return nil, err
 	}
 
-	tpdCRetrier := netutil.NewRetrier(log,
-		initBO, maxBO, tries, factor)
+	// Try DMSG-HTTP first if configured, fall back to plain HTTP
+	if conf.DiscoveryDmsg != "" && v.dmsgC != nil {
+		dmsgHTTPC, err := getHTTPClient(ctx, v, conf.DiscoveryDmsg)
+		if err != nil {
+			log.WithError(err).Warn("Failed to get DMSG-HTTP client for TPD, trying plain HTTP")
+		} else {
+			tpdC, err := tpdclient.NewHTTP(conf.DiscoveryDmsg, v.conf.PK, v.conf.SK, dmsgHTTPC, pIP, v.MasterLogger())
+			if err == nil {
+				log.Info("Connected to transport discovery via DMSG-HTTP")
+				return tpdC, nil
+			}
+			log.WithError(err).Warn("DMSG-HTTP transport discovery failed, falling back to plain HTTP")
+		}
+	}
+
+	// Plain HTTP (primary if no DMSG config, fallback if DMSG failed)
+	httpC, err := getHTTPClient(ctx, v, conf.Discovery)
+	if err != nil {
+		return nil, err
+	}
+
+	tpdCRetrier := netutil.NewRetrier(log, initBO, maxBO, tries, factor)
 
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
@@ -865,7 +932,6 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err
 		}
-
 		return nil
 	}
 
