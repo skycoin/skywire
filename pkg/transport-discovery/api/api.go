@@ -67,6 +67,17 @@ type API struct {
 
 	uptimesCache []store.VisorSummary
 	uptimesMu    sync.RWMutex
+
+	// cxoPublisher is an optional CXO publisher for distributing transport data.
+	// When set, transport register/deregister operations publish to CXO subscribers.
+	cxoPublisher CXOPublisher
+}
+
+// CXOPublisher is the interface for publishing transport data to CXO.
+// Implemented by pkg/cxo/publisher.Publisher.
+type CXOPublisher interface {
+	Put(key, value string) error
+	Delete(key string) error
 }
 
 // HealthCheckResponse is struct of /health endpoint
@@ -159,6 +170,36 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	api.Handler = r
 
 	return api
+}
+
+// SetCXOPublisher enables CXO distribution of transport data.
+// When set, register/deregister operations publish changes to CXO subscribers.
+func (api *API) SetCXOPublisher(p CXOPublisher) {
+	api.cxoPublisher = p
+}
+
+// publishTransportToCXO publishes a transport entry to the CXO feed.
+// No-op if CXO publisher is not configured.
+func (api *API) publishTransportToCXO(entry *transport.Entry) {
+	if api.cxoPublisher == nil {
+		return
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return
+	}
+	if err := api.cxoPublisher.Put(entry.ID.String(), string(data)); err != nil {
+		// Log but don't fail the HTTP request
+		_ = err
+	}
+}
+
+// unpublishTransportFromCXO removes a transport entry from the CXO feed.
+func (api *API) unpublishTransportFromCXO(id string) {
+	if api.cxoPublisher == nil {
+		return
+	}
+	api.cxoPublisher.Delete(id) //nolint:errcheck
 }
 
 // RunBackgroundTasks is function which runs periodic background tasks of API.
