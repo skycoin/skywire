@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
 
 // session represents an authenticated user session
@@ -27,12 +29,14 @@ type session struct {
 
 // pendingLogin tracks a login challenge waiting for transaction confirmation
 type pendingLogin struct {
-	Address    string    `json:"address"`
-	Visors     []string  `json:"visors"`
-	Challenge  string    `json:"challenge"`   // random challenge string
-	FundedTxID string    `json:"funded_txid"` // txid of coins sent to user
-	CreatedAt  time.Time `json:"created_at"`
-	ExpiresAt  time.Time `json:"expires_at"`
+	Address      string    `json:"address"`       // original reward address or xpub
+	LoginAddress string    `json:"login_address"` // derived address for verification (change chain for xpub)
+	Visors       []string  `json:"visors"`
+	Challenge    string    `json:"challenge"`   // random challenge string
+	FundedTxID   string    `json:"funded_txid"` // txid of coins sent to user
+	IsXpub       bool      `json:"is_xpub"`
+	CreatedAt    time.Time `json:"created_at"`
+	ExpiresAt    time.Time `json:"expires_at"`
 }
 
 var (
@@ -264,23 +268,38 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			return
 		}
 
-		// Fund the user's address on the login chain if needed
+		// Determine the login verification address.
+		// For xpub keys: derive change chain address (m/account'/1/0)
+		// For single addresses: use the address directly
+		_, isXpub, _ := rewardconfig.ValidateRewardAddress(address)
+		loginAddress := address
+		if isXpub {
+			derived, err := rewardconfig.DeriveLoginAddressFromXpub(address, 0)
+			if err != nil {
+				c.Redirect(http.StatusFound, "/login?msg=Failed+to+derive+login+address+from+xpub:+"+err.Error())
+				return
+			}
+			loginAddress = derived
+			fmt.Printf("Login chain: derived change chain address %s from xpub\n", loginAddress)
+		}
+
+		// Fund the login address on the login chain if needed
 		var fundedTxID string
 		if loginNodeAddr != "" {
-			coins, _, err := checkBalanceOnLoginChain(loginNodeAddr, address)
+			coins, _, err := checkBalanceOnLoginChain(loginNodeAddr, loginAddress)
 			if err != nil {
 				fmt.Printf("Warning: failed to check login chain balance: %v\n", err)
 			}
 			if coins == 0 {
-				// Send minimum coins (1 coin) to the user's address
-				txID, err := sendCoinsOnLoginChain(loginNodeAddr, address, "1.000000")
+				// Send minimum coins (1 coin) to the login address
+				txID, err := sendCoinsOnLoginChain(loginNodeAddr, loginAddress, "1.000000")
 				if err != nil {
 					fmt.Printf("Warning: failed to fund login address: %v\n", err)
 					c.Redirect(http.StatusFound, "/login?msg=Failed+to+prepare+login+verification.+Please+try+again.")
 					return
 				}
 				fundedTxID = txID
-				fmt.Printf("Login chain: funded %s with 1 coin (tx: %s)\n", address, txID)
+				fmt.Printf("Login chain: funded %s with 1 coin (tx: %s)\n", loginAddress, txID)
 			}
 		}
 
@@ -288,12 +307,14 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		challenge := generateChallenge()
 		pendingLoginsMu.Lock()
 		pendingLogins[challenge] = &pendingLogin{
-			Address:    address,
-			Visors:     visors,
-			Challenge:  challenge,
-			FundedTxID: fundedTxID,
-			CreatedAt:  time.Now(),
-			ExpiresAt:  time.Now().Add(10 * time.Minute),
+			Address:      address,
+			LoginAddress: loginAddress,
+			Visors:       visors,
+			Challenge:    challenge,
+			FundedTxID:   fundedTxID,
+			IsXpub:       isXpub,
+			CreatedAt:    time.Now(),
+			ExpiresAt:    time.Now().Add(10 * time.Minute),
 		}
 		pendingLoginsMu.Unlock()
 
@@ -323,12 +344,18 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		l := loginPageHeader("Verify Wallet Ownership")
 		l += navlinks
 		l += "<h1>Verify Wallet Ownership</h1>"
-		l += "<p>To prove you control address <code>" + pending.Address + "</code>, "
-		l += "please send any amount of coins from that address to the login address below.</p>"
-		l += "<p><strong>Login address:</strong> <code>" + loginGenesisAddress + "</code></p>"
+		if pending.IsXpub {
+			l += "<p>To prove you control the wallet for xpub <code>" + pending.Address[:20] + "...</code>, "
+			l += "please send coins from the change chain address below to the login address.</p>"
+			l += "<p><strong>Your login address (change chain):</strong> <code>" + pending.LoginAddress + "</code></p>"
+		} else {
+			l += "<p>To prove you control address <code>" + pending.Address + "</code>, "
+			l += "please send coins from that address to the login address below.</p>"
+		}
+		l += "<p><strong>Send to:</strong> <code>" + loginGenesisAddress + "</code></p>"
 		l += "<p>Use the <a href='http://127.0.0.1:8006' target='_blank'>Skycoin Web Wallet</a> "
 		l += "connected to this node to send the transaction.</p>"
-		l += "<p class='info'>This verifies that you hold the private key for your reward address. "
+		l += "<p class='info'>This verifies that you hold the private key for your reward wallet. "
 		l += "The login chain resets periodically — coins have no real value.</p>"
 		l += "<hr>"
 		l += "<p>Waiting for transaction confirmation...</p>"
@@ -362,8 +389,8 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			return
 		}
 
-		// Check if user sent coins FROM their address TO the genesis address
-		confirmed := checkTransactionToAddress(loginNodeAddr, pending.Address, loginGenesisAddress)
+		// Check if user sent coins FROM their login address TO the genesis address
+		confirmed := checkTransactionToAddress(loginNodeAddr, pending.LoginAddress, loginGenesisAddress)
 
 		if confirmed {
 			// Create session
