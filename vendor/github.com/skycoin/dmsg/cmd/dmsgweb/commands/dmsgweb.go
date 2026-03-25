@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
+	dmsgcmdutil "github.com/skycoin/dmsg/pkg/cmdutil"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgclient"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
@@ -74,6 +75,8 @@ func init() {
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 	RootCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file\033[0m\n\r")
+	RootCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 
 }
 
@@ -160,6 +163,9 @@ dmsgweb conf file detected: ` + dwcfg
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
+		stopPProf := dmsgcmdutil.InitPProf(dlog, pprofMode, pprofAddr)
+		defer stopPProf()
+
 		ctx, cancel := cmdutil.SignalContext(context.Background(), dlog)
 		defer cancel()
 

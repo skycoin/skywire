@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/spf13/cobra"
 
+	dmsgcmdutil "github.com/skycoin/dmsg/pkg/cmdutil"
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgclient"
@@ -51,6 +52,8 @@ var (
 	// root command flags
 	confStdin = false
 	confPath  = "./config.json"
+	pprofMode string
+	pprofAddr string
 )
 
 // init prepares flags.
@@ -67,6 +70,8 @@ func init() {
 	RootCmd.Flags().StringVar(&envPrefix, "envprefix", envPrefix, "env prefix")
 	RootCmd.Flags().BoolVar(&confStdin, "confstdin", confStdin, "config will be read from stdin if set")
 	RootCmd.Flags().StringVarP(&confPath, "confpath", "c", confPath, "config path")
+	RootCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 
 }
 
@@ -90,6 +95,8 @@ var RootCmd = &cobra.Command{
 			log.Printf("Failed to output build info: %v", err)
 		}
 		log := logging.MustGetLogger("dmsgpty-host")
+		stopPProf := dmsgcmdutil.InitPProf(log, pprofMode, pprofAddr)
+		defer stopPProf()
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
 

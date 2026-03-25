@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
+	dmsgcmdutil "github.com/skycoin/dmsg/pkg/cmdutil"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgclient"
 )
@@ -34,6 +35,8 @@ var (
 	wl        []string
 	wlkeys    []cipher.PubKey
 	err       error
+	pprofMode string
+	pprofAddr string
 )
 
 func init() {
@@ -48,6 +51,8 @@ func init() {
 		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint
 	}
 	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
+	RootCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
+	RootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 
 }
 
@@ -69,6 +74,9 @@ var RootCmd = &cobra.Command{
 }
 
 func server() {
+	stopPProf := dmsgcmdutil.InitPProf(dlog, pprofMode, pprofAddr)
+	defer stopPProf()
+
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 
