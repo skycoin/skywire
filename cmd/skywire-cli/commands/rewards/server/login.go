@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -24,13 +25,31 @@ type session struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
+// pendingLogin tracks a login challenge waiting for transaction confirmation
+type pendingLogin struct {
+	Address    string    `json:"address"`
+	Visors     []string  `json:"visors"`
+	Challenge  string    `json:"challenge"`   // random challenge string
+	FundedTxID string    `json:"funded_txid"` // txid of coins sent to user
+	CreatedAt  time.Time `json:"created_at"`
+	ExpiresAt  time.Time `json:"expires_at"`
+}
+
 var (
-	sessions   = make(map[string]*session)
-	sessionsMu sync.RWMutex
+	sessions        = make(map[string]*session)
+	sessionsMu      sync.RWMutex
+	pendingLogins   = make(map[string]*pendingLogin) // challenge -> pending login
+	pendingLoginsMu sync.RWMutex
 )
 
 func generateSessionID() string {
 	b := make([]byte, 32)
+	rand.Read(b) //nolint:errcheck,gosec
+	return hex.EncodeToString(b)
+}
+
+func generateChallenge() string {
+	b := make([]byte, 16)
 	rand.Read(b) //nolint:errcheck,gosec
 	return hex.EncodeToString(b)
 }
@@ -65,6 +84,140 @@ func findVisorsByRewardAddress(backupsDir, address string) []string {
 	return visors
 }
 
+// checkBalanceOnLoginChain checks the balance of an address on the login chain.
+func checkBalanceOnLoginChain(nodeURL, address string) (coins uint64, hours uint64, err error) {
+	resp, err := http.Get(fmt.Sprintf("%s/api/v1/balance?addrs=%s", nodeURL, address)) //nolint:gosec
+	if err != nil {
+		return 0, 0, err
+	}
+	defer resp.Body.Close() //nolint:errcheck,gosec
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	var result struct {
+		Confirmed struct {
+			Coins uint64 `json:"coins"`
+			Hours uint64 `json:"hours"`
+		} `json:"confirmed"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return 0, 0, err
+	}
+
+	return result.Confirmed.Coins, result.Confirmed.Hours, nil
+}
+
+// sendCoinsOnLoginChain sends coins from the genesis wallet to the target address.
+// Returns the transaction ID.
+func sendCoinsOnLoginChain(nodeURL, genesisWalletID, destAddress string, coins uint64) (string, error) {
+	// First get CSRF token
+	csrfResp, err := http.Get(fmt.Sprintf("%s/api/v1/csrf", nodeURL)) //nolint:gosec
+	if err != nil {
+		return "", fmt.Errorf("csrf: %w", err)
+	}
+	defer csrfResp.Body.Close()              //nolint:errcheck,gosec
+	csrfBody, _ := io.ReadAll(csrfResp.Body) //nolint:errcheck,gosec
+	var csrfData struct {
+		Token string `json:"csrf_token"`
+	}
+	json.Unmarshal(csrfBody, &csrfData) //nolint:errcheck,gosec
+
+	// Create and send transaction
+	txReq := fmt.Sprintf(`{"hours_selection":{"type":"auto","mode":"share","share_factor":"0.5"},"wallet_id":"%s","to":[{"address":"%s","coins":"%d.000000"}]}`,
+		genesisWalletID, destAddress, coins)
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/v1/wallet/transaction", nodeURL), strings.NewReader(txReq))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-CSRF-Token", csrfData.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close() //nolint:errcheck,gosec
+
+	body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("transaction failed (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var txResult struct {
+		Transaction struct {
+			TxID string `json:"txid"`
+		} `json:"transaction"`
+	}
+	if err := json.Unmarshal(body, &txResult); err != nil {
+		return "", fmt.Errorf("parse tx result: %w", err)
+	}
+
+	// Inject the transaction
+	injectReq := fmt.Sprintf(`{"rawtx":"%s"}`, txResult.Transaction.TxID)
+	req2, _ := http.NewRequest("POST", fmt.Sprintf("%s/api/v1/injectTransaction", nodeURL), strings.NewReader(injectReq)) //nolint:errcheck,gosec
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-CSRF-Token", csrfData.Token)
+	resp2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		return "", err
+	}
+	defer resp2.Body.Close() //nolint:errcheck,gosec
+
+	return txResult.Transaction.TxID, nil
+}
+
+// checkTransactionToAddress checks if there's a confirmed transaction
+// FROM the given address TO the genesis address on the login chain.
+func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) bool {
+	resp, err := http.Get(fmt.Sprintf("%s/api/v1/transactions?addrs=%s&confirmed=true", nodeURL, fromAddress)) //nolint:gosec
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close() //nolint:errcheck,gosec
+
+	body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
+
+	var txs []struct {
+		Txn struct {
+			Outputs []struct {
+				Dst string `json:"dst"`
+			} `json:"outputs"`
+			Inputs []struct {
+				Owner string `json:"owner"`
+			} `json:"inputs"`
+		} `json:"txn"`
+	}
+	if err := json.Unmarshal(body, &txs); err != nil {
+		return false
+	}
+
+	for _, tx := range txs {
+		// Check if any input is from the user's address
+		fromUser := false
+		for _, inp := range tx.Txn.Inputs {
+			if inp.Owner == fromAddress {
+				fromUser = true
+				break
+			}
+		}
+		if !fromUser {
+			continue
+		}
+		// Check if any output goes to the genesis address
+		for _, out := range tx.Txn.Outputs {
+			if out.Dst == toAddress {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // registerLoginRoutes adds login-related routes to the gin router.
 // When loginEnabled is false, the login page shows a "not available" message.
 func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
@@ -75,15 +228,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 		c.Writer.WriteHeader(http.StatusOK)
 
-		l := "<html><head><title>Login - Skywire Rewards</title>"
-		l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }"
-		l += "body { background-color: black; color: white; font-family: monospace; max-width: 600px; margin: 40px auto; padding: 0 20px; }"
-		l += "input[type=text] { width: 100%; padding: 8px; font-family: monospace; font-size: 14px; background: #222; color: white; border: 1px solid #444; margin: 10px 0; }"
-		l += "button { padding: 8px 20px; font-family: monospace; font-size: 14px; background: #36A2EB; color: white; border: none; cursor: pointer; }"
-		l += "button:hover { background: #2888CC; }"
-		l += ".error { color: #FF6384; }"
-		l += ".info { color: #4BC0C0; }"
-		l += "</style></head><body>"
+		l := loginPageHeader("Login")
 		l += navlinks
 
 		if !loginEnabled {
@@ -95,13 +240,12 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		}
 
 		l += "<h1>Login</h1>"
-		l += "<p>Enter your reward address or xpub key to view your visor data.</p>"
+		l += "<p>Enter your reward address to prove wallet ownership and view your visor data.</p>"
 		l += "<form method='POST' action='/login'>"
-		l += "<input type='text' name='address' placeholder='Skycoin address or xpub key' required>"
-		l += "<br><button type='submit'>Look up</button>"
+		l += "<input type='text' name='address' placeholder='Skycoin reward address' required>"
+		l += "<br><button type='submit'>Start verification</button>"
 		l += "</form>"
 
-		// Check for message from redirect
 		if msg := c.Query("msg"); msg != "" {
 			l += "<p class='error'>" + strings.ReplaceAll(msg, "<", "&lt;") + "</p>"
 		}
@@ -113,7 +257,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
 	})
 
-	// Login POST — look up address in surveys
+	// Login POST — look up address, create verification challenge
 	r.POST("/login", func(c *gin.Context) {
 		if !loginEnabled {
 			c.Redirect(http.StatusFound, "/login?msg=Login+is+not+currently+available")
@@ -121,7 +265,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		}
 		address := strings.TrimSpace(c.PostForm("address"))
 		if address == "" {
-			c.Redirect(http.StatusFound, "/login?msg=Please+enter+an+address+or+xpub+key")
+			c.Redirect(http.StatusFound, "/login?msg=Please+enter+a+reward+address")
 			return
 		}
 
@@ -131,20 +275,119 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			return
 		}
 
-		// Create session
-		sessionID := generateSessionID()
-		sessionsMu.Lock()
-		sessions[sessionID] = &session{
+		// Create pending login challenge
+		challenge := generateChallenge()
+		pendingLoginsMu.Lock()
+		pendingLogins[challenge] = &pendingLogin{
 			Address:   address,
 			Visors:    visors,
+			Challenge: challenge,
 			CreatedAt: time.Now(),
-			ExpiresAt: time.Now().Add(24 * time.Hour),
+			ExpiresAt: time.Now().Add(10 * time.Minute),
 		}
-		sessionsMu.Unlock()
+		pendingLoginsMu.Unlock()
 
-		// Set session cookie
-		c.SetCookie("session", sessionID, 86400, "/", "", false, true)
-		c.Redirect(http.StatusFound, "/account")
+		c.Redirect(http.StatusFound, "/login/verify?challenge="+challenge)
+	})
+
+	// Verification page — instructs user to send coins back
+	r.GET("/login/verify", func(c *gin.Context) {
+		challenge := c.Query("challenge")
+		if challenge == "" {
+			c.Redirect(http.StatusFound, "/login?msg=Invalid+verification+link")
+			return
+		}
+
+		pendingLoginsMu.RLock()
+		pending, ok := pendingLogins[challenge]
+		pendingLoginsMu.RUnlock()
+
+		if !ok || time.Now().After(pending.ExpiresAt) {
+			c.Redirect(http.StatusFound, "/login?msg=Verification+expired")
+			return
+		}
+
+		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		c.Writer.WriteHeader(http.StatusOK)
+
+		l := loginPageHeader("Verify Wallet Ownership")
+		l += navlinks
+		l += "<h1>Verify Wallet Ownership</h1>"
+		l += "<p>To prove you control address <code>" + pending.Address + "</code>, "
+		l += "please send any amount of coins from that address to the login address below.</p>"
+		l += "<p><strong>Login address:</strong> <code>" + loginGenesisAddress + "</code></p>"
+		l += "<p>Use the <a href='http://127.0.0.1:8006' target='_blank'>Skycoin Web Wallet</a> "
+		l += "connected to this node to send the transaction.</p>"
+		l += "<p class='info'>This verifies that you hold the private key for your reward address. "
+		l += "The login chain resets periodically — coins have no real value.</p>"
+		l += "<hr>"
+		l += "<p>Waiting for transaction confirmation...</p>"
+		l += "<script>"
+		l += "setInterval(function() {"
+		l += "  fetch('/login/check?challenge=" + challenge + "')"
+		l += "    .then(r => r.json())"
+		l += "    .then(d => { if(d.confirmed) window.location='/account'; });"
+		l += "}, 3000);"
+		l += "</script>"
+		l += "<noscript><p>JavaScript is required for auto-detection. "
+		l += "<a href='/login/check?challenge=" + challenge + "&redirect=1'>Click here to check manually</a></p></noscript>"
+		l += "</body></html>"
+		c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+	})
+
+	// Check if verification transaction is confirmed
+	r.GET("/login/check", func(c *gin.Context) {
+		challenge := c.Query("challenge")
+
+		pendingLoginsMu.RLock()
+		pending, ok := pendingLogins[challenge]
+		pendingLoginsMu.RUnlock()
+
+		if !ok || time.Now().After(pending.ExpiresAt) {
+			if c.Query("redirect") == "1" {
+				c.Redirect(http.StatusFound, "/login?msg=Verification+expired")
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"confirmed": false, "error": "expired"})
+			return
+		}
+
+		// Check if user sent coins FROM their address TO the genesis address
+		confirmed := checkTransactionToAddress(loginNodeAddr, pending.Address, loginGenesisAddress)
+
+		if confirmed {
+			// Create session
+			sessionID := generateSessionID()
+			sessionsMu.Lock()
+			sessions[sessionID] = &session{
+				Address:   pending.Address,
+				Visors:    pending.Visors,
+				CreatedAt: time.Now(),
+				ExpiresAt: time.Now().Add(24 * time.Hour),
+			}
+			sessionsMu.Unlock()
+
+			// Clean up pending login
+			pendingLoginsMu.Lock()
+			delete(pendingLogins, challenge)
+			pendingLoginsMu.Unlock()
+
+			// Set session cookie
+			c.SetCookie("session", sessionID, 86400, "/", "", false, true)
+
+			if c.Query("redirect") == "1" {
+				c.Redirect(http.StatusFound, "/account")
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"confirmed": true})
+			return
+		}
+
+		if c.Query("redirect") == "1" {
+			c.Redirect(http.StatusFound, "/login/verify?challenge="+challenge+"&msg=Transaction+not+yet+confirmed")
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"confirmed": false})
 	})
 
 	// Account page — shows visor data for logged-in user
@@ -176,62 +419,17 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 		c.Writer.WriteHeader(http.StatusOK)
 
-		l := "<html><head><title>Account - Skywire Rewards</title>"
-		l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }"
-		l += "body { background-color: black; color: white; font-family: monospace; max-width: 900px; margin: 40px auto; padding: 0 20px; }"
-		l += "pre { white-space: pre-wrap; word-wrap: break-word; }"
-		l += ".visor-section { border: 1px solid #333; padding: 15px; margin: 15px 0; }"
-		l += "</style></head><body>"
+		l := loginPageHeader("Account")
 		l += navlinks
-
 		l += "<h1>Account</h1>"
-		l += "<p>Reward address: <code>" + sess.Address + "</code></p>"
-		l += fmt.Sprintf("<p>%d visor(s) found</p>", len(sess.Visors))
-		l += "<p><a href='/logout'>Logout</a></p>"
-		l += "<hr>"
-
-		// Show each visor's survey data
-		for _, pk := range sess.Visors {
-			l += "<div class='visor-section'>"
-			l += "<h3>Visor: <a href='/log-collection/tree/" + pk + "'>" + pk[:16] + "...</a></h3>"
-
-			surveyPath := filepath.Join(backupsDir, pk, "node-info.json")
-			data, err := os.ReadFile(surveyPath) //nolint:gosec
-			if err != nil {
-				l += "<p>Survey not available</p>"
-			} else {
-				// Parse and display key fields
-				var survey map[string]interface{}
-				if json.Unmarshal(data, &survey) == nil {
-					if v, ok := survey["skywire_version"]; ok {
-						l += fmt.Sprintf("<p>Version: %v</p>", v)
-					}
-					if v, ok := survey["go_arch"]; ok {
-						l += fmt.Sprintf("<p>Architecture: %v</p>", v)
-					}
-					if v, ok := survey["ip_address"]; ok {
-						l += fmt.Sprintf("<p>IP: %v</p>", v)
-					}
-				}
-			}
-
-			// Show health info if available
-			healthPath := filepath.Join(backupsDir, pk, "health.json")
-			healthData, err := os.ReadFile(healthPath) //nolint:gosec
-			if err == nil {
-				var health map[string]interface{}
-				if json.Unmarshal(healthData, &health) == nil {
-					if bi, ok := health["build_info"].(map[string]interface{}); ok {
-						if v, ok := bi["version"]; ok {
-							l += fmt.Sprintf("<p>Build version: %v</p>", v)
-						}
-					}
-				}
-			}
-
-			l += "</div>"
+		l += "<p>Logged in as: <code>" + sess.Address + "</code></p>"
+		l += "<p>Visors associated with this address:</p>"
+		l += "<ul>"
+		for _, v := range sess.Visors {
+			l += "<li><code>" + v + "</code></li>"
 		}
-
+		l += "</ul>"
+		l += "<p><a href='/logout'>Logout</a></p>"
 		l += "</body></html>"
 		c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
 	})
@@ -247,4 +445,17 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		c.SetCookie("session", "", -1, "/", "", false, true)
 		c.Redirect(http.StatusFound, "/login?info=Logged+out")
 	})
+}
+
+func loginPageHeader(title string) string {
+	return "<html><head><title>" + title + " - Skywire Rewards</title>" +
+		"<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }" +
+		"body { background-color: black; color: white; font-family: monospace; max-width: 600px; margin: 40px auto; padding: 0 20px; }" +
+		"input[type=text] { width: 100%; padding: 8px; font-family: monospace; font-size: 14px; background: #222; color: white; border: 1px solid #444; margin: 10px 0; }" +
+		"button { padding: 8px 20px; font-family: monospace; font-size: 14px; background: #36A2EB; color: white; border: none; cursor: pointer; }" +
+		"button:hover { background: #2888CC; }" +
+		"code { background: #222; padding: 2px 6px; }" +
+		".error { color: #FF6384; }" +
+		".info { color: #4BC0C0; }" +
+		"</style></head><body>"
 }
