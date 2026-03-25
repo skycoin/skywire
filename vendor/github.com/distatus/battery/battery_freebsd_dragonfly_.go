@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017,2023 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -19,12 +19,13 @@
 // TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 // OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// +build freebsd dragonfly
+//go:build freebsd || dragonfly
 
 package battery
 
 import (
 	"errors"
+	"fmt"
 	"syscall"
 	"unsafe"
 
@@ -62,6 +63,8 @@ func systemGet(idx int) (*Battery, error) {
 
 	// No unions in Go, so lets "emulate" union with byte array ;-].
 	var retptr [164]byte
+	// XXX What about byte encoding idx and storing it in retptr?
+	// Then we wouldn't need this unsafe pointer manipulations
 	unit := (*int)(unsafe.Pointer(&retptr[0]))
 
 	*unit = idx
@@ -79,17 +82,19 @@ func systemGet(idx int) (*Battery, error) {
 	*unit = idx
 	err = ioctl_(fd, 0x11, &retptr) // APCIIO_BATT_GET_BST
 	if err == nil {
-		switch readUint32(retptr[0:4]) { // acpi_bst.state
+		state := readUint32(retptr[0:4]) // acpi_bst.state
+		b.State.specific = fmt.Sprintf("%x", state)
+		switch state {
 		case 0x0000:
-			b.State = Full
+			b.State.Raw = Full
 		case 0x0001:
-			b.State = Discharging
+			b.State.Raw = Discharging
 		case 0x0002:
-			b.State = Charging
+			b.State.Raw = Charging
 		case 0x0004:
-			b.State = Empty
+			b.State.Raw = Empty
 		default:
-			b.State = Unknown
+			b.State.Raw = Undefined
 		}
 		b.ChargeRate, e.ChargeRate = uint32ToFloat64(readUint32(retptr[4:8])) // acpi_bst.rate
 		b.Current, e.Current = uint32ToFloat64(readUint32(retptr[8:12]))      // acpi_bst.cap

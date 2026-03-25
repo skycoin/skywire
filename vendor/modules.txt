@@ -397,8 +397,8 @@ github.com/dgryski/go-rendezvous
 # github.com/disintegration/imaging v1.6.2
 ## explicit
 github.com/disintegration/imaging
-# github.com/distatus/battery v0.10.0
-## explicit; go 1.13
+# github.com/distatus/battery v0.11.0
+## explicit; go 1.18
 github.com/distatus/battery
 # github.com/distribution/reference v0.6.0
 ## explicit; go 1.20
@@ -846,7 +846,7 @@ github.com/lithammer/fuzzysearch/fuzzy
 # github.com/lucasb-eyer/go-colorful v1.3.0
 ## explicit; go 1.12
 github.com/lucasb-eyer/go-colorful
-# github.com/lufia/plan9stats v0.0.0-20260216142805-b3301c5f2a88
+# github.com/lufia/plan9stats v0.0.0-20260324052639-156f7da3f749
 ## explicit; go 1.21
 github.com/lufia/plan9stats
 # github.com/mattn/go-colorable v0.1.14
@@ -915,11 +915,10 @@ github.com/oschwald/maxminddb-golang/v2
 github.com/oschwald/maxminddb-golang/v2/internal/decoder
 github.com/oschwald/maxminddb-golang/v2/internal/mmdberrors
 github.com/oschwald/maxminddb-golang/v2/mmdbdata
-# github.com/pelletier/go-toml/v2 v2.2.4
+# github.com/pelletier/go-toml/v2 v2.3.0
 ## explicit; go 1.21.0
 github.com/pelletier/go-toml/v2
 github.com/pelletier/go-toml/v2/internal/characters
-github.com/pelletier/go-toml/v2/internal/danger
 github.com/pelletier/go-toml/v2/internal/tracker
 github.com/pelletier/go-toml/v2/unstable
 # github.com/peterh/liner v1.2.2
@@ -1058,7 +1057,7 @@ github.com/skycoin/hardware-wallet/firmware
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.5-alpha1.0.20260323015226-90b668188f85
+# github.com/skycoin/skycoin v0.28.5
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/hardware-wallet/commands
@@ -1257,7 +1256,7 @@ github.com/xxxserxxx/gotop/v4/widgets
 # github.com/xxxserxxx/lingo/v2 v2.0.1
 ## explicit; go 1.16
 github.com/xxxserxxx/lingo/v2
-# github.com/yuin/goldmark v1.7.17
+# github.com/yuin/goldmark v1.8.1
 ## explicit; go 1.22
 github.com/yuin/goldmark
 github.com/yuin/goldmark/ast
@@ -1359,7 +1358,7 @@ golang.org/x/crypto/xtea
 # golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
 ## explicit; go 1.25.0
 golang.org/x/exp/maps
-# golang.org/x/image v0.37.0
+# golang.org/x/image v0.38.0
 ## explicit; go 1.25.0
 golang.org/x/image/bmp
 golang.org/x/image/ccitt
