@@ -34,7 +34,7 @@ func NewConfig() Config {
 }
 
 // SetOption implements renderer.NodeRenderer.SetOption.
-func (c *Config) SetOption(name renderer.OptionName, value interface{}) {
+func (c *Config) SetOption(name renderer.OptionName, value any) {
 	switch name {
 	case optHardWraps:
 		c.HardWraps = value.(bool)
@@ -273,6 +273,10 @@ func (r *Renderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(ast.KindParagraph, r.renderParagraph)
 	reg.Register(ast.KindTextBlock, r.renderTextBlock)
 	reg.Register(ast.KindThematicBreak, r.renderThematicBreak)
+	reg.Register(ast.KindLinkReferenceDefinition, func(
+		_ util.BufWriter, _ []byte, _ ast.Node, _ bool) (ast.WalkStatus, error) {
+		return ast.WalkSkipChildren, nil
+	})
 
 	// inlines
 
@@ -288,7 +292,7 @@ func (r *Renderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 
 func (r *Renderer) writeLines(w util.BufWriter, source []byte, n ast.Node) {
 	l := n.Lines().Len()
-	for i := 0; i < l; i++ {
+	for i := range l {
 		line := n.Lines().At(i)
 		r.Writer.RawWrite(w, line.Value(source))
 	}
@@ -378,7 +382,7 @@ func (r *Renderer) renderHTMLBlock(
 	if entering {
 		if r.Unsafe {
 			l := n.Lines().Len()
-			for i := 0; i < l; i++ {
+			for i := range l {
 				line := n.Lines().At(i)
 				r.Writer.SecureWrite(w, line.Value(source))
 			}
@@ -643,7 +647,7 @@ func (r *Renderer) renderRawHTML(
 	if r.Unsafe {
 		n := node.(*ast.RawHTML)
 		l := n.Segments.Len()
-		for i := 0; i < l; i++ {
+		for i := range l {
 			segment := n.Segments.At(i)
 			_, _ = w.Write(segment.Value(source))
 		}
@@ -806,7 +810,7 @@ func escapeRune(writer util.BufWriter, r rune) {
 func (d *defaultWriter) SecureWrite(writer util.BufWriter, source []byte) {
 	n := 0
 	l := len(source)
-	for i := 0; i < l; i++ {
+	for i := range l {
 		if source[i] == '\u0000' {
 			_, _ = writer.Write(source[i-n : i])
 			n = 0
@@ -823,7 +827,7 @@ func (d *defaultWriter) SecureWrite(writer util.BufWriter, source []byte) {
 func (d *defaultWriter) RawWrite(writer util.BufWriter, source []byte) {
 	n := 0
 	l := len(source)
-	for i := 0; i < l; i++ {
+	for i := range l {
 		v := util.EscapeHTMLByte(source[i])
 		if v != nil {
 			_, _ = writer.Write(source[i-n : i])

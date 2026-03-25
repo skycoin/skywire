@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017,2023 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -24,54 +24,72 @@
 // Gives access to a system independent, typed battery state, capacity, charge and voltage values recalculated as necessary to be returned in mW, mWh or V units.
 //
 // Currently supported systems:
-//  Linux 2.6.39+
-//  OS X 10.10+
-//  Windows XP+
-//  FreeBSD
-//  DragonFlyBSD
-//  NetBSD
-//  OpenBSD
-//  Solaris
+//
+//	Linux 2.6.39+
+//	OS X 10.10+
+//	Windows XP+
+//	FreeBSD
+//	DragonFlyBSD
+//	NetBSD
+//	OpenBSD
+//	Solaris
 package battery
 
 import (
 	"fmt"
-	"strings"
 )
 
-// State type enumerates possible battery states.
-type State int
+// AgnosticState type enumerates possible battery states, using platform agnostic naming.
+type AgnosticState int8
 
-// Possible state values.
-// Unknown can mean either controller returned unknown, or
-// not able to retrieve state due to some error.
 const (
-	Unknown State = iota
+	// Undefined specifies a state that was returned by the controller, but there is no
+	// platform agnostic mapping for it.
+	// This generally shouldn't happen, if it does consider opening a report for the library
+	// (ideally with the contents of `State.Explain()` call as well).
+	Undefined AgnosticState = -1
+	// Unknown specifies a literal unknown state returned by the controller.
+	// This state is also considered the "default", therefore it will be set when an Error
+	// was returned from the Get/GetAll call.
+	Unknown AgnosticState = iota - 1
 	Empty
 	Full
 	Charging
 	Discharging
+	// Idle specifies a state where battery is in "capacity saving" mode.
+	// It usually means that it sits idle at around 80% charge while power source is plugged in.
+	Idle
 )
 
-var states = [...]string{
+var states = map[AgnosticState]string{
+	Undefined:   "Undefined",
 	Unknown:     "Unknown",
 	Empty:       "Empty",
 	Full:        "Full",
 	Charging:    "Charging",
 	Discharging: "Discharging",
+	Idle:        "Idle",
 }
 
-func (s State) String() string {
+func (s AgnosticState) String() string {
 	return states[s]
 }
 
-func newState(name string) (State, error) {
-	for i, state := range states {
-		if strings.EqualFold(name, state) {
-			return State(i), nil
-		}
-	}
-	return Unknown, fmt.Errorf("Invalid state `%s`", name)
+type State struct {
+	Raw      AgnosticState
+	specific string
+}
+
+func (s State) Explain() string {
+	return s.specific
+}
+
+func (s State) String() string {
+	return s.Raw.String()
+}
+
+func (s State) GoString() string {
+	return fmt.Sprintf("%s (%s)", s.Raw, s.specific)
 }
 
 // Battery type represents a single battery entry information.
