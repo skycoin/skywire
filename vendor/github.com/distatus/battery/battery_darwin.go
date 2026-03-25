@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017,2023 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -22,6 +22,7 @@
 package battery
 
 import (
+	"fmt"
 	"math"
 	"os/exec"
 
@@ -30,8 +31,8 @@ import (
 
 type battery struct {
 	Voltage           int
-	CurrentCapacity   int
-	MaxCapacity       int
+	CurrentCapacity   int `plist:"AppleRawCurrentCapacity"`
+	MaxCapacity       int `plist:"AppleRawMaxCapacity"`
 	DesignCapacity    int
 	Amperage          int64
 	FullyCharged      bool
@@ -69,15 +70,23 @@ func convertBattery(battery *battery) *Battery {
 	}
 	switch {
 	case !battery.ExternalConnected:
-		b.State, _ = newState("Discharging")
+		b.State.Raw = Discharging
+		b.State.specific = "not(ExternalConnected)"
 	case battery.IsCharging:
-		b.State, _ = newState("Charging")
+		b.State.Raw = Charging
+		b.State.specific = "IsCharging"
 	case battery.CurrentCapacity == 0:
-		b.State, _ = newState("Empty")
+		b.State.Raw = Empty
+		b.State.specific = "CurrentCapacity is 0"
+	case !battery.FullyCharged:
+		b.State.Raw = Idle
+		b.State.specific = "not(FullyCharged)"
 	case battery.FullyCharged:
-		b.State, _ = newState("Full")
+		b.State.Raw = Full
+		b.State.specific = "FullyCharged"
 	default:
-		b.State, _ = newState("Unknown")
+		b.State.Raw = Undefined
+		b.State.specific = fmt.Sprintf("%+v", *battery)
 	}
 	return b
 }
