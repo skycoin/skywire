@@ -792,25 +792,24 @@ func configureLauncher(log *logging.Logger) {
 		LocalAddr: "",
 	}
 
-	// Use dmsg urls for services and add dmsg-servers
+	// Populate DMSG-HTTP URLs for services.
+	// When --dmsghttp is set, DMSG URLs go into the _dmsg fields as primary,
+	// and HTTP URLs are kept in the main fields as fallback.
+	// This gives the visor both paths: DMSG-HTTP first, plain HTTP fallback.
 	if isDmsgHTTP {
 		if dmsgHTTPServersList != nil {
 			if isTestEnv {
 				conf.Dmsg.Servers = dmsgHTTPServersList.Test.DMSGServers
 				conf.Dmsg.Discovery = dmsgHTTPServersList.Test.DMSGDiscovery
-				conf.Transport.AddressResolver = dmsgHTTPServersList.Test.AddressResolver
-				conf.Transport.Discovery = dmsgHTTPServersList.Test.TransportDiscovery
-				conf.UptimeTracker.Addr = dmsgHTTPServersList.Test.UptimeTracker
-				conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
-				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
+				conf.Transport.AddressResolverDmsg = dmsgHTTPServersList.Test.AddressResolver
+				conf.Transport.DiscoveryDmsg = dmsgHTTPServersList.Test.TransportDiscovery
+				conf.Launcher.ServiceDiscDmsg = dmsgHTTPServersList.Test.ServiceDiscovery
 			} else {
 				conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
 				conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
-				conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
-				conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
-				conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
-				conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
-				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
+				conf.Transport.AddressResolverDmsg = dmsgHTTPServersList.Prod.AddressResolver
+				conf.Transport.DiscoveryDmsg = dmsgHTTPServersList.Prod.TransportDiscovery
+				conf.Launcher.ServiceDiscDmsg = dmsgHTTPServersList.Prod.ServiceDiscovery
 			}
 		}
 	}
