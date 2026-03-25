@@ -180,6 +180,9 @@ func NewNodeContainer(
 		}
 	}
 
+	// DMSG transport (set externally via SetDMSG before or after node creation)
+	// The DMSG factory and listener are managed by the caller who owns the dmsg.Client.
+
 	// rpc
 
 	if conf.RPC != "" {
@@ -330,6 +333,18 @@ func (n *Node) SetDMSG(d *DMSG) {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 	n.dmsg = d
+}
+
+// EnableDMSG creates and starts a DMSG transport on this node using the given
+// DMSG factory. It starts listening for incoming CXO connections over DMSG.
+func (n *Node) EnableDMSG(factory *transport.DMSGFactory) error {
+	d := newDMSG(n, factory)
+	if err := d.Listen(); err != nil {
+		return err
+	}
+	n.SetDMSG(d)
+	n.Debugf(NewInConnPin, "CXO DMSG transport enabled on %s", d.Address())
+	return nil
 }
 
 func (n *Node) onConnect(c *Conn) error {
@@ -657,6 +672,9 @@ func (n *Node) Close() (err error) {
 		}
 		if n.udp != nil {
 			n.udp.Close() //nolint:errcheck,gosec
+		}
+		if n.dmsg != nil {
+			n.dmsg.Close()
 		}
 		if n.rpc != nil {
 			n.rpc.Close() //nolint:errcheck,gosec
