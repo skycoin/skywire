@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016-2017,2023 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -107,27 +107,9 @@ func getByPath(path string) (*Battery, error) {
 		b.Design, e.Design = readFloat(path, "energy_full_design")
 		b.ChargeRate, e.ChargeRate = readFloat(path, "power_now")
 	}
-
-	status, err := ioutil.ReadFile(filepath.Join(path, "status"))
+	state, err := ioutil.ReadFile(filepath.Join(path, "status"))
 	if err == nil {
-		status := string(status[:len(status)-1])
-		b.State.specific = status
-		switch status {
-		case "Unknown":
-			b.State.Raw = Unknown
-		case "Empty":
-			b.State.Raw = Empty
-		case "Full":
-			b.State.Raw = Full
-		case "Charging":
-			b.State.Raw = Charging
-		case "Discharging":
-			b.State.Raw = Discharging
-		case "Not charging":
-			b.State.Raw = Idle
-		default:
-			b.State.Raw = Undefined
-		}
+		b.State, e.State = newState(string(state[:len(state)-1]))
 	} else {
 		e.State = err
 	}
