@@ -76,15 +76,17 @@ type LogServer struct {
 
 // Transport defines a transport config.
 type Transport struct {
-	Discovery         string          `json:"discovery"`
-	AddressResolver   string          `json:"address_resolver"`
-	PublicAutoconnect bool            `json:"public_autoconnect"`
-	TransportSetupPKs []cipher.PubKey `json:"transport_setup"`
-	TPSetupSK         *cipher.SecKey  `json:"tps_sk,omitempty"`
-	TPSDmsg           *TPSDmsgConfig  `json:"tps_dmsg,omitempty"`
-	LogStore          *LogStore       `json:"log_store"`
-	StcprPort         int             `json:"stcpr_port"`
-	SudphPort         int             `json:"sudph_port"`
+	Discovery           string          `json:"discovery"`
+	DiscoveryDmsg       string          `json:"discovery_dmsg,omitempty"` // DMSG-HTTP URL for transport discovery (fallback pair with discovery)
+	AddressResolver     string          `json:"address_resolver"`
+	AddressResolverDmsg string          `json:"address_resolver_dmsg,omitempty"` // DMSG-HTTP URL for address resolver
+	PublicAutoconnect   bool            `json:"public_autoconnect"`
+	TransportSetupPKs   []cipher.PubKey `json:"transport_setup"`
+	TPSetupSK           *cipher.SecKey  `json:"tps_sk,omitempty"`
+	TPSDmsg             *TPSDmsgConfig  `json:"tps_dmsg,omitempty"`
+	LogStore            *LogStore       `json:"log_store"`
+	StcprPort           int             `json:"stcpr_port"`
+	SudphPort           int             `json:"sudph_port"`
 	// SyncTPDData enables syncing all transport discovery data on transport re-registration.
 	// When enabled, the visor receives the full TPD dataset in the registration response
 	// for use in local route calculation.
@@ -154,6 +156,7 @@ type PublicVisorConfig struct {
 // Launcher configures the app
 type Launcher struct {
 	ServiceDisc       string                `json:"service_discovery"`
+	ServiceDiscDmsg   string                `json:"service_discovery_dmsg,omitempty"` // DMSG-HTTP URL for service discovery
 	Apps              []appserver.AppConfig `json:"apps"`
 	ServerAddr        string                `json:"server_addr"`
 	BinPath           string                `json:"bin_path"`

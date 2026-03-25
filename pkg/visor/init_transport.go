@@ -39,7 +39,19 @@ import (
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	httpC, err := getHTTPClient(ctx, v, conf.AddressResolver)
+	// Try DMSG-HTTP first for address resolver if configured
+	arURL := conf.AddressResolver
+	if conf.AddressResolverDmsg != "" && v.dmsgC != nil {
+		if dmsgC, err := getHTTPClient(ctx, v, conf.AddressResolverDmsg); err == nil {
+			arURL = conf.AddressResolverDmsg
+			_ = dmsgC // URL is enough, getHTTPClient sets up DMSG routing
+			log.Info("Using DMSG-HTTP for address resolver")
+		} else {
+			log.WithError(err).Warn("DMSG-HTTP address resolver failed, using plain HTTP")
+		}
+	}
+
+	httpC, err := getHTTPClient(ctx, v, arURL)
 	if err != nil {
 		return err
 	}
@@ -878,26 +890,39 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 	const (
 		initBO = 1 * time.Second
 		maxBO  = 10 * time.Second
-		// trying till success
 		tries  = 0
 		factor = 1
 	)
 
 	conf := v.conf.Transport
 
-	httpC, err := getHTTPClient(ctx, v, conf.Discovery)
-	if err != nil {
-		return nil, err
-	}
-
-	// only needed for dmsghttp
 	pIP, err := getPublicIP(v, conf.AddressResolver)
 	if err != nil {
 		return nil, err
 	}
 
-	tpdCRetrier := netutil.NewRetrier(log,
-		initBO, maxBO, tries, factor)
+	// Try DMSG-HTTP first if configured, fall back to plain HTTP
+	if conf.DiscoveryDmsg != "" && v.dmsgC != nil {
+		dmsgHTTPC, err := getHTTPClient(ctx, v, conf.DiscoveryDmsg)
+		if err != nil {
+			log.WithError(err).Warn("Failed to get DMSG-HTTP client for TPD, trying plain HTTP")
+		} else {
+			tpdC, err := tpdclient.NewHTTP(conf.DiscoveryDmsg, v.conf.PK, v.conf.SK, dmsgHTTPC, pIP, v.MasterLogger())
+			if err == nil {
+				log.Info("Connected to transport discovery via DMSG-HTTP")
+				return tpdC, nil
+			}
+			log.WithError(err).Warn("DMSG-HTTP transport discovery failed, falling back to plain HTTP")
+		}
+	}
+
+	// Plain HTTP (primary if no DMSG config, fallback if DMSG failed)
+	httpC, err := getHTTPClient(ctx, v, conf.Discovery)
+	if err != nil {
+		return nil, err
+	}
+
+	tpdCRetrier := netutil.NewRetrier(log, initBO, maxBO, tries, factor)
 
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
@@ -907,7 +932,6 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err
 		}
-
 		return nil
 	}
 
