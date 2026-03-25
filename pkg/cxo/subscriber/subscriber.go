@@ -79,7 +79,7 @@ func New(dmsgC *dmsg.Client, feedPK cipher.PubKey, conf Config) (*Subscriber, er
 	// Enable DMSG transport
 	factory := transport.NewDMSGFactory(dmsgC, transport.DefaultCXOPort)
 	if err := cxoNode.EnableDMSG(factory); err != nil {
-		cxoNode.Close() //nolint:errcheck
+		cxoNode.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
 

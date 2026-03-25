@@ -99,7 +99,7 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, conf Config) (*Publisher, error) 
 	// Enable DMSG transport
 	factory := transport.NewDMSGFactory(dmsgC, transport.DefaultCXOPort)
 	if err := cxoNode.EnableDMSG(factory); err != nil {
-		cxoNode.Close() //nolint:errcheck
+		cxoNode.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
 
@@ -111,7 +111,7 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, conf Config) (*Publisher, error) 
 
 	kv, err := node.OpenKVStore(cxoNode, cxoPK, cxoSecKey)
 	if err != nil {
-		cxoNode.Close() //nolint:errcheck
+		cxoNode.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
 
