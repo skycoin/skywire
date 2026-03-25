@@ -89,6 +89,10 @@ type Transport struct {
 	// When enabled, the visor receives the full TPD dataset in the registration response
 	// for use in local route calculation.
 	SyncTPDData bool `json:"sync_tpd_data,omitempty"`
+	// CXOFeedPK is the public key of the TPD's CXO feed for transport data.
+	// When set and DMSG is available, the visor subscribes to the feed for
+	// push-based transport updates instead of HTTP polling.
+	CXOFeedPK string `json:"cxo_feed_pk,omitempty"`
 }
 
 // TPSDmsgConfig configures the embedded Transport Setup Node's dmsg client.
