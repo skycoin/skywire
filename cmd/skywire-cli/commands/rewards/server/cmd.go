@@ -23,23 +23,25 @@ import (
 var outputDir string
 var err error
 var (
-	startTime       = time.Now()
-	runTime         time.Duration
-	sk              cipher.SecKey
-	dmsgDisc        string
-	dmsgPort        uint16
-	dmsgSess        int
-	wl              string
-	wd              string
-	wlkeys          []cipher.PubKey
-	webPort         uint
-	ensureOnlineURL string
-	loginNode       string
-	skycoinNode     string
-	healthOnly      bool
-	noUI            bool
-	buildTimeout    time.Duration
-	log             = logging.MustGetLogger("rewards")
+	startTime           = time.Now()
+	runTime             time.Duration
+	sk                  cipher.SecKey
+	dmsgDisc            string
+	dmsgPort            uint16
+	dmsgSess            int
+	wl                  string
+	wd                  string
+	wlkeys              []cipher.PubKey
+	webPort             uint
+	ensureOnlineURL     string
+	loginNode           string
+	loginNodeAddr       string // resolved URL of login chain node (set at runtime)
+	loginGenesisAddress string // genesis wallet address for login verification (set at runtime)
+	skycoinNode         string
+	healthOnly          bool
+	noUI                bool
+	buildTimeout        time.Duration
+	log                 = logging.MustGetLogger("rewards")
 )
 
 var skyenvfile = os.Getenv("SKYENV")
