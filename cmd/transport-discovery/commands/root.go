@@ -379,7 +379,7 @@ Example:
 				} else {
 					tpdAPI.SetCXOPublisher(cxoPub)
 					logger.Infof("CXO transport feed enabled: %s", cxoPub.Feed())
-					defer cxoPub.Close() //nolint:errcheck
+					defer cxoPub.Close() //nolint:errcheck,gosec
 				}
 			}
 

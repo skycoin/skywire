@@ -199,7 +199,7 @@ func (api *API) unpublishTransportFromCXO(id string) {
 	if api.cxoPublisher == nil {
 		return
 	}
-	api.cxoPublisher.Delete(id) //nolint:errcheck
+	api.cxoPublisher.Delete(id) //nolint:errcheck,gosec
 }
 
 // RunBackgroundTasks is function which runs periodic background tasks of API.

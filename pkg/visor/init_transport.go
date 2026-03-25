@@ -871,7 +871,7 @@ func wrapTPDWithCXO(ctx context.Context, v *Visor, httpClient transport.Discover
 	// Connect to the TPD's CXO feed over DMSG
 	if err := sub.Connect(feedPK); err != nil {
 		log.WithError(err).Warn("Failed to connect to TPD CXO feed, continuing without CXO")
-		sub.Close() //nolint:errcheck
+		sub.Close() //nolint:errcheck,gosec
 		return httpClient
 	}
 
@@ -880,7 +880,7 @@ func wrapTPDWithCXO(ctx context.Context, v *Visor, httpClient transport.Discover
 	// Close subscriber when context is done
 	go func() {
 		<-ctx.Done()
-		sub.Close() //nolint:errcheck
+		sub.Close() //nolint:errcheck,gosec
 	}()
 
 	return tpdclient.NewCXOClient(httpClient, sub, v.MasterLogger().PackageLogger("tpd-cxo"))
