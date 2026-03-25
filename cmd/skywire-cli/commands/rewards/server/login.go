@@ -353,8 +353,18 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			l += "please send coins from that address to the login address below.</p>"
 		}
 		l += "<p><strong>Send to:</strong> <code>" + loginGenesisAddress + "</code></p>"
-		l += "<p>Use the <a href='http://127.0.0.1:8006' target='_blank'>Skycoin Web Wallet</a> "
-		l += "connected to this node to send the transaction.</p>"
+		// Use the current request's host as the node URL for the wallet
+		scheme := "https"
+		if c.Request.TLS == nil {
+			scheme = "http"
+		}
+		if fwdProto := c.GetHeader("X-Forwarded-Proto"); fwdProto != "" {
+			scheme = fwdProto
+		}
+		nodeURL := scheme + "://" + c.Request.Host
+		l += "<p>Use the Skycoin Web Wallet connected to this login chain node to send the transaction.</p>"
+		l += "<p>Start the wallet with: <code>skywire skycoin web -n " + nodeURL + " -p 8006</code></p>"
+		l += "<p>Then open <a href='http://127.0.0.1:8006' target='_blank'>http://127.0.0.1:8006</a></p>"
 		l += "<p class='info'>This verifies that you hold the private key for your reward wallet. "
 		l += "The login chain resets periodically — coins have no real value.</p>"
 		l += "<hr>"
