@@ -42,6 +42,8 @@ type Noise struct {
 
 	encNonce uint64 // increment after encryption
 	decNonce uint64 // expect increment with each subsequent packet
+
+	encBuf [nonceSize]byte // reusable nonce buffer for encryption
 }
 
 // New creates a new Noise with:
@@ -134,11 +136,12 @@ func (ns *Noise) LocalStatic() cipher.PubKey {
 // RemoteStatic returns the remote static public key.
 // Returns an empty public key if the peer static key is invalid.
 func (ns *Noise) RemoteStatic() cipher.PubKey {
-	pk, err := cipher.NewPubKey(ns.hs.PeerStatic())
-	if err != nil {
-		noiseLogger.WithError(err).Error("Invalid remote static public key")
+	raw := ns.hs.PeerStatic()
+	if len(raw) != len(cipher.PubKey{}) {
 		return cipher.PubKey{}
 	}
+	var pk cipher.PubKey
+	copy(pk[:], raw)
 	return pk
 }
 
@@ -146,9 +149,12 @@ func (ns *Noise) RemoteStatic() cipher.PubKey {
 // be used with external lock.
 func (ns *Noise) EncryptUnsafe(plaintext []byte) []byte {
 	ns.encNonce++
-	buf := make([]byte, nonceSize)
-	binary.BigEndian.PutUint64(buf, ns.encNonce)
-	return append(buf, ns.enc.Cipher().Encrypt(nil, ns.encNonce, nil, plaintext)...)
+	binary.BigEndian.PutUint64(ns.encBuf[:], ns.encNonce)
+	ciphertext := ns.enc.Cipher().Encrypt(nil, ns.encNonce, nil, plaintext)
+	out := make([]byte, nonceSize+len(ciphertext))
+	copy(out, ns.encBuf[:])
+	copy(out[nonceSize:], ciphertext)
+	return out
 }
 
 // DecryptUnsafe decrypts ciphertext without interlocking, should only
