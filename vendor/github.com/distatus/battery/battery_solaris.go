@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016-2017,2023 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -52,7 +52,7 @@ func readVoltage(val string) (float64, error) {
 	return voltage / 1000, nil
 }
 
-func readState(val string) (AgnosticState, error) {
+func readState(val string) (State, error) {
 	state, err := strconv.Atoi(val)
 	if err != nil {
 		return Unknown, err
@@ -60,13 +60,13 @@ func readState(val string) (AgnosticState, error) {
 
 	switch {
 	case state&1 != 0:
-		return Discharging, nil
+		return newState("Discharging")
 	case state&2 != 0:
-		return Charging, nil
+		return newState("Charging")
 	case state&4 != 0:
-		return Empty, nil
+		return newState("Empty")
 	default:
-		return Undefined, nil
+		return Unknown, fmt.Errorf("Invalid state flag retrieved: `%d`", state)
 	}
 }
 
@@ -171,8 +171,7 @@ func (r *batteryReader) readBattery() (*Battery, bool, bool) {
 		case "bst_rate":
 			b.ChargeRate, r.e.ChargeRate = readFloat(value)
 		case "bst_state":
-			b.State.Raw, r.e.State = readState(value)
-			b.State.specific = value
+			b.State, r.e.State = readState(value)
 		}
 	}
 
@@ -217,9 +216,8 @@ func (r *batteryReader) next() (*Battery, error) {
 		}
 	}
 
-	if b.State.Raw == Unknown && r.e.Current == nil && r.e.Full == nil && b.Current >= b.Full {
-		b.State.Raw = Full
-		b.State.specific = fmt.Sprintf("current >= full")
+	if b.State == Unknown && r.e.Current == nil && r.e.Full == nil && b.Current >= b.Full {
+		b.State, r.e.State = newState("Full")
 	}
 
 	return b, r.e
