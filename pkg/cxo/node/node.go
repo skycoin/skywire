@@ -49,8 +49,9 @@ type Node struct {
 	//
 
 	// listen and connect
-	tcp *TCP
-	udp *UDP
+	tcp  *TCP
+	udp  *UDP
+	dmsg *DMSG // optional DMSG transport
 
 	//
 	// other
@@ -314,6 +315,21 @@ func (n *Node) createUDP() {
 
 	n.udp = newUDP(n)
 
+}
+
+// DMSG returns the DMSG transport of the Node, or nil if not configured.
+func (n *Node) DMSG() *DMSG {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+	return n.dmsg
+}
+
+// SetDMSG sets the DMSG transport for this node.
+// Must be called before Listen/Connect operations on the DMSG transport.
+func (n *Node) SetDMSG(d *DMSG) {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+	n.dmsg = d
 }
 
 func (n *Node) onConnect(c *Conn) error {
