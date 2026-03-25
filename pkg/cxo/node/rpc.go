@@ -8,6 +8,7 @@ import (
 	"github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
+	swcipher "github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // wrap the RPC
@@ -34,6 +35,7 @@ func (r *rpcServer) Listen(address string) (err error) {
 
 	r.r.RegisterName("root", &RootRPC{r.n}) //nolint:errcheck,gosec
 	r.r.RegisterName("kv", newKVRPC(r.n))   //nolint:errcheck,gosec
+	r.r.RegisterName("dmsg", &DMSGRPC{r.n}) //nolint:errcheck,gosec
 
 	if r.l, err = net.Listen("tcp", address); err != nil {
 		return
@@ -356,4 +358,58 @@ func (r *RootRPC) Last(feed cipher.PubKey, z *registry.Root) (err error) {
 	}
 	*z = *x
 	return
+}
+
+// DMSGRPC represents RPC methods for the DMSG transport.
+type DMSGRPC struct {
+	n *Node
+}
+
+// Connect to a remote CXO node over DMSG by public key.
+func (d *DMSGRPC) Connect(pk cipher.PubKey, _ *struct{}) error {
+	dmsgT := d.n.DMSG()
+	if dmsgT == nil {
+		return errors.New("DMSG transport not enabled")
+	}
+	// Convert skycoin cipher.PubKey to skywire cipher.PubKey
+	var swPK swcipher.PubKey
+	copy(swPK[:], pk[:])
+	_, err := dmsgT.ConnectPK(swPK)
+	return err
+}
+
+// DMSGConnFeed represents a DMSG peer and feed to subscribe to.
+type DMSGConnFeed struct {
+	Peer cipher.PubKey
+	Feed cipher.PubKey
+}
+
+// Subscribe to a feed on a DMSG-connected peer.
+func (d *DMSGRPC) Subscribe(cf DMSGConnFeed, _ *struct{}) error {
+	dmsgT := d.n.DMSG()
+	if dmsgT == nil {
+		return errors.New("DMSG transport not enabled")
+	}
+	var swPeer swcipher.PubKey
+	copy(swPeer[:], cf.Peer[:])
+	c := dmsgT.getConn(swPeer)
+	if c == nil {
+		return errors.New("no DMSG connection to peer")
+	}
+	return c.Subscribe(cf.Feed)
+}
+
+// Connections lists connected DMSG peers.
+func (d *DMSGRPC) Connections(_ struct{}, pks *[]cipher.PubKey) error {
+	dmsgT := d.n.DMSG()
+	if dmsgT == nil {
+		return errors.New("DMSG transport not enabled")
+	}
+	swPKs := dmsgT.Connections()
+	result := make([]cipher.PubKey, len(swPKs))
+	for i, swPK := range swPKs {
+		copy(result[i][:], swPK[:])
+	}
+	*pks = result
+	return nil
 }

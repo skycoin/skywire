@@ -35,3 +35,38 @@ func ValidateRewardAddress(addr string) (canonical string, isXpub bool, err erro
 	}
 	return cAddr.String(), false, nil
 }
+
+// DeriveLoginAddressFromXpub derives a login verification address from an account xpub key.
+// Uses the BIP44 change chain (m/account'/1/index) so login addresses don't
+// collide with reward addresses (which use the external chain m/account'/0/i).
+//
+// TODO: This should be moved to github.com/skycoin/skycoin/src/cipher/bip44
+// as a proper utility function once the login system is stable.
+func DeriveLoginAddressFromXpub(xpub string, index uint32) (string, error) {
+	// Parse the account-level xpub
+	accountKey, err := bip32.DeserializeEncodedPublicKey(xpub)
+	if err != nil {
+		return "", fmt.Errorf("invalid xpub: %w", err)
+	}
+
+	// Derive change chain key: account_xpub → child(1)
+	changeChainKey, err := accountKey.NewPublicChildKey(1) // 1 = change chain
+	if err != nil {
+		return "", fmt.Errorf("derive change chain: %w", err)
+	}
+
+	// Derive address at index: change_chain → child(index)
+	addrKey, err := changeChainKey.NewPublicChildKey(index)
+	if err != nil {
+		return "", fmt.Errorf("derive address at index %d: %w", index, err)
+	}
+
+	// Convert to skycoin address
+	cpk, err := coincipher.NewPubKey(addrKey.Key)
+	if err != nil {
+		return "", fmt.Errorf("invalid derived public key: %w", err)
+	}
+
+	addr := coincipher.AddressFromPubKey(cpk)
+	return addr.String(), nil
+}
