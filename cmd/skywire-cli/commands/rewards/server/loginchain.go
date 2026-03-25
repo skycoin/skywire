@@ -102,8 +102,14 @@ func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
 		return "", nil, fmt.Errorf("failed to write login_fiber.toml: %w", err)
 	}
 
-	// Start skycoin node subprocess
-	cmd := exec.Command("skycoin", //nolint:gosec
+	// Start skycoin node subprocess using the skywire binary
+	// (skywire skycoin daemon) to ensure same codebase
+	skywireBin, err := os.Executable()
+	if err != nil {
+		skywireBin = "skywire" // fallback to PATH
+	}
+	cmd := exec.Command(skywireBin, //nolint:gosec
+		"skycoin", "daemon",
 		"--data-dir="+loginDataDir,
 		"--localhost-only",
 		"--disable-networking",
