@@ -30,6 +30,14 @@ const (
 	authSize   = 24 // noise auth data size
 )
 
+// framePool reuses frame buffers to reduce allocations in the hot path.
+var framePool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, maxFrameSize)
+		return &b
+	},
+}
+
 type timeoutError struct{}
 
 func (timeoutError) Error() string   { return "deadline exceeded" }
@@ -273,16 +281,31 @@ func ResponderHandshake(ns *Noise, r *bufio.Reader, w io.Writer) error {
 // WriteRawFrame writes a raw frame (data prefixed with a uint16 len).
 // It returns the bytes written.
 func WriteRawFrame(w io.Writer, p []byte) ([]byte, error) {
-	buf := make([]byte, prefixSize+len(p))
+	frameLen := prefixSize + len(p)
 	lenp, ok := safecast.To[uint16](len(p))
-	if ok {
+	if !ok {
+		return []byte{}, fmt.Errorf("failed to cast length of slice to uint16")
+	}
+
+	// Use pooled buffer for frames that fit, fall back to allocation for oversized.
+	if frameLen <= maxFrameSize {
+		bp := framePool.Get().(*[]byte)
+		buf := (*bp)[:frameLen]
 		binary.BigEndian.PutUint16(buf, lenp)
 		copy(buf[prefixSize:], p)
-
 		n, err := w.Write(buf)
-		return buf[:n], err
+		framePool.Put(bp)
+		if err != nil {
+			return buf[:n], err
+		}
+		return buf[:n], nil
 	}
-	return []byte{}, fmt.Errorf("failed to cast length of slice to uint16")
+
+	buf := make([]byte, frameLen)
+	binary.BigEndian.PutUint16(buf, lenp)
+	copy(buf[prefixSize:], p)
+	n, err := w.Write(buf)
+	return buf[:n], err
 }
 
 // ReadRawFrame attempts to read a raw frame from a buffered reader.
