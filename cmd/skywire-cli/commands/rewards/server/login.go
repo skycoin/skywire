@@ -84,6 +84,82 @@ func findVisorsByRewardAddress(backupsDir, address string) []string {
 	return visors
 }
 
+// checkBalanceOnLoginChain checks the balance of an address on the login chain.
+func checkBalanceOnLoginChain(nodeURL, address string) (coins uint64, hours uint64, err error) {
+	resp, err := http.Get(fmt.Sprintf("%s/api/v1/balance?addrs=%s", nodeURL, address)) //nolint:gosec
+	if err != nil {
+		return 0, 0, err
+	}
+	defer resp.Body.Close() //nolint:errcheck,gosec
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	var result struct {
+		Confirmed struct {
+			Coins uint64 `json:"coins"`
+			Hours uint64 `json:"hours"`
+		} `json:"confirmed"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return 0, 0, err
+	}
+
+	return result.Confirmed.Coins, result.Confirmed.Hours, nil
+}
+
+// sendCoinsOnLoginChain sends coins from the genesis wallet to the target address
+// via the login chain node's API. Returns the transaction ID.
+func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, error) {
+	// Get CSRF token
+	csrfResp, err := http.Get(fmt.Sprintf("%s/api/v1/csrf", nodeURL)) //nolint:gosec
+	if err != nil {
+		return "", fmt.Errorf("csrf: %w", err)
+	}
+	defer csrfResp.Body.Close()              //nolint:errcheck,gosec
+	csrfBody, _ := io.ReadAll(csrfResp.Body) //nolint:errcheck,gosec
+	var csrfData struct {
+		Token string `json:"csrf_token"`
+	}
+	if err := json.Unmarshal(csrfBody, &csrfData); err != nil {
+		return "", fmt.Errorf("csrf parse: %w", err)
+	}
+
+	// Create transaction using the default wallet (genesis wallet)
+	txReq := fmt.Sprintf(`{"hours_selection":{"type":"auto","mode":"share","share_factor":"0.5"},"to":[{"address":"%s","coins":"%s"}]}`,
+		destAddress, coins)
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/v2/transaction", nodeURL), strings.NewReader(txReq))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-CSRF-Token", csrfData.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close() //nolint:errcheck,gosec
+
+	body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return "", fmt.Errorf("transaction failed (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var txResult struct {
+		TxID string `json:"txid"`
+	}
+	if err := json.Unmarshal(body, &txResult); err != nil {
+		return "", fmt.Errorf("parse tx result: %w", err)
+	}
+
+	return txResult.TxID, nil
+}
+
 // checkTransactionToAddress checks if there's a confirmed transaction
 // FROM the given address TO the genesis address on the login chain.
 func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) bool {
@@ -188,15 +264,36 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			return
 		}
 
+		// Fund the user's address on the login chain if needed
+		var fundedTxID string
+		if loginNodeAddr != "" {
+			coins, _, err := checkBalanceOnLoginChain(loginNodeAddr, address)
+			if err != nil {
+				fmt.Printf("Warning: failed to check login chain balance: %v\n", err)
+			}
+			if coins == 0 {
+				// Send minimum coins (1 coin) to the user's address
+				txID, err := sendCoinsOnLoginChain(loginNodeAddr, address, "1.000000")
+				if err != nil {
+					fmt.Printf("Warning: failed to fund login address: %v\n", err)
+					c.Redirect(http.StatusFound, "/login?msg=Failed+to+prepare+login+verification.+Please+try+again.")
+					return
+				}
+				fundedTxID = txID
+				fmt.Printf("Login chain: funded %s with 1 coin (tx: %s)\n", address, txID)
+			}
+		}
+
 		// Create pending login challenge
 		challenge := generateChallenge()
 		pendingLoginsMu.Lock()
 		pendingLogins[challenge] = &pendingLogin{
-			Address:   address,
-			Visors:    visors,
-			Challenge: challenge,
-			CreatedAt: time.Now(),
-			ExpiresAt: time.Now().Add(10 * time.Minute),
+			Address:    address,
+			Visors:     visors,
+			Challenge:  challenge,
+			FundedTxID: fundedTxID,
+			CreatedAt:  time.Now(),
+			ExpiresAt:  time.Now().Add(10 * time.Minute),
 		}
 		pendingLoginsMu.Unlock()
 
