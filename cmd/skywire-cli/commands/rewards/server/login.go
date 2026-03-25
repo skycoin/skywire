@@ -271,7 +271,11 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		// Determine the login verification address.
 		// For xpub keys: derive change chain address (m/account'/1/0)
 		// For single addresses: use the address directly
-		_, isXpub, _ := rewardconfig.ValidateRewardAddress(address) //nolint:errcheck,gosec
+		_, isXpub, vaErr := rewardconfig.ValidateRewardAddress(address)
+		if vaErr != nil {
+			c.Redirect(http.StatusFound, "/login?msg=Invalid+address:+"+vaErr.Error())
+			return
+		}
 		loginAddress := address
 		if isXpub {
 			derived, err := rewardconfig.DeriveLoginAddressFromXpub(address, 0)
