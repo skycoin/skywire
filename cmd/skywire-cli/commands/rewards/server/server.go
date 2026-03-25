@@ -4,6 +4,7 @@ package clirewardsserver
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	htmpl "html/template"
 	"io"
@@ -1323,6 +1324,24 @@ func server(e error) {
 			} else {
 				defer cleanup()
 				loginNode = addr
+			}
+		}
+
+		// Set login chain variables for the login routes
+		if loginNode != "" {
+			loginNodeAddr = loginNode
+			// Read genesis address from saved wallet
+			genesisPath := filepath.Join(wd, "login_genesis.json")
+			if data, err := os.ReadFile(genesisPath); err == nil { //nolint:gosec
+				var gw struct {
+					Address string `json:"address"`
+				}
+				if err := json.Unmarshal(data, &gw); err == nil {
+					loginGenesisAddress = gw.Address
+				}
+			}
+			if loginGenesisAddress == "" {
+				fmt.Println("Warning: could not determine login genesis address")
 			}
 		}
 

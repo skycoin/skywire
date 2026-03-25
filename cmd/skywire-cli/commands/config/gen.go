@@ -110,7 +110,9 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "url")
 	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
-	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use dmsg connection to skywire services")
+	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use only dmsg connection to skywire services (no http fallback)")
+	genConfigCmd.Flags().BoolVar(&isHTTPOnly, "http", false, "use only http connection to skywire services (no dmsg)")
+	genConfigCmd.MarkFlagsMutuallyExclusive("dmsghttp", "http")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
 	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString("${DMSGCONF}"), "dmsghttp-config path")
 	gHiddenFlags = append(gHiddenFlags, "dmsgconf")
@@ -618,10 +620,11 @@ func readExistingConfig(log *logging.Logger) {
 // oldConfCache holds the previously-read config for use across configure* functions.
 var oldConfCache *visorconfig.V1
 
-// configureDMSGHTTP loads dmsghttp server list when dmsghttp mode is enabled.
+// configureDMSGHTTP loads dmsghttp server list when dmsg URLs are needed.
+// This runs for both --dmsghttp (DMSG-only) and default (dual) modes.
 func configureDMSGHTTP(log *logging.Logger, outerErr error) {
 	_ = outerErr
-	if isDmsgHTTP {
+	if isDmsgHTTP || !isHTTPOnly {
 		// TODO
 		//if isUsrEnv {
 		//	dmsgHTTPPath = homepath + "/" + skyenv.DMSGHTTPName
@@ -792,25 +795,34 @@ func configureLauncher(log *logging.Logger) {
 		LocalAddr: "",
 	}
 
-	// Use dmsg urls for services and add dmsg-servers
-	if isDmsgHTTP {
-		if dmsgHTTPServersList != nil {
-			if isTestEnv {
-				conf.Dmsg.Servers = dmsgHTTPServersList.Test.DMSGServers
-				conf.Dmsg.Discovery = dmsgHTTPServersList.Test.DMSGDiscovery
-				conf.Transport.AddressResolver = dmsgHTTPServersList.Test.AddressResolver
-				conf.Transport.Discovery = dmsgHTTPServersList.Test.TransportDiscovery
-				conf.UptimeTracker.Addr = dmsgHTTPServersList.Test.UptimeTracker
-				conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
-				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
+	// Configure service URLs based on connection mode:
+	// --dmsghttp: DMSG-only (overwrite HTTP URLs with DMSG URLs)
+	// --http: HTTP-only (no DMSG fields, default HTTP URLs kept)
+	// neither: dual mode (HTTP URLs + DMSG URLs in _dmsg fields)
+	if !isHTTPOnly && dmsgHTTPServersList != nil {
+		var dmsgConf *visorconfig.DmsgHTTPServersData
+		if isTestEnv {
+			dmsgConf = &dmsgHTTPServersList.Test
+		} else {
+			dmsgConf = &dmsgHTTPServersList.Prod
+		}
+
+		if dmsgConf != nil {
+			conf.Dmsg.Servers = dmsgConf.DMSGServers
+			conf.Dmsg.Discovery = dmsgConf.DMSGDiscovery
+
+			if isDmsgHTTP {
+				// DMSG-only: overwrite HTTP URLs
+				conf.Transport.AddressResolver = dmsgConf.AddressResolver
+				conf.Transport.Discovery = dmsgConf.TransportDiscovery
+				conf.UptimeTracker.Addr = dmsgConf.UptimeTracker
+				conf.Routing.RouteFinder = dmsgConf.RouteFinder
+				conf.Launcher.ServiceDisc = dmsgConf.ServiceDiscovery
 			} else {
-				conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
-				conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
-				conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
-				conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
-				conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
-				conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
-				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
+				// Dual mode: keep HTTP URLs, add DMSG URLs as fallback
+				conf.Transport.AddressResolverDmsg = dmsgConf.AddressResolver
+				conf.Transport.DiscoveryDmsg = dmsgConf.TransportDiscovery
+				conf.Launcher.ServiceDiscDmsg = dmsgConf.ServiceDiscovery
 			}
 		}
 	}

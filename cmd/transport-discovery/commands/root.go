@@ -20,6 +20,7 @@ import (
 	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/cxo/publisher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -57,6 +58,7 @@ var (
 	dmsgDisc        = deployment.Prod.DmsgDiscovery
 	pprofAddr       string
 	storeDataPath   string
+	enableCXO       bool
 )
 
 func init() {
@@ -76,6 +78,7 @@ func init() {
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire/tpd/bandwidth", "path for bandwidth backup files\n\r")
+	RootCmd.Flags().BoolVar(&enableCXO, "cxo", false, "enable CXO feed for transport data distribution over DMSG")
 }
 
 // exampleJSON marshals v to indented JSON with color, returning empty string on error
@@ -365,6 +368,20 @@ Example:
 			}()
 
 			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, logger)
+
+			// Initialize CXO publisher for transport data distribution
+			if enableCXO {
+				cxoConf := publisher.DefaultConfig()
+				cxoConf.Logger = logging.MustGetLogger("cxo-tpd")
+				cxoPub, err := publisher.New(dmsgDC, sk, cxoConf)
+				if err != nil {
+					logger.WithError(err).Error("Failed to start CXO publisher, continuing without it")
+				} else {
+					tpdAPI.SetCXOPublisher(cxoPub)
+					logger.Infof("CXO transport feed enabled: %s", cxoPub.Feed())
+					defer cxoPub.Close() //nolint:errcheck,gosec
+				}
+			}
 
 			go func() {
 				if err := dmsghttp.ListenAndServe(ctx, sk, tpdAPI, dClient, dmsgPort, dmsgDC, logger); err != nil {
