@@ -144,13 +144,23 @@ var rewardCmd = &cobra.Command{
 		}
 		//print reward address and exit
 		if isRead {
+			// prefer RPC to get the visor's actual reward address
+			if clienterr == nil {
+				rwdAdd, err := client.GetRewardAddress()
+				if err == nil && rwdAdd != "" {
+					out := fmt.Sprintf("%s\n", rwdAdd)
+					internal.PrintOutput(cmd.Flags(), out, out)
+					os.Exit(0)
+				}
+			}
+			// fallback to local file
 			//nolint:gosec
 			dat, err := os.ReadFile(output)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error reading file. err=%v", err))
 			}
-			output := fmt.Sprintf("%s\n", dat)
-			internal.PrintOutput(cmd.Flags(), output, output)
+			out := fmt.Sprintf("%s\n", dat)
+			internal.PrintOutput(cmd.Flags(), out, out)
 			os.Exit(0)
 		}
 		//set reward address from first argument
@@ -183,10 +193,11 @@ var rewardCmd = &cobra.Command{
 				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 				return
 			}
-			output := fmt.Sprintf("Reward address:\n  %s\n", rwdAdd)
-			internal.PrintOutput(cmd.Flags(), output, output)
-		}
-		if clienterr != nil {
+			// also write to the local file so -r works without visor running
+			os.WriteFile(output, []byte(rwdAdd), 0600) //nolint:errcheck,gosec
+			out := fmt.Sprintf("Reward address:\n  %s\n", rwdAdd)
+			internal.PrintOutput(cmd.Flags(), out, out)
+		} else {
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(canonical), 0600))
 			readRewardFile(cmd.Flags())
 		}
