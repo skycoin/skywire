@@ -160,21 +160,17 @@ func runLoginChain() {
 	genesisAddr := gw.Entries[0].Address
 	genesisTimestamp := time.Now().Unix()
 
-	// Write fiber.toml files
+	// Write publisher fiber.toml only — peer toml created after publisher signs genesis
 	publisherTOML := fmt.Sprintf(loginFiberTOMLTemplate, genesisTimestamp, genesisAddr)
 	if err := os.WriteFile(fiberTOMLPath, []byte(publisherTOML), 0600); err != nil {
 		fmt.Printf("Failed to write login_fiber.toml: %v\n", err)
 		return
 	}
-	peerTOML := fmt.Sprintf(loginPeerTOMLTemplate, genesisTimestamp, genesisAddr)
-	if err := os.WriteFile(peerTOMLPath, []byte(peerTOML), 0600); err != nil {
-		fmt.Printf("Failed to write login_peer.toml: %v\n", err)
-		return
-	}
 
 	sharedEnv := append(os.Environ(), "GENESIS="+genesisPath)
 
-	// Start block publisher
+	// Step 1: Start block publisher — it creates and signs the genesis block,
+	// then writes the signature back to login_fiber.toml
 	publisherCmd := exec.Command(skywireBin, "skycoin", "daemon", //nolint:gosec
 		"--block-publisher",
 		"--localhost-only",
@@ -194,7 +190,44 @@ func runLoginChain() {
 		return
 	}
 
-	// Start peer node
+	// Wait for publisher to be healthy (genesis block created and signed)
+	publisherHealthy := false
+	for i := 0; i < 30; i++ {
+		time.Sleep(1 * time.Second)
+		resp, err := http.Get("http://127.0.0.1:6421/api/v1/health") //nolint:gosec
+		if err == nil {
+			resp.Body.Close() //nolint:errcheck,gosec
+			if resp.StatusCode == http.StatusOK {
+				publisherHealthy = true
+				break
+			}
+		}
+	}
+	if !publisherHealthy {
+		fmt.Println("Login chain: publisher failed to become healthy after 30s")
+		publisherCmd.Process.Kill() //nolint:errcheck,gosec
+		return
+	}
+	fmt.Println("Login chain: publisher is healthy")
+
+	// Step 2: Publisher wrote genesis signature back to login_fiber.toml.
+	// Create peer toml from the updated publisher toml (with signed genesis).
+	updatedTOML, err := os.ReadFile(fiberTOMLPath) //nolint:gosec
+	if err != nil {
+		fmt.Printf("Failed to read updated login_fiber.toml: %v\n", err)
+		publisherCmd.Process.Kill() //nolint:errcheck,gosec
+		return
+	}
+	peerTOMLContent := strings.ReplaceAll(string(updatedTOML), "port = 6001", "port = 6002")
+	peerTOMLContent = strings.ReplaceAll(peerTOMLContent, "web_interface_port = 6421", "web_interface_port = 6422")
+	peerTOMLContent = strings.ReplaceAll(peerTOMLContent, `"127.0.0.1:6002"`, `"127.0.0.1:6001"`)
+	if err := os.WriteFile(peerTOMLPath, []byte(peerTOMLContent), 0600); err != nil {
+		fmt.Printf("Failed to write login_peer.toml: %v\n", err)
+		publisherCmd.Process.Kill() //nolint:errcheck,gosec
+		return
+	}
+
+	// Step 3: Start peer node with signed genesis credentials
 	peerCmd := exec.Command(skywireBin, "skycoin", "daemon", //nolint:gosec
 		"--localhost-only",
 		"--download-peerlist=false",
@@ -228,34 +261,26 @@ func runLoginChain() {
 		os.Exit(0)
 	}()
 
-	// Wait for both nodes to be healthy
-	for _, check := range []struct {
-		name string
-		url  string
-	}{
-		{"publisher", "http://127.0.0.1:6421/api/v1/health"},
-		{"peer", "http://127.0.0.1:6422/api/v1/health"},
-	} {
-		healthy := false
-		for i := 0; i < 30; i++ {
-			time.Sleep(1 * time.Second)
-			resp, err := http.Get(check.url) //nolint:gosec
-			if err == nil {
-				resp.Body.Close() //nolint:errcheck,gosec
-				if resp.StatusCode == http.StatusOK {
-					healthy = true
-					break
-				}
+	// Wait for peer to be healthy
+	peerHealthy := false
+	for i := 0; i < 30; i++ {
+		time.Sleep(1 * time.Second)
+		resp, err := http.Get("http://127.0.0.1:6422/api/v1/health") //nolint:gosec
+		if err == nil {
+			resp.Body.Close() //nolint:errcheck,gosec
+			if resp.StatusCode == http.StatusOK {
+				peerHealthy = true
+				break
 			}
 		}
-		if !healthy {
-			fmt.Printf("Login chain: %s failed to become healthy after 30s\n", check.name)
-			publisherCmd.Process.Kill() //nolint:errcheck,gosec
-			peerCmd.Process.Kill()      //nolint:errcheck,gosec
-			return
-		}
-		fmt.Printf("Login chain: %s is healthy\n", check.name)
 	}
+	if !peerHealthy {
+		fmt.Println("Login chain: peer failed to become healthy after 30s")
+		publisherCmd.Process.Kill() //nolint:errcheck,gosec
+		peerCmd.Process.Kill()      //nolint:errcheck,gosec
+		return
+	}
+	fmt.Println("Login chain: peer is healthy")
 
 	// Bootstrap: create block #1
 	if err := bootstrapLoginChain(skywireBin, "http://127.0.0.1:6421", fiberTOMLPath, genesisPath, genesisAddr); err != nil {
