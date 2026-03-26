@@ -8,11 +8,16 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
+// loginFiberTOMLTemplate is the fiber.toml for the block publisher node.
 const loginFiberTOMLTemplate = `# Login chain fiber configuration — auto-generated, do not edit
 [node]
 genesis_signature_str = ""
@@ -21,10 +26,41 @@ blockchain_pubkey_str = ""
 blockchain_seckey_str = ""
 genesis_timestamp = %d
 genesis_coin_volume = 1000000000
-default_connections = []
+default_connections = ["127.0.0.1:6002"]
 peer_list_url = ""
 port = 6001
 web_interface_port = 6421
+display_name = "SkywireLogin"
+ticker = "SWL"
+coin_hours_display_name = "Login Hours"
+coin_hours_display_name_singular = "Login Hour"
+coin_hours_ticker = "SLH"
+bip44_coin = 8001
+explorer_url = ""
+
+[params]
+max_coin_supply = 1000000000
+initial_unlocked_count = 1
+unlock_address_rate = 0
+unlock_time_interval = 0
+distribution_addresses = [
+    "%s",
+]
+`
+
+// loginPeerTOMLTemplate is the fiber.toml for the peer node that serves the wallet API.
+const loginPeerTOMLTemplate = `# Login chain peer node — auto-generated, do not edit
+[node]
+genesis_signature_str = ""
+genesis_address_str = ""
+blockchain_pubkey_str = ""
+blockchain_seckey_str = ""
+genesis_timestamp = %d
+genesis_coin_volume = 1000000000
+default_connections = ["127.0.0.1:6001"]
+peer_list_url = ""
+port = 6002
+web_interface_port = 6422
 display_name = "SkywireLogin"
 ticker = "SWL"
 coin_hours_display_name = "Login Hours"
@@ -53,147 +89,202 @@ type addressGenWallet struct {
 	} `json:"entries"`
 }
 
-// ensureLoginChain sets up a local fiber chain for login authentication.
-// It wipes blockchain data on every startup (fresh chain) but preserves the
-// genesis wallet so the genesis address stays the same across restarts.
-// Returns the node address and a cleanup function that kills the subprocess.
-func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
-	loginDataDir := filepath.Join(wd, "login_data")
-	genesisPath := filepath.Join(wd, "login_genesis.json")
-	fiberTOMLPath := filepath.Join(wd, "login_fiber.toml")
+// LoginChainCmd starts the login chain (block publisher + peer node).
+// Run this as a separate process; the reward server connects via --login-node.
+var LoginChainCmd = &cobra.Command{
+	Use:   "loginchain",
+	Short: "start the login chain nodes (block publisher + peer)",
+	Long: `Starts a two-node login chain for wallet ownership verification.
 
+Block publisher on :6001 (P2P) / :6421 (API)
+Peer node on :6002 (P2P) / :6422 (API) — serves wallet API
+
+The reward system UI server connects to the peer node:
+  skywire cli rewards ui --login-node http://127.0.0.1:6422
+
+Blockchain data is wiped on every startup (fresh chain).
+The genesis wallet (login_genesis.json) is preserved across restarts.`,
+	Run: func(_ *cobra.Command, _ []string) {
+		runLoginChain()
+	},
+}
+
+func runLoginChain() {
 	skywireBin, err := os.Executable()
 	if err != nil {
-		skywireBin = "skywire" // fallback to PATH
+		skywireBin = "skywire"
 	}
 
-	// Always start fresh — wipe blockchain data
-	if err := os.RemoveAll(loginDataDir); err != nil {
-		return "", nil, fmt.Errorf("failed to remove login_data: %w", err)
+	publisherDataDir := filepath.Join(wd, "login_data")
+	peerDataDir := filepath.Join(wd, "login_peer_data")
+	genesisPath := filepath.Join(wd, "login_genesis.json")
+	fiberTOMLPath := filepath.Join(wd, "login_fiber.toml")
+	peerTOMLPath := filepath.Join(wd, "login_peer.toml")
+
+	// Wipe blockchain data (fresh chain every startup)
+	for _, dir := range []string{publisherDataDir, peerDataDir} {
+		if err := os.RemoveAll(dir); err != nil {
+			fmt.Printf("Failed to remove %s: %v\n", dir, err)
+			return
+		}
 	}
 
-	// Load or create genesis wallet using addressGen format
+	// Load or create genesis wallet
 	var gw addressGenWallet
 	data, err := os.ReadFile(genesisPath) //nolint:gosec
 	if err == nil {
 		if err := json.Unmarshal(data, &gw); err != nil || len(gw.Entries) == 0 {
-			return "", nil, fmt.Errorf("failed to parse login_genesis.json: %w", err)
+			fmt.Printf("Failed to parse login_genesis.json: %v\n", err)
+			return
 		}
 		fmt.Printf("Login chain: using existing genesis wallet %s\n", gw.Entries[0].Address)
 	} else {
-		// Generate genesis wallet via skycoin cli addressGen
 		fmt.Println("Login chain: generating genesis wallet via addressGen...")
 		genCmd := exec.Command(skywireBin, "skycoin", "cli", "addressGen") //nolint:gosec
 		genOut, err := genCmd.Output()
 		if err != nil {
-			return "", nil, fmt.Errorf("addressGen failed: %w", err)
+			fmt.Printf("addressGen failed: %v\n", err)
+			return
 		}
 		if err := json.Unmarshal(genOut, &gw); err != nil || len(gw.Entries) == 0 {
-			return "", nil, fmt.Errorf("failed to parse addressGen output: %w", err)
+			fmt.Printf("Failed to parse addressGen output: %v\n", err)
+			return
 		}
 		if err := os.WriteFile(genesisPath, genOut, 0600); err != nil {
-			return "", nil, fmt.Errorf("failed to write login_genesis.json: %w", err)
+			fmt.Printf("Failed to write login_genesis.json: %v\n", err)
+			return
 		}
 		fmt.Printf("Login chain: generated new genesis wallet %s\n", gw.Entries[0].Address)
 	}
 
 	genesisAddr := gw.Entries[0].Address
+	genesisTimestamp := time.Now().Unix()
 
-	// Write fiber.toml for login chain
-	// Leave genesis_address_str, blockchain_pubkey_str, blockchain_seckey_str empty —
-	// they will be loaded from GENESIS env var at startup.
-	tomlContent := fmt.Sprintf(loginFiberTOMLTemplate,
-		time.Now().Unix(),
-		genesisAddr,
-	)
-	if err := os.WriteFile(fiberTOMLPath, []byte(tomlContent), 0600); err != nil {
-		return "", nil, fmt.Errorf("failed to write login_fiber.toml: %w", err)
+	// Write fiber.toml files
+	publisherTOML := fmt.Sprintf(loginFiberTOMLTemplate, genesisTimestamp, genesisAddr)
+	if err := os.WriteFile(fiberTOMLPath, []byte(publisherTOML), 0600); err != nil {
+		fmt.Printf("Failed to write login_fiber.toml: %v\n", err)
+		return
+	}
+	peerTOML := fmt.Sprintf(loginPeerTOMLTemplate, genesisTimestamp, genesisAddr)
+	if err := os.WriteFile(peerTOMLPath, []byte(peerTOML), 0600); err != nil {
+		fmt.Printf("Failed to write login_peer.toml: %v\n", err)
+		return
 	}
 
-	// Build daemon arguments: fixed args + configurable flags + fixed port args
-	daemonArgs := []string{"skycoin", "daemon"}
-	if loginChainFlags != "" {
-		daemonArgs = append(daemonArgs, strings.Fields(loginChainFlags)...)
-	} else {
-		daemonArgs = append(daemonArgs,
-			"--block-publisher",
-			"--localhost-only",
-			"--download-peerlist=false",
-			"--disable-default-peers",
-			"--disable-csrf",
-			"--host-whitelist=fiber.skywire.dev",
-			"--log-level=warn",
-		)
-	}
-	daemonArgs = append(daemonArgs,
-		"--data-dir="+loginDataDir,
+	sharedEnv := append(os.Environ(), "GENESIS="+genesisPath)
+
+	// Start block publisher
+	publisherCmd := exec.Command(skywireBin, "skycoin", "daemon", //nolint:gosec
+		"--block-publisher",
+		"--localhost-only",
+		"--download-peerlist=false",
+		"--data-dir="+publisherDataDir,
 		"--web-interface-port=6421",
 		"--port=6001",
+		"--log-level=warn",
 	)
-	cmd := exec.Command(skywireBin, daemonArgs...) //nolint:gosec
-	cmd.Env = append(os.Environ(),
-		"FIBER_TOML="+fiberTOMLPath,
-		"GENESIS="+genesisPath,
-	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	publisherCmd.Env = append(sharedEnv, "FIBER_TOML="+fiberTOMLPath)
+	publisherCmd.Stdout = os.Stdout
+	publisherCmd.Stderr = os.Stderr
 
-	fmt.Println("Login chain: starting skycoin node on :6421 ...")
-	if err := cmd.Start(); err != nil {
-		return "", nil, fmt.Errorf("failed to start login chain node: %w", err)
+	fmt.Println("Login chain: starting block publisher on :6001/:6421 ...")
+	if err := publisherCmd.Start(); err != nil {
+		fmt.Printf("Failed to start publisher: %v\n", err)
+		return
 	}
 
-	cleanupFn := func() {
-		fmt.Println("Login chain: stopping node...")
-		if cmd.Process != nil {
-			cmd.Process.Kill() //nolint:errcheck,gosec
-		}
+	// Start peer node
+	peerCmd := exec.Command(skywireBin, "skycoin", "daemon", //nolint:gosec
+		"--localhost-only",
+		"--download-peerlist=false",
+		"--disable-csrf",
+		"--host-whitelist=fiber.skywire.dev",
+		"--enable-all-api-sets=true",
+		"--data-dir="+peerDataDir,
+		"--web-interface-port=6422",
+		"--port=6002",
+		"--log-level=warn",
+	)
+	peerCmd.Env = append(sharedEnv, "FIBER_TOML="+peerTOMLPath)
+	peerCmd.Stdout = os.Stdout
+	peerCmd.Stderr = os.Stderr
+
+	fmt.Println("Login chain: starting peer node on :6002/:6422 ...")
+	if err := peerCmd.Start(); err != nil {
+		publisherCmd.Process.Kill() //nolint:errcheck,gosec
+		fmt.Printf("Failed to start peer: %v\n", err)
+		return
 	}
 
-	// Wait for health check
-	healthURL := "http://127.0.0.1:6421/api/v1/health"
-	healthy := false
-	for i := 0; i < 30; i++ {
-		time.Sleep(1 * time.Second)
-		resp, err := http.Get(healthURL) //nolint:gosec
-		if err == nil {
-			resp.Body.Close() //nolint:errcheck,gosec
-			if resp.StatusCode == http.StatusOK {
-				healthy = true
-				break
+	// Cleanup on signal
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		fmt.Println("\nLogin chain: shutting down...")
+		publisherCmd.Process.Kill() //nolint:errcheck,gosec
+		peerCmd.Process.Kill()      //nolint:errcheck,gosec
+		os.Exit(0)
+	}()
+
+	// Wait for both nodes to be healthy
+	for _, check := range []struct {
+		name string
+		url  string
+	}{
+		{"publisher", "http://127.0.0.1:6421/api/v1/health"},
+		{"peer", "http://127.0.0.1:6422/api/v1/health"},
+	} {
+		healthy := false
+		for i := 0; i < 30; i++ {
+			time.Sleep(1 * time.Second)
+			resp, err := http.Get(check.url) //nolint:gosec
+			if err == nil {
+				resp.Body.Close() //nolint:errcheck,gosec
+				if resp.StatusCode == http.StatusOK {
+					healthy = true
+					break
+				}
 			}
 		}
-	}
-	if !healthy {
-		cleanupFn()
-		return "", nil, fmt.Errorf("login chain node failed to become healthy after 30s")
-	}
-
-	fmt.Println("Login chain: node is healthy")
-
-	// Bootstrap: create block #1 by sending genesis coins to the same address.
-	// The genesis UxOut has a null SrcTransaction which the transaction API
-	// cannot handle. createRawTransaction + broadcastTransaction creates a
-	// proper block with valid SrcTransactions on the UxOuts.
-	nodeURL := "http://127.0.0.1:6421"
-	if err := bootstrapLoginChain(skywireBin, nodeURL, fiberTOMLPath, genesisPath, genesisAddr); err != nil {
-		fmt.Printf("Login chain: bootstrap warning: %v\n", err)
+		if !healthy {
+			fmt.Printf("Login chain: %s failed to become healthy after 30s\n", check.name)
+			publisherCmd.Process.Kill() //nolint:errcheck,gosec
+			peerCmd.Process.Kill()      //nolint:errcheck,gosec
+			return
+		}
+		fmt.Printf("Login chain: %s is healthy\n", check.name)
 	}
 
-	return nodeURL, cleanupFn, nil
+	// Bootstrap: create block #1
+	if err := bootstrapLoginChain(skywireBin, "http://127.0.0.1:6421", fiberTOMLPath, genesisPath, genesisAddr); err != nil {
+		fmt.Printf("Login chain: bootstrap failed: %v\n", err)
+		fmt.Println("Login chain: nodes still running — you can bootstrap manually")
+	}
+
+	fmt.Println("\nLogin chain is running. Connect the reward server with:")
+	fmt.Println("  skywire cli rewards ui --login-node http://127.0.0.1:6422")
+	fmt.Println("\nPress Ctrl+C to stop.")
+
+	// Wait for either process to exit
+	done := make(chan error, 2)
+	go func() { done <- publisherCmd.Wait() }()
+	go func() { done <- peerCmd.Wait() }()
+	<-done
+
+	// Kill the other
+	publisherCmd.Process.Kill() //nolint:errcheck,gosec
+	peerCmd.Process.Kill()      //nolint:errcheck,gosec
 }
 
-// bootstrapLoginChain uses the genesis wallet (addressGen format) with
-// createRawTransaction to send genesis coins to the same address,
-// producing block #1 with proper SrcTransactions on the UxOuts.
-func bootstrapLoginChain(skywireBin, nodeURL, fiberTOMLPath, genesisPath, genesisAddr string) error {
+// bootstrapLoginChain uses createRawTransaction + injectTransaction to create block #1.
+func bootstrapLoginChain(skywireBin, publisherURL, fiberTOMLPath, genesisPath, genesisAddr string) error {
 	cliEnv := append(os.Environ(),
 		"FIBER_TOML="+fiberTOMLPath,
-		"RPC_ADDR="+nodeURL,
+		"RPC_ADDR="+publisherURL,
 	)
 
-	// The addressGen output (login_genesis.json) IS a wallet file.
-	// createRawTransaction can use it directly.
 	fmt.Println("Login chain: creating bootstrap transaction...")
 	createCmd := exec.Command(skywireBin, "skycoin", "cli", "createRawTransaction", //nolint:gosec
 		genesisPath, genesisAddr, "1000")
@@ -208,10 +299,9 @@ func bootstrapLoginChain(skywireBin, nodeURL, fiberTOMLPath, genesisPath, genesi
 		return fmt.Errorf("createRawTransaction returned empty output")
 	}
 
-	// Inject transaction via API with no_broadcast (no peers to broadcast to)
-	fmt.Println("Login chain: injecting bootstrap transaction (no broadcast)...")
-	injectBody := fmt.Sprintf(`{"rawtx":"%s","no_broadcast":true}`, rawTxStr)
-	injectReq, err := http.NewRequest("POST", nodeURL+"/api/v1/injectTransaction", strings.NewReader(injectBody))
+	fmt.Println("Login chain: injecting bootstrap transaction...")
+	injectBody := fmt.Sprintf(`{"rawtx":"%s"}`, rawTxStr)
+	injectReq, err := http.NewRequest("POST", publisherURL+"/api/v1/injectTransaction", strings.NewReader(injectBody))
 	if err != nil {
 		return fmt.Errorf("inject request: %w", err)
 	}
@@ -227,20 +317,28 @@ func bootstrapLoginChain(skywireBin, nodeURL, fiberTOMLPath, genesisPath, genesi
 	}
 	fmt.Printf("Login chain: bootstrap tx injected: %s\n", strings.TrimSpace(string(injectOut)))
 
-	// Wait for block #1
+	// Wait for block #1 on the peer node
 	fmt.Println("Login chain: waiting for bootstrap block...")
-	for i := 0; i < 15; i++ {
+	peerURL := "http://127.0.0.1:6422"
+	for i := 0; i < 30; i++ {
 		time.Sleep(2 * time.Second)
-		resp, err := http.Get(fmt.Sprintf("%s/api/v1/blockchain/metadata", nodeURL)) //nolint:gosec
+		resp, err := http.Get(fmt.Sprintf("%s/api/v1/blockchain/metadata", peerURL)) //nolint:gosec
 		if err != nil {
 			continue
 		}
 		body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
 		resp.Body.Close()                //nolint:errcheck,gosec
 		if strings.Contains(string(body), `"seq": 1`) {
-			fmt.Println("Login chain: bootstrap complete")
+			fmt.Println("Login chain: bootstrap complete — block #1 confirmed on peer")
 			return nil
 		}
 	}
-	return fmt.Errorf("bootstrap block not confirmed after 30s")
+	return fmt.Errorf("bootstrap block not confirmed on peer after 60s")
+}
+
+// ensureLoginChain is the old embedded approach — now just returns an error
+// directing users to run the loginchain subcommand separately.
+// Kept for backward compatibility with --login-node auto.
+func ensureLoginChain(_ string) (string, func(), error) {
+	return "", nil, fmt.Errorf("--login-node auto is no longer supported; run 'skywire cli rewards loginchain' separately and use --login-node http://127.0.0.1:6422")
 }
