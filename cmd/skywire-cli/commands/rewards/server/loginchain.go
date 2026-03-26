@@ -98,7 +98,6 @@ func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
 	}
 
 	genesisAddr := gw.Entries[0].Address
-	genesisSecKey := gw.Entries[0].SecretKey
 
 	// Write fiber.toml for login chain
 	// Leave genesis_address_str, blockchain_pubkey_str, blockchain_seckey_str empty —
@@ -177,7 +176,7 @@ func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
 	// cannot handle. createRawTransaction + broadcastTransaction creates a
 	// proper block with valid SrcTransactions on the UxOuts.
 	nodeURL := "http://127.0.0.1:6421"
-	if err := bootstrapLoginChain(skywireBin, nodeURL, fiberTOMLPath, genesisPath, genesisAddr, genesisSecKey); err != nil {
+	if err := bootstrapLoginChain(skywireBin, nodeURL, fiberTOMLPath, genesisPath, genesisAddr); err != nil {
 		fmt.Printf("Login chain: bootstrap warning: %v\n", err)
 	}
 
@@ -187,7 +186,7 @@ func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
 // bootstrapLoginChain uses the genesis wallet (addressGen format) with
 // createRawTransaction to send genesis coins to the same address,
 // producing block #1 with proper SrcTransactions on the UxOuts.
-func bootstrapLoginChain(skywireBin, nodeURL, fiberTOMLPath, genesisPath, genesisAddr, genesisSecKey string) error {
+func bootstrapLoginChain(skywireBin, nodeURL, fiberTOMLPath, genesisPath, genesisAddr string) error {
 	cliEnv := append(os.Environ(),
 		"FIBER_TOML="+fiberTOMLPath,
 		"RPC_ADDR="+nodeURL,
@@ -209,14 +208,24 @@ func bootstrapLoginChain(skywireBin, nodeURL, fiberTOMLPath, genesisPath, genesi
 		return fmt.Errorf("createRawTransaction returned empty output")
 	}
 
-	fmt.Println("Login chain: broadcasting bootstrap transaction...")
-	bcastCmd := exec.Command(skywireBin, "skycoin", "cli", "broadcastTransaction", rawTxStr) //nolint:gosec
-	bcastCmd.Env = cliEnv
-	bcastOut, err := bcastCmd.CombinedOutput()
+	// Inject transaction via API with no_broadcast (no peers to broadcast to)
+	fmt.Println("Login chain: injecting bootstrap transaction (no broadcast)...")
+	injectBody := fmt.Sprintf(`{"rawtx":"%s","no_broadcast":true}`, rawTxStr)
+	injectReq, err := http.NewRequest("POST", nodeURL+"/api/v1/injectTransaction", strings.NewReader(injectBody))
 	if err != nil {
-		return fmt.Errorf("broadcastTransaction failed: %s: %w", string(bcastOut), err)
+		return fmt.Errorf("inject request: %w", err)
 	}
-	fmt.Printf("Login chain: bootstrap tx broadcast: %s\n", strings.TrimSpace(string(bcastOut)))
+	injectReq.Header.Set("Content-Type", "application/json")
+	injectResp, err := http.DefaultClient.Do(injectReq)
+	if err != nil {
+		return fmt.Errorf("inject failed: %w", err)
+	}
+	defer injectResp.Body.Close()               //nolint:errcheck,gosec
+	injectOut, _ := io.ReadAll(injectResp.Body) //nolint:errcheck,gosec
+	if injectResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("inject failed (%d): %s", injectResp.StatusCode, string(injectOut))
+	}
+	fmt.Printf("Login chain: bootstrap tx injected: %s\n", strings.TrimSpace(string(injectOut)))
 
 	// Wait for block #1
 	fmt.Println("Login chain: waiting for bootstrap block...")
