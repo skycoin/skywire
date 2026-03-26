@@ -72,7 +72,20 @@ const longtext = `
 
 func longText() string {
 	//show configured reward address if valid configuration exists
-	//only the default is supported
+	// try RPC first to get the visor's actual reward address
+	client, clienterr := clirpc.Client(nil)
+	if clienterr == nil {
+		rwdAdd, err := client.GetRewardAddress()
+		if err == nil && strings.TrimSpace(rwdAdd) != "" {
+			_, _, err = rewardconfig.ValidateRewardAddress(strings.TrimSpace(rwdAdd))
+			if err == nil {
+				isRewarded = true
+				defaultRewardAddress = fmt.Sprintf("%s\n", rwdAdd)
+				return "\n    skycoin reward address set to:\n    " + strings.TrimSpace(rwdAdd) + "\n"
+			}
+		}
+	}
+	// fallback to local file
 	if _, err := os.Stat(rewardFile); err == nil {
 		//nolint:gosec
 		reward, err := os.ReadFile(rewardFile)
