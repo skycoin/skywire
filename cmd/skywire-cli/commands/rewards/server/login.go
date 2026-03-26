@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bitfield/script"
 	"github.com/gin-gonic/gin"
 
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
@@ -115,57 +116,47 @@ func checkBalanceOnLoginChain(nodeURL, address string) (coins uint64, hours uint
 }
 
 // sendCoinsOnLoginChain sends coins from the genesis wallet to the target address
-// via the login chain node's API. Returns the transaction ID.
+// using the skycoin CLI (createRawTransaction + injectTransaction).
+// The CLI loads the genesis wallet file directly for signing.
 func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, error) {
-	// Get CSRF token (optional — disabled on login chain)
-	var csrfToken string
-	csrfResp, err := http.Get(fmt.Sprintf("%s/api/v1/csrf", nodeURL)) //nolint:gosec
-	if err == nil {
-		defer csrfResp.Body.Close() //nolint:errcheck,gosec
-		if csrfResp.StatusCode == http.StatusOK {
-			csrfBody, _ := io.ReadAll(csrfResp.Body) //nolint:errcheck,gosec
-			var csrfData struct {
-				Token string `json:"csrf_token"`
-			}
-			if json.Unmarshal(csrfBody, &csrfData) == nil {
-				csrfToken = csrfData.Token
-			}
-		}
-	}
+	genesisPath := filepath.Join(wd, "login_genesis.json")
+	fiberTOMLPath := filepath.Join(wd, "login_fiber.toml")
 
-	// Create transaction using the genesis address as the funding source
-	txReq := fmt.Sprintf(`{"addresses":["%s"],"hours_selection":{"type":"auto","mode":"share","share_factor":"0.5"},"to":[{"address":"%s","coins":"%s"}]}`,
-		loginGenesisAddress, destAddress, coins)
-
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/v2/transaction", nodeURL), strings.NewReader(txReq))
+	skywireBin, err := os.Executable()
 	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if csrfToken != "" {
-		req.Header.Set("X-CSRF-Token", csrfToken)
+		skywireBin = "skywire"
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	// Create raw transaction using the genesis wallet
+	rawTxStr, err := script.Exec(fmt.Sprintf(`bash -c 'FIBER_TOML=%s RPC_ADDR=%s %s skycoin cli createRawTransaction %s %s %s'`,
+		fiberTOMLPath, nodeURL, skywireBin, genesisPath, destAddress, coins)).String()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("createRawTransaction failed: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck,gosec
-
-	body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("transaction failed (%d): %s", resp.StatusCode, string(body))
+	rawTxStr = strings.TrimSpace(rawTxStr)
+	if rawTxStr == "" {
+		return "", fmt.Errorf("createRawTransaction returned empty output")
 	}
 
-	var txResult struct {
-		TxID string `json:"txid"`
+	// Inject transaction with no_broadcast
+	injectBody := fmt.Sprintf(`{"rawtx":"%s","no_broadcast":true}`, rawTxStr)
+	injectReq, err := http.NewRequest("POST", nodeURL+"/api/v1/injectTransaction", strings.NewReader(injectBody))
+	if err != nil {
+		return "", fmt.Errorf("inject request: %w", err)
 	}
-	if err := json.Unmarshal(body, &txResult); err != nil {
-		return "", fmt.Errorf("parse tx result: %w", err)
+	injectReq.Header.Set("Content-Type", "application/json")
+	injectResp, err := http.DefaultClient.Do(injectReq)
+	if err != nil {
+		return "", fmt.Errorf("inject failed: %w", err)
+	}
+	defer injectResp.Body.Close()               //nolint:errcheck,gosec
+	injectOut, _ := io.ReadAll(injectResp.Body) //nolint:errcheck,gosec
+	if injectResp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("inject failed (%d): %s", injectResp.StatusCode, string(injectOut))
 	}
 
-	return txResult.TxID, nil
+	txID := strings.Trim(strings.TrimSpace(string(injectOut)), `"`)
+	return txID, nil
 }
 
 // checkTransactionToAddress checks if there's a confirmed transaction
