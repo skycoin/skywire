@@ -117,18 +117,20 @@ func checkBalanceOnLoginChain(nodeURL, address string) (coins uint64, hours uint
 // sendCoinsOnLoginChain sends coins from the genesis wallet to the target address
 // via the login chain node's API. Returns the transaction ID.
 func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, error) {
-	// Get CSRF token
+	// Get CSRF token (optional — disabled on login chain)
+	var csrfToken string
 	csrfResp, err := http.Get(fmt.Sprintf("%s/api/v1/csrf", nodeURL)) //nolint:gosec
-	if err != nil {
-		return "", fmt.Errorf("csrf: %w", err)
-	}
-	defer csrfResp.Body.Close()              //nolint:errcheck,gosec
-	csrfBody, _ := io.ReadAll(csrfResp.Body) //nolint:errcheck,gosec
-	var csrfData struct {
-		Token string `json:"csrf_token"`
-	}
-	if err := json.Unmarshal(csrfBody, &csrfData); err != nil {
-		return "", fmt.Errorf("csrf parse: %w", err)
+	if err == nil {
+		defer csrfResp.Body.Close() //nolint:errcheck,gosec
+		if csrfResp.StatusCode == http.StatusOK {
+			csrfBody, _ := io.ReadAll(csrfResp.Body) //nolint:errcheck,gosec
+			var csrfData struct {
+				Token string `json:"csrf_token"`
+			}
+			if json.Unmarshal(csrfBody, &csrfData) == nil {
+				csrfToken = csrfData.Token
+			}
+		}
 	}
 
 	// Create transaction using the default wallet (genesis wallet)
@@ -140,7 +142,9 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-CSRF-Token", csrfData.Token)
+	if csrfToken != "" {
+		req.Header.Set("X-CSRF-Token", csrfToken)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
