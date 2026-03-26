@@ -110,6 +110,7 @@ func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
 	}
 	cmd := exec.Command(skywireBin, //nolint:gosec
 		"skycoin", "daemon",
+		"--block-publisher",
 		"--data-dir="+loginDataDir,
 		"--localhost-only",
 		"--disable-networking",
