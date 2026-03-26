@@ -150,7 +150,6 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 			return err
 		}
 
-		// TODO(evanlinjin): Implement proper load-balancing.
 		if s.SessionCount() >= s.maxSessions {
 			s.log.
 				WithField("max_sessions", s.maxSessions).

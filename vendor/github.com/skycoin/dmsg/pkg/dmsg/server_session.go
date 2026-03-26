@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
@@ -13,6 +14,16 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/dmsg/metrics"
 	"github.com/skycoin/dmsg/pkg/noise"
+)
+
+const (
+	// maxConcurrentStreams limits how many streams can be served concurrently
+	// per session to prevent a single session from exhausting server resources.
+	maxConcurrentStreams = 2048
+
+	// streamErrorBackoff is the delay after a non-fatal stream accept error
+	// to prevent CPU spin on persistent errors.
+	streamErrorBackoff = 50 * time.Millisecond
 )
 
 // ServerSession represents a session from the perspective of a dmsg server.
@@ -45,6 +56,10 @@ func (ss *ServerSession) Close() error {
 func (ss *ServerSession) Serve() {
 	ss.m.RecordSession(metrics.DeltaConnect)          // record successful connection
 	defer ss.m.RecordSession(metrics.DeltaDisconnect) // record disconnection
+
+	// Semaphore to limit concurrent streams per session.
+	sem := make(chan struct{}, maxConcurrentStreams)
+
 	if ss.sm.smux != nil {
 		for {
 			sStr, err := ss.sm.smux.AcceptStream()
@@ -54,13 +69,24 @@ func (ss *ServerSession) Serve() {
 					return
 				}
 				ss.log.WithError(err).Warn("Failed to accept smux stream, continuing...")
+				time.Sleep(streamErrorBackoff)
 				continue
 			}
 
 			log := ss.log.WithField("smux_id", sStr.ID())
-			log.Info("Initiating stream.")
 
+			// Acquire semaphore slot; if full, reject the stream.
+			select {
+			case sem <- struct{}{}:
+			default:
+				log.Warn("Max concurrent streams reached, rejecting stream.")
+				sStr.Close() //nolint:errcheck,gosec
+				continue
+			}
+
+			log.Info("Initiating stream.")
 			go func(sStr *smux.Stream) {
+				defer func() { <-sem }()
 				defer func() {
 					if r := recover(); r != nil {
 						log.WithField("panic", r).Error("Recovered from panic in serveStream")
@@ -79,13 +105,24 @@ func (ss *ServerSession) Serve() {
 					return
 				}
 				ss.log.WithError(err).Warn("Failed to accept yamux stream, continuing...")
+				time.Sleep(streamErrorBackoff)
 				continue
 			}
 
 			log := ss.log.WithField("yamux_id", yStr.StreamID())
-			log.Info("Initiating stream.")
 
+			// Acquire semaphore slot; if full, reject the stream.
+			select {
+			case sem <- struct{}{}:
+			default:
+				log.Warn("Max concurrent streams reached, rejecting stream.")
+				yStr.Close() //nolint:errcheck,gosec
+				continue
+			}
+
+			log.Info("Initiating stream.")
 			go func(yStr *yamux.Stream) {
+				defer func() { <-sem }()
 				defer func() {
 					if r := recover(); r != nil {
 						log.WithField("panic", r).Error("Recovered from panic in serveStream")
@@ -101,6 +138,14 @@ func (ss *ServerSession) Serve() {
 // struct
 
 func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCloser, addr net.Addr) error {
+	// Set a deadline for the initial stream request read so a slow or
+	// malicious client cannot hold a goroutine and semaphore slot indefinitely.
+	if conn, ok := yStr.(net.Conn); ok {
+		if err := conn.SetReadDeadline(time.Now().Add(HandshakeTimeout)); err != nil {
+			return fmt.Errorf("set read deadline: %w", err)
+		}
+	}
+
 	readRequest := func() (StreamRequest, error) {
 		obj, err := ss.readObject(yStr)
 		if err != nil {
@@ -182,6 +227,11 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 		return err
 	}
 	log.Debug("Forwarded stream response.")
+
+	// Clear the read deadline before the long-lived bidirectional copy.
+	if conn, ok := yStr.(net.Conn); ok {
+		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+	}
 
 	// Serve stream.
 	log.Info("Serving stream.")
