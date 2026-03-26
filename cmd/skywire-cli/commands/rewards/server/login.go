@@ -133,9 +133,9 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 		}
 	}
 
-	// Create transaction using the default wallet (genesis wallet)
-	txReq := fmt.Sprintf(`{"hours_selection":{"type":"auto","mode":"share","share_factor":"0.5"},"to":[{"address":"%s","coins":"%s"}]}`,
-		destAddress, coins)
+	// Create transaction using the genesis address as the funding source
+	txReq := fmt.Sprintf(`{"addresses":["%s"],"hours_selection":{"type":"auto","mode":"share","share_factor":"0.5"},"to":[{"address":"%s","coins":"%s"}]}`,
+		loginGenesisAddress, destAddress, coins)
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/v2/transaction", nodeURL), strings.NewReader(txReq))
 	if err != nil {
