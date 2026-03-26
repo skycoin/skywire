@@ -3,8 +3,10 @@ package clireward
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -12,6 +14,8 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -73,8 +77,11 @@ const longtext = `
 func longText() string {
 	//show configured reward address if valid configuration exists
 	// try RPC first to get the visor's actual reward address
-	client, clienterr := clirpc.Client(nil)
-	if clienterr == nil {
+	const rpcDialTimeout = time.Second * 2
+	conn, dialErr := net.DialTimeout("tcp", clirpc.Addr, rpcDialTimeout)
+	if dialErr == nil {
+		rpcLogger := logging.MustGetLogger("rpc-reward")
+		client := visor.NewRPCClient(rpcLogger, conn, visor.RPCPrefix, 0)
 		rwdAdd, err := client.GetRewardAddress()
 		if err == nil && strings.TrimSpace(rwdAdd) != "" {
 			_, _, err = rewardconfig.ValidateRewardAddress(strings.TrimSpace(rwdAdd))
