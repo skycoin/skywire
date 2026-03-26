@@ -1330,14 +1330,16 @@ func server(e error) {
 		// Set login chain variables for the login routes
 		if loginNode != "" {
 			loginNodeAddr = loginNode
-			// Read genesis address from saved wallet
+			// Read genesis address from saved wallet (addressGen format)
 			genesisPath := filepath.Join(wd, "login_genesis.json")
 			if data, err := os.ReadFile(genesisPath); err == nil { //nolint:gosec
 				var gw struct {
-					Address string `json:"address"`
+					Entries []struct {
+						Address string `json:"address"`
+					} `json:"entries"`
 				}
-				if err := json.Unmarshal(data, &gw); err == nil {
-					loginGenesisAddress = gw.Address
+				if err := json.Unmarshal(data, &gw); err == nil && len(gw.Entries) > 0 {
+					loginGenesisAddress = gw.Entries[0].Address
 				}
 			}
 			if loginGenesisAddress == "" {
