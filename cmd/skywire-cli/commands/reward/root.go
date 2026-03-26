@@ -3,8 +3,10 @@ package clireward
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -12,6 +14,8 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -72,7 +76,23 @@ const longtext = `
 
 func longText() string {
 	//show configured reward address if valid configuration exists
-	//only the default is supported
+	// try RPC first to get the visor's actual reward address
+	const rpcDialTimeout = time.Second * 2
+	conn, dialErr := net.DialTimeout("tcp", clirpc.Addr, rpcDialTimeout)
+	if dialErr == nil {
+		rpcLogger := logging.MustGetLogger("rpc-reward")
+		client := visor.NewRPCClient(rpcLogger, conn, visor.RPCPrefix, 0)
+		rwdAdd, err := client.GetRewardAddress()
+		if err == nil && strings.TrimSpace(rwdAdd) != "" {
+			_, _, err = rewardconfig.ValidateRewardAddress(strings.TrimSpace(rwdAdd))
+			if err == nil {
+				isRewarded = true
+				defaultRewardAddress = fmt.Sprintf("%s\n", rwdAdd)
+				return "\n    skycoin reward address set to:\n    " + strings.TrimSpace(rwdAdd) + "\n"
+			}
+		}
+	}
+	// fallback to local file
 	if _, err := os.Stat(rewardFile); err == nil {
 		//nolint:gosec
 		reward, err := os.ReadFile(rewardFile)
@@ -144,13 +164,23 @@ var rewardCmd = &cobra.Command{
 		}
 		//print reward address and exit
 		if isRead {
+			// prefer RPC to get the visor's actual reward address
+			if clienterr == nil {
+				rwdAdd, err := client.GetRewardAddress()
+				if err == nil && rwdAdd != "" {
+					out := fmt.Sprintf("%s\n", rwdAdd)
+					internal.PrintOutput(cmd.Flags(), out, out)
+					os.Exit(0)
+				}
+			}
+			// fallback to local file
 			//nolint:gosec
 			dat, err := os.ReadFile(output)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error reading file. err=%v", err))
 			}
-			output := fmt.Sprintf("%s\n", dat)
-			internal.PrintOutput(cmd.Flags(), output, output)
+			out := fmt.Sprintf("%s\n", dat)
+			internal.PrintOutput(cmd.Flags(), out, out)
 			os.Exit(0)
 		}
 		//set reward address from first argument
@@ -183,10 +213,11 @@ var rewardCmd = &cobra.Command{
 				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
 				return
 			}
-			output := fmt.Sprintf("Reward address:\n  %s\n", rwdAdd)
-			internal.PrintOutput(cmd.Flags(), output, output)
-		}
-		if clienterr != nil {
+			// also write to the local file so -r works without visor running
+			os.WriteFile(output, []byte(rwdAdd), 0600) //nolint:errcheck,gosec
+			out := fmt.Sprintf("Reward address:\n  %s\n", rwdAdd)
+			internal.PrintOutput(cmd.Flags(), out, out)
+		} else {
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(canonical), 0600))
 			readRewardFile(cmd.Flags())
 		}
