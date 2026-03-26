@@ -21,30 +21,7 @@ func InitPProf(log *logging.Logger, mode string, addr string) func() { //nolint:
 
 	switch mode {
 	case "http":
-		go func() {
-			mux := http.NewServeMux()
-			mux.HandleFunc("/debug/pprof/", pprof.Index)
-			mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-			mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-			mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-
-			for _, profile := range []string{"heap", "goroutine", "threadcreate", "block", "mutex", "allocs"} {
-				mux.Handle("/debug/pprof/"+profile, pprof.Handler(profile))
-			}
-
-			srv := &http.Server{
-				Addr:              addr,
-				Handler:           mux,
-				ReadHeaderTimeout: 5 * time.Second,
-				WriteTimeout:      30 * time.Second,
-			}
-			log.Infof("Serving pprof on http://%s", addr)
-			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Errorf("pprof http server failed: %v", err)
-			}
-		}()
-
+		startPProfHTTP(log, addr, false)
 		time.Sleep(100 * time.Millisecond)
 		return noop
 
@@ -122,21 +99,7 @@ func InitPProf(log *logging.Logger, mode string, addr string) func() { //nolint:
 		}
 
 	case "trace":
-		go func() {
-			mux := http.NewServeMux()
-			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-			srv := &http.Server{
-				Addr:              addr,
-				Handler:           mux,
-				ReadHeaderTimeout: 5 * time.Second,
-				WriteTimeout:      60 * time.Second,
-			}
-			log.Infof("Serving trace endpoint on http://%s/debug/pprof/trace", addr)
-			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Errorf("pprof trace server failed: %v", err)
-			}
-		}()
-
+		startPProfHTTP(log, addr, true)
 		time.Sleep(100 * time.Millisecond)
 		return noop
 
@@ -148,4 +111,48 @@ func InitPProf(log *logging.Logger, mode string, addr string) func() { //nolint:
 	}
 
 	return noop
+}
+
+// startPProfHTTP starts a pprof HTTP server on a dedicated OS thread.
+// Locking the goroutine to its own thread ensures the kernel scheduler
+// gives it CPU time even when the Go runtime is saturated with goroutines,
+// which is exactly when pprof is needed most.
+func startPProfHTTP(log *logging.Logger, addr string, traceOnly bool) {
+	// Reserve an extra OS thread for the pprof server so it doesn't
+	// compete with application goroutines for GOMAXPROCS slots.
+	runtime.GOMAXPROCS(runtime.GOMAXPROCS(0) + 1)
+
+	go func() {
+		// Pin this goroutine to a dedicated OS thread so the kernel
+		// scheduler guarantees it CPU time independent of Go's
+		// cooperative goroutine scheduler.
+		runtime.LockOSThread()
+
+		mux := http.NewServeMux()
+		if traceOnly {
+			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+			log.Infof("Serving trace endpoint on http://%s/debug/pprof/trace (dedicated thread)", addr)
+		} else {
+			mux.HandleFunc("/debug/pprof/", pprof.Index)
+			mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+			mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+			mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+			for _, profile := range []string{"heap", "goroutine", "threadcreate", "block", "mutex", "allocs"} {
+				mux.Handle("/debug/pprof/"+profile, pprof.Handler(profile))
+			}
+			log.Infof("Serving pprof on http://%s (dedicated thread)", addr)
+		}
+
+		srv := &http.Server{
+			Addr:              addr,
+			Handler:           mux,
+			ReadHeaderTimeout: 5 * time.Second,
+			WriteTimeout:      30 * time.Second,
+		}
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Errorf("pprof http server failed: %v", err)
+		}
+	}()
 }
