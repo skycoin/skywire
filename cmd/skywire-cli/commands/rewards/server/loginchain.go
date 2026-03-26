@@ -4,22 +4,21 @@ package clirewardsserver
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
-
-	skycoincipher "github.com/skycoin/skycoin/src/cipher"
 )
 
 const loginFiberTOMLTemplate = `# Login chain fiber configuration — auto-generated, do not edit
 [node]
 genesis_signature_str = ""
-genesis_address_str = "%s"
-blockchain_pubkey_str = "%s"
-blockchain_seckey_str = "%s"
+genesis_address_str = ""
+blockchain_pubkey_str = ""
+blockchain_seckey_str = ""
 genesis_timestamp = %d
 genesis_coin_volume = 1000000000
 default_connections = []
@@ -44,10 +43,14 @@ distribution_addresses = [
 ]
 `
 
-type genesisWallet struct {
-	PubKey  string `json:"pubkey"`
-	SecKey  string `json:"seckey"`
-	Address string `json:"address"`
+// addressGenWallet is the JSON format produced by `skycoin cli addressGen`
+// and expected by the GENESIS env var.
+type addressGenWallet struct {
+	Entries []struct {
+		Address   string `json:"address"`
+		PublicKey string `json:"public_key"`
+		SecretKey string `json:"secret_key"`
+	} `json:"entries"`
 }
 
 // ensureLoginChain sets up a local fiber chain for login authentication.
@@ -59,63 +62,60 @@ func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
 	genesisPath := filepath.Join(wd, "login_genesis.json")
 	fiberTOMLPath := filepath.Join(wd, "login_fiber.toml")
 
+	skywireBin, err := os.Executable()
+	if err != nil {
+		skywireBin = "skywire" // fallback to PATH
+	}
+
 	// Always start fresh — wipe blockchain data
 	if err := os.RemoveAll(loginDataDir); err != nil {
 		return "", nil, fmt.Errorf("failed to remove login_data: %w", err)
 	}
 
-	// Load or create genesis wallet
-	var gw genesisWallet
+	// Load or create genesis wallet using addressGen format
+	var gw addressGenWallet
 	data, err := os.ReadFile(genesisPath) //nolint:gosec
 	if err == nil {
-		if err := json.Unmarshal(data, &gw); err != nil {
+		if err := json.Unmarshal(data, &gw); err != nil || len(gw.Entries) == 0 {
 			return "", nil, fmt.Errorf("failed to parse login_genesis.json: %w", err)
 		}
-		fmt.Printf("Login chain: using existing genesis wallet %s\n", gw.Address)
+		fmt.Printf("Login chain: using existing genesis wallet %s\n", gw.Entries[0].Address)
 	} else {
-		// Generate new keypair
-		pk, sk := skycoincipher.GenerateKeyPair()
-		addr := skycoincipher.AddressFromPubKey(pk)
-		gw = genesisWallet{
-			PubKey:  pk.Hex(),
-			SecKey:  sk.Hex(),
-			Address: addr.String(),
-		}
-		data, err := json.MarshalIndent(gw, "", "  ")
+		// Generate genesis wallet via skycoin cli addressGen
+		fmt.Println("Login chain: generating genesis wallet via addressGen...")
+		genCmd := exec.Command(skywireBin, "skycoin", "cli", "addressGen") //nolint:gosec
+		genOut, err := genCmd.Output()
 		if err != nil {
-			return "", nil, fmt.Errorf("failed to marshal genesis wallet: %w", err)
+			return "", nil, fmt.Errorf("addressGen failed: %w", err)
 		}
-		if err := os.WriteFile(genesisPath, data, 0600); err != nil {
+		if err := json.Unmarshal(genOut, &gw); err != nil || len(gw.Entries) == 0 {
+			return "", nil, fmt.Errorf("failed to parse addressGen output: %w", err)
+		}
+		if err := os.WriteFile(genesisPath, genOut, 0600); err != nil {
 			return "", nil, fmt.Errorf("failed to write login_genesis.json: %w", err)
 		}
-		fmt.Printf("Login chain: generated new genesis wallet %s\n", gw.Address)
+		fmt.Printf("Login chain: generated new genesis wallet %s\n", gw.Entries[0].Address)
 	}
 
+	genesisAddr := gw.Entries[0].Address
+	genesisSecKey := gw.Entries[0].SecretKey
+
 	// Write fiber.toml for login chain
+	// Leave genesis_address_str, blockchain_pubkey_str, blockchain_seckey_str empty —
+	// they will be loaded from GENESIS env var at startup.
 	tomlContent := fmt.Sprintf(loginFiberTOMLTemplate,
-		gw.Address,
-		gw.PubKey,
-		gw.SecKey,
 		time.Now().Unix(),
-		gw.Address,
+		genesisAddr,
 	)
 	if err := os.WriteFile(fiberTOMLPath, []byte(tomlContent), 0600); err != nil {
 		return "", nil, fmt.Errorf("failed to write login_fiber.toml: %w", err)
 	}
 
-	// Start skycoin node subprocess using the skywire binary
-	// (skywire skycoin daemon) to ensure same codebase
-	skywireBin, err := os.Executable()
-	if err != nil {
-		skywireBin = "skywire" // fallback to PATH
-	}
 	// Build daemon arguments: fixed args + configurable flags + fixed port args
 	daemonArgs := []string{"skycoin", "daemon"}
 	if loginChainFlags != "" {
-		// User-specified flags from --login-chain-flags or LOGINCHAIN_FLAGS
 		daemonArgs = append(daemonArgs, strings.Fields(loginChainFlags)...)
 	} else {
-		// Default flags for isolated login chain
 		daemonArgs = append(daemonArgs,
 			"--block-publisher",
 			"--localhost-only",
@@ -126,7 +126,6 @@ func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
 			"--log-level=warn",
 		)
 	}
-	// Always set data-dir and ports (not overridable)
 	daemonArgs = append(daemonArgs,
 		"--data-dir="+loginDataDir,
 		"--web-interface-port=6421",
@@ -135,6 +134,7 @@ func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
 	cmd := exec.Command(skywireBin, daemonArgs...) //nolint:gosec
 	cmd.Env = append(os.Environ(),
 		"FIBER_TOML="+fiberTOMLPath,
+		"GENESIS="+genesisPath,
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -171,5 +171,67 @@ func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
 	}
 
 	fmt.Println("Login chain: node is healthy")
-	return "http://127.0.0.1:6421", cleanupFn, nil
+
+	// Bootstrap: create block #1 by sending genesis coins to the same address.
+	// The genesis UxOut has a null SrcTransaction which the transaction API
+	// cannot handle. createRawTransaction + broadcastTransaction creates a
+	// proper block with valid SrcTransactions on the UxOuts.
+	nodeURL := "http://127.0.0.1:6421"
+	if err := bootstrapLoginChain(skywireBin, nodeURL, fiberTOMLPath, genesisPath, genesisAddr, genesisSecKey); err != nil {
+		fmt.Printf("Login chain: bootstrap warning: %v\n", err)
+	}
+
+	return nodeURL, cleanupFn, nil
+}
+
+// bootstrapLoginChain uses the genesis wallet (addressGen format) with
+// createRawTransaction to send genesis coins to the same address,
+// producing block #1 with proper SrcTransactions on the UxOuts.
+func bootstrapLoginChain(skywireBin, nodeURL, fiberTOMLPath, genesisPath, genesisAddr, genesisSecKey string) error {
+	cliEnv := append(os.Environ(),
+		"FIBER_TOML="+fiberTOMLPath,
+		"RPC_ADDR="+nodeURL,
+	)
+
+	// The addressGen output (login_genesis.json) IS a wallet file.
+	// createRawTransaction can use it directly.
+	fmt.Println("Login chain: creating bootstrap transaction...")
+	createCmd := exec.Command(skywireBin, "skycoin", "cli", "createRawTransaction", //nolint:gosec
+		genesisPath, genesisAddr, "1000")
+	createCmd.Env = cliEnv
+	rawTx, err := createCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("createRawTransaction failed: %s: %w", string(rawTx), err)
+	}
+
+	rawTxStr := strings.TrimSpace(string(rawTx))
+	if rawTxStr == "" {
+		return fmt.Errorf("createRawTransaction returned empty output")
+	}
+
+	fmt.Println("Login chain: broadcasting bootstrap transaction...")
+	bcastCmd := exec.Command(skywireBin, "skycoin", "cli", "broadcastTransaction", rawTxStr) //nolint:gosec
+	bcastCmd.Env = cliEnv
+	bcastOut, err := bcastCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("broadcastTransaction failed: %s: %w", string(bcastOut), err)
+	}
+	fmt.Printf("Login chain: bootstrap tx broadcast: %s\n", strings.TrimSpace(string(bcastOut)))
+
+	// Wait for block #1
+	fmt.Println("Login chain: waiting for bootstrap block...")
+	for i := 0; i < 15; i++ {
+		time.Sleep(2 * time.Second)
+		resp, err := http.Get(fmt.Sprintf("%s/api/v1/blockchain/metadata", nodeURL)) //nolint:gosec
+		if err != nil {
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
+		resp.Body.Close()                //nolint:errcheck,gosec
+		if strings.Contains(string(body), `"seq": 1`) {
+			fmt.Println("Login chain: bootstrap complete")
+			return nil
+		}
+	}
+	return fmt.Errorf("bootstrap block not confirmed after 30s")
 }
