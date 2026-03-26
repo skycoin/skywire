@@ -8,5 +8,6 @@ import (
 func init() {
 	RootCmd.AddCommand(
 		server.ServerCmd,
+		server.LoginChainCmd,
 	)
 }
