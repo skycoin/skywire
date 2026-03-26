@@ -175,6 +175,7 @@ func runLoginChain() {
 		"--block-publisher",
 		"--localhost-only",
 		"--download-peerlist=false",
+		"--disable-csrf",
 		"--data-dir="+publisherDataDir,
 		"--web-interface-port=6421",
 		"--port=6001",
@@ -239,7 +240,9 @@ func runLoginChain() {
 		"--port=6002",
 		"--log-level=warn",
 	)
-	peerCmd.Env = append(sharedEnv, "FIBER_TOML="+peerTOMLPath)
+	// Peer does NOT use GENESIS env — the signed fiber.toml has all credentials.
+	// GENESIS would clear the genesis signature, causing "Failed to recover pubkey".
+	peerCmd.Env = append(os.Environ(), "FIBER_TOML="+peerTOMLPath)
 	peerCmd.Stdout = os.Stdout
 	peerCmd.Stderr = os.Stderr
 
@@ -325,7 +328,7 @@ func bootstrapLoginChain(skywireBin, publisherURL, fiberTOMLPath, genesisPath, g
 	}
 
 	fmt.Println("Login chain: injecting bootstrap transaction...")
-	injectBody := fmt.Sprintf(`{"rawtx":"%s"}`, rawTxStr)
+	injectBody := fmt.Sprintf(`{"rawtx":"%s","no_broadcast":true}`, rawTxStr)
 	injectReq, err := http.NewRequest("POST", publisherURL+"/api/v1/injectTransaction", strings.NewReader(injectBody))
 	if err != nil {
 		return fmt.Errorf("inject request: %w", err)
