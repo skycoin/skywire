@@ -38,6 +38,7 @@ var (
 	loginNodeAddr       string // resolved URL of login chain node (set at runtime)
 	loginGenesisAddress string // genesis wallet address for login verification (set at runtime)
 	skycoinNode         string
+	loginChainFlags     string
 	healthOnly          bool
 	noUI                bool
 	buildTimeout        time.Duration
@@ -72,6 +73,7 @@ func init() {
 	ServerCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 	ServerCmd.Flags().StringVar(&loginNode, "login-node", scriptExecString("${LOGINNODE}"), "login chain node: empty=disabled, 'auto'=auto-setup on localhost:6421,\nor URL of external node (e.g. http://localhost:6421)")
 	ServerCmd.Flags().StringVar(&skycoinNode, "skycoin-node", scriptExecString("${SKYCOINNODE:-http://127.0.0.1:6420}"), "Skycoin mainnet node URL for reward transaction broadcasts")
+	ServerCmd.Flags().StringVar(&loginChainFlags, "login-chain-flags", scriptExecString("${LOGINCHAIN_FLAGS}"), "override flags for login chain skycoin daemon subprocess\n(default: --block-publisher --localhost-only --download-peerlist=false\n--disable-default-peers --disable-csrf --host-whitelist=fiber.skywire.dev)")
 	ServerCmd.Flags().BoolVar(&healthOnly, "health-only", false, "serve only /health endpoint for testing")
 	ServerCmd.Flags().BoolVar(&noUI, "no-ui", false, "skip cogentcore UI extraction and compilation, serve plain HTTP")
 	ServerCmd.Flags().DurationVar(&buildTimeout, "build-timeout", 5*time.Minute, "timeout for UI build process")
