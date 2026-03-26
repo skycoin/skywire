@@ -128,10 +128,12 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 	}
 
 	// Create raw transaction using the genesis wallet
-	rawTxStr, err := script.Exec(fmt.Sprintf(`bash -c 'FIBER_TOML=%s RPC_ADDR=%s %s skycoin cli createRawTransaction %s %s %s'`,
-		fiberTOMLPath, nodeURL, skywireBin, genesisPath, destAddress, coins)).String()
+	createRawTxCmd := fmt.Sprintf(`bash -c 'FIBER_TOML="%s" RPC_ADDR="%s" "%s" skycoin cli createRawTransaction "%s" "%s" "%s" 2>&1'`,
+		fiberTOMLPath, nodeURL, skywireBin, genesisPath, destAddress, coins)
+	fmt.Printf("Login chain: running: %s\n", createRawTxCmd)
+	rawTxStr, err := script.Exec(createRawTxCmd).String()
 	if err != nil {
-		return "", fmt.Errorf("createRawTransaction failed: %w", err)
+		return "", fmt.Errorf("createRawTransaction failed: %s: %w", rawTxStr, err)
 	}
 	rawTxStr = strings.TrimSpace(rawTxStr)
 	if rawTxStr == "" {
@@ -139,6 +141,7 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 	}
 
 	// Inject transaction with no_broadcast
+	fmt.Printf("Login chain: injecting tx to %s (%d bytes)\n", nodeURL, len(rawTxStr))
 	injectBody := fmt.Sprintf(`{"rawtx":"%s","no_broadcast":true}`, rawTxStr)
 	injectReq, err := http.NewRequest("POST", nodeURL+"/api/v1/injectTransaction", strings.NewReader(injectBody))
 	if err != nil {
