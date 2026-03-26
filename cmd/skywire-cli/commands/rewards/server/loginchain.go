@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	skycoincipher "github.com/skycoin/skycoin/src/cipher"
@@ -108,16 +109,30 @@ func ensureLoginChain(wd string) (nodeAddr string, cleanup func(), err error) {
 	if err != nil {
 		skywireBin = "skywire" // fallback to PATH
 	}
-	cmd := exec.Command(skywireBin, //nolint:gosec
-		"skycoin", "daemon",
-		"--block-publisher",
+	// Build daemon arguments: fixed args + configurable flags + fixed port args
+	daemonArgs := []string{"skycoin", "daemon"}
+	if loginChainFlags != "" {
+		// User-specified flags from --login-chain-flags or LOGINCHAIN_FLAGS
+		daemonArgs = append(daemonArgs, strings.Fields(loginChainFlags)...)
+	} else {
+		// Default flags for isolated login chain
+		daemonArgs = append(daemonArgs,
+			"--block-publisher",
+			"--localhost-only",
+			"--download-peerlist=false",
+			"--disable-default-peers",
+			"--disable-csrf",
+			"--host-whitelist=fiber.skywire.dev",
+			"--log-level=warn",
+		)
+	}
+	// Always set data-dir and ports (not overridable)
+	daemonArgs = append(daemonArgs,
 		"--data-dir="+loginDataDir,
-		"--localhost-only",
-		"--disable-networking",
 		"--web-interface-port=6421",
 		"--port=6001",
-		"--log-level=warn",
 	)
+	cmd := exec.Command(skywireBin, daemonArgs...) //nolint:gosec
 	cmd.Env = append(os.Environ(),
 		"FIBER_TOML="+fiberTOMLPath,
 	)
