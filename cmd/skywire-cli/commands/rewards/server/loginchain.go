@@ -103,7 +103,26 @@ The reward system UI server connects to the peer node:
   skywire cli rewards ui --login-node http://127.0.0.1:6422
 
 Blockchain data is wiped on every startup (fresh chain).
-The genesis wallet (login_genesis.json) is preserved across restarts.`,
+The genesis wallet (login_genesis.json) is preserved across restarts.
+
+IMPORTANT: Run this command from the same directory as the reward
+server's -W working directory, or use -W to specify it explicitly.
+The loginchain reads login_genesis.json and login_fiber.toml from
+the working directory. A mismatch causes "no unspents to spend".
+
+LOGIN VERIFICATION FLOW
+
+  1. User submits their reward address (skycoin address or xpub)
+  2. Server funds a login address with coins on the login chain
+  3. User sends those coins back to the genesis address
+  4. Server confirms the transaction, proving wallet ownership
+
+For xpub users, the login address is derived from the change chain
+(m/44'/coin'/0'/1/0) to avoid collision with receiving addresses.
+This requires the account-level xpub (--path=0), not the external
+chain xpub shown in the Skycoin web wallet GUI (--path=0/0).
+
+See 'skywire reward --help' for xpub setup instructions.`,
 	Run: func(_ *cobra.Command, _ []string) {
 		runLoginChain()
 	},

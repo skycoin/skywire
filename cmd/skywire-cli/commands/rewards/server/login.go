@@ -276,6 +276,32 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		}
 		loginAddress := address
 		if isXpub {
+			// Check xpub depth before attempting derivation
+			if warning := rewardconfig.CheckXpubDepth(address); warning != "" {
+				fmt.Printf("Login chain: xpub depth error for %s...\n", address[:20])
+				c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+				c.Writer.WriteHeader(http.StatusBadRequest)
+				l := loginPageHeader("Login Error")
+				l += navlinks
+				l += "<h1>Wrong xpub key level</h1>"
+				l += "<p class='error'>The xpub key you provided is at the chain level (depth 4), "
+				l += "not the account level (depth 3) required for login verification.</p>"
+				l += "<p>The Skycoin web wallet shows the <strong>external chain</strong> xpub "
+				l += "(BIP44 path <code>m/44'/8000'/0'/0</code>). The login system needs the "
+				l += "<strong>account-level</strong> xpub (<code>m/44'/8000'/0'</code>) to derive "
+				l += "change chain addresses for verification.</p>"
+				l += "<h3>How to get the correct xpub</h3>"
+				l += "<p>Export the account-level xpub from your wallet using the CLI:</p>"
+				l += "<pre>skywire skycoin cli walletKeyExport WALLET_FILE -k xpub --path=0</pre>"
+				l += "<p>The default <code>--path=0/0</code> gives the external chain xpub (wrong).<br>"
+				l += "Use <code>--path=0</code> for the account-level xpub (correct).</p>"
+				l += "<p>Then update your visor's reward address:</p>"
+				l += "<pre>skywire reward ACCOUNT_XPUB</pre>"
+				l += "<p><a href='/login'>Back to login</a></p>"
+				l += "</body></html>"
+				c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+				return
+			}
 			derived, err := rewardconfig.DeriveLoginAddressFromXpub(address, 0)
 			if err != nil {
 				c.Redirect(http.StatusFound, "/login?msg=Failed+to+derive+login+address+from+xpub:+"+err.Error())
