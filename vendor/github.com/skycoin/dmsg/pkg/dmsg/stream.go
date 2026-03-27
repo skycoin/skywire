@@ -325,9 +325,17 @@ func (s *Stream) StreamID() uint32 {
 	return s.yStr.StreamID()
 }
 
-// Read implements io.Reader
+// Read implements io.Reader.
+// It refreshes the idle timeout on each successful read so that active
+// streams are never killed, while stale streams stuck in waitRead with
+// no incoming data will time out and release their ephemeral port.
 func (s *Stream) Read(b []byte) (int, error) {
-	return s.nsConn.Read(b)
+	n, err := s.nsConn.Read(b)
+	if n > 0 {
+		// Reset the read deadline on successful read to keep the stream alive.
+		s.SetReadDeadline(time.Now().Add(StreamIdleTimeout)) //nolint:errcheck,gosec
+	}
+	return n, err
 }
 
 // Write implements io.Writer

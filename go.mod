@@ -41,7 +41,7 @@ require (
 	github.com/pterm/pterm v0.12.83
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
-	github.com/skycoin/dmsg v1.3.29-0.20260326182411-b57639cfb52f
+	github.com/skycoin/dmsg v1.3.29-0.20260327203016-a57dc6abe74d
 	github.com/skycoin/skycoin v0.28.6-0.20260325014814-f48988877c68
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
