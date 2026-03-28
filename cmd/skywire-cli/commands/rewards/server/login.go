@@ -45,6 +45,8 @@ var (
 	sessionsMu      sync.RWMutex
 	pendingLogins   = make(map[string]*pendingLogin) // challenge -> pending login
 	pendingLoginsMu sync.RWMutex
+	consumedTxIDs   = make(map[string]bool) // txids already used for login verification
+	consumedTxMu    sync.RWMutex
 )
 
 func generateSessionID() string {
@@ -164,10 +166,12 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 
 // checkTransactionToAddress checks if there's a confirmed transaction
 // FROM the given address TO the genesis address on the login chain.
-func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) bool {
+// Returns the txid of the matching transaction, or empty string if none found.
+// Skips transactions that have already been consumed for a previous login.
+func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) string {
 	resp, err := http.Get(fmt.Sprintf("%s/api/v1/transactions?addrs=%s&confirmed=true&verbose=1", nodeURL, fromAddress)) //nolint:gosec
 	if err != nil {
-		return false
+		return ""
 	}
 	defer resp.Body.Close() //nolint:errcheck,gosec
 
@@ -176,6 +180,7 @@ func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) bool {
 	// Use verbose=1 to get full input details including owner addresses
 	var txs []struct {
 		Txn struct {
+			TxID    string `json:"txid"`
 			Outputs []struct {
 				Dst string `json:"dst"`
 			} `json:"outputs"`
@@ -185,10 +190,18 @@ func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) bool {
 		} `json:"txn"`
 	}
 	if err := json.Unmarshal(body, &txs); err != nil {
-		return false
+		return ""
 	}
 
+	consumedTxMu.RLock()
+	defer consumedTxMu.RUnlock()
+
 	for _, tx := range txs {
+		// Skip transactions already consumed for a previous login
+		if consumedTxIDs[tx.Txn.TxID] {
+			continue
+		}
+
 		// Check if any output goes to the target address
 		hasOutputToTarget := false
 		for _, out := range tx.Txn.Outputs {
@@ -201,21 +214,18 @@ func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) bool {
 			continue
 		}
 		// With verbose=1, inputs have owner field; without it, inputs are just UxIDs.
-		// If owner fields are populated, verify the sender. Otherwise, since we queried
-		// by fromAddress, any tx with an output to toAddress is likely the return tx.
 		if len(tx.Txn.Inputs) > 0 && tx.Txn.Inputs[0].Owner != "" {
 			for _, inp := range tx.Txn.Inputs {
 				if inp.Owner == fromAddress {
-					return true
+					return tx.Txn.TxID
 				}
 			}
 		} else {
-			// Non-verbose: trust that the tx involves fromAddress (queried by it)
-			// and has an output to toAddress
-			return true
+			// Non-verbose fallback
+			return tx.Txn.TxID
 		}
 	}
-	return false
+	return ""
 }
 
 // registerLoginRoutes adds login-related routes to the gin router.
@@ -437,9 +447,15 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		}
 
 		// Check if user sent coins FROM their login address TO the genesis address
-		confirmed := checkTransactionToAddress(loginNodeAddr, pending.LoginAddress, loginGenesisAddress)
+		// Returns the txid of a matching, unconsumed transaction (or empty string)
+		verifyTxID := checkTransactionToAddress(loginNodeAddr, pending.LoginAddress, loginGenesisAddress)
 
-		if confirmed {
+		if verifyTxID != "" {
+			// Mark this transaction as consumed so it can't be reused
+			consumedTxMu.Lock()
+			consumedTxIDs[verifyTxID] = true
+			consumedTxMu.Unlock()
+
 			// Create session
 			sessionID := generateSessionID()
 			sessionsMu.Lock()
