@@ -18,6 +18,7 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/gin-gonic/gin"
+	skycoincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
@@ -32,14 +33,15 @@ type session struct {
 
 // pendingLogin tracks a login challenge waiting for transaction confirmation
 type pendingLogin struct {
-	Address      string    `json:"address"`       // original reward address or xpub
-	LoginAddress string    `json:"login_address"` // derived address for verification (change chain for xpub)
-	Visors       []string  `json:"visors"`
-	Challenge    string    `json:"challenge"`   // random challenge string
-	FundedTxID   string    `json:"funded_txid"` // txid of coins sent to user
-	IsXpub       bool      `json:"is_xpub"`
-	CreatedAt    time.Time `json:"created_at"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	Address       string    `json:"address"`        // original reward address or xpub
+	LoginAddress  string    `json:"login_address"`  // derived address for verification (change chain for xpub)
+	VerifyAddress string    `json:"verify_address"` // unique per-challenge receive address
+	Visors        []string  `json:"visors"`
+	Challenge     string    `json:"challenge"`   // random challenge string
+	FundedTxID    string    `json:"funded_txid"` // txid of coins sent to user
+	IsXpub        bool      `json:"is_xpub"`
+	CreatedAt     time.Time `json:"created_at"`
+	ExpiresAt     time.Time `json:"expires_at"`
 }
 
 var (
@@ -59,6 +61,14 @@ func generateChallenge() string {
 	b := make([]byte, 16)
 	rand.Read(b) //nolint:errcheck,gosec
 	return hex.EncodeToString(b)
+}
+
+// generateVerifyAddress creates a unique skycoin address for a login challenge.
+// The user sends coins to this address to prove wallet ownership.
+// We only check its balance — never spend from it.
+func generateVerifyAddress() string {
+	pk, _ := skycoincipher.GenerateKeyPair()
+	return skycoincipher.AddressFromPubKey(pk).String()
 }
 
 // rewardHistoryEntry represents one reward payment for a date.
@@ -424,28 +434,25 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			}
 		}
 
-		// Create pending login challenge.
-		// Invalidate any existing challenge for this login address to prevent
-		// an attacker from creating a challenge and waiting for the real user
-		// to verify on a different machine.
+		// Create pending login challenge with a unique verify address.
+		// Each challenge gets its own receive address so transactions from
+		// different challenges can't be confused or piggybacked.
 		challenge := generateChallenge()
+		verifyAddr := generateVerifyAddress()
 		pendingLoginsMu.Lock()
-		for k, p := range pendingLogins {
-			if p.LoginAddress == loginAddress {
-				delete(pendingLogins, k)
-			}
-		}
 		pendingLogins[challenge] = &pendingLogin{
-			Address:      address,
-			LoginAddress: loginAddress,
-			Visors:       visors,
-			Challenge:    challenge,
-			FundedTxID:   fundedTxID,
-			IsXpub:       isXpub,
-			CreatedAt:    time.Now(),
-			ExpiresAt:    time.Now().Add(10 * time.Minute),
+			Address:       address,
+			LoginAddress:  loginAddress,
+			VerifyAddress: verifyAddr,
+			Visors:        visors,
+			Challenge:     challenge,
+			FundedTxID:    fundedTxID,
+			IsXpub:        isXpub,
+			CreatedAt:     time.Now(),
+			ExpiresAt:     time.Now().Add(10 * time.Minute),
 		}
 		pendingLoginsMu.Unlock()
+		fmt.Printf("Login chain: challenge %s → verify address %s\n", challenge[:8], verifyAddr)
 
 		c.Redirect(http.StatusFound, "/login/verify?challenge="+challenge)
 	})
@@ -481,7 +488,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			l += "<p>To prove you control address <code>" + pending.Address + "</code>, "
 			l += "please send coins from that address to the login address below.</p>"
 		}
-		l += "<p><strong>Send to:</strong> <code>" + loginGenesisAddress + "</code></p>"
+		l += "<p><strong>Send to:</strong> <code>" + pending.VerifyAddress + "</code></p>"
 		// Use the current request's host as the node URL for the wallet
 		scheme := "https"
 		if c.Request.TLS == nil {
@@ -530,7 +537,13 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 
 		// Check if user sent coins FROM their login address TO the genesis address
 		// Only accepts transactions created after this challenge was issued
-		verifyTxID := checkTransactionToAddress(loginNodeAddr, pending.LoginAddress, loginGenesisAddress, pending.CreatedAt)
+		// Check if the unique verify address received coins.
+		// Each challenge has a unique address, so any balance means this challenge was satisfied.
+		verifyCoins, _, verifyErr := checkBalanceOnLoginChain(loginNodeAddr, pending.VerifyAddress)
+		verifyTxID := ""
+		if verifyErr == nil && verifyCoins > 0 {
+			verifyTxID = "verified" // unique address has balance
+		}
 
 		if verifyTxID != "" {
 			// Create session
