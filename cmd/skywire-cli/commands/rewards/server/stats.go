@@ -733,16 +733,37 @@ func GenerateVersionHistoryChartHTML(history []VersionHistoryEntry, chartWidth, 
 	}
 
 	sb.WriteString(fmt.Sprintf("<div style='position: relative; margin-left: 40px; height: 20px; min-width: %dpx; font-size: 10px; color: #888;'>\n", chartWidth))
+	lastLabelIdx := -1
+	prevYear := ""
 	for i, entry := range history {
-		if i%labelInterval == 0 || i == len(history)-1 {
-			dateParts := strings.Split(entry.Date, "-")
-			label := entry.Date
-			if len(dateParts) == 3 {
+		isRegular := i%labelInterval == 0
+		isLast := i == len(history)-1
+
+		if !isRegular && !isLast {
+			continue
+		}
+
+		// Skip last label if it would overlap the previous label
+		if isLast && lastLabelIdx >= 0 && (i-lastLabelIdx) < labelInterval/2 {
+			continue
+		}
+
+		dateParts := strings.Split(entry.Date, "-")
+		label := entry.Date
+		if len(dateParts) == 3 {
+			year := dateParts[0]
+			// Show year on first label and when year changes
+			if prevYear == "" || year != prevYear {
+				label = dateParts[0] + "-" + dateParts[1] + "-" + dateParts[2]
+				prevYear = year
+			} else {
 				label = dateParts[1] + "-" + dateParts[2]
 			}
-			x := i * barWidth
-			sb.WriteString(fmt.Sprintf("<span style='position: absolute; left: %dpx;'>%s</span>\n", x, label))
 		}
+
+		x := i * barWidth
+		sb.WriteString(fmt.Sprintf("<span style='position: absolute; left: %dpx;'>%s</span>\n", x, label))
+		lastLabelIdx = i
 	}
 	sb.WriteString("</div>\n")
 
