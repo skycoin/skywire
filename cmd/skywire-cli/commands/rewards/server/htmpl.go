@@ -20,11 +20,9 @@ var (
 	navlinks               string
 	htmltoplink            = "<a href='#top'>top of page</a>\n"
 	htmlend                = "</pre></body></html>"
-	htmlRewardPageTemplate = `
-{{.Page.Content}}
-`
-	tmpl                 *htmpl.Template
-	htmlPageTemplateData htmlTemplateData
+	htmlRewardPageTemplate string
+	tmpl                   *htmpl.Template
+	htmlPageTemplateData   htmlTemplateData
 )
 
 func init() {
@@ -61,6 +59,10 @@ func init() {
 	nl = append(nl, "  <a href='/login'>login</a>")
 	nl = append(nl, "\n<br>\n")
 	navlinks = strings.Join(nl, "")
+
+	htmlRewardPageTemplate = `<!doctype html><html lang="en"><head><title>Skycoin Reward Calculation and Distribution</title>
+<style type="text/css">a { color: #3399FF; } a:visited { color: #FF00FF; } pre { font-family:Courier New; font-size:10pt; } body { background-color:black; color:white; font-family:monospace; }</style>
+</head><body><pre>` + navlinks + `{{.Page.Content}}</pre></body></html>`
 
 }
 
