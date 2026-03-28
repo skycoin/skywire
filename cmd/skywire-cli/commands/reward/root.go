@@ -65,14 +65,59 @@ const longtext = `
 	reward address setting
 
 	Sets the skycoin reward address or xpub key for the visor.
-	Accepts either a skycoin address or a BIP44 account xpub key.
-	The address is written to the root of the default 'local' directory specified in the visor's config
+	Accepts either a skycoin address or a BIP44 account-level xpub key.
+	The address is written to the root of the default 'local' directory
+	specified in the visor's config.
 
-	This file is parsed by the visor at runtime, and the reward address is included in the survey which is served via dmsghttp along with transport logs
-	and the system hardware survey for automating reward distribution
+	This file is parsed by the visor at runtime, and the reward address
+	is included in the survey which is served via dmsghttp along with
+	transport logs and the system hardware survey for automating reward
+	distribution.
 
-	By setting a reward address, you consent to collection of the survey from the visors where the reward address is set.
-	The survey is ONLY for verification of reward eligibility. We respect your privacy.`
+	By setting a reward address, you consent to collection of the survey
+	from the visors where the reward address is set.
+	The survey is ONLY for verification of reward eligibility. We respect
+	your privacy.
+
+	XPUB KEY SETUP (BIP44 wallets)
+
+	When using an xpub key, you must provide the account-level xpub
+	(BIP44 path: m/44'/coin'/account'). This is NOT the same as the
+	external chain xpub shown in the Skycoin web wallet GUI.
+
+	The Skycoin web wallet displays the external chain xpub (path 0/0,
+	depth 4). The reward and login systems require the account-level
+	xpub (path 0, depth 3) which is the parent of both the external
+	and change chains.
+
+	To export the correct xpub from a bip44 wallet using the CLI:
+
+	  1. Start a skycoin node with seed API enabled:
+	     skywire skycoin daemon --enable-api-sets="INSECURE_WALLET_SEED"
+
+	  2. Export the account-level xpub (path 0):
+	     skywire skycoin cli walletKeyExport WALLET_FILE -k xpub --path=0
+
+	     The default --path=0/0 gives the external chain xpub (WRONG).
+	     You must use --path=0 for the account-level xpub (CORRECT).
+
+	  3. Set the reward address:
+	     skywire reward ACCOUNT_XPUB
+
+	BIP44 key hierarchy:
+
+	  m/44'/coin'/0'            <-- account xpub (depth 3) USE THIS
+	    ├── 0/                  <-- external chain (depth 4, receiving)
+	    │   ├── 0  address 1
+	    │   ├── 1  address 2
+	    │   └── ...
+	    └── 1/                  <-- change chain (depth 4, login)
+	        ├── 0  login address
+	        └── ...
+
+	The login system derives verification addresses from the change
+	chain (m/44'/coin'/0'/1/i) so they do not collide with receiving
+	addresses on the external chain.`
 
 func longText() string {
 	//show configured reward address if valid configuration exists
@@ -195,9 +240,14 @@ var rewardCmd = &cobra.Command{
 		//remove any newline from rewardAddress string
 		rewardAddress = strings.TrimSuffix(rewardAddress, "\n")
 		//validate the skycoin address or xpub key
-		canonical, _, err := rewardconfig.ValidateRewardAddress(rewardAddress)
+		canonical, isXpub, err := rewardconfig.ValidateRewardAddress(rewardAddress)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address or xpub key specified: %v", err))
+		}
+		if isXpub {
+			if warning := rewardconfig.CheckXpubDepth(canonical); warning != "" {
+				fmt.Fprintf(os.Stderr, "\n%s\n\n", warning)
+			}
 		}
 
 		//using the rpc of the running visor avoids needing sudo permissions

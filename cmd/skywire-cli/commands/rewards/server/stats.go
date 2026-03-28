@@ -17,7 +17,9 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
+	"github.com/oschwald/geoip2-golang/v2"
 
+	geoipcmd "github.com/skycoin/skywire/cmd/geoip/commands"
 	"github.com/skycoin/skywire/deployment"
 )
 
@@ -314,39 +316,25 @@ func generateAndCacheCountryStats() error {
 		visorIPs = append(visorIPs, ipAddr)
 	}
 
-	// Second pass: query geoip for unique IPs only (cache results)
+	// Second pass: query geoip for unique IPs using the embedded database directly
+	// (avoids spawning a subprocess per IP)
 	ipCache := make(map[string]geoIPResult)
 
-	for ip := range ipToVisors {
-		// Query geoip for this IP
-		geoResult, err := script.Exec(`skywire svc ip ` + ip).String()
-		if err != nil {
-			continue
-		}
-
-		// Parse JSON response (skip log line if present)
-		lines := strings.Split(geoResult, "\n")
-		var jsonStr string
-		for _, line := range lines {
-			if strings.HasPrefix(strings.TrimSpace(line), "{") {
-				idx := strings.Index(geoResult, line)
-				jsonStr = geoResult[idx:]
-				break
+	db, dbErr := geoip2.OpenBytes(geoipcmd.EmbeddedGeoIP())
+	if dbErr != nil {
+		fmt.Printf("Warning: failed to open embedded GeoIP database: %v\n", dbErr)
+	} else {
+		defer db.Close() //nolint:errcheck,gosec
+		for ip := range ipToVisors {
+			res, err := geoipcmd.LookupIP(db, ip)
+			if err != nil {
+				continue
 			}
-		}
-
-		var geoData struct {
-			CountryCode string `json:"country_code"`
-			CountryName string `json:"country_name"`
-		}
-		if err := json.Unmarshal([]byte(jsonStr), &geoData); err != nil {
-			continue
-		}
-
-		if geoData.CountryCode != "" {
-			ipCache[ip] = geoIPResult{
-				CountryCode: geoData.CountryCode,
-				CountryName: geoData.CountryName,
+			if res.CountryCode != "" {
+				ipCache[ip] = geoIPResult{
+					CountryCode: res.CountryCode,
+					CountryName: res.CountryName,
+				}
 			}
 		}
 	}
@@ -732,18 +720,38 @@ func GenerateVersionHistoryChartHTML(history []VersionHistoryEntry, chartWidth, 
 		labelInterval = 1
 	}
 
-	sb.WriteString(fmt.Sprintf("<div style='display: flex; margin-left: 40px; font-size: 10px; color: #888; min-width: %dpx;'>\n", chartWidth))
+	sb.WriteString(fmt.Sprintf("<div style='position: relative; margin-left: 40px; height: 20px; min-width: %dpx; font-size: 10px; color: #888;'>\n", chartWidth))
+	lastLabelIdx := -1
+	prevYear := ""
 	for i, entry := range history {
-		if i%labelInterval == 0 || i == len(history)-1 {
-			// Show month-day format
-			dateParts := strings.Split(entry.Date, "-")
-			label := entry.Date
-			if len(dateParts) == 3 {
+		isRegular := i%labelInterval == 0
+		isLast := i == len(history)-1
+
+		if !isRegular && !isLast {
+			continue
+		}
+
+		// Skip last label if it would overlap the previous label
+		if isLast && lastLabelIdx >= 0 && (i-lastLabelIdx) < labelInterval/2 {
+			continue
+		}
+
+		dateParts := strings.Split(entry.Date, "-")
+		label := entry.Date
+		if len(dateParts) == 3 {
+			year := dateParts[0]
+			// Show year on first label and when year changes
+			if prevYear == "" || year != prevYear {
+				label = dateParts[0] + "-" + dateParts[1] + "-" + dateParts[2]
+				prevYear = year
+			} else {
 				label = dateParts[1] + "-" + dateParts[2]
 			}
-			width := barWidth * labelInterval
-			sb.WriteString(fmt.Sprintf("<span style='width: %dpx; text-align: left;'>%s</span>\n", width, label))
 		}
+
+		x := i * barWidth
+		sb.WriteString(fmt.Sprintf("<span style='position: absolute; left: %dpx;'>%s</span>\n", x, label))
+		lastLabelIdx = i
 	}
 	sb.WriteString("</div>\n")
 
@@ -761,8 +769,9 @@ func GenerateVersionHistoryChartHTML(history []VersionHistoryEntry, chartWidth, 
 }
 
 // GeneratePieChartHTML generates a CSS-based pie chart with legend
-// maxSlices limits how many distinct slices to show (rest grouped as "Other")
-func GeneratePieChartHTML(items []PieChartItem, maxSlices int) string {
+// GeneratePieChartHTML generates a pie chart. All items are shown — no grouping.
+// The maxSlices parameter is ignored (kept for API compatibility).
+func GeneratePieChartHTML(items []PieChartItem, _ int) string {
 	if len(items) == 0 {
 		return ""
 	}
@@ -776,19 +785,7 @@ func GeneratePieChartHTML(items []PieChartItem, maxSlices int) string {
 		return ""
 	}
 
-	// Group small items into "Other" if we have too many
-	var displayItems []PieChartItem
-	otherCount := 0
-	for i, item := range items {
-		if i < maxSlices-1 || len(items) <= maxSlices {
-			displayItems = append(displayItems, item)
-		} else {
-			otherCount += item.Count
-		}
-	}
-	if otherCount > 0 {
-		displayItems = append(displayItems, PieChartItem{Label: "Other", Count: otherCount})
-	}
+	displayItems := items
 
 	// Build conic-gradient
 	var gradientParts []string
@@ -1282,18 +1279,13 @@ func renderTPDBandwidthTable(metrics []tpdTransportMetric) string {
 			dailyBW[d.Date] = bw
 		}
 
-		idShort := m.ID
-		if len(idShort) > 8 {
-			idShort = idShort[:8]
-		}
-
 		liveStr := "<span style='color:#FF6384'>no</span>"
 		if m.Live {
 			liveStr = "<span style='color:#4BC0C0'>yes</span>"
 		}
 
 		sb.WriteString("<tr style='border-bottom: 1px solid #333;'>")
-		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px;' title='%s'>%s</td>", m.ID, idShort))
+		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; font-size: 11px;'>%s</td>", m.ID))
 		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; text-align: center;'>%s</td>", m.Type))
 		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; text-align: center;'>%s</td>", liveStr))
 
@@ -1453,7 +1445,7 @@ func renderTPDNetworkSummaryHTML() string {
 		return fmt.Sprintf("<p style='color: #FF6384;'>Error fetching TPD network summary: %v</p>", err)
 	}
 
-	l := "<h2>Transport Discovery Network Summary</h2>"
+	l := fmt.Sprintf("<h2>Transport Discovery Network Summary (%s)</h2>", time.Now().UTC().Format("2006-01-02"))
 	l += "<pre>"
 	l += fmt.Sprintf("Total Transports:  %d (%d live)\n", summary.TotalTransports, summary.LiveTransports)
 	l += fmt.Sprintf("Unique Visors:     %d\n", summary.UniqueVisors)
@@ -1476,5 +1468,209 @@ func renderTPDNetworkSummaryHTML() string {
 
 	l += "</pre>"
 	l += fmt.Sprintf("<p style='color: #888; font-size: 0.8em;'>Last updated: %s</p>", summary.LastUpdated)
+	return l
+}
+
+// renderTPDBandwidthHistoryChart generates a bar chart of daily total bandwidth from TPD metrics.
+func renderTPDBandwidthHistoryChart(metrics []tpdTransportMetric) string {
+	// Aggregate bandwidth by date
+	dailyTotals := make(map[string]uint64)
+	for _, m := range metrics {
+		for _, d := range m.Daily {
+			var bw uint64
+			if d.A != nil {
+				bw += d.A.Sent + d.A.Recv
+			}
+			if d.B != nil {
+				bw += d.B.Sent + d.B.Recv
+			}
+			dailyTotals[d.Date] += bw
+		}
+	}
+
+	if len(dailyTotals) == 0 {
+		return "<p>No bandwidth data available.</p>"
+	}
+
+	// Sort dates
+	var dates []string
+	for d := range dailyTotals {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+
+	// Build Chart.js bar chart
+	var labels, data []string
+	for _, d := range dates {
+		parts := strings.Split(d, "-")
+		label := d
+		if len(parts) == 3 {
+			label = parts[1] + "-" + parts[2]
+		}
+		labels = append(labels, fmt.Sprintf("'%s'", label))
+		data = append(data, fmt.Sprintf("%d", dailyTotals[d]))
+	}
+
+	l := "<canvas id='bw-history-chart' width='800' height='300'></canvas>\n"
+	l += "<script src='https://cdn.jsdelivr.net/npm/chart.js'></script>\n"
+	l += "<script>\n"
+	l += "new Chart(document.getElementById('bw-history-chart'), {\n"
+	l += "  type: 'bar',\n"
+	l += "  data: {\n"
+	l += "    labels: [" + strings.Join(labels, ",") + "],\n"
+	l += "    datasets: [{\n"
+	l += "      label: 'Total Bandwidth (bytes)',\n"
+	l += "      data: [" + strings.Join(data, ",") + "],\n"
+	l += "      backgroundColor: '#36A2EB'\n"
+	l += "    }]\n"
+	l += "  },\n"
+	l += "  options: {\n"
+	l += "    responsive: true,\n"
+	l += "    plugins: { legend: { labels: { color: 'white' } } },\n"
+	l += "    scales: {\n"
+	l += "      x: { ticks: { color: 'white' }, grid: { color: '#333' } },\n"
+	l += "      y: { ticks: { color: 'white', callback: function(v) { if(v>=1073741824) return (v/1073741824).toFixed(1)+'GB'; if(v>=1048576) return (v/1048576).toFixed(1)+'MB'; if(v>=1024) return (v/1024).toFixed(1)+'KB'; return v+'B'; } }, grid: { color: '#333' } }\n"
+	l += "    }\n"
+	l += "  }\n"
+	l += "});\n"
+	l += "</script>\n"
+
+	// Summary table
+	l += "<table style='border-collapse:collapse;margin-top:10px;'>"
+	l += "<tr><th style='border:1px solid #444;padding:4px 8px;'>Date</th><th style='border:1px solid #444;padding:4px 8px;'>Bandwidth</th></tr>"
+	for _, d := range dates {
+		parts := strings.Split(d, "-")
+		label := d
+		if len(parts) == 3 {
+			label = parts[1] + "-" + parts[2]
+		}
+		l += fmt.Sprintf("<tr><td style='border:1px solid #444;padding:4px 8px;'>%s</td><td style='border:1px solid #444;padding:4px 8px;'>%s</td></tr>", label, formatBytesChart(dailyTotals[d]))
+	}
+	l += "</table>"
+
+	return l
+}
+
+// renderTPDVisorBandwidthChart generates a stacked bar chart of per-visor bandwidth from TPD metrics.
+func renderTPDVisorBandwidthChart(metrics []tpdTransportMetric) string {
+	// Aggregate bandwidth per visor (by edge PKs) per date
+	type visorBW struct {
+		pk      string
+		daily   map[string]uint64
+		totalBW uint64
+	}
+
+	visorMap := make(map[string]*visorBW)
+	for _, m := range metrics {
+		for _, edge := range m.Edges {
+			if _, ok := visorMap[edge]; !ok {
+				visorMap[edge] = &visorBW{pk: edge, daily: make(map[string]uint64)}
+			}
+		}
+		for _, d := range m.Daily {
+			var bw uint64
+			if d.A != nil {
+				bw += d.A.Sent + d.A.Recv
+			}
+			if d.B != nil {
+				bw += d.B.Sent + d.B.Recv
+			}
+			// Attribute to both edges
+			for _, edge := range m.Edges {
+				if v, ok := visorMap[edge]; ok {
+					v.daily[d.Date] += bw
+					v.totalBW += bw
+				}
+			}
+		}
+	}
+
+	if len(visorMap) == 0 {
+		return "<p>No per-visor bandwidth data available.</p>"
+	}
+
+	// Sort visors by total bandwidth, take top 20
+	var allVisors []*visorBW
+	for _, v := range visorMap {
+		allVisors = append(allVisors, v)
+	}
+	sort.Slice(allVisors, func(i, j int) bool {
+		return allVisors[i].totalBW > allVisors[j].totalBW
+	})
+
+	maxVisors := 20
+	if len(allVisors) < maxVisors {
+		maxVisors = len(allVisors)
+	}
+	topVisors := allVisors[:maxVisors]
+
+	// Collect all dates
+	dateSet := make(map[string]struct{})
+	for _, v := range topVisors {
+		for d := range v.daily {
+			dateSet[d] = struct{}{}
+		}
+	}
+	var dates []string
+	for d := range dateSet {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+
+	// Build labels
+	var labels []string
+	for _, d := range dates {
+		parts := strings.Split(d, "-")
+		label := d
+		if len(parts) == 3 {
+			label = parts[1] + "-" + parts[2]
+		}
+		labels = append(labels, fmt.Sprintf("'%s'", label))
+	}
+
+	// Colors for datasets
+	colors := []string{
+		"#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF",
+		"#FF9F40", "#C9CBCF", "#7BC8A4", "#E7E9ED", "#FF6B6B",
+		"#4ECDC4", "#45B7D1", "#96CEB4", "#FFEEAD", "#D4A5A5",
+		"#9B59B6", "#3498DB", "#E74C3C", "#2ECC71", "#F39C12",
+	}
+
+	// Build datasets
+	var datasets []string
+	for i, v := range topVisors {
+		var data []string
+		for _, d := range dates {
+			data = append(data, fmt.Sprintf("%d", v.daily[d]))
+		}
+		shortPK := v.pk
+		if len(shortPK) > 12 {
+			shortPK = shortPK[:8] + "..."
+		}
+		color := colors[i%len(colors)]
+		datasets = append(datasets, fmt.Sprintf("{ label: '%s', data: [%s], backgroundColor: '%s' }",
+			shortPK, strings.Join(data, ","), color))
+	}
+
+	l := "<canvas id='visor-bw-chart' width='800' height='400'></canvas>\n"
+	l += "<script src='https://cdn.jsdelivr.net/npm/chart.js'></script>\n"
+	l += "<script>\n"
+	l += "new Chart(document.getElementById('visor-bw-chart'), {\n"
+	l += "  type: 'bar',\n"
+	l += "  data: {\n"
+	l += "    labels: [" + strings.Join(labels, ",") + "],\n"
+	l += "    datasets: [" + strings.Join(datasets, ",\n") + "]\n"
+	l += "  },\n"
+	l += "  options: {\n"
+	l += "    responsive: true,\n"
+	l += "    scales: {\n"
+	l += "      x: { stacked: true, ticks: { color: 'white' }, grid: { color: '#333' } },\n"
+	l += "      y: { stacked: true, ticks: { color: 'white', callback: function(v) { if(v>=1073741824) return (v/1073741824).toFixed(1)+'GB'; if(v>=1048576) return (v/1048576).toFixed(1)+'MB'; if(v>=1024) return (v/1024).toFixed(1)+'KB'; return v+'B'; } }, grid: { color: '#333' } }\n"
+	l += "    },\n"
+	l += "    plugins: { legend: { labels: { color: 'white', font: { size: 10 } } } }\n"
+	l += "  }\n"
+	l += "});\n"
+	l += "</script>\n"
+
 	return l
 }
