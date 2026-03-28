@@ -302,14 +302,28 @@ func server(e error) {
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines() //nolint:errcheck,gosec
-			c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                            //nolint:errcheck,gosec,staticcheck
+			c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n\n", surveycount)))                          //nolint:errcheck,gosec,staticcheck
 			c.Writer.Flush()
-			st, err := script.Exec(`skywire cli log st -d ` + wd + `/log_backups -r`).Bytes()
+			// List visor directories with survey status
+			backupsDir := filepath.Join(wd, "log_backups")
+			dirEntries, err := os.ReadDir(backupsDir)
 			if err != nil {
-				log.WithError(err).Error()
-				c.Writer.Write([]byte(err.Error())) //nolint:errcheck,gosec
+				c.Writer.Write([]byte(fmt.Sprintf("Error reading log_backups: %v\n", err))) //nolint:errcheck,gosec
+			} else {
+				for _, entry := range dirEntries {
+					if !entry.IsDir() {
+						continue
+					}
+					pk := entry.Name()
+					surveyPath := filepath.Join(backupsDir, pk, "node-info.json")
+					_, surveyErr := os.Stat(surveyPath)
+					status := "<span style='color:#4BC0C0'>survey</span>"
+					if surveyErr != nil {
+						status = "<span style='color:#FF6384'>no survey</span>"
+					}
+					c.Writer.Write([]byte(fmt.Sprintf("<a href='/log-collection/tree/%s'>%s</a>  %s\n", pk, pk, status))) //nolint:errcheck,gosec
+				}
 			}
-			c.Writer.Write(ansihtml.ConvertToHTML(st)) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -608,18 +622,15 @@ func server(e error) {
 			l += "<a id='top'></a>"
 			l += navlinks
 			l += "<h1>Network Bandwidth History</h1>"
-			l += "<p>Shows daily total bandwidth for qualifying visors (≥ minimum bandwidth threshold).</p>"
+			l += "<p>Shows daily total bandwidth across all transports (from Transport Discovery).</p>"
 
-			histDir := filepath.Join(wd, "hist")
-			history, err := ParseHistoricBandwidthData(histDir)
+			tpdMetrics, err := fetchTPDBandwidthMetrics(7)
 			if err != nil {
-				l += fmt.Sprintf("<p>Error loading bandwidth data: %v</p>", err)
-			} else if len(history) == 0 {
-				l += "<p>No bandwidth history data available. Run <code>bw-collect</code> to start collecting.</p>"
+				l += fmt.Sprintf("<p>Error fetching TPD bandwidth data: %v</p>", err)
+			} else if len(tpdMetrics) == 0 {
+				l += "<p>No bandwidth data available from Transport Discovery.</p>"
 			} else {
-				chartWidth := 800
-				chartHeight := 300
-				l += GenerateBandwidthHistoryChartHTML(history, chartWidth, chartHeight)
+				l += renderTPDBandwidthHistoryChart(tpdMetrics)
 			}
 
 			l += "<br>" + htmltoplink
@@ -641,18 +652,15 @@ func server(e error) {
 			l += "<a id='top'></a>"
 			l += navlinks
 			l += "<h1>Per-Visor Bandwidth History</h1>"
-			l += "<p>Shows daily bandwidth per visor for reward-eligible visors. Top 20 visors by total bandwidth shown individually.</p>"
+			l += "<p>Shows daily bandwidth per visor from Transport Discovery. Top 20 visors by total bandwidth shown individually.</p>"
 
-			histDir := filepath.Join(wd, "hist")
-			history, err := ParseHistoricBandwidthData(histDir)
+			tpdMetrics, err := fetchTPDBandwidthMetrics(7)
 			if err != nil {
-				l += fmt.Sprintf("<p>Error loading bandwidth data: %v</p>", err)
-			} else if len(history) == 0 {
-				l += "<p>No bandwidth history data available.</p>"
+				l += fmt.Sprintf("<p>Error fetching TPD bandwidth data: %v</p>", err)
+			} else if len(tpdMetrics) == 0 {
+				l += "<p>No bandwidth data available from Transport Discovery.</p>"
 			} else {
-				chartWidth := 800
-				chartHeight := 400
-				l += GenerateVisorBandwidthChartHTML(history, chartWidth, chartHeight, 20)
+				l += renderTPDVisorBandwidthChart(tpdMetrics)
 			}
 
 			l += "<br>" + htmltoplink
