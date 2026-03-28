@@ -17,7 +17,9 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
+	"github.com/oschwald/geoip2-golang/v2"
 
+	geoipcmd "github.com/skycoin/skywire/cmd/geoip/commands"
 	"github.com/skycoin/skywire/deployment"
 )
 
@@ -314,39 +316,25 @@ func generateAndCacheCountryStats() error {
 		visorIPs = append(visorIPs, ipAddr)
 	}
 
-	// Second pass: query geoip for unique IPs only (cache results)
+	// Second pass: query geoip for unique IPs using the embedded database directly
+	// (avoids spawning a subprocess per IP)
 	ipCache := make(map[string]geoIPResult)
 
-	for ip := range ipToVisors {
-		// Query geoip for this IP
-		geoResult, err := script.Exec(`skywire svc ip ` + ip).String()
-		if err != nil {
-			continue
-		}
-
-		// Parse JSON response (skip log line if present)
-		lines := strings.Split(geoResult, "\n")
-		var jsonStr string
-		for _, line := range lines {
-			if strings.HasPrefix(strings.TrimSpace(line), "{") {
-				idx := strings.Index(geoResult, line)
-				jsonStr = geoResult[idx:]
-				break
+	db, dbErr := geoip2.OpenBytes(geoipcmd.EmbeddedGeoIP())
+	if dbErr != nil {
+		fmt.Printf("Warning: failed to open embedded GeoIP database: %v\n", dbErr)
+	} else {
+		defer db.Close() //nolint:errcheck,gosec
+		for ip := range ipToVisors {
+			res, err := geoipcmd.LookupIP(db, ip)
+			if err != nil {
+				continue
 			}
-		}
-
-		var geoData struct {
-			CountryCode string `json:"country_code"`
-			CountryName string `json:"country_name"`
-		}
-		if err := json.Unmarshal([]byte(jsonStr), &geoData); err != nil {
-			continue
-		}
-
-		if geoData.CountryCode != "" {
-			ipCache[ip] = geoIPResult{
-				CountryCode: geoData.CountryCode,
-				CountryName: geoData.CountryName,
+			if res.CountryCode != "" {
+				ipCache[ip] = geoIPResult{
+					CountryCode: res.CountryCode,
+					CountryName: res.CountryName,
+				}
 			}
 		}
 	}
