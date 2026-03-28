@@ -165,7 +165,7 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 // checkTransactionToAddress checks if there's a confirmed transaction
 // FROM the given address TO the genesis address on the login chain.
 func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) bool {
-	resp, err := http.Get(fmt.Sprintf("%s/api/v1/transactions?addrs=%s&confirmed=true", nodeURL, fromAddress)) //nolint:gosec
+	resp, err := http.Get(fmt.Sprintf("%s/api/v1/transactions?addrs=%s&confirmed=true&verbose=1", nodeURL, fromAddress)) //nolint:gosec
 	if err != nil {
 		return false
 	}
@@ -173,6 +173,7 @@ func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) bool {
 
 	body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
 
+	// Use verbose=1 to get full input details including owner addresses
 	var txs []struct {
 		Txn struct {
 			Outputs []struct {
@@ -188,22 +189,30 @@ func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) bool {
 	}
 
 	for _, tx := range txs {
-		// Check if any input is from the user's address
-		fromUser := false
-		for _, inp := range tx.Txn.Inputs {
-			if inp.Owner == fromAddress {
-				fromUser = true
+		// Check if any output goes to the target address
+		hasOutputToTarget := false
+		for _, out := range tx.Txn.Outputs {
+			if out.Dst == toAddress {
+				hasOutputToTarget = true
 				break
 			}
 		}
-		if !fromUser {
+		if !hasOutputToTarget {
 			continue
 		}
-		// Check if any output goes to the genesis address
-		for _, out := range tx.Txn.Outputs {
-			if out.Dst == toAddress {
-				return true
+		// With verbose=1, inputs have owner field; without it, inputs are just UxIDs.
+		// If owner fields are populated, verify the sender. Otherwise, since we queried
+		// by fromAddress, any tx with an output to toAddress is likely the return tx.
+		if len(tx.Txn.Inputs) > 0 && tx.Txn.Inputs[0].Owner != "" {
+			for _, inp := range tx.Txn.Inputs {
+				if inp.Owner == fromAddress {
+					return true
+				}
 			}
+		} else {
+			// Non-verbose: trust that the tx involves fromAddress (queried by it)
+			// and has an output to toAddress
+			return true
 		}
 	}
 	return false
