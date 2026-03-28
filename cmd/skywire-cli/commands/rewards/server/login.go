@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bitfield/script"
@@ -49,6 +50,11 @@ var (
 	sessionsMu      sync.RWMutex
 	pendingLogins   = make(map[string]*pendingLogin) // challenge -> pending login
 	pendingLoginsMu sync.RWMutex
+	// Genesis wallet seed for deriving verify addresses.
+	// Loaded from login_genesis.json on first use.
+	genesisSeed     []byte
+	genesisSeedOnce sync.Once
+	verifyAddrIndex uint32 // atomic counter for next verify address index
 )
 
 func generateSessionID() string {
@@ -63,11 +69,54 @@ func generateChallenge() string {
 	return hex.EncodeToString(b)
 }
 
-// generateVerifyAddress creates a unique skycoin address for a login challenge.
-// The user sends coins to this address to prove wallet ownership.
-// We only check its balance — never spend from it.
+// loadGenesisSeed reads the genesis wallet seed from login_genesis.json.
+func loadGenesisSeed() {
+	genesisPath := filepath.Join(wd, "login_genesis.json")
+	data, err := os.ReadFile(genesisPath) //nolint:gosec
+	if err != nil {
+		fmt.Printf("Warning: could not read genesis wallet for verify addresses: %v\n", err)
+		return
+	}
+	var wallet struct {
+		Meta struct {
+			Seed string `json:"seed"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(data, &wallet); err != nil || wallet.Meta.Seed == "" {
+		fmt.Printf("Warning: could not parse genesis wallet seed: %v\n", err)
+		return
+	}
+	genesisSeed = []byte(wallet.Meta.Seed)
+	// Start at index 1 — index 0 is the genesis address
+	atomic.StoreUint32(&verifyAddrIndex, 1)
+	fmt.Printf("Login chain: loaded genesis seed for verify address derivation\n")
+}
+
+// generateVerifyAddress derives a unique skycoin address from the genesis wallet
+// for a login challenge. Uses an incrementing index so each challenge gets a
+// different address, all derived from the same deterministic wallet.
 func generateVerifyAddress() string {
-	pk, _ := skycoincipher.GenerateKeyPair()
+	genesisSeedOnce.Do(loadGenesisSeed)
+
+	if genesisSeed == nil {
+		// Fallback to random address if seed not available
+		pk, _ := skycoincipher.GenerateKeyPair()
+		return skycoincipher.AddressFromPubKey(pk).String()
+	}
+
+	idx := atomic.AddUint32(&verifyAddrIndex, 1)
+	// Derive address at this index from the genesis seed
+	seckeys, err := skycoincipher.GenerateDeterministicKeyPairs(genesisSeed, int(idx))
+	if err != nil || len(seckeys) < int(idx) {
+		// Fallback
+		pk, _ := skycoincipher.GenerateKeyPair()
+		return skycoincipher.AddressFromPubKey(pk).String()
+	}
+	pk, err := skycoincipher.PubKeyFromSecKey(seckeys[idx-1])
+	if err != nil {
+		pk2, _ := skycoincipher.GenerateKeyPair()
+		return skycoincipher.AddressFromPubKey(pk2).String()
+	}
 	return skycoincipher.AddressFromPubKey(pk).String()
 }
 
