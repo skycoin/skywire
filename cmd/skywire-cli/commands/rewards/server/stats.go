@@ -781,8 +781,9 @@ func GenerateVersionHistoryChartHTML(history []VersionHistoryEntry, chartWidth, 
 }
 
 // GeneratePieChartHTML generates a CSS-based pie chart with legend
-// maxSlices limits how many distinct slices to show (rest grouped as "Other")
-func GeneratePieChartHTML(items []PieChartItem, maxSlices int) string {
+// GeneratePieChartHTML generates a pie chart. All items are shown — no grouping.
+// The maxSlices parameter is ignored (kept for API compatibility).
+func GeneratePieChartHTML(items []PieChartItem, _ int) string {
 	if len(items) == 0 {
 		return ""
 	}
@@ -796,19 +797,7 @@ func GeneratePieChartHTML(items []PieChartItem, maxSlices int) string {
 		return ""
 	}
 
-	// Group small items into "Other" if we have too many
-	var displayItems []PieChartItem
-	otherCount := 0
-	for i, item := range items {
-		if i < maxSlices-1 || len(items) <= maxSlices {
-			displayItems = append(displayItems, item)
-		} else {
-			otherCount += item.Count
-		}
-	}
-	if otherCount > 0 {
-		displayItems = append(displayItems, PieChartItem{Label: "Other", Count: otherCount})
-	}
+	displayItems := items
 
 	// Build conic-gradient
 	var gradientParts []string
