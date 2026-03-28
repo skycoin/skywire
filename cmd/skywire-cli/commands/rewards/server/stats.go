@@ -1282,18 +1282,13 @@ func renderTPDBandwidthTable(metrics []tpdTransportMetric) string {
 			dailyBW[d.Date] = bw
 		}
 
-		idShort := m.ID
-		if len(idShort) > 8 {
-			idShort = idShort[:8]
-		}
-
 		liveStr := "<span style='color:#FF6384'>no</span>"
 		if m.Live {
 			liveStr = "<span style='color:#4BC0C0'>yes</span>"
 		}
 
 		sb.WriteString("<tr style='border-bottom: 1px solid #333;'>")
-		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px;' title='%s'>%s</td>", m.ID, idShort))
+		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; font-size: 11px;'>%s</td>", m.ID))
 		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; text-align: center;'>%s</td>", m.Type))
 		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; text-align: center;'>%s</td>", liveStr))
 
