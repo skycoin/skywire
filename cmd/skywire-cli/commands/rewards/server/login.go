@@ -132,7 +132,10 @@ type rewardHistoryEntry struct {
 func findRewardHistory(histDir, address string) []rewardHistoryEntry {
 	// Build set of addresses to match against
 	matchAddrs := make(map[string]bool)
-	_, isXpub, _ := rewardconfig.ValidateRewardAddress(address)
+	_, isXpub, vaErr := rewardconfig.ValidateRewardAddress(address)
+	if vaErr != nil {
+		return nil
+	}
 	if isXpub {
 		// Match the xpub itself (in case it appears in the CSV)
 		matchAddrs[address] = true
