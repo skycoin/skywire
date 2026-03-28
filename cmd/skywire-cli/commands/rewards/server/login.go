@@ -366,6 +366,30 @@ func checkTransactionToAddress(nodeURL, fromAddress, toAddress string, challenge
 func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 	backupsDir := filepath.Join(wd, "log_backups")
 
+	// Periodically clean up expired challenges and sessions
+	go func() {
+		for {
+			time.Sleep(5 * time.Minute)
+			now := time.Now()
+
+			pendingLoginsMu.Lock()
+			for k, p := range pendingLogins {
+				if now.After(p.ExpiresAt) {
+					delete(pendingLogins, k)
+				}
+			}
+			pendingLoginsMu.Unlock()
+
+			sessionsMu.Lock()
+			for k, s := range sessions {
+				if now.After(s.ExpiresAt) {
+					delete(sessions, k)
+				}
+			}
+			sessionsMu.Unlock()
+		}
+	}()
+
 	// Login page
 	r.GET("/login", func(c *gin.Context) {
 		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
