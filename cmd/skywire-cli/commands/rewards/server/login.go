@@ -504,36 +504,61 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		c.Writer.WriteHeader(http.StatusOK)
 
 		l := loginPageHeader("Account")
-		l += "<style>pre.survey { background: #111; padding: 12px; overflow-x: auto; font-size: 12px; border: 1px solid #333; max-height: 400px; overflow-y: auto; }</style>"
 		l += navlinks
 		l += "<h1>Account</h1>"
 		l += "<p>Logged in as: <code>" + sess.Address + "</code></p>"
 		l += fmt.Sprintf("<p>Visors: %d</p>", len(sess.Visors))
-
+		l += "<ul>"
 		for _, v := range sess.Visors {
-			l += "<hr>"
-			l += "<h3>Visor <code>" + v + "</code></h3>"
-			surveyPath := filepath.Join(backupsDir, v, "node-info.json")
-			surveyData, err := os.ReadFile(surveyPath) //nolint:gosec
-			if err != nil {
-				l += "<p class='error'>Survey not available</p>"
-				continue
-			}
-			// Pretty-print the JSON
-			var prettyJSON json.RawMessage
-			if json.Unmarshal(surveyData, &prettyJSON) == nil {
-				pretty, err := json.MarshalIndent(prettyJSON, "", "  ")
-				if err == nil {
-					surveyData = pretty
-				}
-			}
-			l += "<pre class='survey'>" + strings.ReplaceAll(string(surveyData), "<", "&lt;") + "</pre>"
+			l += "<li><a href='/account/survey/" + v + "'><code>" + v + "</code></a></li>"
 		}
-
-		l += "<hr>"
+		l += "</ul>"
 		l += "<p><a href='/logout'>Logout</a></p>"
 		l += "</body></html>"
 		c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+	})
+
+	// Authenticated survey endpoint — only serves surveys for visors in the user's session
+	r.GET("/account/survey/:pk", func(c *gin.Context) {
+		sessionID, err := c.Cookie("session")
+		if err != nil {
+			c.Redirect(http.StatusFound, "/login?msg=Please+log+in")
+			return
+		}
+
+		sessionsMu.RLock()
+		sess, ok := sessions[sessionID]
+		sessionsMu.RUnlock()
+
+		if !ok || time.Now().After(sess.ExpiresAt) {
+			c.Redirect(http.StatusFound, "/login?msg=Session+expired")
+			return
+		}
+
+		pk := c.Param("pk")
+
+		// Verify this PK belongs to the logged-in user's visors
+		authorized := false
+		for _, v := range sess.Visors {
+			if v == pk {
+				authorized = true
+				break
+			}
+		}
+		if !authorized {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized for this visor"})
+			return
+		}
+
+		surveyPath := filepath.Join(backupsDir, pk, "node-info.json")
+		surveyData, err := os.ReadFile(surveyPath) //nolint:gosec
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "survey not available"})
+			return
+		}
+
+		// Serve as JSON
+		c.Data(http.StatusOK, "application/json", surveyData)
 	})
 
 	// Logout
