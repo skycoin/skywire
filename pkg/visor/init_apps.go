@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
@@ -530,6 +531,24 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 			v.pushCloseStack("lan_dmsg_server", func() error {
 				return lanServer.Server.Close()
 			})
+
+			// Connect the hypervisor's own DMSG client to the LAN server.
+			// This makes the hypervisor reachable by LAN visors through the LAN server
+			// instead of routing through public DMSG servers.
+			go func() {
+				lanEntry := &dmsgdisc.Entry{
+					Static: lanServer.PK,
+					Server: &dmsgdisc.Server{
+						Address:           lanServer.Address,
+						AvailableSessions: 100,
+					},
+				}
+				if err := v.dmsgC.EnsureSession(ctx, lanEntry); err != nil {
+					v.log.WithError(err).Warn("Failed to connect hypervisor DMSG client to LAN server")
+				} else {
+					v.log.Info("Hypervisor DMSG client connected to LAN DMSG server")
+				}
+			}()
 		}
 	}
 
