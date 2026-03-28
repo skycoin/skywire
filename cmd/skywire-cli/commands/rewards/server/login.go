@@ -553,15 +553,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		l := loginPageHeader("Verify Wallet Ownership")
 		l += navlinks
 		l += "<h1>Verify Wallet Ownership</h1>"
-		if pending.IsXpub {
-			l += "<p>To prove you control the wallet for xpub <code>" + pending.Address[:20] + "...</code>, "
-			l += "please send coins from the change chain address below to the login address.</p>"
-			l += "<p><strong>Your login address (change chain):</strong> <code>" + pending.LoginAddress + "</code></p>"
-		} else {
-			l += "<p>To prove you control address <code>" + pending.Address + "</code>, "
-			l += "please send coins from that address to the login address below.</p>"
-		}
-		l += "<p><strong>Send to:</strong> <code>" + pending.VerifyAddress + "</code></p>"
+
 		// Use the current request's host as the node URL for the wallet
 		scheme := "https"
 		if c.Request.TLS == nil {
@@ -571,11 +563,24 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			scheme = fwdProto
 		}
 		nodeURL := scheme + "://" + c.Request.Host
-		l += "<p>Use the Skycoin Web Wallet connected to this login chain node to send the transaction.</p>"
-		l += "<p>Start the wallet with: <code>skywire skycoin web -n " + nodeURL + " -p 8006</code></p>"
+
+		l += "<h3>Step 1: Open the Skycoin Web Wallet</h3>"
+		l += "<p>Start the wallet connected to the login chain:</p>"
+		l += "<pre>skywire skycoin web -n " + nodeURL + " -p 8006</pre>"
 		l += "<p>Then open <a href='http://127.0.0.1:8006' target='_blank'>http://127.0.0.1:8006</a></p>"
-		l += "<p class='info'>This verifies that you hold the private key for your reward wallet. "
-		l += "The login chain resets periodically — coins have no real value.</p>"
+
+		l += "<h3>Step 2: Send coins to the verification address</h3>"
+		if pending.IsXpub {
+			l += "<p>From the <strong>change chain</strong> address in your wallet:</p>"
+			l += "<p><strong>From:</strong> <code>" + pending.LoginAddress + "</code></p>"
+		} else {
+			l += "<p>From your reward address:</p>"
+			l += "<p><strong>From:</strong> <code>" + pending.Address + "</code></p>"
+		}
+		l += "<p><strong>Send any amount to:</strong> <code>" + pending.VerifyAddress + "</code></p>"
+
+		l += "<p class='info'>This proves you control the private key for your reward wallet. "
+		l += "The login chain is ephemeral — coins have no real value.</p>"
 		l += "<hr>"
 		l += "<p>Waiting for transaction confirmation...</p>"
 		l += "<script>"

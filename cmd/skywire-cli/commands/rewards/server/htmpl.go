@@ -60,9 +60,9 @@ func init() {
 	nl = append(nl, "\n<br>\n")
 	navlinks = strings.Join(nl, "")
 
-	htmlRewardPageTemplate = `<!doctype html><html lang="en"><head><title>Skycoin Reward Calculation and Distribution</title>
-<style type="text/css">a { color: #3399FF; } a:visited { color: #FF00FF; } pre { font-family:Courier New; font-size:10pt; } body { background-color:black; color:white; font-family:monospace; }</style>
-</head><body><pre>` + navlinks + `{{.Page.Content}}</pre></body></html>`
+	// htmlRewardPageTemplate is rendered inside the base htmlMainPageTemplate
+	// which already provides the HTML document wrapper and navigation.
+	htmlRewardPageTemplate = `{{.Page.Content}}`
 
 }
 
