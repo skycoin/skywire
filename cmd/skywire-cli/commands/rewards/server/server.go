@@ -707,10 +707,12 @@ func server(e error) {
 			}
 			l += "\n" + string(ansihtml.ConvertToHTML([]byte(calendar)))
 			l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
-			l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
 			l += "<thead>\n"
 			l += "<tr>\n"
-			l += "<th style='text-align: center;'> <br> <u>RewardDate</u> </th><th style='text-align: center;'> Pool 1 <br> <u>SKY/Share</u> </th><th style='text-align: center;'> Pool 2 <br> </th><th style='text-align: center;'> Distributed <br> <u>[<span style='color: red;'>&#10060;</span>/<span style='color: green;'>&#10004;</span>]</u> </th>\n"
+			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: left;'>Date</th>"
+			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right;'>Pool 1 SKY/Share</th>"
+			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right;'>Pool 2</th>"
+			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: center;'>Distributed</th>\n"
 			l += "</tr>\n"
 			l += "</thead>\n"
 			l += "<tbody>\n"
@@ -752,15 +754,15 @@ func server(e error) {
 				} else {
 					distributedIcon = "<span style='color: red;'>&#10060;</span>"
 				}
-				l += "<tr>\n"
-				l += "<td style='text-align: center;'><a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a></td>\n"
-				l += "<td style='text-align: center;'>" + skycoinpershare1 + "</td>\n"
+				l += "<tr style='border-bottom: 1px solid #333;'>\n"
+				l += "<td style='padding: 4px 12px; text-align: left;'><a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a></td>\n"
+				l += "<td style='padding: 4px 12px; text-align: right; font-family: monospace;'>" + skycoinpershare1 + "</td>\n"
 				if skycoinpershare2 != "" {
-					l += "<td style='text-align: center;'>" + skycoinpershare2 + pool2Label + "</td>\n"
+					l += "<td style='padding: 4px 12px; text-align: right; font-family: monospace;'>" + skycoinpershare2 + pool2Label + "</td>\n"
 				} else {
-					l += "<td style='text-align: center;'></td>\n"
+					l += "<td style='padding: 4px 12px;'></td>\n"
 				}
-				l += "<td style='text-align: center;'>" + distributedIcon + "</td>\n"
+				l += "<td style='padding: 4px 12px; text-align: center;'>" + distributedIcon + "</td>\n"
 				l += "</tr>\n"
 			}
 			l += "</tbody>\n</table>\n"
