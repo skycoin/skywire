@@ -308,7 +308,7 @@ func server(e error) {
 			backupsDir := filepath.Join(wd, "log_backups")
 			dirEntries, err := os.ReadDir(backupsDir)
 			if err != nil {
-				c.Writer.Write([]byte(fmt.Sprintf("Error reading log_backups: %v\n", err))) //nolint:errcheck,gosec
+				fmt.Fprintf(c.Writer, "Error reading log_backups: %v\n", err) //nolint:errcheck,gosec
 			} else {
 				for _, entry := range dirEntries {
 					if !entry.IsDir() {
@@ -321,7 +321,7 @@ func server(e error) {
 					if surveyErr != nil {
 						status = "<span style='color:#FF6384'>no survey</span>"
 					}
-					c.Writer.Write([]byte(fmt.Sprintf("<a href='/log-collection/tree/%s'>%s</a>  %s\n", pk, pk, status))) //nolint:errcheck,gosec
+					fmt.Fprintf(c.Writer, "<a href='/log-collection/tree/%s'>%s</a>  %s\n", pk, pk, status) //nolint:errcheck,gosec
 				}
 			}
 			c.Writer.Flush()
@@ -710,7 +710,7 @@ func server(e error) {
 			l += "<thead>\n"
 			l += "<tr>\n"
 			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: left;'>Date</th>"
-			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right;'>Pool 1 SKY/Share</th>"
+			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right;'>Pool 1</th>"
 			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right;'>Pool 2</th>"
 			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: center;'>Distributed</th>\n"
 			l += "</tr>\n"

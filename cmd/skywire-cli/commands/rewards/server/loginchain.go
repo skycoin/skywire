@@ -48,37 +48,6 @@ distribution_addresses = [
 ]
 `
 
-// loginPeerTOMLTemplate is the fiber.toml for the peer node that serves the wallet API.
-const loginPeerTOMLTemplate = `# Login chain peer node — auto-generated, do not edit
-[node]
-genesis_signature_str = ""
-genesis_address_str = ""
-blockchain_pubkey_str = ""
-blockchain_seckey_str = ""
-genesis_timestamp = %d
-genesis_coin_volume = 1000000000
-default_connections = ["127.0.0.1:6001"]
-peer_list_url = ""
-port = 6002
-web_interface_port = 6422
-display_name = "SkywireLogin"
-ticker = "SWL"
-coin_hours_display_name = "Login Hours"
-coin_hours_display_name_singular = "Login Hour"
-coin_hours_ticker = "SLH"
-bip44_coin = 8001
-explorer_url = ""
-
-[params]
-max_coin_supply = 1000000000
-initial_unlocked_count = 1
-unlock_address_rate = 0
-unlock_time_interval = 0
-distribution_addresses = [
-    "%s",
-]
-`
-
 // addressGenWallet is the JSON format produced by `skycoin cli addressGen`
 // and expected by the GENESIS env var.
 type addressGenWallet struct {

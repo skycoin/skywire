@@ -228,29 +228,28 @@ func findVisorsByRewardAddress(backupsDir, address string) []string {
 }
 
 // checkBalanceOnLoginChain checks the balance of an address on the login chain.
-func checkBalanceOnLoginChain(nodeURL, address string) (coins uint64, hours uint64, err error) {
+func checkBalanceOnLoginChain(nodeURL, address string) (coins uint64, err error) {
 	resp, err := http.Get(fmt.Sprintf("%s/api/v1/balance?addrs=%s", nodeURL, address)) //nolint:gosec
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 	defer resp.Body.Close() //nolint:errcheck,gosec
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
 	var result struct {
 		Confirmed struct {
 			Coins uint64 `json:"coins"`
-			Hours uint64 `json:"hours"`
 		} `json:"confirmed"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
-	return result.Confirmed.Coins, result.Confirmed.Hours, nil
+	return result.Confirmed.Coins, nil
 }
 
 // sendCoinsOnLoginChain sends coins from the genesis wallet to the target address
@@ -298,70 +297,6 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 
 	txID := strings.Trim(strings.TrimSpace(string(injectOut)), `"`)
 	return txID, nil
-}
-
-// checkTransactionToAddress checks if there's a confirmed transaction
-// FROM the given address TO the genesis address on the login chain.
-// Only considers transactions with a block timestamp after challengeTime.
-// Returns the txid of the matching transaction, or empty string if none found.
-func checkTransactionToAddress(nodeURL, fromAddress, toAddress string, challengeTime time.Time) string {
-	resp, err := http.Get(fmt.Sprintf("%s/api/v1/transactions?addrs=%s&confirmed=true&verbose=1", nodeURL, fromAddress)) //nolint:gosec
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close() //nolint:errcheck,gosec
-
-	body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
-
-	// Use verbose=1 to get full input details including owner addresses
-	var txs []struct {
-		Time int64 `json:"time"` // block timestamp (unix seconds)
-		Txn  struct {
-			TxID    string `json:"txid"`
-			Outputs []struct {
-				Dst string `json:"dst"`
-			} `json:"outputs"`
-			Inputs []struct {
-				Owner string `json:"owner"`
-			} `json:"inputs"`
-		} `json:"txn"`
-	}
-	if err := json.Unmarshal(body, &txs); err != nil {
-		return ""
-	}
-
-	challengeUnix := challengeTime.Unix()
-
-	for _, tx := range txs {
-		// Only accept transactions created after the challenge was issued
-		if tx.Time <= challengeUnix {
-			continue
-		}
-
-		// Check if any output goes to the target address
-		hasOutputToTarget := false
-		for _, out := range tx.Txn.Outputs {
-			if out.Dst == toAddress {
-				hasOutputToTarget = true
-				break
-			}
-		}
-		if !hasOutputToTarget {
-			continue
-		}
-		// With verbose=1, inputs have owner field; without it, inputs are just UxIDs.
-		if len(tx.Txn.Inputs) > 0 && tx.Txn.Inputs[0].Owner != "" {
-			for _, inp := range tx.Txn.Inputs {
-				if inp.Owner == fromAddress {
-					return tx.Txn.TxID
-				}
-			}
-		} else {
-			// Non-verbose fallback
-			return tx.Txn.TxID
-		}
-	}
-	return ""
 }
 
 // registerLoginRoutes adds login-related routes to the gin router.
@@ -493,7 +428,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		// Fund the login address on the login chain if needed
 		var fundedTxID string
 		if loginNodeAddr != "" {
-			coins, _, err := checkBalanceOnLoginChain(loginNodeAddr, loginAddress)
+			coins, err := checkBalanceOnLoginChain(loginNodeAddr, loginAddress)
 			if err != nil {
 				fmt.Printf("Warning: failed to check login chain balance: %v\n", err)
 			}
@@ -620,7 +555,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		// Only accepts transactions created after this challenge was issued
 		// Check if the unique verify address received coins.
 		// Each challenge has a unique address, so any balance means this challenge was satisfied.
-		verifyCoins, _, verifyErr := checkBalanceOnLoginChain(loginNodeAddr, pending.VerifyAddress)
+		verifyCoins, verifyErr := checkBalanceOnLoginChain(loginNodeAddr, pending.VerifyAddress)
 		verifyTxID := ""
 		if verifyErr == nil && verifyCoins > 0 {
 			verifyTxID = "verified" // unique address has balance
