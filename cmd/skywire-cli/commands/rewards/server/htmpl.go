@@ -16,51 +16,65 @@ import (
 
 var (
 	// html snippets
-	nl                     []string
 	navlinks               string
 	htmltoplink            = "<a href='#top'>top of page</a>\n"
 	htmlend                = "</pre></body></html>"
-	htmlRewardPageTemplate = `
-{{.Page.Content}}
-`
-	tmpl                 *htmpl.Template
-	htmlPageTemplateData htmlTemplateData
+	htmlRewardPageTemplate string
+	tmpl                   *htmpl.Template
+	htmlPageTemplateData   htmlTemplateData
 )
 
 func init() {
-	// Main navigation links
-	nl = append(nl, "  <a href='/'>fiber</a>")
-	nl = append(nl, "  <a href='/skycoin-rewards'>skycoin rewards</a>")
-	nl = append(nl, "  <a href='/stats'>network stats</a>")
-	nl = append(nl, "  <a href='/stats/version-history'>version history</a>")
-	nl = append(nl, "  <a href='/stats/bandwidth-history'>bandwidth history</a>")
-	nl = append(nl, "  <a href='/stats/visor-bandwidth'>visor bandwidth</a>")
-	nl = append(nl, "  <a href='/transport-graph'>transport graph</a>")
+	// Navigation bar — matches the base template (htmlMainPageTemplate) structure.
+	// Includes inline CSS so pages not using the base template still render correctly.
+	navCSS := `<style>
+nav{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 0;}
+nav a{padding:4px 8px;white-space:nowrap;color:#3399FF;}
+nav a:visited{color:#FF00FF;}
+nav details{display:inline-flex;position:relative;}
+nav details summary{list-style:none;padding:4px 8px;cursor:pointer;color:#3399FF;}
+nav details summary::-webkit-details-marker{display:none;}
+nav details summary::after{content:' ▶';font-size:8px;}
+nav details[open] summary::after{content:' ▼';}
+nav .dropdown{position:absolute;top:100%;left:0;background:#222;border-radius:4px;z-index:100;min-width:max-content;padding:4px 0;border:1px solid #333;}
+nav .dropdown a{display:block;padding:4px 12px;}
+</style>`
 
-	// Log collection section
-	nl = append(nl, "  <details><summary>log collection</summary><div class='dropdown'>")
-	nl = append(nl, "    <a href='/log-collection'>overview</a>")
-	nl = append(nl, "    <a href='/log-collection/tree'>survey index</a>")
-	nl = append(nl, "    <a href='/log-collection/tplogs'>transport logs</a>")
-	nl = append(nl, "  </div></details>")
+	navInner := `<nav>
+  <a href='/'>fiber</a>
+  <a href='/skycoin-rewards'>skycoin rewards</a>
+  <a href='/stats'>network stats</a>
+  <a href='/stats/version-history'>version history</a>
+  <a href='/stats/bandwidth-history'>bandwidth history</a>
+  <a href='/stats/visor-bandwidth'>visor bandwidth</a>
+  <a href='/transport-graph'>transport graph</a>
+  <details><summary>logs</summary><div class='dropdown'>
+    <a href='/log-collection'>overview</a>
+    <a href='/log-collection/tree'>survey index</a>
+    <a href='/log-collection/tplogs'>transport logs</a>
+  </div></details>
+  <details><summary>services</summary><div class='dropdown'>
+    <a href='` + strings.ReplaceAll(deployment.Prod.UptimeTracker, "http://", "https://") + `/uptimes?v=v2'>uptime tracker</a>
+    <a href='` + strings.ReplaceAll(deployment.Prod.AddressResolver, "http://", "https://") + `'>address resolver</a>
+    <a href='` + strings.ReplaceAll(deployment.Prod.TransportDiscovery, "http://", "https://") + `/all-transports'>transport discovery</a>
+  </div></details>
+  <details><summary>dmsg</summary><div class='dropdown'>
+    <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/entries'>entries</a>
+    <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/all_servers'>all servers</a>
+    <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available servers</a>
+  </div></details>
+  <a href='/login'>login</a>
+  <details><summary>community</summary><div class='dropdown'>
+    <a title='@skywire telegram' href='https://t.me/skywire'>skywire telegram</a>
+    <a title='@skywire_reward telegram' href='https://t.me/skywire_reward'>reward notifications</a>
+  </div></details>
+</nav>`
 
-	// External services section
-	nl = append(nl, "  <details><summary>services</summary><div class='dropdown'>")
-	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.UptimeTracker, "http://", "https://")+"/uptimes?v=v2'>uptime tracker</a>")
-	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.AddressResolver, "http://", "https://")+"'>address resolver</a>")
-	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.TransportDiscovery, "http://", "https://")+"/all-transports'>transport discovery</a>")
-	nl = append(nl, "  </div></details>")
+	navlinks = navCSS + navInner
 
-	// DMSG discovery section
-	nl = append(nl, "  <details><summary>dmsg</summary><div class='dropdown'>")
-	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/entries'>entries</a>")
-	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/all_servers'>all servers</a>")
-	nl = append(nl, "    <a href='"+strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://")+"/dmsg-discovery/available_servers'>available servers</a>")
-	nl = append(nl, "  </div></details>")
-
-	nl = append(nl, "  <a href='/login'>login</a>")
-	nl = append(nl, "\n<br>\n")
-	navlinks = strings.Join(nl, "")
+	// htmlRewardPageTemplate is rendered inside the base htmlMainPageTemplate
+	// which already provides the HTML document wrapper and navigation.
+	htmlRewardPageTemplate = `{{.Page.Content}}`
 
 }
 

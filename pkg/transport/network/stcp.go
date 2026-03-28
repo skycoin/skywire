@@ -54,7 +54,12 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 	}
 
 	c.log.Debugf("Dialed %v:%v@%v", rPK, rPort, conn.RemoteAddr())
-	return c.initTransport(ctx, conn, rPK, rPort)
+	tp, err := c.initTransport(ctx, conn, rPK, rPort)
+	if err != nil {
+		conn.Close() //nolint:errcheck,gosec
+		return nil, err
+	}
+	return tp, nil
 }
 
 // Start implements Client interface

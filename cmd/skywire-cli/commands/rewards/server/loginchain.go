@@ -48,37 +48,6 @@ distribution_addresses = [
 ]
 `
 
-// loginPeerTOMLTemplate is the fiber.toml for the peer node that serves the wallet API.
-const loginPeerTOMLTemplate = `# Login chain peer node — auto-generated, do not edit
-[node]
-genesis_signature_str = ""
-genesis_address_str = ""
-blockchain_pubkey_str = ""
-blockchain_seckey_str = ""
-genesis_timestamp = %d
-genesis_coin_volume = 1000000000
-default_connections = ["127.0.0.1:6001"]
-peer_list_url = ""
-port = 6002
-web_interface_port = 6422
-display_name = "SkywireLogin"
-ticker = "SWL"
-coin_hours_display_name = "Login Hours"
-coin_hours_display_name_singular = "Login Hour"
-coin_hours_ticker = "SLH"
-bip44_coin = 8001
-explorer_url = ""
-
-[params]
-max_coin_supply = 1000000000
-initial_unlocked_count = 1
-unlock_address_rate = 0
-unlock_time_interval = 0
-distribution_addresses = [
-    "%s",
-]
-`
-
 // addressGenWallet is the JSON format produced by `skycoin cli addressGen`
 // and expected by the GENESIS env var.
 type addressGenWallet struct {
@@ -103,7 +72,26 @@ The reward system UI server connects to the peer node:
   skywire cli rewards ui --login-node http://127.0.0.1:6422
 
 Blockchain data is wiped on every startup (fresh chain).
-The genesis wallet (login_genesis.json) is preserved across restarts.`,
+The genesis wallet (login_genesis.json) is preserved across restarts.
+
+IMPORTANT: Run this command from the same directory as the reward
+server's -W working directory, or use -W to specify it explicitly.
+The loginchain reads login_genesis.json and login_fiber.toml from
+the working directory. A mismatch causes "no unspents to spend".
+
+LOGIN VERIFICATION FLOW
+
+  1. User submits their reward address (skycoin address or xpub)
+  2. Server funds a login address with coins on the login chain
+  3. User sends those coins back to the genesis address
+  4. Server confirms the transaction, proving wallet ownership
+
+For xpub users, the login address is derived from the change chain
+(m/44'/coin'/0'/1/0) to avoid collision with receiving addresses.
+This requires the account-level xpub (--path=0), not the external
+chain xpub shown in the Skycoin web wallet GUI (--path=0/0).
+
+See 'skywire reward --help' for xpub setup instructions.`,
 	Run: func(_ *cobra.Command, _ []string) {
 		runLoginChain()
 	},
