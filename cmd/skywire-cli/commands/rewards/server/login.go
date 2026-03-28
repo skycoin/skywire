@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +61,80 @@ func generateChallenge() string {
 	b := make([]byte, 16)
 	rand.Read(b) //nolint:errcheck,gosec
 	return hex.EncodeToString(b)
+}
+
+// rewardHistoryEntry represents one reward payment for a date.
+type rewardHistoryEntry struct {
+	Date   string
+	Amount string
+}
+
+// findRewardHistory scans hist/*_rewardtxn0.csv files for reward payments
+// to the given address. For xpub keys, derives external chain addresses
+// (m/account'/0/0 through m/account'/0/19) to match against.
+func findRewardHistory(histDir, address string) []rewardHistoryEntry {
+	// Build set of addresses to match against
+	matchAddrs := make(map[string]bool)
+	_, isXpub, _ := rewardconfig.ValidateRewardAddress(address)
+	if isXpub {
+		// Match the xpub itself (in case it appears in the CSV)
+		matchAddrs[address] = true
+		// Derive first 20 external chain addresses
+		for i := uint32(0); i < 20; i++ {
+			derived, err := rewardconfig.DeriveExternalAddressFromXpub(address, i)
+			if err != nil {
+				break
+			}
+			matchAddrs[derived] = true
+		}
+	} else {
+		matchAddrs[address] = true
+	}
+
+	entries, err := os.ReadDir(histDir)
+	if err != nil {
+		return nil
+	}
+
+	var history []rewardHistoryEntry
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, "_rewardtxn0.csv") {
+			continue
+		}
+		// Extract date from filename: YYYY-MM-DD_rewardtxn0.csv
+		date := strings.TrimSuffix(name, "_rewardtxn0.csv")
+
+		data, err := os.ReadFile(filepath.Join(histDir, name)) //nolint:gosec
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "Skycoin Address") {
+				continue // skip header and empty lines
+			}
+			parts := strings.SplitN(line, ",", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			csvAddr := strings.TrimSpace(parts[0])
+			csvAmount := strings.TrimSpace(parts[1])
+			if matchAddrs[csvAddr] {
+				history = append(history, rewardHistoryEntry{
+					Date:   date,
+					Amount: csvAmount,
+				})
+			}
+		}
+	}
+
+	// Sort by date descending (newest first)
+	sort.Slice(history, func(i, j int) bool {
+		return history[i].Date > history[j].Date
+	})
+
+	return history
 }
 
 // findVisorsByRewardAddress searches log_backups for surveys matching the given
@@ -520,6 +596,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		c.Writer.WriteHeader(http.StatusOK)
 
 		l := loginPageHeader("Account")
+		l += "<style>table.rewards { border-collapse: collapse; width: 100%; } table.rewards th, table.rewards td { border: 1px solid #444; padding: 6px 10px; text-align: left; } table.rewards th { background: #222; }</style>"
 		l += navlinks
 		l += "<h1>Account</h1>"
 		l += "<p>Logged in as: <code>" + sess.Address + "</code></p>"
@@ -529,6 +606,26 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			l += "<li><a href='/account/survey/" + v + "'><code>" + v + "</code></a></li>"
 		}
 		l += "</ul>"
+
+		// Reward history
+		histDir := filepath.Join(wd, "hist")
+		rewardHistory := findRewardHistory(histDir, sess.Address)
+		if len(rewardHistory) > 0 {
+			l += "<h2>Reward History</h2>"
+			l += "<table class='rewards'><tr><th>Date</th><th>Reward (SKY)</th></tr>"
+			totalReward := 0.0
+			for _, rh := range rewardHistory {
+				l += fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", rh.Date, rh.Amount)
+				if v, err := strconv.ParseFloat(strings.TrimSpace(rh.Amount), 64); err == nil {
+					totalReward += v
+				}
+			}
+			l += fmt.Sprintf("<tr><th>Total</th><th>%.6f</th></tr>", totalReward)
+			l += "</table>"
+		} else {
+			l += "<p class='info'>No reward history found.</p>"
+		}
+
 		l += "<p><a href='/logout'>Logout</a></p>"
 		l += "</body></html>"
 		c.Writer.Write([]byte(l)) //nolint:errcheck,gosec

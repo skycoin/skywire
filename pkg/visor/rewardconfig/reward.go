@@ -55,6 +55,36 @@ func CheckXpubDepth(xpub string) string {
 	return ""
 }
 
+// DeriveExternalAddressFromXpub derives a reward address from an account xpub key.
+// Uses the BIP44 external chain (m/account'/0/index) — the same chain used for
+// reward distribution addresses.
+func DeriveExternalAddressFromXpub(xpub string, index uint32) (string, error) {
+	accountKey, err := bip32.DeserializeEncodedPublicKey(xpub)
+	if err != nil {
+		return "", fmt.Errorf("invalid xpub: %w", err)
+	}
+
+	// Derive external chain key: account_xpub → child(0)
+	externalChainKey, err := accountKey.NewPublicChildKey(0) // 0 = external chain
+	if err != nil {
+		return "", fmt.Errorf("derive external chain: %w", err)
+	}
+
+	// Derive address at index
+	addrKey, err := externalChainKey.NewPublicChildKey(index)
+	if err != nil {
+		return "", fmt.Errorf("derive address at index %d: %w", index, err)
+	}
+
+	cpk, err := coincipher.NewPubKey(addrKey.Key)
+	if err != nil {
+		return "", fmt.Errorf("invalid derived public key: %w", err)
+	}
+
+	addr := coincipher.AddressFromPubKey(cpk)
+	return addr.String(), nil
+}
+
 // DeriveLoginAddressFromXpub derives a login verification address from an account xpub key.
 // Uses the BIP44 change chain (m/account'/1/index) so login addresses don't
 // collide with reward addresses (which use the external chain m/account'/0/i).
