@@ -47,8 +47,6 @@ var (
 	sessionsMu      sync.RWMutex
 	pendingLogins   = make(map[string]*pendingLogin) // challenge -> pending login
 	pendingLoginsMu sync.RWMutex
-	consumedTxIDs   = make(map[string]bool) // txids already used for login verification
-	consumedTxMu    sync.RWMutex
 )
 
 func generateSessionID() string {
@@ -242,9 +240,9 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 
 // checkTransactionToAddress checks if there's a confirmed transaction
 // FROM the given address TO the genesis address on the login chain.
+// Only considers transactions with a block timestamp after challengeTime.
 // Returns the txid of the matching transaction, or empty string if none found.
-// Skips transactions that have already been consumed for a previous login.
-func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) string {
+func checkTransactionToAddress(nodeURL, fromAddress, toAddress string, challengeTime time.Time) string {
 	resp, err := http.Get(fmt.Sprintf("%s/api/v1/transactions?addrs=%s&confirmed=true&verbose=1", nodeURL, fromAddress)) //nolint:gosec
 	if err != nil {
 		return ""
@@ -255,7 +253,8 @@ func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) string {
 
 	// Use verbose=1 to get full input details including owner addresses
 	var txs []struct {
-		Txn struct {
+		Time int64 `json:"time"` // block timestamp (unix seconds)
+		Txn  struct {
 			TxID    string `json:"txid"`
 			Outputs []struct {
 				Dst string `json:"dst"`
@@ -269,12 +268,11 @@ func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) string {
 		return ""
 	}
 
-	consumedTxMu.RLock()
-	defer consumedTxMu.RUnlock()
+	challengeUnix := challengeTime.Unix()
 
 	for _, tx := range txs {
-		// Skip transactions already consumed for a previous login
-		if consumedTxIDs[tx.Txn.TxID] {
+		// Only accept transactions created after the challenge was issued
+		if tx.Time <= challengeUnix {
 			continue
 		}
 
@@ -523,15 +521,10 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		}
 
 		// Check if user sent coins FROM their login address TO the genesis address
-		// Returns the txid of a matching, unconsumed transaction (or empty string)
-		verifyTxID := checkTransactionToAddress(loginNodeAddr, pending.LoginAddress, loginGenesisAddress)
+		// Only accepts transactions created after this challenge was issued
+		verifyTxID := checkTransactionToAddress(loginNodeAddr, pending.LoginAddress, loginGenesisAddress, pending.CreatedAt)
 
 		if verifyTxID != "" {
-			// Mark this transaction as consumed so it can't be reused
-			consumedTxMu.Lock()
-			consumedTxIDs[verifyTxID] = true
-			consumedTxMu.Unlock()
-
 			// Create session
 			sessionID := generateSessionID()
 			sessionsMu.Lock()
