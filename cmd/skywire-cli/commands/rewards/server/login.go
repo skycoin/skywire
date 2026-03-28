@@ -504,15 +504,33 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		c.Writer.WriteHeader(http.StatusOK)
 
 		l := loginPageHeader("Account")
+		l += "<style>pre.survey { background: #111; padding: 12px; overflow-x: auto; font-size: 12px; border: 1px solid #333; max-height: 400px; overflow-y: auto; }</style>"
 		l += navlinks
 		l += "<h1>Account</h1>"
 		l += "<p>Logged in as: <code>" + sess.Address + "</code></p>"
-		l += "<p>Visors associated with this address:</p>"
-		l += "<ul>"
+		l += fmt.Sprintf("<p>Visors: %d</p>", len(sess.Visors))
+
 		for _, v := range sess.Visors {
-			l += "<li><code>" + v + "</code></li>"
+			l += "<hr>"
+			l += "<h3>Visor <code>" + v + "</code></h3>"
+			surveyPath := filepath.Join(backupsDir, v, "node-info.json")
+			surveyData, err := os.ReadFile(surveyPath) //nolint:gosec
+			if err != nil {
+				l += "<p class='error'>Survey not available</p>"
+				continue
+			}
+			// Pretty-print the JSON
+			var prettyJSON json.RawMessage
+			if json.Unmarshal(surveyData, &prettyJSON) == nil {
+				pretty, err := json.MarshalIndent(prettyJSON, "", "  ")
+				if err == nil {
+					surveyData = pretty
+				}
+			}
+			l += "<pre class='survey'>" + strings.ReplaceAll(string(surveyData), "<", "&lt;") + "</pre>"
 		}
-		l += "</ul>"
+
+		l += "<hr>"
 		l += "<p><a href='/logout'>Logout</a></p>"
 		l += "</body></html>"
 		c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
