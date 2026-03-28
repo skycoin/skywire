@@ -519,6 +519,20 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		v.log.Fatalln("Failed to start hypervisor:", err)
 	}
 
+	// Start LAN DMSG server if configured
+	if conf.LANDmsgServer != nil && conf.LANDmsgServer.Enable {
+		lanServer, err := startLANDmsgServer(conf.LANDmsgServer, v.MasterLogger())
+		if err != nil {
+			v.log.WithError(err).Warn("Failed to start LAN DMSG server")
+		} else {
+			hv.lanDmsg = lanServer
+			v.log.WithField("pk", lanServer.PK).WithField("addr", lanServer.Address).Info("LAN DMSG server started")
+			v.pushCloseStack("lan_dmsg_server", func() error {
+				return lanServer.Server.Close()
+			})
+		}
+	}
+
 	hv.serveDmsg(ctx, v.log)
 
 	// Serve HTTP(s).
