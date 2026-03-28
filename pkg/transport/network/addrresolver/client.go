@@ -359,11 +359,13 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 	}
 	arConn, err := hs(kcpConn)
 	if err != nil {
+		kcpConn.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
 
 	addresses, err := netutil.LocalAddresses()
 	if err != nil {
+		arConn.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
 
@@ -374,10 +376,12 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 
 	laData, err := json.Marshal(localAddresses)
 	if err != nil {
+		arConn.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
 
 	if _, err := arConn.Write(laData); err != nil {
+		arConn.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
 

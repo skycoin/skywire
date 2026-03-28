@@ -61,8 +61,12 @@ func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
 		return nil, err
 	}
 
-	// Clear deadline.
-	if err = dStr.SetDeadline(time.Time{}); err != nil {
+	// Set idle timeout — refreshed on each successful read.
+	if err = dStr.SetReadDeadline(time.Now().Add(StreamIdleTimeout)); err != nil {
+		return nil, err
+	}
+	// Clear the write deadline so writes are not affected.
+	if err = dStr.SetWriteDeadline(time.Time{}); err != nil {
 		return nil, err
 	}
 
@@ -169,8 +173,12 @@ func (cs *ClientSession) acceptStream() (dStr *Stream, err error) {
 		return nil, err
 	}
 
-	// Clear deadline.
-	if err = dStr.SetDeadline(time.Time{}); err != nil {
+	// Set idle timeout — refreshed on each successful read.
+	if err = dStr.SetReadDeadline(time.Now().Add(StreamIdleTimeout)); err != nil {
+		return nil, err
+	}
+	// Clear the write deadline so writes are not affected.
+	if err = dStr.SetWriteDeadline(time.Time{}); err != nil {
 		return nil, err
 	}
 
