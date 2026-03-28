@@ -424,9 +424,17 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			}
 		}
 
-		// Create pending login challenge
+		// Create pending login challenge.
+		// Invalidate any existing challenge for this login address to prevent
+		// an attacker from creating a challenge and waiting for the real user
+		// to verify on a different machine.
 		challenge := generateChallenge()
 		pendingLoginsMu.Lock()
+		for k, p := range pendingLogins {
+			if p.LoginAddress == loginAddress {
+				delete(pendingLogins, k)
+			}
+		}
 		pendingLogins[challenge] = &pendingLogin{
 			Address:      address,
 			LoginAddress: loginAddress,
