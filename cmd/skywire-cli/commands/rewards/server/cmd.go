@@ -62,6 +62,7 @@ func init() {
 		log.Fatal("Error getting current directory:", err)
 	}
 	ServerCmd.Flags().StringVarP(&wd, "wd", "W", wd, "location of dir containing 'log_collection' & reward 'hist' dirs")
+	LoginChainCmd.Flags().StringVarP(&wd, "wd", "W", wd, "working directory for login chain files (login_genesis.json, login_fiber.toml)")
 	ServerCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", deployment.Prod.DmsgDiscovery, "dmsg discovery url")
 	ServerCmd.Flags().StringVarP(&ensureOnlineURL, "ensure-online", "O", scriptExecString("${ENSUREONLINE}"), "Exit when the specified URL cannot be fetched;\ni.e. https://fiber.skywire.dev")
 	if os.Getenv("DMSGHTTP_SK") != "" {

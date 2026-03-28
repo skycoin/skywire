@@ -43,7 +43,12 @@ func (c *stcprClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 		return nil, err
 	}
 
-	return c.initTransport(ctx, conn, rPK, rPort)
+	tp, err := c.initTransport(ctx, conn, rPK, rPort)
+	if err != nil {
+		conn.Close() //nolint:errcheck,gosec
+		return nil, err
+	}
+	return tp, nil
 }
 
 func (c *stcprClient) dial(ctx context.Context, addr string) (net.Conn, error) {

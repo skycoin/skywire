@@ -14,7 +14,6 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/fatih/color"
-	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/rewards"
 )
 
@@ -475,7 +475,7 @@ Architectures:
 			}
 			_, allowed1 := allowArchMap1[arch]
 			_, allowed2 := allowArchMap2[arch]
-			_, err := coincipher.DecodeBase58Address(sky)
+			_, _, err := rewardconfig.ValidateRewardAddress(sky)
 
 			// Check transport requirement
 			_, hasTransports := transportMap[pk]

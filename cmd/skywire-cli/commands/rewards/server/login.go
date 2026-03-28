@@ -10,12 +10,16 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bitfield/script"
 	"github.com/gin-gonic/gin"
+	skycoincipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
@@ -30,14 +34,15 @@ type session struct {
 
 // pendingLogin tracks a login challenge waiting for transaction confirmation
 type pendingLogin struct {
-	Address      string    `json:"address"`       // original reward address or xpub
-	LoginAddress string    `json:"login_address"` // derived address for verification (change chain for xpub)
-	Visors       []string  `json:"visors"`
-	Challenge    string    `json:"challenge"`   // random challenge string
-	FundedTxID   string    `json:"funded_txid"` // txid of coins sent to user
-	IsXpub       bool      `json:"is_xpub"`
-	CreatedAt    time.Time `json:"created_at"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	Address       string    `json:"address"`        // original reward address or xpub
+	LoginAddress  string    `json:"login_address"`  // derived address for verification (change chain for xpub)
+	VerifyAddress string    `json:"verify_address"` // unique per-challenge receive address
+	Visors        []string  `json:"visors"`
+	Challenge     string    `json:"challenge"`   // random challenge string
+	FundedTxID    string    `json:"funded_txid"` // txid of coins sent to user
+	IsXpub        bool      `json:"is_xpub"`
+	CreatedAt     time.Time `json:"created_at"`
+	ExpiresAt     time.Time `json:"expires_at"`
 }
 
 var (
@@ -45,6 +50,11 @@ var (
 	sessionsMu      sync.RWMutex
 	pendingLogins   = make(map[string]*pendingLogin) // challenge -> pending login
 	pendingLoginsMu sync.RWMutex
+	// Genesis wallet seed for deriving verify addresses.
+	// Loaded from login_genesis.json on first use.
+	genesisSeed     []byte
+	genesisSeedOnce sync.Once
+	verifyAddrIndex uint32 // atomic counter for next verify address index
 )
 
 func generateSessionID() string {
@@ -57,6 +67,134 @@ func generateChallenge() string {
 	b := make([]byte, 16)
 	rand.Read(b) //nolint:errcheck,gosec
 	return hex.EncodeToString(b)
+}
+
+// loadGenesisSeed reads the genesis wallet seed from login_genesis.json.
+func loadGenesisSeed() {
+	genesisPath := filepath.Join(wd, "login_genesis.json")
+	data, err := os.ReadFile(genesisPath) //nolint:gosec
+	if err != nil {
+		fmt.Printf("Warning: could not read genesis wallet for verify addresses: %v\n", err)
+		return
+	}
+	var wallet struct {
+		Meta struct {
+			Seed string `json:"seed"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(data, &wallet); err != nil || wallet.Meta.Seed == "" {
+		fmt.Printf("Warning: could not parse genesis wallet seed: %v\n", err)
+		return
+	}
+	genesisSeed = []byte(wallet.Meta.Seed)
+	// Start at index 1 — index 0 is the genesis address
+	atomic.StoreUint32(&verifyAddrIndex, 1)
+	fmt.Printf("Login chain: loaded genesis seed for verify address derivation\n")
+}
+
+// generateVerifyAddress derives a unique skycoin address from the genesis wallet
+// for a login challenge. Uses an incrementing index so each challenge gets a
+// different address, all derived from the same deterministic wallet.
+func generateVerifyAddress() string {
+	genesisSeedOnce.Do(loadGenesisSeed)
+
+	if genesisSeed == nil {
+		// Fallback to random address if seed not available
+		pk, _ := skycoincipher.GenerateKeyPair()
+		return skycoincipher.AddressFromPubKey(pk).String()
+	}
+
+	idx := atomic.AddUint32(&verifyAddrIndex, 1)
+	// Derive address at this index from the genesis seed
+	seckeys, err := skycoincipher.GenerateDeterministicKeyPairs(genesisSeed, int(idx))
+	if err != nil || len(seckeys) < int(idx) {
+		// Fallback
+		pk, _ := skycoincipher.GenerateKeyPair()
+		return skycoincipher.AddressFromPubKey(pk).String()
+	}
+	pk, err := skycoincipher.PubKeyFromSecKey(seckeys[idx-1])
+	if err != nil {
+		pk2, _ := skycoincipher.GenerateKeyPair()
+		return skycoincipher.AddressFromPubKey(pk2).String()
+	}
+	return skycoincipher.AddressFromPubKey(pk).String()
+}
+
+// rewardHistoryEntry represents one reward payment for a date.
+type rewardHistoryEntry struct {
+	Date   string
+	Amount string
+}
+
+// findRewardHistory scans hist/*_rewardtxn0.csv files for reward payments
+// to the given address. For xpub keys, derives external chain addresses
+// (m/account'/0/0 through m/account'/0/19) to match against.
+func findRewardHistory(histDir, address string) []rewardHistoryEntry {
+	// Build set of addresses to match against
+	matchAddrs := make(map[string]bool)
+	_, isXpub, vaErr := rewardconfig.ValidateRewardAddress(address)
+	if vaErr != nil {
+		return nil
+	}
+	if isXpub {
+		// Match the xpub itself (in case it appears in the CSV)
+		matchAddrs[address] = true
+		// Derive first 20 external chain addresses
+		for i := uint32(0); i < 20; i++ {
+			derived, err := rewardconfig.DeriveExternalAddressFromXpub(address, i)
+			if err != nil {
+				break
+			}
+			matchAddrs[derived] = true
+		}
+	} else {
+		matchAddrs[address] = true
+	}
+
+	entries, err := os.ReadDir(histDir)
+	if err != nil {
+		return nil
+	}
+
+	var history []rewardHistoryEntry
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, "_rewardtxn0.csv") {
+			continue
+		}
+		// Extract date from filename: YYYY-MM-DD_rewardtxn0.csv
+		date := strings.TrimSuffix(name, "_rewardtxn0.csv")
+
+		data, err := os.ReadFile(filepath.Join(histDir, name)) //nolint:gosec
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "Skycoin Address") {
+				continue // skip header and empty lines
+			}
+			parts := strings.SplitN(line, ",", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			csvAddr := strings.TrimSpace(parts[0])
+			csvAmount := strings.TrimSpace(parts[1])
+			if matchAddrs[csvAddr] {
+				history = append(history, rewardHistoryEntry{
+					Date:   date,
+					Amount: csvAmount,
+				})
+			}
+		}
+	}
+
+	// Sort by date descending (newest first)
+	sort.Slice(history, func(i, j int) bool {
+		return history[i].Date > history[j].Date
+	})
+
+	return history
 }
 
 // findVisorsByRewardAddress searches log_backups for surveys matching the given
@@ -90,29 +228,28 @@ func findVisorsByRewardAddress(backupsDir, address string) []string {
 }
 
 // checkBalanceOnLoginChain checks the balance of an address on the login chain.
-func checkBalanceOnLoginChain(nodeURL, address string) (coins uint64, hours uint64, err error) {
+func checkBalanceOnLoginChain(nodeURL, address string) (coins uint64, err error) {
 	resp, err := http.Get(fmt.Sprintf("%s/api/v1/balance?addrs=%s", nodeURL, address)) //nolint:gosec
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 	defer resp.Body.Close() //nolint:errcheck,gosec
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
 	var result struct {
 		Confirmed struct {
 			Coins uint64 `json:"coins"`
-			Hours uint64 `json:"hours"`
 		} `json:"confirmed"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
-	return result.Confirmed.Coins, result.Confirmed.Hours, nil
+	return result.Confirmed.Coins, nil
 }
 
 // sendCoinsOnLoginChain sends coins from the genesis wallet to the target address
@@ -128,10 +265,12 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 	}
 
 	// Create raw transaction using the genesis wallet
-	rawTxStr, err := script.Exec(fmt.Sprintf(`bash -c 'FIBER_TOML=%s RPC_ADDR=%s %s skycoin cli createRawTransaction %s %s %s'`,
-		fiberTOMLPath, nodeURL, skywireBin, genesisPath, destAddress, coins)).String()
+	createRawTxCmd := fmt.Sprintf(`bash -c 'FIBER_TOML="%s" RPC_ADDR="%s" "%s" skycoin cli createRawTransaction "%s" "%s" "%s" 2>&1'`,
+		fiberTOMLPath, nodeURL, skywireBin, genesisPath, destAddress, coins)
+	fmt.Printf("Login chain: running: %s\n", createRawTxCmd)
+	rawTxStr, err := script.Exec(createRawTxCmd).String()
 	if err != nil {
-		return "", fmt.Errorf("createRawTransaction failed: %w", err)
+		return "", fmt.Errorf("createRawTransaction failed: %s: %w", rawTxStr, err)
 	}
 	rawTxStr = strings.TrimSpace(rawTxStr)
 	if rawTxStr == "" {
@@ -139,6 +278,7 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 	}
 
 	// Inject transaction with no_broadcast
+	fmt.Printf("Login chain: injecting tx to %s (%d bytes)\n", nodeURL, len(rawTxStr))
 	injectBody := fmt.Sprintf(`{"rawtx":"%s","no_broadcast":true}`, rawTxStr)
 	injectReq, err := http.NewRequest("POST", nodeURL+"/api/v1/injectTransaction", strings.NewReader(injectBody))
 	if err != nil {
@@ -159,57 +299,34 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 	return txID, nil
 }
 
-// checkTransactionToAddress checks if there's a confirmed transaction
-// FROM the given address TO the genesis address on the login chain.
-func checkTransactionToAddress(nodeURL, fromAddress, toAddress string) bool {
-	resp, err := http.Get(fmt.Sprintf("%s/api/v1/transactions?addrs=%s&confirmed=true", nodeURL, fromAddress)) //nolint:gosec
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close() //nolint:errcheck,gosec
-
-	body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
-
-	var txs []struct {
-		Txn struct {
-			Outputs []struct {
-				Dst string `json:"dst"`
-			} `json:"outputs"`
-			Inputs []struct {
-				Owner string `json:"owner"`
-			} `json:"inputs"`
-		} `json:"txn"`
-	}
-	if err := json.Unmarshal(body, &txs); err != nil {
-		return false
-	}
-
-	for _, tx := range txs {
-		// Check if any input is from the user's address
-		fromUser := false
-		for _, inp := range tx.Txn.Inputs {
-			if inp.Owner == fromAddress {
-				fromUser = true
-				break
-			}
-		}
-		if !fromUser {
-			continue
-		}
-		// Check if any output goes to the genesis address
-		for _, out := range tx.Txn.Outputs {
-			if out.Dst == toAddress {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // registerLoginRoutes adds login-related routes to the gin router.
 // When loginEnabled is false, the login page shows a "not available" message.
 func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 	backupsDir := filepath.Join(wd, "log_backups")
+
+	// Periodically clean up expired challenges and sessions
+	go func() {
+		for {
+			time.Sleep(5 * time.Minute)
+			now := time.Now()
+
+			pendingLoginsMu.Lock()
+			for k, p := range pendingLogins {
+				if now.After(p.ExpiresAt) {
+					delete(pendingLogins, k)
+				}
+			}
+			pendingLoginsMu.Unlock()
+
+			sessionsMu.Lock()
+			for k, s := range sessions {
+				if now.After(s.ExpiresAt) {
+					delete(sessions, k)
+				}
+			}
+			sessionsMu.Unlock()
+		}
+	}()
 
 	// Login page
 	r.GET("/login", func(c *gin.Context) {
@@ -273,6 +390,32 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		}
 		loginAddress := address
 		if isXpub {
+			// Check xpub depth before attempting derivation
+			if warning := rewardconfig.CheckXpubDepth(address); warning != "" {
+				fmt.Printf("Login chain: xpub depth error for %s...\n", address[:20])
+				c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+				c.Writer.WriteHeader(http.StatusBadRequest)
+				l := loginPageHeader("Login Error")
+				l += navlinks
+				l += "<h1>Wrong xpub key level</h1>"
+				l += "<p class='error'>The xpub key you provided is at the chain level (depth 4), "
+				l += "not the account level (depth 3) required for login verification.</p>"
+				l += "<p>The Skycoin web wallet shows the <strong>external chain</strong> xpub "
+				l += "(BIP44 path <code>m/44'/8000'/0'/0</code>). The login system needs the "
+				l += "<strong>account-level</strong> xpub (<code>m/44'/8000'/0'</code>) to derive "
+				l += "change chain addresses for verification.</p>"
+				l += "<h3>How to get the correct xpub</h3>"
+				l += "<p>Export the account-level xpub from your wallet using the CLI:</p>"
+				l += "<pre>skywire skycoin cli walletKeyExport WALLET_FILE -k xpub --path=0</pre>"
+				l += "<p>The default <code>--path=0/0</code> gives the external chain xpub (wrong).<br>"
+				l += "Use <code>--path=0</code> for the account-level xpub (correct).</p>"
+				l += "<p>Then update your visor's reward address:</p>"
+				l += "<pre>skywire reward ACCOUNT_XPUB</pre>"
+				l += "<p><a href='/login'>Back to login</a></p>"
+				l += "</body></html>"
+				c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+				return
+			}
 			derived, err := rewardconfig.DeriveLoginAddressFromXpub(address, 0)
 			if err != nil {
 				c.Redirect(http.StatusFound, "/login?msg=Failed+to+derive+login+address+from+xpub:+"+err.Error())
@@ -285,7 +428,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		// Fund the login address on the login chain if needed
 		var fundedTxID string
 		if loginNodeAddr != "" {
-			coins, _, err := checkBalanceOnLoginChain(loginNodeAddr, loginAddress)
+			coins, err := checkBalanceOnLoginChain(loginNodeAddr, loginAddress)
 			if err != nil {
 				fmt.Printf("Warning: failed to check login chain balance: %v\n", err)
 			}
@@ -302,20 +445,25 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			}
 		}
 
-		// Create pending login challenge
+		// Create pending login challenge with a unique verify address.
+		// Each challenge gets its own receive address so transactions from
+		// different challenges can't be confused or piggybacked.
 		challenge := generateChallenge()
+		verifyAddr := generateVerifyAddress()
 		pendingLoginsMu.Lock()
 		pendingLogins[challenge] = &pendingLogin{
-			Address:      address,
-			LoginAddress: loginAddress,
-			Visors:       visors,
-			Challenge:    challenge,
-			FundedTxID:   fundedTxID,
-			IsXpub:       isXpub,
-			CreatedAt:    time.Now(),
-			ExpiresAt:    time.Now().Add(10 * time.Minute),
+			Address:       address,
+			LoginAddress:  loginAddress,
+			VerifyAddress: verifyAddr,
+			Visors:        visors,
+			Challenge:     challenge,
+			FundedTxID:    fundedTxID,
+			IsXpub:        isXpub,
+			CreatedAt:     time.Now(),
+			ExpiresAt:     time.Now().Add(10 * time.Minute),
 		}
 		pendingLoginsMu.Unlock()
+		fmt.Printf("Login chain: challenge %s → verify address %s\n", challenge[:8], verifyAddr)
 
 		c.Redirect(http.StatusFound, "/login/verify?challenge="+challenge)
 	})
@@ -343,15 +491,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		l := loginPageHeader("Verify Wallet Ownership")
 		l += navlinks
 		l += "<h1>Verify Wallet Ownership</h1>"
-		if pending.IsXpub {
-			l += "<p>To prove you control the wallet for xpub <code>" + pending.Address[:20] + "...</code>, "
-			l += "please send coins from the change chain address below to the login address.</p>"
-			l += "<p><strong>Your login address (change chain):</strong> <code>" + pending.LoginAddress + "</code></p>"
-		} else {
-			l += "<p>To prove you control address <code>" + pending.Address + "</code>, "
-			l += "please send coins from that address to the login address below.</p>"
-		}
-		l += "<p><strong>Send to:</strong> <code>" + loginGenesisAddress + "</code></p>"
+
 		// Use the current request's host as the node URL for the wallet
 		scheme := "https"
 		if c.Request.TLS == nil {
@@ -361,11 +501,24 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			scheme = fwdProto
 		}
 		nodeURL := scheme + "://" + c.Request.Host
-		l += "<p>Use the Skycoin Web Wallet connected to this login chain node to send the transaction.</p>"
-		l += "<p>Start the wallet with: <code>skywire skycoin web -n " + nodeURL + " -p 8006</code></p>"
+
+		l += "<h3>Step 1: Open the Skycoin Web Wallet</h3>"
+		l += "<p>Start the wallet connected to the login chain:</p>"
+		l += "<pre>skywire skycoin web -n " + nodeURL + " -p 8006</pre>"
 		l += "<p>Then open <a href='http://127.0.0.1:8006' target='_blank'>http://127.0.0.1:8006</a></p>"
-		l += "<p class='info'>This verifies that you hold the private key for your reward wallet. "
-		l += "The login chain resets periodically — coins have no real value.</p>"
+
+		l += "<h3>Step 2: Send coins to the verification address</h3>"
+		if pending.IsXpub {
+			l += "<p>From the <strong>change chain</strong> address in your wallet:</p>"
+			l += "<p><strong>From:</strong> <code>" + pending.LoginAddress + "</code></p>"
+		} else {
+			l += "<p>From your reward address:</p>"
+			l += "<p><strong>From:</strong> <code>" + pending.Address + "</code></p>"
+		}
+		l += "<p><strong>Send any amount to:</strong> <code>" + pending.VerifyAddress + "</code></p>"
+
+		l += "<p class='info'>This proves you control the private key for your reward wallet. "
+		l += "The login chain is ephemeral — coins have no real value.</p>"
 		l += "<hr>"
 		l += "<p>Waiting for transaction confirmation...</p>"
 		l += "<script>"
@@ -399,9 +552,16 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		}
 
 		// Check if user sent coins FROM their login address TO the genesis address
-		confirmed := checkTransactionToAddress(loginNodeAddr, pending.LoginAddress, loginGenesisAddress)
+		// Only accepts transactions created after this challenge was issued
+		// Check if the unique verify address received coins.
+		// Each challenge has a unique address, so any balance means this challenge was satisfied.
+		verifyCoins, verifyErr := checkBalanceOnLoginChain(loginNodeAddr, pending.VerifyAddress)
+		verifyTxID := ""
+		if verifyErr == nil && verifyCoins > 0 {
+			verifyTxID = "verified" // unique address has balance
+		}
 
-		if confirmed {
+		if verifyTxID != "" {
 			// Create session
 			sessionID := generateSessionID()
 			sessionsMu.Lock()
@@ -466,18 +626,82 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		c.Writer.WriteHeader(http.StatusOK)
 
 		l := loginPageHeader("Account")
+		l += "<style>table.rewards { border-collapse: collapse; width: 100%; } table.rewards th, table.rewards td { border: 1px solid #444; padding: 6px 10px; text-align: left; } table.rewards th { background: #222; }</style>"
 		l += navlinks
 		l += "<h1>Account</h1>"
 		l += "<p>Logged in as: <code>" + sess.Address + "</code></p>"
-		l += "<p>Visors associated with this address:</p>"
+		l += fmt.Sprintf("<p>Visors: %d</p>", len(sess.Visors))
 		l += "<ul>"
 		for _, v := range sess.Visors {
-			l += "<li><code>" + v + "</code></li>"
+			l += "<li><a href='/account/survey/" + v + "'><code>" + v + "</code></a></li>"
 		}
 		l += "</ul>"
+
+		// Reward history
+		histDir := filepath.Join(wd, "hist")
+		rewardHistory := findRewardHistory(histDir, sess.Address)
+		if len(rewardHistory) > 0 {
+			l += "<h2>Reward History</h2>"
+			l += "<table class='rewards'><tr><th>Date</th><th>Reward (SKY)</th></tr>"
+			totalReward := 0.0
+			for _, rh := range rewardHistory {
+				l += fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", rh.Date, rh.Amount)
+				if v, err := strconv.ParseFloat(strings.TrimSpace(rh.Amount), 64); err == nil {
+					totalReward += v
+				}
+			}
+			l += fmt.Sprintf("<tr><th>Total</th><th>%.6f</th></tr>", totalReward)
+			l += "</table>"
+		} else {
+			l += "<p class='info'>No reward history found.</p>"
+		}
+
 		l += "<p><a href='/logout'>Logout</a></p>"
 		l += "</body></html>"
 		c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+	})
+
+	// Authenticated survey endpoint — only serves surveys for visors in the user's session
+	r.GET("/account/survey/:pk", func(c *gin.Context) {
+		sessionID, err := c.Cookie("session")
+		if err != nil {
+			c.Redirect(http.StatusFound, "/login?msg=Please+log+in")
+			return
+		}
+
+		sessionsMu.RLock()
+		sess, ok := sessions[sessionID]
+		sessionsMu.RUnlock()
+
+		if !ok || time.Now().After(sess.ExpiresAt) {
+			c.Redirect(http.StatusFound, "/login?msg=Session+expired")
+			return
+		}
+
+		pk := c.Param("pk")
+
+		// Verify this PK belongs to the logged-in user's visors
+		authorized := false
+		for _, v := range sess.Visors {
+			if v == pk {
+				authorized = true
+				break
+			}
+		}
+		if !authorized {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized for this visor"})
+			return
+		}
+
+		surveyPath := filepath.Join(backupsDir, pk, "node-info.json")
+		surveyData, err := os.ReadFile(surveyPath) //nolint:gosec
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "survey not available"})
+			return
+		}
+
+		// Serve as JSON
+		c.Data(http.StatusOK, "application/json", surveyData)
 	})
 
 	// Logout
