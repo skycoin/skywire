@@ -30,6 +30,19 @@ import (
 //go:embed GeoLite2-City.mmdb
 var embeddedGeoIP []byte
 
+// EmbeddedGeoIP returns the embedded GeoLite2-City database bytes.
+func EmbeddedGeoIP() []byte {
+	return embeddedGeoIP
+}
+
+// LookupResult holds a GeoIP lookup result.
+type LookupResult = lookupResult
+
+// LookupIP performs a GeoIP lookup using the given database reader.
+func LookupIP(db *geoip2.Reader, ipStr string) (*LookupResult, error) {
+	return lookupIP(db, ipStr)
+}
+
 // exampleJSON marshals v to indented JSON with color, returning empty string on error
 func exampleJSON(v interface{}) string {
 	b, err := json.MarshalIndent(v, "    ", "  ")

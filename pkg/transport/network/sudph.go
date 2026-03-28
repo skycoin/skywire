@@ -192,7 +192,12 @@ func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 		return nil, err
 	}
 
-	return c.initTransport(ctx, conn, rPK, rPort)
+	tp, err := c.initTransport(ctx, conn, rPK, rPort)
+	if err != nil {
+		conn.Close() //nolint:errcheck,gosec
+		return nil, err
+	}
+	return tp, nil
 }
 
 func (c *sudphClient) dialWithTimeout(ctx context.Context, addr string) (net.Conn, error) {
@@ -211,7 +216,13 @@ func (c *sudphClient) dialWithTimeout(ctx context.Context, addr string) (net.Con
 				return conn, nil
 			}
 			c.log.WithError(err).
-				Warnf("Failed to dial %v, trying again: %v", addr, err)
+				Debugf("Failed to dial %v, trying again", addr)
+			// Brief pause before retry to avoid tight loop
+			select {
+			case <-timedCtx.Done():
+				return nil, timedCtx.Err()
+			case <-time.After(1 * time.Second):
+			}
 		}
 	}
 }
@@ -227,11 +238,13 @@ func (c *sudphClient) dial(remoteAddr string) (net.Conn, error) {
 	dialConn := c.filter.NewConn(dialConnPriority, packetfilter.NewKCPConversationFilter(c.mLog))
 
 	if _, err := dialConn.WriteTo([]byte(holePunchMessage), rAddr); err != nil {
+		dialConn.Close() //nolint:errcheck,gosec
 		return nil, fmt.Errorf("dialConn.WriteTo: %w", err)
 	}
 
 	kcpConn, err := kcp.NewConn(remoteAddr, nil, 0, 0, dialConn)
 	if err != nil {
+		dialConn.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
 
