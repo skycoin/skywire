@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy } from '@angular/core';
+import { Component, Input, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Observable, Subscription } from 'rxjs';
@@ -29,7 +29,8 @@ import { LabeledElementTypes, StorageService } from 'src/app/services/storage.se
     selector: 'app-route-list',
     templateUrl: './route-list.component.html',
     styleUrls: ['./route-list.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RouteListComponent implements OnDestroy {
   // Small text for identifying the list, needed for the helper objects.
@@ -76,7 +77,22 @@ export class RouteListComponent implements OnDestroy {
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
+  private lastRouteCount = -1;
+  private lastRouteKeys = '';
+
   @Input() set routes(val: Route[]) {
+    if (!val) {
+      return;
+    }
+    // Skip reprocessing if route list hasn't changed
+    const newKeys = val.map(r => r.key).sort().join(',');
+    if (newKeys === this.lastRouteKeys && val.length === this.lastRouteCount) {
+      this.cdr.markForCheck();
+      return;
+    }
+    this.lastRouteCount = val.length;
+    this.lastRouteKeys = newKeys;
+
     this.allRoutes = val;
 
     // Include additional properties with helpful data. Mostly for displating the data and for
@@ -162,6 +178,7 @@ export class RouteListComponent implements OnDestroy {
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
     private storageService: StorageService,
+    private cdr: ChangeDetectorRef,
   ) {
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [

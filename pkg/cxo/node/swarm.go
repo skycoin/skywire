@@ -181,37 +181,33 @@ func (s *Swarm) Peers() []Peer {
 }
 
 func (s *Swarm) run() {
-	var (
-		requestPeers  = time.Tick(s.cfg.RequestPeerRate)
-		clearOldPeers = time.Tick(s.cfg.ClearOldPeersRate)
-		outgoingConn  = time.Tick(s.cfg.OutgoingConnRate)
-	)
+	requestPeers := time.NewTicker(s.cfg.RequestPeerRate)
+	clearOldPeers := time.NewTicker(s.cfg.ClearOldPeersRate)
+	outgoingConn := time.NewTicker(s.cfg.OutgoingConnRate)
+	defer requestPeers.Stop()
+	defer clearOldPeers.Stop()
+	defer outgoingConn.Stop()
 
-LOOP:
 	for {
 		select {
 		case <-s.quit:
-			break LOOP
-		default:
-		}
+			close(s.done)
+			return
 
-		select {
-		case <-requestPeers:
+		case <-requestPeers.C:
 			if s.needPeers() {
 				s.requestPeers()
 			}
 
-		case <-clearOldPeers:
+		case <-clearOldPeers.C:
 			s.clearOldPeers()
 
-		case <-outgoingConn:
+		case <-outgoingConn.C:
 			if count, ok := s.needConns(); ok {
 				s.createOutgoingConns(count)
 			}
 		}
 	}
-
-	close(s.done)
 }
 
 func (s *Swarm) shutdown() {
@@ -323,24 +319,24 @@ func (s *Swarm) addPeers(peers []msg.PeerInfo) {
 		}
 	}
 
-	// Update existing peers or add new one
+	// Update existing peers or add new ones
 	for _, pi := range peers {
 		p, ok := s.peers[pi.PubKey]
-		if !ok {
+		if ok {
+			// Existing peer — update last seen time and metadata
 			s.node.Debugf(PEXPin, "updating last seen time of peer %s for feed %s",
 				pi.PubKey.Hex()[:8], s.feed.Hex()[:8])
 			p.seen()
 
-			if ok = p.update(pi); ok {
+			if updated := p.update(pi); updated {
 				s.node.Debugf(PEXPin, "updating info about peer %s for feed %s",
 					pi.PubKey.Hex()[:8], s.feed.Hex()[:8])
-
 				s.onPeerUpdated(p)
 			}
 		} else {
+			// New peer — add it
 			s.node.Debugf(PEXPin, "adding new peer %s for feed %s",
 				pi.PubKey.Hex()[:8], s.feed.Hex()[:8])
-
 			p = msgToPeer(pi)
 			s.onPeerAdded(p)
 		}

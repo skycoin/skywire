@@ -75,7 +75,7 @@ func server(e error) {
 	dmsgclient := dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, log), dconf)
 	defer func() {
 		if err := dmsgclient.Close(); err != nil {
-			log.WithError(err).Error()
+			log.WithError(err).Error("Failed to close DMSG client")
 		}
 	}()
 
@@ -83,7 +83,7 @@ func server(e error) {
 
 	select {
 	case <-ctx.Done():
-		log.WithError(ctx.Err()).Warn()
+		log.WithError(ctx.Err()).Warn("Context canceled while waiting for DMSG client")
 		return
 
 	case <-dmsgclient.Ready():
@@ -91,12 +91,12 @@ func server(e error) {
 
 	lis, err := dmsgclient.Listen(dmsgPort) //nolint: gosec
 	if err != nil {
-		log.WithError(err).Fatal()
+		log.WithError(err).Fatal("Failed to listen on DMSG port")
 	}
 	go func() {
 		<-ctx.Done()
 		if err := lis.Close(); err != nil {
-			log.WithError(err).Error()
+			log.WithError(err).Error("Failed to close DMSG listener")
 		}
 	}()
 
@@ -790,7 +790,7 @@ func server(e error) {
 				fmt.Println("error: ", err)
 			}
 
-			c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)) //nolint:errcheck,gosec
+			c.Writer.Write(normalizeNewlines(result.Bytes())) //nolint:errcheck,gosec
 			c.Writer.Flush()
 		})
 
@@ -1416,7 +1416,9 @@ func server(e error) {
 	if ensureOnlineURL != "" {
 		go func() {
 			var errCount int
-			for range time.Tick(15 * time.Minute) {
+			ticker := time.NewTicker(15 * time.Minute)
+			defer ticker.Stop()
+			for range ticker.C {
 				_, err := script.NewPipe().WithHTTPClient(&http.Client{Timeout: 60 * time.Second}).Get(ensureOnlineURL).AppendFile("/dev/null")
 				if err != nil {
 					errCount++

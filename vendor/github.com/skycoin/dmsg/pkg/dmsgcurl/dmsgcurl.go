@@ -182,7 +182,12 @@ func parseOutputFile(name string, urlPath string) (*os.File, error) {
 	}
 
 	if stat.IsDir() {
-		f, err := os.Create(filepath.Join(name, urlPath)) //nolint
+		// Sanitize the URL path to prevent directory traversal.
+		cleanPath := filepath.Base(urlPath)
+		if cleanPath == "." || cleanPath == "/" || cleanPath == "" {
+			cleanPath = "index.html"
+		}
+		f, err := os.Create(filepath.Join(name, cleanPath)) //nolint
 		if err != nil {
 			return nil, err
 		}

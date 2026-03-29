@@ -8,6 +8,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -55,7 +56,8 @@ func MakeIPDetails(log logrus.FieldLogger, geoip string) LocationDetails {
 			err  error
 		)
 
-		resp, err = http.Get(fmt.Sprintf(reqStructure, geoip, ip.String()))
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err = client.Get(fmt.Sprintf(reqStructure, geoip, ip.String()))
 		if err != nil {
 			return nil, err
 		}
