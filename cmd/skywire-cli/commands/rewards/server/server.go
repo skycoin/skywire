@@ -790,7 +790,7 @@ func server(e error) {
 				fmt.Println("error: ", err)
 			}
 
-			c.Writer.Write(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(bytes.Replace(result.Bytes(), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1), []byte("\n\n"), []byte("\n"), -1)) //nolint:errcheck,gosec
+			c.Writer.Write(normalizeNewlines(result.Bytes())) //nolint:errcheck,gosec
 			c.Writer.Flush()
 		})
 

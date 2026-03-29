@@ -292,3 +292,13 @@ body {
 }
 </style>
 </head>`
+
+// normalizeNewlines collapses consecutive blank lines into single newlines.
+func normalizeNewlines(data []byte) []byte {
+	doubleNL := []byte("\n\n")
+	singleNL := []byte("\n")
+	for bytes.Contains(data, doubleNL) {
+		data = bytes.ReplaceAll(data, doubleNL, singleNL)
+	}
+	return data
+}
