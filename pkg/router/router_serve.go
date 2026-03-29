@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/noise"
@@ -138,7 +139,12 @@ func (r *router) serveSetup() {
 
 		r.logger.Debugf("handling setup request: setupPK(%s)", remotePK)
 
-		go r.rpcSrv.ServeConn(conn)
+		go func() {
+			// Set deadline to prevent indefinite blocking from unresponsive setup nodes
+			conn.SetDeadline(time.Now().Add(2 * time.Minute)) //nolint:errcheck,gosec
+			r.rpcSrv.ServeConn(conn)
+			conn.Close() //nolint:errcheck,gosec
+		}()
 	}
 }
 

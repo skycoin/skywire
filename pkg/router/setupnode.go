@@ -106,7 +106,13 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 			conn.Close() //nolint:errcheck,gosec
 			continue
 		}
-		go rpcS.ServeConn(conn)
+		go func() {
+			// Set a deadline on the connection so it doesn't block forever
+			// if the remote visor disconnects uncleanly.
+			conn.SetDeadline(time.Now().Add(2 * timeout)) //nolint:errcheck,gosec
+			rpcS.ServeConn(conn)
+			conn.Close() //nolint:errcheck,gosec
+		}()
 	}
 }
 

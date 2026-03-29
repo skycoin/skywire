@@ -90,6 +90,10 @@ func (c *Client) call(ctx context.Context, method string, args interface{}, repl
 	call := c.rpc.Go(RPCName+"."+method, args, reply, nil)
 	select {
 	case <-ctx.Done():
+		// Close the RPC client to release the underlying DMSG stream.
+		// Without this, the abandoned rpc.Go call keeps the stream alive
+		// with its smux buffers (~40MB per stream), causing memory leaks.
+		c.rpc.Close() //nolint:errcheck,gosec
 		return ctx.Err()
 	case <-call.Done:
 		return call.Error
