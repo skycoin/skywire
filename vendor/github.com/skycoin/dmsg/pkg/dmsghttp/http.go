@@ -30,6 +30,7 @@ func ListenAndServe(ctx context.Context, _ cipher.SecKey, a http.Handler, _ disc
 		WriteTimeout:      3 * time.Second,
 		IdleTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 3 * time.Second,
+		MaxHeaderBytes:    1 << 14, // 16KB
 		Handler:           a,
 	}
 
