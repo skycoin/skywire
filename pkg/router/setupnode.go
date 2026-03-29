@@ -106,7 +106,16 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 			conn.Close() //nolint:errcheck,gosec
 			continue
 		}
-		go rpcS.ServeConn(conn)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Errorf("Panic in setup RPC handler: %v", r)
+				}
+				conn.Close() //nolint:errcheck,gosec
+			}()
+			conn.SetDeadline(time.Now().Add(2 * timeout)) //nolint:errcheck,gosec
+			rpcS.ServeConn(conn)
+		}()
 	}
 }
 

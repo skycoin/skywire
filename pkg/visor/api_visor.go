@@ -116,22 +116,22 @@ func (v *Visor) Overview() (*Overview, error) {
 func (v *Visor) Summary() (*Summary, error) {
 	overview, err := v.Overview()
 	if err != nil {
-		return nil, fmt.Errorf("overview")
+		return nil, fmt.Errorf("failed to get visor overview: %w", err)
 	}
 
 	health, err := v.Health()
 	if err != nil {
-		return nil, fmt.Errorf("health")
+		return nil, fmt.Errorf("failed to get health info: %w", err)
 	}
 
 	uptime, err := v.Uptime()
 	if err != nil {
-		return nil, fmt.Errorf("uptime")
+		return nil, fmt.Errorf("failed to get uptime: %w", err)
 	}
 
 	routes, err := v.RoutingRules()
 	if err != nil {
-		return nil, fmt.Errorf("routes")
+		return nil, fmt.Errorf("failed to get routing rules: %w", err)
 	}
 
 	extraRoutes := make([]routingRuleResp, 0, len(routes))
@@ -145,7 +145,7 @@ func (v *Visor) Summary() (*Summary, error) {
 
 	pts, err := v.conf.GetPersistentTransports()
 	if err != nil {
-		return nil, fmt.Errorf("pts")
+		return nil, fmt.Errorf("failed to get persistent transports: %w", err)
 	}
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}

@@ -23,19 +23,12 @@ import (
 // DialDmsgPing implements API. Dials a remote visor over dmsg for ping.
 // It prefers to use the lowest-latency DMSG server that both visors share.
 func (v *Visor) DialDmsgPing(pk cipher.PubKey) error {
-	if v.dmsgC == nil {
-		return fmt.Errorf("dmsg client not available")
+	if err := v.mustWaitDmsgReady(); err != nil {
+		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	// Wait for dmsg client to be ready
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-v.dmsgC.Ready():
-	}
 
 	// Try to use the preferred (lowest-latency) server
 	preferredServer, err := v.GetPreferredDmsgServer(pk)
@@ -71,19 +64,12 @@ func (v *Visor) DialDmsgPing(pk cipher.PubKey) error {
 
 // DialDmsgPingViaServer implements API. Dials a remote visor over dmsg via a specific server.
 func (v *Visor) DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error {
-	if v.dmsgC == nil {
-		return fmt.Errorf("dmsg client not available")
+	if err := v.mustWaitDmsgReady(); err != nil {
+		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	// Wait for dmsg client to be ready
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-v.dmsgC.Ready():
-	}
 
 	// First ensure we have a session with the specified server
 	_, err := v.dmsgC.EnsureAndObtainSession(ctx, serverPK)
@@ -112,19 +98,12 @@ func (v *Visor) DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) 
 // DialDmsgRPC implements API. Dials a remote visor's gRPC/RPC port over DMSG.
 // Returns a net.Conn that can be used to create a gRPC client.
 func (v *Visor) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
-	if v.dmsgC == nil {
-		return nil, fmt.Errorf("dmsg client not available")
+	if err := v.mustWaitDmsgReady(); err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	// Wait for dmsg client to be ready
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-v.dmsgC.Ready():
-	}
 
 	v.log.WithField("remote", pk.String()[:16]+"...").
 		Debug("Dialing remote visor RPC over DMSG")
@@ -575,19 +554,12 @@ func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
 
 // DmsgHTTP implements API. Performs an HTTP request over dmsg using the visor's dmsg client.
 func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
-	if v.dmsgC == nil {
-		return nil, fmt.Errorf("dmsg client not available")
+	if err := v.mustWaitDmsgReady(); err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-
-	// Wait for dmsg client to be ready
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-v.dmsgC.Ready():
-	}
 
 	// Create HTTP transport using visor's dmsg client
 	transport := dmsgHTTPTransport{

@@ -110,15 +110,16 @@ func (c *EntityCommon) SessionCount() int {
 
 func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) bool {
 	c.sessionsMx.Lock()
-	defer c.sessionsMx.Unlock()
-
 	if _, ok := c.sessions[dSes.RemotePK()]; ok {
+		c.sessionsMx.Unlock()
 		return false
 	}
 	c.sessions[dSes.RemotePK()] = dSes
+	cb := c.setSessionCallback
+	c.sessionsMx.Unlock()
 
-	if c.setSessionCallback != nil {
-		if err := c.setSessionCallback(ctx); err != nil {
+	if cb != nil {
+		if err := cb(ctx); err != nil {
 			c.log.
 				WithField("func", "EntityCommon.setSession").
 				WithError(err).
@@ -131,15 +132,17 @@ func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) bool
 func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 	c.sessionsMx.Lock()
 	delete(c.sessions, pk)
-	if c.delSessionCallback != nil {
-		if err := c.delSessionCallback(ctx); err != nil {
+	cb := c.delSessionCallback
+	c.sessionsMx.Unlock()
+
+	if cb != nil {
+		if err := cb(ctx); err != nil {
 			c.log.
 				WithField("func", "EntityCommon.delSession").
 				WithError(err).
 				Warn("Callback returned non-nil error.\n")
 		}
 	}
-	c.sessionsMx.Unlock()
 }
 
 // updateServerEntry updates the dmsg server's entry within dmsg discovery.
@@ -147,7 +150,7 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 // Caller must hold c.sessionsMx.
 func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSessions int, authPassphrase string) (err error) {
 	if addr == "" {
-		panic("updateServerEntry cannot accept empty 'addr' input") // this should never happen
+		return errors.New("updateServerEntry cannot accept empty 'addr' input")
 	}
 
 	// Record last update on success.
@@ -158,6 +161,9 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSe
 	}()
 
 	availableSessions := maxSessions - len(c.sessions)
+	if availableSessions < 0 {
+		availableSessions = 0
+	}
 
 	entry, err := c.dc.Entry(ctx, c.pk)
 	if err != nil {

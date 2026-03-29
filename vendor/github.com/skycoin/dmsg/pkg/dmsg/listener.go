@@ -7,8 +7,11 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 )
+
+var listenerLog = logging.MustGetLogger("dmsg_listener")
 
 // Listener listens for remote-initiated streams.
 type Listener struct {
@@ -59,6 +62,7 @@ func (l *Listener) introduceStream(tp *Stream) error {
 		return ErrEntityClosed
 
 	default:
+		listenerLog.WithField("addr", l.addr).Warn("Accept buffer full, dropping stream.")
 		_ = tp.Close() //nolint:errcheck
 		return ErrAcceptChanMaxed
 	}
