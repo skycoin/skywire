@@ -1416,7 +1416,9 @@ func server(e error) {
 	if ensureOnlineURL != "" {
 		go func() {
 			var errCount int
-			for range time.Tick(15 * time.Minute) {
+			ticker := time.NewTicker(15 * time.Minute)
+			defer ticker.Stop()
+			for range ticker.C {
 				_, err := script.NewPipe().WithHTTPClient(&http.Client{Timeout: 60 * time.Second}).Get(ensureOnlineURL).AppendFile("/dev/null")
 				if err != nil {
 					errCount++

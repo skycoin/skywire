@@ -181,37 +181,33 @@ func (s *Swarm) Peers() []Peer {
 }
 
 func (s *Swarm) run() {
-	var (
-		requestPeers  = time.Tick(s.cfg.RequestPeerRate)
-		clearOldPeers = time.Tick(s.cfg.ClearOldPeersRate)
-		outgoingConn  = time.Tick(s.cfg.OutgoingConnRate)
-	)
+	requestPeers := time.NewTicker(s.cfg.RequestPeerRate)
+	clearOldPeers := time.NewTicker(s.cfg.ClearOldPeersRate)
+	outgoingConn := time.NewTicker(s.cfg.OutgoingConnRate)
+	defer requestPeers.Stop()
+	defer clearOldPeers.Stop()
+	defer outgoingConn.Stop()
 
-LOOP:
 	for {
 		select {
 		case <-s.quit:
-			break LOOP
-		default:
-		}
+			close(s.done)
+			return
 
-		select {
-		case <-requestPeers:
+		case <-requestPeers.C:
 			if s.needPeers() {
 				s.requestPeers()
 			}
 
-		case <-clearOldPeers:
+		case <-clearOldPeers.C:
 			s.clearOldPeers()
 
-		case <-outgoingConn:
+		case <-outgoingConn.C:
 			if count, ok := s.needConns(); ok {
 				s.createOutgoingConns(count)
 			}
 		}
 	}
-
-	close(s.done)
 }
 
 func (s *Swarm) shutdown() {
