@@ -51,19 +51,30 @@ func (hk *Key) UnmarshalText(text []byte) error {
 
 // HypervisorConfig configures the hypervisor.
 type HypervisorConfig struct {
-	UIAssets      fs.FS         `json:"-"`
-	PK            cipher.PubKey `json:"-"`
-	SK            cipher.SecKey `json:"-"`
-	DBPath        string        `json:"db_path"`             // Path to store database file.
-	EnableAuth    bool          `json:"enable_auth"`         // Whether to enable user management.
-	Cookies       CookieConfig  `json:"cookies"`             // Configures cookies (for session management).
-	DmsgDiscovery string        `json:"-"`                   // Dmsg discovery address.
-	DmsgPort      uint16        `json:"dmsg_port,omitempty"` // Dmsg port to serve on.
-	HTTPAddr      string        `json:"http_addr"`           // HTTP address to serve API/web UI on.
-	EnableTLS     bool          `json:"enable_tls"`          // Whether to enable TLS.
-	TLSCertFile   string        `json:"tls_cert_file"`       // TLS cert file location.
-	TLSKeyFile    string        `json:"tls_key_file"`        // TLS key file location.
-	TPViz         TPVizConfig   `json:"tp_viz"`              // Transport visualizer config.
+	UIAssets      fs.FS              `json:"-"`
+	PK            cipher.PubKey      `json:"-"`
+	SK            cipher.SecKey      `json:"-"`
+	DBPath        string             `json:"db_path"`                   // Path to store database file.
+	EnableAuth    bool               `json:"enable_auth"`               // Whether to enable user management.
+	Cookies       CookieConfig       `json:"cookies"`                   // Configures cookies (for session management).
+	DmsgDiscovery string             `json:"-"`                         // Dmsg discovery address.
+	DmsgPort      uint16             `json:"dmsg_port,omitempty"`       // Dmsg port to serve on.
+	HTTPAddr      string             `json:"http_addr"`                 // HTTP address to serve API/web UI on.
+	EnableTLS     bool               `json:"enable_tls"`                // Whether to enable TLS.
+	TLSCertFile   string             `json:"tls_cert_file"`             // TLS cert file location.
+	TLSKeyFile    string             `json:"tls_key_file"`              // TLS key file location.
+	TPViz         TPVizConfig        `json:"tp_viz"`                    // Transport visualizer config.
+	LANDmsgServer *LANDmsgServerConf `json:"lan_dmsg_server,omitempty"` // LAN DMSG server config.
+}
+
+// LANDmsgServerConf configures an embedded DMSG server for LAN visors.
+// When enabled, the hypervisor acts as a local DMSG relay so LAN visors
+// don't need to route through public DMSG servers.
+type LANDmsgServerConf struct {
+	Enable      bool   `json:"enable"`                 // Enable the LAN DMSG server.
+	Port        int    `json:"port,omitempty"`         // TCP port (default 8085).
+	MaxSessions int    `json:"max_sessions,omitempty"` // Max concurrent sessions (default 100).
+	KeyFile     string `json:"key_file,omitempty"`     // File to persist server keypair (default: lan_dmsg_server.json).
 }
 
 // TPVizConfig configures the embedded transport visualizer.

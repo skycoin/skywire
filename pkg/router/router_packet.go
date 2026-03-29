@@ -186,7 +186,7 @@ func (r *router) UpdateRuleActivity(routeID routing.RouteID) error {
 func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule routing.Rule) error {
 	tp := r.tm.Transport(rule.NextTransportID())
 	if tp == nil {
-		return errors.New("unknown transport")
+		return fmt.Errorf("transport %s not found for next-hop routing", rule.NextTransportID())
 	}
 
 	var p routing.Packet
