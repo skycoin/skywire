@@ -607,7 +607,9 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 		LocalAddresses: localAddresses,
 	}
 
-	if err := a.store.Bind(context.TODO(), types.SUDPH, pk, visorData); err != nil {
+	bindCtx, bindCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer bindCancel()
+	if err := a.store.Bind(bindCtx, types.SUDPH, pk, visorData); err != nil {
 		a.log.WithError(err).Errorf("Failed to bind (SUDPH) pk %q to addr %q", strPK, remoteAddr)
 		a.cleanupUDPConn(pk, conn)
 		return

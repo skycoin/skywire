@@ -123,7 +123,7 @@ func server() {
 		httpClient = &http.Client{
 			Transport: transport,
 		}
-		ctx = context.WithValue(context.Background(), "socks5_proxy", proxyAddr) //nolint
+		ctx = context.WithValue(ctx, "socks5_proxy", proxyAddr) //nolint
 	}
 
 	var dmsgC *dmsg.Client

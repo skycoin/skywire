@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy } from '@angular/core';
+import { Component, Input, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Observable, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -31,7 +31,8 @@ import { NodeService } from 'src/app/services/node.service';
     selector: 'app-transport-list',
     templateUrl: './transport-list.component.html',
     styleUrls: ['./transport-list.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TransportListComponent implements OnDestroy {
   // Small text for identifying the list, needed for the helper objects.
@@ -79,7 +80,29 @@ export class TransportListComponent implements OnDestroy {
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
+  private lastTransportCount = -1;
+  private lastTransportIds = '';
+
   @Input() set node(val: Node) {
+    // Skip reprocessing if transport list hasn't changed
+    const newIds = val.transports.map(t => t.id).sort().join(',');
+    if (newIds === this.lastTransportIds && val.transports.length === this.lastTransportCount) {
+      // Just update traffic stats without full reprocessing
+      if (this.allTransports) {
+        val.transports.forEach(t => {
+          const existing = this.allTransports.find(e => e.id === t.id);
+          if (existing) {
+            existing.sent = t.sent;
+            existing.recv = t.recv;
+          }
+        });
+        this.cdr.markForCheck();
+      }
+      return;
+    }
+    this.lastTransportCount = val.transports.length;
+    this.lastTransportIds = newIds;
+
     this.currentNode = val;
     this.allTransports = val.transports;
     this.nodePK = val.localPk;
@@ -119,6 +142,7 @@ export class TransportListComponent implements OnDestroy {
     });
 
     this.dataFilterer.setData(this.allTransports);
+    this.cdr.markForCheck();
   }
 
   // Array with the properties of the columns that can be used for filtering the data.
@@ -174,6 +198,7 @@ export class TransportListComponent implements OnDestroy {
     private translateService: TranslateService,
     private storageService: StorageService,
     private nodeService: NodeService,
+    private cdr: ChangeDetectorRef,
   ) {
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [

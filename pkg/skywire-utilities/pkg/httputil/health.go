@@ -25,8 +25,12 @@ type HealthCheckResponse struct {
 }
 
 // GetServiceHealth gets the response from the given service url
-func GetServiceHealth(_ context.Context, url string) (health *HealthCheckResponse, err error) {
-	resp, err := http.Get(url + path)
+func GetServiceHealth(ctx context.Context, url string) (health *HealthCheckResponse, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ package dmsgpty
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/rpc"
 	"net/url"
@@ -22,15 +23,16 @@ type hostMux struct {
 
 type handleFunc func(ctx context.Context, uri *url.URL, rpcS *rpc.Server) error
 
-func (h *hostMux) Handle(pattern string, fn handleFunc) {
+func (h *hostMux) Handle(pattern string, fn handleFunc) error {
 	pattern = strings.TrimPrefix(pattern, "/")
 	if _, err := path.Match(pattern, ""); err != nil {
-		panic(err)
+		return fmt.Errorf("invalid mux pattern %q: %w", pattern, err)
 	}
 	h.entries = append(h.entries, muxEntry{
 		pat: pattern,
 		fn:  fn,
 	})
+	return nil
 }
 
 func (h *hostMux) ServeConn(ctx context.Context, conn net.Conn) error {
@@ -49,7 +51,7 @@ func (h *hostMux) ServeConn(ctx context.Context, conn net.Conn) error {
 	for _, entry := range h.entries {
 		ok, err := path.Match(entry.pat, uri.EscapedPath())
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("path match error for pattern %q: %w", entry.pat, err)
 		}
 		if !ok {
 			continue

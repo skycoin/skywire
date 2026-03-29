@@ -186,8 +186,7 @@ func (sc *SessionCommon) Close() error {
 	sc.sm.mutx.Lock()
 	if sc.sm.smux != nil {
 		err = sc.sm.smux.Close()
-	}
-	if sc.sm.yamux != nil {
+	} else if sc.sm.yamux != nil {
 		err = sc.sm.yamux.Close()
 	}
 	sc.sm.mutx.Unlock()

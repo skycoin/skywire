@@ -1,0 +1,23 @@
+.vpn-small-button {
+  cursor: pointer;
+  user-select: none;
+
+  &:active {
+    transform: scale(0.9);
+  }
+}
+
+.vpn-dark-box-radius {
+  border-radius: 10px;
+}
+
+.vpn-table-container {
+  text-align: center;
+
+  .width-limiter {
+    width: inherit;
+    max-width: 1250px;
+    display: inline-block;
+    text-align: initial;
+  }
+}

@@ -251,7 +251,14 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 
 			rAddr := wrappedConn.RemoteAddr().(appnet.Addr)
 			log.Debugf("Accepted sky forwarding conn on %s from %s", wrappedConn.LocalAddr(), rAddr.PubKey)
-			go handleServerConn(log, wrappedConn, v)
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Errorf("Panic in server conn handler: %v", r)
+					}
+				}()
+				handleServerConn(log, wrappedConn, v)
+			}()
 		}
 	}()
 
@@ -303,7 +310,14 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	// send nil error to indicate to the remote connection that everything is ok
 	sendError(log, remoteConn, nil)
 
-	go forward(log, remoteConn, lHost, cMsg.RawTCP)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Errorf("Panic in forward handler: %v", r)
+			}
+		}()
+		forward(log, remoteConn, lHost, cMsg.RawTCP)
+	}()
 }
 
 // forward proxies data between remoteConn (the skywire connection) and a local server.

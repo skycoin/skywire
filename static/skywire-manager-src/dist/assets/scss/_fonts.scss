@@ -1,0 +1,25 @@
+@import "assets/fonts/material-icons/material-icons.css";
+
+@font-face {
+  font-family: 'Skycoin';
+  font-style: normal;
+  font-weight: 300;
+  src: url('/assets/fonts/skycoin/skycoin-light-webfont.woff2') format('woff2'),
+  url('/assets/fonts/skycoin/skycoin-light-webfont.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Skycoin';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/assets/fonts/skycoin/skycoin-regular-webfont.woff2') format('woff2'),
+  url('/assets/fonts/skycoin/skycoin-regular-webfont.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Skycoin';
+  font-style: normal;
+  font-weight: 700;
+  src: url('/assets/fonts/skycoin/skycoin-bold-webfont.woff2') format('woff2'),
+  url('/assets/fonts/skycoin/skycoin-bold-webfont.woff') format('woff');
+}

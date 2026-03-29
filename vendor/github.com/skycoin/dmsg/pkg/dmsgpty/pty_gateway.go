@@ -1,6 +1,8 @@
 // Package dmsgpty pkg/dmsgpty/pty_gateway.go
 package dmsgpty
 
+import "fmt"
+
 // WinSize wraps around pty.Winsize and *windows.Coord
 type WinSize struct {
 	X    uint16
@@ -41,11 +43,21 @@ func (g *LocalPtyGateway) Stop(_, _ *struct{}) error {
 	return g.ses.Stop()
 }
 
+// maxPtyReadSize is the maximum bytes that can be requested in a single PTY read.
+const maxPtyReadSize = 64 * 1024 // 64KB
+
 // Read reads from the local pty.
 func (g *LocalPtyGateway) Read(reqN *int, respB *[]byte) error {
-	b := make([]byte, *reqN)
-	n, err := g.ses.Read(b)
-	*respB = b[:n]
+	n := *reqN
+	if n <= 0 {
+		return fmt.Errorf("invalid read size: %d", n)
+	}
+	if n > maxPtyReadSize {
+		n = maxPtyReadSize
+	}
+	b := make([]byte, n)
+	nr, err := g.ses.Read(b)
+	*respB = b[:nr]
 	return err
 }
 
@@ -93,9 +105,16 @@ func (g *ProxiedPtyGateway) Stop(_, _ *struct{}) error {
 
 // Read reads from the remote pty.
 func (g *ProxiedPtyGateway) Read(reqN *int, respB *[]byte) error {
-	b := make([]byte, *reqN)
-	n, err := g.ptyC.Read(b)
-	*respB = b[:n]
+	n := *reqN
+	if n <= 0 {
+		return fmt.Errorf("invalid read size: %d", n)
+	}
+	if n > maxPtyReadSize {
+		n = maxPtyReadSize
+	}
+	b := make([]byte, n)
+	nr, err := g.ptyC.Read(b)
+	*respB = b[:nr]
 	return err
 }
 

@@ -159,22 +159,31 @@ func (dtm *Manager) updateAllTrackers(ctx context.Context) {
 
 	dtsLen := len(dtm.dts)
 	errCh := make(chan errReport, dtsLen)
-	defer close(errCh)
 
 	for _, dt := range dtm.dts {
 		dt := dt
 		go func() {
 			err := dt.Update(cancelCtx)
-			errCh <- errReport{pk: dt.sum.PK, err: err}
+			select {
+			case errCh <- errReport{pk: dt.sum.PK, err: err}:
+			case <-cancelCtx.Done():
+				// Context canceled while trying to send — don't block
+			}
 		}()
 	}
 
 	for i := 0; i < dtsLen; i++ {
-		if r := <-errCh; r.err != nil {
-			log.WithError(r.err).
-				WithField("client_pk", r.pk).
-				Warn("Removing dmsg client tracker.")
-			delete(dtm.dts, r.pk)
+		select {
+		case r := <-errCh:
+			if r.err != nil {
+				log.WithError(r.err).
+					WithField("client_pk", r.pk).
+					Warn("Removing dmsg client tracker.")
+				delete(dtm.dts, r.pk)
+			}
+		case <-cancelCtx.Done():
+			// Don't wait for remaining goroutines
+			return
 		}
 	}
 }
@@ -231,43 +240,18 @@ func (dtm *Manager) establishTracker(ctx context.Context, pk cipher.PubKey) {
 
 	log := dtm.log.WithField("func", "dtm.establishTracker")
 
-	type errReport struct {
-		pk  cipher.PubKey
-		err error
-	}
-
-	errCh := make(chan errReport)
-	defer close(errCh)
-	doneCh := make(chan struct{})
-
 	dCtx, cancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
 	defer cancel()
-	go func() {
-		dt, err := newDmsgTracker(dCtx, dtm.dc, pk)
-		if err != nil {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				errCh <- errReport{pk: pk, err: err}
-			}
-		}
-		dtm.mx.Lock()
-		if dt != nil {
-			dtm.dts[pk] = dt
-		}
-		dtm.mx.Unlock()
-		close(doneCh)
-	}()
 
-	select {
-	case r := <-errCh:
-		if r.err != nil {
-			log.WithError(r.err).WithField("client_pk", r.pk).Warn("Failed to re-create dmsgtracker client.")
-		}
-	case <-ctx.Done():
-		log.WithError(ctx.Err()).WithField("client_pk", pk).Warn("Failed to re-create dmsgtracker client.")
-	case <-doneCh:
+	dt, err := newDmsgTracker(dCtx, dtm.dc, pk)
+	if err != nil {
+		log.WithError(err).WithField("client_pk", pk).Warn("Failed to re-create dmsgtracker client.")
+		return
+	}
+	if dt != nil {
+		dtm.mx.Lock()
+		dtm.dts[pk] = dt
+		dtm.mx.Unlock()
 		log.WithField("client_pk", pk).Debug("Dmsgtracker client Established.")
 	}
 }

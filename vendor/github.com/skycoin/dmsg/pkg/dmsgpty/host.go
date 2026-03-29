@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -64,6 +65,7 @@ func (h *Host) ServeCLI(ctx context.Context, lis net.Listener) error {
 			// This is the main comment for reference https://github.com/golang/go/issues/45729#issuecomment-1104607098
 			if err, ok := err.(net.Error); ok && err.Temporary() { //nolint
 				log.Warn("Failed to accept CLI connection with temporary error, continuing...")
+				time.Sleep(50 * time.Millisecond)
 				continue
 			}
 			if err == io.ErrClosedPipe || strings.Contains(err.Error(), "use of closed network connection") {
@@ -118,6 +120,7 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 			// This is the main comment for reference https://github.com/golang/go/issues/45729#issuecomment-1104607098
 			if err, ok := err.(net.Error); ok && err.Temporary() { //nolint
 				log.Warn("Failed to accept dmsg.Stream with temporary error, continuing...")
+				time.Sleep(50 * time.Millisecond)
 				continue
 			}
 			if err == io.ErrClosedPipe || err == dmsg.ErrEntityClosed ||
@@ -197,15 +200,15 @@ func (h *Host) log() logrus.FieldLogger {
 
 // cliEndpoints returns the endpoints served for CLI connections.
 func cliEndpoints(h *Host) (mux hostMux) {
-	mux.Handle(WhitelistURI, handleWhitelist(h))
-	mux.Handle(PtyURI, handlePty(h))
-	mux.Handle(PtyProxyURI, handleProxy(h))
+	mux.Handle(WhitelistURI, handleWhitelist(h)) //nolint:errcheck,gosec
+	mux.Handle(PtyURI, handlePty(h))             //nolint:errcheck,gosec
+	mux.Handle(PtyProxyURI, handleProxy(h))      //nolint:errcheck,gosec
 	return mux
 }
 
 // dmsgEndpoints returns the endpoints served for remote dmsg connections.
 func dmsgEndpoints(h *Host) (mux hostMux) {
-	mux.Handle(PtyURI, handlePty(h))
+	mux.Handle(PtyURI, handlePty(h)) //nolint:errcheck,gosec
 	return mux
 }
 
