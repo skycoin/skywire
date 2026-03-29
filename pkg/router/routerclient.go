@@ -54,12 +54,18 @@ func NewClientFromRaw(conn io.ReadWriteCloser, rPK cipher.PubKey) *Client {
 	}
 }
 
-// Close closes a Client.
+// Close closes a Client. Safe to call multiple times.
 func (c *Client) Close() error {
 	if c == nil {
 		return nil
 	}
-	return c.rpc.Close()
+	err := c.rpc.Close()
+	// Ignore "connection is shut down" — the RPC client was already closed
+	// (e.g., by context cancellation in call()).
+	if err != nil && err.Error() == "connection is shut down" {
+		return nil
+	}
+	return err
 }
 
 // AddEdgeRules adds forward and consume rules to router (forward and reverse).
