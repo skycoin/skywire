@@ -37,6 +37,10 @@ func MakeMap(ctx context.Context, dialer network.Dialer, pks []cipher.PubKey) (M
 	for range pks {
 		res := <-results
 		if isDone(ctx) {
+			// Close clients that completed after cancellation
+			if res.client != nil {
+				res.client.Close() //nolint:errcheck,gosec
+			}
 			continue
 		}
 		if res.err != nil {

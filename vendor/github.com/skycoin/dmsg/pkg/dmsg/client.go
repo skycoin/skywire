@@ -112,7 +112,10 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 
 	// Init callback: on set session.
 	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
-		if err := c.EntityCommon.updateClientEntry(ctx, c.done, c.conf.ClientType); err != nil {
+		c.sessionsMx.Lock()
+		err := c.EntityCommon.updateClientEntry(ctx, c.done, c.conf.ClientType)
+		c.sessionsMx.Unlock()
+		if err != nil {
 			return err
 		}
 		// Client is 'ready' once we have successfully updated the discovery entry
@@ -123,7 +126,9 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 
 	// Init callback: on delete session.
 	c.EntityCommon.delSessionCallback = func(ctx context.Context) error {
+		c.sessionsMx.Lock()
 		err := c.EntityCommon.updateClientEntry(ctx, c.done, c.conf.ClientType)
+		c.sessionsMx.Unlock()
 		return err
 	}
 
@@ -275,6 +280,7 @@ func (ce *Client) Serve(ctx context.Context) {
 						select {
 						case ce.errCh <- err:
 						default:
+							ce.log.WithError(err).Warn("Error channel full, dropping error.")
 						}
 						ce.sesMx.Unlock()
 					}
@@ -376,12 +382,11 @@ func (ce *Client) serveWait() {
 	t := time.NewTimer(bo)
 	defer t.Stop()
 
-	if newBO := time.Duration(float64(bo) * ce.factor); ce.maxBO == 0 || newBO <= ce.maxBO {
-		ce.bo = newBO
-		if newBO > ce.maxBO {
-			ce.bo = ce.maxBO
-		}
+	newBO := time.Duration(float64(bo) * ce.factor)
+	if ce.maxBO > 0 && newBO > ce.maxBO {
+		newBO = ce.maxBO
 	}
+	ce.bo = newBO
 	<-t.C
 }
 

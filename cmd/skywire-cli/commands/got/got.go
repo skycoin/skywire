@@ -145,12 +145,13 @@ Examples:
 			fatal(err)
 		}
 
-		var body io.Reader
+		var body io.ReadCloser
 		if data != "" {
 			body, err = getBodyReader(data)
 			if err != nil {
 				fatal(err)
 			}
+			defer body.Close() //nolint:errcheck
 		}
 
 		var out io.Writer = os.Stdout
@@ -230,7 +231,7 @@ func newGot() (*got.Got, error) {
 	return got.New(), nil
 }
 
-func getBodyReader(data string) (io.Reader, error) {
+func getBodyReader(data string) (io.ReadCloser, error) {
 	if strings.HasPrefix(data, "@") {
 		filename := data[1:]
 		f, err := os.Open(filename) //nolint:gosec
@@ -239,7 +240,7 @@ func getBodyReader(data string) (io.Reader, error) {
 		}
 		return f, nil
 	}
-	return strings.NewReader(data), nil
+	return io.NopCloser(strings.NewReader(data)), nil
 }
 
 func progressFunc() got.ProgressFunc {

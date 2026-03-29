@@ -199,7 +199,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	go func() {
 		<-ctx.Done()
 		if err := lis.Close(); err != nil {
-			logger.WithError(err).Error()
+			logger.WithError(err).Error("Failed to close DMSG HTTP listener")
 		}
 	}()
 
@@ -327,7 +327,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 
 		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
-			log.Error("insufficient permissions")
+			log.WithError(err).Errorf("Insufficient permissions to unlink socket file %q", v.conf.Dmsgpty.CLIAddr)
 			return err
 		}
 	}
@@ -436,6 +436,8 @@ func initDmsgPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.pushCloseStack("dmsg_ping", lis.Close)
 
 	go func() {
+		var wg sync.WaitGroup
+		defer wg.Wait()
 		for {
 			conn, err := lis.Accept()
 			if err != nil {
@@ -445,7 +447,11 @@ func initDmsgPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 				return
 			}
 			log.Debugf("Accepted dmsg ping conn from %s", conn.RemoteAddr())
-			go handleDmsgPingConn(log, conn)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				handleDmsgPingConn(log, conn)
+			}()
 		}
 	}()
 

@@ -59,8 +59,6 @@ var RootCmd = &cobra.Command{
 		// case 2 : config file is old (already contains "wl" key)
 		// - load config file into memory to manipulate whitelists
 		// - writes changes back to config file
-		println(confPath)
-
 		if _, err := os.Stat(confPath); err != nil {
 			cli.Log.Fatalf("Config file %s not found.", confPath)
 		}

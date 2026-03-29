@@ -67,6 +67,7 @@ type Hypervisor struct {
 	selfConn     Conn
 	logger       *logging.Logger
 	tpvizServer  *tpviz.Server
+	lanDmsg      *LANDmsgServer // embedded LAN DMSG server (nil if disabled)
 }
 
 // NewHypervisor creates a new Hypervisor.
@@ -300,6 +301,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/about", hv.getAbout())
 				r.Get("/dmsg", hv.getDmsg())
 
+				r.Get("/lan-dmsg-server", hv.getLANDmsgServer())
 				r.Get("/visors", hv.getVisors())
 				r.Get("/visors-summary", hv.getAllVisorsSummary())
 				r.Get("/visors/{pk}", hv.getVisor())
@@ -405,6 +407,27 @@ func (hv *Hypervisor) getAbout() http.HandlerFunc {
 		httputil.WriteJSON(w, r, http.StatusOK, About{
 			PubKey: hv.c.PK,
 			Build:  buildinfo.Get(),
+		})
+	}
+}
+
+// LANDmsgServerInfo is the API response for the LAN DMSG server endpoint.
+type LANDmsgServerInfo struct {
+	Enabled bool          `json:"enabled"`
+	PK      cipher.PubKey `json:"pk,omitempty"`
+	Address string        `json:"address,omitempty"`
+}
+
+func (hv *Hypervisor) getLANDmsgServer() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if hv.lanDmsg == nil {
+			httputil.WriteJSON(w, r, http.StatusOK, LANDmsgServerInfo{Enabled: false})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, LANDmsgServerInfo{
+			Enabled: true,
+			PK:      hv.lanDmsg.PK,
+			Address: hv.lanDmsg.Address,
 		})
 	}
 }
