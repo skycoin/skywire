@@ -34,7 +34,7 @@ func TestLoadOrGenerateKeyPair(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify the saved keypair is valid JSON
-		data, err := os.ReadFile(keyFile)
+		data, err := os.ReadFile(keyFile) //nolint:gosec
 		require.NoError(t, err)
 		var kp lanDmsgKeyPair
 		require.NoError(t, json.Unmarshal(data, &kp))
@@ -167,7 +167,8 @@ func TestLANDmsgServerClientConnection(t *testing.T) {
 		t.Log("Client connected to LAN server successfully")
 	}
 
-	dmsgC.Close() //nolint:errcheck
+	err = dmsgC.Close() //nolint:gosec
+	assert.NoError(t, err)
 }
 
 // newTestDirectClient creates a simple in-memory discovery client for testing.

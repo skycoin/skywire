@@ -167,7 +167,7 @@ func (dtm *Manager) updateAllTrackers(ctx context.Context) {
 			select {
 			case errCh <- errReport{pk: dt.sum.PK, err: err}:
 			case <-cancelCtx.Done():
-				// Context cancelled while trying to send — don't block
+				// Context canceled while trying to send — don't block
 			}
 		}()
 	}

@@ -11,11 +11,8 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 )
 
-// Common errors for API methods.
-var (
-	ErrTpMNotReady  = errors.New("transport manager not available")
-	ErrDmsgNotReady = errors.New("dmsg client not ready")
-)
+// ErrDmsgNotReady is returned when the DMSG client is not ready within the timeout.
+var ErrDmsgNotReady = errors.New("dmsg client not ready")
 
 // waitDmsgReady waits for a DMSG client to be ready with a timeout.
 // Returns ErrDmsgNotReady if the timeout expires.
@@ -28,22 +25,6 @@ func waitDmsgReady(ctx context.Context, dmsgC *dmsg.Client, timeout time.Duratio
 	case <-dmsgC.Ready():
 		return nil
 	}
-}
-
-// checkRouter returns an error if the visor's router is nil.
-func (v *Visor) checkRouter() error {
-	if v.router == nil {
-		return ErrRouterNotReady
-	}
-	return nil
-}
-
-// checkTpM returns an error if the visor's transport manager is nil.
-func (v *Visor) checkTpM() error {
-	if v.tpM == nil {
-		return ErrTpMNotReady
-	}
-	return nil
 }
 
 // mustWaitDmsgReady is a convenience wrapper that uses context.Background

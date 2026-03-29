@@ -103,7 +103,7 @@ func startLANDmsgServer(conf *visorconfig.LANDmsgServerConf, masterLogger *loggi
 }
 
 // loadOrGenerateKeyPair loads a keypair from a JSON file, or generates and saves a new one.
-func loadOrGenerateKeyPair(path string, log *logging.Logger) (cipher.PubKey, cipher.SecKey, error) {
+func loadOrGenerateKeyPair(path string, log *logging.Logger) (cipher.PubKey, cipher.SecKey, error) { //nolint:unparam
 	data, err := os.ReadFile(path) //nolint:gosec
 	if err == nil {
 		var kp lanDmsgKeyPair
