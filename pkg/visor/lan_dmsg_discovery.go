@@ -7,14 +7,12 @@ import (
 	"time"
 
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
-
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // discoverLANDmsgServer attempts to connect to a previously saved LAN DMSG server
 // for the given hypervisor. If no saved entry exists, the hypervisor will push the
 // LAN server info via the SetLANDmsgServer RPC when it connects.
-func (v *Visor) discoverLANDmsgServer(hvPK cipher.PubKey) {
+func (v *Visor) discoverLANDmsgServer() {
 	log := v.MasterLogger().PackageLogger("lan_dmsg_discovery")
 
 	if err := v.mustWaitDmsgReady(); err != nil {
@@ -48,7 +46,7 @@ func (v *Visor) discoverLANDmsgServer(hvPK cipher.PubKey) {
 func (v *Visor) SetLANDmsgServer(info LANDmsgServerInfo) error {
 	log := v.MasterLogger().PackageLogger("lan_dmsg_discovery")
 
-	if !info.Enabled || info.PK == (cipher.PubKey{}) || info.Address == "" {
+	if !info.Enabled || info.PK.Null() || info.Address == "" {
 		return nil
 	}
 

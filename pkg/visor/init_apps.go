@@ -499,7 +499,7 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 		})
 
 		// Auto-discover LAN DMSG server from this hypervisor
-		go v.discoverLANDmsgServer(hvPK)
+		go v.discoverLANDmsgServer()
 	}
 
 	return nil
