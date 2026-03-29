@@ -2,10 +2,9 @@
 package visor
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
-	"os"
+	"strings"
 
 	"github.com/skycoin/dmsg/pkg/direct"
 	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -21,73 +21,81 @@ type LANDmsgServer struct {
 	Server  *dmsg.Server
 	PK      cipher.PubKey
 	SK      cipher.SecKey
-	Address string // "ip:port" the server is listening on
-}
-
-// lanDmsgKeyPair is the persisted server keypair.
-type lanDmsgKeyPair struct {
-	PK string `json:"pk"`
-	SK string `json:"sk"`
+	Address string // "ip:port" the server is listening on (LAN-routable)
+	Port    int    // actual port (useful when port 0 was configured)
 }
 
 // startLANDmsgServer creates and starts an embedded DMSG server for LAN visors.
 // It uses direct.NewClient as the discovery backend (in-memory, no public registration).
-// The server keypair is persisted to a file so it remains stable across restarts.
-func startLANDmsgServer(conf *visorconfig.LANDmsgServerConf, masterLogger *logging.MasterLogger) (*LANDmsgServer, error) {
+// The server keypair is stored in the config and auto-generated on first use.
+// Port 0 is supported — the OS picks a random available port.
+func startLANDmsgServer(conf *visorconfig.LANDmsgServerConf, visorConf *visorconfig.V1, masterLogger *logging.MasterLogger) (*LANDmsgServer, error) {
 	log := masterLogger.PackageLogger("lan_dmsg_server")
 
-	// Defaults
-	port := conf.Port
-	if port == 0 {
-		port = 8085
-	}
 	maxSessions := conf.MaxSessions
 	if maxSessions == 0 {
 		maxSessions = 100
 	}
-	keyFile := conf.KeyFile
-	if keyFile == "" {
-		keyFile = "lan_dmsg_server.json"
-	}
 
-	// Load or generate server keypair
-	pk, sk, err := loadOrGenerateKeyPair(keyFile, log)
-	if err != nil {
-		return nil, fmt.Errorf("keypair: %w", err)
+	// Use keypair from config, or generate and save to config
+	pk := conf.PK
+	sk := conf.SK
+	if pk.Null() || sk.Null() {
+		pk, sk = cipher.GenerateKeyPair()
+		conf.PK = pk
+		conf.SK = sk
+		// Persist the generated keypair to the config file
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Warnf("Could not persist LAN DMSG server keypair to config: %v", r)
+				}
+			}()
+			if err := visorConf.Flush(); err != nil {
+				log.WithError(err).Warn("Failed to save generated LAN DMSG server keypair to config")
+			} else {
+				log.Info("Generated and saved LAN DMSG server keypair to config")
+			}
+		}()
 	}
 
 	log.Infof("LAN DMSG server PK: %s", pk.String())
 
-	// Create a direct (in-memory) discovery client for the server.
-	// This absorbs all registration calls without contacting public discovery.
+	// Listen first so we know the actual port (important when port is 0)
+	listenAddr := fmt.Sprintf(":%d", conf.Port)
+	lis, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		return nil, fmt.Errorf("listen on %s: %w", listenAddr, err)
+	}
+
+	// Extract actual port
+	_, portStr, _ := net.SplitHostPort(lis.Addr().String())
+	actualPort := 0
+	fmt.Sscanf(portStr, "%d", &actualPort) //nolint:errcheck
+
+	// Determine LAN-routable address
+	lanIP := getLANIP(log)
+	advertisedAddr := fmt.Sprintf("%s:%d", lanIP, actualPort)
+
+	log.Infof("LAN DMSG server listening on :%d, advertised as %s", actualPort, advertisedAddr)
+
+	// Create a direct (in-memory) discovery client for the server
 	serverEntry := &dmsgdisc.Entry{
 		Static: pk,
 		Server: &dmsgdisc.Server{
-			Address:           fmt.Sprintf(":%d", port),
+			Address:           advertisedAddr,
 			AvailableSessions: maxSessions,
 		},
 	}
 	dc := direct.NewClient([]*dmsgdisc.Entry{serverEntry}, log)
 
-	// Create the server
+	// Create and start the server
 	serverConf := &dmsg.ServerConfig{
 		MaxSessions: maxSessions,
 	}
 	server := dmsg.NewServer(pk, sk, dc, serverConf, nil)
 	server.SetLogger(log)
 
-	// Listen on all interfaces
-	listenAddr := fmt.Sprintf(":%d", port)
-	lis, err := net.Listen("tcp", listenAddr)
-	if err != nil {
-		return nil, fmt.Errorf("listen on %s: %w", listenAddr, err)
-	}
-
-	// Determine the advertised address (LAN IP + port)
-	advertisedAddr := lis.Addr().String()
-	log.Infof("LAN DMSG server listening on %s", advertisedAddr)
-
-	// Start serving in background
 	go func() {
 		if err := server.Serve(lis, advertisedAddr); err != nil {
 			log.WithError(err).Error("LAN DMSG server stopped")
@@ -99,37 +107,30 @@ func startLANDmsgServer(conf *visorconfig.LANDmsgServerConf, masterLogger *loggi
 		PK:      pk,
 		SK:      sk,
 		Address: advertisedAddr,
+		Port:    actualPort,
 	}, nil
 }
 
-// loadOrGenerateKeyPair loads a keypair from a JSON file, or generates and saves a new one.
-func loadOrGenerateKeyPair(path string, log *logging.Logger) (cipher.PubKey, cipher.SecKey, error) { //nolint:unparam
-	data, err := os.ReadFile(path) //nolint:gosec
-	if err == nil {
-		var kp lanDmsgKeyPair
-		if err := json.Unmarshal(data, &kp); err == nil && kp.PK != "" && kp.SK != "" {
-			var pk cipher.PubKey
-			var sk cipher.SecKey
-			if err := pk.Set(kp.PK); err == nil {
-				if err := sk.Set(kp.SK); err == nil {
-					log.Info("Loaded existing LAN DMSG server keypair")
-					return pk, sk, nil
-				}
-			}
+// getLANIP returns the first non-loopback private IPv4 address.
+func getLANIP(log *logging.Logger) string {
+	addrs, err := netutil.LocalAddresses()
+	if err != nil {
+		log.WithError(err).Warn("Failed to get local addresses, using 127.0.0.1")
+		return "127.0.0.1"
+	}
+	for _, addr := range addrs {
+		if addr == "127.0.0.1" || addr == "::1" || strings.Contains(addr, ":") {
+			continue
+		}
+		ip := net.ParseIP(addr)
+		if ip != nil && ip.IsPrivate() {
+			return addr
 		}
 	}
-
-	// Generate new keypair
-	pk, sk := cipher.GenerateKeyPair()
-	kp := lanDmsgKeyPair{PK: pk.Hex(), SK: sk.Hex()}
-	data, err = json.MarshalIndent(kp, "", "  ")
-	if err != nil {
-		return pk, sk, nil // Use the keypair even if we can't save it
+	for _, addr := range addrs {
+		if addr != "127.0.0.1" && addr != "::1" && !strings.Contains(addr, ":") {
+			return addr
+		}
 	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		log.WithError(err).Warn("Failed to save LAN DMSG server keypair")
-	} else {
-		log.Info("Generated and saved new LAN DMSG server keypair")
-	}
-	return pk, sk, nil
+	return "127.0.0.1"
 }

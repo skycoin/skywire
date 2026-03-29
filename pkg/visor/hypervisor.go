@@ -176,6 +176,22 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		hv.visor.remoteVisors[addr.PK] = *visorConn
 		hv.remoteVisors[addr.PK] = *visorConn
 		hv.mu.Unlock()
+
+		// Push LAN DMSG server info to the connected visor
+		if hv.lanDmsg != nil {
+			go func() {
+				if err := visorConn.API.SetLANDmsgServer(LANDmsgServerInfo{
+					Enabled: true,
+					PK:      hv.lanDmsg.PK,
+					Address: hv.lanDmsg.Address,
+				}); err != nil {
+					hv.logger.WithError(err).Debug("Failed to push LAN DMSG server info to visor")
+				} else {
+					hv.logger.WithField("visor", addr.PK.String()[:16]+"...").
+						Info("Pushed LAN DMSG server info to visor")
+				}
+			}()
+		}
 	}
 }
 

@@ -497,6 +497,9 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 			wg.Wait()
 			return nil
 		})
+
+		// Auto-discover LAN DMSG server from this hypervisor
+		go v.discoverLANDmsgServer(hvPK)
 	}
 
 	return nil
@@ -522,7 +525,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	// Start LAN DMSG server if configured
 	if conf.LANDmsgServer != nil && conf.LANDmsgServer.Enable {
-		lanServer, err := startLANDmsgServer(conf.LANDmsgServer, v.MasterLogger())
+		lanServer, err := startLANDmsgServer(conf.LANDmsgServer, v.conf, v.MasterLogger())
 		if err != nil {
 			v.log.WithError(err).Warn("Failed to start LAN DMSG server")
 		} else {

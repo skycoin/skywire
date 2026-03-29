@@ -138,6 +138,12 @@ func (rc *rpcClient) SetRewardAddress(r string) (rConfig string, err error) {
 	return rConfig, err
 }
 
+// SetLANDmsgServer implements API.
+func (rc *rpcClient) SetLANDmsgServer(info LANDmsgServerInfo) error {
+	var ok bool
+	return rc.Call("SetLANDmsgServer", &info, &ok)
+}
+
 // GetRewardAddress implements API.
 func (rc *rpcClient) GetRewardAddress() (rConfig string, err error) {
 	err = rc.Call("GetRewardAddress", &struct{}{}, &rConfig)
