@@ -199,7 +199,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	go func() {
 		<-ctx.Done()
 		if err := lis.Close(); err != nil {
-			logger.WithError(err).Error()
+			logger.WithError(err).Error("Failed to close DMSG HTTP listener")
 		}
 	}()
 
@@ -327,7 +327,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 
 		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
-			log.Error("insufficient permissions")
+			log.WithError(err).Errorf("Insufficient permissions to unlink socket file %q", v.conf.Dmsgpty.CLIAddr)
 			return err
 		}
 	}
