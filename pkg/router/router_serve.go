@@ -140,10 +140,14 @@ func (r *router) serveSetup() {
 		r.logger.Debugf("handling setup request: setupPK(%s)", remotePK)
 
 		go func() {
-			// Set deadline to prevent indefinite blocking from unresponsive setup nodes
+			defer func() {
+				if rec := recover(); rec != nil {
+					r.logger.Errorf("Panic in router RPC handler: %v", rec)
+				}
+				conn.Close() //nolint:errcheck,gosec
+			}()
 			conn.SetDeadline(time.Now().Add(2 * time.Minute)) //nolint:errcheck,gosec
 			r.rpcSrv.ServeConn(conn)
-			conn.Close() //nolint:errcheck,gosec
 		}()
 	}
 }

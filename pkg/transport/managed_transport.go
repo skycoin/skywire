@@ -481,6 +481,11 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 	}
 	ch := make(chan writeResult, 1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- writeResult{0, fmt.Errorf("panic in transport write: %v", r)}
+			}
+		}()
 		n, err := mt.transport.Write(packet)
 		ch <- writeResult{n, err}
 	}()
