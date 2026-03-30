@@ -45,7 +45,8 @@ const (
 	// TransportPort Listening port of a visor for incoming transports.
 	TransportPort uint16 = 45
 
-	// LatencyProbePort is the port used for transport latency measurement probes.
+	// LatencyProbePort is the Skywire routing port for transport latency probes.
+	// Note: same number as DmsgHypervisorPort but different namespace (routing vs DMSG).
 	LatencyProbePort uint16 = 46
 
 	// PublicAutoconnect determines if the visor automatically creates stcpr transports to public visors
@@ -74,12 +75,6 @@ const (
 
 	// SkychatAddr is the non-dmsg port used to access the skychat app on localhost
 	SkychatAddr = ":8001"
-
-	// PingTestName is the namew of the ping test
-	PingTestName = "pingtest"
-
-	// PingTestPort is the port to user for ping tests
-	PingTestPort uint16 = 2
 
 	// SkysocksName is the name of the skysocks app
 	SkysocksName = "skysocks"
@@ -114,37 +109,19 @@ const (
 	ExampleServerName = "example-server-app"
 
 	// ExampleServerPort is dmsg port of example server app
-	ExampleServerPort uint16 = 45
-
-	// ExampleClientName is the name of the example client app
-	ExampleClientName = "example-client-app"
-
-	// ExampleClientPort dmsg port of example client app
-	ExampleClientPort uint16 = 46
+	// Previously 45 — conflicted with TransportPort
+	ExampleServerPort uint16 = 55
 
 	// SkyForwardingServerName name of sky forwarding server app (built-in)
 	SkyForwardingServerName = "sky-forwarding"
 
 	// SkyForwardingServerPort skynet port of skyfwd server app (built-in)
-	SkyForwardingServerPort uint16 = 47
-
-	// SkynetAppName name of skynet app (port forwarding server)
-	SkynetAppName = "skynet"
-
-	// SkynetAppPort skynet port for skynet app
-	SkynetAppPort uint16 = 49
-
-	// SkynetClientName name of skynet-client app (port forwarding client)
-	SkynetClientName = "skynet-client"
-
-	// SkynetClientPort skynet port for skynet-client app
-	SkynetClientPort uint16 = 50
-
-	// SkyPingName is the name of the sky ping
-	SkyPingName = "sky-ping"
+	// Previously 47 — conflicted with DmsgTransportSetupPort
+	SkyForwardingServerPort uint16 = 57
 
 	// SkyPingPort dmsg port of sky ping
-	SkyPingPort uint16 = 48
+	// Previously 48 — conflicted with DmsgTransportSetupServicePort
+	SkyPingPort uint16 = 58
 
 	// RPC constants.
 
@@ -227,14 +204,8 @@ const (
 
 	// Default hypervisor constants
 
-	//HypervisorDB stores the password to access the hypervisor
-	HypervisorDB = ".skycoin/hypervisor/users.db"
-
 	// EnableAuth enables auth on the hypervisor UI
 	EnableAuth = false
-
-	// PackageEnableAuth is the default auth for package-based installations for hypervisor UI
-	PackageEnableAuth = true
 
 	// EnableTLS enables tls for accessing hypervisor ui
 	EnableTLS = false
