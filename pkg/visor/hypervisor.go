@@ -414,15 +414,26 @@ func (hv *Hypervisor) getCsrf() http.HandlerFunc {
 
 // About provides info about the hypervisor.
 type About struct {
-	PubKey cipher.PubKey   `json:"public_key"` // The hypervisor's public key.
-	Build  *buildinfo.Info `json:"build"`
+	PubKey        cipher.PubKey   `json:"public_key"` // The hypervisor's public key.
+	Build         *buildinfo.Info `json:"build"`
+	DmsgConnected bool            `json:"dmsg_connected"` // Whether the DMSG client is connected to servers.
+	DmsgSessions  int             `json:"dmsg_sessions"`  // Number of active DMSG server sessions.
 }
 
 func (hv *Hypervisor) getAbout() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		dmsgConnected := false
+		dmsgSessions := 0
+		if hv.dmsgC != nil {
+			sessions := hv.dmsgC.AllSessions()
+			dmsgSessions = len(sessions)
+			dmsgConnected = dmsgSessions > 0
+		}
 		httputil.WriteJSON(w, r, http.StatusOK, About{
-			PubKey: hv.c.PK,
-			Build:  buildinfo.Get(),
+			PubKey:        hv.c.PK,
+			Build:         buildinfo.Get(),
+			DmsgConnected: dmsgConnected,
+			DmsgSessions:  dmsgSessions,
 		})
 	}
 }
