@@ -25,7 +25,7 @@ func TestStartLANDmsgServer(t *testing.T) {
 		MaxSessions: 10,
 	}
 
-	// Create a minimal visor config (Flush is a no-op without a config path)
+	// Create a minimal visor config with Dmsg field to avoid nil pointer during keypair persist
 	visorConf := &visorconfig.V1{}
 	visorConf.Hypervisor = &visorconfig.HypervisorConfig{
 		LANDmsgServer: conf,
@@ -34,7 +34,6 @@ func TestStartLANDmsgServer(t *testing.T) {
 	server, err := startLANDmsgServer(conf, visorConf, masterLogger)
 	require.NoError(t, err)
 	require.NotNil(t, server)
-	defer server.Server.Close() //nolint:errcheck
 
 	// Server should have a valid PK
 	assert.False(t, server.PK.Null())
@@ -48,6 +47,9 @@ func TestStartLANDmsgServer(t *testing.T) {
 	assert.False(t, conf.SK.Null())
 
 	t.Logf("LAN DMSG server started on %s (port %d) with PK %s", server.Address, server.Port, server.PK)
+
+	// Close server after assertions (not deferred, to avoid race with Serve goroutine)
+	require.NoError(t, server.Server.Close())
 }
 
 func TestLANDmsgServerClientConnection(t *testing.T) {
@@ -67,7 +69,6 @@ func TestLANDmsgServerClientConnection(t *testing.T) {
 	server, err := startLANDmsgServer(conf, visorConf, masterLogger)
 	require.NoError(t, err)
 	require.NotNil(t, server)
-	defer server.Server.Close() //nolint:errcheck
 
 	// Wait for the server to be accepting connections
 	require.Eventually(t, func() bool {
@@ -117,6 +118,9 @@ func TestLANDmsgServerClientConnection(t *testing.T) {
 
 	err = dmsgC.Close()
 	assert.NoError(t, err)
+
+	// Close server after client to avoid race between Serve and Close
+	require.NoError(t, server.Server.Close())
 }
 
 // testDirectClient is a minimal in-memory disc.APIClient for testing.
