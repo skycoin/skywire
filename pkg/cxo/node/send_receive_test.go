@@ -369,7 +369,7 @@ func Test_send_receive_refs(t *testing.T) {
 		t.Fatal("slow")
 	}
 
-	// TODO (kostyarin): compare the Root objects
+	// Root object comparison not implemented.
 
 	_ = rr
 
