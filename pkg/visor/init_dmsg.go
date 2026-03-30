@@ -145,14 +145,23 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		logger.Debug("Connected to the dmsg network.")
 		v.tpM.InitDmsgClient(ctx, dmsgC)
 	}
-	// dmsgctrl setup
+	// dmsgctrl setup — listen for incoming control streams (ping/pong).
+	// Each accepted Control is self-serving (handles ping/pong in its own goroutine).
+	// We drain the channel so the listener doesn't block on a full buffer.
 	cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
 	if err != nil {
 		return err
 	}
 	v.pushCloseStack("dmsgctrl", cl.Close)
 
-	dmsgctrl.ServeListener(cl, 0)
+	ctrlCh := dmsgctrl.ServeListener(cl, 16)
+	go func() {
+		for ctrl := range ctrlCh {
+			// Each control is already self-serving via ctrl.serve().
+			// We just hold a reference so the GC doesn't collect it prematurely.
+			_ = ctrl
+		}
+	}()
 	return nil
 }
 
