@@ -12,11 +12,11 @@ import (
 
 const TM time.Duration = 4000 * time.Millisecond
 
-// waitForCondition polls a condition function until it returns true or timeout.
+// waitForCondition polls a condition function until it returns true or TM expires.
 // Used instead of fixed time.Sleep to make tests event-driven.
-func waitForCondition(t *testing.T, timeout time.Duration, msg string, cond func() bool) {
+func waitForCondition(t *testing.T, msg string, cond func() bool) {
 	t.Helper()
-	deadline := time.After(timeout)
+	deadline := time.After(TM)
 	for {
 		if cond() {
 			return
@@ -241,7 +241,7 @@ func TestNode_Publish(t *testing.T) {
 	c, err = sn1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	assertTrue(t, c.PeerID() == ln.ID(), "wrong ID")
-	waitForCondition(t, TM, "ln sees sn1 connected", func() bool {
+	waitForCondition(t, "ln sees sn1 connected", func() bool {
 		return len(ln.Connections()) >= 1
 	})
 	assertIDs(t, ln.Connections(), sn1.ID())
@@ -253,7 +253,7 @@ func TestNode_Publish(t *testing.T) {
 	c, err = sn2.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	assertTrue(t, c.PeerID() == ln.ID(), "wrong ID")
-	waitForCondition(t, TM, "ln sees sn2 connected", func() bool {
+	waitForCondition(t, "ln sees sn2 connected", func() bool {
 		return len(ln.Connections()) >= 2
 	})
 	assertIDs(t, ln.Connections(), sn1.ID(), sn2.ID())
@@ -265,7 +265,7 @@ func TestNode_Publish(t *testing.T) {
 	c, err = un1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	assertTrue(t, c.PeerID() == ln.ID(), "wrong id")
-	waitForCondition(t, TM, "ln sees un1 connected", func() bool {
+	waitForCondition(t, "ln sees un1 connected", func() bool {
 		return len(ln.Connections()) >= 3
 	})
 
@@ -340,7 +340,7 @@ func TestNode_Publish(t *testing.T) {
 	c, err = un1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	c.Close() //nolint:errcheck,gosec
-	waitForCondition(t, TM, "ln sees un1 disconnected", func() bool {
+	waitForCondition(t, "ln sees un1 disconnected", func() bool {
 		return len(ln.Connections()) == 2
 	})
 	assertIDs(t, ln.Connections(), sn1.ID(), sn2.ID())
@@ -351,7 +351,7 @@ func TestNode_Publish(t *testing.T) {
 	c, err = sn2.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	c.Close() //nolint:errcheck,gosec
-	waitForCondition(t, TM, "ln sees sn2 disconnected", func() bool {
+	waitForCondition(t, "ln sees sn2 disconnected", func() bool {
 		return len(ln.Connections()) == 1
 	})
 	assertIDs(t, ln.Connections(), sn1.ID())
@@ -362,7 +362,7 @@ func TestNode_Publish(t *testing.T) {
 	c, err = sn1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	c.Close() //nolint:errcheck,gosec
-	waitForCondition(t, TM, "ln sees sn1 disconnected", func() bool {
+	waitForCondition(t, "ln sees sn1 disconnected", func() bool {
 		return len(ln.Connections()) == 0
 	})
 	assertIDs(t, ln.Connections())
