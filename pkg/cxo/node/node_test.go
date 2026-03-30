@@ -12,6 +12,23 @@ import (
 
 const TM time.Duration = 4000 * time.Millisecond
 
+// waitForCondition polls a condition function until it returns true or timeout.
+// Used instead of fixed time.Sleep to make tests event-driven.
+func waitForCondition(t *testing.T, timeout time.Duration, msg string, cond func() bool) {
+	t.Helper()
+	deadline := time.After(timeout)
+	for {
+		if cond() {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for: %s", msg)
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
 func getTestConfigNotListen(prefix string) (c *Config) {
 	c = getTestConfig(prefix)
 	c.TCP.Listen = ""
@@ -315,11 +332,11 @@ func TestNode_Publish(t *testing.T) {
 	assertNil(t, err)
 	c.Close() //nolint:errcheck,gosec
 
-	<-time.After(TM)
-
+	waitForCondition(t, TM, "un1 disconnected from ln", func() bool {
+		return len(un1.Connections()) == 0
+	})
 	assertIDs(t, ln.Connections(), sn1.ID(), sn2.ID())
 	assertIDs(t, ln.ConnectionsOfFeed(pk), sn1.ID(), sn2.ID())
-	assertIDs(t, un1.Connections())
 	assertIDs(t, un1.ConnectionsOfFeed(pk))
 
 	// sn2
@@ -327,11 +344,11 @@ func TestNode_Publish(t *testing.T) {
 	assertNil(t, err)
 	c.Close() //nolint:errcheck,gosec
 
-	<-time.After(TM)
-
+	waitForCondition(t, TM, "sn2 disconnected from ln", func() bool {
+		return len(sn2.Connections()) == 0
+	})
 	assertIDs(t, ln.Connections(), sn1.ID())
 	assertIDs(t, ln.ConnectionsOfFeed(pk), sn1.ID())
-	assertIDs(t, sn2.Connections())
 	assertIDs(t, sn2.ConnectionsOfFeed(pk))
 
 	// sn1
@@ -339,11 +356,11 @@ func TestNode_Publish(t *testing.T) {
 	assertNil(t, err)
 	c.Close() //nolint:errcheck,gosec
 
-	<-time.After(TM)
-
+	waitForCondition(t, TM, "sn1 disconnected from ln", func() bool {
+		return len(sn1.Connections()) == 0
+	})
 	assertIDs(t, ln.Connections())
 	assertIDs(t, ln.ConnectionsOfFeed(pk))
-	assertIDs(t, sn1.Connections())
 	assertIDs(t, sn1.ConnectionsOfFeed(pk))
 
 }

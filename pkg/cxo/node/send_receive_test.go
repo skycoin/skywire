@@ -180,28 +180,21 @@ func Test_send_receive(t *testing.T) {
 		t.Fatal("blank listening address")
 	}
 
-	// connect the nodes between
+	// connect the nodes (synchronous: handshake completes before return)
 	var c *Conn
 	if c, err = rn.TCP().Connect(sn.TCP().Address()); err != nil {
 		t.Fatal(err)
 	}
 
-	<-time.After(TM)
-
-	// subscribe the connection
+	// subscribe (synchronous: waits for Ok response, then sender pushes root)
 	if err = c.Subscribe(pk); err != nil {
 		t.Fatal(err)
 	}
 
-	<-time.After(TM)
-
-	var rr *registry.Root // received Root
-
-	// wait the Root
+	// wait for the root to be filled on the receiver
 	select {
-	case rr = <-fr:
+	case <-fr:
 	case <-time.After(4 * TM):
-
 		t.Log("Root :    ", r.Hash.Hex()[:7])
 		t.Log("Registry: ", r.Reg.Short())
 
@@ -211,13 +204,8 @@ func Test_send_receive(t *testing.T) {
 		t.Log("[receiver] objects")
 		printObjects(t, "receiver", rn.Container())
 
-		t.Fatal("slow")
+		t.Fatal("timed out waiting for root replication")
 	}
-
-	// Root object comparison not implemented.
-
-	_ = rr
-
 }
 
 func printObjects(t *testing.T, prefix string, c *skyobject.Container) {
@@ -335,28 +323,21 @@ func Test_send_receive_refs(t *testing.T) {
 		t.Fatal("blank listening address")
 	}
 
-	// connect the nodes between
+	// connect the nodes (synchronous: handshake completes before return)
 	var c *Conn
 	if c, err = rn.TCP().Connect(sn.TCP().Address()); err != nil {
 		t.Fatal(err)
 	}
 
-	<-time.After(TM)
-
-	// subscribe the connection
+	// subscribe (synchronous: waits for Ok response, then sender pushes root)
 	if err = c.Subscribe(pk); err != nil {
 		t.Fatal(err)
 	}
 
-	<-time.After(TM)
-
-	var rr *registry.Root // received Root
-
-	// wait the Root
+	// wait for the root to be filled on the receiver (refs variant has more objects)
 	select {
-	case rr = <-fr:
+	case <-fr:
 	case <-time.After(64 * TM):
-
 		t.Log("Root :    ", r.Hash.Hex()[:7])
 		t.Log("Registry: ", r.Reg.Short())
 
@@ -366,11 +347,6 @@ func Test_send_receive_refs(t *testing.T) {
 		t.Log("[receiver] objects")
 		printObjects(t, "receiver", rn.Container())
 
-		t.Fatal("slow")
+		t.Fatal("timed out waiting for root replication")
 	}
-
-	// Root object comparison not implemented.
-
-	_ = rr
-
 }

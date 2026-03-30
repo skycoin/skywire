@@ -2,6 +2,7 @@ package visor
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
@@ -68,8 +69,15 @@ func TestLANDmsgServerClientConnection(t *testing.T) {
 	require.NotNil(t, server)
 	defer server.Server.Close() //nolint:errcheck
 
-	// Give the server a moment to start serving
-	time.Sleep(500 * time.Millisecond)
+	// Wait for the server to be accepting connections
+	require.Eventually(t, func() bool {
+		conn, err := net.DialTimeout("tcp", server.Address, time.Second)
+		if err != nil {
+			return false
+		}
+		conn.Close() //nolint:errcheck
+		return true
+	}, 5*time.Second, 100*time.Millisecond, "LAN DMSG server should be accepting connections")
 
 	// Create a DMSG client and connect to the LAN server
 	clientPK, clientSK := cipher.GenerateKeyPair()
@@ -92,8 +100,12 @@ func TestLANDmsgServerClientConnection(t *testing.T) {
 
 	go dmsgC.Serve(context.Background()) //nolint:errcheck
 
-	// Wait for the client to connect
-	time.Sleep(2 * time.Second)
+	// Wait for the client to connect (Ready channel closes when first session is established)
+	select {
+	case <-dmsgC.Ready():
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for DMSG client to connect")
+	}
 
 	sessions := dmsgC.AllSessions()
 	assert.GreaterOrEqual(t, len(sessions), 1, "client should have at least one session")
