@@ -2,6 +2,7 @@
 package dmsg
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -144,8 +145,25 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 		}
 	}
 
+	// Check for ping marker: a 2-byte zero-length prefix [0x00, 0x00].
+	// This cannot occur in normal traffic since valid objects always have length > 0.
+	// Read the first 2 bytes to check before passing to readRequest.
+	header := make([]byte, 2)
+	if _, err := io.ReadFull(yStr, header); err != nil {
+		return err
+	}
+	if header[0] == 0 && header[1] == 0 {
+		// Ping: echo back the marker and close.
+		_, err := yStr.Write(pingMarker)
+		return err
+	}
+
+	// Not a ping — the 2 bytes are the length prefix of a normal object.
+	// Pass them through to readRequest via a prefixed reader.
+	prefixedReader := io.MultiReader(bytes.NewReader(header), yStr)
+
 	readRequest := func() (StreamRequest, error) {
-		obj, err := ss.readObject(yStr)
+		obj, err := ss.readObject(prefixedReader)
 		if err != nil {
 			return StreamRequest{}, err
 		}

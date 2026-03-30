@@ -168,6 +168,11 @@ func (sc *SessionCommon) LocalTCPAddr() net.Addr { return sc.netConn.LocalAddr()
 // RemoteTCPAddr returns the remote address of the underlying TCP connection.
 func (sc *SessionCommon) RemoteTCPAddr() net.Addr { return sc.netConn.RemoteAddr() }
 
+// pingMarker is a 2-byte zero-length prefix that cannot occur in normal
+// session traffic (valid SignedObjects always have length > 0). Used to
+// implement ping over smux streams.
+var pingMarker = []byte{0x00, 0x00}
+
 // Ping obtains the round trip latency of the session.
 func (sc *SessionCommon) Ping() (time.Duration, error) {
 	sc.sm.mutx.RLock()
@@ -175,7 +180,34 @@ func (sc *SessionCommon) Ping() (time.Duration, error) {
 	if sc.sm.yamux != nil {
 		return sc.sm.yamux.Ping()
 	}
-	return 0, fmt.Errorf("Ping not available on SMUX protocol")
+	if sc.sm.smux != nil {
+		return sc.smuxPing()
+	}
+	return 0, fmt.Errorf("no mux session available for ping")
+}
+
+// smuxPing implements ping over smux by opening a temporary stream,
+// writing a ping marker, and waiting for the echo.
+func (sc *SessionCommon) smuxPing() (time.Duration, error) {
+	str, err := sc.sm.smux.OpenStream()
+	if err != nil {
+		return 0, fmt.Errorf("smux ping: open stream: %w", err)
+	}
+	defer str.Close() //nolint:errcheck
+
+	if err := str.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return 0, fmt.Errorf("smux ping: set deadline: %w", err)
+	}
+
+	start := time.Now()
+	if _, err := str.Write(pingMarker); err != nil {
+		return 0, fmt.Errorf("smux ping: write: %w", err)
+	}
+	resp := make([]byte, 2)
+	if _, err := io.ReadFull(str, resp); err != nil {
+		return 0, fmt.Errorf("smux ping: read: %w", err)
+	}
+	return time.Since(start), nil
 }
 
 // Close closes the session.

@@ -3,6 +3,7 @@ package dmsg
 
 import (
 	"context"
+	"errors"
 	"net"
 	"sync"
 	"time"
@@ -16,6 +17,9 @@ import (
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg/metrics"
 )
+
+// ErrClosed is returned when an operation is attempted on a closed server.
+var ErrClosed = errors.New("server closed")
 
 // PeerEntry represents a peer dmsg server to connect to.
 type PeerEntry struct {
@@ -156,7 +160,12 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 		WithField("local_pk", s.pk)
 
 	log.Info("Serving server.")
-	s.wg.Add(1)
+	select {
+	case <-s.done:
+		return ErrClosed
+	default:
+		s.wg.Add(1)
+	}
 	defer func() {
 		log.Info("Stopped server.")
 		s.wg.Done()
