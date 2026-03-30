@@ -317,8 +317,8 @@ func shutdownDmsgDependentComponents(v *Visor, log *logging.Logger) error {
 
 	v.closeMu.Unlock()
 	v.initLock.Lock()
-	v.dtmReady = make(chan struct{})
-	v.dtmReadyOnce = sync.Once{}
+	v.dmsgTracker.ready = make(chan struct{})
+	v.dmsgTracker.readyOnce = sync.Once{}
 	v.initLock.Unlock()
 	v.closeMu.Lock()
 

@@ -77,9 +77,9 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 			log.Debug("Failed to get public IP from GeoIP, trying STUN")
 
 			// Fall back to STUN
-			<-v.stunReady
-			if v.stunClient.PublicIP != nil {
-				pIP = v.stunClient.PublicIP.IP()
+			<-v.stun.ready
+			if v.stun.client.PublicIP != nil {
+				pIP = v.stun.client.PublicIP.IP()
 				log.WithField("public_ip", pIP).Debug("Got public IP from STUN")
 			} else {
 				log.Warn("Failed to determine public IP from dmsg, GeoIP, and STUN")
@@ -163,9 +163,9 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 			if err != nil {
 				logger.WithError(err).Debug("Failed to get public IP from GeoIP, trying STUN")
 
-				<-v.stunReady
-				if v.stunClient.PublicIP != nil {
-					pIP = v.stunClient.PublicIP.IP()
+				<-v.stun.ready
+				if v.stun.client.PublicIP != nil {
+					pIP = v.stun.client.PublicIP.IP()
 					logger.WithField("public_ip", pIP).Debug("Got public IP from STUN for service discovery")
 				} else {
 					logger.Warn("Failed to determine public IP for service discovery from dmsg, GeoIP, and STUN")
@@ -192,9 +192,9 @@ func initStunClient(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	sc := network.GetStunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
-	v.stunClient = sc
+	v.stun.client = sc
 	v.initLock.Unlock()
-	v.stunReadyOnce.Do(func() { close(v.stunReady) })
+	v.stun.readyOnce.Do(func() { close(v.stun.ready) })
 	return nil
 }
 
@@ -206,12 +206,12 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.Info("SUDPH transport wont be available under dmsghttp")
 		return nil
 	}
-	if v.stunClient != nil {
-		switch v.stunClient.NATType {
+	if v.stun.client != nil {
+		switch v.stun.client.NATType {
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
+			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stun.client.NATType.String())
 		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
-			log.Warnf("SUDPH transport wont be available: STUN detection failed (%v)", v.stunClient.NATType.String())
+			log.Warnf("SUDPH transport wont be available: STUN detection failed (%v)", v.stun.client.NATType.String())
 		default:
 			v.tpM.InitClient(ctx, types.SUDPH, v.conf.Transport.SudphPort)
 		}

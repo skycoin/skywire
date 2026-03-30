@@ -130,7 +130,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 
 	if hv.visor.isDTMReady() {
 		// Track hypervisor node.
-		if _, err := hv.visor.dtm.ShouldGet(ctx, hv.visor.conf.PK); err != nil {
+		if _, err := hv.visor.dmsgTracker.manager.ShouldGet(ctx, hv.visor.conf.PK); err != nil {
 			hv.logger.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
 		}
 	}
@@ -165,7 +165,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
 		if hv.visor.isDTMReady() {
-			if _, err := hv.visor.dtm.ShouldGet(ctx, addr.PK); err != nil {
+			if _, err := hv.visor.dmsgTracker.manager.ShouldGet(ctx, addr.PK); err != nil {
 				log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
 			}
 		}
@@ -481,7 +481,7 @@ func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 	}
 	if hv.visor.isDTMReady() {
 		ctx := context.TODO()
-		return hv.visor.dtm.GetBulk(ctx, pks)
+		return hv.visor.dmsgTracker.manager.GetBulk(ctx, pks)
 	}
 	return []dmsgtracker.DmsgClientSummary{}
 }

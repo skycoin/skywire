@@ -303,9 +303,9 @@ func initDmsgTrackers(_ context.Context, v *Visor, _ *logging.Logger) error {
 		return dtm.Close()
 	})
 	v.initLock.Lock()
-	v.dtm = dtm
+	v.dmsgTracker.manager = dtm
 	v.initLock.Unlock()
-	v.dtmReadyOnce.Do(func() { close(v.dtmReady) })
+	v.dmsgTracker.readyOnce.Do(func() { close(v.dmsgTracker.ready) })
 	return nil
 }
 
@@ -578,9 +578,9 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 			avgLatency := totalLatency / time.Duration(len(latencies))
 
 			// Store the latency
-			v.dmsgServerLatenciesMu.Lock()
-			v.dmsgServerLatencies[serverPK] = avgLatency
-			v.dmsgServerLatenciesMu.Unlock()
+			v.dmsgLatency.mu.Lock()
+			v.dmsgLatency.servers[serverPK] = avgLatency
+			v.dmsgLatency.mu.Unlock()
 
 			log.WithFields(logrus.Fields{
 				"server":  serverPKStr[:16] + "...",

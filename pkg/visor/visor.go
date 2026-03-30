@@ -82,18 +82,17 @@ type Visor struct {
 	startedAt     time.Time
 	uptimeTracker utclient.APIClient
 
-	ebc          *appevent.Broadcaster // event broadcaster
-	dmsgC        *dmsg.Client
-	dmsgDC       *dmsg.Client       // dmsg direct client
-	dClient      dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP     *http.Client       // dmsghttp client
-	dtm          *dmsgtracker.Manager
-	dtmReady     chan struct{}
-	dtmReadyOnce sync.Once
+	ebc      *appevent.Broadcaster // event broadcaster
+	dmsgC    *dmsg.Client
+	dmsgDC   *dmsg.Client       // dmsg direct client
+	dClient  dmsgdisc.APIClient // dmsg direct api client
+	dmsgHTTP *http.Client       // dmsghttp client
 
-	stunClient    *network.StunDetails
-	stunReady     chan struct{}
-	stunReadyOnce sync.Once
+	// DMSG tracker state
+	dmsgTracker dtmState
+
+	// STUN client state
+	stun stunState
 
 	tpM      *transport.Manager
 	arClient addrresolver.APIClient
@@ -119,9 +118,10 @@ type Visor struct {
 	// Skywire ping state
 	ping pingState
 
-	dmsgPingConns map[cipher.PubKey]ping
-	dmsgPingMx    *sync.Mutex
-	logStorePath  string
+	// DMSG ping state
+	dmsgPing dmsgPingState
+
+	logStorePath string
 
 	// Survey state
 	survey     visorconfig.Survey
@@ -146,8 +146,7 @@ type Visor struct {
 	publicVisor publicVisorState
 
 	// DMSG server latency tracking (for preferring low-latency servers)
-	dmsgServerLatencies   map[cipher.PubKey]time.Duration
-	dmsgServerLatenciesMu sync.RWMutex
+	dmsgLatency dmsgLatencyState
 
 	// Setup node health tracking (TPS and RSN)
 	nodeHealthTracker *NodeHealthTracker
@@ -192,6 +191,32 @@ type autoconnectState struct {
 type publicVisorState struct {
 	updater *appdisc.PublicVisorUpdater
 	mu      sync.Mutex
+}
+
+// dtmState manages the DMSG tracker manager lifecycle.
+type dtmState struct {
+	manager   *dmsgtracker.Manager
+	ready     chan struct{}
+	readyOnce sync.Once
+}
+
+// stunState manages STUN client state.
+type stunState struct {
+	client    *network.StunDetails
+	ready     chan struct{}
+	readyOnce sync.Once
+}
+
+// dmsgPingState manages DMSG ping connections.
+type dmsgPingState struct {
+	conns map[cipher.PubKey]ping
+	mu    *sync.Mutex
+}
+
+// dmsgLatencyState tracks DMSG server latencies.
+type dmsgLatencyState struct {
+	servers map[cipher.PubKey]time.Duration
+	mu      sync.RWMutex
 }
 
 // todo: consider moving module closing to the module system
@@ -323,19 +348,27 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		closeMu:              new(sync.RWMutex),
 		allowedMX:            new(sync.RWMutex),
 		isServicesHealthy:    newInternalHealthInfo(),
-		dtmReady:             make(chan struct{}),
-		stunReady:            make(chan struct{}),
 		connectedHypervisors: make(map[cipher.PubKey]bool),
+		dmsgTracker: dtmState{
+			ready: make(chan struct{}),
+		},
+		stun: stunState{
+			ready: make(chan struct{}),
+		},
 		ping: pingState{
 			conns: make(map[cipher.PubKey]ping),
 			mu:    new(sync.Mutex),
 		},
-		dmsgPingConns:       make(map[cipher.PubKey]ping),
-		dmsgPingMx:          new(sync.Mutex),
-		allowedPorts:        make(map[int]bool),
-		survey:              visorconfig.Survey{},
-		surveyLock:          new(sync.RWMutex),
-		dmsgServerLatencies: make(map[cipher.PubKey]time.Duration),
+		dmsgPing: dmsgPingState{
+			conns: make(map[cipher.PubKey]ping),
+			mu:    new(sync.Mutex),
+		},
+		allowedPorts: make(map[int]bool),
+		survey:       visorconfig.Survey{},
+		surveyLock:   new(sync.RWMutex),
+		dmsgLatency: dmsgLatencyState{
+			servers: make(map[cipher.PubKey]time.Duration),
+		},
 	}
 	v.isServicesHealthy.init()
 
@@ -418,7 +451,7 @@ func (v *Visor) processRuntimeErrs() bool {
 
 func (v *Visor) isStunReady() bool {
 	select {
-	case <-v.stunReady:
+	case <-v.stun.ready:
 		return true
 	default:
 		return false
@@ -535,7 +568,7 @@ func (v *Visor) Close() error {
 
 func (v *Visor) isDTMReady() bool {
 	select {
-	case <-v.dtmReady:
+	case <-v.dmsgTracker.ready:
 		return true
 	default:
 		return false

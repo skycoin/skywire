@@ -39,9 +39,9 @@ func (v *Visor) Overview() (*Overview, error) {
 	}
 
 	if v.isStunReady() {
-		switch v.stunClient.NATType {
+		switch v.stun.client.NATType {
 		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
-			publicIP = v.stunClient.PublicIP.IP()
+			publicIP = v.stun.client.PublicIP.IP()
 			isSymmetricNAT = false
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
 			isSymmetricNAT = true
@@ -55,7 +55,7 @@ func (v *Visor) Overview() (*Overview, error) {
 			if ip, err := GetIP(v.conf.GeoIP); err == nil && ip != "" {
 				publicIP = ip
 			} else {
-				publicIP = v.stunClient.NATType.String()
+				publicIP = v.stun.client.NATType.String()
 			}
 		}
 	}
@@ -150,7 +150,7 @@ func (v *Visor) Summary() (*Summary, error) {
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
 	if v.isDTMReady() {
-		if dmsgTracker, ok := v.dtm.Get(v.conf.PK); ok {
+		if dmsgTracker, ok := v.dmsgTracker.manager.Get(v.conf.PK); ok {
 			dmsgStatValue = &dmsgTracker
 		}
 	}
