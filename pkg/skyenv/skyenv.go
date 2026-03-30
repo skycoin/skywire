@@ -16,7 +16,6 @@ const (
 	SERVICESName = "services-config.json"
 
 	// Dmsg port constants.
-	// TODO(evanlinjin): Define these properly. These are currently random.
 
 	// DmsgCtrlPort Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
 	DmsgCtrlPort uint16 = 7
@@ -100,8 +99,6 @@ const (
 	// VPNClientName is the name of the vpn client app
 	VPNClientName = "vpn-client"
 
-	// TODO(darkrengarius): this one's not needed for the app to run but lack of it causes errors
-
 	// VPNClientPort over dmsg
 	VPNClientPort uint16 = 43
 
@@ -134,7 +131,7 @@ const (
 	// TransportRPCTimeout timeout of transport rpc
 	TransportRPCTimeout = 1 * time.Minute
 
-	// UpdateRPCTimeout update requires huge timeout - NOTE: this is likely unused
+	// UpdateRPCTimeout is the RPC timeout for the "Update" method (used by rpcClient.Call)
 	UpdateRPCTimeout = 6 * time.Hour
 
 	// HealthTimeout defines timeout for /health endpoint calls done from hypervisor.

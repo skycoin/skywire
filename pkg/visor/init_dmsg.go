@@ -309,7 +309,7 @@ func initDmsgTrackers(_ context.Context, v *Visor, _ *logging.Logger) error {
 	return nil
 }
 
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {

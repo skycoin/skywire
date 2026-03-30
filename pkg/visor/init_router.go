@@ -22,7 +22,7 @@ import (
 )
 
 // getRouteSetupHooks aka autotransport
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []router.RouteSetupHook {
@@ -146,7 +146,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		RouteFinder:      rfClient,
 		RouteGroupDialer: rgDialer,
 		SetupNodes:       conf.RouteSetupNodes,
-		RulesGCInterval:  0, // TODO
+		RulesGCInterval:  0, // 0 = DefaultRulesGCInterval (10s)
 		MinHops:          v.conf.Routing.MinHops,
 	}
 

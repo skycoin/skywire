@@ -670,7 +670,7 @@ func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
 	return true
 }
 
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger) error {

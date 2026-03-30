@@ -31,7 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/tpviz"
 )
 
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func server(e error) {

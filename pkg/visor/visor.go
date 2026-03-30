@@ -234,7 +234,7 @@ type logServerState struct {
 	localAPI *logserver.API // localhost log server (optional)
 }
 
-// todo: consider moving module closing to the module system
+// Close stack: tracks cleanup functions pushed during initialization.
 
 type closeFn func() error
 

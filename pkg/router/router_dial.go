@@ -379,7 +379,6 @@ func (r *router) MeasureTransportLatency(ctx context.Context, remote cipher.PubK
 }
 
 func (r *router) fetchBestRoutes(ctx context.Context, src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
-	// TODO: use opts
 	if opts == nil {
 		opts = DefaultDialOptions() // nolint
 	}

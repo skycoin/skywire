@@ -91,7 +91,7 @@ var (
 //go:embed "description.txt"
 var description string
 
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func parseArgs() error {
@@ -229,7 +229,7 @@ func setDefaultTermuiColors(c gotop.Config) {
 	ui.Theme.Block.Border = ui.NewStyle(ui.Color(c.Colorscheme.BorderLine), ui.Color(c.Colorscheme.Bg))
 }
 
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func eventLoop(c gotop.Config, grid *layout.MyGrid) {
@@ -414,7 +414,7 @@ func eventLoop(c gotop.Config, grid *layout.MyGrid) {
 	}
 }
 
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func run() int {

@@ -52,7 +52,7 @@ var (
 	useRouteFinder bool // override local route calculation to use route finder
 )
 
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func init() {

@@ -152,7 +152,7 @@ func (r *router) serveSetup() {
 	}
 }
 
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRules, nsConf noise.Config) (*NoiseRouteGroup, error) {

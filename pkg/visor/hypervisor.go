@@ -736,7 +736,7 @@ func (hv *Hypervisor) getAppStats() http.HandlerFunc {
 }
 
 // nolint: funlen,gocognit,godox
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func (hv *Hypervisor) putApp() http.HandlerFunc {
