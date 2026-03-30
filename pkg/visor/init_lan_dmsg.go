@@ -71,11 +71,11 @@ func startLANDmsgServer(conf *visorconfig.LANDmsgServerConf, visorConf *visorcon
 	// Extract actual port
 	_, portStr, err := net.SplitHostPort(lis.Addr().String())
 	if err != nil {
-		lis.Close() //nolint:errcheck
+		lis.Close() //nolint:errcheck,gosec
 		return nil, fmt.Errorf("parse listener address: %w", err)
 	}
 	actualPort := 0
-	_, _ = fmt.Sscanf(portStr, "%d", &actualPort)
+	_, _ = fmt.Sscanf(portStr, "%d", &actualPort) //nolint:errcheck,gosec
 
 	// Determine LAN-routable address
 	lanIP := getLANIP(log)
