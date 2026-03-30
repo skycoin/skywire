@@ -41,7 +41,7 @@ type Conn struct {
 	//
 	// ------
 
-	mx sync.Mutex // locks all fields below (RWMutex could improve read concurrency)
+	mx sync.RWMutex // locks all fields below
 
 	// request - response
 	seq  uint32                    // message seq number (for request-response)
@@ -512,8 +512,8 @@ func (c *Conn) receiveMsg() error {
 }
 
 func (c *Conn) isResponse(rseq uint32) (rq chan<- msg.Msg, ok bool) {
-	c.mx.Lock()
-	defer c.mx.Unlock()
+	c.mx.RLock()
+	defer c.mx.RUnlock()
 
 	rq, ok = c.reqs[rseq]
 	return
