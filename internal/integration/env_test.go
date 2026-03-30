@@ -1733,7 +1733,7 @@ func (env *TestEnv) logContainerTail(containerName string, lines int) {
 func (env *TestEnv) waitForAppStopped(app AppToRun, timeout time.Duration) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		running, _ := env.isVisorAppRunning(app)
+		running, _ := env.isVisorAppRunning(app) //nolint:errcheck
 		if !running {
 			env.logger.Infof("App %s on %s confirmed stopped", app.AppName, app.VisorHostName)
 			return
@@ -1831,20 +1831,21 @@ func (env *TestEnv) waitForListeningPort(port int, timeout time.Duration) bool {
 }
 
 // waitForTPDClean polls transport discovery until no transports exist for the given visor PK.
-func (env *TestEnv) waitForTPDClean(visor string, timeout time.Duration) bool {
+func (env *TestEnv) waitForTPDClean(visor string, timeout time.Duration) {
 	pk, ok := env.visorPKs[visor]
 	if !ok {
-		return false
+		env.logger.Warnf("waitForTPDClean: no PK for visor %s", visor)
+		return
 	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		entries, err := env.QueryTPDByPK(pk)
 		if err == nil && len(entries) == 0 {
-			return true
+			return
 		}
 		time.Sleep(2 * time.Second)
 	}
-	return false
+	env.logger.Warnf("waitForTPDClean: timeout for visor %s", visor)
 }
 
 // stripDockerLogHeaders removes the 8-byte multiplexed stream headers from Docker container log output.
