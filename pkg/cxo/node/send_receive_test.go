@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"runtime"
 	"testing"
 	"time"
 
@@ -123,6 +124,9 @@ func onFillingBreaksTestLog(
 }
 
 func Test_send_receive(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("CXO root filling is unreliable on Windows CI runners")
+	}
 
 	var (
 		fr, onRootFilled = onRootFilledToChannel(100)

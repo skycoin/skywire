@@ -48,7 +48,9 @@ func TestStartLANDmsgServer(t *testing.T) {
 
 	t.Logf("LAN DMSG server started on %s (port %d) with PK %s", server.Address, server.Port, server.PK)
 
-	// Close server after assertions (not deferred, to avoid race with Serve goroutine)
+	// Wait for Serve goroutine to reach stable state before closing.
+	// dmsg.Server has a race between Serve() and Close() on shared state.
+	time.Sleep(200 * time.Millisecond)
 	require.NoError(t, server.Server.Close())
 }
 
