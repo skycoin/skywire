@@ -171,9 +171,9 @@ func registerModules(logger *logging.MasterLogger) {
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer, &nodeHealth)
 
-	// Hypervisor depends only on dmsgC (not full vis) so the HTTP UI starts early.
-	// DMSG-dependent features (remote visor RPC) activate once DMSG connects.
-	hv = maker("hypervisor", initHypervisor, &dmsgC)
+	// Hypervisor includes the full visor module tree so all services
+	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
+	hv = maker("hypervisor", initHypervisor, &vis)
 }
 
 type initFn func(context.Context, *Visor, *logging.Logger) error
