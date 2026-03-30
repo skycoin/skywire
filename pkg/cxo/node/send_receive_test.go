@@ -180,10 +180,20 @@ func Test_send_receive(t *testing.T) {
 		t.Fatal("blank listening address")
 	}
 
-	// connect the nodes (synchronous: handshake completes before return)
+	// connect the nodes (synchronous from client side; wait for server to register)
 	var c *Conn
 	if c, err = rn.TCP().Connect(sn.TCP().Address()); err != nil {
 		t.Fatal(err)
+	}
+
+	// Wait for the sender to register the accepted connection
+	deadline := time.After(TM)
+	for len(sn.Connections()) == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("sender never registered the accepted connection")
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 
 	// subscribe (synchronous: waits for Ok response, then sender pushes root)
@@ -323,10 +333,20 @@ func Test_send_receive_refs(t *testing.T) {
 		t.Fatal("blank listening address")
 	}
 
-	// connect the nodes (synchronous: handshake completes before return)
+	// connect the nodes (synchronous from client side; wait for server to register)
 	var c *Conn
 	if c, err = rn.TCP().Connect(sn.TCP().Address()); err != nil {
 		t.Fatal(err)
+	}
+
+	// Wait for the sender to register the accepted connection
+	deadline := time.After(TM)
+	for len(sn.Connections()) == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("sender never registered the accepted connection")
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 
 	// subscribe (synchronous: waits for Ok response, then sender pushes root)

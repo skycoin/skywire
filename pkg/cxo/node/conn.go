@@ -269,8 +269,8 @@ func (c *Conn) sendLastRoot(pk cipher.PubKey) {
 		return
 	}
 
-	c.n.Debugf(MsgSendPin, "[%s] sendLastRoot %s: no Root objects found (%d)",
-		c.String(), pk.Hex()[:7], activeHead)
+	c.n.Printf("[WARN] [%s] sendLastRoot %s: %v (activeHead=%d)",
+		c.String(), pk.Hex()[:7], err, activeHead)
 
 }
 

@@ -241,6 +241,9 @@ func TestNode_Publish(t *testing.T) {
 	c, err = sn1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	assertTrue(t, c.PeerID() == ln.ID(), "wrong ID")
+	waitForCondition(t, TM, "ln sees sn1 connected", func() bool {
+		return len(ln.Connections()) >= 1
+	})
 	assertIDs(t, ln.Connections(), sn1.ID())
 
 	assertNil(t, c.Subscribe(pk))
@@ -250,6 +253,9 @@ func TestNode_Publish(t *testing.T) {
 	c, err = sn2.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	assertTrue(t, c.PeerID() == ln.ID(), "wrong ID")
+	waitForCondition(t, TM, "ln sees sn2 connected", func() bool {
+		return len(ln.Connections()) >= 2
+	})
 	assertIDs(t, ln.Connections(), sn1.ID(), sn2.ID())
 
 	assertNil(t, c.Subscribe(pk))
@@ -259,6 +265,9 @@ func TestNode_Publish(t *testing.T) {
 	c, err = un1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	assertTrue(t, c.PeerID() == ln.ID(), "wrong id")
+	waitForCondition(t, TM, "ln sees un1 connected", func() bool {
+		return len(ln.Connections()) >= 3
+	})
 
 	// check all connections
 
