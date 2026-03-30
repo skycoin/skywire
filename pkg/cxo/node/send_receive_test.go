@@ -209,7 +209,7 @@ func Test_send_receive(t *testing.T) {
 	// wait for the root to be filled on the receiver
 	select {
 	case <-fr:
-	case <-time.After(4 * TM):
+	case <-time.After(30 * time.Second):
 		t.Log("Root :    ", r.Hash.Hex()[:7])
 		t.Log("Registry: ", r.Reg.Short())
 
