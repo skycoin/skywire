@@ -186,7 +186,10 @@ func Test_send_receive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait for the sender to register the accepted connection
+	// Wait for the sender to fully register the accepted connection and start
+	// serving. The handshake is synchronous but the sender's acceptConn →
+	// addConn → run() path is async. On slow CI runners, subscribing before
+	// the sender is ready causes sendLastRoot to fail silently.
 	deadline := time.After(TM)
 	for len(sn.Connections()) == 0 {
 		select {
@@ -195,6 +198,8 @@ func Test_send_receive(t *testing.T) {
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
+	// Brief pause to ensure the sender's receiveMsg goroutine is scheduled
+	time.Sleep(100 * time.Millisecond)
 
 	// subscribe (synchronous: waits for Ok response, then sender pushes root)
 	if err = c.Subscribe(pk); err != nil {
@@ -348,6 +353,7 @@ func Test_send_receive_refs(t *testing.T) {
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
+	time.Sleep(100 * time.Millisecond)
 
 	// subscribe (synchronous: waits for Ok response, then sender pushes root)
 	if err = c.Subscribe(pk); err != nil {
