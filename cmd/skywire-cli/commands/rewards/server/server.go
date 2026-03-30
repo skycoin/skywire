@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/tpviz"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
 
 // nolint: gocyclo
@@ -1138,7 +1139,18 @@ func server(e error) {
 					c.Writer.Flush()
 					return
 				}
-				l += "<a id='" + strings.TrimRight(skyaddr, "\n") + "'>" + strings.TrimRight(skyaddr, "\n") + "</a>," + strings.TrimRight(skyamt, "\n") + "\n"
+				// Never display raw xpub keys — they are private.
+				// Derive the address if an xpub appears in historical data.
+				displayAddr := strings.TrimRight(skyaddr, "\n")
+				if strings.HasPrefix(displayAddr, "xpub") {
+					derived, dErr := rewardconfig.DeriveExternalAddressFromXpub(displayAddr, 0)
+					if dErr == nil {
+						displayAddr = derived
+					} else {
+						displayAddr = displayAddr[:12] + "..." // truncate xpub for safety
+					}
+				}
+				l += "<a id='" + displayAddr + "'>" + displayAddr + "</a>," + strings.TrimRight(skyamt, "\n") + "\n"
 			}
 
 			l += "<br>" + htmltoplink
