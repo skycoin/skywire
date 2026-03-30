@@ -75,7 +75,7 @@ func TestLANDmsgServerClientConnection(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		conn.Close() //nolint:errcheck
+		conn.Close() //nolint:errcheck,gosec
 		return true
 	}, 5*time.Second, 100*time.Millisecond, "LAN DMSG server should be accepting connections")
 

@@ -34,7 +34,7 @@ func ServePProf(log logrus.FieldLogger, addr, serviceName string) {
 	// Service identifier
 	mux.HandleFunc("/debug/service", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
-		fmt.Fprintln(w, serviceName)
+		fmt.Fprintln(w, serviceName) //nolint:errcheck
 	})
 
 	// Standard pprof handlers
