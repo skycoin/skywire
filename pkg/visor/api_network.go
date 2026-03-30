@@ -165,36 +165,36 @@ func (v *Visor) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error) {
 
 // RegisterHTTPPort implements API.
 func (v *Visor) RegisterHTTPPort(localPort int) error {
-	v.allowedMX.Lock()
-	defer v.allowedMX.Unlock()
+	v.allowed.mu.Lock()
+	defer v.allowed.mu.Unlock()
 	ok := isPortAvailable(v.log, localPort)
 	if ok {
 		return fmt.Errorf("no connection on local port :%v", localPort)
 	}
-	if v.allowedPorts[localPort] {
+	if v.allowed.ports[localPort] {
 		return fmt.Errorf("port :%v already registered", localPort)
 	}
-	v.allowedPorts[localPort] = true
+	v.allowed.ports[localPort] = true
 	return nil
 }
 
 // DeregisterHTTPPort implements API.
 func (v *Visor) DeregisterHTTPPort(localPort int) error {
-	v.allowedMX.Lock()
-	defer v.allowedMX.Unlock()
-	if !v.allowedPorts[localPort] {
+	v.allowed.mu.Lock()
+	defer v.allowed.mu.Unlock()
+	if !v.allowed.ports[localPort] {
 		return fmt.Errorf("port :%v not registered", localPort)
 	}
-	delete(v.allowedPorts, localPort)
+	delete(v.allowed.ports, localPort)
 	return nil
 }
 
 // ListHTTPPorts implements API.
 func (v *Visor) ListHTTPPorts() ([]int, error) {
-	v.allowedMX.Lock()
-	defer v.allowedMX.Unlock()
-	keys := make([]int, 0, len(v.allowedPorts))
-	for k := range v.allowedPorts {
+	v.allowed.mu.Lock()
+	defer v.allowed.mu.Unlock()
+	keys := make([]int, 0, len(v.allowed.ports))
+	for k := range v.allowed.ports {
 		keys = append(keys, k)
 	}
 	return keys, nil

@@ -112,8 +112,9 @@ type Visor struct {
 	isServicesHealthy    *internalHealthInfo
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
-	allowedPorts         map[int]bool
-	allowedMX            *sync.RWMutex
+
+	// Allowed ports for app connections
+	allowed allowedPortsState
 
 	// Skywire ping state
 	ping pingState
@@ -121,11 +122,8 @@ type Visor struct {
 	// DMSG ping state
 	dmsgPing dmsgPingState
 
-	logStorePath string
-
 	// Survey state
-	survey     visorconfig.Survey
-	surveyLock *sync.RWMutex
+	survey surveyState
 
 	// Cached geolocation data from geoIP service
 	geo geoState
@@ -151,9 +149,8 @@ type Visor struct {
 	// Setup node health tracking (TPS and RSN)
 	nodeHealthTracker *NodeHealthTracker
 
-	// Log server API references for health stats
-	logServerAPI      *logserver.API
-	localLogServerAPI *logserver.API // Localhost log server (optional)
+	// Log server references for health stats
+	logServer logServerState
 
 	// STCP PK table for runtime address injection (tp add -t stcp --addr)
 	stcpTable stcp.PKTable
@@ -217,6 +214,24 @@ type dmsgPingState struct {
 type dmsgLatencyState struct {
 	servers map[cipher.PubKey]time.Duration
 	mu      sync.RWMutex
+}
+
+// allowedPortsState manages ports allowed for app connections.
+type allowedPortsState struct {
+	ports map[int]bool
+	mu    *sync.RWMutex
+}
+
+// surveyState manages system survey data.
+type surveyState struct {
+	data visorconfig.Survey
+	mu   *sync.RWMutex
+}
+
+// logServerState holds log server API references for health stats.
+type logServerState struct {
+	api      *logserver.API
+	localAPI *logserver.API // localhost log server (optional)
 }
 
 // todo: consider moving module closing to the module system
@@ -346,9 +361,12 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		conf:                 conf,
 		initLock:             new(sync.RWMutex),
 		closeMu:              new(sync.RWMutex),
-		allowedMX:            new(sync.RWMutex),
 		isServicesHealthy:    newInternalHealthInfo(),
 		connectedHypervisors: make(map[cipher.PubKey]bool),
+		allowed: allowedPortsState{
+			ports: make(map[int]bool),
+			mu:    new(sync.RWMutex),
+		},
 		dmsgTracker: dtmState{
 			ready: make(chan struct{}),
 		},
@@ -363,9 +381,9 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 			conns: make(map[cipher.PubKey]ping),
 			mu:    new(sync.Mutex),
 		},
-		allowedPorts: make(map[int]bool),
-		survey:       visorconfig.Survey{},
-		surveyLock:   new(sync.RWMutex),
+		survey: surveyState{
+			mu: new(sync.RWMutex),
+		},
 		dmsgLatency: dmsgLatencyState{
 			servers: make(map[cipher.PubKey]time.Duration),
 		},
@@ -381,7 +399,6 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	v.startedAt = time.Now()
 	if isStoreLog {
 		storeLog(conf)
-		v.logStorePath = conf.LocalPath
 	}
 	log := v.MasterLogger().PackageLogger("visor:startup")
 	log.WithField("public_key", conf.PK).

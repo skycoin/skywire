@@ -182,14 +182,14 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		}
 	}
 
-	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, &v.survey, printLog)
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, &v.survey.data, printLog)
 
 	// Set visor as health stats provider for /health endpoint
 	lsAPI.SetHealthStatsProvider(v)
 
 	// Store the log server API reference for public autocheck to use later
 	v.initLock.Lock()
-	v.logServerAPI = lsAPI
+	v.logServer.api = lsAPI
 	v.initLock.Unlock()
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
@@ -248,13 +248,13 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		logger.WithField("local_addr", localAddr).Info("Starting localhost log server")
 
 		// Create a separate API without whitelist authentication for localhost
-		localAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, nil, &v.survey, printLog)
+		localAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, nil, &v.survey.data, printLog)
 
 		// Set visor as health stats provider for /health endpoint
 		localAPI.SetHealthStatsProvider(v)
 
 		// Store the localhost API for potential future use
-		v.localLogServerAPI = localAPI
+		v.logServer.localAPI = localAPI
 
 		localLis, err := net.Listen("tcp", localAddr)
 		if err != nil {
