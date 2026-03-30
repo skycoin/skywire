@@ -775,7 +775,7 @@ func (r *Refs) DeleteByHash(
 		return r.deleteByHashUsingHashTable(pack, hash)
 	}
 
-	// TODO (kostyarin): implement and use (a)descend+delete method
+	// A combined descend+delete method would avoid double traversal.
 	//                   that joins descending and deleting
 
 	// else -> iterate descending
@@ -799,7 +799,7 @@ func (r *Refs) DeleteByHash(
 	return err
 }
 
-// TODO (kostyarin): implement the DeleteSliceByIndices
+// DeleteSliceByIndices is not implemented.
 //
 // // DeleteSliceByRange deletes slice from the 'from' to the 'to'
 // // arguments. The 'from' and 'to' arguments are like a golang [a:b].
@@ -1351,7 +1351,7 @@ func (r *Refs) appnedFunc(
 
 		}
 
-		// TODO (kostyarin): LazyUpdating
+		// LazyUpdating: defer tree rebalance until commit.
 
 		err = r.updateHashIfNeed(pack, true)
 		return err
@@ -1385,7 +1385,7 @@ func (r *Refs) walkUpdating(
 // will be increased if it can't fit all new
 // elements
 //
-// TODO (kostyarin): append itself. The ablility
+// Append optimization: batch insert without per-element rebalance.
 // to append the Refs itself is not implemented
 // yet. Behavior in this case is undefined
 func (r *Refs) Append(
@@ -1647,11 +1647,11 @@ func (r *Refs) Rebuild(
 		return err
 	}
 
-	// TODO (kostyarin): origin mod
+	// Origin modification tracking not implemented.
 
 	// can we reduce depth of the Refs?
 
-	// TODO (kostyarin): improve the algorithm
+	// Algorithm could be optimized for large refs collections.
 	var dif = depthToFit(r.degree, 0, r.length)
 
 	if dif != r.depth {

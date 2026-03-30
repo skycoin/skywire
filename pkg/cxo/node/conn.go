@@ -36,11 +36,11 @@ type Conn struct {
 
 	// # stat
 	//
-	// TODO (kostyarin): stat without mutexes to do not slow down the connection
+	// Stat collection uses the connection mutex; lock-free counters could reduce overhead.
 	//
 	// ------
 
-	mx sync.Mutex // locks all fields below, TODO: change to RWMutex
+	mx sync.Mutex // locks all fields below (RWMutex could improve read concurrency)
 
 	// request - response
 	seq  uint32                    // messege seq number (for request-response)
@@ -402,8 +402,8 @@ func (c *Conn) Close() (err error) {
 	close(c.closeq)
 	c.await.Wait()
 
-	// TODO: c.await.Wait() can exit beofre connection is removed from cache.
-	// TODO: get errors from background goroutines and retrun them.
+	// Note: c.await.Wait() can exit before connection is removed from cache.
+	// Background goroutine errors are not propagated to caller.
 
 	return nil
 }

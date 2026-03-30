@@ -1049,7 +1049,7 @@ func (i *Index) Close() (err error) {
 
 	i.stat.Close() // close statistic first
 
-	// TODO (kostyarin): access time (fuck it for now, the access time
+	// Access time tracking is not implemented (would enable LRU eviction
 	//                   is not implemented as well)
 
 	return

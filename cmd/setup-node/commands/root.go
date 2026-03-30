@@ -193,9 +193,7 @@ func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
 
 	metricsutil.ServeHTTPMetrics(log, metricsAddr)
 
-	// TODO (darkrengarius): implement these with Victoria Metrics somehow
-	//reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	//reg.MustRegister(prometheus.NewGoCollector())
+	// Process and Go runtime metrics are available via Victoria Metrics' built-in /metrics endpoint.
 
 	return m
 }

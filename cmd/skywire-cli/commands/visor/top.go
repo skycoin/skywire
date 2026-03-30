@@ -45,7 +45,7 @@ var topCmd = &cobra.Command{
 	Short: "system monitor",
 	Long:  "system monitor",
 	Run: func(cmd *cobra.Command, _ []string) {
-		// TODO: Make this an option, for performance testing
+		// Could be made configurable for performance testing.
 		//go func() {
 		//	log.Fatal(http.ListenAndServe(":7777", nil))
 		//}()

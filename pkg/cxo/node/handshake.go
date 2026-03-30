@@ -35,7 +35,7 @@ func (c *Conn) performHandshake() error {
 	}
 
 	// Check specified response timeout.
-	// TODO: add special parameter for handshake timeout.
+	// Handshake uses connection-level timeout; a dedicated parameter could give finer control.
 	var (
 		rt time.Duration
 		tm *time.Timer
@@ -95,7 +95,7 @@ func (c *Conn) acceptHandshake() (err error) {
 	c.n.Debugf(ConnHskPin, "[%s] accept handshake", c.String())
 
 	// Check specified response timeout.
-	// TODO: add special parameter for handshake timeout.
+	// Handshake uses connection-level timeout; a dedicated parameter could give finer control.
 	var (
 		rt time.Duration
 		tm *time.Timer

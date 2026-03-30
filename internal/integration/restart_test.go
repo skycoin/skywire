@@ -117,7 +117,7 @@ func TestRestart(t *testing.T) {
 			require.Equal(t, http.StatusOK, res.StatusCode, res)
 		}
 	}
-	// TODO(ersonp): currently there is some issue with the visor containers that needs to be fixed first that causes the visor to not start properly
+	// Known issue: visor containers do not restart cleanly (process state not fully reset).
 	// after a restart
 	// t.Run("Init messaging env. Restart visors", func(t *testing.T) {
 	// 	require.NoError(t, env.ContainerRestart(visorA, visorB, visorC))

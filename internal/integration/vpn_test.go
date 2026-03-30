@@ -32,7 +32,7 @@ func TestVPN(t *testing.T) {
 			// this field is needed for the call of `GatherVisorPKs` to get all the needed PKs.
 			// but if we refactor code properly, we may do this a middleware before any
 			// calls which require PK and remove this field along with the `GatherVisorPKs`.
-			// so it's a TODO
+			// VPN route verification not yet implemented.
 			ParticipatingVisorsHostNames: []string{visorVPNClient, visorVPNServer},
 			AppsToRun: []AppToRun{
 				{

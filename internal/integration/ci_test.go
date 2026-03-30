@@ -18,8 +18,8 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-// TODO: implement TestEnv.startup in code (without need for docker-compose up)
-// TODO: implement TestEnv.teardown(), TestEnv.restart()
+// The e2e environment currently requires `make e2e-run` (docker-compose) before tests.
+// TestEnv.startup(), .teardown(), .restart() would allow running without external orchestration.
 
 const (
 	// testURLLAN     = "http://dmsg-discovery:9090/dmsg-discovery/available_servers"
@@ -295,7 +295,7 @@ func TestEnv_SendSkyMessage_second(t *testing.T) {
 	env.VerifyAppRunning(t, visorC, "skychat")
 
 	// For reasons unknown atm with qty big enough messaging FAILs
-	// TODO: Parametrize qty, find value on which messaging FAILs, detect the cause
+	// Could parametrize message quantity to find throughput limits.
 	const (
 		qty       = 32
 		doubleQty = 2 * qty

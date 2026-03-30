@@ -240,7 +240,7 @@ func TestSchema_HasReferences(t *testing.T) {
 func TestSchema_Kind(t *testing.T) {
 	// Kind() reflect.Kind
 
-	// TODO (kostyarin): low priority
+	// Test not implemented (low priority).
 
 }
 
@@ -515,7 +515,7 @@ func TestSchema_IsRegistered(t *testing.T) {
 			var fs = fl.Schema()
 
 			if fs.Kind() == reflect.Struct {
-				// TODO (kostyarin): for future to increase coverage easy way
+				// Could expand coverage with additional schema types.
 				continue
 			}
 
@@ -532,7 +532,7 @@ func TestSchema_IsRegistered(t *testing.T) {
 func TestSchema_Encode(t *testing.T) {
 	// Encode() (b []byte)
 
-	// TODO: low priority
+	// Test not implemented (low priority).
 
 }
 
@@ -587,6 +587,6 @@ func TestSchema_Size(t *testing.T) {
 func TestSchema_String(t *testing.T) {
 	// String() string
 
-	// TODO: low priority
+	// Test not implemented (low priority).
 
 }

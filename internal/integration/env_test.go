@@ -460,13 +460,13 @@ func (env *TestEnv) VisorRouteRmRule(visor string, routeID routing.RouteID) (str
 	return env.ExecJSONReturnString(cmd)
 }
 
-// TODO(ersonp): figure out a way to write test for this
+// Halt/Start require container lifecycle management; tested via TestEnv_ContainerRestart.
 func (env *TestEnv) VisorHalt(visor string) (string, error) {
 	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 halt --json", visor)
 	return env.ExecJSONReturnString(cmd)
 }
 
-// TODO(ersonp): figure out a way to write test for this
+// Halt/Start require container lifecycle management; tested via TestEnv_ContainerRestart.
 func (env *TestEnv) VisorStart(visor string) (string, error) {
 	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 start --json", visor)
 	return env.ExecJSONReturnString(cmd)

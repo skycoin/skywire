@@ -83,11 +83,11 @@ func TestCreateRouteGroup(t *testing.T) {
 				checkRtIDKeysOfRouterRules(t, mr)
 			}
 
-			// TODO: assert: edge routers
+			// Edge router assertion not implemented.
 			// * Ensure edge routers have 1 edge rule each, and no inter rules.
 			// * Edge rule's descriptor should be of provided src/dst pk/port.
 
-			// TODO: assert: inter routers
+			// Intermediary router assertion not implemented.
 			// * Ensure inter routers have 2 or more inter rules (depending on routes).
 			// * Ensure inter routers have no edge rules.
 		})
@@ -145,7 +145,7 @@ func biRouteFromKeys(fwdPKs, revPKs []cipher.PubKey, srcPort, dstPort routing.Po
 		revHops[i] = routing.Hop{TpID: determineTpID(srcPK, dstPK), From: srcPK, To: dstPK}
 	}
 
-	// TODO(evanlinjin): This should also return a map of format: map[uuid.UUID][]cipher.PubKey
+	// Could also return a map of format: map[uuid.UUID][]cipher.PubKey
 	// This way, we can associate transport IDs to the two transport edges, allowing for more checks.
 	return routing.BidirectionalRoute{
 		Desc:      routing.NewRouteDescriptor(fwdPKs[0], revPKs[0], srcPort, dstPort),
@@ -261,7 +261,7 @@ func TestGenerateRules(t *testing.T) {
 			t.Log("INTERMEDIARY:", inter)
 
 			// assert
-			// TODO: We need more checks here
+			// Additional route validation could be added here.
 			require.NoError(t, err)
 			require.Len(t, fwd, 2)
 			require.Len(t, rev, 2)

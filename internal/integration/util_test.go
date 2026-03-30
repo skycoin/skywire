@@ -76,7 +76,7 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		_ = env.VisorRemoveTransport(tp) //nolint:errcheck
 	}
 
-	// TODO(Sir Darkrengarius+ersonp): set all other args to their default values to ensure that everything is as needed
+	// Other args use visor defaults; explicit values could be set here for full control.
 	// would be better to have a method to inject new app into config with default config.
 	// this way we may also have just a single generic visor config with no apps and
 	// inject apps as we need it for tests.

@@ -365,14 +365,14 @@ func TestNode_Connections(t *testing.T) {
 func TestNode_TCP(t *testing.T) {
 	// (tcp *TCP)
 
-	// TODO (kostyarin): low priority
+	// Test not implemented (low priority).
 
 }
 
 func TestNode_UDP(t *testing.T) {
 	// (udp *UDP)
 
-	// TODO (kostyarin): low priority
+	// Test not implemented (low priority).
 
 }
 
@@ -504,13 +504,13 @@ func TestNode_IsSharing(t *testing.T) {
 func TestNode_Stat(t *testing.T) {
 	// (s *Stat)
 
-	// TODO (kostyarin): the lowest priority
+	// Test not implemented (low priority).
 
 }
 
 func TestNode_Close(t *testing.T) {
 	// (err error)
 
-	// TODO (kostyarin): the lowest priority
+	// Test not implemented (low priority).
 
 }

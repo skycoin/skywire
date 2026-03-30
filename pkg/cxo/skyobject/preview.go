@@ -25,7 +25,7 @@ type Getter interface {
 // provided getter. The Preview used by
 // the node package for feeds preview
 type Preview struct {
-	m map[cipher.SHA256][]byte // hash -> value (TODO: keep in memory?)
+	m map[cipher.SHA256][]byte // hash -> value (kept in memory for preview lifetime)
 	g Getter                   // get from remote peer
 	r *registry.Root           // root for Preview
 	c *Container               //nolint:unused // back reference to access DB and get Registry

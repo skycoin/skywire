@@ -196,7 +196,7 @@ func NewNodeContainer(
 
 	}
 
-	// TODO (kostyarin): pings (move to connection)
+	// Pings are handled at node level; per-connection pings would improve health granularity.
 
 	return n, err
 }
@@ -637,7 +637,7 @@ type Stat struct {
 // Stat returns statistic of the Node
 func (n *Node) Stat() (s *Stat) {
 
-	// TODO (kostyarin): improve the stat
+	// Stat returns basic connection summary; could include bandwidth, latency.
 
 	s = new(Stat)
 	s.Stat = n.c.Stat()
