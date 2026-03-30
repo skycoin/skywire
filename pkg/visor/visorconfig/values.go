@@ -26,26 +26,6 @@ func SkywireConfig() string {
 	return skyenv.SkywirePath + "/" + skyenv.ConfigJSON
 }
 
-// PkgConfig struct contains paths specific to the linux packages
-type PkgConfig struct {
-	LauncherBinPath string `json:"launcher"`
-	LocalPath       string `json:"local_path"`
-	Hypervisor      `json:"hypervisor"`
-	//		TLSCertFile string `json:"tls_cert_file"`
-	//		TLSKeyFile  string `json:"tls_key_file"`
-}
-
-// LauncherBinPath struct contains the BinPath specific to the installation
-type LauncherBinPath struct {
-	BinPath string `json:"bin_path"`
-}
-
-// Hypervisor struct contains Hypervisor paths specific to the linux packages
-type Hypervisor struct {
-	DbPath     string `json:"db_path"`
-	EnableAuth bool   `json:"enable_auth"`
-}
-
 // Version gets the version of the installation for the config
 func Version() string {
 	u := buildinfo.Version()
