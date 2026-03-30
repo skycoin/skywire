@@ -359,7 +359,7 @@ func (n *Node) onConnect(c *Conn) error {
 	return nil
 }
 
-func (n *Node) onDisconenct(c *Conn, reason error) {
+func (n *Node) onDisconnect(c *Conn, reason error) {
 	if odc := n.config.OnDisconnect; odc != nil {
 		odc(c, reason)
 	}

@@ -327,13 +327,12 @@ func TestNode_Publish(t *testing.T) {
 	// ok, now let's disconnect one by one and check
 	// connections again
 
-	// un1
+	// un1 — close and wait for both sides to clean up
 	c, err = un1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	c.Close() //nolint:errcheck,gosec
-
-	waitForCondition(t, TM, "un1 disconnected from ln", func() bool {
-		return len(un1.Connections()) == 0
+	waitForCondition(t, TM, "ln sees un1 disconnected", func() bool {
+		return len(ln.Connections()) == 2
 	})
 	assertIDs(t, ln.Connections(), sn1.ID(), sn2.ID())
 	assertIDs(t, ln.ConnectionsOfFeed(pk), sn1.ID(), sn2.ID())
@@ -343,9 +342,8 @@ func TestNode_Publish(t *testing.T) {
 	c, err = sn2.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	c.Close() //nolint:errcheck,gosec
-
-	waitForCondition(t, TM, "sn2 disconnected from ln", func() bool {
-		return len(sn2.Connections()) == 0
+	waitForCondition(t, TM, "ln sees sn2 disconnected", func() bool {
+		return len(ln.Connections()) == 1
 	})
 	assertIDs(t, ln.Connections(), sn1.ID())
 	assertIDs(t, ln.ConnectionsOfFeed(pk), sn1.ID())
@@ -355,9 +353,8 @@ func TestNode_Publish(t *testing.T) {
 	c, err = sn1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	c.Close() //nolint:errcheck,gosec
-
-	waitForCondition(t, TM, "sn1 disconnected from ln", func() bool {
-		return len(sn1.Connections()) == 0
+	waitForCondition(t, TM, "ln sees sn1 disconnected", func() bool {
+		return len(ln.Connections()) == 0
 	})
 	assertIDs(t, ln.Connections())
 	assertIDs(t, ln.ConnectionsOfFeed(pk))

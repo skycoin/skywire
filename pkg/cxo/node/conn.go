@@ -30,6 +30,7 @@ type Conn struct {
 	initq   chan struct{}
 
 	closeq chan struct{}  // signal for all goroutines to exit
+	doneq  chan struct{}  // closed when run() has fully completed (maps cleaned, transport closed)
 	await  sync.WaitGroup // wait for all goroutines to exit
 
 	sendq chan<- []byte // channel from transport.Connection
@@ -43,7 +44,7 @@ type Conn struct {
 	mx sync.Mutex // locks all fields below (RWMutex could improve read concurrency)
 
 	// request - response
-	seq  uint32                    // messege seq number (for request-response)
+	seq  uint32                    // message seq number (for request-response)
 	reqs map[uint32]chan<- msg.Msg // requests
 }
 
@@ -60,6 +61,7 @@ func (n *Node) newConnection(
 		initq: make(chan struct{}),
 
 		closeq: make(chan struct{}),
+		doneq:  make(chan struct{}),
 
 		sendq: fc.GetChanOut(),
 
@@ -74,38 +76,47 @@ func (c *Conn) waitForInit() error {
 	return c.initErr
 }
 
-// run defines connection lifecycle.
+// run defines connection lifecycle. It blocks until the connection is fully
+// cleaned up (removed from node maps, transport closed, OnDisconnect called).
 func (c *Conn) run() {
-	// Receive messages, until close signal is received or error occures.
-	// In case of error stop all goroutines, started by connection.
+	// Receive messages, until close signal is received or error occurs.
 	var rcvErr error
 	c.await.Add(1)
 	go func() {
 		defer c.await.Done()
 		if rcvErr = c.receiveMsg(); rcvErr != nil {
-			close(c.closeq)
+			select {
+			case <-c.closeq:
+			default:
+				close(c.closeq)
+			}
 		}
 	}()
 
 	// If OnConnect returns error, connection will be closed.
 	var occErr error
 	if occErr = c.n.onConnect(c); occErr != nil {
-		close(c.closeq)
+		select {
+		case <-c.closeq:
+		default:
+			close(c.closeq)
+		}
 	}
 
-	// Wait for all groutines to exit.
+	// Wait for all goroutines to exit.
 	c.await.Wait()
 
+	// Remove from node maps (must happen before signaling done).
 	c.n.removeConn(c)
 
-	// Remove connection from transport's cache and close connection.
+	// Remove from transport cache and close the underlying connection.
 	if c.IsTCP() {
 		c.n.tcp.closeConn(c.Address()) //nolint:errcheck,gosec
 	} else {
 		c.n.udp.closeConn(c.Address()) //nolint:errcheck,gosec
 	}
 
-	// In connection is closed in case of error, decide which one to pass to OnDisconnect.
+	// Determine which error to report.
 	var odcErr error
 	switch {
 	case rcvErr != nil:
@@ -113,13 +124,16 @@ func (c *Conn) run() {
 	case occErr != nil:
 		odcErr = occErr
 	}
-	c.n.onDisconenct(c, odcErr)
+	c.n.onDisconnect(c, odcErr)
+
+	// Signal that the full cleanup is complete.
+	close(c.doneq)
 }
 
 func (c *Conn) decodeRaw(raw []byte) (seq, rseq uint32, m msg.Msg, err error) {
 
 	if len(raw) < 9 {
-		err = errors.New("invlaid messege received: too short")
+		err = errors.New("invalid message received: too short")
 		return
 	}
 
@@ -302,7 +316,7 @@ func (c *Conn) Subscribe(feed cipher.PubKey) (err error) {
 	return err
 }
 
-// just send the messege
+// just send the message
 func (c *Conn) unsubscribe(pk cipher.PubKey) {
 	c.sendMsg(c.nextSeq(), 0, &msg.Unsub{ //nolint:errcheck,gosec
 		Feed: pk,
@@ -398,14 +412,22 @@ func (c *Conn) getter() (cg skyobject.Getter) {
 }
 
 // Close the Conn
+// Close signals the connection to shut down. The connection is fully cleaned
+// up asynchronously by run(). Use Done() to wait for full cleanup if needed.
 func (c *Conn) Close() (err error) {
-	close(c.closeq)
-	c.await.Wait()
-
-	// Note: c.await.Wait() can exit before connection is removed from cache.
-	// Background goroutine errors are not propagated to caller.
-
+	select {
+	case <-c.closeq:
+		// Already closing
+	default:
+		close(c.closeq)
+	}
 	return nil
+}
+
+// Done returns a channel that is closed when run() has fully completed
+// (connection removed from node maps, transport closed, OnDisconnect called).
+func (c *Conn) Done() <-chan struct{} {
+	return c.doneq
 }
 
 func (c *Conn) nextSeq() uint32 {
@@ -544,7 +566,9 @@ func (c *Conn) sendRequest(m msg.Msg) (reply msg.Msg, err error) {
 	c.addRequest(seq, rq)
 	defer c.delRequest(seq)
 
-	c.sendMsg(seq, 0, m) //nolint:errcheck,gosec
+	if err := c.sendMsg(seq, 0, m); err != nil {
+		return nil, err
+	}
 
 	select {
 	case reply = <-rq:
@@ -567,7 +591,7 @@ func (c *Conn) sendOk(rseq uint32) {
 	c.sendMsg(c.nextSeq(), rseq, &msg.Ok{}) //nolint:errcheck,gosec
 }
 
-// handle messeges except responses and handshakes
+// handle messages except responses and handshakes
 func (c *Conn) handle(seq uint32, m msg.Msg) (err error) {
 
 	switch x := m.(type) {
@@ -610,9 +634,9 @@ func (c *Conn) handle(seq uint32, m msg.Msg) (err error) {
 		return c.handleRqPeers(seq, x)
 
 	//
-	// delayed messeges (ignore them)
+	// delayed messages (ignore them)
 	//
-	// the delayed messeges are responses that received
+	// the delayed messages are responses that received
 	// after timeout, e.g. the requst is closed with
 	// ErrTimeout and noone waits them
 
@@ -624,7 +648,7 @@ func (c *Conn) handle(seq uint32, m msg.Msg) (err error) {
 
 	default:
 
-		return fmt.Errorf("invalid messege type %T", m)
+		return fmt.Errorf("invalid message type %T", m)
 
 	}
 
