@@ -354,11 +354,14 @@ func TestEnv_ReadLog(t *testing.T) {
 		GatherVisorPKs([]string{visorA, visorB, visorC}).
 		AddDefaultTransports(routerVisor, skychatVisors)
 
-	// Give the container time to produce logs
-	time.Sleep(2 * time.Second)
-
-	logData, err := env.ReadLog(visorB)
-	require.NoError(t, err)
+	// Poll for non-empty logs instead of sleeping a fixed duration.
+	// Logs may take a moment to appear after container startup.
+	var logData string
+	require.Eventually(t, func() bool {
+		var readErr error
+		logData, readErr = env.ReadLog(visorB)
+		return readErr == nil && len(logData) > 0
+	}, 15*time.Second, 1*time.Second, "Container logs should become available")
 
 	// Log data might be empty in some CI environments due to Docker log driver configuration
 	// Skip instead of fail if no logs are available
