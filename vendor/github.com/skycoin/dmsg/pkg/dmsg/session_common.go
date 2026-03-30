@@ -28,11 +28,11 @@ type SessionCommon struct {
 	netConn net.Conn // underlying net.Conn (TCP connection to the dmsg server)
 	// ys      *yamux.Session
 	// ss      *smux.Session
-	sm   SessionManager
-	ns   *noise.Noise
-	nMap noise.NonceMap
-	rMx  sync.Mutex
-	wMx  sync.Mutex
+	sm  SessionManager
+	ns  *noise.Noise
+	nw  *noise.NonceWindow
+	rMx sync.Mutex
+	wMx sync.Mutex
 
 	log logrus.FieldLogger
 }
@@ -86,7 +86,7 @@ func (sc *SessionCommon) initClient(entity *EntityCommon, conn net.Conn, rPK cip
 	sc.rPK = rPK
 	sc.netConn = conn
 	sc.ns = ns
-	sc.nMap = make(noise.NonceMap)
+	sc.nw = noise.NewNonceWindow()
 	sc.log = entity.log.WithField("session", ns.RemoteStatic())
 	return nil
 }
@@ -113,7 +113,7 @@ func (sc *SessionCommon) initServer(entity *EntityCommon, conn net.Conn) error {
 	sc.rPK = ns.RemoteStatic()
 	sc.netConn = conn
 	sc.ns = ns
-	sc.nMap = make(noise.NonceMap)
+	sc.nw = noise.NewNonceWindow()
 	sc.log = entity.log.WithField("session", ns.RemoteStatic())
 	return nil
 }
@@ -144,11 +144,11 @@ func (sc *SessionCommon) readObject(r io.Reader) (SignedObject, error) {
 	}
 
 	sc.rMx.Lock()
-	if sc.nMap == nil {
+	if sc.nw == nil {
 		sc.rMx.Unlock()
 		return nil, ErrSessionClosed
 	}
-	obj, err := sc.ns.DecryptWithNonceMap(sc.nMap, pb)
+	obj, err := sc.ns.DecryptWithNonceWindow(sc.nw, pb)
 	sc.rMx.Unlock()
 
 	return obj, err
@@ -192,7 +192,7 @@ func (sc *SessionCommon) Close() error {
 	}
 	sc.sm.mutx.Unlock()
 	sc.rMx.Lock()
-	sc.nMap = nil
+	sc.nw = nil
 	sc.rMx.Unlock()
 	return err
 }

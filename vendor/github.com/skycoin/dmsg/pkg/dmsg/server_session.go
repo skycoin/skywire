@@ -13,7 +13,6 @@ import (
 	"github.com/xtaci/smux"
 
 	"github.com/skycoin/dmsg/pkg/dmsg/metrics"
-	"github.com/skycoin/dmsg/pkg/noise"
 )
 
 const (
@@ -35,7 +34,6 @@ type ServerSession struct {
 func makeServerSession(m metrics.Metrics, entity *EntityCommon, conn net.Conn) (ServerSession, error) {
 	var sSes ServerSession
 	sSes.SessionCommon = new(SessionCommon)
-	sSes.nMap = make(noise.NonceMap)
 	if err := sSes.SessionCommon.initServer(entity, conn); err != nil {
 		m.RecordSession(metrics.DeltaFailed) // record failed connection
 		return sSes, err
