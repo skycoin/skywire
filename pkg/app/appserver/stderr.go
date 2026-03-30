@@ -9,8 +9,9 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// TODO(ersonp): check if we can get rid of the errors altogether instead of ignoring/suppressing them.
-
+// printStdErr reads app stderr and logs non-suppressed lines as errors.
+// Suppressed messages (see getIgnoreErrs) are harmless OS/library noise
+// that cannot be eliminated at source (iptables lock, rpc shutdown, etc).
 func printStdErr(stderr io.ReadCloser, errorLog *logrus.Entry) {
 	cmdStderr := bufio.NewScanner(stderr)
 	iErrs := getIgnoreErrs()
