@@ -48,6 +48,9 @@ func TestStartLANDmsgServer(t *testing.T) {
 
 	t.Logf("LAN DMSG server started on %s (port %d) with PK %s", server.Address, server.Port, server.PK)
 
+	// Brief pause to let Serve() goroutine complete wg.Add(1) before Close() calls wg.Wait().
+	// dmsg Server has a race between Serve/Close that the select/default guard doesn't fully prevent.
+	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, server.Server.Close())
 }
 
