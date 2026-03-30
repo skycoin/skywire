@@ -520,7 +520,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	// Prepare hypervisor.
 	hv, err := NewHypervisor(conf, v, v.dmsgC)
 	if err != nil {
-		v.log.Fatalln("Failed to start hypervisor:", err)
+		return fmt.Errorf("failed to start hypervisor: %w", err)
 	}
 
 	// Start LAN DMSG server if configured
@@ -561,7 +561,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	// Needed to work with modern browsers when serving from windows, which need the correct mime type for javascript.
 	if err := mime.AddExtensionType(".js", "application/javascript"); err != nil {
-		log.Fatalln("Unable to register js mime type.")
+		log.WithError(err).Warn("Unable to register js mime type")
 	}
 
 	v.log.WithField("addr", conf.HTTPAddr).

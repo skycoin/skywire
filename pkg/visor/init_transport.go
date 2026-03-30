@@ -618,18 +618,12 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 		}
 
 		if tries >= 3 {
-			if v.conf.DisableShutdownOnNonTransportable {
-				log.Error("Visor is not transportable after 3 failed attempts, but shutdown is disabled for troubleshooting")
-				// Keep trying but don't accumulate tries forever
-				tries = 0
-			} else {
-				log.Error("Visor is not transportable after 3 failed attempts. Shutting down...")
-				if err := v.Shutdown(); err != nil {
-					log.WithError(err).Fatal("Failed to shut down gracefully")
-				}
-				// Signal shutdown to stop the ticker loop
-				tries = -1
-			}
+			log.Warn("Visor is not transportable after 3 failed attempts — will keep retrying")
+			// Reset counter and keep trying. The visor should not shut down
+			// because of transient DMSG issues — many have been fixed and the
+			// self-transport test is not a reliable indicator of visor health.
+			tries = 0
+			ticker.Reset(5 * time.Minute) // Back off to 5 minutes
 		}
 
 		return tries
