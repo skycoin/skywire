@@ -1014,7 +1014,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20260330161039-2b2ebb3bcbb9
+# github.com/skycoin/dmsg v1.3.29-0.20260330164725-bd92c16a2c55
 ## explicit; go 1.26.1
 github.com/skycoin/dmsg/cmd/conf/commands
 github.com/skycoin/dmsg/cmd/dial/commands
