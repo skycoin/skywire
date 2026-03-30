@@ -116,25 +116,22 @@ type Visor struct {
 	allowedPorts         map[int]bool
 	allowedMX            *sync.RWMutex
 
-	pingConns     map[cipher.PubKey]ping
-	pingConnMx    *sync.Mutex
-	pingPcktSize  int
+	// Skywire ping state
+	ping pingState
+
 	dmsgPingConns map[cipher.PubKey]ping
 	dmsgPingMx    *sync.Mutex
 	logStorePath  string
 
+	// Survey state
 	survey     visorconfig.Survey
 	surveyLock *sync.RWMutex
 
 	// Cached geolocation data from geoIP service
-	geoData   *GeoData
-	geoDataMu sync.RWMutex
+	geo geoState
 
 	// UI server state (dynamically started/stopped via RPC)
-	uiServerMu      sync.Mutex
-	uiServer        *http.Server
-	uiServerAddr    string
-	uiServerRunning bool
+	ui uiState
 
 	// Embedded Transport Setup Node (nil if tps_sk not configured)
 	embeddedTPS *embeddedTPS
@@ -143,13 +140,10 @@ type Visor struct {
 	embeddedRouteSetup *EmbeddedRouteSetup
 
 	// Public autoconnect runtime control
-	autoconnectMu      sync.Mutex
-	autoconnectCancel  context.CancelFunc
-	autoconnectRunning bool
+	autoconnect autoconnectState
 
 	// Public visor registration with validation
-	publicVisorUpdater   *appdisc.PublicVisorUpdater
-	publicVisorUpdaterMu sync.Mutex
+	publicVisor publicVisorState
 
 	// DMSG server latency tracking (for preferring low-latency servers)
 	dmsgServerLatencies   map[cipher.PubKey]time.Duration
@@ -164,6 +158,40 @@ type Visor struct {
 
 	// STCP PK table for runtime address injection (tp add -t stcp --addr)
 	stcpTable stcp.PKTable
+}
+
+// pingState manages Skywire transport ping connections.
+type pingState struct {
+	conns    map[cipher.PubKey]ping
+	mu       *sync.Mutex
+	pcktSize int
+}
+
+// geoState caches geolocation data.
+type geoState struct {
+	data *GeoData
+	mu   sync.RWMutex
+}
+
+// uiState manages the dynamically started/stopped UI server.
+type uiState struct {
+	mu      sync.Mutex
+	server  *http.Server
+	addr    string
+	running bool
+}
+
+// autoconnectState manages public autoconnect runtime control.
+type autoconnectState struct {
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	running bool
+}
+
+// publicVisorState manages public visor registration.
+type publicVisorState struct {
+	updater *appdisc.PublicVisorUpdater
+	mu      sync.Mutex
 }
 
 // todo: consider moving module closing to the module system
@@ -298,14 +326,16 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		dtmReady:             make(chan struct{}),
 		stunReady:            make(chan struct{}),
 		connectedHypervisors: make(map[cipher.PubKey]bool),
-		pingConns:            make(map[cipher.PubKey]ping),
-		pingConnMx:           new(sync.Mutex),
-		dmsgPingConns:        make(map[cipher.PubKey]ping),
-		dmsgPingMx:           new(sync.Mutex),
-		allowedPorts:         make(map[int]bool),
-		survey:               visorconfig.Survey{},
-		surveyLock:           new(sync.RWMutex),
-		dmsgServerLatencies:  make(map[cipher.PubKey]time.Duration),
+		ping: pingState{
+			conns: make(map[cipher.PubKey]ping),
+			mu:    new(sync.Mutex),
+		},
+		dmsgPingConns:       make(map[cipher.PubKey]ping),
+		dmsgPingMx:          new(sync.Mutex),
+		allowedPorts:        make(map[int]bool),
+		survey:              visorconfig.Survey{},
+		surveyLock:          new(sync.RWMutex),
+		dmsgServerLatencies: make(map[cipher.PubKey]time.Duration),
 	}
 	v.isServicesHealthy.init()
 

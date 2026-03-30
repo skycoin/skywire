@@ -520,6 +520,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	// Prepare hypervisor.
 	hv, err := NewHypervisor(conf, v, v.dmsgC)
 	if err != nil {
+		cancel()
 		return fmt.Errorf("failed to start hypervisor: %w", err)
 	}
 

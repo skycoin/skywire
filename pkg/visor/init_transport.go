@@ -103,9 +103,9 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 
 	// Store geolocation data if we got it
 	if geoData != nil {
-		v.geoDataMu.Lock()
-		v.geoData = geoData
-		v.geoDataMu.Unlock()
+		v.geo.mu.Lock()
+		v.geo.data = geoData
+		v.geo.mu.Unlock()
 	}
 
 	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
@@ -305,9 +305,9 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		// OnExternalSTCPR notifies the public visor updater when an external
 		// connection is received, validating that the visor is internet-reachable
 		OnExternalSTCPR: func() {
-			v.publicVisorUpdaterMu.Lock()
-			updater := v.publicVisorUpdater
-			v.publicVisorUpdaterMu.Unlock()
+			v.publicVisor.mu.Lock()
+			updater := v.publicVisor.updater
+			v.publicVisor.mu.Unlock()
 			if updater != nil {
 				updater.OnExternalSTCPR()
 			}
@@ -442,10 +442,10 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 // startPublicAutoconnectInternal starts the public autoconnect goroutine.
 // Called both at init time and when starting via API.
 func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging.Logger) error {
-	v.autoconnectMu.Lock()
-	defer v.autoconnectMu.Unlock()
+	v.autoconnect.mu.Lock()
+	defer v.autoconnect.mu.Unlock()
 
-	if v.autoconnectRunning {
+	if v.autoconnect.running {
 		return nil // already running
 	}
 
@@ -474,17 +474,17 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 	connector := MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
 
 	cctx, cancel := context.WithCancel(ctx)
-	v.autoconnectCancel = cancel
-	v.autoconnectRunning = true
+	v.autoconnect.cancel = cancel
+	v.autoconnect.running = true
 
 	v.pushCloseStack("public_autoconnect", func() error {
-		v.autoconnectMu.Lock()
-		defer v.autoconnectMu.Unlock()
-		if v.autoconnectCancel != nil {
-			v.autoconnectCancel()
-			v.autoconnectCancel = nil
+		v.autoconnect.mu.Lock()
+		defer v.autoconnect.mu.Unlock()
+		if v.autoconnect.cancel != nil {
+			v.autoconnect.cancel()
+			v.autoconnect.cancel = nil
 		}
-		v.autoconnectRunning = false
+		v.autoconnect.running = false
 		return nil
 	})
 
@@ -501,26 +501,26 @@ func (v *Visor) StartPublicAutoconnect() error {
 
 // StopPublicAutoconnect stops public autoconnect if running.
 func (v *Visor) StopPublicAutoconnect() error {
-	v.autoconnectMu.Lock()
-	defer v.autoconnectMu.Unlock()
+	v.autoconnect.mu.Lock()
+	defer v.autoconnect.mu.Unlock()
 
-	if !v.autoconnectRunning {
+	if !v.autoconnect.running {
 		return nil // not running
 	}
 
-	if v.autoconnectCancel != nil {
-		v.autoconnectCancel()
-		v.autoconnectCancel = nil
+	if v.autoconnect.cancel != nil {
+		v.autoconnect.cancel()
+		v.autoconnect.cancel = nil
 	}
-	v.autoconnectRunning = false
+	v.autoconnect.running = false
 	return nil
 }
 
 // IsPublicAutoconnectRunning returns whether public autoconnect is running.
 func (v *Visor) IsPublicAutoconnectRunning() bool {
-	v.autoconnectMu.Lock()
-	defer v.autoconnectMu.Unlock()
-	return v.autoconnectRunning
+	v.autoconnect.mu.Lock()
+	defer v.autoconnect.mu.Unlock()
+	return v.autoconnect.running
 }
 
 // advertise this visor as public in service discovery
@@ -577,9 +577,9 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { /
 	}
 
 	// Store the updater so the OnExternalSTCPR callback can access it
-	v.publicVisorUpdaterMu.Lock()
-	v.publicVisorUpdater = publicUpdater
-	v.publicVisorUpdaterMu.Unlock()
+	v.publicVisor.mu.Lock()
+	v.publicVisor.updater = publicUpdater
+	v.publicVisor.mu.Unlock()
 
 	publicUpdater.Start()
 

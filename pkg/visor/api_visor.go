@@ -82,15 +82,15 @@ func (v *Visor) Overview() (*Overview, error) {
 	}
 
 	// Add geolocation data if available
-	v.geoDataMu.RLock()
-	if v.geoData != nil {
-		overview.CountryCode = v.geoData.CountryCode
-		overview.RegionName = v.geoData.RegionName
-		overview.CityName = v.geoData.CityName
-		overview.Latitude = v.geoData.Latitude
-		overview.Longitude = v.geoData.Longitude
+	v.geo.mu.RLock()
+	if v.geo.data != nil {
+		overview.CountryCode = v.geo.data.CountryCode
+		overview.RegionName = v.geo.data.RegionName
+		overview.CityName = v.geo.data.CityName
+		overview.Latitude = v.geo.data.Latitude
+		overview.Longitude = v.geo.data.Longitude
 	}
-	v.geoDataMu.RUnlock()
+	v.geo.mu.RUnlock()
 
 	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
 	if err != nil {
