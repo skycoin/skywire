@@ -128,31 +128,17 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 		errCh <- err
 	}()
 
-	var connClosed, streamClosed bool
-
-	for err := range errCh {
-		if !connClosed {
-			if err := conn.Close(); err != nil && c.appCl != nil {
-				c.appCl.Log().Debugf("Failed to close connection: %v", err)
-			}
-
-			connClosed = true
-		}
-
-		if !streamClosed {
-			if err := stream.Close(); err != nil && c.appCl != nil {
-				c.appCl.Log().Debugf("Failed to close stream: %v", err)
-			}
-
-			streamClosed = true
-		}
-
-		if err != nil && c.appCl != nil {
+	// Wait for both io.Copy goroutines to finish (exactly 2 sends).
+	for i := 0; i < errorCount; i++ {
+		if err := <-errCh; err != nil && c.appCl != nil {
 			c.appCl.Log().Debugf("Copy error: %v", err)
 		}
+		// Close both sides after the first copy finishes to unblock the other.
+		if i == 0 {
+			conn.Close()   //nolint:errcheck,gosec
+			stream.Close() //nolint:errcheck,gosec
+		}
 	}
-
-	close(errCh)
 
 	if c.session.IsClosed() {
 		c.close()
