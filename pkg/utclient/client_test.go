@@ -59,7 +59,7 @@ func TestClientAuth(t *testing.T) {
 	header := <-headerCh
 	assert.Equal(t, testPubKey.Hex(), header.Get("SW-Public"))
 	assert.Equal(t, "1", header.Get("SW-Nonce"))
-	assert.NotEmpty(t, header.Get("SW-Sig")) // TODO: check for the right key
+	assert.NotEmpty(t, header.Get("SW-Sig")) // Signature present; value correctness not verified.
 
 	wg.Wait()
 }

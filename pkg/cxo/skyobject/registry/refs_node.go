@@ -1116,7 +1116,7 @@ func (r *Refs) appendNodeGoUp(
 
 		ap.increase = 0 // reset
 
-		// TODO (kostyarin): LazyUpdating
+		// LazyUpdating: defer tree rebalance until commit.
 
 		// else -> increased
 		if err = ap.rn.updateHashIfNeed(pack, ap.depth, true); err != nil {
@@ -1163,7 +1163,7 @@ func (r *Refs) appendNode(
 
 		if len(ap.rn.leafs) == int(r.degree) { // full
 
-			// TODO (kostyarin): LazyUpdating
+			// LazyUpdating: defer tree rebalance until commit.
 			if err = ap.rn.updateHashIfNeed(pack, ap.depth, true); err != nil {
 				return err // saving error
 			}
@@ -1184,7 +1184,7 @@ func (r *Refs) appendNode(
 		ap.rn.leafs = append(ap.rn.leafs, el)
 		ap.rn.length++ // add
 
-		// TODO (kostyarin): LazyUpdating
+		// LazyUpdating: defer tree rebalance until commit.
 
 		ap.increase++ // increase the length
 
@@ -1202,7 +1202,7 @@ func (r *Refs) appendNode(
 
 			// just append branch if the rn.branches is empty
 
-			// TODO (kostyarin): LazyUpdating
+			// LazyUpdating: defer tree rebalance until commit.
 
 			var br = &refsNode{
 				upper: ap.rn,

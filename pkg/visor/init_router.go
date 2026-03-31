@@ -22,7 +22,7 @@ import (
 )
 
 // getRouteSetupHooks aka autotransport
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []router.RouteSetupHook {
@@ -76,11 +76,11 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				}
 
 				// Wait until stun client is ready
-				<-v.stunReady
+				<-v.stun.ready
 
 				// skip SUDPH if NAT type prevents it (symmetric NAT, firewall, or STUN failure)
 				if nType == types.SUDPH {
-					switch v.stunClient.NATType {
+					switch v.stun.client.NATType {
 					case stun.NATSymmetric, stun.NATSymmetricUDPFirewall,
 						stun.NATError, stun.NATUnknown, stun.NATBlocked:
 						continue
@@ -146,7 +146,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		RouteFinder:      rfClient,
 		RouteGroupDialer: rgDialer,
 		SetupNodes:       conf.RouteSetupNodes,
-		RulesGCInterval:  0, // TODO
+		RulesGCInterval:  0, // 0 = DefaultRulesGCInterval (10s)
 		MinHops:          v.conf.Routing.MinHops,
 	}
 

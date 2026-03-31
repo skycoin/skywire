@@ -98,7 +98,7 @@ func (sc *PtyClient) call(method string, args, reply interface{}) error {
 	call := sc.rpcC.Go(sc.rpcMethod(method), args, reply, nil)
 	select {
 	case <-sc.done:
-		return io.ErrClosedPipe // TODO(evanlinjin): Is there a better error to use?
+		return io.ErrClosedPipe
 	case <-call.Done:
 		return call.Error
 	}

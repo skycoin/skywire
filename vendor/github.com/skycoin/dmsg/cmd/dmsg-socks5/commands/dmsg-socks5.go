@@ -4,6 +4,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -138,7 +139,6 @@ var serveCmd = &cobra.Command{
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), dlog)
 		defer cancel()
-		//TODO: implement whitelist logic
 
 		dmsgC, closeDmsg, err := dmsgclient.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, pk.String())
 
@@ -181,6 +181,28 @@ var serveCmd = &cobra.Command{
 				}
 			}
 			dlog.Infof("Accepted connection from: %s", respConn.RemoteAddr())
+
+			// Enforce whitelist: extract remote PK from the dmsg address.
+			if len(wlkeys) > 0 {
+				remotePK, _, splitErr := net.SplitHostPort(respConn.RemoteAddr().String())
+				if splitErr != nil {
+					dlog.WithError(splitErr).Warn("Failed to parse remote address, rejecting connection.")
+					respConn.Close() //nolint:errcheck,gosec
+					continue
+				}
+				allowed := false
+				for _, key := range wlkeys {
+					if remotePK == key.String() {
+						allowed = true
+						break
+					}
+				}
+				if !allowed {
+					dlog.WithField("remote_pk", remotePK).Warn("Connection rejected: not in whitelist.")
+					respConn.Close() //nolint:errcheck,gosec
+					continue
+				}
+			}
 
 			conf := &socks5.Config{}
 			server, err := socks5.New(conf)

@@ -145,14 +145,23 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		logger.Debug("Connected to the dmsg network.")
 		v.tpM.InitDmsgClient(ctx, dmsgC)
 	}
-	// dmsgctrl setup
+	// dmsgctrl setup — listen for incoming control streams (ping/pong).
+	// Each accepted Control is self-serving (handles ping/pong in its own goroutine).
+	// We drain the channel so the listener doesn't block on a full buffer.
 	cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
 	if err != nil {
 		return err
 	}
 	v.pushCloseStack("dmsgctrl", cl.Close)
 
-	dmsgctrl.ServeListener(cl, 0)
+	ctrlCh := dmsgctrl.ServeListener(cl, 16)
+	go func() {
+		for ctrl := range ctrlCh {
+			// Each control is already self-serving via ctrl.serve().
+			// We just hold a reference so the GC doesn't collect it prematurely.
+			_ = ctrl
+		}
+	}()
 	return nil
 }
 
@@ -182,14 +191,14 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		}
 	}
 
-	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, &v.survey, printLog)
+	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, whitelistedPKs, &v.survey.data, printLog)
 
 	// Set visor as health stats provider for /health endpoint
 	lsAPI.SetHealthStatsProvider(v)
 
 	// Store the log server API reference for public autocheck to use later
 	v.initLock.Lock()
-	v.logServerAPI = lsAPI
+	v.logServer.api = lsAPI
 	v.initLock.Unlock()
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
@@ -248,13 +257,13 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		logger.WithField("local_addr", localAddr).Info("Starting localhost log server")
 
 		// Create a separate API without whitelist authentication for localhost
-		localAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, nil, &v.survey, printLog)
+		localAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, v.conf.DmsgHTTPServerPath, nil, &v.survey.data, printLog)
 
 		// Set visor as health stats provider for /health endpoint
 		localAPI.SetHealthStatsProvider(v)
 
 		// Store the localhost API for potential future use
-		v.localLogServerAPI = localAPI
+		v.logServer.localAPI = localAPI
 
 		localLis, err := net.Listen("tcp", localAddr)
 		if err != nil {
@@ -303,13 +312,13 @@ func initDmsgTrackers(_ context.Context, v *Visor, _ *logging.Logger) error {
 		return dtm.Close()
 	})
 	v.initLock.Lock()
-	v.dtm = dtm
+	v.dmsgTracker.manager = dtm
 	v.initLock.Unlock()
-	v.dtmReadyOnce.Do(func() { close(v.dtmReady) })
+	v.dmsgTracker.readyOnce.Do(func() { close(v.dmsgTracker.ready) })
 	return nil
 }
 
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
@@ -578,9 +587,9 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 			avgLatency := totalLatency / time.Duration(len(latencies))
 
 			// Store the latency
-			v.dmsgServerLatenciesMu.Lock()
-			v.dmsgServerLatencies[serverPK] = avgLatency
-			v.dmsgServerLatenciesMu.Unlock()
+			v.dmsgLatency.mu.Lock()
+			v.dmsgLatency.servers[serverPK] = avgLatency
+			v.dmsgLatency.mu.Unlock()
 
 			log.WithFields(logrus.Fields{
 				"server":  serverPKStr[:16] + "...",

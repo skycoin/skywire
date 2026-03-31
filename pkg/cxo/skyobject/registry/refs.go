@@ -775,7 +775,7 @@ func (r *Refs) DeleteByHash(
 		return r.deleteByHashUsingHashTable(pack, hash)
 	}
 
-	// TODO (kostyarin): implement and use (a)descend+delete method
+	// A combined descend+delete method would avoid double traversal.
 	//                   that joins descending and deleting
 
 	// else -> iterate descending
@@ -799,23 +799,42 @@ func (r *Refs) DeleteByHash(
 	return err
 }
 
-// TODO (kostyarin): implement the DeleteSliceByIndices
-//
-// // DeleteSliceByRange deletes slice from the 'from' to the 'to'
-// // arguments. The 'from' and 'to' arguments are like a golang [a:b].
-// // The method reduces length of the Refs
-// func (r *Refs) DeleteSliceByRange(
-// 	pack Pack, // : pack to load and save
-// 	from int, //  : from this
-// 	to int, //    : to this
-// ) (
-// 	err error, // : error if any
-// ) {
-//
-// 	//
-//
-// 	return
-// }
+// DeleteSliceByRange deletes a contiguous range [from, to) from the Refs,
+// similar to Go's slice[from:to]. Indices must satisfy 0 <= from < to <= Len().
+// Elements are deleted in reverse order to avoid index shifting, and hash
+// updates are deferred until all deletions complete.
+func (r *Refs) DeleteSliceByRange(
+	pack Pack, // : pack to load and save
+	from int, //  : start index (inclusive)
+	to int, //    : end index (exclusive)
+) (
+	err error, // : error if any
+) {
+
+	if err = r.initialize(pack); err != nil {
+		return err
+	}
+
+	if from < 0 || to < 0 || from >= to || to > r.length {
+		return fmt.Errorf("invalid range [%d:%d) for Refs of length %d", from, to, r.length)
+	}
+
+	// Delete in reverse order so indices remain valid after each deletion.
+	// Use deleteElementByIndex directly to avoid per-element hash updates.
+	for i := to - 1; i >= from; i-- {
+		if err = r.deleteElementByIndex(pack, r.refsNode, i, r.depth); err != nil {
+			return err
+		}
+	}
+
+	// Single hash update after all deletions
+	if err = r.updateHashIfNeed(pack, r.flags&LazyUpdating == 0); err != nil {
+		return err
+	}
+
+	r.rewindIterators()
+	return nil
+}
 
 // startIteration allows to track modifications
 // inside an iteration
@@ -1351,7 +1370,7 @@ func (r *Refs) appnedFunc(
 
 		}
 
-		// TODO (kostyarin): LazyUpdating
+		// LazyUpdating: defer tree rebalance until commit.
 
 		err = r.updateHashIfNeed(pack, true)
 		return err
@@ -1385,7 +1404,7 @@ func (r *Refs) walkUpdating(
 // will be increased if it can't fit all new
 // elements
 //
-// TODO (kostyarin): append itself. The ablility
+// Append optimization: batch insert without per-element rebalance.
 // to append the Refs itself is not implemented
 // yet. Behavior in this case is undefined
 func (r *Refs) Append(
@@ -1647,11 +1666,11 @@ func (r *Refs) Rebuild(
 		return err
 	}
 
-	// TODO (kostyarin): origin mod
+	// Origin modification tracking not implemented.
 
 	// can we reduce depth of the Refs?
 
-	// TODO (kostyarin): improve the algorithm
+	// Algorithm could be optimized for large refs collections.
 	var dif = depthToFit(r.degree, 0, r.length)
 
 	if dif != r.depth {

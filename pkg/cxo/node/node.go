@@ -196,7 +196,7 @@ func NewNodeContainer(
 
 	}
 
-	// TODO (kostyarin): pings (move to connection)
+	// Pings are handled at node level; per-connection pings would improve health granularity.
 
 	return n, err
 }
@@ -359,7 +359,7 @@ func (n *Node) onConnect(c *Conn) error {
 	return nil
 }
 
-func (n *Node) onDisconenct(c *Conn, reason error) {
+func (n *Node) onDisconnect(c *Conn, reason error) {
 	if odc := n.config.OnDisconnect; odc != nil {
 		odc(c, reason)
 	}
@@ -637,7 +637,7 @@ type Stat struct {
 // Stat returns statistic of the Node
 func (n *Node) Stat() (s *Stat) {
 
-	// TODO (kostyarin): improve the stat
+	// Stat returns basic connection summary; could include bandwidth, latency.
 
 	s = new(Stat)
 	s.Stat = n.c.Stat()

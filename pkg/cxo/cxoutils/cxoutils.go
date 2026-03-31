@@ -95,4 +95,4 @@ func RemoveObjects(c *skyobject.Container) (err error) {
 	return
 }
 
-// TODO (kostyarin): RemoveObjects with "down to" or "timeout" feature
+// RemoveObjects could support "down to" threshold or timeout-based cleanup.

@@ -33,14 +33,14 @@ func TestDynamic_IsValid(t *testing.T) {
 func TestDynamic_Short(t *testing.T) {
 	// Short() string
 
-	// TODO (kostyarin): lowest priority
+	// Test not implemented (low priority).
 
 }
 
 func TestDynamic_String(t *testing.T) {
 	// String() string
 
-	// TODO (kostyarin): lowest priority
+	// Test not implemented (low priority).
 
 }
 

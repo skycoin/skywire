@@ -32,7 +32,7 @@ func TestVPN(t *testing.T) {
 			// this field is needed for the call of `GatherVisorPKs` to get all the needed PKs.
 			// but if we refactor code properly, we may do this a middleware before any
 			// calls which require PK and remove this field along with the `GatherVisorPKs`.
-			// so it's a TODO
+			// VPN route verification not yet implemented.
 			ParticipatingVisorsHostNames: []string{visorVPNClient, visorVPNServer},
 			AppsToRun: []AppToRun{
 				{
@@ -210,9 +210,10 @@ func testVPNKillServer(t *testing.T, env *TestEnv) {
 	err = env.ContainerRestart(visorVPNServer)
 	require.NoError(t, err)
 
-	// Wait for VPN client to detect server is down and disconnect
-	// The VPN client with killswitch needs time to detect the connection
-	// is lost, tear down the TUN interface, and remove routes
+	// LEGITIMATE WAIT: The VPN client must asynchronously detect the server
+	// is down, tear down the TUN interface, and remove routes. There is no
+	// API to query the client's disconnect completion status, so we must
+	// wait for the async detection cycle to complete.
 	time.Sleep(3 * time.Second)
 
 	// Check client's should not be connected to the vpn anymore / traceroute should not show VPNServer's IP
@@ -234,9 +235,10 @@ func testVPNRemoveTransport(t *testing.T, env *TestEnv) {
 	err = env.RemoveAllTransports(visorVPNClient)
 	require.NoError(t, err)
 
-	// Wait for VPN client to detect transport loss and disconnect
-	// The VPN client with killswitch needs time to detect the connection
-	// is lost, tear down the TUN interface, and remove routes
+	// LEGITIMATE WAIT: The VPN client must asynchronously detect the transport
+	// loss, tear down the TUN interface, and remove routes. There is no
+	// API to query the client's disconnect completion status, so we must
+	// wait for the async detection cycle to complete.
 	time.Sleep(3 * time.Second)
 
 	firstHop, err := getFirstTracerouteHop(targetHost, env)
@@ -335,8 +337,9 @@ func getFirstTracerouteHop(targetHost string, env *TestEnv) (net.IP, error) {
 		close(cmdErrC)
 	}()
 
-	// traceroute may hang for really long time, we care about only the first hop,
-	// so we give it enough time to get it and interrupt
+	// LEGITIMATE WAIT: traceroute runs as an external command with its own timeout
+	// (9s via the `timeout 9` wrapper). We must wait for it to complete or time out.
+	// The goroutine above will send on cmdErrC when done; we block on that channel.
 	time.Sleep(10 * time.Second)
 	if err = <-cmdErrC; err != nil {
 		return nil, fmt.Errorf("failed to run command %s: %w", fullCmd, err)

@@ -82,18 +82,17 @@ type Visor struct {
 	startedAt     time.Time
 	uptimeTracker utclient.APIClient
 
-	ebc          *appevent.Broadcaster // event broadcaster
-	dmsgC        *dmsg.Client
-	dmsgDC       *dmsg.Client       // dmsg direct client
-	dClient      dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP     *http.Client       // dmsghttp client
-	dtm          *dmsgtracker.Manager
-	dtmReady     chan struct{}
-	dtmReadyOnce sync.Once
+	ebc      *appevent.Broadcaster // event broadcaster
+	dmsgC    *dmsg.Client
+	dmsgDC   *dmsg.Client       // dmsg direct client
+	dClient  dmsgdisc.APIClient // dmsg direct api client
+	dmsgHTTP *http.Client       // dmsghttp client
 
-	stunClient    *network.StunDetails
-	stunReady     chan struct{}
-	stunReadyOnce sync.Once
+	// DMSG tracker state
+	dmsgTracker dtmState
+
+	// STUN client state
+	stun stunState
 
 	tpM      *transport.Manager
 	arClient addrresolver.APIClient
@@ -113,28 +112,24 @@ type Visor struct {
 	isServicesHealthy    *internalHealthInfo
 	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
-	allowedPorts         map[int]bool
-	allowedMX            *sync.RWMutex
 
-	pingConns     map[cipher.PubKey]ping
-	pingConnMx    *sync.Mutex
-	pingPcktSize  int
-	dmsgPingConns map[cipher.PubKey]ping
-	dmsgPingMx    *sync.Mutex
-	logStorePath  string
+	// Allowed ports for app connections
+	allowed allowedPortsState
 
-	survey     visorconfig.Survey
-	surveyLock *sync.RWMutex
+	// Skywire ping state
+	ping pingState
+
+	// DMSG ping state
+	dmsgPing dmsgPingState
+
+	// Survey state
+	survey surveyState
 
 	// Cached geolocation data from geoIP service
-	geoData   *GeoData
-	geoDataMu sync.RWMutex
+	geo geoState
 
 	// UI server state (dynamically started/stopped via RPC)
-	uiServerMu      sync.Mutex
-	uiServer        *http.Server
-	uiServerAddr    string
-	uiServerRunning bool
+	ui uiState
 
 	// Embedded Transport Setup Node (nil if tps_sk not configured)
 	embeddedTPS *embeddedTPS
@@ -143,30 +138,103 @@ type Visor struct {
 	embeddedRouteSetup *EmbeddedRouteSetup
 
 	// Public autoconnect runtime control
-	autoconnectMu      sync.Mutex
-	autoconnectCancel  context.CancelFunc
-	autoconnectRunning bool
+	autoconnect autoconnectState
 
 	// Public visor registration with validation
-	publicVisorUpdater   *appdisc.PublicVisorUpdater
-	publicVisorUpdaterMu sync.Mutex
+	publicVisor publicVisorState
 
 	// DMSG server latency tracking (for preferring low-latency servers)
-	dmsgServerLatencies   map[cipher.PubKey]time.Duration
-	dmsgServerLatenciesMu sync.RWMutex
+	dmsgLatency dmsgLatencyState
 
 	// Setup node health tracking (TPS and RSN)
 	nodeHealthTracker *NodeHealthTracker
 
-	// Log server API references for health stats
-	logServerAPI      *logserver.API
-	localLogServerAPI *logserver.API // Localhost log server (optional)
+	// Log server references for health stats
+	logServer logServerState
 
 	// STCP PK table for runtime address injection (tp add -t stcp --addr)
 	stcpTable stcp.PKTable
 }
 
-// todo: consider moving module closing to the module system
+// pingState manages Skywire transport ping connections.
+type pingState struct {
+	conns    map[cipher.PubKey]ping
+	mu       *sync.Mutex
+	pcktSize int
+}
+
+// geoState caches geolocation data.
+type geoState struct {
+	data *GeoData
+	mu   sync.RWMutex
+}
+
+// uiState manages the dynamically started/stopped UI server.
+type uiState struct {
+	mu      sync.Mutex
+	server  *http.Server
+	addr    string
+	running bool
+}
+
+// autoconnectState manages public autoconnect runtime control.
+type autoconnectState struct {
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	running bool
+}
+
+// publicVisorState manages public visor registration.
+type publicVisorState struct {
+	updater *appdisc.PublicVisorUpdater
+	mu      sync.Mutex
+}
+
+// dtmState manages the DMSG tracker manager lifecycle.
+type dtmState struct {
+	manager   *dmsgtracker.Manager
+	ready     chan struct{}
+	readyOnce sync.Once
+}
+
+// stunState manages STUN client state.
+type stunState struct {
+	client    *network.StunDetails
+	ready     chan struct{}
+	readyOnce sync.Once
+}
+
+// dmsgPingState manages DMSG ping connections.
+type dmsgPingState struct {
+	conns map[cipher.PubKey]ping
+	mu    *sync.Mutex
+}
+
+// dmsgLatencyState tracks DMSG server latencies.
+type dmsgLatencyState struct {
+	servers map[cipher.PubKey]time.Duration
+	mu      sync.RWMutex
+}
+
+// allowedPortsState manages ports allowed for app connections.
+type allowedPortsState struct {
+	ports map[int]bool
+	mu    *sync.RWMutex
+}
+
+// surveyState manages system survey data.
+type surveyState struct {
+	data visorconfig.Survey
+	mu   *sync.RWMutex
+}
+
+// logServerState holds log server API references for health stats.
+type logServerState struct {
+	api      *logserver.API
+	localAPI *logserver.API // localhost log server (optional)
+}
+
+// Close stack: tracks cleanup functions pushed during initialization.
 
 type closeFn func() error
 
@@ -293,19 +361,32 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		conf:                 conf,
 		initLock:             new(sync.RWMutex),
 		closeMu:              new(sync.RWMutex),
-		allowedMX:            new(sync.RWMutex),
 		isServicesHealthy:    newInternalHealthInfo(),
-		dtmReady:             make(chan struct{}),
-		stunReady:            make(chan struct{}),
 		connectedHypervisors: make(map[cipher.PubKey]bool),
-		pingConns:            make(map[cipher.PubKey]ping),
-		pingConnMx:           new(sync.Mutex),
-		dmsgPingConns:        make(map[cipher.PubKey]ping),
-		dmsgPingMx:           new(sync.Mutex),
-		allowedPorts:         make(map[int]bool),
-		survey:               visorconfig.Survey{},
-		surveyLock:           new(sync.RWMutex),
-		dmsgServerLatencies:  make(map[cipher.PubKey]time.Duration),
+		allowed: allowedPortsState{
+			ports: make(map[int]bool),
+			mu:    new(sync.RWMutex),
+		},
+		dmsgTracker: dtmState{
+			ready: make(chan struct{}),
+		},
+		stun: stunState{
+			ready: make(chan struct{}),
+		},
+		ping: pingState{
+			conns: make(map[cipher.PubKey]ping),
+			mu:    new(sync.Mutex),
+		},
+		dmsgPing: dmsgPingState{
+			conns: make(map[cipher.PubKey]ping),
+			mu:    new(sync.Mutex),
+		},
+		survey: surveyState{
+			mu: new(sync.RWMutex),
+		},
+		dmsgLatency: dmsgLatencyState{
+			servers: make(map[cipher.PubKey]time.Duration),
+		},
 	}
 	v.isServicesHealthy.init()
 
@@ -318,7 +399,6 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	v.startedAt = time.Now()
 	if isStoreLog {
 		storeLog(conf)
-		v.logStorePath = conf.LocalPath
 	}
 	log := v.MasterLogger().PackageLogger("visor:startup")
 	log.WithField("public_key", conf.PK).
@@ -388,7 +468,7 @@ func (v *Visor) processRuntimeErrs() bool {
 
 func (v *Visor) isStunReady() bool {
 	select {
-	case <-v.stunReady:
+	case <-v.stun.ready:
 		return true
 	default:
 		return false
@@ -505,7 +585,7 @@ func (v *Visor) Close() error {
 
 func (v *Visor) isDTMReady() bool {
 	select {
-	case <-v.dtmReady:
+	case <-v.dmsgTracker.ready:
 		return true
 	default:
 		return false

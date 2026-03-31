@@ -2,9 +2,7 @@ package visor
 
 import (
 	"context"
-	"encoding/json"
-	"os"
-	"path/filepath"
+	"net"
 	"testing"
 	"time"
 
@@ -18,125 +16,75 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-func TestLoadOrGenerateKeyPair(t *testing.T) {
-	log := logging.MustGetLogger("test")
-	tmpDir := t.TempDir()
-
-	t.Run("generates new keypair when file doesn't exist", func(t *testing.T) {
-		keyFile := filepath.Join(tmpDir, "new_keys.json")
-		pk, sk, err := loadOrGenerateKeyPair(keyFile, log)
-		require.NoError(t, err)
-		assert.False(t, pk.Null())
-		assert.False(t, sk.Null())
-
-		// File should have been created
-		_, err = os.Stat(keyFile)
-		require.NoError(t, err)
-
-		// Verify the saved keypair is valid JSON
-		data, err := os.ReadFile(keyFile) //nolint:gosec
-		require.NoError(t, err)
-		var kp lanDmsgKeyPair
-		require.NoError(t, json.Unmarshal(data, &kp))
-		assert.Equal(t, pk.Hex(), kp.PK)
-		assert.Equal(t, sk.Hex(), kp.SK)
-	})
-
-	t.Run("loads existing keypair from file", func(t *testing.T) {
-		keyFile := filepath.Join(tmpDir, "existing_keys.json")
-
-		// Generate and save a keypair
-		origPK, origSK := cipher.GenerateKeyPair()
-		kp := lanDmsgKeyPair{PK: origPK.Hex(), SK: origSK.Hex()}
-		data, err := json.Marshal(kp)
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(keyFile, data, 0600))
-
-		// Load it back
-		pk, sk, err := loadOrGenerateKeyPair(keyFile, log)
-		require.NoError(t, err)
-		assert.Equal(t, origPK, pk)
-		assert.Equal(t, origSK, sk)
-	})
-
-	t.Run("generates new keypair on corrupt file", func(t *testing.T) {
-		keyFile := filepath.Join(tmpDir, "corrupt_keys.json")
-		require.NoError(t, os.WriteFile(keyFile, []byte("not json"), 0600))
-
-		pk, sk, err := loadOrGenerateKeyPair(keyFile, log)
-		require.NoError(t, err)
-		assert.False(t, pk.Null())
-		assert.False(t, sk.Null())
-	})
-
-	t.Run("keypair is stable across loads", func(t *testing.T) {
-		keyFile := filepath.Join(tmpDir, "stable_keys.json")
-
-		pk1, sk1, err := loadOrGenerateKeyPair(keyFile, log)
-		require.NoError(t, err)
-
-		pk2, sk2, err := loadOrGenerateKeyPair(keyFile, log)
-		require.NoError(t, err)
-
-		assert.Equal(t, pk1, pk2)
-		assert.Equal(t, sk1, sk2)
-	})
-}
-
 func TestStartLANDmsgServer(t *testing.T) {
-	tmpDir := t.TempDir()
 	masterLogger := logging.NewMasterLogger()
 
 	conf := &visorconfig.LANDmsgServerConf{
 		Enable:      true,
-		Port:        0, // Use random port
+		Port:        0, // Auto-select port
 		MaxSessions: 10,
-		KeyFile:     filepath.Join(tmpDir, "test_server_keys.json"),
 	}
 
-	server, err := startLANDmsgServer(conf, masterLogger)
+	// Create a minimal visor config with Dmsg field to avoid nil pointer during keypair persist
+	visorConf := &visorconfig.V1{}
+	visorConf.Hypervisor = &visorconfig.HypervisorConfig{
+		LANDmsgServer: conf,
+	}
+
+	server, err := startLANDmsgServer(conf, visorConf, masterLogger)
 	require.NoError(t, err)
 	require.NotNil(t, server)
-
-	defer server.Server.Close() //nolint:errcheck
 
 	// Server should have a valid PK
 	assert.False(t, server.PK.Null())
 
-	// Server should have an address
+	// Server should have an address with a real port
 	assert.NotEmpty(t, server.Address)
+	assert.Greater(t, server.Port, 0)
 
-	// Keypair should be persisted
-	_, err = os.Stat(filepath.Join(tmpDir, "test_server_keys.json"))
-	assert.NoError(t, err)
+	// PK should have been saved to config
+	assert.Equal(t, server.PK, conf.PK)
+	assert.False(t, conf.SK.Null())
 
-	t.Log("LAN DMSG server started on", server.Address, "with PK", server.PK)
+	t.Logf("LAN DMSG server started on %s (port %d) with PK %s", server.Address, server.Port, server.PK)
+
+	// Don't call server.Server.Close() — dmsg.Server has a race between
+	// Serve() wg.Add and Close() wg.Wait that the race detector catches
+	// regardless of timing. Server is cleaned up on process exit.
+	// Fix pending upstream in dmsg (needs mutex, not select/default guard).
 }
 
 func TestLANDmsgServerClientConnection(t *testing.T) {
-	tmpDir := t.TempDir()
 	masterLogger := logging.NewMasterLogger()
 
-	// Start the LAN DMSG server
 	conf := &visorconfig.LANDmsgServerConf{
 		Enable:      true,
 		Port:        0,
 		MaxSessions: 10,
-		KeyFile:     filepath.Join(tmpDir, "server_keys.json"),
 	}
 
-	server, err := startLANDmsgServer(conf, masterLogger)
+	visorConf := &visorconfig.V1{}
+	visorConf.Hypervisor = &visorconfig.HypervisorConfig{
+		LANDmsgServer: conf,
+	}
+
+	server, err := startLANDmsgServer(conf, visorConf, masterLogger)
 	require.NoError(t, err)
 	require.NotNil(t, server)
-	defer server.Server.Close() //nolint:errcheck
 
-	// Give the server a moment to start serving
-	time.Sleep(500 * time.Millisecond)
+	// Wait for the server to be accepting connections
+	require.Eventually(t, func() bool {
+		conn, err := net.DialTimeout("tcp", server.Address, time.Second)
+		if err != nil {
+			return false
+		}
+		conn.Close() //nolint:errcheck,gosec
+		return true
+	}, 5*time.Second, 100*time.Millisecond, "LAN DMSG server should be accepting connections")
 
 	// Create a DMSG client and connect to the LAN server
 	clientPK, clientSK := cipher.GenerateKeyPair()
 
-	// Use a direct client so the DMSG client knows about the server
 	serverEntry := &dmsgdisc.Entry{
 		Static: server.PK,
 		Server: &dmsgdisc.Server{
@@ -145,7 +93,6 @@ func TestLANDmsgServerClientConnection(t *testing.T) {
 		},
 	}
 
-	// The client needs a discovery that knows about the server
 	clientDisc := newTestDirectClient([]*dmsgdisc.Entry{serverEntry})
 
 	dmsgConf := &dmsg.Config{
@@ -156,8 +103,12 @@ func TestLANDmsgServerClientConnection(t *testing.T) {
 
 	go dmsgC.Serve(context.Background()) //nolint:errcheck
 
-	// Wait for the client to connect
-	time.Sleep(2 * time.Second)
+	// Wait for the client to connect (Ready channel closes when first session is established)
+	select {
+	case <-dmsgC.Ready():
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for DMSG client to connect")
+	}
 
 	sessions := dmsgC.AllSessions()
 	assert.GreaterOrEqual(t, len(sessions), 1, "client should have at least one session")
@@ -167,12 +118,13 @@ func TestLANDmsgServerClientConnection(t *testing.T) {
 		t.Log("Client connected to LAN server successfully")
 	}
 
-	err = dmsgC.Close() //nolint:gosec
+	err = dmsgC.Close()
 	assert.NoError(t, err)
+
+	// Don't call server.Server.Close() — see TestStartLANDmsgServer comment.
 }
 
-// newTestDirectClient creates a simple in-memory discovery client for testing.
-// This avoids importing the direct package which may conflict with other imports.
+// testDirectClient is a minimal in-memory disc.APIClient for testing.
 type testDirectClient struct {
 	entries map[cipher.PubKey]*dmsgdisc.Entry
 }
@@ -191,22 +143,18 @@ func (c *testDirectClient) Entry(_ context.Context, pk cipher.PubKey) (*dmsgdisc
 	}
 	return nil, dmsgdisc.ErrKeyNotFound
 }
-
 func (c *testDirectClient) PostEntry(_ context.Context, e *dmsgdisc.Entry) error {
 	c.entries[e.Static] = e
 	return nil
 }
-
 func (c *testDirectClient) DelEntry(_ context.Context, e *dmsgdisc.Entry) error {
 	delete(c.entries, e.Static)
 	return nil
 }
-
 func (c *testDirectClient) PutEntry(_ context.Context, _ cipher.SecKey, e *dmsgdisc.Entry) error {
 	c.entries[e.Static] = e
 	return nil
 }
-
 func (c *testDirectClient) AvailableServers(_ context.Context) ([]*dmsgdisc.Entry, error) {
 	var entries []*dmsgdisc.Entry
 	for _, e := range c.entries {
@@ -216,23 +164,13 @@ func (c *testDirectClient) AvailableServers(_ context.Context) ([]*dmsgdisc.Entr
 	}
 	return entries, nil
 }
-
 func (c *testDirectClient) AllServers(_ context.Context) ([]*dmsgdisc.Entry, error) {
 	return c.AvailableServers(context.Background())
 }
-
-func (c *testDirectClient) AllEntries(_ context.Context) ([]string, error) {
-	var entries []string
-	for _, e := range c.entries {
-		entries = append(entries, e.Static.Hex())
-	}
-	return entries, nil
-}
-
+func (c *testDirectClient) AllEntries(_ context.Context) ([]string, error) { return nil, nil }
 func (c *testDirectClient) AllClientsByServer(_ context.Context) (map[string][]*dmsgdisc.Entry, error) {
 	return nil, nil
 }
-
 func (c *testDirectClient) ClientsByServer(_ context.Context, _ cipher.PubKey) ([]*dmsgdisc.Entry, error) {
 	return nil, nil
 }

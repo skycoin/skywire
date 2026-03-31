@@ -3,6 +3,7 @@ package dmsg
 
 import (
 	"context"
+	"errors"
 	"net"
 	"sync"
 	"time"
@@ -17,11 +18,21 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg/metrics"
 )
 
+// ErrClosed is returned when an operation is attempted on a closed server.
+var ErrClosed = errors.New("server closed")
+
+// PeerEntry represents a peer dmsg server to connect to.
+type PeerEntry struct {
+	PK   cipher.PubKey
+	Addr string
+}
+
 // ServerConfig configues the Server
 type ServerConfig struct {
 	MaxSessions    int
 	UpdateInterval time.Duration
 	AuthPassphrase string
+	Peers          []PeerEntry
 }
 
 // DefaultServerConfig returns the default server config.
@@ -53,6 +64,12 @@ type Server struct {
 	maxSessions int
 
 	authPassphrase string
+
+	// Peer server mesh support.
+	peers          []PeerEntry
+	peerPKs        map[cipher.PubKey]struct{} // set of known peer server PKs
+	peerSessions   map[cipher.PubKey]*SessionCommon
+	peerSessionsMx sync.Mutex
 }
 
 // NewServer creates a new dmsg server entity.
@@ -83,6 +100,24 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions, conf.AuthPassphrase)
 	}
 	s.authPassphrase = conf.AuthPassphrase
+
+	// Initialize peer mesh.
+	s.peers = conf.Peers
+	s.peerPKs = make(map[cipher.PubKey]struct{}, len(conf.Peers))
+	for _, p := range conf.Peers {
+		s.peerPKs[p.PK] = struct{}{}
+	}
+	s.peerSessions = make(map[cipher.PubKey]*SessionCommon)
+	s.peerSessionsFunc = func() []*SessionCommon {
+		s.peerSessionsMx.Lock()
+		defer s.peerSessionsMx.Unlock()
+		sessions := make([]*SessionCommon, 0, len(s.peerSessions))
+		for _, ses := range s.peerSessions {
+			sessions = append(sessions, ses)
+		}
+		return sessions
+	}
+
 	return s
 }
 
@@ -125,7 +160,12 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 		WithField("local_pk", s.pk)
 
 	log.Info("Serving server.")
-	s.wg.Add(1)
+	select {
+	case <-s.done:
+		return ErrClosed
+	default:
+		s.wg.Add(1)
+	}
 	defer func() {
 		log.Info("Stopped server.")
 		s.wg.Done()
@@ -141,6 +181,8 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 	if err := s.startUpdateEntryLoop(ctx); err != nil {
 		return err
 	}
+
+	s.connectToPeers(ctx)
 
 	log.Info("Accepting sessions...")
 	s.readyOnce.Do(func() { close(s.ready) })
@@ -211,6 +253,180 @@ func (s *Server) Ready() <-chan struct{} {
 	return s.ready
 }
 
+func (s *Server) connectToPeers(ctx context.Context) {
+	// Connect to statically configured peers.
+	for _, peer := range s.peers {
+		s.wg.Add(1)
+		go func(peer PeerEntry) {
+			defer s.wg.Done()
+			s.maintainPeerConnection(ctx, peer)
+		}(peer)
+	}
+
+	// Periodically discover other servers from discovery and peer with them.
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.discoverAndConnectPeers(ctx)
+	}()
+}
+
+// discoverAndConnectPeers periodically queries discovery for all servers
+// and establishes peer connections to any that aren't already connected.
+func (s *Server) discoverAndConnectPeers(ctx context.Context) {
+	// activePeers tracks goroutines managing discovered peer connections.
+	activePeers := make(map[cipher.PubKey]context.CancelFunc)
+
+	// Initial delay to let the server register itself first.
+	select {
+	case <-time.After(10 * time.Second):
+	case <-ctx.Done():
+		return
+	}
+
+	ticker := time.NewTicker(s.updateInterval)
+	defer ticker.Stop()
+
+	for {
+		entries, err := s.dc.AllServers(ctx)
+		if err != nil {
+			s.log.WithError(err).Debug("Failed to discover peer servers.")
+		} else {
+			for _, entry := range entries {
+				pk := entry.Static
+				// Skip self and already-connected peers.
+				if pk == s.pk {
+					continue
+				}
+				if _, ok := activePeers[pk]; ok {
+					continue
+				}
+				// Skip if already a static peer (handled by connectToPeers).
+				s.peerSessionsMx.Lock()
+				_, alreadyPeer := s.peerPKs[pk]
+				if !alreadyPeer && entry.Server != nil && entry.Server.Address != "" {
+					s.peerPKs[pk] = struct{}{}
+				}
+				s.peerSessionsMx.Unlock()
+				if alreadyPeer {
+					continue
+				}
+				if entry.Server == nil || entry.Server.Address == "" {
+					continue
+				}
+
+				peerCtx, peerCancel := context.WithCancel(ctx) //nolint:gosec
+				activePeers[pk] = peerCancel
+
+				peer := PeerEntry{PK: pk, Addr: entry.Server.Address}
+				s.wg.Add(1)
+				go func() {
+					defer s.wg.Done()
+					s.maintainPeerConnection(peerCtx, peer)
+				}()
+			}
+		}
+
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			// Cancel all discovered peer connections.
+			for _, cancel := range activePeers {
+				cancel()
+			}
+			return
+		}
+	}
+}
+
+func (s *Server) maintainPeerConnection(ctx context.Context, peer PeerEntry) {
+	log := s.log.WithField("peer_pk", peer.PK).WithField("peer_addr", peer.Addr)
+	bo := 5 * time.Second
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.done:
+			return
+		default:
+		}
+
+		log.Info("Dialing peer server...")
+		conn, err := net.DialTimeout("tcp", peer.Addr, 10*time.Second)
+		if err != nil {
+			log.WithError(err).Warn("Failed to dial peer server.")
+			select {
+			case <-time.After(bo):
+			case <-ctx.Done():
+				return
+			}
+			if bo < time.Minute {
+				bo = time.Duration(float64(bo) * 1.5)
+			}
+			continue
+		}
+
+		ses := new(SessionCommon)
+		if err := ses.initClient(&s.EntityCommon, conn, peer.PK); err != nil {
+			log.WithError(err).Warn("Peer noise handshake failed.")
+			conn.Close() //nolint:errcheck,gosec
+			select {
+			case <-time.After(bo):
+			case <-ctx.Done():
+				return
+			}
+			continue
+		}
+
+		ses.sm.mutx.Lock()
+		ses.sm.yamux, err = yamux.Client(conn, yamux.DefaultConfig())
+		if err != nil {
+			ses.sm.mutx.Unlock()
+			log.WithError(err).Warn("Peer yamux setup failed.")
+			conn.Close() //nolint:errcheck,gosec
+			select {
+			case <-time.After(bo):
+			case <-ctx.Done():
+				return
+			}
+			continue
+		}
+		ses.sm.addr = ses.sm.yamux.RemoteAddr()
+		ses.isPeer = true
+		ses.sm.mutx.Unlock()
+
+		s.peerSessionsMx.Lock()
+		s.peerSessions[peer.PK] = ses
+		s.peerSessionsMx.Unlock()
+
+		log.Info("Connected to peer server.")
+		bo = 5 * time.Second // reset backoff on success
+
+		// Block until the yamux session closes or context is done.
+		select {
+		case <-ctx.Done():
+		case <-s.done:
+		}
+
+		// Clean up.
+		s.peerSessionsMx.Lock()
+		delete(s.peerSessions, peer.PK)
+		s.peerSessionsMx.Unlock()
+		ses.Close() //nolint:errcheck,gosec
+
+		log.Info("Peer session closed, will reconnect.")
+	}
+}
+
+// isPeerPK returns true if the given PK is a known peer server.
+func (s *Server) isPeerPK(pk cipher.PubKey) bool {
+	s.peerSessionsMx.Lock()
+	_, ok := s.peerPKs[pk]
+	s.peerSessionsMx.Unlock()
+	return ok
+}
+
 func (s *Server) handleSession(conn net.Conn) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -234,7 +450,14 @@ func (s *Server) handleSession(conn net.Conn) {
 		return
 	}
 	log = log.WithField("remote_pk", dSes.RemotePK())
-	log.Info("Started session.")
+
+	// Mark session as peer if remote PK is a known peer server.
+	if s.isPeerPK(dSes.RemotePK()) {
+		dSes.isPeer = true
+		log.Info("Started peer server session.")
+	} else {
+		log.Info("Started session.")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {

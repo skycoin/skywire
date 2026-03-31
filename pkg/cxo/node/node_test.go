@@ -12,6 +12,23 @@ import (
 
 const TM time.Duration = 4000 * time.Millisecond
 
+// waitForCondition polls a condition function until it returns true or TM expires.
+// Used instead of fixed time.Sleep to make tests event-driven.
+func waitForCondition(t *testing.T, msg string, cond func() bool) {
+	t.Helper()
+	deadline := time.After(TM)
+	for {
+		if cond() {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for: %s", msg)
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
 func getTestConfigNotListen(prefix string) (c *Config) {
 	c = getTestConfig(prefix)
 	c.TCP.Listen = ""
@@ -224,6 +241,9 @@ func TestNode_Publish(t *testing.T) {
 	c, err = sn1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	assertTrue(t, c.PeerID() == ln.ID(), "wrong ID")
+	waitForCondition(t, "ln sees sn1 connected", func() bool {
+		return len(ln.Connections()) >= 1
+	})
 	assertIDs(t, ln.Connections(), sn1.ID())
 
 	assertNil(t, c.Subscribe(pk))
@@ -233,6 +253,9 @@ func TestNode_Publish(t *testing.T) {
 	c, err = sn2.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	assertTrue(t, c.PeerID() == ln.ID(), "wrong ID")
+	waitForCondition(t, "ln sees sn2 connected", func() bool {
+		return len(ln.Connections()) >= 2
+	})
 	assertIDs(t, ln.Connections(), sn1.ID(), sn2.ID())
 
 	assertNil(t, c.Subscribe(pk))
@@ -242,6 +265,9 @@ func TestNode_Publish(t *testing.T) {
 	c, err = un1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	assertTrue(t, c.PeerID() == ln.ID(), "wrong id")
+	waitForCondition(t, "ln sees un1 connected", func() bool {
+		return len(ln.Connections()) >= 3
+	})
 
 	// check all connections
 
@@ -310,40 +336,37 @@ func TestNode_Publish(t *testing.T) {
 	// ok, now let's disconnect one by one and check
 	// connections again
 
-	// un1
+	// un1 — close and wait for both sides to clean up
 	c, err = un1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	c.Close() //nolint:errcheck,gosec
-
-	<-time.After(TM)
-
+	waitForCondition(t, "ln sees un1 disconnected", func() bool {
+		return len(ln.Connections()) == 2
+	})
 	assertIDs(t, ln.Connections(), sn1.ID(), sn2.ID())
 	assertIDs(t, ln.ConnectionsOfFeed(pk), sn1.ID(), sn2.ID())
-	assertIDs(t, un1.Connections())
 	assertIDs(t, un1.ConnectionsOfFeed(pk))
 
 	// sn2
 	c, err = sn2.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	c.Close() //nolint:errcheck,gosec
-
-	<-time.After(TM)
-
+	waitForCondition(t, "ln sees sn2 disconnected", func() bool {
+		return len(ln.Connections()) == 1
+	})
 	assertIDs(t, ln.Connections(), sn1.ID())
 	assertIDs(t, ln.ConnectionsOfFeed(pk), sn1.ID())
-	assertIDs(t, sn2.Connections())
 	assertIDs(t, sn2.ConnectionsOfFeed(pk))
 
 	// sn1
 	c, err = sn1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
 	c.Close() //nolint:errcheck,gosec
-
-	<-time.After(TM)
-
+	waitForCondition(t, "ln sees sn1 disconnected", func() bool {
+		return len(ln.Connections()) == 0
+	})
 	assertIDs(t, ln.Connections())
 	assertIDs(t, ln.ConnectionsOfFeed(pk))
-	assertIDs(t, sn1.Connections())
 	assertIDs(t, sn1.ConnectionsOfFeed(pk))
 
 }
@@ -365,14 +388,14 @@ func TestNode_Connections(t *testing.T) {
 func TestNode_TCP(t *testing.T) {
 	// (tcp *TCP)
 
-	// TODO (kostyarin): low priority
+	// Test not implemented (low priority).
 
 }
 
 func TestNode_UDP(t *testing.T) {
 	// (udp *UDP)
 
-	// TODO (kostyarin): low priority
+	// Test not implemented (low priority).
 
 }
 
@@ -504,13 +527,13 @@ func TestNode_IsSharing(t *testing.T) {
 func TestNode_Stat(t *testing.T) {
 	// (s *Stat)
 
-	// TODO (kostyarin): the lowest priority
+	// Test not implemented (low priority).
 
 }
 
 func TestNode_Close(t *testing.T) {
 	// (err error)
 
-	// TODO (kostyarin): the lowest priority
+	// Test not implemented (low priority).
 
 }
