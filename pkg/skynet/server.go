@@ -225,7 +225,7 @@ func (s *Server) forwardHTTP(remoteConn net.Conn, localAddr string) {
 		if err != nil {
 			s.log.WithError(err).Error("Failed to dial local server")
 			// Send error indication back to remote so client knows the forward failed
-			errMsg := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n")
+			errMsg := "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n"
 			_, _ = remoteConn.Write([]byte(errMsg)) //nolint:errcheck,gosec
 			return
 		}
