@@ -210,7 +210,7 @@ func (c *Client) handleLocalConn(localConn net.Conn) {
 	respBuf := make([]byte, 64*1024)
 	total := 0
 	for {
-		remoteConn.SetReadDeadline(timeoutAfter(5)) //nolint:errcheck,gosec
+		_ = remoteConn.SetReadDeadline(timeoutAfter(DefaultReadTimeout)) //nolint:errcheck,gosec
 		rn, err := remoteConn.Read(respBuf[total:])
 		if err != nil {
 			if !errors.Is(err, io.EOF) && !isTimeout(err) {
