@@ -858,7 +858,9 @@ func server(e error) {
 						return
 					}
 					//record the transaction ID for the reward notification system - append the file!
-					_, err = script.Echo(txid).AppendFile(wd + `/` + "transactions0.txt")
+					txnFile := wd + `/` + "transactions0.txt"
+					fmt.Printf("[reward] Appending txid to %s\n", txnFile)
+					_, err = script.Echo(txid).AppendFile(txnFile)
 					if err != nil {
 						c.Writer.WriteHeader(http.StatusInternalServerError)
 						c.Writer.Write([]byte(`script.Echo(txid).AppendFile(wd + / + "transactions0.txt")\n\n` + txid + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec

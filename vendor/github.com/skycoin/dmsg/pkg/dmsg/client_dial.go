@@ -3,10 +3,14 @@ package dmsg
 
 import (
 	"context"
+	"math"
 	"net"
+	"sort"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+
+	"github.com/skycoin/dmsg/pkg/disc"
 )
 
 // Listen listens on a given dmsg port.
@@ -28,40 +32,58 @@ func (ce *Client) Dial(ctx context.Context, addr Addr) (net.Conn, error) {
 
 // DialStream dials to a remote client entity with the given address.
 func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
-	entry, err := getClientEntry(ctx, ce.dc, addr.PK)
+	entry, err := ce.getClientEntryCached(ctx, addr.PK)
 	if err != nil {
 		return nil, err
 	}
 
-	// 1. Try existing sessions to the target's delegated servers (direct path, cheapest).
-	for _, srvPK := range entry.Client.DelegatedServers {
-		if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
+	// Phase 0: Try cached route first (server that last successfully reached this destination).
+	if cachedSrvPK, ok := ce.getCachedRoute(addr.PK); ok {
+		if dSes, ok := ce.clientSession(ce.porter, cachedSrvPK); ok {
 			stream, err := dSes.DialStream(addr)
 			if err != nil {
-				ce.log.WithError(err).WithField("server", srvPK).
-					Debug("DialStream failed via existing session, trying next server")
-				continue
+				ce.log.WithError(err).WithField("server", cachedSrvPK).
+					Debug("DialStream failed via cached route, evicting")
+				ce.evictCachedRoute(addr.PK)
+			} else {
+				return stream, nil
 			}
-			return stream, nil
+		} else {
+			// Session no longer exists, evict stale route.
+			ce.evictCachedRoute(addr.PK)
 		}
 	}
 
-	// 2. Try all other existing sessions (mesh path — already connected, no new handshake).
-	// If servers are meshed, our server forwards the request to the target's server.
-	for _, ses := range ce.allClientSessions(ce.porter) {
-		if hasPK(entry.Client.DelegatedServers, ses.RemotePK()) {
-			continue // already tried above
+	// Phase 1: Try existing sessions to the target's delegated servers (direct path, cheapest).
+	// Sort by latency so the lowest-latency server is tried first.
+	delegatedSessions := ce.sortedDelegatedSessions(entry.Client.DelegatedServers)
+	for _, dSes := range delegatedSessions {
+		stream, err := dSes.DialStream(addr)
+		if err != nil {
+			ce.log.WithError(err).WithField("server", dSes.RemotePK()).
+				Debug("DialStream failed via existing session, trying next server")
+			continue
 		}
+		ce.setCachedRoute(addr.PK, dSes.RemotePK())
+		return stream, nil
+	}
+
+	// Phase 2: Try all other existing sessions (mesh path — already connected, no new handshake).
+	// If servers are meshed, our server forwards the request to the target's server.
+	// Sorted by latency.
+	meshSessions := ce.sortedMeshSessions(entry.Client.DelegatedServers)
+	for _, ses := range meshSessions {
 		stream, err := ses.DialStream(addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", ses.RemotePK()).
 				Debug("DialStream failed via mesh, trying next server")
 			continue
 		}
+		ce.setCachedRoute(addr.PK, ses.RemotePK())
 		return stream, nil
 	}
 
-	// 3. Last resort: establish new sessions to the target's delegated servers.
+	// Phase 3: Last resort: establish new sessions to the target's delegated servers.
 	for _, srvPK := range entry.Client.DelegatedServers {
 		dSes, err := ce.EnsureAndObtainSession(ctx, srvPK)
 		if err != nil {
@@ -73,10 +95,68 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 				Debug("DialStream failed via new session, trying next server")
 			continue
 		}
+		ce.setCachedRoute(addr.PK, srvPK)
 		return stream, nil
 	}
 
 	return nil, ErrCannotConnectToDelegated
+}
+
+// getClientEntryCached returns a client entry, using the entry cache when possible.
+func (ce *Client) getClientEntryCached(ctx context.Context, clientPK cipher.PubKey) (*disc.Entry, error) {
+	if entry, ok := ce.getCachedEntry(clientPK); ok {
+		return entry, nil
+	}
+	entry, err := getClientEntry(ctx, ce.dc, clientPK)
+	if err != nil {
+		return nil, err
+	}
+	ce.setCachedEntry(clientPK, entry)
+	return entry, nil
+}
+
+// sortedDelegatedSessions returns existing sessions to the given delegated servers,
+// sorted by ascending latency (lowest ping first).
+func (ce *Client) sortedDelegatedSessions(delegatedServers []cipher.PubKey) []ClientSession {
+	var sessions []ClientSession
+	for _, srvPK := range delegatedServers {
+		if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
+			sessions = append(sessions, dSes)
+		}
+	}
+	sortSessionsByLatency(sessions)
+	return sessions
+}
+
+// sortedMeshSessions returns all sessions NOT in the delegated list,
+// sorted by ascending latency.
+func (ce *Client) sortedMeshSessions(delegatedServers []cipher.PubKey) []ClientSession {
+	var sessions []ClientSession
+	for _, ses := range ce.allClientSessions(ce.porter) {
+		if hasPK(delegatedServers, ses.RemotePK()) {
+			continue
+		}
+		sessions = append(sessions, ses)
+	}
+	sortSessionsByLatency(sessions)
+	return sessions
+}
+
+// sortSessionsByLatency sorts sessions by last measured ping latency (ascending).
+// Sessions with no measurement (0) are sorted last.
+func sortSessionsByLatency(sessions []ClientSession) {
+	sort.Slice(sessions, func(i, j int) bool {
+		pi := sessions[i].LastPing()
+		pj := sessions[j].LastPing()
+		// Treat 0 (unmeasured) as maximum latency.
+		if pi == 0 {
+			pi = math.MaxInt64
+		}
+		if pj == 0 {
+			pj = math.MaxInt64
+		}
+		return pi < pj
+	})
 }
 
 // LookupIP dails to dmsg servers for public IP of the client.

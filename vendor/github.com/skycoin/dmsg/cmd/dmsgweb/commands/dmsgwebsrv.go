@@ -177,12 +177,13 @@ func proxyHTTPConnections(ctx context.Context, localPort uint, listener net.List
 	}
 	authRoute.Any("/*path", func(c *gin.Context) {
 		targetURL := fmt.Sprintf("http://127.0.0.1:%d%s?%s", localPort, c.Request.URL.Path, c.Request.URL.RawQuery)
+		parsed, err := url.Parse(targetURL)
+		if err != nil {
+			dlog.Errorf("failed to parse target URL %q: %v", targetURL, err)
+			c.String(http.StatusInternalServerError, "Bad target URL")
+			return
+		}
 		proxy := httputil.ReverseProxy{Director: func(req *http.Request) {
-			parsed, err := url.Parse(targetURL)
-			if err != nil {
-				dlog.Errorf("failed to parse target URL %q: %v", targetURL, err)
-				return
-			}
 			req.URL = parsed
 			req.Host = req.URL.Host
 		}}
@@ -211,12 +212,16 @@ func proxyHTTPConnections(ctx context.Context, localPort uint, listener net.List
 	}
 }
 
+// maxTCPConns is the maximum number of concurrent TCP proxy connections.
+const maxTCPConns = 256
+
 func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Listener) {
 	// To track active connections for cleanup
 	var connWg sync.WaitGroup
 	connChan := make(chan net.Conn)
 	activeConns := make(map[net.Conn]struct{})
 	connMutex := &sync.Mutex{} // Protect access to activeConns
+	sem := make(chan struct{}, maxTCPConns)
 
 	// Goroutine to accept new connections
 	go func() {
@@ -241,11 +246,15 @@ func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Liste
 		select {
 		case <-ctx.Done():
 			dlog.Info("Shutting down TCP proxy connections...")
-			listener.Close() //nolint
+			if err := listener.Close(); err != nil {
+				dlog.WithError(err).Debug("Error closing TCP listener")
+			}
 
 			connMutex.Lock()
 			for conn := range activeConns {
-				conn.Close() //nolint
+				if err := conn.Close(); err != nil {
+					dlog.WithError(err).Debug("Error closing active connection")
+				}
 			}
 			connMutex.Unlock()
 
@@ -257,14 +266,30 @@ func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Liste
 				return
 			}
 
+			// Limit concurrent connections.
+			select {
+			case sem <- struct{}{}:
+			default:
+				dlog.Warn("Max TCP connections reached, rejecting connection")
+				if err := conn.Close(); err != nil {
+					dlog.WithError(err).Debug("Error closing rejected connection")
+				}
+				continue
+			}
+
 			connMutex.Lock()
 			activeConns[conn] = struct{}{}
 			connMutex.Unlock()
 
 			connWg.Add(1)
 			go func(dmsgConn net.Conn) {
+				defer func() { <-sem }()
 				defer connWg.Done()
-				defer dmsgConn.Close() //nolint
+				defer func() {
+					if err := dmsgConn.Close(); err != nil {
+						dlog.WithError(err).Debug("Error closing dmsg connection")
+					}
+				}()
 
 				localConn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", localPort))
 				if err != nil {
@@ -276,21 +301,27 @@ func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Liste
 
 					return
 				}
-				defer localConn.Close() //nolint
 
+				done := make(chan struct{})
 				go func() {
+					defer close(done)
 					_, err1 := io.Copy(dmsgConn, localConn)
 					if err1 != nil {
-						dlog.WithError(err1).Warn("Error on io.Copy(dmsgConn, localConn)")
+						dlog.WithError(err1).Debug("io.Copy(dmsgConn, localConn) ended")
 					}
 				}()
 				_, err2 := io.Copy(localConn, dmsgConn)
 				if err2 != nil {
-					dlog.WithError(err2).Warn("Error on io.Copy(localConn, dmsgConn)")
+					dlog.WithError(err2).Debug("io.Copy(localConn, dmsgConn) ended")
 				}
 				// Close both to unblock the goroutine
-				dmsgConn.Close()  //nolint
-				localConn.Close() //nolint
+				if err := dmsgConn.Close(); err != nil {
+					dlog.WithError(err).Debug("Error closing dmsg conn")
+				}
+				if err := localConn.Close(); err != nil {
+					dlog.WithError(err).Debug("Error closing local conn")
+				}
+				<-done
 
 				connMutex.Lock()
 				delete(activeConns, dmsgConn)
