@@ -97,6 +97,11 @@ const envfileLinux = `#
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
 
+### Rewards #############################################################
+
+#--	Skycoin reward address or xpub key
+#REWARDSKYADDR=''
+
 ### Apps ################################################################
 
 #--	Display the node ip in the service discovery
@@ -268,6 +273,11 @@ const envfileWindows = `#
 
 #--	Start the hypervisor interface for this visor
 #$ISHYPERVISOR=$true
+
+### Rewards #############################################################
+
+#--	Skycoin reward address or xpub key
+#$REWARDSKYADDR=''
 
 ### Apps ################################################################
 

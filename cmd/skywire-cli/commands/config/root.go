@@ -106,6 +106,7 @@ var (
 	enableSyncTPDData          bool
 	isSkychatEnable            bool
 	skychatAddr                string
+	rewardSkyAddr              string
 	hvHTTPAddr                 string
 	stunServers                string
 	shutdownTimeout            string

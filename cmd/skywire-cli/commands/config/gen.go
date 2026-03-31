@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -223,6 +224,9 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&isSkychatEnable, "servechat", scriptExecBool("${SKYCHAT:-true}"), "autostart skychat (default: true)")
 	genConfigCmd.Flags().StringVar(&skychatAddr, "chataddr", scriptExecString("${SKYCHATADDR:-"+skyenv.SkychatAddr+"}"), "skychat local address")
 	gHiddenFlags = append(gHiddenFlags, "chataddr")
+
+	// Reward address
+	genConfigCmd.Flags().StringVar(&rewardSkyAddr, "rewardaddr", scriptExecString("${REWARDSKYADDR}"), "skycoin reward address or xpub key")
 
 	// Path and environment flags
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
@@ -806,6 +810,13 @@ func configureLauncher(log *logging.Logger) {
 		conf.ShutdownTimeout = visorconfig.DefaultTimeout
 	}
 	conf.GeoIP = skyenv.GeoIP
+	if rewardSkyAddr != "" {
+		canonical, _, err := rewardconfig.ValidateRewardAddress(rewardSkyAddr)
+		if err != nil {
+			log.WithError(err).Fatal("Invalid reward address")
+		}
+		conf.RewardAddress = canonical
+	}
 
 	conf.Dmsgpty = &visorconfig.Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
