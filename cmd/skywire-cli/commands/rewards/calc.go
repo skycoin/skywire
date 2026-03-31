@@ -701,9 +701,14 @@ Architectures:
 			}
 
 			if !h1 {
-				fmt.Println("Skycoin Address, Skywire Public Key, Presence Share, Bandwidth (bytes), Total Reward SKY, IP, Architecture, UUID, Interfaces")
+				fmt.Println("Skycoin Address, Skywire Public Key, Presence Share, Bandwidth (bytes), Total Reward SKY, IP, Architecture, UUID, Interfaces, XPub")
 				for _, ni := range nodesInfos1 {
-					fmt.Printf("%s, %s, %.6f, %d, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Share, ni.Bandwidth, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
+					resolved := resolveRewardAddress(ni.SkyAddr)
+					xpub := ""
+					if strings.HasPrefix(ni.SkyAddr, "xpub") {
+						xpub = ni.SkyAddr
+					}
+					fmt.Printf("%s, %s, %.6f, %d, %.6f, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Bandwidth, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, xpub)
 				}
 			}
 
@@ -783,9 +788,14 @@ Architectures:
 			combinedNodesInfos := append(nodesInfos1, nodesInfos2...)
 
 			if !h1 {
-				fmt.Println("Skycoin Address, Skywire Public Key, Reward Shares, Reward SKY Amount, IP, Architecture, UUID, Interfaces")
+				fmt.Println("Skycoin Address, Skywire Public Key, Reward Shares, Reward SKY Amount, IP, Architecture, UUID, Interfaces, XPub")
 				for _, ni := range combinedNodesInfos {
-					fmt.Printf("%s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
+					resolved := resolveRewardAddress(ni.SkyAddr)
+					xpub := ""
+					if strings.HasPrefix(ni.SkyAddr, "xpub") {
+						xpub = ni.SkyAddr
+					}
+					fmt.Printf("%s, %s, %.6f, %.6f, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, xpub)
 				}
 			}
 
@@ -816,26 +826,58 @@ Architectures:
 				}
 			}
 		}
+
 	},
 }
 
-// resolveRewardAddress resolves an xpub key to the next external chain address
-// using BIP44 derivation. Regular addresses are returned as-is.
-// The xpub key should NEVER appear in output — it is treated as private.
+// countUndistributedDays counts consecutive days before wdate (inclusive) that
+// lack a transaction marker file (hist/{date}.txt). This tells us how many
+// reward calculations are pending distribution, so we can offset the address
+// index to avoid reuse.
+func countUndistributedDays(forDate string) int {
+	d, err := time.Parse("2006-01-02", forDate)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for i := 0; i < 365; i++ { // look back up to a year
+		checkDate := d.AddDate(0, 0, -i)
+		markerFile := fmt.Sprintf("hist/%s.txt", checkDate.Format("2006-01-02"))
+		if _, err := os.Stat(markerFile); err == nil {
+			break // found a distributed day — stop counting
+		}
+		count++
+	}
+	return count
+}
+
+// resolveRewardAddress resolves an xpub key to the next unused external chain
+// address using BIP44 derivation. The address index is offset by the number of
+// undistributed reward days to prevent address reuse when distribution is delayed.
+// Regular addresses are returned as-is.
+// The xpub key should NEVER appear in public output — it is treated as private.
 func resolveRewardAddress(addr string) string {
 	if !strings.HasPrefix(addr, "xpub") {
 		return addr
 	}
-	// Derive index 0 of the external chain (m/account'/0/0)
-	// For proper "next empty" behavior, the reward system would need to track
-	// which indices have been used. For now, index 0 is deterministic and stable.
-	resolved, err := rewardconfig.DeriveExternalAddressFromXpub(addr, 0)
+
+	// Index 0 = first empty address for this xpub.
+	// Offset by the number of consecutive undistributed days before the
+	// current calculation date, so each pending day gets a distinct address.
+	offset := countUndistributedDays(wdate)
+	if offset > 0 {
+		offset-- // current day is index 0; prior undistributed days offset from there
+	}
+	index := uint32(offset) //nolint:gosec
+
+	resolved, err := rewardconfig.DeriveExternalAddressFromXpub(addr, index)
 	if err != nil {
-		log.Warnf("Failed to derive address from xpub %s...: %v", addr[:20], err)
+		log.Warnf("Failed to derive address from xpub %s... at index %d: %v", addr[:20], index, err)
 		// NEVER fall back to the raw xpub — it must stay private
 		return "INVALID_XPUB_DERIVATION"
 	}
-	log.Infof("Resolved xpub %s... → %s", addr[:20], resolved)
+
+	log.Infof("Resolved xpub %s... → %s (index %d, undistributed offset %d)", addr[:20], resolved, index, offset)
 	return resolved
 }
 
