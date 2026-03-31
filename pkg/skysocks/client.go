@@ -135,8 +135,8 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 		}
 		// Close both sides after the first copy finishes to unblock the other.
 		if i == 0 {
-			conn.Close()   //nolint:errcheck
-			stream.Close() //nolint:errcheck
+			conn.Close()   //nolint:errcheck,gosec
+			stream.Close() //nolint:errcheck,gosec
 		}
 	}
 
