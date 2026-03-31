@@ -28,45 +28,26 @@ type Server struct {
 	activeConn sync.WaitGroup
 }
 
-// clientMsg is the message sent by the client to request port forwarding
-type clientMsg struct {
-	Port   int  `json:"port"`
-	RawTCP bool `json:"raw_tcp,omitempty"`
-}
-
-// serverReply is the response sent to the client
-type serverReply struct {
-	Error *string `json:"error,omitempty"`
-}
-
-// NewServer creates a new skyforward server
-func NewServer(log logrus.FieldLogger, ports []int, allowedPKs []cipher.PubKey) *Server {
-	portMap := make(map[int]struct{})
-	for _, p := range ports {
-		portMap[p] = struct{}{}
-	}
-
-	wlMap := make(map[cipher.PubKey]struct{})
-	for _, pk := range allowedPKs {
-		wlMap[pk] = struct{}{}
-	}
-
+// NewServer creates a new skynet server
+func NewServer(log logrus.FieldLogger) *Server {
 	return &Server{
 		log:       log,
-		ports:     portMap,
-		whitelist: wlMap,
-		useWL:     len(allowedPKs) > 0,
+		ports:     make(map[int]struct{}),
+		whitelist: make(map[cipher.PubKey]struct{}),
 		closeCh:   make(chan struct{}),
 	}
 }
 
-// Serve starts accepting connections on the listener
-func (s *Server) Serve(l net.Listener) error {
-	s.listener = l
-	s.log.Info("Skyforward server started")
+// Serve starts the server on the given listener
+func (s *Server) Serve(lis net.Listener) error {
+	s.mu.Lock()
+	s.listener = lis
+	s.mu.Unlock()
+
+	s.log.Info("Skynet server started")
 
 	for {
-		conn, err := l.Accept()
+		conn, err := lis.Accept()
 		if err != nil {
 			select {
 			case <-s.closeCh:
@@ -87,30 +68,13 @@ func (s *Server) Serve(l net.Listener) error {
 	}
 }
 
-// Close stops the server
-func (s *Server) Close() error {
-	var err error
-	s.closeOnce.Do(func() {
-		close(s.closeCh)
-		if s.listener != nil {
-			err = s.listener.Close()
-		}
-		s.activeConn.Wait()
-	})
-	return err
-}
-
 func (s *Server) handleConn(conn net.Conn) {
-	defer func() {
-		if err := conn.Close(); err != nil {
-			s.log.WithError(err).Debug("Error closing connection")
-		}
-	}()
+	defer func() { _ = conn.Close() }() //nolint:errcheck,gosec
 
-	// Get remote public key for whitelist check
-	wrappedConn, err := appnet.WrapConn(conn)
-	if err != nil {
-		s.log.WithError(err).Error("Failed to wrap connection")
+	// Wrap the connection
+	wrappedConn, ok := conn.(*appnet.WrappedConn)
+	if !ok {
+		s.log.Error("Connection is not a WrappedConn")
 		return
 	}
 
@@ -136,11 +100,17 @@ func (s *Server) handleConn(conn net.Conn) {
 		}
 	}
 
-	// Read client message
+	// Read client message with size limit
 	buf := make([]byte, 32*1024)
 	n, err := wrappedConn.Read(buf)
 	if err != nil {
 		s.log.WithError(err).Error("Failed to read client message")
+		return
+	}
+
+	if n > int(MaxRequestSize) {
+		s.log.Error("Client message exceeds maximum size")
+		s.sendError(wrappedConn, fmt.Errorf("request too large"))
 		return
 	}
 
@@ -167,24 +137,14 @@ func (s *Server) handleConn(conn net.Conn) {
 		return
 	}
 
-	// Check if local port is available
-	localAddr := fmt.Sprintf("127.0.0.1:%d", msg.Port)
-	testConn, err := net.Dial("tcp", localAddr)
-	if err != nil {
-		s.log.WithError(err).WithField("port", msg.Port).Warn("Local port not available")
-		s.sendError(wrappedConn, fmt.Errorf("local port %d not available", msg.Port))
-		return
-	}
-	_ = testConn.Close() //nolint:errcheck
-
 	// Send success reply
 	s.sendError(wrappedConn, nil)
 
 	// Forward traffic
 	if msg.RawTCP {
-		s.forwardRawTCP(wrappedConn, localAddr)
+		s.forwardRawTCP(wrappedConn, fmt.Sprintf("127.0.0.1:%d", msg.Port))
 	} else {
-		s.forwardHTTP(wrappedConn, localAddr)
+		s.forwardHTTP(wrappedConn, fmt.Sprintf("127.0.0.1:%d", msg.Port))
 	}
 }
 
@@ -217,36 +177,32 @@ func (s *Server) forwardRawTCP(remoteConn net.Conn, localAddr string) {
 
 	// remote -> local
 	go func() {
+		defer func() { done <- struct{}{} }()
 		_, err := io.Copy(localConn, remoteConn)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
 			s.log.WithError(err).Debug("remote->local copy ended")
 		}
-		done <- struct{}{}
 	}()
 
 	// local -> remote
 	go func() {
+		defer func() { done <- struct{}{} }()
 		_, err := io.Copy(remoteConn, localConn)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
 			s.log.WithError(err).Debug("local->remote copy ended")
 		}
-		done <- struct{}{}
 	}()
 
-	// Wait for one direction to finish
+	// Wait for one direction to finish, then close both to unblock the other
+	<-done
+	_ = localConn.Close()  //nolint:errcheck,gosec
+	_ = remoteConn.Close() //nolint:errcheck,gosec
 	<-done
 
-	// Close both connections
-	_ = localConn.Close() //nolint:errcheck
-	// remoteConn will be closed by the caller
-
-	<-done
 	s.log.Debug("Raw TCP forwarding completed")
 }
 
 func (s *Server) forwardHTTP(remoteConn net.Conn, localAddr string) {
-	// For HTTP mode, we do a simpler request-response forwarding
-	// This matches the original behavior in pkg/visor/init.go
 	for {
 		select {
 		case <-s.closeCh:
@@ -254,7 +210,8 @@ func (s *Server) forwardHTTP(remoteConn net.Conn, localAddr string) {
 		default:
 		}
 
-		buf := make([]byte, 32*1024)
+		// Read request from remote with size limit
+		buf := make([]byte, MaxRequestSize)
 		n, err := remoteConn.Read(buf)
 		if err != nil {
 			if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
@@ -267,21 +224,24 @@ func (s *Server) forwardHTTP(remoteConn net.Conn, localAddr string) {
 		localConn, err := net.Dial("tcp", localAddr)
 		if err != nil {
 			s.log.WithError(err).Error("Failed to dial local server")
+			// Send error indication back to remote so client knows the forward failed
+			errMsg := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n")
+			_, _ = remoteConn.Write([]byte(errMsg)) //nolint:errcheck,gosec
 			return
 		}
 
 		// Send data to local
 		if _, err := localConn.Write(buf[:n]); err != nil {
 			s.log.WithError(err).Error("Failed to write to local")
-			_ = localConn.Close() //nolint:errcheck
+			_ = localConn.Close() //nolint:errcheck,gosec
 			return
 		}
 
-		// Read response from local
-		respBuf := make([]byte, 64*1024)
+		// Read response from local with configurable timeout
+		respBuf := make([]byte, MaxResponseSize)
 		total := 0
 		for {
-			localConn.SetReadDeadline(timeoutAfter(5)) //nolint:errcheck,gosec
+			_ = localConn.SetReadDeadline(timeoutAfter(DefaultReadTimeout)) //nolint:errcheck,gosec
 			rn, err := localConn.Read(respBuf[total:])
 			if err != nil {
 				if !errors.Is(err, io.EOF) && !isTimeout(err) {
@@ -291,10 +251,11 @@ func (s *Server) forwardHTTP(remoteConn net.Conn, localAddr string) {
 			}
 			total += rn
 			if total >= len(respBuf) {
+				s.log.Warn("Response exceeded maximum buffer size, truncating")
 				break
 			}
 		}
-		_ = localConn.Close() //nolint:errcheck
+		_ = localConn.Close() //nolint:errcheck,gosec
 
 		if total > 0 {
 			if _, err := remoteConn.Write(respBuf[:total]); err != nil {
@@ -357,4 +318,23 @@ func (s *Server) Whitelist() []cipher.PubKey {
 		pks = append(pks, pk)
 	}
 	return pks
+}
+
+// Close stops the server
+func (s *Server) Close() error {
+	var err error
+	s.closeOnce.Do(func() {
+		close(s.closeCh)
+
+		s.mu.Lock()
+		if s.listener != nil {
+			if cErr := s.listener.Close(); cErr != nil {
+				err = cErr
+			}
+		}
+		s.mu.Unlock()
+
+		s.activeConn.Wait()
+	})
+	return err
 }
