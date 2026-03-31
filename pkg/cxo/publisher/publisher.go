@@ -196,7 +196,7 @@ func (p *Publisher) batchLoop() {
 				// The KV store already published on each Put/Delete.
 				// With batching, we'd accumulate changes and publish once.
 				// For now, this is a no-op since KV.Put publishes immediately.
-				// TODO: Add deferred publishing mode to KVStore.
+				// Deferred publishing (batch writes) could reduce DB round-trips.
 			}
 		}
 	}

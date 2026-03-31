@@ -130,7 +130,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 
 	if hv.visor.isDTMReady() {
 		// Track hypervisor node.
-		if _, err := hv.visor.dtm.ShouldGet(ctx, hv.visor.conf.PK); err != nil {
+		if _, err := hv.visor.dmsgTracker.manager.ShouldGet(ctx, hv.visor.conf.PK); err != nil {
 			hv.logger.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
 		}
 	}
@@ -165,7 +165,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
 		if hv.visor.isDTMReady() {
-			if _, err := hv.visor.dtm.ShouldGet(ctx, addr.PK); err != nil {
+			if _, err := hv.visor.dmsgTracker.manager.ShouldGet(ctx, addr.PK); err != nil {
 				log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
 			}
 		}
@@ -176,6 +176,22 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		hv.visor.remoteVisors[addr.PK] = *visorConn
 		hv.remoteVisors[addr.PK] = *visorConn
 		hv.mu.Unlock()
+
+		// Push LAN DMSG server info to the connected visor
+		if hv.lanDmsg != nil {
+			go func() {
+				if err := visorConn.API.SetLANDmsgServer(LANDmsgServerInfo{
+					Enabled: true,
+					PK:      hv.lanDmsg.PK,
+					Address: hv.lanDmsg.Address,
+				}); err != nil {
+					hv.logger.WithError(err).Debug("Failed to push LAN DMSG server info to visor")
+				} else {
+					hv.logger.WithField("visor", addr.PK.String()[:16]+"...").
+						Info("Pushed LAN DMSG server info to visor")
+				}
+			}()
+		}
 	}
 }
 
@@ -398,15 +414,26 @@ func (hv *Hypervisor) getCsrf() http.HandlerFunc {
 
 // About provides info about the hypervisor.
 type About struct {
-	PubKey cipher.PubKey   `json:"public_key"` // The hypervisor's public key.
-	Build  *buildinfo.Info `json:"build"`
+	PubKey        cipher.PubKey   `json:"public_key"` // The hypervisor's public key.
+	Build         *buildinfo.Info `json:"build"`
+	DmsgConnected bool            `json:"dmsg_connected"` // Whether the DMSG client is connected to servers.
+	DmsgSessions  int             `json:"dmsg_sessions"`  // Number of active DMSG server sessions.
 }
 
 func (hv *Hypervisor) getAbout() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		dmsgConnected := false
+		dmsgSessions := 0
+		if hv.dmsgC != nil {
+			sessions := hv.dmsgC.AllSessions()
+			dmsgSessions = len(sessions)
+			dmsgConnected = dmsgSessions > 0
+		}
 		httputil.WriteJSON(w, r, http.StatusOK, About{
-			PubKey: hv.c.PK,
-			Build:  buildinfo.Get(),
+			PubKey:        hv.c.PK,
+			Build:         buildinfo.Get(),
+			DmsgConnected: dmsgConnected,
+			DmsgSessions:  dmsgSessions,
 		})
 	}
 }
@@ -454,7 +481,7 @@ func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 	}
 	if hv.visor.isDTMReady() {
 		ctx := context.TODO()
-		return hv.visor.dtm.GetBulk(ctx, pks)
+		return hv.visor.dmsgTracker.manager.GetBulk(ctx, pks)
 	}
 	return []dmsgtracker.DmsgClientSummary{}
 }
@@ -709,7 +736,7 @@ func (hv *Hypervisor) getAppStats() http.HandlerFunc {
 }
 
 // nolint: funlen,gocognit,godox
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func (hv *Hypervisor) putApp() http.HandlerFunc {

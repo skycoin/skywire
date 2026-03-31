@@ -232,11 +232,11 @@ func (v *Visor) TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]TPSTr
 // StartUIServer starts the embedded UI server on the specified address.
 // If addr is empty, uses the configured LocalAddr or defaults to localhost:8081.
 func (v *Visor) StartUIServer(addr string) error {
-	v.uiServerMu.Lock()
-	defer v.uiServerMu.Unlock()
+	v.ui.mu.Lock()
+	defer v.ui.mu.Unlock()
 
-	if v.uiServerRunning {
-		return fmt.Errorf("UI server is already running on %s", v.uiServerAddr)
+	if v.ui.running {
+		return fmt.Errorf("UI server is already running on %s", v.ui.addr)
 	}
 
 	// Determine address
@@ -281,32 +281,32 @@ func (v *Visor) StartUIServer(addr string) error {
 		}
 	}()
 
-	v.uiServer = srv
-	v.uiServerAddr = addr
-	v.uiServerRunning = true
+	v.ui.server = srv
+	v.ui.addr = addr
+	v.ui.running = true
 
 	return nil
 }
 
 // StopUIServer stops the embedded UI server if running.
 func (v *Visor) StopUIServer() error {
-	v.uiServerMu.Lock()
-	defer v.uiServerMu.Unlock()
+	v.ui.mu.Lock()
+	defer v.ui.mu.Unlock()
 
-	if !v.uiServerRunning {
+	if !v.ui.running {
 		return fmt.Errorf("UI server is not running")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := v.uiServer.Shutdown(ctx); err != nil {
+	if err := v.ui.server.Shutdown(ctx); err != nil {
 		v.log.WithError(err).Warn("UI server shutdown error")
 	}
 
-	v.uiServer = nil
-	v.uiServerAddr = ""
-	v.uiServerRunning = false
+	v.ui.server = nil
+	v.ui.addr = ""
+	v.ui.running = false
 
 	v.log.Info("UI server stopped")
 	return nil
@@ -314,15 +314,15 @@ func (v *Visor) StopUIServer() error {
 
 // UIServerStatus returns the current status of the UI server.
 func (v *Visor) UIServerStatus() (*UIServerStatus, error) {
-	v.uiServerMu.Lock()
-	defer v.uiServerMu.Unlock()
+	v.ui.mu.Lock()
+	defer v.ui.mu.Unlock()
 
 	status := &UIServerStatus{
-		Running: v.uiServerRunning,
+		Running: v.ui.running,
 	}
 
-	if v.uiServerRunning {
-		status.LocalAddr = v.uiServerAddr
+	if v.ui.running {
+		status.LocalAddr = v.ui.addr
 	}
 
 	// Include configured DMSG port if UI server config exists

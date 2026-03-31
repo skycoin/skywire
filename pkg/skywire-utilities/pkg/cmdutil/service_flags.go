@@ -60,8 +60,7 @@ func (sf *ServiceFlags) Init(rootCmd *cobra.Command, defaultTag, defaultConf str
 
 	// "library" defaults
 	if sf.SyslogNet == "" {
-		// TODO (evanlinjin): Consider using tcp as syslog udp is legacy.
-		sf.SyslogNet = "udp"
+		sf.SyslogNet = "udp" // NOTE: ServiceFlags is only used by vendored dmsg commands, not skywire itself
 	}
 	if sf.LogLevel == "" {
 		sf.LogLevel = "debug"

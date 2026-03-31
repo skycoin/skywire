@@ -238,7 +238,7 @@ func (s *Swarm) requestPeers() {
 			if err != nil {
 				s.node.Errorf(err, "failed to send request for feed %s, peer %s, addr %s",
 					s.feed.Hex()[:8], c.PeerID().Hex()[:8], c.Address())
-				// TODO: maybe call s.incPeerRetryTimes(c.PeerID())
+				// Could track retry count per peer for backoff.
 				return
 			}
 
@@ -247,17 +247,17 @@ func (s *Swarm) requestPeers() {
 			case *msg.Peers:
 				if m.Feed != s.feed {
 					err = errors.New("received peers for wrong feed")
-					// TODO: maybe call s.incPeerRetryTimes(c.PeerID())
+					// Could track retry count per peer for backoff.
 				}
 				s.addPeers(m.List)
 
 			case *msg.Err:
 				err = errors.New(m.Err)
-				// TODO: maybe call s.incPeerRetryTimes(c.PeerID())
+				// Could track retry count per peer for backoff.
 
 			default:
 				err = errors.New("received unexpected message")
-				// TODO: maybe call s.incPeerRetryTimes(c.PeerID())
+				// Could track retry count per peer for backoff.
 			}
 
 			if err != nil {
