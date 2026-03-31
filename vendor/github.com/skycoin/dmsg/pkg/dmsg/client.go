@@ -16,6 +16,14 @@ import (
 	"github.com/skycoin/dmsg/pkg/disc"
 )
 
+// entryCacheEntry holds a cached discovery entry with a timestamp.
+type entryCacheEntry struct {
+	entry     *disc.Entry
+	fetchedAt time.Time
+}
+
+const entryCacheTTL = 30 * time.Second
+
 // SessionDialCallback is triggered BEFORE a session is dialed to.
 // If a non-nil error is returned, the session dial is instantly terminated.
 type SessionDialCallback func(network, addr string) (err error)
@@ -79,6 +87,16 @@ type Client struct {
 	maxBO  time.Duration // maximum backoff duration
 	factor float64       // multiplier for the backoff duration that is applied on every retry
 
+	// routeCache maps destination client PK → server PK that last successfully
+	// relayed to that destination. Evicted on failure.
+	routeCache   map[cipher.PubKey]cipher.PubKey
+	routeCacheMx sync.RWMutex
+
+	// entryCache caches discovery entry lookups with TTL to avoid
+	// re-querying HTTP discovery on every request.
+	entryCache   map[cipher.PubKey]entryCacheEntry
+	entryCacheMx sync.RWMutex
+
 	errCh chan error
 	done  chan struct{}
 	once  sync.Once
@@ -97,15 +115,17 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	conf.Ensure()
 
 	c := &Client{
-		ready:  make(chan struct{}),
-		porter: netutil.NewPorter(netutil.PorterMinEphemeral),
-		errCh:  make(chan error, 10),
-		done:   make(chan struct{}),
-		conf:   conf,
-		initBO: time.Second * 5,
-		bo:     time.Second * 5,
-		maxBO:  time.Minute,
-		factor: netutil.DefaultFactor,
+		ready:      make(chan struct{}),
+		porter:     netutil.NewPorter(netutil.PorterMinEphemeral),
+		routeCache: make(map[cipher.PubKey]cipher.PubKey),
+		entryCache: make(map[cipher.PubKey]entryCacheEntry),
+		errCh:      make(chan error, 10),
+		done:       make(chan struct{}),
+		conf:       conf,
+		initBO:     time.Second * 5,
+		bo:         time.Second * 5,
+		maxBO:      time.Minute,
+		factor:     netutil.DefaultFactor,
 	}
 
 	// Init common fields.
@@ -163,6 +183,7 @@ func (ce *Client) Serve(ctx context.Context) {
 	}(cancellabelCtx)
 
 	updateEntryLoopOnce := new(sync.Once)
+	pingLoopOnce := new(sync.Once)
 
 	needInitialPost := true
 
@@ -297,6 +318,7 @@ func (ce *Client) Serve(ctx context.Context) {
 
 		// Only start the update entry loop once we have at least one session established.
 		updateEntryLoopOnce.Do(func() { go ce.updateClientEntryLoop(cancellabelCtx, ce.done, ce.conf.ClientType) })
+		pingLoopOnce.Do(func() { go ce.pingSessionsLoop(cancellabelCtx) })
 
 		// We dial all servers and wait for error or done signal.
 		select {
@@ -398,4 +420,79 @@ func hasPK(pks []cipher.PubKey, pk cipher.PubKey) bool {
 		}
 	}
 	return false
+}
+
+// getCachedRoute returns the server PK that last successfully reached the given destination.
+func (ce *Client) getCachedRoute(dst cipher.PubKey) (cipher.PubKey, bool) {
+	ce.routeCacheMx.RLock()
+	srvPK, ok := ce.routeCache[dst]
+	ce.routeCacheMx.RUnlock()
+	return srvPK, ok
+}
+
+// setCachedRoute records a successful route to a destination via a server.
+func (ce *Client) setCachedRoute(dst, srvPK cipher.PubKey) {
+	ce.routeCacheMx.Lock()
+	ce.routeCache[dst] = srvPK
+	ce.routeCacheMx.Unlock()
+}
+
+// evictCachedRoute removes a cached route on failure.
+func (ce *Client) evictCachedRoute(dst cipher.PubKey) {
+	ce.routeCacheMx.Lock()
+	delete(ce.routeCache, dst)
+	ce.routeCacheMx.Unlock()
+}
+
+// getCachedEntry returns a cached discovery entry if it exists and hasn't expired.
+func (ce *Client) getCachedEntry(pk cipher.PubKey) (*disc.Entry, bool) {
+	ce.entryCacheMx.RLock()
+	cached, ok := ce.entryCache[pk]
+	ce.entryCacheMx.RUnlock()
+	if !ok || time.Since(cached.fetchedAt) > entryCacheTTL {
+		return nil, false
+	}
+	return cached.entry, true
+}
+
+// setCachedEntry stores a discovery entry in the cache.
+func (ce *Client) setCachedEntry(pk cipher.PubKey, entry *disc.Entry) {
+	ce.entryCacheMx.Lock()
+	ce.entryCache[pk] = entryCacheEntry{entry: entry, fetchedAt: time.Now()}
+	ce.entryCacheMx.Unlock()
+}
+
+// pingSessionsLoop periodically pings all sessions to measure latency.
+func (ce *Client) pingSessionsLoop(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	// Do an initial ping immediately.
+	ce.pingSessions()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ce.done:
+			return
+		case <-ticker.C:
+			ce.pingSessions()
+		}
+	}
+}
+
+func (ce *Client) pingSessions() {
+	sessions := ce.allClientSessions(ce.porter)
+	for _, ses := range sessions {
+		rtt, err := ses.Ping()
+		if err != nil {
+			ce.log.WithError(err).WithField("server", ses.RemotePK()).
+				Debug("Ping failed, keeping previous latency measurement")
+			continue
+		}
+		ses.SetLastPing(rtt)
+		ce.log.WithField("server", ses.RemotePK()).WithField("rtt", rtt).
+			Debug("Session ping measured")
+	}
 }
