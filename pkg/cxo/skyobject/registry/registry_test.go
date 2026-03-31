@@ -251,7 +251,7 @@ func TestDecodeRegistry(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_ = rr // TODO
+		_ = rr // unused in this test
 
 	})
 

@@ -497,6 +497,9 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 			wg.Wait()
 			return nil
 		})
+
+		// Auto-discover LAN DMSG server from this hypervisor
+		go v.discoverLANDmsgServer()
 	}
 
 	return nil
@@ -517,12 +520,13 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	// Prepare hypervisor.
 	hv, err := NewHypervisor(conf, v, v.dmsgC)
 	if err != nil {
-		v.log.Fatalln("Failed to start hypervisor:", err)
+		cancel()
+		return fmt.Errorf("failed to start hypervisor: %w", err)
 	}
 
 	// Start LAN DMSG server if configured
 	if conf.LANDmsgServer != nil && conf.LANDmsgServer.Enable {
-		lanServer, err := startLANDmsgServer(conf.LANDmsgServer, v.MasterLogger())
+		lanServer, err := startLANDmsgServer(conf.LANDmsgServer, v.conf, v.MasterLogger())
 		if err != nil {
 			v.log.WithError(err).Warn("Failed to start LAN DMSG server")
 		} else {
@@ -558,7 +562,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	// Needed to work with modern browsers when serving from windows, which need the correct mime type for javascript.
 	if err := mime.AddExtensionType(".js", "application/javascript"); err != nil {
-		log.Fatalln("Unable to register js mime type.")
+		log.WithError(err).Warn("Unable to register js mime type")
 	}
 
 	v.log.WithField("addr", conf.HTTPAddr).

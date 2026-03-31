@@ -29,7 +29,7 @@ func newSubnetIPIncrementer(octetLowerBorders, octetBorders [4]uint8, step uint8
 	}
 }
 
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func (inc *subnetIPIncrementer) next() (net.IP, error) {

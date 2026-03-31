@@ -23,9 +23,9 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 		// Check for valid reward address as prerequisite
 		rewardAddressBytes, err := os.ReadFile(v.conf.LocalPath + "/" + skyenv.RewardFile) //nolint:gosec
 		if err != nil {
-			v.surveyLock.Lock()
-			v.survey = visconf.Survey{}
-			v.surveyLock.Unlock()
+			v.survey.mu.Lock()
+			v.survey.data = visconf.Survey{}
+			v.survey.mu.Unlock()
 			log.Debug("No reward address set — survey not generated")
 			if !routine {
 				return
@@ -102,9 +102,9 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 		}
 
 		log.Info("Generating system survey")
-		v.surveyLock.Lock()
-		v.survey = survey
-		v.surveyLock.Unlock()
+		v.survey.mu.Lock()
+		v.survey.data = survey
+		v.survey.mu.Unlock()
 
 		// Save survey to file
 		s, err := json.MarshalIndent(survey, "", "\t")

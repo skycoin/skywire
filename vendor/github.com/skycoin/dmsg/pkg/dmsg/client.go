@@ -82,6 +82,7 @@ type Client struct {
 	errCh chan error
 	done  chan struct{}
 	once  sync.Once
+	wg    sync.WaitGroup // tracks background goroutines for clean shutdown
 	sesMx sync.Mutex
 }
 
@@ -330,8 +331,7 @@ func (ce *Client) discoverServers(ctx context.Context, all bool) (entries []*dis
 	return entries, err
 }
 
-// Close closes the dmsg client entity.
-// TODO(evanlinjin): Have waitgroup.
+// Close closes the dmsg client entity and waits for background goroutines to finish.
 func (ce *Client) Close() error {
 	if ce == nil {
 		return nil
@@ -354,6 +354,7 @@ func (ce *Client) Close() error {
 		ce.log.Debug("All sessions closed.")
 		ce.sessionsMx.Unlock()
 		ce.porter.CloseAll(ce.log)
+		ce.wg.Wait()
 		err = ce.EntityCommon.delEntry(context.Background())
 	})
 	return err

@@ -187,12 +187,6 @@ func (a *API) updateInternalState(ctx context.Context, logger logrus.FieldLogger
 */
 
 func (a *API) getEntries(w http.ResponseWriter, r *http.Request) {
-	// TODO(evanlinjin) May be needed in the future for pagination.
-	//var query servicedisc.ServicesQuery
-	//if err := query.Fill(r.URL.Query()); err != nil {
-	//	httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-	//	return
-	//}
 
 	sType := r.URL.Query().Get("type")
 	if sType == "" {

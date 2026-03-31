@@ -572,7 +572,7 @@ func (tm *Manager) TransportCount() int {
 }
 
 func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) error {
-	transport, err := lis.AcceptTransport() // TODO: tcp panic.
+	transport, err := lis.AcceptTransport()
 	if err != nil {
 		return err
 	}

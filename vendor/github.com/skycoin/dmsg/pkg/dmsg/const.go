@@ -21,7 +21,7 @@ const (
 
 	DefaultUpdateInterval = time.Minute
 
-	DefaultMaxSessions = 100
+	DefaultMaxSessions = 2048
 
 	DefaultDmsgHTTPPort = uint16(80)
 

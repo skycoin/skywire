@@ -70,11 +70,13 @@ type HypervisorConfig struct {
 // LANDmsgServerConf configures an embedded DMSG server for LAN visors.
 // When enabled, the hypervisor acts as a local DMSG relay so LAN visors
 // don't need to route through public DMSG servers.
+// The server keypair is stored in the config so it persists across restarts.
 type LANDmsgServerConf struct {
-	Enable      bool   `json:"enable"`                 // Enable the LAN DMSG server.
-	Port        int    `json:"port,omitempty"`         // TCP port (default 8085).
-	MaxSessions int    `json:"max_sessions,omitempty"` // Max concurrent sessions (default 100).
-	KeyFile     string `json:"key_file,omitempty"`     // File to persist server keypair (default: lan_dmsg_server.json).
+	Enable      bool          `json:"enable"`                 // Enable the LAN DMSG server.
+	Port        int           `json:"port,omitempty"`         // TCP port (0 = auto-select).
+	MaxSessions int           `json:"max_sessions,omitempty"` // Max concurrent sessions (default 100).
+	PK          cipher.PubKey `json:"pk,omitempty"`           // Server public key (auto-generated if empty).
+	SK          cipher.SecKey `json:"sk,omitempty"`           // Server secret key (auto-generated if empty).
 }
 
 // TPVizConfig configures the embedded transport visualizer.

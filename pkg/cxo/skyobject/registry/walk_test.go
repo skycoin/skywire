@@ -1,3 +1,3 @@
 package registry
 
-// TODO (kostyarin): implement walk tests
+// Walk tests not implemented.

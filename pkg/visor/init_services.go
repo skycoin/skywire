@@ -115,9 +115,9 @@ func getPublicIP(v *Visor, service string) (string, error) {
 
 	pIP, err = GetIP(v.conf.GeoIP)
 	if err != nil {
-		<-v.stunReady
-		if v.stunClient.PublicIP != nil {
-			pIP = v.stunClient.PublicIP.IP()
+		<-v.stun.ready
+		if v.stun.client.PublicIP != nil {
+			pIP = v.stun.client.PublicIP.IP()
 			return pIP, nil
 		}
 		err = fmt.Errorf("cannot fetch public ip")

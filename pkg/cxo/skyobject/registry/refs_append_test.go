@@ -37,7 +37,7 @@ func TestRefs_Append(t *testing.T) {
 func TestRefs_AppendValues(t *testing.T) {
 	// AppendValues(pack Pack, values ...interface{}) (err error)
 
-	// TODO (kostyarin): the AppendValues method based on the AppendHashes
+	// AppendValues delegates to AppendHashes internally.
 	//                   method and this test case is not important a lot,
 	//                   thus I mark it as low priority
 

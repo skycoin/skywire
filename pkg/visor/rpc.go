@@ -113,6 +113,14 @@ func (r *RPC) SetRewardAddress(p string, out *string) (err error) {
 	return err
 }
 
+// SetLANDmsgServer is called by the hypervisor to push LAN DMSG server info to this visor.
+func (r *RPC) SetLANDmsgServer(info LANDmsgServerInfo, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "SetLANDmsgServer", info)(out, &err)
+	err = r.visor.SetLANDmsgServer(info)
+	*out = err == nil
+	return err
+}
+
 // GetRewardAddress reads the reward address from reward.txt
 func (r *RPC) GetRewardAddress(_ *struct{}, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "GetRewardAddress", nil)(out, &err)

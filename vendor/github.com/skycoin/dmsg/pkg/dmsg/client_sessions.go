@@ -113,7 +113,9 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		return ClientSession{}, errors.New("session already exists")
 	}
 
+	ce.wg.Add(1)
 	go func() {
+		defer ce.wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				ce.log.Warnf("recovered panic in session serve goroutine: %v", r)
