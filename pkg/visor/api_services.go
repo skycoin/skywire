@@ -286,9 +286,9 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 			ports["sudph"] = PortDetail{Port: sudphPort, Type: "UDP"}
 		}
 	}
-	if v.stunClient != nil {
-		if v.stunClient.PublicIP != nil {
-			ports["public_visor"] = PortDetail{Port: fmt.Sprint(v.stunClient.PublicIP.Port()), Type: "TCP"}
+	if v.stun.client != nil {
+		if v.stun.client.PublicIP != nil {
+			ports["public_visor"] = PortDetail{Port: fmt.Sprint(v.stun.client.PublicIP.Port()), Type: "TCP"}
 		}
 	}
 	if v.dmsgC != nil {

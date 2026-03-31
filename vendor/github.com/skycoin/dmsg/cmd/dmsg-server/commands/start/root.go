@@ -97,10 +97,17 @@ var RootCmd = &cobra.Command{
 
 		srvAPI := dmsgserver.NewServerAPI(r, log, m)
 
+		// Convert peer config to dmsg.PeerEntry.
+		var peers []dmsg.PeerEntry
+		for _, p := range conf.Peers {
+			peers = append(peers, dmsg.PeerEntry{PK: p.PubKey, Addr: p.Address})
+		}
+
 		srvConf := dmsg.ServerConfig{
 			MaxSessions:    conf.MaxSessions,
 			UpdateInterval: conf.UpdateInterval,
 			AuthPassphrase: authPassphrase,
+			Peers:          peers,
 		}
 		srv := dmsg.NewServer(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.Discovery, &http.Client{}, log), &srvConf, m)
 		srv.SetLogger(log)

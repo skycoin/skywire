@@ -85,8 +85,8 @@ func TestDmsgWebSrvAndCurl(t *testing.T) {
 	_, err := env.execResult(cmd)
 	require.NoError(t, err, "Failed to start python HTTP server")
 
-	// Give the HTTP server time to start
-	time.Sleep(2 * time.Second)
+	// Poll until the HTTP server is listening on port 8086
+	env.waitForHTTPServerReady(httpServerPort, 10*time.Second)
 
 	t.Log("Starting dmsg web srv to proxy the HTTP server...")
 
@@ -96,8 +96,10 @@ func TestDmsgWebSrvAndCurl(t *testing.T) {
 	_, err = env.execResult(cmd)
 	require.NoError(t, err, "Failed to start dmsg web srv")
 
-	// Wait for dmsg web srv to connect to dmsg network
-	time.Sleep(5 * time.Second)
+	// Poll until dmsg web srv port is listening (indicates successful DMSG network connection)
+	if !env.waitForListeningPort(dmsgHTTPPort, 15*time.Second) {
+		t.Log("Warning: dmsg web srv port not detected as listening; proceeding anyway")
+	}
 
 	t.Log("Testing skywire dmsg curl to fetch from dmsg web server...")
 
@@ -133,8 +135,10 @@ func TestDmsgWebProxy(t *testing.T) {
 	_, err := env.execResult(cmd)
 	require.NoError(t, err, "Failed to start dmsg web proxy")
 
-	// Wait for dmsg web proxy to start
-	time.Sleep(5 * time.Second)
+	// Poll until at least one of the proxy ports is listening
+	if !env.waitForListeningPort(8080, 15*time.Second) {
+		t.Log("Warning: dmsg web proxy HTTP port 8080 not detected as listening; proceeding anyway")
+	}
 
 	// Verify the proxy is listening (check for ports)
 	cmd = "sh -c 'netstat -tuln | grep -E \":(8080|4445)\" || true'"

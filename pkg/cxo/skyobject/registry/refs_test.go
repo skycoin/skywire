@@ -179,14 +179,14 @@ func testFillRefsWithUsers(
 func TestRefs_String(t *testing.T) {
 	// String() string
 
-	// TODO (kostyarin): lowest priority
+	// Test not implemented (low priority).
 
 }
 
 func TestRefs_Short(t *testing.T) {
 	// Short() string
 
-	// TODO (kostyarin): lowest priority
+	// Test not implemented (low priority).
 
 }
 
@@ -895,14 +895,14 @@ func TestRefs_Flags(t *testing.T) {
 	// So, the Flags tested inside another tests
 	// let's mark this test case low priority
 
-	// TODO (kostyarin): low priority
+	// Test not implemented (low priority).
 
 }
 
 func TestRefs_Reset(t *testing.T) {
 	// Reset() (err error)
 
-	// TODO (kostyarin): lowest priority
+	// Test not implemented (low priority).
 
 }
 
@@ -1666,7 +1666,7 @@ func TestRefs_ValueOfHashWithIndex(t *testing.T) {
 	// The method based on IndexOfHash method. Som let it be
 	// low priority
 
-	// TODO (kostyarin): low priority
+	// Test not implemented (low priority).
 
 }
 
@@ -1846,7 +1846,7 @@ func TestRefs_ValueByIndex(t *testing.T) {
 	// The ValueByIndex emthod based on the HashByIndex
 	// method, and thus, I mark the test as low prority
 
-	// TODO (kostyarin): low priority
+	// Test not implemented (low priority).
 
 }
 
@@ -2018,7 +2018,7 @@ func TestRefs_SetValueByIndex(t *testing.T) {
 	// The method based on the SetHashByIndex and I mark it
 	// as low priority
 
-	// TODO (kostyarin): low priority
+	// Test not implemented (low priority).
 
 }
 
@@ -2509,7 +2509,7 @@ func TestRefs_Clear(t *testing.T) {
 
 	// The Clear is just *r = Refs{}
 
-	// TODO (kostyarin): lowest priority
+	// Test not implemented (low priority).
 
 }
 
@@ -2553,7 +2553,7 @@ func TestRefs_Rebuild(t *testing.T) {
 
 				_ = users
 
-				// TODO (kostyarin): the test
+				// Test case not implemented.
 
 			}
 
@@ -2566,6 +2566,6 @@ func TestRefs_Rebuild(t *testing.T) {
 func TestRefs_Tree(t *testing.T) {
 	// Tree() (tree string)
 
-	// TODO (kostyarin): low priority
+	// Test not implemented (low priority).
 
 }

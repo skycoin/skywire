@@ -1197,7 +1197,29 @@ func (a *App) tpsAddTransport() {
 	resultEl.Set("innerHTML", "Created "+strings.ToUpper(resp.Type)+"<br>"+
 		resp.LocalPK[:12]+"... ↔ "+resp.RemotePK[:12]+"...")
 
-	// TODO: Add overlay edge to graph
+	// Add the new transport as an edge in the graph immediately (will be
+	// confirmed/replaced on the next data refresh cycle).
+	edgeID := resp.ID
+	if edgeID == "" {
+		edgeID = resp.LocalPK + "-" + resp.RemotePK + "-" + resp.Type
+	}
+	if _, exists := a.graph.Edges[edgeID]; !exists {
+		tpTypeMap := map[string]TransportType{
+			"stcpr": TransportSTCPR,
+			"sudph": TransportSUDPH,
+			"dmsg":  TransportDMSG,
+		}
+		tt, ok := tpTypeMap[strings.ToLower(resp.Type)]
+		if !ok {
+			tt = TransportSTCPR
+		}
+		a.graph.AddEdge(&Edge{
+			ID:   edgeID,
+			From: resp.LocalPK,
+			To:   resp.RemotePK,
+			Type: tt,
+		})
+	}
 }
 
 // tpsRefreshTransports gets transports from the target visor

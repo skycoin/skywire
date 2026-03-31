@@ -27,14 +27,14 @@ func TestRef_IsBlank(t *testing.T) {
 func TestRef_Short(t *testing.T) {
 	// Short() string
 
-	// TODO (kostyarin): lowest priority
+	// Test not implemented (low priority).
 
 }
 
 func TestRef_String(t *testing.T) {
 	// String() string
 
-	// TODO (kostyarin): lowest priority
+	// Test not implemented (low priority).
 
 }
 

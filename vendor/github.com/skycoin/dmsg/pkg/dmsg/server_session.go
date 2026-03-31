@@ -2,6 +2,7 @@
 package dmsg
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -13,7 +14,6 @@ import (
 	"github.com/xtaci/smux"
 
 	"github.com/skycoin/dmsg/pkg/dmsg/metrics"
-	"github.com/skycoin/dmsg/pkg/noise"
 )
 
 const (
@@ -35,7 +35,6 @@ type ServerSession struct {
 func makeServerSession(m metrics.Metrics, entity *EntityCommon, conn net.Conn) (ServerSession, error) {
 	var sSes ServerSession
 	sSes.SessionCommon = new(SessionCommon)
-	sSes.nMap = make(noise.NonceMap)
 	if err := sSes.SessionCommon.initServer(entity, conn); err != nil {
 		m.RecordSession(metrics.DeltaFailed) // record failed connection
 		return sSes, err
@@ -146,8 +145,25 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 		}
 	}
 
+	// Check for ping marker: a 2-byte zero-length prefix [0x00, 0x00].
+	// This cannot occur in normal traffic since valid objects always have length > 0.
+	// Read the first 2 bytes to check before passing to readRequest.
+	header := make([]byte, 2)
+	if _, err := io.ReadFull(yStr, header); err != nil {
+		return err
+	}
+	if header[0] == 0 && header[1] == 0 {
+		// Ping: echo back the marker and close.
+		_, err := yStr.Write(pingMarker)
+		return err
+	}
+
+	// Not a ping — the 2 bytes are the length prefix of a normal object.
+	// Pass them through to readRequest via a prefixed reader.
+	prefixedReader := io.MultiReader(bytes.NewReader(header), yStr)
+
 	readRequest := func() (StreamRequest, error) {
-		obj, err := ss.readObject(yStr)
+		obj, err := ss.readObject(prefixedReader)
 		if err != nil {
 			return StreamRequest{}, err
 		}
@@ -155,11 +171,17 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 		if err != nil {
 			return StreamRequest{}, err
 		}
-		// TODO(evanlinjin): Implement timestamp tracker.
+		// Timestamp validation: we pass 0 because concurrent streams from
+		// the same client can have timestamps that arrive out of order at
+		// the server. Strict monotonic enforcement would reject valid
+		// concurrent requests. The noise encryption layer already prevents
+		// replay at the session level via nonce tracking.
 		if err := req.Verify(0); err != nil {
 			return StreamRequest{}, err
 		}
-		if req.SrcAddr.PK != ss.rPK {
+		// For peer sessions, the SrcAddr.PK is the original client, not the
+		// peer server. The request signature is still verified above.
+		if !ss.isPeer && req.SrcAddr.PK != ss.rPK {
 			return StreamRequest{}, ErrReqInvalidSrcPK
 		}
 		return req, nil
@@ -205,25 +227,34 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 		return nil
 	}
 
-	// Obtain next session.
+	// Obtain next session (local client).
 	ss2, ok := ss.entity.serverSession(req.DstAddr.PK)
 	if !ok {
-		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
-		return ErrReqNoNextSession
+		// Destination not connected locally. If this request came from a
+		// client (not a peer), try forwarding through peer servers (1-hop).
+		// If this request already came from a peer, do NOT forward further.
+		if ss.isPeer {
+			ss.m.RecordStream(metrics.DeltaFailed)
+			return ErrReqNoNextSession
+		}
+		return ss.forwardViaPeer(log, yStr, req)
 	}
 	log.Debug("Obtained next session.")
 
-	// Forward request and obtain/check response.
-	yStr2, resp, err := ss2.forwardRequest(req)
+	return ss.bridgeStream(log, yStr, ss2, req)
+}
+
+// bridgeStream forwards a request to a destination session and bridges the two streams.
+func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteCloser, dst ServerSession, req StreamRequest) error {
+	yStr2, resp, err := dst.forwardRequest(req)
 	if err != nil {
-		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
+		ss.m.RecordStream(metrics.DeltaFailed)
 		return err
 	}
 	log.Debug("Forwarded stream request.")
 
-	// Forward response.
 	if err := ss.writeObject(yStr, resp); err != nil {
-		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
+		ss.m.RecordStream(metrics.DeltaFailed)
 		return err
 	}
 	log.Debug("Forwarded stream response.")
@@ -233,11 +264,39 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 	}
 
-	// Serve stream.
 	log.Info("Serving stream.")
-	ss.m.RecordStream(metrics.DeltaConnect)          // record successful stream
-	defer ss.m.RecordStream(metrics.DeltaDisconnect) // record disconnection
+	ss.m.RecordStream(metrics.DeltaConnect)
+	defer ss.m.RecordStream(metrics.DeltaDisconnect)
 	return netutil.CopyReadWriteCloser(yStr, yStr2)
+}
+
+// forwardViaPeer tries to forward a stream request through peer server sessions.
+// This is only called for client-originated requests (not peer-originated, enforcing 1-hop max).
+func (ss *ServerSession) forwardViaPeer(log logrus.FieldLogger, yStr io.ReadWriteCloser, req StreamRequest) error {
+	peers := ss.entity.peerServerSessions()
+	if len(peers) == 0 {
+		ss.m.RecordStream(metrics.DeltaFailed)
+		return ErrReqNoNextSession
+	}
+
+	for _, peer := range peers {
+		// Don't forward back to the session the request came from.
+		if peer.RemotePK() == ss.rPK {
+			continue
+		}
+
+		log := log.WithField("peer", peer.RemotePK())
+		log.Debug("Trying peer server for forwarding.")
+
+		err := ss.bridgeStream(log, yStr, peer, req)
+		if err == nil {
+			return nil
+		}
+		log.WithError(err).Debug("Peer forward failed, trying next.")
+	}
+
+	ss.m.RecordStream(metrics.DeltaFailed)
+	return ErrReqNoNextSession
 }
 
 func addrToIP(addr net.Addr) (net.IP, error) {

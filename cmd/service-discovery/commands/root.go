@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/pprof"
 	"os"
 	"path/filepath"
 	"strings"
@@ -174,38 +172,7 @@ Example:
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
 
-		if pprofAddr != "" {
-			pprofMux := http.NewServeMux()
-
-			// Register the index (which links to everything else)
-			pprofMux.HandleFunc("/debug/pprof/", pprof.Index)
-			pprofMux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-			pprofMux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-			pprofMux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-			pprofMux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-
-			// Register profile handlers using pprof.Handler
-			for _, profile := range []string{"heap", "goroutine", "threadcreate", "block", "mutex", "allocs"} {
-				pprofMux.Handle("/debug/pprof/"+profile, pprof.Handler(profile))
-			}
-
-			go func() {
-				log.Infof("Starting pprof server on %s", pprofAddr)
-				server := &http.Server{
-					Addr:              pprofAddr,
-					Handler:           pprofMux,
-					ReadHeaderTimeout: 10 * time.Second,
-					ReadTimeout:       30 * time.Second,
-					WriteTimeout:      30 * time.Second,
-					IdleTimeout:       60 * time.Second,
-				}
-				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-					log.Errorf("pprof server failed: %v", err)
-				}
-			}()
-
-			time.Sleep(100 * time.Millisecond)
-		}
+		metricsutil.ServePProf(log, pprofAddr, "service-discovery")
 
 		redisPassword := storeconfig.RedisPassword()
 		opt, err := redis.ParseURL(redisURL)
