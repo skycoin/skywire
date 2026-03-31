@@ -819,28 +819,24 @@ Architectures:
 	},
 }
 
-// resolveRewardAddress resolves an xpub key to the next unused skycoin address
-// using skycoin-cli. Regular addresses are returned as-is.
+// resolveRewardAddress resolves an xpub key to the next external chain address
+// using BIP44 derivation. Regular addresses are returned as-is.
+// The xpub key should NEVER appear in output — it is treated as private.
 func resolveRewardAddress(addr string) string {
 	if !strings.HasPrefix(addr, "xpub") {
 		return addr
 	}
-	out, err := exec.Command("skycoin-cli", "nextAddress", addr).Output() //nolint:gosec
+	// Derive index 0 of the external chain (m/account'/0/0)
+	// For proper "next empty" behavior, the reward system would need to track
+	// which indices have been used. For now, index 0 is deterministic and stable.
+	resolved, err := rewardconfig.DeriveExternalAddressFromXpub(addr, 0)
 	if err != nil {
 		log.Warnf("Failed to derive address from xpub %s...: %v", addr[:20], err)
-		return addr // fall back to xpub string — won't be sendable but won't lose data
+		// NEVER fall back to the raw xpub — it must stay private
+		return "INVALID_XPUB_DERIVATION"
 	}
-	// nextAddress output format: "address: <addr>\nchild_index: <n>\npublic_key: <pk>\n"
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "address: ") {
-			resolved := strings.TrimPrefix(line, "address: ")
-			log.Infof("Resolved xpub %s... → %s", addr[:20], resolved)
-			return resolved
-		}
-	}
-	log.Warnf("Could not parse nextAddress output for xpub %s...", addr[:20])
-	return addr
+	log.Infof("Resolved xpub %s... → %s", addr[:20], resolved)
+	return resolved
 }
 
 func mustExist(path string) {

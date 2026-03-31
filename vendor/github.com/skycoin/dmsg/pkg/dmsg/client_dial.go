@@ -33,8 +33,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		return nil, err
 	}
 
-	// Range client's delegated servers.
-	// Try existing sessions first, falling back to next server on failure.
+	// 1. Try existing sessions to the target's delegated servers (direct path, cheapest).
 	for _, srvPK := range entry.Client.DelegatedServers {
 		if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
 			stream, err := dSes.DialStream(addr)
@@ -47,8 +46,22 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		}
 	}
 
-	// Range client's delegated servers.
-	// Attempt to connect to a delegated server.
+	// 2. Try all other existing sessions (mesh path — already connected, no new handshake).
+	// If servers are meshed, our server forwards the request to the target's server.
+	for _, ses := range ce.allClientSessions(ce.porter) {
+		if hasPK(entry.Client.DelegatedServers, ses.RemotePK()) {
+			continue // already tried above
+		}
+		stream, err := ses.DialStream(addr)
+		if err != nil {
+			ce.log.WithError(err).WithField("server", ses.RemotePK()).
+				Debug("DialStream failed via mesh, trying next server")
+			continue
+		}
+		return stream, nil
+	}
+
+	// 3. Last resort: establish new sessions to the target's delegated servers.
 	for _, srvPK := range entry.Client.DelegatedServers {
 		dSes, err := ce.EnsureAndObtainSession(ctx, srvPK)
 		if err != nil {

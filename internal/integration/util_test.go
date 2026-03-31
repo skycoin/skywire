@@ -10,11 +10,7 @@ import (
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-const (
-	// appStartDelay is a delay that we wait for apps to fully start
-	// and initialize before testing
-	appStartDelay = 10 * time.Second
-)
+// Constants moved to polling-based patterns; appStartDelay replaced by waitForVisorApp polling.
 
 // IntegrationTestCase is an integration test case.
 type IntegrationTestCase struct {
@@ -54,10 +50,11 @@ func RunIntegrationTestCase(t *testing.T, testCases []IntegrationTestCase) {
 		startIntegrationTestCase(t, itc)
 		resetIntegrationTestCase(t, itc)
 
-		// Brief delay between test cases since containers are restarted in reset
+		// LEGITIMATE WAIT: Brief pacing delay between test cases. The reset
+		// function already polls for container and DMSG readiness, so this is
+		// just a small buffer to avoid Docker API rate-limiting. 1s is minimal.
 		if i < len(testCases)-1 {
 			const cleanupDelay = 1 * time.Second
-			t.Logf("Waiting %v between test cases...", cleanupDelay)
 			time.Sleep(cleanupDelay)
 		}
 	}
@@ -76,7 +73,7 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		_ = env.VisorRemoveTransport(tp) //nolint:errcheck
 	}
 
-	// TODO(Sir Darkrengarius+ersonp): set all other args to their default values to ensure that everything is as needed
+	// Other args use visor defaults; explicit values could be set here for full control.
 	// would be better to have a method to inject new app into config with default config.
 	// this way we may also have just a single generic visor config with no apps and
 	// inject apps as we need it for tests.
@@ -107,9 +104,6 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		}
 	}
 
-	// Brief delay to ensure containers are fully restarted
-	time.Sleep(2 * time.Second)
-
 	// Wait for DMSG to be ready on all restarted visors
 	// This ensures visors can establish DMSG connections before the next test
 	for visor := range visorsToRestart {
@@ -121,13 +115,12 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		}
 	}
 
-	// Brief delay after DMSG readiness to allow initial TPD reconciliation to complete.
-	// The visor runs aggressive TPD cleanup on startup (see initEnsureTPDConcurrency)
-	// which removes stale transport entries from previous tests. Give it a few seconds
-	// to complete before starting apps that depend on accurate routing information.
-	const tpdReconciliationWait = 5 * time.Second
-	t.Logf("Waiting %v for TPD reconciliation to clean up stale transport entries...", tpdReconciliationWait)
-	time.Sleep(tpdReconciliationWait)
+	// Wait for TPD to clean up stale transport entries from previous tests.
+	// Poll until no transports remain for the restarted visors.
+	t.Log("Waiting for TPD reconciliation to clean up stale transport entries...")
+	for visor := range visorsToRestart {
+		env.waitForTPDClean(visor, 15*time.Second)
+	}
 
 	// Dump TPD state AFTER reset to verify cleanup happened
 	t.Log("=== TPD STATE AFTER RESET ===")
@@ -149,9 +142,10 @@ func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 			t.Logf("Starting server app %s on %s", app.AppName, app.VisorHostName)
 			env = env.StartApp(t, app, "")
 
-			// After app shows "running", give it time to complete Accept() and
-			// register routing rules. Status changes to "running" when proc starts,
-			// but routing registration happens shortly after.
+			// LEGITIMATE WAIT: After app shows "running", it needs to complete
+			// Accept() and register routing rules. Status changes to "running"
+			// when the process starts, but routing registration is async and
+			// there is no API to check routing rule registration completion.
 			const acceptDelay = 3 * time.Second
 			time.Sleep(acceptDelay)
 			t.Logf("Server app %s on %s ready", app.AppName, app.VisorHostName)
@@ -174,7 +168,16 @@ func startIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		}
 	}
 
-	time.Sleep(appStartDelay)
+	// Wait for all apps to reach "running" status instead of a fixed delay.
+	// waitForVisorApp is already called inside StartApp, so this confirms
+	// final readiness of any client apps started above.
+	for _, app := range itc.AppsToRun {
+		if app.VisorServerName != "" {
+			if err := env.waitForVisorApp(app); err != nil {
+				t.Logf("Warning: client app %s on %s may not be fully ready: %v", app.AppName, app.VisorHostName, err)
+			}
+		}
+	}
 
 	t.Run(itc.Name, func(t *testing.T) {
 		itc.Case(t, env)

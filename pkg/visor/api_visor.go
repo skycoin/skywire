@@ -39,9 +39,9 @@ func (v *Visor) Overview() (*Overview, error) {
 	}
 
 	if v.isStunReady() {
-		switch v.stunClient.NATType {
+		switch v.stun.client.NATType {
 		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
-			publicIP = v.stunClient.PublicIP.IP()
+			publicIP = v.stun.client.PublicIP.IP()
 			isSymmetricNAT = false
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
 			isSymmetricNAT = true
@@ -55,7 +55,7 @@ func (v *Visor) Overview() (*Overview, error) {
 			if ip, err := GetIP(v.conf.GeoIP); err == nil && ip != "" {
 				publicIP = ip
 			} else {
-				publicIP = v.stunClient.NATType.String()
+				publicIP = v.stun.client.NATType.String()
 			}
 		}
 	}
@@ -82,15 +82,15 @@ func (v *Visor) Overview() (*Overview, error) {
 	}
 
 	// Add geolocation data if available
-	v.geoDataMu.RLock()
-	if v.geoData != nil {
-		overview.CountryCode = v.geoData.CountryCode
-		overview.RegionName = v.geoData.RegionName
-		overview.CityName = v.geoData.CityName
-		overview.Latitude = v.geoData.Latitude
-		overview.Longitude = v.geoData.Longitude
+	v.geo.mu.RLock()
+	if v.geo.data != nil {
+		overview.CountryCode = v.geo.data.CountryCode
+		overview.RegionName = v.geo.data.RegionName
+		overview.CityName = v.geo.data.CityName
+		overview.Latitude = v.geo.data.Latitude
+		overview.Longitude = v.geo.data.Longitude
 	}
-	v.geoDataMu.RUnlock()
+	v.geo.mu.RUnlock()
 
 	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
 	if err != nil {
@@ -150,7 +150,7 @@ func (v *Visor) Summary() (*Summary, error) {
 
 	dmsgStatValue := &dmsgtracker.DmsgClientSummary{}
 	if v.isDTMReady() {
-		if dmsgTracker, ok := v.dtm.Get(v.conf.PK); ok {
+		if dmsgTracker, ok := v.dmsgTracker.manager.Get(v.conf.PK); ok {
 			dmsgStatValue = &dmsgTracker
 		}
 	}

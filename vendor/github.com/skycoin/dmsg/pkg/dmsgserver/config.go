@@ -26,6 +26,12 @@ var defaultDiscoveryURL = dmsg.DiscAddr(false)
 // DefaultDiscoverURLTest default URL for discovery in test env
 var DefaultDiscoverURLTest = dmsg.DiscAddr(true)
 
+// PeerConfig represents a peer dmsg server to connect to for server-to-server mesh.
+type PeerConfig struct {
+	PubKey  cipher.PubKey `json:"public_key"`
+	Address string        `json:"address"`
+}
+
 // Config is structure of config file
 type Config struct {
 	Path string `json:"-"`
@@ -39,6 +45,7 @@ type Config struct {
 	LogLevel       string        `json:"log_level"`
 	UpdateInterval time.Duration `json:"update_interval"`
 	MaxSessions    int           `json:"max_sessions"`
+	Peers          []PeerConfig  `json:"peers,omitempty"`
 }
 
 // GenerateDefaultConfig generate default config for dmsg-server
@@ -53,7 +60,7 @@ func GenerateDefaultConfig(c *Config) {
 	c.LocalAddress = defaultLocalAddress
 	c.HTTPAddress = defaultHTTPAddress
 	c.LogLevel = "info"
-	c.MaxSessions = 2048
+	c.MaxSessions = dmsg.DefaultMaxSessions
 }
 
 // Flush trying to save config file

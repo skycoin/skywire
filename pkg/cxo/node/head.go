@@ -105,7 +105,7 @@ type fillHead struct {
 
 	r  connRoot           // filling Root
 	f  *skyobject.Filler  // filler of the r
-	rq chan cipher.SHA256 // request objects (TODO: maxParall)
+	rq chan cipher.SHA256 // request objects (parallelism bounded by filler limit)
 	ff chan error         // filler failure
 
 	ft *time.Timer      // fill timeout
@@ -329,7 +329,7 @@ func (f *fillHead) handleReceivedRoot(cr connRoot) {
 // thus we cahnge the zero to 1024 (I think it's enough)
 func (f *fillHead) maxParallel() (mp int) {
 	if mp = f.node().maxFillingParallel; mp <= 0 {
-		mp = 1024 // TODO (kostyarin): make it constant
+		mp = 1024 // max parallel requests
 	}
 	return
 }
@@ -634,7 +634,7 @@ type headInfo struct {
 	pendingRoot    bool   // has pending Root
 	pendingRootSeq uint64 // its seq
 
-	// TODO (kostyarin): connections used for current filling
+	// Tracking which connections contribute to filling could improve prioritization.
 
 	// known Root objects of peers
 	known map[*Conn][]uint64

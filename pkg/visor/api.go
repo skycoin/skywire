@@ -45,6 +45,9 @@ type API interface {
 	GetRewardAddress() (string, error)
 	DeleteRewardAddress() error
 
+	// LAN DMSG server
+	SetLANDmsgServer(LANDmsgServerInfo) error
+
 	//app controls
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)

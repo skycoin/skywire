@@ -52,7 +52,9 @@ func MakeMap(ctx context.Context, dialer network.Dialer, pks []cipher.PubKey) (M
 	}
 
 	if err != nil {
-		rcM.CloseAll() // TODO: log this
+		if closeErrs := rcM.CloseAll(); len(closeErrs) > 0 {
+			log.WithError(closeErrs[0]).WithField("count", len(closeErrs)).Warn("MakeMap: errors closing clients after dial failure")
+		}
 	}
 	return rcM, err
 }

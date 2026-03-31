@@ -24,7 +24,7 @@ import (
 
 // DialPing implements API.
 func (v *Visor) DialPing(conf PingConfig) error {
-	v.pingPcktSize = conf.PcktSize
+	v.ping.pcktSize = conf.PcktSize
 	// waiting for at least one transport to initialize
 	<-v.tpM.Ready()
 
@@ -85,23 +85,23 @@ func (v *Visor) DialPing(conf PingConfig) error {
 		hopInfos = skyConn.RouteHopDetails()
 	}
 
-	v.pingConnMx.Lock()
-	v.pingConns[conf.PK] = ping{
+	v.ping.mu.Lock()
+	v.ping.conns[conf.PK] = ping{
 		conn:     conn,
 		hops:     hops,
 		hopInfos: hopInfos,
 	}
-	v.pingConnMx.Unlock()
+	v.ping.mu.Unlock()
 	return nil
 }
 
 // Ping implements API.
 // Measures round-trip time by sending ping data and waiting for an echo response.
 func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
-	v.pingConnMx.Lock()
-	defer v.pingConnMx.Unlock()
+	v.ping.mu.Lock()
+	defer v.ping.mu.Unlock()
 
-	pingEntry, ok := v.pingConns[conf.PK]
+	pingEntry, ok := v.ping.conns[conf.PK]
 	if !ok {
 		return nil, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
 	}
@@ -164,10 +164,10 @@ func doPingRoundTrips(conn net.Conn, conf PingConfig) ([]time.Duration, error) {
 // PingOnce implements API.
 // Performs a single ping and returns the round-trip time.
 func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
-	v.pingConnMx.Lock()
-	defer v.pingConnMx.Unlock()
+	v.ping.mu.Lock()
+	defer v.ping.mu.Unlock()
 
-	pingEntry, ok := v.pingConns[conf.PK]
+	pingEntry, ok := v.ping.conns[conf.PK]
 	if !ok {
 		return 0, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
 	}
@@ -227,10 +227,10 @@ func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
 // Returns bytes sent, bytes received, latency, and error.
 // If echoFull is true, server echoes full payload (for bandwidth testing).
 func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
-	v.pingConnMx.Lock()
-	defer v.pingConnMx.Unlock()
+	v.ping.mu.Lock()
+	defer v.ping.mu.Unlock()
 
-	pingEntry, ok := v.pingConns[conf.PK]
+	pingEntry, ok := v.ping.conns[conf.PK]
 	if !ok {
 		return 0, 0, 0, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
 	}
@@ -310,41 +310,41 @@ func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, byt
 
 // StopPing implements API.
 func (v *Visor) StopPing(pk cipher.PubKey) error {
-	v.pingConnMx.Lock()
-	defer v.pingConnMx.Unlock()
+	v.ping.mu.Lock()
+	defer v.ping.mu.Unlock()
 
-	pingEntry, ok := v.pingConns[pk]
+	pingEntry, ok := v.ping.conns[pk]
 	if !ok || pingEntry.conn == nil {
 		// Already stopped or never started
-		delete(v.pingConns, pk)
+		delete(v.ping.conns, pk)
 		return nil
 	}
 	err := pingEntry.conn.Close()
 	if err != nil {
 		// Still delete the entry even if close fails
-		delete(v.pingConns, pk)
+		delete(v.ping.conns, pk)
 		return err
 	}
-	delete(v.pingConns, pk)
+	delete(v.ping.conns, pk)
 	return nil
 }
 
 // StopAllPings stops all active ping connections and cleans up their routes.
 // Returns the number of connections stopped, error messages, and any fatal error.
 func (v *Visor) StopAllPings() (int, []string, error) {
-	v.pingConnMx.Lock()
-	defer v.pingConnMx.Unlock()
+	v.ping.mu.Lock()
+	defer v.ping.mu.Unlock()
 
 	var errs []string
 	count := 0
 
-	for pk, pingEntry := range v.pingConns {
+	for pk, pingEntry := range v.ping.conns {
 		if pingEntry.conn != nil {
 			if err := pingEntry.conn.Close(); err != nil {
 				errs = append(errs, fmt.Sprintf("failed to close ping to %s: %v", pk, err))
 			}
 		}
-		delete(v.pingConns, pk)
+		delete(v.ping.conns, pk)
 		count++
 	}
 
@@ -354,10 +354,10 @@ func (v *Visor) StopAllPings() (int, []string, error) {
 // GetPingRoute returns the route hops for an established ping connection.
 // Returns nil if no ping connection exists for the given public key.
 func (v *Visor) GetPingRoute(pk cipher.PubKey) []cipher.PubKey {
-	v.pingConnMx.Lock()
-	defer v.pingConnMx.Unlock()
+	v.ping.mu.Lock()
+	defer v.ping.mu.Unlock()
 
-	if pingEntry, ok := v.pingConns[pk]; ok {
+	if pingEntry, ok := v.ping.conns[pk]; ok {
 		return pingEntry.hops
 	}
 	return nil
@@ -366,10 +366,10 @@ func (v *Visor) GetPingRoute(pk cipher.PubKey) []cipher.PubKey {
 // GetPingRouteDetails returns detailed route information for a ping connection,
 // including transport IDs and types for each hop.
 func (v *Visor) GetPingRouteDetails(pk cipher.PubKey) []router.RouteHopInfo {
-	v.pingConnMx.Lock()
-	defer v.pingConnMx.Unlock()
+	v.ping.mu.Lock()
+	defer v.ping.mu.Unlock()
 
-	if pingEntry, ok := v.pingConns[pk]; ok {
+	if pingEntry, ok := v.ping.conns[pk]; ok {
 		return pingEntry.hopInfos
 	}
 	return nil
@@ -394,9 +394,9 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 		LocalRoute: conf.LocalRoute,
 	}
 
-	v.pingConnMx.Lock()
-	_, exists := v.pingConns[conf.PK]
-	v.pingConnMx.Unlock()
+	v.ping.mu.Lock()
+	_, exists := v.ping.conns[conf.PK]
+	v.ping.mu.Unlock()
 
 	if !exists {
 		if err := v.DialPing(pingConf); err != nil {
@@ -404,14 +404,14 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 		}
 	}
 
-	v.pingConnMx.Lock()
-	pingEntry, ok := v.pingConns[conf.PK]
+	v.ping.mu.Lock()
+	pingEntry, ok := v.ping.conns[conf.PK]
 	if !ok {
-		v.pingConnMx.Unlock()
+		v.ping.mu.Unlock()
 		return BandwidthResult{}, fmt.Errorf("no ping connection for %s", conf.PK)
 	}
 	conn := pingEntry.conn
-	v.pingConnMx.Unlock()
+	v.ping.mu.Unlock()
 
 	// Prepare packet with EchoFull flag for download measurement
 	packetSize := conf.PacketSize

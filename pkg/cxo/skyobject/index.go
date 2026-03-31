@@ -34,7 +34,7 @@ func (i *indexHeads) setActive() {
 
 	for nonce, dr := range i.h {
 
-		if i.activet < dr.Time {
+		if i.activet <= dr.Time {
 			i.activet = dr.Time
 			i.activen = nonce
 		}
@@ -106,7 +106,7 @@ func (i *Index) load(c *Container) (err error) {
 
 				feedMap.h[nonce] = ir // head (or nil)
 
-				if ir != nil && feedMap.activet < ir.Time {
+				if ir != nil && feedMap.activet <= ir.Time {
 
 					feedMap.activet = ir.Time // last timestamp of active feeds
 					feedMap.activen = nonce   // active head (nonce)
@@ -406,7 +406,7 @@ func (i *Index) addRoot(r *registry.Root) (alreadyHave bool, err error) {
 
 	hs.h[r.Nonce] = dr
 
-	if hs.activet < r.Time {
+	if hs.activet <= r.Time {
 		hs.activet = r.Time
 		hs.activen = r.Nonce
 	}
@@ -428,7 +428,7 @@ func (i *Index) addSavedRoot(r *registry.Root, dr *data.Root) {
 
 	hs.h[r.Nonce] = dr
 
-	if hs.activet < r.Time {
+	if hs.activet <= r.Time {
 		hs.activet = r.Time
 		hs.activen = r.Nonce
 	}
@@ -1049,7 +1049,7 @@ func (i *Index) Close() (err error) {
 
 	i.stat.Close() // close statistic first
 
-	// TODO (kostyarin): access time (fuck it for now, the access time
+	// Access time tracking is not implemented (would enable LRU eviction
 	//                   is not implemented as well)
 
 	return

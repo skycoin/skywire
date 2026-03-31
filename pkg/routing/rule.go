@@ -12,9 +12,37 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
+// Rule binary format
+//
+// All rules share a common header:
+//
+//	Offset  Size  Field
+//	0       8     KeepAlive (uint64, big-endian, time.Duration)
+//	8       1     Type      (0=Reverse/Consume, 1=Forward, 2=Intermediary)
+//	9       4     KeyRouteID (uint32, big-endian)
+//
+// Body layout varies by type:
+//
+//	Reverse (consume locally):
+//	  13  33    SrcPK  (cipher.PubKey)
+//	  46  33    DstPK  (cipher.PubKey)
+//	  79   2    SrcPort (uint16, big-endian)
+//	  81   2    DstPort (uint16, big-endian)
+//
+//	Forward (send to next hop):
+//	  13  33    SrcPK
+//	  46  33    DstPK
+//	  79   2    SrcPort
+//	  81   2    DstPort
+//	  83   4    NextRouteID (uint32, big-endian)
+//	  87  16    NextTransportID (uuid.UUID)
+//
+//	Intermediary (relay):
+//	  13   4    NextRouteID (uint32, big-endian)
+//	  17  16    NextTransportID (uuid.UUID)
+
 // RuleHeaderSize represents the base size of a rule.
 // All rules should be at-least this size.
-// TODO(evanlinjin): Document the format of rules in comments.
 const (
 	RuleHeaderSize      = 8 + 1 + 4
 	pkSize              = len(cipher.PubKey{})

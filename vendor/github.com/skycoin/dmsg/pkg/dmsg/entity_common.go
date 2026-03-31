@@ -36,6 +36,10 @@ type EntityCommon struct {
 
 	setSessionCallback func(ctx context.Context) error
 	delSessionCallback func(ctx context.Context) error
+
+	// peerSessionsFunc returns peer server sessions for mesh forwarding.
+	// Only set on Server entities; nil for clients.
+	peerSessionsFunc func() []*SessionCommon
 }
 
 func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, log logrus.FieldLogger, updateInterval time.Duration) {
@@ -82,6 +86,19 @@ func (c *EntityCommon) session(pk cipher.PubKey) (*SessionCommon, bool) {
 func (c *EntityCommon) serverSession(pk cipher.PubKey) (ServerSession, bool) {
 	ses, ok := c.session(pk)
 	return ServerSession{SessionCommon: ses}, ok
+}
+
+// peerServerSessions returns all peer server sessions for mesh forwarding.
+func (c *EntityCommon) peerServerSessions() []ServerSession {
+	if c.peerSessionsFunc == nil {
+		return nil
+	}
+	raw := c.peerSessionsFunc()
+	sessions := make([]ServerSession, len(raw))
+	for i, ses := range raw {
+		sessions[i] = ServerSession{SessionCommon: ses}
+	}
+	return sessions
 }
 
 // clientSession obtains a session as a client.

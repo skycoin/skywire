@@ -1,6 +1,7 @@
 package skyobject
 
 import (
+	"log"
 	"sync"
 
 	"github.com/skycoin/skycoin/src/cipher"
@@ -222,7 +223,7 @@ func (c *Container) Fill(
 func (f *Filler) apply() {
 	for key, inc := range f.incs {
 		if err := f.c.Finc(key, inc); err != nil {
-			panic("DB failure: " + err.Error()) // TODO: handle the error
+			log.Printf("[CXO] filler apply: failed to increment ref count for %s: %v", key.Hex(), err)
 		}
 	}
 }
@@ -230,7 +231,7 @@ func (f *Filler) apply() {
 func (f *Filler) reject() {
 	for key, inc := range f.incs {
 		if err := f.c.Finc(key, -inc); err != nil {
-			panic("DB failure: " + err.Error()) // TODO: handle the error
+			log.Printf("[CXO] filler reject: failed to decrement ref count for %s: %v", key.Hex(), err)
 		}
 	}
 }

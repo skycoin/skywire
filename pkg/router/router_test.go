@@ -43,7 +43,7 @@ func (e *TestEnv) GenRouterConfig(i int) *Config {
 		PubKey:           e.TpMngrConfs[i].PubKey,
 		SecKey:           e.TpMngrConfs[i].SecKey,
 		TransportManager: e.TpMngrs[i],
-		SetupNodes:       nil, // TODO
+		SetupNodes:       nil, // not needed for this test
 	}
 }
 

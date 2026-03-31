@@ -25,9 +25,8 @@ var (
 // format hint: bi.Main.Version = v1.3.29-rc7.0.20250410212328-dc5d22b7ab2a
 var bi *debug.BuildInfo
 
-// TODO: deprecate?
-// $ go build -ldflags="-X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.golist=$(go list -m -json -mod=mod github.com/skycoin/<repo>@<branch>)' -X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")'" .
 // ldflags-provided module info (`go list -m -json`)
+// $ go build -ldflags="-X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.golist=$(go list -m -json -mod=mod github.com/skycoin/<repo>@<branch>)' -X 'github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")'" .
 var golist string
 
 // ModuleInfo represents the JSON structure returned by `go list -m -json`.

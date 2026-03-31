@@ -100,17 +100,20 @@ func testMuxDistributesTraffic(t *testing.T, env *TestEnv) {
 		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotFound {
 			successCount++
 		}
-		// Brief pause between requests to spread across keep-alive cycles
+		// LEGITIMATE WAIT: Brief pacing between requests to spread traffic
+		// across keep-alive cycles and avoid overwhelming the proxy.
 		time.Sleep(100 * time.Millisecond)
 	}
 
 	require.Greater(t, successCount, 0, "No proxy requests succeeded")
 	t.Logf("%d/%d proxy requests succeeded", successCount, requestCount)
 
-	// Check transport bandwidth — both transports should show some bytes
-	// because mux distributes packets across them.
-	// Give a moment for bandwidth counters to update.
-	time.Sleep(2 * time.Second)
+	// Poll until at least one transport shows non-zero bandwidth (up to 10s).
+	// This replaces a fixed sleep with a condition check.
+	serverPKForBW := env.visorPKs[visorA]
+	if !env.waitForNonZeroBandwidth(visorC, serverPKForBW, 10*time.Second) {
+		t.Log("Warning: no bandwidth recorded yet; proceeding with check anyway")
+	}
 
 	// Parse transport list with bandwidth data (CLI outputs flat recv_bytes/sent_bytes)
 	type tpWithBW struct {

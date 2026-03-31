@@ -123,7 +123,7 @@ func TestUptime(t *testing.T) {
 
 // }
 
-// TODO(evanlinjin): These should be moved to /pkg/app/launcher
+// These tests cover launcher functionality but live in visor/rpc_test for historical reasons.
 //func TestListApps(t *testing.T) {
 //	apps := make(map[string]AppConfig)
 //	appCfg := []AppConfig{
@@ -361,7 +361,7 @@ These tests have been commented out for the following reasons:
 //		})
 //	})
 //
-//	// TODO(evanlinjin): For some reason, this freezes.
+//	// Known issue: this test freezes (likely RPC deadlock).
 //	t.Run("StopStartApp", func(t *testing.T) {
 //		appName := "foo"
 //		require.NoError(t, gateway.StopApp(&appName, &struct{}{}))
@@ -434,6 +434,6 @@ These tests have been commented out for the following reasons:
 //		}
 //	})
 //
-//	// TODO: Test add/remove transports
+//	// Transport add/remove test not implemented.
 //
 //}

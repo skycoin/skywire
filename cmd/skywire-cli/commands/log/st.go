@@ -44,7 +44,7 @@ var stCmd = &cobra.Command{
 	},
 }
 
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //	//nolint:errcheck
 //

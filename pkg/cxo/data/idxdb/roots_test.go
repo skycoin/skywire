@@ -10,7 +10,7 @@ import (
 func TestRoots_Ascend(t *testing.T) {
 	// Ascend(IterateRootsFunc) error
 
-	// TODO (kostyarin): memeory
+	// Memory-backed variant not implemented.
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
@@ -25,7 +25,7 @@ func TestRoots_Ascend(t *testing.T) {
 func TestRoots_Descend(t *testing.T) {
 	// Descend(IterateRootsFunc) error
 
-	// TODO (kostyarin): memeory
+	// Memory-backed variant not implemented.
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
@@ -40,7 +40,7 @@ func TestRoots_Descend(t *testing.T) {
 func TestRoots_Set(t *testing.T) {
 	// Set(*Root) error
 
-	// TODO (kostyarin): memeory
+	// Memory-backed variant not implemented.
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
@@ -55,7 +55,7 @@ func TestRoots_Set(t *testing.T) {
 func TestRoots_Del(t *testing.T) {
 	// Del(uint64) error
 
-	// TODO (kostyarin): memeory
+	// Memory-backed variant not implemented.
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
@@ -70,7 +70,7 @@ func TestRoots_Del(t *testing.T) {
 func TestRoots_Get(t *testing.T) {
 	// Get(uint64) (*Root, error)
 
-	// TODO (kostyarin): memeory
+	// Memory-backed variant not implemented.
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
@@ -85,7 +85,7 @@ func TestRoots_Get(t *testing.T) {
 func TestRoots_Has(t *testing.T) {
 	// Has(uint64) bool
 
-	// TODO (kostyarin): memeory
+	// Memory-backed variant not implemented.
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
