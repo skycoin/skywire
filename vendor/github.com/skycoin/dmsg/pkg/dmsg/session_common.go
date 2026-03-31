@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chen3feng/safecast"
@@ -33,6 +34,11 @@ type SessionCommon struct {
 	nw  *noise.NonceWindow
 	rMx sync.Mutex
 	wMx sync.Mutex
+
+	// lastPingNs stores the last measured round-trip latency in nanoseconds.
+	// Updated by background ping goroutine; read by DialStream for sorting.
+	// A value of 0 means no measurement yet (treated as max latency for sorting).
+	lastPingNs atomic.Int64
 
 	log logrus.FieldLogger
 }
@@ -208,6 +214,17 @@ func (sc *SessionCommon) smuxPing() (time.Duration, error) {
 		return 0, fmt.Errorf("smux ping: read: %w", err)
 	}
 	return time.Since(start), nil
+}
+
+// LastPing returns the last measured round-trip latency.
+// Returns 0 if no measurement has been taken yet.
+func (sc *SessionCommon) LastPing() time.Duration {
+	return time.Duration(sc.lastPingNs.Load())
+}
+
+// SetLastPing records a latency measurement.
+func (sc *SessionCommon) SetLastPing(d time.Duration) {
+	sc.lastPingNs.Store(int64(d))
 }
 
 // Close closes the session.

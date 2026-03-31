@@ -14,7 +14,7 @@ import (
 
 // GetServers is used to get all the available servers from the dmsg-discovery.
 func GetServers(ctx context.Context, dmsgDisc string, dmsgServerType string, log *logging.Logger) (entries []*disc.Entry) {
-	dmsgclient := disc.NewHTTP(dmsgDisc, &http.Client{}, log)
+	dmsgclient := disc.NewHTTP(dmsgDisc, &http.Client{Timeout: 30 * time.Second}, log)
 	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
 	for {
@@ -52,7 +52,7 @@ func GetServers(ctx context.Context, dmsgDisc string, dmsgServerType string, log
 
 // UpdateServers is used to update the servers in the direct client.
 func UpdateServers(ctx context.Context, dClient disc.APIClient, dmsgDisc string, dmsgC *dmsg.Client, dmsgServerType string, log *logging.Logger) (entries []*disc.Entry) {
-	dmsgclient := disc.NewHTTP(dmsgDisc, &http.Client{}, log)
+	dmsgclient := disc.NewHTTP(dmsgDisc, &http.Client{Timeout: 30 * time.Second}, log)
 	ticker := time.NewTicker(time.Minute * 10)
 	defer ticker.Stop()
 	for {
