@@ -141,7 +141,7 @@ func TestRefs_Walk(t *testing.T) {
 					}
 				})
 
-				// TODO (kostyarin): improve the test case
+				// Test case could be more thorough.
 
 			}
 

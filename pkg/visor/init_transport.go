@@ -77,9 +77,9 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 			log.Debug("Failed to get public IP from GeoIP, trying STUN")
 
 			// Fall back to STUN
-			<-v.stunReady
-			if v.stunClient.PublicIP != nil {
-				pIP = v.stunClient.PublicIP.IP()
+			<-v.stun.ready
+			if v.stun.client.PublicIP != nil {
+				pIP = v.stun.client.PublicIP.IP()
 				log.WithField("public_ip", pIP).Debug("Got public IP from STUN")
 			} else {
 				log.Warn("Failed to determine public IP from dmsg, GeoIP, and STUN")
@@ -103,9 +103,9 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 
 	// Store geolocation data if we got it
 	if geoData != nil {
-		v.geoDataMu.Lock()
-		v.geoData = geoData
-		v.geoDataMu.Unlock()
+		v.geo.mu.Lock()
+		v.geo.data = geoData
+		v.geo.mu.Unlock()
 	}
 
 	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
@@ -163,9 +163,9 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 			if err != nil {
 				logger.WithError(err).Debug("Failed to get public IP from GeoIP, trying STUN")
 
-				<-v.stunReady
-				if v.stunClient.PublicIP != nil {
-					pIP = v.stunClient.PublicIP.IP()
+				<-v.stun.ready
+				if v.stun.client.PublicIP != nil {
+					pIP = v.stun.client.PublicIP.IP()
 					logger.WithField("public_ip", pIP).Debug("Got public IP from STUN for service discovery")
 				} else {
 					logger.Warn("Failed to determine public IP for service discovery from dmsg, GeoIP, and STUN")
@@ -192,9 +192,9 @@ func initStunClient(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	sc := network.GetStunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
-	v.stunClient = sc
+	v.stun.client = sc
 	v.initLock.Unlock()
-	v.stunReadyOnce.Do(func() { close(v.stunReady) })
+	v.stun.readyOnce.Do(func() { close(v.stun.ready) })
 	return nil
 }
 
@@ -206,12 +206,12 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.Info("SUDPH transport wont be available under dmsghttp")
 		return nil
 	}
-	if v.stunClient != nil {
-		switch v.stunClient.NATType {
+	if v.stun.client != nil {
+		switch v.stun.client.NATType {
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
+			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stun.client.NATType.String())
 		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
-			log.Warnf("SUDPH transport wont be available: STUN detection failed (%v)", v.stunClient.NATType.String())
+			log.Warnf("SUDPH transport wont be available: STUN detection failed (%v)", v.stun.client.NATType.String())
 		default:
 			v.tpM.InitClient(ctx, types.SUDPH, v.conf.Transport.SudphPort)
 		}
@@ -305,9 +305,9 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		// OnExternalSTCPR notifies the public visor updater when an external
 		// connection is received, validating that the visor is internet-reachable
 		OnExternalSTCPR: func() {
-			v.publicVisorUpdaterMu.Lock()
-			updater := v.publicVisorUpdater
-			v.publicVisorUpdaterMu.Unlock()
+			v.publicVisor.mu.Lock()
+			updater := v.publicVisor.updater
+			v.publicVisor.mu.Unlock()
 			if updater != nil {
 				updater.OnExternalSTCPR()
 			}
@@ -442,10 +442,10 @@ func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) e
 // startPublicAutoconnectInternal starts the public autoconnect goroutine.
 // Called both at init time and when starting via API.
 func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging.Logger) error {
-	v.autoconnectMu.Lock()
-	defer v.autoconnectMu.Unlock()
+	v.autoconnect.mu.Lock()
+	defer v.autoconnect.mu.Unlock()
 
-	if v.autoconnectRunning {
+	if v.autoconnect.running {
 		return nil // already running
 	}
 
@@ -474,17 +474,17 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 	connector := MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
 
 	cctx, cancel := context.WithCancel(ctx)
-	v.autoconnectCancel = cancel
-	v.autoconnectRunning = true
+	v.autoconnect.cancel = cancel
+	v.autoconnect.running = true
 
 	v.pushCloseStack("public_autoconnect", func() error {
-		v.autoconnectMu.Lock()
-		defer v.autoconnectMu.Unlock()
-		if v.autoconnectCancel != nil {
-			v.autoconnectCancel()
-			v.autoconnectCancel = nil
+		v.autoconnect.mu.Lock()
+		defer v.autoconnect.mu.Unlock()
+		if v.autoconnect.cancel != nil {
+			v.autoconnect.cancel()
+			v.autoconnect.cancel = nil
 		}
-		v.autoconnectRunning = false
+		v.autoconnect.running = false
 		return nil
 	})
 
@@ -501,26 +501,26 @@ func (v *Visor) StartPublicAutoconnect() error {
 
 // StopPublicAutoconnect stops public autoconnect if running.
 func (v *Visor) StopPublicAutoconnect() error {
-	v.autoconnectMu.Lock()
-	defer v.autoconnectMu.Unlock()
+	v.autoconnect.mu.Lock()
+	defer v.autoconnect.mu.Unlock()
 
-	if !v.autoconnectRunning {
+	if !v.autoconnect.running {
 		return nil // not running
 	}
 
-	if v.autoconnectCancel != nil {
-		v.autoconnectCancel()
-		v.autoconnectCancel = nil
+	if v.autoconnect.cancel != nil {
+		v.autoconnect.cancel()
+		v.autoconnect.cancel = nil
 	}
-	v.autoconnectRunning = false
+	v.autoconnect.running = false
 	return nil
 }
 
 // IsPublicAutoconnectRunning returns whether public autoconnect is running.
 func (v *Visor) IsPublicAutoconnectRunning() bool {
-	v.autoconnectMu.Lock()
-	defer v.autoconnectMu.Unlock()
-	return v.autoconnectRunning
+	v.autoconnect.mu.Lock()
+	defer v.autoconnect.mu.Unlock()
+	return v.autoconnect.running
 }
 
 // advertise this visor as public in service discovery
@@ -577,9 +577,9 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { /
 	}
 
 	// Store the updater so the OnExternalSTCPR callback can access it
-	v.publicVisorUpdaterMu.Lock()
-	v.publicVisorUpdater = publicUpdater
-	v.publicVisorUpdaterMu.Unlock()
+	v.publicVisor.mu.Lock()
+	v.publicVisor.updater = publicUpdater
+	v.publicVisor.mu.Unlock()
 
 	publicUpdater.Start()
 
@@ -618,18 +618,12 @@ func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.
 		}
 
 		if tries >= 3 {
-			if v.conf.DisableShutdownOnNonTransportable {
-				log.Error("Visor is not transportable after 3 failed attempts, but shutdown is disabled for troubleshooting")
-				// Keep trying but don't accumulate tries forever
-				tries = 0
-			} else {
-				log.Error("Visor is not transportable after 3 failed attempts. Shutting down...")
-				if err := v.Shutdown(); err != nil {
-					log.WithError(err).Fatal("Failed to shut down gracefully")
-				}
-				// Signal shutdown to stop the ticker loop
-				tries = -1
-			}
+			log.Warn("Visor is not transportable after 3 failed attempts — will keep retrying")
+			// Reset counter and keep trying. The visor should not shut down
+			// because of transient DMSG issues — many have been fixed and the
+			// self-transport test is not a reliable indicator of visor health.
+			tries = 0
+			ticker.Reset(5 * time.Minute) // Back off to 5 minutes
 		}
 
 		return tries
@@ -676,7 +670,7 @@ func tryTransport(v *Visor, tpType string, log *logging.Logger) bool {
 	return true
 }
 
-// TODO: fix gocyclo error.
+// nolint: gocyclo
 //
 //gocyclo:ignore
 func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger) error {

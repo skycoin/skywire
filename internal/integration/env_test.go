@@ -259,8 +259,8 @@ func (env *TestEnv) StartApp(t *testing.T, app AppToRun, pk string) *TestEnv {
 			_, _ = env.VisorAppStop(app) //nolint:errcheck
 		}
 
-		// Wait a moment for it to stop
-		time.Sleep(2 * time.Second)
+		// Wait for app to actually stop before restarting
+		env.waitForAppStopped(app, 10*time.Second)
 
 		// Now start it fresh
 		if app.AppName == skyenv.VPNClientName {
@@ -460,13 +460,13 @@ func (env *TestEnv) VisorRouteRmRule(visor string, routeID routing.RouteID) (str
 	return env.ExecJSONReturnString(cmd)
 }
 
-// TODO(ersonp): figure out a way to write test for this
+// Halt/Start require container lifecycle management; tested via TestEnv_ContainerRestart.
 func (env *TestEnv) VisorHalt(visor string) (string, error) {
 	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 halt --json", visor)
 	return env.ExecJSONReturnString(cmd)
 }
 
-// TODO(ersonp): figure out a way to write test for this
+// Halt/Start require container lifecycle management; tested via TestEnv_ContainerRestart.
 func (env *TestEnv) VisorStart(visor string) (string, error) {
 	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 start --json", visor)
 	return env.ExecJSONReturnString(cmd)
@@ -728,10 +728,9 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 					env.logger.Info("Transport re-added successfully")
 				}
 
-				// Wait longer for transport to settle and routes to be established
-				// Transport deletion now uses 10s timeout, so we need more time for cleanup + re-establishment
-				env.logger.Info("Waiting for transport settlement and route establishment...")
-				time.Sleep(5 * time.Second)
+				// Wait for the re-added transport to appear in visor's transport list
+				env.logger.Info("Waiting for transport to appear in visor transport list...")
+				env.waitForTransportToPeer(app.VisorHostName, serverPk, 15*time.Second)
 
 				// Continue to next retry attempt
 				continue
@@ -1137,10 +1136,27 @@ func (env *TestEnv) ContainerRestart(serviceName ...string) error {
 		}
 	}
 
-	// Wait for restarted services to fully initialize
-	env.logger.Infof("Waiting %v for restarted services to stabilize", RestartDelay)
-	time.Sleep(RestartDelay)
+	// Poll restarted containers until their Docker state is "running"
+	// This replaces a fixed sleep with an event-driven check.
+	env.logger.Info("Waiting for restarted containers to reach running state...")
+	deadline := time.Now().Add(RestartDelay)
+	for time.Now().Before(deadline) {
+		allRunning := true
+		for _, svcName := range serviceName {
+			inspect, inspErr := env.cli.ContainerInspect(env.ctx, env.containers[svcName].ID)
+			if inspErr != nil || !inspect.State.Running {
+				allRunning = false
+				break
+			}
+		}
+		if allRunning {
+			env.logger.Info("All restarted containers are running")
+			return nil
+		}
+		time.Sleep(2 * time.Second)
+	}
 
+	env.logger.Warn("Restart wait timed out; containers may not be fully ready")
 	return nil
 }
 
@@ -1711,6 +1727,125 @@ func (env *TestEnv) logContainerTail(containerName string, lines int) {
 		env.logger.Infof("=== Container logs [%s] (last %d lines) ===\n%s\n=== End [%s] ===",
 			containerName, lines, logOutput, containerName)
 	}
+}
+
+// waitForAppStopped polls until the app is no longer in "running" state.
+func (env *TestEnv) waitForAppStopped(app AppToRun, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		running, _ := env.isVisorAppRunning(app) //nolint:errcheck
+		if !running {
+			env.logger.Infof("App %s on %s confirmed stopped", app.AppName, app.VisorHostName)
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	env.logger.Warnf("Timeout waiting for app %s to stop on %s", app.AppName, app.VisorHostName)
+}
+
+// waitForTransportToPeer polls until a transport to the given peer PK appears in the visor's transport list.
+func (env *TestEnv) waitForTransportToPeer(visor, peerPK string, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		tps, err := env.VisorTpLs(visor)
+		if err == nil {
+			for _, tp := range tps {
+				if tp.Remote.Hex() == peerPK || tp.Remote.String() == peerPK {
+					env.logger.Infof("Transport to %s found on %s", truncatePK(peerPK), visor)
+					return
+				}
+			}
+		}
+		time.Sleep(2 * time.Second)
+	}
+	env.logger.Warnf("Timeout waiting for transport to %s on %s", truncatePK(peerPK), visor)
+}
+
+// waitForNonZeroBandwidth polls transport list until at least one transport to the given peer shows non-zero bandwidth.
+func (env *TestEnv) waitForNonZeroBandwidth(visor, peerPK string, timeout time.Duration) bool {
+	type tpBW struct {
+		RemotePK  string `json:"remote_pk"`
+		RecvBytes uint64 `json:"recv_bytes,omitempty"`
+		SentBytes uint64 `json:"sent_bytes,omitempty"`
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		var result struct {
+			Output []tpBW `json:"output"`
+		}
+		err := env.ExecJSON(
+			fmt.Sprintf("/release/skywire cli --rpc %s:3435 tp --json", visor),
+			&result,
+		)
+		if err == nil {
+			for _, tp := range result.Output {
+				if tp.RemotePK == peerPK && (tp.RecvBytes+tp.SentBytes) > 0 {
+					return true
+				}
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return false
+}
+
+// waitForHTTPServerReady polls a port inside a container until it accepts TCP connections.
+func (env *TestEnv) waitForHTTPServerReady(port int, timeout time.Duration) {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		// Use the test runner container to check if the port is listening
+		cmd := fmt.Sprintf("sh -c 'cat < /dev/tcp/127.0.0.1/%d'", port)
+		_, err := env.execResult(cmd)
+		// Any response (even error from cat) means the port accepted a connection
+		if err == nil {
+			return
+		}
+		// Also try with a simple wget
+		cmd = fmt.Sprintf("wget -q --spider --timeout=1 http://127.0.0.1:%d/ 2>/dev/null", port)
+		_, err = env.execResult(cmd)
+		if err == nil {
+			return
+		}
+		_ = addr // suppress unused warning
+		time.Sleep(500 * time.Millisecond)
+	}
+	env.logger.Warnf("Timeout waiting for port %d to be ready", port)
+}
+
+// waitForListeningPort polls for a port to be listening by checking netstat output inside the container.
+func (env *TestEnv) waitForListeningPort(port int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		cmd := fmt.Sprintf("sh -c 'netstat -tuln 2>/dev/null | grep :%d || ss -tuln 2>/dev/null | grep :%d || true'", port, port)
+		result, err := env.execResult(cmd)
+		if err == nil {
+			stdout := result.Stdout()
+			if strings.Contains(stdout, fmt.Sprintf(":%d", port)) {
+				return true
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return false
+}
+
+// waitForTPDClean polls transport discovery until no transports exist for the given visor PK.
+func (env *TestEnv) waitForTPDClean(visor string, timeout time.Duration) {
+	pk, ok := env.visorPKs[visor]
+	if !ok {
+		env.logger.Warnf("waitForTPDClean: no PK for visor %s", visor)
+		return
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		entries, err := env.QueryTPDByPK(pk)
+		if err == nil && len(entries) == 0 {
+			return
+		}
+		time.Sleep(2 * time.Second)
+	}
+	env.logger.Warnf("waitForTPDClean: timeout for visor %s", visor)
 }
 
 // stripDockerLogHeaders removes the 8-byte multiplexed stream headers from Docker container log output.

@@ -172,9 +172,11 @@ func (ns *Noise) DecryptUnsafe(ciphertext []byte) ([]byte, error) {
 }
 
 // NonceMap is a map of used nonces.
+// Deprecated: Use NonceWindow instead for bounded memory usage.
 type NonceMap map[uint64]struct{}
 
 // DecryptWithNonceMap is equivalent to DecryptNonce, instead it uses NonceMap to track nonces instead of a counter.
+// Deprecated: Use DecryptWithNonceWindow instead.
 func (ns *Noise) DecryptWithNonceMap(nm NonceMap, ciphertext []byte) ([]byte, error) {
 	if len(ciphertext) < nonceSize {
 		return nil, ErrInvalidCipherText
@@ -188,5 +190,23 @@ func (ns *Noise) DecryptWithNonceMap(nm NonceMap, ciphertext []byte) ([]byte, er
 		return nil, err
 	}
 	nm[recvSeq] = struct{}{}
+	return plaintext, nil
+}
+
+// DecryptWithNonceWindow decrypts ciphertext using a sliding window for nonce tracking.
+// Unlike DecryptWithNonceMap, memory usage is bounded to O(NonceWindowSize) regardless
+// of how many messages are decrypted over the session's lifetime.
+func (ns *Noise) DecryptWithNonceWindow(nw *NonceWindow, ciphertext []byte) ([]byte, error) {
+	if len(ciphertext) < nonceSize {
+		return nil, ErrInvalidCipherText
+	}
+	recvSeq := binary.BigEndian.Uint64(ciphertext[:nonceSize])
+	if err := nw.Check(recvSeq); err != nil {
+		return nil, err
+	}
+	plaintext, err := ns.dec.Cipher().Decrypt(nil, recvSeq, nil, ciphertext[nonceSize:])
+	if err != nil {
+		return nil, err
+	}
 	return plaintext, nil
 }

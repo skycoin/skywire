@@ -30,7 +30,7 @@ func TestIdxDB_Tx(t *testing.T) {
 func TestIdxDB_Close(t *testing.T) {
 	// Close() error
 
-	// TODO (kostyarin): memory
+	// Memory-backed variant not implemented.
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)

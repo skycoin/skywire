@@ -220,6 +220,11 @@ func (mc *mockRPCClient) GetRewardAddress() (string, error) {
 	return "", nil
 }
 
+// SetLANDmsgServer implements API.
+func (mc *mockRPCClient) SetLANDmsgServer(_ LANDmsgServerInfo) error {
+	return nil
+}
+
 // DeleteRewardAddress implements API.
 func (mc *mockRPCClient) DeleteRewardAddress() error {
 	return nil

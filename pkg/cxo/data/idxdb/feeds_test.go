@@ -10,7 +10,7 @@ import (
 func TestFeeds_Add(t *testing.T) {
 	// Add(cipher.PubKey) error
 
-	// TODO (kostyarin): memory
+	// Memory-backed variant not implemented.
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
@@ -24,7 +24,7 @@ func TestFeeds_Add(t *testing.T) {
 func TestFeeds_Del(t *testing.T) {
 	// Del(cipher.PubKey) error
 
-	// TODO (kostyarin): memory
+	// Memory-backed variant not implemented.
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
@@ -38,7 +38,7 @@ func TestFeeds_Del(t *testing.T) {
 func TestFeeds_Iterate(t *testing.T) {
 	// Iterate(IterateFeedsFunc) error
 
-	// TODO (kostyarin): memory
+	// Memory-backed variant not implemented.
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
@@ -52,7 +52,7 @@ func TestFeeds_Iterate(t *testing.T) {
 func TestFeeds_Has(t *testing.T) {
 	// Has(cipher.PubKey) bool
 
-	// TODO (kostyarin): memory
+	// Memory-backed variant not implemented.
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)
@@ -66,7 +66,7 @@ func TestFeeds_Has(t *testing.T) {
 func TestFeeds_Heads(t *testing.T) {
 	// Heads(cipher.PubKey) (Roots, error)
 
-	// TODO (kostyarin): memory
+	// Memory-backed variant not implemented.
 
 	t.Run("drive", func(t *testing.T) {
 		idx := testNewDriveIdxDB(t)

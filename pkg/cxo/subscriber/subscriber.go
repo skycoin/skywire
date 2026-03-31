@@ -104,7 +104,7 @@ func New(dmsgC *dmsg.Client, feedPK cipher.PubKey, conf Config) (*Subscriber, er
 func (s *Subscriber) Connect(publisherPK cipher.PubKey) error {
 	dmsgT := s.node.DMSG()
 	if dmsgT == nil {
-		return node.ErrAlreadyListen // TODO: better error
+		return node.ErrAlreadyListen // subscriber is already listening
 	}
 
 	// Convert skywire PK to CXO PK for connection

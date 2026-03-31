@@ -200,8 +200,8 @@ func TestRefs_Ascend(t *testing.T) {
 
 	// -------------------------------------------------------------------------
 
-	// TODO (kostyaring): extended testing of the Ascend
-	// TODO (kostyaring): error bubbling test (and for desc, asc_from, etc)
+	// Extended Ascend testing not implemented.
+	// Error bubbling test not implemented.
 
 }
 
@@ -422,7 +422,7 @@ func TestRefs_AscendFrom(t *testing.T) {
 
 	// -------------------------------------------------------------------------
 
-	// TODO (kostyaring): extended testing of the AscendFrom
+	// Extended Ascend testing not implemented.From
 
 }
 
@@ -621,7 +621,7 @@ func TestRefs_Descend(t *testing.T) {
 
 	// -------------------------------------------------------------------------
 
-	// TODO (kostyaring): extended testing of the Descend
+	// Extended Descend testing not implemented.
 
 }
 
@@ -861,6 +861,6 @@ func TestRefs_DescendFrom(t *testing.T) {
 
 	// -------------------------------------------------------------------------
 
-	// TODO (kostyaring): extended testing of the DescendFrom
+	// Extended Descend testing not implemented.From
 
 }

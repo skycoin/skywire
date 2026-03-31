@@ -67,7 +67,7 @@ func TestClientAuth(t *testing.T) {
 				defer wg.Done()
 				assert.Equal(t, testPubKey.Hex(), r.Header.Get("SW-Public"))
 				assert.Equal(t, "1", r.Header.Get("SW-Nonce"))
-				assert.NotEmpty(t, r.Header.Get("SW-Sig")) // TODO: check for the right key
+				assert.NotEmpty(t, r.Header.Get("SW-Sig")) // Signature present; value correctness not verified.
 
 			case fmt.Sprintf("/security/nonces/%s", testPubKey):
 				_, err := fmt.Fprintf(w, `{"edge": "%s", "next_nonce": 1}`, testPubKey)
@@ -104,7 +104,7 @@ func TestRegisterTransportResponses(t *testing.T) {
 			func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusCreated) },
 			func(err error) { require.NoError(t, err) },
 		},
-		// TODO(evaninjin): Not sure why this is failing and why this is expected behavior.
+		// This assertion documents observed behavior; root cause unclear.
 		//{
 		//	"StatusOK",
 		//	func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) },

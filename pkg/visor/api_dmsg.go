@@ -55,9 +55,9 @@ func (v *Visor) DialDmsgPing(pk cipher.PubKey) error {
 		serverPK = stream.ServerPK()
 	}
 
-	v.dmsgPingMx.Lock()
-	v.dmsgPingConns[pk] = ping{conn: conn, serverPK: serverPK}
-	v.dmsgPingMx.Unlock()
+	v.dmsgPing.mu.Lock()
+	v.dmsgPing.conns[pk] = ping{conn: conn, serverPK: serverPK}
+	v.dmsgPing.mu.Unlock()
 
 	return nil
 }
@@ -88,9 +88,9 @@ func (v *Visor) DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) 
 		return fmt.Errorf("failed to dial dmsg ping via server %s: %w", serverPK, err)
 	}
 
-	v.dmsgPingMx.Lock()
-	v.dmsgPingConns[pk] = ping{conn: stream, serverPK: serverPK}
-	v.dmsgPingMx.Unlock()
+	v.dmsgPing.mu.Lock()
+	v.dmsgPing.conns[pk] = ping{conn: stream, serverPK: serverPK}
+	v.dmsgPing.mu.Unlock()
 
 	return nil
 }
@@ -119,10 +119,10 @@ func (v *Visor) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
 
 // GetDmsgPingServerPK implements API. Returns the DMSG server PK used for a ping connection.
 func (v *Visor) GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey, error) {
-	v.dmsgPingMx.Lock()
-	defer v.dmsgPingMx.Unlock()
+	v.dmsgPing.mu.Lock()
+	defer v.dmsgPing.mu.Unlock()
 
-	pingEntry, ok := v.dmsgPingConns[pk]
+	pingEntry, ok := v.dmsgPing.conns[pk]
 	if !ok {
 		return cipher.PubKey{}, fmt.Errorf("no dmsg ping connection for %s", pk)
 	}
@@ -194,10 +194,10 @@ func (v *Visor) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error) 
 
 // DmsgPing implements API. Measures round-trip time over dmsg connection.
 func (v *Visor) DmsgPing(conf PingConfig) ([]time.Duration, error) {
-	v.dmsgPingMx.Lock()
-	defer v.dmsgPingMx.Unlock()
+	v.dmsgPing.mu.Lock()
+	defer v.dmsgPing.mu.Unlock()
 
-	pingEntry, ok := v.dmsgPingConns[conf.PK]
+	pingEntry, ok := v.dmsgPing.conns[conf.PK]
 	if !ok {
 		return nil, fmt.Errorf("no dmsg ping connection for %s, call DialDmsgPing first", conf.PK)
 	}
@@ -230,10 +230,10 @@ func (v *Visor) DmsgPingViaServer(conf PingConfig, serverPK cipher.PubKey) ([]ti
 
 // DmsgPingOnce implements API. Performs a single ping over dmsg connection.
 func (v *Visor) DmsgPingOnce(conf PingConfig) (time.Duration, error) {
-	v.dmsgPingMx.Lock()
-	defer v.dmsgPingMx.Unlock()
+	v.dmsgPing.mu.Lock()
+	defer v.dmsgPing.mu.Unlock()
 
-	pingEntry, ok := v.dmsgPingConns[conf.PK]
+	pingEntry, ok := v.dmsgPing.conns[conf.PK]
 	if !ok {
 		return 0, fmt.Errorf("no dmsg ping connection for %s, call DialDmsgPing first", conf.PK)
 	}
@@ -293,10 +293,10 @@ func (v *Visor) DmsgPingOnce(conf PingConfig) (time.Duration, error) {
 // Returns bytes sent, bytes received, latency, and error.
 // If echoFull is true, server echoes full payload (for bandwidth testing).
 func (v *Visor) DmsgPingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
-	v.dmsgPingMx.Lock()
-	defer v.dmsgPingMx.Unlock()
+	v.dmsgPing.mu.Lock()
+	defer v.dmsgPing.mu.Unlock()
 
-	dmsgEntry, ok := v.dmsgPingConns[conf.PK]
+	dmsgEntry, ok := v.dmsgPing.conns[conf.PK]
 	if !ok {
 		return 0, 0, 0, fmt.Errorf("no dmsg ping connection for %s, call DialDmsgPing first", conf.PK)
 	}
@@ -376,10 +376,10 @@ func (v *Visor) DmsgPingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent,
 
 // StopDmsgPing implements API.
 func (v *Visor) StopDmsgPing(pk cipher.PubKey) error {
-	v.dmsgPingMx.Lock()
-	defer v.dmsgPingMx.Unlock()
+	v.dmsgPing.mu.Lock()
+	defer v.dmsgPing.mu.Unlock()
 
-	dmsgConn, ok := v.dmsgPingConns[pk]
+	dmsgConn, ok := v.dmsgPing.conns[pk]
 	if !ok {
 		return fmt.Errorf("no dmsg ping connection for %s", pk)
 	}
@@ -387,7 +387,7 @@ func (v *Visor) StopDmsgPing(pk cipher.PubKey) error {
 	if err != nil {
 		return err
 	}
-	delete(v.dmsgPingConns, pk)
+	delete(v.dmsgPing.conns, pk)
 	return nil
 }
 
@@ -395,9 +395,9 @@ func (v *Visor) StopDmsgPing(pk cipher.PubKey) error {
 // Performs a bandwidth test over dmsg by sending and receiving data for the specified duration.
 func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error) {
 	// First establish a dmsg ping connection if not already connected
-	v.dmsgPingMx.Lock()
-	_, exists := v.dmsgPingConns[conf.PK]
-	v.dmsgPingMx.Unlock()
+	v.dmsgPing.mu.Lock()
+	_, exists := v.dmsgPing.conns[conf.PK]
+	v.dmsgPing.mu.Unlock()
 
 	if !exists {
 		if err := v.DialDmsgPing(conf.PK); err != nil {
@@ -405,14 +405,14 @@ func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, er
 		}
 	}
 
-	v.dmsgPingMx.Lock()
-	dmsgEntry, ok := v.dmsgPingConns[conf.PK]
+	v.dmsgPing.mu.Lock()
+	dmsgEntry, ok := v.dmsgPing.conns[conf.PK]
 	if !ok {
-		v.dmsgPingMx.Unlock()
+		v.dmsgPing.mu.Unlock()
 		return BandwidthResult{}, fmt.Errorf("no dmsg ping connection for %s", conf.PK)
 	}
 	conn := dmsgEntry.conn
-	v.dmsgPingMx.Unlock()
+	v.dmsgPing.mu.Unlock()
 
 	// Prepare packet with EchoFull flag for download measurement
 	packetSize := conf.PacketSize
@@ -499,7 +499,7 @@ func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, er
 // IsDMSGClientReady return availability of dsmg client
 func (v *Visor) IsDMSGClientReady() (bool, error) {
 	if v.isDTMReady() {
-		dmsgTracker, ok := v.dtm.Get(v.conf.PK)
+		dmsgTracker, ok := v.dmsgTracker.manager.Get(v.conf.PK)
 		if ok && dmsgTracker.ServerPK.Hex()[:5] != "00000" {
 			return true, nil
 		}
@@ -522,7 +522,7 @@ func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
 
 	// Build list with latencies
 	servers := make([]DMSGServerInfo, 0, len(serverPKs))
-	v.dmsgServerLatenciesMu.RLock()
+	v.dmsgLatency.mu.RLock()
 	for _, pkStr := range serverPKs {
 		var pk cipher.PubKey
 		if err := pk.Set(pkStr); err != nil {
@@ -530,11 +530,11 @@ func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
 		}
 		info := DMSGServerInfo{
 			PK:      pk,
-			Latency: v.dmsgServerLatencies[pk],
+			Latency: v.dmsgLatency.servers[pk],
 		}
 		servers = append(servers, info)
 	}
-	v.dmsgServerLatenciesMu.RUnlock()
+	v.dmsgLatency.mu.RUnlock()
 
 	// Sort by latency (lowest first, 0/unmeasured at end)
 	for i := 0; i < len(servers)-1; i++ {
