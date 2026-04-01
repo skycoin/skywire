@@ -102,8 +102,9 @@ func server(e error) {
 	}()
 
 	htmlPageTemplateData = htmlTemplateData{
-		Title: "skycoin rewards",
-		Page:  "front",
+		Title:       "Skycoin Rewards",
+		Description: "Skywire Network reward calculation and distribution system. Earn Skycoin by running Skywire visors.",
+		Page:        "front",
 	}
 	var err1 error
 	tmpl, err1 = htmpl.New("index").Parse(htmlMainPageTemplate)
@@ -156,7 +157,7 @@ func server(e error) {
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
 			c.Writer.WriteHeader(http.StatusOK)
 			c.Writer.Flush()
-			c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport statistics</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec
+			c.Writer.Write([]byte(chunkedPageHead("Transport Statistics", "Live transport statistics for the Skywire Network"))) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -174,7 +175,7 @@ func server(e error) {
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
 			c.Writer.WriteHeader(http.StatusOK)
 			c.Writer.Flush()
-			c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Transport Map</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec
+			c.Writer.Write([]byte(chunkedPageHead("Transport Map", "Geographic map of active Skywire transports"))) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -239,7 +240,7 @@ func server(e error) {
 			c.Writer.Header().Set("Transfer-Encoding", "chunked") //nolint:errcheck,gosec
 			c.Writer.WriteHeader(http.StatusOK)
 			c.Writer.Flush()
-			c.Writer.Write([]byte("<!doctype html><html lang=en><head><title>Skywire Survey and Transport Log Collection</title></head>")) //nolint:errcheck,gosec  //nolint:errcheck,gosec
+			c.Writer.Write([]byte(chunkedPageHead("Log Collection", "Skywire visor survey and transport log collection overview"))) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec  //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -298,7 +299,7 @@ func server(e error) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
 			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec
+			c.Writer.Write([]byte(chunkedPageHead("Survey Index", "Index of Skywire visor surveys and transport logs on the Skywire Network"))) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -370,7 +371,7 @@ func server(e error) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
 			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write([]byte("<!doctype html><html lang=en><head><meta charset='UTF-8'><title>Index of Skywire Surveys & Transport Logs</title></head><body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec
+			c.Writer.Write([]byte(chunkedPageHead("Visor Survey", "Skywire visor survey and log details"))) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -408,9 +409,7 @@ func server(e error) {
 			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
 			c.Writer.Write([]byte(func() (l string) { //nolint:errcheck,gosec
-				l = "<!doctype html><html lang=en><head><title>Skywire Transport Bandwidth Logs By Day</title>"
-				l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; } pre { font-family:Courier New; font-size:10pt; } body { background-color:black; color:white; }</style>"
-				l += "</head><body><pre>"
+				l = chunkedPageHead("Transport Bandwidth Logs", "Daily transport bandwidth logs for the Skywire Network")
 				l += navlinks
 				l += "<p><a href='/stats/bandwidth-history'>View Bandwidth History Graph</a></p>"
 				l += "<p style='color:#36A2EB'>Blue = Verified Bandwidth</p>"
@@ -467,7 +466,7 @@ func server(e error) {
 			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
 
-			l := "<html><head><title>Network Statistics</title>"
+			l := chunkedPageHead("Network Statistics", "Skywire Network hardware, OS, and geographic statistics")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
 			l += "</head>"
 			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
@@ -608,7 +607,7 @@ func server(e error) {
 			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
 
-			l := "<html><head><title>Version History</title>"
+			l := chunkedPageHead("Version History", "Skywire visor version adoption history")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
 			l += "</head>"
 			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
@@ -648,7 +647,7 @@ func server(e error) {
 			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
 
-			l := "<html><head><title>Bandwidth History</title>"
+			l := chunkedPageHead("Bandwidth History", "Skywire Network bandwidth usage history")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
 			l += "</head>"
 			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
@@ -678,7 +677,7 @@ func server(e error) {
 			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
 
-			l := "<html><head><title>Visor Bandwidth</title>"
+			l := chunkedPageHead("Visor Bandwidth", "Per-visor bandwidth usage on the Skywire Network")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
 			l += "</head>"
 			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
@@ -811,8 +810,9 @@ func server(e error) {
 			}
 			tmpl := tmpl0
 			htmlPageTemplateData1 := htmlTemplateData{
-				Title:   "Skycoin Reward Calculation and Distribution",
-				Content: htmpl.HTML(l), //nolint:gosec
+				Title:       "Skycoin Reward History",
+				Description: "Daily Skycoin reward calculation and distribution history for the Skywire Network.",
+				Content:     htmpl.HTML(l), //nolint:gosec
 			}
 			tmplData := map[string]interface{}{
 				"Page": htmlPageTemplateData1,
@@ -1244,10 +1244,10 @@ func server(e error) {
 			}
 			tmpl := tmpl0
 			htmlPageTemplateData1 := htmlTemplateData{
-				Title:   "Skycoin Reward Calculation and Distribution",
-				Content: htmpl.HTML(l), //nolint:gosec
+				Title:       "Skycoin Rewards " + c.Param("date"),
+				Description: "Skycoin reward calculation details for " + c.Param("date") + " on the Skywire Network.",
+				Content:     htmpl.HTML(l), //nolint:gosec
 			}
-			//	htmlPageTemplateData1.Content =
 			tmplData := map[string]interface{}{
 				"Page": htmlPageTemplateData1,
 			}

@@ -79,9 +79,28 @@ nav .dropdown a{display:block;padding:4px 12px;}
 }
 
 type htmlTemplateData struct {
-	Title   string
-	Page    string
-	Content htmpl.HTML
+	Title       string
+	Description string
+	Page        string
+	Content     htmpl.HTML
+}
+
+// chunkedPageHead returns an HTML head for chunked (non-template) pages with
+// SEO meta tags. Title and description should be page-specific.
+func chunkedPageHead(title, description string) string {
+	return `<!doctype html><html lang='en'><head>` +
+		`<meta charset='UTF-8'>` +
+		`<meta name='viewport' content='width=device-width, initial-scale=1.0'>` +
+		`<title>` + title + ` - Skywire Network</title>` +
+		`<meta name='description' content='` + description + `'>` +
+		`<meta property='og:title' content='` + title + ` - Skywire Network'>` +
+		`<meta property='og:description' content='` + description + `'>` +
+		`<meta property='og:type' content='website'>` +
+		`<style type='text/css'>` +
+		`a { color: #3399FF; } a:visited { color: #FF00FF; } ` +
+		`pre { font-family:Courier New; font-size:10pt; white-space:pre-wrap; word-wrap:break-word; } ` +
+		`body { background-color:black; color:white; }` +
+		`</style></head><body><pre>`
 }
 
 const htmlFrontPageTemplate = `
@@ -169,7 +188,11 @@ var htmlMainPageTemplate = `
 var htmlHeadTemplate = `<head>
 <meta charset='UTF-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=4.9,'>
-<title title='{{.Page.Title}}'>{{.Page.Title}}</title>
+<title>{{.Page.Title}} - Skywire Network</title>
+{{if .Page.Description}}<meta name='description' content='{{.Page.Description}}'>
+<meta property='og:description' content='{{.Page.Description}}'>{{end}}
+<meta property='og:title' content='{{.Page.Title}} - Skywire Network'>
+<meta property='og:type' content='website'>
 <style type='text/css'>
 a {
 		color: #3399FF;
