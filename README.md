@@ -15,7 +15,7 @@
 Skywire is a fully open-source, privacy-focused suite of networking tools developed by Skycoin. The public Skywire Network enables this software to be developed and tested in real-world conditions. A few features the Skywire Network provides:
 
 * service discovery for decentralized [VPN](https://sd.skycoin.com/api/services?type=proxy) and [SOCKS5 proxy](https://sd.skycoin.com/api/services?type=proxy) servers
-* multi-hop public key–based routing
+* multi-hop public key-based routing
 * a means of accessing and hosting hidden websites
 * [daily rewards in Skycoin](/rewards/mainnet_rules.md) ($SKY) to eligible participants in the Skywire Network
 

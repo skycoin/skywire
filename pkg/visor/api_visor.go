@@ -226,6 +226,9 @@ func (v *Visor) RuntimeStats() (*RuntimeStatsInfo, error) {
 
 // SetRewardAddress implements API.
 func (v *Visor) SetRewardAddress(p string) (string, error) {
+	// Write to config
+	v.conf.RewardAddress = p
+	// Also write to reward file for backward compatibility
 	path := v.conf.LocalPath + "/" + skyenv.RewardFile
 	err := os.WriteFile(path, []byte(p), 0600)
 	if err != nil {
@@ -238,23 +241,20 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 
 // GetRewardAddress implements API.
 func (v *Visor) GetRewardAddress() (string, error) {
-	path := v.conf.LocalPath + "/" + skyenv.RewardFile
-	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		file, err := os.Create(filepath.Clean(path))
-		if err != nil {
-			return "", fmt.Errorf("failed to create config file. err=%v", err)
-		}
-		err = file.Close()
-		if err != nil {
-			return "", fmt.Errorf("failed to close config file. err=%v", err)
-		}
+	// Prefer config value
+	if v.conf.RewardAddress != "" {
+		return v.conf.RewardAddress, nil
 	}
+	// Fall back to reward file
+	path := v.conf.LocalPath + "/" + skyenv.RewardFile
 	rConfig, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return "", fmt.Errorf("failed to read config file. err=%v", err)
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to read reward file: %v", err)
 	}
-	return string(rConfig), nil
+	return strings.TrimSpace(string(rConfig)), nil
 }
 
 // DeleteRewardAddress implements API.
