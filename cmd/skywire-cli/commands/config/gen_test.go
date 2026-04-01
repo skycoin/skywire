@@ -106,6 +106,9 @@ func repoRoot(t *testing.T) string {
 // extra flags from the repo root and returns the parsed config.
 func runConfigGen(t *testing.T, extraFlags ...string) *visorconfig.V1 {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("bash-based integration test not supported on Windows")
+	}
 	root := repoRoot(t)
 	flags := strings.Join(extraFlags, " ")
 	cmd := "cd " + root + " && SKYENV= go run . cli config gen -n " + flags
@@ -123,6 +126,9 @@ func runConfigGen(t *testing.T, extraFlags ...string) *visorconfig.V1 {
 // runConfigGenWithEnv runs config gen with a custom SKYENV file.
 func runConfigGenWithEnv(t *testing.T, envContent string, extraFlags ...string) *visorconfig.V1 {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("bash-based integration test not supported on Windows")
+	}
 	root := repoRoot(t)
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, "test-skyenv.conf")
