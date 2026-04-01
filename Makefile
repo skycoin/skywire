@@ -279,7 +279,7 @@ update-deps: ## Update all dependencies to latest versions (use 'make update-dep
 
 update-dmsg: ## Update dmsg to latest develop branch
 	@echo "Updating dmsg to latest develop..."
-	${OPTS} go get -v github.com/skycoin/dmsg@develop
+	${OPTS} GOPROXY=direct go get -v github.com/skycoin/dmsg@develop
 	${OPTS} go mod tidy -v
 	${OPTS} go mod vendor -v
 	@echo "dmsg updated successfully"

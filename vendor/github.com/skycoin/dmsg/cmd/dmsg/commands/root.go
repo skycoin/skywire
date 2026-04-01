@@ -3,6 +3,9 @@ package commands
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -24,8 +27,9 @@ import (
 )
 
 var (
-	bv  bool
-	dbi bool
+	bv       bool
+	dbi      bool
+	withKill bool
 )
 
 func init() {
@@ -63,6 +67,8 @@ func init() {
 	di.RootCmd.Use = "ip"
 
 	modifySubcommands(RootCmd)
+	RootCmd.PersistentFlags().BoolVar(&withKill, "with-kill", false, "force exit after 3 interrupt signals")
+	RootCmd.PersistentFlags().MarkHidden("with-kill") //nolint:errcheck,gosec
 	if fmt.Sprintf("%v", buildinfo.DebugBuildInfo()) != "" {
 		RootCmd.Flags().BoolVarP(&dbi, "info", "d", false, "print runtime/debug.BuildInfo")
 	}
@@ -98,6 +104,21 @@ var RootCmd = &cobra.Command{
 		}
 		return ret
 	}(),
+	PersistentPreRun: func(_ *cobra.Command, _ []string) {
+		if withKill {
+			c := make(chan os.Signal, 1)
+			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+			go func() {
+				sigCount := 0
+				for range c {
+					sigCount++
+					if sigCount >= 3 {
+						os.Exit(1)
+					}
+				}
+			}()
+		}
+	},
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
