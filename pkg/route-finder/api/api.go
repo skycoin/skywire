@@ -110,11 +110,23 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	var minHops, maxHops int
+	if grr.Opts != nil {
+		minHops = int(grr.Opts.MinHops)
+		maxHops = int(grr.Opts.MaxHops)
+	}
+
+	// Limit graph exploration depth to prevent OOM on large networks.
+	graphDepth := maxHops
+	if graphDepth <= 0 || graphDepth > 10 {
+		graphDepth = 10
+	}
+
 	graphs := make(map[cipher.PubKey]*routeFinder.Graph)
 	for _, edge := range grr.Edges {
 		srcPK := edge[0]
 		if _, ok := graphs[srcPK]; !ok {
-			graph, err := routeFinder.NewGraph(r.Context(), a.store, srcPK)
+			graph, err := routeFinder.NewGraphWithDepth(r.Context(), a.store, srcPK, graphDepth)
 			if err != nil {
 				if err == store.ErrTransportNotFound {
 					a.handleError(w, r, http.StatusNotFound, err)
@@ -126,12 +138,6 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 			}
 			graphs[srcPK] = graph
 		}
-	}
-
-	var minHops, maxHops int
-	if grr.Opts != nil {
-		minHops = int(grr.Opts.MinHops)
-		maxHops = int(grr.Opts.MaxHops)
 	}
 
 	routes := make(map[routing.PathEdges][][]routing.Hop)
