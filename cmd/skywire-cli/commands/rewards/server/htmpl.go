@@ -81,26 +81,47 @@ nav .dropdown a{display:block;padding:4px 12px;}
 type htmlTemplateData struct {
 	Title       string
 	Description string
+	Canonical   string
+	OGImage     string
 	Page        string
 	Content     htmpl.HTML
 }
 
+// withCanonical returns a copy of the template data with canonical URL and OG image set
+// based on the canonicalDomain flag and the given request path.
+func (d htmlTemplateData) withCanonical(path string) htmlTemplateData {
+	if canonicalDomain != "" {
+		base := strings.TrimRight(canonicalDomain, "/")
+		d.Canonical = base + path
+		d.OGImage = base + "/favicon.ico"
+	}
+	return d
+}
+
 // chunkedPageHead returns an HTML head for chunked (non-template) pages with
 // SEO meta tags. Title and description should be page-specific.
-func chunkedPageHead(title, description string) string {
-	return `<!doctype html><html lang='en'><head>` +
+// The path parameter is the request path (e.g. "/stats") for canonical URL generation.
+func chunkedPageHead(title, description, path string) string {
+	h := `<!doctype html><html lang='en'><head>` +
 		`<meta charset='UTF-8'>` +
 		`<meta name='viewport' content='width=device-width, initial-scale=1.0'>` +
 		`<title>` + title + ` - Skywire Network</title>` +
 		`<meta name='description' content='` + description + `'>` +
 		`<meta property='og:title' content='` + title + ` - Skywire Network'>` +
 		`<meta property='og:description' content='` + description + `'>` +
-		`<meta property='og:type' content='website'>` +
-		`<style type='text/css'>` +
+		`<meta property='og:type' content='website'>`
+	if canonicalDomain != "" {
+		canonical := strings.TrimRight(canonicalDomain, "/") + path
+		h += `<link rel='canonical' href='` + canonical + `'>` +
+			`<meta property='og:url' content='` + canonical + `'>` +
+			`<meta property='og:image' content='` + strings.TrimRight(canonicalDomain, "/") + `/favicon.ico'>`
+	}
+	h += `<style type='text/css'>` +
 		`a { color: #3399FF; } a:visited { color: #FF00FF; } ` +
 		`pre { font-family:Courier New; font-size:10pt; white-space:pre-wrap; word-wrap:break-word; } ` +
 		`body { background-color:black; color:white; }` +
 		`</style></head><body><pre>`
+	return h
 }
 
 const htmlFrontPageTemplate = `
@@ -124,7 +145,7 @@ func mainPage(c *gin.Context) {
 
 	mainnetRulesHTML, _ := script.Exec(`skywire cli reward rules -l`).String()              //nolint:errcheck,gosec
 	skywireVersion, _ := script.Exec(`skywire -v`).Replace("skywire version ", "").String() //nolint:errcheck,gosec
-	htmlPageTemplateData1 := htmlPageTemplateData
+	htmlPageTemplateData1 := htmlPageTemplateData.withCanonical("/")
 	//nolint:gosec
 	htmlPageTemplateData1.Content = htmpl.HTML(skywireVersion + "<br>" + skycoinlogohtml + "<br>" + mainnetRulesHTML)
 	tmplData := map[string]interface{}{
@@ -193,6 +214,9 @@ var htmlHeadTemplate = `<head>
 <meta property='og:description' content='{{.Page.Description}}'>{{end}}
 <meta property='og:title' content='{{.Page.Title}} - Skywire Network'>
 <meta property='og:type' content='website'>
+{{if .Page.Canonical}}<link rel='canonical' href='{{.Page.Canonical}}'>
+<meta property='og:url' content='{{.Page.Canonical}}'>
+<meta property='og:image' content='{{.Page.OGImage}}'>{{end}}
 <style type='text/css'>
 a {
 		color: #3399FF;

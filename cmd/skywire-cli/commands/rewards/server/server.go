@@ -151,13 +151,69 @@ func server(e error) {
 			c.Status(http.StatusNoContent)
 		})
 
+		r1.GET("/robots.txt", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Content-Type", "text/plain")
+			c.Writer.WriteHeader(http.StatusOK)
+			base := strings.TrimRight(canonicalDomain, "/")
+			c.Writer.Write([]byte("User-agent: *\nAllow: /\n")) //nolint:errcheck,gosec
+			if base != "" {
+				c.Writer.Write([]byte("Sitemap: " + base + "/sitemap.xml\n")) //nolint:errcheck,gosec
+			}
+		})
+
+		r1.GET("/sitemap.xml", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Content-Type", "application/xml")
+			c.Writer.WriteHeader(http.StatusOK)
+			base := strings.TrimRight(canonicalDomain, "/")
+			if base == "" {
+				base = "https://theskywirenetwork.net"
+			}
+			urls := []struct{ loc, priority string }{
+				{"/", "1.0"},
+				{"/skycoin-rewards", "0.9"},
+				{"/stats", "0.7"},
+				{"/log-collection", "0.6"},
+				{"/log-collection/tree", "0.6"},
+				{"/transport-graph", "0.5"},
+				{"/stats/version-history", "0.5"},
+				{"/stats/bandwidth-history", "0.5"},
+				{"/stats/visor-bandwidth", "0.5"},
+				{"/log-collection/tplogs", "0.4"},
+				{"/login", "0.3"},
+			}
+			// Add recent reward dates
+			histDir := filepath.Join(wd, "hist")
+			if entries, err := os.ReadDir(histDir); err == nil {
+				seen := make(map[string]bool)
+				for i := len(entries) - 1; i >= 0 && len(seen) < 30; i-- {
+					name := entries[i].Name()
+					if len(name) >= 10 {
+						date := name[:10]
+						if _, err := time.Parse("2006-01-02", date); err == nil && !seen[date] {
+							seen[date] = true
+							urls = append(urls, struct{ loc, priority string }{"/skycoin-rewards/hist/" + date, "0.6"})
+						}
+					}
+				}
+			}
+			xml := `<?xml version="1.0" encoding="UTF-8"?>` + "\n" +
+				`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` + "\n"
+			for _, u := range urls {
+				xml += "  <url><loc>" + base + u.loc + "</loc><priority>" + u.priority + "</priority></url>\n"
+			}
+			xml += "</urlset>\n"
+			c.Writer.Write([]byte(xml)) //nolint:errcheck,gosec
+		})
+
 		r1.GET("/transports", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Content-Type", "text/html;charset=utf-8")
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
 			c.Writer.WriteHeader(http.StatusOK)
 			c.Writer.Flush()
-			c.Writer.Write([]byte(chunkedPageHead("Transport Statistics", "Live transport statistics for the Skywire Network"))) //nolint:errcheck,gosec
+			c.Writer.Write([]byte(chunkedPageHead("Transport Statistics", "Live transport statistics for the Skywire Network", "/transport-graph"))) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -175,7 +231,7 @@ func server(e error) {
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
 			c.Writer.WriteHeader(http.StatusOK)
 			c.Writer.Flush()
-			c.Writer.Write([]byte(chunkedPageHead("Transport Map", "Geographic map of active Skywire transports"))) //nolint:errcheck,gosec
+			c.Writer.Write([]byte(chunkedPageHead("Transport Map", "Geographic map of active Skywire transports", "/transport-graph"))) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -240,7 +296,7 @@ func server(e error) {
 			c.Writer.Header().Set("Transfer-Encoding", "chunked") //nolint:errcheck,gosec
 			c.Writer.WriteHeader(http.StatusOK)
 			c.Writer.Flush()
-			c.Writer.Write([]byte(chunkedPageHead("Log Collection", "Skywire visor survey and transport log collection overview"))) //nolint:errcheck,gosec
+			c.Writer.Write([]byte(chunkedPageHead("Log Collection", "Skywire visor survey and transport log collection overview", "/log-collection"))) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte("<body style='background-color:black;color:white;'>\n<style type='text/css'>\na { color: #3399FF; }\na:visited { color: #FF00FF; }\npre {\n  font-family:Courier New;\n  font-size:10pt;\n}\n.af_line {\n  color: gray;\n  text-decoration: none;\n}\n.column {\n  float: left;\n  width: 30%;\n  padding: 10px;\n}\n.row:after {\n  content: '';\n  display: table;\n  clear: both;\n}\n#latest-content-anchor {\n  visibility: hidden;\n}\n</style>\n<pre>")) //nolint:errcheck,gosec  //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -299,7 +355,7 @@ func server(e error) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
 			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write([]byte(chunkedPageHead("Survey Index", "Index of Skywire visor surveys and transport logs on the Skywire Network"))) //nolint:errcheck,gosec
+			c.Writer.Write([]byte(chunkedPageHead("Survey Index", "Index of Skywire visor surveys and transport logs on the Skywire Network", "/log-collection/tree"))) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -371,7 +427,7 @@ func server(e error) {
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Transfer-Encoding", "chunked")
 			c.Writer.WriteHeader(http.StatusOK)
-			c.Writer.Write([]byte(chunkedPageHead("Visor Survey", "Skywire visor survey and log details"))) //nolint:errcheck,gosec
+			c.Writer.Write([]byte(chunkedPageHead("Visor Survey", "Skywire visor survey and log details", "/log-collection/tree/"+c.Param("pk")))) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -409,7 +465,7 @@ func server(e error) {
 			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
 			c.Writer.Write([]byte(func() (l string) { //nolint:errcheck,gosec
-				l = chunkedPageHead("Transport Bandwidth Logs", "Daily transport bandwidth logs for the Skywire Network")
+				l = chunkedPageHead("Transport Bandwidth Logs", "Daily transport bandwidth logs for the Skywire Network", "/log-collection/tplogs")
 				l += navlinks
 				l += "<p><a href='/stats/bandwidth-history'>View Bandwidth History Graph</a></p>"
 				l += "<p style='color:#36A2EB'>Blue = Verified Bandwidth</p>"
@@ -466,7 +522,7 @@ func server(e error) {
 			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
 
-			l := chunkedPageHead("Network Statistics", "Skywire Network hardware, OS, and geographic statistics")
+			l := chunkedPageHead("Network Statistics", "Skywire Network hardware, OS, and geographic statistics", "/stats")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
 			l += "</head>"
 			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
@@ -607,7 +663,7 @@ func server(e error) {
 			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
 
-			l := chunkedPageHead("Version History", "Skywire visor version adoption history")
+			l := chunkedPageHead("Version History", "Skywire visor version adoption history", "/stats/version-history")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
 			l += "</head>"
 			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
@@ -647,7 +703,7 @@ func server(e error) {
 			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
 
-			l := chunkedPageHead("Bandwidth History", "Skywire Network bandwidth usage history")
+			l := chunkedPageHead("Bandwidth History", "Skywire Network bandwidth usage history", "/stats/bandwidth-history")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
 			l += "</head>"
 			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
@@ -677,7 +733,7 @@ func server(e error) {
 			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			c.Writer.WriteHeader(http.StatusOK)
 
-			l := chunkedPageHead("Visor Bandwidth", "Per-visor bandwidth usage on the Skywire Network")
+			l := chunkedPageHead("Visor Bandwidth", "Per-visor bandwidth usage on the Skywire Network", "/stats/visor-bandwidth")
 			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
 			l += "</head>"
 			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
@@ -809,11 +865,11 @@ func server(e error) {
 				fmt.Println("Error parsing Front Page template:", err1)
 			}
 			tmpl := tmpl0
-			htmlPageTemplateData1 := htmlTemplateData{
+			htmlPageTemplateData1 := (htmlTemplateData{
 				Title:       "Skycoin Reward History",
 				Description: "Daily Skycoin reward calculation and distribution history for the Skywire Network.",
 				Content:     htmpl.HTML(l), //nolint:gosec
-			}
+			}).withCanonical("/skycoin-rewards")
 			tmplData := map[string]interface{}{
 				"Page": htmlPageTemplateData1,
 			}
@@ -1243,11 +1299,11 @@ func server(e error) {
 				fmt.Println("Error parsing Front Page template:", err1)
 			}
 			tmpl := tmpl0
-			htmlPageTemplateData1 := htmlTemplateData{
+			htmlPageTemplateData1 := (htmlTemplateData{
 				Title:       "Skycoin Rewards " + c.Param("date"),
 				Description: "Skycoin reward calculation details for " + c.Param("date") + " on the Skywire Network.",
 				Content:     htmpl.HTML(l), //nolint:gosec
-			}
+			}).withCanonical("/skycoin-rewards/hist/" + c.Param("date"))
 			tmplData := map[string]interface{}{
 				"Page": htmlPageTemplateData1,
 			}
