@@ -45,8 +45,13 @@ type Graph struct {
 }
 
 // NewGraph creates a new Graph accessing given transport store, such Graph is created by exploring
-// from rootPK cipher PubKey
+// from rootPK cipher PubKey. Uses MaxGraphDepth for depth limiting.
 func NewGraph(ctx context.Context, s store.Store, rootPK cipher.PubKey) (*Graph, error) {
+	return NewGraphWithDepth(ctx, s, rootPK, MaxGraphDepth)
+}
+
+// NewGraphWithDepth creates a new Graph with an explicit depth limit for exploration.
+func NewGraphWithDepth(ctx context.Context, s store.Store, rootPK cipher.PubKey, maxDepth int) (*Graph, error) {
 	g := &Graph{
 		store:   s,
 		visited: make(map[cipher.PubKey]*vertex),
@@ -59,7 +64,7 @@ func NewGraph(ctx context.Context, s store.Store, rootPK cipher.PubKey) (*Graph,
 	}
 
 	rootVertex := newVertex(rootPK, rootConnections)
-	err = g.DeepFirstSearch(ctx, rootVertex)
+	err = g.deepFirstSearch(ctx, rootVertex, maxDepth)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +88,7 @@ func (g *Graph) MarkAndSweep(ctx context.Context, rootPK cipher.PubKey) ([]ciphe
 	}
 
 	rootVertex := newVertex(rootPK, rootConnections)
-	err = g.DeepFirstSearch(ctx, rootVertex)
+	err = g.deepFirstSearch(ctx, rootVertex, MaxGraphDepth)
 	if err != nil {
 		return nil, err
 	}
@@ -91,25 +96,47 @@ func (g *Graph) MarkAndSweep(ctx context.Context, rootPK cipher.PubKey) ([]ciphe
 	return g.Sweep(), nil
 }
 
-// DeepFirstSearch as Mark algorithm. Recursive
-func (g *Graph) DeepFirstSearch(ctx context.Context, v *vertex) error {
-	select {
-	case <-ctx.Done():
-		return ErrContextClosed
-	default:
-		if _, ok := g.visited[v.edge]; !ok {
-			v.visited = true
-			g.visited[v.edge] = v
+// MaxGraphDepth limits how deep the graph exploration goes from the root.
+// This prevents OOM on large networks. Used as default by NewGraph.
+var MaxGraphDepth = 10
+
+// deepFirstSearch explores the graph iteratively with depth limiting.
+// Uses an explicit stack to avoid stack overflow on large networks.
+func (g *Graph) deepFirstSearch(ctx context.Context, v *vertex, maxDepth int) error {
+	type stackItem struct {
+		v     *vertex
+		depth int
+	}
+
+	stack := []stackItem{{v: v, depth: 0}}
+
+	for len(stack) > 0 {
+		select {
+		case <-ctx.Done():
+			return ErrContextClosed
+		default:
 		}
 
-		for _, connection := range v.connections {
+		item := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if _, ok := g.visited[item.v.edge]; ok {
+			continue
+		}
+
+		item.v.visited = true
+		g.visited[item.v.edge] = item.v
+
+		if item.depth >= maxDepth {
+			continue
+		}
+
+		for _, connection := range item.v.connections {
 			var connectionPK cipher.PubKey
-			if v.edge == connection.Edges[0] {
-				connectionPKEdge := connection.Edges[1]
-				connectionPK = connectionPKEdge
+			if item.v.edge == connection.Edges[0] {
+				connectionPK = connection.Edges[1]
 			} else {
-				connectionPKEdge := connection.Edges[0]
-				connectionPK = connectionPKEdge
+				connectionPK = connection.Edges[0]
 			}
 			if _, ok := g.visited[connectionPK]; !ok {
 				connectionConnections, err := g.store.GetTransportsByEdge(ctx, connectionPK)
@@ -118,17 +145,15 @@ func (g *Graph) DeepFirstSearch(ctx context.Context, v *vertex) error {
 				}
 
 				neighbourVertex := newVertex(connectionPK, connectionConnections)
-				v.neighbors[connectionPK] = neighbourVertex
-				if err = g.DeepFirstSearch(ctx, neighbourVertex); err != nil {
-					return err
-				}
+				item.v.neighbors[connectionPK] = neighbourVertex
+				stack = append(stack, stackItem{v: neighbourVertex, depth: item.depth + 1})
 			} else {
-				v.neighbors[connectionPK] = g.visited[connectionPK]
+				item.v.neighbors[connectionPK] = g.visited[connectionPK]
 			}
 		}
-
-		return nil
 	}
+
+	return nil
 }
 
 // Sweep checks which nodes cannot be reached in the Graph and prepares for next iteration
