@@ -126,7 +126,7 @@ func runConfigGenWithEnv(t *testing.T, envContent string, extraFlags ...string) 
 	root := repoRoot(t)
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, "test-skyenv.conf")
-	if err := os.WriteFile(envPath, []byte(envContent), 0644); err != nil {
+	if err := os.WriteFile(envPath, []byte(envContent), 0600); err != nil {
 		t.Fatal(err)
 	}
 	flags := strings.Join(extraFlags, " ")

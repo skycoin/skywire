@@ -38,7 +38,7 @@ func TestScriptExecString(t *testing.T) {
 	// Create a temp skyenv file that sets TEST_VAR
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, "test.conf")
-	if err := os.WriteFile(envPath, []byte("TEST_VAR='hello world'\n"), 0644); err != nil {
+	if err := os.WriteFile(envPath, []byte("TEST_VAR='hello world'\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -79,7 +79,7 @@ func TestScriptExecBool(t *testing.T) {
 
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, "test.conf")
-	if err := os.WriteFile(envPath, []byte("MYBOOL=true\nMYFALSE=false\n"), 0644); err != nil {
+	if err := os.WriteFile(envPath, []byte("MYBOOL=true\nMYFALSE=false\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -111,7 +111,7 @@ func TestScriptExecArray(t *testing.T) {
 
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, "test.conf")
-	if err := os.WriteFile(envPath, []byte("MYARR=('aaa' 'bbb' 'ccc')\n"), 0644); err != nil {
+	if err := os.WriteFile(envPath, []byte("MYARR=('aaa' 'bbb' 'ccc')\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -138,7 +138,7 @@ func TestScriptExecInt(t *testing.T) {
 
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, "test.conf")
-	if err := os.WriteFile(envPath, []byte("MYINT=42\n"), 0644); err != nil {
+	if err := os.WriteFile(envPath, []byte("MYINT=42\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
