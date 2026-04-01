@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -42,6 +44,27 @@ const (
 const (
 	configFilePerms = 0600
 )
+
+// testenvPortOffset is added to localhost ports when generating a testenv config
+// to avoid conflicts with a production visor running on the same machine.
+const testenvPortOffset = 10000
+
+// offsetAddr adds testenvPortOffset to a host:port or :port address string.
+// Returns the original address unchanged if parsing fails or testenv is not enabled.
+func offsetAddr(addr string) string {
+	if !isTestEnv {
+		return addr
+	}
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return addr
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port+testenvPortOffset))
+}
 
 // RootCmd contains commands that interact with the config of local skywire-visor
 var checkPKCmd = &cobra.Command{
@@ -205,8 +228,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "killsw")
 	genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", scriptExecString("${ADDVPNPK}"), "set vpn server public key for vpn client")
 	gHiddenFlags = append(gHiddenFlags, "addvpn")
-	genConfigCmd.Flags().StringVar(&addVPNServerWhitelist, "vpnwl", scriptExecString("${VPNSERVERWL}"), "comma-separated list of public keys allowed to connect to vpn server (empty = allow all)")
-	gHiddenFlags = append(gHiddenFlags, "vpnwl")
+	genConfigCmd.Flags().StringVar(&addVPNServerWhitelist, "vpnwl", scriptExecArray("${VPNSERVERWL[@]}"), "comma-separated list of public keys allowed to connect to vpn server (empty = allow all)")
 	genConfigCmd.Flags().StringVar(&setVPNServerSecure, "secure", scriptExecString("${VPNSEVERSECURE}"), "change secure mode status of vpn server")
 	gHiddenFlags = append(gHiddenFlags, "secure")
 	genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", scriptExecString("${VPNSEVERNETIFC}"), "VPN Server network interface (detected: "+getInterfaceNames()+")")
@@ -217,10 +239,16 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "proxyclientpk")
 	genConfigCmd.Flags().BoolVar(&enableProxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client")
 	gHiddenFlags = append(gHiddenFlags, "startproxyclient")
-	genConfigCmd.Flags().BoolVar(&disableProxyServerAutostart, "noproxyserver", scriptExecBool("${NOPROXYSERVER:-false}"), "disable autostart of proxy server")
-	gHiddenFlags = append(gHiddenFlags, "noproxyserver")
-	genConfigCmd.Flags().StringVar(&proxyServerWhitelist, "proxywl", scriptExecString("${PROXYSERVERWL}"), "comma-separated list of public keys allowed to connect to proxy server (empty = allow all)")
-	gHiddenFlags = append(gHiddenFlags, "proxywl")
+	genConfigCmd.Flags().BoolVar(&isProxyServerEnable, "serveproxy", scriptExecBool("${PROXYSERVER:-true}"), "autostart proxy server (default: true)")
+	genConfigCmd.Flags().StringVar(&proxyServerWhitelist, "proxywl", scriptExecArray("${PROXYSERVERWL[@]}"), "comma-separated list of public keys allowed to connect to proxy server (empty = allow all)")
+
+	// Skychat flags
+	genConfigCmd.Flags().BoolVar(&isSkychatEnable, "servechat", scriptExecBool("${SKYCHAT:-true}"), "autostart skychat (default: true)")
+	genConfigCmd.Flags().StringVar(&skychatAddr, "chataddr", scriptExecString("${SKYCHATADDR:-"+skyenv.SkychatAddr+"}"), "skychat local address")
+	gHiddenFlags = append(gHiddenFlags, "chataddr")
+
+	// Reward address
+	genConfigCmd.Flags().StringVar(&rewardSkyAddr, "rewardaddr", scriptExecString("${REWARDSKYADDR}"), "skycoin reward address or xpub key")
 
 	// Path and environment flags
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
@@ -254,6 +282,21 @@ func init() {
 	// Version and misc flags
 	genConfigCmd.Flags().StringVar(&ver, "version", scriptExecString("${VERSION}"), "custom version testing override")
 	gHiddenFlags = append(gHiddenFlags, "version")
+
+	// Advanced tuning flags (visible with --all)
+	genConfigCmd.Flags().StringVar(&hvHTTPAddr, "hvaddr", scriptExecString("${HVHTTPADDR}"), "hypervisor HTTP address")
+	gHiddenFlags = append(gHiddenFlags, "hvaddr")
+	genConfigCmd.Flags().StringVar(&stunServers, "stun", scriptExecArray("${STUNSERVERS[@]}"), "comma-separated list of STUN servers")
+	gHiddenFlags = append(gHiddenFlags, "stun")
+	genConfigCmd.Flags().StringVar(&shutdownTimeout, "timeout", scriptExecString("${SHUTDOWNTIMEOUT}"), "graceful shutdown timeout (e.g. 10s)")
+	gHiddenFlags = append(gHiddenFlags, "timeout")
+	genConfigCmd.Flags().StringVar(&publicVisorRegTimeout, "regtimeout", scriptExecString("${REGTIMEOUT}"), "public visor registration timeout (e.g. 10m)")
+	gHiddenFlags = append(gHiddenFlags, "regtimeout")
+	genConfigCmd.Flags().IntVar(&publicVisorMaxTransports, "maxtransports", 0, "public visor max transports")
+	gHiddenFlags = append(gHiddenFlags, "maxtransports")
+	genConfigCmd.Flags().IntVar(&muxRoutes, "muxroutes", 0, "number of parallel mux routes per connection")
+	gHiddenFlags = append(gHiddenFlags, "muxroutes")
+
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 
 	//show all flags on help
@@ -714,6 +757,10 @@ func configureDMSG() {
 
 // configureTransports sets up transport configuration on conf.
 func configureTransports() {
+	tpLogPath := skyenv.LocalPath + "/" + skyenv.TpLogStore
+	if isTestEnv {
+		tpLogPath = skyenv.LocalPath + "-testenv/" + skyenv.TpLogStore
+	}
 	conf.Transport = &visorconfig.Transport{
 		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
 		AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
@@ -721,7 +768,7 @@ func configureTransports() {
 		TransportSetupPKs: services.TransportSetupPKs,
 		LogStore: &visorconfig.LogStore{
 			Type:             visorconfig.FileLogStore,
-			Location:         skyenv.LocalPath + "/" + skyenv.TpLogStore,
+			Location:         tpLogPath,
 			RotationInterval: visorconfig.DefaultLogRotationInterval,
 		},
 		SudphPort:   sudphPort,
@@ -741,6 +788,10 @@ func configureRouting() {
 		CalculateRoutes:    enableCalculateRoutes,
 	}
 
+	if muxRoutes > 0 {
+		conf.Routing.MuxRoutes = muxRoutes
+	}
+
 	if oldConfCache != nil && oldConfCache.Routing != nil {
 		if oldConfCache.Routing.MinHops != 0 {
 			conf.Routing.MinHops = oldConfCache.Routing.MinHops
@@ -753,23 +804,49 @@ func configureRouting() {
 // overrides if enabled.
 func configureLauncher(log *logging.Logger) {
 	_ = log
+	localPath := skyenv.LocalPath
+	if isTestEnv {
+		localPath = skyenv.LocalPath + "-testenv"
+	}
 	conf.Launcher = &visorconfig.Launcher{
 		ServiceDisc:   services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
 		Apps:          nil,
-		ServerAddr:    skyenv.AppSrvAddr,
+		ServerAddr:    offsetAddr(skyenv.AppSrvAddr),
 		BinPath:       skyenv.AppBinPath,
 		DisplayNodeIP: isDisplayNodeIP,
 	}
 	conf.UptimeTracker = &visorconfig.UptimeTracker{
 		Addr: services.UptimeTracker, //utilenv.UptimeTrackerAddr,
 	}
-	conf.CLIAddr = skyenv.RPCAddr
+	conf.CLIAddr = offsetAddr(skyenv.RPCAddr)
 	conf.LogLevel = logLevel
-	conf.LocalPath = skyenv.LocalPath
-	conf.DmsgHTTPServerPath = skyenv.LocalPath + "/" + skyenv.Custom
-	conf.StunServers = services.StunServers //utilenv.GetStunServers()
-	conf.ShutdownTimeout = visorconfig.DefaultTimeout
+	conf.LocalPath = localPath
+	conf.DmsgHTTPServerPath = localPath + "/" + skyenv.Custom
+	if stunServers != "" {
+		conf.StunServers = strings.Split(stunServers, ",")
+		for i := range conf.StunServers {
+			conf.StunServers[i] = strings.TrimSpace(conf.StunServers[i])
+		}
+	} else {
+		conf.StunServers = services.StunServers //utilenv.GetStunServers()
+	}
+	if shutdownTimeout != "" {
+		d, err := time.ParseDuration(shutdownTimeout)
+		if err != nil {
+			log.WithError(err).Fatal("Failed to parse shutdown timeout")
+		}
+		conf.ShutdownTimeout = visorconfig.Duration(d)
+	} else {
+		conf.ShutdownTimeout = visorconfig.DefaultTimeout
+	}
 	conf.GeoIP = skyenv.GeoIP
+	if rewardSkyAddr != "" {
+		canonical, _, err := rewardconfig.ValidateRewardAddress(rewardSkyAddr)
+		if err != nil {
+			log.WithError(err).Fatal("Invalid reward address")
+		}
+		conf.RewardAddress = canonical
+	}
 
 	conf.Dmsgpty = &visorconfig.Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
@@ -778,7 +855,7 @@ func configureLauncher(log *logging.Logger) {
 	}
 
 	conf.STCP = &network.STCPConfig{
-		ListeningAddress: skyenv.STCPAddr,
+		ListeningAddress: offsetAddr(skyenv.STCPAddr),
 		PKTable:          nil,
 	}
 
@@ -830,9 +907,21 @@ func configureLauncher(log *logging.Logger) {
 	// Configure public visor
 	conf.IsPublic = isPublic
 	if isPublic {
+		regTimeout := visorconfig.Duration(skyenv.PublicVisorRegistrationTimeout)
+		if publicVisorRegTimeout != "" {
+			d, err := time.ParseDuration(publicVisorRegTimeout)
+			if err != nil {
+				log.WithError(err).Fatal("Failed to parse registration timeout")
+			}
+			regTimeout = visorconfig.Duration(d)
+		}
+		maxTp := visorconfig.PublicVisorMaxTransports
+		if publicVisorMaxTransports > 0 {
+			maxTp = publicVisorMaxTransports
+		}
 		conf.PublicVisorConfig = &visorconfig.PublicVisorConfig{
-			RegistrationTimeout: visorconfig.Duration(skyenv.PublicVisorRegistrationTimeout),
-			MaxTransports:       visorconfig.PublicVisorMaxTransports,
+			RegistrationTimeout: regTimeout,
+			MaxTransports:       maxTp,
 		}
 	}
 }
@@ -862,7 +951,12 @@ func configureHypervisor(log *logging.Logger) {
 	}
 	// Local hypervisor setting
 	if isHypervisor {
-		config := visorconfig.GenerateWorkDirConfig(false)
+		config := visorconfig.GenerateWorkDirConfig(isTestEnv)
+		if hvHTTPAddr != "" {
+			config.HTTPAddr = hvHTTPAddr
+		} else {
+			config.HTTPAddr = offsetAddr(config.HTTPAddr)
+		}
 		conf.Hypervisor = &config
 	}
 
@@ -911,6 +1005,10 @@ func configureHypervisor(log *logging.Logger) {
 // configureApps sets up launcher app configurations (internal or external),
 // handles app disable/enable flags, and configures VPN/proxy app settings.
 func configureApps(log *logging.Logger) {
+	// Apply port offsets for testenv to avoid conflicts with production visor
+	chatAddr := offsetAddr(skychatAddr)
+	socksClientAddr := offsetAddr(skyenv.SkysocksClientAddr)
+
 	// App config settings
 	if externalApps {
 		// External apps configuration (apps run as separate processes)
@@ -925,14 +1023,14 @@ func configureApps(log *logging.Logger) {
 			{
 				Name:      skyenv.SkychatName,
 				Binary:    "skywire",
-				AutoStart: true,
+				AutoStart: isSkychatEnable,
 				Port:      routing.Port(skyenv.SkychatPort),
-				Args:      append([]string{"app", "skychat"}, "--addr", skyenv.SkychatAddr),
+				Args:      append([]string{"app", "skychat"}, "--addr", chatAddr),
 			},
 			{
 				Name:      skyenv.SkysocksName,
 				Binary:    "skywire",
-				AutoStart: true,
+				AutoStart: isProxyServerEnable,
 				Port:      routing.Port(skyenv.SkysocksPort),
 				Args:      []string{"app", "skysocks"},
 			},
@@ -941,7 +1039,7 @@ func configureApps(log *logging.Logger) {
 				Binary:    "skywire",
 				AutoStart: false,
 				Port:      routing.Port(skyenv.SkysocksClientPort),
-				Args:      append([]string{"app", "skysocks-client"}, "--addr", skyenv.SkysocksClientAddr),
+				Args:      append([]string{"app", "skysocks-client"}, "--addr", socksClientAddr),
 			},
 			{
 				Name:      skyenv.VPNServerName,
@@ -962,13 +1060,13 @@ func configureApps(log *logging.Logger) {
 			},
 			{
 				Name:      skyenv.SkychatName,
-				AutoStart: true,
+				AutoStart: isSkychatEnable,
 				Port:      routing.Port(skyenv.SkychatPort),
-				Args:      []string{"--addr", skyenv.SkychatAddr},
+				Args:      []string{"--addr", chatAddr},
 			},
 			{
 				Name:      skyenv.SkysocksName,
-				AutoStart: true,
+				AutoStart: isProxyServerEnable,
 				Port:      routing.Port(skyenv.SkysocksPort),
 				Args:      []string{},
 			},
@@ -976,7 +1074,7 @@ func configureApps(log *logging.Logger) {
 				Name:      skyenv.SkysocksClientName,
 				AutoStart: false,
 				Port:      routing.Port(skyenv.SkysocksClientPort),
-				Args:      []string{"--addr", skyenv.SkysocksClientAddr},
+				Args:      []string{"--addr", socksClientAddr},
 			},
 			{
 				Name:      skyenv.VPNServerName,
@@ -1066,13 +1164,6 @@ func configureApps(log *logging.Logger) {
 		changeAppsConfig(conf, "skysocks", "--whitelist", proxyServerWhitelist)
 	}
 
-	if disableProxyServerAutostart {
-		for i, app := range conf.Launcher.Apps {
-			if app.Name == "skysocks" {
-				conf.Launcher.Apps[i].AutoStart = false
-			}
-		}
-	}
 	if enableProxyClientAutostart {
 		for i, app := range conf.Launcher.Apps {
 			if app.Name == "skysocks-client" {

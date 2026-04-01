@@ -68,7 +68,7 @@ func init() {
 		"data directory")
 }
 
-func runDaemon(cmd *cobra.Command, args []string) {
+func runDaemon(_ *cobra.Command, _ []string) {
 	n, err := node.NewNode(cfg)
 	if err != nil {
 		log.Fatal(err)
