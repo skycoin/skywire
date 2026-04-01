@@ -306,6 +306,7 @@ func server(e error) {
 			c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n\n", surveycount)))                          //nolint:errcheck,gosec,staticcheck
 			c.Writer.Flush()
 			// List visor directories with survey status
+			wl := isWhitelisted(c)
 			backupsDir := filepath.Join(wd, "log_backups")
 			dirEntries, err := os.ReadDir(backupsDir)
 			if err != nil {
@@ -322,7 +323,21 @@ func server(e error) {
 					if surveyErr != nil {
 						status = "<span style='color:#FF6384'>no survey</span>"
 					}
-					fmt.Fprintf(c.Writer, "<a href='/log-collection/tree/%s'>%s</a>  %s\n", pk, pk, status) //nolint:errcheck,gosec
+					fmt.Fprintf(c.Writer, "<a href='/log-collection/tree/%s'>%s</a>  %s", pk, pk, status) //nolint:errcheck,gosec
+					if wl {
+						// Show links to individual files for whitelisted keys
+						pkDir := filepath.Join(backupsDir, pk)
+						files, fErr := os.ReadDir(pkDir)
+						if fErr == nil {
+							for _, f := range files {
+								if f.IsDir() {
+									continue
+								}
+								fmt.Fprintf(c.Writer, "  <a href='/log-collection/file/%s/%s'>%s</a>", pk, f.Name(), f.Name()) //nolint:errcheck,gosec
+							}
+						}
+					}
+					fmt.Fprint(c.Writer, "\n") //nolint:errcheck,gosec
 				}
 			}
 			c.Writer.Flush()
@@ -365,9 +380,26 @@ func server(e error) {
 			st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -rup ` + c.Param("pk")).Bytes() //nolint:errcheck,gosec
 			c.Writer.Write(ansihtml.ConvertToHTML(st))                                                      //nolint:errcheck,gosec
 			c.Writer.Flush()
-			c.Writer.Write([]byte(htmltoplink)) //nolint:errcheck,gosec  //nolint:errcheck,gosec
+			// For whitelisted keys, show clickable file links
+			if isWhitelisted(c) {
+				for _, pk := range pks {
+					pkDir := filepath.Join(wd, "log_backups", pk)
+					files, fErr := os.ReadDir(pkDir)
+					if fErr == nil {
+						c.Writer.Write([]byte(fmt.Sprintf("\n<b>Files for %s:</b>\n", pk))) //nolint:errcheck,gosec
+						for _, f := range files {
+							if f.IsDir() {
+								continue
+							}
+							fmt.Fprintf(c.Writer, "  <a href='/log-collection/file/%s/%s'>%s</a>\n", pk, f.Name(), f.Name()) //nolint:errcheck,gosec
+						}
+					}
+				}
+				c.Writer.Flush()
+			}
+			c.Writer.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
 			c.Writer.Flush()
-			c.Writer.Write([]byte(htmlend)) //nolint:errcheck,gosec  //nolint:errcheck,gosec
+			c.Writer.Write([]byte(htmlend)) //nolint:errcheck,gosec
 			c.Writer.Flush()
 		})
 
@@ -800,6 +832,39 @@ func server(e error) {
 			authRoute.Use(whitelistAuth(wlkeys))
 		}
 
+		// Serve individual log files — whitelisted keys only
+		authRoute.GET("/log-collection/file/:pk/:filename", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			if len(wlkeys) == 0 {
+				c.Writer.WriteHeader(http.StatusUnauthorized)
+				c.Writer.Write([]byte("401 Unauthorized")) //nolint:errcheck,gosec
+				return
+			}
+			pk := c.Param("pk")
+			filename := c.Param("filename")
+			// Sanitize: only allow simple filenames (no path traversal)
+			if strings.Contains(filename, "/") || strings.Contains(filename, "..") {
+				c.Writer.WriteHeader(http.StatusBadRequest)
+				c.Writer.Write([]byte("400 Bad Request")) //nolint:errcheck,gosec
+				return
+			}
+			filePath := filepath.Join(wd, "log_backups", pk, filename)
+			data, err := os.ReadFile(filePath) //nolint:gosec
+			if err != nil {
+				c.Writer.WriteHeader(http.StatusNotFound)
+				c.Writer.Write([]byte("404 Not Found")) //nolint:errcheck,gosec
+				return
+			}
+			if strings.HasSuffix(filename, ".json") {
+				c.Writer.Header().Set("Content-Type", "application/json")
+			} else {
+				c.Writer.Header().Set("Content-Type", "text/plain")
+			}
+			c.Writer.WriteHeader(http.StatusOK)
+			c.Writer.Write(data) //nolint:errcheck,gosec
+			c.Writer.Flush()
+		})
+
 		// dmsgpost dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80/reward -d $(skycoin-cli createRawTransaction /home/user/.skycoin/wallets/2023_06_29.wlt --csv <(curl --silent -L http://fiber.skywire.dev/skycoin-rewards/csv) -a 24MGsKPDo3EJX4uF1h4CHcgmNNHmtGaLR5f) -s <secret-key-of-reward-whitelisted-pk>
 		authRoute.POST("/reward", func(c *gin.Context) {
 			//override the behavior of `public fallback` for this endpoint
@@ -1155,6 +1220,19 @@ func server(e error) {
 				l += "<a id='" + displayAddr + "'>" + displayAddr + "</a>," + strings.TrimRight(skyamt, "\n") + "\n"
 			}
 
+			// For whitelisted keys, add links to all raw files for this date
+			if isWhitelisted(c) {
+				histFiles, hErr := os.ReadDir(filepath.Join(wd, "hist"))
+				if hErr == nil {
+					l += "\n<b>Raw files:</b>\n"
+					for _, hf := range histFiles {
+						if strings.HasPrefix(hf.Name(), c.Param("date")) {
+							l += fmt.Sprintf("  <a href='/skycoin-rewards/hist/%s'>%s</a>\n", hf.Name(), hf.Name())
+						}
+					}
+				}
+			}
+
 			l += "<br>" + htmltoplink
 			tmpl0, err1 := tmpl.Clone()
 			if err1 != nil {
@@ -1499,6 +1577,24 @@ func cal() (ret string) {
 		startDayOfWeek = 0
 	}
 	return ret
+}
+
+// isWhitelisted checks if the current request comes from a whitelisted public key.
+// Returns true if wlkeys is empty (public mode) or the remote PK matches a whitelisted key.
+func isWhitelisted(c *gin.Context) bool {
+	if len(wlkeys) == 0 {
+		return false // public mode — no special access
+	}
+	remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	for _, wlPK := range wlkeys {
+		if remotePK == wlPK.String() {
+			return true
+		}
+	}
+	return false
 }
 
 func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
