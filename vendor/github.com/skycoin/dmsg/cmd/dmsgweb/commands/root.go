@@ -98,7 +98,7 @@ func scriptExecString(s, envfile string) string {
 		}
 		return defaultvalue
 	}
-	z, err := script.Exec(fmt.Sprintf(`sh -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, envfile, s)).String()
+	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, envfile, s)).String()
 	if err == nil {
 		return strings.TrimSpace(z)
 	}
@@ -239,7 +239,7 @@ func scriptExecInt(s, envfile string) int {
 		}
 		return 0
 	}
-	z, err := script.Exec(fmt.Sprintf(`sh -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, envfile, s)).String()
+	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, envfile, s)).String()
 	if err == nil {
 		if z == "" {
 			return 0
@@ -279,7 +279,7 @@ func scriptExecUint(s, envfile string) uint {
 		}
 		return 0
 	}
-	z, err := script.Exec(fmt.Sprintf(`sh -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, envfile, s)).String()
+	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, envfile, s)).String()
 	if err == nil {
 		if z == "" {
 			return 0
