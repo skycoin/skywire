@@ -8,12 +8,13 @@ import (
 
 	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/pkg/cxo/node"
 )
 
-// Flag variables for CXO daemon — bound at init, applied to cfg in PreRun.
+// Flag variables for CXO daemon — bound at init time to avoid calling
+// node.NewConfig() during package init (which panics when $HOME is unset).
+// These are applied to the real config in runDaemon.
 var (
 	flagMaxConns    int
 	flagMaxFillTime time.Duration
@@ -32,83 +33,96 @@ var (
 	flagDataDir     string
 )
 
-var cfg *node.Config
-
 var daemonCmd = &cobra.Command{
 	Use:   "daemon",
 	Short: "Run CXO daemon",
 	Long:  "CXO object distribution daemon. Listens for connections, replicates CX objects.",
-	PreRun: func(cmd *cobra.Command, _ []string) {
-		// Create config with real defaults (requires $HOME for DataDir).
-		// This runs only when the cxo daemon command is actually invoked.
-		cfg = node.NewConfig()
-		cfg.OnSubscribeRemote = acceptAllSubscriptions
-
-		// Apply only flags that were explicitly set by the user.
-		cmd.Flags().Visit(func(f *pflag.Flag) { //nolint:errcheck,gosec
-			switch f.Name {
-			case "max-connections":
-				cfg.MaxConnections = flagMaxConns
-			case "max-filling-time":
-				cfg.MaxFillingTime = flagMaxFillTime
-			case "max-heads":
-				cfg.MaxHeads = flagMaxHeads
-			case "rpc":
-				cfg.RPC = flagRPC
-			case "tcp":
-				cfg.TCP.Listen = flagTCPListen
-			case "tcp-response-timeout":
-				cfg.TCP.ResponseTimeout = flagTCPRespTO
-			case "tcp-pings":
-				cfg.TCP.Pings = flagTCPPings
-			case "udp":
-				cfg.UDP.Listen = flagUDPListen
-			case "udp-response-timeout":
-				cfg.UDP.ResponseTimeout = flagUDPRespTO
-			case "udp-pings":
-				cfg.UDP.Pings = flagUDPPings
-			case "public":
-				cfg.Public = flagPublic
-			case "log-prefix":
-				cfg.Logger.Prefix = flagLogPrefix
-			case "debug":
-				cfg.Logger.Debug = flagDebug
-			case "mem-db":
-				cfg.Config.InMemoryDB = flagMemDB
-			case "data-dir":
-				cfg.Config.DataDir = flagDataDir
-			}
-		})
-	},
-	Run: runDaemon,
+	Run:   runDaemon,
 }
 
 func init() {
 	f := daemonCmd.Flags()
 
+	// node
 	f.IntVar(&flagMaxConns, "max-connections", 0, "max connections, incoming and outgoing, tcp and udp")
 	f.DurationVar(&flagMaxFillTime, "max-filling-time", 0, "max time to fill a Root")
 	f.IntVar(&flagMaxHeads, "max-heads", 0, "max heads of a feed allowed")
 	f.StringVar(&flagRPC, "rpc", "", "RPC listening address")
 
+	// TCP
 	f.StringVar(&flagTCPListen, "tcp", "", "TCP listening address")
 	f.DurationVar(&flagTCPRespTO, "tcp-response-timeout", 0, "response timeout of TCP connections")
 	f.DurationVar(&flagTCPPings, "tcp-pings", 0, "pings interval of TCP connections")
 
+	// UDP
 	f.StringVar(&flagUDPListen, "udp", "", "UDP listening address")
 	f.DurationVar(&flagUDPRespTO, "udp-response-timeout", 0, "response timeout of UDP connections")
 	f.DurationVar(&flagUDPPings, "udp-pings", 0, "pings interval of UDP connections")
 
+	// public
 	f.BoolVar(&flagPublic, "public", false, "public server")
 
+	// logger
 	f.StringVar(&flagLogPrefix, "log-prefix", "", "log prefix")
 	f.BoolVar(&flagDebug, "debug", false, "print debug logs")
 
+	// skyobject
 	f.BoolVar(&flagMemDB, "mem-db", false, "use in-memory database")
 	f.StringVar(&flagDataDir, "data-dir", "", "data directory")
 }
 
-func runDaemon(_ *cobra.Command, _ []string) {
+func runDaemon(cmd *cobra.Command, _ []string) {
+	// Create config with real defaults here (not at init time).
+	cfg := node.NewConfig()
+	cfg.OnSubscribeRemote = acceptAllSubscriptions
+
+	// Override defaults with any explicitly-set flags.
+	if cmd.Flags().Changed("max-connections") {
+		cfg.MaxConnections = flagMaxConns
+	}
+	if cmd.Flags().Changed("max-filling-time") {
+		cfg.MaxFillingTime = flagMaxFillTime
+	}
+	if cmd.Flags().Changed("max-heads") {
+		cfg.MaxHeads = flagMaxHeads
+	}
+	if cmd.Flags().Changed("rpc") {
+		cfg.RPC = flagRPC
+	}
+	if cmd.Flags().Changed("tcp") {
+		cfg.TCP.Listen = flagTCPListen
+	}
+	if cmd.Flags().Changed("tcp-response-timeout") {
+		cfg.TCP.ResponseTimeout = flagTCPRespTO
+	}
+	if cmd.Flags().Changed("tcp-pings") {
+		cfg.TCP.Pings = flagTCPPings
+	}
+	if cmd.Flags().Changed("udp") {
+		cfg.UDP.Listen = flagUDPListen
+	}
+	if cmd.Flags().Changed("udp-response-timeout") {
+		cfg.UDP.ResponseTimeout = flagUDPRespTO
+	}
+	if cmd.Flags().Changed("udp-pings") {
+		cfg.UDP.Pings = flagUDPPings
+	}
+	if cmd.Flags().Changed("public") {
+		cfg.Public = flagPublic
+	}
+	if cmd.Flags().Changed("log-prefix") {
+		cfg.Logger.Prefix = flagLogPrefix
+	}
+	if cmd.Flags().Changed("debug") {
+		cfg.Logger.Debug = flagDebug
+	}
+	if cmd.Flags().Changed("mem-db") {
+		cfg.Config.InMemoryDB = flagMemDB
+	}
+	if cmd.Flags().Changed("data-dir") {
+		cfg.Config.DataDir = flagDataDir
+	}
+
 	n, err := node.NewNode(cfg)
 	if err != nil {
 		log.Fatal(err)
