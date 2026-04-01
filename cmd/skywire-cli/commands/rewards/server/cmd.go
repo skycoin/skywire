@@ -42,6 +42,7 @@ var (
 	healthOnly          bool
 	noUI                bool
 	buildTimeout        time.Duration
+	canonicalDomain     string
 	log                 = logging.MustGetLogger("rewards")
 )
 
@@ -78,6 +79,7 @@ func init() {
 	ServerCmd.Flags().BoolVar(&healthOnly, "health-only", false, "serve only /health endpoint for testing")
 	ServerCmd.Flags().BoolVar(&noUI, "no-ui", false, "skip cogentcore UI extraction and compilation, serve plain HTTP")
 	ServerCmd.Flags().DurationVar(&buildTimeout, "build-timeout", 5*time.Minute, "timeout for UI build process")
+	ServerCmd.Flags().StringVar(&canonicalDomain, "canonical", scriptExecString("${CANONICAL:-https://theskywirenetwork.net}"), "canonical domain for SEO (e.g. https://theskywirenetwork.net)")
 }
 
 // ServerCmd starts the reward system ui server
