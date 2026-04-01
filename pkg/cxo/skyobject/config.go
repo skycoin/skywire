@@ -79,7 +79,8 @@ func DataDir() string {
 	homeDir := UserHome()
 
 	if homeDir == "" {
-		panic("empty home dir")
+		// Fall back to /tmp when HOME is not set (e.g. systemd services)
+		homeDir = os.TempDir()
 	}
 
 	return filepath.Join(homeDir, skycoinDataDir, cxoSubDir)

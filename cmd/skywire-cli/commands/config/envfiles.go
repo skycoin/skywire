@@ -97,13 +97,18 @@ const envfileLinux = `#
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
 
+### Rewards #############################################################
+
+#--	Skycoin reward address or xpub key
+#REWARDSKYADDR=''
+
 ### Apps ################################################################
 
 #--	Display the node ip in the service discovery
 #	for any public services this visor is running
 #DISPLAYNODEIP=true
 
-#--	Disable vpn server autostart for this visor
+#--	Autostart vpn server for this visor
 #VPNSERVER=false
 
 #--	Set server public key for proxy client to connect to
@@ -112,15 +117,17 @@ const envfileLinux = `#
 #--	Enable autostart of the proxy client
 #STARTPROXYCLIENT=true
 
-#--	Disable autostart of proxy server
-#NOPROXYSERVER=true
+#--	Autostart proxy server
+#PROXYSERVER=false
 
-#--	Set a password for the proxy server
-#PROXYSEVERPASS=''
+#--	Autostart skychat
+#SKYCHAT=false
 
-#--	Password for the proxy client to access the server
-# (if password is set for the server)
-#PROXYCLIENTPASS=''
+#--	Skychat local address
+#SKYCHATADDR=':8001'
+
+#--	Whitelist public keys for the proxy server (empty = allow all)
+#PROXYSERVERWL=('')
 
 #--	Set VPN client killswitch
 #VPNKS=true
@@ -128,18 +135,34 @@ const envfileLinux = `#
 #--	Set vpn server public key for the vpn client to use
 #ADDVPNPK=''
 
-#--	Password for vpn client to access the server
-# (if password is set for the server)
-#VPNCLIENTPASS=''
-
-#--	Set password to the vpn server
-#VPNSEVERPASS=''
+#--	Whitelist public keys for the vpn server (empty = allow all)
+#VPNSERVERWL=('')
 
 #--	Change secure mode status of vpn server
 #VPNSEVERSECURE=''
 
 #--	Set VPN Server network interface - i.e. eth0
 #VPNSEVERNETIFC=''
+
+### Advanced Tuning #####################################################
+
+#--	Hypervisor HTTP address (default :8000)
+#HVHTTPADDR=':8000'
+
+#--	STUN servers for NAT traversal
+#STUNSERVERS=('')
+
+#--	Graceful shutdown timeout (default 10s)
+#SHUTDOWNTIMEOUT='10s'
+
+#--	Public visor registration timeout (default 10m)
+#REGTIMEOUT='10m'
+
+#--	Public visor max transports (default 1000)
+#MAXTRANSPORTS=1000
+
+#--	Number of parallel mux routes per connection (default 0)
+#MUXROUTES=0
 
 ### Miscellaneous #######################################################
 
@@ -251,13 +274,18 @@ const envfileWindows = `#
 #--	Start the hypervisor interface for this visor
 #$ISHYPERVISOR=$true
 
+### Rewards #############################################################
+
+#--	Skycoin reward address or xpub key
+#$REWARDSKYADDR=''
+
 ### Apps ################################################################
 
 #--	Display the node IP in the service discovery
 #	for any public services this visor is running
 #$DISPLAYNODEIP=$true
 
-#--	Disable VPN server autostart for this visor
+#--	Autostart vpn server for this visor
 #$VPNSERVER=$false
 
 #--	Set server public key for proxy client to connect to
@@ -266,14 +294,17 @@ const envfileWindows = `#
 #--	Enable autostart of the proxy client
 #$STARTPROXYCLIENT=$true
 
-#--	Disable autostart of proxy server
-#$NOPROXYSERVER=$true
+#--	Autostart proxy server
+#$PROXYSERVER=$false
 
-#--	Set a password for the proxy server
-#$PROXYSEVERPASS=''
+#--	Autostart skychat
+#$SKYCHAT=$false
 
-#--	Password for the proxy client to access the server (if password is set for the server)
-#$PROXYCLIENTPASS=''
+#--	Skychat local address
+#$SKYCHATADDR=':8001'
+
+#--	Whitelist public keys for the proxy server (empty = allow all)
+#$PROXYSERVERWL=@('')
 
 #--	Set VPN client killswitch
 #$VPNKS=$true
@@ -281,17 +312,34 @@ const envfileWindows = `#
 #--	Set VPN server public key for the VPN client to use
 #$ADDVPNPK=''
 
-#--	Password for VPN client to access the server (if password is set for the server)
-#$VPNCLIENTPASS=''
-
-#--	Set password to the VPN server
-#$VPNSEVERPASS=''
+#--	Whitelist public keys for the vpn server (empty = allow all)
+#$VPNSERVERWL=@('')
 
 #--	Change secure mode status of VPN server
 #$VPNSEVERSECURE=''
 
 #--	Set VPN Server network interface, e.g., 'Ethernet'
 #$VPNSEVERNETIFC=''
+
+### Advanced Tuning #####################################################
+
+#--	Hypervisor HTTP address (default :8000)
+#$HVHTTPADDR=':8000'
+
+#--	STUN servers for NAT traversal
+#$STUNSERVERS=@('')
+
+#--	Graceful shutdown timeout (default 10s)
+#$SHUTDOWNTIMEOUT='10s'
+
+#--	Public visor registration timeout (default 10m)
+#$REGTIMEOUT='10m'
+
+#--	Public visor max transports (default 1000)
+#$MAXTRANSPORTS=1000
+
+#--	Number of parallel mux routes per connection (default 0)
+#$MUXROUTES=0
 
 ### Miscellaneous #######################################################
 
