@@ -44,6 +44,7 @@ type V1 struct {
 	PublicVisorConfig    *PublicVisorConfig               `json:"public_visor,omitempty"`
 	GeoIP                string                           `json:"geoip"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
+	RewardAddress        string                           `json:"reward_address,omitempty"`
 
 	Hypervisor *HypervisorConfig `json:"hypervisor,omitempty"`
 }

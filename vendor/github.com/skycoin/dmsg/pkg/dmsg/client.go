@@ -377,7 +377,12 @@ func (ce *Client) Close() error {
 		ce.sessionsMx.Unlock()
 		ce.porter.CloseAll(ce.log)
 		ce.wg.Wait()
-		err = ce.EntityCommon.delEntry(context.Background())
+		// Use a short timeout for discovery cleanup — if the discovery
+		// server is accessed over dmsg (which we just closed), this
+		// request would hang forever with context.Background().
+		delCtx, delCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err = ce.EntityCommon.delEntry(delCtx)
+		delCancel()
 	})
 	return err
 }

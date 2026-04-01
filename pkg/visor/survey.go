@@ -20,23 +20,19 @@ import (
 // Does not require root — only needs write access to the visor's local path.
 func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 	for {
-		// Check for valid reward address as prerequisite
-		rewardAddressBytes, err := os.ReadFile(v.conf.LocalPath + "/" + skyenv.RewardFile) //nolint:gosec
-		if err != nil {
+		// Check for valid reward address: prefer config, fall back to reward file
+		rewardAddress := strings.TrimSpace(v.conf.RewardAddress)
+		if rewardAddress == "" {
+			rewardAddressBytes, err := os.ReadFile(v.conf.LocalPath + "/" + skyenv.RewardFile) //nolint:gosec
+			if err == nil {
+				rewardAddress = strings.TrimSpace(string(rewardAddressBytes))
+			}
+		}
+		if rewardAddress == "" {
 			v.survey.mu.Lock()
 			v.survey.data = visconf.Survey{}
 			v.survey.mu.Unlock()
 			log.Debug("No reward address set — survey not generated")
-			if !routine {
-				return
-			}
-			time.Sleep(24 * time.Hour)
-			continue
-		}
-
-		rewardAddress := strings.TrimSpace(string(rewardAddressBytes))
-		if rewardAddress == "" {
-			log.Debug("Reward address is empty — survey not generated")
 			if !routine {
 				return
 			}
