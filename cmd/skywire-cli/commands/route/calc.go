@@ -41,7 +41,7 @@ func init() {
 	calcCmd.Flags().DurationVarP(&calcTimeout, "timeout", "t", 30*time.Second, "request timeout")
 	calcCmd.Flags().StringVarP(&tpdURL, "tpd", "a", deployment.Prod.TransportDiscovery, "transport discovery URL")
 	calcCmd.Flags().Uint16VarP(&calcMinHops, "min", "n", 1, "minimum hops")
-	calcCmd.Flags().Uint16VarP(&calcMaxHops, "max", "x", 1000, "maximum hops")
+	calcCmd.Flags().Uint16VarP(&calcMaxHops, "max", "x", 5, "maximum hops")
 }
 
 var calcCmd = &cobra.Command{
@@ -132,7 +132,7 @@ var calcCmd = &cobra.Command{
 		}
 
 		memStore := newMemoryStoreFromEntries(entries)
-		graph, err := routeFinder.NewGraph(ctx, memStore, srcPK)
+		graph, err := routeFinder.NewGraphWithDepth(ctx, memStore, srcPK, int(calcMaxHops))
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to build graph: %w", err))
 		}
