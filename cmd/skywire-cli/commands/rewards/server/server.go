@@ -386,7 +386,7 @@ func server(e error) {
 					pkDir := filepath.Join(wd, "log_backups", pk)
 					files, fErr := os.ReadDir(pkDir)
 					if fErr == nil {
-						c.Writer.Write([]byte(fmt.Sprintf("\n<b>Files for %s:</b>\n", pk))) //nolint:errcheck,gosec
+						fmt.Fprintf(c.Writer, "\n<b>Files for %s:</b>\n", pk) //nolint:errcheck,gosec
 						for _, f := range files {
 							if f.IsDir() {
 								continue
