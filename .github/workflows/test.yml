@@ -183,3 +183,18 @@ jobs:
           git diff --cached --quiet && echo "No change" && exit 0
           git commit -m "Update to ${GITHUB_SHA::12}"
           git push origin skywire-commit
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+
+      - name: Warm Go module proxy cache
+        run: |
+          # Fetch the skywire commit through the default proxy (proxy.golang.org)
+          # so it's cached for all visors worldwide. Also warms sum.golang.org.
+          COMMIT="${{ github.sha }}"
+          echo "Warming proxy cache for github.com/skycoin/skywire@${COMMIT}"
+          go mod download "github.com/skycoin/skywire@${COMMIT}" || true
+          # Also warm the skywire-commit branch itself
+          echo "Warming proxy cache for skywire-commit branch"
+          go mod download "github.com/skycoin/skywire@skywire-commit" || true
