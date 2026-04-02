@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
-	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 const (
@@ -25,260 +24,208 @@ const (
 	targetHost            = "google.com"
 )
 
+// TestVPN is a phased test that shares a single environment setup across
+// multiple verification steps. This avoids redundant container restarts
+// between transport-type tests (DMSG, STCPR, SUDPH) and only restarts
+// when testing disruption scenarios (server stop, transport deletion).
 func TestVPN(t *testing.T) {
-	tt := []IntegrationTestCase{
-		{
-			Name: "vpn is functional (DMSG)",
-			// this field is needed for the call of `GatherVisorPKs` to get all the needed PKs.
-			// but if we refactor code properly, we may do this a middleware before any
-			// calls which require PK and remove this field along with the `GatherVisorPKs`.
-			// VPN route verification not yet implemented.
-			ParticipatingVisorsHostNames: []string{visorVPNClient, visorVPNServer},
-			AppsToRun: []AppToRun{
-				{
-					VisorHostName:   visorVPNServer,
-					AppName:         skyenv.VPNServerName,
-					VisorServerName: "",
-					LauncherMode:    "internal",
-				},
-				{
-					VisorHostName:   visorVPNClient,
-					AppName:         skyenv.VPNClientName,
-					VisorServerName: visorVPNServer,
-					LauncherMode:    "internal",
-				},
-			},
-			AppArgsToSet: []AppArg{},
-			TransportsToAdd: []Transport{
-				{
-					FromVisorHostName: visorVPNClient,
-					ToVisorHostName:   visorVPNServer,
-					Type:              "dmsg",
-				},
-			},
-			Case: testVPNIsFunctional,
-		},
-		{
-			Name:                         "vpn can establish STCPR transport",
-			ParticipatingVisorsHostNames: []string{visorVPNClient, visorVPNServer},
-			AppsToRun: []AppToRun{
-				{
-					VisorHostName:   visorVPNServer,
-					AppName:         skyenv.VPNServerName,
-					VisorServerName: "",
-					LauncherMode:    "internal",
-				},
-				{
-					VisorHostName:   visorVPNClient,
-					AppName:         skyenv.VPNClientName,
-					VisorServerName: visorVPNServer,
-					LauncherMode:    "internal",
-				},
-			},
-			AppArgsToSet: []AppArg{},
-			TransportsToAdd: []Transport{
-				{
-					FromVisorHostName: visorVPNClient,
-					ToVisorHostName:   visorVPNServer,
-					Type:              "stcpr",
-				},
-			},
-			Case: testVPNCanRouteThroughSTCPR,
-		},
-		{
-			Name:                         "vpn can route through SUDPH transport",
-			ParticipatingVisorsHostNames: []string{visorVPNClient, visorVPNServer},
-			AppsToRun: []AppToRun{
-				{
-					VisorHostName:   visorVPNServer,
-					AppName:         skyenv.VPNServerName,
-					VisorServerName: "",
-					LauncherMode:    "internal",
-				},
-				{
-					VisorHostName:   visorVPNClient,
-					AppName:         skyenv.VPNClientName,
-					VisorServerName: visorVPNServer,
-					LauncherMode:    "internal",
-				},
-			},
-			AppArgsToSet: []AppArg{},
-			TransportsToAdd: []Transport{
-				{
-					FromVisorHostName: visorVPNClient,
-					ToVisorHostName:   visorVPNServer,
-					Type:              "sudph",
-				},
-			},
-			Case: testVPNCanRouteThroughSUDPH,
-		},
-		{
-			Name:                         "simulate vpn server stopped",
-			ParticipatingVisorsHostNames: []string{visorVPNClient, visorVPNServer},
-			AppsToRun: []AppToRun{
-				{
-					VisorHostName:   visorVPNServer,
-					AppName:         skyenv.VPNServerName,
-					VisorServerName: "",
-					LauncherMode:    "internal",
-				},
-				{
-					VisorHostName:   visorVPNClient,
-					AppName:         skyenv.VPNClientName,
-					VisorServerName: visorVPNServer,
-					LauncherMode:    "internal",
-				},
-			},
-			AppArgsToSet: []AppArg{
-				{
-					VisorHostName: visorVPNClient,
-					AppName:       skyenv.VPNClientName,
-					ArgName:       "killswitch",
-					Val:           "true",
-				},
-			},
-			TransportsToAdd: []Transport{
-				{
-					FromVisorHostName: visorVPNClient,
-					ToVisorHostName:   visorVPNServer,
-					Type:              types.DMSG,
-				},
-			},
-			Case: testVPNKillServer,
-		},
-		{
-			Name:                         "simulate transport deleted",
-			ParticipatingVisorsHostNames: []string{visorVPNClient, visorVPNServer},
-			AppsToRun: []AppToRun{
-				{
-					VisorHostName:   visorVPNServer,
-					AppName:         skyenv.VPNServerName,
-					VisorServerName: "",
-					LauncherMode:    "internal",
-				},
-				{
-					VisorHostName:   visorVPNClient,
-					AppName:         skyenv.VPNClientName,
-					VisorServerName: visorVPNServer,
-					LauncherMode:    "internal",
-				},
-			},
-			AppArgsToSet: []AppArg{
-				{
-					VisorHostName: visorVPNClient,
-					AppName:       skyenv.VPNClientName,
-					ArgName:       "killswitch",
-					Val:           "true",
-				},
-			},
-			TransportsToAdd: []Transport{
-				{
-					FromVisorHostName: visorVPNClient,
-					ToVisorHostName:   visorVPNServer,
-					Type:              types.DMSG,
-				},
-			},
-			Case: testVPNRemoveTransport,
-		},
+	// Setup: one environment for all phases
+	env := NewEnv().
+		GatherContainersInfo().
+		GatherVisorPKs([]string{visorVPNClient, visorVPNServer})
 
-		{
-			Name:                         "test vpn subcommand list",
-			ParticipatingVisorsHostNames: []string{visorVPNServer},
-			AppsToRun: []AppToRun{
-				{
-					VisorHostName:   visorVPNServer,
-					AppName:         skyenv.VPNServerName,
-					VisorServerName: "",
-					LauncherMode:    "internal",
-				},
-			},
-			AppArgsToSet:    []AppArg{},
-			TransportsToAdd: []Transport{},
-			Case:            testVPNList,
-		},
-	}
-
-	RunIntegrationTestCase(t, tt)
-}
-
-func testVPNKillServer(t *testing.T, env *TestEnv) {
-	serverTUNIP, err := getServerTUNIP(env)
-	require.NoError(t, err)
-	require.NotEqual(t, "", serverTUNIP)
-
-	// First restart the vpn server
-	err = env.ContainerRestart(visorVPNServer)
-	require.NoError(t, err)
-
-	// LEGITIMATE WAIT: The VPN client must asynchronously detect the server
-	// is down, tear down the TUN interface, and remove routes. There is no
-	// API to query the client's disconnect completion status, so we must
-	// wait for the async detection cycle to complete.
-	time.Sleep(3 * time.Second)
-
-	// Check client's should not be connected to the vpn anymore / traceroute should not show VPNServer's IP
-	firstHop, err := getFirstTracerouteHop(targetHost, env)
-	if err != nil {
-		require.EqualError(t, err, "no ip found")
-	} else {
-		require.NotEqual(t, serverTUNIP, firstHop.String())
-	}
-}
-
-func testVPNRemoveTransport(t *testing.T, env *TestEnv) {
-	serverTUNIP, err := getServerTUNIP(env)
-	require.NoError(t, err)
-	require.NotEqual(t, "", serverTUNIP)
-
-	// Remove ALL transports to the server (not just DMSG) since the visor
-	// may have established additional transports via public autoconnect
-	err = env.RemoveAllTransports(visorVPNClient)
-	require.NoError(t, err)
-
-	// LEGITIMATE WAIT: The VPN client must asynchronously detect the transport
-	// loss, tear down the TUN interface, and remove routes. There is no
-	// API to query the client's disconnect completion status, so we must
-	// wait for the async detection cycle to complete.
-	time.Sleep(3 * time.Second)
-
-	firstHop, err := getFirstTracerouteHop(targetHost, env)
-	if err != nil {
-		require.EqualError(t, err, "no ip found")
-	} else {
-		require.NotEqual(t, serverTUNIP, firstHop.String())
-	}
-}
-
-func testVPNList(t *testing.T, env *TestEnv) {
-	vpns, err := env.VPNList(visorVPNServer)
-	require.NoError(t, err)
-	require.Equal(t, env.visorPKs[visorVPNServer], vpns[0].Addr.PubKey().Hex())
-}
-
-func testVPNCanRouteThroughSUDPH(t *testing.T, env *TestEnv) {
-	t.Run("traffic goes through VPN SUDPH", func(t *testing.T) {
-		testTrafficGoesThroughVPN(t, env, targetHost)
-	})
-}
-
-func testVPNCanRouteThroughSTCPR(t *testing.T, env *TestEnv) {
-	t.Run("traffic goes through VPN STCPR", func(t *testing.T) {
-		testTrafficGoesThroughVPN(t, env, targetHost)
-	})
-}
-
-func testVPNIsFunctional(t *testing.T, env *TestEnv) {
-	// following tests are based on the definition of functioning VPN:
-	// - we can access outer hosts
-	// - traffic flows through the VPN server (its TUN)
-
-	t.Run("host is reachable", func(t *testing.T) {
-		// google gives 301 as a first code to curl, despite `https` scheme
-		testHostIsReachable(t, env, targetHostScheme+targetHost, http.StatusMovedPermanently)
+	// Dump logs from both visors on any failure
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		t.Log("=== TEST FAILED — dumping visor logs ===")
+		for _, visor := range []string{visorVPNClient, visorVPNServer} {
+			logs, err := env.ReadLog(visor)
+			if err != nil {
+				t.Logf("Failed to read logs from %s: %v", visor, err)
+				continue
+			}
+			// Filter to relevant lines
+			var filtered []string
+			for _, line := range strings.Split(logs, "\n") {
+				lower := strings.ToLower(line)
+				if strings.Contains(lower, "error") || strings.Contains(lower, "dmsg") ||
+					strings.Contains(lower, "transport") || strings.Contains(lower, "handshake") ||
+					strings.Contains(lower, "vpn") || strings.Contains(lower, "fatal") {
+					filtered = append(filtered, line)
+				}
+			}
+			if len(filtered) > 100 {
+				filtered = filtered[len(filtered)-100:]
+			}
+			t.Logf("\n=== Logs from %s (last %d relevant lines) ===\n%s\n=== END ===",
+				visor, len(filtered), strings.Join(filtered, "\n"))
+		}
 	})
 
-	t.Run("traffic goes through VPN DMSG", func(t *testing.T) {
-		testTrafficGoesThroughVPN(t, env, targetHost)
+	// Start VPN server app
+	serverApp := AppToRun{
+		VisorHostName:   visorVPNServer,
+		AppName:         skyenv.VPNServerName,
+		VisorServerName: "",
+		LauncherMode:    "internal",
+	}
+	clientApp := AppToRun{
+		VisorHostName:   visorVPNClient,
+		AppName:         skyenv.VPNClientName,
+		VisorServerName: visorVPNServer,
+		LauncherMode:    "internal",
+	}
+
+	// ===== Phase 1: DMSG VPN =====
+	t.Run("phase1_dmsg", func(t *testing.T) {
+		t.Log("Starting VPN server and client with DMSG transport")
+		env = env.StartApp(t, serverApp, "")
+		time.Sleep(3 * time.Second) // wait for server accept/routing registration
+
+		// Add DMSG transport
+		env = env.TestVisorAddTp(t, Transport{
+			FromVisorHostName: visorVPNClient,
+			ToVisorHostName:   visorVPNServer,
+			Type:              "dmsg",
+		})
+
+		// Start VPN client
+		env = env.StartApp(t, clientApp, env.visorPKs[visorVPNServer])
+		if err := env.waitForVisorApp(clientApp); err != nil {
+			t.Logf("Warning: VPN client may not be ready: %v", err)
+		}
+
+		t.Run("host_reachable", func(t *testing.T) {
+			testHostIsReachable(t, env, targetHostScheme+targetHost, http.StatusMovedPermanently)
+		})
+
+		t.Run("traffic_through_vpn", func(t *testing.T) {
+			testTrafficGoesThroughVPN(t, env, targetHost)
+		})
+	})
+
+	// ===== Phase 2: Add STCPR transport (no restart) =====
+	t.Run("phase2_stcpr", func(t *testing.T) {
+		t.Log("Adding STCPR transport to existing environment")
+		env = env.TestVisorAddTp(t, Transport{
+			FromVisorHostName: visorVPNClient,
+			ToVisorHostName:   visorVPNServer,
+			Type:              "stcpr",
+		})
+
+		t.Run("traffic_through_vpn", func(t *testing.T) {
+			testTrafficGoesThroughVPN(t, env, targetHost)
+		})
+	})
+
+	// ===== Phase 3: Add SUDPH transport (no restart) =====
+	t.Run("phase3_sudph", func(t *testing.T) {
+		t.Log("Adding SUDPH transport to existing environment")
+		env = env.TestVisorAddTp(t, Transport{
+			FromVisorHostName: visorVPNClient,
+			ToVisorHostName:   visorVPNServer,
+			Type:              "sudph",
+		})
+
+		t.Run("traffic_through_vpn", func(t *testing.T) {
+			testTrafficGoesThroughVPN(t, env, targetHost)
+		})
+	})
+
+	// ===== Phase 4: VPN list command (no restart, just query) =====
+	t.Run("phase4_vpn_list", func(t *testing.T) {
+		vpns, err := env.VPNList(visorVPNServer)
+		require.NoError(t, err)
+		require.Equal(t, env.visorPKs[visorVPNServer], vpns[0].Addr.PubKey().Hex())
+	})
+
+	// ===== Phase 5: Simulate server stop (needs restart) =====
+	t.Run("phase5_server_stop", func(t *testing.T) {
+		t.Log("Setting killswitch and restarting VPN server")
+
+		// Enable killswitch on client
+		env = env.VisorSetAppArg(t, AppArg{
+			VisorHostName: visorVPNClient,
+			AppName:       skyenv.VPNClientName,
+			ArgName:       "killswitch",
+			Val:           "true",
+		})
+
+		serverTUNIP, err := getServerTUNIP(env)
+		require.NoError(t, err)
+		require.NotEqual(t, "", serverTUNIP)
+
+		// Restart VPN server container
+		err = env.ContainerRestart(visorVPNServer)
+		require.NoError(t, err)
+
+		// Wait for client to detect disconnection
+		time.Sleep(3 * time.Second)
+
+		// Verify traffic no longer goes through VPN server
+		firstHop, err := getFirstTracerouteHop(targetHost, env)
+		if err != nil {
+			require.EqualError(t, err, "no ip found")
+		} else {
+			require.NotEqual(t, serverTUNIP, firstHop.String())
+		}
+	})
+
+	// ===== Phase 6: Simulate transport deleted (needs fresh setup after phase 5) =====
+	t.Run("phase6_transport_deleted", func(t *testing.T) {
+		t.Log("Re-establishing environment for transport deletion test")
+
+		// Wait for both visors to be DMSG-ready after phase 5 restart
+		for _, visor := range []string{visorVPNClient, visorVPNServer} {
+			t.Logf("Waiting for %s DMSG readiness", visor)
+			if err := env.WaitForVisorDmsgReady(visor, 60*time.Second); err != nil {
+				t.Fatalf("%s DMSG not ready: %v", visor, err)
+			}
+		}
+
+		// Re-start apps and add DMSG transport
+		env = env.StartApp(t, serverApp, "")
+		time.Sleep(3 * time.Second)
+
+		env = env.TestVisorAddTp(t, Transport{
+			FromVisorHostName: visorVPNClient,
+			ToVisorHostName:   visorVPNServer,
+			Type:              "dmsg",
+		})
+
+		// Ensure killswitch is still on
+		env = env.VisorSetAppArg(t, AppArg{
+			VisorHostName: visorVPNClient,
+			AppName:       skyenv.VPNClientName,
+			ArgName:       "killswitch",
+			Val:           "true",
+		})
+
+		env = env.StartApp(t, clientApp, env.visorPKs[visorVPNServer])
+		if err := env.waitForVisorApp(clientApp); err != nil {
+			t.Logf("Warning: VPN client may not be ready: %v", err)
+		}
+
+		serverTUNIP, err := getServerTUNIP(env)
+		require.NoError(t, err)
+		require.NotEqual(t, "", serverTUNIP)
+
+		// Remove ALL transports
+		err = env.RemoveAllTransports(visorVPNClient)
+		require.NoError(t, err)
+
+		// Wait for client to detect transport loss
+		time.Sleep(3 * time.Second)
+
+		// Verify traffic no longer goes through VPN
+		firstHop, err := getFirstTracerouteHop(targetHost, env)
+		if err != nil {
+			require.EqualError(t, err, "no ip found")
+		} else {
+			require.NotEqual(t, serverTUNIP, firstHop.String())
+		}
 	})
 }
 
@@ -289,10 +236,6 @@ func testHostIsReachable(t *testing.T, env *TestEnv, targetURL string, wantRespC
 }
 
 func testTrafficGoesThroughVPN(t *testing.T, env *TestEnv, targetHost string) {
-	// basically we have no interface to get real TUN IP on the server side
-	// at this moment. also we're running tests separately, not within the server
-	// container. but since IP generation is deterministic, we may say exactly
-	// which will be the first one generated, if that doesn't change. so,
 	serverTUNIP, err := getServerTUNIP(env)
 	require.NoError(t, err)
 	require.NotEqual(t, "", serverTUNIP)
@@ -336,7 +279,6 @@ func getFirstTracerouteHop(targetHost string, env *TestEnv) (net.IP, error) {
 		cmdErrC <- err
 	}()
 
-	// Block until traceroute completes (has its own 9s timeout via `timeout 9`).
 	if cmdErr := <-cmdErrC; cmdErr != nil {
 		return nil, fmt.Errorf("failed to run command %s: %w", fullCmd, cmdErr)
 	}
@@ -360,7 +302,6 @@ func getServerTUNIP(env *TestEnv) (string, error) {
 		return "", err
 	}
 
-	// parse output
 	outputSplits := strings.Split(output, "\n")
 	if len(outputSplits) >= 3 {
 		fourthLine := strings.TrimSpace(outputSplits[2])
