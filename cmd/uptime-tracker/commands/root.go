@@ -58,6 +58,7 @@ var (
 	testing           bool
 	dmsgDisc          string
 	sk                cipher.SecKey
+	keyFile           string
 	dmsgPort          uint16
 	storeDataCutoff   int
 	storeDataPath     string
@@ -83,6 +84,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
 	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg discovery\n\r")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
+	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 }
 
@@ -198,6 +200,11 @@ HTTP Endpoints:
 
 		var gormDB *gorm.DB
 
+		if keyFile != "" {
+			if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
+				logger.Fatal("Failed to load keyfile: ", err)
+			}
+		}
 		pk, err := sk.PubKey()
 		if err != nil {
 			logger.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")

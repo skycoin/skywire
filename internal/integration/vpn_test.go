@@ -330,19 +330,15 @@ func getFirstTracerouteHop(targetHost string, env *TestEnv) (net.IP, error) {
 	var stdout string
 	var err error
 
-	cmdErrC := make(chan error)
+	cmdErrC := make(chan error, 1)
 	go func() {
 		stdout, err = env.ExecInContainerByID(fullCmd, env.containers[visorVPNClient].ID)
 		cmdErrC <- err
-		close(cmdErrC)
 	}()
 
-	// LEGITIMATE WAIT: traceroute runs as an external command with its own timeout
-	// (9s via the `timeout 9` wrapper). We must wait for it to complete or time out.
-	// The goroutine above will send on cmdErrC when done; we block on that channel.
-	time.Sleep(10 * time.Second)
-	if err = <-cmdErrC; err != nil {
-		return nil, fmt.Errorf("failed to run command %s: %w", fullCmd, err)
+	// Block until traceroute completes (has its own 9s timeout via `timeout 9`).
+	if cmdErr := <-cmdErrC; cmdErr != nil {
+		return nil, fmt.Errorf("failed to run command %s: %w", fullCmd, cmdErr)
 	}
 
 	stdoutLine := strings.Split(strings.Split(stdout, "\n")[1], " ")

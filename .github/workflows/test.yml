@@ -5,6 +5,14 @@ on:
       - 'docs/**'
       - 'LICENSE'
       - '.gitignore'
+  push:
+    branches:
+      - develop
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
 name: Test
 
 jobs:
@@ -146,3 +154,54 @@ jobs:
       - name: Build
         shell: powershell
         run: make build-windows
+
+  # Update the skywire-commit branch with the latest tested commit hash.
+  # Only runs on push to develop (not PRs) after all platform tests pass.
+  update-commit:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: [linux, darwin, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: skywire-commit
+          fetch-depth: 1
+
+      - name: Update commit hash
+        run: |
+          COMMIT="${{ github.sha }}"
+          sed -i "s/const Commit = \".*\"/const Commit = \"${COMMIT}\"/" cmd/skywire-commit/main.go
+          cat cmd/skywire-commit/main.go
+
+      - name: Push updated commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cmd/skywire-commit/main.go
+          git diff --cached --quiet && echo "No change" && exit 0
+          git commit -m "Update to ${GITHUB_SHA::12}"
+          git push origin skywire-commit
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+
+      - name: Warm Go module proxy cache
+        run: |
+          # After a PR is merged to develop and all tests pass, run a trivial
+          # program from this commit through the default proxy (proxy.golang.org)
+          # so the module is cached globally for visor auto-updates.
+          # This also populates sum.golang.org.
+          COMMIT="${{ github.sha }}"
+          echo "Warming proxy cache for github.com/skycoin/skywire@${COMMIT}"
+          for attempt in 1 2 3 4 5; do
+            if go run "github.com/skycoin/skywire/examples/hello@${COMMIT}"; then
+              echo "Proxy cache warmed on attempt ${attempt}"
+              exit 0
+            fi
+            echo "Attempt ${attempt} failed, waiting 30s for proxy to index..."
+            sleep 30
+          done
+          echo "Warning: proxy warming failed after 5 attempts (non-fatal)"

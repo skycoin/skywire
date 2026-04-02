@@ -36,6 +36,9 @@ const (
 	// This is the port where TPS nodes listen for incoming transport setup requests from visors.
 	DmsgTransportSetupServicePort uint16 = 48
 
+	// DmsgGRPCPort is the DMSG port for gRPC services (remote gotop, stats, etc.)
+	DmsgGRPCPort uint16 = 49
+
 	// DmsgAwaitSetupPort Listening port of a visor for setup operations.
 	DmsgAwaitSetupPort uint16 = 136
 

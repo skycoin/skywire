@@ -343,6 +343,35 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	})
 
+	// Start gRPC server on DMSG for remote access (gotop, stats, etc.)
+	if v.dmsgC != nil {
+		dmsgGRPCLog := v.MasterLogger().PackageLogger("dmsg_grpc")
+		dmsgGRPCServer := grpc.NewServer()
+		dmsgPingServer := rpcgrpc.NewPingServer(pingAdapter, dmsgGRPCLog)
+		rpcgrpc.RegisterPingServiceServer(dmsgGRPCServer, dmsgPingServer)
+
+		dmsgGRPCL, err := v.dmsgC.Listen(skyenv.DmsgGRPCPort)
+		if err != nil {
+			log.WithError(err).Warn("Failed to listen on DMSG gRPC port")
+		} else {
+			v.pushCloseStack("dmsg.grpc.listener", dmsgGRPCL.Close)
+			v.pushCloseStack("dmsg.grpc.server", func() error {
+				dmsgGRPCServer.GracefulStop()
+				return nil
+			})
+
+			go func() {
+				dmsgGRPCLog.Infof("DMSG gRPC server listening on port %d", skyenv.DmsgGRPCPort)
+				if err := dmsgGRPCServer.Serve(dmsgGRPCL); err != nil {
+					if !strings.Contains(err.Error(), "use of closed network connection") &&
+						!strings.Contains(err.Error(), "closed") {
+						dmsgGRPCLog.WithError(err).Error("DMSG gRPC server error")
+					}
+				}
+			}()
+		}
+	}
+
 	// Use cmux to multiplex gRPC and standard RPC on same port
 	mux := cmux.New(cliL)
 	grpcL := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
