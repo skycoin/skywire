@@ -1446,32 +1446,8 @@ func server(e error) {
 			_, _ = c.Writer.WriteString(string(faviconBuffer)) //nolint:errcheck,gosec
 		})
 
-		if e != nil {
-			r1.GET("/", mainPage)
-			r1.GET("/index.html", mainPage)
-		} else {
-			//manually create routes to the compiled cogentcore web app source files
-			filepath.Walk(outputDir+"/bin/web", func(path string, info os.FileInfo, err error) error { //nolint:errcheck,gosec,revive
-				if !info.IsDir() {
-					relPath, err := filepath.Rel(outputDir+"/bin/web", path)
-					if err != nil {
-						return err
-					}
-
-					if strings.HasSuffix(relPath, "index.html") {
-						r1.GET("/", func(c *gin.Context) {
-							c.File(path)
-						})
-					} else {
-						r1.GET("/"+relPath, func(c *gin.Context) {
-							c.File(path)
-						})
-					}
-				}
-				return nil
-			})
-
-		}
+		r1.GET("/", mainPage)
+		r1.GET("/index.html", mainPage)
 		// Login chain auto-setup
 		if loginNode == "auto" {
 			addr, cleanup, err := ensureLoginChain(wd)
