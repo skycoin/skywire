@@ -51,16 +51,16 @@ const dwenv = "DMSGWEB"
 var dwcfg = os.Getenv(dwenv)
 
 func init() {
-	webPort = scriptExecUintSlice("${WEBPORT[@]:-8080}", dwcfg)
-	proxyPort = scriptExecUint("${PROXYPORT:-4445}", dwcfg)
-	addProxy = scriptExecString("${ADDPROXY}", dwcfg)
-	resolveDmsgAddr = scriptExecStringSlice("${RESOLVEPK[@]}", dwcfg)
-	rawTCP = scriptExecBoolSlice("${RAWTCP[@]:-false}", dwcfg)
+	webPort = cmdutil.SkyenvUintSlice("${WEBPORT[@]:-8080}", dwcfg)
+	proxyPort = cmdutil.SkyenvUint("${PROXYPORT:-4445}", dwcfg)
+	addProxy = cmdutil.SkyenvString("${ADDPROXY}", dwcfg)
+	resolveDmsgAddr = cmdutil.SkyenvStringSlice("${RESOLVEPK[@]}", dwcfg)
+	rawTCP = cmdutil.SkyenvBoolSlice("${RAWTCP[@]:-false}", dwcfg)
 	if os.Getenv("DMSGWEBSK") != "" {
 		sk.Set(os.Getenv("DMSGWEBSK")) //nolint
 	}
-	if scriptExecString("${DMSGWEBSK}", dwcfg) != "" {
-		sk.Set(scriptExecString("${DMSGWEBSK}", dwcfg)) //nolint
+	if cmdutil.SkyenvString("${DMSGWEBSK}", dwcfg) != "" {
+		sk.Set(cmdutil.SkyenvString("${DMSGWEBSK}", dwcfg)) //nolint
 	}
 	pk, _ = sk.PubKey() //nolint
 
