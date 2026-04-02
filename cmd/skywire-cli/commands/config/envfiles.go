@@ -175,6 +175,11 @@ const envfileLinux = `#
 #	"<hash>"  = pin to a specific commit hash
 #UPDATE_CHANNEL=stable
 
+#--	Docker deployment directory (for skywire-docker-update)
+#	Set this to enable auto-updating docker-based deployment services.
+#	The directory must contain a compose.yaml or docker-compose.yml.
+#DEPLOY_DIR=''
+
 ### Miscellaneous #######################################################
 
 #--	Set secret key
@@ -361,6 +366,9 @@ const envfileWindows = `#
 #	"develop" = latest develop branch commit (may be untested)
 #	"<hash>"  = pin to a specific commit hash
 #$UPDATE_CHANNEL='stable'
+
+#--	Docker deployment directory (for skywire-docker-update)
+#$DEPLOY_DIR=''
 
 ### Miscellaneous #######################################################
 
