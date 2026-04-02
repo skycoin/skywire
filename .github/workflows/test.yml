@@ -82,7 +82,10 @@ jobs:
           CGO_ENABLED=0 go run -tags 'withoutsystray withoutgotop' . --help
           CGO_ENABLED=0 go run -tags 'withoutsystray withoutgotop' . cli config gen -dnw
           CGO_ENABLED=0 go run -tags 'withoutsystray withoutgotop' . cli config gen --nofetch -nw
-          CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray withoutgotop' ./internal/... ./pkg/... ./cmd/...
+          CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray withoutgotop' ./internal/... ./pkg/...
+          for pkg in $(CGO_ENABLED=0 go list -tags 'withoutsystray withoutgotop' ./cmd/...); do
+            CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray withoutgotop' "$pkg" || exit 1
+          done
           CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray withoutgotop'
 
   windows:
