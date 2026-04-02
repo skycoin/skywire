@@ -1,17 +1,26 @@
 //go:build withoutsystray
 // +build withoutsystray
 
-// Package commands pkg/visor/withoutsystray.go
+// Package visor pkg/visor/withoutsystray.go
 package visor
 
+import "sync"
+
+var (
+	stopVisorFnMx sync.Mutex //nolint:unused
+	stopVisorFn   func()
+)
+
 func runAppSystray() {
-	runVisor(nil)
+	// no-op: systray not available
 }
 
 func runApp() {
-	runVisor(nil)
+	// no-op: systray not available
 }
 
 func quit() {
-
+	if stopVisorFn != nil {
+		stopVisorFn()
+	}
 }
