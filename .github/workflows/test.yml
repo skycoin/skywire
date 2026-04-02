@@ -190,11 +190,9 @@ jobs:
 
       - name: Warm Go module proxy cache
         run: |
-          # Fetch the skywire commit through the default proxy (proxy.golang.org)
-          # so it's cached for all visors worldwide. Also warms sum.golang.org.
+          # Run a trivial program from the commit through the default proxy
+          # (proxy.golang.org) so the module is cached for all visors worldwide.
+          # This also populates sum.golang.org.
           COMMIT="${{ github.sha }}"
           echo "Warming proxy cache for github.com/skycoin/skywire@${COMMIT}"
-          go mod download "github.com/skycoin/skywire@${COMMIT}" || true
-          # Also warm the skywire-commit branch itself
-          echo "Warming proxy cache for skywire-commit branch"
-          go mod download "github.com/skycoin/skywire@skywire-commit" || true
+          go run "github.com/skycoin/skywire/examples/hello@${COMMIT}"
