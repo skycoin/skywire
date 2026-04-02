@@ -102,11 +102,19 @@ var MaxGraphDepth = 10
 
 // deepFirstSearch explores the graph iteratively with depth limiting.
 // Uses an explicit stack to avoid stack overflow on large networks.
+// Vertices are created once and shared via the pending map to ensure
+// neighbor links point to the canonical vertex for each PK.
 func (g *Graph) deepFirstSearch(ctx context.Context, v *vertex, maxDepth int) error {
 	type stackItem struct {
 		v     *vertex
 		depth int
 	}
+
+	// pending tracks vertices created but not yet visited, keyed by PK.
+	// This ensures only one vertex object exists per PK, so all neighbor
+	// links point to the same object regardless of exploration order.
+	pending := make(map[cipher.PubKey]*vertex)
+	pending[v.edge] = v
 
 	stack := []stackItem{{v: v, depth: 0}}
 
@@ -138,17 +146,20 @@ func (g *Graph) deepFirstSearch(ctx context.Context, v *vertex, maxDepth int) er
 			} else {
 				connectionPK = connection.Edges[0]
 			}
-			if _, ok := g.visited[connectionPK]; !ok {
+
+			if visitedVertex, ok := g.visited[connectionPK]; ok {
+				item.v.neighbors[connectionPK] = visitedVertex
+			} else if pendingVertex, ok := pending[connectionPK]; ok {
+				item.v.neighbors[connectionPK] = pendingVertex
+			} else {
 				connectionConnections, err := g.store.GetTransportsByEdge(ctx, connectionPK)
 				if err != nil {
 					return err
 				}
-
 				neighbourVertex := newVertex(connectionPK, connectionConnections)
+				pending[connectionPK] = neighbourVertex
 				item.v.neighbors[connectionPK] = neighbourVertex
 				stack = append(stack, stackItem{v: neighbourVertex, depth: item.depth + 1})
-			} else {
-				item.v.neighbors[connectionPK] = g.visited[connectionPK]
 			}
 		}
 	}
