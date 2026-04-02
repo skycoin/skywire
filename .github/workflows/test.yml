@@ -5,6 +5,14 @@ on:
       - 'docs/**'
       - 'LICENSE'
       - '.gitignore'
+  push:
+    branches:
+      - develop
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
 name: Test
 
 jobs:
@@ -146,3 +154,32 @@ jobs:
       - name: Build
         shell: powershell
         run: make build-windows
+
+  # Update the skywire-commit branch with the latest tested commit hash.
+  # Only runs on push to develop (not PRs) after all platform tests pass.
+  update-commit:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: [linux, darwin, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: skywire-commit
+          fetch-depth: 1
+
+      - name: Update commit hash
+        run: |
+          COMMIT="${{ github.sha }}"
+          sed -i "s/const Commit = \".*\"/const Commit = \"${COMMIT}\"/" main.go
+          cat main.go
+
+      - name: Push updated commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add main.go
+          git diff --cached --quiet && echo "No change" && exit 0
+          git commit -m "Update to ${GITHUB_SHA::12}"
+          git push origin skywire-commit
