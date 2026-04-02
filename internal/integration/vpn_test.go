@@ -177,6 +177,13 @@ func TestVPN(t *testing.T) {
 	t.Run("phase6_transport_deleted", func(t *testing.T) {
 		t.Log("Re-establishing environment for transport deletion test")
 
+		// Stop apps cleanly from their zombie state after phase 5's server restart
+		t.Log("Stopping apps before re-setup")
+		env.VPNStop(clientApp)                       //nolint:errcheck
+		env.VisorAppStop(serverApp)                  //nolint:errcheck
+		env.waitForAppStopped(clientApp, 10*time.Second) //nolint:errcheck
+		env.waitForAppStopped(serverApp, 10*time.Second) //nolint:errcheck
+
 		// Wait for both visors to be DMSG-ready after phase 5 restart
 		for _, visor := range []string{visorVPNClient, visorVPNServer} {
 			t.Logf("Waiting for %s DMSG readiness", visor)
@@ -185,7 +192,7 @@ func TestVPN(t *testing.T) {
 			}
 		}
 
-		// Re-start apps and add DMSG transport
+		// Start apps fresh and add DMSG transport
 		env = env.StartApp(t, serverApp, "")
 		time.Sleep(3 * time.Second)
 
