@@ -353,12 +353,6 @@ github.com/gdamore/tcell/v2/terminfo/x/xfce
 github.com/gdamore/tcell/v2/terminfo/x/xterm
 github.com/gdamore/tcell/v2/terminfo/x/xterm_ghostty
 github.com/gdamore/tcell/v2/terminfo/x/xterm_kitty
-# github.com/gdamore/tcell/v3 v3.1.2
-## explicit; go 1.24.0
-github.com/gdamore/tcell/v3
-github.com/gdamore/tcell/v3/color
-github.com/gdamore/tcell/v3/tty
-github.com/gdamore/tcell/v3/vt
 # github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 ## explicit
 github.com/gen2brain/dlgs
@@ -472,18 +466,12 @@ github.com/goccy/go-yaml/token
 github.com/godbus/dbus/v5
 github.com/godbus/dbus/v5/introspect
 github.com/godbus/dbus/v5/prop
-# github.com/gogo/protobuf v1.3.2
-## explicit; go 1.15
-github.com/gogo/protobuf/proto
 # github.com/gomarkdown/markdown v0.0.0-20260217112301-37c66b85d6ab
 ## explicit; go 1.12
 github.com/gomarkdown/markdown
 github.com/gomarkdown/markdown/ast
 github.com/gomarkdown/markdown/html
 github.com/gomarkdown/markdown/parser
-# github.com/google/gousb v1.1.3
-## explicit; go 1.16
-github.com/google/gousb
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
@@ -818,20 +806,12 @@ github.com/skycoin/dmsg/pkg/dmsgserver
 github.com/skycoin/dmsg/pkg/dmsgtest
 github.com/skycoin/dmsg/pkg/ioutil
 github.com/skycoin/dmsg/pkg/noise
-# github.com/skycoin/hardware-wallet-protob v0.0.0-20250805154629-410561e1bc2f
-## explicit; go 1.24.5
-github.com/skycoin/hardware-wallet-protob/go
-github.com/skycoin/hardware-wallet-protob/go/google/protobuf
-# github.com/skycoin/hardware-wallet/firmware v0.0.0-20260117000250-43c66b2bf1d2
-## explicit; go 1.21
-github.com/skycoin/hardware-wallet/firmware
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
 # github.com/skycoin/skycoin v0.28.6-0.20260401142608-a27afbb0b33b
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
-github.com/skycoin/skycoin/cmd/hardware-wallet/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
 github.com/skycoin/skycoin/cmd/skycoin-cli/commands
 github.com/skycoin/skycoin/cmd/skycoin-wallet/commands
@@ -868,14 +848,6 @@ github.com/skycoin/skycoin/src/daemon/strand
 github.com/skycoin/skycoin/src/electrum
 github.com/skycoin/skycoin/src/fiber
 github.com/skycoin/skycoin/src/gui
-github.com/skycoin/skycoin/src/hardware-wallet-daemon/api
-github.com/skycoin/skycoin/src/hardware-wallet-daemon/daemon
-github.com/skycoin/skycoin/src/hardware-wallet/cli
-github.com/skycoin/skycoin/src/hardware-wallet/skywallet
-github.com/skycoin/skycoin/src/hardware-wallet/skywallet/usb
-github.com/skycoin/skycoin/src/hardware-wallet/skywallet/wire
-github.com/skycoin/skycoin/src/hardware-wallet/usb/lowlevel/hidapi
-github.com/skycoin/skycoin/src/hardware-wallet/usb/lowlevel/libusb
 github.com/skycoin/skycoin/src/kvstorage
 github.com/skycoin/skycoin/src/params
 github.com/skycoin/skycoin/src/readable

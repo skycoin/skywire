@@ -68,7 +68,7 @@ jobs:
           make check-cg check-help
           CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray' ./internal/... ./pkg/...
           # Test cmd packages individually, excluding CGO-dependent packages
-          for pkg in $(CGO_ENABLED=0 go list -tags withoutsystray ./cmd/... | grep -v 'cmd/release'); do
+          for pkg in $(CGO_ENABLED=0 go list -tags withoutsystray ./cmd/...); do
             echo "Testing $pkg"
             CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray' "$pkg" || exit 1
           done
