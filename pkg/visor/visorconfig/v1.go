@@ -37,7 +37,6 @@ type V1 struct {
 
 	LogLevel             string                           `json:"log_level"`
 	LocalPath            string                           `json:"local_path"`
-	DmsgHTTPServerPath   string                           `json:"dmsghttp_server_path"`
 	StunServers          []string                         `json:"stun_servers"`
 	ShutdownTimeout      Duration                         `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic             bool                             `json:"is_public"`

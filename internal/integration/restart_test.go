@@ -171,8 +171,9 @@ func TestRestart(t *testing.T) {
 			// GC runs periodically. There is no event or API to force immediate
 			// expiration of stale rules on non-restarted visors, so a fixed wait
 			// is the only option to prevent "routing table: rule not found" errors.
-			t.Log("Waiting for stale routing rules to expire (10s)...")
-			time.Sleep(10 * time.Second)
+			// 15s allows for one full GC cycle after the 10s keepalive expires.
+			t.Log("Waiting for stale routing rules to expire (15s)...")
+			time.Sleep(15 * time.Second)
 
 			checkMessage(t, tc.sender, tc.receiver)
 		})

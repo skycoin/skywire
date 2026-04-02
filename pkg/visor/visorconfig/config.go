@@ -76,7 +76,6 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.CLIAddr = skyenv.RPCAddr
 	conf.LogLevel = skyenv.LogLevel
 	conf.LocalPath = skyenv.LocalPath
-	conf.DmsgHTTPServerPath = skyenv.LocalPath + "/" + skyenv.Custom
 	conf.StunServers = services.StunServers
 	conf.ShutdownTimeout = DefaultTimeout
 

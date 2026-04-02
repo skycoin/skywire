@@ -1250,11 +1250,11 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 	}
 
 	hc := http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 15 * time.Second,
 	}
 
-	// Retry with backoff to handle race conditions where the app is starting
-	maxRetries := 5
+	// Retry with exponential backoff to handle post-restart DMSG reconnection
+	maxRetries := 6
 	for i := 0; i < maxRetries; i++ {
 		req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(data))
 		if err != nil {
@@ -1267,10 +1267,11 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 			return resp, nil
 		}
 
-		// Check if this is a connection error worth retrying
+		// Retry with increasing delay
 		if i < maxRetries-1 {
-			env.logger.Warnf("SendSkyMessage attempt %d/%d failed: %v, retrying...", i+1, maxRetries, err)
-			time.Sleep(time.Duration(i+1) * 500 * time.Millisecond)
+			delay := time.Duration(i+1) * 3 * time.Second
+			env.logger.Warnf("SendSkyMessage attempt %d/%d failed: %v, retrying in %v...", i+1, maxRetries, err, delay)
+			time.Sleep(delay)
 		}
 	}
 
