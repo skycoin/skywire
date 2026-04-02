@@ -199,8 +199,8 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 
 lint: ## Run linters. Use make install-linters first
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 --version
-	CGO_ENABLED=0 ${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml --skip-dirs cmd/release --skip-dirs cmd/skywire-cli/commands/rewards/server/ui ./...
-	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor $$(go list ./... | grep -v '/rewards/server/ui' | grep -v 'cmd/release')
+	CGO_ENABLED=0 ${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml ./...
+	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor $$(go list ./... | grep -v 'cmd/release')
 
 lint-extra: ## Run linters with extra checks.
 	golangci-lint run --no-config --enable-all ./...
@@ -211,7 +211,7 @@ gocyclo: ## Run gocyclo
 
 lint-windows: ## Run linters. Use make install-linters-windows first
 	powershell 'go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 --version'
-	powershell 'go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml --skip-dirs cmd/release --skip-dirs cmd/skywire-cli/commands/rewards/server/ui ./...'
+	powershell 'CGO_ENABLED=0 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml ./...'
 
 gocyclo-windows: ## Run gocyclo on windows
 	powershell 'gocyclo -over 14 .'

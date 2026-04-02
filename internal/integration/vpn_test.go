@@ -179,8 +179,8 @@ func TestVPN(t *testing.T) {
 
 		// Stop apps cleanly from their zombie state after phase 5's server restart
 		t.Log("Stopping apps before re-setup")
-		env.VPNStop(clientApp)                           //nolint:errcheck
-		env.VisorAppStop(serverApp)                      //nolint:errcheck
+		_, _ = env.VPNStop(clientApp)    //nolint:errcheck,gosec
+		_, _ = env.VisorAppStop(serverApp) //nolint:errcheck,gosec
 		env.waitForAppStopped(clientApp, 10*time.Second) //nolint:errcheck
 		env.waitForAppStopped(serverApp, 10*time.Second) //nolint:errcheck
 

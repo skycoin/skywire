@@ -91,7 +91,7 @@ skyenv file detected: ` + skyenvfile
 SKYENV=/path/to/fiber.conf fiber run`
 	}(),
 	Run: func(_ *cobra.Command, _ []string) {
-		server(nil)
+		server()
 	},
 }
 

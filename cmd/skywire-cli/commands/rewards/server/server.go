@@ -35,7 +35,7 @@ import (
 // nolint: gocyclo
 //
 //gocyclo:ignore
-func server(e error) {
+func server() {
 
 	log := logging.MustGetLogger("dmsghttp")
 	if dmsgDisc == "" {
