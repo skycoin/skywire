@@ -190,9 +190,18 @@ jobs:
 
       - name: Warm Go module proxy cache
         run: |
-          # Run a trivial program from the commit through the default proxy
-          # (proxy.golang.org) so the module is cached for all visors worldwide.
+          # After a PR is merged to develop and all tests pass, run a trivial
+          # program from this commit through the default proxy (proxy.golang.org)
+          # so the module is cached globally for visor auto-updates.
           # This also populates sum.golang.org.
           COMMIT="${{ github.sha }}"
           echo "Warming proxy cache for github.com/skycoin/skywire@${COMMIT}"
-          go run "github.com/skycoin/skywire/examples/hello@${COMMIT}"
+          for attempt in 1 2 3 4 5; do
+            if go run "github.com/skycoin/skywire/examples/hello@${COMMIT}"; then
+              echo "Proxy cache warmed on attempt ${attempt}"
+              exit 0
+            fi
+            echo "Attempt ${attempt} failed, waiting 30s for proxy to index..."
+            sleep 30
+          done
+          echo "Warning: proxy warming failed after 5 attempts (non-fatal)"
