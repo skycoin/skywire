@@ -4,7 +4,9 @@
 // Package visor pkg/visor/withoutsystray.go
 package visor
 
-import "sync"
+import (
+	"sync"
+)
 
 var (
 	stopVisorFnMx sync.Mutex //nolint:unused
@@ -18,4 +20,3 @@ func runAppSystray() {
 func runApp() {
 	// no-op: systray not available
 }
-
