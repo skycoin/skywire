@@ -108,8 +108,8 @@ func (v *Visor) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
 	v.log.WithField("remote", pk.String()[:16]+"...").
 		Debug("Dialing remote visor RPC over DMSG")
 
-	// Dial to the hypervisor/RPC port
-	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: skyenv.DmsgHypervisorPort})
+	// Dial to the gRPC DMSG port on the remote visor
+	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: skyenv.DmsgGRPCPort})
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial dmsg RPC: %w", err)
 	}
