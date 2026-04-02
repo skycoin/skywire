@@ -36,8 +36,8 @@ type V1 struct {
 	CLIAddr         string          `json:"cli_addr"`
 
 	LogLevel             string                           `json:"log_level"`
-	LocalPath   string   `json:"local_path"`
-	StunServers []string `json:"stun_servers"`
+	LocalPath            string                           `json:"local_path"`
+	StunServers          []string                         `json:"stun_servers"`
 	ShutdownTimeout      Duration                         `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic             bool                             `json:"is_public"`
 	PublicVisorConfig    *PublicVisorConfig               `json:"public_visor,omitempty"`

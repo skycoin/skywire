@@ -160,9 +160,9 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 			}
 		}
 		c.Writer.WriteHeader(http.StatusOK)
-		fmt.Fprintf(c.Writer, `<!doctype html><html><head><title>Skywire Visor</title>
-<style>body{background:#000;color:#fff;font-family:monospace;padding:20px}a{color:#3399FF}a:visited{color:#FF00FF}</style>
-</head><body><h2>Skywire Visor</h2><pre>%s</pre></body></html>`, strings.Join(links, "\n")) //nolint:errcheck
+		fmt.Fprintf(c.Writer, `<!doctype html><html><head><title>Skywire Visor</title>`+ //nolint:errcheck,gosec
+			`<style>body{background:#000;color:#fff;font-family:monospace;padding:20px}a{color:#3399FF}a:visited{color:#FF00FF}</style>`+
+			`</head><body><h2>Skywire Visor</h2><pre>%s</pre></body></html>`, strings.Join(links, "\n"))
 	})
 
 	api.Handler = r
