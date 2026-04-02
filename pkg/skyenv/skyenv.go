@@ -196,9 +196,6 @@ const (
 	// LatencyLogStore is where transport latency logs are stored
 	LatencyLogStore = "latency_logs"
 
-	// Custom path to serve files from dmsghttp log server over dmsg
-	Custom = "custom"
-
 	// LocalPath where the visor writes files to
 	LocalPath = "./local"
 
