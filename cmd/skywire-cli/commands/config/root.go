@@ -2,16 +2,11 @@
 package cliconfig
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
-
-	"github.com/bitfield/script"
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -127,109 +122,11 @@ type servicesConf struct {
 	Prod visorconfig.Services `json:"prod"`
 }
 
-// scriptExecValue sources the SKYENV file and evaluates a bash variable
-// expression, returning the raw string result. This is the common core
-// for all scriptExec* functions.
-func scriptExecValue(expr string) (string, error) {
-	if skyenv.OS == "windows" {
-		// Convert bash ${VAR:-default} to just $VAR for powershell;
-		// default handling is done on the Go side.
-		variable := expr
-		if strings.Contains(variable, ":-") {
-			parts := strings.SplitN(variable, ":-", 2)
-			variable = parts[0] + "}"
-		}
-		out, err := script.Exec(fmt.Sprintf(
-			`powershell -c "$SKYENV = '%s'; if ($SKYENV -ne '' -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`,
-			skyenvfile, variable,
-		)).String()
-		if err != nil {
-			return "", err
-		}
-		out = strings.TrimSpace(out)
-		// If powershell echoed the literal variable name, it wasn't set.
-		if out == "" || out == variable {
-			return "", nil
-		}
-		return out, nil
-	}
-	out, err := script.Exec(fmt.Sprintf(
-		`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`,
-		skyenvfile, expr,
-	)).String()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
-}
+// Thin wrappers around the shared skyenv helpers in cmdutil.
+// These pass the package-level skyenvfile to the shared functions.
 
-// scriptExecSlice sources the SKYENV file and expands a bash array
-// expression into a string slice, one element per line.
-func scriptExecSlice(expr string) ([]string, error) {
-	if skyenv.OS == "windows" {
-		// Convert ${ARRAY[@]} to $ARRAY for powershell iteration.
-		variable := expr
-		if idx := strings.Index(variable, "[@]}"); idx != -1 {
-			variable = strings.TrimSuffix(variable, "[@]}")
-			variable = strings.TrimSuffix(variable, "{")
-		}
-		return script.Exec(fmt.Sprintf(
-			`powershell -c "$SKYENV = '%s'; if ($SKYENV -ne '' -and (Test-Path $SKYENV)) { . $SKYENV }; foreach ($item in %s) { Write-Host $item }"`,
-			skyenvfile, variable,
-		)).Slice()
-	}
-	return script.Exec(fmt.Sprintf(
-		`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; for _i in %s ; do echo "$_i" ; done'`,
-		skyenvfile, expr,
-	)).Slice()
-}
-
-// parseDefault extracts the default value from a bash ${VAR:-default} expression.
-func parseDefault(s string) string {
-	if strings.Contains(s, ":-") {
-		parts := strings.SplitN(s, ":-", 2)
-		return strings.TrimRight(parts[1], "}")
-	}
-	return ""
-}
-
-func scriptExecString(s string) string {
-	out, err := scriptExecValue(s)
-	if err != nil || out == "" {
-		return parseDefault(s)
-	}
-	return out
-}
-
-func scriptExecBool(s string) bool {
-	out, err := scriptExecValue(s)
-	if err != nil || out == "" {
-		// Fall back to default from the expression (e.g. "false" from ${VAR:-false}).
-		out = parseDefault(s)
-	}
-	b, err := strconv.ParseBool(out)
-	if err != nil {
-		return false
-	}
-	return b
-}
-
-func scriptExecArray(s string) string {
-	items, err := scriptExecSlice(s)
-	if err != nil || len(items) == 0 {
-		return ""
-	}
-	return strings.Join(items, ",")
-}
-
-func scriptExecInt(s string) int {
-	out, err := scriptExecValue(s)
-	if err != nil || out == "" {
-		out = parseDefault(s)
-	}
-	i, err := strconv.Atoi(out)
-	if err != nil {
-		return 0
-	}
-	return i
-}
+func scriptExecString(s string) string { return cmdutil.SkyenvString(s, skyenvfile) }
+func scriptExecBool(s string) bool     { return cmdutil.SkyenvBool(s, skyenvfile) }
+func scriptExecArray(s string) string  { return cmdutil.SkyenvArray(s, skyenvfile) }
+func scriptExecInt(s string) int       { return cmdutil.SkyenvInt(s, skyenvfile) }
+func parseDefault(s string) string     { return cmdutil.SkyenvDefault(s) } //nolint:unused

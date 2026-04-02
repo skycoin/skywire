@@ -45,6 +45,7 @@ var (
 	dmsgDisc       string
 	whitelistKeys  string
 	sk             cipher.SecKey
+	keyFile        string
 	dmsgPort       uint16
 	dmsgServerType string
 	geoipURL       string
@@ -123,6 +124,7 @@ func init() {
 	RootCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "url of geoip service\n\r")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n\r")
+	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for service entry expiration\n\r")
 }
@@ -164,6 +166,11 @@ Example:
 			log.Printf("Failed to output build info: %v", err)
 		}
 
+		if keyFile != "" {
+			if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
+				log.Fatal("Failed to load keyfile: ", err)
+			}
+		}
 		pk, err := sk.PubKey()
 		if err != nil {
 			log.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
