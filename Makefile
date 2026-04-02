@@ -129,15 +129,8 @@ check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen an
 
 check-help: ## Cursory check of the help menus
 	@echo "checking help menu for compilation without errors"
-	@echo
 	go run . --help
-	@echo
-	@echo "checking cmd/skycoin-skywire help menu for compilation without errors"
-	@echo
-	go run . --help
-	@echo
 	@echo "compilation successful"
-	@echo
 
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
 
@@ -206,10 +199,7 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 
 lint: ## Run linters. Use make install-linters first
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 --version
-	${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml skywire.go
-	${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml ./cmd/...
-	${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml ./pkg/...
-	${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml	 ./...
+	${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml ./...
 	${OPTS} go vet -all -mod=vendor ./...
 
 lint-extra: ## Run linters with extra checks.
@@ -237,9 +227,6 @@ test: ## Run tests
 	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
 	${OPTS} go test ${TEST_OPTS}
-	go run . --help
-	go run . cli config gen -dnw
-	go run . cli config gen --nofetch -nw
 
 test-windows: ## Run tests on windows
 	@go clean -testcache

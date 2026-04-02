@@ -46,9 +46,6 @@ jobs:
       - name: Check Format and Run Tests
         run: make check
 
-      - name: Build
-        run: make build
-
       - name: Setup SSH Key, Build and Run E2E
         shell: bash
         run: |
@@ -111,9 +108,6 @@ jobs:
           go run . cli config gen -dnw
           go run . cli config gen --nofetch -nw
 
-      - name: Build
-        run: make build
-
   windows:
     runs-on: windows-latest
     steps:
@@ -143,7 +137,4 @@ jobs:
           make check-windows
         shell: powershell
 
-      - name: Build
-        shell: powershell
-        run: make build-windows
 
