@@ -29,15 +29,15 @@ const dwsenv = "DMSGWEBSRV"
 var dwscfg = os.Getenv(dwsenv)
 
 func init() {
-	dmsgPort = scriptExecUintSlice("${DMSGPORT[@]:-80}", dwscfg)
-	wl = scriptExecStringSlice("${WHITELISTPKS[@]}", dwscfg)
-	localPort = scriptExecUintSlice("${LOCALPORT[@]:-8086}", dwscfg)
-	rawTCP = scriptExecBoolSlice("${RAWTCP[@]:-false}", dwscfg)
+	dmsgPort = cmdutil.SkyenvUintSlice("${DMSGPORT[@]:-80}", dwscfg)
+	wl = cmdutil.SkyenvStringSlice("${WHITELISTPKS[@]}", dwscfg)
+	localPort = cmdutil.SkyenvUintSlice("${LOCALPORT[@]:-8086}", dwscfg)
+	rawTCP = cmdutil.SkyenvBoolSlice("${RAWTCP[@]:-false}", dwscfg)
 	if os.Getenv("DMSGWEBSRVSK") != "" {
 		sk.Set(os.Getenv("DMSGWEBSRVSK")) //nolint
 	}
-	if scriptExecString("${DMSGWEBSRVSK}", dwscfg) != "" {
-		sk.Set(scriptExecString("${DMSGWEBSRVSK}", dwscfg)) //nolint
+	if cmdutil.SkyenvString("${DMSGWEBSRVSK}", dwscfg) != "" {
+		sk.Set(cmdutil.SkyenvString("${DMSGWEBSRVSK}", dwscfg)) //nolint
 	}
 	pk, _ = sk.PubKey() //nolint
 

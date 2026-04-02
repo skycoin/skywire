@@ -45,6 +45,7 @@ var (
 	testEnvironment   bool
 	pk                cipher.PubKey
 	sk                cipher.SecKey
+	keyFile           string
 	dmsgPort          uint16
 	authPassphrase    string
 	officialServers   string
@@ -68,6 +69,7 @@ func init() {
 	RootCmd.Flags().BoolVar(&enableLoadTesting, "enable-load-testing", false, "enable load testing")
 	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
+	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 }
@@ -115,6 +117,11 @@ Example:
 		log := sf.Logger()
 
 		var err error
+		if keyFile != "" {
+			if err = dmsgcmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
+				log.Fatal("Failed to load keyfile: ", err)
+			}
+		}
 		if pk, err = sk.PubKey(); err != nil {
 			log.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
 		}
