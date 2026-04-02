@@ -199,8 +199,8 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 
 lint: ## Run linters. Use make install-linters first
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 --version
-	CGO_ENABLED=0 ${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml ./...
-	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor $$(go list ./... | grep -v 'cmd/release')
+	CGO_ENABLED=0 ${OPTS} go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml --build-tags withoutsystray ./...
+	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor -tags withoutsystray $$(go list -tags withoutsystray ./... | grep -v 'cmd/release')
 
 lint-extra: ## Run linters with extra checks.
 	golangci-lint run --no-config --enable-all ./...
@@ -211,7 +211,7 @@ gocyclo: ## Run gocyclo
 
 lint-windows: ## Run linters. Use make install-linters-windows first
 	powershell 'go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 --version'
-	powershell '$$env:CGO_ENABLED=0; go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml ./...'
+	powershell '$$env:CGO_ENABLED=0; go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml --build-tags withoutsystray ./...'
 
 gocyclo-windows: ## Run gocyclo on windows
 	powershell 'gocyclo -over 14 .'

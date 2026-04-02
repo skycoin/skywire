@@ -64,13 +64,13 @@ jobs:
 
       - name: Checking Format and Testing
         run: |
-          CGO_ENABLED=0 GO111MODULE=on go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml ./...
+          CGO_ENABLED=0 GO111MODULE=on go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 run -c .golangci.yml --build-tags withoutsystray ./...
           make check-cg check-help
-          CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags no_ci ./internal/... ./pkg/...
+          CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray' ./internal/... ./pkg/...
           # Test cmd packages individually, excluding CGO-dependent packages
-          for pkg in $(CGO_ENABLED=0 go list ./cmd/... | grep -v 'cmd/release'); do
+          for pkg in $(CGO_ENABLED=0 go list -tags withoutsystray ./cmd/... | grep -v 'cmd/release'); do
             echo "Testing $pkg"
-            CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags no_ci "$pkg" || exit 1
+            CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray' "$pkg" || exit 1
           done
           CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags no_ci
           go run . --help
