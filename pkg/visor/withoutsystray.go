@@ -19,8 +19,3 @@ func runApp() {
 	// no-op: systray not available
 }
 
-func quit() {
-	if stopVisorFn != nil {
-		stopVisorFn()
-	}
-}
