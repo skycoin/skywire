@@ -809,21 +809,34 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 		}
 
 	case "dmsg":
-		// DMSG transports can fail briefly after container restart while the
-		// visor's DMSG client reconnects to servers. Warm up by creating a
-		// self-transport first, then retry the actual transport.
-		fromPK, ok := env.visorPKs[tp.FromVisorHostName]
-		if ok {
-			t.Logf("DMSG warmup: creating self-transport on %s", tp.FromVisorHostName)
-			_, selfErr := env.VisorTpAddWithRetry(tp.FromVisorHostName, fromPK, "dmsg", 5)
-			if selfErr != nil {
-				t.Logf("DMSG self-transport warmup failed (non-fatal): %v", selfErr)
-			} else {
-				t.Logf("DMSG warmup: self-transport created on %s", tp.FromVisorHostName)
+		// DMSG transports need BOTH visors connected to DMSG servers.
+		// First check the visor's actual DMSG state (avoids stale discovery entry issues),
+		// then verify the discovery entry exists (needed for the remote side to find us).
+		for _, visor := range []string{tp.FromVisorHostName, tp.ToVisorHostName} {
+			t.Logf("DMSG: waiting for %s to connect to DMSG servers", visor)
+			if err := env.WaitForVisorDmsgReady(visor, 60*time.Second); err != nil {
+				// Dump visor logs on failure for diagnostics
+				if logs, logErr := env.ReadLog(visor); logErr == nil {
+					t.Logf("=== DMSG debug logs from %s ===\n%s\n=== END ===", visor, logs)
+				}
+				t.Fatalf("DMSG %s not ready: %v", visor, err)
+			}
+			t.Logf("DMSG: waiting for %s discovery entry", visor)
+			if err := env.WaitForDmsgDiscoveryEntry(visor, 30*time.Second); err != nil {
+				t.Logf("Warning: %s not in DMSG discovery yet (may use stale entry): %v", visor, err)
 			}
 		}
+
 		const dmsgRetries = 5
 		_, err = env.VisorTpAddWithRetry(tp.FromVisorHostName, toPK, "dmsg", dmsgRetries)
+		if err != nil {
+			// Dump visor logs from both sides on failure
+			for _, visor := range []string{tp.FromVisorHostName, tp.ToVisorHostName} {
+				if logs, logErr := env.ReadLog(visor); logErr == nil {
+					t.Logf("=== Visor logs from %s ===\n%s\n=== END ===", visor, logs)
+				}
+			}
+		}
 		require.NoError(t, err)
 
 	default:
@@ -1149,14 +1162,13 @@ func (env *TestEnv) ContainerRestart(serviceName ...string) error {
 			return errors.New("test-env: service not found")
 		}
 
-		timeout := int((2 * time.Minute).Seconds())
+		timeout := int((30 * time.Second).Seconds())
 		if err := env.cli.ContainerRestart(env.ctx, svc.ID, container.StopOptions{Timeout: &timeout}); err != nil {
 			return err
 		}
 	}
 
 	// Poll restarted containers until their Docker state is "running"
-	// This replaces a fixed sleep with an event-driven check.
 	env.logger.Info("Waiting for restarted containers to reach running state...")
 	deadline := time.Now().Add(RestartDelay)
 	for time.Now().Before(deadline) {
@@ -1179,9 +1191,53 @@ func (env *TestEnv) ContainerRestart(serviceName ...string) error {
 	return nil
 }
 
+// WaitForVisorDmsgReady waits for a visor to have at least one connected DMSG server.
+// This checks the visor's actual DMSG state, not the discovery entry, so it's not
+// affected by stale discovery entries after restarts.
+func (env *TestEnv) WaitForVisorDmsgReady(visor string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	checkInterval := 3 * time.Second
+
+	for time.Now().Before(deadline) {
+		cmd := fmt.Sprintf("/release/skywire cli --rpc %s:3435 visor dmsg-servers --json", visor)
+		type dmsgServer struct {
+			PK string `json:"pk"`
+		}
+		cliOutput := struct {
+			Output []dmsgServer `json:"output,omitempty"`
+			Err    *string      `json:"error,omitempty"`
+		}{}
+
+		err := env.ExecJSON(cmd, &cliOutput)
+		if err == nil && cliOutput.Err == nil && len(cliOutput.Output) > 0 {
+			env.logger.Infof("Visor %s connected to %d DMSG servers", visor, len(cliOutput.Output))
+			return nil
+		}
+
+		if err != nil {
+			env.logger.Debugf("dmsg-servers query for %s failed: %v", visor, err)
+		} else if cliOutput.Err != nil {
+			env.logger.Debugf("dmsg-servers error for %s: %s", visor, *cliOutput.Err)
+		} else {
+			env.logger.Debugf("Visor %s has no DMSG servers connected yet", visor)
+		}
+		time.Sleep(checkInterval)
+	}
+
+	return fmt.Errorf("visor %s did not connect to any DMSG servers within %v", visor, timeout)
+}
+
 // WaitForDmsgDiscoveryEntry waits for a visor's entry to appear in DMSG discovery
-// with delegated servers. This ensures the visor is ready to create DMSG transports.
+// with delegated servers and a recent timestamp. After a graceful visor halt, the old
+// entry is deregistered, so this waits for a fresh registration from the restarted visor.
 func (env *TestEnv) WaitForDmsgDiscoveryEntry(visor string, timeout time.Duration) error {
+	// Reject entries older than 60s to avoid matching stale entries that
+	// weren't cleaned up (e.g. if graceful halt failed)
+	notBefore := time.Now().Add(-60 * time.Second)
+	return env.waitForDmsgDiscoveryEntryAfter(visor, timeout, notBefore)
+}
+
+func (env *TestEnv) waitForDmsgDiscoveryEntryAfter(visor string, timeout time.Duration, notBefore time.Time) error {
 	if len(env.visorPKs) == 0 {
 		return fmt.Errorf("visor public keys not gathered")
 	}
@@ -1228,8 +1284,15 @@ func (env *TestEnv) WaitForDmsgDiscoveryEntry(visor string, timeout time.Duratio
 		}
 
 		if cliOutput.Output != nil && cliOutput.Output.Client != nil && len(cliOutput.Output.Client.DelegatedServers) > 0 {
-			env.logger.Infof("Visor %s registered in DMSG discovery with %d delegated servers",
-				visor, len(cliOutput.Output.Client.DelegatedServers))
+			entryTime := time.Unix(cliOutput.Output.Timestamp, 0)
+			if !notBefore.IsZero() && entryTime.Before(notBefore) {
+				env.logger.Debugf("Visor %s has stale DMSG entry (timestamp %v < notBefore %v), waiting for fresh registration",
+					visor, entryTime.Format(time.RFC3339), notBefore.Format(time.RFC3339))
+				time.Sleep(checkInterval)
+				continue
+			}
+			env.logger.Infof("Visor %s registered in DMSG discovery with %d delegated servers (entry age: %v)",
+				visor, len(cliOutput.Output.Client.DelegatedServers), time.Since(entryTime).Round(time.Second))
 			return nil
 		}
 
