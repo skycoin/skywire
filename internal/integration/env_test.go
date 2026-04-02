@@ -771,18 +771,16 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 	toPK, ok := env.visorPKs[tp.ToVisorHostName]
 	require.True(t, ok)
 
-	// Use retry logic for SUDPH transports as they can be flaky due to UDP hole punching timing
 	var err error
-	if tp.Type == "sudph" {
+	switch tp.Type {
+	case "sudph":
 		const sudphRetries = 3
 		_, err = env.VisorTpAddWithRetry(tp.FromVisorHostName, toPK, tp.Type, sudphRetries)
 		if err != nil {
-			// Dump diagnostic info for SUDPH failure
 			t.Logf("=== SUDPH DIAGNOSTICS ===")
 			for _, visor := range []string{tp.FromVisorHostName, tp.ToVisorHostName} {
 				logs, logErr := env.ReadLog(visor)
 				if logErr == nil {
-					// Search for SUDPH-related log lines
 					for _, line := range strings.Split(logs, "\n") {
 						lower := strings.ToLower(line)
 						if strings.Contains(lower, "sudph") || strings.Contains(lower, "udp") ||
@@ -793,7 +791,6 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 					}
 				}
 			}
-			// Also check AR logs
 			arLogs, arErr := env.ReadLog("address-resolver")
 			if arErr == nil {
 				for _, line := range strings.Split(arLogs, "\n") {
@@ -807,7 +804,26 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 			t.Logf("=== END SUDPH DIAGNOSTICS ===")
 			t.Skipf("Skipping SUDPH transport test after %d retries: %v", sudphRetries, err)
 		}
-	} else {
+
+	case "dmsg":
+		// DMSG transports can fail briefly after container restart while the
+		// visor's DMSG client reconnects to servers. Warm up by creating a
+		// self-transport first, then retry the actual transport.
+		fromPK, ok := env.visorPKs[tp.FromVisorHostName]
+		if ok {
+			t.Logf("DMSG warmup: creating self-transport on %s", tp.FromVisorHostName)
+			_, selfErr := env.VisorTpAddWithRetry(tp.FromVisorHostName, fromPK, "dmsg", 3)
+			if selfErr != nil {
+				t.Logf("DMSG self-transport warmup failed (non-fatal): %v", selfErr)
+			} else {
+				t.Logf("DMSG warmup: self-transport created on %s", tp.FromVisorHostName)
+			}
+		}
+		const dmsgRetries = 3
+		_, err = env.VisorTpAddWithRetry(tp.FromVisorHostName, toPK, "dmsg", dmsgRetries)
+		require.NoError(t, err)
+
+	default:
 		_, err = env.VisorTpAdd(tp.FromVisorHostName, toPK, tp.Type)
 		require.NoError(t, err)
 	}
