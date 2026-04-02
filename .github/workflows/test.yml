@@ -22,10 +22,17 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
+      - name: Cache golangci-lint
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin/golangci-lint
+          key: golangci-lint-2.6.1-linux
+
       - name: Install Dependencies
         shell: bash
         run: |
           set -euo pipefail
+          command -v golangci-lint || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
           make install-shellcheck
 
       - name: Lint Shell Scripts
@@ -62,18 +69,20 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
+      - name: Cache golangci-lint
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin/golangci-lint
+          key: golangci-lint-2.6.1-darwin
+
       - name: Checking Format and Testing
         run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+          command -v golangci-lint || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
           CGO_ENABLED=0 GO111MODULE=on golangci-lint run -c .golangci.yml --build-tags 'withoutsystray withoutgotop' ./...
           make check-cg check-help
-          CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray' ./internal/... ./pkg/...
-          # Test cmd packages individually, excluding CGO-dependent packages
-          for pkg in $(CGO_ENABLED=0 go list -tags withoutsystray ./cmd/...); do
-            echo "Testing $pkg"
-            CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray' "$pkg" || exit 1
-          done
-          CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags no_ci
+          CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray withoutgotop' ./internal/... ./pkg/...
+          CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray withoutgotop' ./cmd/...
+          CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray withoutgotop'
           go run . --help
           go run . cli config gen -dnw
           go run . cli config gen --nofetch -nw
@@ -89,10 +98,17 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
+      - name: Cache golangci-lint
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin/golangci-lint.exe
+          key: golangci-lint-2.6.1-windows
+
       - name: Install Requirements
         shell: pwsh
         run: |
           choco install make
+          if (-not (Get-Command golangci-lint -ErrorAction SilentlyContinue)) { go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 }
 
       - name: Checking (lint + test)
         run: |
