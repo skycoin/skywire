@@ -1609,18 +1609,18 @@ func (env *TestEnv) DumpTPDState(visors ...string) {
 	env.logger.Info("=== END TPD STATE ===")
 }
 
-// RouteFinderRoute represents a route returned by route finder
-type RouteFinderRoute struct {
-	Hops []string `json:"hops"`
+// RouteFinderResult represents the forward/reverse routes from route finder
+type RouteFinderResult struct {
+	Forward []routing.Hop `json:"forward"`
+	Reverse []routing.Hop `json:"reverse"`
 }
 
 // QueryRouteFinder queries the route finder for routes between two public keys
-func (env *TestEnv) QueryRouteFinder(srcPK, dstPK string) ([]RouteFinderRoute, error) {
-	// Use the CLI to query route finder
+func (env *TestEnv) QueryRouteFinder(srcPK, dstPK string) (*RouteFinderResult, error) {
 	cmd := fmt.Sprintf("/release/skywire cli route find %s %s --addr http://route-finder:9092 --json --timeout 10s", srcPK, dstPK)
 
 	cliOutput := struct {
-		Output []RouteFinderRoute `json:"output,omitempty"`
+		Output *RouteFinderResult `json:"output,omitempty"`
 		Err    *string            `json:"error,omitempty"`
 	}{}
 
@@ -1653,16 +1653,17 @@ func (env *TestEnv) DumpRouteFinderState(srcVisor, dstVisor string) {
 	}
 
 	env.logger.Infof("Querying routes from %s to %s", srcVisor, dstVisor)
-	routes, err := env.QueryRouteFinder(srcPK, dstPK)
+	result, err := env.QueryRouteFinder(srcPK, dstPK)
 	if err != nil {
 		env.logger.WithError(err).Warn("Route finder query failed")
-	} else {
-		env.logger.Infof("Found %d routes:", len(routes))
-		for i, route := range routes {
-			env.logger.Infof("  Route %d: %d hops", i, len(route.Hops))
-			for j, hop := range route.Hops {
-				env.logger.Infof("    Hop %d: %s", j, hop)
-			}
+	} else if result != nil {
+		env.logger.Infof("Forward route: %d hops", len(result.Forward))
+		for i, hop := range result.Forward {
+			env.logger.Infof("  Hop %d: %s -> %s @ %s", i, hop.From, hop.To, hop.TpID)
+		}
+		env.logger.Infof("Reverse route: %d hops", len(result.Reverse))
+		for i, hop := range result.Reverse {
+			env.logger.Infof("  Hop %d: %s -> %s @ %s", i, hop.From, hop.To, hop.TpID)
 		}
 	}
 
