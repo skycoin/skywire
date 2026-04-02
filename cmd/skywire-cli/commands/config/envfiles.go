@@ -164,6 +164,22 @@ const envfileLinux = `#
 #--	Number of parallel mux routes per connection (default 0)
 #MUXROUTES=0
 
+### Auto-Update (skywire-autoupdate package) ############################
+#	These settings are only used by the skywire-update script
+#	installed by the skywire-autoupdate package.
+
+#--	Update channel:
+#	"stable"  = latest commit where all CI tests passed (default)
+#	"develop" = latest develop branch commit (may be untested)
+#	"latest"  = latest tagged release version
+#	"<hash>"  = pin to a specific commit hash
+#UPDATE_CHANNEL=stable
+
+#--	Docker deployment directory (for skywire-docker-update)
+#	Set this to enable auto-updating docker-based deployment services.
+#	The directory must contain a compose.yaml or docker-compose.yml.
+#DEPLOY_DIR=''
+
 ### Miscellaneous #######################################################
 
 #--	Set secret key
@@ -340,6 +356,19 @@ const envfileWindows = `#
 
 #--	Number of parallel mux routes per connection (default 0)
 #$MUXROUTES=0
+
+### Auto-Update (skywire-autoupdate package) ############################
+#	These settings are only used by the skywire-update script
+#	installed by the skywire-autoupdate package.
+
+#--	Update channel:
+#	"stable"  = latest commit where all CI tests passed (default)
+#	"develop" = latest develop branch commit (may be untested)
+#	"<hash>"  = pin to a specific commit hash
+#$UPDATE_CHANNEL='stable'
+
+#--	Docker deployment directory (for skywire-docker-update)
+#$DEPLOY_DIR=''
 
 ### Miscellaneous #######################################################
 

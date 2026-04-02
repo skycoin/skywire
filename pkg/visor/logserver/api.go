@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -43,7 +45,7 @@ type API struct {
 }
 
 // New creates a new API.
-func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelistedPKs []cipher.PubKey, survey *visorconfig.Survey, printLog bool) *API {
+func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []cipher.PubKey, survey *visorconfig.Survey, printLog bool) *API {
 	api := &API{
 		logger:    log,
 		startedAt: time.Now(),
@@ -89,39 +91,78 @@ func New(log *logging.Logger, tpLogPath, localPath, customPath string, whitelist
 		api.health(c)
 	})
 
-	// serve transport log files ; then any files in the custom path
-	r.GET("/:file", func(c *gin.Context) {
-		// files with .csv extension are **likely** transport log files
+	// Transport log files (auth'd)
+	authRoute.GET("/transport_logs/:file", func(c *gin.Context) {
 		if filepath.Ext(c.Param("file")) == ".csv" {
-			// check transport logs dir for the file, and serve it if it exists
-			_, err := os.Stat(filepath.Join(tpLogPath, c.Param("file")))
-			if err == nil {
-				c.File(filepath.Join(tpLogPath, c.Param("file")))
+			fpath := filepath.Join(tpLogPath, c.Param("file"))
+			if _, err := os.Stat(fpath); err == nil {
+				c.File(fpath)
 				return
 			}
 		}
-		// Check for any file in custom dmsghttp dir path
-		_, err := os.Stat(filepath.Join(customPath, c.Param("file")))
-		if err == nil {
-			c.File(filepath.Join(customPath, c.Param("file")))
-			return
-		}
-		// File not found, return 404
 		c.Writer.WriteHeader(http.StatusNotFound)
 	})
-	// serve transport log files
-	r.GET("/transport_logs/:file", func(c *gin.Context) {
-		// files with .csv extension are **likely** transport log files
-		if filepath.Ext(c.Param("file")) == ".csv" {
-			// check transport logs dir for the file, and serve it if it exists
-			_, err := os.Stat(filepath.Join(tpLogPath, c.Param("file")))
-			if err == nil {
-				c.File(filepath.Join(tpLogPath, c.Param("file")))
-				return
+
+	// Serve visor log file (auth'd) — written when visor runs with -s/--save-log
+	authRoute.GET("/visor.log", func(c *gin.Context) {
+		logFile := filepath.Join(localPath, "visor.log")
+		if _, err := os.Stat(logFile); err != nil {
+			c.String(http.StatusNotFound, "visor.log not found (start visor with -s flag)")
+			return
+		}
+		c.File(logFile)
+	})
+
+	// pprof endpoints (auth'd) — runtime profiling
+	authRoute.GET("/debug/pprof/", gin.WrapF(pprof.Index))
+	authRoute.GET("/debug/pprof/cmdline", gin.WrapF(pprof.Cmdline))
+	authRoute.GET("/debug/pprof/profile", gin.WrapF(pprof.Profile))
+	authRoute.GET("/debug/pprof/symbol", gin.WrapF(pprof.Symbol))
+	authRoute.GET("/debug/pprof/trace", gin.WrapF(pprof.Trace))
+	authRoute.GET("/debug/pprof/:name", gin.WrapH(http.HandlerFunc(pprof.Index)))
+
+	// isWhitelisted checks if the current request is from a whitelisted PK
+	// without blocking. Used by the landing page to show/hide auth'd links.
+	isWhitelisted := func(c *gin.Context) bool {
+		if len(whitelistedPKs) == 0 {
+			return true
+		}
+		remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+		if err != nil {
+			return false
+		}
+		for _, pk := range whitelistedPKs {
+			if remotePK == pk.String() {
+				return true
 			}
 		}
-		// File not found, return 404
-		c.Writer.WriteHeader(http.StatusNotFound)
+		return false
+	}
+
+	// Landing page with links to available endpoints
+	r.GET("/", func(c *gin.Context) {
+		wl := isWhitelisted(c)
+		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		var links []string
+		links = append(links, `<a href="/health">/health</a> - visor health status`)
+		if wl {
+			links = append(links, `<a href="/node-info">/node-info</a> - node survey`)
+			links = append(links, `<a href="/node-info/checksum">/node-info/checksum</a> - survey checksum`)
+			links = append(links, `<a href="/visor.log">/visor.log</a> - visor debug log`)
+			links = append(links, `<a href="/debug/pprof/">/debug/pprof/</a> - runtime profiling`)
+			// List transport log files
+			if entries, err := os.ReadDir(tpLogPath); err == nil {
+				for _, e := range entries {
+					if !e.IsDir() && filepath.Ext(e.Name()) == ".csv" {
+						links = append(links, fmt.Sprintf(`<a href="/transport_logs/%s">/transport_logs/%s</a>`, e.Name(), e.Name()))
+					}
+				}
+			}
+		}
+		c.Writer.WriteHeader(http.StatusOK)
+		fmt.Fprintf(c.Writer, `<!doctype html><html><head><title>Skywire Visor</title>`+ //nolint:errcheck,gosec
+			`<style>body{background:#000;color:#fff;font-family:monospace;padding:20px}a{color:#3399FF}a:visited{color:#FF00FF}</style>`+
+			`</head><body><h2>Skywire Visor</h2><pre>%s</pre></body></html>`, strings.Join(links, "\n"))
 	})
 
 	api.Handler = r

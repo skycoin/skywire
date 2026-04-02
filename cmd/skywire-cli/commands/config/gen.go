@@ -821,7 +821,6 @@ func configureLauncher(log *logging.Logger) {
 	conf.CLIAddr = offsetAddr(skyenv.RPCAddr)
 	conf.LogLevel = logLevel
 	conf.LocalPath = localPath
-	conf.DmsgHTTPServerPath = localPath + "/" + skyenv.Custom
 	if stunServers != "" {
 		conf.StunServers = strings.Split(stunServers, ",")
 		for i := range conf.StunServers {
@@ -980,7 +979,6 @@ func configureHypervisor(log *logging.Logger) {
 	if isPkgEnv {
 		pkgConfig := visorconfig.PackageConfig()
 		conf.LocalPath = pkgConfig.LocalPath
-		conf.DmsgHTTPServerPath = pkgConfig.LocalPath + "/" + skyenv.Custom
 		conf.Launcher.BinPath = pkgConfig.LauncherBinPath
 		conf.Transport.LogStore.Location = pkgConfig.LocalPath + "/" + skyenv.TpLogStore
 		if conf.Hypervisor != nil {
@@ -992,7 +990,6 @@ func configureHypervisor(log *logging.Logger) {
 	if isUsr {
 		usrConfig := visorconfig.UserConfig()
 		conf.LocalPath = usrConfig.LocalPath
-		conf.DmsgHTTPServerPath = usrConfig.LocalPath + "/" + skyenv.Custom
 		conf.Launcher.BinPath = usrConfig.LauncherBinPath
 		conf.Transport.LogStore.Location = usrConfig.LocalPath + "/" + skyenv.TpLogStore
 		if conf.Hypervisor != nil {
