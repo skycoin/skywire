@@ -524,9 +524,12 @@ func (env *TestEnv) VisorTpAdd(visor, pk string, tpType tptypes.Type) (*skyvisor
 func (env *TestEnv) VisorTpAddWithRetry(visor, pk string, tpType tptypes.Type, maxRetries int) (*skyvisor.TransportSummary, error) {
 	var lastErr error
 
-	// Use longer delays for SUDPH as UDP hole punching can take time to stabilize
-	baseDelay := 2 * time.Second
-	if tpType == "sudph" {
+	// Use longer delays for transports that need time to stabilize
+	baseDelay := 3 * time.Second
+	switch tpType {
+	case "sudph":
+		baseDelay = 5 * time.Second
+	case "dmsg":
 		baseDelay = 5 * time.Second
 	}
 
@@ -812,14 +815,14 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 		fromPK, ok := env.visorPKs[tp.FromVisorHostName]
 		if ok {
 			t.Logf("DMSG warmup: creating self-transport on %s", tp.FromVisorHostName)
-			_, selfErr := env.VisorTpAddWithRetry(tp.FromVisorHostName, fromPK, "dmsg", 3)
+			_, selfErr := env.VisorTpAddWithRetry(tp.FromVisorHostName, fromPK, "dmsg", 5)
 			if selfErr != nil {
 				t.Logf("DMSG self-transport warmup failed (non-fatal): %v", selfErr)
 			} else {
 				t.Logf("DMSG warmup: self-transport created on %s", tp.FromVisorHostName)
 			}
 		}
-		const dmsgRetries = 3
+		const dmsgRetries = 5
 		_, err = env.VisorTpAddWithRetry(tp.FromVisorHostName, toPK, "dmsg", dmsgRetries)
 		require.NoError(t, err)
 
