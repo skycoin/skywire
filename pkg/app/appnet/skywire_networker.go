@@ -133,7 +133,7 @@ func (r *SkywireNetworker) Listen(addr Addr) (net.Listener, error) {
 
 // ListenContext starts listening on local `addr` in the skynet with context.
 func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Listener, error) {
-	const bufSize = 1000000
+	const bufSize = 128
 
 	lis := &skywireListener{
 		addr:     addr,
