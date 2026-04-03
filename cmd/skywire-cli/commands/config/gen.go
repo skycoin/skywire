@@ -665,28 +665,32 @@ var oldConfCache *visorconfig.V1
 
 // configureDMSGHTTP loads dmsghttp server list when dmsg URLs are needed.
 // This runs for both --dmsghttp (DMSG-only) and default (dual) modes.
+// With the unified services-config.json, DMSG fields are already in the services struct.
+// The separate dmsghttp-config.json path is retained for backward compatibility
+// and custom deployment overrides.
 func configureDMSGHTTP(log *logging.Logger, outerErr error) {
 	_ = outerErr
 	if isDmsgHTTP || !isHTTPOnly {
-		// TODO
-		//if isUsrEnv {
-		//	dmsgHTTPPath = homepath + "/" + skyenv.DMSGHTTPName
-		//}
-		dmsghttpConfigData := deployment.DmsghttpJSON
 		if dmsgHTTPPath != "" {
-			var err error
-			// Read the JSON configuration file
-			dmsghttpConfigData, err = os.ReadFile(dmsgHTTPPath)
+			// Override: load from user-supplied dmsghttp-config.json
+			dmsghttpConfigData, err := os.ReadFile(dmsgHTTPPath)
 			if err != nil {
 				log.Fatalf("Failed to read config file: %v", err)
 			}
+			err = json.Unmarshal(dmsghttpConfigData, &dmsgHTTPServersList)
+			if err != nil {
+				log.WithError(err).Fatal("Failed to unmarshal " + skyenv.DMSGHTTPName)
+			}
+		} else if !services.HasDmsgEndpoints() {
+			// Fallback: if services-config.json didn't have DMSG fields
+			// (e.g., fetched from old config service), use embedded dmsghttp-config.json
+			dmsghttpConfigData := deployment.DmsghttpJSON
+			err := json.Unmarshal(dmsghttpConfigData, &dmsgHTTPServersList)
+			if err != nil {
+				log.WithError(err).Fatal("Failed to unmarshal " + skyenv.DMSGHTTPName)
+			}
 		}
-
-		// Decode JSON data
-		err := json.Unmarshal(dmsghttpConfigData, &dmsgHTTPServersList)
-		if err != nil {
-			log.WithError(err).Fatal("Failed to unmarshal " + skyenv.DMSGHTTPName)
-		}
+		// else: services struct already has DMSG fields from unified config
 	}
 }
 
@@ -740,6 +744,23 @@ func configureServices(log *logging.Logger) {
 
 // configureDMSG sets up the DMSG configuration on conf, preserving protocol
 // from a previous config if regenerating.
+// serviceDmsgServerEntries converts DmsgServerEntry to []*disc.Entry
+// for use in the visor's DMSG config.
+func serviceDmsgServerEntries() []*disc.Entry {
+	var entries []*disc.Entry
+	for _, s := range services.DmsgServers { //nolint:gocritic
+		var pk cipher.PubKey
+		if err := pk.UnmarshalText([]byte(s.Static)); err != nil {
+			continue
+		}
+		entries = append(entries, &disc.Entry{
+			Static: pk,
+			Server: &disc.Server{Address: s.Server.Address},
+		})
+	}
+	return entries
+}
+
 func configureDMSG() {
 	conf.Dmsg = &dmsgc.DmsgConfig{
 		Discovery:            services.DmsgDiscovery,
@@ -875,30 +896,48 @@ func configureLauncher(log *logging.Logger) {
 	// --dmsghttp: DMSG-only (overwrite HTTP URLs with DMSG URLs)
 	// --http: HTTP-only (no DMSG fields, default HTTP URLs kept)
 	// neither: dual mode (HTTP URLs + DMSG URLs in _dmsg fields)
-	if !isHTTPOnly && dmsgHTTPServersList != nil {
-		var dmsgConf *visorconfig.DmsgHTTPServersData
-		if isTestEnv {
-			dmsgConf = &dmsgHTTPServersList.Test
-		} else {
-			dmsgConf = &dmsgHTTPServersList.Prod
-		}
-
-		if dmsgConf != nil {
-			conf.Dmsg.Servers = dmsgConf.DMSGServers
-			conf.Dmsg.Discovery = dmsgConf.DMSGDiscovery
+	if !isHTTPOnly {
+		// Prefer unified services config; fall back to legacy dmsgHTTPServersList
+		if services.HasDmsgEndpoints() {
+			// Unified config: DMSG fields from services-config.json
+			conf.Dmsg.Servers = serviceDmsgServerEntries()
 
 			if isDmsgHTTP {
-				// DMSG-only: overwrite HTTP URLs
-				conf.Transport.AddressResolver = dmsgConf.AddressResolver
-				conf.Transport.Discovery = dmsgConf.TransportDiscovery
-				conf.UptimeTracker.Addr = dmsgConf.UptimeTracker
-				conf.Routing.RouteFinder = dmsgConf.RouteFinder
-				conf.Launcher.ServiceDisc = dmsgConf.ServiceDiscovery
+				conf.Dmsg.Discovery = services.DmsgDiscoveryDmsg
+				conf.Transport.AddressResolver = services.AddressResolverDmsg
+				conf.Transport.Discovery = services.TransportDiscoveryDmsg
+				conf.UptimeTracker.Addr = services.UptimeTrackerDmsg
+				conf.Routing.RouteFinder = services.RouteFinderDmsg
+				conf.Launcher.ServiceDisc = services.ServiceDiscoveryDmsg
 			} else {
-				// Dual mode: keep HTTP URLs, add DMSG URLs as fallback
-				conf.Transport.AddressResolverDmsg = dmsgConf.AddressResolver
-				conf.Transport.DiscoveryDmsg = dmsgConf.TransportDiscovery
-				conf.Launcher.ServiceDiscDmsg = dmsgConf.ServiceDiscovery
+				conf.Dmsg.DiscoveryDmsg = services.DmsgDiscoveryDmsg
+				conf.Transport.AddressResolverDmsg = services.AddressResolverDmsg
+				conf.Transport.DiscoveryDmsg = services.TransportDiscoveryDmsg
+				conf.Launcher.ServiceDiscDmsg = services.ServiceDiscoveryDmsg
+			}
+		} else if dmsgHTTPServersList != nil {
+			// Legacy fallback: separate dmsghttp-config.json
+			var dmsgConf *visorconfig.DmsgHTTPServersData
+			if isTestEnv {
+				dmsgConf = &dmsgHTTPServersList.Test
+			} else {
+				dmsgConf = &dmsgHTTPServersList.Prod
+			}
+			if dmsgConf != nil {
+				conf.Dmsg.Servers = dmsgConf.DMSGServers
+				if isDmsgHTTP {
+					conf.Dmsg.Discovery = dmsgConf.DMSGDiscovery
+					conf.Transport.AddressResolver = dmsgConf.AddressResolver
+					conf.Transport.Discovery = dmsgConf.TransportDiscovery
+					conf.UptimeTracker.Addr = dmsgConf.UptimeTracker
+					conf.Routing.RouteFinder = dmsgConf.RouteFinder
+					conf.Launcher.ServiceDisc = dmsgConf.ServiceDiscovery
+				} else {
+					conf.Dmsg.DiscoveryDmsg = dmsgConf.DMSGDiscovery
+					conf.Transport.AddressResolverDmsg = dmsgConf.AddressResolver
+					conf.Transport.DiscoveryDmsg = dmsgConf.TransportDiscovery
+					conf.Launcher.ServiceDiscDmsg = dmsgConf.ServiceDiscovery
+				}
 			}
 		}
 	}

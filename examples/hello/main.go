@@ -2,7 +2,9 @@
 // go run github.com/skycoin/skywire/examples/hello@<commit>
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 func main() {
 	fmt.Println("ok")
