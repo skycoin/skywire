@@ -347,6 +347,9 @@ services:
         ipv4_address: 173.0.0.11
       intra:
         ipv4_address: 174.0.0.11
+    extra_hosts:
+      - "visor-b:173.0.0.12"
+      - "visor-c:173.0.0.13"
     volumes:
       - type: bind
         source: ../docker/integration/visorA.json
@@ -372,6 +375,9 @@ services:
         ipv4_address: 173.0.0.12
       intra:
         ipv4_address: 174.0.0.12
+    extra_hosts:
+      - "visor-a:173.0.0.11"
+      - "visor-c:173.0.0.13"
     volumes:
       - type: bind
         source: ../docker/integration/visorB.json
@@ -407,6 +413,9 @@ services:
         ipv4_address: 173.0.0.13
       intra:
         ipv4_address: 174.0.0.13
+    extra_hosts:
+      - "visor-a:173.0.0.11"
+      - "visor-b:173.0.0.12"
     volumes:
       - type: bind
         source: ../docker/integration/visorC.json
@@ -523,6 +532,12 @@ services:
       - visors
       - intra
       - srv
+    extra_hosts:
+      # Static host entries bypass Docker embedded DNS (127.0.0.11)
+      # which is flaky on GH Actions ("server misbehaving").
+      - "visor-a:173.0.0.11"
+      - "visor-b:173.0.0.12"
+      - "visor-c:173.0.0.13"
     volumes:
       - ../:/workspace
       - go-test-cache:/root/.cache/go-build
