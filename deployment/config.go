@@ -103,7 +103,7 @@ func init() {
 	if path := os.Getenv("SKYDEPLOY"); path != "" {
 		data, err := os.ReadFile(path) //nolint:gosec
 		if err != nil {
-			log.Panicf("SKYDEPLOY=%s: %v", path, err)
+			log.Panicf("SKYDEPLOY=%s: %v", path, err) //nolint:gosec
 		}
 		ServicesJSON = data
 	}

@@ -596,7 +596,7 @@ func stripCSVHeader(filePath string, log *logging.Logger) {
 		idx := strings.Index(content, "\n")
 		if idx != -1 {
 			newContent := content[idx+1:]
-			if err := os.WriteFile(filePath, []byte(newContent), 0600); err == nil {
+			if err := os.WriteFile(filePath, []byte(newContent), 0600); err == nil { //nolint:gosec
 				log.Debugf("Stripped CSV header from %s", filePath)
 			}
 		}

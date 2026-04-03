@@ -397,9 +397,9 @@ func writeCountryStats(countryCount map[string]int, countryNames map[string]stri
 	var plaintext strings.Builder
 	plaintext.WriteString(title + ":\n\n")
 	for _, s := range stats {
-		plaintext.WriteString(fmt.Sprintf("%d %s %s\n", s.Count, s.CountryName, s.Flag))
+		fmt.Fprintf(&plaintext, "%d %s %s\n", s.Count, s.CountryName, s.Flag)
 	}
-	plaintext.WriteString(fmt.Sprintf("\nTotal: %d\n", totalNodes))
+	fmt.Fprintf(&plaintext, "\nTotal: %d\n", totalNodes)
 
 	_, err := script.Echo(plaintext.String()).WriteFile(tempStatsPath + "/" + filePrefix + ".txt")
 	if err != nil {
@@ -662,11 +662,11 @@ func GenerateVersionHistoryChartHTML(history []VersionHistoryEntry, chartWidth, 
 	sb.WriteString("<div style='display: flex; align-items: flex-end; gap: 5px; min-width: fit-content;'>\n")
 
 	// Y-axis labels
-	sb.WriteString(fmt.Sprintf("<div style='display: flex; flex-direction: column; justify-content: space-between; height: %dpx; font-size: 11px; color: #888; text-align: right; padding-right: 5px; flex-shrink: 0;'>\n", chartHeight))
-	sb.WriteString(fmt.Sprintf("<span>%d</span>\n", maxTotal))
-	sb.WriteString(fmt.Sprintf("<span>%d</span>\n", maxTotal*3/4))
-	sb.WriteString(fmt.Sprintf("<span>%d</span>\n", maxTotal/2))
-	sb.WriteString(fmt.Sprintf("<span>%d</span>\n", maxTotal/4))
+	fmt.Fprintf(&sb, "<div style='display: flex; flex-direction: column; justify-content: space-between; height: %dpx; font-size: 11px; color: #888; text-align: right; padding-right: 5px; flex-shrink: 0;'>\n", chartHeight)
+	fmt.Fprintf(&sb, "<span>%d</span>\n", maxTotal)
+	fmt.Fprintf(&sb, "<span>%d</span>\n", maxTotal*3/4)
+	fmt.Fprintf(&sb, "<span>%d</span>\n", maxTotal/2)
+	fmt.Fprintf(&sb, "<span>%d</span>\n", maxTotal/4)
 	sb.WriteString("<span>0</span>\n")
 	sb.WriteString("</div>\n")
 
