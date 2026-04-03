@@ -390,7 +390,11 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	}
 	v.isServicesHealthy.init()
 
-	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {
+	logLevel := conf.LogLevel
+	if logLevel == "" {
+		logLevel = "debug"
+	}
+	if logLvl, err := logging.LevelFromString(logLevel); err != nil {
 		v.log.WithError(err).Warn("Failed to read log level from config.")
 	} else {
 		v.conf.MasterLogger().SetLevel(logLvl)
