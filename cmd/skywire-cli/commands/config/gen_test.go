@@ -111,7 +111,7 @@ func runConfigGen(t *testing.T, extraFlags ...string) *visorconfig.V1 {
 	}
 	root := repoRoot(t)
 	flags := strings.Join(extraFlags, " ")
-	cmd := "cd " + root + " && SKYENV= CGO_ENABLED=0 go run -tags 'withoutsystray withoutgotop' . cli config gen -n " + flags
+	cmd := `cd ` + root + ` && SKYENV= CGO_ENABLED=0 go run -tags "withoutsystray withoutgotop" . cli config gen -n ` + flags
 	out, err := script.Exec(shell + ` -c '` + cmd + `'`).String()
 	if err != nil {
 		t.Fatalf("config gen failed: %v\noutput: %s", err, out)
@@ -136,7 +136,7 @@ func runConfigGenWithEnv(t *testing.T, envContent string, extraFlags ...string) 
 		t.Fatal(err)
 	}
 	flags := strings.Join(extraFlags, " ")
-	cmd := "cd " + root + " && SKYENV=" + envPath + " CGO_ENABLED=0 go run -tags 'withoutsystray withoutgotop' . cli config gen -n " + flags
+	cmd := `cd ` + root + ` && SKYENV=` + envPath + ` CGO_ENABLED=0 go run -tags "withoutsystray withoutgotop" . cli config gen -n ` + flags
 	out, err := script.Exec(shell + ` -c '` + cmd + `'`).String()
 	if err != nil {
 		t.Fatalf("config gen failed: %v\noutput: %s", err, out)
