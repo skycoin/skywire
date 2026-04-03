@@ -6,7 +6,7 @@ require (
 	fyne.io/systray v1.12.0
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/MichaelMure/go-term-markdown v0.1.4
-	github.com/VictoriaMetrics/metrics v1.43.0
+	github.com/VictoriaMetrics/metrics v1.43.1
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/bitfield/script v0.24.1
 	github.com/blang/semver/v4 v4.0.0
@@ -40,7 +40,7 @@ require (
 	github.com/pterm/pterm v0.12.83
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
-	github.com/skycoin/dmsg v1.3.29-0.20260402173539-8961a6c66fb9
+	github.com/skycoin/dmsg v1.3.29-0.20260403201417-63477a838f19
 	github.com/skycoin/skycoin v0.28.6-0.20260401142608-a27afbb0b33b
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
@@ -238,7 +238,7 @@ require (
 	golang.org/x/image v0.38.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260319201613-d00831a3d3e7 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
