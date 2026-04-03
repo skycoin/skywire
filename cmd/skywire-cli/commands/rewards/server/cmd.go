@@ -2,10 +2,8 @@
 package clirewardsserver
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -20,7 +18,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
-var outputDir string
 var err error
 var (
 	startTime           = time.Now()
@@ -40,8 +37,6 @@ var (
 	skycoinNode         string
 	loginChainFlags     string
 	healthOnly          bool
-	noUI                bool
-	buildTimeout        time.Duration
 	canonicalDomain     string
 	log                 = logging.MustGetLogger("rewards")
 )
@@ -77,8 +72,6 @@ func init() {
 	ServerCmd.Flags().StringVar(&skycoinNode, "skycoin-node", scriptExecString("${SKYCOINNODE:-http://127.0.0.1:6420}"), "Skycoin mainnet node URL for reward transaction broadcasts")
 	ServerCmd.Flags().StringVar(&loginChainFlags, "login-chain-flags", scriptExecString("${LOGINCHAIN_FLAGS}"), "override flags for login chain skycoin daemon subprocess\n(default: --block-publisher --localhost-only --download-peerlist=false\n--disable-default-peers --disable-csrf --host-whitelist=fiber.skywire.dev)")
 	ServerCmd.Flags().BoolVar(&healthOnly, "health-only", false, "serve only /health endpoint for testing")
-	ServerCmd.Flags().BoolVar(&noUI, "no-ui", false, "skip cogentcore UI extraction and compilation, serve plain HTTP")
-	ServerCmd.Flags().DurationVar(&buildTimeout, "build-timeout", 5*time.Minute, "timeout for UI build process")
 	ServerCmd.Flags().StringVar(&canonicalDomain, "canonical", scriptExecString("${CANONICAL:-https://theskywirenetwork.net}"), "canonical domain for SEO (e.g. https://theskywirenetwork.net)")
 }
 
@@ -98,38 +91,7 @@ skyenv file detected: ` + skyenvfile
 SKYENV=/path/to/fiber.conf fiber run`
 	}(),
 	Run: func(_ *cobra.Command, _ []string) {
-		if noUI {
-			// Skip UI build, serve plain HTTP
-			fmt.Println("Skipping cogentcore UI build (--no-ui flag set)")
-			err = fmt.Errorf("UI build skipped")
-		} else if !healthOnly {
-			outputDir, err = extractFiles()
-			if err != nil {
-				fmt.Println("Error extracting files:", err)
-				return
-			}
-			fmt.Printf("All files successfully extracted to '%s'.\n", outputDir)
-
-			// Run build with timeout
-			ctx, cancel := context.WithTimeout(context.Background(), buildTimeout)
-			defer cancel()
-
-			buildScript := `cd ` + outputDir + ` || exit 0 ; go mod init fiber.skywire.dev/ui ; go get github.com/skycoin/skywire@develop && go mod tidy && go mod vendor && go run cogentcore.org/core@main build web`
-			cmd := exec.CommandContext(ctx, "bash", "-c", buildScript) //nolint:gosec
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-
-			fmt.Printf("Building cogentcore UI (timeout: %v)...\n", buildTimeout)
-			err = cmd.Run()
-			if ctx.Err() == context.DeadlineExceeded {
-				fmt.Printf("Error: UI build timed out after %v\n", buildTimeout)
-				err = fmt.Errorf("build timed out after %v", buildTimeout)
-			} else if err != nil {
-				fmt.Println("Error:", err)
-			}
-		}
-
-		server(err)
+		server()
 	},
 }
 

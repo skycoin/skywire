@@ -1,0 +1,64 @@
+name: Update Commit
+on:
+  workflow_run:
+    workflows: ["Test"]
+    types:
+      - completed
+
+jobs:
+  update-commit:
+    # Only update when Test workflow succeeded (PR tests passed)
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Get latest develop commit
+        id: get-commit
+        run: |
+          # Get the latest commit on develop (which is the merge commit)
+          COMMIT=$(gh api repos/${{ github.repository }}/commits/develop --jq '.sha')
+          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+          echo "Latest develop commit: $COMMIT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/checkout@v5
+        with:
+          ref: skywire-commit
+          fetch-depth: 1
+
+      - name: Update commit hash
+        run: |
+          COMMIT="${{ steps.get-commit.outputs.commit }}"
+          echo "Updating skywire-commit to ${COMMIT}"
+          sed -i "s/const Commit = \".*\"/const Commit = \"${COMMIT}\"/" cmd/skywire-commit/main.go
+          cat cmd/skywire-commit/main.go
+
+      - name: Push updated commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cmd/skywire-commit/main.go
+          git diff --cached --quiet && echo "No change" && exit 0
+          COMMIT="${{ steps.get-commit.outputs.commit }}"
+          git commit -m "Update to ${COMMIT::12}"
+          git push origin skywire-commit
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+
+      - name: Warm Go module proxy cache
+        run: |
+          COMMIT="${{ steps.get-commit.outputs.commit }}"
+          echo "Warming proxy cache for github.com/skycoin/skywire@${COMMIT}"
+          for attempt in 1 2 3 4 5; do
+            if go run "github.com/skycoin/skywire/examples/hello@${COMMIT}"; then
+              echo "Proxy cache warmed on attempt ${attempt}"
+              exit 0
+            fi
+            echo "Attempt ${attempt} failed, waiting 30s for proxy to index..."
+            sleep 30
+          done
+          echo "Warning: proxy warming failed after 5 attempts (non-fatal)"
