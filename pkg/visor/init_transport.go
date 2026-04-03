@@ -112,7 +112,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		v.geo.mu.Unlock()
 	}
 
-	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
+	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
 	if err != nil {
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
