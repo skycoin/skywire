@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
@@ -647,14 +648,23 @@ func fetchServiceConfigDmsg(log *logging.Logger) bool {
 		log.Infof("Fetching service endpoints via DMSG from %s", embeddedConf.ConfDmsg)
 	}
 
-	// Bootstrap a short-lived DMSG client using embedded servers
+	// Bootstrap a short-lived DMSG client using embedded servers.
+	// Use a discard logger in stdout mode to prevent DMSG client logs
+	// from polluting the JSON output.
 	ctx, cancel := context.WithTimeout(context.Background(), servicesFetchTimeout)
 	defer cancel()
 
 	// Generate ephemeral keypair for the fetch
 	pk, sk := cipher.GenerateKeyPair()
 
-	dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk,
+	dmsgLog := log
+	if isStdout {
+		silentLogger := logrus.New()
+		silentLogger.SetOutput(io.Discard)
+		dmsgLog = &logging.Logger{FieldLogger: silentLogger}
+	}
+
+	dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, dmsgLog, pk, sk,
 		dmsg.Prod.DmsgServers, embeddedConf.DmsgDiscovery, "")
 	if err != nil {
 		logIfNotStdout(log, err, "DMSG bootstrap failed for config fetch")
