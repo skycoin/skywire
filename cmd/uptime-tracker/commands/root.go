@@ -307,6 +307,11 @@ HTTP Endpoints:
 					cancel()
 				}
 			}()
+			go func() {
+				if err := dmsghttp.ServeDebug(ctx, dmsgBoot.Client, logger, deployment.Prod.SurveyWhitelist); err != nil {
+					logger.Errorf("dmsghttp.ServeDebug: %v", err)
+				}
+			}()
 		}
 
 		<-ctx.Done()

@@ -198,7 +198,7 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' .
 
 lint: ## Run linters. Use make install-linters first
-	command -v golangci-lint || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+	command -v golangci-lint || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	golangci-lint --version
 	CGO_ENABLED=0 ${OPTS} golangci-lint run -c .golangci.yml --build-tags 'withoutsystray withoutgotop' ./...
 	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor -tags 'withoutsystray withoutgotop' ./...
@@ -211,7 +211,7 @@ gocyclo: ## Run gocyclo
 	gocyclo -over 14 .
 
 lint-windows: ## Run linters. Use make install-linters-windows first
-	powershell 'if (-not (Get-Command golangci-lint -ErrorAction SilentlyContinue)) { go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 }'
+	powershell 'if (-not (Get-Command golangci-lint -ErrorAction SilentlyContinue)) { go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest }'
 	powershell 'golangci-lint --version'
 	powershell '$$env:CGO_ENABLED=0; golangci-lint run -c .golangci.yml --build-tags "withoutsystray withoutgotop" ./...'
 

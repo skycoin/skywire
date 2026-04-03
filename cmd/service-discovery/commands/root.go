@@ -269,6 +269,11 @@ Example:
 					cancel()
 				}
 			}()
+			go func() {
+				if err := dmsghttp.ServeDebug(ctx, dmsgBoot.Client, log, deployment.Prod.SurveyWhitelist); err != nil {
+					log.Errorf("dmsghttp.ServeDebug: %v", err)
+				}
+			}()
 		}
 
 		<-ctx.Done()

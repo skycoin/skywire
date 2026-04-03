@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/config-bootstrapper/api"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -170,6 +171,11 @@ HTTP Endpoints:
 				if err := dmsghttp.ListenAndServe(ctx, sk, conAPI, dmsgBoot.DClient, dmsgPort, dmsgBoot.Client, logger); err != nil {
 					logger.Errorf("dmsghttp.ListenAndServe: %v", err)
 					cancel()
+				}
+			}()
+			go func() {
+				if err := dmsghttp.ServeDebug(ctx, dmsgBoot.Client, logger, deployment.Prod.SurveyWhitelist); err != nil {
+					logger.Errorf("dmsghttp.ServeDebug: %v", err)
 				}
 			}()
 		}

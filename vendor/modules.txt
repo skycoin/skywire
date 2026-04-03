@@ -772,7 +772,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20260403201417-63477a838f19
+# github.com/skycoin/dmsg v1.3.29-0.20260403210921-8d367ffa9cc6
 ## explicit; go 1.26.1
 github.com/skycoin/dmsg/cmd/conf/commands
 github.com/skycoin/dmsg/cmd/dial/commands

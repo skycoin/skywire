@@ -116,7 +116,7 @@ func updateServersDmsgFirst(
 		case <-ticker.C:
 			servers := fetchServers(ctx, dmsgC, dmsgDisc, dmsgServerType, log)
 			for _, server := range servers {
-				dClient.PostEntry(ctx, server) //nolint:errcheck
+				dClient.PostEntry(ctx, server) //nolint:errcheck,gosec
 				if err := dmsgC.EnsureSession(ctx, server); err != nil {
 					log.WithField("remote_pk", server.Static).WithError(err).Warn("Failed to establish session")
 				}
