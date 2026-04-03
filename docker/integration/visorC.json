@@ -1,129 +1,132 @@
 {
-  "version": "v1.3.32",
-  "sk": "0e17cd505d81f998950e22864ae4692249124441bd9148b801f76f1595ac688f",
-  "pk": "031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055",
-  "dmsg": {
-    "discovery": "http://dmsg-discovery:9090",
-    "sessions_count": 1,
-    "servers": [],
-    "servers_type": "all",
-    "protocol": "smux"
-  },
-  "dmsgpty": {
-    "dmsg_port": 22,
-    "cli_network": "unix",
-    "cli_address": "/tmp/dmsgpty.sock",
-    "whitelist": null
-  },
-  "skywire-tcp": {
-    "pk_table": null,
-    "listening_address": ":7777"
-  },
-  "transport": {
-    "discovery": "http://transport-discovery:9094",
-    "address_resolver": "http://address-resolver:9093",
-    "public_autoconnect": false,
-    "transport_setup": null,
-    "log_store": {
-      "type": "file",
-      "location": "./local/transport_logs",
-      "rotation_interval": "168h0m0s"
-    },
-    "stcpr_port": 40552,
-    "sudph_port": 40562
-  },
-  "routing": {
-    "route_setup_nodes": [
-      "02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
-    ],
-    "route_finder": "http://route-finder:9092",
-    "route_finder_timeout": "10s",
-    "min_hops": 1,
-    "mux_routes": 2
-  },
-  "uptime_tracker": {
-    "addr": "http://uptime-tracker:9095"
-  },
-  "launcher": {
-    "service_discovery": "http://service-discovery:9091",
-    "apps": [
-      {
-        "name": "vpn-client",
-        "binary": "skywire",
-        "args": [
-          "app",
-          "vpn-client",
-          "--srv",
-          "024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
-          "-killswitch=false"
-        ],
-        "auto_start": false,
-        "port": 43
-      },
-      {
-        "name": "skychat",
-        "binary": "skywire",
-        "args": [
-          "app",
-          "skychat",
-          "--addr",
-          "*:8001"
-        ],
-        "auto_start": true,
-        "port": 1
-      },
-      {
-        "name": "skysocks-client",
-        "binary": "skywire",
-        "args": [
-          "app",
-          "skysocks-client",
-          "--srv",
-          "024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
-          "--addr",
-          ":1080"
-        ],
-        "auto_start": true,
-        "port": 13
-      },
-      {
-        "name": "skysocks",
-        "binary": "skywire",
-        "args": [
-          "app",
-          "skysocks"
-        ],
-        "auto_start": true,
-        "port": 3
-      },
-      {
-        "name": "vpn-server",
-        "binary": "skywire",
-        "args": [
-          "app",
-          "vpn-server"
-        ],
-        "auto_start": false,
-        "port": 44
-      }
-    ],
-    "server_addr": ":5507",
-    "bin_path": "/release",
-    "display_node_ip": false
-  },
-  "survey_whitelist": null,
-  "hypervisors": [
-    "0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe"
-  ],
-  "cli_addr": "0.0.0.0:3435",
-  "log_level": "debug",
-  "local_path": "./local",
-  "dmsghttp_server_path": "./local/custom",
-  "stun_servers": [
-    "173.0.0.17:3478"
-  ],
-  "shutdown_timeout": "30s",
-  "is_public": false,
-  "geoip": "http://ip.skycoin.com",
-  "persistent_transports": null
+	"version": "v1.3.40",
+	"sk": "0e17cd505d81f998950e22864ae4692249124441bd9148b801f76f1595ac688f",
+	"pk": "031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055",
+	"dmsg": {
+		"discovery": "http://dmsg-discovery:9090",
+		"discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80",
+		"sessions_count": 2,
+		"servers": [
+			{
+				"version": "",
+				"sequence": 0,
+				"timestamp": 0,
+				"static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+				"server": {
+					"address": "174.0.0.5:8080",
+					"availableSessions": 0
+				}
+			}
+		],
+		"servers_type": "all",
+		"protocol": "yamux"
+	},
+	"dmsgpty": {
+		"dmsg_port": 22,
+		"cli_network": "unix",
+		"cli_address": "/tmp/dmsgpty.sock",
+		"whitelist": []
+	},
+	"ui_server": {
+		"enable": false,
+		"local_addr": "localhost:8081",
+		"dmsg_port": 81,
+		"dmsg_whitelist": null,
+		"survey_dir": ""
+	},
+	"log_server": {
+		"local_addr": ""
+	},
+	"skywire-tcp": {
+		"pk_table": null,
+		"listening_address": ":7777"
+	},
+	"transport": {
+		"discovery": "http://transport-discovery:9094",
+		"discovery_dmsg": "dmsg://02a5993cb6792eb18908cb7c6c9c742ef5fbe3dcfcce2862bbc4615a5f35cbed46:80",
+		"address_resolver": "http://address-resolver:9093",
+		"address_resolver_dmsg": "dmsg://02252c40a1ac021dcf6d93f1aae38023e8fd20bb0d35b7d07cba9435a7cb7ef34f:80",
+		"public_autoconnect": true,
+		"transport_setup": [
+			"0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
+		],
+		"log_store": {
+			"type": "file",
+			"location": "./local/transport_logs",
+			"rotation_interval": "168h0m0s"
+		},
+		"stcpr_port": 0,
+		"sudph_port": 0
+	},
+	"routing": {
+		"route_setup_nodes": [
+			"02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
+		],
+		"route_finder": "http://route-finder:9092",
+		"route_finder_timeout": "10s",
+		"min_hops": 1
+	},
+	"uptime_tracker": {
+		"addr": "http://uptime-tracker:9095"
+	},
+	"launcher": {
+		"service_discovery": "http://service-discovery:9091",
+		"service_discovery_dmsg": "dmsg://026f96adae04285f8b35eeba23b9aa2be3470ea4bb005118f4e64006afdeea85a7:80",
+		"apps": [
+			{
+				"name": "vpn-client",
+				"args": [
+					"--dns",
+					"1.1.1.1"
+				],
+				"auto_start": false,
+				"port": 43
+			},
+			{
+				"name": "skychat",
+				"args": [
+					"--addr",
+					":8001"
+				],
+				"auto_start": true,
+				"port": 1
+			},
+			{
+				"name": "skysocks",
+				"auto_start": true,
+				"port": 3
+			},
+			{
+				"name": "skysocks-client",
+				"args": [
+					"--addr",
+					":1080"
+				],
+				"auto_start": false,
+				"port": 13
+			},
+			{
+				"name": "vpn-server",
+				"auto_start": true,
+				"port": 44
+			}
+		],
+		"server_addr": "localhost:5505",
+		"bin_path": "./",
+		"display_node_ip": false
+	},
+	"survey_whitelist": [],
+	"hypervisors": [
+		"0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe"
+	],
+	"cli_addr": "localhost:3435",
+	"log_level": "",
+	"local_path": "./local",
+	"stun_servers": [
+		"174.0.0.17:3478"
+	],
+	"shutdown_timeout": "10s",
+	"is_public": false,
+	"geoip": "http://ip.skycoin.com",
+	"persistent_transports": null
 }

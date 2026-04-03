@@ -1,28 +1,62 @@
 {
-	"version": "v1.3.32",
+	"version": "v1.3.40",
 	"sk": "da4f48916e99aa3de794bffe1b5ecd465335e38b55457a9f78b411eb8585e36f",
 	"pk": "0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe",
 	"dmsg": {
 		"discovery": "http://dmsg-discovery:9090",
-		"sessions_count": 1,
-		"servers": [],
+		"discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80",
+		"sessions_count": 2,
+		"servers": [
+			{
+				"version": "",
+				"sequence": 0,
+				"timestamp": 0,
+				"static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+				"server": {
+					"address": "174.0.0.5:8080",
+					"availableSessions": 0
+				}
+			}
+		],
 		"servers_type": "all",
-		"protocol": "smux"
+		"protocol": "yamux"
 	},
 	"dmsgpty": {
 		"dmsg_port": 22,
 		"cli_network": "unix",
-		"cli_address": "/tmp/dmsgpty.sock"
+		"cli_address": "/tmp/dmsgpty.sock",
+		"whitelist": []
+	},
+	"ui_server": {
+		"enable": false,
+		"local_addr": "localhost:8081",
+		"dmsg_port": 81,
+		"dmsg_whitelist": null,
+		"survey_dir": ""
+	},
+	"log_server": {
+		"local_addr": ""
+	},
+	"skywire-tcp": {
+		"pk_table": null,
+		"listening_address": ":7777"
 	},
 	"transport": {
 		"discovery": "http://transport-discovery:9094",
+		"discovery_dmsg": "dmsg://02a5993cb6792eb18908cb7c6c9c742ef5fbe3dcfcce2862bbc4615a5f35cbed46:80",
 		"address_resolver": "http://address-resolver:9093",
-		"public_autoconnect": false,
-		"transport_setup_nodes": [
+		"address_resolver_dmsg": "dmsg://02252c40a1ac021dcf6d93f1aae38023e8fd20bb0d35b7d07cba9435a7cb7ef34f:80",
+		"public_autoconnect": true,
+		"transport_setup": [
 			"0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
 		],
-		"stcpr_port": 40551,
-		"sudph_port": 40561
+		"log_store": {
+			"type": "file",
+			"location": "./local/transport_logs",
+			"rotation_interval": "168h0m0s"
+		},
+		"stcpr_port": 0,
+		"sudph_port": 0
 	},
 	"routing": {
 		"route_setup_nodes": [
@@ -37,55 +71,79 @@
 	},
 	"launcher": {
 		"service_discovery": "http://service-discovery:9091",
+		"service_discovery_dmsg": "dmsg://026f96adae04285f8b35eeba23b9aa2be3470ea4bb005118f4e64006afdeea85a7:80",
 		"apps": [
 			{
 				"name": "vpn-client",
-				"binary": "skywire",
 				"args": [
-					"app",
-					"vpn-client"
+					"--dns",
+					"1.1.1.1"
 				],
 				"auto_start": false,
 				"port": 43
 			},
 			{
-				"name": "vpn-server",
-				"binary": "skywire",
+				"name": "skychat",
 				"args": [
-					"app",
-					"vpn-server"
- 				],
+					"--addr",
+					":8001"
+				],
+				"auto_start": true,
+				"port": 1
+			},
+			{
+				"name": "skysocks",
+				"auto_start": true,
+				"port": 3
+			},
+			{
+				"name": "skysocks-client",
+				"args": [
+					"--addr",
+					":1080"
+				],
 				"auto_start": false,
+				"port": 13
+			},
+			{
+				"name": "vpn-server",
+				"auto_start": true,
 				"port": 44
 			}
 		],
-		"server_addr": ":5506",
-		"bin_path": "/release"
+		"server_addr": "localhost:5505",
+		"bin_path": "./",
+		"display_node_ip": false
 	},
+	"survey_whitelist": [],
 	"hypervisors": [],
-	"cli_addr": "0.0.0.0:3435",
-	"log_level": "info",
+	"cli_addr": "localhost:3435",
+	"log_level": "",
 	"local_path": "./local",
-	"stun_servers": null,
-	"shutdown_timeout": "30s",
-	"restart_check_delay": "1s",
+	"stun_servers": [
+		"174.0.0.17:3478"
+	],
+	"shutdown_timeout": "10s",
 	"is_public": false,
 	"geoip": "http://ip.skycoin.com",
 	"persistent_transports": null,
 	"hypervisor": {
-		"db_path": "./local/hypervisor/users.db",
+		"db_path": "/home/d0mo/go/src/github.com/0pcom/skywire/users.db",
 		"enable_auth": false,
 		"cookies": {
-			"hash_key": "fe629f5531a017ab065fee09065a75ae3b57684daa033915eb8dda4cc0bf555678bbce74f8416603e72b0edf744a8d7a2850e6f065092af0ae50c09d6ae0d258",
-			"block_key": "4a8bbf6ac5ff929a18be4a3ec186f6f17f208dd94c9c58d219b0282d584f0727",
+			"hash_key": "9e6224b59123eb84e5071bdc170f2668b740f9f15f7fd4dc264446ce3a3325dd4974ad734e1465ac8092a5148f54022d12d7195f005d938aed26544b4d8b95e2",
+			"block_key": "f96eb2f051e15ca4fce562e9e8632557cf51511e96557a8fa2a4181446e97b72",
 			"expires_duration": 43200000000000,
 			"path": "/",
 			"domain": ""
 		},
 		"dmsg_port": 46,
 		"http_addr": ":8000",
-		"enable_tls": true,
-		"tls_cert_file": "/opt/integration/hypervisor.crt",
-		"tls_key_file": "/opt/integration/hypervisor.key"
+		"enable_tls": false,
+		"tls_cert_file": "./ssl/cert.pem",
+		"tls_key_file": "./ssl/key.pem",
+		"tp_viz": {
+			"enable": true
+		}
 	}
 }
