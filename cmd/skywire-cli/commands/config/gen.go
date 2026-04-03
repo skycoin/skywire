@@ -969,10 +969,14 @@ func configureLauncher(log *logging.Logger) {
 		conf.RewardAddress = canonical
 	}
 
+	dmsgptyAddr := dmsgpty.DefaultCLIAddr()
+	if isTestEnv {
+		dmsgptyAddr = filepath.Join(os.TempDir(), "dmsgpty-test.sock")
+	}
 	conf.Dmsgpty = &visorconfig.Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
 		CLINet:   skyenv.DmsgPtyCLINet,
-		CLIAddr:  dmsgpty.DefaultCLIAddr(),
+		CLIAddr:  dmsgptyAddr,
 	}
 
 	conf.STCP = &network.STCPConfig{
