@@ -243,8 +243,18 @@ func (m *procManager) Register(conf appcommon.ProcConfig) (appcommon.ProcKey, er
 		return appcommon.ProcKey{}, ErrClosed
 	}
 
-	if _, ok := m.procs[conf.AppName]; ok {
-		return appcommon.ProcKey{}, ErrAppAlreadyStarted
+	if existingProc, ok := m.procs[conf.AppName]; ok {
+		// Check if the existing proc is actually alive.
+		// Internal apps can exit without cleaning up the proc map.
+		if existingProc.IsRunning() {
+			return appcommon.ProcKey{}, ErrAppAlreadyStarted
+		}
+		// Dead proc — clean it up so we can restart
+		log.WithField("app", conf.AppName).Warn("Found dead proc in registry, cleaning up for restart")
+		delete(m.procs, conf.AppName)
+		if existingProc.conf.ProcKey != (appcommon.ProcKey{}) {
+			delete(m.procsByKey, existingProc.conf.ProcKey)
+		}
 	}
 
 	// Ensure proc key is unique (just in case - this is probably not necessary).

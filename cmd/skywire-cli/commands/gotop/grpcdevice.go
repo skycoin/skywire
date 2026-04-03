@@ -1,3 +1,5 @@
+//go:build !withoutgotop
+
 // Package cligotop cmd/skywire-cli/commands/gotop/grpcdevice.go
 package cligotop
 
