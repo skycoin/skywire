@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
@@ -35,20 +34,19 @@ const (
 )
 
 var (
-	addr            string
-	metricsAddr     string
-	redisURL        string
-	redisPoolSize   int
-	logLvl          string
-	tag             string
-	testing         bool
-	dmsgDisc        string
-	sk              cipher.SecKey
-	keyFile         string
-	dmsgPort        uint16
-	dmsgServerType  string
-	multiplexingLib string
-	pprofAddr       string
+	addr           string
+	metricsAddr    string
+	redisURL       string
+	redisPoolSize  int
+	logLvl         string
+	tag            string
+	testing        bool
+	dmsgDisc       string
+	sk             cipher.SecKey
+	keyFile        string
+	dmsgPort       uint16
+	dmsgServerType string
+	pprofAddr      string
 )
 
 // exampleJSON marshals v to indented JSON with color, returning empty string on error
@@ -107,7 +105,6 @@ func init() {
 	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
-	RootCmd.Flags().StringVar(&multiplexingLib, "multiplexing-lib", "yamux", "type of multiplexing lib on dmsg network\n\r")
 }
 
 // RootCmd contains the root command
@@ -212,36 +209,22 @@ Example:
 		}()
 
 		if !pk.Null() {
-			servers := dmsghttp.GetServers(ctx, dmsgDisc, dmsgServerType, logger)
-
-			var keys cipher.PubKeys
-			keys = append(keys, pk)
-			dClient := direct.NewClient(direct.GetAllEntries(keys, servers), logger)
-			config := &dmsg.Config{
-				MinSessions:          0, // listen on all available servers
-				UpdateInterval:       dmsg.DefaultUpdateInterval,
-				ConnectedServersType: dmsgServerType,
-				Protocol:             multiplexingLib,
-			}
-
-			dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, logger, pk, sk, dClient, config)
+			dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, logger, pk, sk,
+				dmsg.Prod.DmsgServers, dmsgDisc, dmsgServerType)
 			if err != nil {
 				logger.WithError(err).Fatal("failed to start direct dmsg client.")
 			}
-
-			defer closeDmsgDC()
+			defer dmsgBoot.Close()
 
 			go func() {
 				for {
-					rfAPI.DmsgServers = dmsgDC.ConnectedServersPK()
+					rfAPI.DmsgServers = dmsgBoot.Client.ConnectedServersPK()
 					time.Sleep(time.Second)
 				}
 			}()
 
-			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, logger)
-
 			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, sk, rfAPI, dClient, dmsgPort, dmsgDC, logger); err != nil {
+				if err := dmsghttp.ListenAndServe(ctx, sk, rfAPI, dmsgBoot.DClient, dmsgPort, dmsgBoot.Client, logger); err != nil {
 					logger.Errorf("dmsghttp.ListenAndServe: %v", err)
 					cancel()
 				}

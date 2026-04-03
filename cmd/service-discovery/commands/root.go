@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
@@ -250,34 +249,22 @@ Example:
 		}()
 
 		if !pk.Null() {
-			servers := dmsghttp.GetServers(ctx, dmsgDisc, dmsgServerType, log)
-			config := &dmsg.Config{
-				MinSessions:          0, // listen on all available servers
-				UpdateInterval:       dmsg.DefaultUpdateInterval,
-				ConnectedServersType: dmsgServerType,
-			}
-			var keys cipher.PubKeys
-			keys = append(keys, pk)
-			dClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
-
-			dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, log, pk, sk, dClient, config)
+			dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk,
+				dmsg.Prod.DmsgServers, dmsgDisc, dmsgServerType)
 			if err != nil {
 				log.WithError(err).Fatal("failed to start direct dmsg client.")
 			}
-
-			defer closeDmsgDC()
+			defer dmsgBoot.Close()
 
 			go func() {
 				for {
-					sdAPI.DmsgServers = dmsgDC.ConnectedServersPK()
+					sdAPI.DmsgServers = dmsgBoot.Client.ConnectedServersPK()
 					time.Sleep(time.Second)
 				}
 			}()
 
-			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, log)
-
 			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, sk, sdAPI, dClient, dmsgPort, dmsgDC, log); err != nil {
+				if err := dmsghttp.ListenAndServe(ctx, sk, sdAPI, dmsgBoot.DClient, dmsgPort, dmsgBoot.Client, log); err != nil {
 					log.Errorf("dmsghttp.ListenAndServe: %v", err)
 					cancel()
 				}
