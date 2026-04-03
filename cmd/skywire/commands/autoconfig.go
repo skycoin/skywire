@@ -195,8 +195,16 @@ func generateConfig(hvArg string) error {
 		return err
 	}
 
-	// Generate test deployment config with the same keys
-	return generateTestConfig(hvArg)
+	// Generate test deployment config with the same keys.
+	// Skip if the user has a custom service config URL — that config bootstrapper
+	// serves one deployment, there's no "test" counterpart to fetch from.
+	if os.Getenv("SVCCONFADDR") == "" {
+		if err := generateTestConfig(hvArg); err != nil {
+			// Non-fatal: test config is optional
+			fmt.Printf("%sWarning:%s test config generation failed: %v\n", colorYellow, colorReset, err)
+		}
+	}
+	return nil
 }
 
 func generateTestConfig(hvArg string) error {
