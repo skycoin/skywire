@@ -262,6 +262,8 @@ dep: tidy ## Sorts dependencies
 
 update-deps: ## Update all dependencies to latest versions (use 'make update-deps push-deps' to also commit and push)
 	${OPTS} go get -v -u ./...
+	@echo "Pinning distatus/battery@v0.10.0 (v0.11.0 breaks gotop)"
+	${OPTS} go get github.com/distatus/battery@v0.10.0
 	${OPTS} go mod tidy -v
 	${OPTS} go mod vendor -v
 	@echo "Dependencies updated. Run 'make push-deps' to commit and push changes."
@@ -560,15 +562,7 @@ integration-env-clean: #clean
 	bash -c "DOCKER_TAG=integration docker compose -f ${COMPOSE_FILE} down"
 	bash ./docker/docker_clean.sh integration
 
-update-dep: #update vendor deps
-	go get -v -u ./...
-	echo "hold distatus/battery@v0.10.0 (v0.11.0 breaks gotop)"
-	go get github.com/distatus/battery@v0.10.0
-	go mod tidy
-	go mod vendor
-	git add go.mod go.sum vendor
-	git diff --cached --quiet || git commit -m "update deps"
-	git diff --cached --quiet || git push
+update-dep: update-deps ## Alias for update-deps
 
 ## Sync local develop branch with upstream skycoin/skywire develop.
 ## Requires: origin = your fork, upstream = skycoin/skywire
