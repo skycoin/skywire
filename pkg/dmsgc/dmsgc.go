@@ -16,6 +16,7 @@ import (
 // DmsgConfig defines config for Dmsg network.
 type DmsgConfig struct {
 	Discovery            string        `json:"discovery"`
+	DiscoveryDmsg        string        `json:"discovery_dmsg,omitempty"`
 	SessionsCount        int           `json:"sessions_count"`
 	Servers              []*disc.Entry `json:"servers"`
 	ConnectedServersType string        `json:"servers_type"`

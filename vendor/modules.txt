@@ -9,119 +9,6 @@ atomicgo.dev/keyboard/keys
 # atomicgo.dev/schedule v0.1.0
 ## explicit; go 1.18
 atomicgo.dev/schedule
-# cogentcore.org/core v0.3.21
-## explicit; go 1.25.6
-cogentcore.org/core/base/bools
-cogentcore.org/core/base/datasize
-cogentcore.org/core/base/elide
-cogentcore.org/core/base/errors
-cogentcore.org/core/base/fileinfo
-cogentcore.org/core/base/fileinfo/mimedata
-cogentcore.org/core/base/fsx
-cogentcore.org/core/base/indent
-cogentcore.org/core/base/iox
-cogentcore.org/core/base/iox/imagex
-cogentcore.org/core/base/iox/jsonx
-cogentcore.org/core/base/iox/tomlx
-cogentcore.org/core/base/keylist
-cogentcore.org/core/base/labels
-cogentcore.org/core/base/metadata
-cogentcore.org/core/base/nptime
-cogentcore.org/core/base/num
-cogentcore.org/core/base/option
-cogentcore.org/core/base/ordmap
-cogentcore.org/core/base/plan
-cogentcore.org/core/base/profile
-cogentcore.org/core/base/reflectx
-cogentcore.org/core/base/slicesx
-cogentcore.org/core/base/stack
-cogentcore.org/core/base/strcase
-cogentcore.org/core/base/stringsx
-cogentcore.org/core/base/tiered
-cogentcore.org/core/base/vcs
-cogentcore.org/core/colors
-cogentcore.org/core/colors/cam/cam16
-cogentcore.org/core/colors/cam/cie
-cogentcore.org/core/colors/cam/hct
-cogentcore.org/core/colors/cam/hsl
-cogentcore.org/core/colors/colormap
-cogentcore.org/core/colors/gradient
-cogentcore.org/core/colors/matcolor
-cogentcore.org/core/core
-cogentcore.org/core/cursors
-cogentcore.org/core/cursors/cursorimg
-cogentcore.org/core/enums
-cogentcore.org/core/events
-cogentcore.org/core/events/key
-cogentcore.org/core/gpu
-cogentcore.org/core/gpu/drawmatrix
-cogentcore.org/core/gpu/gpudraw
-cogentcore.org/core/htmlcore
-cogentcore.org/core/icons
-cogentcore.org/core/keymap
-cogentcore.org/core/math32
-cogentcore.org/core/paint
-cogentcore.org/core/paint/pdf
-cogentcore.org/core/paint/pimage
-cogentcore.org/core/paint/ppath
-cogentcore.org/core/paint/render
-cogentcore.org/core/paint/renderers
-cogentcore.org/core/paint/renderers/htmlcanvas
-cogentcore.org/core/paint/renderers/pdfrender
-cogentcore.org/core/paint/renderers/rasterx
-cogentcore.org/core/paint/renderers/rasterx/scan
-cogentcore.org/core/paint/renderers/svgrender
-cogentcore.org/core/styles
-cogentcore.org/core/styles/abilities
-cogentcore.org/core/styles/sides
-cogentcore.org/core/styles/states
-cogentcore.org/core/styles/styleprops
-cogentcore.org/core/styles/units
-cogentcore.org/core/svg
-cogentcore.org/core/system
-cogentcore.org/core/system/composer
-cogentcore.org/core/system/driver
-cogentcore.org/core/system/driver/android
-cogentcore.org/core/system/driver/base
-cogentcore.org/core/system/driver/desktop
-cogentcore.org/core/system/driver/ios
-cogentcore.org/core/system/driver/mobile/callfn
-cogentcore.org/core/system/driver/mobile/mobileinit
-cogentcore.org/core/system/driver/offscreen
-cogentcore.org/core/system/driver/web
-cogentcore.org/core/system/driver/web/jsfs
-cogentcore.org/core/text/csl
-cogentcore.org/core/text/difflib
-cogentcore.org/core/text/fonts
-cogentcore.org/core/text/highlighting
-cogentcore.org/core/text/htmltext
-cogentcore.org/core/text/lines
-cogentcore.org/core/text/parse
-cogentcore.org/core/text/parse/complete
-cogentcore.org/core/text/parse/languages
-cogentcore.org/core/text/parse/languages/bibtex
-cogentcore.org/core/text/parse/languages/golang
-cogentcore.org/core/text/parse/languages/markdown
-cogentcore.org/core/text/parse/languages/tex
-cogentcore.org/core/text/parse/lexer
-cogentcore.org/core/text/parse/parser
-cogentcore.org/core/text/parse/supportedlanguages
-cogentcore.org/core/text/parse/syms
-cogentcore.org/core/text/printer
-cogentcore.org/core/text/rich
-cogentcore.org/core/text/runes
-cogentcore.org/core/text/search
-cogentcore.org/core/text/shaped
-cogentcore.org/core/text/shaped/shapers
-cogentcore.org/core/text/shaped/shapers/shapedgt
-cogentcore.org/core/text/shaped/shapers/shapedjs
-cogentcore.org/core/text/spell
-cogentcore.org/core/text/text
-cogentcore.org/core/text/textcore
-cogentcore.org/core/text/textpos
-cogentcore.org/core/text/token
-cogentcore.org/core/tree
-cogentcore.org/core/types
 # fyne.io/systray v1.12.0
 ## explicit; go 1.19
 fyne.io/systray
@@ -137,12 +24,6 @@ github.com/AudriusButkevicius/pfilter
 ## explicit; go 1.16
 github.com/Azure/go-ansiterm
 github.com/Azure/go-ansiterm/winterm
-# github.com/Bios-Marcel/wastebasket/v2 v2.0.3
-## explicit; go 1.23.4
-github.com/Bios-Marcel/wastebasket/v2
-github.com/Bios-Marcel/wastebasket/v2/internal
-github.com/Bios-Marcel/wastebasket/v2/wastebasket_nix
-github.com/Bios-Marcel/wastebasket/v2/wastebasket_windows
 # github.com/BurntSushi/toml v1.6.0
 ## explicit; go 1.18
 github.com/BurntSushi/toml
@@ -150,9 +31,6 @@ github.com/BurntSushi/toml/internal
 # github.com/DiSiqueira/GoTree v1.0.0
 ## explicit
 github.com/DiSiqueira/GoTree
-# github.com/Masterminds/vcs v1.13.3
-## explicit; go 1.17
-github.com/Masterminds/vcs
 # github.com/MichaelMure/go-term-markdown v0.1.4
 ## explicit; go 1.12
 github.com/MichaelMure/go-term-markdown
@@ -170,7 +48,7 @@ github.com/Microsoft/go-winio/pkg/guid
 # github.com/NYTimes/gziphandler v1.1.1
 ## explicit; go 1.11
 github.com/NYTimes/gziphandler
-# github.com/VictoriaMetrics/metrics v1.42.0
+# github.com/VictoriaMetrics/metrics v1.43.0
 ## explicit; go 1.24.0
 github.com/VictoriaMetrics/metrics
 # github.com/VividCortex/ewma v1.2.0
@@ -211,21 +89,9 @@ github.com/alecthomas/chroma/lexers/x
 github.com/alecthomas/chroma/lexers/y
 github.com/alecthomas/chroma/lexers/z
 github.com/alecthomas/chroma/styles
-# github.com/alecthomas/chroma/v2 v2.23.1
-## explicit; go 1.22
-github.com/alecthomas/chroma/v2
-github.com/alecthomas/chroma/v2/formatters/html
-github.com/alecthomas/chroma/v2/lexers
 # github.com/anatol/smart.go v0.0.0-20260314002218-4abf60ecc43c
 ## explicit; go 1.26
 github.com/anatol/smart.go
-# github.com/anthonynsimon/bild v0.14.0
-## explicit; go 1.21
-github.com/anthonynsimon/bild/clone
-github.com/anthonynsimon/bild/convolution
-github.com/anthonynsimon/bild/math/f64
-github.com/anthonynsimon/bild/parallel
-github.com/anthonynsimon/bild/transform
 # github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 ## explicit
 github.com/armon/go-socks5
@@ -235,10 +101,6 @@ github.com/atotto/clipboard
 # github.com/aymanbagabas/go-osc52/v2 v2.0.1
 ## explicit; go 1.16
 github.com/aymanbagabas/go-osc52/v2
-# github.com/aymerick/douceur v0.2.0
-## explicit
-github.com/aymerick/douceur/css
-github.com/aymerick/douceur/parser
 # github.com/bitfield/script v0.24.1
 ## explicit; go 1.18
 github.com/bitfield/script
@@ -330,9 +192,6 @@ github.com/charmbracelet/x/term
 # github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937
 ## explicit; go 1.18
 github.com/chen3feng/safecast
-# github.com/chewxy/math32 v1.11.1
-## explicit; go 1.13
-github.com/chewxy/math32
 # github.com/clipperhouse/displaywidth v0.11.0
 ## explicit; go 1.18
 github.com/clipperhouse/displaywidth
@@ -356,22 +215,6 @@ github.com/coder/websocket/internal/bpool
 github.com/coder/websocket/internal/errd
 github.com/coder/websocket/internal/util
 github.com/coder/websocket/internal/wsjs
-# github.com/cogentcore/webgpu v0.23.0
-## explicit; go 1.22
-github.com/cogentcore/webgpu/jsx
-github.com/cogentcore/webgpu/wgpu
-github.com/cogentcore/webgpu/wgpu/lib
-github.com/cogentcore/webgpu/wgpu/lib/android/386
-github.com/cogentcore/webgpu/wgpu/lib/android/amd64
-github.com/cogentcore/webgpu/wgpu/lib/android/arm
-github.com/cogentcore/webgpu/wgpu/lib/android/arm64
-github.com/cogentcore/webgpu/wgpu/lib/darwin/amd64
-github.com/cogentcore/webgpu/wgpu/lib/darwin/arm64
-github.com/cogentcore/webgpu/wgpu/lib/ios/amd64
-github.com/cogentcore/webgpu/wgpu/lib/ios/arm64
-github.com/cogentcore/webgpu/wgpu/lib/linux/amd64
-github.com/cogentcore/webgpu/wgpu/lib/windows/amd64
-github.com/cogentcore/webgpu/wgpuglfw
 # github.com/confiant-inc/go-socks5 v0.0.0-20210816151940-c1124825b1d6
 ## explicit
 github.com/confiant-inc/go-socks5
@@ -443,7 +286,7 @@ github.com/docker/go-units
 # github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1
 ## explicit
 github.com/droundy/goopt
-# github.com/elazarl/goproxy v1.8.2
+# github.com/elazarl/goproxy v1.8.3
 ## explicit; go 1.23.0
 github.com/elazarl/goproxy
 github.com/elazarl/goproxy/internal/http1parser
@@ -451,9 +294,6 @@ github.com/elazarl/goproxy/internal/signer
 # github.com/eliukblau/pixterm/pkg/ansimage v0.0.0-20191210081756-9fb6cf8c2f75
 ## explicit; go 1.13
 github.com/eliukblau/pixterm/pkg/ansimage
-# github.com/ericchiang/css v1.4.0
-## explicit; go 1.15
-github.com/ericchiang/css
 # github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f
 ## explicit; go 1.16
 github.com/erikgeiser/coninput
@@ -513,12 +353,6 @@ github.com/gdamore/tcell/v2/terminfo/x/xfce
 github.com/gdamore/tcell/v2/terminfo/x/xterm
 github.com/gdamore/tcell/v2/terminfo/x/xterm_ghostty
 github.com/gdamore/tcell/v2/terminfo/x/xterm_kitty
-# github.com/gdamore/tcell/v3 v3.1.2
-## explicit; go 1.24.0
-github.com/gdamore/tcell/v3
-github.com/gdamore/tcell/v3/color
-github.com/gdamore/tcell/v3/tty
-github.com/gdamore/tcell/v3/vt
 # github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 ## explicit
 github.com/gen2brain/dlgs
@@ -558,15 +392,6 @@ github.com/go-echarts/go-echarts/v2/render
 github.com/go-echarts/go-echarts/v2/templates
 github.com/go-echarts/go-echarts/v2/types
 github.com/go-echarts/go-echarts/v2/util
-# github.com/go-gl/glfw/v3.3/glfw v0.0.0-20250301202403-da16c1255728
-## explicit; go 1.19
-github.com/go-gl/glfw/v3.3/glfw
-github.com/go-gl/glfw/v3.3/glfw/glfw/deps
-github.com/go-gl/glfw/v3.3/glfw/glfw/deps/glad
-github.com/go-gl/glfw/v3.3/glfw/glfw/deps/mingw
-github.com/go-gl/glfw/v3.3/glfw/glfw/deps/vs2008
-github.com/go-gl/glfw/v3.3/glfw/glfw/include/GLFW
-github.com/go-gl/glfw/v3.3/glfw/glfw/src
 # github.com/go-logr/logr v1.4.3
 ## explicit; go 1.18
 github.com/go-logr/logr
@@ -585,8 +410,8 @@ github.com/go-playground/locales/currency
 # github.com/go-playground/universal-translator v0.18.1
 ## explicit; go 1.18
 github.com/go-playground/universal-translator
-# github.com/go-playground/validator/v10 v10.30.1
-## explicit; go 1.24.0
+# github.com/go-playground/validator/v10 v10.30.2
+## explicit; go 1.25.0
 github.com/go-playground/validator/v10
 # github.com/go-redis/redis v6.15.9+incompatible
 ## explicit
@@ -607,34 +432,10 @@ github.com/go-redis/redis/v8/internal/pool
 github.com/go-redis/redis/v8/internal/proto
 github.com/go-redis/redis/v8/internal/rand
 github.com/go-redis/redis/v8/internal/util
-# github.com/go-text/typesetting v0.3.4
-## explicit; go 1.19
-github.com/go-text/typesetting/di
-github.com/go-text/typesetting/font
-github.com/go-text/typesetting/font/cff
-github.com/go-text/typesetting/font/cff/interpreter
-github.com/go-text/typesetting/font/opentype
-github.com/go-text/typesetting/font/opentype/tables
-github.com/go-text/typesetting/fontscan
-github.com/go-text/typesetting/harfbuzz
-github.com/go-text/typesetting/internal/unicodedata
-github.com/go-text/typesetting/language
-github.com/go-text/typesetting/segmenter
-github.com/go-text/typesetting/shaping
 # github.com/go-viper/mapstructure/v2 v2.5.0
 ## explicit; go 1.18
 github.com/go-viper/mapstructure/v2
 github.com/go-viper/mapstructure/v2/internal/errors
-# github.com/gobwas/glob v0.2.3
-## explicit
-github.com/gobwas/glob
-github.com/gobwas/glob/compiler
-github.com/gobwas/glob/match
-github.com/gobwas/glob/syntax
-github.com/gobwas/glob/syntax/ast
-github.com/gobwas/glob/syntax/lexer
-github.com/gobwas/glob/util/runes
-github.com/gobwas/glob/util/strings
 # github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1
 ## explicit; go 1.13
 github.com/gocarina/gocsv
@@ -665,18 +466,12 @@ github.com/goccy/go-yaml/token
 github.com/godbus/dbus/v5
 github.com/godbus/dbus/v5/introspect
 github.com/godbus/dbus/v5/prop
-# github.com/gogo/protobuf v1.3.2
-## explicit; go 1.15
-github.com/gogo/protobuf/proto
 # github.com/gomarkdown/markdown v0.0.0-20260217112301-37c66b85d6ab
 ## explicit; go 1.12
 github.com/gomarkdown/markdown
 github.com/gomarkdown/markdown/ast
 github.com/gomarkdown/markdown/html
 github.com/gomarkdown/markdown/parser
-# github.com/google/gousb v1.1.3
-## explicit; go 1.16
-github.com/google/gousb
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
@@ -686,40 +481,12 @@ github.com/gookit/color
 # github.com/gopherjs/gopherjs v1.20.1
 ## explicit; go 1.20
 github.com/gopherjs/gopherjs/js
-# github.com/gorilla/css v1.0.1
-## explicit; go 1.20
-github.com/gorilla/css/scanner
 # github.com/gorilla/securecookie v1.1.2
 ## explicit; go 1.20
 github.com/gorilla/securecookie
 # github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2
 ## explicit; go 1.23.0
-# github.com/h2non/filetype v1.1.3
-## explicit; go 1.13
-github.com/h2non/filetype
-github.com/h2non/filetype/matchers
-github.com/h2non/filetype/matchers/isobmff
-github.com/h2non/filetype/types
-# github.com/hack-pad/go-indexeddb v0.3.2
-## explicit; go 1.18
-github.com/hack-pad/go-indexeddb/idb
-github.com/hack-pad/go-indexeddb/idb/internal/jscache
-# github.com/hack-pad/hackpadfs v0.2.4
-## explicit; go 1.19
-github.com/hack-pad/hackpadfs
-github.com/hack-pad/hackpadfs/indexeddb
-github.com/hack-pad/hackpadfs/indexeddb/idbblob
-github.com/hack-pad/hackpadfs/internal/jswrapper
-github.com/hack-pad/hackpadfs/keyvalue
-github.com/hack-pad/hackpadfs/keyvalue/blob
-github.com/hack-pad/hackpadfs/mem
-github.com/hack-pad/hackpadfs/mount
-# github.com/hack-pad/safejs v0.1.1
-## explicit; go 1.18
-github.com/hack-pad/safejs
-github.com/hack-pad/safejs/internal/catch
-github.com/hack-pad/safejs/internal/stackerr
-# github.com/hashicorp/go-version v1.8.0
+# github.com/hashicorp/go-version v1.9.0
 ## explicit
 github.com/hashicorp/go-version
 # github.com/hashicorp/yamux v0.1.2
@@ -728,10 +495,10 @@ github.com/hashicorp/yamux
 # github.com/inconshreveable/mousetrap v1.1.0
 ## explicit; go 1.18
 github.com/inconshreveable/mousetrap
-# github.com/itchyny/gojq v0.12.18
+# github.com/itchyny/gojq v0.12.19
 ## explicit; go 1.24.0
 github.com/itchyny/gojq
-# github.com/itchyny/timefmt-go v0.1.7
+# github.com/itchyny/timefmt-go v0.1.8
 ## explicit; go 1.24
 github.com/itchyny/timefmt-go
 # github.com/ivanpirog/coloredcobra v1.0.1
@@ -764,7 +531,7 @@ github.com/jackc/puddle/v2/internal/genstack
 # github.com/james-barrow/golang-ipc v1.2.4
 ## explicit; go 1.15
 github.com/james-barrow/golang-ipc
-# github.com/jaypipes/ghw v0.23.0
+# github.com/jaypipes/ghw v0.24.0
 ## explicit; go 1.21
 github.com/jaypipes/ghw
 github.com/jaypipes/ghw/internal/config
@@ -794,12 +561,6 @@ github.com/jaypipes/ghw/pkg/util
 github.com/jaypipes/pcidb
 github.com/jaypipes/pcidb/internal
 github.com/jaypipes/pcidb/types
-# github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade
-## explicit; go 1.18
-github.com/jeandeaual/go-locale
-# github.com/jinzhu/copier v0.4.0
-## explicit; go 1.13
-github.com/jinzhu/copier
 # github.com/jinzhu/inflection v1.0.0
 ## explicit
 github.com/jinzhu/inflection
@@ -828,7 +589,7 @@ github.com/kyokomi/emoji/v2
 ## explicit; go 1.18
 github.com/leodido/go-urn
 github.com/leodido/go-urn/scim/schema
-# github.com/lib/pq v1.12.0
+# github.com/lib/pq v1.12.2
 ## explicit; go 1.21
 github.com/lib/pq
 github.com/lib/pq/internal/pgpass
@@ -843,10 +604,10 @@ github.com/lib/pq/scram
 # github.com/lithammer/fuzzysearch v1.1.8
 ## explicit; go 1.15
 github.com/lithammer/fuzzysearch/fuzzy
-# github.com/lucasb-eyer/go-colorful v1.3.0
+# github.com/lucasb-eyer/go-colorful v1.4.0
 ## explicit; go 1.12
 github.com/lucasb-eyer/go-colorful
-# github.com/lufia/plan9stats v0.0.0-20260324052639-156f7da3f749
+# github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e
 ## explicit; go 1.21
 github.com/lufia/plan9stats
 # github.com/mattn/go-colorable v0.1.14
@@ -864,9 +625,6 @@ github.com/mattn/go-runewidth
 # github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 ## explicit
 github.com/mgutz/ansi
-# github.com/mitchellh/go-homedir v1.1.0
-## explicit
-github.com/mitchellh/go-homedir
 # github.com/mitchellh/go-wordwrap v1.0.1
 ## explicit; go 1.14
 github.com/mitchellh/go-wordwrap
@@ -1048,20 +806,12 @@ github.com/skycoin/dmsg/pkg/dmsgserver
 github.com/skycoin/dmsg/pkg/dmsgtest
 github.com/skycoin/dmsg/pkg/ioutil
 github.com/skycoin/dmsg/pkg/noise
-# github.com/skycoin/hardware-wallet-protob v0.0.0-20250805154629-410561e1bc2f
-## explicit; go 1.24.5
-github.com/skycoin/hardware-wallet-protob/go
-github.com/skycoin/hardware-wallet-protob/go/google/protobuf
-# github.com/skycoin/hardware-wallet/firmware v0.0.0-20260117000250-43c66b2bf1d2
-## explicit; go 1.21
-github.com/skycoin/hardware-wallet/firmware
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
 # github.com/skycoin/skycoin v0.28.6-0.20260401142608-a27afbb0b33b
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
-github.com/skycoin/skycoin/cmd/hardware-wallet/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
 github.com/skycoin/skycoin/cmd/skycoin-cli/commands
 github.com/skycoin/skycoin/cmd/skycoin-wallet/commands
@@ -1098,14 +848,6 @@ github.com/skycoin/skycoin/src/daemon/strand
 github.com/skycoin/skycoin/src/electrum
 github.com/skycoin/skycoin/src/fiber
 github.com/skycoin/skycoin/src/gui
-github.com/skycoin/skycoin/src/hardware-wallet-daemon/api
-github.com/skycoin/skycoin/src/hardware-wallet-daemon/daemon
-github.com/skycoin/skycoin/src/hardware-wallet/cli
-github.com/skycoin/skycoin/src/hardware-wallet/skywallet
-github.com/skycoin/skycoin/src/hardware-wallet/skywallet/usb
-github.com/skycoin/skycoin/src/hardware-wallet/skywallet/wire
-github.com/skycoin/skycoin/src/hardware-wallet/usb/lowlevel/hidapi
-github.com/skycoin/skycoin/src/hardware-wallet/usb/lowlevel/libusb
 github.com/skycoin/skycoin/src/kvstorage
 github.com/skycoin/skycoin/src/params
 github.com/skycoin/skycoin/src/readable
@@ -1181,9 +923,6 @@ github.com/subosito/gotenv
 # github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 ## explicit
 github.com/syndtr/gocapability/capability
-# github.com/tdewolff/parse/v2 v2.8.10
-## explicit; go 1.11
-github.com/tdewolff/parse/v2/strconv
 # github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161
 ## explicit
 github.com/templexxx/cpufeat
@@ -1257,7 +996,7 @@ github.com/xxxserxxx/gotop/v4/widgets
 # github.com/xxxserxxx/lingo/v2 v2.0.1
 ## explicit; go 1.16
 github.com/xxxserxxx/lingo/v2
-# github.com/yuin/goldmark v1.8.1
+# github.com/yuin/goldmark v1.8.2
 ## explicit; go 1.22
 github.com/yuin/goldmark
 github.com/yuin/goldmark/ast
@@ -1358,30 +1097,22 @@ golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
 # golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
 ## explicit; go 1.25.0
-golang.org/x/exp/maps
 # golang.org/x/image v0.38.0
 ## explicit; go 1.25.0
 golang.org/x/image/bmp
 golang.org/x/image/ccitt
-golang.org/x/image/draw
-golang.org/x/image/math/f64
-golang.org/x/image/math/fixed
 golang.org/x/image/riff
 golang.org/x/image/tiff
 golang.org/x/image/tiff/lzw
 golang.org/x/image/vp8
 golang.org/x/image/vp8l
 golang.org/x/image/webp
-# golang.org/x/mod v0.34.0
-## explicit; go 1.25.0
-golang.org/x/mod/semver
 # golang.org/x/net v0.52.0
 ## explicit; go 1.25.0
 golang.org/x/net/bpf
 golang.org/x/net/context
 golang.org/x/net/html
 golang.org/x/net/html/atom
-golang.org/x/net/html/charset
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/h2c
@@ -1416,14 +1147,8 @@ golang.org/x/term
 ## explicit; go 1.25.0
 golang.org/x/text/cases
 golang.org/x/text/encoding
-golang.org/x/text/encoding/charmap
-golang.org/x/text/encoding/htmlindex
 golang.org/x/text/encoding/internal
 golang.org/x/text/encoding/internal/identifier
-golang.org/x/text/encoding/japanese
-golang.org/x/text/encoding/korean
-golang.org/x/text/encoding/simplifiedchinese
-golang.org/x/text/encoding/traditionalchinese
 golang.org/x/text/encoding/unicode
 golang.org/x/text/internal
 golang.org/x/text/internal/language
@@ -1441,27 +1166,6 @@ golang.org/x/text/width
 # golang.org/x/time v0.15.0
 ## explicit; go 1.25.0
 golang.org/x/time/rate
-# golang.org/x/tools v0.43.0
-## explicit; go 1.25.0
-golang.org/x/tools/go/ast/edge
-golang.org/x/tools/go/ast/inspector
-golang.org/x/tools/go/gcexportdata
-golang.org/x/tools/go/packages
-golang.org/x/tools/go/types/objectpath
-golang.org/x/tools/go/types/typeutil
-golang.org/x/tools/internal/aliases
-golang.org/x/tools/internal/event
-golang.org/x/tools/internal/event/core
-golang.org/x/tools/internal/event/keys
-golang.org/x/tools/internal/event/label
-golang.org/x/tools/internal/gcimporter
-golang.org/x/tools/internal/gocommand
-golang.org/x/tools/internal/packagesinternal
-golang.org/x/tools/internal/pkgbits
-golang.org/x/tools/internal/stdlib
-golang.org/x/tools/internal/typeparams
-golang.org/x/tools/internal/typesinternal
-golang.org/x/tools/internal/versions
 # golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
 ## explicit; go 1.17
 golang.zx2c4.com/wintun
@@ -1473,10 +1177,10 @@ golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
 # google.golang.org/genproto/googleapis/api v0.0.0-20260319201613-d00831a3d3e7
 ## explicit; go 1.25.0
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20260319201613-d00831a3d3e7
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9
 ## explicit; go 1.25.0
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.79.3
+# google.golang.org/grpc v1.80.0
 ## explicit; go 1.24.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes
@@ -1514,6 +1218,7 @@ google.golang.org/grpc/internal/grpclog
 google.golang.org/grpc/internal/grpcsync
 google.golang.org/grpc/internal/grpcutil
 google.golang.org/grpc/internal/idle
+google.golang.org/grpc/internal/mem
 google.golang.org/grpc/internal/metadata
 google.golang.org/grpc/internal/pretty
 google.golang.org/grpc/internal/proxyattributes
