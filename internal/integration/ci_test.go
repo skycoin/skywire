@@ -392,9 +392,10 @@ func TestEnv_Tp(t *testing.T) {
 		GatherVisorPKs([]string{visorA, visorB, visorC})
 
 	// Wait for DMSG discovery entries for all visors before creating transports
-	// This ensures visors are registered with delegated servers
+	// This ensures visors are registered with delegated servers.
+	// 120s timeout: the single DMSG server in E2E can be slow to accept sessions.
 	for _, visor := range []string{visorA, visorB, visorC} {
-		err := env.WaitForDmsgDiscoveryEntry(visor, 60*time.Second)
+		err := env.WaitForDmsgDiscoveryEntry(visor, 120*time.Second)
 		if err != nil {
 			// Dump logs on failure for debugging
 			t.Logf("Failed to find DMSG discovery entry for %s: %v", visor, err)
