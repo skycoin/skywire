@@ -25,7 +25,10 @@ const (
 	colorBold   = "\033[1m"
 )
 
+var autoconfigVerbose bool
+
 func init() {
+	autoconfigCmd.Flags().BoolVarP(&autoconfigVerbose, "verbose", "v", false, "show reward address, support links, and other details")
 	RootCmd.AddCommand(autoconfigCmd)
 }
 
@@ -148,8 +151,10 @@ var autoconfigCmd = &cobra.Command{
 			msg2(fmt.Sprintf("Remote Hypervisor Public Key:\n%s%s%s", colorPurple, strings.TrimSpace(hvPKs), colorReset))
 		}
 
-		// Welcome message
-		printWelcome(pubkey, isHypervisor)
+		// Welcome message (only with --verbose)
+		if autoconfigVerbose {
+			printWelcome(pubkey, isHypervisor)
+		}
 	},
 }
 
@@ -187,18 +192,11 @@ func printWelcome(pubkey string, isHypervisor bool) {
 	rewardOut, err := exec.Command("skywire", "cli", "reward", "-r").Output()
 	if err == nil && len(rewardOut) > 0 {
 		msg2(fmt.Sprintf("skycoin reward address:\n%s%s%s", colorGreen, strings.TrimSpace(string(rewardOut)), colorReset))
-		msg2(fmt.Sprintf("reward metrics:\n%shttps://fiber.skywire.dev/skycoin-rewards%s", colorBlue, colorReset))
+		msg2(fmt.Sprintf("reward metrics:\n%shttps://theskywirenetwork.net%s", colorBlue, colorReset))
 		msg2(fmt.Sprintf("distribution notifications:\n%shttps://t.me/skywire_reward%s", colorBlue, colorReset))
 	} else {
 		msg2(fmt.Sprintf("reward eligibility rules:\n%shttps://github.com/skycoin/skywire/blob/develop/mainnet_rules.md%s", colorYellow, colorReset))
 		msg2(fmt.Sprintf("set your skycoin reward address:\n%sskywire cli %sreward %s<skycoin-address>%s", colorCyan, colorYellow, colorGreen, colorReset))
-	}
-
-	// Uptime tracking
-	if pubkey != "" {
-		msg2(fmt.Sprintf("track uptime:\n  %sskywire cli %sut -m0 -k %s%s%s\n%shttps://ut.skywire.skycoin.com/uptimes?v=v2&visors=%s%s",
-			colorCyan, colorYellow, colorGreen, pubkey, colorReset,
-			colorBlue, pubkey, colorReset))
 	}
 
 	// Support
