@@ -885,10 +885,10 @@ func configureLauncher(log *logging.Logger) {
 
 		if dmsgConf != nil {
 			conf.Dmsg.Servers = dmsgConf.DMSGServers
-			conf.Dmsg.Discovery = dmsgConf.DMSGDiscovery
 
 			if isDmsgHTTP {
-				// DMSG-only: overwrite HTTP URLs
+				// DMSG-only: overwrite HTTP URLs with DMSG URLs
+				conf.Dmsg.Discovery = dmsgConf.DMSGDiscovery
 				conf.Transport.AddressResolver = dmsgConf.AddressResolver
 				conf.Transport.Discovery = dmsgConf.TransportDiscovery
 				conf.UptimeTracker.Addr = dmsgConf.UptimeTracker
@@ -896,6 +896,7 @@ func configureLauncher(log *logging.Logger) {
 				conf.Launcher.ServiceDisc = dmsgConf.ServiceDiscovery
 			} else {
 				// Dual mode: keep HTTP URLs, add DMSG URLs as fallback
+				conf.Dmsg.DiscoveryDmsg = dmsgConf.DMSGDiscovery
 				conf.Transport.AddressResolverDmsg = dmsgConf.AddressResolver
 				conf.Transport.DiscoveryDmsg = dmsgConf.TransportDiscovery
 				conf.Launcher.ServiceDiscDmsg = dmsgConf.ServiceDiscovery
