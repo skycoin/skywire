@@ -44,7 +44,7 @@ func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) er
 }
 
 func initSystemSurvey(_ context.Context, v *Visor, log *logging.Logger) error {
-	go GenerateSurvey(v, log, true)
+	go GenerateSurvey(v, log, true) //nolint:gosec
 	return nil
 }
 
@@ -76,7 +76,7 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 
 	ticker := time.NewTicker(tickDuration)
 
-	go func() {
+	go func() { //nolint:gosec
 		for range ticker.C {
 			c := context.Background()
 			if err := ut.UpdateVisorUptime(c, v.conf.Version); err != nil {

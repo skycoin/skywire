@@ -671,12 +671,12 @@ func GenerateVersionHistoryChartHTML(history []VersionHistoryEntry, chartWidth, 
 	sb.WriteString("</div>\n")
 
 	// Chart area - use min-width so it can scroll on mobile
-	sb.WriteString(fmt.Sprintf("<div style='position: relative; min-width: %dpx; height: %dpx; border-left: 1px solid #444; border-bottom: 1px solid #444; background: #1a1a1a; flex-shrink: 0;'>\n", chartWidth, chartHeight))
+	fmt.Fprintf(&sb, "<div style='position: relative; min-width: %dpx; height: %dpx; border-left: 1px solid #444; border-bottom: 1px solid #444; background: #1a1a1a; flex-shrink: 0;'>\n", chartWidth, chartHeight) //nolint:errcheck,gosec
 
 	// Grid lines
 	for i := 1; i <= 4; i++ {
 		y := chartHeight - (chartHeight * i / 4)
-		sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: 0; right: 0; top: %dpx; border-top: 1px dashed #333;'></div>\n", y))
+		fmt.Fprintf(&sb, "<div style='position: absolute; left: 0; right: 0; top: %dpx; border-top: 1px dashed #333;'></div>\n", y) //nolint:errcheck,gosec
 	}
 
 	// Calculate bar width
@@ -706,8 +706,8 @@ func GenerateVersionHistoryChartHTML(history []VersionHistoryEntry, chartWidth, 
 			bottom := currentY
 			currentY += segmentHeight
 
-			sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: %dpx; bottom: %dpx; width: %dpx; height: %dpx; background: %s;' title='%s: %s (%d)'></div>\n",
-				x, bottom, barWidth-1, segmentHeight, color, entry.Date, version, count))
+			fmt.Fprintf(&sb, "<div style='position: absolute; left: %dpx; bottom: %dpx; width: %dpx; height: %dpx; background: %s;' title='%s: %s (%d)'></div>\n", //nolint:errcheck,gosec
+				x, bottom, barWidth-1, segmentHeight, color, entry.Date, version, count)
 		}
 	}
 
@@ -720,7 +720,7 @@ func GenerateVersionHistoryChartHTML(history []VersionHistoryEntry, chartWidth, 
 		labelInterval = 1
 	}
 
-	sb.WriteString(fmt.Sprintf("<div style='position: relative; margin-left: 40px; height: 20px; min-width: %dpx; font-size: 10px; color: #888;'>\n", chartWidth))
+	fmt.Fprintf(&sb, "<div style='position: relative; margin-left: 40px; height: 20px; min-width: %dpx; font-size: 10px; color: #888;'>\n", chartWidth) //nolint:errcheck,gosec
 	lastLabelIdx := -1
 	prevYear := ""
 	for i, entry := range history {
@@ -750,7 +750,7 @@ func GenerateVersionHistoryChartHTML(history []VersionHistoryEntry, chartWidth, 
 		}
 
 		x := i * barWidth
-		sb.WriteString(fmt.Sprintf("<span style='position: absolute; left: %dpx;'>%s</span>\n", x, label))
+		fmt.Fprintf(&sb, "<span style='position: absolute; left: %dpx;'>%s</span>\n", x, label) //nolint:errcheck,gosec
 		lastLabelIdx = i
 	}
 	sb.WriteString("</div>\n")
@@ -759,7 +759,7 @@ func GenerateVersionHistoryChartHTML(history []VersionHistoryEntry, chartWidth, 
 	sb.WriteString("<div style='margin-top: 15px; display: flex; flex-wrap: wrap; gap: 8px 15px; font-size: 12px;'>\n")
 	for _, version := range versions {
 		color := versionColors[version]
-		sb.WriteString(fmt.Sprintf("<span style='display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;'><span style='display: inline-block; width: 12px; height: 12px; background: %s; flex-shrink: 0;'></span>%s</span>\n", color, html.EscapeString(version)))
+		fmt.Fprintf(&sb, "<span style='display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;'><span style='display: inline-block; width: 12px; height: 12px; background: %s; flex-shrink: 0;'></span>%s</span>\n", color, html.EscapeString(version)) //nolint:errcheck,gosec
 	}
 	sb.WriteString("</div>\n")
 
@@ -806,7 +806,7 @@ func GeneratePieChartHTML(items []PieChartItem, _ int) string {
 	sb.WriteString("<div style='display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 20px; margin: 10px 0; flex-wrap: wrap;'>\n")
 
 	// Pie chart (larger, on the right)
-	sb.WriteString(fmt.Sprintf("<div style='width: 200px; height: 200px; border-radius: 50%%; background: conic-gradient(%s); flex-shrink: 0;'></div>\n", gradient))
+	fmt.Fprintf(&sb, "<div style='width: 200px; height: 200px; border-radius: 50%%; background: conic-gradient(%s); flex-shrink: 0;'></div>\n", gradient) //nolint:errcheck,gosec
 
 	// Legend
 	sb.WriteString("<div style='font-size: 12px; line-height: 1.5; flex: 1; min-width: 200px;'>\n")
@@ -817,9 +817,9 @@ func GeneratePieChartHTML(items []PieChartItem, _ int) string {
 		if len(label) > 35 {
 			label = label[:32] + "..."
 		}
-		sb.WriteString(fmt.Sprintf("<div style='margin: 2px 0;'><span style='display: inline-block; width: 14px; height: 14px; background: %s; margin-right: 6px; vertical-align: middle;'></span>%s (%d, %.1f%%)</div>\n", color, label, item.Count, pct))
+		fmt.Fprintf(&sb, "<div style='margin: 2px 0;'><span style='display: inline-block; width: 14px; height: 14px; background: %s; margin-right: 6px; vertical-align: middle;'></span>%s (%d, %.1f%%)</div>\n", color, label, item.Count, pct) //nolint:errcheck,gosec
 	}
-	sb.WriteString(fmt.Sprintf("<div style='margin-top: 8px; font-weight: bold; font-size: 13px;'>Total: %d</div>\n", total))
+	fmt.Fprintf(&sb, "<div style='margin-top: 8px; font-weight: bold; font-size: 13px;'>Total: %d</div>\n", total) //nolint:errcheck,gosec
 	sb.WriteString("</div>\n")
 
 	sb.WriteString("</div>\n")
