@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
@@ -58,15 +59,9 @@ type EnvServices struct {
 	Prod json.RawMessage `json:"prod"`
 }
 
-// DmsgServerEntry represents a DMSG server with its public key and address.
-type DmsgServerEntry struct {
-	Static string `json:"static"`
-	Server struct {
-		Address string `json:"address"`
-	} `json:"server"`
-}
-
-// Services is subdomains and IP addresses of the skywire services
+// Services is subdomains and IP addresses of the skywire services.
+// This mirrors deployment.Services for use in visor configuration and
+// the config gen CLI. Both HTTP and DMSG endpoints are included.
 type Services struct {
 	// HTTP endpoints
 	DmsgDiscovery      string          `json:"dmsg_discovery,omitempty"`
@@ -81,13 +76,13 @@ type Services struct {
 	DNSServer          string          `json:"dns_server,omitempty"`
 	SurveyWhitelist    []cipher.PubKey `json:"survey_whitelist,omitempty"`
 	// DMSG endpoints (dmsg:// URLs for the same services)
-	DmsgServers            []DmsgServerEntry `json:"dmsg_servers,omitempty"`
-	DmsgDiscoveryDmsg      string            `json:"dmsg_discovery_dmsg,omitempty"`
-	TransportDiscoveryDmsg string            `json:"transport_discovery_dmsg,omitempty"`
-	AddressResolverDmsg    string            `json:"address_resolver_dmsg,omitempty"`
-	RouteFinderDmsg        string            `json:"route_finder_dmsg,omitempty"`
-	UptimeTrackerDmsg      string            `json:"uptime_tracker_dmsg,omitempty"`
-	ServiceDiscoveryDmsg   string            `json:"service_discovery_dmsg,omitempty"`
+	DmsgServers            []deployment.DmsgServerEntry `json:"dmsg_servers,omitempty"`
+	DmsgDiscoveryDmsg      string                       `json:"dmsg_discovery_dmsg,omitempty"`
+	TransportDiscoveryDmsg string                       `json:"transport_discovery_dmsg,omitempty"`
+	AddressResolverDmsg    string                       `json:"address_resolver_dmsg,omitempty"`
+	RouteFinderDmsg        string                       `json:"route_finder_dmsg,omitempty"`
+	UptimeTrackerDmsg      string                       `json:"uptime_tracker_dmsg,omitempty"`
+	ServiceDiscoveryDmsg   string                       `json:"service_discovery_dmsg,omitempty"`
 }
 
 // HasDmsgEndpoints returns true if the services config has DMSG endpoints.

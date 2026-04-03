@@ -535,11 +535,18 @@ func logIfNotStdout(log *logging.Logger, err error, msg string) {
 	}
 }
 
-// fetchServiceConfig fetches service endpoints from the configured URL
-// or falls back to a local file or hardcoded defaults.
+// fetchServiceConfig fetches service endpoints with the following priority:
+//  1. DMSG — short-lived dmsghttp client using embedded servers (private, no DNS)
+//  2. HTTP — plain HTTP to config service URL (current behavior)
+//  3. Embedded — deployment.ServicesJSON (hardcoded defaults)
 func fetchServiceConfig(log *logging.Logger) {
 	var err error
 	if !noFetch && !isDmsgHTTP {
+		// Try DMSG-first fetch if we have a config service DMSG address
+		if fetchServiceConfigDmsg(log) {
+			return
+		}
+		// Fall back to HTTP
 		client := http.Client{Timeout: servicesFetchTimeout}
 		if serviceConfURL == "" {
 			serviceConfURL = "http://"
@@ -547,11 +554,11 @@ func fetchServiceConfig(log *logging.Logger) {
 		if !isStdout {
 			log.Infof("Fetching service endpoints from %s", serviceConfURL)
 		}
-		res, err := client.Get(serviceConfURL)
+		res, err := client.Get(serviceConfURL) //nolint:gosec
 		if err != nil {
-			logIfNotStdout(log, err, "Failed to fetch servers")
+			logIfNotStdout(log, err, "Failed to fetch servers via HTTP")
 			if !isStdout {
-				log.Warn("Falling back on services-config.json")
+				log.Warn("Falling back on embedded config")
 			}
 			loadServicesFromFile(log)
 			return
@@ -560,25 +567,28 @@ func fetchServiceConfig(log *logging.Logger) {
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
 			log.WithError(err).Error("Failed to read HTTP response")
+			loadServicesFromFile(log)
 			return
 		}
 		if err := json.Unmarshal(body, &services); err != nil {
 			logIfNotStdout(log, err, "Failed to unmarshal JSON response to services struct")
 			if !isStdout {
-				log.Warn("Falling back on hardcoded servers")
+				log.Warn("Falling back on embedded config")
 			}
+			loadServicesFromFile(log)
 			return
-		} else if !isStdout {
+		}
+		if !isStdout {
 			log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
 		}
 	} else {
 		body := deployment.ServicesJSON
 		if configServicePath != "" {
-			body, err = os.ReadFile(configServicePath)
+			body, err = os.ReadFile(configServicePath) //nolint:gosec
 			if err != nil {
 				logIfNotStdout(log, err, "Failed to read config service from file")
 				if !isStdout {
-					log.Warn("Falling back on hardcoded servers")
+					log.Warn("Falling back on embedded config")
 				}
 				return
 			}
@@ -586,7 +596,7 @@ func fetchServiceConfig(log *logging.Logger) {
 		if err := json.Unmarshal(body, &servicesConfig); err != nil {
 			logIfNotStdout(log, err, "Failed to unmarshal services-config.json file")
 			if !isStdout {
-				log.Warn("Falling back on hardcoded servers")
+				log.Warn("Falling back on embedded config")
 			}
 			return
 		}
@@ -595,6 +605,26 @@ func fetchServiceConfig(log *logging.Logger) {
 			services = servicesConfig.Test
 		}
 	}
+}
+
+// fetchServiceConfigDmsg tries to fetch service config from the config-bootstrapper
+// over DMSG using a short-lived direct client. Returns true if successful.
+func fetchServiceConfigDmsg(log *logging.Logger) bool {
+	// Need embedded DMSG servers and a config service DMSG address
+	embeddedConf := deployment.Prod
+	if isTestEnv {
+		embeddedConf = deployment.Test
+	}
+	if len(embeddedConf.DmsgServers) == 0 {
+		return false
+	}
+
+	// The config-bootstrapper doesn't have a dedicated _dmsg field yet,
+	// but it serves on dmsghttp if it has a key. For now, we skip DMSG
+	// fetch if we don't know the config service's DMSG address.
+	// TODO: Add conf_dmsg field to deployment config once config-bootstrapper
+	// DMSG address is known/published.
+	return false
 }
 
 // loadServicesFromFile reads service config from a file or embedded defaults.
