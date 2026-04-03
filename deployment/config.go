@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"log"
+	"os"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
@@ -16,11 +17,16 @@ services-config.json contains the complete deployment configuration including
 both HTTP and DMSG endpoints. The _dmsg suffixed fields contain dmsg:// URLs
 for the same services, and dmsg_servers lists the DMSG servers for bootstrapping.
 
+Set SKYDEPLOY=/path/to/config.json to override the embedded defaults with a
+custom deployment configuration (e.g., for private networks or testing).
+
 dmsghttp-config.json is retained for backward compatibility with dmsg imports.
 It will be removed once dmsg is updated to read from services-config.json.
 */
 
-// ServicesJSON is the embedded services-config.json file (unified deployment config)
+// ServicesJSON is the deployment configuration. By default this is the embedded
+// services-config.json. If the SKYDEPLOY environment variable is set to a file
+// path, that file is loaded instead at init time.
 //
 //go:embed services-config.json
 var ServicesJSON []byte
@@ -101,6 +107,16 @@ var Test Services
 var TestConf Conf
 
 func init() {
+	// SKYDEPLOY overrides the embedded deployment config with a user-supplied file.
+	// This supports private networks, corporate deployments, and test environments.
+	if path := os.Getenv("SKYDEPLOY"); path != "" {
+		data, err := os.ReadFile(path) //nolint:gosec
+		if err != nil {
+			log.Panicf("SKYDEPLOY=%s: %v", path, err)
+		}
+		ServicesJSON = data
+	}
+
 	var envServices EnvServices
 	err := json.Unmarshal(ServicesJSON, &envServices)
 	if err != nil {
