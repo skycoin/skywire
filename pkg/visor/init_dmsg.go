@@ -93,16 +93,31 @@ func rotateServers(servers []*dmsgdisc.Entry) {
 }
 */
 
-func initDmsg(ctx context.Context, v *Visor, _ *logging.Logger) (err error) {
+func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	if v.conf.Dmsg == nil {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}
 
-	httpC, err := getHTTPClient(ctx, v, v.conf.Dmsg.Discovery)
+	// Prefer DMSG-HTTP for discovery if configured (more private, no DNS dependency),
+	// fall back to plain HTTP URL.
+	discURL := v.conf.Dmsg.Discovery
+	if v.conf.Dmsg.DiscoveryDmsg != "" && v.dmsgHTTP != nil {
+		if _, err := getHTTPClient(ctx, v, v.conf.Dmsg.DiscoveryDmsg); err == nil {
+			discURL = v.conf.Dmsg.DiscoveryDmsg
+			log.Info("Using DMSG-HTTP for dmsg discovery")
+		} else {
+			log.WithError(err).Warn("DMSG-HTTP discovery failed, using plain HTTP")
+		}
+	}
+
+	httpC, err := getHTTPClient(ctx, v, discURL)
 	if err != nil {
 		return err
 	}
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg, httpC, v.MasterLogger())
+	// Override the discovery URL used by the DMSG client
+	dmsgConf := *v.conf.Dmsg
+	dmsgConf.Discovery = discURL
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, &dmsgConf, httpC, v.MasterLogger())
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	go func() {

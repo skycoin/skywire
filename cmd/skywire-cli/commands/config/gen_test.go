@@ -66,7 +66,7 @@ func TestConfigGenCmdFunc(t *testing.T) {
 	_ = os.Remove("test-config.json")
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := script.Exec(shell + ` -c "go run ../../skywire-cli.go ` + test.command + `"`).Stdout()
+			_, err := script.Exec(shell + ` -c "CGO_ENABLED=0 go run -tags 'withoutsystray withoutgotop' ../../skywire-cli.go ` + test.command + `"`).Stdout()
 			if err != nil {
 				if !test.expectedErr {
 					t.Fatalf("Expected error: %v, but got: %v", test.expectedErr, err)
@@ -111,7 +111,7 @@ func runConfigGen(t *testing.T, extraFlags ...string) *visorconfig.V1 {
 	}
 	root := repoRoot(t)
 	flags := strings.Join(extraFlags, " ")
-	cmd := "cd " + root + " && SKYENV= go run . cli config gen -n " + flags
+	cmd := `cd ` + root + ` && SKYENV= CGO_ENABLED=0 go run -tags "withoutsystray withoutgotop" . cli config gen -n ` + flags
 	out, err := script.Exec(shell + ` -c '` + cmd + `'`).String()
 	if err != nil {
 		t.Fatalf("config gen failed: %v\noutput: %s", err, out)
@@ -136,7 +136,7 @@ func runConfigGenWithEnv(t *testing.T, envContent string, extraFlags ...string) 
 		t.Fatal(err)
 	}
 	flags := strings.Join(extraFlags, " ")
-	cmd := "cd " + root + " && SKYENV=" + envPath + " go run . cli config gen -n " + flags
+	cmd := `cd ` + root + ` && SKYENV=` + envPath + ` CGO_ENABLED=0 go run -tags "withoutsystray withoutgotop" . cli config gen -n ` + flags
 	out, err := script.Exec(shell + ` -c '` + cmd + `'`).String()
 	if err != nil {
 		t.Fatalf("config gen failed: %v\noutput: %s", err, out)

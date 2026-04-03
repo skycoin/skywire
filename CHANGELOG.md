@@ -6,6 +6,71 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.40
+
+### Auto-Update System
+-   Rolling-release auto-update via `skywire-commit` branch (CI updates on test pass)
+-   CI warms Go module proxy for global visor availability
+-   Docker deployment auto-updater with commit-SHA tagged images
+-   `UPDATE_CHANNEL` config (stable/develop/latest/pinned hash)
+-   `DEPLOY_DIR` config for docker compose auto-update
+-   Unprivileged build user (`skywire-build`) for compilation isolation
+
+### Config Generation
+-   Add `PROXYSERVERWL` and `VPNSERVERWL` whitelist config variables
+-   Add `SKYCHAT` and `SKYCHATADDR` flags for skychat autostart/address
+-   Add `REWARDSKYADDR` reward address to visor config and config gen
+-   Add advanced tuning flags: `--hvaddr`, `--stun`, `--timeout`, `--regtimeout`, `--maxtransports`, `--muxroutes`
+-   Rename `NOPROXYSERVER` to `PROXYSERVER` with correct default-true semantics
+-   Remove dead password config entries
+-   Offset localhost ports by +10000 for `--testenv` config gen
+-   Refactor scriptExec helpers to shared `cmdutil.Skyenv*` library
+
+### Infrastructure Services
+-   Add `--keyfile` flag to all services (ar, rf, tpd, sd, ut, dmsg-discovery)
+-   Auto-generate keypair on first run, eliminating bash ExecStartPre workarounds
+-   Systemd services simplified to single ExecStart line
+-   Add `GODEBUG=madvdontneed=1` to all systemd services and Docker compose
+
+### Rewards UI & SEO
+-   Add whitelisted-key file access to rewards UI
+-   Add pprof, visor.log, and landing page to dmsghttp log server
+-   Transport logs and custom files moved behind whitelist auth
+-   Add canonical URLs, sitemap.xml, robots.txt, og:image for SEO
+-   Add meta descriptions and Open Graph tags to all pages
+-   Remove cogentcore UI dependency (~638K vendor lines removed)
+
+### Route Finder & Transport Discovery
+-   Fix route calc OOM: iterative DFS with depth limit (default 5 hops)
+-   Add `NewGraphWithDepth` for concurrent-safe graph exploration
+-   Route finder API uses maxHops from request to limit depth
+-   TPD: always apply TTL on transport registration (stale entries expire)
+
+### Memory & Performance
+-   Reduce listener channel buffer from 1M to 128
+-   Remove cogentcore and cmd/release CGO dependencies (~706K lines removed)
+-   CI lint runs consolidated (4→1), redundant build steps removed
+-   VPN E2E tests restructured as phased test (4 fewer container restarts)
+
+### Visor
+-   Add DMSG gRPC listener on port 49 for remote gotop and stats
+-   Add reward address to V1 config struct with validation
+-   Fix CXO DataDir panic when HOME is unset (systemd services)
+-   Fix dead proc cleanup: auto-remove zombie apps on restart
+-   Remove `DmsgHTTPServerPath` / custom path serving
+
+### CXO
+-   Fix flaky CXO tests: event-driven subscribe with retry
+-   Fix iterative DFS vertex aliasing with pending map
+
+### CI
+-   Separate `update-commit` workflow (workflow_run trigger)
+-   Remove push-to-develop test trigger (avoids duplicate runs)
+-   Add `withoutsystray` build tag for CGO_ENABLED=0 builds
+-   Cache golangci-lint via `go install`
+-   Add `examples/hello` for proxy cache warming
+-   Docker images tagged with commit SHA
+
 ## 1.3.38
 
 ### Route Multiplexing
