@@ -103,6 +103,13 @@ var autoconfigCmd = &cobra.Command{
 			msg2(fmt.Sprintf("Start the skywire service with:\n\t%ssystemctl start skywire%s", colorRed, colorReset))
 		}
 
+		// Restart test service only if already running
+		checkTestActive := exec.Command("systemctl", "is-active", "--quiet", "skywire-test")
+		if checkTestActive.Run() == nil {
+			msg3("Restarting skywire-test.service...")
+			exec.Command("systemctl", "restart", "skywire-test").Run() //nolint:errcheck,gosec
+		}
+
 		// Get public key
 		pkOut, err := exec.Command("skywire", "cli", "visor", "pk", "-p").Output()
 		pubkey := ""
@@ -159,7 +166,7 @@ var autoconfigCmd = &cobra.Command{
 }
 
 func generateConfig(hvArg string) error {
-	// Build config gen command
+	// Build config gen command for production
 	args := []string{"cli", "config", "gen", "-r", "-p", "-b"}
 
 	// Handle hypervisor argument
@@ -181,8 +188,49 @@ func generateConfig(hvArg string) error {
 
 	msg3(fmt.Sprintf("Generating skywire config with command:\n  %sskywire %s%s", colorCyan, strings.Join(args, " "), colorReset))
 
-	cmd := exec.Command("skywire", args...)
-	cmd.Stdout = nil // Suppress output
+	cmd := exec.Command("skywire", args...) //nolint:gosec
+	cmd.Stdout = nil                        // Suppress output
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	// Generate test deployment config with the same keys
+	return generateTestConfig(hvArg)
+}
+
+func generateTestConfig(hvArg string) error {
+	// Read the SK from the prod config to reuse the same identity
+	conf, err := visorconfig.ReadFile("/opt/skywire/skywire.json")
+	if err != nil {
+		return fmt.Errorf("cannot read prod config for test config generation: %w", err)
+	}
+
+	args := []string{"cli", "config", "gen",
+		"-p", "-b", // package env, best protocol
+		"-t",                  // test deployment
+		"--sk", conf.SK.Hex(), // same identity as prod
+		"-o", "/opt/skywire/skywire-test.json", // separate config file
+	}
+
+	// Mirror hypervisor setting from prod
+	switch hvArg {
+	case "0":
+		args = append(args, "-i")
+	case "":
+		if conf.Hypervisor != nil {
+			args = append(args, "-i")
+		}
+	default:
+		if hvArg != "1" {
+			args = append(args, "-j", hvArg)
+		}
+	}
+
+	msg3(fmt.Sprintf("Generating test config:\n  %sskywire %s%s", colorCyan, strings.Join(args, " "), colorReset))
+
+	cmd := exec.Command("skywire", args...) //nolint:gosec
+	cmd.Stdout = nil
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
