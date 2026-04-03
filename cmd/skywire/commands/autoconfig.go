@@ -25,7 +25,10 @@ const (
 	colorBold   = "\033[1m"
 )
 
+var autoconfigVerbose bool
+
 func init() {
+	autoconfigCmd.Flags().BoolVarP(&autoconfigVerbose, "verbose", "v", false, "show reward address, support links, and other details")
 	RootCmd.AddCommand(autoconfigCmd)
 }
 
@@ -148,8 +151,10 @@ var autoconfigCmd = &cobra.Command{
 			msg2(fmt.Sprintf("Remote Hypervisor Public Key:\n%s%s%s", colorPurple, strings.TrimSpace(hvPKs), colorReset))
 		}
 
-		// Welcome message
-		printWelcome(pubkey, isHypervisor)
+		// Welcome message (only with --verbose)
+		if autoconfigVerbose {
+			printWelcome(pubkey, isHypervisor)
+		}
 	},
 }
 
