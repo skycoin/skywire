@@ -2,6 +2,7 @@
 package cliconfig
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
@@ -28,6 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -629,21 +633,60 @@ func fetchServiceConfig(log *logging.Logger) {
 // fetchServiceConfigDmsg tries to fetch service config from the config-bootstrapper
 // over DMSG using a short-lived direct client. Returns true if successful.
 func fetchServiceConfigDmsg(log *logging.Logger) bool {
-	// Need embedded DMSG servers and a config service DMSG address
 	embeddedConf := deployment.Prod
 	if isTestEnv {
 		embeddedConf = deployment.Test
 	}
-	if len(embeddedConf.DmsgServers) == 0 {
+
+	// Need both embedded DMSG servers and a config service DMSG address
+	if len(embeddedConf.DmsgServers) == 0 || embeddedConf.ConfDmsg == "" {
 		return false
 	}
 
-	// The config-bootstrapper doesn't have a dedicated _dmsg field yet,
-	// but it serves on dmsghttp if it has a key. For now, we skip DMSG
-	// fetch if we don't know the config service's DMSG address.
-	// TODO: Add conf_dmsg field to deployment config once config-bootstrapper
-	// DMSG address is known/published.
-	return false
+	if !isStdout {
+		log.Infof("Fetching service endpoints via DMSG from %s", embeddedConf.ConfDmsg)
+	}
+
+	// Bootstrap a short-lived DMSG client using embedded servers
+	ctx, cancel := context.WithTimeout(context.Background(), servicesFetchTimeout)
+	defer cancel()
+
+	// Generate ephemeral keypair for the fetch
+	pk, sk := cipher.GenerateKeyPair()
+
+	dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk,
+		dmsg.Prod.DmsgServers, embeddedConf.DmsgDiscovery, "")
+	if err != nil {
+		logIfNotStdout(log, err, "DMSG bootstrap failed for config fetch")
+		return false
+	}
+	defer dmsgBoot.Close()
+
+	// Make HTTP request through DMSG transport
+	dmsgHTTPClient := &http.Client{
+		Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgBoot.Client),
+		Timeout:   servicesFetchTimeout,
+	}
+
+	res, err := dmsgHTTPClient.Get(embeddedConf.ConfDmsg)
+	if err != nil {
+		logIfNotStdout(log, err, "Failed to fetch config via DMSG")
+		return false
+	}
+	defer res.Body.Close() //nolint:errcheck
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		logIfNotStdout(log, err, "Failed to read DMSG response")
+		return false
+	}
+	if err := json.Unmarshal(body, &services); err != nil {
+		logIfNotStdout(log, err, "Failed to unmarshal DMSG config response")
+		return false
+	}
+	if !isStdout {
+		log.Info("Fetched service endpoints via DMSG")
+	}
+	return true
 }
 
 // loadServicesFromFile reads service config from a file or embedded defaults.

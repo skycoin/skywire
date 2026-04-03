@@ -76,6 +76,7 @@ type Services struct {
 	DNSServer          string          `json:"dns_server,omitempty"`
 	SurveyWhitelist    []cipher.PubKey `json:"survey_whitelist,omitempty"`
 	// DMSG endpoints (dmsg:// URLs for the same services)
+	ConfDmsg               string                       `json:"conf_dmsg,omitempty"`
 	DmsgServers            []deployment.DmsgServerEntry `json:"dmsg_servers,omitempty"`
 	DmsgDiscoveryDmsg      string                       `json:"dmsg_discovery_dmsg,omitempty"`
 	TransportDiscoveryDmsg string                       `json:"transport_discovery_dmsg,omitempty"`
