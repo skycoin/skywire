@@ -20,8 +20,6 @@ for the same services, and dmsg_servers lists the DMSG servers for bootstrapping
 Set SKYDEPLOY=/path/to/config.json to override the embedded defaults with a
 custom deployment configuration (e.g., for private networks or testing).
 
-dmsghttp-config.json is retained for backward compatibility with dmsg imports.
-It will be removed once dmsg is updated to read from services-config.json.
 */
 
 // ServicesJSON is the deployment configuration. By default this is the embedded
@@ -30,13 +28,6 @@ It will be removed once dmsg is updated to read from services-config.json.
 //
 //go:embed services-config.json
 var ServicesJSON []byte
-
-// DmsghttpJSON is the embedded dmsghttp-config.json file.
-// Deprecated: retained for backward compatibility with dmsg package imports.
-// Use ServicesJSON with _dmsg suffixed fields instead.
-//
-//go:embed dmsghttp-config.json
-var DmsghttpJSON []byte
 
 // EnvServices is the wrapper struct for the outer JSON - i.e. 'prod' or 'test' deployment config
 type EnvServices struct {

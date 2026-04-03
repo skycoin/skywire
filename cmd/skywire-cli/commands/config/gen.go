@@ -682,12 +682,11 @@ func configureDMSGHTTP(log *logging.Logger, outerErr error) {
 				log.WithError(err).Fatal("Failed to unmarshal " + skyenv.DMSGHTTPName)
 			}
 		} else if !services.HasDmsgEndpoints() {
-			// Fallback: if services-config.json didn't have DMSG fields
-			// (e.g., fetched from old config service), use embedded dmsghttp-config.json
-			dmsghttpConfigData := deployment.DmsghttpJSON
-			err := json.Unmarshal(dmsghttpConfigData, &dmsgHTTPServersList)
+			// Fallback: if fetched config didn't have DMSG fields,
+			// try parsing the embedded config for legacy DmsgHTTPServers format
+			err := json.Unmarshal(deployment.ServicesJSON, &dmsgHTTPServersList)
 			if err != nil {
-				log.WithError(err).Fatal("Failed to unmarshal " + skyenv.DMSGHTTPName)
+				log.WithError(err).Warn("Failed to parse legacy dmsghttp config from embedded services")
 			}
 		}
 		// else: services struct already has DMSG fields from unified config
