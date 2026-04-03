@@ -350,6 +350,15 @@ services:
     extra_hosts:
       - "visor-b:173.0.0.12"
       - "visor-c:173.0.0.13"
+      - "dmsg-discovery:174.0.0.4"
+      - "dmsg-server:174.0.0.5"
+      - "transport-discovery:174.0.0.2"
+      - "route-finder:174.0.0.3"
+      - "address-resolver:174.0.0.8"
+      - "service-discovery:174.0.0.9"
+      - "uptime-tracker:174.0.0.7"
+      - "setup-node:174.0.0.6"
+      - "stun-server:174.0.0.17"
     volumes:
       - type: bind
         source: ../docker/integration/visorA.json
@@ -378,6 +387,15 @@ services:
     extra_hosts:
       - "visor-a:173.0.0.11"
       - "visor-c:173.0.0.13"
+      - "dmsg-discovery:174.0.0.4"
+      - "dmsg-server:174.0.0.5"
+      - "transport-discovery:174.0.0.2"
+      - "route-finder:174.0.0.3"
+      - "address-resolver:174.0.0.8"
+      - "service-discovery:174.0.0.9"
+      - "uptime-tracker:174.0.0.7"
+      - "setup-node:174.0.0.6"
+      - "stun-server:174.0.0.17"
     volumes:
       - type: bind
         source: ../docker/integration/visorB.json
@@ -416,6 +434,15 @@ services:
     extra_hosts:
       - "visor-a:173.0.0.11"
       - "visor-b:173.0.0.12"
+      - "dmsg-discovery:174.0.0.4"
+      - "dmsg-server:174.0.0.5"
+      - "transport-discovery:174.0.0.2"
+      - "route-finder:174.0.0.3"
+      - "address-resolver:174.0.0.8"
+      - "service-discovery:174.0.0.9"
+      - "uptime-tracker:174.0.0.7"
+      - "setup-node:174.0.0.6"
+      - "stun-server:174.0.0.17"
     volumes:
       - type: bind
         source: ../docker/integration/visorC.json
@@ -538,6 +565,15 @@ services:
       - "visor-a:173.0.0.11"
       - "visor-b:173.0.0.12"
       - "visor-c:173.0.0.13"
+      - "dmsg-discovery:174.0.0.4"
+      - "dmsg-server:174.0.0.5"
+      - "transport-discovery:174.0.0.2"
+      - "route-finder:174.0.0.3"
+      - "address-resolver:174.0.0.8"
+      - "service-discovery:174.0.0.9"
+      - "uptime-tracker:174.0.0.7"
+      - "setup-node:174.0.0.6"
+      - "stun-server:174.0.0.17"
     volumes:
       - ../:/workspace
       - go-test-cache:/root/.cache/go-build
