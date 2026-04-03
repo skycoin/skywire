@@ -90,17 +90,21 @@ func InitConfig() error {
 	if err != nil {
 		return err
 	}
-	err = json.Unmarshal(envServices.Prod, &Prod)
-	if err != nil {
-		return err
+	if envServices.Prod != nil {
+		err = json.Unmarshal(envServices.Prod, &Prod)
+		if err != nil {
+			return err
+		}
+		Prod.DmsgServers, err = shuffleServers(Prod.DmsgServers)
+		if err != nil {
+			return err
+		}
 	}
-	Prod.DmsgServers, err = shuffleServers(Prod.DmsgServers)
-	if err != nil {
-		return err
-	}
-	err = json.Unmarshal(envServices.Test, &Test)
-	if err != nil {
-		return err
+	if envServices.Test != nil {
+		err = json.Unmarshal(envServices.Test, &Test)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -114,16 +114,20 @@ func init() {
 	if err != nil {
 		log.Panic("services-config.json: ", err)
 	}
-	if err = json.Unmarshal(envServices.Prod, &Prod); err != nil {
-		log.Panic(err)
+	if envServices.Prod != nil {
+		if err = json.Unmarshal(envServices.Prod, &Prod); err != nil {
+			log.Panic(err)
+		}
+		if err = json.Unmarshal(envServices.Prod, &ProdConf); err != nil {
+			log.Panic(err)
+		}
 	}
-	if err = json.Unmarshal(envServices.Prod, &ProdConf); err != nil {
-		log.Panic(err)
-	}
-	if err = json.Unmarshal(envServices.Test, &Test); err != nil {
-		log.Panic(err)
-	}
-	if err = json.Unmarshal(envServices.Test, &TestConf); err != nil {
-		log.Panic(err)
+	if envServices.Test != nil {
+		if err = json.Unmarshal(envServices.Test, &Test); err != nil {
+			log.Panic(err)
+		}
+		if err = json.Unmarshal(envServices.Test, &TestConf); err != nil {
+			log.Panic(err)
+		}
 	}
 }

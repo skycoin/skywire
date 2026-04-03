@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -196,9 +197,10 @@ func generateConfig(hvArg string) error {
 	}
 
 	// Generate test deployment config with the same keys.
-	// Skip if the user has a custom service config URL — that config bootstrapper
-	// serves one deployment, there's no "test" counterpart to fetch from.
-	if os.Getenv("SVCCONFADDR") == "" {
+	// Skip if:
+	// - Custom service config URL is set (no test counterpart to fetch from)
+	// - Test deployment is not defined (SKYDEPLOY with only prod section)
+	if os.Getenv("SVCCONFADDR") == "" && deployment.Test.DmsgDiscovery != "" {
 		if err := generateTestConfig(hvArg); err != nil {
 			// Non-fatal: test config is optional
 			fmt.Printf("%sWarning:%s test config generation failed: %v\n", colorYellow, colorReset, err)
