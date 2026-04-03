@@ -605,6 +605,22 @@ func fetchServiceConfig(log *logging.Logger) {
 		if !isStdout {
 			log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
 		}
+		// Supplement missing DMSG fields from embedded config if the
+		// config bootstrapper hasn't been updated to serve them yet.
+		if !services.HasDmsgEndpoints() {
+			embedded := deployment.Prod
+			if isTestEnv {
+				embedded = deployment.Test
+			}
+			services.DmsgServers = embedded.DmsgServers
+			services.ConfDmsg = embedded.ConfDmsg
+			services.DmsgDiscoveryDmsg = embedded.DmsgDiscoveryDmsg
+			services.TransportDiscoveryDmsg = embedded.TransportDiscoveryDmsg
+			services.AddressResolverDmsg = embedded.AddressResolverDmsg
+			services.RouteFinderDmsg = embedded.RouteFinderDmsg
+			services.UptimeTrackerDmsg = embedded.UptimeTrackerDmsg
+			services.ServiceDiscoveryDmsg = embedded.ServiceDiscoveryDmsg
+		}
 	} else {
 		body := deployment.ServicesJSON
 		if configServicePath != "" {
