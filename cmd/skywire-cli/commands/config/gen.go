@@ -95,6 +95,25 @@ var genKeysCmd = &cobra.Command{
 	},
 }
 
+var pkFromSKCmd = &cobra.Command{
+	Use:   "pk <secret-key-hex>",
+	Short: "derive public key from a secret key",
+	Args:  cobra.ExactArgs(1),
+	Run: func(_ *cobra.Command, args []string) {
+		var sk cipher.SecKey
+		if err := sk.Set(args[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "invalid secret key: %v\n", err) //nolint:errcheck,gosec
+			os.Exit(1)
+		}
+		pk, err := sk.PubKey()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to derive public key: %v\n", err) //nolint:errcheck,gosec
+			os.Exit(1)
+		}
+		fmt.Println(pk.Hex())
+	},
+}
+
 var (
 	isEnvs     bool
 	skyenvfile = os.Getenv("SKYENV")
@@ -105,7 +124,7 @@ func init() {
 	var msg string
 	//disable sorting, flags appear in the order shown here
 	genConfigCmd.Flags().SortFlags = false
-	RootCmd.AddCommand(genConfigCmd, genKeysCmd, checkPKCmd)
+	RootCmd.AddCommand(genConfigCmd, genKeysCmd, pkFromSKCmd, checkPKCmd)
 
 	// Output flags
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout")
