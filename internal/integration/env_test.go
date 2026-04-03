@@ -882,7 +882,17 @@ func (env *TestEnv) GatherVisorPKs(visors []string) *TestEnv {
 	env.visorPKs = map[string]string{}
 
 	for _, visor := range visors {
-		pk, err := env.VisorPK(visor)
+		var pk string
+		var err error
+		// Retry to handle transient Docker DNS failures ("server misbehaving")
+		for attempt := 0; attempt < 3; attempt++ {
+			pk, err = env.VisorPK(visor)
+			if err == nil {
+				break
+			}
+			env.logger.Warnf("GatherVisorPKs: attempt %d for %s failed: %v", attempt+1, visor, err)
+			time.Sleep(time.Duration(attempt+1) * 2 * time.Second)
+		}
 		if err != nil {
 			panic(err)
 		}
