@@ -833,11 +833,11 @@ func configureServices(log *logging.Logger) {
 	}
 	services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWlPKs...)
 
-	if services.DmsgDiscovery == "" {
-		log.Fatalf("Dmsg Discovery not set")
+	if services.DmsgDiscovery == "" && services.DmsgDiscoveryDmsg == "" {
+		log.Fatalf("Dmsg Discovery not set (neither HTTP nor DMSG)")
 	}
-	if services.TransportDiscovery == "" {
-		log.Fatalf("Transport Discovery not set")
+	if services.TransportDiscovery == "" && services.TransportDiscoveryDmsg == "" {
+		log.Fatalf("Transport Discovery not set (neither HTTP nor DMSG)")
 	}
 	if routeSetupNodes != "" {
 		if err := routeSetupPKs.Set(routeSetupNodes); err != nil {

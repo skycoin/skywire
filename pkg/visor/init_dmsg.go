@@ -99,15 +99,22 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	}
 
 	// Prefer DMSG-HTTP for discovery if configured (more private, no DNS dependency),
-	// fall back to plain HTTP URL.
+	// fall back to plain HTTP URL. If HTTP URL is empty (DMSG-only deployment),
+	// DMSG is required — not optional.
 	discURL := v.conf.Dmsg.Discovery
 	if v.conf.Dmsg.DiscoveryDmsg != "" && v.dmsgHTTP != nil {
 		if _, err := getHTTPClient(ctx, v, v.conf.Dmsg.DiscoveryDmsg); err == nil {
 			discURL = v.conf.Dmsg.DiscoveryDmsg
 			log.Info("Using DMSG-HTTP for dmsg discovery")
-		} else {
+		} else if discURL != "" {
 			log.WithError(err).Warn("DMSG-HTTP discovery failed, using plain HTTP")
+		} else {
+			return fmt.Errorf("DMSG-only deployment but DMSG discovery unreachable: %w", err)
 		}
+	} else if discURL == "" && v.conf.Dmsg.DiscoveryDmsg != "" {
+		// DMSG URL set but dmsgHTTP not ready — can't proceed without either
+		discURL = v.conf.Dmsg.DiscoveryDmsg
+		log.Warn("HTTP discovery URL empty, attempting DMSG discovery without dmsgHTTP transport")
 	}
 
 	httpC, err := getHTTPClient(ctx, v, discURL)

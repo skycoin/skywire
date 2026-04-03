@@ -46,9 +46,13 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 			arURL = conf.AddressResolverDmsg
 			_ = dmsgC // URL is enough, getHTTPClient sets up DMSG routing
 			log.Info("Using DMSG-HTTP for address resolver")
-		} else {
+		} else if arURL != "" {
 			log.WithError(err).Warn("DMSG-HTTP address resolver failed, using plain HTTP")
+		} else {
+			return fmt.Errorf("address resolver: DMSG-only but unreachable: %w", err)
 		}
+	} else if arURL == "" && conf.AddressResolverDmsg != "" {
+		arURL = conf.AddressResolverDmsg
 	}
 
 	httpC, err := getHTTPClient(ctx, v, arURL)
@@ -911,7 +915,11 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 	}
 
 	// Plain HTTP (primary if no DMSG config, fallback if DMSG failed)
-	httpC, err := getHTTPClient(ctx, v, conf.Discovery)
+	tpdURL := conf.Discovery
+	if tpdURL == "" && conf.DiscoveryDmsg != "" {
+		tpdURL = conf.DiscoveryDmsg // DMSG-only deployment
+	}
+	httpC, err := getHTTPClient(ctx, v, tpdURL)
 	if err != nil {
 		return nil, err
 	}
