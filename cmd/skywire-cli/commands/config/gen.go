@@ -155,7 +155,7 @@ func init() {
 	// Network and deployment flags
 	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", scriptExecArray(fmt.Sprintf("${SVCCONFADDR[@]-%s}", serviceConfURL)), "services conf url\n\r")
 	gHiddenFlags = append(gHiddenFlags, "url")
-	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment")
+	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment\n\r(ports are offset +10000 to allow running alongside prod)")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
 	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use only dmsg connection to skywire services (no http fallback)")
 	genConfigCmd.Flags().BoolVar(&isHTTPOnly, "http", false, "use only http connection to skywire services (no dmsg)")
