@@ -1744,43 +1744,20 @@ func (env *TestEnv) WaitForVisorReady(visor string, timeout time.Duration) error
 
 	env.logger.Infof("WaitForVisorReady: waiting for %s (timeout: %v)", visor, timeout)
 
-	// Phase 1: wait for RPC to be reachable
-	// Phase 2: wait for startup complete (all modules initialized)
 	var lastErr string
-	rpcReady := false
 	for time.Now().Before(deadline) {
 		attempt++
-
-		if !rpcReady {
-			_, err := env.VisorPK(visor)
-			if err == nil {
-				env.logger.Infof("WaitForVisorReady: %s RPC reachable after %v", visor, time.Since(start).Round(time.Second))
-				rpcReady = true
-			}
+		_, err := env.VisorPK(visor)
+		if err == nil {
+			env.logger.Infof("WaitForVisorReady: %s RPC reachable after %v (%d attempts)",
+				visor, time.Since(start).Round(time.Second), attempt)
+			return nil
 		}
 
-		if rpcReady {
-			// Check startup complete via CLI
-			cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 ready --json", visor)
-			out, err := env.Exec(cmd)
-			if err == nil && strings.Contains(out, "ready") {
-				env.logger.Infof("WaitForVisorReady: %s startup complete after %v (%d attempts)",
-					visor, time.Since(start).Round(time.Second), attempt)
-				return nil
-			}
-		}
-
-		if !rpcReady {
-			_, err := env.VisorPK(visor)
-			if err != nil {
-				errStr := err.Error()
-				if errStr != lastErr {
-					env.logger.Infof("WaitForVisorReady: %s attempt %d: %s", visor, attempt, errStr)
-					lastErr = errStr
-				}
-			} else {
-				rpcReady = true
-			}
+		errStr := err.Error()
+		if errStr != lastErr {
+			env.logger.Infof("WaitForVisorReady: %s attempt %d: %s", visor, attempt, errStr)
+			lastErr = errStr
 		}
 
 		// Diagnostics every ~30 seconds
