@@ -124,7 +124,7 @@ func NewDmsgTrackerManager(mLog *logging.MasterLogger, dc *dmsg.Client, updateIn
 
 // Serve serves the dmsg tracker manager.
 func (dtm *Manager) serve() {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is called when dtm.done is closed
 	go func() {
 		<-dtm.done
 		cancel()
