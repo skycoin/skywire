@@ -1873,30 +1873,6 @@ func (env *TestEnv) waitForNonZeroBandwidth(visor, peerPK string, timeout time.D
 	return false
 }
 
-// waitForHTTPServerReady polls a port inside a container until it accepts TCP connections.
-func (env *TestEnv) waitForHTTPServerReady(port int, timeout time.Duration) {
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		// Use the test runner container to check if the port is listening
-		cmd := fmt.Sprintf("sh -c 'cat < /dev/tcp/127.0.0.1/%d'", port)
-		_, err := env.execResult(cmd)
-		// Any response (even error from cat) means the port accepted a connection
-		if err == nil {
-			return
-		}
-		// Also try with a simple wget
-		cmd = fmt.Sprintf("wget -q --spider --timeout=1 http://127.0.0.1:%d/ 2>/dev/null", port)
-		_, err = env.execResult(cmd)
-		if err == nil {
-			return
-		}
-		_ = addr // suppress unused warning
-		time.Sleep(500 * time.Millisecond)
-	}
-	env.logger.Warnf("Timeout waiting for port %d to be ready", port)
-}
-
 // waitForListeningPort polls for a port to be listening by checking netstat output inside the container.
 func (env *TestEnv) waitForListeningPort(port int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
