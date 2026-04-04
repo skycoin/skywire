@@ -191,10 +191,11 @@ func TestEnv_VisorAppLs(t *testing.T) {
 	// Wait for visor-b RPC to be ready before querying apps
 	require.NoError(t, env.WaitForVisorReady(visorB, 180*time.Second), "visor-b not ready")
 
-	// Wait for app launcher to be available (may take a few seconds after RPC is up)
+	// Wait for app launcher to be available. With dual-mode configs (HTTP + DMSG),
+	// initDmsgHTTP blocks until DMSG is connected, which delays the launcher.
 	var output []AppState
 	var err error
-	for i := 0; i < 12; i++ {
+	for i := 0; i < 36; i++ { // up to 3 minutes
 		output, err = env.VisorAppLs(visorB)
 		if err == nil && len(output) > 0 {
 			break
