@@ -48,7 +48,7 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, dmsgC *dmsg.Cli
 		}
 
 		log.Info("Serving RPC client...")
-		connCtx, cancel := context.WithCancel(ctx)
+		connCtx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel is called when ServeConn returns
 		go func() {
 			rpcS.ServeConn(conn)
 			cancel()

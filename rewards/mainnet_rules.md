@@ -37,6 +37,8 @@ A total of up to ~1114.754  Skycoin __per pool__ are distributed daily in leap-y
 
 The presence pool reward for a day is evenly divided among all eligible visors on the basis of having met uptime and other requirements for the previous day, with IP and MAC address deduplication applied. All architectures are eligible for the presence pool.
 
+Regional saturation scaling is applied to the presence pool to promote geographic diversity. See [Regional Saturation Scaling](#Regional-Saturation-Scaling) for details.
+
 ## Pool 2: Bandwidth
 
 The bandwidth pool reward for a day is distributed proportionally based on the amount of transport bandwidth each visor handled during the previous day. Only visors which handled bandwidth above a minimum threshold are eligible for the bandwidth pool.
@@ -75,6 +77,8 @@ To receive Skycoin rewards for running skywire, the following requirements must 
 * [12)](#Transport-Bandwidth-Logs) **The visor produces [transport bandwidth logs](#Transport-Bandwidth-Logs)** - needed for bandwidth-based rewards
 
 * [13)](#Survey) **The visor produces a [survey](#Survey)** when queried over dmsg by any keys in the survey_whitelist array by default
+
+* [14)](#Regional-Saturation-Scaling) **[Regional saturation scaling](#Regional-Saturation-Scaling)** is applied to the presence pool to incentivize geographic diversity of the network
 
 
 ### Exceptions for Deployment Changes with dmsghttp-config (Chinese users)
@@ -254,6 +258,35 @@ Multiple instances of skywire which are otherwise determined to be running on th
 A maximum of 8 reward shares per ip address is divided between all visors which made uptime at a given ip address.
 
 For example, if 9 visors at a given ip address meet the minimum uptime requirement, the reward share for each visor will be 8/9ths of a share (~0.8888) which sum to a total of ~7.99999 shares.
+
+### Regional Saturation Scaling
+
+To incentivize geographic diversity of the skywire network, a regional saturation scaling factor is applied to the presence pool. This adjusts each visor's reward share based on how many unique IP addresses are present in the visor's country.
+
+The scaling uses a power function on the number of unique IP addresses per country:
+
+```
+country_weight = unique_ips_in_country ^ exponent
+country_proportion = country_weight / sum(all_country_weights)
+```
+
+The default exponent is 0.5 (square root). Each country's total reward allocation is then divided among its visors according to their existing shares (after IP and MAC deduplication).
+
+This means:
+- The first visor in a previously unrepresented country receives the highest per-visor reward
+- Each additional unique IP address in a country still increases that country's total allocation, but with diminishing returns
+- Adding more visors behind an existing IP address does not change the country's unique IP count and therefore does not increase its regional allocation
+- No country is excluded from rewards -- all eligible visors receive rewards regardless of location
+
+**Example:** If Country A has 100 unique IPs and Country B has 1 unique IP:
+- Country A's weight is sqrt(100) = 10
+- Country B's weight is sqrt(1) = 1
+- Country A gets 10/11 (~91%) of the combined allocation, not 100/101 (~99%)
+- Country B's single visor is worth approximately 10x more per-IP than each of Country A's
+
+The geographic location of each visor is determined by GeoIP lookup of the visor's IP address using the embedded MaxMind GeoLite2-City database at the country level.
+
+The exponent can be adjusted via the `--sat-exp` flag (default 0.5). Setting it to 1.0 disables regional saturation scaling entirely.
 
 ### Skycoin Address
 
