@@ -305,6 +305,17 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 		return c.dc.PostEntry(ctx, entry)
 	}
 
+	// The entry might be a server entry (e.g., debug client running on a dmsg server).
+	// In that case, entry.Client is nil and we need to create a new client entry.
+	if entry.Client == nil {
+		entry = disc.NewClientEntry(c.pk, 0, srvPKs)
+		entry.ClientType = clientType
+		if err := entry.Sign(c.sk); err != nil {
+			return err
+		}
+		return c.dc.PostEntry(ctx, entry)
+	}
+
 	// Whether the client's CURRENT delegated servers is the same as what would be advertised.
 	sameSrvPKs := cipher.SamePubKeys(srvPKs, entry.Client.DelegatedServers)
 

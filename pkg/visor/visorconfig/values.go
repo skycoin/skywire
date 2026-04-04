@@ -35,9 +35,8 @@ func Version() string {
 		if _, err := os.Stat(".git"); err == nil {
 			//attempt to version from git sources
 			if _, err = exec.LookPath("git"); err == nil {
-				if v, err = script.Exec(`git describe`).String(); err == nil {
-					v = strings.ReplaceAll(v, "\n", "")
-					v = strings.Split(v, "-")[0]
+				if v, err = script.Exec(`git describe --always`).String(); err == nil {
+					v = strings.TrimSpace(v)
 				}
 			}
 		}

@@ -11,12 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/config-bootstrapper/api"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -160,30 +160,22 @@ HTTP Endpoints:
 		defer cancel()
 
 		if !pk.Null() {
-			servers := dmsghttp.GetServers(ctx, dmsgDisc, dmsgServerType, logger)
-
-			var keys cipher.PubKeys
-			keys = append(keys, pk)
-			dClient := direct.NewClient(direct.GetAllEntries(keys, servers), logger)
-			config := &dmsg.Config{
-				MinSessions:          0, // listen on all available servers
-				UpdateInterval:       dmsg.DefaultUpdateInterval,
-				ConnectedServersType: dmsgServerType,
-			}
-
-			dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, logger, pk, sk, dClient, config)
+			dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, logger, pk, sk,
+				dmsg.Prod.DmsgServers, dmsgDisc, dmsgServerType)
 			if err != nil {
 				logger.WithError(err).Fatal("failed to start direct dmsg client.")
 			}
-
-			defer closeDmsgDC()
-
-			go dmsghttp.UpdateServers(ctx, dClient, dmsgDisc, dmsgDC, dmsgServerType, logger)
+			defer dmsgBoot.Close()
 
 			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, sk, conAPI, dClient, dmsgPort, dmsgDC, logger); err != nil {
+				if err := dmsghttp.ListenAndServe(ctx, sk, conAPI, dmsgBoot.DClient, dmsgPort, dmsgBoot.Client, logger); err != nil {
 					logger.Errorf("dmsghttp.ListenAndServe: %v", err)
 					cancel()
+				}
+			}()
+			go func() {
+				if err := dmsghttp.ServeDebug(ctx, dmsgBoot.Client, logger, deployment.Prod.SurveyWhitelist); err != nil {
+					logger.Errorf("dmsghttp.ServeDebug: %v", err)
 				}
 			}()
 		}

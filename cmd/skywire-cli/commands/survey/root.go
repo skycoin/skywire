@@ -143,7 +143,7 @@ func FetchIP(dmsgDisc string) (string, error) {
 
 func startDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, dmsgDisc string) (dmsgC *dmsg.Client, stop func(), err error) {
 	dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, log), &dmsg.Config{MinSessions: dmsg.DefaultMinSessions})
-	go dmsgC.Serve(context.Background())
+	go dmsgC.Serve(context.Background()) //nolint:gosec
 
 	stop = func() {
 		err := dmsgC.Close()

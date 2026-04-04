@@ -51,7 +51,7 @@ func newServiceUpdater(log logrus.FieldLogger, client *servicedisc.HTTPClient, h
 }
 
 func (u *serviceUpdater) Start() {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is stored in u.cancel and called in Stop()
 	u.cancel = cancel
 
 	// Initial registration
@@ -164,7 +164,7 @@ func (u *PublicVisorUpdater) IsValidated() bool {
 
 // Start starts the updater with validation monitoring.
 func (u *PublicVisorUpdater) Start() {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is stored in u.cancel and called in Stop()
 	u.cancel = cancel
 
 	// Start the underlying service updater

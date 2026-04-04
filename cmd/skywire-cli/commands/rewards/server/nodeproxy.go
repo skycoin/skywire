@@ -23,8 +23,8 @@ func registerNodeProxy(r *gin.Engine, targetURL string) error {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 
 	// Preserve the original director but override the host
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
+	originalDirector := proxy.Director         //nolint:staticcheck
+	proxy.Director = func(req *http.Request) { //nolint:staticcheck
 		originalDirector(req)
 		req.Host = target.Host
 	}
