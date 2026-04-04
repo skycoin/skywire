@@ -57,7 +57,6 @@ func TestDmsgDiscoveryQuery(t *testing.T) {
 //
 //	test runner (visor-b) -> dmsg-server -> visor-a log server
 func TestDmsgCurl(t *testing.T) {
-	t.Skip("DMSG connectivity unreliable in CI Docker environment — skip until resolved")
 	env := NewEnv().GatherContainersInfo()
 
 	// Wait for visors to be ready and get their PKs
@@ -110,7 +109,6 @@ func TestDmsgCurl(t *testing.T) {
 // TestDmsgCurlIndex tests fetching visor-a's DMSG log server index page (/).
 // The log server returns an HTML page listing available endpoints.
 func TestDmsgCurlIndex(t *testing.T) {
-	t.Skip("DMSG connectivity unreliable in CI Docker environment — skip until resolved")
 	env := NewEnv().GatherContainersInfo()
 
 	for _, v := range []string{visorA, visorB} {
@@ -158,7 +156,6 @@ func TestDmsgCurlIndex(t *testing.T) {
 // discovery, so this test uses the dmsg web resolve mode (-t) with the local
 // discovery (-U) to achieve the same direct-client behavior.
 func TestDmsgDirect(t *testing.T) {
-	t.Skip("DMSG connectivity unreliable in CI Docker environment — skip until resolved")
 	env := NewEnv().GatherContainersInfo()
 
 	for _, v := range []string{visorA, visorB} {
