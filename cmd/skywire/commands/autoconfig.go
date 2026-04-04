@@ -167,35 +167,46 @@ var autoconfigCmd = &cobra.Command{
 }
 
 func generateConfig(hvArg string) error {
-	// Build config gen command for production
-	args := []string{"cli", "config", "gen", "-r", "-p", "-b"}
+	// Build config gen command.
+	// Only pass -r (regen); all other flags come from SKYENV (/etc/skywire.conf).
+	// The conf file sets PKGENV, BESTPROTO, etc. — no need to hardcode them here.
+	args := []string{"cli", "config", "gen", "-r"}
 
-	// Handle hypervisor argument
+	// Determine SKYENV path
+	skyenv := os.Getenv("SKYENV")
+	if skyenv == "" {
+		if _, err := os.Stat("/etc/skywire.conf"); err == nil {
+			skyenv = "/etc/skywire.conf"
+		}
+	}
+
+	// Handle hypervisor argument (only if not already in SKYENV)
 	switch hvArg {
 	case "0":
-		// Create local hypervisor config
 		args = append(args, "-i")
 	case "1":
 		// No hypervisor
 	case "":
-		// Check if config exists with hypervisor, or create one by default
+		// Create hypervisor by default for new installs
 		if _, err := os.Stat("/opt/skywire/skywire.json"); os.IsNotExist(err) {
-			args = append(args, "-i") // Create hypervisor by default for new installs
+			args = append(args, "-i")
 		}
 	default:
-		// Set remote hypervisor PK
 		args = append(args, "-j", hvArg)
 	}
 
-	msg3(fmt.Sprintf("Generating skywire config with command:\n  %sskywire %s%s", colorCyan, strings.Join(args, " "), colorReset))
+	envPrefix := ""
+	if skyenv != "" {
+		envPrefix = fmt.Sprintf("SKYENV=%s ", skyenv)
+	}
+	msg3(fmt.Sprintf("Generating skywire config with command:\n  %s%sskywire %s%s", colorCyan, envPrefix, strings.Join(args, " "), colorReset))
 
 	cmd := exec.Command("skywire", args...) //nolint:gosec
-	cmd.Stdout = nil                        // Suppress output
+	cmd.Stdout = nil
 	cmd.Stderr = os.Stderr
-	// Set SKYENV so config gen reads user defaults from /etc/skywire.conf
 	cmd.Env = os.Environ()
-	if _, err := os.Stat("/etc/skywire.conf"); err == nil {
-		cmd.Env = append(cmd.Env, "SKYENV=/etc/skywire.conf")
+	if skyenv != "" {
+		cmd.Env = append(cmd.Env, "SKYENV="+skyenv)
 	}
 	if err := cmd.Run(); err != nil {
 		return err
