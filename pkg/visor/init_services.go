@@ -387,13 +387,14 @@ func forwardHTTP(log *logging.Logger, remoteConn net.Conn, lHost string) {
 		req.URL.Scheme = "http"
 		req.URL.Host = lHost
 		client := http.Client{}
-		resp, err := client.Do(req)
+		resp, err := client.Do(req) //nolint:gosec
 		if err != nil {
 			log.WithError(err).Error("Failed to Do req")
 			closeConn(log, remoteConn)
 			return
 		}
 		err = resp.Write(remoteConn)
+		resp.Body.Close() //nolint:errcheck
 		if err != nil {
 			log.WithError(err).Error("Failed to Write")
 			closeConn(log, remoteConn)

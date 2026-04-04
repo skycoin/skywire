@@ -323,30 +323,22 @@ func downloadDmsg(ctx context.Context, log logrus.FieldLogger, httpC *http.Clien
 	if err != nil {
 		log.WithError(err).Fatal("Failed to formulate HTTP request.")
 	}
-	resp, err := httpC.Do(req)
+	resp, err := httpC.Do(req) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("failed to connect to HTTP server: %w", err)
 	}
-	if resp.StatusCode == http.StatusOK {
-		// 200 OK
-		if maxSize > 0 {
-			if resp.ContentLength > maxSize*1024 {
-				return fmt.Errorf("requested file size is more than allowed size: %d KB > %d KB", (resp.ContentLength / 1024), maxSize)
-			}
-		}
-		n, err := CancellableCopy(ctx, w, resp.Body, resp.ContentLength)
-		if err != nil {
-			return fmt.Errorf("download failed at %d/%dB: %w", n, resp.ContentLength, err)
-		}
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				log.WithError(err).Warn("HTTP Response body closed with non-nil error.")
-			}
-		}()
-		return nil
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusOK {
+		return &httpError{Status: resp.StatusCode}
 	}
-	// Convert the non-200 status code to an error
-	return &httpError{Status: resp.StatusCode}
+	if maxSize > 0 && resp.ContentLength > maxSize*1024 {
+		return fmt.Errorf("requested file size is more than allowed size: %d KB > %d KB", (resp.ContentLength / 1024), maxSize)
+	}
+	n, err := CancellableCopy(ctx, w, resp.Body, resp.ContentLength)
+	if err != nil {
+		return fmt.Errorf("download failed at %d/%dB: %w", n, resp.ContentLength, err)
+	}
+	return nil
 }
 
 type readerFunc func(p []byte) (n int, err error)
