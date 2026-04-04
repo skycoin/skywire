@@ -79,11 +79,11 @@ type rewardData struct {
 
 // surveyData represents the relevant fields parsed from a node-info.json survey file.
 type surveyData struct {
-	IPAddr       string `json:"ip_address"`
-	SkyAddr      string `json:"skycoin_address"`
-	Arch         string `json:"go_arch"`
-	UUID         string `json:"uuid"`
-	SysInfo      struct {
+	IPAddr  string `json:"ip_address"`
+	SkyAddr string `json:"skycoin_address"`
+	Arch    string `json:"go_arch"`
+	UUID    string `json:"uuid"`
+	SysInfo struct {
 		Node struct {
 			Hypervisor string `json:"hypervisor"`
 		} `json:"node"`

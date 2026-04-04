@@ -17,7 +17,7 @@ func SignalContext(ctx context.Context, log logrus.FieldLogger) (context.Context
 		log = l
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel is called on signal receipt below
 
 	ch := make(chan os.Signal, 1)
 	listenSigs := listenSignals()
