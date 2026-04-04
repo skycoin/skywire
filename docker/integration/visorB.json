@@ -6,7 +6,18 @@
     "discovery": "http://dmsg-discovery:9090",
     "discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80",
     "sessions_count": 2,
-    "servers": [],
+    "servers": [
+      {
+        "version": "",
+        "sequence": 0,
+        "timestamp": 0,
+        "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+        "server": {
+          "address": "174.0.0.5:8080",
+          "availableSessions": 0
+        }
+      }
+    ],
     "servers_type": "all",
     "protocol": "yamux"
   },
