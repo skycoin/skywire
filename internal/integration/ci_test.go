@@ -367,13 +367,8 @@ func TestEnv_ContainerRestart(t *testing.T) {
 }
 
 func TestEnv_ReadLog(t *testing.T) {
-	routerVisor := visorB
-	skychatVisors := []string{visorA, visorB}
-
 	env := NewEnv().
-		GatherContainersInfo().
-		GatherVisorPKs([]string{visorA, visorB, visorC}).
-		AddDefaultTransports(routerVisor, skychatVisors)
+		GatherContainersInfo()
 
 	// Poll for non-empty logs instead of sleeping a fixed duration.
 	// Logs may take a moment to appear after container startup.

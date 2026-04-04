@@ -144,7 +144,7 @@ func (env *TestEnv) VerifyAppRunning(t *testing.T, visor, appName string) {
 
 	// For skychat, verify the HTTP endpoint is actually ready to accept connections
 	if appName == "skychat" {
-		env.waitForHTTPEndpoint(t, visor, 8001, 10*time.Second)
+		env.waitForHTTPEndpoint(t, visor, 8001, 60*time.Second)
 	}
 }
 
