@@ -98,19 +98,19 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
         run: |
-          go install -tags=cgo -trimpath \
+          go install -tags="cgo,withoutsystray,withoutgotop" -trimpath \
             -ldflags "-s -w -linkmode external -extldflags '-static' -buildid=" \
-            ${{ env.MODULE }}/cmd/release@${{ github.ref_name }}
+            ${{ env.MODULE }}@${{ github.ref_name }}
 
           mkdir -p bin
           GOPATH_BIN="$(go env GOPATH)/bin"
-          if [ -f "${GOPATH_BIN}/linux_${{ matrix.goarch }}/release" ]; then
-            cp "${GOPATH_BIN}/linux_${{ matrix.goarch }}/release" bin/skywire
-          elif [ -f "${GOPATH_BIN}/release" ]; then
-            cp "${GOPATH_BIN}/release" bin/skywire
+          if [ -f "${GOPATH_BIN}/linux_${{ matrix.goarch }}/skywire" ]; then
+            cp "${GOPATH_BIN}/linux_${{ matrix.goarch }}/skywire" bin/skywire
+          elif [ -f "${GOPATH_BIN}/skywire" ]; then
+            cp "${GOPATH_BIN}/skywire" bin/skywire
           else
             echo "Binary not found in expected locations"
-            find "${GOPATH_BIN}" -name "release*" -type f
+            find "${GOPATH_BIN}" -name "skywire*" -type f
             exit 1
           fi
 
@@ -162,10 +162,10 @@ jobs:
           CGO_LDFLAGS: -L/usr/local/lib -L/opt/homebrew/lib -L/opt/homebrew/opt/hidapi/lib -L/opt/homebrew/opt/libusb/lib
         run: |
           go install -trimpath -ldflags "-s -w" \
-            ${{ env.MODULE }}/cmd/release@${{ github.ref_name }}
+            ${{ env.MODULE }}@${{ github.ref_name }}
 
           mkdir -p bin
-          cp "$(go env GOPATH)/bin/release" bin/skywire
+          cp "$(go env GOPATH)/bin/skywire" bin/skywire
           ./bin/skywire || true
           ./bin/skywire skycoin || true
 
@@ -225,10 +225,10 @@ jobs:
           CGO_LDFLAGS: -L/opt/homebrew/lib -L/opt/homebrew/opt/hidapi/lib -L/opt/homebrew/opt/libusb/lib
         run: |
           go install -trimpath -ldflags "-s -w" \
-            ${{ env.MODULE }}/cmd/release@${{ github.ref_name }}
+            ${{ env.MODULE }}@${{ github.ref_name }}
 
           mkdir -p bin
-          cp "$(go env GOPATH)/bin/release" bin/skywire
+          cp "$(go env GOPATH)/bin/skywire" bin/skywire
           ./bin/skywire || true
           ./bin/skywire skycoin || true
 
