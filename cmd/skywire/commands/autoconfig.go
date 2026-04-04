@@ -203,7 +203,7 @@ func generateConfig(hvArg string) error {
 
 	cmd := exec.Command("skywire", args...) //nolint:gosec
 	cmd.Stdout = nil
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = nil // suppress DMSG debug logging
 	cmd.Env = os.Environ()
 	if skyenv != "" {
 		cmd.Env = append(cmd.Env, "SKYENV="+skyenv)
@@ -233,7 +233,7 @@ func generateTestConfig(hvArg string) error {
 	}
 
 	args := []string{"cli", "config", "gen",
-		"-p", "-b", // package env, best protocol
+		"-r",                  // regen (overwrite existing)
 		"-t",                  // test deployment
 		"--sk", conf.SK.Hex(), // same identity as prod
 		"-o", "/opt/skywire/skywire-test.json", // separate config file
@@ -253,11 +253,27 @@ func generateTestConfig(hvArg string) error {
 		}
 	}
 
-	msg3(fmt.Sprintf("Generating test config:\n  %sskywire %s%s", colorCyan, strings.Join(args, " "), colorReset))
+	// Determine SKYENV path (same as prod config)
+	skyenv := os.Getenv("SKYENV")
+	if skyenv == "" {
+		if _, err = os.Stat("/etc/skywire.conf"); err == nil {
+			skyenv = "/etc/skywire.conf"
+		}
+	}
+
+	envPrefix := ""
+	if skyenv != "" {
+		envPrefix = fmt.Sprintf("SKYENV=%s ", skyenv)
+	}
+	msg3(fmt.Sprintf("Generating test config:\n  %s%sskywire %s%s", colorCyan, envPrefix, strings.Join(args, " "), colorReset))
 
 	cmd := exec.Command("skywire", args...) //nolint:gosec
 	cmd.Stdout = nil
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = nil // suppress DMSG debug logging
+	cmd.Env = os.Environ()
+	if skyenv != "" {
+		cmd.Env = append(cmd.Env, "SKYENV="+skyenv)
+	}
 	return cmd.Run()
 }
 
