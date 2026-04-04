@@ -47,8 +47,12 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	entries := direct.GetAllEntries(keys, servers)
 	dClient := direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
-	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
+	// Use a timeout so DMSG HTTP doesn't block visor startup indefinitely.
+	// If the DMSG server isn't reachable within 30s, fall back to HTTP-only.
+	dmsgCtx, dmsgCancel := context.WithTimeout(ctx, 30*time.Second)
+	dmsgDC, closeDmsgDC, err := direct.StartDmsg(dmsgCtx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
 		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+	dmsgCancel()
 	if err != nil {
 		// Non-fatal: visor continues with HTTP-only mode. DMSG HTTP will be
 		// unavailable but all services have HTTP fallback URLs.
