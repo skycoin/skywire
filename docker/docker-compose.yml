@@ -547,6 +547,7 @@ services:
     working_dir: /workspace
     environment:
       - CGO_ENABLED=0
+      - SKYDEPLOY=/workspace/docker/integration/services-config.json
     depends_on:
       - visor-a
       - visor-b

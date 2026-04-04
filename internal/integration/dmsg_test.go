@@ -77,9 +77,9 @@ func TestDmsgCurl(t *testing.T) {
 	dmsgURL := fmt.Sprintf("dmsg://%s:%d/health", pkA, dmsgHTTPPort)
 	t.Logf("Fetching %s via visor-b RPC dmsg client...", dmsgURL)
 
-	// dmsg curl with -U pointing to E2E dmsg-discovery (not production).
-	// Without --sk, it creates its own ephemeral dmsg client.
-	cmd := fmt.Sprintf("/release/skywire dmsg curl --loglvl debug -U %s %s", dmsgDiscoveryURL, dmsgURL)
+	// SKYDEPLOY is set on the e2e-test container, so dmsg curl automatically
+	// uses the E2E discovery and DMSG servers from services-config.json.
+	cmd := fmt.Sprintf("/release/skywire dmsg curl --loglvl debug %s", dmsgURL)
 
 	// Retry a few times; the DMSG session may take a moment to establish.
 	var result ExecResult
@@ -124,7 +124,7 @@ func TestDmsgCurlIndex(t *testing.T) {
 	dmsgURL := fmt.Sprintf("dmsg://%s:%d/", pkA, dmsgHTTPPort)
 	t.Logf("Fetching index page %s via visor-b RPC dmsg client...", dmsgURL)
 
-	cmd := fmt.Sprintf("/release/skywire dmsg curl --loglvl debug -U %s %s", dmsgDiscoveryURL, dmsgURL)
+	cmd := fmt.Sprintf("/release/skywire dmsg curl --loglvl debug %s", dmsgURL)
 
 	var result ExecResult
 	var err error
@@ -177,13 +177,13 @@ func TestDmsgDirect(t *testing.T) {
 	resolveAddr := fmt.Sprintf("%s:%d", pkA, dmsgHTTPPort)
 
 	// Start dmsg web with resolve mode in background.
-	// -U: use the local E2E dmsg discovery (HTTP mode)
+	// SKYDEPLOY provides the correct discovery URL automatically.
 	// -s: standalone secret key (not using visor RPC)
 	// -t: resolve dmsg address to local port
 	// -p: local port to serve on
 	startCmd := fmt.Sprintf(
-		"sh -c 'nohup /release/skywire dmsg web -U %s -s %s -t %s -p %d -l fatal > /tmp/dmsg-web-direct.log 2>&1 &'",
-		dmsgDiscoveryURL, testDmsgClientSK, resolveAddr, localPort)
+		"sh -c 'nohup /release/skywire dmsg web -s %s -t %s -p %d -l debug > /tmp/dmsg-web-direct.log 2>&1 &'",
+		testDmsgClientSK, resolveAddr, localPort)
 	_, err := env.execResult(startCmd)
 	require.NoError(t, err, "Failed to start dmsg web in resolve mode")
 
