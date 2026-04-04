@@ -343,7 +343,7 @@ services:
     depends_on:
       - visor-b
     restart: always
-    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
+    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
 
   visor-b:
     privileged: true
@@ -388,7 +388,7 @@ services:
       - address-resolver
       - dmsg-server
     restart: always
-    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
+    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
 
   visor-c:
     privileged: true
@@ -422,7 +422,7 @@ services:
     depends_on:
       - visor-a
     restart: always
-    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
+    entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
 
   # visor-a-internal:
   #   privileged: true
@@ -444,7 +444,7 @@ services:
   #   depends_on:
   #     - visor-b-internal
   #   restart: always
-  #   entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
+  #   entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
 
   # visor-b-internal:
   #   privileged: true
@@ -476,7 +476,7 @@ services:
   #     - route-finder
   #     - address-resolver
   #   restart: always
-  #   entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
+  #   entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
 
   # visor-c-internal:
   #   privileged: true
@@ -498,7 +498,7 @@ services:
   #   depends_on:
   #     - visor-a-internal
   #   restart: always
-  #   entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
+  #   entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
     
   network-monitor:
     image: "${REGISTRY}/skywire:${DOCKER_TAG}"
