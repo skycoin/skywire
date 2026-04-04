@@ -300,8 +300,39 @@ func TestEnv_SendSkyMessage(t *testing.T) {
 	env.VerifyAppRunning(t, visorA, "skychat")
 	env.VerifyAppRunning(t, visorB, "skychat")
 
+	// Diagnostic: verify transport exists
+	tps, err := env.VisorTpLs(visorA)
+	require.NoError(t, err, "Failed to list transports on visor-a")
+	t.Logf("Transports on visor-a: %d", len(tps))
+	for _, tp := range tps {
+		t.Logf("  tp: %s type=%s remote=%s", tp.ID, tp.Type, tp.Remote)
+	}
+
+	// Diagnostic: check route finder
+	pkB := env.visorPKs[visorB]
+	rfCmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route find %s --json", visorA, pkB)
+	rfOut, rfErr := env.Exec(rfCmd)
+	t.Logf("Route find A→B: err=%v output=%.200s", rfErr, rfOut)
+
+	// Diagnostic: check routing rules
+	rgCmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 route groups --json", visorA)
+	rgOut, rgErr := env.Exec(rgCmd)
+	t.Logf("Route groups on A: err=%v output=%.200s", rgErr, rgOut)
+
 	// Single-hop: A→B (direct DMSG transport)
-	_, err := env.SendSkyMessage(visorA, visorB, visorA+" -> "+visorB)
+	_, err = env.SendSkyMessage(visorA, visorB, visorA+" -> "+visorB)
+	if err != nil {
+		// Dump post-failure diagnostics
+		t.Logf("SendSkyMessage A→B failed: %v", err)
+		rgOut2, rgErr2 := env.Exec(rgCmd)
+		t.Logf("Route groups on A after failure: err=%v output=%.200s", rgErr2, rgOut2)
+		tpsB, tpsBErr := env.VisorTpLs(visorB)
+		t.Logf("VisorTpLs visor-b err=%v", tpsBErr)
+		t.Logf("Transports on visor-b: %d", len(tpsB))
+		for _, tp := range tpsB {
+			t.Logf("  tp: %s type=%s remote=%s", tp.ID, tp.Type, tp.Remote)
+		}
+	}
 	require.NoError(t, err)
 }
 
