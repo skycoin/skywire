@@ -210,6 +210,9 @@ func handleRequest(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, http
 	}
 
 	for i := 0; i < dmsgcurlTries; i++ {
+		if ctx.Err() != nil {
+			return curlError{Error: ctx.Err(), Code: errorCode["RECV_ERROR"]}
+		}
 		if dmsgcurlOutput != "" {
 			if i > 0 {
 				dlog.Debugf("Download attempt %d/%d ...", i+1, dmsgcurlTries)
@@ -247,7 +250,11 @@ func handleRequest(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, http
 			}
 
 			dlog.WithError(err).Debugf("HTTP request attempt %d failed, retrying...", attempt)
-			time.Sleep(time.Duration(attempt) * time.Second)
+			select {
+			case <-ctx.Done():
+				return curlError{Error: ctx.Err(), Code: errorCode["RECV_ERROR"]}
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
 		}
 
 		if err != nil {
@@ -297,7 +304,7 @@ func buildHTTPRequest(url, data string) (*http.Request, error) {
 
 func isFatalHTTPErr(err error) bool {
 	var netErr net.Error
-	return errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())
 }
 
 func prepareOutputFile() (*os.File, error) {

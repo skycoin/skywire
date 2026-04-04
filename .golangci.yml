@@ -87,6 +87,9 @@ linters:
       - linters:
           - staticcheck
         text: "QF1006:" # could lift into loop condition (staticcheck)
+      - linters:
+          - staticcheck
+        text: "QF1012:" # could use fmt.Fprintf instead of WriteString(fmt.Sprintf) (staticcheck)
 issues:
   new: false
 formatters:

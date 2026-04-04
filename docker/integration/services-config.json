@@ -1,0 +1,68 @@
+{
+  "test": {
+    "dmsg_discovery": "http://dmsg-discovery:9090",
+    "transport_discovery": "http://transport-discovery:9094",
+    "address_resolver": "http://address-resolver:9093",
+    "route_finder": "http://route-finder:9092",
+    "route_setup_nodes": [
+      "02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
+    ],
+    "transport_setup": [
+      "0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
+    ],
+    "uptime_tracker": "http://uptime-tracker:9095",
+    "service_discovery": "http://service-discovery:9091",
+    "stun_servers": [
+      "174.0.0.17:3478"
+    ],
+    "dns_server": "1.1.1.1",
+    "survey_whitelist": [],
+    "dmsg_servers": [
+      {
+        "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+        "server": {
+          "address": "174.0.0.5:8080"
+        }
+      }
+    ],
+    "dmsg_discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80",
+    "transport_discovery_dmsg": "dmsg://02a5993cb6792eb18908cb7c6c9c742ef5fbe3dcfcce2862bbc4615a5f35cbed46:80",
+    "address_resolver_dmsg": "dmsg://02252c40a1ac021dcf6d93f1aae38023e8fd20bb0d35b7d07cba9435a7cb7ef34f:80",
+    "route_finder_dmsg": "dmsg://02b88fe426b2f6f83f19b151c427c155aae186d734cbd45f12b57ddbd237b49278:80",
+    "uptime_tracker_dmsg": "dmsg://031ecf9a2aefa62398b305481f9a00365e4a1247ae0ea46bdb92223a43a306a98e:80",
+    "service_discovery_dmsg": "dmsg://026f96adae04285f8b35eeba23b9aa2be3470ea4bb005118f4e64006afdeea85a7:80"
+  },
+  "prod": {
+    "dmsg_discovery": "http://dmsg-discovery:9090",
+    "transport_discovery": "http://transport-discovery:9094",
+    "address_resolver": "http://address-resolver:9093",
+    "route_finder": "http://route-finder:9092",
+    "route_setup_nodes": [
+      "02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
+    ],
+    "transport_setup": [
+      "0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
+    ],
+    "uptime_tracker": "http://uptime-tracker:9095",
+    "service_discovery": "http://service-discovery:9091",
+    "stun_servers": [
+      "174.0.0.17:3478"
+    ],
+    "dns_server": "1.1.1.1",
+    "survey_whitelist": [],
+    "dmsg_servers": [
+      {
+        "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+        "server": {
+          "address": "174.0.0.5:8080"
+        }
+      }
+    ],
+    "dmsg_discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80",
+    "transport_discovery_dmsg": "dmsg://02a5993cb6792eb18908cb7c6c9c742ef5fbe3dcfcce2862bbc4615a5f35cbed46:80",
+    "address_resolver_dmsg": "dmsg://02252c40a1ac021dcf6d93f1aae38023e8fd20bb0d35b7d07cba9435a7cb7ef34f:80",
+    "route_finder_dmsg": "dmsg://02b88fe426b2f6f83f19b151c427c155aae186d734cbd45f12b57ddbd237b49278:80",
+    "uptime_tracker_dmsg": "dmsg://031ecf9a2aefa62398b305481f9a00365e4a1247ae0ea46bdb92223a43a306a98e:80",
+    "service_discovery_dmsg": "dmsg://026f96adae04285f8b35eeba23b9aa2be3470ea4bb005118f4e64006afdeea85a7:80"
+  }
+}

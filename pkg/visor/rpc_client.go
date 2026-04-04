@@ -122,6 +122,15 @@ func (rc *rpcClient) Health() (*HealthInfo, error) {
 	return hi, err
 }
 
+// IsStartupComplete calls IsStartupComplete
+func (rc *rpcClient) IsStartupComplete() bool {
+	var out bool
+	if err := rc.Call("IsStartupComplete", &struct{}{}, &out); err != nil {
+		return false
+	}
+	return out
+}
+
 // Uptime calls Uptime
 func (rc *rpcClient) Uptime() (float64, error) {
 	var out float64

@@ -43,29 +43,42 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		return nil
 	}
 
+	log := v.MasterLogger().PackageLogger("dmsg_http")
 	keys = append(keys, v.conf.PK)
 	entries := direct.GetAllEntries(keys, servers)
 	dClient := direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
-	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
-		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
-	if err != nil {
-		return fmt.Errorf("failed to start dmsg: %w", err)
-	}
-
-	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
-
-	v.pushCloseStack("dmsg_http", func() error {
-		closeDmsgDC()
-		return nil
-	})
-
+	// Set dClient immediately for direct discovery access.
 	v.initLock.Lock()
 	v.dClient = dClient
-	v.dmsgHTTP = &dmsgHTTP
-	v.dmsgDC = dmsgDC
 	v.initLock.Unlock()
-	time.Sleep(time.Duration(len(entries)) * time.Second)
+
+	// Start DMSG HTTP connection in background so it doesn't block visor startup.
+	// Downstream modules check v.dmsgHTTP != nil before using DMSG transport
+	// and fall back to plain HTTP if it's not ready yet.
+	go func() {
+		dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
+			v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+		if err != nil {
+			log.WithError(err).Warn("DMSG HTTP transport unavailable")
+			return
+		}
+
+		dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
+
+		v.pushCloseStack("dmsg_http", func() error {
+			closeDmsgDC()
+			return nil
+		})
+
+		v.initLock.Lock()
+		v.dmsgHTTP = &dmsgHTTP
+		v.dmsgDC = dmsgDC
+		v.initLock.Unlock()
+
+		log.Info("DMSG HTTP transport ready")
+	}()
+
 	return nil
 }
 
@@ -99,15 +112,22 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	}
 
 	// Prefer DMSG-HTTP for discovery if configured (more private, no DNS dependency),
-	// fall back to plain HTTP URL.
+	// fall back to plain HTTP URL. If HTTP URL is empty (DMSG-only deployment),
+	// DMSG is required — not optional.
 	discURL := v.conf.Dmsg.Discovery
 	if v.conf.Dmsg.DiscoveryDmsg != "" && v.dmsgHTTP != nil {
 		if _, err := getHTTPClient(ctx, v, v.conf.Dmsg.DiscoveryDmsg); err == nil {
 			discURL = v.conf.Dmsg.DiscoveryDmsg
 			log.Info("Using DMSG-HTTP for dmsg discovery")
-		} else {
+		} else if discURL != "" {
 			log.WithError(err).Warn("DMSG-HTTP discovery failed, using plain HTTP")
+		} else {
+			return fmt.Errorf("DMSG-only deployment but DMSG discovery unreachable: %w", err)
 		}
+	} else if discURL == "" && v.conf.Dmsg.DiscoveryDmsg != "" {
+		// DMSG URL set but dmsgHTTP not ready — can't proceed without either
+		discURL = v.conf.Dmsg.DiscoveryDmsg
+		log.Warn("HTTP discovery URL empty, attempting DMSG discovery without dmsgHTTP transport")
 	}
 
 	httpC, err := getHTTPClient(ctx, v, discURL)

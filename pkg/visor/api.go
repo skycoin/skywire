@@ -28,6 +28,7 @@ type API interface {
 	Overview() (*Overview, error)
 	Summary() (*Summary, error)
 	Health() (*HealthInfo, error)
+	IsStartupComplete() bool
 	Uptime() (float64, error)
 	RuntimeStats() (*RuntimeStatsInfo, error)
 	Reload() error

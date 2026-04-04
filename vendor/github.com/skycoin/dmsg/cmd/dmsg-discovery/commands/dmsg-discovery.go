@@ -14,6 +14,7 @@ import (
 
 	proxyproto "github.com/pires/go-proxyproto"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
@@ -204,6 +205,17 @@ Example:
 				if dmsgErr := dmsghttp.ListenAndServe(ctx, sk, a, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, log); dmsgErr != nil {
 					log.Errorf("dmsghttp.ListenAndServe: %v", dmsgErr)
 					cancel()
+				}
+			}()
+
+			// Serve pprof debug interface over dmsg
+			wl := deployment.Prod.SurveyWhitelist
+			if testEnvironment {
+				wl = deployment.Test.SurveyWhitelist
+			}
+			go func() {
+				if debugErr := dmsghttp.ServeDebug(ctx, dmsgDC, log, wl); debugErr != nil {
+					log.Errorf("dmsghttp.ServeDebug: %v", debugErr)
 				}
 			}()
 		}

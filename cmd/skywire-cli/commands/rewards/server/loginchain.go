@@ -210,7 +210,7 @@ func runLoginChain() {
 	peerTOMLContent := strings.ReplaceAll(string(updatedTOML), "port = 6001", "port = 6002")
 	peerTOMLContent = strings.ReplaceAll(peerTOMLContent, "web_interface_port = 6421", "web_interface_port = 6422")
 	peerTOMLContent = strings.ReplaceAll(peerTOMLContent, `"127.0.0.1:6002"`, `"127.0.0.1:6001"`)
-	if err := os.WriteFile(peerTOMLPath, []byte(peerTOMLContent), 0600); err != nil {
+	if err := os.WriteFile(peerTOMLPath, []byte(peerTOMLContent), 0600); err != nil { //nolint:gosec
 		fmt.Printf("Failed to write login_peer.toml: %v\n", err)
 		publisherCmd.Process.Kill() //nolint:errcheck,gosec
 		return

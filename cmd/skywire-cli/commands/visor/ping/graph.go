@@ -380,10 +380,10 @@ var pingGraphCmd = &cobra.Command{
 		}
 		var textOutput strings.Builder
 		textOutput.WriteString("=== Ping Graph Results ===\n")
-		textOutput.WriteString(fmt.Sprintf("Start Time: %s\n", results.StartTime))
-		textOutput.WriteString(fmt.Sprintf("Local Visor: %s\n", localPK))
+		fmt.Fprintf(&textOutput, "Start Time: %s\n", results.StartTime) //nolint:errcheck,gosec
+		fmt.Fprintf(&textOutput, "Local Visor: %s\n", localPK)          //nolint:errcheck,gosec
 		if graphVersion != "" {
-			textOutput.WriteString(fmt.Sprintf("Min Version: %s\n", graphVersion))
+			fmt.Fprintf(&textOutput, "Min Version: %s\n", graphVersion) //nolint:errcheck,gosec
 		}
 		textOutput.WriteString("\n")
 

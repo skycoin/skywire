@@ -79,8 +79,9 @@ type Visor struct {
 	log      *logging.Logger
 	logstore logstore.Store
 
-	startedAt     time.Time
-	uptimeTracker utclient.APIClient
+	startedAt       time.Time
+	startupComplete chan struct{}
+	uptimeTracker   utclient.APIClient
 
 	ebc      *appevent.Broadcaster // event broadcaster
 	dmsgC    *dmsg.Client
@@ -390,13 +391,21 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	}
 	v.isServicesHealthy.init()
 
-	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {
+	logLevel := conf.LogLevel
+	if logLevel == "" {
+		logLevel = "debug"
+	}
+	if logLvl, err := logging.LevelFromString(logLevel); err != nil {
 		v.log.WithError(err).Warn("Failed to read log level from config.")
 	} else {
 		v.conf.MasterLogger().SetLevel(logLvl)
 	}
 
 	v.startedAt = time.Now()
+	v.startupComplete = make(chan struct{})
+
+	// Set Go memory limit based on config
+	applyMemoryLimit(v.log, conf.MemoryLimit)
 	if isStoreLog {
 		storeLog(conf)
 	}
@@ -450,6 +459,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		return nil, false
 	}
 	log.Info("Startup complete.")
+	close(v.startupComplete)
 	return v, true
 }
 

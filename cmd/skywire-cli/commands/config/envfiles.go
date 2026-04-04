@@ -64,6 +64,9 @@ const envfileLinux = `#
 #SYNCTPDDATA=true
 
 ### Ports ###############################################################
+#	Note: when generating a test deployment config (-t / TESTENV=true),
+#	all ports are automatically offset by +10000 to allow prod and test
+#	visors to run simultaneously on the same machine.
 
 #- set port for UDP connections / SUDPH transports
 #SUDPHPORT=0
@@ -145,6 +148,10 @@ const envfileLinux = `#
 #VPNSEVERNETIFC=''
 
 ### Advanced Tuning #####################################################
+
+#--	CLI RPC address (default localhost:3435)
+#	Use 0.0.0.0:3435 for Docker/remote access
+#CLIADDR='localhost:3435'
 
 #--	Hypervisor HTTP address (default :8000)
 #HVHTTPADDR=':8000'

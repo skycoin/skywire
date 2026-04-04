@@ -269,7 +269,7 @@ Architectures:
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}
-		dConf, err := script.Echo(string(deployment.DmsghttpJSON)).JQ(`.prod`).Bytes()
+		dConf, err := script.Echo(string(deployment.ServicesJSON)).JQ(`.prod`).Bytes()
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}
@@ -934,7 +934,7 @@ var testCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}
-		dConf, err := script.Echo(string(deployment.DmsghttpJSON)).JQ(`.prod`).Bytes()
+		dConf, err := script.Echo(string(deployment.ServicesJSON)).JQ(`.prod`).Bytes()
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}
