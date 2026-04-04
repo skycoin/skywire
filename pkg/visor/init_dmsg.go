@@ -43,38 +43,42 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		return nil
 	}
 
+	log := v.MasterLogger().PackageLogger("dmsg_http")
 	keys = append(keys, v.conf.PK)
 	entries := direct.GetAllEntries(keys, servers)
 	dClient := direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
-	// Use a timeout so DMSG HTTP doesn't block visor startup indefinitely.
-	// If the DMSG server isn't reachable within 30s, fall back to HTTP-only.
-	dmsgCtx, dmsgCancel := context.WithTimeout(ctx, 30*time.Second)
-	dmsgDC, closeDmsgDC, err := direct.StartDmsg(dmsgCtx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
-		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
-	dmsgCancel()
-	if err != nil {
-		// Non-fatal: visor continues with HTTP-only mode. DMSG HTTP will be
-		// unavailable but all services have HTTP fallback URLs.
-		v.MasterLogger().PackageLogger("dmsg_http").WithError(err).Warn("DMSG HTTP transport unavailable, using HTTP-only mode")
-		v.initLock.Lock()
-		v.dClient = dClient
-		v.initLock.Unlock()
-		return nil
-	}
-
-	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
-
-	v.pushCloseStack("dmsg_http", func() error {
-		closeDmsgDC()
-		return nil
-	})
-
+	// Set dClient immediately for direct discovery access.
 	v.initLock.Lock()
 	v.dClient = dClient
-	v.dmsgHTTP = &dmsgHTTP
-	v.dmsgDC = dmsgDC
 	v.initLock.Unlock()
+
+	// Start DMSG HTTP connection in background so it doesn't block visor startup.
+	// Downstream modules check v.dmsgHTTP != nil before using DMSG transport
+	// and fall back to plain HTTP if it's not ready yet.
+	go func() {
+		dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
+			v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+		if err != nil {
+			log.WithError(err).Warn("DMSG HTTP transport unavailable")
+			return
+		}
+
+		dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
+
+		v.pushCloseStack("dmsg_http", func() error {
+			closeDmsgDC()
+			return nil
+		})
+
+		v.initLock.Lock()
+		v.dmsgHTTP = &dmsgHTTP
+		v.dmsgDC = dmsgDC
+		v.initLock.Unlock()
+
+		log.Info("DMSG HTTP transport ready")
+	}()
+
 	return nil
 }
 

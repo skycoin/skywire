@@ -251,6 +251,9 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		if err != nil {
 			return nil, fmt.Errorf("error saving clientEntry: %w", err)
 		}
+		if v.dmsgHTTP == nil {
+			return nil, fmt.Errorf("DMSG HTTP transport not ready yet")
+		}
 		return v.dmsgHTTP, nil
 	}
 	return &http.Client{
