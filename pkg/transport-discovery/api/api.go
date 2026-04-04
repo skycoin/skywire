@@ -65,8 +65,9 @@ type API struct {
 	transportsCacheFiltered []*transport.Entry // excludes self-transports
 	transportsMu            sync.RWMutex
 
-	uptimesCache []store.VisorSummary
-	uptimesMu    sync.RWMutex
+	uptimesCache   []store.VisorSummary
+	uptimesV2Cache []store.VisorSummary
+	uptimesMu      sync.RWMutex
 
 	// cxoPublisher is an optional CXO publisher for distributing transport data.
 	// When set, transport register/deregister operations publish to CXO subscribers.
@@ -129,6 +130,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		r.Post("/transports/", api.registerTransport)
 		r.Delete("/transports/id:{id}", api.deleteTransport)
 		r.Post("/transports/delete-batch", api.deleteTransportsBatch)
+		r.Get("/v4/update", api.visorHeartbeat)
 	})
 
 	// Public data endpoints (rate limited, no auth)
@@ -232,23 +234,36 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 	}
 }
 
-// refreshUptimesCache fetches visor data from the store and caches it.
+// refreshUptimesCache fetches visor data from the store and caches both v1 and v2 formats.
 func (api *API) refreshUptimesCache(ctx context.Context, logger logrus.FieldLogger) {
-	uptimes, err := api.store.GetAllVisorSummaries(ctx)
+	uptimes, err := api.store.GetAllVisorSummaries(ctx, false)
 	if err != nil {
 		logger.WithError(err).Error("failed to refresh uptimes cache")
 		return
 	}
+	uptimesV2, err := api.store.GetAllVisorSummaries(ctx, true)
+	if err != nil {
+		logger.WithError(err).Error("failed to refresh uptimes v2 cache")
+		uptimesV2 = uptimes // fall back to v1
+	}
 	api.uptimesMu.Lock()
 	api.uptimesCache = uptimes
+	api.uptimesV2Cache = uptimesV2
 	api.uptimesMu.Unlock()
 }
 
-// getUptimesFromCache returns the cached uptimes data.
+// getUptimesFromCache returns the cached v1 uptimes data.
 func (api *API) getUptimesFromCache() []store.VisorSummary {
 	api.uptimesMu.RLock()
 	defer api.uptimesMu.RUnlock()
 	return api.uptimesCache
+}
+
+// getUptimesV2FromCache returns the cached v2 uptimes data (with version and daily).
+func (api *API) getUptimesV2FromCache() []store.VisorSummary {
+	api.uptimesMu.RLock()
+	defer api.uptimesMu.RUnlock()
+	return api.uptimesV2Cache
 }
 
 func (api *API) log(r *http.Request) logrus.FieldLogger {

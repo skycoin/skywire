@@ -166,7 +166,8 @@ type TransportStore interface {
 	// Bandwidth query methods (legacy)
 	GetTransportBandwidth(ctx context.Context, tpID uuid.UUID, period string, limit int) ([]BandwidthAggregation, error)
 	GetVisorBandwidth(ctx context.Context, pk cipher.PubKey, period string, limit int) ([]BandwidthAggregation, error)
-	GetAllVisorSummaries(ctx context.Context) ([]VisorSummary, error)
+	GetAllVisorSummaries(ctx context.Context, v2 bool) ([]VisorSummary, error)
+	RecordHeartbeat(ctx context.Context, pk cipher.PubKey, version string) error
 	BackupAndCleanOldBandwidth(ctx context.Context, backupPath string) error
 	// New metrics methods
 	GetNetworkMetrics(ctx context.Context, query MetricsQuery) (*NetworkMetricResponse, error)

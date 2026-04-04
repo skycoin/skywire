@@ -83,10 +83,11 @@ func isPublic(logger *logging.Logger) string {
 func getStunServers() ([]string, error) {
 	var info stunInfo
 
-	resp, err := http.Get("https://conf.skywire.skycoin.com/")
+	resp, err := http.Get("https://conf.skywire.skycoin.com/") //nolint:gosec
 	if err != nil {
 		return info.Stun, err
 	}
+	defer resp.Body.Close() //nolint:errcheck
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return info.Stun, err

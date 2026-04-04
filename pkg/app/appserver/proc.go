@@ -218,7 +218,7 @@ func (p *Proc) Start() error {
 }
 
 func (p *Proc) startInProcess() error {
-	p.appCtx, p.appCancelCtx = context.WithCancel(context.Background())
+	p.appCtx, p.appCancelCtx = context.WithCancel(context.Background()) //nolint:gosec
 
 	runFunc, ok := p.conf.RunFunc.(appcommon.AppFunc)
 	if !ok {

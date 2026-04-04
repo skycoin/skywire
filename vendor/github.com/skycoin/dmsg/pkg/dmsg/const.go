@@ -30,8 +30,8 @@ const (
 	DefaultCommunityDmsgServerType = "community"
 )
 
-// DmsghttpJSON is dmsghttp-config.json embedded in deployment.DmsghttpJSON
-var DmsghttpJSON = deployment.DmsghttpJSON
+// DmsghttpJSON is services-config.json embedded in deployment.ServicesJSON
+var DmsghttpJSON = deployment.ServicesJSON
 
 // Prod is the production deployment dmsghttp-config.json services
 var Prod DmsghttpConfig
@@ -65,15 +65,15 @@ func ExtractPKFromDmsgAddr(input string) string {
 	return ""
 }
 
-// DmsghttpConfig is the struct that corresponds to the json data of the dmsghttp-config.json
+// DmsghttpConfig is the struct that corresponds to the _dmsg fields of services-config.json
 type DmsghttpConfig struct {
 	DmsgServers        []disc.Entry `json:"dmsg_servers"`
-	DmsgDiscovery      string       `json:"dmsg_discovery"`
-	TransportDiscovery string       `json:"transport_discovery"`
-	AddressResolver    string       `json:"address_resolver"`
-	RouteFinder        string       `json:"route_finder"`
-	UptimeTracker      string       `json:"uptime_tracker"`
-	ServiceDiscovery   string       `json:"service_discovery"`
+	DmsgDiscovery      string       `json:"dmsg_discovery_dmsg"`
+	TransportDiscovery string       `json:"transport_discovery_dmsg"`
+	AddressResolver    string       `json:"address_resolver_dmsg"`
+	RouteFinder        string       `json:"route_finder_dmsg"`
+	UptimeTracker      string       `json:"uptime_tracker_dmsg"`
+	ServiceDiscovery   string       `json:"service_discovery_dmsg"`
 }
 
 func init() {
@@ -90,17 +90,21 @@ func InitConfig() error {
 	if err != nil {
 		return err
 	}
-	err = json.Unmarshal(envServices.Prod, &Prod)
-	if err != nil {
-		return err
+	if envServices.Prod != nil {
+		err = json.Unmarshal(envServices.Prod, &Prod)
+		if err != nil {
+			return err
+		}
+		Prod.DmsgServers, err = shuffleServers(Prod.DmsgServers)
+		if err != nil {
+			return err
+		}
 	}
-	Prod.DmsgServers, err = shuffleServers(Prod.DmsgServers)
-	if err != nil {
-		return err
-	}
-	err = json.Unmarshal(envServices.Test, &Test)
-	if err != nil {
-		return err
+	if envServices.Test != nil {
+		err = json.Unmarshal(envServices.Test, &Test)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

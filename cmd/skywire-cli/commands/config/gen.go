@@ -2,6 +2,7 @@
 package cliconfig
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,7 +16,10 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
@@ -28,6 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -95,6 +100,25 @@ var genKeysCmd = &cobra.Command{
 	},
 }
 
+var pkFromSKCmd = &cobra.Command{
+	Use:   "pk <secret-key-hex>",
+	Short: "derive public key from a secret key",
+	Args:  cobra.ExactArgs(1),
+	Run: func(_ *cobra.Command, args []string) {
+		var sk cipher.SecKey
+		if err := sk.Set(args[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "invalid secret key: %v\n", err) //nolint:errcheck,gosec
+			os.Exit(1)
+		}
+		pk, err := sk.PubKey()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to derive public key: %v\n", err) //nolint:errcheck,gosec
+			os.Exit(1)
+		}
+		fmt.Println(pk.Hex())
+	},
+}
+
 var (
 	isEnvs     bool
 	skyenvfile = os.Getenv("SKYENV")
@@ -105,7 +129,7 @@ func init() {
 	var msg string
 	//disable sorting, flags appear in the order shown here
 	genConfigCmd.Flags().SortFlags = false
-	RootCmd.AddCommand(genConfigCmd, genKeysCmd, checkPKCmd)
+	RootCmd.AddCommand(genConfigCmd, genKeysCmd, pkFromSKCmd, checkPKCmd)
 
 	// Output flags
 	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout")
@@ -131,7 +155,7 @@ func init() {
 	// Network and deployment flags
 	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", scriptExecArray(fmt.Sprintf("${SVCCONFADDR[@]-%s}", serviceConfURL)), "services conf url\n\r")
 	gHiddenFlags = append(gHiddenFlags, "url")
-	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment")
+	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment\n\r(ports are offset +10000 to allow running alongside prod)")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
 	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use only dmsg connection to skywire services (no http fallback)")
 	genConfigCmd.Flags().BoolVar(&isHTTPOnly, "http", false, "use only http connection to skywire services (no dmsg)")
@@ -296,6 +320,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "maxtransports")
 	genConfigCmd.Flags().IntVar(&muxRoutes, "muxroutes", 0, "number of parallel mux routes per connection")
 	gHiddenFlags = append(gHiddenFlags, "muxroutes")
+	genConfigCmd.Flags().StringVar(&cliAddr, "cliaddr", scriptExecString("${CLIADDR}"), "CLI RPC address (e.g. 0.0.0.0:3435 for Docker)")
+	gHiddenFlags = append(gHiddenFlags, "cliaddr")
 
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 
@@ -332,7 +358,12 @@ var genConfigCmd = &cobra.Command{
 	print the SKYENV file template with:
 	skywire-cli config gen -q`
 		}
-		return `Generate a config file`
+		return `Generate a config file
+
+	Custom deployment config (services-config.json) may be specified with:
+	SKYDEPLOY=/path/to/services-config.json skywire cli config gen
+	This overrides the embedded deployment defaults for all service URLs,
+	DMSG servers, and DMSG endpoints. Use with --nofetch to skip HTTP fetch.`
 
 	}(),
 	PreRun: func(cmd *cobra.Command, _ []string) {
@@ -535,11 +566,18 @@ func logIfNotStdout(log *logging.Logger, err error, msg string) {
 	}
 }
 
-// fetchServiceConfig fetches service endpoints from the configured URL
-// or falls back to a local file or hardcoded defaults.
+// fetchServiceConfig fetches service endpoints with the following priority:
+//  1. DMSG — short-lived dmsghttp client using embedded servers (private, no DNS)
+//  2. HTTP — plain HTTP to config service URL (current behavior)
+//  3. Embedded — deployment.ServicesJSON (hardcoded defaults)
 func fetchServiceConfig(log *logging.Logger) {
 	var err error
 	if !noFetch && !isDmsgHTTP {
+		// Try DMSG-first fetch if we have a config service DMSG address
+		if fetchServiceConfigDmsg(log) {
+			return
+		}
+		// Fall back to HTTP
 		client := http.Client{Timeout: servicesFetchTimeout}
 		if serviceConfURL == "" {
 			serviceConfURL = "http://"
@@ -547,11 +585,11 @@ func fetchServiceConfig(log *logging.Logger) {
 		if !isStdout {
 			log.Infof("Fetching service endpoints from %s", serviceConfURL)
 		}
-		res, err := client.Get(serviceConfURL)
+		res, err := client.Get(serviceConfURL) //nolint:gosec
 		if err != nil {
-			logIfNotStdout(log, err, "Failed to fetch servers")
+			logIfNotStdout(log, err, "Failed to fetch servers via HTTP")
 			if !isStdout {
-				log.Warn("Falling back on services-config.json")
+				log.Warn("Falling back on embedded config")
 			}
 			loadServicesFromFile(log)
 			return
@@ -560,25 +598,44 @@ func fetchServiceConfig(log *logging.Logger) {
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
 			log.WithError(err).Error("Failed to read HTTP response")
+			loadServicesFromFile(log)
 			return
 		}
 		if err := json.Unmarshal(body, &services); err != nil {
 			logIfNotStdout(log, err, "Failed to unmarshal JSON response to services struct")
 			if !isStdout {
-				log.Warn("Falling back on hardcoded servers")
+				log.Warn("Falling back on embedded config")
 			}
+			loadServicesFromFile(log)
 			return
-		} else if !isStdout {
+		}
+		if !isStdout {
 			log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
+		}
+		// Supplement missing DMSG fields from embedded config if the
+		// config bootstrapper hasn't been updated to serve them yet.
+		if !services.HasDmsgEndpoints() {
+			embedded := deployment.Prod
+			if isTestEnv {
+				embedded = deployment.Test
+			}
+			services.DmsgServers = embedded.DmsgServers
+			services.ConfDmsg = embedded.ConfDmsg
+			services.DmsgDiscoveryDmsg = embedded.DmsgDiscoveryDmsg
+			services.TransportDiscoveryDmsg = embedded.TransportDiscoveryDmsg
+			services.AddressResolverDmsg = embedded.AddressResolverDmsg
+			services.RouteFinderDmsg = embedded.RouteFinderDmsg
+			services.UptimeTrackerDmsg = embedded.UptimeTrackerDmsg
+			services.ServiceDiscoveryDmsg = embedded.ServiceDiscoveryDmsg
 		}
 	} else {
 		body := deployment.ServicesJSON
 		if configServicePath != "" {
-			body, err = os.ReadFile(configServicePath)
+			body, err = os.ReadFile(configServicePath) //nolint:gosec
 			if err != nil {
 				logIfNotStdout(log, err, "Failed to read config service from file")
 				if !isStdout {
-					log.Warn("Falling back on hardcoded servers")
+					log.Warn("Falling back on embedded config")
 				}
 				return
 			}
@@ -586,7 +643,7 @@ func fetchServiceConfig(log *logging.Logger) {
 		if err := json.Unmarshal(body, &servicesConfig); err != nil {
 			logIfNotStdout(log, err, "Failed to unmarshal services-config.json file")
 			if !isStdout {
-				log.Warn("Falling back on hardcoded servers")
+				log.Warn("Falling back on embedded config")
 			}
 			return
 		}
@@ -595,6 +652,74 @@ func fetchServiceConfig(log *logging.Logger) {
 			services = servicesConfig.Test
 		}
 	}
+}
+
+// fetchServiceConfigDmsg tries to fetch service config from the config-bootstrapper
+// over DMSG using a short-lived direct client. Returns true if successful.
+func fetchServiceConfigDmsg(log *logging.Logger) bool {
+	embeddedConf := deployment.Prod
+	if isTestEnv {
+		embeddedConf = deployment.Test
+	}
+
+	// Need both embedded DMSG servers and a config service DMSG address
+	if len(embeddedConf.DmsgServers) == 0 || embeddedConf.ConfDmsg == "" {
+		return false
+	}
+
+	if !isStdout {
+		log.Infof("Fetching service endpoints via DMSG from %s", embeddedConf.ConfDmsg)
+	}
+
+	// Bootstrap a short-lived DMSG client using embedded servers.
+	// Use a discard logger in stdout mode to prevent DMSG client logs
+	// from polluting the JSON output.
+	ctx, cancel := context.WithTimeout(context.Background(), servicesFetchTimeout)
+	defer cancel()
+
+	// Generate ephemeral keypair for the fetch
+	pk, sk := cipher.GenerateKeyPair()
+
+	dmsgLog := log
+	if isStdout {
+		silentLogger := logrus.New()
+		silentLogger.SetOutput(io.Discard)
+		dmsgLog = &logging.Logger{FieldLogger: silentLogger}
+	}
+
+	dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, dmsgLog, pk, sk,
+		dmsg.Prod.DmsgServers, embeddedConf.DmsgDiscovery, "")
+	if err != nil {
+		logIfNotStdout(log, err, "DMSG bootstrap failed for config fetch")
+		return false
+	}
+	defer dmsgBoot.Close()
+
+	// Make HTTP request through DMSG transport
+	dmsgHTTPClient := &http.Client{
+		Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgBoot.Client),
+		Timeout:   servicesFetchTimeout,
+	}
+
+	res, err := dmsgHTTPClient.Get(embeddedConf.ConfDmsg)
+	if err != nil {
+		logIfNotStdout(log, err, "Failed to fetch config via DMSG")
+		return false
+	}
+	defer res.Body.Close() //nolint:errcheck
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		logIfNotStdout(log, err, "Failed to read DMSG response")
+		return false
+	}
+	if err := json.Unmarshal(body, &services); err != nil {
+		logIfNotStdout(log, err, "Failed to unmarshal DMSG config response")
+		return false
+	}
+	if !isStdout {
+		log.Info("Fetched service endpoints via DMSG")
+	}
+	return true
 }
 
 // loadServicesFromFile reads service config from a file or embedded defaults.
@@ -682,12 +807,11 @@ func configureDMSGHTTP(log *logging.Logger, outerErr error) {
 				log.WithError(err).Fatal("Failed to unmarshal " + skyenv.DMSGHTTPName)
 			}
 		} else if !services.HasDmsgEndpoints() {
-			// Fallback: if services-config.json didn't have DMSG fields
-			// (e.g., fetched from old config service), use embedded dmsghttp-config.json
-			dmsghttpConfigData := deployment.DmsghttpJSON
-			err := json.Unmarshal(dmsghttpConfigData, &dmsgHTTPServersList)
+			// Fallback: if fetched config didn't have DMSG fields,
+			// try parsing the embedded config for legacy DmsgHTTPServers format
+			err := json.Unmarshal(deployment.ServicesJSON, &dmsgHTTPServersList)
 			if err != nil {
-				log.WithError(err).Fatal("Failed to unmarshal " + skyenv.DMSGHTTPName)
+				log.WithError(err).Warn("Failed to parse legacy dmsghttp config from embedded services")
 			}
 		}
 		// else: services struct already has DMSG fields from unified config
@@ -716,11 +840,11 @@ func configureServices(log *logging.Logger) {
 	}
 	services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWlPKs...)
 
-	if services.DmsgDiscovery == "" {
-		log.Fatalf("Dmsg Discovery not set")
+	if services.DmsgDiscovery == "" && services.DmsgDiscoveryDmsg == "" {
+		log.Fatalf("Dmsg Discovery not set (neither HTTP nor DMSG)")
 	}
-	if services.TransportDiscovery == "" {
-		log.Fatalf("Transport Discovery not set")
+	if services.TransportDiscovery == "" && services.TransportDiscoveryDmsg == "" {
+		log.Fatalf("Transport Discovery not set (neither HTTP nor DMSG)")
 	}
 	if routeSetupNodes != "" {
 		if err := routeSetupPKs.Set(routeSetupNodes); err != nil {
@@ -839,7 +963,11 @@ func configureLauncher(log *logging.Logger) {
 	conf.UptimeTracker = &visorconfig.UptimeTracker{
 		Addr: services.UptimeTracker, //utilenv.UptimeTrackerAddr,
 	}
-	conf.CLIAddr = offsetAddr(skyenv.RPCAddr)
+	if cliAddr != "" {
+		conf.CLIAddr = offsetAddr(cliAddr)
+	} else {
+		conf.CLIAddr = offsetAddr(skyenv.RPCAddr)
+	}
 	conf.LogLevel = logLevel
 	conf.LocalPath = localPath
 	if stunServers != "" {
@@ -860,6 +988,7 @@ func configureLauncher(log *logging.Logger) {
 		conf.ShutdownTimeout = visorconfig.DefaultTimeout
 	}
 	conf.GeoIP = skyenv.GeoIP
+	conf.MemoryLimit = "auto"
 	if rewardSkyAddr != "" {
 		canonical, _, err := rewardconfig.ValidateRewardAddress(rewardSkyAddr)
 		if err != nil {
@@ -868,10 +997,14 @@ func configureLauncher(log *logging.Logger) {
 		conf.RewardAddress = canonical
 	}
 
+	dmsgptyAddr := dmsgpty.DefaultCLIAddr()
+	if isTestEnv {
+		dmsgptyAddr = filepath.Join(os.TempDir(), "dmsgpty-test.sock")
+	}
 	conf.Dmsgpty = &visorconfig.Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
 		CLINet:   skyenv.DmsgPtyCLINet,
-		CLIAddr:  dmsgpty.DefaultCLIAddr(),
+		CLIAddr:  dmsgptyAddr,
 	}
 
 	conf.STCP = &network.STCPConfig{
