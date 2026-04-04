@@ -119,7 +119,7 @@
   "hypervisors": [
     "0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe"
   ],
-  "cli_addr": "localhost:3435",
+  "cli_addr": "0.0.0.0:3435",
   "log_level": "",
   "local_path": "./local",
   "stun_servers": [

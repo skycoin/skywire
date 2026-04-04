@@ -117,7 +117,7 @@
   },
   "survey_whitelist": [],
   "hypervisors": [],
-  "cli_addr": "localhost:3435",
+  "cli_addr": "0.0.0.0:3435",
   "log_level": "",
   "local_path": "./local",
   "stun_servers": [
