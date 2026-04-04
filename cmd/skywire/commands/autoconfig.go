@@ -226,25 +226,32 @@ func generateConfig(hvArg string) error {
 }
 
 func generateTestConfig(hvArg string) error {
-	// Read the SK from the prod config to reuse the same identity
-	conf, err := visorconfig.ReadFile("/opt/skywire/skywire.json")
-	if err != nil {
-		return fmt.Errorf("cannot read prod config for test config generation: %w", err)
+	testConf := "/opt/skywire/skywire-test.json"
+
+	// If test config doesn't exist yet, copy prod config as base so -r can reuse its keys
+	if _, err := os.Stat(testConf); os.IsNotExist(err) {
+		prodData, readErr := os.ReadFile("/opt/skywire/skywire.json")
+		if readErr != nil {
+			return fmt.Errorf("cannot read prod config: %w", readErr)
+		}
+		if writeErr := os.WriteFile(testConf, prodData, 0600); writeErr != nil { //nolint:gosec
+			return fmt.Errorf("cannot seed test config: %w", writeErr)
+		}
 	}
 
 	args := []string{"cli", "config", "gen",
-		"-r",                  // regen (overwrite existing)
-		"-t",                  // test deployment
-		"--sk", conf.SK.Hex(), // same identity as prod
-		"-o", "/opt/skywire/skywire-test.json", // separate config file
+		"-r",            // regen (reuses existing SK from the test config file)
+		"-t",            // test deployment
+		"-o", testConf,  // separate config file
 	}
 
 	// Mirror hypervisor setting from prod
+	conf, _ := visorconfig.ReadFile("/opt/skywire/skywire.json")
 	switch hvArg {
 	case "0":
 		args = append(args, "-i")
 	case "":
-		if conf.Hypervisor != nil {
+		if conf != nil && conf.Hypervisor != nil {
 			args = append(args, "-i")
 		}
 	default:
@@ -256,7 +263,7 @@ func generateTestConfig(hvArg string) error {
 	// Determine SKYENV path (same as prod config)
 	skyenv := os.Getenv("SKYENV")
 	if skyenv == "" {
-		if _, err = os.Stat("/etc/skywire.conf"); err == nil {
+		if _, statErr := os.Stat("/etc/skywire.conf"); statErr == nil {
 			skyenv = "/etc/skywire.conf"
 		}
 	}
