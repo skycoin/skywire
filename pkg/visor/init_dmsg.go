@@ -35,7 +35,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
+func initDmsgHTTP(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var keys cipher.PubKeys
 	servers := shuffleServers(v.conf.Dmsg.Servers)
 
@@ -47,25 +47,37 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	entries := direct.GetAllEntries(keys, servers)
 	dClient := direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
-	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
-		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
-	if err != nil {
-		return fmt.Errorf("failed to start dmsg: %w", err)
-	}
+	// Start DMSG in a background goroutine so it doesn't block visor startup.
+	// Downstream modules that need dmsgHTTP will fall back to plain HTTP
+	// if DMSG isn't ready yet.
+	go func() {
+		dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
+			v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
+		if err != nil {
+			log.WithError(err).Warn("Failed to start dmsg HTTP transport")
+			return
+		}
 
-	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
+		dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
 
-	v.pushCloseStack("dmsg_http", func() error {
-		closeDmsgDC()
-		return nil
-	})
+		v.pushCloseStack("dmsg_http", func() error {
+			closeDmsgDC()
+			return nil
+		})
 
+		v.initLock.Lock()
+		v.dmsgHTTP = &dmsgHTTP
+		v.dmsgDC = dmsgDC
+		v.initLock.Unlock()
+
+		log.Info("DMSG HTTP transport ready")
+	}()
+
+	// Set dClient immediately so downstream modules can use it for direct connections
 	v.initLock.Lock()
 	v.dClient = dClient
-	v.dmsgHTTP = &dmsgHTTP
-	v.dmsgDC = dmsgDC
 	v.initLock.Unlock()
-	time.Sleep(time.Duration(len(entries)) * time.Second)
+
 	return nil
 }
 
