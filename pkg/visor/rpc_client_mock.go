@@ -205,6 +205,11 @@ func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 	return hi, nil
 }
 
+// IsStartupComplete implements API
+func (mc *mockRPCClient) IsStartupComplete() bool {
+	return true
+}
+
 // Uptime implements API
 func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil

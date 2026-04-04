@@ -184,6 +184,7 @@ func (ce *Client) Serve(ctx context.Context) {
 
 	updateEntryLoopOnce := new(sync.Once)
 	pingLoopOnce := new(sync.Once)
+	reconnectLoopOnce := new(sync.Once)
 
 	needInitialPost := true
 
@@ -306,10 +307,13 @@ func (ce *Client) Serve(ctx context.Context) {
 						}
 						ce.sesMx.Unlock()
 					}
+					// Only backoff after all servers have been tried
+					ce.log.WithField("current_backoff", ce.bo.String()).
+						Warn("All servers failed, backing off.")
+					ce.serveWait()
 				}
-				ce.log.WithField("remote_pk", entry.Static).WithError(err).WithField("current_backoff", ce.bo.String()).
+				ce.log.WithField("remote_pk", entry.Static).WithError(err).
 					Warn("Failed to establish session.")
-				ce.serveWait()
 			} else {
 				// Reset backoff on successful session establishment.
 				ce.bo = ce.initBO
@@ -319,6 +323,11 @@ func (ce *Client) Serve(ctx context.Context) {
 		// Only start the update entry loop once we have at least one session established.
 		updateEntryLoopOnce.Do(func() { go ce.updateClientEntryLoop(cancellabelCtx, ce.done, ce.conf.ClientType) })
 		pingLoopOnce.Do(func() { go ce.pingSessionsLoop(cancellabelCtx) })
+		// When MinSessions is 0 (connect to all), start a reconnect loop that
+		// aggressively retries connecting to servers we failed to reach on the first pass.
+		if ce.conf.MinSessions == 0 {
+			reconnectLoopOnce.Do(func() { go ce.reconnectLoop(cancellabelCtx) })
+		}
 
 		// We dial all servers and wait for error or done signal.
 		select {
@@ -465,6 +474,56 @@ func (ce *Client) setCachedEntry(pk cipher.PubKey, entry *disc.Entry) {
 	ce.entryCacheMx.Lock()
 	ce.entryCache[pk] = entryCacheEntry{entry: entry, fetchedAt: time.Now()}
 	ce.entryCacheMx.Unlock()
+}
+
+// reconnectLoop periodically discovers all available servers and attempts to
+// connect to any that don't have an active session. This ensures services using
+// MinSessions=0 (connect to all) maintain sessions to all servers, even if some
+// were unavailable during initial startup.
+func (ce *Client) reconnectLoop(ctx context.Context) {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ce.done:
+			return
+		case <-ticker.C:
+			ce.reconnectMissing(ctx)
+		}
+	}
+}
+
+func (ce *Client) reconnectMissing(ctx context.Context) {
+	entries, err := ce.discoverServers(ctx, false)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if isClosed(ce.done) {
+			return
+		}
+		// Skip servers we already have sessions with
+		if _, ok := ce.session(entry.Static); ok {
+			continue
+		}
+		// Filter by server type if configured
+		if ce.conf.ConnectedServersType == "official" && entry.Server.ServerType != "official" {
+			continue
+		}
+		if ce.conf.ConnectedServersType == "community" && entry.Server.ServerType != "community" {
+			continue
+		}
+		ce.log.WithField("remote_pk", entry.Static).Debug("Reconnecting to missing server...")
+		if err := ce.EnsureSession(ctx, entry); err != nil {
+			ce.log.WithField("remote_pk", entry.Static).WithError(err).
+				Debug("Reconnect failed, will retry next cycle.")
+		} else {
+			ce.log.WithField("remote_pk", entry.Static).Info("Reconnected to server.")
+		}
+	}
 }
 
 // pingSessionsLoop periodically pings all sessions to measure latency.

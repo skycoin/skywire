@@ -46,9 +46,13 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 			arURL = conf.AddressResolverDmsg
 			_ = dmsgC // URL is enough, getHTTPClient sets up DMSG routing
 			log.Info("Using DMSG-HTTP for address resolver")
-		} else {
+		} else if arURL != "" {
 			log.WithError(err).Warn("DMSG-HTTP address resolver failed, using plain HTTP")
+		} else {
+			return fmt.Errorf("address resolver: DMSG-only but unreachable: %w", err)
 		}
+	} else if arURL == "" && conf.AddressResolverDmsg != "" {
+		arURL = conf.AddressResolverDmsg
 	}
 
 	httpC, err := getHTTPClient(ctx, v, arURL)
@@ -108,7 +112,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		v.geo.mu.Unlock()
 	}
 
-	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
+	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
 	if err != nil {
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -473,7 +477,7 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 	}
 	connector := MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
 
-	cctx, cancel := context.WithCancel(ctx)
+	cctx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel stored in v.autoconnect.cancel, called in pushCloseStack
 	v.autoconnect.cancel = cancel
 	v.autoconnect.running = true
 
@@ -911,7 +915,11 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 	}
 
 	// Plain HTTP (primary if no DMSG config, fallback if DMSG failed)
-	httpC, err := getHTTPClient(ctx, v, conf.Discovery)
+	tpdURL := conf.Discovery
+	if tpdURL == "" && conf.DiscoveryDmsg != "" {
+		tpdURL = conf.DiscoveryDmsg // DMSG-only deployment
+	}
+	httpC, err := getHTTPClient(ctx, v, tpdURL)
 	if err != nil {
 		return nil, err
 	}

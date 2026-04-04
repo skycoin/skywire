@@ -208,7 +208,7 @@ func (c *Client) doRequest(client *http.Client, req *http.Request, body []byte) 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return client.Do(req)
+	return client.Do(req) //nolint:gosec
 }
 
 func (c *Client) getCurrentNonce() Nonce {

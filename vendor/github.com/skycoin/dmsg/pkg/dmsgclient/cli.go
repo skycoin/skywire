@@ -63,6 +63,13 @@ Default mode of operation is dmsghttp:
 
 // InitDmsgWithFlags starts dmsg with flags from the flags package
 func InitDmsgWithFlags(ctx context.Context, dlog *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, httpClient *http.Client, destination string) (dmsgC *dmsg.Client, stop func(), err error) {
+	if DmsgServerAddr != "" {
+		srvEntry, err := ParseServerAddr(DmsgServerAddr)
+		if err != nil {
+			return nil, nil, err
+		}
+		return StartDmsgDirectWithServers(ctx, dlog, pk, sk, "", []*disc.Entry{srvEntry}, 1, dmsg.ExtractPKFromDmsgAddr(destination))
+	}
 	if UseDC {
 		return StartDmsgDirect(ctx, dlog, pk, sk, "", DmsgSessions, dmsg.ExtractPKFromDmsgAddr(destination))
 	}

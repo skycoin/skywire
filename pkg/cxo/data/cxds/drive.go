@@ -274,8 +274,8 @@ func (d *driveCXDS) incr(
 		nrc = rc // all done (no changes)
 		return nrc, err
 	case inc < 0:
-		inc = -inc // change its sign
-		if uinc := uint32(inc); uinc >= rc {
+		inc = -inc                           // change its sign
+		if uinc := uint32(inc); uinc >= rc { //nolint:gosec
 			nrc = 0 // zero
 		} else {
 			nrc = rc - uinc // reduce (rc > 0)

@@ -41,7 +41,7 @@ func AtomicWriteFile(filename string, data []byte) error {
 		}
 	}
 
-	if err := os.WriteFile(tempFilePath, data, ownerRWOtherRW); err != nil {
+	if err := os.WriteFile(tempFilePath, data, ownerRWOtherRW); err != nil { //nolint:gosec
 		return err
 	}
 

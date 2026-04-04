@@ -153,9 +153,15 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 		return err
 	}
 	if header[0] == 0 && header[1] == 0 {
-		// Ping: echo back the marker and close.
+		// Ping: echo back the marker and close the stream to flush the write.
+		// Without the explicit close, smux may buffer the response and the
+		// client's read times out waiting for data that never arrives.
 		_, err := yStr.Write(pingMarker)
-		return err
+		closeErr := yStr.Close()
+		if err != nil {
+			return err
+		}
+		return closeErr
 	}
 
 	// Not a ping — the 2 bytes are the length prefix of a normal object.

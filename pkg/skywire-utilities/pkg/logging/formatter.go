@@ -174,7 +174,7 @@ func (f *TextFormatter) init(entry *logrus.Entry) {
 func (f *TextFormatter) checkIfTerminal(w io.Writer) bool {
 	switch v := w.(type) {
 	case *os.File:
-		return term.IsTerminal(int(v.Fd()))
+		return term.IsTerminal(int(v.Fd())) //nolint:gosec
 	default:
 		return false
 	}

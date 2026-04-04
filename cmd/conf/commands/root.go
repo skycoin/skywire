@@ -42,17 +42,18 @@ var ServicesConfCmd = &cobra.Command{
 	},
 }
 
-// DmsghttpConfCmd is the command to print the dmsghttp-config.json
+// DmsghttpConfCmd is the command to print the deployment config (DMSG fields).
+// Retained for backward compatibility; now prints from unified services-config.json.
 var DmsghttpConfCmd = &cobra.Command{
 	Use:                   "dmsgconf",
-	Short:                 `print dmsghttp-config.json file`,
-	Long:                  `print dmsghttp-config.json file`,
+	Short:                 `print deployment config`,
+	Long:                  `print deployment config (unified services-config.json)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Run: func(_ *cobra.Command, _ []string) {
-		fmt.Printf("%s\n", string(deployment.DmsghttpJSON))
+		fmt.Printf("%s\n", string(deployment.ServicesJSON))
 	},
 }
 

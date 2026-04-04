@@ -20,8 +20,6 @@ for the same services, and dmsg_servers lists the DMSG servers for bootstrapping
 Set SKYDEPLOY=/path/to/config.json to override the embedded defaults with a
 custom deployment configuration (e.g., for private networks or testing).
 
-dmsghttp-config.json is retained for backward compatibility with dmsg imports.
-It will be removed once dmsg is updated to read from services-config.json.
 */
 
 // ServicesJSON is the deployment configuration. By default this is the embedded
@@ -30,13 +28,6 @@ It will be removed once dmsg is updated to read from services-config.json.
 //
 //go:embed services-config.json
 var ServicesJSON []byte
-
-// DmsghttpJSON is the embedded dmsghttp-config.json file.
-// Deprecated: retained for backward compatibility with dmsg package imports.
-// Use ServicesJSON with _dmsg suffixed fields instead.
-//
-//go:embed dmsghttp-config.json
-var DmsghttpJSON []byte
 
 // EnvServices is the wrapper struct for the outer JSON - i.e. 'prod' or 'test' deployment config
 type EnvServices struct {
@@ -80,6 +71,7 @@ type Services struct {
 	DNSServer          string          `json:"dns_server,omitempty"`
 	SurveyWhitelist    []cipher.PubKey `json:"survey_whitelist,omitempty"`
 	// DMSG endpoints (dmsg:// URLs for the same services)
+	ConfDmsg               string            `json:"conf_dmsg,omitempty"`
 	DmsgServers            []DmsgServerEntry `json:"dmsg_servers,omitempty"`
 	DmsgDiscoveryDmsg      string            `json:"dmsg_discovery_dmsg,omitempty"`
 	TransportDiscoveryDmsg string            `json:"transport_discovery_dmsg,omitempty"`
@@ -112,7 +104,7 @@ func init() {
 	if path := os.Getenv("SKYDEPLOY"); path != "" {
 		data, err := os.ReadFile(path) //nolint:gosec
 		if err != nil {
-			log.Panicf("SKYDEPLOY=%s: %v", path, err)
+			log.Panicf("SKYDEPLOY=%s: %v", path, err) //nolint:gosec
 		}
 		ServicesJSON = data
 	}
@@ -122,16 +114,20 @@ func init() {
 	if err != nil {
 		log.Panic("services-config.json: ", err)
 	}
-	if err = json.Unmarshal(envServices.Prod, &Prod); err != nil {
-		log.Panic(err)
+	if envServices.Prod != nil {
+		if err = json.Unmarshal(envServices.Prod, &Prod); err != nil {
+			log.Panic(err)
+		}
+		if err = json.Unmarshal(envServices.Prod, &ProdConf); err != nil {
+			log.Panic(err)
+		}
 	}
-	if err = json.Unmarshal(envServices.Prod, &ProdConf); err != nil {
-		log.Panic(err)
-	}
-	if err = json.Unmarshal(envServices.Test, &Test); err != nil {
-		log.Panic(err)
-	}
-	if err = json.Unmarshal(envServices.Test, &TestConf); err != nil {
-		log.Panic(err)
+	if envServices.Test != nil {
+		if err = json.Unmarshal(envServices.Test, &Test); err != nil {
+			log.Panic(err)
+		}
+		if err = json.Unmarshal(envServices.Test, &TestConf); err != nil {
+			log.Panic(err)
+		}
 	}
 }

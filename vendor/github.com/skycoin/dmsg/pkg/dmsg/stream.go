@@ -71,7 +71,10 @@ func (s *Stream) Close() error {
 	if s.sStr != nil {
 		return s.sStr.Close()
 	}
-	return s.yStr.Close()
+	if s.yStr != nil {
+		return s.yStr.Close()
+	}
+	return nil
 }
 
 // Logger returns the internal logrus.FieldLogger instance.

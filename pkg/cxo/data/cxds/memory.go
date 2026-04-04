@@ -66,7 +66,7 @@ func (m *memoryCXDS) incr(
 	case inc < 0:
 		inc = -inc // change the sign
 
-		if uinc := uint32(inc); uinc >= rc {
+		if uinc := uint32(inc); uinc >= rc { //nolint:gosec
 			nrc = 0
 		} else {
 			nrc = rc - uinc

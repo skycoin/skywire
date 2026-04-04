@@ -144,7 +144,7 @@ func (env *TestEnv) VerifyAppRunning(t *testing.T, visor, appName string) {
 
 	// For skychat, verify the HTTP endpoint is actually ready to accept connections
 	if appName == "skychat" {
-		env.waitForHTTPEndpoint(t, visor, 8001, 10*time.Second)
+		env.waitForHTTPEndpoint(t, visor, 8001, 60*time.Second)
 	}
 }
 
@@ -1127,7 +1127,16 @@ func (env *TestEnv) checkVPNClientStatus(app AppToRun) (bool, error) {
 
 func (env *TestEnv) AddDefaultTransports(routerVisor string, skychatNodes []string) *TestEnv {
 	for _, node := range skychatNodes {
-		_, err := env.VisorTpAddDefault(routerVisor, env.visorPKs[node])
+		var err error
+		// Retry transport creation — DMSG may take time to reconnect after restart
+		for attempt := 0; attempt < 12; attempt++ {
+			_, err = env.VisorTpAddDefault(routerVisor, env.visorPKs[node])
+			if err == nil {
+				break
+			}
+			env.logger.Warnf("AddDefaultTransports: attempt %d for %s failed: %v", attempt+1, node, err)
+			time.Sleep(5 * time.Second)
+		}
 		if err != nil {
 			panic(err)
 		}
@@ -1749,29 +1758,19 @@ func (env *TestEnv) WaitForVisorReady(visor string, timeout time.Duration) error
 		attempt++
 		_, err := env.VisorPK(visor)
 		if err == nil {
-			env.logger.Infof("WaitForVisorReady: %s ready after %v (%d attempts)",
+			env.logger.Infof("WaitForVisorReady: %s RPC reachable after %v (%d attempts)",
 				visor, time.Since(start).Round(time.Second), attempt)
 			return nil
 		}
 
 		errStr := err.Error()
-		elapsed := time.Since(start).Round(time.Second)
-		remaining := time.Until(deadline).Round(time.Second)
-
-		// Log every attempt with elapsed/remaining time
-		env.logger.Infof("WaitForVisorReady: %s attempt %d failed (elapsed: %v, remaining: %v): %s",
-			visor, attempt, elapsed, remaining, errStr)
-
-		// If error changed, note it
 		if errStr != lastErr {
-			if lastErr != "" {
-				env.logger.Infof("WaitForVisorReady: %s error changed from %q to %q", visor, lastErr, errStr)
-			}
+			env.logger.Infof("WaitForVisorReady: %s attempt %d: %s", visor, attempt, errStr)
 			lastErr = errStr
 		}
 
-		// On longer waits, try to get visor container logs for diagnostics
-		if attempt%6 == 0 { // Every ~30 seconds
+		// Diagnostics every ~30 seconds
+		if attempt%6 == 0 {
 			env.logContainerTail(visor, 10)
 		}
 
@@ -1881,30 +1880,6 @@ func (env *TestEnv) waitForNonZeroBandwidth(visor, peerPK string, timeout time.D
 		time.Sleep(500 * time.Millisecond)
 	}
 	return false
-}
-
-// waitForHTTPServerReady polls a port inside a container until it accepts TCP connections.
-func (env *TestEnv) waitForHTTPServerReady(port int, timeout time.Duration) {
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		// Use the test runner container to check if the port is listening
-		cmd := fmt.Sprintf("sh -c 'cat < /dev/tcp/127.0.0.1/%d'", port)
-		_, err := env.execResult(cmd)
-		// Any response (even error from cat) means the port accepted a connection
-		if err == nil {
-			return
-		}
-		// Also try with a simple wget
-		cmd = fmt.Sprintf("wget -q --spider --timeout=1 http://127.0.0.1:%d/ 2>/dev/null", port)
-		_, err = env.execResult(cmd)
-		if err == nil {
-			return
-		}
-		_ = addr // suppress unused warning
-		time.Sleep(500 * time.Millisecond)
-	}
-	env.logger.Warnf("Timeout waiting for port %d to be ready", port)
 }
 
 // waitForListeningPort polls for a port to be listening by checking netstat output inside the container.

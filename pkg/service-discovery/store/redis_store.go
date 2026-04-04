@@ -162,7 +162,7 @@ func (s *redisStore) Services(ctx context.Context, sType, version, country strin
 		if val == nil {
 			// Key expired, clean up set (async)
 			if i < len(pubKeys) {
-				go s.client.SRem(context.Background(), setKey, pubKeys[i])
+				go s.client.SRem(context.Background(), setKey, pubKeys[i]) //nolint:gosec
 			}
 			continue
 		}

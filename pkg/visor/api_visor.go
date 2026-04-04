@@ -200,6 +200,16 @@ func (v *Visor) Health() (*HealthInfo, error) {
 	return &HealthInfo{ServicesHealth: v.isServicesHealthy.value()}, nil
 }
 
+// IsStartupComplete implements API.
+func (v *Visor) IsStartupComplete() bool {
+	select {
+	case <-v.startupComplete:
+		return true
+	default:
+		return false
+	}
+}
+
 // Uptime implements API.
 func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil

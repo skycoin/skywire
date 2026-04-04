@@ -118,11 +118,11 @@ check: lint check-cg check-help test ## Run linters and tests
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
 	@echo "checking dmsghttp offline config gen"
 	@echo
-	go run . cli config gen --nofetch -dnw
+	go run . cli config gen -f --nofetch -dnw
 	@echo
 	@echo "checking offline config gen"
 	@echo
-	go run . cli config gen --nofetch -nw
+	go run . cli config gen -f --nofetch -nw
 	@echo
 	@echo "config gen succeeded without error"
 	@echo
@@ -198,7 +198,7 @@ install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' .
 
 lint: ## Run linters. Use make install-linters first
-	command -v golangci-lint || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+	command -v golangci-lint || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	golangci-lint --version
 	CGO_ENABLED=0 ${OPTS} golangci-lint run -c .golangci.yml --build-tags 'withoutsystray withoutgotop' ./...
 	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor -tags 'withoutsystray withoutgotop' ./...
@@ -211,7 +211,7 @@ gocyclo: ## Run gocyclo
 	gocyclo -over 14 .
 
 lint-windows: ## Run linters. Use make install-linters-windows first
-	powershell 'if (-not (Get-Command golangci-lint -ErrorAction SilentlyContinue)) { go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1 }'
+	powershell 'if (-not (Get-Command golangci-lint -ErrorAction SilentlyContinue)) { go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest }'
 	powershell 'golangci-lint --version'
 	powershell '$$env:CGO_ENABLED=0; golangci-lint run -c .golangci.yml --build-tags "withoutsystray withoutgotop" ./...'
 
@@ -262,6 +262,8 @@ dep: tidy ## Sorts dependencies
 
 update-deps: ## Update all dependencies to latest versions (use 'make update-deps push-deps' to also commit and push)
 	${OPTS} go get -v -u ./...
+	@echo "Pinning distatus/battery@v0.10.0 (v0.11.0 breaks gotop)"
+	${OPTS} go get github.com/distatus/battery@v0.10.0
 	${OPTS} go mod tidy -v
 	${OPTS} go mod vendor -v
 	@echo "Dependencies updated. Run 'make push-deps' to commit and push changes."
@@ -510,6 +512,24 @@ e2e-test-local:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment 
 		e2e-test \
 		sh -c "go clean -testcache && go test -v -timeout=25m ./internal/integration"
 
+e2e-config: ## E2E. Regenerate visor configs from template and deployment config
+	@echo "Regenerating E2E visor configs..."
+	@# visor-A: skychat node with hypervisor set to visor-B
+	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
+		go run . cli config gen -f --nofetch --sk 42bca4df2f3189b28872d40e6c61aacd5e85b8e91f8fea65780af27c142419e5 \
+		-j 0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe \
+		-o docker/integration/visorA.json
+	@# visor-B: hypervisor
+	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
+		go run . cli config gen -f --nofetch --sk da4f48916e99aa3de794bffe1b5ecd465335e38b55457a9f78b411eb8585e36f \
+		-i -o docker/integration/visorB.json
+	@# visor-C: skychat node with hypervisor set to visor-B
+	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
+		go run . cli config gen -f --nofetch --sk 0e17cd505d81f998950e22864ae4692249124441bd9148b801f76f1595ac688f \
+		-j 0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe \
+		-o docker/integration/visorC.json
+	@echo "E2E visor configs regenerated."
+
 e2e-stop: ## E2E. Stop e2e environment without destroying it. Restart with `make e2e-run`
 	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} stop"
 	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} ps"
@@ -560,15 +580,7 @@ integration-env-clean: #clean
 	bash -c "DOCKER_TAG=integration docker compose -f ${COMPOSE_FILE} down"
 	bash ./docker/docker_clean.sh integration
 
-update-dep: #update vendor deps
-	go get -v -u ./...
-	echo "hold distatus/battery@v0.10.0 (v0.11.0 breaks gotop)"
-	go get github.com/distatus/battery@v0.10.0
-	go mod tidy
-	go mod vendor
-	git add go.mod go.sum vendor
-	git diff --cached --quiet || git commit -m "update deps"
-	git diff --cached --quiet || git push
+update-dep: update-deps ## Alias for update-deps
 
 ## Sync local develop branch with upstream skycoin/skywire develop.
 ## Requires: origin = your fork, upstream = skycoin/skywire

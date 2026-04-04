@@ -67,8 +67,7 @@ func init() {
 	di.RootCmd.Use = "ip"
 
 	modifySubcommands(RootCmd)
-	RootCmd.PersistentFlags().BoolVar(&withKill, "with-kill", false, "force exit after 3 interrupt signals")
-	RootCmd.PersistentFlags().MarkHidden("with-kill") //nolint:errcheck,gosec
+	RootCmd.PersistentFlags().BoolVar(&withKill, "with-kill", true, "force exit after 3 interrupt signals")
 	if fmt.Sprintf("%v", buildinfo.DebugBuildInfo()) != "" {
 		RootCmd.Flags().BoolVarP(&dbi, "info", "d", false, "print runtime/debug.BuildInfo")
 	}

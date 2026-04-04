@@ -61,8 +61,12 @@ func (m *mockStore) GetVisorBandwidth(_ context.Context, _ cipher.PubKey, _ stri
 	return []tpdstore.BandwidthAggregation{}, nil
 }
 
-func (m *mockStore) GetAllVisorSummaries(_ context.Context) ([]tpdstore.VisorSummary, error) {
+func (m *mockStore) GetAllVisorSummaries(_ context.Context, _ bool) ([]tpdstore.VisorSummary, error) {
 	return []tpdstore.VisorSummary{}, nil
+}
+
+func (m *mockStore) RecordHeartbeat(_ context.Context, _ cipher.PubKey, _ string) error {
+	return nil
 }
 
 func (m *mockStore) BackupAndCleanOldBandwidth(_ context.Context, _ string) error {

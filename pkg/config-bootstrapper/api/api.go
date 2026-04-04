@@ -19,7 +19,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // API represents the api of the stun-list service.
@@ -30,7 +29,7 @@ type API struct {
 
 	startedAt time.Time
 
-	services *visorconfig.Services
+	services *deployment.Services
 
 	dmsghttpConf   httputil.DMSGHTTPConf
 	dmsghttpConfTs time.Time
@@ -62,33 +61,40 @@ type Config struct {
 	TransportSetupPKs []cipher.PubKey `json:"transport_setup"`
 }
 
-// New creates a new api.
+// New creates a new api. By default, serves the embedded deployment config
+// (deployment.Prod). The domain parameter applies HTTP URL replacements for
+// custom deployments; DMSG addresses are PK-based and don't change.
 func New(log *logging.Logger, conf Config, domain, dmsgAddr string) *API {
+	// Start from the full embedded deployment config (includes DMSG fields)
 	svcs := deployment.Prod
 
-	sd := strings.Replace(svcs.ServiceDiscovery, "skycoin.com", domain, -1)
-	if domain == "skywire.skycoin.com" {
-		sd = svcs.ServiceDiscovery
+	// Apply domain replacement to HTTP URLs for custom deployments
+	if domain != "" && domain != "skywire.skycoin.com" {
+		svcs.DmsgDiscovery = strings.Replace(svcs.DmsgDiscovery, "skywire.skycoin.com", domain, -1)
+		svcs.TransportDiscovery = strings.Replace(svcs.TransportDiscovery, "skywire.skycoin.com", domain, -1)
+		svcs.AddressResolver = strings.Replace(svcs.AddressResolver, "skywire.skycoin.com", domain, -1)
+		svcs.RouteFinder = strings.Replace(svcs.RouteFinder, "skywire.skycoin.com", domain, -1)
+		svcs.UptimeTracker = strings.Replace(svcs.UptimeTracker, "skywire.skycoin.com", domain, -1)
+		svcs.ServiceDiscovery = strings.Replace(svcs.ServiceDiscovery, "skycoin.com", domain, -1)
 	}
-
-	services := &visorconfig.Services{
-		DmsgDiscovery:      strings.Replace(svcs.DmsgDiscovery, "skywire.skycoin.com", domain, -1),
-		TransportDiscovery: strings.Replace(svcs.TransportDiscovery, "skywire.skycoin.com", domain, -1),
-		AddressResolver:    strings.Replace(svcs.AddressResolver, "skywire.skycoin.com", domain, -1),
-		RouteFinder:        strings.Replace(svcs.RouteFinder, "skywire.skycoin.com", domain, -1),
-		RouteSetupNodes:    conf.SetupNodes,
-		UptimeTracker:      strings.Replace(svcs.UptimeTracker, "skywire.skycoin.com", domain, -1),
-		ServiceDiscovery:   sd,
-		StunServers:        conf.StunServers,
-		DNSServer:          svcs.DNSServer,
-		SurveyWhitelist:    conf.SurveyWhitelist,
-		TransportSetupPKs:  conf.TransportSetupPKs,
+	// Override from config file if provided
+	if conf.SetupNodes != nil {
+		svcs.RouteSetupNodes = conf.SetupNodes
+	}
+	if conf.StunServers != nil {
+		svcs.StunServers = conf.StunServers
+	}
+	if conf.SurveyWhitelist != nil {
+		svcs.SurveyWhitelist = conf.SurveyWhitelist
+	}
+	if conf.TransportSetupPKs != nil {
+		svcs.TransportSetupPKs = conf.TransportSetupPKs
 	}
 
 	api := &API{
 		log:            log,
 		startedAt:      time.Now(),
-		services:       services,
+		services:       &svcs,
 		dmsghttpConfTs: time.Now().Add(-5 * time.Minute),
 		closeC:         make(chan struct{}),
 		dmsgAddr:       dmsgAddr,
