@@ -81,7 +81,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 			return ClientSession{}, fmt.Errorf("failed to dial through SOCKS5 proxy: %w", err)
 		}
 	} else {
-		conn, err = net.Dial(network, entry.Server.Address)
+		conn, err = net.DialTimeout(network, entry.Server.Address, DialTimeout)
 		if err != nil {
 			return ClientSession{}, fmt.Errorf("failed to dial: %w", err)
 		}

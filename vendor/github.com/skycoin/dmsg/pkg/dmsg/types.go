@@ -21,6 +21,10 @@ const (
 )
 
 var (
+	// DialTimeout defines the duration a TCP dial to a dmsg server should take.
+	// This prevents blocking for minutes on unresponsive/overloaded servers.
+	DialTimeout = 10 * time.Second
+
 	// HandshakeTimeout defines the duration a stream handshake should take.
 	HandshakeTimeout = time.Second * 20
 
