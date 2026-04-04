@@ -403,6 +403,9 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 
 	v.startedAt = time.Now()
 	v.startupComplete = make(chan struct{})
+
+	// Set Go memory limit based on config
+	applyMemoryLimit(v.log, conf.MemoryLimit)
 	if isStoreLog {
 		storeLog(conf)
 	}

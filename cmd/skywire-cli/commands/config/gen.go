@@ -977,6 +977,7 @@ func configureLauncher(log *logging.Logger) {
 		conf.ShutdownTimeout = visorconfig.DefaultTimeout
 	}
 	conf.GeoIP = skyenv.GeoIP
+	conf.MemoryLimit = "auto"
 	if rewardSkyAddr != "" {
 		canonical, _, err := rewardconfig.ValidateRewardAddress(rewardSkyAddr)
 		if err != nil {
