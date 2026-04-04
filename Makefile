@@ -118,11 +118,11 @@ check: lint check-cg check-help test ## Run linters and tests
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
 	@echo "checking dmsghttp offline config gen"
 	@echo
-	go run . cli config gen --nofetch -dnw
+	go run . cli config gen -f --nofetch -dnw
 	@echo
 	@echo "checking offline config gen"
 	@echo
-	go run . cli config gen --nofetch -nw
+	go run . cli config gen -f --nofetch -nw
 	@echo
 	@echo "config gen succeeded without error"
 	@echo
@@ -516,23 +516,18 @@ e2e-config: ## E2E. Regenerate visor configs from template and deployment config
 	@echo "Regenerating E2E visor configs..."
 	@# visor-A: skychat node with hypervisor set to visor-B
 	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
-		go run . cli config gen --nofetch --sk 42bca4df2f3189b28872d40e6c61aacd5e85b8e91f8fea65780af27c142419e5 \
+		go run . cli config gen -f --nofetch --sk 42bca4df2f3189b28872d40e6c61aacd5e85b8e91f8fea65780af27c142419e5 \
 		-j 0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe \
 		-o docker/integration/visorA.json
 	@# visor-B: hypervisor
 	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
-		go run . cli config gen --nofetch --sk da4f48916e99aa3de794bffe1b5ecd465335e38b55457a9f78b411eb8585e36f \
+		go run . cli config gen -f --nofetch --sk da4f48916e99aa3de794bffe1b5ecd465335e38b55457a9f78b411eb8585e36f \
 		-i -o docker/integration/visorB.json
 	@# visor-C: skychat node with hypervisor set to visor-B
 	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
-		go run . cli config gen --nofetch --sk 0e17cd505d81f998950e22864ae4692249124441bd9148b801f76f1595ac688f \
+		go run . cli config gen -f --nofetch --sk 0e17cd505d81f998950e22864ae4692249124441bd9148b801f76f1595ac688f \
 		-j 0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe \
 		-o docker/integration/visorC.json
-	@# Fix cli_addr to bind on all interfaces for cross-container RPC access
-	@for v in A B C; do \
-		jq '.cli_addr = "0.0.0.0:3435"' docker/integration/visor$${v}.json > /tmp/visor$${v}_e2e.json && \
-		mv /tmp/visor$${v}_e2e.json docker/integration/visor$${v}.json; \
-	done
 	@echo "E2E visor configs regenerated."
 
 e2e-stop: ## E2E. Stop e2e environment without destroying it. Restart with `make e2e-run`

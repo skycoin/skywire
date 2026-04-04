@@ -149,6 +149,10 @@ const envfileLinux = `#
 
 ### Advanced Tuning #####################################################
 
+#--	CLI RPC address (default localhost:3435)
+#	Use 0.0.0.0:3435 for Docker/remote access
+#CLIADDR='localhost:3435'
+
 #--	Hypervisor HTTP address (default :8000)
 #HVHTTPADDR=':8000'
 

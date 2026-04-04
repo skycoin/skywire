@@ -320,6 +320,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "maxtransports")
 	genConfigCmd.Flags().IntVar(&muxRoutes, "muxroutes", 0, "number of parallel mux routes per connection")
 	gHiddenFlags = append(gHiddenFlags, "muxroutes")
+	genConfigCmd.Flags().StringVar(&cliAddr, "cliaddr", scriptExecString("${CLIADDR}"), "CLI RPC address (e.g. 0.0.0.0:3435 for Docker)")
+	gHiddenFlags = append(gHiddenFlags, "cliaddr")
 
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 
@@ -961,7 +963,11 @@ func configureLauncher(log *logging.Logger) {
 	conf.UptimeTracker = &visorconfig.UptimeTracker{
 		Addr: services.UptimeTracker, //utilenv.UptimeTrackerAddr,
 	}
-	conf.CLIAddr = offsetAddr(skyenv.RPCAddr)
+	if cliAddr != "" {
+		conf.CLIAddr = offsetAddr(cliAddr)
+	} else {
+		conf.CLIAddr = offsetAddr(skyenv.RPCAddr)
+	}
 	conf.LogLevel = logLevel
 	conf.LocalPath = localPath
 	if stunServers != "" {

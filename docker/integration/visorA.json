@@ -128,5 +128,6 @@
   "shutdown_timeout": "10s",
   "is_public": false,
   "geoip": "http://ip.skycoin.com",
-  "persistent_transports": null
+  "persistent_transports": null,
+  "memory_limit": "auto"
 }

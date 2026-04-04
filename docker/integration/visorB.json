@@ -127,12 +127,13 @@
   "is_public": false,
   "geoip": "http://ip.skycoin.com",
   "persistent_transports": null,
+  "memory_limit": "auto",
   "hypervisor": {
-    "db_path": "./local/hypervisor/users.db",
+    "db_path": "/home/d0mo/go/src/github.com/0pcom/skywire/users.db",
     "enable_auth": false,
     "cookies": {
-      "hash_key": "9e6224b59123eb84e5071bdc170f2668b740f9f15f7fd4dc264446ce3a3325dd4974ad734e1465ac8092a5148f54022d12d7195f005d938aed26544b4d8b95e2",
-      "block_key": "f96eb2f051e15ca4fce562e9e8632557cf51511e96557a8fa2a4181446e97b72",
+      "hash_key": "5691cd3250f66669a83d3e071bcc3dad93ca85e36451d3eb2b5cab14ce6ae872a8eaec53f5a747bb1cde501bba47101d63196e2315d0aab36da37e3c2ccb521e",
+      "block_key": "ef4c72f9f7de75f1c4754d010c73263a9804c3c0dc473e5366492005d284d7be",
       "expires_duration": 43200000000000,
       "path": "/",
       "domain": ""
@@ -140,8 +141,8 @@
     "dmsg_port": 46,
     "http_addr": ":8000",
     "enable_tls": false,
-    "tls_cert_file": "/opt/integration/hypervisor.crt",
-    "tls_key_file": "/opt/integration/hypervisor.key",
+    "tls_cert_file": "./ssl/cert.pem",
+    "tls_key_file": "./ssl/key.pem",
     "tp_viz": {
       "enable": true
     }
