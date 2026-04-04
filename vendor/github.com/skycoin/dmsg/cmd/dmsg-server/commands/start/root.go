@@ -71,6 +71,10 @@ var RootCmd = &cobra.Command{
 		stopPProf := dmsgcmdutil.InitPProf(log, pprofMode, pprofAddr)
 		defer stopPProf()
 
+		if conf.MaxSessions <= 0 {
+			conf.MaxSessions = dmsg.DefaultMaxSessions
+		}
+
 		if conf.HTTPAddress == "" {
 			u, err := url.Parse(conf.LocalAddress)
 			if err != nil {
