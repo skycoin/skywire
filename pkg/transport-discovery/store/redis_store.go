@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -636,16 +637,166 @@ func (s *redisStore) GetVisorBandwidth(ctx context.Context, pk cipher.PubKey,
 // GetAllVisorSummaries returns uptime summaries for all visors with active transports.
 // Online status is determined by having active transports.
 // Version and Daily uptime fields require uptime tracker integration.
-func (s *redisStore) GetAllVisorSummaries(ctx context.Context) ([]VisorSummary, error) {
-	// SCAN active tp:* keys, then MGET to determine online visors
+// uptimeKey returns the Redis key for a visor's heartbeat data on a given date.
+func uptimeKey(pk string, date string) string {
+	return fmt.Sprintf("%s:uptime:%s:%s", serviceName, pk, date)
+}
+
+// uptimeOnlineKey returns the Redis key for the set of visors seen today.
+func uptimeOnlineKey(date string) string {
+	return fmt.Sprintf("%s:uptime:online:%s", serviceName, date)
+}
+
+// onlineThreshold is the maximum time between heartbeats for a visor to be
+// considered online.
+const onlineThreshold = 6 * time.Minute
+
+// uptimeHistoryDays is the number of days of daily uptime to include in v2 responses.
+const uptimeHistoryDays = 7
+
+// expectedHeartbeatsPerDay is the number of heartbeats expected in a full day
+// (one heartbeat every 5 minutes = 288 per day).
+const expectedHeartbeatsPerDay = float64(24*60) / float64(5) // 288
+
+// RecordHeartbeat records a visor heartbeat for uptime tracking.
+// Each heartbeat increments the daily counter and updates the version/last_seen.
+func (s *redisStore) RecordHeartbeat(ctx context.Context, pk cipher.PubKey, version string) error {
+	now := time.Now().UTC()
+	date := now.Format("2006-01-02")
+	pkHex := pk.Hex()
+	key := uptimeKey(pkHex, date)
+
+	pipe := s.client.Pipeline()
+
+	// Increment heartbeat count for today
+	pipe.HIncrBy(ctx, key, "count", 1)
+	// Update version and last_seen
+	pipe.HSet(ctx, key, "version", version)
+	pipe.HSet(ctx, key, "last_seen", now.Unix())
+	// Set TTL: keep for 8 days (7 days history + buffer)
+	pipe.Expire(ctx, key, 8*24*time.Hour)
+
+	// Track this visor in today's online set
+	pipe.SAdd(ctx, uptimeOnlineKey(date), pkHex)
+	pipe.Expire(ctx, uptimeOnlineKey(date), 8*24*time.Hour)
+
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool) ([]VisorSummary, error) {
+	now := time.Now().UTC()
+	today := now.Format("2006-01-02")
+
+	// Get all visors that have been seen today (from heartbeats)
+	heartbeatVisors, err := s.client.SMembers(ctx, uptimeOnlineKey(today)).Result()
+	if err != nil {
+		heartbeatVisors = nil
+	}
+
+	// Also get visors with active transports (for backward compat)
+	transportVisors := s.getOnlineVisorsFromTransports(ctx)
+
+	// Merge both sets
+	allVisors := make(map[string]struct{})
+	for _, pk := range heartbeatVisors {
+		allVisors[pk] = struct{}{}
+	}
+	for pk := range transportVisors {
+		allVisors[pk] = struct{}{}
+	}
+
+	if len(allVisors) == 0 {
+		return []VisorSummary{}, nil
+	}
+
+	result := make([]VisorSummary, 0, len(allVisors))
+
+	for pkHex := range allVisors {
+		var pk cipher.PubKey
+		if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
+			continue
+		}
+
+		// Check online status from heartbeat (within threshold)
+		online := false
+		version := ""
+		key := uptimeKey(pkHex, today)
+		vals, err := s.client.HMGet(ctx, key, "last_seen", "version").Result()
+		if err == nil && len(vals) >= 2 {
+			if lastSeenStr, ok := vals[0].(string); ok {
+				if lastSeen, err := strconv.ParseInt(lastSeenStr, 10, 64); err == nil {
+					if now.Sub(time.Unix(lastSeen, 0)) < onlineThreshold {
+						online = true
+					}
+				}
+			}
+			if v, ok := vals[1].(string); ok {
+				version = v
+			}
+		}
+
+		// Fall back to transport-based online if no heartbeat
+		if !online {
+			if _, hasTransport := transportVisors[pkHex]; hasTransport {
+				online = true
+			}
+		}
+
+		summary := VisorSummary{
+			PK:      pk,
+			Online:  online,
+			Version: version,
+		}
+
+		// Add daily history for v2
+		if v2 {
+			summary.Daily = s.getDailyUptime(ctx, pkHex, now)
+		}
+
+		result = append(result, summary)
+	}
+
+	return result, nil
+}
+
+// getDailyUptime computes the last 7 days of uptime percentages for a visor.
+func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.Time) map[string]string {
+	daily := make(map[string]string)
+
+	for i := 0; i < uptimeHistoryDays; i++ {
+		date := now.AddDate(0, 0, -i).Format("2006-01-02")
+		key := uptimeKey(pkHex, date)
+
+		countStr, err := s.client.HGet(ctx, key, "count").Result()
+		if err != nil {
+			continue
+		}
+		count, err := strconv.ParseFloat(countStr, 64)
+		if err != nil {
+			continue
+		}
+
+		pct := (count / expectedHeartbeatsPerDay) * 100
+		if pct > 100 {
+			pct = 100
+		}
+		daily[date] = fmt.Sprintf("%.2f", pct)
+	}
+
+	return daily
+}
+
+// getOnlineVisorsFromTransports returns visors with active transports (legacy method).
+func (s *redisStore) getOnlineVisorsFromTransports(ctx context.Context) map[string]struct{} {
 	pattern := fmt.Sprintf("%s:tp:*", serviceName)
 	var keys []string
 	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
 	for iter.Next(ctx) {
 		keys = append(keys, iter.Val())
 	}
-	if err := iter.Err(); err != nil {
-		return nil, err
+	if iter.Err() != nil {
+		return nil
 	}
 
 	onlineVisors := make(map[string]struct{})
@@ -676,27 +827,7 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context) ([]VisorSummary, 
 		}
 	}
 
-	if len(onlineVisors) == 0 {
-		return []VisorSummary{}, nil
-	}
-
-	// Assemble VisorSummary slices
-	result := make([]VisorSummary, 0, len(onlineVisors))
-
-	for pkHex := range onlineVisors {
-		var pk cipher.PubKey
-		if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
-			continue
-		}
-
-		summary := VisorSummary{
-			PK:     pk,
-			Online: true,
-		}
-		result = append(result, summary)
-	}
-
-	return result, nil
+	return onlineVisors
 }
 
 func (s *redisStore) getBandwidthFromHash(ctx context.Context, key, transportID, period, periodKey string) (BandwidthAggregation, error) {

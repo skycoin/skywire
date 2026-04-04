@@ -465,13 +465,38 @@ func (api *API) getVisorBandwidth(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /uptimes
+// Query params: v=v2 for extended format with version and daily uptime percentages
 func (api *API) getUptimes(w http.ResponseWriter, r *http.Request) {
+	v2 := r.URL.Query().Get("v") == "v2"
+	if v2 {
+		uptimes := api.getUptimesV2FromCache()
+		if uptimes == nil {
+			uptimes = []store.VisorSummary{}
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, uptimes)
+		return
+	}
 	uptimes := api.getUptimesFromCache()
 	if uptimes == nil {
 		uptimes = []store.VisorSummary{}
 	}
-
 	httputil.WriteJSON(w, r, http.StatusOK, uptimes)
+}
+
+// GET /v4/update - visor heartbeat for uptime tracking
+func (api *API) visorHeartbeat(w http.ResponseWriter, r *http.Request) {
+	pk, ok := r.Context().Value(httpauth.ContextAuthKey).(cipher.PubKey)
+	if !ok {
+		httputil.WriteJSON(w, r, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	version := r.URL.Query().Get("version")
+	if err := api.store.RecordHeartbeat(r.Context(), pk, version); err != nil {
+		api.log(r).WithError(err).Error("Failed to record heartbeat")
+		httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	httputil.WriteJSON(w, r, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // GET /version - returns version statistics (count by version)
