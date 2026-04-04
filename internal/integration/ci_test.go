@@ -285,44 +285,38 @@ func TestEnv_VisorAddTp_second(t *testing.T) {
 	}
 }
 
+// TestEnv_SendSkyMessage tests single-hop skychat messaging over a DMSG transport.
+// Uses a direct A↔B transport (single hop, no routing through intermediary).
+// DMSG transports must NOT be used in multi-hop routes because the DMSG server
+// is an unaccounted intermediary — multi-hop DMSG routes transit the same server
+// multiple times, which breaks routing rules.
 func TestEnv_SendSkyMessage(t *testing.T) {
-	routerVisor := visorB
-	skychatVisors := []string{visorA, visorC}
-
 	env := NewEnv().
 		GatherContainersInfo().
-		GatherVisorPKs([]string{visorA, visorB, visorC}).
-		AddDefaultTransports(routerVisor, skychatVisors)
+		GatherVisorPKs([]string{visorA, visorB}).
+		AddDefaultTransports(visorA, []string{visorB})
 
-	// Verify skychat is running on both nodes before attempting to send messages
+	// Verify skychat is running on both nodes
 	env.VerifyAppRunning(t, visorA, "skychat")
-	env.VerifyAppRunning(t, visorC, "skychat")
+	env.VerifyAppRunning(t, visorB, "skychat")
 
-	_, err := env.SendSkyMessage(visorA, visorC, visorA+" -> "+visorC)
+	// Single-hop: A→B (direct DMSG transport)
+	_, err := env.SendSkyMessage(visorA, visorB, visorA+" -> "+visorB)
 	require.NoError(t, err)
 }
 
+// TestEnv_SendSkyMessage_second tests bidirectional single-hop messaging.
 func TestEnv_SendSkyMessage_second(t *testing.T) {
-	routerVisor := visorB
-	skychatVisors := []string{visorA, visorC}
-
 	env := NewEnv().
 		GatherContainersInfo().
-		GatherVisorPKs([]string{visorA, visorB, visorC}).
-		AddDefaultTransports(routerVisor, skychatVisors)
+		GatherVisorPKs([]string{visorA, visorB}).
+		AddDefaultTransports(visorA, []string{visorB})
 
-	// Verify skychat is running on both nodes before attempting to send messages
 	env.VerifyAppRunning(t, visorA, "skychat")
-	env.VerifyAppRunning(t, visorC, "skychat")
+	env.VerifyAppRunning(t, visorB, "skychat")
 
-	// Keep message count low for CI reliability — route setup on shared
-	// GH Actions runners is slow, and high message counts saturate routes.
-	const (
-		qty       = 4
-		doubleQty = 2 * qty
-	)
-
-	errCh := make(chan error, doubleQty)
+	const qty = 4
+	errCh := make(chan error, qty*2)
 
 	sendMessage := func(idx int, sender, recipient string) error {
 		msg := fmt.Sprintf("Msg: %v. From %v to %v", idx, sender, recipient)
@@ -331,15 +325,16 @@ func TestEnv_SendSkyMessage_second(t *testing.T) {
 		if err != nil {
 			return err
 		}
-
-		require.NoError(t, res.Body.Close())
+		if res != nil && res.Body != nil {
+			require.NoError(t, res.Body.Close())
+		}
 
 		return nil
 	}
 
 	for i := 0; i < qty; i++ {
-		errCh <- sendMessage(i, visorA, visorC)
-		errCh <- sendMessage(i, visorC, visorA)
+		errCh <- sendMessage(i, visorA, visorB)
+		errCh <- sendMessage(i, visorB, visorA)
 	}
 
 	close(errCh)
@@ -351,7 +346,7 @@ func TestEnv_SendSkyMessage_second(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	require.EqualValues(t, doubleQty, idx)
+	require.EqualValues(t, qty*2, idx)
 }
 
 func TestEnv_ContainerRestart(t *testing.T) {
