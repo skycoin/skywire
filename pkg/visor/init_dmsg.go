@@ -50,7 +50,13 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
 		v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
 	if err != nil {
-		return fmt.Errorf("failed to start dmsg: %w", err)
+		// Non-fatal: visor continues with HTTP-only mode. DMSG HTTP will be
+		// unavailable but all services have HTTP fallback URLs.
+		v.MasterLogger().PackageLogger("dmsg_http").WithError(err).Warn("DMSG HTTP transport unavailable, using HTTP-only mode")
+		v.initLock.Lock()
+		v.dClient = dClient
+		v.initLock.Unlock()
+		return nil
 	}
 
 	dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}

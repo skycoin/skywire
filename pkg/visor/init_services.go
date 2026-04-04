@@ -394,7 +394,7 @@ func forwardHTTP(log *logging.Logger, remoteConn net.Conn, lHost string) {
 			return
 		}
 		err = resp.Write(remoteConn)
-		resp.Body.Close() //nolint:errcheck
+		resp.Body.Close() //nolint:errcheck,gosec
 		if err != nil {
 			log.WithError(err).Error("Failed to Write")
 			closeConn(log, remoteConn)
