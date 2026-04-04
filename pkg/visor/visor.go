@@ -79,8 +79,9 @@ type Visor struct {
 	log      *logging.Logger
 	logstore logstore.Store
 
-	startedAt     time.Time
-	uptimeTracker utclient.APIClient
+	startedAt       time.Time
+	startupComplete chan struct{}
+	uptimeTracker   utclient.APIClient
 
 	ebc      *appevent.Broadcaster // event broadcaster
 	dmsgC    *dmsg.Client
@@ -401,6 +402,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	}
 
 	v.startedAt = time.Now()
+	v.startupComplete = make(chan struct{})
 	if isStoreLog {
 		storeLog(conf)
 	}
@@ -454,6 +456,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		return nil, false
 	}
 	log.Info("Startup complete.")
+	close(v.startupComplete)
 	return v, true
 }
 

@@ -1744,34 +1744,47 @@ func (env *TestEnv) WaitForVisorReady(visor string, timeout time.Duration) error
 
 	env.logger.Infof("WaitForVisorReady: waiting for %s (timeout: %v)", visor, timeout)
 
+	// Phase 1: wait for RPC to be reachable
+	// Phase 2: wait for startup complete (all modules initialized)
 	var lastErr string
+	rpcReady := false
 	for time.Now().Before(deadline) {
 		attempt++
-		_, err := env.VisorPK(visor)
-		if err == nil {
-			env.logger.Infof("WaitForVisorReady: %s ready after %v (%d attempts)",
-				visor, time.Since(start).Round(time.Second), attempt)
-			return nil
-		}
 
-		errStr := err.Error()
-		elapsed := time.Since(start).Round(time.Second)
-		remaining := time.Until(deadline).Round(time.Second)
-
-		// Log every attempt with elapsed/remaining time
-		env.logger.Infof("WaitForVisorReady: %s attempt %d failed (elapsed: %v, remaining: %v): %s",
-			visor, attempt, elapsed, remaining, errStr)
-
-		// If error changed, note it
-		if errStr != lastErr {
-			if lastErr != "" {
-				env.logger.Infof("WaitForVisorReady: %s error changed from %q to %q", visor, lastErr, errStr)
+		if !rpcReady {
+			_, err := env.VisorPK(visor)
+			if err == nil {
+				env.logger.Infof("WaitForVisorReady: %s RPC reachable after %v", visor, time.Since(start).Round(time.Second))
+				rpcReady = true
 			}
-			lastErr = errStr
 		}
 
-		// On longer waits, try to get visor container logs for diagnostics
-		if attempt%6 == 0 { // Every ~30 seconds
+		if rpcReady {
+			// Check startup complete via CLI
+			cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 ready --json", visor)
+			out, err := env.Exec(cmd)
+			if err == nil && strings.Contains(out, "ready") {
+				env.logger.Infof("WaitForVisorReady: %s startup complete after %v (%d attempts)",
+					visor, time.Since(start).Round(time.Second), attempt)
+				return nil
+			}
+		}
+
+		if !rpcReady {
+			_, err := env.VisorPK(visor)
+			if err != nil {
+				errStr := err.Error()
+				if errStr != lastErr {
+					env.logger.Infof("WaitForVisorReady: %s attempt %d: %s", visor, attempt, errStr)
+					lastErr = errStr
+				}
+			} else {
+				rpcReady = true
+			}
+		}
+
+		// Diagnostics every ~30 seconds
+		if attempt%6 == 0 {
 			env.logContainerTail(visor, 10)
 		}
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -23,6 +24,7 @@ func init() {
 	pkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from "+fmt.Sprintf("%v", visorconfig.PackageConfig()))
 	RootCmd.AddCommand(summaryCmd)
+	RootCmd.AddCommand(readyCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 	RootCmd.AddCommand(portsCmd)
 	RootCmd.AddCommand(dmsgServersCmd)
@@ -150,6 +152,29 @@ var summaryCmd = &cobra.Command{
 			BuildTag:       summary.BuildTag,
 		}
 		internal.PrintOutput(cmd.Flags(), outputJSON, msg)
+	},
+}
+
+var readyCmd = &cobra.Command{
+	Use:   "ready",
+	Short: "Wait for visor startup to complete",
+	Long:  "\n  Polls the visor and exits once startup is complete.\n  Useful in scripts and systemd ExecStartPost.",
+	Run: func(cmd *cobra.Command, _ []string) {
+		timeout := 3 * time.Minute
+		deadline := time.Now().Add(timeout)
+		for time.Now().Before(deadline) {
+			rpcClient, err := clirpc.Client(cmd.Flags())
+			if err != nil {
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			if rpcClient.IsStartupComplete() {
+				internal.PrintOutput(cmd.Flags(), "ready\n", "ready\n")
+				return
+			}
+			time.Sleep(2 * time.Second)
+		}
+		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("visor startup not complete after %v", timeout))
 	},
 }
 
