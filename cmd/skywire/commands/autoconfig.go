@@ -228,21 +228,10 @@ func generateConfig(hvArg string) error {
 func generateTestConfig(hvArg string) error {
 	testConf := "/opt/skywire/skywire-test.json"
 
-	// If test config doesn't exist yet, copy prod config as base so -r can reuse its keys
-	if _, err := os.Stat(testConf); os.IsNotExist(err) {
-		prodData, readErr := os.ReadFile("/opt/skywire/skywire.json")
-		if readErr != nil {
-			return fmt.Errorf("cannot read prod config: %w", readErr)
-		}
-		if writeErr := os.WriteFile(testConf, prodData, 0600); writeErr != nil { //nolint:gosec
-			return fmt.Errorf("cannot seed test config: %w", writeErr)
-		}
-	}
-
 	args := []string{"cli", "config", "gen",
-		"-r",            // regen (reuses existing SK from the test config file)
-		"-t",            // test deployment
-		"-o", testConf,  // separate config file
+		"-r",           // regen (reuses SK if test config exists, or from SKYENV)
+		"-t",           // test deployment
+		"-o", testConf, // separate config file
 	}
 
 	// Mirror hypervisor setting from prod
