@@ -77,10 +77,9 @@ func TestDmsgCurl(t *testing.T) {
 	dmsgURL := fmt.Sprintf("dmsg://%s:%d/health", pkA, dmsgHTTPPort)
 	t.Logf("Fetching %s via visor-b RPC dmsg client...", dmsgURL)
 
-	// dmsg curl uses visor-b's RPC (localhost:3435) by default since we
-	// don't pass --sk. The visor-b dmsg client connects through dmsg-server
-	// to visor-a's log server on DMSG port 80.
-	cmd := fmt.Sprintf("/release/skywire dmsg curl %s", dmsgURL)
+	// dmsg curl with -U pointing to E2E dmsg-discovery (not production).
+	// Without --sk, it creates its own ephemeral dmsg client.
+	cmd := fmt.Sprintf("/release/skywire dmsg curl --loglvl debug -U %s %s", dmsgDiscoveryURL, dmsgURL)
 
 	// Retry a few times; the DMSG session may take a moment to establish.
 	var result ExecResult
@@ -125,7 +124,7 @@ func TestDmsgCurlIndex(t *testing.T) {
 	dmsgURL := fmt.Sprintf("dmsg://%s:%d/", pkA, dmsgHTTPPort)
 	t.Logf("Fetching index page %s via visor-b RPC dmsg client...", dmsgURL)
 
-	cmd := fmt.Sprintf("/release/skywire dmsg curl %s", dmsgURL)
+	cmd := fmt.Sprintf("/release/skywire dmsg curl --loglvl debug -U %s %s", dmsgDiscoveryURL, dmsgURL)
 
 	var result ExecResult
 	var err error
