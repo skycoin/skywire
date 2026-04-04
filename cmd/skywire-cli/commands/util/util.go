@@ -25,9 +25,4 @@ func init() {
 var RootCmd = &cobra.Command{
 	Use:   "util",
 	Short: "Bundled utility commands",
-	Long: `Standalone utilities bundled with skywire.
-
-  util jq     jq-like JSON processor (gojq)
-  util edit   Terminal text editor (femto)
-  util got    HTTP client with concurrent downloads`,
 }
