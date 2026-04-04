@@ -86,7 +86,7 @@
         "name": "skychat",
         "args": [
           "--addr",
-          ":8001"
+          "*:8001"
         ],
         "auto_start": true,
         "port": 1
