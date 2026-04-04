@@ -416,6 +416,7 @@ services:
       - setup-node
       - route-finder
       - address-resolver
+      - dmsg-server
     restart: always
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json
 
