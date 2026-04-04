@@ -1129,7 +1129,7 @@ func (env *TestEnv) AddDefaultTransports(routerVisor string, skychatNodes []stri
 	for _, node := range skychatNodes {
 		var err error
 		// Retry transport creation — DMSG may take time to reconnect after restart
-		for attempt := 0; attempt < 6; attempt++ {
+		for attempt := 0; attempt < 12; attempt++ {
 			_, err = env.VisorTpAddDefault(routerVisor, env.visorPKs[node])
 			if err == nil {
 				break
