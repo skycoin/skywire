@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,6 +128,16 @@ func TestNewEnv(t *testing.T) {
 		}
 
 		t.Logf("Waiting for containers... (%s)", lastFailed)
+		// Dump logs from restarting containers to help diagnose crashes
+		if strings.Contains(lastFailed, "restarting") {
+			for name, state := range runningContainers {
+				if state == "restarting" {
+					if logs, err := env.ReadLog(strings.TrimPrefix(name, "/")); err == nil && logs != "" {
+						t.Logf("=== Logs from %s (restarting) ===\n%s\n=== End ===", name, logs)
+					}
+				}
+			}
+		}
 		time.Sleep(pollInterval)
 	}
 
