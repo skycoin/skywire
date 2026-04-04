@@ -13,17 +13,21 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 	"github.com/spf13/cobra"
 
 	dmsgcmdutil "github.com/skycoin/dmsg/pkg/cmdutil"
+	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsg/metrics"
 	"github.com/skycoin/dmsg/pkg/dmsgclient"
+	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/skycoin/dmsg/pkg/dmsgserver"
 )
 
@@ -66,6 +70,10 @@ var RootCmd = &cobra.Command{
 
 		stopPProf := dmsgcmdutil.InitPProf(log, pprofMode, pprofAddr)
 		defer stopPProf()
+
+		if conf.MaxSessions <= 0 {
+			conf.MaxSessions = dmsg.DefaultMaxSessions
+		}
 
 		if conf.HTTPAddress == "" {
 			u, err := url.Parse(conf.LocalAddress)
@@ -124,6 +132,37 @@ var RootCmd = &cobra.Command{
 			if err := srvAPI.ListenAndServe(conf.LocalAddress, conf.PublicAddress, conf.HTTPAddress); err != nil {
 				log.Errorf("Serve: %v", err)
 				cancel()
+			}
+		}()
+
+		// Serve pprof debug interface over dmsg using a direct client through ourselves
+		go func() {
+			// Wait for the dmsg server to be ready before connecting the debug client
+			<-srv.Ready()
+
+			serverEntry := &disc.Entry{
+				Version: "0.0.1",
+				Static:  conf.PubKey,
+				Server: &disc.Server{
+					Address:           conf.PublicAddress,
+					AvailableSessions: conf.MaxSessions,
+				},
+			}
+			entries := direct.GetAllEntries(cipher.PubKeys{conf.PubKey}, []*disc.Entry{serverEntry})
+			dClient := direct.NewClient(entries, log)
+
+			debugConfig := &dmsg.Config{
+				MinSessions: 0,
+			}
+			dmsgC, closeDebug, err := direct.StartDmsg(ctx, log, conf.PubKey, conf.SecKey, dClient, debugConfig)
+			if err != nil {
+				log.WithError(err).Error("failed to start debug dmsg client")
+				return
+			}
+			defer closeDebug()
+
+			if debugErr := dmsghttp.ServeDebug(ctx, dmsgC, log, deployment.Prod.SurveyWhitelist); debugErr != nil {
+				log.Errorf("dmsghttp.ServeDebug: %v", debugErr)
 			}
 		}()
 

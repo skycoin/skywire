@@ -41,28 +41,9 @@ if [[ "$image_tag" == "e2e" ]]; then
   fi
 
   echo ============ Base images ready ======================
-
-  if [[ "$git_branch" == "master" ]]; then
-    dockerhub_image_tag="prod"
-  else
-    dockerhub_image_tag="test"
-  fi
-
-  echo "build dmsg discovery image"
-  DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-discovery/Dockerfile \
-    --build-arg build_opts="$go_buildopts" \
-    --build-arg image_tag="$image_tag" \
-    --build-arg base_image="skycoin/dmsg-discovery:$dockerhub_image_tag" \
-    $platform \
-    -t "$registry"/dmsg-discovery:"$image_tag" .
-
-  echo "build dmsg server image"
-  DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/dmsg-server/Dockerfile \
-    --build-arg base_image="skycoin/dmsg-server:$dockerhub_image_tag" \
-    --build-arg build_opts="$go_buildopts" \
-    --build-arg image_tag="$image_tag" \
-    $platform \
-    -t "$registry"/dmsg-server:"$image_tag" .
+  # dmsg-server and dmsg-discovery use the same skywire:e2e image
+  # (entrypoints: 'skywire dmsg server start' and 'skywire dmsg disc')
+  # No separate dmsg images needed.
 
 fi
 

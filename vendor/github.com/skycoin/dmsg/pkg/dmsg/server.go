@@ -380,7 +380,7 @@ func (s *Server) maintainPeerConnection(ctx context.Context, peer PeerEntry) {
 		}
 
 		ses.sm.mutx.Lock()
-		ses.sm.yamux, err = yamux.Client(conn, yamux.DefaultConfig())
+		ses.sm.yamux, err = yamux.Client(conn, YamuxConfig())
 		if err != nil {
 			ses.sm.mutx.Unlock()
 			log.WithError(err).Warn("Peer yamux setup failed.")
@@ -470,7 +470,7 @@ func (s *Server) handleSession(conn net.Conn) {
 	// based on protocol, create smux or yamux stream session
 	dSes.sm.mutx.Lock()
 	if protocol == "smux" {
-		dSes.sm.smux, err = smux.Server(conn, smux.DefaultConfig())
+		dSes.sm.smux, err = smux.Server(conn, SmuxConfig())
 		if err != nil {
 			dSes.sm.mutx.Unlock()
 			conn.Close() //nolint:errcheck,gosec
@@ -480,7 +480,7 @@ func (s *Server) handleSession(conn net.Conn) {
 		dSes.sm.addr = dSes.sm.smux.RemoteAddr()
 		log.Infof("smux stream session initial for %s", dSes.RemotePK().String())
 	} else {
-		dSes.sm.yamux, err = yamux.Server(conn, yamux.DefaultConfig())
+		dSes.sm.yamux, err = yamux.Server(conn, YamuxConfig())
 		if err != nil {
 			dSes.sm.mutx.Unlock()
 			conn.Close() //nolint:errcheck,gosec
