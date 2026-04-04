@@ -183,6 +183,12 @@ services:
       transport-discovery:
         condition: service_started
     entrypoint: "/release/skywire dmsg disc --addr :9090 --redis redis://dmsgd-redis:6379 --sk b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714 -t"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9090/dmsg-discovery/available_servers || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
@@ -198,7 +204,8 @@ services:
       intra:
         ipv4_address: 174.0.0.5
     depends_on:
-      - dmsg-discovery
+      dmsg-discovery:
+        condition: service_healthy
     restart: always
     entrypoint: "/release/skywire dmsg server start /release/dmsg-server.json"
     volumes:
