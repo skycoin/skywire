@@ -64,6 +64,12 @@ func newRPCServer(v *Visor, remoteName string) (*rpc.Server, error) {
 */
 
 // Health returns health information about the visor
+// IsStartupComplete returns whether the visor has finished initializing all modules.
+func (r *RPC) IsStartupComplete(_ *struct{}, out *bool) (err error) {
+	*out = r.visor.IsStartupComplete()
+	return nil
+}
+
 func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "Health", nil)(out, &err)
 

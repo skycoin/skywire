@@ -108,6 +108,7 @@ var (
 	publicVisorRegTimeout      string
 	publicVisorMaxTransports   int
 	muxRoutes                  int
+	cliAddr                    string
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor
