@@ -4,19 +4,21 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/bitfield/script"
 	"github.com/fatih/color"
+	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	geoipcmd "github.com/skycoin/skywire/cmd/geoip/commands"
 	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -49,6 +51,7 @@ var (
 	transportHistPath     string
 	requireBandwidth      bool
 	minBWThreshold        uint64
+	saturationExponent    float64
 )
 
 type nodeinfo struct {
@@ -65,17 +68,260 @@ type nodeinfo struct {
 	HV         string  `json:"hypervisor"`        //NOT the skywire hypervisor ; will be null unless the visor is running on virtual machine
 	Reason     string  `json:"ineligible_reason"` //Reason why the visor will not be rewarded
 	Bandwidth  uint64  `json:"bandwidth"`         //daily bandwidth in bytes from TPD
-}
-
-type counting struct {
-	Name  string
-	Count int
+	Country    string  `json:"country"`           //country code from GeoIP lookup
 }
 
 type rewardData struct {
 	SkyAddr string
 	Reward  float64
 	Shares  float64
+}
+
+// surveyData represents the relevant fields parsed from a node-info.json survey file.
+type surveyData struct {
+	IPAddr  string `json:"ip_address"`
+	SkyAddr string `json:"skycoin_address"`
+	Arch    string `json:"go_arch"`
+	UUID    string `json:"uuid"`
+	SysInfo struct {
+		Node struct {
+			Hypervisor string `json:"hypervisor"`
+		} `json:"node"`
+		Network []struct {
+			Name       string `json:"name"`
+			MacAddress string `json:"macaddress"`
+		} `json:"network"`
+	} `json:"zcalusic_sysinfo"`
+	IPAddrs []struct {
+		IfName  string `json:"ifname"`
+		Address string `json:"address"`
+	} `json:"ip_addr"`
+	Services json.RawMessage `json:"services"`
+}
+
+// parseSurvey reads and parses a node-info.json file into structured data.
+func parseSurvey(path string) (*surveyData, error) {
+	data, err := os.ReadFile(path) //nolint:gosec
+	if err != nil {
+		return nil, err
+	}
+	var s surveyData
+	if err := json.Unmarshal(data, &s); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// extractInterfaces returns the interface list string and MAC addresses from a survey.
+func extractInterfaces(s *surveyData) (ifc string, macs []string) {
+	// Try ip_addr first (non-loopback)
+	type ifcEntry struct {
+		Address string `json:"address"`
+		IfName  string `json:"ifname"`
+	}
+	var entries []ifcEntry
+	for _, a := range s.IPAddrs {
+		if a.IfName != "lo" {
+			entries = append(entries, ifcEntry{Address: a.Address, IfName: a.IfName})
+			macs = append(macs, a.Address)
+		}
+	}
+
+	// Fall back to zcalusic sysinfo network
+	if len(entries) == 0 {
+		for _, n := range s.SysInfo.Network {
+			entries = append(entries, ifcEntry{Address: n.MacAddress, IfName: n.Name})
+			macs = append(macs, n.MacAddress)
+		}
+	}
+
+	if len(entries) > 0 {
+		b, _ := json.Marshal(entries) //nolint:errcheck
+		ifc = string(b)
+	}
+	if len(macs) == 0 {
+		macs = append(macs, "")
+	}
+	return ifc, macs
+}
+
+// checkServiceConfig verifies the survey's service configuration against the expected deployment config.
+func checkServiceConfig(surveyPath string, sConf, dConf []byte) bool {
+	// Use JQ to extract and compare services (preserving existing behavior for stun_servers exclusion)
+	svcBytes, err := script.File(surveyPath).JQ(`.services | del(.stun_servers)`).Bytes()
+	if err != nil {
+		return false
+	}
+	confType, _ := script.File(surveyPath).JQ(`.services.dmsg_discovery`).Replace("\"", "").String() //nolint:errcheck
+	confType = strings.TrimRight(confType, "\n")
+
+	if strings.HasPrefix(confType, "http://") {
+		return compareAndPrintDiffs(svcBytes, sConf, true)
+	}
+	if strings.HasPrefix(confType, "dmsg://") {
+		return compareAndPrintDiffs(svcBytes, dConf, true)
+	}
+	return false
+}
+
+// countFrequency counts occurrences of each string in a slice, returning a map.
+func countFrequency(values []string) map[string]int {
+	counts := make(map[string]int)
+	for _, v := range values {
+		if v != "" {
+			counts[v]++
+		}
+	}
+	return counts
+}
+
+// calcPresenceShare computes a visor's share after IP cap and MAC dedup.
+func calcPresenceShare(ni nodeinfo, ipCounts, macCounts map[string]int) float64 {
+	share := 1.0
+	if count := ipCounts[ni.IPAddr]; count >= 8 {
+		share = 8.0 / float64(count)
+	}
+	if count := macCounts[ni.MacAddr]; count > 1 {
+		share /= float64(count)
+	}
+	return share
+}
+
+// applyRegionalSaturation applies diminishing returns scaling based on the
+// number of unique IP addresses per country. Each country's weight is
+// unique_ips^exponent (default sqrt). This scales each visor's share so that
+// the total pool allocation is redistributed to favor geographic diversity.
+func applyRegionalSaturation(nodes []nodeinfo, exponent float64) {
+	if exponent >= 1.0 || len(nodes) == 0 {
+		return
+	}
+
+	countryIPs := make(map[string]map[string]struct{})
+	countryShares := make(map[string]float64)
+	for _, ni := range nodes {
+		c := ni.Country
+		if c == "" {
+			c = "XX"
+		}
+		if countryIPs[c] == nil {
+			countryIPs[c] = make(map[string]struct{})
+		}
+		countryIPs[c][ni.IPAddr] = struct{}{}
+		countryShares[c] += ni.Share
+	}
+
+	totalWeight := 0.0
+	countryWeight := make(map[string]float64)
+	for c, ips := range countryIPs {
+		w := math.Pow(float64(len(ips)), exponent)
+		countryWeight[c] = w
+		totalWeight += w
+	}
+
+	totalRawShares := 0.0
+	for _, s := range countryShares {
+		totalRawShares += s
+	}
+	if totalRawShares == 0 || totalWeight == 0 {
+		return
+	}
+
+	countryScale := make(map[string]float64)
+	for c, raw := range countryShares {
+		if raw > 0 {
+			countryScale[c] = (countryWeight[c] / totalWeight * totalRawShares) / raw
+		}
+	}
+
+	for i := range nodes {
+		c := nodes[i].Country
+		if c == "" {
+			c = "XX"
+		}
+		if scale, ok := countryScale[c]; ok {
+			nodes[i].Share *= scale
+		}
+	}
+}
+
+// computePoolShares computes shares and rewards for a pool of nodes.
+func computePoolShares(nodes []nodeinfo, ipCounts, macCounts map[string]int) {
+	for i, ni := range nodes {
+		nodes[i].Share = calcPresenceShare(ni, ipCounts, macCounts)
+	}
+	applyRegionalSaturation(nodes, saturationExponent)
+}
+
+// computePoolRewards assigns reward amounts based on shares and the daily pool reward.
+func computePoolRewards(nodes []nodeinfo, dayReward float64) float64 {
+	total := 0.0
+	for _, ni := range nodes {
+		total += ni.Share
+	}
+	if total > 0 {
+		for i := range nodes {
+			nodes[i].Reward = nodes[i].Share * dayReward / total
+		}
+	}
+	return total
+}
+
+// sumRewardsByAddress aggregates rewards per skycoin address, sorted descending.
+func sumRewardsByAddress(nodes []nodeinfo) []rewardData {
+	sums := make(map[string]float64)
+	for _, ni := range nodes {
+		sums[ni.SkyAddr] += ni.Reward
+	}
+	var result []rewardData
+	for addr, reward := range sums {
+		result = append(result, rewardData{SkyAddr: addr, Reward: reward})
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Reward > result[j].Reward })
+	return result
+}
+
+// printSaturationStats prints per-country saturation statistics.
+func printSaturationStats(nodes []nodeinfo, dayReward, totalShares float64) {
+	if saturationExponent >= 1.0 {
+		return
+	}
+	fmt.Printf("\n--- Regional Saturation Scaling ---\n")
+	fmt.Printf("saturation exponent: %.2f\n", saturationExponent)
+
+	type countryStat struct {
+		code   string
+		visors int
+		ips    int
+		shares float64
+	}
+
+	cIPs := make(map[string]map[string]struct{})
+	cVisors := make(map[string]int)
+	cShares := make(map[string]float64)
+	for _, ni := range nodes {
+		c := ni.Country
+		if c == "" {
+			c = "XX"
+		}
+		if cIPs[c] == nil {
+			cIPs[c] = make(map[string]struct{})
+		}
+		cIPs[c][ni.IPAddr] = struct{}{}
+		cVisors[c]++
+		cShares[c] += ni.Share
+	}
+
+	var stats []countryStat
+	for c := range cVisors {
+		stats = append(stats, countryStat{c, cVisors[c], len(cIPs[c]), cShares[c]})
+	}
+	sort.Slice(stats, func(i, j int) bool { return stats[i].shares > stats[j].shares })
+
+	fmt.Printf("%-4s %7s %5s %10s %10s\n", "CC", "Visors", "IPs", "Shares", "SKY/visor")
+	for _, cs := range stats {
+		sky := cs.shares * dayReward / totalShares
+		fmt.Printf("%-4s %7d %5d %10.2f %10.2f\n", cs.code, cs.visors, cs.ips, cs.shares, sky/float64(cs.visors))
+	}
 }
 
 // runRewardProcessing executes the complete reward processing workflow
@@ -233,6 +479,7 @@ func init() {
 	RootCmd.Flags().StringVarP(&transportHistPath, "tp-hist", "T", "hist", "path to transport history directory")
 	RootCmd.Flags().BoolVarP(&requireBandwidth, "require-bw", "b", false, "require minimum bandwidth (proportional reward based on bandwidth)")
 	RootCmd.Flags().Uint64VarP(&minBWThreshold, "min-bw", "B", defaultMinBandwidth, "minimum bandwidth in bytes to qualify (used with --require-bw)")
+	RootCmd.Flags().Float64VarP(&saturationExponent, "sat-exp", "S", 0.5, "regional saturation exponent (1.0=no derating, 0.5=sqrt, 0=all countries equal)")
 }
 
 // RootCmd is the root command for skywire-cli rewards
@@ -284,28 +531,35 @@ Architectures:
 			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
 		}
 
+		// Initialize GeoIP database for regional saturation scaling
+		var geoDB *geoip2.Reader
+		if saturationExponent < 1.0 {
+			geoDB, err = geoip2.OpenBytes(geoipcmd.EmbeddedGeoIP())
+			if err != nil {
+				log.Warn("Failed to load embedded GeoIP database, disabling regional saturation: ", err)
+				saturationExponent = 1.0
+			} else {
+				defer func() { _ = geoDB.Close() }() //nolint:errcheck
+			}
+		}
+
 		_, err = os.Stat(utfile)
 		if os.IsNotExist(err) {
 			log.Fatal("uptime tracker data file not found\n", err, "\nfetch the uptime tracker data with:\n$ skywire-cli ut > ut.txt")
 		}
 
-		// Create a map for disallowed architectures
+		// Build architecture lookup maps
 		disallowedMap := make(map[string]struct{})
-		for _, disallowedArch := range disallowArchitectures {
-			disallowedMap[disallowedArch] = struct{}{}
+		for _, arch := range disallowArchitectures {
+			disallowedMap[arch] = struct{}{}
 		}
 
-		// Create maps for allowed architectures for pool 1 and pool 2
 		allowArchMap1 := make(map[string]struct{})
 		allowArchMap2 := make(map[string]struct{})
-
-		// Create a map for quick lookup of skywire architectures
 		supportedArchitecturesMap := make(map[string]struct{})
 		for _, arch := range rewards.Architectures {
 			supportedArchitecturesMap[arch] = struct{}{}
 		}
-
-		// Populate allowed architecture maps for pool 1 and pool 2, excluding disallowed ones
 		for _, arch := range allowArchitectures1 {
 			if _, isDisallowed := disallowedMap[arch]; !isDisallowed {
 				allowArchMap1[arch] = struct{}{}
@@ -318,29 +572,23 @@ Architectures:
 		}
 
 		if !requireBandwidth {
-			// Legacy mode: check for common architectures between the two allowed slices
 			for arch := range allowArchMap1 {
 				if _, exists := allowArchMap2[arch]; exists {
 					log.Fatal("Error: Architecture cannot be specified in both pools: " + arch)
 				}
 			}
 		}
-
-		// Validate each allowed architecture against the supported architectures
 		for arch := range allowArchMap1 {
 			if _, isValid := supportedArchitecturesMap[arch]; !isValid {
 				log.Fatal("Error: Architecture is not valid: ", arch)
 			}
 		}
-
 		for arch := range allowArchMap2 {
 			if _, isValid := supportedArchitecturesMap[arch]; !isValid {
 				log.Fatal("Error: Architecture is not valid: ", arch)
 			}
 		}
 
-		// In bandwidth mode, merge both arch pools into a single allowed set for the presence pool
-		// Pool 1 = presence (all archs, equal shares), Pool 2 = bandwidth (proportional)
 		allowArchMapAll := make(map[string]struct{})
 		if requireBandwidth {
 			for arch := range allowArchMap1 {
@@ -351,7 +599,7 @@ Architectures:
 			}
 		}
 
-		// Load transport requirement data (visors that had >= 2 transports)
+		// Load transport requirement data
 		transportMap := make(map[string]struct{})
 		if requireTransports {
 			transportFile := fmt.Sprintf("%s/%s_transports.txt", transportHistPath, wdate)
@@ -369,7 +617,7 @@ Architectures:
 			}
 		}
 
-		// Load bandwidth data for bandwidth pool
+		// Load bandwidth data
 		bandwidthMap := make(map[string]uint64)
 		if requireBandwidth {
 			bwFile := fmt.Sprintf("%s/%s_bandwidth.json", transportHistPath, wdate)
@@ -386,6 +634,7 @@ Architectures:
 			}
 		}
 
+		// Get public keys that met uptime requirement
 		var res []string
 		if pubkey == "" {
 			//nolint:errcheck
@@ -401,89 +650,39 @@ Architectures:
 			}
 		}
 
-		// Collect eligible nodes
-		// In legacy mode: nodesInfos1 = arch pool 1, nodesInfos2 = arch pool 2
-		// In bandwidth mode: nodesInfos1 = presence pool (all archs), nodesInfos2 unused for presence
-		var nodesInfos1 []nodeinfo
-		var nodesInfos2 []nodeinfo
-		var grrInfos []nodeinfo
+		// Collect eligible nodes by parsing surveys
+		var nodesInfos1 []nodeinfo // pool 1 (presence in bandwidth mode, or arch pool 1 in legacy)
+		var nodesInfos2 []nodeinfo // pool 2 (unused in bandwidth mode, or arch pool 2 in legacy)
+		var grrInfos []nodeinfo    // ineligible nodes (for error reporting)
+
 		for _, pk := range res {
-			nodeInfoDotJSON := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
-			_, err = os.Stat(nodeInfoDotJSON)
-			if os.IsNotExist(err) {
-				log.Debug(err.Error())
-				continue
-			}
-			var (
-				ip      string
-				sky     string
-				arch    string
-				hv      string
-				uu      string
-				ifc     string
-				ifc1    string
-				macs    []string
-				macs1   []string
-				svcconf bool
-			)
-
-			//stun_servers does not currently match between conf.skywire.skycoin.com & https://github.com/skycoin/skywire/blob/develop/services-config.json ; omit checking them until next version
-			nodeInfoSvc, err = script.File(nodeInfoDotJSON).JQ(`.services | del(.stun_servers)`).Bytes()
-			if err != nil {
-				log.Debug(err.Error())
+			surveyPath := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
+			survey, parseErr := parseSurvey(surveyPath)
+			if parseErr != nil {
+				log.Debug(parseErr.Error())
 				continue
 			}
 
-			//nolint:errcheck
-			confType, _ := script.File(nodeInfoDotJSON).JQ(`.services.dmsg_discovery`).Replace("\"", "").String()
-			if err != nil {
-				log.Debug(err.Error())
-				continue
-			}
-			if strings.HasPrefix(confType, "http://") {
-				svcconf = compareAndPrintDiffs(nodeInfoSvc, sConf, true)
-			}
-			if strings.HasPrefix(confType, "dmsg://") {
-				svcconf = compareAndPrintDiffs(nodeInfoSvc, dConf, true)
-			}
+			svcconf := checkServiceConfig(surveyPath, sConf, dConf)
+			ifc, macs := extractInterfaces(survey)
 
-			//nolint:errcheck
-			ip, _ = script.File(nodeInfoDotJSON).JQ(`.ip_address`).Replace(" ", "").Replace(`"`, "").String()
-			ip = strings.TrimRight(ip, "\n")
-			//nolint:errcheck
-			sky, _ = script.File(nodeInfoDotJSON).JQ(".skycoin_address").Replace(" ", "").Replace(`"`, "").String()
-			sky = strings.TrimRight(sky, "\n")
-			arch, _ = script.File(nodeInfoDotJSON).JQ(`.go_arch`).Replace(" ", "").Replace(`"`, "").String() //nolint:errcheck
-			arch = strings.TrimRight(arch, "\n")
-			hv, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.node.hypervisor`).Replace(" ", "").Replace(`"`, "").String() //nolint:errcheck
-			hv = strings.TrimRight(hv, "\n")
-			uu, _ = script.File(nodeInfoDotJSON).JQ(".uuid").Replace(" ", "").Replace(`"`, "").String() //nolint:errcheck
-			uu = strings.TrimRight(uu, "\n")
-			ifc, _ = script.File(nodeInfoDotJSON).JQ(`[.ip_addr[]? | select(.ifname != "lo") | {address: .address, ifname: .ifname}]`).Replace(" ", "").Replace(`"`, "").String() //nolint:errcheck
-			ifc = strings.TrimRight(ifc, "\n")
-			ifc1, _ = script.File(nodeInfoDotJSON).JQ(`[.zcalusic_sysinfo.network[] | {address: .macaddress, ifname: .name}]`).Replace(" ", "").Replace(`"`, "").String() //nolint:errcheck
-			ifc1 = strings.TrimRight(ifc1, "\n")
-			macs, _ = script.File(nodeInfoDotJSON).JQ(`.ip_addr[]? | select(.ifname != "lo") | .address`).Replace(" ", "").Replace(`"`, "").Slice() //nolint:errcheck
-			macs1, _ = script.File(nodeInfoDotJSON).JQ(`.zcalusic_sysinfo.network[] | .macaddress`).Replace(" ", "").Replace(`"`, "").Slice()       //nolint:errcheck
-			if ifc == "[]" && ifc1 != "[]" {
-				ifc = ifc1
+			ip := survey.IPAddr
+			sky := survey.SkyAddr
+			arch := survey.Arch
+			hv := survey.SysInfo.Node.Hypervisor
+			if hv == "" {
+				hv = "null"
 			}
-			if len(macs) == 0 && len(macs1) > 0 {
-				macs = macs1
-			} else {
-				macs = append(macs, "")
-			}
+			uu := survey.UUID
+
 			_, allowed1 := allowArchMap1[arch]
 			_, allowed2 := allowArchMap2[arch]
-			_, _, err := rewardconfig.ValidateRewardAddress(sky)
+			_, _, addrErr := rewardconfig.ValidateRewardAddress(sky)
 
-			// Check transport requirement
 			_, hasTransports := transportMap[pk]
 			meetsTransportReq := !requireTransports || hasTransports
-
 			visorBW := bandwidthMap[pk]
 
-			// Determine architecture eligibility
 			var archAllowed bool
 			if requireBandwidth {
 				_, archAllowed = allowArchMapAll[arch]
@@ -502,7 +701,12 @@ Architectures:
 				SvcConf:    svcconf,
 				HV:         hv,
 				Bandwidth:  visorBW,
-				Reason: func() string {
+			}
+
+			baseEligible := archAllowed && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && addrErr == nil && meetsTransportReq
+
+			if !baseEligible {
+				ni.Reason = func() string {
 					switch {
 					case !archAllowed:
 						return arch
@@ -516,161 +720,95 @@ Architectures:
 						return macs[0]
 					case hv != "null":
 						return hv
-					case err != nil:
+					case addrErr != nil:
 						return "Invalid Skycoin address"
 					case !meetsTransportReq:
 						return "No transports"
 					default:
 						return "Unknown reason"
 					}
-				}(),
-			}
-
-			baseEligible := archAllowed && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && err == nil && meetsTransportReq
-
-			if baseEligible {
-				if requireBandwidth {
-					// Bandwidth mode: all eligible visors go into the single presence pool
-					nodesInfos1 = append(nodesInfos1, ni)
-				} else {
-					// Legacy mode: split by architecture
-					if allowed1 {
-						nodesInfos1 = append(nodesInfos1, ni)
-					}
-					if allowed2 {
-						nodesInfos2 = append(nodesInfos2, ni)
-					}
-				}
-			} else {
+				}()
 				if grr {
 					grrInfos = append(grrInfos, ni)
 				}
+				continue
+			}
+
+			// GeoIP country lookup
+			if geoDB != nil {
+				if geoRes, geoErr := geoipcmd.LookupIP(geoDB, ip); geoErr == nil && geoRes.CountryCode != "" {
+					ni.Country = geoRes.CountryCode
+				} else {
+					ni.Country = "XX"
+				}
+			}
+
+			if requireBandwidth {
+				nodesInfos1 = append(nodesInfos1, ni)
+			} else {
+				if allowed1 {
+					nodesInfos1 = append(nodesInfos1, ni)
+				}
+				if allowed2 {
+					nodesInfos2 = append(nodesInfos2, ni)
+				}
 			}
 		}
+
 		if grr {
 			for _, ni := range grrInfos {
 				fmt.Printf("%s, %s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Reason, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
 			}
 			return
 		}
+
+		// Calculate daily reward amount
 		daysThisMonth := time.Date(wDate.Year(), wDate.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()
 		daysThisYear := int(time.Date(wDate.Year(), 12, 31, 23, 59, 59, 999999999, time.UTC).Sub(time.Date(wDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)).Hours()) / 24
 		monthReward := (float64(yearlyTotal) / float64(daysThisYear)) * float64(daysThisMonth)
 		dayReward := monthReward / float64(daysThisMonth)
 		wdate = strings.ReplaceAll(wdate, " ", "0")
 
-		// Compute IP/MAC dedup counts across all eligible visors
+		// Build dedup counts from all eligible visors
 		allEligible := append(nodesInfos1, nodesInfos2...)
-		uniqueIP, _ := script.Echo(func() string { //nolint:errcheck
-			var inputStr strings.Builder
-			for _, ni := range allEligible {
-				inputStr.WriteString(fmt.Sprintf("%s\n", ni.IPAddr))
-			}
-			return inputStr.String()
-		}()).Freq().Slice()
-		var ipCounts []counting
-		for _, line := range uniqueIP {
-			if line != "" {
-				fields := strings.Fields(line)
-				if len(fields) == 2 {
-					//nolint:errcheck
-					count, _ := strconv.Atoi(fields[0])
-					ipCounts = append(ipCounts, counting{
-						Name:  fields[1],
-						Count: count,
-					})
+		allIPs := make([]string, 0, len(allEligible))
+		allMACs := make([]string, 0, len(allEligible))
+		allUUIDs := make([]string, 0, len(allEligible))
+		for _, ni := range allEligible {
+			allIPs = append(allIPs, ni.IPAddr)
+			allMACs = append(allMACs, ni.MacAddr)
+			allUUIDs = append(allUUIDs, ni.UUID)
+		}
+		ipCounts := countFrequency(allIPs)
+		macCounts := countFrequency(allMACs)
+		uuidCounts := countFrequency(allUUIDs)
+
+		if requireBandwidth {
+			// ==================== TWO-POOL MODEL ====================
+			// Pool 1: Presence — equal shares with IP/MAC dedup + regional saturation
+			// Pool 2: Bandwidth — proportional to bandwidth bytes
+
+			computePoolShares(nodesInfos1, ipCounts, macCounts)
+			totalPresenceShares := computePoolRewards(nodesInfos1, dayReward)
+
+			// Bandwidth pool: add proportional bandwidth reward on top
+			var totalBWShares float64
+			var bwPoolCount int
+			for _, ni := range nodesInfos1 {
+				if ni.Bandwidth >= minBWThreshold {
+					totalBWShares += float64(ni.Bandwidth)
+					bwPoolCount++
 				}
 			}
-		}
-		uniqueUUID, _ := script.Echo(func() string { //nolint:errcheck
-			var inputStr strings.Builder
-			for _, ni := range allEligible {
-				inputStr.WriteString(fmt.Sprintf("%s\n", ni.UUID))
-			}
-			return inputStr.String()
-		}()).Freq().Slice()
-
-		// look at the first non loopback interface macaddress
-		uniqueMac, _ := script.Echo(func() string { //nolint:errcheck
-			var inputStr strings.Builder
-			for _, ni := range allEligible {
-				inputStr.WriteString(fmt.Sprintf("%s\n", ni.MacAddr))
-			}
-			return inputStr.String()
-		}()).Freq().Slice()
-
-		var macCounts []counting
-		for _, line := range uniqueMac {
-			if line != "" {
-				fields := strings.Fields(line)
-				if len(fields) == 2 {
-					//nolint:errcheck
-					count, _ := strconv.Atoi(fields[0])
-					macCounts = append(macCounts, counting{
-						Name:  fields[1],
-						Count: count,
-					})
-
-				}
-			}
-		}
-
-		// calcPresenceShare computes equal share with IP/MAC dedup (base = 1.0)
-		calcPresenceShare := func(ni nodeinfo) float64 {
-			share := 1.0
-			for _, ipCount := range ipCounts {
-				if ni.IPAddr == ipCount.Name {
-					if ipCount.Count >= 8 {
-						share = 8.0 / float64(ipCount.Count)
+			if totalBWShares > 0 {
+				for i := range nodesInfos1 {
+					if nodesInfos1[i].Bandwidth >= minBWThreshold {
+						nodesInfos1[i].Reward += float64(nodesInfos1[i].Bandwidth) * dayReward / totalBWShares
 					}
 				}
 			}
-			for _, macCount := range macCounts {
-				if macCount.Name == ni.MacAddr {
-					share = share / float64(macCount.Count)
-				}
-			}
-			return share
-		}
 
-		if requireBandwidth {
-			// ==================== NEW TWO-POOL MODEL ====================
-			// Pool 1: Presence — all archs combined, equal shares with IP/MAC dedup
-			// Pool 2: Bandwidth — pure proportional to bandwidth bytes
-			// Both pools are the same yearly total (408K/yr each)
-
-			// --- Pool 1: Presence ---
-			totalPresenceShares := 0.0
-			for _, ni := range nodesInfos1 {
-				totalPresenceShares += calcPresenceShare(ni)
-			}
-
-			for i, ni := range nodesInfos1 {
-				nodesInfos1[i].Share = calcPresenceShare(ni)
-				if totalPresenceShares > 0 {
-					nodesInfos1[i].Reward = nodesInfos1[i].Share * dayReward / totalPresenceShares
-				}
-			}
-
-			// --- Pool 2: Bandwidth (pure proportional) ---
-			// Only visors with bandwidth >= threshold qualify for the bandwidth pool
-			var bwPoolNodes []int // indices into nodesInfos1
-			var totalBWShares float64
-			for i, ni := range nodesInfos1 {
-				if ni.Bandwidth >= minBWThreshold {
-					bwPoolNodes = append(bwPoolNodes, i)
-					totalBWShares += float64(ni.Bandwidth)
-				}
-			}
-
-			for _, idx := range bwPoolNodes {
-				bwShare := float64(nodesInfos1[idx].Bandwidth)
-				if totalBWShares > 0 {
-					nodesInfos1[idx].Reward += bwShare * dayReward / totalBWShares
-				}
-			}
-
-			// --- Output ---
+			// Output stats
 			if !h0 {
 				fmt.Printf("date: %s\n", wdate)
 				fmt.Printf("days this month: %d\n", daysThisMonth)
@@ -686,70 +824,55 @@ Architectures:
 				}
 				fmt.Printf("\n--- Bandwidth Pool (proportional to bytes) ---\n")
 				fmt.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
-				fmt.Printf("qualifying visors: %d\n", len(bwPoolNodes))
+				fmt.Printf("qualifying visors: %d\n", bwPoolCount)
 				var totalBW uint64
-				for _, idx := range bwPoolNodes {
-					totalBW += nodesInfos1[idx].Bandwidth
+				for _, ni := range nodesInfos1 {
+					if ni.Bandwidth >= minBWThreshold {
+						totalBW += ni.Bandwidth
+					}
 				}
 				fmt.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
 				if totalBWShares > 0 {
 					fmt.Printf("Skycoin Per GB (Pool 2): %.6f\n", dayReward/totalBWShares*1024*1024*1024)
 				}
-				fmt.Printf("\nUnique mac addresses: %d\n", len(uniqueMac))
-				fmt.Printf("Unique IP Addresses: %d\n", len(uniqueIP))
-				fmt.Printf("Unique UUIDs: %d\n", len(uniqueUUID))
+				fmt.Printf("\nUnique mac addresses: %d\n", len(macCounts))
+				fmt.Printf("Unique IP Addresses: %d\n", len(ipCounts))
+				fmt.Printf("Unique UUIDs: %d\n", len(uuidCounts))
+				printSaturationStats(nodesInfos1, dayReward, totalPresenceShares)
 			}
 
 			if !h1 {
-				fmt.Println("Skycoin Address, Skywire Public Key, Presence Share, Bandwidth (bytes), Total Reward SKY, IP, Architecture, UUID, Interfaces, XPub")
+				fmt.Println("Skycoin Address, Skywire Public Key, Presence Share, Bandwidth (bytes), Total Reward SKY, IP, Architecture, UUID, Interfaces, Country, XPub")
 				for _, ni := range nodesInfos1 {
 					resolved := resolveRewardAddress(ni.SkyAddr)
 					xpub := ""
 					if strings.HasPrefix(ni.SkyAddr, "xpub") {
 						xpub = ni.SkyAddr
 					}
-					fmt.Printf("%s, %s, %.6f, %d, %.6f, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Bandwidth, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, xpub)
+					fmt.Printf("%s, %s, %.6f, %d, %.6f, %s, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Bandwidth, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, ni.Country, xpub)
 				}
 			}
 
-			// Calculate reward sum by Skycoin Address
-			rewardSumBySkyAddr := make(map[string]float64)
-			for _, ni := range nodesInfos1 {
-				rewardSumBySkyAddr[ni.SkyAddr] += ni.Reward
-			}
-			var sortedSkyAddrs []rewardData
-			for skyAddr, rewardSum := range rewardSumBySkyAddr {
-				sortedSkyAddrs = append(sortedSkyAddrs, rewardData{SkyAddr: skyAddr, Reward: rewardSum})
-			}
-			sort.Slice(sortedSkyAddrs, func(i, j int) bool {
-				return sortedSkyAddrs[i].Reward > sortedSkyAddrs[j].Reward
-			})
+			sortedAddrs := sumRewardsByAddress(nodesInfos1)
 			if !h0 {
-				fmt.Printf("\nTotal Reward Amount (both pools): %.6f\n", func() (tr float64) {
-					for _, skyAddrReward := range sortedSkyAddrs {
-						tr += skyAddrReward.Reward
-					}
-					return tr
-				}())
+				total := 0.0
+				for _, a := range sortedAddrs {
+					total += a.Reward
+				}
+				fmt.Printf("\nTotal Reward Amount (both pools): %.6f\n", total)
 			}
 			if !h2 {
 				fmt.Println("Skycoin Address, Reward Amount")
-				for _, skyAddrReward := range sortedSkyAddrs {
-					resolved := resolveRewardAddress(skyAddrReward.SkyAddr)
-					fmt.Printf("%s, %.6f\n", resolved, skyAddrReward.Reward)
+				for _, a := range sortedAddrs {
+					fmt.Printf("%s, %.6f\n", resolveRewardAddress(a.SkyAddr), a.Reward)
 				}
 			}
 		} else {
 			// ==================== LEGACY TWO-ARCH-POOL MODEL ====================
-			totalValidShares1 := 0.0
-			totalValidShares2 := 0.0
-
-			for _, ni := range nodesInfos1 {
-				totalValidShares1 += calcPresenceShare(ni)
-			}
-			for _, ni := range nodesInfos2 {
-				totalValidShares2 += calcPresenceShare(ni)
-			}
+			computePoolShares(nodesInfos1, ipCounts, macCounts)
+			computePoolShares(nodesInfos2, ipCounts, macCounts)
+			totalShares1 := computePoolRewards(nodesInfos1, dayReward)
+			totalShares2 := computePoolRewards(nodesInfos2, dayReward)
 
 			if !h0 {
 				fmt.Printf("date: %s\n", wdate)
@@ -759,70 +882,51 @@ Architectures:
 				fmt.Printf("reward total per pool: %.6f\n", dayReward)
 				fmt.Printf("Visors meeting uptime & other requirements (Pool 1): %d\n", len(nodesInfos1))
 				fmt.Printf("Visors meeting uptime & other requirements (Pool 2): %d\n", len(nodesInfos2))
-				fmt.Printf("Unique mac addresses for first interface after lo: %d\n", len(uniqueMac))
-				fmt.Printf("Unique IP Addresses: %d\n", len(uniqueIP))
-				fmt.Printf("Unique UUIDs: %d\n", len(uniqueUUID))
-				fmt.Printf("Total valid shares (Pool 1): %.6f\n", totalValidShares1)
-				fmt.Printf("Total valid shares (Pool 2): %.6f\n", totalValidShares2)
-				if totalValidShares1 != 0 {
-					fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalValidShares1)
+				fmt.Printf("Unique mac addresses for first interface after lo: %d\n", len(macCounts))
+				fmt.Printf("Unique IP Addresses: %d\n", len(ipCounts))
+				fmt.Printf("Unique UUIDs: %d\n", len(uuidCounts))
+				if saturationExponent < 1.0 {
+					fmt.Printf("Regional saturation exponent: %.2f\n", saturationExponent)
+				}
+				fmt.Printf("Total valid shares (Pool 1): %.6f\n", totalShares1)
+				fmt.Printf("Total valid shares (Pool 2): %.6f\n", totalShares2)
+				if totalShares1 != 0 {
+					fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalShares1)
 				} else {
 					fmt.Printf("Skycoin Per Share (Pool 1): 0\n")
 				}
-				if totalValidShares2 != 0 {
-					fmt.Printf("Skycoin Per Share (Pool 2): %.6f\n", dayReward/totalValidShares2)
+				if totalShares2 != 0 {
+					fmt.Printf("Skycoin Per Share (Pool 2): %.6f\n", dayReward/totalShares2)
 				} else {
 					fmt.Printf("Skycoin Per Share (Pool 2): 0\n")
 				}
 			}
 
-			for i, ni := range nodesInfos1 {
-				nodesInfos1[i].Share = calcPresenceShare(ni)
-				nodesInfos1[i].Reward = nodesInfos1[i].Share * dayReward / float64(totalValidShares1)
-			}
-			for i, ni := range nodesInfos2 {
-				nodesInfos2[i].Share = calcPresenceShare(ni)
-				nodesInfos2[i].Reward = nodesInfos2[i].Share * dayReward / float64(totalValidShares2)
-			}
-
-			combinedNodesInfos := append(nodesInfos1, nodesInfos2...)
-
+			combinedNodes := append(nodesInfos1, nodesInfos2...)
 			if !h1 {
-				fmt.Println("Skycoin Address, Skywire Public Key, Reward Shares, Reward SKY Amount, IP, Architecture, UUID, Interfaces, XPub")
-				for _, ni := range combinedNodesInfos {
+				fmt.Println("Skycoin Address, Skywire Public Key, Reward Shares, Reward SKY Amount, IP, Architecture, UUID, Interfaces, Country, XPub")
+				for _, ni := range combinedNodes {
 					resolved := resolveRewardAddress(ni.SkyAddr)
 					xpub := ""
 					if strings.HasPrefix(ni.SkyAddr, "xpub") {
 						xpub = ni.SkyAddr
 					}
-					fmt.Printf("%s, %s, %.6f, %.6f, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, xpub)
+					fmt.Printf("%s, %s, %.6f, %.6f, %s, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, ni.Country, xpub)
 				}
 			}
 
-			rewardSumBySkyAddr := make(map[string]float64)
-			for _, ni := range combinedNodesInfos {
-				rewardSumBySkyAddr[ni.SkyAddr] += ni.Reward
-			}
-			var sortedSkyAddrs []rewardData
-			for skyAddr, rewardSum := range rewardSumBySkyAddr {
-				sortedSkyAddrs = append(sortedSkyAddrs, rewardData{SkyAddr: skyAddr, Reward: rewardSum})
-			}
-			sort.Slice(sortedSkyAddrs, func(i, j int) bool {
-				return sortedSkyAddrs[i].Reward > sortedSkyAddrs[j].Reward
-			})
+			sortedAddrs := sumRewardsByAddress(combinedNodes)
 			if !h0 {
-				fmt.Printf("Total Reward Amount: %.6f\n", func() (tr float64) {
-					for _, skyAddrReward := range sortedSkyAddrs {
-						tr += skyAddrReward.Reward
-					}
-					return tr
-				}())
+				total := 0.0
+				for _, a := range sortedAddrs {
+					total += a.Reward
+				}
+				fmt.Printf("Total Reward Amount: %.6f\n", total)
 			}
 			if !h2 {
 				fmt.Println("Skycoin Address, Reward Amount")
-				for _, skyAddrReward := range sortedSkyAddrs {
-					resolved := resolveRewardAddress(skyAddrReward.SkyAddr)
-					fmt.Printf("%s, %.6f\n", resolved, skyAddrReward.Reward)
+				for _, a := range sortedAddrs {
+					fmt.Printf("%s, %.6f\n", resolveRewardAddress(a.SkyAddr), a.Reward)
 				}
 			}
 		}

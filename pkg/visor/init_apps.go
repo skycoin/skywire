@@ -502,7 +502,7 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 			return err
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is called in pushCloseStack
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
 

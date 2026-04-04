@@ -322,7 +322,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		err := fmt.Errorf("failed to start transport manager: %w", err)
 		return err
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is called in pushCloseStack
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 
@@ -345,7 +345,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel is called in pushCloseStack
 	// To remove the block set by NewTransportListener if dmsg is not initialized
 	go func() {
 		ts, err := ts.NewTransportListener(ctx, v.conf.PK, v.conf.Transport.TransportSetupPKs, v.dmsgC, v.tpM, v.MasterLogger())

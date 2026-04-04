@@ -401,7 +401,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	pty := dmsgpty.NewHost(dmsgC, wl)
 
 	if ptyPort := conf.DmsgPort; ptyPort != 0 {
-		serveCtx, cancel := context.WithCancel(context.Background())
+		serveCtx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is called in pushCloseStack
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
 
@@ -436,7 +436,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 			return err
 		}
 
-		serveCtx, cancel := context.WithCancel(context.Background())
+		serveCtx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is called in pushCloseStack
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
 
