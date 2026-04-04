@@ -192,6 +192,11 @@ func generateConfig(hvArg string) error {
 	cmd := exec.Command("skywire", args...) //nolint:gosec
 	cmd.Stdout = nil                        // Suppress output
 	cmd.Stderr = os.Stderr
+	// Set SKYENV so config gen reads user defaults from /etc/skywire.conf
+	cmd.Env = os.Environ()
+	if _, err := os.Stat("/etc/skywire.conf"); err == nil {
+		cmd.Env = append(cmd.Env, "SKYENV=/etc/skywire.conf")
+	}
 	if err := cmd.Run(); err != nil {
 		return err
 	}
