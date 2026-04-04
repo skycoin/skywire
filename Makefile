@@ -512,6 +512,29 @@ e2e-test-local:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment 
 		e2e-test \
 		sh -c "go clean -testcache && go test -v -timeout=25m ./internal/integration"
 
+e2e-config: ## E2E. Regenerate visor configs from template and deployment config
+	@echo "Regenerating E2E visor configs..."
+	@# visor-A: skychat node with hypervisor set to visor-B
+	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
+		go run . cli config gen --nofetch --sk 42bca4df2f3189b28872d40e6c61aacd5e85b8e91f8fea65780af27c142419e5 \
+		-j 0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe \
+		-o docker/integration/visorA.json
+	@# visor-B: hypervisor
+	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
+		go run . cli config gen --nofetch --sk da4f48916e99aa3de794bffe1b5ecd465335e38b55457a9f78b411eb8585e36f \
+		-i -o docker/integration/visorB.json
+	@# visor-C: skychat node with hypervisor set to visor-B
+	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
+		go run . cli config gen --nofetch --sk 0e17cd505d81f998950e22864ae4692249124441bd9148b801f76f1595ac688f \
+		-j 0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe \
+		-o docker/integration/visorC.json
+	@# Fix cli_addr to bind on all interfaces for cross-container RPC access
+	@for v in A B C; do \
+		jq '.cli_addr = "0.0.0.0:3435"' docker/integration/visor$${v}.json > /tmp/visor$${v}_e2e.json && \
+		mv /tmp/visor$${v}_e2e.json docker/integration/visor$${v}.json; \
+	done
+	@echo "E2E visor configs regenerated."
+
 e2e-stop: ## E2E. Stop e2e environment without destroying it. Restart with `make e2e-run`
 	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} stop"
 	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} ps"

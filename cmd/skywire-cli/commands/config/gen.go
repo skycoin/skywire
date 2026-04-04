@@ -356,7 +356,12 @@ var genConfigCmd = &cobra.Command{
 	print the SKYENV file template with:
 	skywire-cli config gen -q`
 		}
-		return `Generate a config file`
+		return `Generate a config file
+
+	Custom deployment config (services-config.json) may be specified with:
+	SKYDEPLOY=/path/to/services-config.json skywire cli config gen
+	This overrides the embedded deployment defaults for all service URLs,
+	DMSG servers, and DMSG endpoints. Use with --nofetch to skip HTTP fetch.`
 
 	}(),
 	PreRun: func(cmd *cobra.Command, _ []string) {
