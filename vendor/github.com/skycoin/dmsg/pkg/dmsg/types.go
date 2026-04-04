@@ -4,11 +4,14 @@ package dmsg
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"time"
 
+	"github.com/hashicorp/yamux"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/xtaci/smux"
 )
 
 const (
@@ -36,6 +39,32 @@ var (
 	// AcceptBufferSize defines the size of the accepts buffer.
 	AcceptBufferSize = 20
 )
+
+// YamuxConfig returns a tuned yamux configuration for dmsg sessions.
+func YamuxConfig() *yamux.Config {
+	return &yamux.Config{
+		AcceptBacklog:          512,
+		EnableKeepAlive:        true,
+		KeepAliveInterval:      30 * time.Second,
+		ConnectionWriteTimeout: 10 * time.Second,
+		MaxStreamWindowSize:    256 * 1024,
+		StreamOpenTimeout:      20 * time.Second,
+		StreamCloseTimeout:     30 * time.Second,
+		LogOutput:              io.Discard,
+	}
+}
+
+// SmuxConfig returns a tuned smux configuration for dmsg sessions.
+func SmuxConfig() *smux.Config {
+	return &smux.Config{
+		Version:           2,
+		KeepAliveInterval: 10 * time.Second,
+		KeepAliveTimeout:  30 * time.Second,
+		MaxFrameSize:      32768,
+		MaxReceiveBuffer:  1048576,
+		MaxStreamBuffer:   65536,
+	}
+}
 
 // Addr implements net.Addr for dmsg addresses.
 type Addr struct {
