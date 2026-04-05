@@ -1460,11 +1460,15 @@ func getInterfaceNames() string { //nolint Note: pending implementation for conf
 	var interfaceNames []string
 	defaultInterface := ""
 	for _, iface := range interfaces {
-		if iface.Flags&net.FlagLoopback == 0 {
-			interfaceNames = append(interfaceNames, iface.Name)
-			if iface.Index == 0 && defaultInterface == "" {
-				defaultInterface = iface.Name
-			}
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		if netutil.IsVirtualInterface(iface.Name) {
+			continue
+		}
+		interfaceNames = append(interfaceNames, iface.Name)
+		if iface.Index == 0 && defaultInterface == "" {
+			defaultInterface = iface.Name
 		}
 	}
 

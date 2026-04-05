@@ -151,7 +151,7 @@ func LocalAddresses() ([]string, error) {
 			continue
 		}
 		// Skip Docker/container bridge interfaces
-		if isVirtualInterface(iface.Name) {
+		if IsVirtualInterface(iface.Name) {
 			continue
 		}
 
@@ -176,9 +176,9 @@ func LocalAddresses() ([]string, error) {
 	return result, nil
 }
 
-// isVirtualInterface returns true for Docker bridges, veth pairs, and other
+// IsVirtualInterface returns true for Docker bridges, veth pairs, and other
 // virtual interfaces that shouldn't be registered with the address resolver.
-func isVirtualInterface(name string) bool {
+func IsVirtualInterface(name string) bool {
 	prefixes := []string{"docker", "br-", "veth", "virbr", "lxc", "cni", "flannel", "calico"}
 	for _, p := range prefixes {
 		if len(name) >= len(p) && name[:len(p)] == p {
