@@ -146,9 +146,14 @@ func extractInterfaces(s *surveyData) (ifc string, macs []string) {
 }
 
 // checkServiceConfig verifies the survey's service configuration against the expected deployment config.
+// Supports both HTTP-only configs and dual HTTP+DMSG configs.
 func checkServiceConfig(surveyPath string, sConf, dConf []byte) bool {
-	// Use JQ to extract and compare services (preserving existing behavior for stun_servers exclusion)
-	svcBytes, err := script.File(surveyPath).JQ(`.services | del(.stun_servers)`).Bytes()
+	// Strip fields that may differ between survey and expected config:
+	// - stun_servers: excluded by design
+	// - dmsg_servers: survey doesn't include the server entry list
+	// - conf_dmsg: config-bootstrapper address, not relevant to visor survey
+	delFields := `del(.stun_servers, .dmsg_servers, .conf_dmsg)`
+	svcBytes, err := script.File(surveyPath).JQ(`.services | ` + delFields).Bytes()
 	if err != nil {
 		return false
 	}
@@ -156,10 +161,19 @@ func checkServiceConfig(surveyPath string, sConf, dConf []byte) bool {
 	confType = strings.TrimRight(confType, "\n")
 
 	if strings.HasPrefix(confType, "http://") {
-		return compareAndPrintDiffs(svcBytes, sConf, true)
+		// Strip same fields from expected config for fair comparison
+		stripped, err := script.Echo(string(sConf)).JQ(delFields).Bytes()
+		if err != nil {
+			stripped = sConf
+		}
+		return compareAndPrintDiffs(svcBytes, stripped, true)
 	}
 	if strings.HasPrefix(confType, "dmsg://") {
-		return compareAndPrintDiffs(svcBytes, dConf, true)
+		stripped, err := script.Echo(string(dConf)).JQ(delFields).Bytes()
+		if err != nil {
+			stripped = dConf
+		}
+		return compareAndPrintDiffs(svcBytes, stripped, true)
 	}
 	return false
 }
