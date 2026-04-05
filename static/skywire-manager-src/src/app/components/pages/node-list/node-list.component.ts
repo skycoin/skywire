@@ -434,6 +434,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
           }
 
           // Stop the loading indicator and show a warning icon.
+          this.loading = false;
           this.errorsUpdating = true;
           AppComponent.currentInstance.showDataProblemMsg();
         }
