@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -68,6 +69,12 @@ type Hypervisor struct {
 	logger       *logging.Logger
 	tpvizServer  *tpviz.Server
 	lanDmsg      *LANDmsgServer // embedded LAN DMSG server (nil if disabled)
+
+	// Runtime state for enable/disable toggle
+	httpSrv   *http.Server // nil when disabled
+	srvCancel context.CancelFunc
+	enabled   bool
+	enableMu  sync.Mutex
 }
 
 // NewHypervisor creates a new Hypervisor.
@@ -119,6 +126,122 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 	}
 
 	return hv, nil
+}
+
+// Enable starts the hypervisor HTTP server and DMSG RPC listener.
+// Safe to call multiple times — no-op if already enabled.
+func (hv *Hypervisor) Enable(ctx context.Context) error {
+	hv.enableMu.Lock()
+	defer hv.enableMu.Unlock()
+
+	if hv.enabled {
+		return nil
+	}
+
+	srvCtx, cancel := context.WithCancel(ctx)
+	hv.srvCancel = cancel
+
+	// Start DMSG RPC listener for remote visors (waits for DMSG to be ready)
+	if hv.dmsgC != nil {
+		go func() {
+			<-hv.dmsgC.Ready()
+			hv.logger.WithField("addr", fmt.Sprintf("%s:%d", hv.c.PK, hv.c.DmsgPort)).
+				Info("Serving hypervisor RPC over DMSG")
+			if err := hv.ServeRPC(srvCtx, hv.c.DmsgPort); err != nil && !errors.Is(err, dmsg.ErrEntityClosed) {
+				hv.logger.WithError(err).Error("Hypervisor DMSG RPC stopped")
+			}
+		}()
+	}
+
+	// Start HTTP server
+	handler := hv.HTTPHandler()
+	hv.httpSrv = &http.Server{
+		Handler:           handler,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	lis, err := net.Listen("tcp", hv.c.HTTPAddr)
+	if err != nil {
+		cancel()
+		return fmt.Errorf("hypervisor HTTP listen %s: %w", hv.c.HTTPAddr, err)
+	}
+
+	go func() {
+		hv.logger.Infof("Hypervisor HTTP serving on %s", hv.c.HTTPAddr)
+		var srvErr error
+		if hv.c.EnableTLS {
+			srvErr = hv.httpSrv.ServeTLS(lis, hv.c.TLSCertFile, hv.c.TLSKeyFile)
+		} else {
+			srvErr = hv.httpSrv.Serve(lis)
+		}
+		if srvErr != nil && !errors.Is(srvErr, http.ErrServerClosed) {
+			hv.logger.WithError(srvErr).Error("Hypervisor HTTP server error")
+		}
+	}()
+
+	// Start tpviz if configured
+	if hv.tpvizServer != nil {
+		hv.tpvizServer.Start()
+	}
+
+	hv.enabled = true
+	hv.logger.Info("Hypervisor enabled")
+	return nil
+}
+
+// Disable stops the hypervisor HTTP server and DMSG RPC listener.
+// Disconnects all remote visors. Safe to call multiple times.
+func (hv *Hypervisor) Disable() error {
+	hv.enableMu.Lock()
+	defer hv.enableMu.Unlock()
+
+	if !hv.enabled {
+		return nil
+	}
+
+	// Stop HTTP server
+	if hv.httpSrv != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if err := hv.httpSrv.Shutdown(shutdownCtx); err != nil {
+			hv.logger.WithError(err).Warn("Hypervisor HTTP shutdown error")
+		}
+		hv.httpSrv = nil
+	}
+
+	// Cancel DMSG RPC context (stops listener)
+	if hv.srvCancel != nil {
+		hv.srvCancel()
+		hv.srvCancel = nil
+	}
+
+	// Disconnect all remote visors
+	hv.vsMu.Lock()
+	for pk, conn := range hv.remoteVisors {
+		if conn.API != nil {
+			hv.logger.Infof("Disconnecting remote visor %s", pk)
+		}
+		delete(hv.remoteVisors, pk)
+	}
+	hv.vsMu.Unlock()
+
+	// Stop tpviz
+	if hv.tpvizServer != nil {
+		hv.tpvizServer.Stop()
+	}
+
+	hv.enabled = false
+	hv.logger.Info("Hypervisor disabled")
+	return nil
+}
+
+// IsEnabled returns whether the hypervisor is currently serving.
+func (hv *Hypervisor) IsEnabled() bool {
+	hv.enableMu.Lock()
+	defer hv.enableMu.Unlock()
+	return hv.enabled
 }
 
 // ServeRPC serves RPC of a Hypervisor.
@@ -1647,23 +1770,6 @@ func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) (
 	}
 
 	return pks, nil
-}
-
-func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
-	go func() {
-		<-hv.dmsgC.Ready()
-		if err := hv.ServeRPC(ctx, hv.c.DmsgPort); err != nil {
-			log := log.WithError(err)
-			if errors.Is(err, dmsg.ErrEntityClosed) {
-				log.Debug("Dmsg client stopped serving.")
-				return
-			}
-			log.Error("Failed to serve RPC client over dmsg.")
-			return
-		}
-	}()
-	log.WithField("addr", dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}).
-		Debug("Serving RPC client over dmsg.")
 }
 
 // dmsgPtyUI servers as a wrapper for `*dmsgpty.UI`. this way source file with

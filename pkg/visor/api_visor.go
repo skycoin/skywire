@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -198,6 +199,30 @@ func (v *Visor) Health() (*HealthInfo, error) {
 		return &HealthInfo{}, nil
 	}
 	return &HealthInfo{ServicesHealth: v.isServicesHealthy.value()}, nil
+}
+
+// EnableHypervisor implements API.
+func (v *Visor) EnableHypervisor() error {
+	if v.hvInstance == nil {
+		return fmt.Errorf("hypervisor not configured in visor config")
+	}
+	return v.hvInstance.Enable(context.Background())
+}
+
+// DisableHypervisor implements API.
+func (v *Visor) DisableHypervisor() error {
+	if v.hvInstance == nil {
+		return nil
+	}
+	return v.hvInstance.Disable()
+}
+
+// IsHypervisorEnabled implements API.
+func (v *Visor) IsHypervisorEnabled() bool {
+	if v.hvInstance == nil {
+		return false
+	}
+	return v.hvInstance.IsEnabled()
 }
 
 // IsStartupComplete implements API.
