@@ -85,6 +85,11 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 		survey.ServicesURLs.ServiceDiscovery = v.conf.Launcher.ServiceDisc
 		survey.ServicesURLs.SurveyWhitelist = v.conf.SurveyWhitelist
 		survey.ServicesURLs.StunServers = v.conf.StunServers
+		// DMSG endpoints (dual-mode config)
+		survey.ServicesURLs.DmsgDiscoveryDmsg = v.conf.Dmsg.DiscoveryDmsg
+		survey.ServicesURLs.TransportDiscoveryDmsg = v.conf.Transport.DiscoveryDmsg
+		survey.ServicesURLs.AddressResolverDmsg = v.conf.Transport.AddressResolverDmsg
+		survey.ServicesURLs.ServiceDiscoveryDmsg = v.conf.Launcher.ServiceDiscDmsg
 		survey.DmsgServers = v.dmsgC.ConnectedServersPK()
 
 		// Get public IP from DMSG server

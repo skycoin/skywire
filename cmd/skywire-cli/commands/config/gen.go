@@ -124,6 +124,7 @@ var (
 	skyenvfile = os.Getenv("SKYENV")
 )
 var envfile string
+var envfileOut string
 
 func init() {
 	var msg string
@@ -143,7 +144,8 @@ func init() {
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", scriptExecString("${OUTPUT}"), msg+"")
 	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal :: show errors with -n flag")
 	gHiddenFlags = append(gHiddenFlags, "hide")
-	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the environmental variable settings")
+	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the conf template (reflects flags passed)")
+	genConfigCmd.Flags().StringVarP(&envfileOut, "envout", "Q", "", "write conf template to file (reflects flags passed)")
 
 	// Config generation flags
 	genConfigCmd.Flags().BoolVarP(&isForce, "force", "f", false, "remove pre-existing config")
@@ -368,13 +370,23 @@ var genConfigCmd = &cobra.Command{
 	}(),
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		log := logger
-		if isEnvs {
+		if isEnvs || envfileOut != "" {
 			if skyenv.OS == "windows" {
 				envfile = envfileWindows
 			} else {
 				envfile = envfileLinux
 			}
-			fmt.Println(envfile)
+			// Uncomment settings that match flags passed on the command line
+			envfile = applyFlagsToConf(envfile, cmd)
+
+			if envfileOut != "" {
+				if err := os.WriteFile(envfileOut, []byte(envfile+"\n"), 0644); err != nil { //nolint:gosec
+					log.Fatalf("Failed to write conf file: %v", err)
+				}
+				fmt.Printf("Conf template written to %s\n", envfileOut)
+			} else {
+				fmt.Println(envfile)
+			}
 			os.Exit(0)
 		}
 
@@ -1121,8 +1133,11 @@ func configureHypervisor(log *logging.Logger) {
 		}
 	}
 	// Local hypervisor setting
-	if isHypervisor {
+	// Always include hypervisor config (for runtime enable/disable).
+	// The Enable field controls whether it auto-starts.
+	{
 		config := visorconfig.GenerateWorkDirConfig(isTestEnv)
+		config.Enable = isHypervisor
 		if hvHTTPAddr != "" {
 			config.HTTPAddr = hvHTTPAddr
 		} else {
@@ -1394,6 +1409,13 @@ func writeConfigOutput(log *logging.Logger) {
 			if err != nil {
 				log.Fatalf("Failed to convert config to setup-node config format: %v", err)
 			}
+			// Re-indent for readable file output
+			var data any
+			if err = json.Unmarshal(jsonData, &data); err == nil {
+				if indented, indentErr := json.MarshalIndent(data, "", "    "); indentErr == nil {
+					jsonData = indented
+				}
+			}
 		}
 		// Write the JSON data back to the file
 		err = os.WriteFile(confPath, jsonData, configFilePerms)
@@ -1448,11 +1470,15 @@ func getInterfaceNames() string { //nolint Note: pending implementation for conf
 	var interfaceNames []string
 	defaultInterface := ""
 	for _, iface := range interfaces {
-		if iface.Flags&net.FlagLoopback == 0 {
-			interfaceNames = append(interfaceNames, iface.Name)
-			if iface.Index == 0 && defaultInterface == "" {
-				defaultInterface = iface.Name
-			}
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		if netutil.IsVirtualInterface(iface.Name) {
+			continue
+		}
+		interfaceNames = append(interfaceNames, iface.Name)
+		if iface.Index == 0 && defaultInterface == "" {
+			defaultInterface = iface.Name
 		}
 	}
 
@@ -1468,4 +1494,55 @@ func getInterfaceNames() string { //nolint Note: pending implementation for conf
 	}
 
 	return strings.Join(interfaceNames, ", ")
+}
+
+// applyFlagsToConf uncomments settings in the conf template that correspond
+// to flags passed on the command line. This makes -q/-Q output reflect the
+// user's intent (e.g., `config gen -iq` uncomments ISHYPERVISOR=true).
+func applyFlagsToConf(conf string, cmd *cobra.Command) string {
+	// Map of flag names to the SKYENV variable they control.
+	// When a flag is explicitly set, uncomment the corresponding line.
+	flagToEnv := map[string]string{
+		"pkg":       "PKGENV=true",
+		"bestproto": "BESTPROTO=true",
+		"ishv":      "ISHYPERVISOR=true",
+		"testenv":   "TESTENV=true",
+		"dmsghttp":  "DMSGHTTP=true",
+		"public":    "VISORISPUBLIC=true",
+		"servevpn":  "VPNSERVER=true",
+		"autoconn":  "DISABLEPUBLICAUTOCONN=true",
+		"publicip":  "DISPLAYNODEIP=true",
+	}
+
+	// Also handle string/value flags
+	valueFlagToEnv := map[string]string{
+		"cliaddr": "CLIADDR",
+		"hvaddr":  "HVHTTPADDR",
+		"timeout": "SHUTDOWNTIMEOUT",
+		"reward":  "REWARDSKYADDR",
+	}
+
+	lines := strings.Split(conf, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Check boolean flags
+		for flagName, envSetting := range flagToEnv {
+			if cmd.Flags().Changed(flagName) {
+				commented := "#" + envSetting
+				if strings.HasPrefix(trimmed, commented) || trimmed == commented {
+					lines[i] = strings.Replace(line, "#"+envSetting, envSetting, 1)
+				}
+			}
+		}
+		// Check value flags
+		for flagName, envKey := range valueFlagToEnv {
+			if cmd.Flags().Changed(flagName) {
+				val, _ := cmd.Flags().GetString(flagName) //nolint:errcheck
+				if val != "" && strings.Contains(trimmed, envKey) && strings.HasPrefix(trimmed, "#") {
+					lines[i] = envKey + "='" + val + "'"
+				}
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
 }
