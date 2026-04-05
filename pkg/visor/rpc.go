@@ -70,6 +70,24 @@ func (r *RPC) IsStartupComplete(_ *struct{}, out *bool) (err error) {
 	return nil
 }
 
+// EnableHypervisor starts the hypervisor HTTP server and DMSG listener.
+func (r *RPC) EnableHypervisor(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "EnableHypervisor", nil)(nil, &err)
+	return r.visor.EnableHypervisor()
+}
+
+// DisableHypervisor stops the hypervisor HTTP server and disconnects remote visors.
+func (r *RPC) DisableHypervisor(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DisableHypervisor", nil)(nil, &err)
+	return r.visor.DisableHypervisor()
+}
+
+// IsHypervisorEnabled returns whether the hypervisor is currently serving.
+func (r *RPC) IsHypervisorEnabled(_ *struct{}, out *bool) (err error) {
+	*out = r.visor.IsHypervisorEnabled()
+	return nil
+}
+
 func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "Health", nil)(out, &err)
 

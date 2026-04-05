@@ -138,6 +138,9 @@ type Visor struct {
 	// Embedded Route Setup Node (nil if route_setup_sk not configured)
 	embeddedRouteSetup *EmbeddedRouteSetup
 
+	// Hypervisor instance (nil if never initialized; may be enabled/disabled at runtime)
+	hvInstance *Hypervisor
+
 	// Public autoconnect runtime control
 	autoconnect autoconnectState
 
