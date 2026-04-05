@@ -146,35 +146,62 @@ func extractInterfaces(s *surveyData) (ifc string, macs []string) {
 }
 
 // checkServiceConfig verifies the survey's service configuration against the expected deployment config.
-// Supports both HTTP-only configs and dual HTTP+DMSG configs.
+// Accepts three valid config types:
+//   - HTTP-only: dmsg_discovery is http://, no _dmsg fields
+//   - DMSG-only: dmsg_discovery is dmsg://, all URLs are dmsg://
+//   - Dual (HTTP+DMSG): dmsg_discovery is http://, _dmsg fields also present
+//
+// Each present field is checked against the expected deployment config.
+// Missing optional fields (_dmsg URLs) are not penalized.
 func checkServiceConfig(surveyPath string, sConf, dConf []byte) bool {
-	// Strip fields that may differ between survey and expected config:
-	// - stun_servers: excluded by design
-	// - dmsg_servers: survey doesn't include the server entry list
-	// - conf_dmsg: config-bootstrapper address, not relevant to visor survey
+	// Strip fields not relevant to comparison
 	delFields := `del(.stun_servers, .dmsg_servers, .conf_dmsg)`
 	svcBytes, err := script.File(surveyPath).JQ(`.services | ` + delFields).Bytes()
 	if err != nil {
 		return false
 	}
+
 	confType, _ := script.File(surveyPath).JQ(`.services.dmsg_discovery`).Replace("\"", "").String() //nolint:errcheck
 	confType = strings.TrimRight(confType, "\n")
 
-	if strings.HasPrefix(confType, "http://") {
-		// Strip same fields from expected config for fair comparison
-		stripped, err := script.Echo(string(sConf)).JQ(delFields).Bytes()
-		if err != nil {
-			stripped = sConf
-		}
-		return compareAndPrintDiffs(svcBytes, stripped, true)
-	}
 	if strings.HasPrefix(confType, "dmsg://") {
+		// DMSG-only config: compare against dConf
 		stripped, err := script.Echo(string(dConf)).JQ(delFields).Bytes()
 		if err != nil {
 			stripped = dConf
 		}
 		return compareAndPrintDiffs(svcBytes, stripped, true)
 	}
+
+	if strings.HasPrefix(confType, "http://") {
+		// HTTP or dual config: strip _dmsg and dmsg_servers fields from BOTH sides
+		// so that HTTP-only, dual, and expected configs all compare cleanly.
+		// The _dmsg fields are validated separately if present.
+		httpOnly := `del(.stun_servers, .dmsg_servers, .conf_dmsg, .dmsg_discovery_dmsg, .transport_discovery_dmsg, .address_resolver_dmsg, .route_finder_dmsg, .uptime_tracker_dmsg, .service_discovery_dmsg)`
+		surveyHTTP, err := script.File(surveyPath).JQ(`.services | ` + httpOnly).Bytes()
+		if err != nil {
+			return false
+		}
+		expectedHTTP, err := script.Echo(string(sConf)).JQ(httpOnly).Bytes()
+		if err != nil {
+			return false
+		}
+		httpOK := compareAndPrintDiffs(surveyHTTP, expectedHTTP, true)
+
+		// If survey has _dmsg fields, validate them too (optional — not required for rewards)
+		hasDmsgFields, _ := script.File(surveyPath).JQ(`.services.dmsg_discovery_dmsg`).Replace("\"", "").String() //nolint:errcheck
+		if strings.TrimSpace(hasDmsgFields) != "" && strings.TrimSpace(hasDmsgFields) != "null" {
+			dmsgOnly := `{dmsg_discovery_dmsg, transport_discovery_dmsg, address_resolver_dmsg, route_finder_dmsg, uptime_tracker_dmsg, service_discovery_dmsg}`
+			surveyDmsg, _ := script.File(surveyPath).JQ(`.services | ` + dmsgOnly).Bytes() //nolint:errcheck
+			expectedDmsg, _ := script.Echo(string(sConf)).JQ(dmsgOnly).Bytes()             //nolint:errcheck
+			if len(surveyDmsg) > 0 && len(expectedDmsg) > 0 {
+				compareAndPrintDiffs(surveyDmsg, expectedDmsg, false) // log but don't fail on _dmsg mismatch
+			}
+		}
+
+		return httpOK
+	}
+
 	return false
 }
 
