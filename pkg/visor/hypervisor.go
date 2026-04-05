@@ -591,19 +591,18 @@ func (hv *Hypervisor) getDmsg() http.HandlerFunc {
 
 func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 	hv.mu.RLock()
-	defer hv.mu.RUnlock()
-
 	pks := make([]cipher.PubKey, 0, len(hv.remoteVisors)+1)
 	if hv.visor != nil {
-		// Add hypervisor node.
 		pks = append(pks, hv.visor.conf.PK)
 	}
-
 	for pk := range hv.remoteVisors {
 		pks = append(pks, pk)
 	}
+	hv.mu.RUnlock()
+
 	if hv.visor.isDTMReady() {
-		ctx := context.TODO()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		return hv.visor.dmsgTracker.manager.GetBulk(ctx, pks)
 	}
 	return []dmsgtracker.DmsgClientSummary{}
@@ -665,16 +664,23 @@ func (hv *Hypervisor) getUptime() http.HandlerFunc {
 // provides overview of all visors.
 func (hv *Hypervisor) getVisors() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Snapshot remote visors under lock, then release immediately
 		hv.mu.RLock()
-		wg := new(sync.WaitGroup)
-		wg.Add(len(hv.remoteVisors))
+		type visorEntry struct {
+			pk   cipher.PubKey
+			conn Conn
+		}
+		remotes := make([]visorEntry, 0, len(hv.remoteVisors))
+		for pk, c := range hv.remoteVisors {
+			remotes = append(remotes, visorEntry{pk, c})
+		}
+		hv.mu.RUnlock()
 
 		i := 0
 		if hv.visor != nil {
 			i++
 		}
-
-		overviews := make([]Overview, len(hv.remoteVisors)+i)
+		overviews := make([]Overview, len(remotes)+i)
 
 		if hv.visor != nil {
 			overview, err := hv.visor.Overview()
@@ -682,34 +688,37 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 				hv.logger.WithError(err).Warn("Failed to obtain overview of this visor.")
 				overview = &Overview{PubKey: hv.visor.conf.PK}
 			}
-
 			overviews[0] = *overview
 		}
 
-		for pk, c := range hv.remoteVisors {
-			go func(pk cipher.PubKey, c Conn, i int) {
-				log := hv.log(r).
-					WithField("visor_addr", c.Addr).
-					WithField("func", "getVisors")
-
-				log.Debug("Requesting overview via RPC.")
-
-				overview, err := c.API.Overview()
-				if err != nil {
-					log.WithError(err).
-						Warn("Failed to obtain overview via RPC.")
-					overview = &Overview{PubKey: pk}
-				} else {
-					log.Debug("Obtained overview via RPC.")
+		wg := new(sync.WaitGroup)
+		wg.Add(len(remotes))
+		for _, entry := range remotes {
+			go func(pk cipher.PubKey, c Conn, idx int) {
+				defer wg.Done()
+				// Per-visor timeout prevents one dead visor from blocking everything
+				done := make(chan struct{})
+				var overview *Overview
+				go func() {
+					var err error
+					overview, err = c.API.Overview()
+					if err != nil {
+						hv.logger.WithError(err).WithField("pk", pk).Warn("Failed to obtain overview via RPC")
+						overview = &Overview{PubKey: pk}
+					}
+					close(done)
+				}()
+				select {
+				case <-done:
+					overviews[idx] = *overview
+				case <-time.After(5 * time.Second):
+					hv.logger.WithField("pk", pk).Warn("Remote visor RPC timed out (5s)")
+					overviews[idx] = Overview{PubKey: pk}
 				}
-				overviews[i] = *overview
-				wg.Done()
-			}(pk, c, i)
+			}(entry.pk, entry.conn, i)
 			i++
 		}
-
 		wg.Wait()
-		hv.mu.RUnlock()
 
 		httputil.WriteJSON(w, r, http.StatusOK, overviews)
 	}
@@ -763,64 +772,93 @@ func makeSummaryResp(online, hyper bool, sum *Summary) Summary {
 
 func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Get DMSG stats first (before acquiring lock to avoid deadlock)
+		// Get DMSG stats first (uses its own lock internally)
 		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
 		for _, stat := range hv.getDmsgSummary() {
 			dmsgStats[stat.PK.String()] = stat
 		}
 
+		// Snapshot remote visors under lock, then release immediately
 		hv.mu.RLock()
-		wg := new(sync.WaitGroup)
-		wg.Add(len(hv.remoteVisors))
+		type visorEntry struct {
+			pk   cipher.PubKey
+			conn Conn
+		}
+		remotes := make([]visorEntry, 0, len(hv.remoteVisors))
+		for pk, c := range hv.remoteVisors {
+			remotes = append(remotes, visorEntry{pk, c})
+		}
+		hv.mu.RUnlock()
 
-		summaries := make([]Summary, 0)
+		summaries := make([]Summary, 0, len(remotes)+1)
 
+		// Local visor summary
 		summary, err := hv.visor.Summary()
 		if err != nil {
 			hv.logger.WithError(err).Warn("Failed to obtain summary of this visor.")
 			summary = &Summary{
-				Overview: &Overview{
-					PubKey: hv.visor.conf.PK,
-				},
-				Health: &HealthInfo{},
+				Overview: &Overview{PubKey: hv.visor.conf.PK},
+				Health:   &HealthInfo{},
 			}
 		}
-
 		summaries = append(summaries, makeSummaryResp(err == nil, true, summary))
 
-		for pk, c := range hv.remoteVisors {
+		// Remote visor summaries with per-visor timeout
+		var deadVisors []cipher.PubKey
+		var mu sync.Mutex
+		wg := new(sync.WaitGroup)
+		wg.Add(len(remotes))
+
+		for _, entry := range remotes {
 			go func(pk cipher.PubKey, c Conn) {
-				log := hv.log(r).
-					WithField("visor_addr", c.Addr).
-					WithField("func", "getVisors")
+				defer wg.Done()
 
-				log.Trace("Requesting summary via RPC.")
+				done := make(chan struct{})
+				var sum *Summary
+				var rpcErr error
+				go func() {
+					sum, rpcErr = c.API.Summary()
+					close(done)
+				}()
 
-				summary, err := c.API.Summary()
-				if err != nil {
-					log.WithError(err).
-						Warn("Failed to obtain summary via RPC.", pk)
-					delete(hv.remoteVisors, pk)
-				} else {
-					log.Trace("Obtained summary via RPC.")
-					resp := makeSummaryResp(err == nil, false, summary)
-					hv.vsMu.Lock()
-					summaries = append(summaries, resp)
-					hv.vsMu.Unlock()
+				select {
+				case <-done:
+					if rpcErr != nil {
+						hv.logger.WithError(rpcErr).WithField("pk", pk).Warn("Failed to obtain summary via RPC")
+						mu.Lock()
+						deadVisors = append(deadVisors, pk)
+						mu.Unlock()
+					} else {
+						resp := makeSummaryResp(true, false, sum)
+						mu.Lock()
+						summaries = append(summaries, resp)
+						mu.Unlock()
+					}
+				case <-time.After(5 * time.Second):
+					hv.logger.WithField("pk", pk).Warn("Remote visor summary RPC timed out (5s)")
+					mu.Lock()
+					deadVisors = append(deadVisors, pk)
+					mu.Unlock()
 				}
-				wg.Done()
-			}(pk, c)
+			}(entry.pk, entry.conn)
+		}
+		wg.Wait()
+
+		// Remove dead visors under write lock (safe — no goroutines accessing the map)
+		if len(deadVisors) > 0 {
+			hv.mu.Lock()
+			for _, pk := range deadVisors {
+				delete(hv.remoteVisors, pk)
+			}
+			hv.mu.Unlock()
 		}
 
-		wg.Wait()
+		// Attach DMSG stats
 		for i := 0; i < len(summaries); i++ {
 			if stat, ok := dmsgStats[summaries[i].Overview.PubKey.String()]; ok {
 				summaries[i].DmsgStats = &stat
 			}
-			// If stats not found, leave DmsgStats as nil (don't create empty struct with 0ms latency)
 		}
-
-		hv.mu.RUnlock()
 
 		httputil.WriteJSON(w, r, http.StatusOK, summaries)
 	}

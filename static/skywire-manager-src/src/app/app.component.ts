@@ -151,8 +151,9 @@ export class AppComponent {
         this.pkErrorShown = true;
       }
 
-      if (!this.inLoginPage) {
-        this.checkHypervisorPk(1000);
+      // Retry with increasing delay, max 30 retries before giving up
+      if (!this.inLoginPage && this.pkErrorsFound < 30) {
+        this.checkHypervisorPk(Math.min(this.pkErrorsFound * 1000, 10000));
       }
     });
   }
