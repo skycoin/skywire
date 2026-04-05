@@ -1406,6 +1406,13 @@ func writeConfigOutput(log *logging.Logger) {
 			if err != nil {
 				log.Fatalf("Failed to convert config to setup-node config format: %v", err)
 			}
+			// Re-indent for readable file output
+			var data any
+			if err = json.Unmarshal(jsonData, &data); err == nil {
+				if indented, indentErr := json.MarshalIndent(data, "", "    "); indentErr == nil {
+					jsonData = indented
+				}
+			}
 		}
 		// Write the JSON data back to the file
 		err = os.WriteFile(confPath, jsonData, configFilePerms)
