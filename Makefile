@@ -533,10 +533,12 @@ e2e-config: ## E2E. Regenerate visor configs from template and deployment config
 e2e-stop: ## E2E. Stop e2e environment without destroying it. Restart with `make e2e-run`
 	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} stop"
 	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} ps"
+	-sudo ./ci_scripts/cleanup-ip-aliases.sh
 
 e2e-clean: ## E2E. Stop e2e environment and clean everything. Restart only with `make e2e-build && make e2e-run`
 	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} down"
 	bash ./docker/docker_clean.sh e2e
+	-sudo ./ci_scripts/cleanup-ip-aliases.sh
 
 e2e-help: ## E2E. Show env-vars and useful commands
 	@echo -e "\nNow you can use docker compose:\n"

@@ -18,5 +18,8 @@ func runAppSystray() {
 }
 
 func runApp() {
-	// no-op: systray not available
+	err := run(nil)
+	if err != nil {
+		mLog.WithError(err).Fatal("a fatal error occurred")
+	}
 }

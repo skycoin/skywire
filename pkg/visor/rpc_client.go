@@ -131,6 +131,25 @@ func (rc *rpcClient) IsStartupComplete() bool {
 	return out
 }
 
+// EnableHypervisor calls EnableHypervisor
+func (rc *rpcClient) EnableHypervisor() error {
+	return rc.Call("EnableHypervisor", &struct{}{}, &struct{}{})
+}
+
+// DisableHypervisor calls DisableHypervisor
+func (rc *rpcClient) DisableHypervisor() error {
+	return rc.Call("DisableHypervisor", &struct{}{}, &struct{}{})
+}
+
+// IsHypervisorEnabled calls IsHypervisorEnabled
+func (rc *rpcClient) IsHypervisorEnabled() bool {
+	var out bool
+	if err := rc.Call("IsHypervisorEnabled", &struct{}{}, &out); err != nil {
+		return false
+	}
+	return out
+}
+
 // Uptime calls Uptime
 func (rc *rpcClient) Uptime() (float64, error) {
 	var out float64

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -68,6 +69,12 @@ type Hypervisor struct {
 	logger       *logging.Logger
 	tpvizServer  *tpviz.Server
 	lanDmsg      *LANDmsgServer // embedded LAN DMSG server (nil if disabled)
+
+	// Runtime state for enable/disable toggle
+	httpSrv   *http.Server // nil when disabled
+	srvCancel context.CancelFunc
+	enabled   bool
+	enableMu  sync.Mutex
 }
 
 // NewHypervisor creates a new Hypervisor.
@@ -119,6 +126,122 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 	}
 
 	return hv, nil
+}
+
+// Enable starts the hypervisor HTTP server and DMSG RPC listener.
+// Safe to call multiple times — no-op if already enabled.
+func (hv *Hypervisor) Enable(ctx context.Context) error {
+	hv.enableMu.Lock()
+	defer hv.enableMu.Unlock()
+
+	if hv.enabled {
+		return nil
+	}
+
+	srvCtx, cancel := context.WithCancel(ctx)
+	hv.srvCancel = cancel
+
+	// Start DMSG RPC listener for remote visors (waits for DMSG to be ready)
+	if hv.dmsgC != nil {
+		go func() {
+			<-hv.dmsgC.Ready()
+			hv.logger.WithField("addr", fmt.Sprintf("%s:%d", hv.c.PK, hv.c.DmsgPort)).
+				Info("Serving hypervisor RPC over DMSG")
+			if err := hv.ServeRPC(srvCtx, hv.c.DmsgPort); err != nil && !errors.Is(err, dmsg.ErrEntityClosed) {
+				hv.logger.WithError(err).Error("Hypervisor DMSG RPC stopped")
+			}
+		}()
+	}
+
+	// Start HTTP server
+	handler := hv.HTTPHandler()
+	hv.httpSrv = &http.Server{
+		Handler:           handler,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	lis, err := net.Listen("tcp", hv.c.HTTPAddr)
+	if err != nil {
+		cancel()
+		return fmt.Errorf("hypervisor HTTP listen %s: %w", hv.c.HTTPAddr, err)
+	}
+
+	go func() {
+		hv.logger.Infof("Hypervisor HTTP serving on %s", hv.c.HTTPAddr)
+		var srvErr error
+		if hv.c.EnableTLS {
+			srvErr = hv.httpSrv.ServeTLS(lis, hv.c.TLSCertFile, hv.c.TLSKeyFile)
+		} else {
+			srvErr = hv.httpSrv.Serve(lis)
+		}
+		if srvErr != nil && !errors.Is(srvErr, http.ErrServerClosed) {
+			hv.logger.WithError(srvErr).Error("Hypervisor HTTP server error")
+		}
+	}()
+
+	// Start tpviz if configured
+	if hv.tpvizServer != nil {
+		hv.tpvizServer.Start()
+	}
+
+	hv.enabled = true
+	hv.logger.Info("Hypervisor enabled")
+	return nil
+}
+
+// Disable stops the hypervisor HTTP server and DMSG RPC listener.
+// Disconnects all remote visors. Safe to call multiple times.
+func (hv *Hypervisor) Disable() error {
+	hv.enableMu.Lock()
+	defer hv.enableMu.Unlock()
+
+	if !hv.enabled {
+		return nil
+	}
+
+	// Stop HTTP server
+	if hv.httpSrv != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if err := hv.httpSrv.Shutdown(shutdownCtx); err != nil {
+			hv.logger.WithError(err).Warn("Hypervisor HTTP shutdown error")
+		}
+		hv.httpSrv = nil
+	}
+
+	// Cancel DMSG RPC context (stops listener)
+	if hv.srvCancel != nil {
+		hv.srvCancel()
+		hv.srvCancel = nil
+	}
+
+	// Disconnect all remote visors
+	hv.vsMu.Lock()
+	for pk, conn := range hv.remoteVisors {
+		if conn.API != nil {
+			hv.logger.Infof("Disconnecting remote visor %s", pk)
+		}
+		delete(hv.remoteVisors, pk)
+	}
+	hv.vsMu.Unlock()
+
+	// Stop tpviz
+	if hv.tpvizServer != nil {
+		hv.tpvizServer.Stop()
+	}
+
+	hv.enabled = false
+	hv.logger.Info("Hypervisor disabled")
+	return nil
+}
+
+// IsEnabled returns whether the hypervisor is currently serving.
+func (hv *Hypervisor) IsEnabled() bool {
+	hv.enableMu.Lock()
+	defer hv.enableMu.Unlock()
+	return hv.enabled
 }
 
 // ServeRPC serves RPC of a Hypervisor.
@@ -468,19 +591,18 @@ func (hv *Hypervisor) getDmsg() http.HandlerFunc {
 
 func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 	hv.mu.RLock()
-	defer hv.mu.RUnlock()
-
 	pks := make([]cipher.PubKey, 0, len(hv.remoteVisors)+1)
 	if hv.visor != nil {
-		// Add hypervisor node.
 		pks = append(pks, hv.visor.conf.PK)
 	}
-
 	for pk := range hv.remoteVisors {
 		pks = append(pks, pk)
 	}
+	hv.mu.RUnlock()
+
 	if hv.visor.isDTMReady() {
-		ctx := context.TODO()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		return hv.visor.dmsgTracker.manager.GetBulk(ctx, pks)
 	}
 	return []dmsgtracker.DmsgClientSummary{}
@@ -542,16 +664,23 @@ func (hv *Hypervisor) getUptime() http.HandlerFunc {
 // provides overview of all visors.
 func (hv *Hypervisor) getVisors() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Snapshot remote visors under lock, then release immediately
 		hv.mu.RLock()
-		wg := new(sync.WaitGroup)
-		wg.Add(len(hv.remoteVisors))
+		type visorEntry struct {
+			pk   cipher.PubKey
+			conn Conn
+		}
+		remotes := make([]visorEntry, 0, len(hv.remoteVisors))
+		for pk, c := range hv.remoteVisors {
+			remotes = append(remotes, visorEntry{pk, c})
+		}
+		hv.mu.RUnlock()
 
 		i := 0
 		if hv.visor != nil {
 			i++
 		}
-
-		overviews := make([]Overview, len(hv.remoteVisors)+i)
+		overviews := make([]Overview, len(remotes)+i)
 
 		if hv.visor != nil {
 			overview, err := hv.visor.Overview()
@@ -559,34 +688,37 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 				hv.logger.WithError(err).Warn("Failed to obtain overview of this visor.")
 				overview = &Overview{PubKey: hv.visor.conf.PK}
 			}
-
 			overviews[0] = *overview
 		}
 
-		for pk, c := range hv.remoteVisors {
-			go func(pk cipher.PubKey, c Conn, i int) {
-				log := hv.log(r).
-					WithField("visor_addr", c.Addr).
-					WithField("func", "getVisors")
-
-				log.Debug("Requesting overview via RPC.")
-
-				overview, err := c.API.Overview()
-				if err != nil {
-					log.WithError(err).
-						Warn("Failed to obtain overview via RPC.")
-					overview = &Overview{PubKey: pk}
-				} else {
-					log.Debug("Obtained overview via RPC.")
+		wg := new(sync.WaitGroup)
+		wg.Add(len(remotes))
+		for _, entry := range remotes {
+			go func(pk cipher.PubKey, c Conn, idx int) {
+				defer wg.Done()
+				// Per-visor timeout prevents one dead visor from blocking everything
+				done := make(chan struct{})
+				var overview *Overview
+				go func() {
+					var err error
+					overview, err = c.API.Overview()
+					if err != nil {
+						hv.logger.WithError(err).WithField("pk", pk).Warn("Failed to obtain overview via RPC")
+						overview = &Overview{PubKey: pk}
+					}
+					close(done)
+				}()
+				select {
+				case <-done:
+					overviews[idx] = *overview
+				case <-time.After(5 * time.Second):
+					hv.logger.WithField("pk", pk).Warn("Remote visor RPC timed out (5s)")
+					overviews[idx] = Overview{PubKey: pk}
 				}
-				overviews[i] = *overview
-				wg.Done()
-			}(pk, c, i)
+			}(entry.pk, entry.conn, i)
 			i++
 		}
-
 		wg.Wait()
-		hv.mu.RUnlock()
 
 		httputil.WriteJSON(w, r, http.StatusOK, overviews)
 	}
@@ -640,64 +772,93 @@ func makeSummaryResp(online, hyper bool, sum *Summary) Summary {
 
 func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Get DMSG stats first (before acquiring lock to avoid deadlock)
+		// Get DMSG stats first (uses its own lock internally)
 		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
 		for _, stat := range hv.getDmsgSummary() {
 			dmsgStats[stat.PK.String()] = stat
 		}
 
+		// Snapshot remote visors under lock, then release immediately
 		hv.mu.RLock()
-		wg := new(sync.WaitGroup)
-		wg.Add(len(hv.remoteVisors))
+		type visorEntry struct {
+			pk   cipher.PubKey
+			conn Conn
+		}
+		remotes := make([]visorEntry, 0, len(hv.remoteVisors))
+		for pk, c := range hv.remoteVisors {
+			remotes = append(remotes, visorEntry{pk, c})
+		}
+		hv.mu.RUnlock()
 
-		summaries := make([]Summary, 0)
+		summaries := make([]Summary, 0, len(remotes)+1)
 
+		// Local visor summary
 		summary, err := hv.visor.Summary()
 		if err != nil {
 			hv.logger.WithError(err).Warn("Failed to obtain summary of this visor.")
 			summary = &Summary{
-				Overview: &Overview{
-					PubKey: hv.visor.conf.PK,
-				},
-				Health: &HealthInfo{},
+				Overview: &Overview{PubKey: hv.visor.conf.PK},
+				Health:   &HealthInfo{},
 			}
 		}
-
 		summaries = append(summaries, makeSummaryResp(err == nil, true, summary))
 
-		for pk, c := range hv.remoteVisors {
+		// Remote visor summaries with per-visor timeout
+		var deadVisors []cipher.PubKey
+		var mu sync.Mutex
+		wg := new(sync.WaitGroup)
+		wg.Add(len(remotes))
+
+		for _, entry := range remotes {
 			go func(pk cipher.PubKey, c Conn) {
-				log := hv.log(r).
-					WithField("visor_addr", c.Addr).
-					WithField("func", "getVisors")
+				defer wg.Done()
 
-				log.Trace("Requesting summary via RPC.")
+				done := make(chan struct{})
+				var sum *Summary
+				var rpcErr error
+				go func() {
+					sum, rpcErr = c.API.Summary()
+					close(done)
+				}()
 
-				summary, err := c.API.Summary()
-				if err != nil {
-					log.WithError(err).
-						Warn("Failed to obtain summary via RPC.", pk)
-					delete(hv.remoteVisors, pk)
-				} else {
-					log.Trace("Obtained summary via RPC.")
-					resp := makeSummaryResp(err == nil, false, summary)
-					hv.vsMu.Lock()
-					summaries = append(summaries, resp)
-					hv.vsMu.Unlock()
+				select {
+				case <-done:
+					if rpcErr != nil {
+						hv.logger.WithError(rpcErr).WithField("pk", pk).Warn("Failed to obtain summary via RPC")
+						mu.Lock()
+						deadVisors = append(deadVisors, pk)
+						mu.Unlock()
+					} else {
+						resp := makeSummaryResp(true, false, sum)
+						mu.Lock()
+						summaries = append(summaries, resp)
+						mu.Unlock()
+					}
+				case <-time.After(5 * time.Second):
+					hv.logger.WithField("pk", pk).Warn("Remote visor summary RPC timed out (5s)")
+					mu.Lock()
+					deadVisors = append(deadVisors, pk)
+					mu.Unlock()
 				}
-				wg.Done()
-			}(pk, c)
+			}(entry.pk, entry.conn)
+		}
+		wg.Wait()
+
+		// Remove dead visors under write lock (safe — no goroutines accessing the map)
+		if len(deadVisors) > 0 {
+			hv.mu.Lock()
+			for _, pk := range deadVisors {
+				delete(hv.remoteVisors, pk)
+			}
+			hv.mu.Unlock()
 		}
 
-		wg.Wait()
+		// Attach DMSG stats
 		for i := 0; i < len(summaries); i++ {
 			if stat, ok := dmsgStats[summaries[i].Overview.PubKey.String()]; ok {
 				summaries[i].DmsgStats = &stat
 			}
-			// If stats not found, leave DmsgStats as nil (don't create empty struct with 0ms latency)
 		}
-
-		hv.mu.RUnlock()
 
 		httputil.WriteJSON(w, r, http.StatusOK, summaries)
 	}
@@ -1647,23 +1808,6 @@ func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) (
 	}
 
 	return pks, nil
-}
-
-func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
-	go func() {
-		<-hv.dmsgC.Ready()
-		if err := hv.ServeRPC(ctx, hv.c.DmsgPort); err != nil {
-			log := log.WithError(err)
-			if errors.Is(err, dmsg.ErrEntityClosed) {
-				log.Debug("Dmsg client stopped serving.")
-				return
-			}
-			log.Error("Failed to serve RPC client over dmsg.")
-			return
-		}
-	}()
-	log.WithField("addr", dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}).
-		Debug("Serving RPC client over dmsg.")
 }
 
 // dmsgPtyUI servers as a wrapper for `*dmsgpty.UI`. this way source file with

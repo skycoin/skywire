@@ -22,6 +22,9 @@ func init() {
 	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
 	hvCmd.AddCommand(chvpkCmd)
+	hvCmd.AddCommand(hvEnableCmd)
+	hvCmd.AddCommand(hvDisableCmd)
+	hvCmd.AddCommand(hvStatusCmd)
 }
 
 var hvCmd = &cobra.Command{
@@ -99,4 +102,50 @@ func HypervisorPort(cmdFlags *pflag.FlagSet) string {
 		return visorconfig.HTTPAddr()
 	}
 	return fmt.Sprintf(":%s", ports["hypervisor"])
+}
+
+var hvEnableCmd = &cobra.Command{
+	Use:   "enable",
+	Short: "Enable hypervisor UI at runtime",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		if err := rpcClient.EnableHypervisor(); err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
+		internal.PrintOutput(cmd.Flags(), "Hypervisor enabled\n", "Hypervisor enabled\n")
+	},
+}
+
+var hvDisableCmd = &cobra.Command{
+	Use:   "disable",
+	Short: "Disable hypervisor UI at runtime",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		if err := rpcClient.DisableHypervisor(); err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
+		internal.PrintOutput(cmd.Flags(), "Hypervisor disabled\n", "Hypervisor disabled\n")
+	},
+}
+
+var hvStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Check if hypervisor is enabled",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		if rpcClient.IsHypervisorEnabled() {
+			internal.PrintOutput(cmd.Flags(), "enabled\n", "enabled\n")
+		} else {
+			internal.PrintOutput(cmd.Flags(), "disabled\n", "disabled\n")
+		}
+	},
 }

@@ -201,8 +201,8 @@ func TestConfigGenDefault(t *testing.T) {
 		t.Error("vpn-server app not found in launcher config")
 	}
 
-	if conf.Hypervisor != nil {
-		t.Error("should not be hypervisor by default")
+	if conf.Hypervisor != nil && conf.Hypervisor.Enable {
+		t.Error("hypervisor should not be enabled by default")
 	}
 	if conf.IsPublic {
 		t.Error("should not be public by default")
