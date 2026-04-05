@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"mime"
 	"net"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -534,12 +533,11 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 	return nil
 }
 
-func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
+func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.Hypervisor == nil {
-		v.log.Error("hypervisor config = nil")
+		v.log.Debug("hypervisor config not present, skipping")
 		return nil
 	}
-	ctx, cancel := context.WithCancel(context.Background())
 
 	conf := *v.conf.Hypervisor
 	conf.PK = v.conf.PK
@@ -549,9 +547,11 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	// Prepare hypervisor.
 	hv, err := NewHypervisor(conf, v, v.dmsgC)
 	if err != nil {
-		cancel()
 		return fmt.Errorf("failed to start hypervisor: %w", err)
 	}
+
+	// Store instance on visor for runtime enable/disable via RPC
+	v.hvInstance = hv
 
 	// Start LAN DMSG server if configured
 	if conf.LANDmsgServer != nil && conf.LANDmsgServer.Enable {
@@ -565,9 +565,6 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 				return lanServer.Server.Close()
 			})
 
-			// Connect the hypervisor's own DMSG client to the LAN server.
-			// This makes the hypervisor reachable by LAN visors through the LAN server
-			// instead of routing through public DMSG servers.
 			go func() {
 				lanEntry := &dmsgdisc.Entry{
 					Static: lanServer.PK,
@@ -585,50 +582,22 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 
-	hv.serveDmsg(ctx, v.log)
-
-	// Serve HTTP(s).
-
-	// Needed to work with modern browsers when serving from windows, which need the correct mime type for javascript.
+	// Needed for modern browsers (correct MIME type for JavaScript).
 	if err := mime.AddExtensionType(".js", "application/javascript"); err != nil {
 		log.WithError(err).Warn("Unable to register js mime type")
 	}
 
-	v.log.WithField("addr", conf.HTTPAddr).
-		WithField("tls", conf.EnableTLS).
-		Info("Serving hypervisor...")
-	tls := ""
-	if conf.EnableTLS {
-		tls = "s"
-	}
-	v.log.Info(fmt.Sprintf("Hypervisor UI: http%s://127.0.0.1%s", tls, conf.HTTPAddr))
-
-	handler := hv.HTTPHandler()
-	srv := &http.Server{
-		Addr:              conf.HTTPAddr,
-		Handler:           handler,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-
-	go func() {
-		if conf.EnableTLS {
-			err = srv.ListenAndServeTLS(conf.TLSCertFile, conf.TLSKeyFile)
-		} else {
-			err = srv.ListenAndServe()
+	// Enable the hypervisor if configured to auto-start
+	if conf.Enable {
+		if err := hv.Enable(ctx); err != nil {
+			return fmt.Errorf("failed to enable hypervisor: %w", err)
 		}
-
-		// don't print error if local server is closed
-		if !errors.Is(err, http.ErrServerClosed) {
-			v.log.WithError(err).Error("Hypervisor exited with error.")
-		}
-	}()
+	} else {
+		v.log.Info("Hypervisor configured but not enabled (use 'skywire cli visor hv enable' to start)")
+	}
 
 	v.pushCloseStack("hypervisor", func() error {
-		err := srv.Shutdown(ctx)
-		cancel()
-		return err
+		return hv.Disable()
 	})
 
 	return nil

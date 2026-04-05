@@ -94,8 +94,8 @@ var addPvCmd = &cobra.Command{
   transports to the top N visors (by transport count). This is useful for
   improving network connectivity and reachability.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		if pvTransportType != "" && pvTransportType != "dmsg" && pvTransportType != "stcpr" && pvTransportType != "sudph" {
-			logger.Fatal("Invalid transport type specified:", pvTransportType)
+		if pvTransportType != "" && pvTransportType != "stcpr" && pvTransportType != "sudph" {
+			logger.Fatal("Invalid transport type for public visors (use stcpr or sudph):", pvTransportType)
 		}
 
 		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
@@ -373,13 +373,14 @@ var addPvCmd = &cobra.Command{
 					continue
 				}
 			} else {
-				// No transport type specified - try stcpr, sudph, dmsg in order
+				// No transport type specified - try p2p types only (stcpr, sudph).
+				// DMSG transports are relay-based and should not be used for
+				// public visor autoconnect — they transit the DMSG server which
+				// adds latency and load. Use `tp add <pk> -t dmsg` explicitly
+				// if a DMSG transport is specifically needed.
 				transportTypes := []types.Type{
 					types.STCPR,
 					types.SUDPH,
-				}
-				if pvForceAttempt || contains(dmsgkeys, pk) {
-					transportTypes = append(transportTypes, types.DMSG)
 				}
 
 			typeLoop:

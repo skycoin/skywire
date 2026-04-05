@@ -98,7 +98,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
         run: |
-          go install -tags="cgo,withoutsystray,withoutgotop" -trimpath \
+          go install -tags="cgo,withoutsystray" -trimpath \
             -ldflags "-s -w -linkmode external -extldflags '-static' -buildid=" \
             ${{ env.MODULE }}@${{ github.ref_name }}
 

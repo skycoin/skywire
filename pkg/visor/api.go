@@ -29,6 +29,9 @@ type API interface {
 	Summary() (*Summary, error)
 	Health() (*HealthInfo, error)
 	IsStartupComplete() bool
+	EnableHypervisor() error
+	DisableHypervisor() error
+	IsHypervisorEnabled() bool
 	Uptime() (float64, error)
 	RuntimeStats() (*RuntimeStatsInfo, error)
 	Reload() error
