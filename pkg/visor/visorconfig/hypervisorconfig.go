@@ -51,6 +51,7 @@ func (hk *Key) UnmarshalText(text []byte) error {
 
 // HypervisorConfig configures the hypervisor.
 type HypervisorConfig struct {
+	Enable        bool               `json:"enable"` // Whether the hypervisor is enabled (starts HTTP + DMSG on visor startup).
 	UIAssets      fs.FS              `json:"-"`
 	PK            cipher.PubKey      `json:"-"`
 	SK            cipher.SecKey      `json:"-"`
@@ -65,6 +66,16 @@ type HypervisorConfig struct {
 	TLSKeyFile    string             `json:"tls_key_file"`              // TLS key file location.
 	TPViz         TPVizConfig        `json:"tp_viz"`                    // Transport visualizer config.
 	LANDmsgServer *LANDmsgServerConf `json:"lan_dmsg_server,omitempty"` // LAN DMSG server config.
+}
+
+// DefaultHypervisorConfig returns a HypervisorConfig with sensible defaults.
+// Used when enabling the hypervisor at runtime on a visor that wasn't configured
+// as a hypervisor at startup.
+func DefaultHypervisorConfig() HypervisorConfig {
+	c := HypervisorConfig{}
+	c.FillDefaults(false)
+	c.DBPath = filepath.Join(skyenv.SkywirePath, "local", "hypervisor", "users.db")
+	return c
 }
 
 // LANDmsgServerConf configures an embedded DMSG server for LAN visors.

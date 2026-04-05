@@ -168,9 +168,9 @@ var autoconfigCmd = &cobra.Command{
 
 func generateConfig(hvArg string) error {
 	// Build config gen command.
-	// Only pass -r (regen); all other flags come from SKYENV (/etc/skywire.conf).
-	// The conf file sets PKGENV, BESTPROTO, etc. — no need to hardcode them here.
-	args := []string{"cli", "config", "gen", "-r"}
+	// -r: regen existing config, -p: package mode (forces /opt/skywire paths).
+	// All other flags come from SKYENV (/etc/skywire.conf).
+	args := []string{"cli", "config", "gen", "-r", "-p"}
 
 	// Determine SKYENV path
 	skyenv := os.Getenv("SKYENV")
@@ -230,12 +230,13 @@ func generateTestConfig(hvArg string) error {
 
 	args := []string{"cli", "config", "gen",
 		"-r",           // regen (reuses SK if test config exists, or from SKYENV)
+		"-p",           // package mode
 		"-t",           // test deployment
-		"-o", testConf, // separate config file
+		"-o", testConf, // separate config file (overrides -p default path)
 	}
 
 	// Mirror hypervisor setting from prod
-	conf, _ := visorconfig.ReadFile("/opt/skywire/skywire.json")
+	conf, _ := visorconfig.ReadFile("/opt/skywire/skywire.json") //nolint:errcheck
 	switch hvArg {
 	case "0":
 		args = append(args, "-i")

@@ -140,25 +140,52 @@ func ExtractPort(addr net.Addr) (uint16, error) {
 func LocalAddresses() ([]string, error) {
 	result := make([]string, 0)
 
-	addresses, err := net.InterfaceAddrs()
+	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
 	}
 
-	for _, addr := range addresses {
-		switch v := addr.(type) {
-		case *net.IPNet:
-			if v.IP.IsGlobalUnicast() || v.IP.IsLoopback() {
-				result = append(result, v.IP.String())
+	for _, iface := range ifaces {
+		// Skip loopback and down interfaces
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		// Skip Docker/container bridge interfaces
+		if IsVirtualInterface(iface.Name) {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
 			}
-		case *net.IPAddr:
-			if v.IP.IsGlobalUnicast() || v.IP.IsLoopback() {
-				result = append(result, v.IP.String())
+			if ip != nil && ip.IsGlobalUnicast() {
+				result = append(result, ip.String())
 			}
 		}
 	}
 
 	return result, nil
+}
+
+// IsVirtualInterface returns true for Docker bridges, veth pairs, and other
+// virtual interfaces that shouldn't be registered with the address resolver.
+func IsVirtualInterface(name string) bool {
+	prefixes := []string{"docker", "br-", "veth", "virbr", "lxc", "cni", "flannel", "calico"}
+	for _, p := range prefixes {
+		if len(name) >= len(p) && name[:len(p)] == p {
+			return true
+		}
+	}
+	return false
 }
 
 // LocalProtocol check a condition to use dmsghttp or direct url
