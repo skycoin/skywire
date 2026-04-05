@@ -535,7 +535,7 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 
 func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.Hypervisor == nil {
-		v.log.Error("hypervisor config = nil")
+		v.log.Debug("hypervisor config not present, skipping")
 		return nil
 	}
 
@@ -587,9 +587,13 @@ func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.WithError(err).Warn("Unable to register js mime type")
 	}
 
-	// Enable the hypervisor (starts HTTP server + DMSG RPC listener)
-	if err := hv.Enable(ctx); err != nil {
-		return fmt.Errorf("failed to enable hypervisor: %w", err)
+	// Enable the hypervisor if configured to auto-start
+	if conf.Enable {
+		if err := hv.Enable(ctx); err != nil {
+			return fmt.Errorf("failed to enable hypervisor: %w", err)
+		}
+	} else {
+		v.log.Info("Hypervisor configured but not enabled (use 'skywire cli visor hv enable' to start)")
 	}
 
 	v.pushCloseStack("hypervisor", func() error {

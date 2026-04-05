@@ -1133,8 +1133,11 @@ func configureHypervisor(log *logging.Logger) {
 		}
 	}
 	// Local hypervisor setting
-	if isHypervisor {
+	// Always include hypervisor config (for runtime enable/disable).
+	// The Enable field controls whether it auto-starts.
+	{
 		config := visorconfig.GenerateWorkDirConfig(isTestEnv)
+		config.Enable = isHypervisor
 		if hvHTTPAddr != "" {
 			config.HTTPAddr = hvHTTPAddr
 		} else {

@@ -204,7 +204,7 @@ func (v *Visor) Health() (*HealthInfo, error) {
 // EnableHypervisor implements API.
 func (v *Visor) EnableHypervisor() error {
 	if v.hvInstance == nil {
-		return fmt.Errorf("hypervisor not configured in visor config")
+		return fmt.Errorf("hypervisor not configured — add \"hypervisor\" section to visor config")
 	}
 	return v.hvInstance.Enable(context.Background())
 }
