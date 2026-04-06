@@ -15,6 +15,10 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
+var (
+	hvPersist bool
+)
+
 func init() {
 	RootCmd.AddCommand(hvCmd)
 	hvCmd.AddCommand(hvuiCmd)
@@ -23,7 +27,9 @@ func init() {
 	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
 	hvCmd.AddCommand(chvpkCmd)
 	hvCmd.AddCommand(hvEnableCmd)
+	hvEnableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
 	hvCmd.AddCommand(hvDisableCmd)
+	hvDisableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
 	hvCmd.AddCommand(hvStatusCmd)
 }
 
@@ -107,6 +113,7 @@ func HypervisorPort(cmdFlags *pflag.FlagSet) string {
 var hvEnableCmd = &cobra.Command{
 	Use:   "enable",
 	Short: "Enable hypervisor UI at runtime",
+	Long:  "\n  Enable hypervisor UI at runtime.\n  Use -w to also persist the change to the config file.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -115,13 +122,21 @@ var hvEnableCmd = &cobra.Command{
 		if err := rpcClient.EnableHypervisor(); err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
-		internal.PrintOutput(cmd.Flags(), "Hypervisor enabled\n", "Hypervisor enabled\n")
+		if hvPersist {
+			if err := setHypervisorEnabled(true); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("enabled at runtime but failed to persist: %v", err))
+			}
+			internal.PrintOutput(cmd.Flags(), "Hypervisor enabled (persisted to config)\n", "Hypervisor enabled (persisted to config)\n")
+		} else {
+			internal.PrintOutput(cmd.Flags(), "Hypervisor enabled\n", "Hypervisor enabled\n")
+		}
 	},
 }
 
 var hvDisableCmd = &cobra.Command{
 	Use:   "disable",
 	Short: "Disable hypervisor UI at runtime",
+	Long:  "\n  Disable hypervisor UI at runtime.\n  Use -w to also persist the change to the config file.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -130,8 +145,33 @@ var hvDisableCmd = &cobra.Command{
 		if err := rpcClient.DisableHypervisor(); err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
-		internal.PrintOutput(cmd.Flags(), "Hypervisor disabled\n", "Hypervisor disabled\n")
+		if hvPersist {
+			if err := setHypervisorEnabled(false); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("disabled at runtime but failed to persist: %v", err))
+			}
+			internal.PrintOutput(cmd.Flags(), "Hypervisor disabled (persisted to config)\n", "Hypervisor disabled (persisted to config)\n")
+		} else {
+			internal.PrintOutput(cmd.Flags(), "Hypervisor disabled\n", "Hypervisor disabled\n")
+		}
 	},
+}
+
+// setHypervisorEnabled reads the config file, sets the hypervisor enable field, and writes it back.
+func setHypervisorEnabled(enable bool) error {
+	confPath := visorconfig.VisorConfigFile
+	if confPath == "" || confPath == visorconfig.Stdin {
+		confPath = visorconfig.SkywireConfig()
+	}
+	conf, err := visorconfig.ReadFile(confPath)
+	if err != nil {
+		return fmt.Errorf("read config %s: %w", confPath, err)
+	}
+	if conf.Hypervisor == nil {
+		config := visorconfig.DefaultHypervisorConfig()
+		conf.Hypervisor = &config
+	}
+	conf.Hypervisor.Enable = enable
+	return conf.Flush()
 }
 
 var hvStatusCmd = &cobra.Command{
