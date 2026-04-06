@@ -1651,6 +1651,32 @@ type (
 // loop creates a pile-up of blocked goroutines.
 const remoteVisorTimeout = 15 * time.Second
 
+// timeoutResponseWriter buffers the response so that a timed-out handler goroutine
+// cannot corrupt the real response after the timeout fires.
+type timeoutResponseWriter struct {
+	header     http.Header
+	body       []byte
+	statusCode int
+	written    bool
+}
+
+func newTimeoutResponseWriter() *timeoutResponseWriter {
+	return &timeoutResponseWriter{header: make(http.Header), statusCode: http.StatusOK}
+}
+
+func (tw *timeoutResponseWriter) Header() http.Header         { return tw.header }
+func (tw *timeoutResponseWriter) WriteHeader(code int)         { tw.statusCode = code; tw.written = true }
+func (tw *timeoutResponseWriter) Write(b []byte) (int, error) { tw.body = append(tw.body, b...); tw.written = true; return len(b), nil }
+
+// copyTo flushes the buffered response to the real ResponseWriter.
+func (tw *timeoutResponseWriter) copyTo(w http.ResponseWriter) {
+	for k, v := range tw.header {
+		w.Header()[k] = v
+	}
+	w.WriteHeader(tw.statusCode)
+	w.Write(tw.body) //nolint:errcheck
+}
+
 func (hv *Hypervisor) withCtx(vFunc valuesFunc, hFunc handlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rv, ok := vFunc(w, r)
@@ -1658,14 +1684,18 @@ func (hv *Hypervisor) withCtx(vFunc valuesFunc, hFunc handlerFunc) http.HandlerF
 			return
 		}
 		// For remote visors, enforce a timeout so slow/dead visors don't hang the UI.
+		// Uses a buffered response writer so the handler goroutine writes to a buffer,
+		// and only the winner (handler or timeout) writes to the real ResponseWriter.
 		if rv.isRemote {
+			tw := newTimeoutResponseWriter()
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
-				hFunc(w, r, rv)
+				hFunc(tw, r, rv)
 			}()
 			select {
 			case <-done:
+				tw.copyTo(w)
 			case <-time.After(remoteVisorTimeout):
 				httputil.WriteJSON(w, r, http.StatusGatewayTimeout,
 					fmt.Errorf("remote visor %s did not respond within %v", rv.Addr.PK, remoteVisorTimeout))
