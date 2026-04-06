@@ -141,19 +141,17 @@ export class SingleNodeDataService {
   }
 
   /**
-   * Periodically checks all entries in nodesMap and removes all expired ones. Must be
-   * called one tim e only, it calls itself automatically after that,
+   * Periodically checks all entries in nodesMap and removes all expired ones.
+   * Uses setInterval instead of recursive subscription to avoid subscription leaks.
    */
   private checkForExpired() {
-    of(1).pipe(delay(5000)).subscribe(() => {
+    setInterval(() => {
       try {
         this.nodesMap.forEach(n => {
           this.finishIfExpired(n);
         });
       } catch (e) {}
-
-      this.checkForExpired();
-    });
+    }, 5000);
   }
 
   /**
