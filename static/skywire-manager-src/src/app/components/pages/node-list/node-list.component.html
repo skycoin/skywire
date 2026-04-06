@@ -176,11 +176,13 @@
                   </td>
                   <td>
                     @if (node.ip || node.publicIp || node.countryCode) {
-                      @if (node.ip) {
+                      @if (node.ip && node.publicIp && node.ip !== node.publicIp) {
                         <div style="font-size: 0.85em;">LAN: {{ node.ip }}</div>
-                      }
-                      @if (node.publicIp) {
                         <div style="font-size: 0.85em;">Public: {{ node.publicIp }}</div>
+                      } @else if (node.publicIp) {
+                        <div style="font-size: 0.85em;">{{ node.publicIp }}</div>
+                      } @else if (node.ip) {
+                        <div style="font-size: 0.85em;">{{ node.ip }}</div>
                       }
                       @if (node.countryCode) {
                         <div style="font-size: 0.85em;">{{ node.cityName ? node.cityName + ', ' : '' }}{{ node.regionName ? node.regionName + ', ' : '' }}{{ node.countryCode }}</div>
@@ -205,8 +207,12 @@
                     {{ node.localPk }}
                   </td>
                   <td>
-                    <div style="font-size: 0.85em;">{{ 'nodes.visor-version' | translate }}: {{ node.version || '-' }}</div>
-                    <div style="font-size: 0.85em;">{{ 'nodes.config-label' | translate }}: {{ node.configVersion || '-' }}</div>
+                    @if (node.version && node.configVersion && node.version === node.configVersion) {
+                      <div style="font-size: 0.85em;">{{ node.version }}</div>
+                    } @else {
+                      <div style="font-size: 0.85em;">{{ 'nodes.visor-version' | translate }}: {{ node.version || '-' }}</div>
+                      <div style="font-size: 0.85em;">{{ 'nodes.config-label' | translate }}: {{ node.configVersion || '-' }}</div>
+                    }
                   </td>
                   <td>
                     @if (getNodeServices(node).length > 0) {
