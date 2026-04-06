@@ -82,6 +82,14 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 		}
 	}()
 
+	// handlerTimeout is the hard deadline for an entire RPC handler goroutine.
+	// This covers the full lifecycle: dial to remote visors, reserve IDs,
+	// broadcast rules, and return response. It must be longer than the
+	// per-request timeout used in DialRouteGroup (which is `timeout`=30s)
+	// to allow for orderly context cancellation before the connection is
+	// forcibly closed.
+	const handlerTimeout = 2*timeout + 10*time.Second // 70s
+
 	log.WithField("dmsg_port", dmsgPort).Info("Accepting dmsg streams.")
 	for {
 		conn, err := lis.AcceptStream()
@@ -92,9 +100,14 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 			log.WithError(err).Warn("Failed to accept dmsg stream, continuing...")
 			continue
 		}
+
+		// Derive a per-handler context so that if the handler takes too long,
+		// all downstream operations (MakeMap dials, RPC calls) are cancelled.
+		handlerCtx, handlerCancel := context.WithTimeout(ctx, handlerTimeout)
+
 		gw := &SetupRPCGateway{
 			Metrics: m,
-			Ctx:     ctx,
+			Ctx:     handlerCtx,
 			Conn:    conn,
 			ReqPK:   conn.RemoteAddr().(dmsg.Addr).PK,
 			Dialer:  WrapDmsgClient(sn.dmsgC),
@@ -103,7 +116,8 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 		rpcS := rpc.NewServer()
 		if err := rpcS.Register(gw); err != nil {
 			log.WithError(err).Error("Failed to register RPC gateway")
-			conn.Close() //nolint:errcheck,gosec
+			conn.Close()    //nolint:errcheck,gosec
+			handlerCancel() //nolint:gosec
 			continue
 		}
 		go func() {
@@ -111,9 +125,13 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 				if r := recover(); r != nil {
 					log.Errorf("Panic in setup RPC handler: %v", r)
 				}
+				handlerCancel()
 				conn.Close() //nolint:errcheck,gosec
 			}()
-			conn.SetDeadline(time.Now().Add(2 * timeout)) //nolint:errcheck,gosec
+			// Set a hard deadline on the connection itself as a backstop.
+			// If context cancellation fails to propagate (e.g., ServeConn blocks
+			// on a read), the OS will close the connection after this deadline.
+			conn.SetDeadline(time.Now().Add(handlerTimeout)) //nolint:errcheck,gosec
 			rpcS.ServeConn(conn)
 		}()
 	}
