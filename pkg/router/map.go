@@ -64,7 +64,7 @@ func MakeMap(ctx context.Context, dialer network.Dialer, pks []cipher.PubKey) (M
 				continue
 			}
 			if isDone(ctx) {
-				// Context was cancelled (by error or timeout); close late arrivals.
+				// Context was canceled (by error or timeout); close late arrivals.
 				if res.client != nil {
 					res.client.Close() //nolint:errcheck,gosec
 				}

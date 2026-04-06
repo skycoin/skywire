@@ -18,8 +18,8 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // Overview implements API.

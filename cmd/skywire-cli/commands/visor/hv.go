@@ -150,7 +150,6 @@ var hvDisableCmd = &cobra.Command{
 	},
 }
 
-
 var hvStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Check if hypervisor is enabled",

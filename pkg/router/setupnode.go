@@ -102,7 +102,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 		}
 
 		// Derive a per-handler context so that if the handler takes too long,
-		// all downstream operations (MakeMap dials, RPC calls) are cancelled.
+		// all downstream operations (MakeMap dials, RPC calls) are canceled.
 		handlerCtx, handlerCancel := context.WithTimeout(ctx, handlerTimeout)
 
 		gw := &SetupRPCGateway{
