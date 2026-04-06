@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 )
 
@@ -223,6 +224,38 @@ func (v *Visor) IsHypervisorEnabled() bool {
 		return false
 	}
 	return v.hvInstance.IsEnabled()
+}
+
+// EnableHypervisorPersist enables the hypervisor and optionally persists to config.
+func (v *Visor) EnableHypervisorPersist(persist bool) error {
+	if err := v.EnableHypervisor(); err != nil {
+		return err
+	}
+	if persist {
+		return v.persistHypervisorEnabled(true)
+	}
+	return nil
+}
+
+// DisableHypervisorPersist disables the hypervisor and optionally persists to config.
+func (v *Visor) DisableHypervisorPersist(persist bool) error {
+	if err := v.DisableHypervisor(); err != nil {
+		return err
+	}
+	if persist {
+		return v.persistHypervisorEnabled(false)
+	}
+	return nil
+}
+
+// persistHypervisorEnabled writes the hypervisor enable state to the config file.
+func (v *Visor) persistHypervisorEnabled(enable bool) error {
+	if v.conf.Hypervisor == nil {
+		config := visorconfig.DefaultHypervisorConfig()
+		v.conf.Hypervisor = &config
+	}
+	v.conf.Hypervisor.Enable = enable
+	return v.conf.Flush()
 }
 
 // IsStartupComplete implements API.

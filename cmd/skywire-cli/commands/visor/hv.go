@@ -119,13 +119,10 @@ var hvEnableCmd = &cobra.Command{
 		if err != nil {
 			os.Exit(1)
 		}
-		if err := rpcClient.EnableHypervisor(); err != nil {
+		if err := rpcClient.EnableHypervisorPersist(hvPersist); err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if hvPersist {
-			if err := setHypervisorEnabled(true); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("enabled at runtime but failed to persist: %v", err))
-			}
 			internal.PrintOutput(cmd.Flags(), "Hypervisor enabled (persisted to config)\n", "Hypervisor enabled (persisted to config)\n")
 		} else {
 			internal.PrintOutput(cmd.Flags(), "Hypervisor enabled\n", "Hypervisor enabled\n")
@@ -142,13 +139,10 @@ var hvDisableCmd = &cobra.Command{
 		if err != nil {
 			os.Exit(1)
 		}
-		if err := rpcClient.DisableHypervisor(); err != nil {
+		if err := rpcClient.DisableHypervisorPersist(hvPersist); err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if hvPersist {
-			if err := setHypervisorEnabled(false); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("disabled at runtime but failed to persist: %v", err))
-			}
 			internal.PrintOutput(cmd.Flags(), "Hypervisor disabled (persisted to config)\n", "Hypervisor disabled (persisted to config)\n")
 		} else {
 			internal.PrintOutput(cmd.Flags(), "Hypervisor disabled\n", "Hypervisor disabled\n")
@@ -156,23 +150,6 @@ var hvDisableCmd = &cobra.Command{
 	},
 }
 
-// setHypervisorEnabled reads the config file, sets the hypervisor enable field, and writes it back.
-func setHypervisorEnabled(enable bool) error {
-	confPath := visorconfig.VisorConfigFile
-	if confPath == "" || confPath == visorconfig.Stdin {
-		confPath = visorconfig.SkywireConfig()
-	}
-	conf, err := visorconfig.ReadFile(confPath)
-	if err != nil {
-		return fmt.Errorf("read config %s: %w", confPath, err)
-	}
-	if conf.Hypervisor == nil {
-		config := visorconfig.DefaultHypervisorConfig()
-		conf.Hypervisor = &config
-	}
-	conf.Hypervisor.Enable = enable
-	return conf.Flush()
-}
 
 var hvStatusCmd = &cobra.Command{
 	Use:   "status",
