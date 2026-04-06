@@ -99,6 +99,10 @@ export class NodeData {
    * the cache was made. If -1, no such call has been made.
    */
   stopRequestedDate = -1;
+  /**
+   * Consecutive error count for exponential backoff on retries.
+   */
+  consecutiveErrors = 0;
 }
 
 /**
@@ -212,6 +216,9 @@ export class SingleNodeDataService {
       // Load the data.
       mergeMap(() => this.nodeService.getNode(nodeData.pk)))
     .subscribe(result => {
+      // Reset error backoff counter on success.
+      nodeData.consecutiveErrors = 0;
+
       // Update the history values.
       this.updateTrafficData((result as Node).transports, nodeData.lastEmitedData.trafficData, nodeData.whenUpdateWasScheduled);
 
@@ -239,6 +246,9 @@ export class SingleNodeDataService {
     }, err => {
       err = processServiceError(err);
 
+      // Track consecutive errors for backoff.
+      nodeData.consecutiveErrors = (nodeData.consecutiveErrors || 0) + 1;
+
       // Send the event.
       nodeData.lastEmitedData = {
         data: nodeData.lastEmitedData.data,
@@ -252,8 +262,9 @@ export class SingleNodeDataService {
       // If the specific node was not found, stop updating the data.
       const stopUpdating = err.originalError && ((err.originalError as HttpErrorResponse).status === 400);
       if (!stopUpdating) {
-        // Schedule the next update.
-        this.startDataSubscription(AppConfig.connectionRetryDelay, nodeData);
+        // Exponential backoff: 5s, 10s, 20s, 30s max
+        const backoff = Math.min(AppConfig.connectionRetryDelay * Math.pow(2, nodeData.consecutiveErrors - 1), 30000);
+        this.startDataSubscription(backoff, nodeData);
       } else {
         nodeData.dataSubject.complete();
         nodeData.updateSubscription.unsubscribe();
