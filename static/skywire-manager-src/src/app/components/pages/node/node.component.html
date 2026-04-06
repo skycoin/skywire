@@ -12,7 +12,7 @@
         (optionSelected)="performAction($event)"
       ></app-top-bar>
     </div>
-    @if (!notFound) {
+    @if (!notFound && !loadFailed) {
       <app-loading-indicator></app-loading-indicator>
     }
     <!-- Msg shown if the node is not found. -->
@@ -21,6 +21,19 @@
         <div>
           <mat-icon [inline]="true">error</mat-icon>
           {{ 'node.not-found' | translate }}
+        </div>
+      </div>
+    }
+    <!-- Msg shown if loading failed after multiple retries. -->
+    @if (loadFailed) {
+      <div class="w-100 h-100 d-flex not-found-label">
+        <div>
+          <mat-icon [inline]="true">error</mat-icon>
+          {{ 'node.error-load' | translate }}
+          <br>
+          <button mat-raised-button color="primary" style="margin-top: 16px;" (click)="retryLoading()">
+            {{ 'common.refresh' | translate }}
+          </button>
         </div>
       </div>
     }

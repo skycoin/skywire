@@ -87,6 +87,9 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   // True if the user manually requested the data to be updated and the update has still
   // not been made.
   lastUpdateRequestedManually = false;
+  // Set to true when we never successfully loaded data and errors persist.
+  loadFailed = false;
+  private consecutiveLoadErrors = 0;
 
   // Manages the options shown in the menu.
   nodeActionsHelper: NodeActionsHelper;
@@ -286,6 +289,15 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   /**
+   * Retries loading after a load failure.
+   */
+  retryLoading() {
+    this.loadFailed = false;
+    this.consecutiveLoadErrors = 0;
+    this.startGettingData(false);
+  }
+
+  /**
    * Starts getting the data from the backend.
    */
   private startGettingData(checkSavedData: boolean) {
@@ -321,6 +333,8 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           this.lastUpdate = result.momentOfLastCorrectUpdate;
           this.secondsSinceLastUpdate = Math.floor((Date.now() - result.momentOfLastCorrectUpdate) / 1000);
           this.errorsUpdating = false;
+          this.consecutiveLoadErrors = 0;
+          this.loadFailed = false;
           AppComponent.currentInstance.hideDataProblemMsg();
 
           if (this.lastUpdateRequestedManually) {
@@ -335,6 +349,17 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           if (result.error.originalError && ((result.error.originalError as HttpErrorResponse).status === 400)) {
             this.notFound = true;
 
+            return;
+          }
+
+          this.consecutiveLoadErrors++;
+
+          // If we never got data and errors persist, stop polling and show error state.
+          if (!this.node && this.consecutiveLoadErrors >= 3) {
+            this.loadFailed = true;
+            this.singleNodeDataService.stopRequestingSpecificNode(NodeComponent.currentNodeKey);
+            this.snackbarService.showError('common.loading-error', null, true, result.error);
+            AppComponent.currentInstance.showDataProblemMsg();
             return;
           }
 
