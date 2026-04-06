@@ -1627,6 +1627,9 @@ type httpCtx struct {
 	// Hypervisor
 	Conn
 
+	// isRemote is true when the request targets a remote visor (not the local hypervisor).
+	isRemote bool
+
 	// App
 	App *appserver.AppState
 
@@ -1642,9 +1645,32 @@ type (
 	handlerFunc func(w http.ResponseWriter, r *http.Request, ctx *httpCtx)
 )
 
+// remoteVisorTimeout is the maximum time allowed for an HTTP handler that proxies
+// requests to a remote visor via DMSG RPC. Without this, slow or unreachable visors
+// cause the hypervisor HTTP handler to block indefinitely, and the frontend's polling
+// loop creates a pile-up of blocked goroutines.
+const remoteVisorTimeout = 15 * time.Second
+
 func (hv *Hypervisor) withCtx(vFunc valuesFunc, hFunc handlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if rv, ok := vFunc(w, r); ok {
+		rv, ok := vFunc(w, r)
+		if !ok {
+			return
+		}
+		// For remote visors, enforce a timeout so slow/dead visors don't hang the UI.
+		if rv.isRemote {
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				hFunc(w, r, rv)
+			}()
+			select {
+			case <-done:
+			case <-time.After(remoteVisorTimeout):
+				httputil.WriteJSON(w, r, http.StatusGatewayTimeout,
+					fmt.Errorf("remote visor %s did not respond within %v", rv.Addr.PK, remoteVisorTimeout))
+			}
+		} else {
 			hFunc(w, r, rv)
 		}
 	}
@@ -1681,7 +1707,8 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 		}
 
 		return &httpCtx{
-			Conn: v,
+			Conn:     v,
+			isRemote: true,
 		}, true
 	}
 	hv.mu.Lock()
