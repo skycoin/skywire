@@ -112,10 +112,10 @@
                   }
                 </th>
                 <th>
-                  {{ 'nodes.ip' | translate }}
+                  {{ 'nodes.ip-location' | translate }}
                 </th>
                 <th>
-                  {{ 'nodes.location' | translate }}
+                  {{ 'nodes.transports' | translate }}
                 </th>
                 <th class="sortable-column" (click)="dataSorter.changeSortingOrder(keySortData)">
                   {{ 'nodes.key' | translate }}
@@ -129,11 +129,11 @@
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column" (click)="dataSorter.changeSortingOrder(configVersionSortData)">
-                  {{ 'nodes.config-version' | translate }}
-                  @if (dataSorter.currentSortingColumn === configVersionSortData) {
-                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-                  }
+                <th>
+                  {{ 'nodes.services' | translate }}
+                </th>
+                <th>
+                  {{ 'nodes.reward' | translate }}
                 </th>
                 @if (showDmsgInfo) {
                   <th class="sortable-column" (click)="dataSorter.changeSortingOrder(dmsgServerSortData)">
@@ -175,35 +175,56 @@
                     {{ node.label }}
                   </td>
                   <td>
-                    @if (node.ip) {
-                      <span [matTooltip]="'nodes.lan-ip' | translate">{{ node.ip }}</span>
+                    @if (node.ip || node.publicIp || node.countryCode) {
+                      @if (node.ip) {
+                        <div style="font-size: 0.85em;">LAN: {{ node.ip }}</div>
+                      }
+                      @if (node.publicIp) {
+                        <div style="font-size: 0.85em;">Public: {{ node.publicIp }}</div>
+                      }
+                      @if (node.countryCode) {
+                        <div style="font-size: 0.85em;">{{ node.cityName ? node.cityName + ', ' : '' }}{{ node.regionName ? node.regionName + ', ' : '' }}{{ node.countryCode }}</div>
+                      }
                     }
-                    @if (node.publicIp) {
-                      <span> / </span>
-                    }
-                    @if (node.publicIp) {
-                      <span [matTooltip]="'nodes.public-ip' | translate">{{ node.publicIp }}</span>
-                    }
-                    @if (!node.ip && !node.publicIp) {
+                    @if (!node.ip && !node.publicIp && !node.countryCode) {
                       <span>-</span>
                     }
                   </td>
                   <td>
-                    @if (node.countryCode) {
-                      <span>{{ node.cityName ? node.cityName + ', ' : '' }}{{ node.regionName ? node.regionName + ', ' : '' }}{{ node.countryCode }}</span>
+                    @if (node.transports && node.transports.length > 0) {
+                      @for (entry of getTransportCounts(node); track entry.type) {
+                        <div style="font-size: 0.85em;">{{ entry.type }}: {{ entry.count }}</div>
+                      }
+                      <div style="font-size: 0.85em;">Total: {{ node.transports.length }}</div>
                     }
-                    @if (!node.countryCode) {
-                      <span>-</span>
+                    @if (!node.transports || node.transports.length === 0) {
+                      <span style="font-size: 0.85em;">Total: 0</span>
                     }
                   </td>
                   <td>
                     {{ node.localPk }}
                   </td>
                   <td>
-                    {{ node.version || '-' }}
+                    <div style="font-size: 0.85em;">{{ 'nodes.visor-version' | translate }}: {{ node.version || '-' }}</div>
+                    <div style="font-size: 0.85em;">{{ 'nodes.config-label' | translate }}: {{ node.configVersion || '-' }}</div>
                   </td>
                   <td>
-                    {{ node.configVersion || '-' }}
+                    @if (getNodeServices(node).length > 0) {
+                      @for (service of getNodeServices(node); track service) {
+                        <div style="font-size: 0.85em;">{{ service }}</div>
+                      }
+                    }
+                    @if (getNodeServices(node).length === 0) {
+                      <span>-</span>
+                    }
+                  </td>
+                  <td>
+                    @if (node.rewardsAddress) {
+                      <mat-icon style="color: #4caf50; font-size: 20px;" [matTooltip]="node.rewardsAddress">check_circle</mat-icon>
+                    }
+                    @if (!node.rewardsAddress) {
+                      <mat-icon style="color: #f44336; font-size: 20px;" [matTooltip]="'nodes.reward-not-set' | translate">cancel</mat-icon>
+                    }
                   </td>
                   @if (showDmsgInfo) {
                     <td>

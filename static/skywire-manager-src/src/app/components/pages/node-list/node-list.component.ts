@@ -702,6 +702,44 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   }
 
   /**
+   * Returns an array of {type, count} entries for transport types on the given node.
+   * Types are displayed uppercase.
+   */
+  getTransportCounts(node: Node): {type: string, count: number}[] {
+    if (!node.transports || node.transports.length === 0) {
+      return [];
+    }
+    const counts: {[key: string]: number} = {};
+    node.transports.forEach(t => {
+      const tp = (t.type || 'unknown').toUpperCase();
+      counts[tp] = (counts[tp] || 0) + 1;
+    });
+    return Object.keys(counts).sort().map(k => ({type: k, count: counts[k]}));
+  }
+
+  /**
+   * Returns an array of service display names active on the given node.
+   */
+  getNodeServices(node: Node): string[] {
+    const services: string[] = [];
+    if (node.apps) {
+      node.apps.forEach(app => {
+        if (app.status === 1) {
+          if (app.name === 'skysocks') {
+            services.push('Proxy Server');
+          } else if (app.name === 'vpn-server') {
+            services.push('VPN Server');
+          }
+        }
+      });
+    }
+    if (node.autoconnectTransports) {
+      services.push('Public Visor');
+    }
+    return services;
+  }
+
+  /**
    * Removes all offline nodes from the list, until seeing them online again.
    */
   removeOffline() {
