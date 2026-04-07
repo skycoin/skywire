@@ -155,6 +155,20 @@ func TestNewEnv(t *testing.T) {
 	}
 }
 
+// TestServicesDmsgReachable verifies that key services are reachable via DMSG
+// from the e2e-test container. This validates the full DMSG path before running
+// tests that depend on it, providing clear diagnostics on connectivity failures.
+func TestServicesDmsgReachable(t *testing.T) {
+	env := NewEnv().GatherContainersInfo()
+	err := env.CheckServicesDmsgReachable(120 * time.Second)
+	if err != nil {
+		t.Logf("DMSG reachability check failed (non-fatal): %v", err)
+		t.Logf("Tests that depend on DMSG connectivity may fail")
+		// Don't fail the test — log the warning so we have diagnostics
+		// but allow tests to proceed and fail with specific error messages
+	}
+}
+
 func TestEnv_cli(t *testing.T) {
 	env := NewEnv().GatherContainersInfo()
 

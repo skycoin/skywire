@@ -155,7 +155,7 @@ func extractInterfaces(s *surveyData) (ifc string, macs []string) {
 // Missing optional fields (_dmsg URLs) are not penalized.
 func checkServiceConfig(surveyPath string, sConf, dConf []byte) bool {
 	// Strip fields not relevant to comparison
-	delFields := `del(.stun_servers, .dmsg_servers, .conf_dmsg)`
+	delFields := `del(.stun_servers, .dmsg_servers, .conf_dmsg, .reward_system, .reward_system_dmsg)`
 	svcBytes, err := script.File(surveyPath).JQ(`.services | ` + delFields).Bytes()
 	if err != nil {
 		return false

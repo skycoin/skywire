@@ -87,7 +87,7 @@ export class AppComponent {
         if (this.inVpnClient) {
           document.title = 'Skywire VPN';
         } else {
-          document.title = 'Skywire Manager';
+          document.title = 'Skywire Hypervisor';
         }
       }
     });
