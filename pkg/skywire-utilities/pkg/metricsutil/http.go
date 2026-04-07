@@ -50,7 +50,7 @@ func ServePProf(log logrus.FieldLogger, addr, serviceName string) {
 			"build_info":   info,
 			"started_at":   startTime.Format(time.RFC3339),
 		}
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck
+		json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 	})
 
 	// Standard pprof handlers

@@ -168,7 +168,7 @@ Usage:
 					StartedAt:   startedAt,
 					DmsgAddr:    dmsgAddr,
 				}
-				json.NewEncoder(w).Encode(resp) //nolint:errcheck
+				json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 			})
 
 			dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, log, conf.PK, conf.SK,
