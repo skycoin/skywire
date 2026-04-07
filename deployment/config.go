@@ -79,6 +79,9 @@ type Services struct {
 	RouteFinderDmsg        string            `json:"route_finder_dmsg,omitempty"`
 	UptimeTrackerDmsg      string            `json:"uptime_tracker_dmsg,omitempty"`
 	ServiceDiscoveryDmsg   string            `json:"service_discovery_dmsg,omitempty"`
+	// Reward system
+	RewardSystem     string `json:"reward_system,omitempty"`
+	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
 }
 
 // Conf is the configuration URL for the deployment which may be fetched on `skywire cli config gen`
