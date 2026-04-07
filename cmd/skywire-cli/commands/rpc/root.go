@@ -2,7 +2,6 @@
 package clirpc
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -11,8 +10,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -182,46 +183,45 @@ func dmsgURLForHTTP(httpURL string) string {
 	return ""
 }
 
-// fetchViaDmsgDirect creates an ephemeral DMSG client, connects to the network,
-// and fetches the given dmsg:// URL. This is heavyweight but works without a
-// running visor, making it the right choice for DMSG-only deployments.
+// fetchViaDmsgDirect creates an ephemeral DMSG direct client (bypasses discovery),
+// connects to DMSG servers, and fetches the given dmsg:// URL.
+// Services use direct clients (not registered in discovery), so we must too.
 func fetchViaDmsgDirect(dmsgURL string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
 	log := logging.MustGetLogger("cli:dmsg-fetch")
-
 	pk, sk := cipher.GenerateKeyPair()
 
-	// Create discovery client
+	// Fetch DMSG server list from discovery via HTTP (one-time bootstrap)
 	discURL := deployment.Prod.DmsgDiscovery
 	if discURL == "" {
 		return nil, fmt.Errorf("no DMSG discovery URL configured")
 	}
 	httpClient := &http.Client{Timeout: 15 * time.Second}
 	discClient := disc.NewHTTP(discURL, httpClient, log)
-
-	// Create and start DMSG client
-	dmsgConfig := dmsg.DefaultConfig()
-	dmsgConfig.MinSessions = 1
-	dmsgC := dmsg.NewClient(pk, sk, discClient, dmsgConfig)
-	go dmsgC.Serve(ctx) //nolint:errcheck
-
-	// Wait for ready
-	select {
-	case <-ctx.Done():
-		dmsgC.Close() //nolint:errcheck
-		return nil, ctx.Err()
-	case <-dmsgC.Ready():
-	case <-time.After(20 * time.Second):
-		dmsgC.Close() //nolint:errcheck
-		return nil, fmt.Errorf("timeout connecting to DMSG network")
+	servers, err := discClient.AllServers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch DMSG servers: %w", err)
 	}
-	defer dmsgC.Close() //nolint:errcheck
+	if len(servers) == 0 {
+		return nil, fmt.Errorf("no DMSG servers available")
+	}
 
-	// Use dmsghttp transport to make HTTP request over DMSG
-	transport := &dmsgHTTPRoundTripper{ctx: ctx, dmsgC: dmsgC}
-	client := &http.Client{Transport: transport, Timeout: 20 * time.Second}
+	// Create direct client (bypasses discovery for connections — same as services)
+	keys := cipher.PubKeys{pk}
+	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
+
+	dmsgConfig := &dmsg.Config{MinSessions: 1}
+	dmsgDC, closeDmsg, err := direct.StartDmsg(ctx, log, pk, sk, dClient, dmsgConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start DMSG direct client: %w", err)
+	}
+	defer closeDmsg()
+
+	// Use dmsghttp transport for HTTP-over-DMSG
+	dmsgTransport := dmsghttp.MakeHTTPTransport(ctx, dmsgDC)
+	client := &http.Client{Transport: dmsgTransport, Timeout: 30 * time.Second}
 
 	resp, err := client.Get(dmsgURL) //nolint:gosec
 	if err != nil {
@@ -239,39 +239,6 @@ func fetchViaDmsgDirect(dmsgURL string) ([]byte, error) {
 	}
 
 	return body, nil
-}
-
-// dmsgHTTPRoundTripper implements http.RoundTripper using a dmsg client
-type dmsgHTTPRoundTripper struct {
-	ctx   context.Context
-	dmsgC *dmsg.Client
-}
-
-func (t *dmsgHTTPRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	var addr dmsg.Addr
-	if err := addr.Set(req.Host); err != nil {
-		return nil, fmt.Errorf("invalid DMSG address %q: %w", req.Host, err)
-	}
-
-	conn, err := t.dmsgC.Dial(t.ctx, addr)
-	if err != nil {
-		return nil, fmt.Errorf("DMSG dial failed: %w", err)
-	}
-
-	// Write HTTP request over DMSG stream
-	if err := req.Write(conn); err != nil {
-		conn.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to write request: %w", err)
-	}
-
-	// Read HTTP response
-	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
-	if err != nil {
-		conn.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	return resp, nil
 }
 
 // FetchServiceURL fetches a URL from a deployment service using a three-step chain:
