@@ -50,11 +50,20 @@ const routes: Routes = [
       },
       {
         path: 'dmsg',
-        redirectTo: 'dmsg/1',
+        redirectTo: 'rewards/1',
         pathMatch: 'full'
       },
       {
         path: 'dmsg/:page',
+        redirectTo: 'rewards/1',
+      },
+      {
+        path: 'rewards',
+        redirectTo: 'rewards/1',
+        pathMatch: 'full'
+      },
+      {
+        path: 'rewards/:page',
         component: NodeListComponent
       },
       {

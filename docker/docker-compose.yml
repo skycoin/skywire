@@ -65,6 +65,11 @@ services:
         ipv4_address: 174.0.0.252
     container_name: "sd-redis"
     hostname: sd-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   tpd-redis:
     image: "redis:alpine"
@@ -90,6 +95,11 @@ services:
         ipv4_address: 174.0.0.255
     container_name: "ut-redis"
     hostname: ut-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
   
   postgres-db:
     image: "postgres:alpine"
@@ -126,8 +136,15 @@ services:
       intra:
         ipv4_address: 174.0.0.2
     depends_on:
-      - tpd-redis
+      tpd-redis:
+        condition: service_healthy
     entrypoint: "/release/skywire svc tpd --addr :9094 --pprof :6094 --redis redis://tpd-redis:6379 --entry-timeout 2m --sk 85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8 --dmsg-disc http://dmsg-discovery:9090"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:6094/debug/service"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
@@ -143,9 +160,17 @@ services:
       intra:
         ipv4_address: 174.0.0.3
     depends_on:
-      - transport-discovery
-      - tpd-redis
+      transport-discovery:
+        condition: service_healthy
+      tpd-redis:
+        condition: service_healthy
     entrypoint: "/release/skywire svc rf --addr :9092 --pprof :6092 --redis redis://tpd-redis:6379 --sk 640905f9fd60d6bf1ee88519f61035765d65319d9f3bac6c5f2fc14ea5cf15ca --dmsg-disc http://dmsg-discovery:9090"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:6092/debug/service"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
@@ -163,7 +188,7 @@ services:
       dmsgd-redis:
         condition: service_healthy
       transport-discovery:
-        condition: service_started
+        condition: service_healthy
     entrypoint: "/release/skywire dmsg disc --addr :9090 --redis redis://dmsgd-redis:6379 --sk b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714 -t"
     healthcheck:
       test: ["CMD", "/release/skywire", "util", "got", "head", "http://127.0.0.1:9090/dmsg-discovery/available_servers"]
@@ -230,9 +255,17 @@ services:
       intra:
         ipv4_address: 174.0.0.9
     depends_on:
-      - transport-discovery
-      - sd-redis
+      transport-discovery:
+        condition: service_healthy
+      sd-redis:
+        condition: service_healthy
     entrypoint: "/release/skywire svc sd --addr :9091 --pprof :6091 --redis redis://sd-redis:6379 --entry-timeout 2m --sk ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f --dmsg-disc http://dmsg-discovery:9090"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:6091/debug/service"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
@@ -248,8 +281,10 @@ services:
       intra:
         ipv4_address: 174.0.0.7
     depends_on:
-      - ut-redis
-      - postgres-db
+      ut-redis:
+        condition: service_healthy
+      postgres-db:
+        condition: service_healthy
     environment:
       - PG_USER=postgres
       - PG_PASSWORD=postgres
@@ -269,9 +304,16 @@ services:
       intra:
         ipv4_address: 174.0.0.8
     depends_on:
-      - ar-redis
+      ar-redis:
+        condition: service_healthy
     restart: always
     entrypoint: "/release/skywire svc ar --addr :9093 --udp-addr :9093 --pprof :6093 --redis redis://ar-redis:6379 --entry-timeout 2m --sk 1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a --dmsg-disc http://dmsg-discovery:9090"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:6093/debug/service"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
@@ -383,10 +425,14 @@ services:
         target: /opt/integration/hypervisor.key
         read_only: false
     depends_on:
-      - setup-node
-      - route-finder
-      - address-resolver
-      - dmsg-server
+      setup-node:
+        condition: service_started
+      route-finder:
+        condition: service_healthy
+      address-resolver:
+        condition: service_healthy
+      dmsg-server:
+        condition: service_started
     restart: always
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
 

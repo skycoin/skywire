@@ -194,10 +194,13 @@ HTTP Endpoints:
 }
 
 func readConfig(log *logging.Logger, confPath string) (config api.Config) {
-	var r io.Reader
-
 	f, err := os.Open(confPath) //nolint:gosec
 	if err != nil {
+		if os.IsNotExist(err) {
+			log.WithField("filepath", confPath).
+				Info("Config file not found, using embedded defaults.")
+			return api.Config{}
+		}
 		log.WithError(err).
 			WithField("filepath", confPath).
 			Fatal("Failed to read config file.")
@@ -208,9 +211,7 @@ func readConfig(log *logging.Logger, confPath string) (config api.Config) {
 		}
 	}()
 
-	r = f
-
-	raw, err := io.ReadAll(r)
+	raw, err := io.ReadAll(f)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
