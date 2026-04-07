@@ -361,8 +361,9 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 			}
 		}
 
-		dmsgGRPCL, err := v.dmsgC.Listen(skyenv.DmsgGRPCPort)
-		if err != nil {
+		if len(authorizedPKs) == 0 {
+			dmsgGRPCLog.Info("No hypervisor PKs or dmsgpty whitelist configured; DMSG gRPC server disabled")
+		} else if dmsgGRPCL, err := v.dmsgC.Listen(skyenv.DmsgGRPCPort); err != nil {
 			log.WithError(err).Warn("Failed to listen on DMSG gRPC port")
 		} else {
 			// Wrap listener with access control
@@ -644,12 +645,17 @@ func (l *authorizedDmsgListener) Accept() (net.Conn, error) {
 		}
 		if stream, ok := conn.(dmsgAddrProvider); ok {
 			remotePK := stream.RawRemoteAddr().PK
-			if len(l.authorizedPKs) > 0 && !l.authorizedPKs[remotePK] {
+			if !l.authorizedPKs[remotePK] {
 				l.log.WithField("remote_pk", remotePK).Warn("Rejected unauthorized DMSG gRPC connection")
 				conn.Close() //nolint:errcheck,gosec
 				continue
 			}
 			l.log.WithField("remote_pk", remotePK).Debug("Accepted authorized DMSG gRPC connection")
+		} else {
+			// Can't determine remote PK — reject by default
+			l.log.Warn("Rejected DMSG gRPC connection: unable to determine remote PK")
+			conn.Close() //nolint:errcheck,gosec
+			continue
 		}
 
 		return conn, nil
