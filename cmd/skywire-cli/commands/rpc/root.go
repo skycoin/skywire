@@ -12,6 +12,7 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -142,51 +143,82 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	return visor.NewRPCClient(dmsgLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
 }
 
-// FetchServiceURL fetches a URL from a deployment service.
-// It first tries to use the visor's DmsgHTTP RPC to proxy the request over DMSG.
-// If that fails (visor not running, DMSG not connected, etc.), it falls back
-// to a direct HTTP request.
+var (
+	// NoRPC disables the RPC step in FetchServiceURL.
+	NoRPC bool
+	// NoHTTP disables the HTTP fallback step in FetchServiceURL.
+	NoHTTP bool
+)
+
+// RegisterFetchFlags adds --no-rpc and --no-http flags to a command.
+// Call this in init() for any command that uses FetchServiceURL.
+func RegisterFetchFlags(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&NoRPC, "no-rpc", false, "skip visor RPC (DmsgHTTP) step")
+	cmd.Flags().BoolVar(&NoHTTP, "no-http", false, "skip direct HTTP fallback step")
+}
+
+// FetchServiceURL fetches a URL from a deployment service using a three-step chain:
+//  1. RPC — ask the running visor to proxy the request over DMSG (DmsgHTTP RPC)
+//  2. DMSG HTTP — connect directly to DMSG and fetch (if dmsgURL provided)
+//  3. HTTP — direct HTTP request as last resort
+//
+// Steps can be disabled via --no-rpc and --no-http flags.
+// The dmsgURL parameter is optional; if empty, step 2 is skipped.
 //
 // This pattern ensures CLI commands work for:
-//   - Visors with DMSG-only config (no direct HTTP to services)
-//   - Visors with HTTP config (direct HTTP works, DMSG is optional)
-//   - Standalone CLI usage without a running visor (direct HTTP only)
+//   - Visors with DMSG-only config (steps 1 and 2)
+//   - Visors with HTTP config (step 1, then 3)
+//   - Standalone CLI without a running visor (step 3 only)
 func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
-	// Try visor RPC first (proxies over DMSG if available)
-	rpcClient, err := Client(cmdFlags)
-	if err == nil {
-		resp, err := rpcClient.DmsgHTTP(visor.DmsgHTTPRequest{
-			URL:    url,
-			Method: "GET",
-		})
-		if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return resp.Body, nil
-		}
-		if err != nil {
-			logger.Debugf("RPC DmsgHTTP failed for %s: %v, falling back to HTTP", url, err)
+	var lastErr error
+
+	// Step 1: Try visor RPC (proxies over DMSG via DmsgHTTP)
+	if !NoRPC {
+		rpcClient, err := Client(cmdFlags)
+		if err == nil {
+			resp, err := rpcClient.DmsgHTTP(visor.DmsgHTTPRequest{
+				URL:    url,
+				Method: "GET",
+			})
+			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return resp.Body, nil
+			}
+			if err != nil {
+				lastErr = fmt.Errorf("RPC DmsgHTTP: %w", err)
+				logger.Debugf("RPC DmsgHTTP failed for %s: %v", url, err)
+			} else {
+				lastErr = fmt.Errorf("RPC DmsgHTTP: status %d", resp.StatusCode)
+				logger.Debugf("RPC DmsgHTTP status %d for %s", resp.StatusCode, url)
+			}
 		} else {
-			logger.Debugf("RPC DmsgHTTP returned status %d for %s, falling back to HTTP", resp.StatusCode, url)
+			lastErr = fmt.Errorf("RPC: %w", err)
+			logger.Debugf("RPC not available: %v", err)
 		}
-	} else {
-		logger.Debugf("RPC not available: %v, using direct HTTP for %s", err, url)
 	}
 
-	// Fall back to direct HTTP
-	httpClient := &http.Client{Timeout: 30 * time.Second}
-	resp, err := httpClient.Get(url) //nolint:gosec
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	// Step 2: Direct HTTP fallback
+	if !NoHTTP {
+		httpClient := &http.Client{Timeout: 30 * time.Second}
+		resp, err := httpClient.Get(url) //nolint:gosec
+		if err != nil {
+			lastErr = fmt.Errorf("HTTP: %w", err)
+			logger.Debugf("HTTP failed for %s: %v", url, err)
+		} else {
+			defer resp.Body.Close() //nolint:errcheck
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read HTTP response: %w", err)
+			}
+			if resp.StatusCode < 300 {
+				return body, nil
+			}
+			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+			logger.Debugf("HTTP status %d for %s", resp.StatusCode, url)
+		}
 	}
-	defer resp.Body.Close() //nolint:errcheck
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+	if lastErr != nil {
+		return nil, lastErr
 	}
-
-	if resp.StatusCode >= 300 {
-		return body, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
-	}
-
-	return body, nil
+	return nil, fmt.Errorf("all fetch methods disabled or unavailable for %s", url)
 }
