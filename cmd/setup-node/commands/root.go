@@ -38,6 +38,7 @@ var (
 	metricsAddr  string
 	tag          string
 	cfgFromStdin bool
+	pprofMode    string
 	pprofAddr    string
 )
 
@@ -72,7 +73,8 @@ Generate Keys:
 func init() {
 	RootCmd.AddCommand(checkHealthCmd)
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
-	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
+	RootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ http ] pprof mode")
+	RootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "r", "localhost:6060", "pprof http port")
 	RootCmd.Flags().StringVar(&tag, "tag", "setup_node", "logging tag\n\r")
 	RootCmd.Flags().BoolVarP(&cfgFromStdin, "stdin", "i", false, "read config from STDIN")
 }
@@ -105,7 +107,9 @@ Usage:
 			mLog.Printf("Failed to output build info: %v", err)
 		}
 
-		metricsutil.ServePProf(log, pprofAddr, "setup-node")
+		if pprofMode == "http" {
+			metricsutil.ServePProf(log, pprofAddr, "setup-node")
+		}
 
 		var rdr io.Reader
 		var err error

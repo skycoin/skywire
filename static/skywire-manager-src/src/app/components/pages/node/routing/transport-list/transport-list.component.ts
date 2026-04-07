@@ -84,6 +84,8 @@ export class TransportListComponent implements OnDestroy {
   private lastTransportIds = '';
 
   @Input() set node(val: Node) {
+    const t0 = performance.now();
+    console.log('[HV-DIAG] transport-list setter called, transports:', val.transports?.length, 'persistentTransports:', val.persistentTransports?.length);
     // Skip reprocessing if transport list hasn't changed
     const newIds = val.transports.map(t => t.id).sort().join(',');
     if (newIds === this.lastTransportIds && val.transports.length === this.lastTransportCount) {
@@ -98,8 +100,10 @@ export class TransportListComponent implements OnDestroy {
         });
         this.cdr.markForCheck();
       }
+      console.log('[HV-DIAG] transport-list stats-only update took', (performance.now() - t0).toFixed(1), 'ms');
       return;
     }
+    console.log('[HV-DIAG] transport-list FULL reprocessing', val.transports.length, 'transports');
     this.lastTransportCount = val.transports.length;
     this.lastTransportIds = newIds;
 
@@ -558,6 +562,7 @@ export class TransportListComponent implements OnDestroy {
     }
 
     this.dataSource = this.transportsToShow;
+    this.cdr.markForCheck();
   }
 
   /**

@@ -216,6 +216,12 @@ func (mc *mockRPCClient) EnableHypervisor() error { return nil }
 // DisableHypervisor implements API
 func (mc *mockRPCClient) DisableHypervisor() error { return nil }
 
+// EnableHypervisorPersist implements API
+func (mc *mockRPCClient) EnableHypervisorPersist(_ bool) error { return nil }
+
+// DisableHypervisorPersist implements API
+func (mc *mockRPCClient) DisableHypervisorPersist(_ bool) error { return nil }
+
 // IsHypervisorEnabled implements API
 func (mc *mockRPCClient) IsHypervisorEnabled() bool { return false }
 
