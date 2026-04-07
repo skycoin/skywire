@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
@@ -270,13 +271,18 @@ func curlStandalone(ctx context.Context, log *logging.Logger, pk cipher.PubKey, 
 
 // startDmsgClient starts a standalone dmsg client
 func startDmsgClient(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey) (*dmsg.Client, func(), error) {
-	// Use production dmsg servers
+	// Use DMSG servers from deployment config (respects SKYDEPLOY env override).
 	if len(dmsg.Prod.DmsgServers) == 0 {
 		return nil, nil, fmt.Errorf("no DMSG servers configured")
 	}
 
-	// Create discovery client using HTTP
-	discURL := "http://dmsgd.skywire.skycoin.com"
+	// Create discovery client using the deployment config's discovery URL.
+	// This uses the embedded config (or SKYDEPLOY override) instead of
+	// a hardcoded URL, so E2E tests with custom deployments work correctly.
+	discURL := deployment.Prod.DmsgDiscovery
+	if discURL == "" {
+		discURL = "http://dmsgd.skywire.skycoin.com"
+	}
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	discClient := disc.NewHTTP(discURL, httpClient, log)
 

@@ -4,10 +4,7 @@ package clisvc
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -44,15 +41,9 @@ func fetchViaVisorOrDirect(cmd *cobra.Command, service, path, directURL string) 
 		}
 	}
 
-	// Direct fallback
+	// Fallback via FetchServiceURL (tries DmsgHTTP first, then plain HTTP)
 	url := strings.TrimSuffix(directURL, "/") + path
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url) //nolint:gosec
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close() //nolint:errcheck,gosec
-	return io.ReadAll(resp.Body)
+	return clirpc.FetchServiceURL(cmd.Flags(), url)
 }
 
 func prettyJSON(data []byte) string {

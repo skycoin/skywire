@@ -25,6 +25,10 @@ export interface TabButtonData {
    * If true, the button is not visible in the "lg" window size and larger.
    */
   onlyIfLessThanLg?: boolean;
+  /**
+   * If set, clicking the tab opens this URL in a new window instead of navigating via the router.
+   */
+  externalUrl?: string;
 }
 
 /**

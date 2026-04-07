@@ -336,6 +336,23 @@ func (v *Visor) SetPublicAutoconnect(pAc bool) error {
 	return v.conf.UpdatePublicAutoconnect(pAc)
 }
 
+// SetIsPublic sets is_public config of visor and flushes the config.
+func (v *Visor) SetIsPublic(isPublic bool) error {
+	v.conf.IsPublic = isPublic
+	return v.conf.Flush()
+}
+
+// GetIsPublic returns the current is_public config setting.
+func (v *Visor) GetIsPublic() bool {
+	return v.conf.IsPublic
+}
+
+// GetRuntimeConfig returns the visor's running config as JSON bytes.
+// The SK is included — callers should consider access control.
+func (v *Visor) GetRuntimeConfig() ([]byte, error) {
+	return json.MarshalIndent(v.conf, "", "  ")
+}
+
 // PublicAutoconnectStatus returns whether public autoconnect is currently running
 func (v *Visor) PublicAutoconnectStatus() (bool, error) {
 	return v.IsPublicAutoconnectRunning(), nil
