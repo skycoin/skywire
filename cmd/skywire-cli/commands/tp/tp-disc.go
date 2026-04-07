@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"text/tabwriter"
 
@@ -95,13 +93,13 @@ var discTpCmd = &cobra.Command{
 
 		// Query transport discovery via HTTP
 		if useHTTPQuery {
-			// Query via plain HTTP
+			// Query via FetchServiceURL (tries DmsgHTTP first, then plain HTTP)
 			if tppk.Null() {
-				entry, err := getTransportByID(tpdURL, uuid.UUID(tpid))
+				entry, err := getTransportByID(cmd.Flags(), tpdURL, uuid.UUID(tpid))
 				internal.Catch(cmd.Flags(), err)
 				PrintTransportEntries(cmd.Flags(), entry)
 			} else {
-				entries, err := getTransportsByEdge(tpdURL, tppk)
+				entries, err := getTransportsByEdge(cmd.Flags(), tpdURL, tppk)
 				internal.Catch(cmd.Flags(), err)
 				PrintTransportEntries(cmd.Flags(), entries...)
 			}
@@ -109,22 +107,16 @@ var discTpCmd = &cobra.Command{
 	},
 }
 
-// getTransportByID queries transport discovery HTTP endpoint for a transport by ID
-func getTransportByID(baseURL string, id uuid.UUID) (*transport.Entry, error) {
+// getTransportByID queries transport discovery for a transport by ID using FetchServiceURL
+func getTransportByID(cmdFlags *pflag.FlagSet, baseURL string, id uuid.UUID) (*transport.Entry, error) {
 	url := fmt.Sprintf("%s/all-transports", baseURL)
-	resp, err := http.Get(url) //nolint:gosec
+	body, err := clirpc.FetchServiceURL(cmdFlags, url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transport discovery: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-		return nil, fmt.Errorf("transport discovery returned status %d: %s", resp.StatusCode, string(body))
-	}
 
 	var entries []*transport.Entry
-	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+	if err := json.Unmarshal(body, &entries); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
@@ -138,22 +130,16 @@ func getTransportByID(baseURL string, id uuid.UUID) (*transport.Entry, error) {
 	return nil, fmt.Errorf("transport not found")
 }
 
-// getTransportsByEdge queries transport discovery HTTP endpoint for transports by edge public key
-func getTransportsByEdge(baseURL string, pk cipher.PubKey) ([]*transport.Entry, error) {
+// getTransportsByEdge queries transport discovery for transports by edge public key using FetchServiceURL
+func getTransportsByEdge(cmdFlags *pflag.FlagSet, baseURL string, pk cipher.PubKey) ([]*transport.Entry, error) {
 	url := fmt.Sprintf("%s/all-transports", baseURL)
-	resp, err := http.Get(url) //nolint:gosec
+	body, err := clirpc.FetchServiceURL(cmdFlags, url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transport discovery: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-		return nil, fmt.Errorf("transport discovery returned status %d: %s", resp.StatusCode, string(body))
-	}
 
 	var allEntries []*transport.Entry
-	if err := json.NewDecoder(resp.Body).Decode(&allEntries); err != nil {
+	if err := json.Unmarshal(body, &allEntries); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 

@@ -314,8 +314,11 @@
                       }
                       <div style="font-size: 0.85em;">Total: {{ node.transports.length }}</div>
                     }
-                    @if (!node.transports || node.transports.length === 0) {
+                    @if (node.transports && node.transports.length === 0) {
                       <span style="font-size: 0.85em;">Total: 0</span>
+                    }
+                    @if (!node.transports) {
+                      <span>-</span>
                     }
                   </td>
                   <td>

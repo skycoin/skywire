@@ -117,6 +117,28 @@ var summaryCmd = &cobra.Command{
 
 		msg += fmt.Sprintf("DMSG Servers (%d connected):\n              %s\n", len(summary.DMSGServers), dmsgServersStr)
 		msg += fmt.Sprintf("DMSG Latency: %s\n", summary.DmsgStats.RoundTrip)
+
+		// Transport summary by type
+		tpCounts := make(map[string]int)
+		for _, tp := range summary.Overview.Transports {
+			tpCounts[string(tp.Type)]++
+		}
+		tpTotal := len(summary.Overview.Transports)
+		tpStr := fmt.Sprintf("%d", tpTotal)
+		if tpTotal > 0 {
+			tpStr += " ("
+			first := true
+			for tpType, count := range tpCounts {
+				if !first {
+					tpStr += ", "
+				}
+				tpStr += fmt.Sprintf("%s: %d", strings.ToUpper(tpType), count)
+				first = false
+			}
+			tpStr += ")"
+		}
+		msg += fmt.Sprintf("Transports: %s\n", tpStr)
+
 		msg += fmt.Sprintf("Visor Version: %s\nConfig Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
 			summary.Overview.BuildInfo.Version, summary.ConfigVersion, summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
 

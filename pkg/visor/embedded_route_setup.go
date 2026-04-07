@@ -3,6 +3,7 @@ package visor
 
 import (
 	"context"
+	"errors"
 	"net/rpc"
 	"time"
 
@@ -51,9 +52,9 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
-			// Check if context was canceled (normal shutdown)
-			if ctx.Err() != nil {
-				ers.log.Debug("Embedded route setup-node listener stopped (context canceled)")
+			// Check if context was canceled or entity closed (normal shutdown)
+			if ctx.Err() != nil || errors.Is(err, dmsg.ErrEntityClosed) {
+				ers.log.Debug("Embedded route setup-node listener stopped")
 				return nil
 			}
 			ers.log.WithError(err).Warn("Failed to accept stream on route setup-node")

@@ -817,6 +817,25 @@ func (r *RPC) SetPublicAutoconnect(pAc *bool, _ *struct{}) (err error) {
 	return err
 }
 
+// SetIsPublic sets the is_public field in the visor config and flushes.
+func (r *RPC) SetIsPublic(isPublic *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetIsPublic", *isPublic)(nil, &err)
+	return r.visor.SetIsPublic(*isPublic)
+}
+
+// GetIsPublic returns whether the visor is configured as public.
+func (r *RPC) GetIsPublic(_ *struct{}, out *bool) (err error) {
+	*out = r.visor.GetIsPublic()
+	return nil
+}
+
+// GetRuntimeConfig returns the visor's running config as JSON.
+func (r *RPC) GetRuntimeConfig(_ *struct{}, out *[]byte) (err error) {
+	defer rpcutil.LogCall(r.log, "GetRuntimeConfig", nil)(nil, &err)
+	*out, err = r.visor.GetRuntimeConfig()
+	return err
+}
+
 // StartPublicAutoconnect starts the public autoconnect routine
 func (r *RPC) StartPublicAutoconnect(_ *struct{}, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StartPublicAutoconnect", nil)(nil, &err)

@@ -5,6 +5,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -51,8 +52,8 @@ var (
 	selectedOS                 string
 	disableApps                string
 	isBestProtocol             bool
-	serviceConfURL             = "http://conf.skywire.skycoin.com"
-	testServiceConfURL         = "http://conf.skywire.dev"
+	serviceConfURL             = deployment.ProdConf.Conf
+	testServiceConfURL         = deployment.TestConf.Conf
 	dnsServer                  = "1.1.1.1"
 	services                   visorconfig.Services
 	servicesConfig             servicesConf

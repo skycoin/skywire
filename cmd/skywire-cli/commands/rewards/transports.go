@@ -17,11 +17,19 @@ import (
 )
 
 const (
-	tpdCacheFile      = "/tmp/tpd.json"
-	tpdCacheMaxAge    = 5 * time.Minute
-	tpdPerKeyStatsURL = "https://tpd.skywire.skycoin.com/all-transports/per-key-stats"
-	minTransports     = 2
+	tpdCacheFile   = "/tmp/tpd.json"
+	tpdCacheMaxAge = 5 * time.Minute
+	minTransports  = 2
 )
+
+// tpdPerKeyStatsURL returns the transport discovery per-key stats URL from the deployment config.
+func tpdPerKeyStatsURL() string {
+	base := deployment.Prod.TransportDiscovery
+	if base == "" {
+		base = "https://tpd.skywire.skycoin.com"
+	}
+	return strings.TrimRight(base, "/") + "/all-transports/per-key-stats"
+}
 
 // PerKeyStats is a map from PK hex to transport counts by type (includes "total" key)
 // Format: {"pk1": {"total": 15, "stcpr": 1, "sudph": 14}, ...}
@@ -472,10 +480,10 @@ func fetchTPDData(tpLog *logging.Logger, bypassCache bool) (PerKeyStats, error) 
 	}
 
 	// Fetch fresh data
-	tpLog.Info("Fetching fresh TPD data from ", tpdPerKeyStatsURL)
+	tpLog.Info("Fetching fresh TPD data from ", tpdPerKeyStatsURL())
 
 	//nolint:gosec
-	resp, err := http.Get(tpdPerKeyStatsURL)
+	resp, err := http.Get(tpdPerKeyStatsURL())
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}

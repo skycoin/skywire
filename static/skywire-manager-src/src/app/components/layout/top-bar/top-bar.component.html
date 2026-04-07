@@ -88,16 +88,31 @@
         <div
           [ngClass]="{'d-lg-none': tabData.onlyIfLessThanLg, 'd-none d-md-inline-block': tabsData.length !== 1}"
           >
-          <a
-            mat-button
-            class="tab-button white-theme"
-            [disabled]="i === selectedTabIndex"
-            [routerLink]="tabData.linkParts"
-            [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse && i !== selectedTabIndex}"
-            >
-            <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
-            <span>{{ tabData.label | translate }}</span>
-          </a>
+          @if (tabData.externalUrl) {
+            <a
+              mat-button
+              class="tab-button white-theme"
+              [href]="tabData.externalUrl"
+              target="_blank"
+              rel="noreferrer nofollow noopener"
+              [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse}"
+              >
+              <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
+              <span>{{ tabData.label | translate }}</span>
+            </a>
+          }
+          @if (!tabData.externalUrl) {
+            <a
+              mat-button
+              class="tab-button white-theme"
+              [disabled]="i === selectedTabIndex"
+              [routerLink]="tabData.linkParts"
+              [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse && i !== selectedTabIndex}"
+              >
+              <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
+              <span>{{ tabData.label | translate }}</span>
+            </a>
+          }
         </div>
       }
       <!-- Select tab button. Only shown on small screens when there is only one tab. -->

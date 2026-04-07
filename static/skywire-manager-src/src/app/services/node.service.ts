@@ -132,6 +132,36 @@ return {
 });
           }
 
+          // Transports.
+          node.transports = [];
+          if (response.overview.transports) {
+            (response.overview.transports as any[]).forEach(transport => {
+              node.transports.push({
+                id: transport.id,
+                localPk: transport.local_pk,
+                remotePk: transport.remote_pk,
+                type: transport.type,
+                recv: transport.log ? transport.log.recv : 0,
+                sent: transport.log ? transport.log.sent : 0,
+              });
+            });
+          }
+
+          // Apps (for services column).
+          node.apps = [];
+          if (response.overview.apps) {
+            (response.overview.apps as any[]).forEach(app => {
+              node.apps.push({
+                name: app.name,
+                autostart: app.auto_start,
+                port: app.port,
+                status: app.status,
+                detailedStatus: app.detailed_status,
+                args: app.args,
+              });
+            });
+          }
+
           // Check if is hypervisor.
           node.isHypervisor = response.is_hypervisor;
 
