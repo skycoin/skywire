@@ -2,6 +2,7 @@
 package dmsg
 
 import (
+	"context"
 	"errors"
 	"net"
 	"time"
@@ -28,7 +29,9 @@ func makeClientSession(entity *EntityCommon, porter *netutil.Porter, conn net.Co
 }
 
 // DialStream attempts to dial a stream to a remote client via the dmsg server that this session is connected to.
-func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
+// The context is used to cancel the dial if the caller's deadline expires — this prevents ephemeral port
+// leaks when many dials are attempted and the caller gives up before the handshake completes.
+func (cs *ClientSession) DialStream(ctx context.Context, dst Addr) (dStr *Stream, err error) {
 	log := cs.log.
 		WithField("func", "ClientSession.DialStream").
 		WithField("dst_addr", dst)
@@ -37,7 +40,7 @@ func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
 		return nil, err
 	}
 
-	// Close stream on failure.
+	// Close stream on failure — this frees the reserved ephemeral port.
 	defer func() {
 		if err != nil {
 			log.WithError(err).
@@ -45,6 +48,23 @@ func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
 				Debug("Stream closed on failure.")
 		}
 	}()
+
+	// If the caller's context is canceled, close the stream to interrupt
+	// any blocked read/write and free the ephemeral port immediately.
+	ctxDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			dStr.Close() //nolint:errcheck,gosec
+		case <-ctxDone:
+		}
+	}()
+	defer close(ctxDone)
+
+	// Check context before starting.
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	// Prepare deadline.
 	if err = dStr.SetDeadline(time.Now().Add(HandshakeTimeout)); err != nil {
