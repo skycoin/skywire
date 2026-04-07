@@ -4,14 +4,13 @@ package clivisor
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -34,34 +33,23 @@ var ipCmd = &cobra.Command{
 		mLog.SetLevel(logrus.PanicLevel)
 		logger := mLog.PackageLogger("visor_ip_information")
 
-		ip, err := getIPAddress(geoipURL)
+		ip, err := getIPAddress(cmd.Flags(), geoipURL)
 		if err != nil {
 			internal.Catch(cmd.Flags(), err)
 		}
-		isPublic := isPublic(logger)
+		isPublic := isPublic(cmd.Flags(), logger)
 		internal.PrintOutput(cmd.Flags(), ip, fmt.Sprintf("IP: %s\nPublic Status: %s\n", ip, isPublic))
 	},
 }
 
-func getIPAddress(geoipURL string) (string, error) {
+func getIPAddress(cmdFlags *pflag.FlagSet, geoipURL string) (string, error) {
 	var info ipInfo
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	resp, err := client.Get(geoipURL)
+	body, err := clirpc.FetchServiceURL(cmdFlags, geoipURL)
 	if err != nil {
 		return info.IP, err
 	}
-	//nolint:errcheck
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return info.IP, err
-	}
-	err = json.Unmarshal(respBody, &info)
+	err = json.Unmarshal(body, &info)
 	if err != nil {
 		return info.IP, err
 	}
@@ -72,8 +60,8 @@ type ipInfo struct {
 	IP string `json:"ip_address"`
 }
 
-func isPublic(logger *logging.Logger) string {
-	stunServers, err := getStunServers()
+func isPublic(cmdFlags *pflag.FlagSet, logger *logging.Logger) string {
+	stunServers, err := getStunServers(cmdFlags)
 	if err != nil {
 		return err.Error()
 	}
@@ -81,23 +69,18 @@ func isPublic(logger *logging.Logger) string {
 	return sc.NATType.String()
 }
 
-func getStunServers() ([]string, error) {
+func getStunServers(cmdFlags *pflag.FlagSet) ([]string, error) {
 	var info stunInfo
 
 	confURL := deployment.ProdConf.Conf
 	if confURL == "" {
 		confURL = "http://conf.skywire.skycoin.com"
 	}
-	resp, err := http.Get(confURL + "/") //nolint:gosec
+	body, err := clirpc.FetchServiceURL(cmdFlags, confURL+"/")
 	if err != nil {
 		return info.Stun, err
 	}
-	defer resp.Body.Close() //nolint:errcheck
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return info.Stun, err
-	}
-	err = json.Unmarshal(respBody, &info)
+	err = json.Unmarshal(body, &info)
 	if err != nil {
 		return info.Stun, err
 	}
