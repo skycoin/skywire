@@ -343,16 +343,35 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 	})
 
 	// Start gRPC server on DMSG for remote access (gotop, stats, etc.)
+	// Access is restricted to hypervisor PKs and dmsgpty whitelist PKs.
 	if v.dmsgC != nil {
 		dmsgGRPCLog := v.MasterLogger().PackageLogger("dmsg_grpc")
 		dmsgGRPCServer := grpc.NewServer()
 		dmsgPingServer := rpcgrpc.NewPingServer(pingAdapter, dmsgGRPCLog)
 		rpcgrpc.RegisterPingServiceServer(dmsgGRPCServer, dmsgPingServer)
 
+		// Build authorized PK set: hypervisor PKs + dmsgpty whitelist
+		authorizedPKs := make(map[cipher.PubKey]bool)
+		for _, pk := range v.conf.Hypervisors {
+			authorizedPKs[pk] = true
+		}
+		if v.conf.Dmsgpty != nil {
+			for _, pk := range v.conf.Dmsgpty.Whitelist {
+				authorizedPKs[pk] = true
+			}
+		}
+
 		dmsgGRPCL, err := v.dmsgC.Listen(skyenv.DmsgGRPCPort)
 		if err != nil {
 			log.WithError(err).Warn("Failed to listen on DMSG gRPC port")
 		} else {
+			// Wrap listener with access control
+			authL := &authorizedDmsgListener{
+				Listener:      dmsgGRPCL,
+				authorizedPKs: authorizedPKs,
+				log:           dmsgGRPCLog,
+			}
+
 			v.pushCloseStack("dmsg.grpc.listener", dmsgGRPCL.Close)
 			v.pushCloseStack("dmsg.grpc.server", func() error {
 				dmsgGRPCServer.GracefulStop()
@@ -360,8 +379,8 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 			})
 
 			go func() {
-				dmsgGRPCLog.Infof("DMSG gRPC server listening on port %d", skyenv.DmsgGRPCPort)
-				if err := dmsgGRPCServer.Serve(dmsgGRPCL); err != nil {
+				dmsgGRPCLog.Infof("DMSG gRPC server listening on port %d (%d authorized PKs)", skyenv.DmsgGRPCPort, len(authorizedPKs))
+				if err := dmsgGRPCServer.Serve(authL); err != nil {
 					if !strings.Contains(err.Error(), "use of closed network connection") &&
 						!strings.Contains(err.Error(), "closed") {
 						dmsgGRPCLog.WithError(err).Error("DMSG gRPC server error")
@@ -601,4 +620,38 @@ func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
 	})
 
 	return nil
+}
+
+// authorizedDmsgListener wraps a net.Listener and rejects connections from
+// unauthorized PKs. Only PKs in the authorizedPKs map are allowed to connect.
+// This protects the DMSG gRPC server (gotop stats, etc.) from unauthorized access.
+type authorizedDmsgListener struct {
+	net.Listener
+	authorizedPKs map[cipher.PubKey]bool
+	log           *logging.Logger
+}
+
+func (l *authorizedDmsgListener) Accept() (net.Conn, error) {
+	for {
+		conn, err := l.Listener.Accept()
+		if err != nil {
+			return nil, err
+		}
+
+		// Extract remote PK from the DMSG stream
+		type dmsgAddrProvider interface {
+			RawRemoteAddr() dmsg.Addr
+		}
+		if stream, ok := conn.(dmsgAddrProvider); ok {
+			remotePK := stream.RawRemoteAddr().PK
+			if len(l.authorizedPKs) > 0 && !l.authorizedPKs[remotePK] {
+				l.log.WithField("remote_pk", remotePK).Warn("Rejected unauthorized DMSG gRPC connection")
+				conn.Close() //nolint:errcheck,gosec
+				continue
+			}
+			l.log.WithField("remote_pk", remotePK).Debug("Accepted authorized DMSG gRPC connection")
+		}
+
+		return conn, nil
+	}
 }
