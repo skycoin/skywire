@@ -527,8 +527,11 @@ func (ce *Client) reconnectMissing(ctx context.Context) {
 }
 
 // pingSessionsLoop periodically pings all sessions to measure latency.
+// The interval is 1 hour — this is for server selection, not keepalive
+// (yamux handles its own keepalives). 30s was excessive and generated
+// noisy DEBUG logs (N_clients × N_servers pings every 30s).
 func (ce *Client) pingSessionsLoop(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
 	// Do an initial ping immediately.
@@ -552,11 +555,11 @@ func (ce *Client) pingSessions() {
 		rtt, err := ses.Ping()
 		if err != nil {
 			ce.log.WithError(err).WithField("server", ses.RemotePK()).
-				Debug("Ping failed, keeping previous latency measurement")
+				Trace("Ping failed, keeping previous latency measurement")
 			continue
 		}
 		ses.SetLastPing(rtt)
 		ce.log.WithField("server", ses.RemotePK()).WithField("rtt", rtt).
-			Debug("Session ping measured")
+			Trace("Session ping measured")
 	}
 }
