@@ -84,12 +84,16 @@ export class RouteListComponent implements OnDestroy {
     if (!val) {
       return;
     }
+    const t0 = performance.now();
+    console.log('[HV-DIAG] route-list setter called, routes:', val.length);
     // Skip reprocessing if route list hasn't changed
     const newKeys = val.map(r => r.key).sort().join(',');
     if (newKeys === this.lastRouteKeys && val.length === this.lastRouteCount) {
       this.cdr.markForCheck();
+      console.log('[HV-DIAG] route-list skip (unchanged) took', (performance.now() - t0).toFixed(1), 'ms');
       return;
     }
+    console.log('[HV-DIAG] route-list FULL reprocessing', val.length, 'routes');
     this.lastRouteCount = val.length;
     this.lastRouteKeys = newKeys;
 
@@ -422,6 +426,7 @@ export class RouteListComponent implements OnDestroy {
     }
 
     this.dataSource = this.routesToShow;
+    this.cdr.markForCheck();
   }
 
   /**

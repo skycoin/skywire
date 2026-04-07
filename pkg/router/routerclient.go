@@ -28,9 +28,17 @@ type Client struct {
 	log logrus.FieldLogger
 }
 
+// DialTimeout is the maximum time allowed for a single dial attempt to a remote visor.
+// Without this, dials to unreachable visors block indefinitely in DialStream.readResponse,
+// leaking goroutines. This caps the dial itself; the RPC deadline is set separately.
+const DialTimeout = 30 * time.Second
+
 // NewClient creates a new Client.
 func NewClient(ctx context.Context, dialer network.Dialer, rPK cipher.PubKey) (*Client, error) {
-	s, err := dialer.Dial(ctx, rPK, skyenv.DmsgAwaitSetupPort)
+	dialCtx, dialCancel := context.WithTimeout(ctx, DialTimeout)
+	defer dialCancel()
+
+	s, err := dialer.Dial(dialCtx, rPK, skyenv.DmsgAwaitSetupPort)
 	if err != nil {
 		return nil, fmt.Errorf("dial %v@%v: %w", rPK, skyenv.DmsgAwaitSetupPort, err)
 	}

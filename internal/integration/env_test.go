@@ -1246,6 +1246,60 @@ func (env *TestEnv) WaitForVisorDmsgReady(visor string, timeout time.Duration) e
 	return fmt.Errorf("visor %s did not connect to any DMSG servers within %v", visor, timeout)
 }
 
+// WaitForServiceDmsgReachable uses dmsg curl to verify a service is reachable via DMSG.
+// It runs from the e2e-test container which has SKYDEPLOY set, so skywire dmsg curl
+// automatically uses the test deployment config (DMSG discovery URL, servers, etc.).
+// The -Z flag uses HTTP for DMSG discovery connection (not DMSG-over-DMSG).
+func (env *TestEnv) WaitForServiceDmsgReachable(serviceName, dmsgURL string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	checkInterval := 5 * time.Second
+
+	env.logger.Infof("Checking DMSG reachability of %s at %s", serviceName, dmsgURL)
+
+	for time.Now().Before(deadline) {
+		cmd := fmt.Sprintf("/release/skywire dmsg curl -Z -l fatal %s", dmsgURL)
+		out, err := env.Exec(cmd)
+		if err == nil && len(out) > 0 {
+			truncated := out
+			if len(truncated) > 80 {
+				truncated = truncated[:80]
+			}
+			env.logger.Infof("Service %s reachable via DMSG: %s", serviceName, truncated)
+			return nil
+		}
+		if err != nil {
+			env.logger.Debugf("DMSG curl to %s failed: %v", serviceName, err)
+		}
+		time.Sleep(checkInterval)
+	}
+
+	return fmt.Errorf("service %s not reachable via DMSG at %s within %v", serviceName, dmsgURL, timeout)
+}
+
+// CheckServicesDmsgReachable verifies that key services are reachable via DMSG.
+// Called once before running tests that depend on DMSG connectivity.
+// Uses SKYDEPLOY (set in docker-compose) to get the test deployment DMSG addresses.
+func (env *TestEnv) CheckServicesDmsgReachable(timeout time.Duration) error {
+	// These DMSG URLs correspond to the services in docker/integration/services-config.json.
+	// The e2e-test container has SKYDEPLOY set, so skywire dmsg curl resolves them automatically.
+	// We check /health on each to verify end-to-end DMSG connectivity.
+	services := []struct {
+		name string
+		url  string
+	}{
+		{"transport-discovery", "dmsg://02a5993cb6792eb18908cb7c6c9c742ef5fbe3dcfcce2862bbc4615a5f35cbed46:80/health"},
+		{"address-resolver", "dmsg://02252c40a1ac021dcf6d93f1aae38023e8fd20bb0d35b7d07cba9435a7cb7ef34f:80/health"},
+		{"route-finder", "dmsg://02b88fe426b2f6f83f19b151c427c155aae186d734cbd45f12b57ddbd237b49278:80/health"},
+	}
+
+	for _, svc := range services {
+		if err := env.WaitForServiceDmsgReachable(svc.name, svc.url, timeout); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // WaitForDmsgDiscoveryEntry waits for a visor's entry to appear in DMSG discovery
 // with delegated servers and a recent timestamp. After a graceful visor halt, the old
 // entry is deregistered, so this waits for a fresh registration from the restarted visor.

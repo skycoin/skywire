@@ -31,6 +31,8 @@ type API interface {
 	IsStartupComplete() bool
 	EnableHypervisor() error
 	DisableHypervisor() error
+	EnableHypervisorPersist(persist bool) error
+	DisableHypervisorPersist(persist bool) error
 	IsHypervisorEnabled() bool
 	Uptime() (float64, error)
 	RuntimeStats() (*RuntimeStatsInfo, error)

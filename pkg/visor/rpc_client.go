@@ -131,14 +131,26 @@ func (rc *rpcClient) IsStartupComplete() bool {
 	return out
 }
 
-// EnableHypervisor calls EnableHypervisor
+// EnableHypervisor calls EnableHypervisor (runtime only, no persist).
 func (rc *rpcClient) EnableHypervisor() error {
-	return rc.Call("EnableHypervisor", &struct{}{}, &struct{}{})
+	persist := false
+	return rc.Call("EnableHypervisor", &persist, &struct{}{})
 }
 
-// DisableHypervisor calls DisableHypervisor
+// DisableHypervisor calls DisableHypervisor (runtime only, no persist).
 func (rc *rpcClient) DisableHypervisor() error {
-	return rc.Call("DisableHypervisor", &struct{}{}, &struct{}{})
+	persist := false
+	return rc.Call("DisableHypervisor", &persist, &struct{}{})
+}
+
+// EnableHypervisorPersist calls EnableHypervisor with persist flag.
+func (rc *rpcClient) EnableHypervisorPersist(persist bool) error {
+	return rc.Call("EnableHypervisor", &persist, &struct{}{})
+}
+
+// DisableHypervisorPersist calls DisableHypervisor with persist flag.
+func (rc *rpcClient) DisableHypervisorPersist(persist bool) error {
+	return rc.Call("DisableHypervisor", &persist, &struct{}{})
 }
 
 // IsHypervisorEnabled calls IsHypervisorEnabled

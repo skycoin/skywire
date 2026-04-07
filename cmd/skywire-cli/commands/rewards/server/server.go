@@ -1440,6 +1440,115 @@ func server() {
 			c.JSON(http.StatusOK, txids)
 		})
 
+		// JSON API: per-visor reward data for a specific date
+		r1.GET("/skycoin-rewards/hist/:date/json", func(c *gin.Context) {
+			dateStr := c.Param("date")
+			if _, err := time.Parse("2006-01-02", dateStr); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date format, use YYYY-MM-DD"})
+				return
+			}
+			sharesFile := wd + `/hist/` + dateStr + "_shares.csv"
+			lines, err := script.File(sharesFile).Slice()
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "no reward data for " + dateStr})
+				return
+			}
+			// Check if rewards were distributed (txid file exists)
+			sent := false
+			txid := ""
+			if txidBytes, err := script.File(wd + `/hist/` + dateStr + ".txt").String(); err == nil {
+				txid = strings.TrimSpace(txidBytes)
+				sent = txid != ""
+			}
+			type visorReward struct {
+				PK     string  `json:"pk"`
+				Share  float64 `json:"share"`
+				Amount float64 `json:"amount"`
+			}
+			var results []visorReward
+			for i, line := range lines {
+				if i == 0 {
+					continue // skip header
+				}
+				pkStr, _ := script.Echo(line).Column(2).String()    //nolint:errcheck,gosec
+				shareStr, _ := script.Echo(line).Column(3).String() //nolint:errcheck,gosec
+				skyStr, _ := script.Echo(line).Column(4).String()   //nolint:errcheck,gosec
+				pkStr = strings.TrimSpace(pkStr)
+				share, _ := strconv.ParseFloat(strings.TrimRight(strings.TrimSpace(shareStr), ","), 64) //nolint:errcheck
+				sky, _ := strconv.ParseFloat(strings.TrimRight(strings.TrimSpace(skyStr), ","), 64)     //nolint:errcheck
+				if pkStr != "" {
+					results = append(results, visorReward{PK: pkStr, Share: share, Amount: sky})
+				}
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"date":    dateStr,
+				"sent":    sent,
+				"txid":    txid,
+				"count":   len(results),
+				"rewards": results,
+			})
+		})
+
+		// JSON API: reward history for a specific visor PK (last 7 days)
+		r1.GET("/skycoin-rewards/visor/:pk", func(c *gin.Context) {
+			pk := c.Param("pk")
+			days := 7
+			if d := c.Query("days"); d != "" {
+				if parsed, err := strconv.Atoi(d); err == nil && parsed > 0 && parsed <= 90 {
+					days = parsed
+				}
+			}
+			type dayReward struct {
+				Date   string  `json:"date"`
+				Amount float64 `json:"amount"`
+				Share  float64 `json:"share"`
+				Sent   bool    `json:"sent"`
+				Txid   string  `json:"txid,omitempty"`
+			}
+			var history []dayReward
+			now := time.Now()
+			for i := 0; i < days; i++ {
+				date := now.AddDate(0, 0, -i).Format("2006-01-02")
+				sharesFile := wd + `/hist/` + date + "_shares.csv"
+				lines, err := script.File(sharesFile).Slice()
+				if err != nil {
+					history = append(history, dayReward{Date: date})
+					continue
+				}
+				sent := false
+				txid := ""
+				if txidBytes, err := script.File(wd + `/hist/` + date + ".txt").String(); err == nil {
+					txid = strings.TrimSpace(txidBytes)
+					sent = txid != ""
+				}
+				found := false
+				for j, line := range lines {
+					if j == 0 {
+						continue
+					}
+					pkStr, _ := script.Echo(line).Column(2).String() //nolint:errcheck,gosec
+					pkStr = strings.TrimSpace(pkStr)
+					if pkStr == pk {
+						shareStr, _ := script.Echo(line).Column(3).String()                                     //nolint:errcheck,gosec
+						skyStr, _ := script.Echo(line).Column(4).String()                                       //nolint:errcheck,gosec
+						share, _ := strconv.ParseFloat(strings.TrimRight(strings.TrimSpace(shareStr), ","), 64) //nolint:errcheck
+						sky, _ := strconv.ParseFloat(strings.TrimRight(strings.TrimSpace(skyStr), ","), 64)     //nolint:errcheck
+						history = append(history, dayReward{Date: date, Amount: sky, Share: share, Sent: sent, Txid: txid})
+						found = true
+						break
+					}
+				}
+				if !found {
+					history = append(history, dayReward{Date: date, Sent: sent, Txid: txid})
+				}
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"pk":      pk,
+				"days":    days,
+				"history": history,
+			})
+		})
+
 		r1.StaticFile("/log-collection/json", filepath.Join(os.TempDir(), "log-collection.json"))
 
 		r1.GET("/favicon.ico", func(c *gin.Context) {

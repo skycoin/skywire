@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, NgZone, Injector } from '@angular/core';
+import { Component, OnDestroy, OnInit, NgZone, Injector, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs/internal/Subscription';
 import { Observable, ReplaySubject, delay, of, timer } from 'rxjs';
@@ -47,6 +47,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   private readonly persistentDataResponseKey = 'serv-dat-response';
 
   node: Node;
+  nodeLoaded = false;
   trafficData: TrafficData;
   notFound = false;
 
@@ -87,6 +88,10 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   // True if the user manually requested the data to be updated and the update has still
   // not been made.
   lastUpdateRequestedManually = false;
+  // Set to true when we never successfully loaded data and errors persist.
+  loadFailed = false;
+  private consecutiveLoadErrors = 0;
+  private instanceId = '';
 
   // Manages the options shown in the menu.
   nodeActionsHelper: NodeActionsHelper;
@@ -128,6 +133,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     private ngZone: NgZone,
     private snackbarService: SnackbarService,
     private injector: Injector,
+    private cdr: ChangeDetectorRef,
     router: Router,
   ) {
     super();
@@ -135,6 +141,8 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     NodeComponent.nodeSubject = new ReplaySubject<Node>(1);
     NodeComponent.trafficDataSubject = new ReplaySubject<TrafficData>(1);
     NodeComponent.currentInstanceInternal = this;
+    this.instanceId = Math.random().toString(36).substring(7);
+    console.log('[HV-DIAG] NodeComponent constructor, instance:', this.instanceId);
 
     this.navigationsSubscription = router.events.subscribe(event => {
       if (event['urlAfterRedirects']) {
@@ -165,6 +173,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   private processRouteUpdate() {
+    console.log('[HV-DIAG] processRouteUpdate called, instance id:', this.instanceId);
     NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
     if (this.nodeActionsHelper) {
       this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
@@ -286,6 +295,15 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   /**
+   * Retries loading after a load failure.
+   */
+  retryLoading() {
+    this.loadFailed = false;
+    this.consecutiveLoadErrors = 0;
+    this.startGettingData(false);
+  }
+
+  /**
    * Starts getting the data from the backend.
    */
   private startGettingData(checkSavedData: boolean) {
@@ -298,18 +316,40 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
 
     // Get the node info.
     this.dataSubscription = nextOperation.subscribe((result: SingleNodeBackendData) => {
+      const t0 = performance.now();
+      console.log('[HV-DIAG] data event received', {
+        updating: result?.updating,
+        hasData: !!result?.data,
+        hasError: !!result?.error,
+        transports: result?.data?.transports?.length ?? 'n/a',
+        routes: result?.data?.routes?.length ?? 'n/a',
+        apps: result?.data?.apps?.length ?? 'n/a',
+      });
+
       if (!savedData) {
+        const t1 = performance.now();
         this.saveLocalValue(this.persistentDataResponseKey, JSON.stringify(result));
+        console.log('[HV-DIAG] saveLocalValue took', (performance.now() - t1).toFixed(1), 'ms');
       }
 
       this.updating = result ? result.updating : true;
+      console.log('[HV-DIAG] updating:', this.updating, 'node set:', !!this.node, 'notFound:', this.notFound, 'loadFailed:', this.loadFailed);
 
       if (result && !result.updating) {
         // If the data was obtained.
         if (result.data && !result.error) {
-          this.node = result.data;
-          this.trafficData = result.trafficData;
-          NodeComponent.nodeSubject.next(this.node);
+          const tAssign = performance.now();
+          this.ngZone.run(() => {
+            this.node = result.data;
+            this.trafficData = result.trafficData;
+            this.nodeLoaded = true;
+          });
+          console.log('[HV-DIAG] node assigned, instance:', this.instanceId, 'nodeLoaded:', this.nodeLoaded, 'node.localPk:', this.node?.localPk?.substring(0, 8), 'transports:', this.node?.transports?.length, 'routes:', this.node?.routes?.length);
+          try {
+            NodeComponent.nodeSubject.next(this.node);
+          } catch(e) {
+            console.error('[HV-DIAG] ERROR in nodeSubject.next:', e);
+          }
           NodeComponent.trafficDataSubject.next(this.trafficData);
           if (this.nodeActionsHelper) {
             this.nodeActionsHelper.setCurrentNode(this.node);
@@ -321,7 +361,13 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           this.lastUpdate = result.momentOfLastCorrectUpdate;
           this.secondsSinceLastUpdate = Math.floor((Date.now() - result.momentOfLastCorrectUpdate) / 1000);
           this.errorsUpdating = false;
+          this.consecutiveLoadErrors = 0;
+          this.loadFailed = false;
           AppComponent.currentInstance.hideDataProblemMsg();
+
+          console.log('[HV-DIAG] data processing took', (performance.now() - tAssign).toFixed(1), 'ms');
+          console.log('[HV-DIAG] AFTER ASSIGNMENT: this.node is', this.node ? 'SET' : 'NULL', 'this.notFound:', this.notFound, 'this.loadFailed:', this.loadFailed);
+          this.cdr.detectChanges();
 
           if (this.lastUpdateRequestedManually) {
             // Show a confirmation msg.
@@ -335,6 +381,17 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           if (result.error.originalError && ((result.error.originalError as HttpErrorResponse).status === 400)) {
             this.notFound = true;
 
+            return;
+          }
+
+          this.consecutiveLoadErrors++;
+
+          // If we never got data and errors persist, stop polling and show error state.
+          if (!this.node && this.consecutiveLoadErrors >= 3) {
+            this.loadFailed = true;
+            this.singleNodeDataService.stopRequestingSpecificNode(NodeComponent.currentNodeKey);
+            this.snackbarService.showError('common.loading-error', null, true, result.error);
+            AppComponent.currentInstance.showDataProblemMsg();
             return;
           }
 
@@ -361,6 +418,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   ngOnDestroy() {
+    console.log('[HV-DIAG] ngOnDestroy, instance:', this.instanceId);
     this.singleNodeDataService.stopRequestingSpecificNode(NodeComponent.currentNodeKey);
 
     this.dataSubscription.unsubscribe();
