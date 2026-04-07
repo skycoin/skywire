@@ -18,6 +18,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/pkg/disc"
 	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 )
@@ -151,6 +153,44 @@ Usage:
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
+
+		// Start DMSG HTTP health server on port 80 (standard for all services)
+		if !conf.PK.Null() && !conf.SK.Null() {
+			startedAt := time.Now()
+			dmsgAddr := fmt.Sprintf("%s:%d", conf.PK.Hex(), dmsg.DefaultDmsgHTTPPort)
+
+			healthMux := http.NewServeMux()
+			healthMux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				resp := httputil.HealthCheckResponse{
+					ServiceName: "setup-node",
+					BuildInfo:   buildinfo.Get(),
+					StartedAt:   startedAt,
+					DmsgAddr:    dmsgAddr,
+				}
+				json.NewEncoder(w).Encode(resp) //nolint:errcheck
+			})
+
+			dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, log, conf.PK, conf.SK,
+				dmsg.Prod.DmsgServers, conf.Dmsg.Discovery, "")
+			if err != nil {
+				log.WithError(err).Warn("Failed to start DMSG HTTP bootstrap, health endpoint unavailable")
+			} else {
+				defer dmsgBoot.Close()
+				go func() {
+					if err := dmsghttp.ListenAndServe(ctx, conf.SK, healthMux, dmsgBoot.DClient,
+						dmsg.DefaultDmsgHTTPPort, dmsgBoot.Client, log); err != nil {
+						log.WithError(err).Error("DMSG HTTP health server stopped")
+					}
+				}()
+				go func() {
+					if err := dmsghttp.ServeDebug(ctx, dmsgBoot.Client, log, deployment.Prod.SurveyWhitelist); err != nil {
+						log.WithError(err).Error("DMSG HTTP debug server stopped")
+					}
+				}()
+				log.Infof("DMSG HTTP health endpoint available at %s", dmsgAddr)
+			}
+		}
 
 		log.Fatal(sn.Serve(ctx, m))
 	},
