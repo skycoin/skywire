@@ -1664,9 +1664,13 @@ func newTimeoutResponseWriter() *timeoutResponseWriter {
 	return &timeoutResponseWriter{header: make(http.Header), statusCode: http.StatusOK}
 }
 
-func (tw *timeoutResponseWriter) Header() http.Header         { return tw.header }
-func (tw *timeoutResponseWriter) WriteHeader(code int)         { tw.statusCode = code; tw.written = true }
-func (tw *timeoutResponseWriter) Write(b []byte) (int, error) { tw.body = append(tw.body, b...); tw.written = true; return len(b), nil }
+func (tw *timeoutResponseWriter) Header() http.Header  { return tw.header }
+func (tw *timeoutResponseWriter) WriteHeader(code int) { tw.statusCode = code; tw.written = true }
+func (tw *timeoutResponseWriter) Write(b []byte) (int, error) {
+	tw.body = append(tw.body, b...)
+	tw.written = true
+	return len(b), nil
+}
 
 // copyTo flushes the buffered response to the real ResponseWriter.
 func (tw *timeoutResponseWriter) copyTo(w http.ResponseWriter) {
@@ -1674,7 +1678,7 @@ func (tw *timeoutResponseWriter) copyTo(w http.ResponseWriter) {
 		w.Header()[k] = v
 	}
 	w.WriteHeader(tw.statusCode)
-	w.Write(tw.body) //nolint:errcheck
+	w.Write(tw.body) //nolint:errcheck,gosec
 }
 
 func (hv *Hypervisor) withCtx(vFunc valuesFunc, hFunc handlerFunc) http.HandlerFunc {
