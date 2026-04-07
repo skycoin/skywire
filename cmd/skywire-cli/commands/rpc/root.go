@@ -10,10 +10,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/skycoin/dmsg/pkg/direct"
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/skycoin/dmsg/pkg/dmsgclient"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -183,45 +182,44 @@ func dmsgURLForHTTP(httpURL string) string {
 	return ""
 }
 
-// fetchViaDmsgDirect creates an ephemeral DMSG direct client (bypasses discovery),
-// connects to DMSG servers, and fetches the given dmsg:// URL.
-// Services use direct clients (not registered in discovery), so we must too.
+// fetchViaDmsgDirect creates ephemeral DMSG direct clients — one per DMSG server —
+// and uses a FallbackRoundTripper to try each until one reaches the target service.
+// This matches the pattern used by `skywire dmsg curl -B`: services connect to DMSG
+// servers directly (not via discovery), so we must connect to each server to find them.
 func fetchViaDmsgDirect(dmsgURL string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	log := logging.MustGetLogger("cli:dmsg-fetch")
+	dlog := logging.MustGetLogger("cli:dmsg-fetch")
 	pk, sk := cipher.GenerateKeyPair()
 
-	// Fetch DMSG server list from discovery via HTTP (one-time bootstrap)
-	discURL := deployment.Prod.DmsgDiscovery
-	if discURL == "" {
-		return nil, fmt.Errorf("no DMSG discovery URL configured")
-	}
-	httpClient := &http.Client{Timeout: 15 * time.Second}
-	discClient := disc.NewHTTP(discURL, httpClient, log)
-	servers, err := discClient.AllServers(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch DMSG servers: %w", err)
-	}
+	servers := dmsg.Prod.DmsgServers
 	if len(servers) == 0 {
-		return nil, fmt.Errorf("no DMSG servers available")
+		return nil, fmt.Errorf("no DMSG servers configured")
 	}
 
-	// Create direct client (bypasses discovery for connections — same as services)
-	keys := cipher.PubKeys{pk}
-	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
-
-	dmsgConfig := &dmsg.Config{MinSessions: 1}
-	dmsgDC, closeDmsg, err := direct.StartDmsg(ctx, log, pk, sk, dClient, dmsgConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start DMSG direct client: %w", err)
+	// Connect to each DMSG server via a separate direct client (same as dmsg curl -B)
+	var dmsgClients []*dmsg.Client
+	destination := dmsg.ExtractPKFromDmsgAddr(dmsgURL)
+	for _, server := range servers {
+		dmsgDC, closeFn, err := dmsgclient.StartDmsgDirectWithServers(ctx, dlog, pk, sk, "", []*disc.Entry{&server}, 1, destination)
+		if err != nil {
+			dlog.WithError(err).Debug("Failed to start direct client for server, skipping...")
+			continue
+		}
+		dmsgClients = append(dmsgClients, dmsgDC)
+		defer closeFn()
 	}
-	defer closeDmsg()
 
-	// Use dmsghttp transport for HTTP-over-DMSG
-	dmsgTransport := dmsghttp.MakeHTTPTransport(ctx, dmsgDC)
-	client := &http.Client{Transport: dmsgTransport, Timeout: 30 * time.Second}
+	if len(dmsgClients) == 0 {
+		return nil, fmt.Errorf("failed to connect to any DMSG servers")
+	}
+
+	// FallbackRoundTripper tries each client until one succeeds
+	client := &http.Client{
+		Transport: dmsgclient.NewFallbackRoundTripper(ctx, dmsgClients),
+		Timeout:   30 * time.Second,
+	}
 
 	resp, err := client.Get(dmsgURL) //nolint:gosec
 	if err != nil {
