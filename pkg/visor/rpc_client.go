@@ -498,6 +498,27 @@ func (rc *rpcClient) SetPublicAutoconnect(pAc bool) error {
 	return rc.Call("SetPublicAutoconnect", &pAc, &struct{}{})
 }
 
+// SetIsPublic implements API.
+func (rc *rpcClient) SetIsPublic(isPublic bool) error {
+	return rc.Call("SetIsPublic", &isPublic, &struct{}{})
+}
+
+// GetIsPublic implements API.
+func (rc *rpcClient) GetIsPublic() bool {
+	var out bool
+	if err := rc.Call("GetIsPublic", &struct{}{}, &out); err != nil {
+		return false
+	}
+	return out
+}
+
+// GetRuntimeConfig implements API.
+func (rc *rpcClient) GetRuntimeConfig() ([]byte, error) {
+	var out []byte
+	err := rc.Call("GetRuntimeConfig", &struct{}{}, &out)
+	return out, err
+}
+
 // StartPublicAutoconnect implements API.
 func (rc *rpcClient) StartPublicAutoconnect() error {
 	return rc.Call("StartPublicAutoconnect", &struct{}{}, &struct{}{})
