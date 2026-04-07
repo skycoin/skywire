@@ -4,18 +4,18 @@ package clitp
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 )
 
 func init() {
+	tpdHealthCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	tpdNetStatsCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	tpCmd.AddCommand(tpdHealthCmd)
 	tpCmd.AddCommand(tpdNetStatsCmd)
 }
@@ -28,21 +28,11 @@ func tpdBaseURL() string {
 	return strings.TrimRight(base, "/")
 }
 
-func fetchJSON(url string) ([]byte, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url) //nolint:gosec
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck
-	return io.ReadAll(resp.Body)
-}
-
 var tpdHealthCmd = &cobra.Command{
 	Use:   "tpd-health",
 	Short: "Transport discovery health and version info",
 	Run: func(cmd *cobra.Command, _ []string) {
-		body, err := fetchJSON(tpdBaseURL() + "/health")
+		body, err := clirpc.FetchServiceURL(cmd.Flags(), tpdBaseURL()+"/health")
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -78,7 +68,7 @@ var tpdNetStatsCmd = &cobra.Command{
 	Long: `Query the transport discovery for aggregate network statistics.
 Shows total transport count by type and unique visor count.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		body, err := fetchJSON(tpdBaseURL() + "/all-transports/stats")
+		body, err := clirpc.FetchServiceURL(cmd.Flags(), tpdBaseURL()+"/all-transports/stats")
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}

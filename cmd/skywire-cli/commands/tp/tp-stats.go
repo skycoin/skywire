@@ -4,8 +4,6 @@ package clitp
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -14,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 )
 
@@ -27,6 +26,7 @@ func init() {
 	tpdStatsCmd.Flags().IntVarP(&statsTop, "top", "n", 0, "show top N visors by transport count (0 = all)")
 	tpdStatsCmd.Flags().StringVarP(&statsType, "type", "t", "", "filter by transport type (e.g. stcpr, sudph)")
 	tpdStatsCmd.Flags().IntVar(&statsMinTps, "min", 0, "minimum transport count to display")
+	tpdStatsCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	tpCmd.AddCommand(tpdStatsCmd)
 }
 
@@ -53,15 +53,9 @@ Examples:
 		}
 		statsURL := strings.TrimRight(tpdURL, "/") + "/all-transports/per-key-stats"
 
-		resp, err := http.Get(statsURL) //nolint:gosec
+		body, err := clirpc.FetchServiceURL(cmd.Flags(), statsURL)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to fetch TPD stats: %w", err))
-		}
-		defer resp.Body.Close() //nolint:errcheck
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to read response: %w", err))
 		}
 
 		// Parse: {"pk1": {"total": 15, "stcpr": 1, "sudph": 14}, ...}

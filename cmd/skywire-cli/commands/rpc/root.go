@@ -4,6 +4,7 @@ package clirpc
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -139,4 +140,53 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	// Use logger with dmsg address as tag for better identification
 	dmsgLogger := logging.MustGetLogger(fmt.Sprintf("dmsg://%s", VisorPK[:8]))
 	return visor.NewRPCClient(dmsgLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
+}
+
+// FetchServiceURL fetches a URL from a deployment service.
+// It first tries to use the visor's DmsgHTTP RPC to proxy the request over DMSG.
+// If that fails (visor not running, DMSG not connected, etc.), it falls back
+// to a direct HTTP request.
+//
+// This pattern ensures CLI commands work for:
+//   - Visors with DMSG-only config (no direct HTTP to services)
+//   - Visors with HTTP config (direct HTTP works, DMSG is optional)
+//   - Standalone CLI usage without a running visor (direct HTTP only)
+func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
+	// Try visor RPC first (proxies over DMSG if available)
+	rpcClient, err := Client(cmdFlags)
+	if err == nil {
+		resp, err := rpcClient.DmsgHTTP(visor.DmsgHTTPRequest{
+			URL:    url,
+			Method: "GET",
+		})
+		if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return resp.Body, nil
+		}
+		if err != nil {
+			logger.Debugf("RPC DmsgHTTP failed for %s: %v, falling back to HTTP", url, err)
+		} else {
+			logger.Debugf("RPC DmsgHTTP returned status %d for %s, falling back to HTTP", resp.StatusCode, url)
+		}
+	} else {
+		logger.Debugf("RPC not available: %v, using direct HTTP for %s", err, url)
+	}
+
+	// Fall back to direct HTTP
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	resp, err := httpClient.Get(url) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode >= 300 {
+		return body, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	return body, nil
 }
