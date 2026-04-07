@@ -65,6 +65,11 @@ services:
         ipv4_address: 174.0.0.252
     container_name: "sd-redis"
     hostname: sd-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   tpd-redis:
     image: "redis:alpine"
@@ -90,6 +95,11 @@ services:
         ipv4_address: 174.0.0.255
     container_name: "ut-redis"
     hostname: ut-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
   
   postgres-db:
     image: "postgres:alpine"
