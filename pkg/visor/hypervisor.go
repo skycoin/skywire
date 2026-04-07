@@ -271,7 +271,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
-			if ctx.Err() != nil {
+			if ctx.Err() != nil || errors.Is(err, dmsg.ErrEntityClosed) {
 				return nil
 			}
 			hv.visor.MasterLogger().PackageLogger("hypervisor").WithError(err).Warn("Failed to accept dmsg stream, continuing...")
