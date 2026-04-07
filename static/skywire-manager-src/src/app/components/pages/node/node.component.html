@@ -1,47 +1,5 @@
-<!-- Content when loading. -->
-@if (!node) {
-  <div class="d-flex flex-column h-100 w-100">
-    <div>
-      <app-top-bar
-        [titleParts]="titleParts"
-        [tabsData]="tabsData"
-        [selectedTabIndex]="selectedTabIndex"
-        [showUpdateButton]="false"
-        [optionsData]="nodeActionsHelper ? nodeActionsHelper.options : null"
-        [returnText]="nodeActionsHelper ? nodeActionsHelper.returnButtonText : ''"
-        (optionSelected)="performAction($event)"
-      ></app-top-bar>
-    </div>
-    @if (!notFound && !loadFailed) {
-      <app-loading-indicator></app-loading-indicator>
-    }
-    <!-- Msg shown if the node is not found. -->
-    @if (notFound) {
-      <div class="w-100 h-100 d-flex not-found-label">
-        <div>
-          <mat-icon [inline]="true">error</mat-icon>
-          {{ 'node.not-found' | translate }}
-        </div>
-      </div>
-    }
-    <!-- Msg shown if loading failed after multiple retries. -->
-    @if (loadFailed) {
-      <div class="w-100 h-100 d-flex not-found-label">
-        <div>
-          <mat-icon [inline]="true">error</mat-icon>
-          {{ 'node.error-load' | translate }}
-          <br>
-          <button mat-raised-button color="primary" style="margin-top: 16px;" (click)="retryLoading()">
-            {{ 'common.refresh' | translate }}
-          </button>
-        </div>
-      </div>
-    }
-  </div>
-}
-
-<!-- Content when loaded. -->
-@if (node) {
+<!-- Use nodeLoaded boolean flag with if/else to avoid Angular @if detection issues -->
+<ng-container *ngIf="nodeLoaded; else loadingBlock">
   <div class="row">
     <div class="col-12">
       <app-top-bar
@@ -67,10 +25,51 @@
       </div>
       <!-- Right bar. -->
       <div class="right-bar" [ngClass]="{'d-none': showingInfo || showingFullList}">
-        @if (!showingInfo && !showingFullList) {
+        <ng-container *ngIf="!showingInfo && !showingFullList">
           <app-node-info-content [nodeInfo]="node" [trafficData]="trafficData"></app-node-info-content>
-        }
+        </ng-container>
       </div>
     </div>
   </div>
-}
+</ng-container>
+
+<ng-template #loadingBlock>
+  <div class="d-flex flex-column h-100 w-100">
+    <div>
+      <app-top-bar
+        [titleParts]="titleParts"
+        [tabsData]="tabsData"
+        [selectedTabIndex]="selectedTabIndex"
+        [showUpdateButton]="false"
+        [optionsData]="nodeActionsHelper ? nodeActionsHelper.options : null"
+        [returnText]="nodeActionsHelper ? nodeActionsHelper.returnButtonText : ''"
+        (optionSelected)="performAction($event)"
+      ></app-top-bar>
+    </div>
+    <ng-container *ngIf="!notFound && !loadFailed">
+      <app-loading-indicator></app-loading-indicator>
+    </ng-container>
+    <!-- Msg shown if the node is not found. -->
+    <ng-container *ngIf="notFound">
+      <div class="w-100 h-100 d-flex not-found-label">
+        <div>
+          <mat-icon [inline]="true">error</mat-icon>
+          {{ 'node.not-found' | translate }}
+        </div>
+      </div>
+    </ng-container>
+    <!-- Msg shown if loading failed after multiple retries. -->
+    <ng-container *ngIf="loadFailed">
+      <div class="w-100 h-100 d-flex not-found-label">
+        <div>
+          <mat-icon [inline]="true">error</mat-icon>
+          {{ 'node.error-load' | translate }}
+          <br>
+          <button mat-raised-button color="primary" style="margin-top: 16px;" (click)="retryLoading()">
+            {{ 'common.refresh' | translate }}
+          </button>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+</ng-template>
