@@ -83,7 +83,7 @@ func (v *Visor) DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) 
 		return fmt.Errorf("no session with dmsg server %s", serverPK)
 	}
 
-	stream, err := session.DialStream(dmsg.Addr{PK: pk, Port: skyenv.DmsgPingPort})
+	stream, err := session.DialStream(context.Background(), dmsg.Addr{PK: pk, Port: skyenv.DmsgPingPort})
 	if err != nil {
 		return fmt.Errorf("failed to dial dmsg ping via server %s: %w", serverPK, err)
 	}
