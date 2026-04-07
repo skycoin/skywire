@@ -40,7 +40,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// Phase 0: Try cached route first (server that last successfully reached this destination).
 	if cachedSrvPK, ok := ce.getCachedRoute(addr.PK); ok {
 		if dSes, ok := ce.clientSession(ce.porter, cachedSrvPK); ok {
-			stream, err := dSes.DialStream(addr)
+			stream, err := dSes.DialStream(ctx, addr)
 			if err != nil {
 				ce.log.WithError(err).WithField("server", cachedSrvPK).
 					Debug("DialStream failed via cached route, evicting")
@@ -58,7 +58,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// Sort by latency so the lowest-latency server is tried first.
 	delegatedSessions := ce.sortedDelegatedSessions(entry.Client.DelegatedServers)
 	for _, dSes := range delegatedSessions {
-		stream, err := dSes.DialStream(addr)
+		stream, err := dSes.DialStream(ctx, addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", dSes.RemotePK()).
 				Debug("DialStream failed via existing session, trying next server")
@@ -73,7 +73,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// Sorted by latency.
 	meshSessions := ce.sortedMeshSessions(entry.Client.DelegatedServers)
 	for _, ses := range meshSessions {
-		stream, err := ses.DialStream(addr)
+		stream, err := ses.DialStream(ctx, addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", ses.RemotePK()).
 				Debug("DialStream failed via mesh, trying next server")
@@ -89,7 +89,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		if err != nil {
 			continue
 		}
-		stream, err := dSes.DialStream(addr)
+		stream, err := dSes.DialStream(ctx, addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", srvPK).
 				Debug("DialStream failed via new session, trying next server")
