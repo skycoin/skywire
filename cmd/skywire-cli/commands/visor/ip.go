@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -83,7 +84,11 @@ func isPublic(logger *logging.Logger) string {
 func getStunServers() ([]string, error) {
 	var info stunInfo
 
-	resp, err := http.Get("https://conf.skywire.skycoin.com/") //nolint:gosec
+	confURL := deployment.ProdConf.Conf
+	if confURL == "" {
+		confURL = "http://conf.skywire.skycoin.com"
+	}
+	resp, err := http.Get(confURL + "/") //nolint:gosec
 	if err != nil {
 		return info.Stun, err
 	}
