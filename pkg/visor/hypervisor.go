@@ -1632,11 +1632,13 @@ func (hv *Hypervisor) deleteRewardAddress() http.HandlerFunc {
 	})
 }
 
+type isPublicResp struct {
+	IsPublic bool `json:"is_public"`
+}
+
 func (hv *Hypervisor) putIsPublic() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var req struct {
-			IsPublic bool `json:"is_public"`
-		}
+		var req isPublicResp
 		if err := httputil.ReadJSON(r, &req); err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
@@ -1645,13 +1647,13 @@ func (hv *Hypervisor) putIsPublic() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{ IsPublic bool `json:"is_public"` }{req.IsPublic})
+		httputil.WriteJSON(w, r, http.StatusOK, req)
 	})
 }
 
 func (hv *Hypervisor) getIsPublic() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		httputil.WriteJSON(w, r, http.StatusOK, struct{ IsPublic bool `json:"is_public"` }{ctx.API.GetIsPublic()})
+		httputil.WriteJSON(w, r, http.StatusOK, isPublicResp{ctx.API.GetIsPublic()})
 	})
 }
 
