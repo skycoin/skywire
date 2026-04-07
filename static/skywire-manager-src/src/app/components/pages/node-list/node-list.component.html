@@ -5,7 +5,7 @@
       <app-top-bar
         [titleParts]="['start.title']"
         [tabsData]="tabsData"
-        [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
+        [selectedTabIndex]="showRewardsInfo ? 1 : 0"
         [showUpdateButton]="false"
       ></app-top-bar>
     </div>
@@ -20,7 +20,7 @@
       <app-top-bar
         [titleParts]="['start.title']"
         [tabsData]="tabsData"
-        [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
+        [selectedTabIndex]="showRewardsInfo ? 1 : 0"
         [secondsSinceLastUpdate]="secondsSinceLastUpdate"
         [showLoading]="updating"
         [showAlert]="errorsUpdating"
@@ -77,7 +77,7 @@
             <app-paginator
               [currentPage]="currentPage"
               [numberOfPages]="numberOfPages"
-              [linkParts]="!showDmsgInfo ? ['/nodes', 'list'] : ['/nodes', 'dmsg']"
+              [linkParts]="showRewardsInfo ? ['/nodes', 'rewards'] : ['/nodes', 'list']"
               [queryParams]="dataFilterer.currentUrlQueryParams">
             </app-paginator>
           }
@@ -85,8 +85,142 @@
       </div>
       @if (dataSource.length !== 0) {
         <div class="rounded-elevated-box mt-3"><div class="box-internal-container overflow full-node-list-margins">
-          <!-- Table for large screens. -->
-          @if (dataSource.length > 0) {
+
+          <!-- ==================== REWARDS TABLE (large screens) ==================== -->
+          @if (showRewardsInfo && dataSource.length > 0) {
+            <table
+              class="responsive-table-translucid d-none d-md-table"
+              cellspacing="0" cellpadding="0"
+              >
+              <!-- Column names. -->
+              <tr>
+                <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(hypervisorSortData)" [matTooltip]="'nodes.hypervisor' | translate">
+                  <mat-icon class="hypervisor-icon grey-text">star_outline</mat-icon>
+                  @if (dataSorter.currentSortingColumn === hypervisorSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
+                </th>
+                <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(stateSortData)" [matTooltip]="'nodes.state-tooltip' | translate">
+                  <span class="dot-outline-gray"></span>
+                  @if (dataSorter.currentSortingColumn === stateSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
+                </th>
+                <th class="sortable-column labels" (click)="dataSorter.changeSortingOrder(labelSortData)">
+                  {{ 'nodes.label' | translate }}
+                  @if (dataSorter.currentSortingColumn === labelSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
+                </th>
+                <th class="sortable-column" (click)="dataSorter.changeSortingOrder(keySortData)">
+                  {{ 'nodes.key' | translate }}
+                  @if (dataSorter.currentSortingColumn === keySortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
+                </th>
+                <th>
+                  {{ 'nodes.reward-address' | translate }}
+                </th>
+                @if (rewardDataLoaded) {
+                  @for (header of rewardDateHeaders; track header; let i = $index) {
+                    <th class="reward-day-column">
+                      {{ header }}
+                    </th>
+                  }
+                  <th class="reward-total-column">
+                    {{ 'nodes.reward-total' | translate }}
+                  </th>
+                }
+                @if (rewardDataLoading) {
+                  <th>
+                    {{ 'nodes.rewards-loading' | translate }}
+                  </th>
+                }
+                <th class="actions"></th>
+              </tr>
+              <!-- Values. -->
+              @for (node of dataSource; track node) {
+                <a
+                  [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online}"
+                  class="selectable link-row"
+                  [routerLink]="node.online ? ['/nodes', node.localPk] : null"
+                  >
+                  <td>
+                    @if (node.isHypervisor) {
+                      <mat-icon class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>
+                    }
+                  </td>
+                  <td>
+                    <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
+                  </td>
+                  <td>
+                    {{ node.label }}
+                  </td>
+                  <td>
+                    {{ node.localPk }}
+                  </td>
+                  <td>
+                    <span style="font-size: 0.85em;">{{ getRewardAddress(node.localPk) }}</span>
+                  </td>
+                  @if (rewardDataLoaded) {
+                    @for (date of rewardDates; track date) {
+                      <td class="reward-day-column">
+                        <span [class]="getRewardClass(node.localPk, date)" style="font-size: 0.85em;">{{ getRewardAmount(node.localPk, date) }}</span>
+                      </td>
+                    }
+                    <td class="reward-total-column">
+                      <span style="font-size: 0.85em; font-weight: bold;">{{ getWeekTotal(node.localPk) }}</span>
+                    </td>
+                  }
+                  @if (rewardDataLoading) {
+                    <td>
+                      <span style="font-size: 0.85em;">...</span>
+                    </td>
+                  }
+                  <td class="actions">
+                    <button
+                      (click)="$event.stopPropagation(); $event.preventDefault(); copyToClipboard(node);"
+                      mat-button
+                      [matTooltip]="'nodes.copy-key' | translate"
+                      class="big-action-button transparent-button"
+                      >
+                      <mat-icon [inline]="true">filter_none</mat-icon>
+                    </button>
+                    <button
+                      (click)="$event.stopPropagation(); $event.preventDefault(); showEditLabelDialog(node);"
+                      mat-button
+                      [matTooltip]="'labeled-element.edit-label' | translate"
+                      class="big-action-button transparent-button"
+                      >
+                      <mat-icon [inline]="true">short_text</mat-icon>
+                    </button>
+                    @if (node.online) {
+                      <button
+                        mat-button
+                        [matTooltip]="'nodes.view-node' | translate"
+                        class="big-action-button transparent-button"
+                        >
+                        <mat-icon [inline]="true">chevron_right</mat-icon>
+                      </button>
+                    }
+                    @if (!node.online) {
+                      <button
+                        (click)="$event.stopPropagation(); $event.preventDefault(); deleteNode(node);"
+                        mat-button
+                        [matTooltip]="'nodes.delete-node' | translate"
+                        class="big-action-button transparent-button"
+                        >
+                        <mat-icon>close</mat-icon>
+                      </button>
+                    }
+                  </td>
+                </a>
+              }
+            </table>
+          }
+
+          <!-- ==================== VISOR LIST TABLE (large screens) ==================== -->
+          @if (!showRewardsInfo && dataSource.length > 0) {
             <table
               class="responsive-table-translucid d-none d-md-table"
               cellspacing="0" cellpadding="0"
@@ -135,25 +269,6 @@
                 <th>
                   {{ 'nodes.reward' | translate }}
                 </th>
-                @if (showDmsgInfo) {
-                  <th class="sortable-column" (click)="dataSorter.changeSortingOrder(dmsgServerSortData)">
-                    {{ 'nodes.dmsg-server' | translate }}
-                    @if (dataSorter.currentSortingColumn === dmsgServerSortData) {
-                      <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-                      @if (dataSorter.currentlySortingByLabel) {
-                        *
-                      }
-                    }
-                  </th>
-                }
-                @if (showDmsgInfo) {
-                  <th class="sortable-column" (click)="dataSorter.changeSortingOrder(pingSortData)">
-                    {{ 'nodes.ping' | translate }}
-                    @if (dataSorter.currentSortingColumn === pingSortData) {
-                      <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-                    }
-                  </th>
-                }
                 <th class="actions"></th>
               </tr>
               <!-- Values. -->
@@ -232,31 +347,11 @@
                       <mat-icon style="color: #f44336; font-size: 20px;" [matTooltip]="'nodes.reward-not-set' | translate">cancel</mat-icon>
                     }
                   </td>
-                  @if (showDmsgInfo) {
-                    <td>
-                      @if (node.dmsgServerPk) {
-                        <app-labeled-element-text
-                          [short]="true"
-                          id="{{ node.dmsgServerPk }}"
-                          shortTextLength="4"
-                          (labelEdited)="forceDataRefresh()"
-                          [elementType]="labeledElementTypes.DmsgServer">
-                        </app-labeled-element-text>
-                      }
-                    </td>
-                  }
-                  @if (showDmsgInfo) {
-                    <td>
-                      @if (node.dmsgServerPk) {
-                        {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
-                      }
-                    </td>
-                  }
                   <td class="actions">
                     <button
                       (click)="$event.stopPropagation(); $event.preventDefault(); copyToClipboard(node);"
                       mat-button
-                      [matTooltip]="(showDmsgInfo ? 'nodes.copy-data' : 'nodes.copy-key') | translate"
+                      [matTooltip]="'nodes.copy-key' | translate"
                       class="big-action-button transparent-button"
                       >
                       <mat-icon [inline]="true">filter_none</mat-icon>
@@ -293,6 +388,7 @@
               }
             </table>
           }
+
           <!-- List for small screens. -->
           @if (dataSource.length > 0) {
             <table
@@ -377,22 +473,6 @@
                             {{ node.configVersion }}
                           </div>
                         }
-                        @if (showDmsgInfo) {
-                          <div class="list-row long-content">
-                            <span class="title">{{ 'nodes.dmsg-server' | translate }}</span>:
-                            <app-labeled-element-text
-                              id="{{ node.dmsgServerPk }}"
-                              (labelEdited)="forceDataRefresh()"
-                              [elementType]="labeledElementTypes.DmsgServer">
-                            </app-labeled-element-text>
-                          </div>
-                        }
-                        @if (showDmsgInfo) {
-                          <div class="list-row">
-                            <span class="title">{{ 'nodes.ping' | translate }}</span>:
-                            {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
-                          </div>
-                        }
                       </div>
                       <div class="margin-part"></div>
                       <div class="right-part">
@@ -417,7 +497,7 @@
           <app-paginator
             [currentPage]="currentPage"
             [numberOfPages]="numberOfPages"
-            [linkParts]="!showDmsgInfo ? ['/nodes', 'list'] : ['/nodes', 'dmsg']"
+            [linkParts]="showRewardsInfo ? ['/nodes', 'rewards'] : ['/nodes', 'list']"
             [queryParams]="dataFilterer.currentUrlQueryParams">
           </app-paginator>
         }

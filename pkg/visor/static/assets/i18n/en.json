@@ -217,6 +217,12 @@
   "nodes": {
     "title": "Visor list",
     "dmsg-title": "DMSG",
+    "rewards-title": "Rewards",
+    "reward-address": "Reward Address",
+    "reward-total": "Week Total",
+    "reward-distributed": "Distributed",
+    "reward-pending": "Pending",
+    "rewards-loading": "Loading rewards...",
     "modify-rewards-all": "Change rewards address",
     "update-all": "Update all online visors",
     "hypervisor": "Hypervisor",
