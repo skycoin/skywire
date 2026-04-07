@@ -99,6 +99,10 @@ export class NodeData {
    * the cache was made. If -1, no such call has been made.
    */
   stopRequestedDate = -1;
+  /**
+   * Consecutive error count for exponential backoff on retries.
+   */
+  consecutiveErrors = 0;
 }
 
 /**
@@ -141,19 +145,17 @@ export class SingleNodeDataService {
   }
 
   /**
-   * Periodically checks all entries in nodesMap and removes all expired ones. Must be
-   * called one tim e only, it calls itself automatically after that,
+   * Periodically checks all entries in nodesMap and removes all expired ones.
+   * Uses setInterval instead of recursive subscription to avoid subscription leaks.
    */
   private checkForExpired() {
-    of(1).pipe(delay(5000)).subscribe(() => {
+    setInterval(() => {
       try {
         this.nodesMap.forEach(n => {
           this.finishIfExpired(n);
         });
       } catch (e) {}
-
-      this.checkForExpired();
-    });
+    }, 5000);
   }
 
   /**
@@ -202,6 +204,7 @@ export class SingleNodeDataService {
       nodeData.updateSubscription.unsubscribe();
     }
 
+    let fetchStart = 0;
     nodeData.updateSubscription = of(1).pipe(
       // Wait the requested delay.
       delay(delayMs),
@@ -211,9 +214,17 @@ export class SingleNodeDataService {
         nodeData.dataSubject.next(nodeData.lastEmitedData);
       }),
       delay(120),
+      tap(() => {
+        fetchStart = performance.now();
+        console.log('[HV-DIAG] fetching node data for', nodeData.pk.substring(0, 8) + '...');
+      }),
       // Load the data.
       mergeMap(() => this.nodeService.getNode(nodeData.pk)))
     .subscribe(result => {
+      console.log('[HV-DIAG] fetch completed in', (performance.now() - fetchStart).toFixed(0), 'ms for', nodeData.pk.substring(0, 8) + '...');
+      // Reset error backoff counter on success.
+      nodeData.consecutiveErrors = 0;
+
       // Update the history values.
       this.updateTrafficData((result as Node).transports, nodeData.lastEmitedData.trafficData, nodeData.whenUpdateWasScheduled);
 
@@ -241,6 +252,9 @@ export class SingleNodeDataService {
     }, err => {
       err = processServiceError(err);
 
+      // Track consecutive errors for backoff.
+      nodeData.consecutiveErrors = (nodeData.consecutiveErrors || 0) + 1;
+
       // Send the event.
       nodeData.lastEmitedData = {
         data: nodeData.lastEmitedData.data,
@@ -254,8 +268,9 @@ export class SingleNodeDataService {
       // If the specific node was not found, stop updating the data.
       const stopUpdating = err.originalError && ((err.originalError as HttpErrorResponse).status === 400);
       if (!stopUpdating) {
-        // Schedule the next update.
-        this.startDataSubscription(AppConfig.connectionRetryDelay, nodeData);
+        // Exponential backoff: 5s, 10s, 20s, 30s max
+        const backoff = Math.min(AppConfig.connectionRetryDelay * Math.pow(2, nodeData.consecutiveErrors - 1), 30000);
+        this.startDataSubscription(backoff, nodeData);
       } else {
         nodeData.dataSubject.complete();
         nodeData.updateSubscription.unsubscribe();

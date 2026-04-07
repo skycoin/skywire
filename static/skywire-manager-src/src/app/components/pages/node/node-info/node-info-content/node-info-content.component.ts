@@ -30,6 +30,7 @@ export class NodeInfoContentComponent implements OnDestroy {
   @Input() set nodeInfo(val: Node) {
     this.node = val;
     this.timeOnline = TimeUtils.getElapsedTime(val.secondsOnline);
+    this.transportStats = this.computeTransportStats();
 
     if (val.health && val.health.servicesHealth === KnownHealthStatuses.Healthy) {
       this.nodeHealthText = 'node.statuses.online';
@@ -50,6 +51,7 @@ export class NodeInfoContentComponent implements OnDestroy {
 
   node: Node;
   timeOnline: ElapsedTime;
+  transportStats: { total: number, byType: { type: string, count: number }[] } = { total: 0, byType: [] };
   nodeHealthClass: string;
   nodeHealthText: string;
 
@@ -130,7 +132,7 @@ export class NodeInfoContentComponent implements OnDestroy {
   /**
    * Returns transport statistics: total count and counts by type.
    */
-  getTransportStats(): { total: number, byType: { type: string, count: number }[] } {
+  private computeTransportStats(): { total: number, byType: { type: string, count: number }[] } {
     if (!this.node || !this.node.transports) {
       return { total: 0, byType: [] };
     }

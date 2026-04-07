@@ -15,6 +15,10 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
+var (
+	hvPersist bool
+)
+
 func init() {
 	RootCmd.AddCommand(hvCmd)
 	hvCmd.AddCommand(hvuiCmd)
@@ -23,7 +27,9 @@ func init() {
 	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
 	hvCmd.AddCommand(chvpkCmd)
 	hvCmd.AddCommand(hvEnableCmd)
+	hvEnableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
 	hvCmd.AddCommand(hvDisableCmd)
+	hvDisableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
 	hvCmd.AddCommand(hvStatusCmd)
 }
 
@@ -107,30 +113,40 @@ func HypervisorPort(cmdFlags *pflag.FlagSet) string {
 var hvEnableCmd = &cobra.Command{
 	Use:   "enable",
 	Short: "Enable hypervisor UI at runtime",
+	Long:  "\n  Enable hypervisor UI at runtime.\n  Use -w to also persist the change to the config file.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
-		if err := rpcClient.EnableHypervisor(); err != nil {
+		if err := rpcClient.EnableHypervisorPersist(hvPersist); err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
-		internal.PrintOutput(cmd.Flags(), "Hypervisor enabled\n", "Hypervisor enabled\n")
+		if hvPersist {
+			internal.PrintOutput(cmd.Flags(), "Hypervisor enabled (persisted to config)\n", "Hypervisor enabled (persisted to config)\n")
+		} else {
+			internal.PrintOutput(cmd.Flags(), "Hypervisor enabled\n", "Hypervisor enabled\n")
+		}
 	},
 }
 
 var hvDisableCmd = &cobra.Command{
 	Use:   "disable",
 	Short: "Disable hypervisor UI at runtime",
+	Long:  "\n  Disable hypervisor UI at runtime.\n  Use -w to also persist the change to the config file.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
-		if err := rpcClient.DisableHypervisor(); err != nil {
+		if err := rpcClient.DisableHypervisorPersist(hvPersist); err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
-		internal.PrintOutput(cmd.Flags(), "Hypervisor disabled\n", "Hypervisor disabled\n")
+		if hvPersist {
+			internal.PrintOutput(cmd.Flags(), "Hypervisor disabled (persisted to config)\n", "Hypervisor disabled (persisted to config)\n")
+		} else {
+			internal.PrintOutput(cmd.Flags(), "Hypervisor disabled\n", "Hypervisor disabled\n")
+		}
 	},
 }
 

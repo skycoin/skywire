@@ -71,15 +71,19 @@ func (r *RPC) IsStartupComplete(_ *struct{}, out *bool) (err error) {
 }
 
 // EnableHypervisor starts the hypervisor HTTP server and DMSG listener.
-func (r *RPC) EnableHypervisor(_ *struct{}, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "EnableHypervisor", nil)(nil, &err)
-	return r.visor.EnableHypervisor()
+// If persist is true, the change is also written to the config file.
+func (r *RPC) EnableHypervisor(persist *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "EnableHypervisor", persist)(nil, &err)
+	p := persist != nil && *persist
+	return r.visor.EnableHypervisorPersist(p)
 }
 
 // DisableHypervisor stops the hypervisor HTTP server and disconnects remote visors.
-func (r *RPC) DisableHypervisor(_ *struct{}, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "DisableHypervisor", nil)(nil, &err)
-	return r.visor.DisableHypervisor()
+// If persist is true, the change is also written to the config file.
+func (r *RPC) DisableHypervisor(persist *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DisableHypervisor", persist)(nil, &err)
+	p := persist != nil && *persist
+	return r.visor.DisableHypervisorPersist(p)
 }
 
 // IsHypervisorEnabled returns whether the hypervisor is currently serving.
