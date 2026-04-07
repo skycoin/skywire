@@ -124,7 +124,7 @@ Examples:
 			fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\n", //nolint:errcheck
 				v.PK, v.Total, v.ByType["stcpr"], v.ByType["sudph"], v.ByType["dmsg"])
 		}
-		w.Flush() //nolint:errcheck
+		w.Flush() //nolint:errcheck,gosec
 		fmt.Fprintf(&buf, "\nTotal visors: %d\n", len(visors)) //nolint:errcheck
 
 		internal.PrintOutput(cmd.Flags(), jsonOut, buf.String())
