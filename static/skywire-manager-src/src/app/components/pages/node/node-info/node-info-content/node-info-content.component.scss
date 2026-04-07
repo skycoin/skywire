@@ -147,6 +147,23 @@
   text-shadow: 0 0 8px rgba(248, 113, 113, 0.5);
 }
 
+// Raw config viewer
+.raw-config {
+  margin-top: 10px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 6px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.9);
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 // Transport stats styling
 .transport-stats {
   color: rgba(255, 255, 255, 0.85);
