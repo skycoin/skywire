@@ -4,12 +4,11 @@ package clisvc
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -57,7 +56,7 @@ var healthCmd = &cobra.Command{
 		}
 
 		// Direct query fallback
-		results = queryServicesDirect()
+		results = queryServicesDirect(cmd.Flags())
 		printHealthResults(cmd, results)
 	},
 }
@@ -73,7 +72,7 @@ func printHealthResults(cmd *cobra.Command, results []skyvisor.ServiceHealthEntr
 	internal.PrintOutput(cmd.Flags(), results, "")
 }
 
-func queryServicesDirect() []skyvisor.ServiceHealthEntry {
+func queryServicesDirect(cmdFlags *pflag.FlagSet) []skyvisor.ServiceHealthEntry {
 	services := map[string]string{
 		"Transport Discovery": deployment.Prod.TransportDiscovery,
 		"DMSG Discovery":      deployment.Prod.DmsgDiscovery,
@@ -83,7 +82,6 @@ func queryServicesDirect() []skyvisor.ServiceHealthEntry {
 		"Service Discovery":   deployment.Prod.ServiceDiscovery,
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
 	var results []skyvisor.ServiceHealthEntry
 
 	for name, baseURL := range services {
@@ -94,20 +92,11 @@ func queryServicesDirect() []skyvisor.ServiceHealthEntry {
 		entry := skyvisor.ServiceHealthEntry{Name: name, URL: baseURL}
 
 		start := time.Now()
-		resp, err := client.Get(url) //nolint:gosec
+		body, err := clirpc.FetchServiceURL(cmdFlags, url)
 		entry.LatencyMs = time.Since(start).Milliseconds()
 
 		if err != nil {
 			entry.Status = "DOWN"
-			results = append(results, entry)
-			continue
-		}
-
-		body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
-		resp.Body.Close()                //nolint:errcheck,gosec
-
-		if resp.StatusCode != http.StatusOK {
-			entry.Status = fmt.Sprintf("ERROR(%d)", resp.StatusCode)
 			results = append(results, entry)
 			continue
 		}

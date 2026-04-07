@@ -23,7 +23,9 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsgcurl"
 	"github.com/skycoin/dmsg/pkg/dmsghttp"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil" //nolint:errcheck
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -52,13 +54,14 @@ func init() {
 	logCmd.Flags().BoolVar(&runCleanup, "cleanup", true, "run cleanup after collection (remove old/invalid files)")
 	logCmd.Flags().StringVar(&backupDir, "backup-dir", "log_backups", "backup directory to also clean")
 	logCmd.Flags().IntVar(&maxAgeDays, "max-age", 7, "maximum age in days for files before deletion")
+	logCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 }
 
 var logCmd = &cobra.Command{
 	Use:   "log",
 	Short: "survey & transport log collection",
 	Long:  "Fetch health, survey, and transport logging from visors which are online in the uptime tracker\nhttp://ut.skywire.skycoin.com/uptimes?v=v2\nhttp://ut.skywire.skycoin.com/uptimes?v=v2&visors=<pk1>;<pk2>;<pk3>",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		log := logging.MustGetLogger("log-collecting")
 		fver, err := version.NewVersion("v1.3.17")
 		if err != nil {
@@ -124,7 +127,7 @@ var logCmd = &cobra.Command{
 		defer closeDmsg()
 
 		// Connect dmsgC to all servers
-		allServer := getAllDMSGServers()
+		allServer := getAllDMSGServers(cmd.Flags())
 		for _, server := range allServer {
 			dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint:errcheck,gosec
 		}
@@ -414,16 +417,10 @@ func getUptimes(endpoint string, log *logging.Logger) ([]VisorUptimeResponse, er
 	return results, nil
 }
 
-func getAllDMSGServers() []dmsgServer {
+func getAllDMSGServers(cmdFlags *pflag.FlagSet) []dmsgServer {
 	var results []dmsgServer
 
-	response, err := http.Get(dmsgDisc + "/dmsg-discovery/all_servers")
-	if err != nil {
-		return results
-	}
-
-	defer response.Body.Close() //nolint:errcheck
-	body, err := io.ReadAll(response.Body)
+	body, err := clirpc.FetchServiceURL(cmdFlags, dmsgDisc+"/dmsg-discovery/all_servers")
 	if err != nil {
 		return results
 	}

@@ -153,6 +153,16 @@
         {{ ('node.details.transports-info.' + (node.autoconnectTransports ? 'disable' : 'enable') + '-button') | translate }}
       </app-button>
     </div>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.transports-info.is-public' | translate }} </span>
+      {{ ('node.details.transports-info.public-' + (isPublic ? 'enabled' : 'disabled')) | translate }}
+      <mat-icon [inline]="true" [matTooltip]="'node.details.transports-info.is-public-info' | translate">info</mat-icon>
+    </span>
+    <div class="config-button-container">
+      <app-button color="primary" (action)="changePublicConfig()" [forDarkBackground]="true">
+        {{ ('node.details.transports-info.public-' + (isPublic ? 'disable' : 'enable') + '-button') | translate }}
+      </app-button>
+    </div>
   </div>
   <div class="separator"></div>
   <!-- Router info section. -->
@@ -178,6 +188,44 @@
       {{ nodeHealthText | translate }}
     </span>
   </div>
+  <!-- Ports section. -->
+  @if (ports.length > 0) {
+    <div class="separator"></div>
+    <div class="d-flex flex-column">
+      <span class="section-title">{{ 'node.details.ports.title' | translate }}</span>
+      @for (port of ports; track port.name) {
+        <span class="info-line">
+          <span class="title">{{ port.name }}: </span>
+          {{ port.value }}
+        </span>
+      }
+    </div>
+  }
+  <!-- Runtime config section. -->
+  <div class="separator"></div>
+  <div class="d-flex flex-column">
+    <span class="section-title">{{ 'node.details.config.title' | translate }}</span>
+    <div class="config-button-container">
+      <app-button color="primary" (action)="viewConfig()" [forDarkBackground]="true">
+        {{ 'node.details.config.view-button' | translate }}
+      </app-button>
+    </div>
+    @if (showRawConfig && rawConfig) {
+      <pre class="raw-config">{{ rawConfig }}</pre>
+    }
+  </div>
+  <!-- Transport Visualizer link (hypervisor only). -->
+  @if (node.isHypervisor) {
+    <div class="separator"></div>
+    <div class="d-flex flex-column">
+      <span class="section-title">{{ 'node.details.tpviz.title' | translate }}</span>
+      <div class="config-button-container">
+        <app-button color="primary" (action)="openTpViz()" [forDarkBackground]="true">
+          {{ 'node.details.tpviz.open' | translate }}
+        </app-button>
+      </div>
+    </div>
+  }
   <div class="separator"></div>
   <!-- Traffic info section. -->
   <div class="d-flex flex-column">
