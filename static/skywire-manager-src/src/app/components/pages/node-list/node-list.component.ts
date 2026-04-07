@@ -16,7 +16,6 @@ import { SelectOptionComponent, SelectableOption } from '../../layout/select-opt
 import { ClipboardService } from 'src/app/services/clipboard.service';
 import { AppConfig } from 'src/app/app.config';
 import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
-import { LabeledElementTextComponent } from '../../layout/labeled-element-text/labeled-element-text.component';
 import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { NodeData, UpdateAllComponent } from '../../layout/update-all/update-all.component';
@@ -24,6 +23,7 @@ import { BulkRewardAddressChangerComponent, BulkRewardAddressParams, NodeToEditD
 import { MultipleNodeDataService, MultipleNodesBackendData } from 'src/app/services/multiple-node-data.service';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { AppComponent } from 'src/app/app.component';
+import { RewardService, VisorRewardData } from 'src/app/services/reward.service';
 
 /**
  * Page for showing the node list.
@@ -63,7 +63,15 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   tabsData: TabButtonData[] = [];
   options: MenuOptionData[] = [];
   showDmsgInfo = false;
+  showRewardsInfo = false;
   canLogOut = true;
+
+  // Reward data
+  rewardDataMap: Map<string, VisorRewardData> = new Map();
+  rewardDates: string[] = [];
+  rewardDateHeaders: string[] = [];
+  rewardDataLoading = false;
+  rewardDataLoaded = false;
 
   // Vars for the pagination functionality.
   allNodes: Node[];
@@ -146,6 +154,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     private snackbarService: SnackbarService,
     private clipboardService: ClipboardService,
     private translateService: TranslateService,
+    private rewardService: RewardService,
     route: ActivatedRoute,
   ) {
     super();
@@ -159,13 +168,13 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       this.updateOptionsMenu();
     });
 
-    // Show the dmsg info if the dmsg url was used.
-    this.showDmsgInfo = this.router.url.indexOf('dmsg') !== -1;
+    // Show the rewards info if the rewards url was used (also catch old dmsg urls via redirect).
+    this.showRewardsInfo = this.router.url.indexOf('rewards') !== -1;
+    // Keep showDmsgInfo false — DMSG tab is replaced by Rewards
+    this.showDmsgInfo = false;
 
-    // Remove the DMSG filtering options if no DMSG info is being shown.
-    if (!this.showDmsgInfo) {
-      this.filterProperties.splice(this.filterProperties.length - 1);
-    }
+    // Remove the DMSG filtering options (last entry) since DMSG tab is gone.
+    this.filterProperties.splice(this.filterProperties.length - 1);
 
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
@@ -176,12 +185,9 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       this.versionSortData,
       this.configVersionSortData,
     ];
-    if (this.showDmsgInfo) {
-      sortableColumns.push(this.dmsgServerSortData);
-      sortableColumns.push(this.pingSortData);
-    }
+    const listId = this.showRewardsInfo ? 'rl' : this.nodesListId;
     this.dataSorter = new DataSorter(
-      this.dialog, this.translateService, this.storageService, sortableColumns, 3, this.showDmsgInfo ? this.dmsgListId : this.nodesListId
+      this.dialog, this.translateService, this.storageService, sortableColumns, 3, listId
     );
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allNodes has already been sorted.
@@ -189,7 +195,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     });
 
     this.dataFilterer = new DataFilterer(
-      this.dialog, route, this.router, this.filterProperties, this.showDmsgInfo ? this.dmsgListId : this.nodesListId
+      this.dialog, route, this.router, this.filterProperties, listId
     );
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredNodes = data;
@@ -227,9 +233,9 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
         linkParts: ['/nodes'],
       },
       {
-        icon: 'language',
-        label: 'nodes.dmsg-title',
-        linkParts: ['/nodes', 'dmsg'],
+        icon: 'monetization_on',
+        label: 'nodes.rewards-title',
+        linkParts: ['/nodes', 'rewards'],
       },
       {
         icon: 'settings',
@@ -397,15 +403,12 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
         // If the data was obtained.
         if (result.data && !result.error) {
           this.allNodes = result.data as Node[];
-
-          if (this.showDmsgInfo) {
-            // Add the label data to the array, to be able to use it for filtering and sorting.
-            this.allNodes.forEach(node => {
-              node['dmsgServerPk_label'] =
-                LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, node.dmsgServerPk);
-            });
-          }
           this.dataFilterer.setData(this.allNodes);
+
+          // Fetch reward data if on the rewards tab and not yet loaded
+          if (this.showRewardsInfo && !this.rewardDataLoaded && !this.rewardDataLoading) {
+            this.loadRewardData();
+          }
 
           this.loading = false;
           // Close any previous temporary loading error msg.
@@ -588,13 +591,6 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       }
     ];
 
-    if (this.showDmsgInfo) {
-      options.push({
-        icon: 'filter_none',
-        label: 'nodes.copy-dmsg',
-      });
-    }
-
     options.push({
       icon: 'short_text',
       label: 'labeled-element.edit-label',
@@ -610,51 +606,19 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         this.copySpecificTextToClipboard(node.localPk);
-      } else if (this.showDmsgInfo) {
-        if (selectedOption === 2) {
-          this.copySpecificTextToClipboard(node.dmsgServerPk);
-        } else if (selectedOption === 3) {
-          this.showEditLabelDialog(node);
-        } else if (selectedOption === 4) {
-          this.deleteNode(node);
-        }
-      } else {
-        if (selectedOption === 2) {
-          this.showEditLabelDialog(node);
-        } else if (selectedOption === 3) {
-          this.deleteNode(node);
-        }
+      } else if (selectedOption === 2) {
+        this.showEditLabelDialog(node);
+      } else if (selectedOption === 3) {
+        this.deleteNode(node);
       }
     });
   }
 
   /**
-   * Copies the public key of a visor. If the dmsg data is being shown, it allows the user to
-   * select between copying the public key of the node or the dmsg server.
+   * Copies the public key of a visor to the clipboard.
    */
   copyToClipboard(node: Node) {
-    if (!this.showDmsgInfo) {
-      this.copySpecificTextToClipboard(node.localPk);
-    } else {
-      const options: SelectableOption[] = [
-        {
-          icon: 'filter_none',
-          label: 'nodes.key',
-        },
-        {
-          icon: 'filter_none',
-          label: 'nodes.dmsg-server',
-        }
-      ];
-
-      SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
-        if (selectedOption === 1) {
-          this.copySpecificTextToClipboard(node.localPk);
-        } else if (selectedOption === 2) {
-          this.copySpecificTextToClipboard(node.dmsgServerPk);
-        }
-      });
-    }
+    this.copySpecificTextToClipboard(node.localPk);
   }
 
   /**
@@ -699,6 +663,121 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       this.forceDataRefresh();
       this.snackbarService.showDone('nodes.deleted');
     });
+  }
+
+  /**
+   * Returns an array of {type, count} entries for transport types on the given node.
+   * Types are displayed uppercase.
+   */
+  getTransportCounts(node: Node): {type: string, count: number}[] {
+    if (!node.transports || node.transports.length === 0) {
+      return [];
+    }
+    const counts: {[key: string]: number} = {};
+    node.transports.forEach(t => {
+      const tp = (t.type || 'unknown').toUpperCase();
+      counts[tp] = (counts[tp] || 0) + 1;
+    });
+    return Object.keys(counts).sort().map(k => ({type: k, count: counts[k]}));
+  }
+
+  /**
+   * Returns an array of service display names active on the given node.
+   */
+  getNodeServices(node: Node): string[] {
+    const services: string[] = [];
+    if (node.apps) {
+      node.apps.forEach(app => {
+        if (app.status === 1) {
+          if (app.name === 'skysocks') {
+            services.push('Proxy Server');
+          } else if (app.name === 'vpn-server') {
+            services.push('VPN Server');
+          }
+        }
+      });
+    }
+    if (node.autoconnectTransports) {
+      services.push('Autoconnect');
+    }
+    return services;
+  }
+
+  /**
+   * Loads reward data for all known visors.
+   */
+  private loadRewardData(): void {
+    if (!this.allNodes || this.allNodes.length === 0) {
+      return;
+    }
+
+    this.rewardDataLoading = true;
+    const pks = this.allNodes.map(n => n.localPk);
+
+    this.rewardService.fetchRewardData(pks).subscribe(dataMap => {
+      this.rewardDataMap = dataMap;
+      this.rewardDates = this.rewardService.getCachedDates();
+      this.rewardDateHeaders = this.rewardDates.map(d => this.rewardService.formatDateShort(d));
+      this.rewardDataLoading = false;
+      this.rewardDataLoaded = true;
+    });
+  }
+
+  /**
+   * Returns the reward data for a given visor PK, or null if not available.
+   */
+  getRewardData(pk: string): VisorRewardData | null {
+    return this.rewardDataMap.get(pk) || null;
+  }
+
+  /**
+   * Returns the reward amount for a visor on a given date, formatted for display.
+   */
+  getRewardAmount(pk: string, date: string): string {
+    const data = this.rewardDataMap.get(pk);
+    if (!data || !data.dailyAmounts[date] || data.dailyAmounts[date] === 0) {
+      return '-';
+    }
+    return data.dailyAmounts[date].toFixed(2);
+  }
+
+  /**
+   * Returns the CSS class for a reward cell based on sent status.
+   */
+  getRewardClass(pk: string, date: string): string {
+    const data = this.rewardDataMap.get(pk);
+    if (!data || !data.dailyAmounts[date] || data.dailyAmounts[date] === 0) {
+      return '';
+    }
+    return data.dailySent[date] ? 'reward-sent' : 'reward-pending';
+  }
+
+  /**
+   * Returns the week total for a visor, formatted for display.
+   */
+  getWeekTotal(pk: string): string {
+    const data = this.rewardDataMap.get(pk);
+    if (!data || data.weekTotal === 0) {
+      return '-';
+    }
+    return data.weekTotal.toFixed(2);
+  }
+
+  /**
+   * Returns the reward address for a visor, or "-" if not set.
+   */
+  getRewardAddress(pk: string): string {
+    // First check the node's own rewardsAddress field
+    const node = this.allNodes?.find(n => n.localPk === pk);
+    if (node?.rewardsAddress) {
+      return node.rewardsAddress;
+    }
+    // Fall back to reward service data
+    const data = this.rewardDataMap.get(pk);
+    if (data?.rewardAddress) {
+      return data.rewardAddress;
+    }
+    return '-';
   }
 
   /**

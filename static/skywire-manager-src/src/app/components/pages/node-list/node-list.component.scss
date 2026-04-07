@@ -30,3 +30,23 @@
 .non-selectable {
   cursor: not-allowed;
 }
+
+.reward-day-column {
+  text-align: center;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.reward-total-column {
+  text-align: center;
+  white-space: nowrap;
+  min-width: 70px;
+}
+
+.reward-sent {
+  color: #4caf50;
+}
+
+.reward-pending {
+  color: #ff9800;
+}
