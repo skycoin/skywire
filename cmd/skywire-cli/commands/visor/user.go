@@ -65,7 +65,11 @@ var userCmd = &cobra.Command{
 		// Parse UID from /proc status (format: "Uid:\t1000\t1000\t1000\t1000")
 		fields := strings.Fields(uidLine)
 		if len(fields) >= 2 {
-			uid, _ := strconv.Atoi(fields[1])
+			uid, atoiErr := strconv.Atoi(fields[1])
+			if atoiErr != nil {
+				internal.PrintOutput(cmd.Flags(), fields[1], fmt.Sprintf("uid=%s\n", fields[1]))
+				return
+			}
 			u, err := user.LookupId(strconv.Itoa(uid))
 			if err != nil {
 				internal.PrintOutput(cmd.Flags(), fields[1], fmt.Sprintf("uid=%s\n", fields[1]))

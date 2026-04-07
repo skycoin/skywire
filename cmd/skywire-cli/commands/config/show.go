@@ -51,7 +51,7 @@ Use --json for machine-readable output.`,
 		if err != nil {
 			// Fallback: try to read the config file directly
 			configPath := visorconfig.SkywireConfig()
-			data, readErr := os.ReadFile(configPath)
+			data, readErr := os.ReadFile(configPath) //nolint:gosec
 			if readErr != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("visor not running and config not found at %s: %v", configPath, readErr))
 			}
