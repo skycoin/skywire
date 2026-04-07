@@ -32,9 +32,9 @@ func init() {
 }
 
 type visorStats struct {
-	PK      string
-	Total   int
-	ByType  map[string]int
+	PK     string
+	Total  int
+	ByType map[string]int
 }
 
 var tpdStatsCmd = &cobra.Command{
@@ -119,13 +119,13 @@ Examples:
 		// Text output
 		var buf strings.Builder
 		w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-		fmt.Fprintf(w, "PK\tTOTAL\tSTCPR\tSUDPH\tDMSG\n")
+		fmt.Fprintf(w, "PK\tTOTAL\tSTCPR\tSUDPH\tDMSG\n") //nolint:errcheck
 		for _, v := range visors {
-			fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\n",
+			fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\n", //nolint:errcheck
 				v.PK, v.Total, v.ByType["stcpr"], v.ByType["sudph"], v.ByType["dmsg"])
 		}
-		w.Flush()
-		fmt.Fprintf(&buf, "\nTotal visors: %d\n", len(visors))
+		_ = w.Flush()
+		fmt.Fprintf(&buf, "\nTotal visors: %d\n", len(visors)) //nolint:errcheck
 
 		internal.PrintOutput(cmd.Flags(), jsonOut, buf.String())
 
