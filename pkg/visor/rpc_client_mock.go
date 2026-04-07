@@ -635,6 +635,15 @@ func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.Entry, err
 	return nil, ErrNotImplemented
 }
 
+// SetIsPublic implements API.
+func (mc *mockRPCClient) SetIsPublic(_ bool) error { return nil }
+
+// GetIsPublic implements API.
+func (mc *mockRPCClient) GetIsPublic() bool { return false }
+
+// GetRuntimeConfig implements API.
+func (mc *mockRPCClient) GetRuntimeConfig() ([]byte, error) { return []byte("{}"), nil }
+
 // SetPublicAutoconnect implements API.
 func (mc *mockRPCClient) SetPublicAutoconnect(_ bool) error {
 	return nil

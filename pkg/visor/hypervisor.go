@@ -271,7 +271,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
-			if ctx.Err() != nil {
+			if ctx.Err() != nil || errors.Is(err, dmsg.ErrEntityClosed) {
 				return nil
 			}
 			hv.visor.MasterLogger().PackageLogger("hypervisor").WithError(err).Warn("Failed to accept dmsg stream, continuing...")
@@ -477,6 +477,10 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/reward", hv.getRewardAddress())
 				r.Put("/visors/{pk}/reward", hv.putRewardAddress())
 				r.Delete("/visors/{pk}/reward", hv.deleteRewardAddress())
+				r.Put("/visors/{pk}/public", hv.putIsPublic())
+				r.Get("/visors/{pk}/public", hv.getIsPublic())
+				r.Get("/visors/{pk}/runtime-config", hv.getRuntimeConfig())
+				r.Get("/visors/{pk}/ports", hv.getPorts())
 			})
 		})
 
@@ -492,6 +496,23 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// Mount tp-viz UI if enabled
 		if hv.tpvizServer != nil {
 			r.Mount("/tp-viz", http.StripPrefix("/tp-viz", hv.tpvizServer.Handler()))
+			// tp-viz bundle.js uses absolute paths like /api/health, /api/transports etc.
+			// Mount the tp-viz handler at root to serve those paths too.
+			tpvHandler := hv.tpvizServer.Handler()
+			r.Get("/api/health", tpvHandler.ServeHTTP)
+			r.Get("/api/transports", tpvHandler.ServeHTTP)
+			r.Get("/api/uptimes", tpvHandler.ServeHTTP)
+			r.Get("/api/services", tpvHandler.ServeHTTP)
+			r.Get("/api/ip-groups", tpvHandler.ServeHTTP)
+			r.Get("/api/local-visor", tpvHandler.ServeHTTP)
+			r.Get("/api/tps/status", tpvHandler.ServeHTTP)
+			r.Post("/api/tps/add-transport", tpvHandler.ServeHTTP)
+			r.Post("/api/tps/remove-transport", tpvHandler.ServeHTTP)
+			r.Get("/api/tps/refresh-transports", tpvHandler.ServeHTTP)
+			r.Post("/api/local/add-transport", tpvHandler.ServeHTTP)
+			r.Get("/api/dmsg/servers", tpvHandler.ServeHTTP)
+			r.Get("/api/dmsg/entries", tpvHandler.ServeHTTP)
+			r.Get("/api/dmsg/health", tpvHandler.ServeHTTP)
 		}
 
 		r.Handle("/*", http.FileServer(http.FS(hv.c.UIAssets)))
@@ -1608,6 +1629,55 @@ func (hv *Hypervisor) deleteRewardAddress() http.HandlerFunc {
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+type isPublicResp struct {
+	IsPublic bool `json:"is_public"`
+}
+
+func (hv *Hypervisor) putIsPublic() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var req isPublicResp
+		if err := httputil.ReadJSON(r, &req); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			return
+		}
+		if err := ctx.API.SetIsPublic(req.IsPublic); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, req)
+	})
+}
+
+func (hv *Hypervisor) getIsPublic() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		httputil.WriteJSON(w, r, http.StatusOK, isPublicResp{ctx.API.GetIsPublic()})
+	})
+}
+
+func (hv *Hypervisor) getRuntimeConfig() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		configJSON, err := ctx.API.GetRuntimeConfig()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(configJSON) //nolint:errcheck,gosec
+	})
+}
+
+func (hv *Hypervisor) getPorts() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		ports, err := ctx.API.Ports()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, ports)
 	})
 }
 

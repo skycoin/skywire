@@ -3,6 +3,7 @@ package visor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/rpc"
 	"time"
@@ -105,7 +106,7 @@ func (tps *embeddedTPS) Serve(ctx context.Context) error {
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
-			if ctx.Err() != nil {
+			if ctx.Err() != nil || errors.Is(err, dmsg.ErrEntityClosed) {
 				return nil
 			}
 			tps.log.WithError(err).Warn("Failed to accept dmsg stream, continuing...")

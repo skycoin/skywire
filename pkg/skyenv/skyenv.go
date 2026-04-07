@@ -202,7 +202,7 @@ const (
 	// Default hypervisor constants
 
 	// EnableAuth enables auth on the hypervisor UI
-	EnableAuth = false
+	EnableAuth = true
 
 	// EnableTLS enables tls for accessing hypervisor ui
 	EnableTLS = false

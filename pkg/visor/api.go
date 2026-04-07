@@ -108,6 +108,9 @@ type API interface {
 	RemoveTransport(tid uuid.UUID) error
 	RemoveAllTransports() error
 	SetPublicAutoconnect(pAc bool) error
+	SetIsPublic(isPublic bool) error
+	GetIsPublic() bool
+	GetRuntimeConfig() ([]byte, error)
 	StartPublicAutoconnect() error
 	StopPublicAutoconnect() error
 	PublicAutoconnectStatus() (bool, error)

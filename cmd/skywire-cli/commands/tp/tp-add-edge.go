@@ -60,7 +60,7 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 		// Query transport discovery for transports of the target PK
 		var entries []*transport.Entry
 		if tpdURL != "" {
-			entries, err = getTransportsByEdge(tpdURL, targetPK)
+			entries, err = getTransportsByEdge(cmd.Flags(), tpdURL, targetPK)
 		} else {
 			entries, err = rpcClient.DiscoverTransportsByPK(targetPK)
 		}

@@ -108,7 +108,8 @@ func init() {
 	hiddenflags = append(hiddenflags, "pkg")
 	hiddenflags = append(hiddenflags, "user")
 	RootCmd.Flags().BoolVar(&runAsSystray, "systray", false, "run as systray")
-	RootCmd.Flags().BoolVarP(&hypervisorUI, "hvui", "i", false, "run as hypervisor \u001b[0m*")
+	// Note: -i/--hvui flag removed. Use `skywire cli visor hv enable -w` for runtime toggle.
+	// The hypervisor is now configured via the config file's hypervisor.enable field.
 	RootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor \u001b[0m*")
 	hiddenflags = append(hiddenflags, "nohvui")
 	RootCmd.Flags().StringVarP(&remoteHypervisorPKs, "hv", "j", "", "add remote hypervisor \u001b[0m*")

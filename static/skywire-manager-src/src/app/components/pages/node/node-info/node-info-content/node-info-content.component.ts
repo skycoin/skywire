@@ -12,6 +12,7 @@ import { RouterConfigComponent, RouterConfigParams } from './router-config/route
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { TransportService } from 'src/app/services/transport.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
+import { ApiService } from 'src/app/services/api.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
 import { RewardsAddressComponent, RewardsAddressConfigParams } from './rewards-address-config/rewards-address-config.component';
@@ -45,6 +46,11 @@ export class NodeInfoContentComponent implements OnDestroy {
       this.nodeHealthText = 'node.statuses.unknown';
       this.nodeHealthClass = 'dot-outline-gray';
     }
+
+    // Fetch ports for this visor.
+    this.fetchPorts(val.localPk);
+    // Fetch public visor status.
+    this.fetchPublicStatus(val.localPk);
   }
 
   @Input() trafficData: TrafficData;
@@ -54,19 +60,28 @@ export class NodeInfoContentComponent implements OnDestroy {
   transportStats: { total: number, byType: { type: string, count: number }[] } = { total: 0, byType: [] };
   nodeHealthClass: string;
   nodeHealthText: string;
+  ports: { name: string, value: string }[] = [];
+  isPublic = false;
+  showRawConfig = false;
+  rawConfig = '';
 
   private autoconnectSubscription: Subscription;
+  private publicToggleSubscription: Subscription;
 
   constructor(
     private dialog: MatDialog,
     public storageService: StorageService,
     private transportService: TransportService,
     private snackbarService: SnackbarService,
+    private apiService: ApiService,
   ) { }
 
   ngOnDestroy() {
     if (this.autoconnectSubscription) {
       this.autoconnectSubscription.unsubscribe();
+    }
+    if (this.publicToggleSubscription) {
+      this.publicToggleSubscription.unsubscribe();
     }
   }
 
@@ -149,6 +164,83 @@ return { type: type, count: count }
       .sort((a, b) => b.count - a.count); // Sort by count descending
 
     return { total: this.node.transports.length, byType: byType };
+  }
+
+  /**
+   * Fetches ports for the given visor.
+   */
+  private fetchPorts(pk: string) {
+    this.apiService.get(`visors/${pk}/ports`).subscribe((result: any) => {
+      if (result && typeof result === 'object') {
+        this.ports = Object.entries(result).map(([name, value]) => ({
+          name: name,
+          value: JSON.stringify(value),
+        }));
+      } else {
+        this.ports = [];
+      }
+    }, () => {
+      this.ports = [];
+    });
+  }
+
+  /**
+   * Fetches public visor status.
+   */
+  private fetchPublicStatus(pk: string) {
+    this.apiService.get(`visors/${pk}/public`).subscribe((result: any) => {
+      this.isPublic = result && result.is_public === true;
+    }, () => {
+      this.isPublic = false;
+    });
+  }
+
+  /**
+   * Toggles public visor status.
+   */
+  changePublicConfig() {
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(
+      this.dialog,
+      this.isPublic ? 'node.details.transports-info.public-disable-confirmation' : 'node.details.transports-info.public-enable-confirmation'
+    );
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.showProcessing();
+
+      this.publicToggleSubscription = this.apiService.put(`visors/${this.node.localPk}/public`, { is_public: !this.isPublic }).subscribe(() => {
+        confirmationDialog.close();
+        this.snackbarService.showDone(
+          this.isPublic ? 'node.details.transports-info.public-disable-done' : 'node.details.transports-info.public-enable-done'
+        );
+        this.isPublic = !this.isPublic;
+      }, (err: OperationError) => {
+        err = processServiceError(err);
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      });
+    });
+  }
+
+  /**
+   * Fetches and displays the runtime config.
+   */
+  viewConfig() {
+    if (this.showRawConfig) {
+      this.showRawConfig = false;
+      return;
+    }
+    this.apiService.get(`visors/${this.node.localPk}/runtime-config`).subscribe((result: any) => {
+      this.rawConfig = JSON.stringify(result, null, 2);
+      this.showRawConfig = true;
+    }, () => {
+      this.snackbarService.showError('common.loading-error');
+    });
+  }
+
+  /**
+   * Opens the transport visualizer in a new window.
+   */
+  openTpViz() {
+    window.open('/tp-viz/', '_blank');
   }
 
   /**

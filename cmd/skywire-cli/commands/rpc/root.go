@@ -4,6 +4,7 @@ package clirpc
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/skycoin/dmsg/pkg/disc"
 	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/dmsg/pkg/dmsgclient"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -139,4 +142,180 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	// Use logger with dmsg address as tag for better identification
 	dmsgLogger := logging.MustGetLogger(fmt.Sprintf("dmsg://%s", VisorPK[:8]))
 	return visor.NewRPCClient(dmsgLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
+}
+
+var (
+	// NoRPC disables the RPC step in FetchServiceURL.
+	NoRPC bool
+	// NoDmsg disables the direct DMSG HTTP step in FetchServiceURL.
+	NoDmsg bool
+	// NoHTTP disables the HTTP fallback step in FetchServiceURL.
+	NoHTTP bool
+)
+
+// RegisterFetchFlags adds --no-rpc, --no-dmsg, and --no-http flags to a command.
+// Call this in init() for any command that uses FetchServiceURL.
+func RegisterFetchFlags(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&NoRPC, "no-rpc", false, "skip visor RPC (DmsgHTTP) step")
+	cmd.Flags().BoolVar(&NoDmsg, "no-dmsg", false, "skip direct DMSG HTTP step")
+	cmd.Flags().BoolVar(&NoHTTP, "no-http", false, "skip direct HTTP fallback step")
+}
+
+// dmsgURLForHTTP looks up the DMSG equivalent URL for an HTTP service URL.
+// Returns empty string if no DMSG address is known for the service.
+func dmsgURLForHTTP(httpURL string) string {
+	// Map HTTP base URLs to their DMSG counterparts from the deployment config
+	mappings := map[string]string{
+		deployment.Prod.TransportDiscovery: deployment.Prod.TransportDiscoveryDmsg,
+		deployment.Prod.DmsgDiscovery:      deployment.Prod.DmsgDiscoveryDmsg,
+		deployment.Prod.AddressResolver:    deployment.Prod.AddressResolverDmsg,
+		deployment.Prod.RouteFinder:        deployment.Prod.RouteFinderDmsg,
+		deployment.Prod.UptimeTracker:      deployment.Prod.UptimeTrackerDmsg,
+		deployment.Prod.ServiceDiscovery:   deployment.Prod.ServiceDiscoveryDmsg,
+	}
+	for httpBase, dmsgBase := range mappings {
+		if httpBase != "" && dmsgBase != "" && len(httpURL) >= len(httpBase) && httpURL[:len(httpBase)] == httpBase {
+			// Replace the HTTP base with the DMSG base, keep the path
+			return dmsgBase + httpURL[len(httpBase):]
+		}
+	}
+	return ""
+}
+
+// fetchViaDmsgDirect creates ephemeral DMSG direct clients — one per DMSG server —
+// and uses a FallbackRoundTripper to try each until one reaches the target service.
+// This matches the pattern used by `skywire dmsg curl -B`: services connect to DMSG
+// servers directly (not via discovery), so we must connect to each server to find them.
+func fetchViaDmsgDirect(dmsgURL string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	dlog := logging.MustGetLogger("cli:dmsg-fetch")
+	pk, sk := cipher.GenerateKeyPair()
+
+	servers := dmsg.Prod.DmsgServers
+	if len(servers) == 0 {
+		return nil, fmt.Errorf("no DMSG servers configured")
+	}
+
+	// Connect to each DMSG server via a separate direct client (same as dmsg curl -B)
+	var dmsgClients []*dmsg.Client
+	destination := dmsg.ExtractPKFromDmsgAddr(dmsgURL)
+	for _, server := range servers {
+		dmsgDC, closeFn, err := dmsgclient.StartDmsgDirectWithServers(ctx, dlog, pk, sk, "", []*disc.Entry{&server}, 1, destination)
+		if err != nil {
+			dlog.WithError(err).Debug("Failed to start direct client for server, skipping...")
+			continue
+		}
+		dmsgClients = append(dmsgClients, dmsgDC)
+		defer closeFn()
+	}
+
+	if len(dmsgClients) == 0 {
+		return nil, fmt.Errorf("failed to connect to any DMSG servers")
+	}
+
+	// FallbackRoundTripper tries each client until one succeeds
+	client := &http.Client{
+		Transport: dmsgclient.NewFallbackRoundTripper(ctx, dmsgClients),
+		Timeout:   30 * time.Second,
+	}
+
+	resp, err := client.Get(dmsgURL) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("DMSG HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read DMSG response: %w", err)
+	}
+
+	if resp.StatusCode >= 300 {
+		return body, fmt.Errorf("DMSG HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	return body, nil
+}
+
+// FetchServiceURL fetches a URL from a deployment service using a three-step chain:
+//  1. RPC — ask the running visor to proxy the request over DMSG (DmsgHTTP RPC)
+//  2. DMSG direct — create ephemeral DMSG client and fetch directly
+//  3. HTTP — direct HTTP request as last resort
+//
+// Steps can be disabled via --no-rpc, --no-dmsg, and --no-http flags.
+//
+// This pattern ensures CLI commands work for:
+//   - Visors running with DMSG (step 1)
+//   - Standalone CLI without a running visor on DMSG network (step 2)
+//   - Environments without DMSG connectivity (step 3)
+func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
+	var lastErr error
+
+	// Step 1: Try visor RPC (proxies over DMSG via DmsgHTTP)
+	if !NoRPC {
+		rpcClient, err := Client(cmdFlags)
+		if err == nil {
+			resp, err := rpcClient.DmsgHTTP(visor.DmsgHTTPRequest{
+				URL:    url,
+				Method: "GET",
+			})
+			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return resp.Body, nil
+			}
+			if err != nil {
+				lastErr = fmt.Errorf("RPC DmsgHTTP: %w", err)
+				logger.Debugf("RPC DmsgHTTP failed for %s: %v", url, err)
+			} else {
+				lastErr = fmt.Errorf("RPC DmsgHTTP: status %d", resp.StatusCode)
+				logger.Debugf("RPC DmsgHTTP status %d for %s", resp.StatusCode, url)
+			}
+		} else {
+			lastErr = fmt.Errorf("RPC: %w", err)
+			logger.Debugf("RPC not available: %v", err)
+		}
+	}
+
+	// Step 2: Direct DMSG HTTP (ephemeral client)
+	if !NoDmsg {
+		dmsgURL := dmsgURLForHTTP(url)
+		if dmsgURL != "" {
+			logger.Debugf("Trying direct DMSG fetch: %s", dmsgURL)
+			body, err := fetchViaDmsgDirect(dmsgURL)
+			if err == nil {
+				return body, nil
+			}
+			lastErr = fmt.Errorf("DMSG direct: %w", err)
+			logger.Debugf("DMSG direct failed for %s: %v", dmsgURL, err)
+		} else {
+			logger.Debugf("No DMSG address known for %s, skipping DMSG step", url)
+		}
+	}
+
+	// Step 3: Direct HTTP fallback
+	if !NoHTTP {
+		httpClient := &http.Client{Timeout: 30 * time.Second}
+		resp, err := httpClient.Get(url) //nolint:gosec
+		if err != nil {
+			lastErr = fmt.Errorf("HTTP: %w", err)
+			logger.Debugf("HTTP failed for %s: %v", url, err)
+		} else {
+			defer resp.Body.Close() //nolint:errcheck
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read HTTP response: %w", err)
+			}
+			if resp.StatusCode < 300 {
+				return body, nil
+			}
+			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+			logger.Debugf("HTTP status %d for %s", resp.StatusCode, url)
+		}
+	}
+
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("all fetch methods disabled or unavailable for %s", url)
 }
