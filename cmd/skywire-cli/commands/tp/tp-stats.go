@@ -27,6 +27,7 @@ func init() {
 	tpdStatsCmd.Flags().StringVarP(&statsType, "type", "t", "", "filter by transport type (e.g. stcpr, sudph)")
 	tpdStatsCmd.Flags().IntVar(&statsMinTps, "min", 0, "minimum transport count to display")
 	tpdStatsCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	clirpc.RegisterFetchFlags(tpdStatsCmd)
 	tpCmd.AddCommand(tpdStatsCmd)
 }
 

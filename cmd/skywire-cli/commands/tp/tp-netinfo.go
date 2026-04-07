@@ -15,7 +15,9 @@ import (
 
 func init() {
 	tpdHealthCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	clirpc.RegisterFetchFlags(tpdHealthCmd)
 	tpdNetStatsCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	clirpc.RegisterFetchFlags(tpdNetStatsCmd)
 	tpCmd.AddCommand(tpdHealthCmd)
 	tpCmd.AddCommand(tpdNetStatsCmd)
 }
