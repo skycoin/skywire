@@ -1646,8 +1646,19 @@ func (hv *Hypervisor) proxyRewardSystem() http.HandlerFunc {
 			return
 		}
 
-		rewardDmsg := deployment.Prod.RewardSystemDmsg
-		rewardHTTP := deployment.Prod.RewardSystem
+		// Read from visor config (configurable), fall back to deployment defaults
+		rewardDmsg := ""
+		rewardHTTP := ""
+		if hv.visor != nil && hv.visor.conf != nil {
+			rewardDmsg = hv.visor.conf.RewardSystemDmsg
+			rewardHTTP = hv.visor.conf.RewardSystem
+		}
+		if rewardDmsg == "" {
+			rewardDmsg = deployment.Prod.RewardSystemDmsg
+		}
+		if rewardHTTP == "" {
+			rewardHTTP = deployment.Prod.RewardSystem
+		}
 		var fetchErr error
 
 		// Try DMSG via the visor's DmsgHTTP
