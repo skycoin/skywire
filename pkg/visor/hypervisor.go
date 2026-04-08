@@ -1683,7 +1683,7 @@ func (hv *Hypervisor) proxyRewardSystem() http.HandlerFunc {
 			client := &http.Client{Timeout: 15 * time.Second}
 			resp, err := client.Get(rewardHTTP + "/" + path) //nolint:gosec
 			if err == nil {
-				defer resp.Body.Close() //nolint:errcheck
+				defer resp.Body.Close()          //nolint:errcheck
 				body, _ := io.ReadAll(resp.Body) //nolint:errcheck
 				w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 				w.WriteHeader(resp.StatusCode)
