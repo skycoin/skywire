@@ -176,6 +176,9 @@ func (ce *Client) dialViaConnectedServers(ctx context.Context, addr Addr) (*Stre
 	sortSessionsByLatency(sessions)
 
 	for _, ses := range sessions {
+		if ctx.Err() != nil {
+			return nil, ErrCannotConnectToDelegated
+		}
 		stream, err := ses.DialStream(ctx, addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", ses.RemotePK()).
