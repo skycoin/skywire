@@ -154,8 +154,11 @@ Usage:
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
 
-		// Start DMSG HTTP health server on port 80 (standard for all services)
-		if !conf.PK.Null() && !conf.SK.Null() {
+		// Start DMSG HTTP health server using the setup-node's own DMSG client.
+		// This avoids creating a second DMSG client with the same PK, which
+		// causes "error 306 - no associated listener" when the DMSG server
+		// routes streams to the wrong client.
+		{
 			startedAt := time.Now()
 			dmsgAddr := fmt.Sprintf("%s:%d", conf.PK.Hex(), dmsg.DefaultDmsgHTTPPort)
 
@@ -171,25 +174,20 @@ Usage:
 				json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 			})
 
-			dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, log, conf.PK, conf.SK,
-				dmsg.Prod.DmsgServers, conf.Dmsg.Discovery, "")
-			if err != nil {
-				log.WithError(err).Warn("Failed to start DMSG HTTP bootstrap, health endpoint unavailable")
-			} else {
-				defer dmsgBoot.Close()
-				go func() {
-					if err := dmsghttp.ListenAndServe(ctx, conf.SK, healthMux, dmsgBoot.DClient,
-						dmsg.DefaultDmsgHTTPPort, dmsgBoot.Client, log); err != nil {
-						log.WithError(err).Error("DMSG HTTP health server stopped")
-					}
-				}()
-				go func() {
-					if err := dmsghttp.ServeDebug(ctx, dmsgBoot.Client, log, deployment.Prod.SurveyWhitelist); err != nil {
-						log.WithError(err).Error("DMSG HTTP debug server stopped")
-					}
-				}()
-				log.Infof("DMSG HTTP health endpoint available at %s", dmsgAddr)
-			}
+			// Use the setup-node's own DMSG client for health/debug endpoints
+			snClient := sn.DmsgClient()
+			go func() {
+				if err := dmsghttp.ListenAndServe(ctx, conf.SK, healthMux, nil,
+					dmsg.DefaultDmsgHTTPPort, snClient, log); err != nil {
+					log.WithError(err).Error("DMSG HTTP health server stopped")
+				}
+			}()
+			go func() {
+				if err := dmsghttp.ServeDebug(ctx, snClient, log, deployment.Prod.SurveyWhitelist); err != nil {
+					log.WithError(err).Error("DMSG HTTP debug server stopped")
+				}
+			}()
+			log.Infof("DMSG HTTP health endpoint available at %s", dmsgAddr)
 		}
 
 		log.Fatal(sn.Serve(ctx, m))
