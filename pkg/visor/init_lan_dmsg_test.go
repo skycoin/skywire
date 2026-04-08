@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
-	"github.com/skycoin/dmsg/pkg/dmsg"
+	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

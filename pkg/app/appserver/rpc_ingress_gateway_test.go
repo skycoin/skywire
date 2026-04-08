@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 

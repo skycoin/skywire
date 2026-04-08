@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/skycoin/dmsg/pkg/direct"
-	"github.com/skycoin/dmsg/pkg/disc"
-	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/dmsg/direct"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"

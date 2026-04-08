@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 

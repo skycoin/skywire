@@ -20,8 +20,8 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/pkg/dmsgcurl"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 

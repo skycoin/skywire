@@ -2,7 +2,7 @@
 package cliconfig
 
 import (
-	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
