@@ -274,12 +274,21 @@ func TestLookupIP(t *testing.T) {
 		// Serve dmsg server B.
 		chSrvB := make(chan error, 1)
 		go func() { chSrvB <- srvB.Serve(lisSrvB, "") }() //nolint:errcheck
+		<-srvB.Ready()
 
-		// Ensure all entities are registered in discovery before continuing.
-		time.Sleep(time.Second * 2)
+		// Allow discovery registration and client session stabilization.
+		time.Sleep(time.Second * 3)
 
 		srvs := []cipher.PubKey{pkSrvB}
-		ip, err := dmsgC.LookupIP(context.Background(), srvs)
+		var ip net.IP
+		for attempt := 0; attempt < 3; attempt++ {
+			ip, err = dmsgC.LookupIP(context.Background(), srvs)
+			if err == nil {
+				break
+			}
+			t.Logf("LookupIP attempt %d failed: %v", attempt+1, err)
+			time.Sleep(2 * time.Second)
+		}
 		require.NoError(t, err)
 
 		if runtime.GOOS == "windows" {

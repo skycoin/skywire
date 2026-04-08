@@ -27,7 +27,7 @@ ADDPROXY='127.0.0.1:1080'
 	}
 
 	// Run dmsgweb --help with the conf file
-	cmd := exec.Command("go", "run", "./cmd/dmsgweb", "--help")
+	cmd := exec.Command("go", "run", "./cmd/dmsg-commands/dmsgweb", "--help")
 	cmd.Dir = repoRoot(t)
 	cmd.Env = append(os.Environ(), "DMSGWEB="+confPath)
 	out, err := cmd.CombinedOutput()
@@ -75,7 +75,7 @@ WHITELISTPKS=('02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e
 	}
 
 	// Run dmsgweb srv --help with the conf file
-	cmd := exec.Command("go", "run", "./cmd/dmsgweb", "srv", "--help")
+	cmd := exec.Command("go", "run", "./cmd/dmsg-commands/dmsgweb", "srv", "--help")
 	cmd.Dir = repoRoot(t)
 	cmd.Env = append(os.Environ(), "DMSGWEBSRV="+confPath)
 	out, err := cmd.CombinedOutput()

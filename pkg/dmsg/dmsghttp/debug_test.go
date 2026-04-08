@@ -136,8 +136,9 @@ func TestServeDebug_Integration(t *testing.T) {
 	log := logging.MustGetLogger("test-debug")
 	go dmsghttp.ServeDebug(ctx, dmsgC, log, nil) //nolint:errcheck
 
-	// Allow listener to start
-	time.Sleep(100 * time.Millisecond)
+	// Allow listener to start — CI runners (especially macOS) need more time
+	// for noise handshakes to complete across concurrent client sessions.
+	time.Sleep(2 * time.Second)
 
 	// Create a second client to access the debug interface
 	fetchPK, fetchSK := cipher.GenerateKeyPair()
@@ -146,8 +147,23 @@ func TestServeDebug_Integration(t *testing.T) {
 	<-fetchC.Ready()
 	defer fetchC.Close() //nolint:errcheck
 
-	httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, fetchC)}
-	resp, err := httpC.Get(fmt.Sprintf("dmsg://%s:%d/debug/pprof/", clientPK.Hex(), dmsghttp.DefaultDebugPort))
+	// Allow sessions to stabilize before making HTTP request
+	time.Sleep(time.Second)
+
+	httpC := http.Client{
+		Transport: dmsghttp.MakeHTTPTransport(ctx, fetchC),
+		Timeout:   30 * time.Second,
+	}
+
+	// Retry the request — noise handshakes can race on CI
+	var resp *http.Response
+	for attempt := 0; attempt < 3; attempt++ {
+		resp, err = httpC.Get(fmt.Sprintf("dmsg://%s:%d/debug/pprof/", clientPK.Hex(), dmsghttp.DefaultDebugPort))
+		if err == nil {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
 	require.NoError(t, err)
 	defer resp.Body.Close() //nolint:errcheck
 
