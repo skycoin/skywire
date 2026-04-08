@@ -1659,37 +1659,48 @@ func (hv *Hypervisor) proxyRewardSystem() http.HandlerFunc {
 		if rewardHTTP == "" {
 			rewardHTTP = deployment.Prod.RewardSystem
 		}
+		log := hv.visor.MasterLogger().PackageLogger("reward_proxy")
 		var fetchErr error
 
-		// Try DMSG via the visor's DmsgHTTP
+		// Try DMSG first via the visor's DmsgHTTP
 		if rewardDmsg != "" && hv.visor != nil {
+			dmsgURL := rewardDmsg + "/" + path
+			log.Debugf("Fetching reward data via DMSG: %s", dmsgURL)
 			resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
-				URL:    rewardDmsg + "/" + path,
+				URL:    dmsgURL,
 				Method: "GET",
 			})
 			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				log.Debugf("DMSG fetch succeeded: %d bytes, status %d", len(resp.Body), resp.StatusCode)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(resp.StatusCode)
 				w.Write(resp.Body) //nolint:errcheck,gosec
 				return
 			}
 			if err != nil {
+				log.WithError(err).Warn("DMSG fetch failed, falling back to HTTP")
 				fetchErr = err
+			} else {
+				log.Warnf("DMSG fetch returned non-success status: %d", resp.StatusCode)
 			}
 		}
 
 		// Fall back to plain HTTP
 		if rewardHTTP != "" {
+			httpURL := rewardHTTP + "/" + path
+			log.Debugf("Fetching reward data via HTTP: %s", httpURL)
 			client := &http.Client{Timeout: 15 * time.Second}
-			resp, err := client.Get(rewardHTTP + "/" + path) //nolint:gosec
+			resp, err := client.Get(httpURL) //nolint:gosec
 			if err == nil {
 				defer resp.Body.Close()          //nolint:errcheck
 				body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+				log.Debugf("HTTP fetch succeeded: %d bytes, status %d", len(body), resp.StatusCode)
 				w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 				w.WriteHeader(resp.StatusCode)
 				w.Write(body) //nolint:errcheck,gosec
 				return
 			}
+			log.WithError(err).Warn("HTTP fetch also failed")
 			fetchErr = err
 		}
 
