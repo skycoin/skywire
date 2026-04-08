@@ -7,7 +7,7 @@ import (
 	"net/rpc"
 	"time"
 
-	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"

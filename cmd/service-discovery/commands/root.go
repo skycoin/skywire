@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 

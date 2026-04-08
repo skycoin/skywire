@@ -7,7 +7,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/skycoin/dmsg/pkg/noise"
+	"github.com/skycoin/skywire/pkg/dmsg/noise"
 
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"

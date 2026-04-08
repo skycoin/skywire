@@ -1,7 +1,7 @@
 package config
 
 import (
-	msg "github.com/skycoin/dmsg/pkg/dmsgserver"
+	msg "github.com/skycoin/skywire/pkg/dmsg/dmsgserver"
 
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/router"
