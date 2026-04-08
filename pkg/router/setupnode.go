@@ -28,6 +28,14 @@ type Node struct {
 	dmsgC *dmsg.Client
 }
 
+// DmsgClient returns the setup node's DMSG client.
+// This allows other components (e.g. DMSG HTTP health) to share the same
+// client instead of creating a second one with the same PK, which causes
+// "error 306 - no associated listener" when streams route to the wrong client.
+func (sn *Node) DmsgClient() *dmsg.Client {
+	return sn.dmsgC
+}
+
 // NewNode constructs a new SetupNode.
 func NewNode(conf *SetupConfig) (*Node, error) {
 	if lvl, err := logging.LevelFromString(conf.LogLevel); err == nil {
