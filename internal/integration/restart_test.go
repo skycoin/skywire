@@ -92,6 +92,14 @@ func TestRestart(t *testing.T) {
 				continue
 			}
 
+			if res == nil {
+				lastError = "HTTP response is nil despite no error"
+				t.Logf("Attempt %d: %s (retrying in 5s)", attempt+1, lastError)
+				if attempt < 3 {
+					time.Sleep(5 * time.Second)
+				}
+				continue
+			}
 			if res.StatusCode == http.StatusOK {
 				require.NoError(t, res.Body.Close())
 				return
