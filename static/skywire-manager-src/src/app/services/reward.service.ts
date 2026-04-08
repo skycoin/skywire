@@ -102,16 +102,15 @@ export class RewardService {
     }
 
     this.fetching = true;
-    const dates = this.getLastNDays(7);
-    const visorPkSet = new Set(visorPks);
 
-    // Fetch data for each of the 7 days
-    const requests: Observable<{ date: string; entries: RewardHistoryEntry[] }>[] = dates.map(date => {
+    // Fetch per-visor reward history (last 7 days) using the per-PK endpoint.
+    // This is much more efficient than fetching all rewards for all visors.
+    const requests: Observable<{ pk: string; history: any[] }>[] = visorPks.map(pk => {
       return this.http.get<any>(
-        `${this.rewardSystemUrl}/skycoin-rewards/hist/${date}/json`
+        `${this.rewardSystemUrl}/skycoin-rewards/visor/${pk}?days=7`
       ).pipe(
-        map(resp => ({ date, entries: (resp && resp.rewards ? resp.rewards : resp) || [] })),
-        catchError(() => of({ date, entries: [] as RewardHistoryEntry[] }))
+        map(resp => ({ pk, history: (resp && resp.history ? resp.history : []) })),
+        catchError(() => of({ pk, history: [] as any[] }))
       );
     });
 
@@ -119,55 +118,29 @@ export class RewardService {
       map(results => {
         const dataMap = new Map<string, VisorRewardData>();
 
-        // Initialize entries for all known visors
-        for (const pk of visorPks) {
-          dataMap.set(pk, {
+        for (const { pk, history } of results) {
+          const visorData: VisorRewardData = {
             pk,
             rewardAddress: '',
             dailyAmounts: {},
             dailySent: {},
             weekTotal: 0,
-          });
-        }
+          };
 
-        // Populate from daily results
-        for (const { date, entries } of results) {
-          for (const entry of entries) {
-            if (!visorPkSet.has(entry.pk)) {
-              continue;
+          for (const day of history) {
+            if (day.date) {
+              visorData.dailyAmounts[day.date] = day.amount || 0;
+              visorData.dailySent[day.date] = day.sent || false;
+              visorData.weekTotal += day.amount || 0;
             }
-            let visorData = dataMap.get(entry.pk);
-            if (!visorData) {
-              visorData = {
-                pk: entry.pk,
-                rewardAddress: '',
-                dailyAmounts: {},
-                dailySent: {},
-                weekTotal: 0,
-              };
-              dataMap.set(entry.pk, visorData);
-            }
-
-            if (entry['reward-address']) {
-              visorData.rewardAddress = entry['reward-address'];
-            }
-            visorData.dailyAmounts[date] = entry.amount || 0;
-            // The hist endpoint doesn't have sent info; we mark > 0 as distributed
-            visorData.dailySent[date] = (entry.amount || 0) > 0;
           }
-        }
 
-        // Calculate week totals
-        dataMap.forEach(visorData => {
-          visorData.weekTotal = 0;
-          for (const date of dates) {
-            visorData.weekTotal += visorData.dailyAmounts[date] || 0;
-          }
-        });
+          dataMap.set(pk, visorData);
+        }
 
         // Cache results
         this.rewardDataCache = dataMap;
-        this.cachedDates = dates;
+        this.cachedDates = this.getLastNDays(7);
         this.fetching = false;
 
         return dataMap;
