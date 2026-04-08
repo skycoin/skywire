@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )

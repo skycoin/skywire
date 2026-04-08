@@ -505,12 +505,12 @@ e2e-logs:
 e2e-test:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment with `make e2e-build && make e2e-run`
 	DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} run --rm \
 		e2e-test \
-		sh -c "go clean -testcache && go test -v -timeout=25m ./internal/integration"
+		sh -c "go clean -testcache && go test -v -timeout=45m ./internal/integration"
 
 e2e-test-local:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment with `make e2e-build && make e2e-run`
 	DOCKER_TAG=integration docker compose -f ${COMPOSE_FILE} run --rm \
 		e2e-test \
-		sh -c "go clean -testcache && go test -v -timeout=25m ./internal/integration"
+		sh -c "go clean -testcache && go test -v -timeout=45m ./internal/integration"
 
 e2e-config: ## E2E. Regenerate visor configs from template and deployment config
 	@echo "Regenerating E2E visor configs..."

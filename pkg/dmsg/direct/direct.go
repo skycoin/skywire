@@ -1,0 +1,46 @@
+// Package direct pkg/direct/direct.go
+package direct
+
+import (
+	"context"
+	"sync"
+
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
+)
+
+// StartDmsg starts dmsg directly without the discovery
+func StartDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey,
+	dClient disc.APIClient, config *dmsg.Config) (dmsgDC *dmsg.Client, stop func(), err error) {
+
+	dmsgDC = dmsg.NewClient(pk, sk, dClient, config)
+	dmsgDC.SetLogger(log)
+
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		dmsgDC.Serve(ctx)
+	}()
+
+	stop = func() {
+		err := dmsgDC.Close()
+		log.WithError(err).Debug("Disconnected from dmsg network.\n")
+		wg.Wait()
+	}
+
+	log.WithField("public_key", pk.String()).Debug("Connecting to dmsg network...\n")
+
+	select {
+	case <-ctx.Done():
+		stop()
+		return nil, nil, ctx.Err()
+
+	case <-dmsgDC.Ready():
+		log.Debug("Dmsg network ready.")
+		return dmsgDC, stop, nil
+	}
+}

@@ -10,7 +10,7 @@ import (
 	"github.com/bitfield/script"
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
-	dmsg "github.com/skycoin/dmsg/cmd/dmsg/commands"
+	dmsg "github.com/skycoin/skywire/cmd/dmsg-commands/dmsg/commands"
 	"github.com/spf13/cobra"
 
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
