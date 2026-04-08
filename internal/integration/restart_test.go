@@ -78,7 +78,7 @@ func TestRestart(t *testing.T) {
 		var err error
 		var lastError string
 
-		for attempt := 0; attempt < 4; attempt++ {
+		for attempt := 0; attempt < 2; attempt++ {
 			res, err = env.SendSkyMessage(sender, receiver, t.Name())
 
 			// If HTTP request itself failed (e.g., connection timeout), retry
@@ -86,7 +86,7 @@ func TestRestart(t *testing.T) {
 				lastError = fmt.Sprintf("HTTP request failed: %v", err)
 				t.Logf("Attempt %d: %s (retrying in 5s)", attempt+1, lastError)
 
-				if attempt < 3 { // Don't sleep after last attempt
+				if attempt < 1 { // Don't sleep after last attempt
 					time.Sleep(5 * time.Second)
 				}
 				continue
@@ -112,7 +112,7 @@ func TestRestart(t *testing.T) {
 			t.Logf("Attempt %d: skychat returned error: %v (retrying in 5s)", attempt+1, lastError)
 			require.NoError(t, res.Body.Close())
 
-			if attempt < 3 { // Don't sleep after last attempt
+			if attempt < 1 { // Don't sleep after last attempt
 				time.Sleep(5 * time.Second)
 			}
 		}
@@ -151,9 +151,9 @@ func TestRestart(t *testing.T) {
 				t.Logf("DMSG ready on %s", visor)
 			}
 
-			// Wait for TPD to clear stale transport entries from restarted visors
+			// Brief wait for TPD to clear stale transport entries
 			for _, visor := range tc.restartList {
-				env.waitForTPDClean(visor, 15*time.Second)
+				env.waitForTPDClean(visor, 5*time.Second)
 			}
 
 			// Re-establish transports after visor restart
