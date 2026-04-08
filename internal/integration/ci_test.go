@@ -83,8 +83,9 @@ func TestWAN(t *testing.T) {
 
 func TestNewEnv(t *testing.T) {
 	// Wait for all containers to reach "running" state.
-	// Services may restart during initial startup while waiting for dependencies.
-	const maxWait = 90 * time.Second
+	// Services have cascading healthcheck dependencies (redis → tpd → dmsg-disc → dmsg-server → setup-node)
+	// which can take 60-90s in CI. Allow generous time for the full chain.
+	const maxWait = 180 * time.Second
 	const pollInterval = 5 * time.Second
 
 	env := NewEnv()
@@ -431,8 +432,16 @@ func TestEnv_RmTp(t *testing.T) {
 	skychatVisors := []string{visorA, visorB}
 	env := NewEnv().
 		GatherContainersInfo().
-		GatherVisorPKs([]string{visorA, visorB, visorC}).
-		AddDefaultTransports(routerVisor, skychatVisors)
+		GatherVisorPKs([]string{visorA, visorB, visorC})
+
+	// Clean up any stale transports from previous tests before re-creating
+	if err := env.RemoveAllTransports(visorA, visorB, visorC); err != nil {
+		t.Logf("Warning: cleanup of stale transports failed: %v", err)
+	}
+	// Allow time for transport deregistration to propagate
+	time.Sleep(3 * time.Second)
+
+	env.AddDefaultTransports(routerVisor, skychatVisors)
 
 	tps, err := env.VisorTpLs(visorB)
 	require.NoError(t, err)

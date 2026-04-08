@@ -77,6 +77,15 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.LogLevel = skyenv.LogLevel
 	conf.LocalPath = skyenv.LocalPath
 	conf.StunServers = services.StunServers
+	conf.RewardSystem = services.RewardSystem
+	conf.RewardSystemDmsg = services.RewardSystemDmsg
+	// Supplement from embedded deployment config if conf service didn't provide them
+	if conf.RewardSystem == "" {
+		conf.RewardSystem = deployment.Prod.RewardSystem
+	}
+	if conf.RewardSystemDmsg == "" {
+		conf.RewardSystemDmsg = deployment.Prod.RewardSystemDmsg
+	}
 	conf.ShutdownTimeout = DefaultTimeout
 
 	conf.Dmsgpty = &Dmsgpty{

@@ -127,7 +127,7 @@ var autoconfigCmd = &cobra.Command{
 
 		// Load config to check hypervisor status
 		conf, err := visorconfig.ReadFile("/opt/skywire/skywire.json")
-		isHypervisor := err == nil && conf != nil && conf.Hypervisor != nil
+		isHypervisor := err == nil && conf != nil && conf.Hypervisor != nil && conf.Hypervisor.Enable
 
 		// Show hypervisor URLs if applicable
 		if isHypervisor {
@@ -241,7 +241,7 @@ func generateTestConfig(hvArg string) error {
 	case "0":
 		args = append(args, "-i")
 	case "":
-		if conf != nil && conf.Hypervisor != nil {
+		if conf != nil && conf.Hypervisor != nil && conf.Hypervisor.Enable {
 			args = append(args, "-i")
 		}
 	default:
