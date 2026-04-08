@@ -10,7 +10,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,8 +62,7 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 		startHTTPServer(t, server0Results, lis)
 		addr := lis.Addr().String()
-		log := logging.MustGetLogger("http_client")
-		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		// Arrange: create http clients (in which each http client has an underlying dmsg client).
 		// Configure timeouts to prevent hanging on errors.

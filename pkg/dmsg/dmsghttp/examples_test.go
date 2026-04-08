@@ -10,8 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"golang.org/x/net/nettest"
 
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -90,8 +88,7 @@ func ExampleMakeHTTPTransport() {
 	go dmsgC2.Serve(context.Background())
 	<-dmsgC2.Ready()
 
-	log := logging.MustGetLogger("http_client")
-	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// Run HTTP client.
 	httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC2)}
