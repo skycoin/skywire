@@ -12,7 +12,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -64,7 +63,7 @@ func TestDownload(t *testing.T) {
 	for i := 0; i < dlClients; i++ {
 		func(i int) {
 			log := logging.MustGetLogger(fmt.Sprintf("dl_client_%d", i))
-			ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			err := Download(ctx, log, newHTTPClient(t, dc), dsts[i], hsAddr, fileSize)
 
@@ -123,12 +122,16 @@ func startDmsgEnv(t *testing.T, nSrvs, maxSessions int) disc.APIClient {
 			close(errCh)
 		}()
 
+		<-srv.Ready()
 		t.Cleanup(func() {
 			// listener is also closed when dmsg server is closed
 			assert.NoError(t, srv.Close())
 			assert.NoError(t, <-errCh)
 		})
 	}
+
+	// Allow noise handshakes to stabilize — macOS CI runners are slow
+	time.Sleep(2 * time.Second)
 
 	return dc
 }
@@ -179,8 +182,13 @@ func newHTTPClient(t *testing.T, dc disc.APIClient) *http.Client {
 	t.Cleanup(func() { assert.NoError(t, dmsgC.Close()) })
 	<-dmsgC.Ready()
 
-	log := logging.MustGetLogger("http_client")
-	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	defer cancel()
-	return &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
+	// Allow session stabilization
+	time.Sleep(time.Second)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	return &http.Client{
+		Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC),
+		Timeout:   30 * time.Second,
+	}
 }

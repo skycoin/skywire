@@ -156,6 +156,7 @@ func startDmsgEnv(t *testing.T, nSrvs, maxSessions int) disc.APIClient {
 			close(errCh)
 		}()
 
+		<-srv.Ready()
 		t.Cleanup(func() {
 			// listener is also closed when dmsg server is closed
 			assert.NoError(t, srv.Close())

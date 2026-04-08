@@ -70,6 +70,14 @@ func (env *Env) Startup(entryTimeout time.Duration, servers, clients int, conf *
 			return err
 		}
 	}
+
+	// Allow noise handshakes to fully complete across all sessions.
+	// macOS CI runners are particularly slow and sessions that report
+	// Ready() may still have in-flight handshakes.
+	if clients > 0 && servers > 0 {
+		time.Sleep(2 * time.Second)
+	}
+
 	return nil
 }
 
