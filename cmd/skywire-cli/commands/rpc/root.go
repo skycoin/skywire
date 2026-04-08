@@ -10,9 +10,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/skycoin/dmsg/pkg/disc"
-	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 

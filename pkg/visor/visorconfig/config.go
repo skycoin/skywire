@@ -4,8 +4,8 @@ package visorconfig
 import (
 	"encoding/json"
 
-	"github.com/skycoin/dmsg/pkg/disc"
-	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/dmsgc"

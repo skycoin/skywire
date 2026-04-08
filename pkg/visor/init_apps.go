@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
-	"github.com/skycoin/dmsg/pkg/dmsg"
+	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 

@@ -21,8 +21,8 @@ import (
 	"github.com/bitfield/script"
 	"github.com/gin-gonic/gin"
 	"github.com/robert-nix/ansihtml"
-	"github.com/skycoin/dmsg/pkg/disc"
-	dmsg "github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"

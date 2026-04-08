@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/skycoin/dmsg/pkg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
