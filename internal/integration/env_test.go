@@ -530,7 +530,7 @@ func (env *TestEnv) VisorTpAddWithRetry(visor, pk string, tpType tptypes.Type, m
 	case "sudph":
 		baseDelay = 5 * time.Second
 	case "dmsg":
-		baseDelay = 5 * time.Second
+		baseDelay = 3 * time.Second
 	}
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
@@ -827,7 +827,7 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 			}
 		}
 
-		const dmsgRetries = 5
+		const dmsgRetries = 3
 		_, err = env.VisorTpAddWithRetry(tp.FromVisorHostName, toPK, "dmsg", dmsgRetries)
 		if err != nil {
 			// Dump visor logs from both sides on failure
@@ -992,7 +992,8 @@ func (env *TestEnv) ExecInContainerByID(cmd string, containerID string) (string,
 }
 
 // defaultExecTimeout is the maximum time any single CLI command exec may take.
-const defaultExecTimeout = 120 * time.Second
+// Keep this short so that retries + total test fit within the 25-minute E2E timeout.
+const defaultExecTimeout = 60 * time.Second
 
 func (env *TestEnv) execResult(cmd string) (ExecResult, error) {
 	if env.testRunnerID == "" {
