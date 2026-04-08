@@ -32,12 +32,19 @@ func (ce *Client) Dial(ctx context.Context, addr Addr) (net.Conn, error) {
 
 // DialStream dials to a remote client entity with the given address.
 func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
-	entry, err := ce.getClientEntryCached(ctx, addr.PK)
-	if err != nil {
+	entry, discErr := ce.getClientEntryCached(ctx, addr.PK)
+	if discErr != nil {
 		// Discovery lookup failed. For direct clients or when the destination
 		// doesn't register in discovery, try all connected servers as forwarders.
-		ce.log.WithError(err).Debug("Discovery lookup failed, trying connected servers")
-		return ce.dialViaConnectedServers(ctx, addr)
+		ce.log.WithError(discErr).Debug("Discovery lookup failed, trying connected servers")
+		stream, err := ce.dialViaConnectedServers(ctx, addr)
+		if err != nil {
+			// If no server could reach the destination, return the original
+			// discovery error so callers can distinguish "not found" from
+			// "found but unreachable".
+			return nil, discErr
+		}
+		return stream, nil
 	}
 
 	// Phase 0: Try cached route first (server that last successfully reached this destination).
