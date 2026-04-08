@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/skycoin/dmsg/pkg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
 
 // ErrDmsgNotReady is returned when the DMSG client is not ready within the timeout.
