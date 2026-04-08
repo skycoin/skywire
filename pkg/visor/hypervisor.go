@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/dmsg/pkg/dmsg"
 	"github.com/skycoin/dmsg/pkg/dmsgpty"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -483,6 +484,11 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/ports", hv.getPorts())
 			})
 		})
+
+		// Reward system proxy — fetches from the reward system via the visor's
+		// DMSG client (or HTTP fallback), avoiding CORS issues and ensuring
+		// DMSG-first access pattern.
+		r.Get("/api/rewards/*", hv.proxyRewardSystem())
 
 		// we don't enable `dmsgpty` endpoints for Windows
 		r.Route("/pty", func(r chi.Router) {
@@ -1630,6 +1636,58 @@ func (hv *Hypervisor) deleteRewardAddress() http.HandlerFunc {
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
 	})
+}
+
+func (hv *Hypervisor) proxyRewardSystem() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := chi.URLParam(r, "*")
+		if path == "" {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, "missing reward API path")
+			return
+		}
+
+		rewardDmsg := deployment.Prod.RewardSystemDmsg
+		rewardHTTP := deployment.Prod.RewardSystem
+		var fetchErr error
+
+		// Try DMSG via the visor's DmsgHTTP
+		if rewardDmsg != "" && hv.visor != nil {
+			resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
+				URL:    rewardDmsg + "/" + path,
+				Method: "GET",
+			})
+			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(resp.StatusCode)
+				w.Write(resp.Body) //nolint:errcheck,gosec
+				return
+			}
+			if err != nil {
+				fetchErr = err
+			}
+		}
+
+		// Fall back to plain HTTP
+		if rewardHTTP != "" {
+			client := &http.Client{Timeout: 15 * time.Second}
+			resp, err := client.Get(rewardHTTP + "/" + path) //nolint:gosec
+			if err == nil {
+				defer resp.Body.Close() //nolint:errcheck
+				body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+				w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+				w.WriteHeader(resp.StatusCode)
+				w.Write(body) //nolint:errcheck,gosec
+				return
+			}
+			fetchErr = err
+		}
+
+		if fetchErr != nil {
+			httputil.WriteJSON(w, r, http.StatusBadGateway, fmt.Errorf("reward system unreachable: %w", fetchErr))
+		} else {
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, "no reward system URL configured")
+		}
+	}
 }
 
 type isPublicResp struct {
