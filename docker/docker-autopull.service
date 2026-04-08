@@ -1,0 +1,10 @@
+[Unit]
+Description=Skywire Docker image auto-pull
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/skywire-docker-autopull
+StandardOutput=journal
+StandardError=journal
