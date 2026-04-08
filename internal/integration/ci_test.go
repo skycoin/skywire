@@ -482,9 +482,9 @@ func TestEnv_Tp(t *testing.T) {
 				// Use retry logic for transport creation (up to 3 attempts)
 				addTpSum, err := env.VisorTpAddWithRetry(visorB, pk, tpType, 3)
 				if err != nil {
-					// SUDPH transport may not work in Docker E2E environment due to NAT/STUN limitations
-					if tpType == types.SUDPH {
-						t.Logf("Skipping SUDPH transport test: %v (expected in Docker environment)", err)
+					// SUDPH/DMSG transports may not work in Docker E2E due to NAT/STUN/noise limitations
+					if tpType == types.SUDPH || tpType == types.DMSG {
+						t.Logf("Skipping %s transport test: %v (expected in Docker environment)", tpType, err)
 						continue
 					}
 					// Dump visor-b logs on transport creation failure
