@@ -1659,60 +1659,56 @@ func (hv *Hypervisor) proxyRewardSystem() http.HandlerFunc {
 		if rewardHTTP == "" {
 			rewardHTTP = deployment.Prod.RewardSystem
 		}
-		// Race DMSG and HTTP concurrently — return whichever responds first.
-		// DMSG can take 55s to timeout; we don't want to block the browser.
-		type result struct {
-			contentType string
-			statusCode  int
-			body        []byte
-		}
-		ch := make(chan *result, 2)
+		log := hv.visor.MasterLogger().PackageLogger("reward_proxy")
+		var fetchErr error
 
-		// DMSG fetch (background)
+		// Try DMSG first via the visor's DmsgHTTP
 		if rewardDmsg != "" && hv.visor != nil {
-			go func() {
-				resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
-					URL:    rewardDmsg + "/" + path,
-					Method: "GET",
-				})
-				if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-					ch <- &result{"application/json", resp.StatusCode, resp.Body}
-				} else {
-					ch <- nil
-				}
-			}()
-		} else {
-			ch <- nil
-		}
-
-		// HTTP fetch (background)
-		if rewardHTTP != "" {
-			go func() {
-				client := &http.Client{Timeout: 15 * time.Second}
-				resp, err := client.Get(rewardHTTP + "/" + path) //nolint:gosec
-				if err == nil {
-					defer resp.Body.Close()          //nolint:errcheck
-					body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-					ch <- &result{resp.Header.Get("Content-Type"), resp.StatusCode, body}
-				} else {
-					ch <- nil
-				}
-			}()
-		} else {
-			ch <- nil
-		}
-
-		// Wait for the first successful response, or both to fail.
-		for i := 0; i < 2; i++ {
-			res := <-ch
-			if res != nil {
-				w.Header().Set("Content-Type", res.contentType)
-				w.WriteHeader(res.statusCode)
-				w.Write(res.body) //nolint:errcheck,gosec
+			dmsgURL := rewardDmsg + "/" + path
+			log.Debugf("Fetching reward data via DMSG: %s", dmsgURL)
+			resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
+				URL:    dmsgURL,
+				Method: "GET",
+			})
+			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				log.Debugf("DMSG fetch succeeded: %d bytes, status %d", len(resp.Body), resp.StatusCode)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(resp.StatusCode)
+				w.Write(resp.Body) //nolint:errcheck,gosec
 				return
 			}
+			if err != nil {
+				log.WithError(err).Warn("DMSG fetch failed, falling back to HTTP")
+				fetchErr = err
+			} else {
+				log.Warnf("DMSG fetch returned non-success status: %d", resp.StatusCode)
+			}
 		}
-		httputil.WriteJSON(w, r, http.StatusBadGateway, "reward system unreachable")
+
+		// Fall back to plain HTTP
+		if rewardHTTP != "" {
+			httpURL := rewardHTTP + "/" + path
+			log.Debugf("Fetching reward data via HTTP: %s", httpURL)
+			client := &http.Client{Timeout: 15 * time.Second}
+			resp, err := client.Get(httpURL) //nolint:gosec
+			if err == nil {
+				defer resp.Body.Close()          //nolint:errcheck
+				body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+				log.Debugf("HTTP fetch succeeded: %d bytes, status %d", len(body), resp.StatusCode)
+				w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+				w.WriteHeader(resp.StatusCode)
+				w.Write(body) //nolint:errcheck,gosec
+				return
+			}
+			log.WithError(err).Warn("HTTP fetch also failed")
+			fetchErr = err
+		}
+
+		if fetchErr != nil {
+			httputil.WriteJSON(w, r, http.StatusBadGateway, fmt.Errorf("reward system unreachable: %w", fetchErr))
+		} else {
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, "no reward system URL configured")
+		}
 	}
 }
 
