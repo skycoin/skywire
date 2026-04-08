@@ -1001,6 +1001,15 @@ func configureLauncher(log *logging.Logger) {
 	}
 	conf.GeoIP = skyenv.GeoIP
 	conf.MemoryLimit = "auto"
+	// Reward system endpoints
+	conf.RewardSystem = services.RewardSystem
+	conf.RewardSystemDmsg = services.RewardSystemDmsg
+	if conf.RewardSystem == "" {
+		conf.RewardSystem = deployment.Prod.RewardSystem
+	}
+	if conf.RewardSystemDmsg == "" {
+		conf.RewardSystemDmsg = deployment.Prod.RewardSystemDmsg
+	}
 	if rewardSkyAddr != "" {
 		canonical, _, err := rewardconfig.ValidateRewardAddress(rewardSkyAddr)
 		if err != nil {
