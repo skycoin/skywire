@@ -66,11 +66,11 @@ jobs:
 
       - name: Checking Format and Testing
         run: |
-          CGO_ENABLED=0 GO111MODULE=on golangci-lint run -c .golangci.yml --build-tags 'withoutsystray withoutgotop' ./...
-          CGO_ENABLED=0 go run -tags 'withoutsystray withoutgotop' . --help
-          CGO_ENABLED=0 go run -tags 'withoutsystray withoutgotop' . cli config gen -dnw
-          CGO_ENABLED=0 go run -tags 'withoutsystray withoutgotop' . cli config gen --nofetch -nw
-          CGO_ENABLED=0 GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci withoutsystray withoutgotop' ./internal/... ./pkg/... ./cmd/skywire-cli/commands/config/...
+          GO111MODULE=on golangci-lint run -c .golangci.yml ./...
+          go run . --help
+          go run . cli config gen -dnw
+          go run . cli config gen --nofetch -nw
+          GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci' ./internal/... ./pkg/... ./cmd/skywire-cli/commands/config/...
 
   windows:
     runs-on: windows-latest

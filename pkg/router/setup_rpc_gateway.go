@@ -8,6 +8,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -53,13 +54,20 @@ type HealthCheckArgs struct{}
 
 // HealthCheckReply is returned by the HealthCheck RPC method.
 type HealthCheckReply struct {
-	Status string
+	Status  string `json:"status"`
+	Version string `json:"version,omitempty"`
+	Commit  string `json:"commit,omitempty"`
+	Date    string `json:"date,omitempty"`
 }
 
 // HealthCheck to test if the setup node is responsive.
 func (g *SetupRPCGateway) HealthCheck(_ *HealthCheckArgs, reply *HealthCheckReply) error {
 	log := logging.MustGetLogger("health-check")
 	log.WithField("remote_pk", g.ReqPK.String()).Info("Health check received from RSN")
+	info := buildinfo.Get()
 	reply.Status = "OK"
+	reply.Version = info.Version
+	reply.Commit = info.Commit
+	reply.Date = info.Date
 	return nil
 }
