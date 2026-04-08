@@ -21,6 +21,7 @@ func TestMessagingWithRestarts(t *testing.T) {
 
 	res, err := env.SendSkyMessage(visorA, visorC, visorA+" -> "+visorC)
 	require.NoError(t, err)
+	require.NotNil(t, res, "SendSkyMessage returned nil response")
 
 	require.NoError(t, res.Body.Close())
 }
