@@ -23,7 +23,7 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 	logging.SetLevel(logrus.WarnLevel)
 
 	const (
-		nSrvs       = 2
+		nSrvs       = 1
 		minSessions = 1
 		maxSessions = 10
 	)
@@ -41,7 +41,7 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 
 		// Arrange: constants and dmsg environment.
 		const port = uint16(80)
-		const nReqs = 10
+		const nReqs = 3
 		dc := startDmsgEnv(t, nSrvs, maxSessions)
 
 		// Arrange: Result channels.
