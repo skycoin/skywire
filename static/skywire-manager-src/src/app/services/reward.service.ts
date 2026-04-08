@@ -107,10 +107,10 @@ export class RewardService {
 
     // Fetch data for each of the 7 days
     const requests: Observable<{ date: string; entries: RewardHistoryEntry[] }>[] = dates.map(date => {
-      return this.http.get<RewardHistoryEntry[]>(
+      return this.http.get<any>(
         `${this.rewardSystemUrl}/skycoin-rewards/hist/${date}/json`
       ).pipe(
-        map(entries => ({ date, entries: entries || [] })),
+        map(resp => ({ date, entries: (resp && resp.rewards ? resp.rewards : resp) || [] })),
         catchError(() => of({ date, entries: [] as RewardHistoryEntry[] }))
       );
     });

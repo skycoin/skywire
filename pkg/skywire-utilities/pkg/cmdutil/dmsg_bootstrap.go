@@ -75,7 +75,7 @@ func BootstrapDmsg(
 	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
 
 	config := &dmsg.Config{
-		MinSessions:          0,
+		MinSessions:          0, // 0 = connect to all available servers
 		UpdateInterval:       dmsg.DefaultUpdateInterval,
 		ConnectedServersType: dmsgServerType,
 	}
