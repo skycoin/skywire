@@ -20,8 +20,12 @@ func TestMessagingWithRestarts(t *testing.T) {
 		AddDefaultTransports(routerVisor, skychatVisors)
 
 	res, err := env.SendSkyMessage(visorA, visorC, visorA+" -> "+visorC)
-	require.NoError(t, err)
-	require.NotNil(t, res, "SendSkyMessage returned nil response")
-
-	require.NoError(t, res.Body.Close())
+	if err != nil {
+		t.Fatalf("SendSkyMessage failed: %v", err)
+	}
+	if res == nil {
+		t.Fatal("SendSkyMessage returned nil response")
+	}
+	defer res.Body.Close() //nolint:errcheck
+	require.Equal(t, 200, res.StatusCode, "expected HTTP 200 from skychat")
 }
