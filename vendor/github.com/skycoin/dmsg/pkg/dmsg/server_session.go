@@ -366,11 +366,21 @@ func (ss *ServerSession) forwardRequest(req StreamRequest) (mStr io.ReadWriteClo
 			return nil, nil, err
 		}
 	}
+	// Set a deadline for the forwarding handshake. If the destination visor
+	// accepts the stream but never responds, readObject blocks forever,
+	// leaking goroutines. Observed as 2K+ stuck goroutines per DMSG server.
+	if conn, ok := mStr.(net.Conn); ok {
+		conn.SetDeadline(time.Now().Add(HandshakeTimeout)) //nolint:errcheck,gosec
+	}
 	if err = ss.writeObject(mStr, req.raw); err != nil {
 		return nil, nil, err
 	}
 	if respObj, err = ss.readObject(mStr); err != nil {
 		return nil, nil, err
+	}
+	// Clear deadline before returning the stream for long-lived bridging.
+	if conn, ok := mStr.(net.Conn); ok {
+		conn.SetDeadline(time.Time{}) //nolint:errcheck,gosec
 	}
 	var resp StreamResponse
 	if resp, err = respObj.ObtainStreamResponse(); err != nil {

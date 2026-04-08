@@ -84,6 +84,9 @@ type Services struct {
 	RouteFinderDmsg        string                       `json:"route_finder_dmsg,omitempty"`
 	UptimeTrackerDmsg      string                       `json:"uptime_tracker_dmsg,omitempty"`
 	ServiceDiscoveryDmsg   string                       `json:"service_discovery_dmsg,omitempty"`
+	// Reward system
+	RewardSystem     string `json:"reward_system,omitempty"`
+	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
 }
 
 // HasDmsgEndpoints returns true if the services config has DMSG endpoints.
