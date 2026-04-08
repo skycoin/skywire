@@ -34,7 +34,10 @@ func (ce *Client) Dial(ctx context.Context, addr Addr) (net.Conn, error) {
 func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	entry, err := ce.getClientEntryCached(ctx, addr.PK)
 	if err != nil {
-		return nil, err
+		// Discovery lookup failed. For direct clients or when the destination
+		// doesn't register in discovery, try all connected servers as forwarders.
+		ce.log.WithError(err).Debug("Discovery lookup failed, trying connected servers")
+		return ce.dialViaConnectedServers(ctx, addr)
 	}
 
 	// Phase 0: Try cached route first (server that last successfully reached this destination).
@@ -157,6 +160,26 @@ func sortSessionsByLatency(sessions []ClientSession) {
 		}
 		return pi < pj
 	})
+}
+
+// dialViaConnectedServers tries all connected server sessions as forwarders.
+// Used when the destination PK is not registered in discovery (e.g. direct clients).
+func (ce *Client) dialViaConnectedServers(ctx context.Context, addr Addr) (*Stream, error) {
+	sessions := ce.allClientSessions(ce.porter)
+	sortSessionsByLatency(sessions)
+
+	for _, ses := range sessions {
+		stream, err := ses.DialStream(ctx, addr)
+		if err != nil {
+			ce.log.WithError(err).WithField("server", ses.RemotePK()).
+				Debug("DialStream failed via connected server, trying next")
+			continue
+		}
+		ce.setCachedRoute(addr.PK, ses.RemotePK())
+		return stream, nil
+	}
+
+	return nil, ErrCannotConnectToDelegated
 }
 
 // LookupIP dails to dmsg servers for public IP of the client.

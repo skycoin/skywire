@@ -34,17 +34,19 @@ func CopyReadWriteCloser(conn1, conn2 io.ReadWriteCloser) error {
 	case firstErr = <-errCh2:
 	}
 
-	// Close both connections.
-	_ = conn1.Close() //nolint:errcheck
-	_ = conn2.Close() //nolint:errcheck
-
-	// Force-expire any pending read deadlines to unblock the other goroutine.
+	// Force-expire read deadlines BEFORE closing, so the blocked Read
+	// gets woken by the deadline timer while the stream is still open.
+	// After Close(), SetReadDeadline is a no-op on yamux streams.
 	if ds, ok := conn1.(DeadlineSetter); ok {
 		ds.ForceReadDeadline()
 	}
 	if ds, ok := conn2.(DeadlineSetter); ok {
 		ds.ForceReadDeadline()
 	}
+
+	// Close both connections.
+	_ = conn1.Close() //nolint:errcheck
+	_ = conn2.Close() //nolint:errcheck
 
 	// Wait for the other direction to finish (should return quickly now).
 	<-errCh1

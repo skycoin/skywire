@@ -20,7 +20,7 @@ import (
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/spf13/cobra"
 
@@ -707,9 +707,11 @@ func fetchServiceConfigDmsg(log *logging.Logger) bool {
 	}
 	defer dmsgBoot.Close()
 
-	// Make HTTP request through DMSG transport
+	// Make HTTP request through DMSG transport using FallbackRoundTripper.
+	// This tries each connected DMSG server directly, bypassing discovery
+	// lookup (conf service uses a direct client, not registered in discovery).
 	dmsgHTTPClient := &http.Client{
-		Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgBoot.Client),
+		Transport: dmsgclient.NewFallbackRoundTripper(ctx, []*dmsg.Client{dmsgBoot.Client}),
 		Timeout:   servicesFetchTimeout,
 	}
 
@@ -1001,6 +1003,15 @@ func configureLauncher(log *logging.Logger) {
 	}
 	conf.GeoIP = skyenv.GeoIP
 	conf.MemoryLimit = "auto"
+	// Reward system endpoints
+	conf.RewardSystem = services.RewardSystem
+	conf.RewardSystemDmsg = services.RewardSystemDmsg
+	if conf.RewardSystem == "" {
+		conf.RewardSystem = deployment.Prod.RewardSystem
+	}
+	if conf.RewardSystemDmsg == "" {
+		conf.RewardSystemDmsg = deployment.Prod.RewardSystemDmsg
+	}
 	if rewardSkyAddr != "" {
 		canonical, _, err := rewardconfig.ValidateRewardAddress(rewardSkyAddr)
 		if err != nil {

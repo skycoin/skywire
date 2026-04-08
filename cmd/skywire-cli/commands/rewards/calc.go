@@ -1137,6 +1137,16 @@ func compareAndPrintDiffs(nodeInfoData, configData []byte, noLogging bool) bool 
 func compareMaps(nodeInfoServices, configServices map[string]interface{}, noLogging bool) bool {
 	for key, value1 := range nodeInfoServices {
 		if value2, ok := configServices[key]; ok {
+			// Skip nil values (JSON null) — reflect.TypeOf(nil) panics
+			if value1 == nil || value2 == nil {
+				if value1 != value2 {
+					if !noLogging {
+						printDifference(key, value1, value2)
+					}
+					return false
+				}
+				continue
+			}
 			if reflect.TypeOf(value1).Kind() == reflect.Slice && reflect.TypeOf(value2).Kind() == reflect.Slice {
 				slice1 := value1.([]interface{})
 				slice2 := value2.([]interface{})
