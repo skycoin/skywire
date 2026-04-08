@@ -3,6 +3,7 @@
 package metricsutil
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/pprof"
@@ -12,6 +13,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
+
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 )
 
 // AddMetricsHandler adds a prometheus-format Handle at '/metrics' to the provided serve mux.
@@ -29,12 +32,25 @@ func ServePProf(log logrus.FieldLogger, addr, serviceName string) {
 		return
 	}
 
+	startTime := time.Now()
 	mux := http.NewServeMux()
 
 	// Service identifier
 	mux.HandleFunc("/debug/service", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		fmt.Fprintln(w, serviceName) //nolint:errcheck
+	})
+
+	// Health/version endpoint
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		info := buildinfo.Get()
+		w.Header().Set("Content-Type", "application/json")
+		resp := map[string]interface{}{
+			"service_name": serviceName,
+			"build_info":   info,
+			"started_at":   startTime.Format(time.RFC3339),
+		}
+		json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 	})
 
 	// Standard pprof handlers
