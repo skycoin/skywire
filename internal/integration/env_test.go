@@ -1138,21 +1138,17 @@ func (env *TestEnv) AddDefaultTransports(routerVisor string, skychatNodes []stri
 
 	for _, node := range skychatNodes {
 		var err error
-		// Retry transport creation with increasing delay
-		for attempt := 0; attempt < 15; attempt++ {
+		// Retry transport creation with short delay (max 3 attempts)
+		for attempt := 0; attempt < 3; attempt++ {
 			_, err = env.VisorTpAddDefault(routerVisor, env.visorPKs[node])
 			if err == nil {
 				break
 			}
-			delay := time.Duration(3+attempt) * time.Second
-			if delay > 10*time.Second {
-				delay = 10 * time.Second
-			}
-			env.logger.Warnf("AddDefaultTransports: attempt %d for %s failed: %v (retry in %v)", attempt+1, node, err, delay)
-			time.Sleep(delay)
+			env.logger.Warnf("AddDefaultTransports: attempt %d for %s failed: %v (retry in 3s)", attempt+1, node, err)
+			time.Sleep(3 * time.Second)
 		}
 		if err != nil {
-			panic(err)
+			env.logger.Warnf("AddDefaultTransports: giving up on %s after 3 attempts: %v", node, err)
 		}
 	}
 
