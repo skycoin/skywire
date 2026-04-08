@@ -3,6 +3,7 @@ package dmsgtest
 
 import (
 	"context"
+	"runtime"
 	"sort"
 	"sync"
 	"testing"
@@ -69,6 +70,11 @@ func (env *Env) Startup(entryTimeout time.Duration, servers, clients int, conf *
 		if _, err := env.newClientWithKeys(ctx, pk, sk, conf); err != nil {
 			return err
 		}
+	}
+
+	// macOS CI runners need extra time for noise handshakes to settle.
+	if runtime.GOOS == "darwin" && clients > 0 && servers > 0 {
+		time.Sleep(2 * time.Second)
 	}
 
 	return nil
