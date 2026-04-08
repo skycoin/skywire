@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/sirupsen/logrus"
@@ -59,6 +60,8 @@ func ExampleMakeHTTPTransport() {
 	}()
 	go dmsgC1.Serve(context.Background())
 	<-dmsgC1.Ready()
+	// Allow discovery entry to propagate
+	time.Sleep(time.Second)
 
 	// Host HTTP server via dmsg client 1.
 	lis, err := dmsgC1.Listen(dmsgHTTPPort)
@@ -88,10 +91,16 @@ func ExampleMakeHTTPTransport() {
 	go dmsgC2.Serve(context.Background())
 	<-dmsgC2.Ready()
 
+	// Allow all sessions and discovery entries to stabilize.
+	time.Sleep(2 * time.Second)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// Run HTTP client.
-	httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC2)}
+	httpC := http.Client{
+		Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC2),
+		Timeout:   30 * time.Second,
+	}
 	resp, err := httpC.Get(fmt.Sprintf("http://%s:%d/", c1PK.String(), dmsgHTTPPort))
 	if err != nil {
 		panic(err)
