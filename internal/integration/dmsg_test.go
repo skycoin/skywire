@@ -203,7 +203,7 @@ func TestDmsgDirect(t *testing.T) {
 	if !env.waitForListeningPort(localPort, 30*time.Second) {
 		// Dump log for debugging
 		logResult, _ := env.execResult("sh -c 'cat /tmp/dmsg-web-direct.log 2>/dev/null || true'") //nolint:errcheck
-		_, _ = env.execResult("sh -c 'pkill -f \"dmsg web\" || true'")                              //nolint:errcheck
+		_, _ = env.execResult("sh -c 'pkill -f \"dmsg web\" || true'")                             //nolint:errcheck
 		t.Skipf("dmsg web local port %d not listening after 30s (Docker DMSG issue); log: %s", localPort, logResult.Combined())
 	}
 
