@@ -234,7 +234,7 @@ services:
     depends_on:
       - dmsg-server
     restart: always
-    entrypoint: /release/skywire svc sn --pprof :6070 /release/setup-node.json
+    entrypoint: /release/skywire svc sn -q http -r :6070 /release/setup-node.json
     volumes:
       - type: bind
         source: ../docker/integration/setup-node.json
