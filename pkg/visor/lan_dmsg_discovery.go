@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
+	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 )
 
 // discoverLANDmsgServer attempts to connect to a previously saved LAN DMSG server

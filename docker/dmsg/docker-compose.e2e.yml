@@ -1,0 +1,63 @@
+networks:
+  dmsg:
+    driver: "bridge"
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+    driver_opts:
+      com.docker.network.bridge.name: br-dmsg-e2e
+
+services:
+  redis:
+    image: "redis:alpine"
+    container_name: "dmsg-e2e-redis"
+    hostname: redis
+    networks:
+      dmsg:
+        ipv4_address: 172.20.0.2
+    ports:
+      - "6380:6379"
+
+  dmsg-discovery:
+    build:
+      context: ..
+      dockerfile: docker/images/dmsg-discovery/Dockerfile
+    container_name: "dmsg-e2e-discovery"
+    hostname: dmsg-discovery
+    networks:
+      dmsg:
+        ipv4_address: 172.20.0.3
+    ports:
+      - "9090:9090"
+    depends_on:
+      - redis
+    command: ["--addr", ":9090", "--redis", "redis://redis:6379", "--sk", "b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714", "-t"]
+
+  dmsg-server:
+    build:
+      context: ..
+      dockerfile: docker/images/dmsg-server/Dockerfile
+    container_name: "dmsg-e2e-server"
+    hostname: dmsg-server
+    networks:
+      dmsg:
+        ipv4_address: 172.20.0.4
+    ports:
+      - "8080:8080"
+    depends_on:
+      - dmsg-discovery
+    command: ["start", "/e2e/dmsg-server.json"]
+
+  dmsg-client:
+    build:
+      context: ..
+      dockerfile: docker/images/dmsg-client/Dockerfile
+    container_name: "dmsg-e2e-client"
+    hostname: dmsg-client
+    networks:
+      dmsg:
+        ipv4_address: 172.20.0.5
+    depends_on:
+      - dmsg-server
+    entrypoint: ["/bin/sh"]
+    command: ["-c", "sleep infinity"]

@@ -18,12 +18,12 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/pkg/direct"
-	dmsgdisc "github.com/skycoin/dmsg/pkg/disc"
-	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsgctrl"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
-	"github.com/skycoin/dmsg/pkg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/dmsg/direct"
+	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgctrl"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/skyenv"

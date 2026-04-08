@@ -17,11 +17,11 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/pkg/disc"
-	"github.com/skycoin/dmsg/pkg/dmsg"
-	"github.com/skycoin/dmsg/pkg/dmsghttp"
-	"github.com/skycoin/dmsg/pkg/dmsgpty"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"

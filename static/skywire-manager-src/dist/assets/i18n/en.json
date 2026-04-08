@@ -170,7 +170,17 @@
         "enable-confirmation": "Are you sure you want to enable the autoconnect feature?",
         "disable-confirmation": "Are you sure you want to disable the autoconnect feature?",
         "enable-done": "The autoconnect feature has been enabled.",
-        "disable-done": "The autoconnect feature has been disabled."
+        "disable-done": "The autoconnect feature has been disabled.",
+        "is-public": "Public Visor:",
+        "is-public-info": "When enabled, this visor registers as a public relay for other visors",
+        "public-enabled": "Enabled",
+        "public-disabled": "Disabled",
+        "public-enable-button": "Enable",
+        "public-disable-button": "Disable",
+        "public-enable-confirmation": "Are you sure you want to make this visor public?",
+        "public-disable-confirmation": "Are you sure you want to make this visor private?",
+        "public-enable-done": "This visor is now public.",
+        "public-disable-done": "This visor is now private."
       },
       "router-info": {
         "title": "Router",
@@ -183,6 +193,17 @@
         "uptime-tracker": "Uptime tracker:",
         "connected": "Connected",
         "disconnected": "Disconnected"
+      },
+      "ports": {
+        "title": "Ports"
+      },
+      "config": {
+        "view-button": "View Config",
+        "title": "Runtime Configuration"
+      },
+      "tpviz": {
+        "title": "Network Visualizer",
+        "open": "Open Transport Visualizer"
       },
       "node-traffic-data": "Traffic data"
     },
@@ -217,6 +238,12 @@
   "nodes": {
     "title": "Visor list",
     "dmsg-title": "DMSG",
+    "rewards-title": "Rewards",
+    "reward-address": "Reward Address",
+    "reward-total": "Week Total",
+    "reward-distributed": "Distributed",
+    "reward-pending": "Pending",
+    "rewards-loading": "Loading rewards...",
     "modify-rewards-all": "Change rewards address",
     "update-all": "Update all online visors",
     "hypervisor": "Hypervisor",
@@ -250,6 +277,14 @@
     "deleted-plural": "{{ number }} offline visors removed.",
     "no-visors-to-update": "There are no visors to update.",
     "no-visors-to-modify": "There are no visors to modify.",
+    "transports": "Transports",
+    "services": "Services",
+    "reward": "Reward",
+    "reward-set": "Reward address set",
+    "reward-not-set": "No reward address",
+    "ip-location": "IP / Location",
+    "visor-version": "Visor",
+    "config-label": "Config",
     "filter-dialog": {
       "online": "The visor must be",
       "label": "The label must contain",
