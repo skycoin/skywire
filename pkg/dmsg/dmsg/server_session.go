@@ -309,6 +309,14 @@ func (c *idleTimeoutConn) Close() error {
 	return c.rwc.Close()
 }
 
+// ForceReadDeadline sets an immediate read deadline to unblock any pending Read.
+// This is needed because yamux Stream.Close() does NOT unblock a local Read().
+func (c *idleTimeoutConn) ForceReadDeadline() {
+	if conn, ok := c.rwc.(net.Conn); ok {
+		conn.SetReadDeadline(time.Now().Add(-time.Second)) //nolint:errcheck,gosec
+	}
+}
+
 // forwardViaPeer tries to forward a stream request through peer server sessions.
 // This is only called for client-originated requests (not peer-originated, enforcing 1-hop max).
 func (ss *ServerSession) forwardViaPeer(log logrus.FieldLogger, yStr io.ReadWriteCloser, req StreamRequest) error {
