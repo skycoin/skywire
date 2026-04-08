@@ -161,8 +161,6 @@ github.com/ccding/go-stun/stun
 # github.com/cenkalti/backoff v2.2.1+incompatible
 ## explicit
 github.com/cenkalti/backoff
-# github.com/cenkalti/backoff/v5 v5.0.3
-## explicit; go 1.23
 # github.com/cespare/xxhash/v2 v2.3.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
@@ -228,6 +226,8 @@ github.com/containerd/errdefs
 ## explicit; go 1.22
 github.com/containerd/errdefs/pkg/errhttp
 github.com/containerd/errdefs/pkg/internal/cause
+# github.com/containerd/log v0.1.0
+## explicit; go 1.20
 # github.com/creack/pty v1.1.24
 ## explicit; go 1.18
 github.com/creack/pty
@@ -484,8 +484,6 @@ github.com/gopherjs/gopherjs/js
 # github.com/gorilla/securecookie v1.1.2
 ## explicit; go 1.20
 github.com/gorilla/securecookie
-# github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2
-## explicit; go 1.23.0
 # github.com/hashicorp/go-version v1.9.0
 ## explicit
 github.com/hashicorp/go-version
@@ -631,14 +629,18 @@ github.com/mitchellh/go-wordwrap
 # github.com/moby/docker-image-spec v1.3.1
 ## explicit; go 1.18
 github.com/moby/docker-image-spec/specs-go/v1
-# github.com/moby/sys/sequential v0.6.0
-## explicit; go 1.17
+# github.com/moby/sys/atomicwriter v0.1.0
+## explicit; go 1.18
+# github.com/moby/term v0.5.2
+## explicit; go 1.18
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
 ## explicit
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.2
 ## explicit; go 1.12
 github.com/modern-go/reflect2
+# github.com/morikuni/aec v1.1.0
+## explicit; go 1.21
 # github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 ## explicit; go 1.17
 github.com/muesli/ansi
@@ -772,40 +774,6 @@ github.com/shopspring/decimal
 ## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v1.3.29-0.20260408011302-9dddab06ee64
-## explicit; go 1.26.1
-github.com/skycoin/dmsg/cmd/conf/commands
-github.com/skycoin/dmsg/cmd/dial/commands
-github.com/skycoin/dmsg/cmd/dmsg-discovery/commands
-github.com/skycoin/dmsg/cmd/dmsg-server/commands
-github.com/skycoin/dmsg/cmd/dmsg-server/commands/config
-github.com/skycoin/dmsg/cmd/dmsg-server/commands/start
-github.com/skycoin/dmsg/cmd/dmsg-socks5/commands
-github.com/skycoin/dmsg/cmd/dmsg/commands
-github.com/skycoin/dmsg/cmd/dmsgcurl/commands
-github.com/skycoin/dmsg/cmd/dmsghttp/commands
-github.com/skycoin/dmsg/cmd/dmsgip/commands
-github.com/skycoin/dmsg/cmd/dmsgpty-cli/commands
-github.com/skycoin/dmsg/cmd/dmsgpty-host/commands
-github.com/skycoin/dmsg/cmd/dmsgpty-ui/commands
-github.com/skycoin/dmsg/cmd/dmsgweb/commands
-github.com/skycoin/dmsg/pkg/cmdutil
-github.com/skycoin/dmsg/pkg/direct
-github.com/skycoin/dmsg/pkg/disc
-github.com/skycoin/dmsg/pkg/disc/metrics
-github.com/skycoin/dmsg/pkg/discovery/api
-github.com/skycoin/dmsg/pkg/discovery/store
-github.com/skycoin/dmsg/pkg/dmsg
-github.com/skycoin/dmsg/pkg/dmsg/metrics
-github.com/skycoin/dmsg/pkg/dmsgclient
-github.com/skycoin/dmsg/pkg/dmsgctrl
-github.com/skycoin/dmsg/pkg/dmsgcurl
-github.com/skycoin/dmsg/pkg/dmsghttp
-github.com/skycoin/dmsg/pkg/dmsgpty
-github.com/skycoin/dmsg/pkg/dmsgserver
-github.com/skycoin/dmsg/pkg/dmsgtest
-github.com/skycoin/dmsg/pkg/ioutil
-github.com/skycoin/dmsg/pkg/noise
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
@@ -1042,8 +1010,8 @@ go.opentelemetry.io/auto/sdk/internal/telemetry
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/request
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/semconv
-# go.opentelemetry.io/otel v1.39.0
-## explicit; go 1.24.0
+# go.opentelemetry.io/otel v1.43.0
+## explicit; go 1.25.0
 go.opentelemetry.io/otel
 go.opentelemetry.io/otel/attribute
 go.opentelemetry.io/otel/attribute/internal
@@ -1051,25 +1019,29 @@ go.opentelemetry.io/otel/attribute/internal/xxhash
 go.opentelemetry.io/otel/baggage
 go.opentelemetry.io/otel/codes
 go.opentelemetry.io/otel/internal/baggage
+go.opentelemetry.io/otel/internal/errorhandler
 go.opentelemetry.io/otel/internal/global
 go.opentelemetry.io/otel/propagation
 go.opentelemetry.io/otel/semconv/v1.37.0
 go.opentelemetry.io/otel/semconv/v1.37.0/httpconv
-# go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.38.0
-## explicit; go 1.23.0
-# go.opentelemetry.io/otel/metric v1.39.0
-## explicit; go 1.24.0
+go.opentelemetry.io/otel/semconv/v1.40.0
+# go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0
+## explicit; go 1.25.0
+# go.opentelemetry.io/otel/metric v1.43.0
+## explicit; go 1.25.0
 go.opentelemetry.io/otel/metric
 go.opentelemetry.io/otel/metric/embedded
 go.opentelemetry.io/otel/metric/noop
-# go.opentelemetry.io/otel/trace v1.39.0
-## explicit; go 1.24.0
+# go.opentelemetry.io/otel/sdk v1.43.0
+## explicit; go 1.25.0
+# go.opentelemetry.io/otel/sdk/metric v1.43.0
+## explicit; go 1.25.0
+# go.opentelemetry.io/otel/trace v1.43.0
+## explicit; go 1.25.0
 go.opentelemetry.io/otel/trace
 go.opentelemetry.io/otel/trace/embedded
 go.opentelemetry.io/otel/trace/internal/telemetry
 go.opentelemetry.io/otel/trace/noop
-# go.opentelemetry.io/proto/otlp v1.7.1
-## explicit; go 1.23.0
 # go.yaml.in/yaml/v3 v3.0.4
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
@@ -1305,6 +1277,8 @@ gorm.io/gorm/logger
 gorm.io/gorm/migrator
 gorm.io/gorm/schema
 gorm.io/gorm/utils
+# gotest.tools/v3 v3.5.2
+## explicit; go 1.17
 # howett.net/plist v1.0.2-0.20250314012144-ee69052608d9
 ## explicit; go 1.12
 howett.net/plist
