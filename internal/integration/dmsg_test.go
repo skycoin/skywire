@@ -84,7 +84,7 @@ func TestDmsgCurl(t *testing.T) {
 	// Retry a few times; the DMSG session may take a moment to establish.
 	var result ExecResult
 	var err error
-	const maxAttempts = 2
+	const maxAttempts = 1
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		result, err = env.execResult(cmd)
 		if err == nil && result.ExitCode == 0 {
@@ -133,7 +133,7 @@ func TestDmsgCurlIndex(t *testing.T) {
 
 	var result ExecResult
 	var err error
-	const maxAttempts = 2
+	const maxAttempts = 1
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		result, err = env.execResult(cmd)
 		if err == nil && result.ExitCode == 0 {
