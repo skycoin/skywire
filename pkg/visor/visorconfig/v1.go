@@ -44,6 +44,8 @@ type V1 struct {
 	GeoIP                string                           `json:"geoip"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	RewardAddress        string                           `json:"reward_address,omitempty"`
+	RewardSystem         string                           `json:"reward_system,omitempty"`
+	RewardSystemDmsg     string                           `json:"reward_system_dmsg,omitempty"`
 	MemoryLimit          string                           `json:"memory_limit,omitempty"` // Go memory limit (e.g., "256MiB", "auto" for 60% of available RAM)
 
 	Hypervisor *HypervisorConfig `json:"hypervisor,omitempty"`
