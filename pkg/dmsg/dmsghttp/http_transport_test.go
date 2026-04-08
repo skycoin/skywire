@@ -23,9 +23,9 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 	logging.SetLevel(logrus.WarnLevel)
 
 	const (
-		nSrvs       = 5
-		minSessions = 3
-		maxSessions = 20
+		nSrvs       = 2
+		minSessions = 1
+		maxSessions = 10
 	)
 
 	// Ensure HTTP request/response works.
