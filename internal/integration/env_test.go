@@ -1126,16 +1126,27 @@ func (env *TestEnv) checkVPNClientStatus(app AppToRun) (bool, error) {
 }
 
 func (env *TestEnv) AddDefaultTransports(routerVisor string, skychatNodes []string) *TestEnv {
+	// Ensure visors are ready before creating transports
+	for _, v := range append([]string{routerVisor}, skychatNodes...) {
+		if err := env.WaitForVisorReady(v, 60*time.Second); err != nil {
+			env.logger.Warnf("AddDefaultTransports: visor %s not ready: %v", v, err)
+		}
+	}
+
 	for _, node := range skychatNodes {
 		var err error
-		// Retry transport creation — DMSG may take time to reconnect after restart
-		for attempt := 0; attempt < 12; attempt++ {
+		// Retry transport creation with increasing delay
+		for attempt := 0; attempt < 15; attempt++ {
 			_, err = env.VisorTpAddDefault(routerVisor, env.visorPKs[node])
 			if err == nil {
 				break
 			}
-			env.logger.Warnf("AddDefaultTransports: attempt %d for %s failed: %v", attempt+1, node, err)
-			time.Sleep(5 * time.Second)
+			delay := time.Duration(3+attempt) * time.Second
+			if delay > 10*time.Second {
+				delay = 10 * time.Second
+			}
+			env.logger.Warnf("AddDefaultTransports: attempt %d for %s failed: %v (retry in %v)", attempt+1, node, err, delay)
+			time.Sleep(delay)
 		}
 		if err != nil {
 			panic(err)

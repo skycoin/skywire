@@ -156,6 +156,21 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	v.initLock.Lock()
 	v.dmsgC = dmsgC
 	v.initLock.Unlock()
+
+	// Wait for DMSG to connect before returning. All modules that depend on
+	// dmsgC will only start after this, ensuring DMSG is ready before any
+	// service tries to use it. Without this, services start dialing over DMSG
+	// before sessions are established, causing unnecessary HTTP fallbacks.
+	const dmsgInitTimeout = 30 * time.Second
+	select {
+	case <-dmsgC.Ready():
+		log.Info("DMSG client connected and ready.")
+	case <-time.After(dmsgInitTimeout):
+		log.Warn("DMSG client not ready after timeout, continuing (services may fall back to HTTP)")
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
 	return nil
 }
 
@@ -165,21 +180,12 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		return nil
 	}
 
-	const dmsgTimeout = time.Second * 20
-	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
-	logger.Debug("Connecting to the dmsg network...")
-	select {
-	case <-time.After(dmsgTimeout):
-		logger.Warn("Failed to connect to the dmsg network, will try again later.")
-		go func() {
-			<-v.dmsgC.Ready()
-			logger.Debug("Connected to the dmsg network.")
-			v.tpM.InitDmsgClient(ctx, dmsgC)
-		}()
-	case <-v.dmsgC.Ready():
-		logger.Debug("Connected to the dmsg network.")
-		v.tpM.InitDmsgClient(ctx, dmsgC)
-	}
+	// DMSG should already be ready (initDmsg waits for it).
+	// Initialize the transport manager's DMSG client.
+	logger := dmsgC.Logger()
+	logger.Debug("Initializing DMSG transport client...")
+	v.tpM.InitDmsgClient(ctx, dmsgC)
+
 	// dmsgctrl setup — listen for incoming control streams (ping/pong).
 	// Each accepted Control is self-serving (handles ping/pong in its own goroutine).
 	// We drain the channel so the listener doesn't block on a full buffer.
