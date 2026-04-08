@@ -988,8 +988,8 @@ func (env *TestEnv) ExecInContainerByID(cmd string, containerID string) (string,
 }
 
 // defaultExecTimeout is the maximum time any single CLI command exec may take.
-// Keep this short so that retries + total test fit within the 25-minute E2E timeout.
-const defaultExecTimeout = 45 * time.Second
+// Keep this short so that retries + total test fit within the E2E timeout budget.
+const defaultExecTimeout = 30 * time.Second
 
 func (env *TestEnv) execResult(cmd string) (ExecResult, error) {
 	if env.testRunnerID == "" {
