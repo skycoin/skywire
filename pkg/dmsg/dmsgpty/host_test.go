@@ -107,6 +107,9 @@ func TestHost(t *testing.T) {
 		})
 	}
 
+	// Wait for previous subtests' DMSG listeners to fully close
+	time.Sleep(3 * time.Second)
+
 	t.Run("ServeCLI", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.TODO())
 
@@ -155,8 +158,8 @@ func TestHost(t *testing.T) {
 			})
 
 			t.Run("endpoint_proxy", func(t *testing.T) {
-				// Give hostA time to establish its listener on macOS
-				time.Sleep(100 * time.Millisecond)
+				// Give hostA time to establish its DMSG listener
+				time.Sleep(2 * time.Second)
 
 				conn, err := cliB.prepareConn()
 				require.NoError(t, err)
