@@ -840,7 +840,8 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 		require.NoError(t, err)
 
 	default:
-		_, err = env.VisorTpAdd(tp.FromVisorHostName, toPK, tp.Type)
+		const defaultRetries = 3
+		_, err = env.VisorTpAddWithRetry(tp.FromVisorHostName, toPK, tp.Type, defaultRetries)
 		require.NoError(t, err)
 	}
 
@@ -990,12 +991,17 @@ func (env *TestEnv) ExecInContainerByID(cmd string, containerID string) (string,
 	return result.Combined(), nil
 }
 
+// defaultExecTimeout is the maximum time any single CLI command exec may take.
+const defaultExecTimeout = 120 * time.Second
+
 func (env *TestEnv) execResult(cmd string) (ExecResult, error) {
 	if env.testRunnerID == "" {
 		return ExecResult{}, errors.New("env.testRunnerID is empty")
 	}
 
-	return Exec(env.ctx, env.cli, env.testRunnerID, strings.Split(cmd, " "))
+	ctx, cancel := context.WithTimeout(env.ctx, defaultExecTimeout)
+	defer cancel()
+	return Exec(ctx, env.cli, env.testRunnerID, strings.Split(cmd, " "))
 }
 
 func (env *TestEnv) waitForVisorApp(app AppToRun) error {
