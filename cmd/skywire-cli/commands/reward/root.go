@@ -234,6 +234,26 @@ var rewardCmd = &cobra.Command{
 				rewardAddress = args[0]
 			}
 		}
+		// If no address provided and no -a flag, print current address and exit
+		if rewardAddress == "" && len(args) == 0 {
+			// Try RPC first
+			if clienterr == nil {
+				rwdAdd, err := client.GetRewardAddress()
+				if err == nil && rwdAdd != "" {
+					out := fmt.Sprintf("%s\n", rwdAdd)
+					internal.PrintOutput(cmd.Flags(), out, out)
+					os.Exit(0)
+				}
+			}
+			// Fallback to file
+			if dat, err := os.ReadFile(output); err == nil {
+				out := fmt.Sprintf("%s\n", dat)
+				internal.PrintOutput(cmd.Flags(), out, out)
+				os.Exit(0)
+			}
+			fmt.Println("No reward address set. Use: skywire cli reward <address|xpub>")
+			os.Exit(0)
+		}
 		if rewardAddress == "" {
 			rewardAddress = defaultRewardAddress
 		}
