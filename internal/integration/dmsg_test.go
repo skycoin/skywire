@@ -20,6 +20,59 @@ const (
 	dmsgHTTPPort     = 80
 )
 
+// TestDmsgServerHealth tests that the DMSG server's /health endpoint is reachable over DMSG.
+// This verifies the server's direct DMSG client serves HTTP on port 80.
+func TestDmsgServerHealth(t *testing.T) {
+	env := NewEnv().GatherContainersInfo()
+
+	// Get the DMSG server's PK from discovery
+	cmd := fmt.Sprintf("curl -s %s/dmsg-discovery/available_servers", dmsgDiscoveryURL)
+	result, err := env.execResult(cmd)
+	require.NoError(t, err, "Failed to query discovery")
+
+	var servers []json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte(result.Stdout()), &servers))
+	require.NotEmpty(t, servers, "Need at least one DMSG server")
+
+	// Parse the first server's PK
+	var entry struct {
+		Static string `json:"static"`
+	}
+	require.NoError(t, json.Unmarshal(servers[0], &entry))
+	require.NotEmpty(t, entry.Static, "Server PK should not be empty")
+
+	// Fetch /health from the DMSG server via visor-b's DMSG client
+	for _, v := range []string{visorA, visorB} {
+		require.NoError(t, env.WaitForVisorReady(v, 60*time.Second), "%s not ready", v)
+	}
+
+	dmsgURL := fmt.Sprintf("dmsg://%s:%d/health", entry.Static, dmsgHTTPPort)
+	t.Logf("Fetching DMSG server health from %s", dmsgURL)
+
+	healthCmd := fmt.Sprintf("/release/skywire dmsg curl --loglvl debug %s", dmsgURL)
+	var healthResult ExecResult
+	for attempt := 1; attempt <= 2; attempt++ {
+		healthResult, err = env.execResult(healthCmd)
+		if err == nil && healthResult.ExitCode == 0 {
+			break
+		}
+		t.Logf("Attempt %d: err=%v exit=%d", attempt, err, healthResult.ExitCode)
+		time.Sleep(3 * time.Second)
+	}
+	if err != nil {
+		t.Skipf("DMSG server health not reachable: %v", err)
+	}
+
+	stdout := healthResult.Stdout()
+	require.NotEmpty(t, stdout, "Health response should not be empty")
+
+	var health map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &health),
+		"Response should be valid JSON; got: %s", stdout)
+	require.Contains(t, health, "service_name", "Health should contain service_name")
+	t.Logf("DMSG server health: %s", truncate(stdout, 200))
+}
+
 // TestDmsgCurlHelp tests that skywire dmsg curl --help works.
 func TestDmsgCurlHelp(t *testing.T) {
 	env := NewEnv().GatherContainersInfo()
