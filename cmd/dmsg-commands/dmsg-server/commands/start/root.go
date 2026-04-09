@@ -202,60 +202,60 @@ var RootCmd = &cobra.Command{
 
 			// Route setup-node on port 36 (optional, enabled via config)
 			if conf.EnableRouteSetup {
-			go func() {
-				snLog := logging.MustGetLogger("dmsg-server:setup-node")
-				snLog.Info("Starting integrated route setup-node")
+				go func() {
+					snLog := logging.MustGetLogger("dmsg-server:setup-node")
+					snLog.Info("Starting integrated route setup-node")
 
-				lis, lisErr := dmsgC.Listen(skyenv.DmsgSetupPort)
-				if lisErr != nil {
-					snLog.WithError(lisErr).Error("Failed to listen on setup port")
-					return
-				}
-				defer lis.Close() //nolint:errcheck
+					lis, lisErr := dmsgC.Listen(skyenv.DmsgSetupPort)
+					if lisErr != nil {
+						snLog.WithError(lisErr).Error("Failed to listen on setup port")
+						return
+					}
+					defer lis.Close() //nolint:errcheck
 
-				snLog.WithField("dmsg_port", skyenv.DmsgSetupPort).Info("Route setup-node listening")
+					snLog.WithField("dmsg_port", skyenv.DmsgSetupPort).Info("Route setup-node listening")
 
-				const maxConcurrent = 20
-				sem := make(chan struct{}, maxConcurrent)
-				setupMetrics := setupmetrics.NewEmpty()
+					const maxConcurrent = 20
+					sem := make(chan struct{}, maxConcurrent)
+					setupMetrics := setupmetrics.NewEmpty()
 
-				for {
-					conn, accErr := lis.AcceptStream()
-					if accErr != nil {
-						if ctx.Err() != nil || errors.Is(accErr, dmsg.ErrEntityClosed) {
-							snLog.Debug("Route setup-node listener stopped")
-							return
+					for {
+						conn, accErr := lis.AcceptStream()
+						if accErr != nil {
+							if ctx.Err() != nil || errors.Is(accErr, dmsg.ErrEntityClosed) {
+								snLog.Debug("Route setup-node listener stopped")
+								return
+							}
+							snLog.WithError(accErr).Warn("Failed to accept setup stream")
+							continue
 						}
-						snLog.WithError(accErr).Warn("Failed to accept setup stream")
-						continue
+
+						reqPK := conn.RemoteAddr().(dmsg.Addr).PK
+						snLog.WithField("remote_pk", reqPK).Debug("Accepted route setup request")
+
+						gw := &router.SetupRPCGateway{
+							Metrics: setupMetrics,
+							Ctx:     ctx,
+							Conn:    conn,
+							ReqPK:   reqPK,
+							Dialer:  router.WrapDmsgClient(dmsgC),
+							Timeout: 2 * time.Minute,
+						}
+
+						rpcS := rpc.NewServer()
+						if regErr := rpcS.Register(gw); regErr != nil {
+							snLog.WithError(regErr).Error("Failed to register setup RPC")
+							conn.Close() //nolint:errcheck,gosec
+							continue
+						}
+
+						go func() {
+							sem <- struct{}{}
+							defer func() { <-sem }()
+							rpcS.ServeConn(conn)
+						}()
 					}
-
-					reqPK := conn.RemoteAddr().(dmsg.Addr).PK
-					snLog.WithField("remote_pk", reqPK).Debug("Accepted route setup request")
-
-					gw := &router.SetupRPCGateway{
-						Metrics: setupMetrics,
-						Ctx:     ctx,
-						Conn:    conn,
-						ReqPK:   reqPK,
-						Dialer:  router.WrapDmsgClient(dmsgC),
-						Timeout: 2 * time.Minute,
-					}
-
-					rpcS := rpc.NewServer()
-					if regErr := rpcS.Register(gw); regErr != nil {
-						snLog.WithError(regErr).Error("Failed to register setup RPC")
-						conn.Close() //nolint:errcheck,gosec
-						continue
-					}
-
-					go func() {
-						sem <- struct{}{}
-						defer func() { <-sem }()
-						rpcS.ServeConn(conn)
-					}()
-				}
-			}()
+				}()
 			} else {
 				log.Info("Route setup-node disabled (enable with enable_route_setup in config)")
 			}
