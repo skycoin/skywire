@@ -200,7 +200,8 @@ var RootCmd = &cobra.Command{
 				}
 			}()
 
-			// Route setup-node on port 36
+			// Route setup-node on port 36 (optional, enabled via config)
+			if conf.EnableRouteSetup {
 			go func() {
 				snLog := logging.MustGetLogger("dmsg-server:setup-node")
 				snLog.Info("Starting integrated route setup-node")
@@ -255,6 +256,9 @@ var RootCmd = &cobra.Command{
 					}()
 				}
 			}()
+			} else {
+				log.Info("Route setup-node disabled (enable with enable_route_setup in config)")
+			}
 
 			<-ctx.Done()
 		}()

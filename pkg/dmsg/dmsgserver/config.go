@@ -45,7 +45,8 @@ type Config struct {
 	LogLevel       string        `json:"log_level"`
 	UpdateInterval time.Duration `json:"update_interval"`
 	MaxSessions    int           `json:"max_sessions"`
-	Peers          []PeerConfig  `json:"peers,omitempty"`
+	Peers             []PeerConfig  `json:"peers,omitempty"`
+	EnableRouteSetup  bool          `json:"enable_route_setup,omitempty"`
 }
 
 // GenerateDefaultConfig generate default config for dmsg-server
