@@ -50,9 +50,9 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 	metrics := setupmetrics.NewEmpty()
 
 	// Limit concurrent route setup requests to prevent ephemeral port exhaustion.
-	// Each request dials 2+ visors through the DMSG client, holding ports for up to
-	// HandshakeTimeout (20s). With 50 concurrent requests × 2 dials = 100 ports max.
-	const maxConcurrent = 50
+	// Each request dials 2 visors × up to 6 servers each, holding ports for up to
+	// HandshakeTimeout (5s). With 20 concurrent × 2 × 6 = 240 ports max.
+	const maxConcurrent = 20
 	sem := make(chan struct{}, maxConcurrent)
 
 	for {
