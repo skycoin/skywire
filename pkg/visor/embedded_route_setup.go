@@ -86,8 +86,19 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 			continue
 		}
 
+		// Acquire semaphore before spawning to bound goroutine count.
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			conn.Close() //nolint:errcheck,gosec
+			return nil
+		case <-time.After(30 * time.Second):
+			ers.log.Warn("Route setup request dropped: concurrency limit reached")
+			conn.Close() //nolint:errcheck,gosec
+			continue
+		}
+
 		go func() {
-			sem <- struct{}{}
 			defer func() { <-sem }()
 			rpcS.ServeConn(conn)
 		}()
