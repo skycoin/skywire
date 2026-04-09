@@ -1193,5 +1193,5 @@ func toJSON(value interface{}) string {
 
 func printDifference(key string, value1, value2 interface{}) {
 	red := color.New(color.FgRed).SprintFunc()
-	fmt.Printf("%s: %s != %s\n", key, red(toJSON(value1)), red(toJSON(value2)))
+	fmt.Fprintf(os.Stderr, "%s: %s != %s\n", key, red(toJSON(value1)), red(toJSON(value2))) //nolint:errcheck,gosec
 }
