@@ -317,7 +317,7 @@ func (c *idleTimeoutConn) Close() error {
 // ForceReadDeadline forces the connection to stop reading by:
 // 1. Setting the forced flag so Read() won't reset the deadline
 // 2. Setting an expired deadline to wake any blocked Read
-// 3. Resetting the yamux stream to forcibly unblock Read
+// 3. Closing the underlying connection to guarantee unblocking
 // This is needed because yamux Stream.Close() sends FIN but does NOT
 // unblock a concurrent local Read() on the same stream.
 func (c *idleTimeoutConn) ForceReadDeadline() {
