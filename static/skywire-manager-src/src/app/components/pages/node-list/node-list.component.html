@@ -141,9 +141,9 @@
               <!-- Values. -->
               @for (node of dataSource; track node) {
                 <a
-                  [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online}"
+                  [ngClass]="{'click-effect': true}"
                   class="selectable link-row"
-                  [routerLink]="node.online ? ['/nodes', node.localPk] : null"
+                  [routerLink]="['/nodes', node.localPk, 'rewards']"
                   >
                   <td>
                     @if (node.isHypervisor) {

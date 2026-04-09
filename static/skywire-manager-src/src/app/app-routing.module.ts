@@ -11,6 +11,7 @@ import { RoutingComponent } from './components/pages/node/routing/routing.compon
 import { AppsComponent } from './components/pages/node/apps/apps.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
+import { NodeRewardsComponent } from './components/pages/node/rewards/node-rewards.component';
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
@@ -104,6 +105,10 @@ const routes: Routes = [
           {
             path: 'routes/:page',
             component: AllRoutesComponent
+          },
+          {
+            path: 'rewards',
+            component: NodeRewardsComponent
           },
           {
             path: 'apps-list/:showOfficialApps/:page',
