@@ -297,12 +297,11 @@ func TestLookupIP(t *testing.T) {
 			require.Equal(t, net.ParseIP("::1"), ip)
 		}
 
-		// Ensure all entities are deregistered in discovery before continuing.
-		time.Sleep(time.Second * 2)
-
-		// Ensure the server B entry is deleted and server A entry is still there.
-		pks := dmsgC.ConnectedServersPK()
-		require.Equal(t, []string{pkSrvA.String()}, pks)
+		// Wait for server B session to be cleaned up from the client.
+		require.Eventually(t, func() bool {
+			pks := dmsgC.ConnectedServersPK()
+			return len(pks) == 1 && pks[0] == pkSrvA.String()
+		}, 10*time.Second, 500*time.Millisecond, "server B session was not cleaned up in time")
 	})
 
 	// Closing logic.
