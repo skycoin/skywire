@@ -49,6 +49,12 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 	ers.log.WithField("dmsg_port", skyenv.DmsgSetupPort).Info("Accepting route setup requests")
 	metrics := setupmetrics.NewEmpty()
 
+	// Limit concurrent route setup requests to prevent ephemeral port exhaustion.
+	// Each request dials 2+ visors through the DMSG client, holding ports for up to
+	// HandshakeTimeout (20s). With 50 concurrent requests × 2 dials = 100 ports max.
+	const maxConcurrent = 50
+	sem := make(chan struct{}, maxConcurrent)
+
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
@@ -80,7 +86,11 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 			continue
 		}
 
-		go rpcS.ServeConn(conn)
+		go func() {
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			rpcS.ServeConn(conn)
+		}()
 	}
 }
 
