@@ -29,7 +29,9 @@ var (
 	DialTimeout = 10 * time.Second
 
 	// HandshakeTimeout defines the duration a stream handshake should take.
-	HandshakeTimeout = time.Second * 20
+	// On a healthy network the noise handshake completes in milliseconds.
+	// 5s is generous — anything longer means the destination is unreachable.
+	HandshakeTimeout = 5 * time.Second
 
 	// StreamIdleTimeout defines how long a stream can be idle (no reads)
 	// before it is considered stale and closed. This prevents streams stuck
