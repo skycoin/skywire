@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/yamux"
@@ -289,11 +290,15 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 type idleTimeoutConn struct {
 	rwc     io.ReadWriteCloser
 	timeout time.Duration
+	forced  atomic.Bool
 }
 
 func (c *idleTimeoutConn) Read(p []byte) (int, error) {
-	if conn, ok := c.rwc.(net.Conn); ok {
-		conn.SetReadDeadline(time.Now().Add(c.timeout)) //nolint:errcheck,gosec
+	// Don't reset deadline if ForceReadDeadline was called
+	if !c.forced.Load() {
+		if conn, ok := c.rwc.(net.Conn); ok {
+			conn.SetReadDeadline(time.Now().Add(c.timeout)) //nolint:errcheck,gosec
+		}
 	}
 	return c.rwc.Read(p)
 }
@@ -311,7 +316,9 @@ func (c *idleTimeoutConn) Close() error {
 
 // ForceReadDeadline sets an immediate read deadline to unblock any pending Read.
 // This is needed because yamux Stream.Close() does NOT unblock a local Read().
+// It also sets a flag to prevent Read() from resetting the deadline.
 func (c *idleTimeoutConn) ForceReadDeadline() {
+	c.forced.Store(true)
 	if conn, ok := c.rwc.(net.Conn); ok {
 		conn.SetReadDeadline(time.Now().Add(-time.Second)) //nolint:errcheck,gosec
 	}
