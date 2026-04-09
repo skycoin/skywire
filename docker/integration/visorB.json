@@ -60,6 +60,7 @@
   },
   "routing": {
     "route_setup_nodes": [
+      "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
       "02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
     ],
     "route_finder": "http://route-finder:9092",
