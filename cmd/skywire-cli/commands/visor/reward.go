@@ -118,9 +118,9 @@ func fetchAndDisplayReward(rpcClient visor.API, rewardDmsg, pk string) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "Reward history for %s (%d days)\n\n", pk[:16]+"...", rewardDays)
-	fmt.Fprintf(w, "DATE\tAMOUNT (SKY)\tSHARE (%%)\tSTATUS\tTXID\n")
-	fmt.Fprintf(w, "----\t------------\t---------\t------\t----\n")
+	fmt.Fprintf(w, "Reward history for %s (%d days)\n\n", pk[:16]+"...", rewardDays) //nolint:errcheck,gosec
+	fmt.Fprintf(w, "DATE\tAMOUNT (SKY)\tSHARE (%%)\tSTATUS\tTXID\n")               //nolint:errcheck,gosec
+	fmt.Fprintf(w, "----\t------------\t---------\t------\t----\n")                   //nolint:errcheck,gosec
 
 	var total float64
 	for _, day := range result.History {
@@ -144,10 +144,10 @@ func fetchAndDisplayReward(rpcClient visor.API, rewardDmsg, pk string) {
 			amountStr = fmt.Sprintf("%.6f", day.Amount)
 			shareStr = fmt.Sprintf("%.4f", day.Share)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", day.Date, amountStr, shareStr, status, txid)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", day.Date, amountStr, shareStr, status, txid) //nolint:errcheck,gosec
 		total += day.Amount
 	}
 
-	fmt.Fprintf(w, "\nTotal:\t%.6f SKY\n", total)
-	w.Flush()
+	fmt.Fprintf(w, "\nTotal:\t%.6f SKY\n", total) //nolint:errcheck,gosec
+	w.Flush()                                     //nolint:errcheck,gosec
 }
