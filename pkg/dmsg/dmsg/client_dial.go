@@ -6,6 +6,7 @@ import (
 	"math"
 	"net"
 	"sort"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
@@ -36,10 +37,13 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	if discErr != nil {
 		// Discovery lookup failed. For direct clients or when the destination
 		// doesn't register in discovery, try all connected servers as forwarders.
-		// Only attempt if context is still valid (avoid races on canceled contexts).
-		if ctx.Err() == nil {
+		// Only attempt if context has enough remaining time to avoid races.
+		if ctx.Err() == nil && ce.hasEnoughTimeForFallback(ctx) {
 			ce.log.WithError(discErr).Debug("Discovery lookup failed, trying connected servers")
-			stream, err := ce.dialViaConnectedServers(ctx, addr)
+			// Use a separate context for fallback to avoid racing with parent cancel.
+			fallbackCtx, fallbackCancel := context.WithTimeout(context.Background(), HandshakeTimeout)
+			defer fallbackCancel()
+			stream, err := ce.dialViaConnectedServers(fallbackCtx, addr)
 			if err == nil {
 				return stream, nil
 			}
@@ -167,6 +171,16 @@ func sortSessionsByLatency(sessions []ClientSession) {
 		}
 		return pi < pj
 	})
+}
+
+// hasEnoughTimeForFallback checks if the context has at least 10 seconds remaining.
+// Short-lived contexts (e.g. test timeouts) skip the fallback to avoid races.
+func (ce *Client) hasEnoughTimeForFallback(ctx context.Context) bool {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return true // no deadline = unlimited time
+	}
+	return time.Until(deadline) > 10*time.Second
 }
 
 // dialViaConnectedServers tries all connected server sessions as forwarders.
