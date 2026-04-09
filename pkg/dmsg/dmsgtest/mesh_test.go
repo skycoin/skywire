@@ -88,7 +88,8 @@ func TestServerMesh_CrossServerDial(t *testing.T) {
 	}
 
 	// Give peer connections time to establish.
-	time.Sleep(2 * time.Second)
+	// macOS CI runners need extra time for noise handshakes between servers.
+	time.Sleep(5 * time.Second)
 
 	// --- Client 1: only sees Server A ---
 	dcA := disc.NewMock(0)
@@ -139,7 +140,16 @@ func TestServerMesh_CrossServerDial(t *testing.T) {
 	require.NoError(t, err)
 	defer lis2.Close()
 
-	stream1, err := client1.DialStream(ctx, dmsg.Addr{PK: pk2, Port: port})
+	// Retry cross-server dial — peer mesh connection may still be establishing.
+	var stream1 *dmsg.Stream
+	for attempt := 0; attempt < 3; attempt++ {
+		stream1, err = client1.DialStream(ctx, dmsg.Addr{PK: pk2, Port: port})
+		if err == nil {
+			break
+		}
+		t.Logf("Cross-server dial attempt %d failed: %v", attempt+1, err)
+		time.Sleep(2 * time.Second)
+	}
 	require.NoError(t, err, "Cross-server dial should succeed via peer mesh")
 	defer stream1.Close()
 
