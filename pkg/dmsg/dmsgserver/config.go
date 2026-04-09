@@ -36,16 +36,17 @@ type PeerConfig struct {
 type Config struct {
 	Path string `json:"-"`
 
-	PubKey         cipher.PubKey `json:"public_key"`
-	SecKey         cipher.SecKey `json:"secret_key"`
-	Discovery      string        `json:"discovery"`
-	PublicAddress  string        `json:"public_address"`
-	LocalAddress   string        `json:"local_address"`
-	HTTPAddress    string        `json:"health_endpoint_address"`
-	LogLevel       string        `json:"log_level"`
-	UpdateInterval time.Duration `json:"update_interval"`
-	MaxSessions    int           `json:"max_sessions"`
-	Peers          []PeerConfig  `json:"peers,omitempty"`
+	PubKey           cipher.PubKey `json:"public_key"`
+	SecKey           cipher.SecKey `json:"secret_key"`
+	Discovery        string        `json:"discovery"`
+	PublicAddress    string        `json:"public_address"`
+	LocalAddress     string        `json:"local_address"`
+	HTTPAddress      string        `json:"health_endpoint_address"`
+	LogLevel         string        `json:"log_level"`
+	UpdateInterval   time.Duration `json:"update_interval"`
+	MaxSessions      int           `json:"max_sessions"`
+	Peers            []PeerConfig  `json:"peers,omitempty"`
+	EnableRouteSetup bool          `json:"enable_route_setup,omitempty"`
 }
 
 // GenerateDefaultConfig generate default config for dmsg-server
