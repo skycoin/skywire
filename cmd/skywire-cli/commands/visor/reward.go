@@ -119,8 +119,8 @@ func fetchAndDisplayReward(rpcClient visor.API, rewardDmsg, pk string) {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "Reward history for %s (%d days)\n\n", pk[:16]+"...", rewardDays) //nolint:errcheck,gosec
-	fmt.Fprintf(w, "DATE\tAMOUNT (SKY)\tSHARE (%%)\tSTATUS\tTXID\n")               //nolint:errcheck,gosec
-	fmt.Fprintf(w, "----\t------------\t---------\t------\t----\n")                   //nolint:errcheck,gosec
+	fmt.Fprintf(w, "DATE\tAMOUNT (SKY)\tSHARE (%%)\tSTATUS\tTXID\n")                 //nolint:errcheck,gosec
+	fmt.Fprintf(w, "----\t------------\t---------\t------\t----\n")                  //nolint:errcheck,gosec
 
 	var total float64
 	for _, day := range result.History {
