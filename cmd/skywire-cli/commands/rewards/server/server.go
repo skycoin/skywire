@@ -1527,7 +1527,7 @@ func server() {
 						continue
 					}
 					pkStr, _ := script.Echo(line).Column(2).String() //nolint:errcheck,gosec
-					pkStr = strings.TrimSpace(pkStr)
+					pkStr = strings.TrimRight(strings.TrimSpace(pkStr), ",")
 					if pkStr == pk {
 						shareStr, _ := script.Echo(line).Column(3).String()                                     //nolint:errcheck,gosec
 						skyStr, _ := script.Echo(line).Column(4).String()                                       //nolint:errcheck,gosec
