@@ -3,20 +3,28 @@ package start
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/rpc"
 	"net/url"
 	"os"
 	"strconv"
+	"time"
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/setupmetrics"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 	"github.com/spf13/cobra"
@@ -135,9 +143,11 @@ var RootCmd = &cobra.Command{
 			}
 		}()
 
-		// Serve pprof debug interface over dmsg using a direct client through ourselves
+		// Serve DMSG services using a direct client through ourselves:
+		// - /health on port 80 (DMSG HTTP)
+		// - /debug/pprof on port 81 (DMSG debug)
+		// - Route setup-node on port 36 (DMSG RPC)
 		go func() {
-			// Wait for the dmsg server to be ready before connecting the debug client
 			<-srv.Ready()
 
 			serverEntry := &disc.Entry{
@@ -156,14 +166,101 @@ var RootCmd = &cobra.Command{
 			}
 			dmsgC, closeDebug, err := direct.StartDmsg(ctx, log, conf.PubKey, conf.SecKey, dClient, debugConfig)
 			if err != nil {
-				log.WithError(err).Error("failed to start debug dmsg client")
+				log.WithError(err).Error("failed to start dmsg client for server services")
 				return
 			}
 			defer closeDebug()
 
-			if debugErr := dmsghttp.ServeDebug(ctx, dmsgC, log, deployment.Prod.SurveyWhitelist); debugErr != nil {
-				log.Errorf("dmsghttp.ServeDebug: %v", debugErr)
+			// Health endpoint on port 80
+			startedAt := time.Now()
+			dmsgAddr := fmt.Sprintf("%s:%d", conf.PubKey.Hex(), dmsg.DefaultDmsgHTTPPort)
+			healthMux := http.NewServeMux()
+			healthMux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				resp := httputil.HealthCheckResponse{
+					ServiceName: "dmsg-server",
+					BuildInfo:   buildinfo.Get(),
+					StartedAt:   startedAt,
+					DmsgAddr:    dmsgAddr,
+				}
+				json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
+			})
+			go func() {
+				if err := dmsghttp.ListenAndServe(ctx, conf.SecKey, healthMux, dClient,
+					dmsg.DefaultDmsgHTTPPort, dmsgC, log); err != nil {
+					log.WithError(err).Error("DMSG HTTP health server stopped")
+				}
+			}()
+			log.Infof("DMSG HTTP health endpoint available at %s", dmsgAddr)
+
+			// Debug/pprof endpoint on port 81
+			go func() {
+				if debugErr := dmsghttp.ServeDebug(ctx, dmsgC, log, deployment.Prod.SurveyWhitelist); debugErr != nil {
+					log.Errorf("dmsghttp.ServeDebug: %v", debugErr)
+				}
+			}()
+
+			// Route setup-node on port 36 (optional, enabled via config)
+			if conf.EnableRouteSetup {
+				go func() {
+					snLog := logging.MustGetLogger("dmsg-server:setup-node")
+					snLog.Info("Starting integrated route setup-node")
+
+					lis, lisErr := dmsgC.Listen(skyenv.DmsgSetupPort)
+					if lisErr != nil {
+						snLog.WithError(lisErr).Error("Failed to listen on setup port")
+						return
+					}
+					defer lis.Close() //nolint:errcheck
+
+					snLog.WithField("dmsg_port", skyenv.DmsgSetupPort).Info("Route setup-node listening")
+
+					const maxConcurrent = 20
+					sem := make(chan struct{}, maxConcurrent)
+					setupMetrics := setupmetrics.NewEmpty()
+
+					for {
+						conn, accErr := lis.AcceptStream()
+						if accErr != nil {
+							if ctx.Err() != nil || errors.Is(accErr, dmsg.ErrEntityClosed) {
+								snLog.Debug("Route setup-node listener stopped")
+								return
+							}
+							snLog.WithError(accErr).Warn("Failed to accept setup stream")
+							continue
+						}
+
+						reqPK := conn.RemoteAddr().(dmsg.Addr).PK
+						snLog.WithField("remote_pk", reqPK).Debug("Accepted route setup request")
+
+						gw := &router.SetupRPCGateway{
+							Metrics: setupMetrics,
+							Ctx:     ctx,
+							Conn:    conn,
+							ReqPK:   reqPK,
+							Dialer:  router.WrapDmsgClient(dmsgC),
+							Timeout: 2 * time.Minute,
+						}
+
+						rpcS := rpc.NewServer()
+						if regErr := rpcS.Register(gw); regErr != nil {
+							snLog.WithError(regErr).Error("Failed to register setup RPC")
+							conn.Close() //nolint:errcheck,gosec
+							continue
+						}
+
+						go func() {
+							sem <- struct{}{}
+							defer func() { <-sem }()
+							rpcS.ServeConn(conn)
+						}()
+					}
+				}()
+			} else {
+				log.Info("Route setup-node disabled (enable with enable_route_setup in config)")
 			}
+
+			<-ctx.Done()
 		}()
 
 		<-ctx.Done()
