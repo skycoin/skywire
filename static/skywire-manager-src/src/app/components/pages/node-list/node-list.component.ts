@@ -59,7 +59,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   dataFilterer: DataFilterer;
 
   loading = true;
-  dataSource: Node[];
+  dataSource: Node[] = [];
   tabsData: TabButtonData[] = [];
   options: MenuOptionData[] = [];
   showDmsgInfo = false;
