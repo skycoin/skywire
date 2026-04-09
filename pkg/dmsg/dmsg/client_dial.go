@@ -36,7 +36,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	if discErr != nil {
 		// Discovery lookup failed. For direct clients or when the destination
 		// doesn't register in discovery, try all connected servers as forwarders.
-		// Only attempt if context is still valid (avoid races on cancelled contexts).
+		// Only attempt if context is still valid (avoid races on canceled contexts).
 		if ctx.Err() == nil {
 			ce.log.WithError(discErr).Debug("Discovery lookup failed, trying connected servers")
 			stream, err := ce.dialViaConnectedServers(ctx, addr)
