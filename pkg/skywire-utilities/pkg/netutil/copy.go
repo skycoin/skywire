@@ -5,13 +5,6 @@ import (
 	"io"
 )
 
-// DeadlineSetter allows setting a read deadline to unblock pending reads.
-// This is needed because yamux Stream.Close() sends FIN but does NOT
-// unblock a concurrent local Read() on the same stream.
-type DeadlineSetter interface {
-	ForceReadDeadline()
-}
-
 // CopyReadWriteCloser copies reads and writes between two connections.
 // It returns when either direction encounters an error (including idle timeout).
 func CopyReadWriteCloser(conn1, conn2 io.ReadWriteCloser) error {
@@ -34,23 +27,14 @@ func CopyReadWriteCloser(conn1, conn2 io.ReadWriteCloser) error {
 	case firstErr = <-errCh2:
 	}
 
-	// Force-expire read deadlines BEFORE closing, so the blocked Read
-	// gets woken by the deadline timer while the stream is still open.
-	// After Close(), SetReadDeadline is a no-op on yamux streams.
-	if ds, ok := conn1.(DeadlineSetter); ok {
-		ds.ForceReadDeadline()
-	}
-	if ds, ok := conn2.(DeadlineSetter); ok {
-		ds.ForceReadDeadline()
-	}
-
-	// Close both connections.
+	// Close both connections to signal the other direction to stop.
 	_ = conn1.Close() //nolint:errcheck
 	_ = conn2.Close() //nolint:errcheck
 
-	// Wait for the other direction to finish (should return quickly now).
-	<-errCh1
-	<-errCh2
-
+	// Don't wait for the second goroutine — yamux Stream.Close() does
+	// not reliably unblock a concurrent Read(), so the goroutine may
+	// be stuck indefinitely. The buffered errCh allows it to complete
+	// asynchronously without leaking (the channel and goroutine will
+	// be GC'd once the goroutine eventually returns).
 	return firstErr
 }
