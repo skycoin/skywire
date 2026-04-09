@@ -31,7 +31,8 @@ type Client struct {
 // DialTimeout is the maximum time allowed for a single dial attempt to a remote visor.
 // Without this, dials to unreachable visors block indefinitely in DialStream.readResponse,
 // leaking goroutines. This caps the dial itself; the RPC deadline is set separately.
-const DialTimeout = 30 * time.Second
+// Keep this short to free ephemeral ports quickly under load.
+const DialTimeout = 10 * time.Second
 
 // NewClient creates a new Client.
 func NewClient(ctx context.Context, dialer network.Dialer, rPK cipher.PubKey) (*Client, error) {

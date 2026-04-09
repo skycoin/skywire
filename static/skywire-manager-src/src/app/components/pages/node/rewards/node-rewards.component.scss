@@ -1,0 +1,53 @@
+.title {
+  font-size: 1.1em;
+  font-weight: bold;
+  color: #f8f9f9;
+}
+
+.label-text {
+  font-size: 0.9em;
+  color: #aaa;
+}
+
+.active-days {
+  color: #4caf50 !important;
+  font-weight: bold;
+}
+
+.total-row {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.error-msg {
+  color: #f44336;
+  text-align: center;
+}
+
+.status-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+
+  &.sent {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4caf50;
+  }
+
+  &.pending {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+  }
+
+  &.no-reward {
+    color: #666;
+  }
+}
+
+tr.sent td {
+  border-left: 2px solid rgba(76, 175, 80, 0.3);
+}
+
+tr.pending td {
+  border-left: 2px solid rgba(255, 193, 7, 0.3);
+}
