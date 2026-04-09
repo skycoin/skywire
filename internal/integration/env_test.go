@@ -1,4 +1,4 @@
-// Package integration_test provides end-to-end tests for the skywire network.
+// Package integration_test provides end-to-end tests for all skywire services.
 // These tests require a running Docker environment with all skywire services.
 //
 //go:build !no_ci

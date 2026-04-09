@@ -21,7 +21,6 @@ import (
 var err error
 var (
 	startTime           = time.Now()
-	runTime             time.Duration
 	sk                  cipher.SecKey
 	dmsgDisc            string
 	dmsgPort            uint16
