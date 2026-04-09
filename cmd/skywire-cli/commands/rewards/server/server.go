@@ -25,6 +25,7 @@ import (
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -122,25 +123,29 @@ func server() {
 	r1.Use(loggingMiddleware())
 
 	r1.GET("/health", func(c *gin.Context) {
-		runTime = time.Since(startTime)
+		// Standard health response matching other skywire services
+		resp := httputil.HealthCheckResponse{
+			ServiceName: "rewards",
+			BuildInfo:   buildinfo.Get(),
+			StartedAt:   startTime,
+			DmsgAddr:    fmt.Sprintf("%s:%d", pk.String(), dmsgPort),
+		}
+
+		// Reward-specific extra fields
 		nextrun, _ := script.Exec(`systemctl status skywire-reward.timer --lines=0`).First(5).Last(1).Replace("    Trigger: ", "").String() //nolint:errcheck,gosec
 		prevDuration, _ := script.Exec(`systemctl status skywire-reward.service --lines=0`).Match("Duration").First(1).String()             //nolint:errcheck,gosec
 		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()                                                     //nolint:errcheck,gosec
+
 		c.JSON(http.StatusOK, gin.H{
-			"frontend_start_time":             startTime,
-			"frontend_run_time":               runTime.String(),
-			"dmsg_discovery":                  dmsgDisc,
-			"dmsg_address":                    fmt.Sprintf("%s:%d", pk.String(), dmsgPort),
+			"service_name":                    resp.ServiceName,
+			"build_info":                      resp.BuildInfo,
+			"started_at":                      resp.StartedAt,
+			"dmsg_address":                    resp.DmsgAddr,
 			"reward_system_active":            strings.TrimRight(active, "\n"),
 			"reward_system_next_run":          strings.TrimRight(nextrun, "\n"),
 			"reward_system_prev_run_duration": strings.TrimRight(prevDuration, "\n"),
-			"version":                         buildinfo.Version(),
-			"commit":                          buildinfo.Commit(),
-			"build_date":                      buildinfo.Date(),
 			"whitelisted_keys":                wlkeys,
 		})
-
-		// In health-only mode, skip all other routes
 	})
 	if !healthOnly {
 		// endpoint for testing minimum response time of curl via socks5 proxy / stand-in for latency test
