@@ -1,0 +1,99 @@
+<div class="rounded-elevated-box mt-3">
+  <div class="box-internal-container overflow">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <span class="title">Reward History</span>
+        @if (label) {
+          <span class="label-text ml-2">({{ label }})</span>
+        }
+      </div>
+      <div class="d-flex align-items-center">
+        <span class="mr-2" style="font-size: 0.85em; color: #ccc;">Show:</span>
+        <button mat-button [class.active-days]="days === 7" (click)="changeDays(7)">7d</button>
+        <button mat-button [class.active-days]="days === 30" (click)="changeDays(30)">30d</button>
+        <button mat-button [class.active-days]="days === 90" (click)="changeDays(90)">90d</button>
+      </div>
+    </div>
+
+    <!-- PK -->
+    <div class="pk-row mb-3">
+      <span style="font-size: 0.75em; color: #999;">{{ pk }}</span>
+    </div>
+
+    <!-- Total -->
+    @if (!loading && history.length > 0) {
+      <div class="total-row mb-3">
+        <span style="font-size: 1.1em; font-weight: bold; color: #4caf50;">
+          Total: {{ total.toFixed(2) }} SKY
+        </span>
+        <span style="font-size: 0.85em; color: #999; margin-left: 12px;">
+          ({{ days }} days)
+        </span>
+      </div>
+    }
+
+    <!-- Loading -->
+    @if (loading) {
+      <div class="d-flex justify-content-center py-4">
+        <mat-spinner diameter="30"></mat-spinner>
+      </div>
+    }
+
+    <!-- Error -->
+    @if (errorMsg) {
+      <div class="error-msg py-2">{{ errorMsg }}</div>
+    }
+
+    <!-- Table -->
+    @if (!loading && history.length > 0) {
+      <table class="responsive-table-translucid" cellspacing="0" cellpadding="0">
+        <tr>
+          <th>Date</th>
+          <th>Amount (SKY)</th>
+          <th>Share (%)</th>
+          <th>Status</th>
+          <th>Transaction</th>
+        </tr>
+        @for (day of history; track day.date) {
+          <tr [class]="statusClass(day)">
+            <td>{{ formatDate(day.date) }}</td>
+            <td>
+              @if (day.amount > 0) {
+                {{ day.amount.toFixed(6) }}
+              } @else {
+                <span style="color: #666;">-</span>
+              }
+            </td>
+            <td>
+              @if (day.share > 0) {
+                {{ day.share.toFixed(4) }}%
+              } @else {
+                <span style="color: #666;">-</span>
+              }
+            </td>
+            <td>
+              <span [class]="'status-badge ' + statusClass(day)">{{ statusText(day) }}</span>
+            </td>
+            <td>
+              @if (day.txid) {
+                <a [href]="'https://explorer.skycoin.com/app/transaction/' + day.txid" target="_blank" rel="noopener"
+                   style="font-size: 0.8em; color: #3399ff;">
+                  {{ day.txid.substring(0, 12) }}...
+                </a>
+              } @else {
+                <span style="color: #666;">-</span>
+              }
+            </td>
+          </tr>
+        }
+      </table>
+    }
+
+    @if (!loading && history.length === 0 && !errorMsg) {
+      <div class="py-4 text-center" style="color: #999;">
+        No reward data available for this visor.
+      </div>
+    }
+  </div>
+</div>
