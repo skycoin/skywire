@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/yamux"
@@ -290,15 +289,11 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 type idleTimeoutConn struct {
 	rwc     io.ReadWriteCloser
 	timeout time.Duration
-	forced  atomic.Bool
 }
 
 func (c *idleTimeoutConn) Read(p []byte) (int, error) {
-	// Don't reset deadline if ForceReadDeadline was called
-	if !c.forced.Load() {
-		if conn, ok := c.rwc.(net.Conn); ok {
-			conn.SetReadDeadline(time.Now().Add(c.timeout)) //nolint:errcheck,gosec
-		}
+	if conn, ok := c.rwc.(net.Conn); ok {
+		conn.SetReadDeadline(time.Now().Add(c.timeout)) //nolint:errcheck,gosec
 	}
 	return c.rwc.Read(p)
 }
@@ -312,23 +307,6 @@ func (c *idleTimeoutConn) Write(p []byte) (int, error) {
 
 func (c *idleTimeoutConn) Close() error {
 	return c.rwc.Close()
-}
-
-// ForceReadDeadline forces the connection to stop reading by:
-// 1. Setting the forced flag so Read() won't reset the deadline
-// 2. Setting an expired deadline to wake any blocked Read
-// 3. Closing the underlying connection to guarantee unblocking
-// This is needed because yamux Stream.Close() sends FIN but does NOT
-// unblock a concurrent local Read() on the same stream.
-func (c *idleTimeoutConn) ForceReadDeadline() {
-	c.forced.Store(true)
-	if conn, ok := c.rwc.(net.Conn); ok {
-		conn.SetReadDeadline(time.Now().Add(-time.Second)) //nolint:errcheck,gosec
-	}
-	// Also close the underlying connection to guarantee unblocking.
-	// This is a last resort — if SetReadDeadline doesn't work,
-	// closing the connection will cause Read to return an error.
-	c.rwc.Close() //nolint:errcheck
 }
 
 // forwardViaPeer tries to forward a stream request through peer server sessions.
