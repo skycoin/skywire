@@ -68,10 +68,18 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		}
 	}
 
+	// Limit servers tried per phase to avoid exhausting ephemeral ports.
+	// The route cache handles the fast path; on miss, trying 2 servers per
+	// phase is enough — if 2 fail, the destination is likely unreachable.
+	const maxPerPhase = 2
+
 	// Phase 1: Try existing sessions to the target's delegated servers (direct path, cheapest).
 	// Sort by latency so the lowest-latency server is tried first.
 	delegatedSessions := ce.sortedDelegatedSessions(entry.Client.DelegatedServers)
-	for _, dSes := range delegatedSessions {
+	for i, dSes := range delegatedSessions {
+		if i >= maxPerPhase {
+			break
+		}
 		stream, err := dSes.DialStream(ctx, addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", dSes.RemotePK()).
@@ -82,11 +90,14 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		return stream, nil
 	}
 
-	// Phase 2: Try all other existing sessions (mesh path — already connected, no new handshake).
+	// Phase 2: Try other existing sessions (mesh path — already connected, no new handshake).
 	// If servers are meshed, our server forwards the request to the target's server.
 	// Sorted by latency.
 	meshSessions := ce.sortedMeshSessions(entry.Client.DelegatedServers)
-	for _, ses := range meshSessions {
+	for i, ses := range meshSessions {
+		if i >= maxPerPhase {
+			break
+		}
 		stream, err := ses.DialStream(ctx, addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", ses.RemotePK()).
@@ -98,7 +109,10 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	}
 
 	// Phase 3: Last resort: establish new sessions to the target's delegated servers.
-	for _, srvPK := range entry.Client.DelegatedServers {
+	for i, srvPK := range entry.Client.DelegatedServers {
+		if i >= maxPerPhase {
+			break
+		}
 		dSes, err := ce.EnsureAndObtainSession(ctx, srvPK)
 		if err != nil {
 			continue
