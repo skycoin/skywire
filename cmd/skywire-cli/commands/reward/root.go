@@ -246,7 +246,7 @@ var rewardCmd = &cobra.Command{
 				}
 			}
 			// Fallback to file
-			if dat, err := os.ReadFile(output); err == nil {
+			if dat, err := os.ReadFile(output); err == nil { //nolint:gosec
 				out := fmt.Sprintf("%s\n", dat)
 				internal.PrintOutput(cmd.Flags(), out, out)
 				os.Exit(0)
