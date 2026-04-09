@@ -171,6 +171,9 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return ctx.Err()
 	}
 
+	// Start periodic config refresh for dynamic key sets
+	go v.startConfigRefresh(ctx) //nolint:errcheck,gosec
+
 	return nil
 }
 
