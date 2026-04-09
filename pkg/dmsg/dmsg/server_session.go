@@ -328,7 +328,7 @@ func (c *idleTimeoutConn) ForceReadDeadline() {
 	// Also close the underlying connection to guarantee unblocking.
 	// This is a last resort — if SetReadDeadline doesn't work,
 	// closing the connection will cause Read to return an error.
-	c.rwc.Close() //nolint:errcheck
+	c.rwc.Close() //nolint:errcheck,gosec
 }
 
 // forwardViaPeer tries to forward a stream request through peer server sessions.
