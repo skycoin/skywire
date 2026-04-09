@@ -442,6 +442,28 @@ jobs:
           }
           gh release upload "${{ github.ref_name }}" @files --repo ${{ github.repository }} --clobber
 
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build and push Docker image
+        run: |
+          make docker-push-test
+          # Also tag with the release version
+          docker tag skycoin/skywire:test "skycoin/skywire:${{ github.ref_name }}"
+          docker push "skycoin/skywire:${{ github.ref_name }}"
+        shell: bash
+
   create-checksums:
     needs: [linux, darwin-amd64, darwin-arm64, windows]
     runs-on: ubuntu-latest
