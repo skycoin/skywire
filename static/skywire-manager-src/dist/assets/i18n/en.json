@@ -210,7 +210,8 @@
     "tabs": {
       "info": "Info",
       "apps": "Apps",
-      "routing": "Routing"
+      "routing": "Routing",
+      "rewards": "Rewards"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },
