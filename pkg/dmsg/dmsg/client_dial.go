@@ -36,15 +36,15 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	if discErr != nil {
 		// Discovery lookup failed. For direct clients or when the destination
 		// doesn't register in discovery, try all connected servers as forwarders.
-		ce.log.WithError(discErr).Debug("Discovery lookup failed, trying connected servers")
-		stream, err := ce.dialViaConnectedServers(ctx, addr)
-		if err != nil {
-			// If no server could reach the destination, return the original
-			// discovery error so callers can distinguish "not found" from
-			// "found but unreachable".
-			return nil, discErr
+		// Only attempt if context is still valid (avoid races on cancelled contexts).
+		if ctx.Err() == nil {
+			ce.log.WithError(discErr).Debug("Discovery lookup failed, trying connected servers")
+			stream, err := ce.dialViaConnectedServers(ctx, addr)
+			if err == nil {
+				return stream, nil
+			}
 		}
-		return stream, nil
+		return nil, discErr
 	}
 
 	// Phase 0: Try cached route first (server that last successfully reached this destination).
@@ -179,7 +179,11 @@ func (ce *Client) dialViaConnectedServers(ctx context.Context, addr Addr) (*Stre
 		if ctx.Err() != nil {
 			return nil, ErrCannotConnectToDelegated
 		}
-		stream, err := ses.DialStream(ctx, addr)
+		// Use a per-attempt timeout derived from the parent context.
+		// This prevents races when the parent context cancels mid-handshake.
+		dialCtx, dialCancel := context.WithTimeout(ctx, HandshakeTimeout)
+		stream, err := ses.DialStream(dialCtx, addr)
+		dialCancel()
 		if err != nil {
 			ce.log.WithError(err).WithField("server", ses.RemotePK()).
 				Debug("DialStream failed via connected server, trying next")
