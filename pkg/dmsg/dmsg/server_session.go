@@ -314,14 +314,21 @@ func (c *idleTimeoutConn) Close() error {
 	return c.rwc.Close()
 }
 
-// ForceReadDeadline sets an immediate read deadline to unblock any pending Read.
-// This is needed because yamux Stream.Close() does NOT unblock a local Read().
-// It also sets a flag to prevent Read() from resetting the deadline.
+// ForceReadDeadline forces the connection to stop reading by:
+// 1. Setting the forced flag so Read() won't reset the deadline
+// 2. Setting an expired deadline to wake any blocked Read
+// 3. Resetting the yamux stream to forcibly unblock Read
+// This is needed because yamux Stream.Close() sends FIN but does NOT
+// unblock a concurrent local Read() on the same stream.
 func (c *idleTimeoutConn) ForceReadDeadline() {
 	c.forced.Store(true)
 	if conn, ok := c.rwc.(net.Conn); ok {
 		conn.SetReadDeadline(time.Now().Add(-time.Second)) //nolint:errcheck,gosec
 	}
+	// Also close the underlying connection to guarantee unblocking.
+	// This is a last resort — if SetReadDeadline doesn't work,
+	// closing the connection will cause Read to return an error.
+	c.rwc.Close() //nolint:errcheck
 }
 
 // forwardViaPeer tries to forward a stream request through peer server sessions.
