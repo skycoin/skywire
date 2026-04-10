@@ -108,14 +108,14 @@ func (v *Visor) TPSGetTransports(targetPK cipher.PubKey) ([]TPSTransportResponse
 
 // GetTransportSetupNodes returns the whitelisted transport setup node public keys.
 func (v *Visor) GetTransportSetupNodes() ([]cipher.PubKey, error) {
-	return v.conf.Transport.TransportSetupPKs, nil
+	return v.conf.EffectiveTransportSetupPKs(), nil
 }
 
 // GetTransportSetupNodesSorted returns TPS nodes sorted by health (healthy first, then by latency).
 func (v *Visor) GetTransportSetupNodesSorted() ([]cipher.PubKey, error) {
 	if v.nodeHealthTracker == nil {
 		// Fall back to unsorted list if health tracker not initialized
-		return v.conf.Transport.TransportSetupPKs, nil
+		return v.conf.EffectiveTransportSetupPKs(), nil
 	}
 	return v.nodeHealthTracker.GetTPSNodesSorted(), nil
 }
@@ -124,7 +124,7 @@ func (v *Visor) GetTransportSetupNodesSorted() ([]cipher.PubKey, error) {
 func (v *Visor) GetRouteSetupNodesSorted() ([]cipher.PubKey, error) {
 	if v.nodeHealthTracker == nil {
 		// Fall back to unsorted list if health tracker not initialized
-		return v.conf.Routing.RouteSetupNodes, nil
+		return v.conf.EffectiveRouteSetupNodes(), nil
 	}
 	return v.nodeHealthTracker.GetRSNNodesSorted(), nil
 }
