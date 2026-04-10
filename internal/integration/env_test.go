@@ -1430,7 +1430,11 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 	// route setup-node unreachable, container crashed, etc.) as readable logs
 	// in the test output, so CI failures are actionable without having to
 	// re-run and hope.
-	maxRetries := 6
+	//
+	// 3 attempts is enough — diagnostic passes are expensive (~dozen DMSG
+	// queries each). 6 retries × 4min diag = 24min per failure which
+	// exceeded the 45min test timeout. Cap at 3.
+	maxRetries := 3
 	for i := 0; i < maxRetries; i++ {
 		req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(data))
 		if err != nil {
