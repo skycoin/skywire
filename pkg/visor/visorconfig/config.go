@@ -129,7 +129,10 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		RegistrationTimeout: Duration(skyenv.PublicVisorRegistrationTimeout),
 		MaxTransports:       PublicVisorMaxTransports,
 	}
-	conf.GeoIP = skyenv.GeoIP
+	conf.GeoIP = services.GeoIP
+	if conf.GeoIP == "" {
+		conf.GeoIP = deployment.Prod.GeoIP
+	}
 	return conf
 }
 
