@@ -553,13 +553,22 @@ func (env *TestEnv) VisorTpAddWithRetry(visor, pk string, tpType tptypes.Type, m
 		env.logger.Warnf("Transport creation attempt %d/%d failed: %v", attempt, maxRetries, err)
 
 		if attempt < maxRetries {
-			// Exponential backoff: baseDelay * attempt
+			// Diagnose before retrying instead of blindly waiting.
+			env.DiagnoseNetwork(DiagContext{
+				Label:  fmt.Sprintf("VisorTpAdd retry %d (%s->%s:%s)", attempt, visor, truncatePK(pk), tpType),
+				Visors: []string{visor},
+			})
 			delay := baseDelay * time.Duration(attempt)
 			env.logger.Infof("Waiting %v before retry...", delay)
 			time.Sleep(delay)
 		}
 	}
 
+	// Final diagnostic dump so the failure is traceable.
+	env.DiagnoseNetwork(DiagContext{
+		Label:  fmt.Sprintf("VisorTpAdd FINAL (%s->%s:%s)", visor, truncatePK(pk), tpType),
+		Visors: []string{visor},
+	})
 	return nil, fmt.Errorf("failed to create %s transport after %d attempts: %w", tpType, maxRetries, lastErr)
 }
 
@@ -1400,7 +1409,11 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 		Timeout: 15 * time.Second,
 	}
 
-	// Retry with exponential backoff to handle post-restart DMSG reconnection
+	// Between attempts, run a diagnostic pass instead of blindly sleeping.
+	// This surfaces the actual failure (stale TPD entry, missing DMSG session,
+	// route setup-node unreachable, container crashed, etc.) as readable logs
+	// in the test output, so CI failures are actionable without having to
+	// re-run and hope.
 	maxRetries := 6
 	for i := 0; i < maxRetries; i++ {
 		req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(data))
@@ -1414,13 +1427,30 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 			return resp, nil
 		}
 
-		// Retry with increasing delay
 		if i < maxRetries-1 {
 			delay := time.Duration(i+1) * 3 * time.Second
-			env.logger.Warnf("SendSkyMessage attempt %d/%d failed: %v, retrying in %v...", i+1, maxRetries, err, delay)
+			env.logger.Warnf("SendSkyMessage attempt %d/%d failed: %v, diagnosing...", i+1, maxRetries, err)
+			env.DiagnoseNetwork(DiagContext{
+				Label: fmt.Sprintf("SendSkyMessage retry %d (%s->%s)", i+1, senderNode, recipientNode),
+				Src:   senderNode,
+				Dst:   recipientNode,
+			})
+			env.logger.Infof("Sleeping %v before next attempt...", delay)
 			time.Sleep(delay)
 		}
 	}
+
+	// Final diagnostic dump on terminal failure so we capture state at the end.
+	env.logger.Warnf("SendSkyMessage failed after %d attempts — dumping final diagnostic state", maxRetries)
+	env.DiagnoseNetwork(DiagContext{
+		Label: fmt.Sprintf("SendSkyMessage FINAL (%s->%s)", senderNode, recipientNode),
+		Src:   senderNode,
+		Dst:   recipientNode,
+	})
+	// Tail visor logs — this is often the quickest way to see route setup errors.
+	env.logContainerTail(senderNode, 100)
+	env.logContainerTail(recipientNode, 100)
+	env.logContainerTail("setup-node", 100)
 
 	return nil, err
 }
