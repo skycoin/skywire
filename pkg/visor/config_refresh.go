@@ -20,6 +20,11 @@ const configRefreshInterval = 1 * time.Hour
 // startConfigRefresh periodically refreshes dynamic key sets from the conf service.
 // This allows route_setup_nodes, transport_setup, and survey_whitelist to be
 // updated without restarting the visor or regenerating the config.
+//
+// Only the deployment-managed fields are touched. User-added keys live in
+// the separate user_route_setup_nodes / user_transport_setup / user_survey_whitelist
+// fields and are merged at use time via the Effective* accessors. This preserves
+// any manually added keys across refreshes.
 func (v *Visor) startConfigRefresh(ctx context.Context) {
 	log := v.MasterLogger().PackageLogger("config_refresh")
 
@@ -69,6 +74,13 @@ func (v *Visor) refreshKeySets(ctx context.Context, log *logging.Logger) {
 	if len(services.SurveyWhitelist) > 0 && !pubKeysEqual(v.conf.SurveyWhitelist, services.SurveyWhitelist) {
 		log.Infof("Updating survey_whitelist: %d keys", len(services.SurveyWhitelist))
 		v.conf.SurveyWhitelist = services.SurveyWhitelist
+		updated = true
+	}
+
+	// Update GeoIP URL
+	if services.GeoIP != "" && services.GeoIP != v.conf.GeoIP {
+		log.Infof("Updating geoip: %s", services.GeoIP)
+		v.conf.GeoIP = services.GeoIP
 		updated = true
 	}
 

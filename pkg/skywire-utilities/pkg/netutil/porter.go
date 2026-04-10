@@ -80,6 +80,14 @@ func (p *Porter) ReserveChild(port, subPort uint16, v interface{}) (bool, func()
 // ErrEphemeralPortSpace is returned when no ephemeral ports are available.
 var ErrEphemeralPortSpace = errors.New("ephemeral port space exhausted")
 
+// Count returns the number of currently reserved ports.
+func (p *Porter) Count() int {
+	p.RLock()
+	defer p.RUnlock()
+	// Exclude the reserved port 0 entry.
+	return len(p.ports) - 1
+}
+
 // ReserveEphemeral reserves a new ephemeral port.
 // It returns the reserved ephemeral port, a function to clear the reservation and an error (if any).
 // Returns ErrEphemeralPortSpace if all ephemeral ports (minEph through 65535) are occupied.

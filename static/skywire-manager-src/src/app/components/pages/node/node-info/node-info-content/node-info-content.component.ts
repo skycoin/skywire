@@ -61,6 +61,7 @@ export class NodeInfoContentComponent implements OnDestroy {
   nodeHealthClass: string;
   nodeHealthText: string;
   ports: { name: string, value: string }[] = [];
+  showPorts = false;
   isPublic = false;
   showRawConfig = false;
   rawConfig = '';
@@ -83,6 +84,28 @@ export class NodeInfoContentComponent implements OnDestroy {
     if (this.publicToggleSubscription) {
       this.publicToggleSubscription.unsubscribe();
     }
+  }
+
+  // Map a per-subsystem health value string to a CSS dot class.
+  subHealthClass(v: string | undefined): string {
+    if (v === KnownHealthStatuses.Healthy) {
+      return 'dot-green';
+    }
+    if (v === KnownHealthStatuses.Unhealthy) {
+      return 'dot-yellow blinking';
+    }
+    return 'dot-outline-gray';
+  }
+
+  // Map a per-subsystem health value string to its translation key.
+  subHealthText(v: string | undefined): string {
+    if (v === KnownHealthStatuses.Healthy) {
+      return 'node.statuses.online';
+    }
+    if (v === KnownHealthStatuses.Unhealthy) {
+      return 'node.statuses.partially-online';
+    }
+    return 'node.statuses.connecting';
   }
 
   showEditLabelDialog() {
