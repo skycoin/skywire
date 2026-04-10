@@ -190,7 +190,10 @@
       },
       "node-health": {
         "title": "Health",
+        "services": "Services:",
         "uptime-tracker": "Uptime tracker:",
+        "autoconnect": "Autoconnect:",
+        "transportability": "Transportability:",
         "connected": "Connected",
         "disconnected": "Disconnected"
       },
@@ -240,6 +243,7 @@
     "title": "Visor list",
     "dmsg-title": "DMSG",
     "rewards-title": "Rewards",
+    "services-health-title": "Services health",
     "reward-address": "Reward Address",
     "reward-total": "Week Total",
     "reward-distributed": "Distributed",
@@ -298,6 +302,18 @@
         "offline": "Offline"
       }
     }
+  },
+
+  "services-health": {
+    "loading": "Checking services…",
+    "all-ok": "All services operational",
+    "degraded": "One or more services are degraded",
+    "last-updated": "last checked",
+    "service": "Service",
+    "status": "Status",
+    "latency": "Latency",
+    "version": "Version",
+    "endpoint": "Endpoint"
   },
 
   "bulk-rewards": {

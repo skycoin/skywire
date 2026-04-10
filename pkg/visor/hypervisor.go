@@ -440,6 +440,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Post("/change-password", hv.users.ChangePassword())
 				r.Get("/about", hv.getAbout())
 				r.Get("/dmsg", hv.getDmsg())
+				r.Get("/service-health", hv.getServiceHealth())
 
 				r.Get("/lan-dmsg-server", hv.getLANDmsgServer())
 				r.Get("/visors", hv.getVisors())
@@ -613,6 +614,25 @@ func (hv *Hypervisor) getDmsg() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		out := hv.getDmsgSummary()
 		httputil.WriteJSON(w, r, http.StatusOK, out)
+	}
+}
+
+// getServiceHealth returns the health status of all configured deployment
+// services (TPD, DMSG discovery, AR, RF, UT, SD). Each entry has name, URL,
+// status, latency and version. Fetched via the local visor's DMSG/HTTP
+// client so the UI sees the same view the visor does.
+func (hv *Hypervisor) getServiceHealth() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if hv.visor == nil {
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, []ServiceHealthEntry{})
+			return
+		}
+		entries, err := hv.visor.ServiceHealth()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, entries)
 	}
 }
 

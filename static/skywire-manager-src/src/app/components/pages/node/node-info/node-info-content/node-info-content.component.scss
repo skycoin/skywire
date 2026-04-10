@@ -164,6 +164,38 @@
   word-break: break-all;
 }
 
+// Per-subsystem health lines (indented under the aggregate "Services" line).
+.sub-health {
+  padding-left: 12px;
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+// Collapsible section header (used by Ports section).
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  user-select: none;
+
+  &:hover {
+    color: #a5b4fc;
+  }
+
+  mat-icon {
+    margin-right: 4px;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .count-badge {
+    margin-left: 6px;
+    color: rgba(255, 255, 255, 0.55);
+    font-weight: 400;
+    font-size: 0.85em;
+  }
+}
+
 // Transport stats styling
 .transport-stats {
   color: rgba(255, 255, 255, 0.85);

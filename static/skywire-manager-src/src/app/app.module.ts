@@ -51,6 +51,7 @@ import { RefreshButtonComponent } from './components/layout/refresh-button/refre
 import { ViewAllLinkComponent } from './components/layout/view-all-link/view-all-link.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
 import { NodeRewardsComponent } from './components/pages/node/rewards/node-rewards.component';
+import { ServicesHealthComponent } from './components/pages/services-health/services-health.component';
 import { PaginatorComponent } from './components/layout/paginator/paginator.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
@@ -141,6 +142,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         AllTransportsComponent,
         AllRoutesComponent,
         NodeRewardsComponent,
+        ServicesHealthComponent,
         AllAppsComponent,
         PaginatorComponent,
         TopBarComponent,
