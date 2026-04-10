@@ -1001,7 +1001,10 @@ func configureLauncher(log *logging.Logger) {
 	} else {
 		conf.ShutdownTimeout = visorconfig.DefaultTimeout
 	}
-	conf.GeoIP = skyenv.GeoIP
+	conf.GeoIP = services.GeoIP
+	if conf.GeoIP == "" {
+		conf.GeoIP = deployment.Prod.GeoIP
+	}
 	conf.MemoryLimit = "auto"
 	// Reward system endpoints
 	conf.RewardSystem = services.RewardSystem
