@@ -64,6 +64,7 @@ func NewEnv() *TestEnv {
 		intraNet: "docker_intra",
 		serviceNames: []string{
 			"/setup-node",
+			"/transport-setup",
 			"/dmsg-server",
 			"/dmsg-discovery",
 			"/route-finder",
