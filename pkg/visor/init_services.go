@@ -81,9 +81,11 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 			c := context.Background()
 			if err := ut.UpdateVisorUptime(c, v.conf.Version); err != nil {
 				v.isServicesHealthy.unset()
+				v.isUptimeTrackerHealthy.unset()
 				log.WithError(err).Warn("Failed to update visor uptime.")
 			} else {
 				v.isServicesHealthy.set()
+				v.isUptimeTrackerHealthy.set()
 			}
 		}
 	}()
