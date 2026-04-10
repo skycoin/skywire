@@ -176,9 +176,11 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			if err != nil {
 				a.log.Errorf("Cannot fetch public visors from service discovery: %s", err)
 				v.isServicesHealthy.unset()
+				v.isAutoconnectHealthy.unset()
 				continue
 			}
 			v.isServicesHealthy.set()
+			v.isAutoconnectHealthy.set()
 
 			if len(addrs) == 0 {
 				a.log.Debugln("No public visors in service discovery, trying TPD fallback")

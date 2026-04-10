@@ -115,6 +115,9 @@ export class NodeService {
           // Health data.
           node.health = {
             servicesHealth: response.health.services_health,
+            uptimeTrackerHealth: response.health.uptime_tracker_health,
+            autoconnectHealth: response.health.autoconnect_health,
+            transportabilityHealth: response.health.transportability_health,
           };
 
           // DMSG info.
@@ -286,6 +289,9 @@ return {
         // Health info.
         node.health = {
           servicesHealth: response.health.services_health,
+          uptimeTrackerHealth: response.health.uptime_tracker_health,
+          autoconnectHealth: response.health.autoconnect_health,
+          transportabilityHealth: response.health.transportability_health,
         };
 
         // Transports.
