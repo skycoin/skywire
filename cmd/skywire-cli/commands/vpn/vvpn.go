@@ -37,7 +37,7 @@ func init() {
 		listCmd,
 	)
 	startCmd.Flags().StringVarP(&pk, "pk", "k", "", "server public key")
-	startCmd.Flags().StringVar(&geoipURL, "geoip", skyenv.GeoIP, "server public key")
+	startCmd.Flags().StringVar(&geoipURL, "geoip", deployment.Prod.GeoIP, "server public key")
 	startCmd.Flags().IntVarP(&startingTimeout, "timeout", "t", 0, "starting timeout value in second")
 	startCmd.Flags().BoolVar(&useInternal, "internal", false, "force internal launcher")
 	startCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")

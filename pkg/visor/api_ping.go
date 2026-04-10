@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/net/proxy"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -554,7 +555,7 @@ func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
 
 	// Set defaults
 	if conf.TestURL == "" {
-		conf.TestURL = "https://ip.skycoin.com"
+		conf.TestURL = deployment.Prod.GeoIP
 	}
 	if conf.Timeout == 0 {
 		conf.Timeout = 30 * time.Second
