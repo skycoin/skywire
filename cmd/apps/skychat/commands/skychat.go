@@ -5,6 +5,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -12,7 +13,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/skycoin/skywire/cmd/apps/skychat/history"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -44,6 +48,20 @@ var (
 	appPort   uint16
 	useSkynet bool
 	useDmsg   bool
+
+	// Persistence (Phase 1) — all off by default.
+	persistEnabled       bool
+	persistDBPath        string
+	persistMaxMsgSize    int
+	persistPerPeerRate   int
+	persistPerPeerCap    int
+	persistTotalCapMB    int
+	persistTTLDays       int
+	persistWhitelistFile string
+	persistSeedCount     int
+
+	// historyStore is nil when persistence is disabled.
+	historyStore history.Store
 )
 
 // the go embed static points to skywire/cmd/apps/skychat/static
@@ -57,6 +75,18 @@ func init() {
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().BoolVar(&useSkynet, "skynet", true, "listen on skynet network")
 	RootCmd.Flags().BoolVar(&useDmsg, "dmsg", true, "listen on dmsg network")
+
+	// Persistence flags (Phase 1). All default off; when --persist is set,
+	// the others fall back to conservative defaults.
+	RootCmd.Flags().BoolVar(&persistEnabled, "persist", false, "persist chat history to a local BoltDB (off by default)")
+	RootCmd.Flags().StringVar(&persistDBPath, "persist-db", "", "path to the BoltDB file (default: <work-dir>/skychat-history.db)")
+	RootCmd.Flags().IntVar(&persistMaxMsgSize, "persist-max-size", 4096, "maximum persisted message size in bytes")
+	RootCmd.Flags().IntVar(&persistPerPeerRate, "persist-per-peer-rate", 20, "persisted messages per minute per peer (rate limit)")
+	RootCmd.Flags().IntVar(&persistPerPeerCap, "persist-per-peer-cap", 500, "maximum persisted messages per peer (FIFO eviction)")
+	RootCmd.Flags().IntVar(&persistTotalCapMB, "persist-total-cap", 10, "total persisted storage cap in MB")
+	RootCmd.Flags().IntVar(&persistTTLDays, "persist-ttl", 30, "days to keep persisted messages before sweep (0 disables)")
+	RootCmd.Flags().StringVar(&persistWhitelistFile, "persist-whitelist", "", "path to file with one peer PK per line; if set, only these peers are persisted")
+	RootCmd.Flags().IntVar(&persistSeedCount, "persist-seed", 50, "number of recent messages to seed new SSE clients with (0 disables)")
 }
 
 // RootCmd is the root command for skywire-cli
@@ -95,6 +125,15 @@ func RunSkychat(ctx context.Context, args []string) error {
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.BoolVar(&useSkynet, "skynet", true, "listen on skynet")
 		fs.BoolVar(&useDmsg, "dmsg", true, "listen on dmsg")
+		fs.BoolVar(&persistEnabled, "persist", false, "persist chat history to BoltDB")
+		fs.StringVar(&persistDBPath, "persist-db", "", "path to BoltDB file")
+		fs.IntVar(&persistMaxMsgSize, "persist-max-size", 4096, "max message size bytes")
+		fs.IntVar(&persistPerPeerRate, "persist-per-peer-rate", 20, "per-peer rate limit / min")
+		fs.IntVar(&persistPerPeerCap, "persist-per-peer-cap", 500, "per-peer message cap")
+		fs.IntVar(&persistTotalCapMB, "persist-total-cap", 10, "total storage cap in MB")
+		fs.IntVar(&persistTTLDays, "persist-ttl", 30, "days to keep persisted messages")
+		fs.StringVar(&persistWhitelistFile, "persist-whitelist", "", "whitelist file path")
+		fs.IntVar(&persistSeedCount, "persist-seed", 50, "messages to seed SSE clients with")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -114,6 +153,20 @@ func RunSkychat(ctx context.Context, args []string) error {
 
 	appLog("Build info: %s", buildinfo.Version())
 	appLog("Successfully started skychat.")
+
+	if persistEnabled {
+		if err := openHistoryStore(); err != nil {
+			appLog("Failed to open history store: %v — continuing in ephemeral mode", err)
+		} else {
+			defer func() {
+				if historyStore != nil {
+					if err := historyStore.Close(); err != nil {
+						appLog("history store close: %v", err)
+					}
+				}
+			}()
+		}
+	}
 
 	clientCh = make(chan string)
 	defer close(clientCh)
@@ -149,6 +202,8 @@ func RunSkychat(ctx context.Context, args []string) error {
 	http.Handle("/", http.FileServer(getFileSystem()))
 	http.HandleFunc("/message", messageHandler(ctx))
 	http.HandleFunc("/sse", sseHandler)
+	http.HandleFunc("/history", historyHandler)
+	http.HandleFunc("/history/peers", historyPeersHandler)
 
 	url := ""
 	address := addr
@@ -252,7 +307,19 @@ func handleConn(conn net.Conn) {
 			return
 		}
 
-		clientMsg, err := json.Marshal(map[string]string{"sender": raddr.PubKey.Hex(), "message": string(buf[:n])})
+		text := string(buf[:n])
+		peerPK := raddr.PubKey.Hex()
+
+		// Persist (best-effort, never blocks ephemeral path).
+		persistMessage(history.Message{
+			Peer:      peerPK,
+			From:      peerPK,
+			Outgoing:  false,
+			Text:      text,
+			Timestamp: time.Now().UTC(),
+		})
+
+		clientMsg, err := json.Marshal(map[string]string{"sender": peerPK, "message": text})
 		if err != nil {
 			appLog("Failed to marshal json: %v", err)
 		}
@@ -331,6 +398,14 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 
 			return
 		}
+
+		// Persist outgoing message (best-effort).
+		persistMessage(history.Message{
+			Peer:      pk.Hex(),
+			Outgoing:  true,
+			Text:      data["message"],
+			Timestamp: time.Now().UTC(),
+		})
 	}
 }
 
@@ -345,6 +420,30 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Transfer-Encoding", "chunked")
+
+	// Seed the new SSE client with recent history if persistence is enabled.
+	if historyStore != nil && persistSeedCount > 0 {
+		recent, err := historyStore.ListRecent(persistSeedCount)
+		if err != nil {
+			appCl.Log().Debugf("SSE seed list failed: %v", err)
+		} else {
+			for _, m := range recent {
+				sender := m.From
+				if m.Outgoing {
+					sender = "self"
+				}
+				b, _ := json.Marshal(map[string]string{ //nolint:errcheck,gosec
+					"sender":  sender,
+					"message": m.Text,
+					"peer":    m.Peer,
+					"ts":      m.Timestamp.Format(time.RFC3339),
+					"history": "true",
+				})
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", b) //nolint:errcheck,gosec
+			}
+			f.Flush()
+		}
+	}
 
 	for {
 		select {
@@ -362,6 +461,132 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 	}
+}
+
+// historyHandler returns JSON history. Query params:
+//
+//	peer=<pk>    — filter to a specific peer
+//	limit=<int>  — max messages to return (default 100, max 1000)
+func historyHandler(w http.ResponseWriter, req *http.Request) {
+	if historyStore == nil {
+		http.Error(w, "persistence not enabled", http.StatusServiceUnavailable)
+		return
+	}
+	peer := req.URL.Query().Get("peer")
+	limit := 100
+	if v := req.URL.Query().Get("limit"); v != "" {
+		if _, err := fmt.Sscanf(v, "%d", &limit); err != nil || limit <= 0 {
+			http.Error(w, "invalid limit", http.StatusBadRequest)
+			return
+		}
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+
+	var msgs []history.Message
+	var err error
+	if peer != "" {
+		msgs, err = historyStore.ListByPeer(peer, limit)
+	} else {
+		msgs, err = historyStore.ListRecent(limit)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(msgs) //nolint:errcheck,gosec
+}
+
+func historyPeersHandler(w http.ResponseWriter, _ *http.Request) {
+	if historyStore == nil {
+		http.Error(w, "persistence not enabled", http.StatusServiceUnavailable)
+		return
+	}
+	peers, err := historyStore.Peers()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(peers) //nolint:errcheck,gosec
+}
+
+// persistMessage stores a message in the history backend if persistence is
+// enabled. Errors are logged at debug level; ephemeral delivery is never
+// blocked by persistence failure.
+func persistMessage(msg history.Message) {
+	if historyStore == nil {
+		return
+	}
+	if err := historyStore.Append(msg); err != nil {
+		switch {
+		case errors.Is(err, history.ErrRateLimited),
+			errors.Is(err, history.ErrTooLarge),
+			errors.Is(err, history.ErrStorageFull),
+			errors.Is(err, history.ErrNotWhitelisted):
+			appCl.Log().Debugf("history: dropped %s (%v)", msg.Peer, err)
+		default:
+			appLog("history: backend error: %v", err)
+		}
+	}
+}
+
+// openHistoryStore constructs the bolt history store from CLI flags.
+func openHistoryStore() error {
+	dbPath := persistDBPath
+	if dbPath == "" {
+		workDir := appCl.Config().ProcWorkDir
+		if workDir == "" {
+			workDir = skyenv.LocalPath
+		}
+		dbPath = filepath.Join(workDir, "skychat-history.db")
+	}
+
+	limits := history.Limits{
+		MaxMessageSize:    persistMaxMsgSize,
+		PerPeerRatePerMin: persistPerPeerRate,
+		PerPeerCap:        persistPerPeerCap,
+		TotalCapBytes:     int64(persistTotalCapMB) * 1024 * 1024,
+		TTL:               time.Duration(persistTTLDays) * 24 * time.Hour,
+	}
+	if persistWhitelistFile != "" {
+		wl, err := loadWhitelist(persistWhitelistFile)
+		if err != nil {
+			return fmt.Errorf("load whitelist: %w", err)
+		}
+		limits.WhitelistOnly = true
+		limits.Whitelist = wl
+	}
+
+	s, err := history.NewBoltStore(dbPath, limits)
+	if err != nil {
+		return err
+	}
+	historyStore = s
+	appLog("Persistence enabled: db=%s cap=%dMB per-peer=%d ttl=%dd whitelist=%v",
+		dbPath, persistTotalCapMB, persistPerPeerCap, persistTTLDays, limits.WhitelistOnly)
+	return nil
+}
+
+// loadWhitelist reads a file with one peer PK hex per line (ignoring blanks
+// and lines starting with #).
+func loadWhitelist(path string) (map[string]bool, error) {
+	data, err := os.ReadFile(path) //nolint:gosec
+	if err != nil {
+		return nil, err
+	}
+	wl := make(map[string]bool)
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		wl[line] = true
+	}
+	return wl, nil
 }
 
 func getFileSystem() http.FileSystem {
