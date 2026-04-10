@@ -223,8 +223,8 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 
 	//whitelist access to the surveys for the hypervisor, dmsggpty whitelist, and for the surveywhitelist of keys which is fetched from the conf service
 	var whitelistedPKs []cipher.PubKey
-	if v.conf.SurveyWhitelist != nil {
-		whitelistedPKs = append(whitelistedPKs, v.conf.SurveyWhitelist...)
+	if sw := v.conf.EffectiveSurveyWhitelist(); sw != nil {
+		whitelistedPKs = append(whitelistedPKs, sw...)
 	}
 	if v.conf.Hypervisors != nil {
 		whitelistedPKs = append(whitelistedPKs, v.conf.Hypervisors...)

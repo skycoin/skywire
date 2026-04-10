@@ -145,7 +145,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		TransportManager: v.tpM,
 		RouteFinder:      rfClient,
 		RouteGroupDialer: rgDialer,
-		SetupNodes:       conf.RouteSetupNodes,
+		SetupNodes:       v.conf.EffectiveRouteSetupNodes(),
 		RulesGCInterval:  0, // 0 = DefaultRulesGCInterval (10s)
 		MinHops:          v.conf.Routing.MinHops,
 	}
@@ -251,9 +251,9 @@ func initNodeHealth(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	// Get configured TPS and RSN nodes
-	tpsNodes := v.conf.Transport.TransportSetupPKs
-	rsnNodes := v.conf.Routing.RouteSetupNodes
+	// Get configured TPS and RSN nodes (deployment + user merged)
+	tpsNodes := v.conf.EffectiveTransportSetupPKs()
+	rsnNodes := v.conf.EffectiveRouteSetupNodes()
 
 	if len(tpsNodes) == 0 && len(rsnNodes) == 0 {
 		log.Info("No TPS or RSN nodes configured, skipping node health tracking")
