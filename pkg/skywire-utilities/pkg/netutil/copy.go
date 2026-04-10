@@ -29,24 +29,18 @@ func forceInterrupt(conn io.ReadWriteCloser) {
 // CopyReadWriteCloser copies reads and writes between two connections.
 // It returns when either direction encounters an error (including idle timeout).
 func CopyReadWriteCloser(conn1, conn2 io.ReadWriteCloser) error {
-	errCh1 := make(chan error, 1)
+	done := make(chan error, 2)
 	go func() {
 		_, err := io.Copy(conn2, conn1)
-		errCh1 <- err
+		done <- err
 	}()
-
-	errCh2 := make(chan error, 1)
 	go func() {
 		_, err := io.Copy(conn1, conn2)
-		errCh2 <- err
+		done <- err
 	}()
 
 	// Wait for one direction to finish.
-	var firstErr error
-	select {
-	case firstErr = <-errCh1:
-	case firstErr = <-errCh2:
-	}
+	firstErr := <-done
 
 	// Force interrupt both directions by setting past deadlines. This is
 	// necessary because yamux.Stream.Close() does not unblock a concurrent
@@ -58,12 +52,14 @@ func CopyReadWriteCloser(conn1, conn2 io.ReadWriteCloser) error {
 	_ = conn1.Close() //nolint:errcheck
 	_ = conn2.Close() //nolint:errcheck
 
-	// Wait for the second goroutine to finish. With the forced deadline,
-	// the blocked Read will return quickly with a timeout error, so this
-	// wait is bounded.
+	// Wait briefly for the second goroutine to finish. With the forced
+	// deadline, the blocked Read should return quickly. Fall back to a
+	// hard timeout so we never block the caller indefinitely; any stragglers
+	// will clean themselves up asynchronously (the buffered channel allows
+	// the late send to succeed without blocking).
 	select {
-	case <-errCh1:
-	case <-errCh2:
+	case <-done:
+	case <-time.After(2 * time.Second):
 	}
 
 	return firstErr
