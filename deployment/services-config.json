@@ -29,6 +29,7 @@
       "172.104.247.120:3478"
     ],
     "dns_server": "1.1.1.1",
+    "geoip": "http://ip.skywire.dev",
     "survey_whitelist": [
       "02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637",
       "03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3",
@@ -91,6 +92,7 @@
       "172.104.247.120:3478"
     ],
     "dns_server": "1.1.1.1",
+    "geoip": "http://ip.skycoin.com",
     "survey_whitelist": [
       "02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637",
       "03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3",

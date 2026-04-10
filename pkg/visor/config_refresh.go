@@ -77,6 +77,13 @@ func (v *Visor) refreshKeySets(ctx context.Context, log *logging.Logger) {
 		updated = true
 	}
 
+	// Update GeoIP URL
+	if services.GeoIP != "" && services.GeoIP != v.conf.GeoIP {
+		log.Infof("Updating geoip: %s", services.GeoIP)
+		v.conf.GeoIP = services.GeoIP
+		updated = true
+	}
+
 	if updated {
 		log.Info("Dynamic key sets refreshed from conf service")
 	}

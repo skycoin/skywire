@@ -88,7 +88,7 @@ func init() {
 
 	// test command flags
 	testCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
-	testCmd.Flags().StringVarP(&testURL, "url", "u", "https://ip.skycoin.com", "URL to fetch through proxy for testing")
+	testCmd.Flags().StringVarP(&testURL, "url", "u", dep.GeoIP, "URL to fetch through proxy for testing")
 	testCmd.Flags().IntVarP(&testTimeout, "timeout", "t", 10, "timeout in seconds for HTTP request (route setup has separate 30s timeout)")
 	testCmd.Flags().IntVarP(&testBatchSize, "batch", "b", 1, "number of proxies to test (1=sequential/stable, >1=parallel/experimental)")
 	testCmd.Flags().BoolVarP(&testOnlyWithTp, "transport", "p", false, "only test proxies that have an existing transport")
