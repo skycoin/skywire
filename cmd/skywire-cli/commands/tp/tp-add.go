@@ -288,6 +288,7 @@ var addTpCmd = &cobra.Command{
 
 		// Process each public key
 		var results []*visor.TransportSummary
+		var lastErr error
 		successCount := 0
 		failCount := 0
 
@@ -326,6 +327,7 @@ var addTpCmd = &cobra.Command{
 					if !isJSON {
 						logger.WithError(tpErr).Errorf("Failed to establish %v transport to %v after %d attempts", transportType, pk, retries)
 					}
+					lastErr = tpErr
 					failCount++
 					continue
 				}
@@ -361,6 +363,7 @@ var addTpCmd = &cobra.Command{
 				}
 
 				if tpErr != nil {
+					lastErr = tpErr
 					failCount++
 					continue
 				}
@@ -378,6 +381,14 @@ var addTpCmd = &cobra.Command{
 		}
 
 		if isJSON {
+			// If EVERY attempt failed, surface the error in the JSON output
+			// so callers (tests, scripts, the UI) can see why. Previously
+			// we'd return {"output": []} with exit 1, which left the caller
+			// guessing what went wrong.
+			if failCount > 0 && successCount == 0 && lastErr != nil {
+				internal.PrintFatalError(cmd.Flags(),
+					fmt.Errorf("tp add failed for all %d target(s): %w", failCount, lastErr))
+			}
 			internal.PrintOutput(cmd.Flags(), results, "")
 		} else {
 			for _, tp := range results {

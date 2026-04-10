@@ -212,7 +212,8 @@ func (env *TestEnv) checkVisorDmsgEntry(visor string) bool {
 		return false
 	}
 	delegated := cliOut.Output.Client.DelegatedServers
-	age := time.Since(time.Unix(cliOut.Output.Timestamp, 0)).Round(time.Second)
+	// Timestamp is nanoseconds since epoch — pass as the nsec arg, not sec.
+	age := time.Since(time.Unix(0, cliOut.Output.Timestamp)).Round(time.Second)
 	env.logger.Infof("VISOR DMSG ENTRY [%s]: %d delegated servers, entry age %v", visor, len(delegated), age)
 	for i, srv := range delegated {
 		env.logger.Infof("   [%d] %s", i, truncatePK(srv))
@@ -279,17 +280,29 @@ func (env *TestEnv) checkVisorTransports(visor string) {
 // checkVisorTransportsViaTPS queries the transport setup-node for a visor's
 // transports. Uses skywire cli tp --remote <pk> which goes through the TPS
 // RPC over DMSG.
+//
+// The CLI output matches []remoteResult in cmd/skywire-cli/commands/tp/tp.go:
+//
+//	{
+//	  "output": [
+//	    {"TargetPK": "...", "Transports": [...], "Error": ""}
+//	  ]
+//	}
 func (env *TestEnv) checkVisorTransportsViaTPS(visor, pk string, localIDs map[string]bool) {
 	cmd := fmt.Sprintf("/release/skywire cli tp --remote %s --json", pk)
 	type remoteTP struct {
 		ID     string `json:"id"`
 		Type   string `json:"type"`
-		Remote string `json:"remote_pk"`
+		Remote string `json:"remote"`
 	}
-	// The output structure for --remote is keyed by PK.
+	type remoteResult struct {
+		TargetPK   string     `json:"TargetPK"`
+		Transports []remoteTP `json:"Transports"`
+		Error      string     `json:"Error"`
+	}
 	cliOut := struct {
-		Output map[string][]remoteTP `json:"output,omitempty"`
-		Err    *string               `json:"error,omitempty"`
+		Output []remoteResult `json:"output,omitempty"`
+		Err    *string        `json:"error,omitempty"`
 	}{}
 	if err := env.ExecJSON(cmd, &cliOut); err != nil {
 		env.logger.Warnf("VISOR TRANSPORTS [%s]: TPS remote query failed: %v", visor, err)
@@ -299,16 +312,18 @@ func (env *TestEnv) checkVisorTransportsViaTPS(visor, pk string, localIDs map[st
 		env.logger.Warnf("VISOR TRANSPORTS [%s]: TPS remote query error: %s", visor, *cliOut.Err)
 		return
 	}
-	remoteTPs, ok := cliOut.Output[pk]
-	if !ok {
-		for _, v := range cliOut.Output {
-			remoteTPs = v
-			break
-		}
+	if len(cliOut.Output) == 0 {
+		env.logger.Warnf("VISOR TRANSPORTS [%s]: TPS remote query returned no results", visor)
+		return
 	}
-	env.logger.Infof("VISOR TRANSPORTS [%s]: %d transports via TPS remote query", visor, len(remoteTPs))
+	res := cliOut.Output[0]
+	if res.Error != "" {
+		env.logger.Warnf("VISOR TRANSPORTS [%s]: TPS remote query for target reported error: %s", visor, res.Error)
+		return
+	}
+	env.logger.Infof("VISOR TRANSPORTS [%s]: %d transports via TPS remote query", visor, len(res.Transports))
 	tpsIDs := make(map[string]bool)
-	for _, tp := range remoteTPs {
+	for _, tp := range res.Transports {
 		tpsIDs[tp.ID] = true
 		env.logger.Infof("   tps:   id=%s type=%s remote=%s", truncateID(tp.ID), tp.Type, truncatePK(tp.Remote))
 	}
@@ -367,7 +382,8 @@ func (env *TestEnv) checkVisorSelfHealthOverDmsg(visor string) bool {
 }
 
 // checkServicesDmsgHealth verifies TPD / AR / RF are reachable over DMSG
-// using the e2e-test container's standalone dmsg client.
+// using the e2e-test container's standalone dmsg client. Queries run in
+// parallel so one slow service doesn't serialize the whole diagnostic pass.
 func (env *TestEnv) checkServicesDmsgHealth() bool {
 	services := []struct {
 		name, pk string
@@ -376,17 +392,31 @@ func (env *TestEnv) checkServicesDmsgHealth() bool {
 		{"address-resolver", arDmsgPK},
 		{"route-finder", rfDmsgPK},
 	}
-	healthy := true
+	type result struct {
+		name    string
+		out     string
+		err     error
+		healthy bool
+	}
+	results := make(chan result, len(services))
 	for _, svc := range services {
-		dmsgURL := fmt.Sprintf("dmsg://%s:80/health", svc.pk)
-		cmd := fmt.Sprintf("/release/skywire dmsg curl -Z -l fatal %s", dmsgURL)
-		out, err := env.Exec(cmd)
-		if err != nil || !strings.Contains(out, "build_info") {
-			env.logger.Warnf("SERVICE DMSG HEALTH [%s]: not reachable: err=%v out=%.120s", svc.name, err, out)
+		go func(name, pk string) {
+			dmsgURL := fmt.Sprintf("dmsg://%s:80/health", pk)
+			cmd := fmt.Sprintf("/release/skywire dmsg curl -Z -l fatal %s", dmsgURL)
+			out, err := env.Exec(cmd)
+			healthy := err == nil && strings.Contains(out, "build_info")
+			results <- result{name: name, out: out, err: err, healthy: healthy}
+		}(svc.name, svc.pk)
+	}
+	healthy := true
+	for i := 0; i < len(services); i++ {
+		r := <-results
+		if !r.healthy {
+			env.logger.Warnf("SERVICE DMSG HEALTH [%s]: not reachable: err=%v out=%.120s", r.name, r.err, r.out)
 			healthy = false
 			continue
 		}
-		env.logger.Infof("SERVICE DMSG HEALTH [%s]: OK", svc.name)
+		env.logger.Infof("SERVICE DMSG HEALTH [%s]: OK", r.name)
 	}
 	return healthy
 }
@@ -403,8 +433,12 @@ func (env *TestEnv) checkTransportSetupNode() bool {
 	return env.checkDmsgServiceNode("TPS", transportSetupPK)
 }
 
-// checkDmsgServiceNode is the shared implementation for RSN/TPS discovery +
-// health checks. Logs its results with the given label prefix.
+// checkDmsgServiceNode is the shared implementation for RSN/TPS discovery
+// checks. Logs its results with the given label prefix. Unlike skywire
+// services, RSN and TPS do not serve an HTTP /health endpoint over DMSG —
+// their presence in DMSG discovery with delegated servers is the health
+// signal. Previous attempts to dmsg curl /health timed out for ~1:48s per
+// check and dominated the diagnostic pass runtime; they're removed.
 func (env *TestEnv) checkDmsgServiceNode(label, pk string) bool {
 	cmd := fmt.Sprintf("/release/skywire cli mdisc entry %s --url http://dmsg-discovery:9090 --json", pk)
 
@@ -430,17 +464,8 @@ func (env *TestEnv) checkDmsgServiceNode(label, pk string) bool {
 		return false
 	}
 	delegated := cliOut.Output.Client.DelegatedServers
-	age := time.Since(time.Unix(cliOut.Output.Timestamp, 0)).Round(time.Second)
+	// Timestamp is nanoseconds — pass as the nsec arg, not sec.
+	age := time.Since(time.Unix(0, cliOut.Output.Timestamp)).Round(time.Second)
 	env.logger.Infof("%s DMSG ENTRY: %d delegated servers, entry age %v", label, len(delegated), age)
-
-	// Health check via dmsg curl on port 80.
-	dmsgURL := fmt.Sprintf("dmsg://%s:80/health", pk)
-	healthCmd := fmt.Sprintf("/release/skywire dmsg curl -Z -l fatal %s", dmsgURL)
-	out, err := env.Exec(healthCmd)
-	if err != nil || !strings.Contains(out, "build_info") {
-		env.logger.Warnf("%s HEALTH: unreachable: err=%v out=%.120s", label, err, out)
-		return false
-	}
-	env.logger.Infof("%s HEALTH: OK", label)
-	return true
+	return len(delegated) > 0
 }
