@@ -151,7 +151,15 @@ func TestVPN(t *testing.T) {
 		}
 		vpns, err := env.VPNList(visorVPNServer)
 		require.NoError(t, err)
-		require.Equal(t, env.visorPKs[visorVPNServer], vpns[0].Addr.PubKey().Hex())
+		expectedPK := env.visorPKs[visorVPNServer]
+		found := false
+		for _, v := range vpns {
+			if v.Addr.PubKey().Hex() == expectedPK {
+				found = true
+				break
+			}
+		}
+		require.True(t, found, "VPN server %s not found in list of %d servers", expectedPK, len(vpns))
 	})
 
 	// ===== Phase 5: Simulate server stop (needs restart) =====
