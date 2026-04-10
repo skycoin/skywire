@@ -48,10 +48,19 @@ $responsive-table-colors: (
 
     .link-row {
       display: table-row;
+      text-decoration: none;
 
       &:hover {
         text-decoration: none;
       }
+    }
+
+    // Ensure all cells align content vertically centered, not top-aligned.
+    // This matters for columns like IP/Location and Services that have
+    // multiple stacked <div> lines, so they visually line up with
+    // single-line columns like Label and Public Key.
+    td {
+      vertical-align: middle;
     }
 
     // Column used for the check boxes.

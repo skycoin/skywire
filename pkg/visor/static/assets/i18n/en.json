@@ -190,7 +190,10 @@
       },
       "node-health": {
         "title": "Health",
+        "services": "Services:",
         "uptime-tracker": "Uptime tracker:",
+        "autoconnect": "Autoconnect:",
+        "transportability": "Transportability:",
         "connected": "Connected",
         "disconnected": "Disconnected"
       },
