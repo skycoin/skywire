@@ -497,8 +497,9 @@ func (env *TestEnv) VisorTpType(visor string) ([]tptypes.Type, error) {
 }
 
 func (env *TestEnv) VisorTpLs(visor string) ([]*skyvisor.TransportSummary, error) {
+	// Listing accepts empty results — a visor with 0 transports is valid state.
 	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp --json", visor)
-	return env.visorTpExec(cmd)
+	return env.visorTpExecAllowEmpty(cmd)
 }
 
 func (env *TestEnv) VisorTpID(visor string, tpID uuid.UUID) (*skyvisor.TransportSummary, error) {
@@ -578,7 +579,24 @@ func (env *TestEnv) VisorTpRm(visor string, tpID uuid.UUID) (string, error) {
 	return env.ExecJSONReturnString(cmd)
 }
 
+// visorTpExec runs a tp CLI command and requires at least one transport in
+// the JSON output. Used for commands like tp add / tp id where the caller
+// expects a specific transport to be returned.
 func (env *TestEnv) visorTpExec(cmd string) ([]*skyvisor.TransportSummary, error) {
+	out, err := env.visorTpExecAllowEmpty(cmd)
+	if err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, errors.New("transport command returned empty output")
+	}
+	return out, nil
+}
+
+// visorTpExecAllowEmpty runs a tp CLI command and tolerates an empty output
+// list. Used for tp list / tp discover style commands where zero results is
+// a valid state.
+func (env *TestEnv) visorTpExecAllowEmpty(cmd string) ([]*skyvisor.TransportSummary, error) {
 	cliOutput := struct {
 		Output []*skyvisor.TransportSummary `json:"output,omitempty"`
 		Err    *string                      `json:"error,omitempty"`
@@ -589,9 +607,6 @@ func (env *TestEnv) visorTpExec(cmd string) ([]*skyvisor.TransportSummary, error
 	}
 	if cliOutput.Err != nil {
 		return nil, errors.New(*cliOutput.Err)
-	}
-	if len(cliOutput.Output) == 0 {
-		return nil, errors.New("transport command returned empty output")
 	}
 	return cliOutput.Output, nil
 }
