@@ -185,6 +185,7 @@ func (ce *Client) Serve(ctx context.Context) {
 	updateEntryLoopOnce := new(sync.Once)
 	pingLoopOnce := new(sync.Once)
 	reconnectLoopOnce := new(sync.Once)
+	porterReapLoopOnce := new(sync.Once)
 
 	needInitialPost := true
 
@@ -323,6 +324,7 @@ func (ce *Client) Serve(ctx context.Context) {
 		// Only start the update entry loop once we have at least one session established.
 		updateEntryLoopOnce.Do(func() { go ce.updateClientEntryLoop(cancellabelCtx, ce.done, ce.conf.ClientType) })
 		pingLoopOnce.Do(func() { go ce.pingSessionsLoop(cancellabelCtx) })
+		porterReapLoopOnce.Do(func() { go ce.porterReapLoop(cancellabelCtx) })
 		// When MinSessions is 0 (connect to all), start a reconnect loop that
 		// aggressively retries connecting to servers we failed to reach on the first pass.
 		if ce.conf.MinSessions == 0 {
@@ -562,4 +564,71 @@ func (ce *Client) pingSessions() {
 		ce.log.WithField("server", ses.RemotePK()).WithField("rtt", rtt).
 			Trace("Session ping measured")
 	}
+}
+
+// porterReapLoop periodically walks the porter and frees ephemeral port
+// entries for streams whose owning ClientSession is no longer in the
+// client's sessions map. This is defense-in-depth against port leaks:
+// ClientSession.Close() reaps on session death, but if a session stays
+// alive for hours while individual streams leak (because
+// rpc.Client.input() detects EOF but doesn't call codec.Close() on the
+// remote end, so some caller paths don't explicitly free the port),
+// nothing cleans them up. The reaper bounds the leak at the reap
+// interval regardless of root cause.
+func (ce *Client) porterReapLoop(ctx context.Context) {
+	const interval = 60 * time.Second
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ce.done:
+			return
+		case <-ticker.C:
+			ce.reapOrphanPorts()
+		}
+	}
+}
+
+// reapOrphanPorts walks the porter and calls the close function for any
+// ephemeral-port stream whose owning session is no longer live (not in
+// the client's sessions map under the same PK). Safe to call concurrently
+// with normal operation — makePortFreer uses sync.Once.
+func (ce *Client) reapOrphanPorts() {
+	// Snapshot the live session set.
+	live := make(map[cipher.PubKey]*SessionCommon)
+	ce.sessionsMx.Lock()
+	for pk, sc := range ce.sessions {
+		live[pk] = sc
+	}
+	ce.sessionsMx.Unlock()
+
+	var toFree []*Stream
+	ce.porter.RangePortValues(func(_ uint16, v interface{}) bool {
+		s, ok := v.(*Stream)
+		if !ok || s == nil || s.ses == nil || s.ses.SessionCommon == nil {
+			return true
+		}
+		pk := s.ses.RemotePK()
+		// If no session exists for this remote PK, or the live session
+		// is a different SessionCommon pointer (session was replaced),
+		// reap the stream.
+		if sc, ok := live[pk]; !ok || sc != s.ses.SessionCommon {
+			toFree = append(toFree, s)
+		}
+		return true
+	})
+
+	if len(toFree) == 0 {
+		return
+	}
+	for _, s := range toFree {
+		if s.close != nil {
+			s.close()
+		}
+	}
+	ce.log.WithField("count", len(toFree)).
+		WithField("ports_reserved", ce.porter.Count()).
+		Debug("Reaped orphaned ephemeral port reservations")
 }
