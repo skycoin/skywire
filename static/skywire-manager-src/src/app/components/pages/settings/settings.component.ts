@@ -52,9 +52,15 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
         linkParts: ['/nodes'],
       },
       {
-        icon: 'language',
-        label: 'nodes.dmsg-title',
-        linkParts: ['/nodes', 'dmsg'],
+        icon: 'monetization_on',
+        label: 'nodes.rewards-title',
+        linkParts: ['/nodes', 'rewards'],
+      },
+      {
+        icon: 'bubble_chart',
+        label: 'node.details.tpviz.title',
+        linkParts: [],
+        externalUrl: '/tp-viz/',
       },
       {
         icon: 'settings',

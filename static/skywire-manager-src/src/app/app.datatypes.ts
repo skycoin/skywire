@@ -99,6 +99,9 @@ interface RouteDescriptor {
 
 export interface HealthInfo {
   servicesHealth?: string;
+  uptimeTrackerHealth?: string;
+  autoconnectHealth?: string;
+  transportabilityHealth?: string;
 }
 
 export class ProxyDiscoveryEntry {
