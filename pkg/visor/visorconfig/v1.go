@@ -31,8 +31,9 @@ type V1 struct {
 	UptimeTracker *UptimeTracker      `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher           `json:"launcher"`
 
-	SurveyWhitelist []cipher.PubKey `json:"survey_whitelist"`
-	Hypervisors     []cipher.PubKey `json:"hypervisors"`
+	SurveyWhitelist     []cipher.PubKey `json:"survey_whitelist"`
+	UserSurveyWhitelist []cipher.PubKey `json:"user_survey_whitelist,omitempty"` // user-added keys, preserved across config refresh
+	Hypervisors         []cipher.PubKey `json:"hypervisors"`
 	CLIAddr         string          `json:"cli_addr"`
 
 	LogLevel             string                           `json:"log_level"`
@@ -83,7 +84,8 @@ type Transport struct {
 	AddressResolver     string          `json:"address_resolver"`
 	AddressResolverDmsg string          `json:"address_resolver_dmsg,omitempty"` // DMSG-HTTP URL for address resolver
 	PublicAutoconnect   bool            `json:"public_autoconnect"`
-	TransportSetupPKs   []cipher.PubKey `json:"transport_setup"`
+	TransportSetupPKs     []cipher.PubKey `json:"transport_setup"`
+	UserTransportSetupPKs []cipher.PubKey `json:"user_transport_setup,omitempty"` // user-added keys, preserved across config refresh
 	TPSetupSK           *cipher.SecKey  `json:"tps_sk,omitempty"`
 	TPSDmsg             *TPSDmsgConfig  `json:"tps_dmsg,omitempty"`
 	LogStore            *LogStore       `json:"log_store"`
@@ -119,8 +121,9 @@ type LogStore struct {
 
 // Routing configures routing.
 type Routing struct {
-	RouteSetupNodes    []cipher.PubKey `json:"route_setup_nodes,omitempty"`
-	RouteSetupSK       *cipher.SecKey  `json:"route_setup_sk,omitempty"` // Embedded route setup-node secret key
+	RouteSetupNodes     []cipher.PubKey `json:"route_setup_nodes,omitempty"`
+	UserRouteSetupNodes []cipher.PubKey `json:"user_route_setup_nodes,omitempty"` // user-added keys, preserved across config refresh
+	RouteSetupSK        *cipher.SecKey  `json:"route_setup_sk,omitempty"`         // Embedded route setup-node secret key
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 	MinHops            uint16          `json:"min_hops"`
@@ -564,6 +567,62 @@ func deleteAppArg(conf *Launcher, appName string) bool {
 		break
 	}
 	return configChanged
+}
+
+// mergePubKeys returns the union of the given public key slices, preserving
+// the order of the first slice and appending any unique keys from the second.
+// nil slices are handled transparently.
+func mergePubKeys(primary, extra []cipher.PubKey) []cipher.PubKey {
+	if len(extra) == 0 {
+		return primary
+	}
+	if len(primary) == 0 {
+		return extra
+	}
+	seen := make(map[cipher.PubKey]struct{}, len(primary)+len(extra))
+	merged := make([]cipher.PubKey, 0, len(primary)+len(extra))
+	for _, k := range primary {
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		merged = append(merged, k)
+	}
+	for _, k := range extra {
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		merged = append(merged, k)
+	}
+	return merged
+}
+
+// EffectiveRouteSetupNodes returns the union of deployment route setup nodes
+// (managed by config refresh) and user-added route setup nodes.
+func (v1 *V1) EffectiveRouteSetupNodes() []cipher.PubKey {
+	if v1 == nil || v1.Routing == nil {
+		return nil
+	}
+	return mergePubKeys(v1.Routing.RouteSetupNodes, v1.Routing.UserRouteSetupNodes)
+}
+
+// EffectiveTransportSetupPKs returns the union of deployment transport setup
+// public keys (managed by config refresh) and user-added keys.
+func (v1 *V1) EffectiveTransportSetupPKs() []cipher.PubKey {
+	if v1 == nil || v1.Transport == nil {
+		return nil
+	}
+	return mergePubKeys(v1.Transport.TransportSetupPKs, v1.Transport.UserTransportSetupPKs)
+}
+
+// EffectiveSurveyWhitelist returns the union of deployment survey whitelist
+// keys (managed by config refresh) and user-added keys.
+func (v1 *V1) EffectiveSurveyWhitelist() []cipher.PubKey {
+	if v1 == nil {
+		return nil
+	}
+	return mergePubKeys(v1.SurveyWhitelist, v1.UserSurveyWhitelist)
 }
 
 /*
