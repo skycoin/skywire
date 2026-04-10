@@ -1,0 +1,112 @@
+<div class="row">
+  <div class="col-12">
+    <app-top-bar
+      [titleParts]="['nodes.services-health-title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="2"
+      [showUpdateButton]="false"
+    ></app-top-bar>
+  </div>
+
+  <div class="content col-12 mt-4.5">
+    @if (loading && entries.length === 0) {
+      <div class="loading-row">
+        <mat-spinner [diameter]="16"></mat-spinner>
+        <span class="ml-2">{{ 'services-health.loading' | translate }}</span>
+      </div>
+    }
+
+    @if (error && entries.length === 0) {
+      <div class="error-row">
+        <mat-icon>error_outline</mat-icon>
+        <span class="ml-2">{{ error }}</span>
+      </div>
+    }
+
+    @if (entries.length > 0) {
+      <!-- Summary line -->
+      <div class="summary-line">
+        @if (anyDown()) {
+          <mat-icon class="warn">warning</mat-icon>
+          <span>{{ 'services-health.degraded' | translate }}</span>
+        } @else {
+          <mat-icon class="ok">check_circle</mat-icon>
+          <span>{{ 'services-health.all-ok' | translate }}</span>
+        }
+        @if (lastUpdated) {
+          <span class="last-updated">
+            — {{ 'services-health.last-updated' | translate }}: {{ lastUpdated | date: 'HH:mm:ss' }}
+          </span>
+        }
+      </div>
+
+      <!-- Services table -->
+      <table class="responsive-table-translucid d-none d-md-table mt-3">
+        <tr>
+          <th class="small-column"></th>
+          <th>{{ 'services-health.service' | translate }}</th>
+          <th>{{ 'services-health.status' | translate }}</th>
+          <th>{{ 'services-health.latency' | translate }}</th>
+          <th>{{ 'services-health.version' | translate }}</th>
+          <th>{{ 'services-health.endpoint' | translate }}</th>
+        </tr>
+        @for (entry of entries; track trackByName($index, entry)) {
+          <tr>
+            <td>
+              <span [class]="statusClass(entry)"></span>
+            </td>
+            <td>
+              <strong>{{ entry.name }}</strong>
+            </td>
+            <td>
+              {{ entry.status }}
+            </td>
+            <td [class]="latencyClass(entry)">
+              {{ entry.latency_ms }}&nbsp;ms
+            </td>
+            <td>
+              @if (entry.version) {
+                <code>{{ entry.version }}</code>
+              } @else {
+                <span class="dim">—</span>
+              }
+            </td>
+            <td>
+              <code class="dim">{{ shortUrl(entry.url) }}</code>
+            </td>
+          </tr>
+        }
+      </table>
+
+      <!-- Mobile: stacked cards -->
+      <div class="d-md-none mt-3">
+        @for (entry of entries; track trackByName($index, entry)) {
+          <div class="mobile-card">
+            <div class="mobile-header">
+              <span [class]="statusClass(entry)"></span>
+              <strong class="ml-2">{{ entry.name }}</strong>
+              <span class="ml-auto" [class]="latencyClass(entry)">{{ entry.latency_ms }}&nbsp;ms</span>
+            </div>
+            <div class="mobile-row">
+              <span class="dim">{{ 'services-health.status' | translate }}:</span>
+              {{ entry.status }}
+            </div>
+            @if (entry.version) {
+              <div class="mobile-row">
+                <span class="dim">{{ 'services-health.version' | translate }}:</span>
+                <code>{{ entry.version }}</code>
+              </div>
+            }
+            <div class="mobile-row">
+              <span class="dim">{{ 'services-health.endpoint' | translate }}:</span>
+              <code class="dim">{{ shortUrl(entry.url) }}</code>
+            </div>
+            @if (entry.error) {
+              <div class="error-detail">{{ entry.error }}</div>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>
