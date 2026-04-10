@@ -359,7 +359,7 @@ type TestResult struct {
 // ProxyTestConfig configures proxy testing
 type ProxyTestConfig struct {
 	Servers []cipher.PubKey `json:"servers"`  // Proxy servers to test
-	TestURL string          `json:"test_url"` // URL to fetch through proxy (default: https://ip.skycoin.com)
+	TestURL string          `json:"test_url"` // URL to fetch through proxy (default from deployment.Prod.GeoIP)
 	Timeout time.Duration   `json:"timeout"`  // Timeout per test (default: 30s)
 }
 
