@@ -74,6 +74,7 @@ type Services struct {
 	ServiceDiscovery   string          `json:"service_discovery,omitempty"`
 	StunServers        []string        `json:"stun_servers,omitempty"`
 	DNSServer          string          `json:"dns_server,omitempty"`
+	GeoIP              string          `json:"geoip,omitempty"` // HTTP only (dmsg doesn't preserve client IP)
 	SurveyWhitelist    []cipher.PubKey `json:"survey_whitelist,omitempty"`
 	// DMSG endpoints (dmsg:// URLs for the same services)
 	ConfDmsg               string                       `json:"conf_dmsg,omitempty"`

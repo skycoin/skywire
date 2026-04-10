@@ -86,8 +86,24 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 			continue
 		}
 
+		// Acquire semaphore before spawning. Non-blocking — if the sem is
+		// full we drop this request IMMEDIATELY rather than waiting, so
+		// the accept loop keeps draining the listener's accept buffer
+		// (AcceptBufferSize=20). If we block here, the buffer fills and
+		// dmsg drops streams with "listener accept chan maxed", which is
+		// worse than dropping with a clear reason.
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			conn.Close() //nolint:errcheck,gosec
+			return nil
+		default:
+			ers.log.Warn("Route setup request dropped: concurrency limit reached")
+			conn.Close() //nolint:errcheck,gosec
+			continue
+		}
+
 		go func() {
-			sem <- struct{}{}
 			defer func() { <-sem }()
 			rpcS.ServeConn(conn)
 		}()

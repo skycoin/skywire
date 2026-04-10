@@ -70,7 +70,7 @@ type Config struct {
 	// SurveyDir is the directory containing visor surveys (node-info.json files)
 	// Used for IP-based grouping without exposing actual IP addresses
 	SurveyDir string
-	// GeoIPURL is the URL of the geoip service (default: http://ip.skycoin.com)
+	// GeoIPURL is the URL of the geoip service (default from deployment.Prod.GeoIP)
 	GeoIPURL string
 }
 
@@ -142,7 +142,7 @@ func DefaultConfig() Config {
 		DMSGURL:      deployment.Prod.DmsgDiscovery,
 		NoCache:      false,
 		AutoRefresh:  true,
-		GeoIPURL:     "http://ip.skycoin.com",
+		GeoIPURL:     deployment.Prod.GeoIP,
 	}
 }
 
