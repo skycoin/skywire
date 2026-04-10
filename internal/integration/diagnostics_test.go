@@ -20,6 +20,10 @@ const (
 	// setupNodePK is the route setup-node's DMSG public key in the test deployment.
 	// This is the same PK listed in route_setup_nodes in services-config.json.
 	setupNodePK = "02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
+	// transportSetupPK is the transport setup-node's DMSG public key in the test
+	// deployment. This is the same PK listed in transport_setup in
+	// services-config.json and in each visor's transport_setup config.
+	transportSetupPK = "0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
 	// DMSG PKs for services reachable on port 80 over DMSG.
 	tpdDmsgPK = "02a5993cb6792eb18908cb7c6c9c742ef5fbe3dcfcce2862bbc4615a5f35cbed46"
 	arDmsgPK  = "02252c40a1ac021dcf6d93f1aae38023e8fd20bb0d35b7d07cba9435a7cb7ef34f"
@@ -81,7 +85,7 @@ func (env *TestEnv) DiagnoseNetwork(ctx DiagContext) (healthy bool) {
 		}
 	}
 
-	// 3. Visor transports (local vs TPD).
+	// 3. Visor transports (local vs TPD vs TPS remote view).
 	for _, v := range visors {
 		env.checkVisorTransports(v)
 	}
@@ -105,12 +109,15 @@ func (env *TestEnv) DiagnoseNetwork(ctx DiagContext) (healthy bool) {
 	// 7. Route setup-node status.
 	rsnHealthy := env.checkRouteSetupNode()
 
-	// 8. Route finder (if src/dst provided).
+	// 8. Transport setup-node status.
+	tpsHealthy := env.checkTransportSetupNode()
+
+	// 9. Route finder (if src/dst provided).
 	if ctx.Src != "" && ctx.Dst != "" {
 		env.DumpRouteFinderState(ctx.Src, ctx.Dst)
 	}
 
-	healthy = containersHealthy && dmsgEntriesOK && visorDmsgHealthy && servicesDmsgHealthy && rsnHealthy
+	healthy = containersHealthy && dmsgEntriesOK && visorDmsgHealthy && servicesDmsgHealthy && rsnHealthy && tpsHealthy
 	if healthy {
 		env.logger.Infof("[%s] diagnosis: network appears healthy", label)
 	} else {
@@ -214,7 +221,13 @@ func (env *TestEnv) checkVisorDmsgEntry(visor string) bool {
 }
 
 // checkVisorTransports lists the visor's local transports and cross-references
-// them with the transport discovery view.
+// them with the transport discovery view and the TPS remote-query view.
+// Three-way cross-check:
+//   - local: what the visor itself reports via its own RPC
+//   - tpd:   what transport-discovery has registered for this PK
+//   - tps:   what transport-setup-node sees when asked to list transports
+//     on this visor via DMSG RPC (this is how an external observer
+//     sees the visor's state and bypasses the local RPC path)
 func (env *TestEnv) checkVisorTransports(visor string) {
 	tps, err := env.VisorTpLs(visor)
 	if err != nil {
@@ -235,24 +248,79 @@ func (env *TestEnv) checkVisorTransports(visor string) {
 	tpdEntries, err := env.QueryTPDByPK(pk)
 	if err != nil {
 		env.logger.Warnf("VISOR TRANSPORTS [%s]: TPD query failed: %v", visor, err)
-		return
-	}
-	env.logger.Infof("VISOR TRANSPORTS [%s]: %d TPD entries", visor, len(tpdEntries))
-	tpdIDs := make(map[string]bool)
-	for _, e := range tpdEntries {
-		tpdIDs[e.ID] = true
-		env.logger.Infof("   tpd:   id=%s type=%s edges=%s,%s", truncateID(e.ID), e.Type, truncatePK(e.Edge1), truncatePK(e.Edge2))
-	}
+	} else {
+		env.logger.Infof("VISOR TRANSPORTS [%s]: %d TPD entries", visor, len(tpdEntries))
+		tpdIDs := make(map[string]bool)
+		for _, e := range tpdEntries {
+			tpdIDs[e.ID] = true
+			env.logger.Infof("   tpd:   id=%s type=%s edges=%s,%s", truncateID(e.ID), e.Type, truncatePK(e.Edge1), truncatePK(e.Edge2))
+		}
 
-	// Diff the two views.
-	for id := range localIDs {
-		if !tpdIDs[id] {
-			env.logger.Warnf("VISOR TRANSPORTS [%s]: local TP %s NOT registered in TPD", visor, truncateID(id))
+		// Diff local vs TPD.
+		for id := range localIDs {
+			if !tpdIDs[id] {
+				env.logger.Warnf("VISOR TRANSPORTS [%s]: local TP %s NOT registered in TPD", visor, truncateID(id))
+			}
+		}
+		for id := range tpdIDs {
+			if !localIDs[id] {
+				env.logger.Warnf("VISOR TRANSPORTS [%s]: TPD entry %s NOT present locally (stale?)", visor, truncateID(id))
+			}
 		}
 	}
-	for id := range tpdIDs {
+
+	// TPS remote-query view: ask the transport setup-node via DMSG RPC
+	// to list this visor's transports. This is independent of the visor's
+	// local RPC and the TPD's cached state — it's what an external
+	// observer sees when reaching the visor over DMSG.
+	env.checkVisorTransportsViaTPS(visor, pk, localIDs)
+}
+
+// checkVisorTransportsViaTPS queries the transport setup-node for a visor's
+// transports. Uses skywire cli tp --remote <pk> which goes through the TPS
+// RPC over DMSG.
+func (env *TestEnv) checkVisorTransportsViaTPS(visor, pk string, localIDs map[string]bool) {
+	cmd := fmt.Sprintf("/release/skywire cli tp --remote %s --json", pk)
+	type remoteTP struct {
+		ID     string `json:"id"`
+		Type   string `json:"type"`
+		Remote string `json:"remote_pk"`
+	}
+	// The output structure for --remote is keyed by PK.
+	cliOut := struct {
+		Output map[string][]remoteTP `json:"output,omitempty"`
+		Err    *string               `json:"error,omitempty"`
+	}{}
+	if err := env.ExecJSON(cmd, &cliOut); err != nil {
+		env.logger.Warnf("VISOR TRANSPORTS [%s]: TPS remote query failed: %v", visor, err)
+		return
+	}
+	if cliOut.Err != nil {
+		env.logger.Warnf("VISOR TRANSPORTS [%s]: TPS remote query error: %s", visor, *cliOut.Err)
+		return
+	}
+	remoteTPs, ok := cliOut.Output[pk]
+	if !ok {
+		for _, v := range cliOut.Output {
+			remoteTPs = v
+			break
+		}
+	}
+	env.logger.Infof("VISOR TRANSPORTS [%s]: %d transports via TPS remote query", visor, len(remoteTPs))
+	tpsIDs := make(map[string]bool)
+	for _, tp := range remoteTPs {
+		tpsIDs[tp.ID] = true
+		env.logger.Infof("   tps:   id=%s type=%s remote=%s", truncateID(tp.ID), tp.Type, truncatePK(tp.Remote))
+	}
+	// Diff local vs TPS remote view.
+	for id := range localIDs {
+		if !tpsIDs[id] {
+			env.logger.Warnf("VISOR TRANSPORTS [%s]: local TP %s NOT visible via TPS (visor unreachable from TPS?)", visor, truncateID(id))
+		}
+	}
+	for id := range tpsIDs {
 		if !localIDs[id] {
-			env.logger.Warnf("VISOR TRANSPORTS [%s]: TPD entry %s NOT present locally (stale?)", visor, truncateID(id))
+			env.logger.Warnf("VISOR TRANSPORTS [%s]: TPS view has extra TP %s (stale local?)", visor, truncateID(id))
 		}
 	}
 }
@@ -326,7 +394,19 @@ func (env *TestEnv) checkServicesDmsgHealth() bool {
 // checkRouteSetupNode verifies the route setup-node is registered in DMSG
 // discovery and its /health endpoint is reachable.
 func (env *TestEnv) checkRouteSetupNode() bool {
-	cmd := fmt.Sprintf("/release/skywire cli mdisc entry %s --url http://dmsg-discovery:9090 --json", setupNodePK)
+	return env.checkDmsgServiceNode("RSN", setupNodePK)
+}
+
+// checkTransportSetupNode verifies the transport setup-node is registered in
+// DMSG discovery and its /health endpoint is reachable.
+func (env *TestEnv) checkTransportSetupNode() bool {
+	return env.checkDmsgServiceNode("TPS", transportSetupPK)
+}
+
+// checkDmsgServiceNode is the shared implementation for RSN/TPS discovery +
+// health checks. Logs its results with the given label prefix.
+func (env *TestEnv) checkDmsgServiceNode(label, pk string) bool {
+	cmd := fmt.Sprintf("/release/skywire cli mdisc entry %s --url http://dmsg-discovery:9090 --json", pk)
 
 	type dmsgClient struct {
 		DelegatedServers []string `json:"delegated_servers"`
@@ -342,25 +422,25 @@ func (env *TestEnv) checkRouteSetupNode() bool {
 	}{}
 
 	if err := env.ExecJSON(cmd, &cliOut); err != nil {
-		env.logger.Warnf("RSN DMSG ENTRY: query failed: %v", err)
+		env.logger.Warnf("%s DMSG ENTRY: query failed: %v", label, err)
 		return false
 	}
 	if cliOut.Err != nil || cliOut.Output == nil || cliOut.Output.Client == nil {
-		env.logger.Warn("RSN DMSG ENTRY: no client entry in discovery")
+		env.logger.Warnf("%s DMSG ENTRY: no client entry in discovery", label)
 		return false
 	}
 	delegated := cliOut.Output.Client.DelegatedServers
 	age := time.Since(time.Unix(cliOut.Output.Timestamp, 0)).Round(time.Second)
-	env.logger.Infof("RSN DMSG ENTRY: %d delegated servers, entry age %v", len(delegated), age)
+	env.logger.Infof("%s DMSG ENTRY: %d delegated servers, entry age %v", label, len(delegated), age)
 
 	// Health check via dmsg curl on port 80.
-	dmsgURL := fmt.Sprintf("dmsg://%s:80/health", setupNodePK)
+	dmsgURL := fmt.Sprintf("dmsg://%s:80/health", pk)
 	healthCmd := fmt.Sprintf("/release/skywire dmsg curl -Z -l fatal %s", dmsgURL)
 	out, err := env.Exec(healthCmd)
 	if err != nil || !strings.Contains(out, "build_info") {
-		env.logger.Warnf("RSN HEALTH: unreachable: err=%v out=%.120s", err, out)
+		env.logger.Warnf("%s HEALTH: unreachable: err=%v out=%.120s", label, err, out)
 		return false
 	}
-	env.logger.Infof("RSN HEALTH: OK")
+	env.logger.Infof("%s HEALTH: OK", label)
 	return true
 }
