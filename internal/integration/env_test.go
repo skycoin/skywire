@@ -503,7 +503,15 @@ func (env *TestEnv) VisorTpLs(visor string) ([]*skyvisor.TransportSummary, error
 }
 
 func (env *TestEnv) VisorTpID(visor string, tpID uuid.UUID) (*skyvisor.TransportSummary, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp id %v --json", visor, tpID)
+	// Use the --id / -i flag, not a positional. The old `tp id <uuid>`
+	// positional syntax silently fell through to the parent tp command
+	// and returned the entire transport list (tests passed by checking
+	// only that the first entry's remote matched the expected PK).
+	// Now that `tp id` is a proper subcommand that computes deterministic
+	// transport IDs from a key pair, the old positional form is invalid
+	// ("unknown flag: --rpc"). Use the supported flag form to look up a
+	// transport by ID.
+	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp -i %v --json", visor, tpID)
 	output, err := env.visorTpExec(cmd)
 	if err != nil {
 		return nil, err
@@ -1430,7 +1438,11 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 	// route setup-node unreachable, container crashed, etc.) as readable logs
 	// in the test output, so CI failures are actionable without having to
 	// re-run and hope.
-	maxRetries := 6
+	//
+	// 3 attempts is enough — diagnostic passes are expensive (~dozen DMSG
+	// queries each). 6 retries × 4min diag = 24min per failure which
+	// exceeded the 45min test timeout. Cap at 3.
+	maxRetries := 3
 	for i := 0; i < maxRetries; i++ {
 		req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(data))
 		if err != nil {
