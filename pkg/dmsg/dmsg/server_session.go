@@ -309,6 +309,23 @@ func (c *idleTimeoutConn) Close() error {
 	return c.rwc.Close()
 }
 
+// SetReadDeadline forwards to the underlying connection if supported.
+// Used by CopyReadWriteCloser to force-interrupt blocked Reads.
+func (c *idleTimeoutConn) SetReadDeadline(t time.Time) error {
+	if conn, ok := c.rwc.(interface{ SetReadDeadline(time.Time) error }); ok {
+		return conn.SetReadDeadline(t)
+	}
+	return nil
+}
+
+// SetWriteDeadline forwards to the underlying connection if supported.
+func (c *idleTimeoutConn) SetWriteDeadline(t time.Time) error {
+	if conn, ok := c.rwc.(interface{ SetWriteDeadline(time.Time) error }); ok {
+		return conn.SetWriteDeadline(t)
+	}
+	return nil
+}
+
 // forwardViaPeer tries to forward a stream request through peer server sessions.
 // This is only called for client-originated requests (not peer-originated, enforcing 1-hop max).
 func (ss *ServerSession) forwardViaPeer(log logrus.FieldLogger, yStr io.ReadWriteCloser, req StreamRequest) error {
