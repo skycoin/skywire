@@ -270,9 +270,16 @@ type Summary struct {
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 }
 
-// HealthInfo carries information about visor's services health represented as boolean value (i32 value)
+// HealthInfo carries information about visor's services health.
+// ServicesHealth is the aggregate status — "connecting" if any subsystem is
+// unhealthy, "healthy" only when all are healthy. The per-subsystem fields
+// let the UI show which specific subsystem is the blocker rather than
+// a generic label.
 type HealthInfo struct {
-	ServicesHealth string `json:"services_health"`
+	ServicesHealth         string `json:"services_health"`
+	UptimeTrackerHealth    string `json:"uptime_tracker_health,omitempty"`
+	AutoconnectHealth      string `json:"autoconnect_health,omitempty"`
+	TransportabilityHealth string `json:"transportability_health,omitempty"`
 }
 
 // RuntimeStatsInfo carries Go runtime statistics for the visor process.

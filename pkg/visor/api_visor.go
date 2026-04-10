@@ -199,7 +199,19 @@ func (v *Visor) Health() (*HealthInfo, error) {
 	if v.isServicesHealthy == nil {
 		return &HealthInfo{}, nil
 	}
-	return &HealthInfo{ServicesHealth: v.isServicesHealthy.value()}, nil
+	hi := &HealthInfo{
+		ServicesHealth: v.isServicesHealthy.value(),
+	}
+	if v.isUptimeTrackerHealthy != nil {
+		hi.UptimeTrackerHealth = v.isUptimeTrackerHealthy.value()
+	}
+	if v.isAutoconnectHealthy != nil {
+		hi.AutoconnectHealth = v.isAutoconnectHealthy.value()
+	}
+	if v.isTransportabilityHealthy != nil {
+		hi.TransportabilityHealth = v.isTransportabilityHealthy.value()
+	}
+	return hi, nil
 }
 
 // EnableHypervisor implements API.
