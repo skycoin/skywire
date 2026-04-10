@@ -110,9 +110,17 @@ type Visor struct {
 	// produced by concurrent parts of modules
 	runtimeErrors chan error
 
-	isServicesHealthy    *internalHealthInfo
-	remoteVisors         map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
-	connectedHypervisors map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
+	// Aggregate health flag — set by ALL subsystems; any one unhealthy
+	// flips it to connecting. Kept for backward compatibility with the
+	// /visors/{pk}/health API response.
+	isServicesHealthy *internalHealthInfo
+	// Per-subsystem health flags so the UI can show which subsystem is
+	// actually unhealthy instead of one generic "services" label.
+	isUptimeTrackerHealthy    *internalHealthInfo
+	isAutoconnectHealthy      *internalHealthInfo
+	isTransportabilityHealthy *internalHealthInfo
+	remoteVisors              map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
+	connectedHypervisors      map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
 
 	// Allowed ports for app connections
 	allowed allowedPortsState
@@ -361,12 +369,15 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	}
 
 	v := &Visor{
-		log:                  conf.MasterLogger().PackageLogger("visor"),
-		conf:                 conf,
-		initLock:             new(sync.RWMutex),
-		closeMu:              new(sync.RWMutex),
-		isServicesHealthy:    newInternalHealthInfo(),
-		connectedHypervisors: make(map[cipher.PubKey]bool),
+		log:                       conf.MasterLogger().PackageLogger("visor"),
+		conf:                      conf,
+		initLock:                  new(sync.RWMutex),
+		closeMu:                   new(sync.RWMutex),
+		isServicesHealthy:         newInternalHealthInfo(),
+		isUptimeTrackerHealthy:    newInternalHealthInfo(),
+		isAutoconnectHealthy:      newInternalHealthInfo(),
+		isTransportabilityHealthy: newInternalHealthInfo(),
+		connectedHypervisors:      make(map[cipher.PubKey]bool),
 		allowed: allowedPortsState{
 			ports: make(map[int]bool),
 			mu:    new(sync.RWMutex),
@@ -393,6 +404,9 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		},
 	}
 	v.isServicesHealthy.init()
+	v.isUptimeTrackerHealthy.init()
+	v.isAutoconnectHealthy.init()
+	v.isTransportabilityHealthy.init()
 
 	logLevel := conf.LogLevel
 	if logLevel == "" {

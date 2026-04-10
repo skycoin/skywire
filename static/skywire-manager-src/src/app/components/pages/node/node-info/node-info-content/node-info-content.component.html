@@ -183,21 +183,48 @@
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.node-health.title' | translate }} </span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-health.uptime-tracker' | translate }}</span>
+      <span class="title">{{ 'node.details.node-health.services' | translate }}</span>
       <i [class]="nodeHealthClass"></i>
       {{ nodeHealthText | translate }}
     </span>
+    @if (node.health?.uptimeTrackerHealth) {
+      <span class="info-line sub-health">
+        <span class="title">{{ 'node.details.node-health.uptime-tracker' | translate }}</span>
+        <i [class]="subHealthClass(node.health?.uptimeTrackerHealth)"></i>
+        {{ subHealthText(node.health?.uptimeTrackerHealth) | translate }}
+      </span>
+    }
+    @if (node.health?.autoconnectHealth) {
+      <span class="info-line sub-health">
+        <span class="title">{{ 'node.details.node-health.autoconnect' | translate }}</span>
+        <i [class]="subHealthClass(node.health?.autoconnectHealth)"></i>
+        {{ subHealthText(node.health?.autoconnectHealth) | translate }}
+      </span>
+    }
+    @if (node.health?.transportabilityHealth) {
+      <span class="info-line sub-health">
+        <span class="title">{{ 'node.details.node-health.transportability' | translate }}</span>
+        <i [class]="subHealthClass(node.health?.transportabilityHealth)"></i>
+        {{ subHealthText(node.health?.transportabilityHealth) | translate }}
+      </span>
+    }
   </div>
-  <!-- Ports section. -->
+  <!-- Ports section (collapsible). -->
   @if (ports.length > 0) {
     <div class="separator"></div>
     <div class="d-flex flex-column">
-      <span class="section-title">{{ 'node.details.ports.title' | translate }}</span>
-      @for (port of ports; track port.name) {
-        <span class="info-line">
-          <span class="title">{{ port.name }}: </span>
-          {{ port.value }}
-        </span>
+      <span class="section-title collapsible-header" (click)="showPorts = !showPorts" style="cursor: pointer;">
+        <mat-icon [inline]="true">{{ showPorts ? 'expand_more' : 'chevron_right' }}</mat-icon>
+        {{ 'node.details.ports.title' | translate }}
+        <span class="count-badge">({{ ports.length }})</span>
+      </span>
+      @if (showPorts) {
+        @for (port of ports; track port.name) {
+          <span class="info-line">
+            <span class="title">{{ port.name }}: </span>
+            {{ port.value }}
+          </span>
+        }
       }
     </div>
   }
