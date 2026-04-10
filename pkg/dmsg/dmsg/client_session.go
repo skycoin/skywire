@@ -28,6 +28,31 @@ func makeClientSession(entity *EntityCommon, porter *netutil.Porter, conn net.Co
 	return cSes, nil
 }
 
+// Close closes the client session and reaps any porter entries for streams
+// belonging to this session. Without this reaping, ephemeral ports stay
+// reserved after the session dies because nothing calls Stream.Close() on
+// the orphaned streams — eventually exhausting the porter's 16k port range.
+// Streams are matched by their underlying SessionCommon pointer because
+// multiple ClientSession value copies can wrap the same SessionCommon.
+func (cs *ClientSession) Close() error {
+	if cs != nil && cs.porter != nil && cs.SessionCommon != nil {
+		var toFree []*Stream
+		cs.porter.RangePortValues(func(_ uint16, v interface{}) bool {
+			if s, ok := v.(*Stream); ok && s != nil && s.ses != nil &&
+				s.ses.SessionCommon == cs.SessionCommon {
+				toFree = append(toFree, s)
+			}
+			return true
+		})
+		for _, s := range toFree {
+			if s.close != nil {
+				s.close()
+			}
+		}
+	}
+	return cs.SessionCommon.Close()
+}
+
 // DialStream attempts to dial a stream to a remote client via the dmsg server that this session is connected to.
 // The context is used to cancel the dial if the caller's deadline expires — this prevents ephemeral port
 // leaks when many dials are attempted and the caller gives up before the handshake completes.
@@ -45,6 +70,7 @@ func (cs *ClientSession) DialStream(ctx context.Context, dst Addr) (dStr *Stream
 		if err != nil {
 			log.WithError(err).
 				WithField("close_error", dStr.Close()).
+				WithField("ports_reserved", cs.porter.Count()).
 				Debug("Stream closed on failure.")
 		}
 	}()
