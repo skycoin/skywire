@@ -2,6 +2,7 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -17,7 +18,11 @@ func newTestStore(t *testing.T, limits Limits) *BoltStore {
 	if err != nil {
 		t.Fatalf("NewBoltStore: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Logf("store close: %v", err)
+		}
+	})
 	return s
 }
 
@@ -215,9 +220,12 @@ func TestBoltStore_TTLSweep(t *testing.T) {
 	}
 
 	// Manually trigger sweep instead of waiting for background ticker.
-	s.sweep(nil)
+	s.sweep(context.TODO())
 
-	msgs, _ := s.ListByPeer("p", 0)
+	msgs, err := s.ListByPeer("p", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(msgs) != 1 {
 		t.Fatalf("want 1 message after sweep, got %d", len(msgs))
 	}
