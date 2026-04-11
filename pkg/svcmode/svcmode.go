@@ -1,8 +1,17 @@
 // Package svcmode provides a shared helper for skywire deployment
 // services (transport-discovery, address-resolver, route-finder,
-// service-discovery, uptime-tracker, config-bootstrapper, dmsg-discovery)
-// that need to listen on HTTP, dmsghttp, or both simultaneously. It
-// centralizes:
+// service-discovery, uptime-tracker, config-bootstrapper) that need
+// to listen on HTTP, dmsghttp, or both simultaneously. It centralizes:
+//
+// Note on dmsg-discovery specifically: dmsg-discovery's HTTP listener
+// is load-bearing — dmsg-servers themselves use disc.NewHTTP(...)
+// (plain HTTP client) to register with it (see cmd/dmsg-commands/
+// dmsg-server/commands/start/root.go). If dmsg-discovery were to run
+// in ModeDmsg only, dmsg-servers would have no way to register
+// because they ARE the dmsg transport layer. dmsg-discovery must run
+// in ModeHTTP or ModeDual; ModeDmsg is not meaningful for it. This
+// package does not enforce that constraint — dmsg-discovery's
+// command wrapper is responsible for rejecting ModeDmsg explicitly.
 //
 //   - Mode selection (http | dmsg | dual) via the --mode flag, with a
 //     sensible default derived from whether a DMSG secret key was
