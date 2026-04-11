@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -123,6 +124,8 @@ func init() {
 	utCmd.Flags().StringVar(&minVersion, "min-version", "", "filter visors with version >= specified (e.g. v1.3.34)")
 	utCmd.Flags().BoolVarP(&listVersions, "list-versions", "l", false, "list PKs with their versions")
 	utCmd.Flags().IntVar(&maxTP, "max-tp", -1, "filter visors with at most N transports (fetches TPD data)")
+	utCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	clirpc.RegisterFetchFlags(utCmd)
 }
 
 var utCmd = &cobra.Command{
@@ -150,12 +153,12 @@ var utCmd = &cobra.Command{
 		utFullURL := utURL + "/uptimes?v=v2"
 		tpdFullURL := tpdURL + "/all-transports"
 
-		uts := internal.GetData(cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
+		uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
 
 		// Build transport count map if --max-tp is specified
 		var tpCount map[string]int
 		if maxTP >= 0 {
-			tpd := internal.GetData(cacheFile(cacheDirTPD, tpdFullURL), tpdFullURL, cacheFilesAge)
+			tpd := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirTPD, tpdFullURL), tpdFullURL, cacheFilesAge)
 			var entries []*transport.Entry
 			if err := json.Unmarshal([]byte(tpd), &entries); err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse TPD data: %w", err))

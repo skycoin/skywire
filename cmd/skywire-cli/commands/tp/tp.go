@@ -275,10 +275,10 @@ var tpCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), err)
 
 		if showMore {
-			utData = internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
-			proxyData = internal.GetData(cacheFileSDProxy, sdURL+"/api/services?type="+servicedisc.ServiceTypeProxy, cacheFilesAge)
-			vpnData = internal.GetData(cacheFileSDVPN, sdURL+"/api/services?type="+servicedisc.ServiceTypeVPN, cacheFilesAge)
-			visorData = internal.GetData(cacheFileSDVisor, sdURL+"/api/services?type="+servicedisc.ServiceTypeVisor, cacheFilesAge)
+			utData = clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+			proxyData = clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileSDProxy, sdURL+"/api/services?type="+servicedisc.ServiceTypeProxy, cacheFilesAge)
+			vpnData = clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileSDVPN, sdURL+"/api/services?type="+servicedisc.ServiceTypeVPN, cacheFilesAge)
+			visorData = clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileSDVisor, sdURL+"/api/services?type="+servicedisc.ServiceTypeVisor, cacheFilesAge)
 		}
 
 		// Get transport logs for bandwidth display

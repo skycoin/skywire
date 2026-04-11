@@ -82,6 +82,7 @@ func init() {
 	addPvCmd.Flags().IntVar(&pvMinTransports, "min", 0, "minimum transport count for target visors")
 	addPvCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	addPvCmd.Flags().StringSliceVar(&pvRemoteVisors, "remote", nil, "request public visor transports on remote visor(s) via TPS (comma-separated PKs)")
+	clirpc.RegisterFetchFlags(addPvCmd)
 	addTpCmd.AddCommand(addPvCmd)
 }
 
@@ -112,7 +113,7 @@ var addPvCmd = &cobra.Command{
 		localPK := overview.PubKey.String()
 
 		// Fetch public visors from service discovery
-		sds := internal.GetData(pvCacheFileSD, pvSDURL+"/api/services?type="+servicedisc.ServiceTypeVisor, pvCacheFilesAge)
+		sds := clirpc.FetchCachedServiceURL(cmd.Flags(), pvCacheFileSD, pvSDURL+"/api/services?type="+servicedisc.ServiceTypeVisor, pvCacheFilesAge)
 
 		var pks []string
 		if pvNoFilterOnline {
@@ -120,7 +121,7 @@ var addPvCmd = &cobra.Command{
 			pks, _ = script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Slice() //nolint:errcheck
 		} else {
 			// Filter by online status
-			uts := internal.GetData(pvCacheFileUT, pvUTURL+"/uptimes?v=v2", pvCacheFilesAge)
+			uts := clirpc.FetchCachedServiceURL(cmd.Flags(), pvCacheFileUT, pvUTURL+"/uptimes?v=v2", pvCacheFilesAge)
 			joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, uts)
 			jqFilter := `
 			[ .ut[] | select(.on) | .pk ] as $online
@@ -136,7 +137,7 @@ var addPvCmd = &cobra.Command{
 		}
 
 		// Fetch transport counts from TPD
-		tpd := internal.GetData(pvCacheFileTPD, pvTPDURL+"/all-transports", pvCacheFilesAge)
+		tpd := clirpc.FetchCachedServiceURL(cmd.Flags(), pvCacheFileTPD, pvTPDURL+"/all-transports", pvCacheFilesAge)
 		var entries []*transport.Entry
 		if err := json.Unmarshal([]byte(tpd), &entries); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse TPD data: %w", err))
@@ -302,7 +303,7 @@ var addPvCmd = &cobra.Command{
 		// Fetch dmsg discovery data if needed
 		var dmsgkeys []string
 		if !pvForceAttempt && (pvTransportType == "" || pvTransportType == "dmsg") {
-			dmsgEntries := internal.GetData(pvCacheFileDmsgD, pvDmsgURL+"/dmsg-discovery/entries", pvCacheFilesAge)
+			dmsgEntries := clirpc.FetchCachedServiceURL(cmd.Flags(), pvCacheFileDmsgD, pvDmsgURL+"/dmsg-discovery/entries", pvCacheFilesAge)
 			dmsgkeys, _ = script.Echo(dmsgEntries).JQ(".[]").Replace(`"`, "").Slice() //nolint:errcheck
 		}
 

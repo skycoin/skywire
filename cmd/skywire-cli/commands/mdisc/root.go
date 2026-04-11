@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/pflag"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -139,7 +140,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		// Build full URL
 		dmsgFullURL := mdURL + "/dmsg-discovery/entries"
 
-		dmsgclientkeys := internal.GetData(cacheFile(cacheDirDMSGD, dmsgFullURL), dmsgFullURL, cacheFilesAge)
+		dmsgclientkeys := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirDMSGD, dmsgFullURL), dmsgFullURL, cacheFilesAge)
 		if isStats {
 			stats, _ := script.Echo(dmsgclientkeys).JQ(".[]").CountLines() //nolint:errcheck
 			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d dmsg clients\n", stats), fmt.Sprintf("%d dmsg clients\n", stats))

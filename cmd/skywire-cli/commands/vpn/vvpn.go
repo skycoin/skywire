@@ -224,6 +224,7 @@ func init() {
 	listCmd.Flags().BoolVar(&showOffline, "offline", false, "show only offline servers (red)")
 	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
 	listCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
+	clirpc.RegisterFetchFlags(listCmd)
 }
 
 var listCmd = &cobra.Command{
@@ -252,7 +253,7 @@ var listCmd = &cobra.Command{
 		utFullURL := utURL + "/uptimes?v=v2"
 
 		// --- Fetch SD ---
-		sds := internal.GetData(cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
+		sds := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint:errcheck,gosec
 			return
@@ -324,7 +325,7 @@ var listCmd = &cobra.Command{
 
 		// --- Show only offline servers ---
 		if showOffline {
-			uts := internal.GetData(cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
+			uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
 
 			// Parse SD and UT data
 			var sdEntries []services.Service
@@ -468,7 +469,7 @@ var listCmd = &cobra.Command{
 		}
 
 		// --- Filtering by online status ---
-		uts := internal.GetData(cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
+		uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
 
 		// Use Go-based filtering when minVersion or maxVersion is specified (jq can't do semver comparison)
 		if minVersion != "" || maxVersion != "" {

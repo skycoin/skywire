@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -42,6 +42,7 @@ func init() {
 	calcCmd.Flags().StringVarP(&tpdURL, "tpd", "a", deployment.Prod.TransportDiscovery, "transport discovery URL")
 	calcCmd.Flags().Uint16VarP(&calcMinHops, "min", "n", 1, "minimum hops")
 	calcCmd.Flags().Uint16VarP(&calcMaxHops, "max", "x", 5, "maximum hops")
+	clirpc.RegisterFetchFlags(calcCmd)
 }
 
 var calcCmd = &cobra.Command{
@@ -126,7 +127,7 @@ var calcCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), calcTimeout)
 		defer cancel()
 
-		entries, err := fetchAllTransports(ctx, tpdURL)
+		entries, err := fetchAllTransports(ctx, cmd.Flags(), tpdURL)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -171,22 +172,16 @@ func reverseHops(fwd []routing.Hop) []routing.Hop {
 	return rev
 }
 
-func fetchAllTransports(ctx context.Context, tpdAddr string) ([]*transport.Entry, error) {
+func fetchAllTransports(_ context.Context, cmdFlags *pflag.FlagSet, tpdAddr string) ([]*transport.Entry, error) {
 	url := strings.TrimSuffix(tpdAddr, "/") + "/all-transports"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// Use visor RPC → DMSG direct → HTTP fallback chain so the CLI picks
+	// up whatever transport the visor is configured to use.
+	body, err := clirpc.FetchServiceURL(cmdFlags, url)
 	if err != nil {
 		return nil, err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close() //nolint:errcheck
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("TPD returned status %d", resp.StatusCode)
 	}
 	var entries []*transport.Entry
-	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+	if err := json.Unmarshal(body, &entries); err != nil {
 		return nil, err
 	}
 	return entries, nil

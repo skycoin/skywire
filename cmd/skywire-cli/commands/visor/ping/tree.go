@@ -311,7 +311,7 @@ var pingTreeCmd = &cobra.Command{
 		localPK := overview.PubKey.String()
 
 		// Fetch TPD data for initial adjacency map
-		tpdRaw := internal.GetData(graphCacheTPD, graphTPDURL+"/all-transports", graphCacheAge)
+		tpdRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), graphCacheTPD, graphTPDURL+"/all-transports", graphCacheAge)
 		var transports []transportEntry
 		if err := json.Unmarshal([]byte(tpdRaw), &transports); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse TPD data: %w", err))
@@ -364,7 +364,7 @@ var pingTreeCmd = &cobra.Command{
 		}
 
 		// Fetch UT data for online/version filtering
-		utRaw := internal.GetData(graphCacheUT, graphUTURL+"/uptimes?v=v2", graphCacheAge)
+		utRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), graphCacheUT, graphUTURL+"/uptimes?v=v2", graphCacheAge)
 		var utEntries []uptimeEntry
 		_ = json.Unmarshal([]byte(utRaw), &utEntries) //nolint:errcheck
 
@@ -421,10 +421,10 @@ var pingTreeCmd = &cobra.Command{
 		// Run tree view mode
 		if graphDmsgOnly {
 			// DMSG tree mode
-			runDmsgTreeViewMode(ctx, grpcClient, rpcClient, localPK, onlineSet, versionFilteredSet, passesFilter)
+			runDmsgTreeViewMode(ctx, cmd.Flags(), grpcClient, rpcClient, localPK, onlineSet, versionFilteredSet, passesFilter)
 		} else {
 			// Route tree mode
-			runTreeViewMode(ctx, grpcClient, rpcClient, localPK, adjacency, localTransports, passesFilter)
+			runTreeViewMode(ctx, cmd.Flags(), grpcClient, rpcClient, localPK, adjacency, localTransports, passesFilter)
 		}
 	},
 }
