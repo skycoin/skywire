@@ -268,6 +268,7 @@ type Summary struct {
 	BuildTag             string                           `json:"build_tag"`
 	ConfigVersion        string                           `json:"config_version"`
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
+	IsPublic             bool                             `json:"is_public"`
 }
 
 // HealthInfo carries information about visor's services health.
