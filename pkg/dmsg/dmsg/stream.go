@@ -332,18 +332,43 @@ func (s *Stream) StreamID() uint32 {
 // It refreshes the idle timeout on each successful read so that active
 // streams are never killed, while stale streams stuck in waitRead with
 // no incoming data will time out and release their ephemeral port.
+//
+// On a terminal read error (EOF, remote close, deadline exceeded), we
+// call s.close (the porter freer) to release the ephemeral port
+// immediately, without waiting for the caller to call Close(). This is
+// necessary because rpc.Client.input() does not call codec.Close() when
+// the remote side closes the stream — it just marks the client as
+// shutdown — so the port would otherwise leak until the owning session
+// dies (which may be hours or days on a long-lived visor). Auto-releasing
+// on read error is safe because a dmsg stream is single-use: once Read
+// fails, the stream is dead and the caller must either close it or
+// discard it. Releasing the port is idempotent (sync.Once in makePortFreer),
+// and we keep the underlying yamux stream intact for the caller's Close()
+// to handle.
 func (s *Stream) Read(b []byte) (int, error) {
 	n, err := s.nsConn.Read(b)
 	if n > 0 {
 		// Reset the read deadline on successful read to keep the stream alive.
 		s.SetReadDeadline(time.Now().Add(StreamIdleTimeout)) //nolint:errcheck,gosec
 	}
+	if err != nil && s != nil && s.close != nil {
+		// Terminal read error — release the porter reservation so we don't
+		// rely on an explicit Close() from the caller's code path.
+		s.close()
+	}
 	return n, err
 }
 
-// Write implements io.Writer
+// Write implements io.Writer.
+// Like Read, a terminal write error means the stream is dead, so we
+// release the porter reservation immediately to prevent a leak when
+// the caller doesn't follow up with Close().
 func (s *Stream) Write(b []byte) (int, error) {
-	return s.nsConn.Write(b)
+	n, err := s.nsConn.Write(b)
+	if err != nil && s != nil && s.close != nil {
+		s.close()
+	}
+	return n, err
 }
 
 // SetDeadline implements net.Conn
