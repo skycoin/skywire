@@ -182,11 +182,16 @@ func (ce *Client) racePhaseDial(ctx context.Context, addr Addr, sessions []Clien
 		return nil, false
 	}
 
-	// Single candidate: no point in the goroutine machinery.
+	// Single candidate: no point in the goroutine machinery. Pass
+	// the parent ctx directly — no derived timeout is needed because
+	// session DialStream already bounds the handshake via its
+	// internal HandshakeTimeout deadline, and deriving a short
+	// WithTimeout + defer cancel here would immediately cancel the
+	// ctx after DialStream returns, which previously raced the
+	// session's ctx-cancel watcher goroutine (manifested as
+	// "stream closed" errors in TestConcurrentStreams).
 	if len(candidates) == 1 {
-		dialCtx, cancel := context.WithTimeout(ctx, phaseDialTimeout)
-		defer cancel()
-		stream, err := candidates[0].DialStream(dialCtx, addr)
+		stream, err := candidates[0].DialStream(ctx, addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", candidates[0].RemotePK()).
 				Debug("DialStream failed (single candidate)")
