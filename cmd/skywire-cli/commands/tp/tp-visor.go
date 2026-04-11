@@ -12,6 +12,7 @@ import (
 	"github.com/tidwall/pretty"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
@@ -48,6 +49,7 @@ func init() {
 	visorListCmd.Flags().StringVarP(&vVersion, "version", "e", "", "filter by version")
 	visorListCmd.Flags().BoolVarP(&vIsStats, "stats", "s", false, "return only a count of the results")
 	visorListCmd.Flags().BoolVar(&vJSONOutput, internal.JSONString, false, "print output in json")
+	clirpc.RegisterFetchFlags(visorListCmd)
 }
 
 var visorListCmd = &cobra.Command{
@@ -62,7 +64,7 @@ Set cache file location to "" to avoid using cache files`,
 		deployment.Prod.ServiceDiscovery, visorServiceType),
 	Run: func(cmd *cobra.Command, _ []string) {
 		// --- Fetch SD ---
-		sds := internal.GetData(vCacheFileSD, vSDURL+"/api/services?type="+visorServiceType, vCacheFilesAge)
+		sds := clirpc.FetchCachedServiceURL(cmd.Flags(), vCacheFileSD, vSDURL+"/api/services?type="+visorServiceType, vCacheFilesAge)
 		if vRawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint:errcheck,gosec
 			return
@@ -114,7 +116,7 @@ Set cache file location to "" to avoid using cache files`,
 		}
 
 		// --- Filtering by online status via jq join ---
-		uts := internal.GetData(vCacheFileUT, vUTURL+"/uptimes?v=v2", vCacheFilesAge)
+		uts := clirpc.FetchCachedServiceURL(cmd.Flags(), vCacheFileUT, vUTURL+"/uptimes?v=v2", vCacheFilesAge)
 		joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, uts)
 
 		// Build jq filter with optional country and version conditions

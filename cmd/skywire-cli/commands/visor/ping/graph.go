@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -186,7 +187,7 @@ var pingGraphCmd = &cobra.Command{
 
 		// Fetch and parse TPD data
 		fmt.Printf("Fetching transport discovery data...\n")
-		tpdRaw := internal.GetData(graphCacheTPD, graphTPDURL+"/all-transports", graphCacheAge)
+		tpdRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), graphCacheTPD, graphTPDURL+"/all-transports", graphCacheAge)
 		var transports []transportEntry
 		if err := json.Unmarshal([]byte(tpdRaw), &transports); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse TPD data: %w", err))
@@ -271,7 +272,7 @@ var pingGraphCmd = &cobra.Command{
 		versionFilteredSet := make(map[string]bool)
 		if filterByVersion || graphOnlineOnly {
 			fmt.Printf("Fetching uptime tracker data...\n")
-			utRaw := internal.GetData(graphCacheUT, graphUTURL+"/uptimes?v=v2", graphCacheAge)
+			utRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), graphCacheUT, graphUTURL+"/uptimes?v=v2", graphCacheAge)
 			var uptimes []uptimeEntry
 			if err := json.Unmarshal([]byte(utRaw), &uptimes); err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse UT data: %w", err))
@@ -419,7 +420,7 @@ var pingGraphCmd = &cobra.Command{
 		if graphTreeView {
 			if graphDmsgOnly {
 				// DMSG tree mode: ping via DMSG servers
-				runDmsgTreeViewMode(ctx, grpcClient, rpcClient, localPK, onlineSet, versionFilteredSet, passesFilter)
+				runDmsgTreeViewMode(ctx, cmd.Flags(), grpcClient, rpcClient, localPK, onlineSet, versionFilteredSet, passesFilter)
 				return
 			}
 			// Route tree mode: ping via transports
@@ -430,7 +431,7 @@ var pingGraphCmd = &cobra.Command{
 					treeAdjacency[pk] = append(treeAdjacency[pk], treeNeighbor(n)) //nolint:staticcheck
 				}
 			}
-			runTreeViewMode(ctx, grpcClient, rpcClient, localPK, treeAdjacency, localTransports, passesFilter)
+			runTreeViewMode(ctx, cmd.Flags(), grpcClient, rpcClient, localPK, treeAdjacency, localTransports, passesFilter)
 			return
 		}
 
@@ -930,6 +931,7 @@ type routeSavedEntry struct {
 // runTreeViewMode executes the ping graph in tree view mode
 func runTreeViewMode(
 	ctx context.Context,
+	cmdFlags *pflag.FlagSet,
 	grpcClient *rpcgrpc.PingClient,
 	rpcClient visor.API,
 	localPK string,
@@ -948,7 +950,7 @@ func runTreeViewMode(
 	// Helper to refresh TPD data and update valid transport IDs
 	refreshTPDCache := func() {
 		fmt.Printf("Refreshing TPD cache...\n")
-		tpdRaw := internal.GetData(graphCacheTPD, graphTPDURL+"/all-transports", graphCacheAge)
+		tpdRaw := clirpc.FetchCachedServiceURL(cmdFlags, graphCacheTPD, graphTPDURL+"/all-transports", graphCacheAge)
 		var transports []transportEntry
 		if err := json.Unmarshal([]byte(tpdRaw), &transports); err != nil {
 			fmt.Printf("Warning: failed to parse TPD data: %v\n", err)
@@ -996,7 +998,7 @@ func runTreeViewMode(
 		}
 		dmsgURL := graphDMSGURL + "/dmsg-discovery/servers/clients"
 		fmt.Fprintf(os.Stderr, "Fetching DMSG clients from: %s\n", dmsgURL)
-		dmsgClientsRaw := internal.GetData(graphCacheDMSG, dmsgURL, graphCacheAge)
+		dmsgClientsRaw := clirpc.FetchCachedServiceURL(cmdFlags, graphCacheDMSG, dmsgURL, graphCacheAge)
 		var clientsByServer map[string][]string
 		if err := json.Unmarshal([]byte(dmsgClientsRaw), &clientsByServer); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to parse DMSG clients data: %v\n", err)
@@ -3767,6 +3769,7 @@ type dmsgSavedEntry struct {
 // runDmsgTreeViewMode executes the ping graph in DMSG tree view mode
 func runDmsgTreeViewMode(
 	ctx context.Context,
+	cmdFlags *pflag.FlagSet,
 	grpcClient *rpcgrpc.PingClient,
 	rpcClient visor.API,
 	localPK string,
@@ -3802,7 +3805,7 @@ func runDmsgTreeViewMode(
 
 	// Fetch DMSG clients by server from dmsg-discovery
 	fmt.Printf("Fetching DMSG clients from discovery...\n")
-	dmsgClientsRaw := internal.GetData(graphCacheDMSG, graphDMSGURL+"/dmsg-discovery/servers/clients", graphCacheAge)
+	dmsgClientsRaw := clirpc.FetchCachedServiceURL(cmdFlags, graphCacheDMSG, graphDMSGURL+"/dmsg-discovery/servers/clients", graphCacheAge)
 	var clientsByServer map[string][]string
 	if err := json.Unmarshal([]byte(dmsgClientsRaw), &clientsByServer); err != nil {
 		fmt.Printf("Warning: failed to parse DMSG clients data: %v\n", err)

@@ -428,7 +428,7 @@ var listCmd = &cobra.Command{
 		utFullURL := utURL + "/uptimes?v=v2"
 
 		// --- Fetch SD ---
-		sds := internal.GetData(cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
+		sds := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint:errcheck,gosec
 			return
@@ -500,7 +500,7 @@ var listCmd = &cobra.Command{
 
 		// --- Show only offline servers ---
 		if showOffline {
-			uts := internal.GetData(cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
+			uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
 
 			// Parse SD and UT data
 			var sdEntries []services.Service
@@ -644,7 +644,7 @@ var listCmd = &cobra.Command{
 		}
 
 		// --- Filtering by online status ---
-		uts := internal.GetData(cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
+		uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
 
 		// Use Go-based filtering when minVersion or maxVersion is specified (jq can't do semver comparison)
 		if minVersion != "" || maxVersion != "" {
@@ -1001,7 +1001,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			}
 		} else {
 			// Fetch proxy servers from service discovery
-			sds := internal.GetData(cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
+			sds := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
 			var proxyServices []services.Service
 			if err := json.Unmarshal([]byte(sds), &proxyServices); err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse service discovery response: %w", err))
