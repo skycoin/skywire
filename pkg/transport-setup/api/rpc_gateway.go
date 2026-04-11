@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/rpc"
 
+	"github.com/google/uuid"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -49,8 +50,13 @@ type TransportSetupRequest struct {
 }
 
 // TransportSetupResponse is the response for AddTransport RPC.
+// ID is uuid.UUID to match the gob-wire format used by the visor's
+// embedded TPS gateway (pkg/visor TPSSetupResponse). Both listen on
+// DmsgTransportSetupServicePort and a client that decodes into one
+// shape cannot decode data serialized from the other, so the wire
+// types MUST match.
 type TransportSetupResponse struct {
-	ID     string
+	ID     uuid.UUID
 	Local  cipher.PubKey
 	Remote cipher.PubKey
 	Type   string
@@ -75,7 +81,7 @@ func (g *SetupRPCGateway) AddTransport(req *TransportSetupRequest, reply *Transp
 		return err
 	}
 
-	reply.ID = result.ID.String()
+	reply.ID = result.ID
 	reply.Local = result.Local
 	reply.Remote = result.Remote
 	reply.Type = string(result.Type)
@@ -108,7 +114,7 @@ func (g *SetupRPCGateway) GetTransports(req *GetTransportsRequest, reply *GetTra
 	reply.Transports = make([]TransportSetupResponse, len(*result))
 	for i, tp := range *result {
 		reply.Transports[i] = TransportSetupResponse{
-			ID:     tp.ID.String(),
+			ID:     tp.ID,
 			Local:  tp.Local,
 			Remote: tp.Remote,
 			Type:   string(tp.Type),
