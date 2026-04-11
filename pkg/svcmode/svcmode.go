@@ -51,21 +51,32 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
 
-// Mode selects which transports a service listens on.
+// Mode selects which inbound listeners a service exposes. It does
+// NOT control whether the service has a dmsg client at all — that is
+// determined purely by whether a secret key is configured. A service
+// running in ModeHTTP with an SK still bootstraps a dmsg.Client
+// (useful for outbound-only dmsg consumers such as TPD's CXO
+// publisher); it simply does not spawn a dmsghttp.ListenAndServe.
 type Mode string
 
 const (
-	// ModeHTTP listens only on the bound HTTP address (plain http).
-	// Useful for public deployments that only expose http and in
-	// environments where dmsg bootstrap is unwanted.
+	// ModeHTTP exposes only the bound HTTP address for inbound
+	// client requests. If a secret key is present the dmsg client
+	// is still bootstrapped — which means the service connects to
+	// dmsg-servers via HTTP dmsg-discovery lookup — but no
+	// dmsghttp listener is spawned. Useful for public deployments
+	// that only want inbound HTTP but still need a dmsg.Client for
+	// outbound purposes or for services that historically ran this
+	// way by setting --sk but never had a dmsghttp in their chain.
 	ModeHTTP Mode = "http"
-	// ModeDmsg listens only on dmsghttp (dmsg://<pk>:<port>).
-	// Useful for corporate / private network deployments that do not
-	// want to expose a plaintext http listener at all.
+	// ModeDmsg listens only on dmsghttp (dmsg://<pk>:<port>) for
+	// inbound requests. No plaintext HTTP listener is exposed.
+	// Useful for corporate / private network deployments that must
+	// not serve plaintext HTTP. Requires SK.
 	ModeDmsg Mode = "dmsg"
-	// ModeDual listens on both http and dmsghttp. This is the default
-	// when a DMSG secret key is available and matches the current
-	// behavior of all services pre-svcmode.
+	// ModeDual listens on both http and dmsghttp. This is the
+	// default when a DMSG secret key is available and matches the
+	// existing pre-svcmode behavior of all services.
 	ModeDual Mode = "dual"
 )
 
@@ -219,6 +230,12 @@ func (h *Handle) Close() {
 // Handle.Errors()) in its main loop, and for calling Handle.Close()
 // on shutdown.
 //
+// dmsg bootstrap is performed whenever cfg.SK is non-null, even in
+// ModeHTTP — a service's "mode" controls its inbound listeners only,
+// not whether it has a dmsg.Client. Services with an SK always get
+// a bootstrapped client they can reuse for outbound purposes
+// (Handle.DmsgClient) regardless of mode.
+//
 // Start returns an error on any validation failure. It does NOT
 // return an error if an async listener (http or dmsghttp) fails to
 // serve — those errors are surfaced via Handle.Errors() instead.
@@ -238,8 +255,14 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 	if cfg.Mode.IncludesDmsg() && cfg.SK.Null() {
 		return nil, fmt.Errorf("svcmode: DMSG secret key required for mode %q", cfg.Mode)
 	}
-	if cfg.Mode.IncludesDmsg() && len(cfg.EmbeddedDmsgServers) == 0 && cfg.DmsgDiscovery == "" {
-		return nil, errors.New("svcmode: DMSG mode requires either EmbeddedDmsgServers or DmsgDiscovery")
+	// If the caller provided an SK we will attempt dmsg bootstrap
+	// even if the mode is ModeHTTP — that lets http-only services
+	// still maintain a dmsg.Client for outbound use. The call needs
+	// either the embedded server list OR an HTTP discovery URL to
+	// bootstrap against.
+	wantDmsgBootstrap := !cfg.SK.Null()
+	if wantDmsgBootstrap && len(cfg.EmbeddedDmsgServers) == 0 && cfg.DmsgDiscovery == "" {
+		return nil, errors.New("svcmode: dmsg bootstrap requires either EmbeddedDmsgServers or DmsgDiscovery")
 	}
 	if cfg.DmsgPort == 0 {
 		cfg.DmsgPort = dmsg.DefaultDmsgHTTPPort
@@ -266,9 +289,11 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 		}
 	}
 
-	// Bring up dmsg first so http can still start below even if
-	// dmsg bootstrap is slow — we return once listeners are spawned.
-	if cfg.Mode.IncludesDmsg() {
+	// Bring up dmsg first (if we have a secret key) so http can
+	// still start below even if dmsg bootstrap is slow. The dmsg
+	// client is kept regardless of whether we're going to spawn
+	// a dmsghttp listener — see note at top of Start.
+	if wantDmsgBootstrap {
 		boot, err := cmdutil.BootstrapDmsg(ctx, cfg.Log, cfg.PK, cfg.SK,
 			cfg.EmbeddedDmsgServers, cfg.DmsgDiscovery, cfg.DmsgServerType)
 		if err != nil {
@@ -277,23 +302,27 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 		h.boot = boot
 		h.DmsgClient = boot.Client
 
-		cfg.Log.Infof("svcmode: dmsg listener on port %d", cfg.DmsgPort)
-		go func() {
-			if err := dmsghttp.ListenAndServe(ctx, cfg.SK, cfg.Handler,
-				boot.DClient, cfg.DmsgPort, boot.Client, cfg.Log); err != nil && !errors.Is(err, context.Canceled) {
-				select {
-				case h.errCh <- fmt.Errorf("dmsghttp: %w", err):
-				default:
-				}
-			}
-		}()
-
-		if len(cfg.SurveyWhitelist) > 0 {
+		if cfg.Mode.IncludesDmsg() {
+			cfg.Log.Infof("svcmode: dmsghttp listener on port %d", cfg.DmsgPort)
 			go func() {
-				if err := dmsghttp.ServeDebug(ctx, boot.Client, cfg.Log, cfg.SurveyWhitelist); err != nil && !errors.Is(err, context.Canceled) {
-					cfg.Log.WithError(err).Warn("svcmode: ServeDebug exited with error")
+				if err := dmsghttp.ListenAndServe(ctx, cfg.SK, cfg.Handler,
+					boot.DClient, cfg.DmsgPort, boot.Client, cfg.Log); err != nil && !errors.Is(err, context.Canceled) {
+					select {
+					case h.errCh <- fmt.Errorf("dmsghttp: %w", err):
+					default:
+					}
 				}
 			}()
+
+			if len(cfg.SurveyWhitelist) > 0 {
+				go func() {
+					if err := dmsghttp.ServeDebug(ctx, boot.Client, cfg.Log, cfg.SurveyWhitelist); err != nil && !errors.Is(err, context.Canceled) {
+						cfg.Log.WithError(err).Warn("svcmode: ServeDebug exited with error")
+					}
+				}()
+			}
+		} else {
+			cfg.Log.Info("svcmode: dmsg client bootstrapped for outbound use (no dmsghttp listener; mode=http)")
 		}
 
 		if cfg.OnDmsgServersUpdated != nil {
