@@ -2,14 +2,10 @@
 package cliutil
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
-	"time"
 
-	"github.com/bitfield/script"
 	"github.com/google/uuid"
 	"github.com/spf13/pflag"
 
@@ -124,33 +120,7 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 	}
 }
 
-// GetData fetches data from the specified URL via http or from cached file
-//
-//nolint:errcheck
-func GetData(cachefile, thisurl string, cacheFilesAge int) (thisdata string) {
-	var shouldfetch bool
-	buf1 := new(bytes.Buffer)
-	cTime := time.Now()
-	if cachefile == "" {
-		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String()
-		return thisdata
-	}
-	if cachefile != "" {
-		if u, err := os.Stat(cachefile); err != nil {
-			shouldfetch = true
-		} else {
-			if cTime.Sub(u.ModTime()).Minutes() > float64(cacheFilesAge) {
-				shouldfetch = true
-			}
-		}
-		if shouldfetch {
-			_, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).Tee(buf1).WriteFile(cachefile)
-			thisdata = buf1.String()
-		} else {
-			thisdata, _ = script.File(cachefile).String()
-		}
-	} else {
-		thisdata, _ = script.NewPipe().WithHTTPClient(&http.Client{Timeout: 30 * time.Second}).Get(thisurl).String()
-	}
-	return thisdata
-}
+// GetData was a direct-HTTP fetch+cache helper that has been removed.
+// Callers now use clirpc.FetchCachedServiceURL which routes the fetch
+// through the visor RPC → DMSG direct → HTTP fallback chain, so it
+// honors whatever transport the visor is actually configured to use.
