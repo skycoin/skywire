@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -47,7 +48,36 @@ type API struct {
 	DmsgServers                 []string
 	authPassphrase              string
 	OfficialServers             map[string]bool
+
+	// allClientsCache serves the `/dmsg-discovery/servers/clients` and
+	// `/dmsg-discovery/server/{pk}/clients` endpoints from a short-lived
+	// in-memory cache. Each call would otherwise do a full Redis
+	// SMEMBERS + MGET of every client entry on the network, which for a
+	// large deployment is O(N) work per request and crushes the
+	// discovery service under any meaningful polling load. We only do
+	// the expensive lookup at most once per allClientsCacheTTL.
+	allClientsMu     sync.Mutex
+	allClientsCache  []*disc.Entry
+	allClientsAt     time.Time
+	allClientsErr    error
+	allClientsSingle singleflight // dedupes concurrent refreshes
 }
+
+// singleflight is a tiny in-place dedupe primitive. When a refresh is
+// already running, concurrent callers wait on the same channel instead
+// of each hitting Redis.
+type singleflight struct {
+	mu   sync.Mutex
+	done chan struct{}
+}
+
+// allClientsCacheTTL is the freshness window for the cached response
+// of the servers/clients and server/{pk}/clients endpoints. 15s is
+// chosen to be shorter than the minimum client update interval
+// (DefaultUpdateInterval = 1 minute) so callers still see new clients
+// reasonably quickly, while keeping Redis load proportional to the
+// poll rate of the cache, not the request rate of the API.
+const allClientsCacheTTL = 15 * time.Second
 
 // New returns a new API object, which can be started as a server
 func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, enableLoadTesting, enableMetrics bool, dmsgAddr, authPassphrase string) *API {
@@ -444,13 +474,71 @@ func (a *API) getAllServers() http.HandlerFunc {
 	}
 }
 
+// getCachedAllClientEntries returns the cached result of
+// store.AllClientEntries, refreshing at most once per allClientsCacheTTL.
+// Concurrent callers that arrive while a refresh is in flight wait on
+// the same inflight fetch instead of each dispatching their own Redis
+// MGET — this is the primary defense against the thundering herd that
+// pegs the discovery service at 100%+ CPU in production.
+func (a *API) getCachedAllClientEntries(ctx context.Context) ([]*disc.Entry, error) {
+	a.allClientsMu.Lock()
+	if time.Since(a.allClientsAt) < allClientsCacheTTL && a.allClientsCache != nil {
+		entries := a.allClientsCache
+		err := a.allClientsErr
+		a.allClientsMu.Unlock()
+		return entries, err
+	}
+
+	// Stale or empty. See if a refresh is already in flight.
+	a.allClientsSingle.mu.Lock()
+	inflight := a.allClientsSingle.done
+	if inflight == nil {
+		inflight = make(chan struct{})
+		a.allClientsSingle.done = inflight
+		a.allClientsSingle.mu.Unlock()
+		a.allClientsMu.Unlock()
+
+		// We own the refresh. Run it, then publish and broadcast.
+		entries, err := a.db.AllClientEntries(ctx)
+
+		a.allClientsMu.Lock()
+		a.allClientsCache = entries
+		a.allClientsErr = err
+		a.allClientsAt = time.Now()
+		a.allClientsMu.Unlock()
+
+		a.allClientsSingle.mu.Lock()
+		a.allClientsSingle.done = nil
+		close(inflight)
+		a.allClientsSingle.mu.Unlock()
+
+		return entries, err
+	}
+	a.allClientsSingle.mu.Unlock()
+	a.allClientsMu.Unlock()
+
+	// Wait for the existing refresh. Honor caller cancellation so a
+	// dying request doesn't linger here.
+	select {
+	case <-inflight:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	a.allClientsMu.Lock()
+	entries := a.allClientsCache
+	err := a.allClientsErr
+	a.allClientsMu.Unlock()
+	return entries, err
+}
+
 // allClientsByServer returns all client PKs grouped by the server they are delegated to
 // URI: /dmsg-discovery/servers/clients
 // Method: GET
 // Response: { "server_pk": ["client_pk1", "client_pk2", ...], ... }
 func (a *API) allClientsByServer() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		entries, err := a.db.AllClientEntries(r.Context())
+		entries, err := a.getCachedAllClientEntries(r.Context())
 		if err != nil {
 			a.handleError(w, r, err)
 			return
@@ -483,7 +571,7 @@ func (a *API) clientsByServer() http.HandlerFunc {
 			return
 		}
 
-		entries, err := a.db.AllClientEntries(r.Context())
+		entries, err := a.getCachedAllClientEntries(r.Context())
 		if err != nil {
 			a.handleError(w, r, err)
 			return

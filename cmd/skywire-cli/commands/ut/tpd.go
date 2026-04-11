@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 )
 
@@ -48,6 +49,7 @@ func init() {
 	tpdCmd.Flags().StringVarP(&tpdVersionFilter, "version", "v", "", "filter visors by exact version")
 	tpdCmd.Flags().StringVar(&tpdMinVersion, "min-version", "", "filter visors with version >= specified (e.g. v1.3.34)")
 	tpdCmd.Flags().BoolVarP(&tpdListVersions, "list-versions", "l", false, "list PKs with their versions")
+	clirpc.RegisterFetchFlags(tpdCmd)
 }
 
 var tpdCmd = &cobra.Command{
@@ -76,7 +78,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		// Note: TPD uses /uptimes (same as separate UT but on TPD host)
 		tpdFullURL := tpdUptimeURL + "/uptimes"
 
-		uts := internal.GetData(cacheFile(tpdCacheDirTPD, tpdFullURL), tpdFullURL, tpdCacheFilesAge)
+		uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(tpdCacheDirTPD, tpdFullURL), tpdFullURL, tpdCacheFilesAge)
 
 		// Build the base selector based on online flag
 		baseSelector := ".[]"

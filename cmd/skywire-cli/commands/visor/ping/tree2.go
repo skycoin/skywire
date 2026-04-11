@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -215,6 +216,9 @@ type pingTreeModel struct {
 	height     int
 	quitting   bool
 	autoScroll bool
+
+	// Command flags (for FetchCachedServiceURL fallback chain)
+	cmdFlags *pflag.FlagSet
 
 	// Ping state
 	ctx        context.Context
@@ -1231,7 +1235,7 @@ func (m *pingTreeModel) loadDmsgClients() {
 
 	dmsgURL := tuiDMSGURL + "/dmsg-discovery/servers/clients"
 	m.setStatus("Loading DMSG clients...")
-	dmsgClientsRaw := internal.GetData(tuiCacheDMSG, dmsgURL, tuiCacheAge)
+	dmsgClientsRaw := clirpc.FetchCachedServiceURL(m.cmdFlags, tuiCacheDMSG, dmsgURL, tuiCacheAge)
 
 	var clientsByServer map[string][]string
 	if err := json.Unmarshal([]byte(dmsgClientsRaw), &clientsByServer); err != nil {
@@ -1289,7 +1293,7 @@ func runPingTreeTUI(cmd *cobra.Command, _ []string) {
 	localPK := overview.PubKey.String()
 
 	// Fetch TPD data
-	tpdRaw := internal.GetData(tuiCacheTPD, tuiTPDURL+"/all-transports", tuiCacheAge)
+	tpdRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), tuiCacheTPD, tuiTPDURL+"/all-transports", tuiCacheAge)
 	var transports []transportEntry
 	if err := json.Unmarshal([]byte(tpdRaw), &transports); err != nil {
 		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse TPD data: %w", err))
@@ -1333,7 +1337,7 @@ func runPingTreeTUI(cmd *cobra.Command, _ []string) {
 	}
 
 	// Fetch UT data
-	utRaw := internal.GetData(tuiCacheUT, tuiUTURL+"/uptimes?v=v2", tuiCacheAge)
+	utRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), tuiCacheUT, tuiUTURL+"/uptimes?v=v2", tuiCacheAge)
 	var utEntries []uptimeEntry
 	_ = json.Unmarshal([]byte(utRaw), &utEntries) //nolint:errcheck
 
@@ -1376,6 +1380,7 @@ func runPingTreeTUI(cmd *cobra.Command, _ []string) {
 	}
 
 	model := &pingTreeModel{
+		cmdFlags:         cmd.Flags(),
 		ctx:              ctx,
 		cancel:           cancel,
 		grpcClient:       grpcClient,

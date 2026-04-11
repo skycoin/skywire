@@ -25,6 +25,10 @@ type EmbeddedRouteSetup struct {
 	dmsgC *dmsg.Client
 	pk    cipher.PubKey
 	log   *logging.Logger
+
+	// stats aggregates per-request success/failure metadata for the
+	// RouteSetupStats RPC and `skywire-cli route rsn-stats` CLI.
+	stats *setupmetrics.Collector
 }
 
 // Serve starts the route setup-node listener on DmsgSetupPort.
@@ -47,7 +51,13 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 	}()
 
 	ers.log.WithField("dmsg_port", skyenv.DmsgSetupPort).Info("Accepting route setup requests")
-	metrics := setupmetrics.NewEmpty()
+	// Use the pre-wired Collector (falling back to Empty if the struct
+	// was constructed without one) so its snapshots include every
+	// attempt that hit the listener.
+	var metrics setupmetrics.Metrics = setupmetrics.NewEmpty()
+	if ers.stats != nil {
+		metrics = ers.stats
+	}
 
 	// Limit concurrent route setup requests to prevent ephemeral port exhaustion.
 	// Each request dials 2 visors × up to 6 servers each, holding ports for up to
@@ -99,6 +109,9 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 			return nil
 		default:
 			ers.log.Warn("Route setup request dropped: concurrency limit reached")
+			if ers.stats != nil {
+				ers.stats.RecordConcurrencyDrop()
+			}
 			conn.Close() //nolint:errcheck,gosec
 			continue
 		}
@@ -122,9 +135,34 @@ func (ers *EmbeddedRouteSetup) CreateRouteGroup(ctx context.Context, biRt routin
 	defer cancel()
 
 	dialer := router.WrapDmsgClient(ers.dmsgC)
-	metrics := setupmetrics.NewEmpty()
+	// Share the same Collector as the listener so local self-dials
+	// (visor → own embedded setup-node) show up in the same snapshot
+	// rather than needing a second data source.
+	var metrics setupmetrics.Metrics = setupmetrics.NewEmpty()
+	if ers.stats != nil {
+		metrics = ers.stats
+	}
 
 	return router.CreateRouteGroup(ctx, dialer, biRt, metrics)
+}
+
+// Stats returns the current collector snapshot. Returns a zero-value
+// snapshot if stats are disabled (shouldn't happen in normal use, but
+// keeps the RPC layer simple).
+func (ers *EmbeddedRouteSetup) Stats() setupmetrics.StatsSnapshot {
+	if ers.stats == nil {
+		return setupmetrics.StatsSnapshot{}
+	}
+	return ers.stats.Snapshot()
+}
+
+// ResetStats clears all counters and ring buffers on the embedded
+// route setup-node's stats collector. Useful before starting a
+// diagnostic capture window.
+func (ers *EmbeddedRouteSetup) ResetStats() {
+	if ers.stats != nil {
+		ers.stats.Reset()
+	}
 }
 
 // PK returns the public key of the embedded route setup-node.

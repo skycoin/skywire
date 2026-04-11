@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -16,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	store "github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
@@ -39,6 +38,8 @@ func init() {
 	metricsCmd.Flags().BoolVar(&metricsTree, "tree", false, "tree view: visors with their transports as children")
 	metricsCmd.Flags().BoolVarP(&metricsVerbose, "verbose", "v", false, "show full public keys (with --by-transport)")
 	metricsCmd.Flags().StringVar(&metricsTpdURL, "tpdurl", deployment.Prod.TransportDiscovery, "transport discovery url")
+	metricsCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	clirpc.RegisterFetchFlags(metricsCmd)
 }
 
 // verifiedBandwidth returns the bandwidth both edges agree on for a transport.
@@ -103,21 +104,15 @@ var metricsCmd = &cobra.Command{
 		url := fmt.Sprintf("%s/metrics?days=%d&bandwidth=true&latency=true&edges=true",
 			strings.TrimSuffix(metricsTpdURL, "/"), metricsDays)
 
-		resp, err := http.Get(url) //nolint:gosec
+		// Fetch via visor RPC → direct DMSG → direct HTTP fallback chain.
+		body, err := clirpc.FetchServiceURL(cmd.Flags(), url)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to query TPD metrics: %w", err))
 			return
 		}
-		defer resp.Body.Close() //nolint:errcheck
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("TPD returned status %d: %s", resp.StatusCode, string(body)))
-			return
-		}
 
 		var metrics []store.TransportMetric
-		if err := json.NewDecoder(resp.Body).Decode(&metrics); err != nil {
+		if err := json.Unmarshal(body, &metrics); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to decode metrics: %w", err))
 			return
 		}
