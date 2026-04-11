@@ -1,0 +1,150 @@
+@import "variables";
+
+.loading-row {
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.75);
+  padding: 24px 0;
+}
+
+.error-row {
+  display: flex;
+  align-items: center;
+  color: #f87171;
+  padding: 24px 0;
+}
+
+.summary-line {
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.95em;
+
+  .last-updated {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.85em;
+    margin-left: 8px;
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 24px 0;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+
+  .action-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    label {
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 0.9em;
+    }
+
+    input[type="number"] {
+      width: 72px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.95em;
+    }
+  }
+
+  .divider {
+    color: rgba(255, 255, 255, 0.25);
+    padding: 0 6px;
+  }
+}
+
+.action-result {
+  margin: 8px 0 20px 0;
+  padding: 10px 14px;
+  background: rgba(74, 222, 128, 0.08);
+  border-left: 3px solid #4ade80;
+  border-radius: 4px;
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.9);
+
+  .result-label {
+    font-weight: 600;
+    margin-right: 8px;
+  }
+
+  .result-failed {
+    color: #f87171;
+    margin-top: 4px;
+    font-size: 0.85em;
+  }
+}
+
+.client-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+
+  .client-header {
+    display: flex;
+    align-items: baseline;
+    margin-bottom: 10px;
+    gap: 10px;
+
+    .role {
+      font-size: 1.1em;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .count {
+      color: rgba(255, 255, 255, 0.65);
+      font-size: 0.85em;
+    }
+  }
+
+  .client-pk {
+    font-family: monospace;
+    font-size: 0.8em;
+    color: rgba(255, 255, 255, 0.55);
+    margin-bottom: 10px;
+    word-break: break-all;
+  }
+
+  .server-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+
+    .server {
+      font-family: monospace;
+      font-size: 0.82em;
+      color: rgba(255, 255, 255, 0.85);
+      padding: 2px 0;
+
+      &::before {
+        content: "•";
+        margin-right: 8px;
+        color: #4ade80;
+      }
+    }
+  }
+
+  .empty {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.9em;
+    font-style: italic;
+  }
+}
+
+.client-card.missing {
+  opacity: 0.55;
+}
