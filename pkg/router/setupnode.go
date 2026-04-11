@@ -155,7 +155,17 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 func CreateRouteGroup(ctx context.Context, dialer network.Dialer, biRt routing.BidirectionalRoute, metrics setupmetrics.Metrics) (resp routing.EdgeRules, err error) {
 	log := logging.MustGetLogger(fmt.Sprintf("request:%s->%s", biRt.Desc.SrcPK(), biRt.Desc.DstPK()))
 	log.Info("Processing request.")
-	defer metrics.RecordRoute()(&err)
+	// If the metrics implementation is a Collector, use the richer
+	// RecordRouteContext so the resulting StatsSnapshot includes src /
+	// dst / hop-count. Fall back to the legacy RecordRoute for the
+	// Victoria Metrics / Empty implementations which don't track per-
+	// request context.
+	hopCount := len(biRt.Forward)
+	if c, ok := metrics.(*setupmetrics.Collector); ok {
+		defer c.RecordRouteContext(ctx, biRt.Desc.SrcPK(), biRt.Desc.DstPK(), hopCount)(&err)
+	} else {
+		defer metrics.RecordRoute()(&err)
+	}
 
 	// Ensure bi routes input is valid.
 	if err = biRt.Check(); err != nil {
