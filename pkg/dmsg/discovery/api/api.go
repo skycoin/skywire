@@ -49,6 +49,17 @@ type API struct {
 	authPassphrase              string
 	OfficialServers             map[string]bool
 
+	// clientEntryTTL is the Redis expiration applied to client entries
+	// on POST /dmsg-discovery/entry. Clients refresh their entry every
+	// DefaultUpdateInterval*5 (5 minutes), so a TTL of 60 minutes
+	// (12× the refresh interval) gives ~2-3 missed refreshes of slack
+	// for brief network hiccups before Redis prunes the entry. This
+	// fixes the "stale delegated_servers" problem where crashed or
+	// network-dropped visors lingered in discovery forever, driving
+	// route setup failures on visors that tried to dial them. 0 means
+	// no expiration (the prior behavior).
+	clientEntryTTL time.Duration
+
 	// allClientsCache serves the `/dmsg-discovery/servers/clients` and
 	// `/dmsg-discovery/server/{pk}/clients` endpoints from a short-lived
 	// in-memory cache. Each call would otherwise do a full Redis
@@ -79,8 +90,10 @@ type singleflight struct {
 // poll rate of the cache, not the request rate of the API.
 const allClientsCacheTTL = 15 * time.Second
 
-// New returns a new API object, which can be started as a server
-func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, enableLoadTesting, enableMetrics bool, dmsgAddr, authPassphrase string) *API {
+// New returns a new API object, which can be started as a server.
+// clientEntryTTL is the Redis expiration applied to client entries;
+// 0 disables expiration (legacy behavior).
+func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, enableLoadTesting, enableMetrics bool, dmsgAddr, authPassphrase string, clientEntryTTL time.Duration) *API {
 	if log == nil {
 		log = logging.MustGetLogger("dmsg_disc")
 	}
@@ -102,6 +115,7 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 		DmsgServers:                 []string{},
 		authPassphrase:              authPassphrase,
 		OfficialServers:             make(map[string]bool),
+		clientEntryTTL:              clientEntryTTL,
 	}
 
 	r.Use(middleware.RequestID)
@@ -297,9 +311,14 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 
-		entryTimeout := time.Duration(0) // no timeout
+		// Default client entry TTL comes from the API config. This
+		// prunes stale entries from visors that crashed or lost
+		// network without cleanly updating their delegated_servers.
+		// 0 means no expiration.
+		entryTimeout := a.clientEntryTTL
 
-		// Since v0.5.0 visors do not send ?timeout=true anymore so this is for older visors.
+		// Legacy override: older (pre-v0.5.0) visors sent ?timeout=true
+		// and expected a short TTL. Preserve that behavior for them.
 		if timeout := r.URL.Query().Get("timeout"); timeout == "true" {
 			entryTimeout = store.DefaultTimeout
 		}
