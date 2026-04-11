@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sort"
 	"time"
 
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -550,6 +551,134 @@ func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
 	}
 
 	return servers, nil
+}
+
+// DmsgConnectAllResult summarizes the result of DmsgConnectAll.
+type DmsgConnectAllResult struct {
+	Total            int               `json:"total"`             // total servers in discovery
+	AlreadyConnected int               `json:"already_connected"` // sessions in place before the call
+	NewlyConnected   int               `json:"newly_connected"`   // sessions opened by the call
+	Failed           map[string]string `json:"failed,omitempty"`  // server PK → error text for any that could not be connected
+}
+
+// DmsgConnectAll enumerates every dmsg server in discovery and ensures the
+// visor's dmsg client has an active session to each one. This is a one-shot
+// action intended for RSN / TPS visors that need to reach arbitrary
+// destinations without relying on phase-3 new-session dials during route
+// setup. It does not mutate the visor's configured sessions_count — for
+// persistent behavior use SetDmsgSessionsCount with 0 (connect to all)
+// or edit sessions_count in the visor config.
+func (v *Visor) DmsgConnectAll() (*DmsgConnectAllResult, error) {
+	if err := v.mustWaitDmsgReady(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	res, err := v.dmsgC.ConnectToAllServers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &DmsgConnectAllResult{
+		Total:            res.Total,
+		AlreadyConnected: res.AlreadyConnected,
+		NewlyConnected:   res.NewlyConnected,
+	}
+	if len(res.Failed) > 0 {
+		out.Failed = make(map[string]string, len(res.Failed))
+		for pk, errStr := range res.Failed {
+			out.Failed[pk.String()] = errStr
+		}
+	}
+	return out, nil
+}
+
+// SetDmsgSessionsCount updates the visor's persisted dmsg.sessions_count
+// setting (written to the config file so it survives restart) and
+// immediately attempts to maximize current session count if the new value
+// is higher or zero (zero = connect to all available servers).
+//
+// Note: the live dmsg.Client's MinSessions is not currently mutable at
+// runtime — the change takes full effect on next visor restart. The
+// DmsgConnectAll one-shot is invoked inline so the visor reaches the
+// desired connectivity immediately in addition to persisting the change.
+func (v *Visor) SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error) {
+	if count < 0 {
+		return nil, errors.New("sessions_count must be >= 0")
+	}
+	if v.conf == nil || v.conf.Dmsg == nil {
+		return nil, errors.New("dmsg config not initialized")
+	}
+	v.conf.Dmsg.SessionsCount = count
+	if err := v.conf.Flush(); err != nil {
+		return nil, fmt.Errorf("failed to persist config: %w", err)
+	}
+	v.log.WithField("sessions_count", count).Info("Updated dmsg.sessions_count in config")
+
+	// Trigger the one-shot so the running visor reaches the new target now
+	// without needing a restart.
+	return v.DmsgConnectAll()
+}
+
+// DmsgSessions enumerates all dmsg clients running inside the visor and
+// returns the server PKs each one has an active session with. Covers the
+// main visor dmsg client, the embedded route setup node's dmsg client
+// (if configured), and the embedded transport setup node's dmsg client
+// (if configured). Each of these runs under a DIFFERENT identity/key and
+// maintains its OWN session set, so checking `visor info` alone does not
+// tell you whether the RSN or TPS is actually reaching the network.
+func (v *Visor) DmsgSessions() (*DmsgClientSessions, error) {
+	out := &DmsgClientSessions{}
+
+	if v.dmsgC != nil {
+		servers := dmsgClientServerPKs(v.dmsgC)
+		out.Main = &DmsgClientSessionInfo{
+			PK:      v.conf.PK,
+			Role:    "main",
+			Count:   len(servers),
+			Servers: servers,
+		}
+	}
+
+	v.initLock.Lock()
+	rsn := v.embeddedRouteSetup
+	tps := v.embeddedTPS
+	v.initLock.Unlock()
+
+	if rsn != nil && rsn.DmsgClient() != nil {
+		servers := dmsgClientServerPKs(rsn.DmsgClient())
+		out.RouteSetup = &DmsgClientSessionInfo{
+			PK:      rsn.PK(),
+			Role:    "route_setup",
+			Count:   len(servers),
+			Servers: servers,
+		}
+	}
+	if tps != nil && tps.DmsgClient() != nil {
+		servers := dmsgClientServerPKs(tps.DmsgClient())
+		out.TransportSetup = &DmsgClientSessionInfo{
+			PK:      tps.PK(),
+			Role:    "transport_setup",
+			Count:   len(servers),
+			Servers: servers,
+		}
+	}
+	return out, nil
+}
+
+// dmsgClientServerPKs returns the PKs of the dmsg servers the given client
+// currently has an active session with. Sorted by PK for stable output.
+func dmsgClientServerPKs(c *dmsg.Client) []cipher.PubKey {
+	strs := c.ConnectedServersPK()
+	out := make([]cipher.PubKey, 0, len(strs))
+	for _, s := range strs {
+		var pk cipher.PubKey
+		if err := pk.Set(s); err == nil {
+			out = append(out, pk)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	return out
 }
 
 // DmsgHTTP implements API. Performs an HTTP request over dmsg using the visor's dmsg client.
