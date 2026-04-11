@@ -244,6 +244,7 @@
     "dmsg-title": "DMSG",
     "rewards-title": "Rewards",
     "services-health-title": "Services health",
+    "dmsg-settings-title": "DMSG settings",
     "reward-address": "Reward Address",
     "reward-total": "Week Total",
     "reward-distributed": "Distributed",
@@ -314,6 +315,22 @@
     "latency": "Latency",
     "version": "Version",
     "endpoint": "Endpoint"
+  },
+
+  "dmsg-settings": {
+    "loading": "Loading DMSG session state…",
+    "summary": "DMSG client sessions",
+    "last-updated": "last updated",
+    "connect-all": "Connect to all servers",
+    "sessions-count-label": "sessions_count",
+    "apply-count": "Apply",
+    "sessions": "sessions",
+    "no-sessions": "No connected sessions.",
+    "no-clients": "No DMSG clients running on this visor.",
+    "result-total": "total:",
+    "result-already": "already connected:",
+    "result-new": "newly connected:",
+    "result-failed": "failed"
   },
 
   "bulk-rewards": {

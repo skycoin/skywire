@@ -441,6 +441,9 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/about", hv.getAbout())
 				r.Get("/dmsg", hv.getDmsg())
 				r.Get("/service-health", hv.getServiceHealth())
+				r.Get("/dmsg/sessions", hv.getDmsgSessions())
+				r.Post("/dmsg/connect-all", hv.postDmsgConnectAll())
+				r.Put("/dmsg/sessions-count", hv.putDmsgSessionsCount())
 
 				r.Get("/lan-dmsg-server", hv.getLANDmsgServer())
 				r.Get("/visors", hv.getVisors())
@@ -633,6 +636,78 @@ func (hv *Hypervisor) getServiceHealth() http.HandlerFunc {
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, entries)
+	}
+}
+
+// getDmsgSessions returns per-client dmsg session info: main + embedded
+// route setup node + embedded transport setup node. Used by the hypervisor
+// UI's dmsg settings panel so operators can see at a glance which dmsg
+// servers each of the visor's three independent dmsg clients is connected
+// to.
+func (hv *Hypervisor) getDmsgSessions() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if hv.visor == nil {
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, &DmsgClientSessions{})
+			return
+		}
+		sessions, err := hv.visor.DmsgSessions()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, sessions)
+	}
+}
+
+// postDmsgConnectAll triggers a one-shot "reach every dmsg server now"
+// action on the main visor dmsg client. Used by the UI's "Connect to all"
+// button for operators running RSN/TPS visors who want to eliminate
+// discovery-stale failure modes on demand.
+func (hv *Hypervisor) postDmsgConnectAll() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if hv.visor == nil {
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, map[string]string{"error": "visor not available"})
+			return
+		}
+		result, err := hv.visor.DmsgConnectAll()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, result)
+	}
+}
+
+// dmsgSessionsCountRequest is the body for PUT /dmsg/sessions-count.
+type dmsgSessionsCountRequest struct {
+	Count int `json:"count"`
+}
+
+// putDmsgSessionsCount persists dmsg.sessions_count to the visor config and
+// triggers an immediate connect-all so the change takes effect without a
+// restart. A value of 0 means "connect to every available dmsg server",
+// which is the recommended setting for RSN/TPS visors.
+func (hv *Hypervisor) putDmsgSessionsCount() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if hv.visor == nil {
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, map[string]string{"error": "visor not available"})
+			return
+		}
+		var req dmsgSessionsCountRequest
+		if err := httputil.ReadJSON(r, &req); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if req.Count < 0 {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "count must be >= 0"})
+			return
+		}
+		result, err := hv.visor.SetDmsgSessionsCount(req.Count)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, result)
 	}
 }
 
