@@ -986,6 +986,34 @@ func (rc *rpcClient) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	return &resp, err
 }
 
+// DmsgConnectAll triggers a one-shot connect-to-all-dmsg-servers action.
+func (rc *rpcClient) DmsgConnectAll() (*DmsgConnectAllResult, error) {
+	var resp DmsgConnectAllResult
+	if err := rc.Call("DmsgConnectAll", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// SetDmsgSessionsCount persists sessions_count and triggers a connect-all.
+func (rc *rpcClient) SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error) {
+	var resp DmsgConnectAllResult
+	if err := rc.Call("SetDmsgSessionsCount", &count, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DmsgSessions returns the current dmsg session state of every dmsg client
+// running inside the visor (main / route_setup / transport_setup).
+func (rc *rpcClient) DmsgSessions() (*DmsgClientSessions, error) {
+	var resp DmsgClientSessions
+	if err := rc.Call("DmsgSessions", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // TPSStatus returns the status of the embedded TPS.
 func (rc *rpcClient) TPSStatus() (*TPSStatus, error) {
 	var status TPSStatus
