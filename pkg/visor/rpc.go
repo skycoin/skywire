@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -1370,6 +1371,24 @@ func (r *RPC) GetRSNHealth(_ *struct{}, out *[]NodeHealth) (err error) {
 	}
 	*out = health
 	return nil
+}
+
+// RouteSetupStats returns a snapshot of the embedded Route Setup Node's
+// request statistics.
+func (r *RPC) RouteSetupStats(_ *struct{}, out *setupmetrics.StatsSnapshot) (err error) {
+	defer rpcutil.LogCall(r.log, "RouteSetupStats", nil)(out, &err)
+	snap, err := r.visor.RouteSetupStats()
+	if err != nil {
+		return err
+	}
+	*out = *snap
+	return nil
+}
+
+// ResetRouteSetupStats clears all counters on the embedded RSN stats collector.
+func (r *RPC) ResetRouteSetupStats(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "ResetRouteSetupStats", nil)(nil, &err)
+	return r.visor.ResetRouteSetupStats()
 }
 
 // TPSExternalHealthCheck dials an external TPS over dmsg and performs a health check.

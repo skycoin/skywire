@@ -708,6 +708,9 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
         }
       });
     }
+    if (node.isPublic) {
+      services.push('Public Visor');
+    }
     if (node.autoconnectTransports) {
       services.push('Autoconnect');
     }

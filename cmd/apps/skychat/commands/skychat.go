@@ -366,6 +366,19 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			PubKey: pk,
 			Port:   1,
 		}
+
+		// Self-send detection — log it clearly so the user can tell self
+		// traffic apart from peer traffic in the visor log. A dmsg self-
+		// dial loops back through the visor's own delegated dmsg server:
+		// the server bridges a new outbound yamux stream back to the same
+		// client, and the local listener accepts it. The dial here is
+		// the real network path — no local short-circuit. Same for
+		// skynet (router builds a 2-hop self-ping loopback).
+		isSelf := pk == appCl.Config().VisorPK
+		if isSelf {
+			appCl.Log().Infof("Self-send via %s on port %d", netType, addr.Port)
+		}
+
 		connsMu.Lock()
 		conn, ok := conns[pk]
 		connsMu.Unlock()
@@ -377,6 +390,11 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 				return err
 			})
 			if err != nil {
+				if isSelf {
+					appCl.Log().WithError(err).Errorf("Self-dial via %s failed", netType)
+				} else {
+					appCl.Log().WithError(err).Warnf("Dial to %s via %s failed", pk, netType)
+				}
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
