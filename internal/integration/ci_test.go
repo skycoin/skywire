@@ -352,6 +352,10 @@ func TestEnv_SendSkyMessage(t *testing.T) {
 }
 
 // TestEnv_SendSkyMessage_second tests bidirectional single-hop messaging.
+// Uses fail-fast semantics: if any single send errors, the test stops
+// rather than hammering the retry envelope through the remaining 7
+// messages (which at ~60s per retry round previously consumed the
+// entire 45-minute CI budget on a single regression).
 func TestEnv_SendSkyMessage_second(t *testing.T) {
 	env := NewEnv().
 		GatherContainersInfo().
@@ -362,7 +366,6 @@ func TestEnv_SendSkyMessage_second(t *testing.T) {
 	env.VerifyAppRunning(t, visorB, "skychat")
 
 	const qty = 4
-	errCh := make(chan error, qty*2)
 
 	sendMessage := func(idx int, sender, recipient string) error {
 		msg := fmt.Sprintf("Msg: %v. From %v to %v", idx, sender, recipient)
@@ -379,20 +382,11 @@ func TestEnv_SendSkyMessage_second(t *testing.T) {
 	}
 
 	for i := 0; i < qty; i++ {
-		errCh <- sendMessage(i, visorA, visorB)
-		errCh <- sendMessage(i, visorB, visorA)
+		require.NoError(t, sendMessage(i, visorA, visorB),
+			"A->B send %d/%d failed", i+1, qty)
+		require.NoError(t, sendMessage(i, visorB, visorA),
+			"B->A send %d/%d failed", i+1, qty)
 	}
-
-	close(errCh)
-
-	var idx int
-	for err := range errCh {
-		idx++
-
-		require.NoError(t, err)
-	}
-
-	require.EqualValues(t, qty*2, idx)
 }
 
 func TestEnv_ContainerRestart(t *testing.T) {
