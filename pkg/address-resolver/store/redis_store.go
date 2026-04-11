@@ -106,15 +106,16 @@ func (s *redisStore) bind(ctx context.Context, key string, visorData addrresolve
 		return err
 	}
 
-	// Only apply TTL on re-registration (key already exists).
-	// First-time registrations get no TTL for backward compatibility with old visors.
-	exists, _ := s.client.Exists(ctx, key).Result() //nolint:errcheck
-	ttl := time.Duration(0)
-	if exists > 0 {
-		ttl = s.ttl
-	}
-
-	if _, err := s.client.Set(ctx, key, string(raw), ttl).Result(); err != nil {
+	// Always apply TTL so stale bindings expire when clients stop
+	// re-registering. The prior behavior skipped TTL on first-time
+	// bindings "for backward compatibility with old visors", which
+	// let crashed / offline clients leave infinite-lifetime entries
+	// in Redis — same anti-pattern as the dmsg-discovery bug fixed
+	// in #2305. Clients refresh their STCPR/SUDPH binding every
+	// 90s (see sudphReRegisterInterval in addrresolver/client.go),
+	// so a TTL >= ~2× refresh (configured via --entry-timeout,
+	// default 5m) gives safe margin for dropped or slow refreshes.
+	if _, err := s.client.Set(ctx, key, string(raw), s.ttl).Result(); err != nil {
 		return err
 	}
 
