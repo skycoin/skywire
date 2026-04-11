@@ -25,6 +25,22 @@ type entryCacheEntry struct {
 
 const entryCacheTTL = 30 * time.Second
 
+// negativeRouteTTL is how long a failed (dst, server) pairing is remembered.
+// Long enough to fast-fail burst retries toward a stale destination, short
+// enough that transient server issues self-recover once the TTL expires.
+const negativeRouteTTL = 30 * time.Second
+
+// negativeRouteMax caps the number of (dst, server) entries we remember
+// to bound memory under pathological workloads. When exceeded, the whole
+// map is wiped and rebuilt — simpler than LRU, fine for a 30s horizon.
+const negativeRouteMax = 4096
+
+// negativeRouteKey is the compound key for the negative route cache.
+type negativeRouteKey struct {
+	dst cipher.PubKey
+	srv cipher.PubKey
+}
+
 // SessionDialCallback is triggered BEFORE a session is dialed to.
 // If a non-nil error is returned, the session dial is instantly terminated.
 type SessionDialCallback func(network, addr string) (err error)
@@ -98,6 +114,13 @@ type Client struct {
 	entryCache   map[cipher.PubKey]entryCacheEntry
 	entryCacheMx sync.RWMutex
 
+	// negativeRoutes remembers (dst, server) pairings that recently
+	// failed to dial. Used by DialStream to skip sessions the caller
+	// would otherwise burn HandshakeTimeout on, which is how stale
+	// discovery entries manifest as 10-second stalls.
+	negativeRoutes   map[negativeRouteKey]time.Time
+	negativeRoutesMx sync.Mutex
+
 	errCh chan error
 	done  chan struct{}
 	once  sync.Once
@@ -116,17 +139,18 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	conf.Ensure()
 
 	c := &Client{
-		ready:      make(chan struct{}),
-		porter:     netutil.NewPorter(netutil.PorterMinEphemeral),
-		routeCache: make(map[cipher.PubKey]cipher.PubKey),
-		entryCache: make(map[cipher.PubKey]entryCacheEntry),
-		errCh:      make(chan error, 10),
-		done:       make(chan struct{}),
-		conf:       conf,
-		initBO:     time.Second * 5,
-		bo:         time.Second * 5,
-		maxBO:      time.Minute,
-		factor:     netutil.DefaultFactor,
+		ready:          make(chan struct{}),
+		porter:         netutil.NewPorter(netutil.PorterMinEphemeral),
+		routeCache:     make(map[cipher.PubKey]cipher.PubKey),
+		entryCache:     make(map[cipher.PubKey]entryCacheEntry),
+		negativeRoutes: make(map[negativeRouteKey]time.Time),
+		errCh:          make(chan error, 10),
+		done:           make(chan struct{}),
+		conf:           conf,
+		initBO:         time.Second * 5,
+		bo:             time.Second * 5,
+		maxBO:          time.Minute,
+		factor:         netutil.DefaultFactor,
 	}
 
 	// Init common fields.
@@ -532,6 +556,49 @@ func (ce *Client) setCachedEntry(pk cipher.PubKey, entry *disc.Entry) {
 	ce.entryCacheMx.Lock()
 	ce.entryCache[pk] = entryCacheEntry{entry: entry, fetchedAt: time.Now()}
 	ce.entryCacheMx.Unlock()
+}
+
+// isNegativeRoute reports whether a recent dial to dst via srv failed and
+// the failure is still within negativeRouteTTL. Expired entries are pruned
+// lazily by the next call that touches them.
+func (ce *Client) isNegativeRoute(dst, srv cipher.PubKey) bool {
+	key := negativeRouteKey{dst: dst, srv: srv}
+	ce.negativeRoutesMx.Lock()
+	defer ce.negativeRoutesMx.Unlock()
+	at, ok := ce.negativeRoutes[key]
+	if !ok {
+		return false
+	}
+	if time.Since(at) > negativeRouteTTL {
+		delete(ce.negativeRoutes, key)
+		return false
+	}
+	return true
+}
+
+// markNegativeRoute records a failed dial to dst via srv. The entry expires
+// after negativeRouteTTL. If the cache exceeds negativeRouteMax, it is
+// wiped and rebuilt to bound memory usage.
+func (ce *Client) markNegativeRoute(dst, srv cipher.PubKey) {
+	key := negativeRouteKey{dst: dst, srv: srv}
+	ce.negativeRoutesMx.Lock()
+	defer ce.negativeRoutesMx.Unlock()
+	if len(ce.negativeRoutes) >= negativeRouteMax {
+		ce.negativeRoutes = make(map[negativeRouteKey]time.Time)
+	}
+	ce.negativeRoutes[key] = time.Now()
+}
+
+// clearNegativeRoute removes all cached negative entries for dst — called
+// on a successful dial so subsequent calls can retry formerly-bad servers.
+func (ce *Client) clearNegativeRoute(dst cipher.PubKey) {
+	ce.negativeRoutesMx.Lock()
+	defer ce.negativeRoutesMx.Unlock()
+	for k := range ce.negativeRoutes {
+		if k.dst == dst {
+			delete(ce.negativeRoutes, k)
+		}
+	}
 }
 
 // reconnectLoop periodically discovers all available servers and attempts to
