@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sort"
 	"time"
 
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -617,6 +618,67 @@ func (v *Visor) SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error) {
 	// Trigger the one-shot so the running visor reaches the new target now
 	// without needing a restart.
 	return v.DmsgConnectAll()
+}
+
+// DmsgSessions enumerates all dmsg clients running inside the visor and
+// returns the server PKs each one has an active session with. Covers the
+// main visor dmsg client, the embedded route setup node's dmsg client
+// (if configured), and the embedded transport setup node's dmsg client
+// (if configured). Each of these runs under a DIFFERENT identity/key and
+// maintains its OWN session set, so checking `visor info` alone does not
+// tell you whether the RSN or TPS is actually reaching the network.
+func (v *Visor) DmsgSessions() (*DmsgClientSessions, error) {
+	out := &DmsgClientSessions{}
+
+	if v.dmsgC != nil {
+		servers := dmsgClientServerPKs(v.dmsgC)
+		out.Main = &DmsgClientSessionInfo{
+			PK:      v.conf.PK,
+			Role:    "main",
+			Count:   len(servers),
+			Servers: servers,
+		}
+	}
+
+	v.initLock.Lock()
+	rsn := v.embeddedRouteSetup
+	tps := v.embeddedTPS
+	v.initLock.Unlock()
+
+	if rsn != nil && rsn.DmsgClient() != nil {
+		servers := dmsgClientServerPKs(rsn.DmsgClient())
+		out.RouteSetup = &DmsgClientSessionInfo{
+			PK:      rsn.PK(),
+			Role:    "route_setup",
+			Count:   len(servers),
+			Servers: servers,
+		}
+	}
+	if tps != nil && tps.DmsgClient() != nil {
+		servers := dmsgClientServerPKs(tps.DmsgClient())
+		out.TransportSetup = &DmsgClientSessionInfo{
+			PK:      tps.PK(),
+			Role:    "transport_setup",
+			Count:   len(servers),
+			Servers: servers,
+		}
+	}
+	return out, nil
+}
+
+// dmsgClientServerPKs returns the PKs of the dmsg servers the given client
+// currently has an active session with. Sorted by PK for stable output.
+func dmsgClientServerPKs(c *dmsg.Client) []cipher.PubKey {
+	strs := c.ConnectedServersPK()
+	out := make([]cipher.PubKey, 0, len(strs))
+	for _, s := range strs {
+		var pk cipher.PubKey
+		if err := pk.Set(s); err == nil {
+			out = append(out, pk)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	return out
 }
 
 // DmsgHTTP implements API. Performs an HTTP request over dmsg using the visor's dmsg client.

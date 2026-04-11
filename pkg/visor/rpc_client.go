@@ -1004,6 +1004,16 @@ func (rc *rpcClient) SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, err
 	return &resp, nil
 }
 
+// DmsgSessions returns the current dmsg session state of every dmsg client
+// running inside the visor (main / route_setup / transport_setup).
+func (rc *rpcClient) DmsgSessions() (*DmsgClientSessions, error) {
+	var resp DmsgClientSessions
+	if err := rc.Call("DmsgSessions", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // TPSStatus returns the status of the embedded TPS.
 func (rc *rpcClient) TPSStatus() (*TPSStatus, error) {
 	var status TPSStatus
