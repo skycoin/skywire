@@ -1282,6 +1282,18 @@ func (r *RPC) SetDmsgSessionsCount(count *int, out *DmsgConnectAllResult) (err e
 	return nil
 }
 
+// DmsgSessions returns the current dmsg session state of every dmsg client
+// running inside the visor.
+func (r *RPC) DmsgSessions(_ *struct{}, out *DmsgClientSessions) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgSessions", nil)(out, &err)
+	resp, err := r.visor.DmsgSessions()
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
 // TPSAddTransportIn is the input for TPSAddTransport RPC.
 type TPSAddTransportIn struct {
 	TargetPK cipher.PubKey

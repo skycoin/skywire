@@ -184,6 +184,7 @@ type API interface {
 	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
 	DmsgConnectAll() (*DmsgConnectAllResult, error)
 	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
+	DmsgSessions() (*DmsgClientSessions, error)
 
 	// Embedded Transport Setup Node (TPS) controls
 	TPSStatus() (*TPSStatus, error)
@@ -414,6 +415,27 @@ type PortDetail struct {
 type DMSGServerInfo struct {
 	PK      cipher.PubKey `json:"pk"`
 	Latency time.Duration `json:"latency"` // Round-trip latency via self-ping, 0 if not measured
+}
+
+// DmsgClientSessions enumerates every dmsg client running inside the visor
+// (main + embedded route setup node + embedded transport setup node) along
+// with the dmsg server PKs each one currently has an active session to.
+// Used by the `skywire cli dmsg sessions` command for operators investigating
+// connectivity issues — the embedded RSN / TPS use SEPARATE dmsg keys and
+// therefore SEPARATE sets of sessions from the main visor, so checking one
+// doesn't tell you about the others.
+type DmsgClientSessions struct {
+	Main           *DmsgClientSessionInfo `json:"main,omitempty"`
+	RouteSetup     *DmsgClientSessionInfo `json:"route_setup,omitempty"`
+	TransportSetup *DmsgClientSessionInfo `json:"transport_setup,omitempty"`
+}
+
+// DmsgClientSessionInfo is one dmsg client's current session state.
+type DmsgClientSessionInfo struct {
+	PK      cipher.PubKey   `json:"pk"`
+	Role    string          `json:"role"` // "main" | "route_setup" | "transport_setup"
+	Count   int             `json:"count"`
+	Servers []cipher.PubKey `json:"servers"`
 }
 
 // DmsgHTTPRequest represents an HTTP request to be made over dmsg
