@@ -14,6 +14,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
@@ -228,6 +229,7 @@ func initEmbeddedRouteSetup(ctx context.Context, v *Visor, log *logging.Logger) 
 		dmsgC: routeSetupDmsgC,
 		pk:    routeSetupPK,
 		log:   log,
+		stats: setupmetrics.NewCollector(setupmetrics.CollectorConfig{}),
 	}
 	v.initLock.Unlock()
 

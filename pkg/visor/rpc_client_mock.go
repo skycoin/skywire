@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
@@ -1079,6 +1080,16 @@ func (mc *mockRPCClient) GetTPSHealth() ([]NodeHealth, error) {
 // GetRSNHealth implements API.
 func (mc *mockRPCClient) GetRSNHealth() ([]NodeHealth, error) {
 	return nil, nil
+}
+
+// RouteSetupStats implements API.
+func (mc *mockRPCClient) RouteSetupStats() (*setupmetrics.StatsSnapshot, error) {
+	return &setupmetrics.StatsSnapshot{}, nil
+}
+
+// ResetRouteSetupStats implements API.
+func (mc *mockRPCClient) ResetRouteSetupStats() error {
+	return nil
 }
 
 // TPSExternalHealthCheck implements API.

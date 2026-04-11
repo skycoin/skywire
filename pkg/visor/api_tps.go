@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 
+	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/tpviz"
@@ -143,6 +144,27 @@ func (v *Visor) GetRSNHealth() ([]NodeHealth, error) {
 		return nil, fmt.Errorf("node health tracker not initialized")
 	}
 	return v.nodeHealthTracker.GetRSNHealth(), nil
+}
+
+// RouteSetupStats returns a snapshot of the embedded Route Setup Node's
+// request statistics. Returns an error if no embedded RSN is running on
+// this visor (i.e. route_setup_sk is not configured).
+func (v *Visor) RouteSetupStats() (*setupmetrics.StatsSnapshot, error) {
+	if v.embeddedRouteSetup == nil {
+		return nil, fmt.Errorf("embedded route setup-node not running on this visor")
+	}
+	snap := v.embeddedRouteSetup.Stats()
+	return &snap, nil
+}
+
+// ResetRouteSetupStats clears all counters and ring buffers on the
+// embedded Route Setup Node's stats collector.
+func (v *Visor) ResetRouteSetupStats() error {
+	if v.embeddedRouteSetup == nil {
+		return fmt.Errorf("embedded route setup-node not running on this visor")
+	}
+	v.embeddedRouteSetup.ResetStats()
+	return nil
 }
 
 // TPSExternalHealthCheck dials an external TPS over dmsg and performs a health check.
