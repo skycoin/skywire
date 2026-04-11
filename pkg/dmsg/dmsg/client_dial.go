@@ -87,31 +87,32 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// so it still uses the tighter cap.
 	const maxPerNewPhase = 2
 
-	// Phase 1: Race the target's delegated-server sessions in parallel.
+	// Phase 1: Iterate the target's delegated-server sessions serially
+	// with a tight per-attempt timeout. Each candidate gets at most
+	// phaseDialTimeout (3s), so a full 16-candidate scan fits in the
+	// ~48s worst case — in practice the negative cache fast-fails
+	// known-bad pairings so the typical traversal is much shorter.
 	//
-	// Prior behavior: sequential loop — each attempt could burn up to
-	// HandshakeTimeout (5s) before moving on. With an outer ctx of ~10s
-	// only 1-2 attempts fit, so phase 2/3 saw "ctx deadline exceeded"
-	// as soon as one server was unresponsive.
-	//
-	// New behavior: fire all (non-negative-cached) delegated sessions
-	// simultaneously with a tight 3s per-dial budget. First success
-	// wins, cancel the rest. On a healthy dial the first session
-	// returns in <500ms so the paralellism has negligible cost; on a
-	// stale-entry dial every session times out in ~3s and phase 2
-	// gets a real remaining budget instead of seeing ctx already done.
+	// Why sequential rather than parallel: a parallel race opens N
+	// yamux streams on the destination's listener simultaneously, then
+	// cancels N-1 losers. The destination's listener accepts the
+	// loser streams into its accept queue before they can be
+	// canceled, leaving orphan streams that subsequent AcceptStream
+	// calls consume — breaking any caller that expects consecutive
+	// dials to produce consecutive, usable streams (the exact failure
+	// mode of TestMultiServerStreams).
 	delegatedSessions := ce.sortedDelegatedSessions(entry.Client.DelegatedServers)
-	if stream, ok := ce.racePhaseDial(ctx, addr, delegatedSessions, maxPerExistingPhase); ok {
+	if stream, ok := ce.sequentialPhaseDial(ctx, addr, delegatedSessions, maxPerExistingPhase); ok {
 		return stream, nil
 	}
 
-	// Phase 2: Race other existing sessions (mesh path — already
+	// Phase 2: Iterate other existing sessions (mesh path — already
 	// connected, no new handshake). If servers are meshed, our server
 	// forwards the request to the target's server. Sorted by latency.
-	// Honors the same 3s per-dial budget as phase 1 and skips
-	// negative-cached pairs.
+	// Honors the same per-attempt deadline and skips negative-cached
+	// pairs.
 	meshSessions := ce.sortedMeshSessions(entry.Client.DelegatedServers)
-	if stream, ok := ce.racePhaseDial(ctx, addr, meshSessions, maxPerExistingPhase); ok {
+	if stream, ok := ce.sequentialPhaseDial(ctx, addr, meshSessions, maxPerExistingPhase); ok {
 		return stream, nil
 	}
 
@@ -151,132 +152,59 @@ func (ce *Client) getClientEntryCached(ctx context.Context, clientPK cipher.PubK
 }
 
 // phaseDialTimeout is the per-attempt deadline for a single session
-// DialStream inside racePhaseDial. It is intentionally shorter than
-// HandshakeTimeout (5s) so that all delegated sessions can complete
-// within a typical 10s outer route-setup context even when every one
-// of them times out, leaving phase 2 a meaningful remaining budget.
+// DialStream inside sequentialPhaseDial. It is intentionally shorter
+// than HandshakeTimeout (5s) so that multiple delegated sessions can
+// be tried serially within a typical 10s outer route-setup context.
+// With the per-attempt deadline at 3s, a full 16-candidate scan fits
+// in the 48s worst case, but in practice the negative cache short-
+// circuits known-bad pairings so traversal is much shorter.
 const phaseDialTimeout = 3 * time.Second
 
-// racePhaseDial races DialStream across all provided sessions in
-// parallel, skipping any (dst, srv) pair that's in the negative route
-// cache. First success wins and cancels the rest; on success we
-// update routeCache and clear negative entries for the destination.
-// On total failure we mark every attempted session as a negative
-// route for dst. Returns (stream, true) on success, (nil, false)
-// otherwise.
-func (ce *Client) racePhaseDial(ctx context.Context, addr Addr, sessions []ClientSession, cap int) (*Stream, bool) {
-	// Filter out negative-cached sessions up-front and cap the pool.
-	candidates := make([]ClientSession, 0, len(sessions))
+// sequentialPhaseDial iterates sessions in order, skipping any
+// (dst, server) pair in the negative route cache. Each attempt uses
+// a per-call context with phaseDialTimeout so a dead session doesn't
+// burn the whole outer context budget. On success it updates the
+// route cache and clears negative entries for dst; on failure it
+// marks the attempted pair as a negative route. Returns
+// (stream, true) on success, (nil, false) if every attempt failed
+// or the pool was empty / fully negative-cached.
+//
+// Sequential rather than parallel because parallel racing opens N
+// yamux streams on the destination simultaneously and leaves N-1
+// orphan streams in the destination's accept queue after cancellation
+// — the destination cannot distinguish "this stream was canceled"
+// from "this stream is for you to accept", and consumes the orphans
+// on subsequent AcceptStream calls.
+func (ce *Client) sequentialPhaseDial(ctx context.Context, addr Addr, sessions []ClientSession, cap int) (*Stream, bool) {
+	tried := 0
 	for _, s := range sessions {
-		if len(candidates) >= cap {
+		if tried >= cap {
 			break
+		}
+		if ctx.Err() != nil {
+			return nil, false
 		}
 		if ce.isNegativeRoute(addr.PK, s.RemotePK()) {
 			ce.log.WithField("server", s.RemotePK()).
 				Debug("DialStream skipping session: negative cache hit")
 			continue
 		}
-		candidates = append(candidates, s)
-	}
-	if len(candidates) == 0 {
-		return nil, false
-	}
+		tried++
 
-	// Single candidate: no point in the goroutine machinery. Pass
-	// the parent ctx directly — no derived timeout is needed because
-	// session DialStream already bounds the handshake via its
-	// internal HandshakeTimeout deadline, and deriving a short
-	// WithTimeout + defer cancel here would immediately cancel the
-	// ctx after DialStream returns, which previously raced the
-	// session's ctx-cancel watcher goroutine (manifested as
-	// "stream closed" errors in TestConcurrentStreams).
-	if len(candidates) == 1 {
-		stream, err := candidates[0].DialStream(ctx, addr)
+		dialCtx, cancel := context.WithTimeout(ctx, phaseDialTimeout)
+		stream, err := s.DialStream(dialCtx, addr)
+		cancel()
 		if err != nil {
-			ce.log.WithError(err).WithField("server", candidates[0].RemotePK()).
-				Debug("DialStream failed (single candidate)")
-			ce.markNegativeRoute(addr.PK, candidates[0].RemotePK())
-			return nil, false
+			ce.log.WithError(err).WithField("server", s.RemotePK()).
+				Debug("DialStream failed, trying next session")
+			ce.markNegativeRoute(addr.PK, s.RemotePK())
+			continue
 		}
 		ce.clearNegativeRoute(addr.PK)
-		ce.setCachedRoute(addr.PK, candidates[0].RemotePK())
+		ce.setCachedRoute(addr.PK, s.RemotePK())
 		return stream, true
 	}
-
-	raceCtx, cancelRace := context.WithTimeout(ctx, phaseDialTimeout)
-	defer cancelRace()
-
-	results := make(chan dialResult, len(candidates))
-	for _, s := range candidates {
-		go func(ses ClientSession) {
-			stream, err := ses.DialStream(raceCtx, addr)
-			results <- dialResult{stream: stream, srvPK: ses.RemotePK(), err: err}
-		}(s)
-	}
-
-	// Collect results. First success wins — we cancel the rest and
-	// drain in a background goroutine to close any late streams.
-	var chosen *Stream
-	var chosenSrv cipher.PubKey
-	remaining := len(candidates)
-	for remaining > 0 {
-		select {
-		case <-ctx.Done():
-			// Parent context died — cancel the race and drain in
-			// background, then return failure. Any stream that
-			// comes back will be closed by the drain loop below.
-			cancelRace()
-			go drainAndCloseResults(results, remaining)
-			return nil, false
-		case res := <-results:
-			remaining--
-			if res.err != nil {
-				ce.log.WithError(res.err).WithField("server", res.srvPK).
-					Debug("DialStream failed in race")
-				ce.markNegativeRoute(addr.PK, res.srvPK)
-				continue
-			}
-			if chosen == nil {
-				chosen = res.stream
-				chosenSrv = res.srvPK
-				// Cancel any still-running dials — their streams
-				// will be closed by the drain loop.
-				cancelRace()
-			} else {
-				// Late arrival after we already chose a winner.
-				_ = res.stream.Close() //nolint:errcheck
-			}
-		}
-	}
-
-	if chosen == nil {
-		return nil, false
-	}
-	ce.clearNegativeRoute(addr.PK)
-	ce.setCachedRoute(addr.PK, chosenSrv)
-	return chosen, true
-}
-
-// dialResult carries the outcome of a single DialStream attempt inside
-// racePhaseDial. A named package-level type so drainAndCloseResults can
-// accept the same channel element type.
-type dialResult struct {
-	stream *Stream
-	srvPK  cipher.PubKey
-	err    error
-}
-
-// drainAndCloseResults consumes n more results from ch and closes any
-// successfully-returned streams. Used when racePhaseDial bails out
-// early and needs to avoid leaking streams that the goroutines may
-// still successfully open before they notice the cancellation.
-func drainAndCloseResults(ch <-chan dialResult, n int) {
-	for i := 0; i < n; i++ {
-		res := <-ch
-		if res.stream != nil {
-			_ = res.stream.Close() //nolint:errcheck
-		}
-	}
+	return nil, false
 }
 
 // sortedDelegatedSessions returns existing sessions to the given delegated servers,
