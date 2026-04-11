@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/yamux"
@@ -78,28 +79,61 @@ func (cs *ClientSession) DialStream(ctx context.Context, dst Addr) (dStr *Stream
 	// If the caller's context is canceled, close the stream to interrupt
 	// any blocked read/write and free the ephemeral port immediately.
 	//
-	// The watcher and DialStream must synchronize on exit: a naive
-	// `defer close(ctxDone)` only makes the watcher runnable; if the
-	// caller cancels ctx before the watcher is actually scheduled
-	// (e.g. callers that use per-attempt WithTimeout + immediate
-	// defer cancel), both select cases race and the watcher may
-	// pick ctx.Done() and close the just-returned stream. The
-	// `<-watcherExited` barrier below guarantees the watcher has
-	// observed ctxDone and fully exited before DialStream returns,
-	// so any post-return ctx cancel finds nothing to cancel.
+	// Synchronization is non-trivial. A naive watcher goroutine that
+	// just `select`s on ctx.Done() vs a ctxDone signal races with the
+	// post-handshake cleanup: if ctx is canceled *around the same
+	// time* the handshake finishes (e.g. a sibling racePhaseDial
+	// goroutine that canceled the shared raceCtx as soon as its own
+	// winning dial returned), both select cases become ready
+	// concurrently and the runtime picks one randomly. Picking
+	// ctx.Done() in that instant closes the stream that DialStream
+	// is about to return successfully, and the caller sees the Write
+	// fail with "stream closed" or reads EOF.
+	//
+	// The fix is a mutex that serializes the decision. The watcher
+	// grabs `mu` before inspecting `finished`; the main-flow defer
+	// grabs `mu` first, marks `finished=true`, releases. Whichever
+	// wins the mutex decides. If the watcher won and closed the
+	// stream, it also sets `closedByWatcher=true` so the defer can
+	// surface the race as a proper error to the caller rather than
+	// handing them a dead stream.
+	var (
+		mu              sync.Mutex
+		finished        bool
+		closedByWatcher bool
+	)
 	ctxDone := make(chan struct{})
-	watcherExited := make(chan struct{})
 	go func() {
-		defer close(watcherExited)
 		select {
 		case <-ctx.Done():
-			dStr.Close() //nolint:errcheck,gosec
+			mu.Lock()
+			if !finished {
+				closedByWatcher = true
+				dStr.Close() //nolint:errcheck,gosec
+			}
+			mu.Unlock()
 		case <-ctxDone:
 		}
 	}()
 	defer func() {
+		mu.Lock()
+		finished = true
+		wasClosed := closedByWatcher
+		mu.Unlock()
 		close(ctxDone)
-		<-watcherExited
+		// If the watcher fired and closed the stream but the main
+		// flow also finished the handshake with err==nil, the
+		// returned stream is unusable. Report it as a cancellation
+		// and release the now-nil pointer so the outer failure
+		// defer at line 69 becomes a no-op.
+		if wasClosed && err == nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				err = ctxErr
+			} else {
+				err = context.Canceled
+			}
+			dStr = nil
+		}
 	}()
 
 	// Check context before starting.
