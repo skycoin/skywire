@@ -12,7 +12,6 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
@@ -28,7 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/tcpproxy"
+	"github.com/skycoin/skywire/pkg/svcmode"
 )
 
 var log = logging.MustGetLogger("service-discovery")
@@ -49,6 +48,7 @@ var (
 	geoipURL       string
 	pprofAddr      string
 	entryTimeout   time.Duration
+	mode           string
 )
 
 // exampleJSON marshals v to indented JSON with color, returning empty string on error
@@ -128,6 +128,7 @@ func init() {
 	// (skyenv.ServiceDiscUpdateInterval), giving safe margin for one
 	// or two dropped refreshes without expiring a live entry.
 	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 5*time.Minute, "client service entry TTL (0 to disable)\n\r")
+	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
 }
 
 // RootCmd contains the root service-discovery command
@@ -242,43 +243,38 @@ Example:
 
 		go sdAPI.RunBackgroundTasks(ctx, log)
 
-		log.WithField("addr", addr).Info("Serving discovery API...")
-		go func() {
-			if err := tcpproxy.ListenAndServe(addr, sdAPI); err != nil {
-				log.Errorf("ListenAndServe: %v", err)
-				cancel()
-			}
-		}()
-
-		if !pk.Null() {
-			dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk,
-				dmsg.Prod.DmsgServers, dmsgDisc, dmsgServerType)
-			if err != nil {
-				log.WithError(err).Fatal("failed to start direct dmsg client.")
-			}
-			defer dmsgBoot.Close()
-
-			go func() {
-				for {
-					sdAPI.DmsgServers = dmsgBoot.Client.ConnectedServersPK()
-					time.Sleep(time.Second)
-				}
-			}()
-
-			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, sk, sdAPI, dmsgBoot.DClient, dmsgPort, dmsgBoot.Client, log); err != nil {
-					log.Errorf("dmsghttp.ListenAndServe: %v", err)
-					cancel()
-				}
-			}()
-			go func() {
-				if err := dmsghttp.ServeDebug(ctx, dmsgBoot.Client, log, deployment.Prod.SurveyWhitelist); err != nil {
-					log.Errorf("dmsghttp.ServeDebug: %v", err)
-				}
-			}()
+		resolvedMode, err := svcmode.ResolveMode(mode, !sk.Null())
+		if err != nil {
+			log.WithError(err).Fatal("invalid --mode")
 		}
 
-		<-ctx.Done()
+		h, err := svcmode.Start(ctx, svcmode.Config{
+			Mode:                resolvedMode,
+			HTTPAddr:            addr,
+			Handler:             sdAPI,
+			PK:                  pk,
+			SK:                  sk,
+			DmsgPort:            dmsgPort,
+			DmsgDiscovery:       dmsgDisc,
+			DmsgServerType:      dmsgServerType,
+			EmbeddedDmsgServers: dmsg.Prod.DmsgServers,
+			SurveyWhitelist:     deployment.Prod.SurveyWhitelist,
+			Log:                 log,
+			OnDmsgServersUpdated: func(s []string) {
+				sdAPI.DmsgServers = s
+			},
+		})
+		if err != nil {
+			log.WithError(err).Fatal("failed to start listeners")
+		}
+		defer h.Close()
+
+		select {
+		case <-ctx.Done():
+		case err := <-h.Errors():
+			log.WithError(err).Error("listener failed")
+			cancel()
+		}
 	},
 }
 
