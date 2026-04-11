@@ -259,6 +259,21 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 	}
 	log.Debug("Forwarded stream request.")
 
+	// Track ownership of yStr2 — if we hit an error path before handing
+	// it to CopyReadWriteCloser, we must close it explicitly or the
+	// yamux stream leaks (each leaked stream pins ~600KB of yamux
+	// send/recv window buffers). Prior code returned on writeObject
+	// failure without closing yStr2, which under production load
+	// accounted for ~340MB of accumulated inuse_space on the dmsg
+	// servers (~85% of heap) — the "dmsg-server-1 is using 1 GB of
+	// RAM" incident.
+	yStr2Owned := true
+	defer func() {
+		if yStr2Owned {
+			_ = yStr2.Close() //nolint:errcheck
+		}
+	}()
+
 	if err := ss.writeObject(yStr, resp); err != nil {
 		ss.m.RecordStream(metrics.DeltaFailed)
 		return err
@@ -274,12 +289,16 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 
 	// Wrap both streams with idle-timeout deadlines.
 	yStr = &idleTimeoutConn{rwc: yStr, timeout: streamIdleTimeout}
-	yStr2 = &idleTimeoutConn{rwc: yStr2, timeout: streamIdleTimeout}
+	yStr2Wrapped := &idleTimeoutConn{rwc: yStr2, timeout: streamIdleTimeout}
+
+	// Ownership of yStr2 now belongs to CopyReadWriteCloser via the
+	// wrapper — it closes both sides when either direction errors out.
+	yStr2Owned = false
 
 	log.Info("Serving stream.")
 	ss.m.RecordStream(metrics.DeltaConnect)
 	defer ss.m.RecordStream(metrics.DeltaDisconnect)
-	return netutil.CopyReadWriteCloser(yStr, yStr2)
+	return netutil.CopyReadWriteCloser(yStr, yStr2Wrapped)
 }
 
 // idleTimeoutConn wraps a ReadWriteCloser with per-operation deadlines.
@@ -367,6 +386,13 @@ func addrToIP(addr net.Addr) (net.IP, error) {
 }
 
 func (ss *ServerSession) forwardRequest(req StreamRequest) (mStr io.ReadWriteCloser, respObj SignedObject, err error) {
+	// On any error after the stream was opened, the deferred close
+	// reclaims the yamux stream. Named-return plus "return without
+	// arguments" so mStr stays set on error paths — the previous code
+	// returned `nil, nil, err` on write/read failure, which made the
+	// `mStr != nil` guard skip the close and leaked every such stream
+	// (main contributor to the ~340MB of accumulated newStream
+	// allocations in the dmsg-server heap).
 	defer func() {
 		if err != nil && mStr != nil {
 			ss.log.
@@ -390,10 +416,10 @@ func (ss *ServerSession) forwardRequest(req StreamRequest) (mStr io.ReadWriteClo
 		conn.SetDeadline(time.Now().Add(HandshakeTimeout)) //nolint:errcheck,gosec
 	}
 	if err = ss.writeObject(mStr, req.raw); err != nil {
-		return nil, nil, err
+		return mStr, nil, err
 	}
 	if respObj, err = ss.readObject(mStr); err != nil {
-		return nil, nil, err
+		return mStr, nil, err
 	}
 	// Clear deadline before returning the stream for long-lived bridging.
 	if conn, ok := mStr.(net.Conn); ok {
@@ -401,10 +427,10 @@ func (ss *ServerSession) forwardRequest(req StreamRequest) (mStr io.ReadWriteClo
 	}
 	var resp StreamResponse
 	if resp, err = respObj.ObtainStreamResponse(); err != nil {
-		return nil, nil, err
+		return mStr, respObj, err
 	}
 	if err = resp.Verify(req); err != nil {
-		return nil, nil, err
+		return mStr, respObj, err
 	}
 	return mStr, respObj, nil
 }

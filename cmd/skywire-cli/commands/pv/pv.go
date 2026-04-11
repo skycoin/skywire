@@ -15,6 +15,7 @@ import (
 	"github.com/tidwall/pretty"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -122,6 +123,8 @@ func init() {
 	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
 	RootCmd.Flags().BoolVarP(&showTransports, "transports", "t", false, "show transport count per visor")
 	RootCmd.Flags().IntVarP(&minTransports, "min", "n", 0, "minimum transport count (requires -t)")
+	RootCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	clirpc.RegisterFetchFlags(RootCmd)
 }
 
 // RootCmd is the command for listing public visors
@@ -169,7 +172,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		tpdFullURL := tpdURL + "/all-transports"
 
 		// Fetch SD
-		sds := internal.GetData(cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
+		sds := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
 		if rawData {
 			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint:errcheck,gosec
 			return
@@ -206,7 +209,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 			pks, _ = script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Slice() //nolint:errcheck
 		} else {
 			// Filter by online status via jq join
-			uts := internal.GetData(cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
+			uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
 			joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, uts)
 
 			// Build jq filter with optional country and version conditions
@@ -244,7 +247,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		}
 
 		// Show transports mode - fetch TPD and count transports per visor
-		tpd := internal.GetData(cacheFile(cacheDirTPD, tpdFullURL), tpdFullURL, cacheFilesAge)
+		tpd := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirTPD, tpdFullURL), tpdFullURL, cacheFilesAge)
 
 		var entries []*transport.Entry
 		if err := json.Unmarshal([]byte(tpd), &entries); err != nil {
