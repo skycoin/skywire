@@ -58,15 +58,23 @@ type transport struct {
 }
 
 // DoHandshake performs given handshake over given raw connection and wraps
-// connection in network.Transport
+// connection in network.Transport. Uses the default handshake.Timeout (10s).
 func DoHandshake(rawConn net.Conn, hs handshake.Handshake, netType types.Type, log *logging.Logger) (Transport, error) {
-	return doHandshake(rawConn, hs, netType, log)
+	return DoHandshakeWithTimeout(rawConn, hs, netType, handshake.Timeout, log)
+}
+
+// DoHandshakeWithTimeout is the same as DoHandshake but lets the caller pick
+// a per-call handshake deadline. Useful for public-facing listeners (e.g. the
+// address-resolver's SUDPH accept loop) that need a tighter timeout than the
+// 10-second default to resist scanner / broken-client accumulation.
+func DoHandshakeWithTimeout(rawConn net.Conn, hs handshake.Handshake, netType types.Type, timeout time.Duration, log *logging.Logger) (Transport, error) {
+	return doHandshake(rawConn, hs, netType, timeout, log)
 }
 
 // handshake performs given handshake over given raw connection and wraps
 // connection in network.transport
-func doHandshake(rawConn net.Conn, hs handshake.Handshake, netType types.Type, log *logging.Logger) (*transport, error) {
-	lAddr, rAddr, err := hs(rawConn, time.Now().Add(handshake.Timeout))
+func doHandshake(rawConn net.Conn, hs handshake.Handshake, netType types.Type, timeout time.Duration, log *logging.Logger) (*transport, error) {
+	lAddr, rAddr, err := hs(rawConn, time.Now().Add(timeout))
 	if err != nil {
 		if err := rawConn.Close(); err != nil {
 			log.WithError(err).Warnf("Failed to close connection")
