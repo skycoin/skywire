@@ -200,16 +200,17 @@ func (s *redisStore) UpdateService(ctx context.Context, se *servicedisc.Service)
 		return s.processErr(err, http.StatusInternalServerError)
 	}
 
-	// Only apply TTL on re-registration (key already exists).
-	// First-time registrations get no TTL for backward compatibility with old visors.
-	exists, _ := s.client.Exists(ctx, key).Result() //nolint: errcheck
-	ttl := time.Duration(0)
-	if exists > 0 {
-		ttl = s.ttl
-	}
-
+	// Always apply TTL so stale services expire when clients stop
+	// re-registering. The prior behavior skipped TTL on first-time
+	// registrations "for backward compatibility with old visors",
+	// which let crashed / offline clients accumulate in Redis
+	// forever — same anti-pattern as the dmsg-discovery bug fixed
+	// in #2305. Clients refresh their service entry every 90s (see
+	// skyenv.ServiceDiscUpdateInterval), so a TTL >= ~2× refresh
+	// (configured via --entry-timeout, default 5m) gives safe
+	// margin for dropped or slow refreshes.
 	pipe := s.client.Pipeline()
-	pipe.Set(ctx, key, data, ttl)
+	pipe.Set(ctx, key, data, s.ttl)
 	pipe.SAdd(ctx, setKey, se.Addr.PubKey().String())
 	pipe.SAdd(ctx, serviceTypesSetKey, se.Type)
 
