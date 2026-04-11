@@ -104,9 +104,9 @@ func TestResolveMode(t *testing.T) {
 
 func TestModeIncludes(t *testing.T) {
 	cases := []struct {
-		mode          Mode
-		wantHTTP      bool
-		wantDmsg      bool
+		mode     Mode
+		wantHTTP bool
+		wantDmsg bool
 	}{
 		{ModeHTTP, true, false},
 		{ModeDmsg, false, true},
