@@ -105,7 +105,7 @@ func (c *sudphClient) makeBindHandshake() func(in net.Conn) (net.Conn, error) {
 	emptyAddr := dmsg.Addr{PK: cipher.PubKey{}, Port: 0}
 	hs := handshake.InitiatorHandshake(c.SK(), dmsg.Addr{PK: c.PK(), Port: 0}, emptyAddr)
 	return func(in net.Conn) (net.Conn, error) {
-		return doHandshake(in, hs, types.SUDPH, c.log)
+		return doHandshake(in, hs, types.SUDPH, handshake.Timeout, c.log)
 	}
 }
 
