@@ -5,6 +5,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -401,6 +402,61 @@ func (ce *Client) Close() error {
 // AllSessions obtains all established sessions.
 func (ce *Client) AllSessions() []ClientSession {
 	return ce.allClientSessions(ce.porter)
+}
+
+// ConnectToAllServersResult summarizes the result of a ConnectToAllServers call.
+type ConnectToAllServersResult struct {
+	Total            int                      // total servers found in discovery
+	AlreadyConnected int                      // sessions already in place before the call
+	NewlyConnected   int                      // sessions established by this call
+	Failed           map[cipher.PubKey]string // server PK → error text for any that could not be connected
+}
+
+// ConnectToAllServers enumerates every server entry in dmsg discovery and
+// ensures the client has an active session to each one. Useful as a
+// one-shot "maximize connectivity now" action for visors that run
+// route/transport setup nodes and need to reach arbitrary destinations
+// without bouncing through phase-3 new-session dials.
+//
+// The client's configured MinSessions is NOT mutated — once a session
+// dies, the normal reconnect behavior applies. Use SetSessionsCount
+// (or restart the client with sessions_count: 0) if you want the
+// "keep sessions to all servers" behavior to persist.
+func (ce *Client) ConnectToAllServers(ctx context.Context) (ConnectToAllServersResult, error) {
+	result := ConnectToAllServersResult{Failed: make(map[cipher.PubKey]string)}
+
+	entries, err := ce.discoverServers(ctx, true)
+	if err != nil {
+		return result, fmt.Errorf("dmsg disc AllServers: %w", err)
+	}
+	result.Total = len(entries)
+
+	for _, entry := range entries {
+		if isClosed(ce.done) {
+			return result, nil
+		}
+		// Respect server type filter if one is configured.
+		if ce.conf.ConnectedServersType == "official" && entry.Server.ServerType != "official" {
+			continue
+		}
+		if ce.conf.ConnectedServersType == "community" && entry.Server.ServerType != "community" {
+			continue
+		}
+		// Skip servers we already have a session with.
+		if _, ok := ce.session(entry.Static); ok {
+			result.AlreadyConnected++
+			continue
+		}
+		if err := ce.EnsureSession(ctx, entry); err != nil {
+			result.Failed[entry.Static] = err.Error()
+			ce.log.WithField("server_pk", entry.Static).WithError(err).
+				Debug("ConnectToAllServers: failed to establish session.")
+			continue
+		}
+		result.NewlyConnected++
+		ce.log.WithField("server_pk", entry.Static).Info("ConnectToAllServers: session established.")
+	}
+	return result, nil
 }
 
 // ConnectedServers obtains all the servers client is connected to.

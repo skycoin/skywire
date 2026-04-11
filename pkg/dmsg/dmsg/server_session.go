@@ -259,22 +259,15 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 	}
 	log.Debug("Forwarded stream request.")
 
-	// Track ownership of yStr2 — if we hit an error path before handing
-	// it to CopyReadWriteCloser, we must close it explicitly or the
-	// yamux stream leaks (each leaked stream pins ~600KB of yamux
-	// send/recv window buffers). Prior code returned on writeObject
-	// failure without closing yStr2, which under production load
-	// accounted for ~340MB of accumulated inuse_space on the dmsg
-	// servers (~85% of heap) — the "dmsg-server-1 is using 1 GB of
-	// RAM" incident.
-	yStr2Owned := true
-	defer func() {
-		if yStr2Owned {
-			_ = yStr2.Close() //nolint:errcheck
-		}
-	}()
-
 	if err := ss.writeObject(yStr, resp); err != nil {
+		// Original client disconnected (or stream broke) while we were
+		// forwarding. Close the peer-side yamux stream we just opened
+		// so its window buffers are released. Prior code omitted this
+		// close, leaking ~600KB of yamux state per failed forward and
+		// accumulating to ~340MB (85% of heap) on production dmsg
+		// servers over hours — the "dmsg-server-1 is using 1 GB of
+		// RAM" incident.
+		_ = yStr2.Close() //nolint:errcheck
 		ss.m.RecordStream(metrics.DeltaFailed)
 		return err
 	}
@@ -287,18 +280,16 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 	// 55K+ stuck goroutines in production dmsg servers.
 	const streamIdleTimeout = 5 * time.Minute
 
-	// Wrap both streams with idle-timeout deadlines.
+	// Wrap both streams with idle-timeout deadlines. Ownership of the
+	// underlying yamux streams passes to CopyReadWriteCloser, which
+	// closes both sides when either direction errors out.
 	yStr = &idleTimeoutConn{rwc: yStr, timeout: streamIdleTimeout}
-	yStr2Wrapped := &idleTimeoutConn{rwc: yStr2, timeout: streamIdleTimeout}
-
-	// Ownership of yStr2 now belongs to CopyReadWriteCloser via the
-	// wrapper — it closes both sides when either direction errors out.
-	yStr2Owned = false
+	yStr2 = &idleTimeoutConn{rwc: yStr2, timeout: streamIdleTimeout}
 
 	log.Info("Serving stream.")
 	ss.m.RecordStream(metrics.DeltaConnect)
 	defer ss.m.RecordStream(metrics.DeltaDisconnect)
-	return netutil.CopyReadWriteCloser(yStr, yStr2Wrapped)
+	return netutil.CopyReadWriteCloser(yStr, yStr2)
 }
 
 // idleTimeoutConn wraps a ReadWriteCloser with per-operation deadlines.

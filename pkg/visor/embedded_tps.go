@@ -27,6 +27,16 @@ type embeddedTPS struct {
 	log   *logging.Logger
 }
 
+// PK returns the public key of the embedded Transport Setup Node.
+func (tps *embeddedTPS) PK() cipher.PubKey {
+	return tps.pk
+}
+
+// DmsgClient returns the dmsg client used by the embedded Transport Setup Node.
+func (tps *embeddedTPS) DmsgClient() *dmsg.Client {
+	return tps.dmsgC
+}
+
 // AddTransport dials a remote visor via dmsg and asks it to create a transport
 // to remotePK of the given type.
 func (tps *embeddedTPS) AddTransport(ctx context.Context, targetPK, remotePK cipher.PubKey, tpType types.Type) (*ts.TransportResponse, error) {
