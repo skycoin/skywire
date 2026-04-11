@@ -169,6 +169,78 @@ func TestCollector_FailureRingEviction(t *testing.T) {
 	}
 }
 
+func TestCollector_CircuitBreaker(t *testing.T) {
+	c := NewCollector(CollectorConfig{})
+	dst, _ := cipher.GenerateKeyPair()
+
+	// Breaker closed initially — all attempts allowed.
+	if ok, _ := c.AllowDestination(dst); !ok {
+		t.Fatal("initial state should allow the destination")
+	}
+
+	// id_reservation failures drive the breaker. One short of
+	// threshold: still closed.
+	idResErr := errors.New("failed to instantiate route id reserver: dmsg error 202 - cannot connect to delegated server")
+	for i := 0; i < circuitFailureThreshold-1; i++ {
+		e := idResErr
+		c.RecordRouteContext(context.Background(), cipher.PubKey{}, dst, 1)(&e)
+	}
+	if ok, _ := c.AllowDestination(dst); !ok {
+		t.Fatal("under threshold: should still allow")
+	}
+
+	// One more failure trips the breaker.
+	e := idResErr
+	c.RecordRouteContext(context.Background(), cipher.PubKey{}, dst, 1)(&e)
+	if ok, reason := c.AllowDestination(dst); ok {
+		t.Fatalf("threshold reached: should deny, got allowed (%q)", reason)
+	}
+
+	// Snapshot should reflect circuit=open on this destination.
+	snap := c.Snapshot()
+	var found bool
+	for _, d := range snap.TopDestinations {
+		if d.PK == dst.String() {
+			found = true
+			if d.Circuit != string(CircuitOpen) {
+				t.Fatalf("snapshot circuit=%q, want open", d.Circuit)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatal("destination not in top destinations")
+	}
+
+	// A success while breaker is open should close it.
+	var okErr error
+	c.RecordRouteContext(context.Background(), cipher.PubKey{}, dst, 1)(&okErr)
+	if ok, _ := c.AllowDestination(dst); !ok {
+		t.Fatal("after success: should allow again")
+	}
+}
+
+// TestCollector_CircuitBreakerOnlyIDReservation verifies that other
+// failure reasons do not trip the breaker — only dial-path failures
+// should, because the others are local config / rule problems that
+// waiting does not fix.
+func TestCollector_CircuitBreakerOnlyIDReservation(t *testing.T) {
+	c := NewCollector(CollectorConfig{})
+	dst, _ := cipher.GenerateKeyPair()
+
+	// Throw circuitFailureThreshold+1 non-id-reservation failures at
+	// the destination.
+	genErr := errors.New("generate rules: no key for hop")
+	for i := 0; i < circuitFailureThreshold+1; i++ {
+		e := genErr
+		c.RecordRouteContext(context.Background(), cipher.PubKey{}, dst, 1)(&e)
+	}
+
+	if ok, _ := c.AllowDestination(dst); !ok {
+		t.Fatal("non-id-reservation failures should not trip breaker")
+	}
+}
+
 func TestCollector_Reset(t *testing.T) {
 	c := NewCollector(CollectorConfig{})
 	dst, _ := cipher.GenerateKeyPair()

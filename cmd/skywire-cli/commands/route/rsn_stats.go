@@ -146,9 +146,9 @@ func formatRSNStats(s *setupmetrics.StatsSnapshot) string {
 	if len(s.TopDestinations) > 0 {
 		fmt.Fprintf(&b, "Top destinations (by total requests):\n")
 		tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "  pk\ttotal\tfailed") //nolint:errcheck,gosec
+		fmt.Fprintln(tw, "  pk\ttotal\tfailed\tcircuit") //nolint:errcheck,gosec
 		for _, d := range s.TopDestinations {
-			fmt.Fprintf(tw, "  %s\t%d\t%d\n", truncatePK(d.PK), d.Total, d.Failed) //nolint:errcheck,gosec
+			fmt.Fprintf(tw, "  %s\t%d\t%d\t%s\n", truncatePK(d.PK), d.Total, d.Failed, circuitOrDash(d.Circuit)) //nolint:errcheck,gosec
 		}
 		tw.Flush() //nolint:errcheck,gosec
 		b.WriteString("\n")
@@ -156,9 +156,9 @@ func formatRSNStats(s *setupmetrics.StatsSnapshot) string {
 	if len(s.TopFailedDestinations) > 0 {
 		fmt.Fprintf(&b, "Top failed destinations:\n")
 		tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "  pk\tfailed\ttotal") //nolint:errcheck,gosec
+		fmt.Fprintln(tw, "  pk\tfailed\ttotal\tcircuit") //nolint:errcheck,gosec
 		for _, d := range s.TopFailedDestinations {
-			fmt.Fprintf(tw, "  %s\t%d\t%d\n", truncatePK(d.PK), d.Failed, d.Total) //nolint:errcheck,gosec
+			fmt.Fprintf(tw, "  %s\t%d\t%d\t%s\n", truncatePK(d.PK), d.Failed, d.Total, circuitOrDash(d.Circuit)) //nolint:errcheck,gosec
 		}
 		tw.Flush() //nolint:errcheck,gosec
 		b.WriteString("\n")
@@ -188,4 +188,15 @@ func truncatePK(pk string) string {
 		return pk
 	}
 	return pk[:16] + "…"
+}
+
+// circuitOrDash renders the per-destination circuit state for the
+// top-destinations tables. "closed" is the healthy default so render
+// it as a dash to keep the column visually quiet; only abnormal
+// states (open / half_open) print the actual word.
+func circuitOrDash(state string) string {
+	if state == "" || state == "closed" {
+		return "-"
+	}
+	return state
 }
