@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
@@ -194,6 +195,11 @@ type API interface {
 	GetRouteSetupNodesSorted() ([]cipher.PubKey, error)
 	GetTPSHealth() ([]NodeHealth, error)
 	GetRSNHealth() ([]NodeHealth, error)
+
+	// Embedded Route Setup Node (RSN) stats
+	RouteSetupStats() (*setupmetrics.StatsSnapshot, error)
+	ResetRouteSetupStats() error
+
 	TPSExternalHealthCheck(tpsPK cipher.PubKey) error
 	TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error)
 	TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]TPSTransportResponse, error)
