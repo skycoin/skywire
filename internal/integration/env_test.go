@@ -1417,6 +1417,14 @@ func (env *TestEnv) waitForDmsgDiscoveryEntryAfter(visor string, timeout time.Du
 	return fmt.Errorf("visor %s did not appear in DMSG discovery with delegated servers within %v", visor, timeout)
 }
 
+// SendSkyMessage posts a skychat message from senderNode to recipientNode.
+// On failure it retries up to maxRetries times with exponential backoff.
+// The retry budget is intentionally tight — a full diagnostic pass only
+// runs on terminal failure, not between retries, because diagnostic
+// passes execute 50+ docker-exec CLI calls and can take 30-60s each. A
+// test that sends many messages (e.g. TestEnv_SendSkyMessage_second
+// sends 8) cannot afford 3+ diagnostics per failing send or it blows
+// through the 45-minute CI budget well before the assertion fires.
 func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (resp *http.Response, err error) {
 	url := fmt.Sprintf("http://%v:8001/message", senderNode)
 	msgData := map[string]string{
@@ -1433,16 +1441,11 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 		Timeout: 15 * time.Second,
 	}
 
-	// Between attempts, run a diagnostic pass instead of blindly sleeping.
-	// This surfaces the actual failure (stale TPD entry, missing DMSG session,
-	// route setup-node unreachable, container crashed, etc.) as readable logs
-	// in the test output, so CI failures are actionable without having to
-	// re-run and hope.
-	//
-	// 3 attempts is enough — diagnostic passes are expensive (~dozen DMSG
-	// queries each). 6 retries × 4min diag = 24min per failure which
-	// exceeded the 45min test timeout. Cap at 3.
-	maxRetries := 3
+	// 2 attempts with a short backoff between them. No diagnostic pass
+	// on the inter-retry sleep — the diagnostic dump only runs once,
+	// on terminal failure, so CI logs still capture the state but
+	// the normal retry budget stays bounded.
+	const maxRetries = 2
 	for i := 0; i < maxRetries; i++ {
 		req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(data))
 		if err != nil {
@@ -1456,14 +1459,9 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 		}
 
 		if i < maxRetries-1 {
-			delay := time.Duration(i+1) * 3 * time.Second
-			env.logger.Warnf("SendSkyMessage attempt %d/%d failed: %v, diagnosing...", i+1, maxRetries, err)
-			env.DiagnoseNetwork(DiagContext{
-				Label: fmt.Sprintf("SendSkyMessage retry %d (%s->%s)", i+1, senderNode, recipientNode),
-				Src:   senderNode,
-				Dst:   recipientNode,
-			})
-			env.logger.Infof("Sleeping %v before next attempt...", delay)
+			delay := 5 * time.Second
+			env.logger.Warnf("SendSkyMessage attempt %d/%d failed: %v, sleeping %v before retry",
+				i+1, maxRetries, err, delay)
 			time.Sleep(delay)
 		}
 	}
