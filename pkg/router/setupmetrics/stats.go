@@ -38,6 +38,7 @@ const (
 	ReasonContextDeadline   FailureReason = "context_deadline"   // overall request timed out
 	ReasonContextCanceled   FailureReason = "context_canceled"   // caller canceled before completion
 	ReasonConcurrencyLimit  FailureReason = "concurrency_limit"  // dropped at the accept loop backpressure check
+	ReasonCircuitOpen       FailureReason = "circuit_open"       // per-destination breaker short-circuited the setup
 	ReasonUnknown           FailureReason = "unknown"            // failure classifier could not decide
 )
 
@@ -511,6 +512,9 @@ func classifyError(ctx context.Context, err error) FailureReason {
 
 	s := strings.ToLower(err.Error())
 	switch {
+	case strings.Contains(s, "destination circuit breaker open"),
+		strings.Contains(s, "circuit open"):
+		return ReasonCircuitOpen
 	case strings.Contains(s, "broadcast rules to destination"):
 		return ReasonDestinationRules
 	case strings.Contains(s, "broadcast intermediary rules"),
