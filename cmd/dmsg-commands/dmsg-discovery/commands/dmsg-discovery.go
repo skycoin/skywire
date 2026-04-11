@@ -31,6 +31,7 @@ import (
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/svcmode"
 )
 
 const redisPasswordEnvName = "REDIS_PASSWORD"
@@ -53,6 +54,7 @@ var (
 	dmsgServerType    string
 	pprofMode         string
 	pprofAddr         string
+	mode              string
 )
 
 func init() {
@@ -77,6 +79,11 @@ func init() {
 	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
+	// dmsg-discovery cannot run in dmsg-only mode because dmsg-servers
+	// themselves register with it over plain HTTP (see
+	// cmd/dmsg-commands/dmsg-server/commands/start/root.go). http and
+	// dual are accepted; dmsg is rejected.
+	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dual (dmsg-only is rejected — dmsg-servers reach this service over HTTP)")
 }
 
 // RootCmd contains commands for dmsg-discovery
@@ -170,6 +177,18 @@ Example:
 			log.Info(err)
 		}
 
+		// Resolve --mode. dmsg-discovery intentionally does NOT
+		// accept ModeDmsg because dmsg-servers themselves register
+		// with it over plain HTTP (see dmsg-server's disc.NewHTTP
+		// call). Allow ModeHTTP and ModeDual; reject ModeDmsg.
+		resolvedMode, err := svcmode.ResolveMode(mode, !sk.Null())
+		if err != nil {
+			log.WithError(err).Fatal("invalid --mode")
+		}
+		if resolvedMode == svcmode.ModeDmsg {
+			log.Fatal("dmsg-discovery cannot run in --mode=dmsg: dmsg-servers must reach it over plain HTTP to register. Use --mode=http or --mode=dual.")
+		}
+
 		go a.RunBackgroundTasks(ctx, log)
 		log.WithField("addr", addr).Info("Serving discovery API...")
 		go func() {
@@ -178,7 +197,7 @@ Example:
 				cancel()
 			}
 		}()
-		if !pk.Null() {
+		if !pk.Null() && resolvedMode.IncludesDmsg() {
 			servers := getServers(ctx, a, dmsgServerType, log)
 			config := &dmsg.Config{
 				MinSessions:          0, // listen on all available servers
