@@ -67,11 +67,53 @@ type LatencyStats struct {
 
 // DestStat is a per-destination counter used to surface "hot" visors
 // (targets of many requests) and "troublesome" visors (high failure
-// rate).
+// rate). Circuit state is the CircuitState (closed/open/half_open)
+// as of the last update.
 type DestStat struct {
-	PK     string `json:"pk"`
-	Total  uint64 `json:"total"`
-	Failed uint64 `json:"failed"`
+	PK      string `json:"pk"`
+	Total   uint64 `json:"total"`
+	Failed  uint64 `json:"failed"`
+	Circuit string `json:"circuit,omitempty"`
+}
+
+// CircuitState is the per-destination breaker state. "closed" = normal,
+// "open" = fast-fail new setups, "half_open" = allow one probe to test
+// recovery.
+type CircuitState string
+
+const (
+	// CircuitClosed means setups to this destination proceed normally.
+	CircuitClosed CircuitState = "closed"
+	// CircuitOpen means setups to this destination are short-circuited.
+	CircuitOpen CircuitState = "open"
+	// CircuitHalfOpen means one probe setup is allowed to test recovery.
+	CircuitHalfOpen CircuitState = "half_open"
+)
+
+// Circuit breaker tuning. Kept as constants for simplicity — can be
+// promoted to CollectorConfig if tests need to vary them.
+const (
+	// circuitFailureThreshold is the number of consecutive failures
+	// to a destination that trips the breaker to OPEN.
+	circuitFailureThreshold = 5
+	// circuitOpenDuration is how long the breaker stays OPEN before
+	// transitioning to HALF_OPEN to allow a probe setup.
+	circuitOpenDuration = 60 * time.Second
+	// circuitFailureWindow bounds how long consecutive failures must
+	// occur within to count toward the threshold. Failures older than
+	// this window are considered stale and the consecutive counter is
+	// reset on the next record.
+	circuitFailureWindow = 5 * time.Minute
+)
+
+// circuitBreaker tracks per-destination consecutive-failure state
+// separately from DestStat counters so the breaker's view isn't
+// perturbed by Reset().
+type circuitBreaker struct {
+	consecutiveFails int
+	firstFailAt      time.Time
+	state            CircuitState
+	openedAt         time.Time
 }
 
 // StatsSnapshot is the public, JSON-friendly view exposed over RPC/CLI.
@@ -142,6 +184,11 @@ type Collector struct {
 	dests        map[string]*DestStat
 	destCapacity int
 
+	// Per-destination circuit breaker state. Shares the dests cap —
+	// when a new destination is added to dests we also add a breaker
+	// entry; Reset() clears both maps atomically.
+	breakers map[string]*circuitBreaker
+
 	// Ring buffer of recent failures. Oldest at index failureRingIdx,
 	// newest at (failureRingIdx-1) mod len.
 	failureRing    []FailureEvent
@@ -185,8 +232,46 @@ func NewCollector(cfg CollectorConfig) *Collector {
 		routeLenHist:  make(map[int]uint64),
 		dests:         make(map[string]*DestStat),
 		destCapacity:  cfg.DestCapacity,
+		breakers:      make(map[string]*circuitBreaker),
 		failureRing:   make([]FailureEvent, cfg.FailureRingSize),
 	}
+}
+
+// AllowDestination reports whether a new route setup to dst should
+// proceed. Returns (true, "") when the breaker is closed or
+// half-open, (false, reason) when it is open. Call this from the
+// request handler BEFORE doing any dial work — rejecting early is
+// the whole point.
+//
+// The half-open transition is driven here: when we find an open
+// breaker that has been open for circuitOpenDuration, we flip it to
+// half-open and allow the current probe through. A subsequent success
+// will close the breaker (via finish); a failure re-opens it and
+// resets the 60-second timer.
+func (c *Collector) AllowDestination(dstPK cipher.PubKey) (bool, string) {
+	pk := dstPK.String()
+	if pk == "" {
+		return true, ""
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	br, ok := c.breakers[pk]
+	if !ok || br.state == CircuitClosed {
+		return true, ""
+	}
+	if br.state == CircuitOpen {
+		if time.Since(br.openedAt) < circuitOpenDuration {
+			return false, "circuit open: " + pk[:16] + " unreachable"
+		}
+		// Time's up — transition to half-open for a probe attempt.
+		br.state = CircuitHalfOpen
+		if d, ok := c.dests[pk]; ok {
+			d.Circuit = string(CircuitHalfOpen)
+		}
+	}
+	// HalfOpen: allow the caller through (they're the probe).
+	return true, ""
 }
 
 // RecordRequest satisfies setupmetrics.Metrics — it bumps the active
@@ -257,6 +342,9 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 		if destStat != nil {
 			destStat.Total++
 		}
+		// Any success closes an open/half-open breaker and resets
+		// the consecutive failure counter.
+		c.recordCircuitSuccessLocked(dstStr)
 		// Record latency and hop count for successful attempts.
 		c.latencyRing[c.latencyRingIdx] = durMs
 		c.latencyRingIdx = (c.latencyRingIdx + 1) % len(c.latencyRing)
@@ -277,7 +365,14 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 		destStat.Failed++
 	}
 
+	// Update the circuit breaker for this destination. Only id_reservation
+	// failures (dial-path failures) drive the breaker — other failure
+	// modes like rule_generation reflect local config problems that
+	// won't self-heal by waiting, so they shouldn't trip the breaker.
 	reason := classifyError(ctx, err)
+	if reason == ReasonIDReservation {
+		c.recordCircuitFailureLocked(dstStr)
+	}
 	c.failsByReason[reason]++
 
 	// Truncate error strings so a giant rpc payload doesn't blow up
@@ -317,9 +412,73 @@ func (c *Collector) touchDest(pk string) *DestStat {
 	if len(c.dests) >= c.destCapacity {
 		return nil
 	}
-	d := &DestStat{PK: pk}
+	d := &DestStat{PK: pk, Circuit: string(CircuitClosed)}
 	c.dests[pk] = d
+	c.breakers[pk] = &circuitBreaker{state: CircuitClosed}
 	return d
+}
+
+// recordCircuitFailureLocked updates the breaker state for pk after a
+// failed id_reservation. Must be called with c.mu held.
+func (c *Collector) recordCircuitFailureLocked(pk string) {
+	if pk == "" {
+		return
+	}
+	br, ok := c.breakers[pk]
+	if !ok {
+		// Destination cap was reached and touchDest returned nil;
+		// without a DestStat we also have no breaker to update.
+		return
+	}
+	now := time.Now()
+	// Reset the consecutive counter if the oldest failure is outside
+	// the window — breaker only fires on a burst, not on a slow trickle.
+	if br.consecutiveFails > 0 && now.Sub(br.firstFailAt) > circuitFailureWindow {
+		br.consecutiveFails = 0
+	}
+	if br.consecutiveFails == 0 {
+		br.firstFailAt = now
+	}
+	br.consecutiveFails++
+
+	// Half-open → failure re-opens the breaker and resets the timer.
+	if br.state == CircuitHalfOpen {
+		br.state = CircuitOpen
+		br.openedAt = now
+		if d, ok := c.dests[pk]; ok {
+			d.Circuit = string(CircuitOpen)
+		}
+		return
+	}
+	// Closed → trip to open once the threshold is reached.
+	if br.state == CircuitClosed && br.consecutiveFails >= circuitFailureThreshold {
+		br.state = CircuitOpen
+		br.openedAt = now
+		if d, ok := c.dests[pk]; ok {
+			d.Circuit = string(CircuitOpen)
+		}
+	}
+}
+
+// recordCircuitSuccessLocked transitions the breaker to Closed on any
+// success. Must be called with c.mu held.
+func (c *Collector) recordCircuitSuccessLocked(pk string) {
+	if pk == "" {
+		return
+	}
+	br, ok := c.breakers[pk]
+	if !ok {
+		return
+	}
+	br.consecutiveFails = 0
+	br.firstFailAt = time.Time{}
+	if br.state != CircuitClosed {
+		br.state = CircuitClosed
+		br.openedAt = time.Time{}
+		if d, ok := c.dests[pk]; ok {
+			d.Circuit = string(CircuitClosed)
+		}
+	}
 }
 
 // classifyError maps an error into one of the well-known FailureReason
@@ -438,6 +597,7 @@ func (c *Collector) Reset() {
 	c.latencyRingLen = 0
 	c.routeLenHist = make(map[int]uint64)
 	c.dests = make(map[string]*DestStat)
+	c.breakers = make(map[string]*circuitBreaker)
 	for i := range c.failureRing {
 		c.failureRing[i] = FailureEvent{}
 	}
