@@ -1258,6 +1258,30 @@ func (r *RPC) DmsgHTTP(req *DmsgHTTPRequest, out *DmsgHTTPResponse) (err error) 
 	return nil
 }
 
+// DmsgConnectAll reaches every dmsg server in discovery and ensures a session to each.
+func (r *RPC) DmsgConnectAll(_ *struct{}, out *DmsgConnectAllResult) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgConnectAll", nil)(out, &err)
+	resp, err := r.visor.DmsgConnectAll()
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
+// SetDmsgSessionsCount updates the persisted sessions_count in the visor
+// config and triggers a one-shot connect-all so the running dmsg client
+// reaches the new target immediately.
+func (r *RPC) SetDmsgSessionsCount(count *int, out *DmsgConnectAllResult) (err error) {
+	defer rpcutil.LogCall(r.log, "SetDmsgSessionsCount", count)(out, &err)
+	resp, err := r.visor.SetDmsgSessionsCount(*count)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
 // TPSAddTransportIn is the input for TPSAddTransport RPC.
 type TPSAddTransportIn struct {
 	TargetPK cipher.PubKey
