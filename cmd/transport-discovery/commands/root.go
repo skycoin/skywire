@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
@@ -26,7 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/tcpproxy"
+	"github.com/skycoin/skywire/pkg/svcmode"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport-discovery/api"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/transport-discovery/metrics"
@@ -57,6 +56,7 @@ var (
 	pprofAddr       string
 	storeDataPath   string
 	enableCXO       bool
+	mode            string
 )
 
 func init() {
@@ -84,6 +84,7 @@ func init() {
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire/tpd/bandwidth", "path for bandwidth backup files\n\r")
 	RootCmd.Flags().BoolVar(&enableCXO, "cxo", false, "enable CXO feed for transport data distribution over DMSG")
+	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
 }
 
 // exampleJSON marshals v to indented JSON with color, returning empty string on error
@@ -313,56 +314,57 @@ Example:
 
 		go tpdAPI.RunBackgroundTasks(ctx, logger)
 
-		go func() {
-			if err := tcpproxy.ListenAndServe(addr, tpdAPI); err != nil {
-				logger.Errorf("tcpproxy.ListenAndServe: %v", err)
-				cancel()
-			}
-		}()
-
-		if !pk.Null() {
-			dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, logger, pk, sk,
-				dmsg.Prod.DmsgServers, dmsgDisc, dmsgServerType)
-			if err != nil {
-				logger.WithError(err).Fatal("failed to start direct dmsg client.")
-			}
-			defer dmsgBoot.Close()
-
-			go func() {
-				for {
-					tpdAPI.DmsgServers = dmsgBoot.Client.ConnectedServersPK()
-					time.Sleep(time.Second)
-				}
-			}()
-
-			// Initialize CXO publisher for transport data distribution
-			if enableCXO {
-				cxoConf := publisher.DefaultConfig()
-				cxoConf.Logger = logging.MustGetLogger("cxo-tpd")
-				cxoPub, err := publisher.New(dmsgBoot.Client, sk, cxoConf)
-				if err != nil {
-					logger.WithError(err).Error("Failed to start CXO publisher, continuing without it")
-				} else {
-					tpdAPI.SetCXOPublisher(cxoPub)
-					logger.Infof("CXO transport feed enabled: %s", cxoPub.Feed())
-					defer cxoPub.Close() //nolint:errcheck,gosec
-				}
-			}
-
-			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, sk, tpdAPI, dmsgBoot.DClient, dmsgPort, dmsgBoot.Client, logger); err != nil {
-					logger.Errorf("dmsghttp.ListenAndServe: %v", err)
-					cancel()
-				}
-			}()
-			go func() {
-				if err := dmsghttp.ServeDebug(ctx, dmsgBoot.Client, logger, deployment.Prod.SurveyWhitelist); err != nil {
-					logger.Errorf("dmsghttp.ServeDebug: %v", err)
-				}
-			}()
+		resolvedMode, err := svcmode.ResolveMode(mode, !sk.Null())
+		if err != nil {
+			logger.WithError(err).Fatal("invalid --mode")
 		}
 
-		<-ctx.Done()
+		h, err := svcmode.Start(ctx, svcmode.Config{
+			Mode:                resolvedMode,
+			HTTPAddr:            addr,
+			Handler:             tpdAPI,
+			PK:                  pk,
+			SK:                  sk,
+			DmsgPort:            dmsgPort,
+			DmsgDiscovery:       dmsgDisc,
+			DmsgServerType:      dmsgServerType,
+			EmbeddedDmsgServers: dmsg.Prod.DmsgServers,
+			SurveyWhitelist:     deployment.Prod.SurveyWhitelist,
+			Log:                 logger,
+			OnDmsgServersUpdated: func(s []string) {
+				tpdAPI.DmsgServers = s
+			},
+		})
+		if err != nil {
+			logger.WithError(err).Fatal("failed to start listeners")
+		}
+		defer h.Close()
+
+		// Initialize CXO publisher for transport data distribution.
+		// Reuses the same bootstrap dmsg client managed by svcmode;
+		// will be nil when running in ModeHTTP so CXO is gated on
+		// dmsg being active.
+		if enableCXO && h.DmsgClient != nil {
+			cxoConf := publisher.DefaultConfig()
+			cxoConf.Logger = logging.MustGetLogger("cxo-tpd")
+			cxoPub, err := publisher.New(h.DmsgClient, sk, cxoConf)
+			if err != nil {
+				logger.WithError(err).Error("Failed to start CXO publisher, continuing without it")
+			} else {
+				tpdAPI.SetCXOPublisher(cxoPub)
+				logger.Infof("CXO transport feed enabled: %s", cxoPub.Feed())
+				defer cxoPub.Close() //nolint:errcheck,gosec
+			}
+		} else if enableCXO {
+			logger.Warn("CXO requested but dmsg is not enabled (--mode=http); CXO disabled")
+		}
+
+		select {
+		case <-ctx.Done():
+		case err := <-h.Errors():
+			logger.WithError(err).Error("listener failed")
+			cancel()
+		}
 	},
 }
 
