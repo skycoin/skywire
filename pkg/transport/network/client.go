@@ -178,7 +178,7 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 // wrapTransport performs handshake over provided raw connection and wraps it in
 // network.Transport type using the data obtained from handshake process
 func (c *genericClient) wrapTransport(rawConn net.Conn, hs handshake.Handshake, initiator bool, onClose func()) (*transport, error) {
-	transport, err := doHandshake(rawConn, hs, c.netType, c.log)
+	transport, err := doHandshake(rawConn, hs, c.netType, handshake.Timeout, c.log)
 	if err != nil {
 		onClose()
 		return nil, err
