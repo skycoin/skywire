@@ -182,6 +182,8 @@ type API interface {
 
 	//dmsg utilities
 	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
+	DmsgConnectAll() (*DmsgConnectAllResult, error)
+	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
 
 	// Embedded Transport Setup Node (TPS) controls
 	TPSStatus() (*TPSStatus, error)
