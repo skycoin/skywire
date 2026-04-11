@@ -186,6 +186,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		ConfigVersion:        v.conf.Common.Version,
 		RewardAddress:        rewardAddress,
 		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
+		IsPublic:             v.conf.IsPublic,
 		DmsgStats:            dmsgStatValue,
 		ConnectedDmsgServers: connectedDmsgServers,
 		DMSGServers:          dmsgServers,

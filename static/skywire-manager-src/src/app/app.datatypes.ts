@@ -30,6 +30,7 @@ export class Node {
   buildTag: string;
   skybianBuildVersion?: string;
   autoconnectTransports: boolean;
+  isPublic?: boolean;
   rewardsAddress: string;
   countryCode?: string;
   regionName?: string;

@@ -62,6 +62,7 @@ export class NodeService {
           node.os = response.overview.build_info.os;
           node.arch = response.overview.build_info.arch;
           node.autoconnectTransports = response.public_autoconnect;
+          node.isPublic = response.is_public;
           node.buildTag = response.build_tag ? response.build_tag : '';
           node.rewardsAddress = response.reward_address;
 
@@ -256,6 +257,7 @@ return {
         node.isSymmeticNat = response.overview.is_symmetic_nat;
         node.publicIp = response.overview.public_ip;
         node.autoconnectTransports = response.public_autoconnect;
+        node.isPublic = response.is_public;
         node.rewardsAddress = response.reward_address;
 
         // Geolocation data.
