@@ -4,12 +4,12 @@ package cliconfig
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"net/http"
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -20,12 +20,14 @@ func init() {
 	servicesCmd.Flags().SortFlags = false
 	//TODO: fix path for non linux package defaults
 	servicesCmd.Flags().StringVarP(&path, "path", "p", "/opt/skywire/services-config.json", "path of services-config file, default is for pkg installation")
+	servicesCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	clirpc.RegisterFetchFlags(servicesCmd)
 }
 
 var servicesCmd = &cobra.Command{
 	Use:   "svc",
 	Short: "update services-config.json file from config bootstrap service",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		log := logging.MustGetLogger("services_updater")
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
@@ -36,7 +38,7 @@ var servicesCmd = &cobra.Command{
 			os.Exit(1)
 		}()
 
-		servicesConf, err := fetchServicesConf()
+		servicesConf, err := fetchServicesConf(cmd.Flags())
 		if err != nil {
 			log.WithError(err).Error("Cannot fetching updated services-config data")
 		}
@@ -53,40 +55,27 @@ var servicesCmd = &cobra.Command{
 	},
 }
 
-func fetchServicesConf() (servicesConf, error) {
+func fetchServicesConf(cmdFlags *pflag.FlagSet) (servicesConf, error) {
 	var newConf servicesConf
+
+	// Fetch prod config via visor RPC → DMSG → HTTP fallback.
+	prodBody, err := clirpc.FetchServiceURL(cmdFlags, serviceConfURL)
+	if err != nil {
+		return newConf, err
+	}
 	var prodConf visorconfig.Services
-	//nolint:gosec
-	prodResp, err := http.Get(serviceConfURL)
-	if err != nil {
-		return newConf, err
-	}
-	//nolint:errcheck
-	defer prodResp.Body.Close()
-	body, err := io.ReadAll(prodResp.Body)
-	if err != nil {
-		return newConf, err
-	}
-	err = json.Unmarshal(body, &prodConf)
-	if err != nil {
+	if err := json.Unmarshal(prodBody, &prodConf); err != nil {
 		return newConf, err
 	}
 	newConf.Prod = prodConf
 
+	// Fetch test config via the same chain.
+	testBody, err := clirpc.FetchServiceURL(cmdFlags, testServiceConfURL)
+	if err != nil {
+		return newConf, err
+	}
 	var testConf visorconfig.Services
-	//nolint:gosec
-	testResp, err := http.Get(testServiceConfURL)
-	if err != nil {
-		return newConf, err
-	}
-	//nolint:errcheck
-	defer testResp.Body.Close()
-	body, err = io.ReadAll(testResp.Body)
-	if err != nil {
-		return newConf, err
-	}
-	err = json.Unmarshal(body, &testConf)
-	if err != nil {
+	if err := json.Unmarshal(testBody, &testConf); err != nil {
 		return newConf, err
 	}
 	newConf.Test = testConf

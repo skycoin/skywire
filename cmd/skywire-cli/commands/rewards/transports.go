@@ -3,15 +3,15 @@ package clirewards
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
@@ -53,6 +53,11 @@ func init() {
 	bwCollectCmd.Flags().StringVarP(&histPath, "hist", "p", "hist", "path to history directory for daily files")
 	bwCollectCmd.Flags().Uint64VarP(&minBandwidth, "min-bw", "b", defaultMinBandwidth, "minimum bandwidth in bytes to qualify")
 	bwCollectCmd.Flags().StringVarP(&bwSurveyPath, "lpath", "l", "log_collecting", "path to hardware surveys (for same-LAN detection)")
+
+	tpCollectCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	bwCollectCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	clirpc.RegisterFetchFlags(tpCollectCmd)
+	clirpc.RegisterFetchFlags(bwCollectCmd)
 }
 
 const (
@@ -92,7 +97,7 @@ This is designed to be run hourly by the reward service.`,
 		}
 
 		// Fetch TPD data (with caching)
-		stats, err := fetchTPDData(tpLog, noCache)
+		stats, err := fetchTPDData(cmd.Flags(), tpLog, noCache)
 		if err != nil {
 			tpLog.Fatal("Failed to fetch TPD data: ", err)
 		}
@@ -242,7 +247,7 @@ This command:
 
 Visors below the minimum bandwidth threshold are excluded.
 Designed to be run hourly by the reward service.`,
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		bwLog := logging.MustGetLogger("bw-collect")
 		if logLvl != "" {
 			if lvl, err := logging.LevelFromString(logLvl); err == nil {
@@ -262,7 +267,7 @@ Designed to be run hourly by the reward service.`,
 		bwLog.Infof("Built PK→IP map with %d entries from %s", len(pkIPMap), bwSurveyPath)
 
 		// Fetch bandwidth data from TPD with same-LAN filtering
-		bwData, err := fetchVisorBandwidthFromTPD(bwLog, pkIPMap, !noCache)
+		bwData, err := fetchVisorBandwidthFromTPD(cmd.Flags(), bwLog, pkIPMap, !noCache)
 		if err != nil {
 			bwLog.Fatal("Failed to fetch bandwidth data: ", err)
 		}
@@ -338,7 +343,7 @@ func buildPKtoIPMap(bwLog *logging.Logger, surveyPath string) map[string]string 
 
 // fetchVisorBandwidthFromTPD fetches all transport metrics from TPD,
 // filters out same-LAN transports (both edges share an IP), and aggregates per visor
-func fetchVisorBandwidthFromTPD(bwLog *logging.Logger, pkIPMap map[string]string, useCache bool) (VisorBandwidthResult, error) {
+func fetchVisorBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logger, pkIPMap map[string]string, useCache bool) (VisorBandwidthResult, error) {
 	// Check cache
 	if useCache {
 		if info, err := os.Stat(bwCacheFile); err == nil {
@@ -356,26 +361,15 @@ func fetchVisorBandwidthFromTPD(bwLog *logging.Logger, pkIPMap map[string]string
 		}
 	}
 
-	// Fetch all transport metrics with edge info
+	// Fetch all transport metrics with edge info via visor RPC → DMSG → HTTP chain.
 	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
 	url := fmt.Sprintf("%s/metrics?days=1&bandwidth=true&latency=false&edges=true", tpdURL)
 
 	bwLog.Info("Fetching all transport metrics from TPD: ", url)
 
-	//nolint:gosec
-	resp, err := http.Get(url)
+	body, err := clirpc.FetchServiceURL(cmdFlags, url)
 	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("TPD returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, fmt.Errorf("TPD fetch failed: %w", err)
 	}
 
 	var transports []tpdTransport
@@ -461,7 +455,7 @@ func formatBytes(b uint64) string {
 }
 
 // fetchTPDData fetches transport per-key stats from TPD, using cache if valid
-func fetchTPDData(tpLog *logging.Logger, bypassCache bool) (PerKeyStats, error) {
+func fetchTPDData(cmdFlags *pflag.FlagSet, tpLog *logging.Logger, bypassCache bool) (PerKeyStats, error) {
 	// Check cache
 	if !bypassCache {
 		if info, err := os.Stat(tpdCacheFile); err == nil {
@@ -479,23 +473,12 @@ func fetchTPDData(tpLog *logging.Logger, bypassCache bool) (PerKeyStats, error) 
 		}
 	}
 
-	// Fetch fresh data
+	// Fetch fresh data via visor RPC → DMSG → HTTP chain.
 	tpLog.Info("Fetching fresh TPD data from ", tpdPerKeyStatsURL())
 
-	//nolint:gosec
-	resp, err := http.Get(tpdPerKeyStatsURL())
+	body, err := clirpc.FetchServiceURL(cmdFlags, tpdPerKeyStatsURL())
 	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("TPD returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, fmt.Errorf("TPD fetch failed: %w", err)
 	}
 
 	stats, err := parsePerKeyStats(body)
