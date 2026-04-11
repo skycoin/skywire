@@ -3,15 +3,13 @@ package climdisc
 
 import (
 	"bytes"
-	"context"
+	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
-	"time"
 
 	"github.com/bitfield/script"
 	"github.com/sirupsen/logrus"
@@ -97,8 +95,7 @@ var (
 	isStats       bool
 	testEnv       bool
 	// allEntries bool
-	masterLogger  = logging.NewMasterLogger()
-	packageLogger = masterLogger.PackageLogger("mdisc:disc")
+	masterLogger = logging.NewMasterLogger()
 )
 
 func init() {
@@ -158,14 +155,21 @@ var entryCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), cmd.Help())
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-		defer cancel()
 		pk := internal.ParsePK(cmd.Flags(), "visor-public-key", args[0])
-
 		masterLogger.SetLevel(logrus.InfoLevel)
-		entry, err := disc.NewHTTP(mdURL, &http.Client{}, packageLogger).Entry(ctx, pk)
+
+		// Use the RPC → DMSG → HTTP fallback chain so this works for
+		// mdURL values with dmsg:// scheme too, not just http(s)://.
+		// The raw response is a JSON-encoded disc.Entry so we decode
+		// it directly rather than routing through disc.NewHTTP's
+		// http.Client (which can't dial dmsg URLs).
+		url := fmt.Sprintf("%s/dmsg-discovery/entry/%s", mdURL, pk.Hex())
+		body, err := clirpc.FetchServiceURL(cmd.Flags(), url)
 		internal.Catch(cmd.Flags(), err)
-		internal.PrintOutput(cmd.Flags(), entry, fmt.Sprintln(entry))
+
+		var entry disc.Entry
+		internal.Catch(cmd.Flags(), json.Unmarshal(body, &entry))
+		internal.PrintOutput(cmd.Flags(), entry, fmt.Sprintln(&entry))
 	},
 }
 
@@ -173,13 +177,15 @@ var availableServersCmd = &cobra.Command{
 	Use:   "servers",
 	Short: "Fetch available servers",
 	Run: func(cmd *cobra.Command, _ []string) {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-		defer cancel()
-
 		masterLogger.SetLevel(logrus.InfoLevel)
 
-		entries, err := disc.NewHTTP(mdURL, &http.Client{}, packageLogger).AvailableServers(ctx)
+		// Same scheme-aware fetch as entryCmd.
+		url := mdURL + "/dmsg-discovery/available_servers"
+		body, err := clirpc.FetchServiceURL(cmd.Flags(), url)
 		internal.Catch(cmd.Flags(), err)
+
+		var entries []*disc.Entry
+		internal.Catch(cmd.Flags(), json.Unmarshal(body, &entries))
 		printAvailableServers(cmd.Flags(), entries)
 	},
 }
