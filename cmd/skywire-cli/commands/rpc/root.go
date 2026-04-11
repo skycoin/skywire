@@ -239,6 +239,56 @@ func fetchViaDmsgDirect(dmsgURL string) ([]byte, error) {
 	return body, nil
 }
 
+// FetchCachedServiceURL is a drop-in replacement for cliutil.GetData that
+// routes the fetch through FetchServiceURL (RPC → DMSG → HTTP) instead of
+// going straight to HTTP.
+//
+// Caching semantics match GetData:
+//   - If cachefile == "", caching is disabled and we fetch fresh every call.
+//   - If the cache file exists and is younger than cacheFilesAge minutes,
+//     its contents are returned as-is.
+//   - Otherwise we fetch via FetchServiceURL and, on success, atomically
+//     write the response to cachefile for the next call.
+//   - On fetch failure, a stale cache file (if present) is returned as a
+//     last resort rather than propagating an empty string, matching the
+//     "best-effort" behavior callers expect.
+//
+// Returns the response body as a string, or "" if every path failed and
+// there was no cache to fall back on. Errors are logged at debug level.
+func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, cacheFilesAge int) string {
+	// Serve a fresh cache if we have one.
+	if cachefile != "" {
+		if st, err := os.Stat(cachefile); err == nil {
+			if time.Since(st.ModTime()).Minutes() <= float64(cacheFilesAge) {
+				if data, err := os.ReadFile(cachefile); err == nil { //nolint:gosec
+					return string(data)
+				}
+			}
+		}
+	}
+
+	// Fetch via the RPC → DMSG → HTTP chain.
+	body, err := FetchServiceURL(cmdFlags, thisurl)
+	if err != nil {
+		logger.Debugf("FetchCachedServiceURL: all fetch paths failed for %s: %v", thisurl, err)
+		// Last-ditch: return stale cache if we have one.
+		if cachefile != "" {
+			if data, rerr := os.ReadFile(cachefile); rerr == nil { //nolint:gosec
+				return string(data)
+			}
+		}
+		return ""
+	}
+
+	// Write-through to cache for next call. Non-fatal on error.
+	if cachefile != "" {
+		if werr := os.WriteFile(cachefile, body, 0o600); werr != nil {
+			logger.Debugf("FetchCachedServiceURL: cache write failed for %s: %v", cachefile, werr)
+		}
+	}
+	return string(body)
+}
+
 // FetchServiceURL fetches a URL from a deployment service using a three-step chain:
 //  1. RPC — ask the running visor to proxy the request over DMSG (DmsgHTTP RPC)
 //  2. DMSG direct — create ephemeral DMSG client and fetch directly

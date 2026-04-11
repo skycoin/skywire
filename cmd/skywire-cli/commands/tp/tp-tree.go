@@ -16,6 +16,7 @@ import (
 	"github.com/tidwall/pretty"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 )
 
@@ -58,6 +59,7 @@ func init() {
 	treeCmd.Flags().BoolVarP(&keysOnly, "keys", "K", false, "output only reachable public keys (requires -k source)")
 	treeCmd.Flags().IntVarP(&maxHops, "hops", "H", 2, "max hops from source for --keys mode (1 or 2)")
 	treeCmd.Flags().BoolVarP(&excludeSelf, "no-self", "x", false, "exclude source key from --keys output")
+	clirpc.RegisterFetchFlags(treeCmd)
 }
 
 var treeCmd = &cobra.Command{
@@ -106,7 +108,7 @@ var treeCmd = &cobra.Command{
 		}
 
 		// Fetch transport data
-		tpsRaw := internal.GetData(cacheFileTPD, tpdURL+"/all-transports", cacheFilesAge)
+		tpsRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileTPD, tpdURL+"/all-transports", cacheFilesAge)
 		if rawData {
 			fmt.Print(tpsRaw)
 			return
@@ -150,7 +152,7 @@ var treeCmd = &cobra.Command{
 		versionFilteredSet := make(map[string]bool) // pk -> true if passes version filter
 
 		if !noFilterOnline || filterByVersion {
-			utsRaw := internal.GetData(cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+			utsRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
 			var uptimes []uptimeEntry
 			if err := json.Unmarshal([]byte(utsRaw), &uptimes); err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse uptime data: %w", err))
