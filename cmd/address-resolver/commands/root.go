@@ -124,7 +124,11 @@ func init() {
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
 	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
 	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
-	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for address entry expiration\n\r")
+	// 5 min is ~3.3× the 90s client refresh interval
+	// (sudphReRegisterInterval in pkg/transport/network/addrresolver/client.go),
+	// giving safe margin for one or two dropped refreshes without
+	// expiring a live binding.
+	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 5*time.Minute, "address binding TTL (0 to disable)\n\r")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
 	RootCmd.Flags().StringVar(&tag, "tag", "address_resolver", "logging tag\n\r")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
