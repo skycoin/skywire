@@ -68,16 +68,30 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		}
 	}
 
-	// Limit servers tried per phase to avoid exhausting ephemeral ports.
-	// The route cache handles the fast path; on miss, trying 2 servers per
-	// phase is enough — if 2 fail, the destination is likely unreachable.
-	const maxPerPhase = 2
+	// Phase 1 and 2 try existing sessions to the client's already-
+	// connected servers. Since PR #2301 auto-releases ephemeral ports
+	// on terminal Read/Write errors, a failed dial frees its port
+	// immediately — there is no longer a port-exhaustion reason to
+	// cap these phases aggressively. We use a generous cap here so
+	// small deployments (~6 dmsg servers) try every session before
+	// giving up, but large networks still bound the total work.
+	//
+	// The prior cap of 2 caused persistent route-setup failures when
+	// a destination's discovery entry was stale (listed delegated
+	// servers it wasn't actually on): phase 1 would hit the listed
+	// servers, fail, and phase 2's first two latency-sorted picks
+	// would often miss the server the destination was actually on.
+	const maxPerExistingPhase = 16
+	// Phase 3 (establishing new sessions to delegated servers) is
+	// more expensive since each attempt does a full noise handshake,
+	// so it still uses the tighter cap.
+	const maxPerNewPhase = 2
 
 	// Phase 1: Try existing sessions to the target's delegated servers (direct path, cheapest).
 	// Sort by latency so the lowest-latency server is tried first.
 	delegatedSessions := ce.sortedDelegatedSessions(entry.Client.DelegatedServers)
 	for i, dSes := range delegatedSessions {
-		if i >= maxPerPhase {
+		if i >= maxPerExistingPhase {
 			break
 		}
 		stream, err := dSes.DialStream(ctx, addr)
@@ -95,7 +109,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// Sorted by latency.
 	meshSessions := ce.sortedMeshSessions(entry.Client.DelegatedServers)
 	for i, ses := range meshSessions {
-		if i >= maxPerPhase {
+		if i >= maxPerExistingPhase {
 			break
 		}
 		stream, err := ses.DialStream(ctx, addr)
@@ -110,7 +124,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 
 	// Phase 3: Last resort: establish new sessions to the target's delegated servers.
 	for i, srvPK := range entry.Client.DelegatedServers {
-		if i >= maxPerPhase {
+		if i >= maxPerNewPhase {
 			break
 		}
 		dSes, err := ce.EnsureAndObtainSession(ctx, srvPK)
