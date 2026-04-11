@@ -361,50 +361,24 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			}
 		}
 
-		// Self-send short-circuit. A DMSG client cannot create a stream to
-		// its own PK (the server has no "session to self" to route through)
-		// and the 2-hop loopback in skynet's router requires at least one
-		// transport partner. Rather than failing the request or relying on
-		// network infrastructure, deliver the message locally: persist it
-		// as both outgoing and incoming and push it to the SSE channel
-		// exactly like a real delivery would.
-		if pk == appCl.Config().VisorPK {
-			text := data["message"]
-			now := time.Now().UTC()
-
-			persistMessage(history.Message{
-				Peer:      pk.Hex(),
-				Outgoing:  true,
-				Text:      text,
-				Timestamp: now,
-			})
-			persistMessage(history.Message{
-				Peer:      pk.Hex(),
-				From:      pk.Hex(),
-				Outgoing:  false,
-				Text:      text,
-				Timestamp: now,
-			})
-
-			clientMsg, err := json.Marshal(map[string]string{"sender": pk.Hex(), "message": text})
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			select {
-			case clientCh <- string(clientMsg):
-				appCl.Log().Debugf("Self-send delivered to ui: %s", clientMsg)
-			default:
-				appCl.Log().Debugf("Self-send trashed (no ui subscriber): %s", clientMsg)
-			}
-			return
-		}
-
 		addr := appnet.Addr{
 			Net:    netType,
 			PubKey: pk,
 			Port:   1,
 		}
+
+		// Self-send detection — log it clearly so the user can tell self
+		// traffic apart from peer traffic in the visor log. A dmsg self-
+		// dial loops back through the visor's own delegated dmsg server:
+		// the server bridges a new outbound yamux stream back to the same
+		// client, and the local listener accepts it. The dial here is
+		// the real network path — no local short-circuit. Same for
+		// skynet (router builds a 2-hop self-ping loopback).
+		isSelf := pk == appCl.Config().VisorPK
+		if isSelf {
+			appCl.Log().Infof("Self-send via %s on port %d", netType, addr.Port)
+		}
+
 		connsMu.Lock()
 		conn, ok := conns[pk]
 		connsMu.Unlock()
@@ -416,6 +390,11 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 				return err
 			})
 			if err != nil {
+				if isSelf {
+					appCl.Log().WithError(err).Errorf("Self-dial via %s failed", netType)
+				} else {
+					appCl.Log().WithError(err).Warnf("Dial to %s via %s failed", pk, netType)
+				}
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
