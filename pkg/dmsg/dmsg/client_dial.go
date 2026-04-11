@@ -89,35 +89,55 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 
 	// Phase 1: Try existing sessions to the target's delegated servers (direct path, cheapest).
 	// Sort by latency so the lowest-latency server is tried first.
+	// Sessions in the negative cache are skipped — they recently failed
+	// to reach this destination and would only burn HandshakeTimeout.
 	delegatedSessions := ce.sortedDelegatedSessions(entry.Client.DelegatedServers)
-	for i, dSes := range delegatedSessions {
-		if i >= maxPerExistingPhase {
+	tried := 0
+	for _, dSes := range delegatedSessions {
+		if tried >= maxPerExistingPhase {
 			break
 		}
+		if ce.isNegativeRoute(addr.PK, dSes.RemotePK()) {
+			ce.log.WithField("server", dSes.RemotePK()).
+				Debug("DialStream skipping phase 1 session: negative cache hit")
+			continue
+		}
+		tried++
 		stream, err := dSes.DialStream(ctx, addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", dSes.RemotePK()).
 				Debug("DialStream failed via existing session, trying next server")
+			ce.markNegativeRoute(addr.PK, dSes.RemotePK())
 			continue
 		}
+		ce.clearNegativeRoute(addr.PK)
 		ce.setCachedRoute(addr.PK, dSes.RemotePK())
 		return stream, nil
 	}
 
 	// Phase 2: Try other existing sessions (mesh path — already connected, no new handshake).
 	// If servers are meshed, our server forwards the request to the target's server.
-	// Sorted by latency.
+	// Sorted by latency. Honor the negative cache here too.
 	meshSessions := ce.sortedMeshSessions(entry.Client.DelegatedServers)
-	for i, ses := range meshSessions {
-		if i >= maxPerExistingPhase {
+	tried = 0
+	for _, ses := range meshSessions {
+		if tried >= maxPerExistingPhase {
 			break
 		}
+		if ce.isNegativeRoute(addr.PK, ses.RemotePK()) {
+			ce.log.WithField("server", ses.RemotePK()).
+				Debug("DialStream skipping phase 2 session: negative cache hit")
+			continue
+		}
+		tried++
 		stream, err := ses.DialStream(ctx, addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", ses.RemotePK()).
 				Debug("DialStream failed via mesh, trying next server")
+			ce.markNegativeRoute(addr.PK, ses.RemotePK())
 			continue
 		}
+		ce.clearNegativeRoute(addr.PK)
 		ce.setCachedRoute(addr.PK, ses.RemotePK())
 		return stream, nil
 	}
