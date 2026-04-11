@@ -30,6 +30,7 @@ import (
 func init() {
 	conf.ServicesConfCmd.AddCommand(
 		conf.DmsghttpConfCmd,
+		conf.HTTPConfCmd,
 	)
 	RootCmd.AddCommand(
 		tpd.RootCmd,
@@ -58,6 +59,7 @@ func init() {
 	sn.RootCmd.Use = "sn"
 	nm.RootCmd.Use = "nm"
 	conf.DmsghttpConfCmd.Use = "dmsghttp"
+	conf.HTTPConfCmd.Use = "http"
 	conf.ServicesConfCmd.Use = "conf"
 	geoip.RootCmd.Use = "ip"
 	stunsvr.RootCmd.Use = "stun"
