@@ -65,7 +65,13 @@ func init() {
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
 	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
 	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
-	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for transport entry expiration\n\r")
+	// 5 min is ~3.3× the 90s client refresh interval
+	// (transportReRegisterInterval in pkg/transport/manager.go),
+	// giving safe margin for one or two dropped refreshes without
+	// expiring a live transport. Prior default of 2m allowed only
+	// ~1.33 refreshes per TTL window — one missed refresh and the
+	// transport would briefly drop from discovery.
+	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 5*time.Minute, "transport entry TTL (0 to disable)\n\r")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
 	RootCmd.Flags().StringVar(&tag, "tag", "transport_discovery", "logging tag\n\r")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
