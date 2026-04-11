@@ -9,10 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 	"gorm.io/gorm"
@@ -29,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/tcpproxy"
+	"github.com/skycoin/skywire/pkg/svcmode"
 	"github.com/skycoin/skywire/pkg/uptime-tracker/api"
 	utmetrics "github.com/skycoin/skywire/pkg/uptime-tracker/metrics"
 	"github.com/skycoin/skywire/pkg/uptime-tracker/store"
@@ -61,6 +60,7 @@ var (
 	storeDataCutoff   int
 	storeDataPath     string
 	pprofAddr         string
+	mode              string
 )
 
 func init() {
@@ -84,6 +84,7 @@ func init() {
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
 	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
+	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
 }
 
 // exampleJSON marshals v to indented JSON with color, returning empty string on error
@@ -267,53 +268,52 @@ HTTP Endpoints:
 
 		utPAPI := api.NewPrivate(logger, s)
 
-		logger.Infof("Listening on %s", addr)
-
 		go utAPI.RunBackgroundTasks(ctx, logger)
 
+		// Private admin listener stays on http regardless of --mode.
+		// It is internal-only and not exposed over dmsg.
 		go func() {
-			if err := tcpproxy.ListenAndServe(addr, utAPI); err != nil {
-				logger.Errorf("tcpproxy.ListenAndServe utAPI: %v", err)
-				cancel()
-			}
-		}()
-
-		go func() {
+			logger.Infof("private listener on %s", pAddr)
 			if err := tcpproxy.ListenAndServe(pAddr, utPAPI); err != nil {
 				logger.Errorf("tcpproxy.ListenAndServe utPAPI: %v", err)
 				cancel()
 			}
 		}()
 
-		if !pk.Null() {
-			dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, logger, pk, sk,
-				dmsg.Prod.DmsgServers, dmsgDisc, "")
-			if err != nil {
-				logger.WithError(err).Fatal("failed to start direct dmsg client.")
-			}
-			defer dmsgBoot.Close()
-
-			go func() {
-				for {
-					utAPI.DmsgServers = dmsgBoot.Client.ConnectedServersPK()
-					time.Sleep(time.Second)
-				}
-			}()
-
-			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, sk, utAPI, dmsgBoot.DClient, dmsgPort, dmsgBoot.Client, logger); err != nil {
-					logger.Errorf("dmsghttp.ListenAndServe utAPI: %v", err)
-					cancel()
-				}
-			}()
-			go func() {
-				if err := dmsghttp.ServeDebug(ctx, dmsgBoot.Client, logger, deployment.Prod.SurveyWhitelist); err != nil {
-					logger.Errorf("dmsghttp.ServeDebug: %v", err)
-				}
-			}()
+		resolvedMode, err := svcmode.ResolveMode(mode, !sk.Null())
+		if err != nil {
+			logger.WithError(err).Fatal("invalid --mode")
 		}
 
-		<-ctx.Done()
+		h, err := svcmode.Start(ctx, svcmode.Config{
+			Mode:     resolvedMode,
+			HTTPAddr: addr,
+			Handler:  utAPI,
+			PK:       pk,
+			SK:       sk,
+			DmsgPort: dmsgPort,
+			// uptime-tracker has historically passed an empty
+			// DmsgServerType to BootstrapDmsg; preserve that.
+			DmsgServerType:      "",
+			DmsgDiscovery:       dmsgDisc,
+			EmbeddedDmsgServers: dmsg.Prod.DmsgServers,
+			SurveyWhitelist:     deployment.Prod.SurveyWhitelist,
+			Log:                 logger,
+			OnDmsgServersUpdated: func(s []string) {
+				utAPI.DmsgServers = s
+			},
+		})
+		if err != nil {
+			logger.WithError(err).Fatal("failed to start listeners")
+		}
+		defer h.Close()
+
+		select {
+		case <-ctx.Done():
+		case err := <-h.Errors():
+			logger.WithError(err).Error("listener failed")
+			cancel()
+		}
 	},
 }
 
