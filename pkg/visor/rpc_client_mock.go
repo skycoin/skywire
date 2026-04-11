@@ -1037,6 +1037,16 @@ func (mc *mockRPCClient) DmsgHTTP(_ DmsgHTTPRequest) (*DmsgHTTPResponse, error) 
 	return &DmsgHTTPResponse{StatusCode: 200, Status: "OK"}, nil
 }
 
+// DmsgConnectAll implements API.
+func (mc *mockRPCClient) DmsgConnectAll() (*DmsgConnectAllResult, error) {
+	return &DmsgConnectAllResult{}, nil
+}
+
+// SetDmsgSessionsCount implements API.
+func (mc *mockRPCClient) SetDmsgSessionsCount(_ int) (*DmsgConnectAllResult, error) {
+	return &DmsgConnectAllResult{}, nil
+}
+
 // TPSStatus implements API.
 func (mc *mockRPCClient) TPSStatus() (*TPSStatus, error) {
 	return &TPSStatus{Enabled: false}, nil
