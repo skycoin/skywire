@@ -65,6 +65,7 @@ func init() {
 	addTpCmd.Flags().BoolVar(&noRegister, "no-register", false, "skip transport discovery registration (implies --user)")
 	addTpCmd.Flags().StringSliceVar(&remoteVisorPKs, "remote", nil, "request transport via TPS on remote visor(s) (comma-separated PKs)")
 	addTpCmd.Flags().StringVar(&stcpAddr, "addr", "", "remote address (ip:port) for stcp transport")
+	clirpc.RegisterFetchFlags(addTpCmd)
 }
 
 var stcpAddr string
@@ -272,7 +273,7 @@ var addTpCmd = &cobra.Command{
 		// Fetch dmsg discovery data once (for all PKs) - only used for dmsg transport checks
 		var dmsgkeys []string
 		if !forceAttempt && (transportType == "" || transportType == "dmsg") {
-			dmsgEntries := internal.GetData(cacheFileDmsgD, dmsgdURL+"/dmsg-discovery/entries", cacheFilesAge)
+			dmsgEntries := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileDmsgD, dmsgdURL+"/dmsg-discovery/entries", cacheFilesAge)
 			dmsgkeys, _ = script.Echo(dmsgEntries).JQ(".[]").Replace(`"`, "").Slice() //nolint:errcheck
 		}
 

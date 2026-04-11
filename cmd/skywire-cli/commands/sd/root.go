@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
@@ -117,6 +118,8 @@ func init() {
 	RootCmd.Flags().IntVarP(&minTransports, "min", "n", 0, "filter by minimum transport count")
 	RootCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	RootCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
+	RootCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	clirpc.RegisterFetchFlags(RootCmd)
 }
 
 // RootCmd contains commands that interact with service discovery
@@ -167,12 +170,12 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		utFullURL := utURL + "/uptimes?v=v2"
 
 		// Fetch service discovery data for all service types
-		proxyData := internal.GetData(cacheFile(cacheDirSD, sdProxyURL), sdProxyURL, cacheFilesAge)
-		vpnData := internal.GetData(cacheFile(cacheDirSD, sdVpnURL), sdVpnURL, cacheFilesAge)
-		visorData := internal.GetData(cacheFile(cacheDirSD, sdVisorURL), sdVisorURL, cacheFilesAge)
+		proxyData := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirSD, sdProxyURL), sdProxyURL, cacheFilesAge)
+		vpnData := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirSD, sdVpnURL), sdVpnURL, cacheFilesAge)
+		visorData := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirSD, sdVisorURL), sdVisorURL, cacheFilesAge)
 
 		// Fetch transport discovery data
-		tpdData := internal.GetData(cacheFile(cacheDirTPD, tpdFullURL), tpdFullURL, cacheFilesAge)
+		tpdData := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirTPD, tpdFullURL), tpdFullURL, cacheFilesAge)
 
 		// Parse service discovery data
 		type sdEntry struct {
@@ -237,7 +240,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		}
 
 		// Always fetch UT data for status tracking
-		utData := internal.GetData(cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
+		utData := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
 
 		type utEntry struct {
 			PK string `json:"pk"`
