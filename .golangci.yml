@@ -59,6 +59,11 @@ linters:
       - cmd/skywire-cli/commands/gotop
       - builtin$
       - examples$
+      # Skip any .go file that npm package vendoring drops under the
+      # frontend node_modules tree (e.g. flatted/golang/**). These are
+      # not part of the skywire source and a developer-local `npm
+      # install` should not break lint.
+      - node_modules
     rules:
       - linters:
           - misspell
