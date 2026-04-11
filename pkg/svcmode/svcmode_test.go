@@ -153,9 +153,20 @@ func TestStartValidation(t *testing.T) {
 			wantErr: "secret key",
 		},
 		{
-			name: "dmsg mode without bootstrap source",
+			name: "dmsg bootstrap without source",
 			cfg: Config{
 				Mode: ModeDmsg, Handler: handler, PK: pk, SK: sk,
+			},
+			wantErr: "EmbeddedDmsgServers",
+		},
+		{
+			// http mode + SK should still attempt dmsg bootstrap
+			// (Handle.DmsgClient should be set) and therefore
+			// needs a bootstrap source. This verifies the new
+			// "http mode doesn't prevent dmsg client" semantics.
+			name: "http mode with SK but no bootstrap source",
+			cfg: Config{
+				Mode: ModeHTTP, HTTPAddr: ":0", Handler: handler, PK: pk, SK: sk,
 			},
 			wantErr: "EmbeddedDmsgServers",
 		},
