@@ -124,7 +124,10 @@ func init() {
 	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n\r")
 	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
-	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 2*time.Minute, "timeout for service entry expiration\n\r")
+	// 5 min is ~3.3× the 90s client refresh interval
+	// (skyenv.ServiceDiscUpdateInterval), giving safe margin for one
+	// or two dropped refreshes without expiring a live entry.
+	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 5*time.Minute, "client service entry TTL (0 to disable)\n\r")
 }
 
 // RootCmd contains the root service-discovery command
