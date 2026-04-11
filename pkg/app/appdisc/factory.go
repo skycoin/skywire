@@ -15,7 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
-// Note: HeartbeatInterval default is skyenv.ServiceDiscUpdateInterval (10 minutes)
+// Note: HeartbeatInterval default is skyenv.ServiceDiscUpdateInterval (90 seconds)
 
 // Factory creates appdisc.Updater instances based on the app name.
 type Factory struct {
