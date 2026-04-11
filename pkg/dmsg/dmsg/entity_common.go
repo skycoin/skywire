@@ -40,6 +40,17 @@ type EntityCommon struct {
 	// peerSessionsFunc returns peer server sessions for mesh forwarding.
 	// Only set on Server entities; nil for clients.
 	peerSessionsFunc func() []*SessionCommon
+
+	// lastPushedSrvPKs is the set of delegated server PKs most recently
+	// pushed to the dmsg discovery. It is used by updateClientEntry to
+	// short-circuit redundant GET/PUT round-trips when nothing has
+	// actually changed — the previous code issued a GET on every single
+	// session add/remove even when the resulting delegated-servers list
+	// was identical, which on production generated sustained hundreds of
+	// MB/s of discovery traffic during reconnect storms. Protected by
+	// pushedSrvPKsMx.
+	lastPushedSrvPKs []cipher.PubKey
+	pushedSrvPKsMx   sync.Mutex
 }
 
 func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, log logrus.FieldLogger, updateInterval time.Duration) {
@@ -283,16 +294,39 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 		return nil
 	}
 
-	// Record last update on success.
-	defer func() {
-		if err == nil {
-			c.recordUpdate()
-		}
-	}()
-
 	srvPKs := make([]cipher.PubKey, 0, len(c.sessions))
 	for pk := range c.sessions {
 		srvPKs = append(srvPKs, pk)
+	}
+
+	// Record last update on success AND cache the set of delegated
+	// server PKs we just pushed, so the next call can short-circuit.
+	defer func() {
+		if err == nil {
+			c.recordUpdate()
+			c.pushedSrvPKsMx.Lock()
+			// Make a defensive copy — the srvPKs slice is a local
+			// snapshot but the caller may hold a reference in log
+			// output, so copying is cheap and keeps ownership clean.
+			pushed := make([]cipher.PubKey, len(srvPKs))
+			copy(pushed, srvPKs)
+			c.lastPushedSrvPKs = pushed
+			c.pushedSrvPKsMx.Unlock()
+		}
+	}()
+
+	// Short-circuit: if the delegated server set we're about to publish
+	// is identical to what we last successfully pushed AND an update
+	// isn't due on the timer, skip both the GET and the PUT. Without
+	// this guard every session add/remove generates an HTTP GET to
+	// dmsg-discovery regardless of whether anything actually changed,
+	// which under reconnect storms sends the discovery service into
+	// 100%+ CPU and saturates its ingress bandwidth.
+	c.pushedSrvPKsMx.Lock()
+	lastPushed := c.lastPushedSrvPKs
+	c.pushedSrvPKsMx.Unlock()
+	if _, due := c.updateIsDue(); !due && lastPushed != nil && cipher.SamePubKeys(srvPKs, lastPushed) {
+		return nil
 	}
 
 	entry, err := c.dc.Entry(ctx, c.pk)
