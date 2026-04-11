@@ -511,19 +511,66 @@ func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object
 	}
 }
 
+// sudphHandshakeTimeout is the per-connection deadline for completing the
+// SUDPH responder handshake. Legitimate clients complete the 3-frame
+// exchange in well under a second; the default handshake.Timeout of 10s
+// is needlessly generous for a public-facing UDP listener and lets
+// scanner / broken-client connections accumulate one goroutine and one
+// KCP session each for the full 10s.
+const sudphHandshakeTimeout = 3 * time.Second
+
+// sudphMaxInFlightHandshakes caps the number of concurrent in-flight
+// SUDPH handshakes. Any new UDP connection arriving while this many
+// handshakes are already in progress is immediately closed rather than
+// queued, providing hard backpressure against scanner floods. In
+// steady state a healthy AR sees ~10 concurrent handshakes, so 256 is
+// ~25× headroom for legitimate bursts while still bounding resource
+// usage.
+const sudphMaxInFlightHandshakes = 256
+
 // ListenUDP listens for UDP connections for SUDPH.
 func (a *API) ListenUDP(listener net.Listener) {
 	a.log.Infof("Listening UDP on %v", listener.Addr())
 
+	// Semaphore bounding in-flight handshake goroutines.
+	sem := make(chan struct{}, sudphMaxInFlightHandshakes)
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			a.log.Fatal(err)
+			// Accept errors on a KCP listener can occur under load
+			// (EMFILE, invalid peer packets). Previously this was a
+			// Fatal that killed the whole AR process; continue the
+			// loop instead so transient errors don't take the
+			// service down.
+			a.log.WithError(err).Warn("SUDPH listener Accept error, continuing")
+			select {
+			case <-a.closeC:
+				return
+			default:
+			}
+			continue
 		}
 
-		a.log.Infof("Accepted new UDP connection from %q", conn.RemoteAddr())
+		// Non-blocking acquire: if the semaphore is full, drop
+		// the connection immediately rather than queueing.
+		select {
+		case sem <- struct{}{}:
+		default:
+			a.log.Warnf("SUDPH handshake queue full (%d in flight), dropping %s",
+				sudphMaxInFlightHandshakes, conn.RemoteAddr())
+			if closeErr := conn.Close(); closeErr != nil {
+				a.log.WithError(closeErr).Debug("Failed to close dropped SUDPH connection")
+			}
+			continue
+		}
 
-		go a.sudphConnHandshake(conn)
+		a.log.Debugf("Accepted new UDP connection from %q", conn.RemoteAddr())
+
+		go func(c net.Conn) {
+			defer func() { <-sem }()
+			a.sudphConnHandshake(c)
+		}(conn)
 	}
 }
 
@@ -532,7 +579,7 @@ func (a *API) sudphConnHandshake(conn net.Conn) {
 
 	hs := handshake.ResponderHandshake(func(_ handshake.Frame2) error { return nil })
 
-	wrapped, err := network.DoHandshake(conn, hs, types.SUDPH, a.log)
+	wrapped, err := network.DoHandshakeWithTimeout(conn, hs, types.SUDPH, sudphHandshakeTimeout, a.log)
 	if err != nil {
 		// Close the connection on handshake failure to prevent KCP session goroutine leak.
 		if closeErr := conn.Close(); closeErr != nil {
