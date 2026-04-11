@@ -77,15 +77,30 @@ func (cs *ClientSession) DialStream(ctx context.Context, dst Addr) (dStr *Stream
 
 	// If the caller's context is canceled, close the stream to interrupt
 	// any blocked read/write and free the ephemeral port immediately.
+	//
+	// The watcher and DialStream must synchronize on exit: a naive
+	// `defer close(ctxDone)` only makes the watcher runnable; if the
+	// caller cancels ctx before the watcher is actually scheduled
+	// (e.g. callers that use per-attempt WithTimeout + immediate
+	// defer cancel), both select cases race and the watcher may
+	// pick ctx.Done() and close the just-returned stream. The
+	// `<-watcherExited` barrier below guarantees the watcher has
+	// observed ctxDone and fully exited before DialStream returns,
+	// so any post-return ctx cancel finds nothing to cancel.
 	ctxDone := make(chan struct{})
+	watcherExited := make(chan struct{})
 	go func() {
+		defer close(watcherExited)
 		select {
 		case <-ctx.Done():
 			dStr.Close() //nolint:errcheck,gosec
 		case <-ctxDone:
 		}
 	}()
-	defer close(ctxDone)
+	defer func() {
+		close(ctxDone)
+		<-watcherExited
+	}()
 
 	// Check context before starting.
 	if ctx.Err() != nil {

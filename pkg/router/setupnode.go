@@ -145,9 +145,17 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 	}
 }
 
+// ErrCircuitOpen is returned by CreateRouteGroup when the per-
+// destination circuit breaker has short-circuited a setup attempt. It
+// is distinct from a dial failure so callers and stats can tell the
+// difference between "this destination is known bad, skipping" and
+// "we tried and failed again".
+var ErrCircuitOpen = fmt.Errorf("route setup: destination circuit breaker open")
+
 // CreateRouteGroup creates a route group by communicating with routers used within the bidirectional route.
 // The following steps are taken:
 // * Check the validity of bi route input.
+// * Consult the per-destination circuit breaker; fast-fail if open.
 // * Route IDs are reserved from the routers.
 // * Intermediary rules are broadcasted to the intermediary routers.
 // * Edge rules are broadcasted to the responding router.
@@ -161,10 +169,25 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, biRt routing.B
 	// Victoria Metrics / Empty implementations which don't track per-
 	// request context.
 	hopCount := len(biRt.Forward)
-	if c, ok := metrics.(*setupmetrics.Collector); ok {
-		defer c.RecordRouteContext(ctx, biRt.Desc.SrcPK(), biRt.Desc.DstPK(), hopCount)(&err)
+	collector, haveCollector := metrics.(*setupmetrics.Collector)
+	if haveCollector {
+		defer collector.RecordRouteContext(ctx, biRt.Desc.SrcPK(), biRt.Desc.DstPK(), hopCount)(&err)
 	} else {
 		defer metrics.RecordRoute()(&err)
+	}
+
+	// Consult the per-destination circuit breaker. If the breaker is
+	// open we short-circuit the entire setup path — no dial work, no
+	// session usage, no concurrent-worker slot held for ~10s. This
+	// matters for destinations that have accumulated thousands of
+	// consecutive id_reservation failures (a dead visor still in
+	// discovery) because one breaker decision saves ~10s of work per
+	// attempt.
+	if haveCollector {
+		if ok, reason := collector.AllowDestination(biRt.Desc.DstPK()); !ok {
+			log.Debugf("circuit breaker: %s", reason)
+			return routing.EdgeRules{}, fmt.Errorf("%w: %s", ErrCircuitOpen, reason)
+		}
 	}
 
 	// Ensure bi routes input is valid.

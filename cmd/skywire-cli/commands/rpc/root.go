@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
@@ -161,6 +162,12 @@ func RegisterFetchFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&NoHTTP, "no-http", false, "skip direct HTTP fallback step")
 }
 
+// isDmsgURL reports whether the given URL is a dmsg:// scheme URL that
+// the visor's DmsgHTTP RPC can handle directly.
+func isDmsgURL(u string) bool {
+	return len(u) >= 7 && u[:7] == "dmsg://"
+}
+
 // dmsgURLForHTTP looks up the DMSG equivalent URL for an HTTP service URL.
 // Returns empty string if no DMSG address is known for the service.
 func dmsgURLForHTTP(httpURL string) string {
@@ -190,7 +197,13 @@ func fetchViaDmsgDirect(dmsgURL string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	dlog := logging.MustGetLogger("cli:dmsg-fetch")
+	// Keep the ephemeral direct-client loggers quiet. They otherwise
+	// dump session-open / yamux / EOF / entry-delete chatter at debug
+	// level for every fetch, which drowns the caller's own output.
+	// Use a dedicated master logger so we don't mutate the global one.
+	dmaster := logging.NewMasterLogger()
+	dmaster.SetLevel(logrus.ErrorLevel)
+	dlog := dmaster.PackageLogger("cli:dmsg-fetch")
 	pk, sk := cipher.GenerateKeyPair()
 
 	servers := dmsg.Prod.DmsgServers
@@ -303,12 +316,23 @@ func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, c
 func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 	var lastErr error
 
+	// The visor's DmsgHTTP RPC parses req.Host as a dmsg.Addr (PK:port),
+	// so hostname-based http:// URLs like http://dmsgd.skywire.skycoin.com
+	// cannot be handled — they always fail with "invalid host address".
+	// Resolve the http URL to its dmsg:// equivalent via the deployment
+	// map before calling RPC; if no mapping exists we skip step 1 and
+	// rely on step 2/3.
+	rpcURL := url
+	if dmsgEquiv := dmsgURLForHTTP(url); dmsgEquiv != "" {
+		rpcURL = dmsgEquiv
+	}
+
 	// Step 1: Try visor RPC (proxies over DMSG via DmsgHTTP)
-	if !NoRPC {
+	if !NoRPC && (rpcURL != url || isDmsgURL(url)) {
 		rpcClient, err := Client(cmdFlags)
 		if err == nil {
 			resp, err := rpcClient.DmsgHTTP(visor.DmsgHTTPRequest{
-				URL:    url,
+				URL:    rpcURL,
 				Method: "GET",
 			})
 			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -316,15 +340,17 @@ func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 			}
 			if err != nil {
 				lastErr = fmt.Errorf("RPC DmsgHTTP: %w", err)
-				logger.Debugf("RPC DmsgHTTP failed for %s: %v", url, err)
+				logger.Debugf("RPC DmsgHTTP failed for %s: %v", rpcURL, err)
 			} else {
 				lastErr = fmt.Errorf("RPC DmsgHTTP: status %d", resp.StatusCode)
-				logger.Debugf("RPC DmsgHTTP status %d for %s", resp.StatusCode, url)
+				logger.Debugf("RPC DmsgHTTP status %d for %s", resp.StatusCode, rpcURL)
 			}
 		} else {
 			lastErr = fmt.Errorf("RPC: %w", err)
 			logger.Debugf("RPC not available: %v", err)
 		}
+	} else if !NoRPC {
+		logger.Debugf("Skipping RPC step: no DMSG mapping for %s", url)
 	}
 
 	// Step 2: Direct DMSG HTTP (ephemeral client)
