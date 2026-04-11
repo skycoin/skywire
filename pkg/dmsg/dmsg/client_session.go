@@ -4,6 +4,7 @@ package dmsg
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -213,6 +214,25 @@ func (cs *ClientSession) LookupIP(dst Addr) (myIP net.IP, err error) {
 }
 
 // serve accepts incoming streams from remote clients.
+//
+// The accept loop is split into two error classes:
+//
+//   - Session-level errors (yamux.ErrSessionShutdown, or any error from
+//     the yamux AcceptStream call itself): the underlying yamux session
+//     is gone, there's nothing to accept anymore. Return the error so
+//     the enclosing dialSession goroutine cleans up via delSession and
+//     the reconnect loop re-dials.
+//
+//   - Stream-level errors (a single incoming stream failed its noise
+//     handshake — bad peer, handshake deadline hit, peer disconnected
+//     mid-handshake, garbled request bytes, etc.): the session itself
+//     is still alive and should continue accepting other streams. Log
+//     at Debug level and loop. Previously any such error terminated
+//     the whole session, causing long-running visors to decay their
+//     dmsg session count as random bad peers triggered session kills
+//     — the root cause of the "zero delegated servers" partial-failure
+//     pattern seen in production (e.g. visors at sequence >1000
+//     accumulating from 6 servers down to 0 over days of uptime).
 func (cs *ClientSession) serve() error {
 	defer func() {
 		if err := cs.Close(); err != nil {
@@ -221,61 +241,72 @@ func (cs *ClientSession) serve() error {
 		}
 	}()
 	for {
-		if _, err := cs.acceptStream(); err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Temporary() { //nolint
-				cs.log.
-					WithError(err).
-					Debug("Failed to accept stream.")
-				continue
-			}
-
-			if errors.Is(err, yamux.ErrSessionShutdown) {
-				cs.log.WithError(err).Debug("Stopped accepting streams.")
+		dStr, err := cs.acceptYamuxStream()
+		if err != nil {
+			// yamux-level failure. Shutdown / closed / EOF are
+			// terminal — the underlying session is dead. Everything
+			// else is treated as potentially-transient and retried
+			// with a short backoff, mirroring the server-side loop
+			// in ServerSession.Serve (streamErrorBackoff = 50ms).
+			if errors.Is(err, yamux.ErrSessionShutdown) || errors.Is(err, io.EOF) || cs.sm.yamux.IsClosed() {
+				cs.log.WithError(err).Debug("Session shut down, stopping accept loop.")
 				return err
 			}
-			cs.log.WithError(err).Warn("Stopped accepting streams.")
-			return err
+			cs.log.WithError(err).Warn("Failed to accept yamux stream, continuing...")
+			time.Sleep(streamErrorBackoff)
+			continue
+		}
+
+		if err := cs.handshakeResponder(dStr); err != nil {
+			// Stream-level handshake failure: close the one bad
+			// stream and keep the session alive. Previously
+			// returned from serve, killing the whole session —
+			// the root cause of the dmsg session rot seen in
+			// long-running visors (sessions decayed from 6 to 0
+			// as random bad peers triggered session kills).
+			cs.log.WithError(err).Debug("Stream handshake failed, continuing.")
+			if closeErr := dStr.Close(); closeErr != nil {
+				cs.log.WithError(closeErr).
+					Debug("On handshakeResponder failure, close stream resulted in error.")
+			}
+			continue
 		}
 	}
 }
 
-func (cs *ClientSession) acceptStream() (dStr *Stream, err error) {
-	if dStr, err = newRespondingStream(cs); err != nil {
-		return nil, err
-	}
+// acceptYamuxStream performs only the yamux-level accept. Errors from
+// this function indicate the session itself is dead (or about to be).
+func (cs *ClientSession) acceptYamuxStream() (*Stream, error) {
+	return newRespondingStream(cs)
+}
 
-	// Close stream on failure.
-	defer func() {
-		if err != nil {
-			if scErr := dStr.Close(); scErr != nil {
-				cs.log.WithError(scErr).
-					Debug("On (*ClientSession).acceptStream() failure, close stream resulted in error.")
-			}
-		}
-	}()
-
+// handshakeResponder performs the noise handshake on an already-
+// accepted yamux stream. Errors from this function are stream-level
+// and should NOT terminate the enclosing session; the caller is
+// responsible for closing dStr on failure.
+func (cs *ClientSession) handshakeResponder(dStr *Stream) error {
 	// Prepare deadline.
-	if err = dStr.SetDeadline(time.Now().Add(HandshakeTimeout)); err != nil {
-		return nil, err
+	if err := dStr.SetDeadline(time.Now().Add(HandshakeTimeout)); err != nil {
+		return err
 	}
 
 	// Do stream handshake.
 	req, err := dStr.readRequest()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if err = dStr.writeResponse(req.raw.Hash()); err != nil {
-		return nil, err
+	if err := dStr.writeResponse(req.raw.Hash()); err != nil {
+		return err
 	}
 
 	// Set idle timeout — refreshed on each successful read.
-	if err = dStr.SetReadDeadline(time.Now().Add(StreamIdleTimeout)); err != nil {
-		return nil, err
+	if err := dStr.SetReadDeadline(time.Now().Add(StreamIdleTimeout)); err != nil {
+		return err
 	}
 	// Clear the write deadline so writes are not affected.
-	if err = dStr.SetWriteDeadline(time.Time{}); err != nil {
-		return nil, err
+	if err := dStr.SetWriteDeadline(time.Time{}); err != nil {
+		return err
 	}
 
-	return dStr, err
+	return nil
 }
