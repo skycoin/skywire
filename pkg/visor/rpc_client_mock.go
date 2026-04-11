@@ -1047,6 +1047,11 @@ func (mc *mockRPCClient) SetDmsgSessionsCount(_ int) (*DmsgConnectAllResult, err
 	return &DmsgConnectAllResult{}, nil
 }
 
+// DmsgSessions implements API.
+func (mc *mockRPCClient) DmsgSessions() (*DmsgClientSessions, error) {
+	return &DmsgClientSessions{}, nil
+}
+
 // TPSStatus implements API.
 func (mc *mockRPCClient) TPSStatus() (*TPSStatus, error) {
 	return &TPSStatus{Enabled: false}, nil
