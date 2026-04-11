@@ -65,7 +65,11 @@ func init() {
 	RootCmd.Flags().StringVar(&officialServers, "official-servers", "", "list of official dmsg servers keys separated by comma")
 	RootCmd.Flags().StringVar(&redisURL, "redis", store.DefaultURL, "connections string for a redis store\n\r")
 	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "list of whitelisted keys of network monitor used for deregistration")
-	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", store.DefaultTimeout, "discovery entry timeout\n\r")
+	// 60m is 12× the client refresh interval (DefaultUpdateInterval*5 = 5m),
+	// giving ~2-3 missed refreshes of slack before Redis prunes an entry.
+	// Set to 0 to disable expiration (legacy behavior, stale entries
+	// will accumulate forever).
+	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 60*time.Minute, "client discovery entry TTL (0 to disable)\n\r")
 	RootCmd.Flags().BoolVarP(&testMode, "test-mode", "t", false, "in testing mode")
 	RootCmd.Flags().BoolVar(&enableLoadTesting, "enable-load-testing", false, "enable load testing")
 	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment")
@@ -150,7 +154,7 @@ Example:
 
 		// we enable metrics middleware if address is passed
 		enableMetrics := sf.MetricsAddr != ""
-		a := api.New(log, db, m, testMode, enableLoadTesting, enableMetrics, dmsgAddr, authPassphrase)
+		a := api.New(log, db, m, testMode, enableLoadTesting, enableMetrics, dmsgAddr, authPassphrase, entryTimeout)
 
 		var whitelistPKs []string
 		if whitelistKeys != "" {
