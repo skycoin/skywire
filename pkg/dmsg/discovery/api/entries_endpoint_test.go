@@ -183,7 +183,7 @@ func TestEntriesEndpoint(t *testing.T) {
 				tc.storerPreHook(t, dbMock, &tc.entry)
 			}
 
-			api := New(nil, dbMock, metrics.NewEmpty(), true, false, true, "", "")
+			api := New(nil, dbMock, metrics.NewEmpty(), true, false, true, "", "", 0)
 			req, err := http.NewRequest(tc.method, tc.endpoint, bytes.NewBufferString(tc.httpBody))
 			require.NoError(t, err)
 
