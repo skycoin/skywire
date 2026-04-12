@@ -251,8 +251,16 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		if err != nil {
 			return nil, fmt.Errorf("error saving clientEntry: %w", err)
 		}
+		// Wait for the background DMSG HTTP transport to become ready.
+		// initDmsgHTTP starts the connection asynchronously; the channel
+		// is closed once v.dmsgHTTP is set.
+		select {
+		case <-v.dmsgHTTPReady:
+		case <-ctx.Done():
+			return nil, fmt.Errorf("DMSG HTTP transport not ready: %w", ctx.Err())
+		}
 		if v.dmsgHTTP == nil {
-			return nil, fmt.Errorf("DMSG HTTP transport not ready yet")
+			return nil, fmt.Errorf("DMSG HTTP transport failed to initialize")
 		}
 		return v.dmsgHTTP, nil
 	}
