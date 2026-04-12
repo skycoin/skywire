@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"path/filepath"
 	"sync"
 	"time"
@@ -399,8 +398,17 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 	dmsgConf.ClientType = "tps"
 	log.WithField("min_sessions", minSessions).WithField("server_type", serverType).Debug("TPS dmsg config")
-	httpC := &http.Client{}
-	tpsDisc := dmsgdisc.NewHTTP(v.conf.Dmsg.Discovery, httpC, v.MasterLogger().PackageLogger("embedded_tps:disc"))
+
+	// Resolve discovery URL: prefer HTTP, fall back to dmsghttp.
+	tpsDiscURL := v.conf.Dmsg.Discovery
+	if tpsDiscURL == "" && v.conf.Dmsg.DiscoveryDmsg != "" {
+		tpsDiscURL = v.conf.Dmsg.DiscoveryDmsg
+	}
+	tpsHTTP, err := getHTTPClient(ctx, v, tpsDiscURL)
+	if err != nil {
+		return fmt.Errorf("embedded TPS: %w", err)
+	}
+	tpsDisc := dmsgdisc.NewHTTP(tpsDiscURL, tpsHTTP, v.MasterLogger().PackageLogger("embedded_tps:disc"))
 	tpsDmsgC := dmsg.NewClient(tpsPK, *tpsSK, tpsDisc, dmsgConf)
 	tpsDmsgC.SetLogger(v.MasterLogger().PackageLogger("embedded_tps:dmsg"))
 
@@ -475,7 +483,7 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 	if err != nil {
 		return err
 	}
-	connector := MakeConnector(conf, 3, v.tpM, v.serviceDisc.Client, pIP, log, v.MasterLogger())
+	connector := MakeConnector(conf, 3, v.tpM, v.dmsgC, v.serviceDisc.Client, pIP, log, v.MasterLogger())
 
 	cctx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel stored in v.autoconnect.cancel, called in pushCloseStack
 	v.autoconnect.cancel = cancel

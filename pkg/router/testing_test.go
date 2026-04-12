@@ -40,6 +40,7 @@ func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) network
 		conn := newRPCConn(new(mockGatewayForDialer))
 		dialer := new(network.MockDialer)
 		dialer.On("Dial", mock.Anything, mock.Anything, mock.Anything).Return(conn, nil)
+		dialer.On("Probe", mock.Anything, mock.Anything, mock.Anything).Return(true)
 		return dialer
 	}
 
@@ -53,6 +54,8 @@ func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) network
 type mockDialer map[cipher.PubKey]net.Conn
 
 func (d mockDialer) Type() string { return string(types.DMSG) }
+
+func (d mockDialer) Probe(_ context.Context, _ cipher.PubKey, _ uint16) bool { return true }
 
 func (d mockDialer) Dial(_ context.Context, remote cipher.PubKey, _ uint16) (net.Conn, error) {
 	conn, ok := d[remote]
