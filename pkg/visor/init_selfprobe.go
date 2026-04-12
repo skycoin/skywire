@@ -81,7 +81,7 @@ func selfProbeLoop(ctx context.Context, v *Visor, dmsgC *dmsg.Client, log *loggi
 }
 
 // runSelfProbes probes each critical dmsg port and returns a map of port → healthy.
-func runSelfProbes(ctx context.Context, v *Visor, dmsgC *dmsg.Client, log *logging.Logger) map[uint16]bool {
+func runSelfProbes(ctx context.Context, _ *Visor, dmsgC *dmsg.Client, log *logging.Logger) map[uint16]bool {
 	results := make(map[uint16]bool)
 	myPK := dmsgC.LocalPK()
 
