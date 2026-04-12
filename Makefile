@@ -289,15 +289,6 @@ push-deps: ## Commit and push dependency updates
 	git push
 	@echo "Dependencies pushed successfully"
 
-snapshot: ## goreleaser --snapshot --clean --skip=publish
-	goreleaser --snapshot --clean --skip=publish
-
-snapshot-linux: ## 	goreleaser --snapshot --config .goreleaser-linux.yml --clean --skip=publish
-	goreleaser --snapshot --config .goreleaser-linux.yml --clean --skip=publish
-
-snapshot-clean: ## Cleans snapshot / release
-	rm -rf ./dist
-
 example-apps: ## Build example apps
 	${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)apps/ ./example/...
 
@@ -333,39 +324,6 @@ build-deploy: ## Build for deployment Docker images
 
 build-race: ## Build for testing Docker images
 	CGO_ENABLED=1 ${OPTS} go build -tags netgo ${BUILD_OPTS} -race -o /release/skywire .
-
-github-prepare-release:
-	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags | sed 's/-.*//'))
-	sed '/^## ${GITHUB_TAG}$$/,/^## .*/!d;//d;/^$$/d' ./CHANGELOG.md > releaseChangelog.md
-
-github-release: github-prepare-release
-	go run github.com/goreleaser/goreleaser/v2@main --clean --config .goreleaser-linux.yml --release-notes releaseChangelog.md
-
-github-release-darwin-amd64:
-	go run github.com/goreleaser/goreleaser/v2@main --clean --config .goreleaser-darwin-amd64.yml --skip=publish
-	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-amd64.tar.gz
-	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
-	cat ./dist/checksums.txt >> ./checksums.txt
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
-
-github-release-darwin-arm64:
-	go run github.com/goreleaser/goreleaser/v2@main --clean --config .goreleaser-darwin-arm64.yml --skip=publish
-	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-darwin-arm64.tar.gz
-	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
-	cat ./dist/checksums.txt >> ./checksums.txt
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
-
-github-release-windows:
-	go run github.com/goreleaser/goreleaser/v2@main --clean --config .goreleaser-windows.yml --skip=publish
-	$(eval GITHUB_TAG=$(shell powershell git describe --abbrev=0 --tags))
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-amd64.zip
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-386.zip
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./dist/skywire-${GITHUB_TAG}-windows-arm64.zip
-	gh release download ${GITHUB_TAG} --repo skycoin/skywire --pattern 'checksums*'
-	cat ./dist/checksums.txt >> ./checksums.txt
-	gh release upload --repo skycoin/skywire ${GITHUB_TAG} --clobber ./checksums.txt
 
 dep-github-release:
 	rm -rf musl-data
