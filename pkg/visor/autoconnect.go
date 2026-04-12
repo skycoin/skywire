@@ -13,6 +13,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -41,6 +42,7 @@ type autoconnector struct {
 	maxConns       int
 	log            *logging.Logger
 	tm             *transport.Manager
+	dmsgC          *dmsg.Client // for reachability probes
 	visorIsPublic  bool
 	clientPublicIP string
 
@@ -50,7 +52,7 @@ type autoconnector struct {
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
 // services
-func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager, httpC *http.Client, clientPublicIP string,
+func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager, dmsgC *dmsg.Client, httpC *http.Client, clientPublicIP string,
 	log *logging.Logger, mLog *logging.MasterLogger) Autoconnector {
 	// Extract just the IP from clientPublicIP (may include port)
 	publicIP := clientPublicIP
@@ -63,6 +65,7 @@ func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager,
 	connector.maxConns = maxConns
 	connector.log = log
 	connector.tm = tm
+	connector.dmsgC = dmsgC
 	connector.clientPublicIP = publicIP
 	return connector
 }
@@ -129,6 +132,23 @@ func (a *autoconnector) connectToVisors(
 		}
 
 		logger := a.log.WithField("pk", pk).WithField("type", string(tpType))
+
+		// Probe the candidate on dmsg port 136 (route-setup port) before
+		// attempting the expensive transport handshake. If the visor is not
+		// reachable on dmsg, establishing a transport to it would also fail.
+		if a.dmsgC != nil {
+			probeCtx, probeCancel := context.WithTimeout(ctx, dmsg.HandshakeTimeout)
+			reachable := a.dmsgC.Probe(probeCtx, pk, skyenv.DmsgAwaitSetupPort)
+			probeCancel()
+			if !reachable {
+				logger.Debug("Skipping visor: dmsg probe failed (unreachable)")
+				if trackAll {
+					result.connected = append(result.connected, pk)
+				}
+				continue
+			}
+		}
+
 		logger.Debugln("Trying to add transport")
 
 		if err := a.tryEstablishTransport(ctx, pk, tpType, logger); err != nil {
