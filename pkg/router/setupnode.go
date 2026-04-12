@@ -195,21 +195,6 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, biRt routing.B
 		return routing.EdgeRules{}, err
 	}
 
-	// Probe the destination before committing to the expensive
-	// ReserveRouteIDs path (which dials every hop and holds concurrent
-	// worker slots). A failed probe means the destination is not
-	// listening on the route-setup port and the full setup would time
-	// out after ~10s. The probe completes the dmsg noise handshake
-	// end-to-end, confirming the visor is alive and reachable.
-	dstPKForProbe := biRt.Desc.DstPK()
-	probeCtx, probeCancel := context.WithTimeout(ctx, dmsg.HandshakeTimeout)
-	if !dialer.Probe(probeCtx, dstPKForProbe, skyenv.DmsgAwaitSetupPort) {
-		probeCancel()
-		log.WithField("dst", dstPKForProbe).Warn("Destination probe failed, skipping route setup")
-		return routing.EdgeRules{}, fmt.Errorf("route setup: destination %s unreachable (probe failed)", dstPKForProbe)
-	}
-	probeCancel()
-
 	// Reserve route IDs from remote routers.
 	rtIDR, err := ReserveRouteIDs(ctx, log, dialer, biRt)
 	if err != nil {
