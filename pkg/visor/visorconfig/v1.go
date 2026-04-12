@@ -125,6 +125,7 @@ type Routing struct {
 	UserRouteSetupNodes []cipher.PubKey `json:"user_route_setup_nodes,omitempty"` // user-added keys, preserved across config refresh
 	RouteSetupSK        *cipher.SecKey  `json:"route_setup_sk,omitempty"`         // Embedded route setup-node secret key
 	RouteFinder         string          `json:"route_finder"`
+	RouteFinderDmsg     string          `json:"route_finder_dmsg,omitempty"`
 	RouteFinderTimeout  Duration        `json:"route_finder_timeout,omitempty"`
 	MinHops             uint16          `json:"min_hops"`
 	// CalculateRoutes enables local route calculation instead of using the route finder service.
@@ -138,7 +139,8 @@ type Routing struct {
 
 // UptimeTracker configures uptime tracker.
 type UptimeTracker struct {
-	Addr string `json:"addr"`
+	Addr     string `json:"addr"`
+	AddrDmsg string `json:"addr_dmsg,omitempty"`
 }
 
 // PublicVisorConfig configures public visor behavior and service discovery registration.
