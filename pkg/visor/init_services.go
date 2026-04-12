@@ -58,17 +58,27 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 		return nil
 	}
 
-	httpC, err := getHTTPClient(ctx, v, conf.Addr)
+	// Resolve UT URL: prefer HTTP, fall back to dmsghttp.
+	utURL := conf.Addr
+	if utURL == "" && conf.AddrDmsg != "" {
+		utURL = conf.AddrDmsg
+	}
+	if utURL == "" {
+		v.log.Debug("'uptime_tracker' addr is empty, skipping.")
+		return nil
+	}
+
+	httpC, err := getHTTPClient(ctx, v, utURL)
 	if err != nil {
 		return err
 	}
 
-	pIP, err := getPublicIP(v, conf.Addr)
+	pIP, err := getPublicIP(v, utURL)
 	if err != nil {
 		return err
 	}
 
-	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+	ut, err := utclient.NewHTTP(utURL, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
 	if err != nil {
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return nil

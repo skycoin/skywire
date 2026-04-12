@@ -80,24 +80,39 @@ func (cs *ClientSession) DialStream(ctx context.Context, dst Addr) (dStr *Stream
 	// If the caller's context is canceled, close the stream to interrupt
 	// any blocked read/write and free the ephemeral port immediately.
 	//
-	// Synchronization is non-trivial. A naive watcher goroutine that
-	// just `select`s on ctx.Done() vs a ctxDone signal races with the
-	// post-handshake cleanup: if ctx is canceled *around the same
-	// time* the handshake finishes (e.g. a sibling racePhaseDial
-	// goroutine that canceled the shared raceCtx as soon as its own
-	// winning dial returned), both select cases become ready
-	// concurrently and the runtime picks one randomly. Picking
-	// ctx.Done() in that instant closes the stream that DialStream
-	// is about to return successfully, and the caller sees the Write
-	// fail with "stream closed" or reads EOF.
+	// Synchronization between the watcher and main-flow defer is
+	// non-trivial. A naive watcher that just `select`s on ctx.Done()
+	// vs ctxDone races with the post-handshake cleanup when ctx is
+	// canceled around the same time the handshake finishes: both
+	// select cases become ready and the runtime picks one randomly.
+	// Picking ctx.Done() in that instant closes the stream that
+	// DialStream is about to return successfully, and the caller
+	// sees the Write fail with "stream closed" or reads EOF.
 	//
-	// The fix is a mutex that serializes the decision. The watcher
-	// grabs `mu` before inspecting `finished`; the main-flow defer
-	// grabs `mu` first, marks `finished=true`, releases. Whichever
-	// wins the mutex decides. If the watcher won and closed the
-	// stream, it also sets `closedByWatcher=true` so the defer can
-	// surface the race as a proper error to the caller rather than
-	// handing them a dead stream.
+	// A mutex serializes the decision: the watcher grabs `mu` before
+	// inspecting `finished`; the main-flow defer grabs `mu` first and
+	// sets `finished=true`. Whichever wins the mutex decides. If the
+	// watcher won and closed the stream, it also sets
+	// `closedByWatcher=true` so the defer can surface the race as a
+	// proper error to the caller rather than handing them a dead
+	// stream.
+	//
+	// IMPORTANT: this mutex is necessary but NOT sufficient for
+	// callers that derive a per-attempt WithTimeout+defer cancel
+	// pattern around DialStream. The handshake REQUEST has already
+	// reached the destination and been introduced into its listener
+	// accept queue by the time the watcher fires; converting the
+	// dial-side result to an error does not undo that introduction.
+	// Closing the dial-side stream propagates FIN through the server
+	// bridge, leaving a DEAD stream in the destination's accept
+	// buffer that subsequent AcceptStream calls dequeue — breaking
+	// any caller that expects consecutive dials to produce
+	// consecutive, usable streams on the destination. So callers
+	// must NOT derive a timeout shorter than HandshakeTimeout —
+	// use the parent ctx directly and rely on the stream's own
+	// SetDeadline (set to HandshakeTimeout below) to bound the dial.
+	// See sequentialPhaseDial in client_dial.go for the caller-side
+	// contract.
 	var (
 		mu              sync.Mutex
 		finished        bool

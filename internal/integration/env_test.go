@@ -1176,10 +1176,25 @@ func (env *TestEnv) AddDefaultTransports(routerVisor string, skychatNodes []stri
 		}
 	}
 
+	const maxRetries = 4
+	const retryDelay = 15 * time.Second
+
 	for _, node := range skychatNodes {
-		_, err := env.VisorTpAddDefault(routerVisor, env.visorPKs[node])
-		if err != nil {
-			env.logger.Warnf("AddDefaultTransports: %s failed: %v", node, err)
+		var lastErr error
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			_, err := env.VisorTpAddDefault(routerVisor, env.visorPKs[node])
+			if err == nil {
+				lastErr = nil
+				break
+			}
+			lastErr = err
+			env.logger.Warnf("AddDefaultTransports: %s attempt %d/%d failed: %v", node, attempt, maxRetries, err)
+			if attempt < maxRetries {
+				time.Sleep(retryDelay)
+			}
+		}
+		if lastErr != nil {
+			env.logger.Warnf("AddDefaultTransports: %s failed after %d attempts: %v", node, maxRetries, lastErr)
 		}
 	}
 
