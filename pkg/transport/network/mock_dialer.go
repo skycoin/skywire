@@ -47,6 +47,20 @@ func (_m *MockDialer) Dial(ctx context.Context, remote cipher.PubKey, port uint1
 	return r0, r1
 }
 
+// Probe provides a mock function with given fields: ctx, remote, port
+func (_m *MockDialer) Probe(ctx context.Context, remote cipher.PubKey, port uint16) bool {
+	ret := _m.Called(ctx, remote, port)
+
+	if len(ret) == 0 {
+		return true
+	}
+
+	if rf, ok := ret.Get(0).(func(context.Context, cipher.PubKey, uint16) bool); ok {
+		return rf(ctx, remote, port)
+	}
+	return ret.Get(0).(bool)
+}
+
 // Type provides a mock function with no fields
 func (_m *MockDialer) Type() string {
 	ret := _m.Called()

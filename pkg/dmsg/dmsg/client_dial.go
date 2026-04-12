@@ -87,11 +87,13 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// so it still uses the tighter cap.
 	const maxPerNewPhase = 2
 
-	// Phase 1: Iterate the target's delegated-server sessions serially
-	// with a tight per-attempt timeout. Each candidate gets at most
-	// phaseDialTimeout (3s), so a full 16-candidate scan fits in the
-	// ~48s worst case — in practice the negative cache fast-fails
-	// known-bad pairings so the typical traversal is much shorter.
+	// Phase 1: Iterate the target's delegated-server sessions
+	// serially. Each attempt is bounded by the stream-level
+	// HandshakeTimeout (5s) via SetDeadline, NOT a derived
+	// per-attempt ctx — see sequentialPhaseDial's doc and the
+	// DialStream watcher comment in client_session.go for why
+	// deriving a shorter ctx races the handshake and orphans
+	// streams in the destination's accept queue.
 	//
 	// Why sequential rather than parallel: a parallel race opens N
 	// yamux streams on the destination's listener simultaneously, then
@@ -109,8 +111,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// Phase 2: Iterate other existing sessions (mesh path — already
 	// connected, no new handshake). If servers are meshed, our server
 	// forwards the request to the target's server. Sorted by latency.
-	// Honors the same per-attempt deadline and skips negative-cached
-	// pairs.
+	// Skips negative-cached pairs.
 	meshSessions := ce.sortedMeshSessions(entry.Client.DelegatedServers)
 	if stream, ok := ce.sequentialPhaseDial(ctx, addr, meshSessions, maxPerExistingPhase); ok {
 		return stream, nil
@@ -151,30 +152,30 @@ func (ce *Client) getClientEntryCached(ctx context.Context, clientPK cipher.PubK
 	return entry, nil
 }
 
-// phaseDialTimeout is the per-attempt deadline for a single session
-// DialStream inside sequentialPhaseDial. It is intentionally shorter
-// than HandshakeTimeout (5s) so that multiple delegated sessions can
-// be tried serially within a typical 10s outer route-setup context.
-// With the per-attempt deadline at 3s, a full 16-candidate scan fits
-// in the 48s worst case, but in practice the negative cache short-
-// circuits known-bad pairings so traversal is much shorter.
-const phaseDialTimeout = 3 * time.Second
-
-// sequentialPhaseDial iterates sessions in order, skipping any
-// (dst, server) pair in the negative route cache. Each attempt uses
-// a per-call context with phaseDialTimeout so a dead session doesn't
-// burn the whole outer context budget. On success it updates the
-// route cache and clears negative entries for dst; on failure it
-// marks the attempted pair as a negative route. Returns
-// (stream, true) on success, (nil, false) if every attempt failed
-// or the pool was empty / fully negative-cached.
+// sequentialPhaseDial iterates sessions in order. The parent ctx is
+// passed straight through to each session.DialStream — the session
+// bounds the handshake itself via HandshakeTimeout (5s, set via
+// SetDeadline on the underlying stream). Do NOT derive a shorter
+// per-attempt context here: the session's DialStream watcher fires
+// ctx.Done() mid-handshake, and even though the watcher/defer
+// mutex converts that into a clean (nil, err) return, the handshake
+// REQUEST has already reached the destination and been introduced
+// into its listener accept queue. Closing the dial-side stream
+// propagates FIN through the server bridge to the destination,
+// leaving a dead stream in the destination's accept buffer that
+// subsequent AcceptStream calls dequeue — manifesting as EOF on
+// read for unrelated streams. This is the exact failure mode of
+// TestConcurrentStreams under -race; see the commit that added
+// this comment for the full bisect.
+//
+// On success it updates the route cache. Returns (stream, true) on
+// success, (nil, false) if every attempt failed or the pool was empty.
 //
 // Sequential rather than parallel because parallel racing opens N
 // yamux streams on the destination simultaneously and leaves N-1
 // orphan streams in the destination's accept queue after cancellation
-// — the destination cannot distinguish "this stream was canceled"
-// from "this stream is for you to accept", and consumes the orphans
-// on subsequent AcceptStream calls.
+// — same failure mode but from a different angle (the exact failure
+// mode of TestMultiServerStreams).
 func (ce *Client) sequentialPhaseDial(ctx context.Context, addr Addr, sessions []ClientSession, cap int) (*Stream, bool) {
 	tried := 0
 	for _, s := range sessions {
@@ -184,23 +185,14 @@ func (ce *Client) sequentialPhaseDial(ctx context.Context, addr Addr, sessions [
 		if ctx.Err() != nil {
 			return nil, false
 		}
-		if ce.isNegativeRoute(addr.PK, s.RemotePK()) {
-			ce.log.WithField("server", s.RemotePK()).
-				Debug("DialStream skipping session: negative cache hit")
-			continue
-		}
 		tried++
 
-		dialCtx, cancel := context.WithTimeout(ctx, phaseDialTimeout)
-		stream, err := s.DialStream(dialCtx, addr)
-		cancel()
+		stream, err := s.DialStream(ctx, addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", s.RemotePK()).
 				Debug("DialStream failed, trying next session")
-			ce.markNegativeRoute(addr.PK, s.RemotePK())
 			continue
 		}
-		ce.clearNegativeRoute(addr.PK)
 		ce.setCachedRoute(addr.PK, s.RemotePK())
 		return stream, true
 	}

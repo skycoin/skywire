@@ -116,6 +116,8 @@ var (
 	uiServer vinit.Module
 	// Node health tracking for TPS and RSN
 	nodeHealth vinit.Module
+	// Self-probe: periodic dmsg listener reachability check
+	selfProbe vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 	// config initialization
@@ -168,8 +170,9 @@ func registerModules(logger *logging.MasterLogger) {
 	embTPS = maker("embedded_tps", initEmbeddedTPS, &dmsgC)
 	uiServer = maker("ui_server", initUIServer, &dmsgC, &tr, &embTPS)
 	nodeHealth = maker("node_health", initNodeHealth, &dmsgC)
+	selfProbe = maker("self_probe", initSelfProbe, &dmsgC, &dmsgHTTPLogServer, &rt)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer, &nodeHealth)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer, &nodeHealth, &selfProbe)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
@@ -251,8 +254,16 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		if err != nil {
 			return nil, fmt.Errorf("error saving clientEntry: %w", err)
 		}
+		// Wait for the background DMSG HTTP transport to become ready.
+		// initDmsgHTTP starts the connection asynchronously; the channel
+		// is closed once v.dmsgHTTP is set.
+		select {
+		case <-v.dmsgHTTPReady:
+		case <-ctx.Done():
+			return nil, fmt.Errorf("DMSG HTTP transport not ready: %w", ctx.Err())
+		}
 		if v.dmsgHTTP == nil {
-			return nil, fmt.Errorf("DMSG HTTP transport not ready yet")
+			return nil, fmt.Errorf("DMSG HTTP transport failed to initialize")
 		}
 		return v.dmsgHTTP, nil
 	}
