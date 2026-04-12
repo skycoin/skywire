@@ -87,7 +87,8 @@ type Visor struct {
 	dmsgC    *dmsg.Client
 	dmsgDC   *dmsg.Client       // dmsg direct client
 	dClient  dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP *http.Client       // dmsghttp client
+	dmsgHTTP      *http.Client // dmsghttp client
+	dmsgHTTPReady chan struct{} // closed when dmsgHTTP is set
 
 	// DMSG tracker state
 	dmsgTracker dtmState
@@ -371,6 +372,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	v := &Visor{
 		log:                       conf.MasterLogger().PackageLogger("visor"),
 		conf:                      conf,
+		dmsgHTTPReady:             make(chan struct{}),
 		initLock:                  new(sync.RWMutex),
 		closeMu:                   new(sync.RWMutex),
 		isServicesHealthy:         newInternalHealthInfo(),
