@@ -222,8 +222,8 @@ install-shellcheck: ## install shellcheck to current directory
 	./ci_scripts/install-shellcheck.sh
 
 lint-shell:
-	find ./ci_scripts -type f -iname '*.sh' -print0 | xargs -0 -I {} bash -c "./shellcheck \"{}\""
-	find ./docker -type f -iname '*.sh' -print0 | xargs -0 -I {} bash -c "./shellcheck -e SC2086 \"{}\""
+	find ./ci_scripts -type f -iname '*.sh' -print0 | xargs -0 -I {} bash -c "$$(command -v ./shellcheck || command -v shellcheck) \"{}\""
+	find ./docker -type f -iname '*.sh' -print0 | xargs -0 -I {} bash -c "$$(command -v ./shellcheck || command -v shellcheck) -e SC2086 \"{}\""
 
 test: ## Run tests
 	-go clean -testcache &>/dev/null
