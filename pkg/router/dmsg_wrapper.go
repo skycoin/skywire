@@ -25,6 +25,10 @@ func (w *dmsgClientDialer) Dial(ctx context.Context, remote cipher.PubKey, port 
 	return w.Client.Dial(ctx, dmsg.Addr{PK: remote, Port: port})
 }
 
+func (w *dmsgClientDialer) Probe(ctx context.Context, remote cipher.PubKey, port uint16) bool {
+	return w.Client.Probe(ctx, remote, port)
+}
+
 func (w *dmsgClientDialer) Type() string {
 	return string(types.DMSG)
 }
