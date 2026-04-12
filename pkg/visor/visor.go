@@ -83,12 +83,12 @@ type Visor struct {
 	startupComplete chan struct{}
 	uptimeTracker   utclient.APIClient
 
-	ebc      *appevent.Broadcaster // event broadcaster
-	dmsgC    *dmsg.Client
-	dmsgDC   *dmsg.Client       // dmsg direct client
-	dClient  dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP      *http.Client // dmsghttp client
-	dmsgHTTPReady chan struct{} // closed when dmsgHTTP is set
+	ebc           *appevent.Broadcaster // event broadcaster
+	dmsgC         *dmsg.Client
+	dmsgDC        *dmsg.Client       // dmsg direct client
+	dClient       dmsgdisc.APIClient // dmsg direct api client
+	dmsgHTTP      *http.Client       // dmsghttp client
+	dmsgHTTPReady chan struct{}      // closed when dmsgHTTP is set
 
 	// DMSG tracker state
 	dmsgTracker dtmState
