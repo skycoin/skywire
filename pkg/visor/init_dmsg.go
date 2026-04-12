@@ -75,6 +75,7 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		v.dmsgHTTP = &dmsgHTTP
 		v.dmsgDC = dmsgDC
 		v.initLock.Unlock()
+		close(v.dmsgHTTPReady)
 
 		log.Info("DMSG HTTP transport ready")
 	}()
