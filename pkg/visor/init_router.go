@@ -4,7 +4,6 @@ package visor
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/ccding/go-stun/stun"
@@ -121,12 +120,17 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
 
-	httpC, err := getHTTPClient(ctx, v, conf.RouteFinder)
+	// Resolve route finder URL: prefer HTTP, fall back to dmsghttp.
+	rfURL := conf.RouteFinder
+	if rfURL == "" && conf.RouteFinderDmsg != "" {
+		rfURL = conf.RouteFinderDmsg
+	}
+	httpC, err := getHTTPClient(ctx, v, rfURL)
 	if err != nil {
 		return err
 	}
 
-	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout), httpC, v.MasterLogger())
+	rfClient := rfclient.NewHTTP(rfURL, time.Duration(conf.RouteFinderTimeout), httpC, v.MasterLogger())
 	logger := v.MasterLogger().PackageLogger("router")
 
 	// Use embedded route setup-node if available, otherwise use remote setup-nodes
@@ -210,8 +214,17 @@ func initEmbeddedRouteSetup(ctx context.Context, v *Visor, log *logging.Logger) 
 		Protocol:    v.conf.Dmsg.Protocol,
 	}
 	dmsgConf.ClientType = "route_setup"
-	httpC := &http.Client{}
-	routeSetupDisc := dmsgdisc.NewHTTP(v.conf.Dmsg.Discovery, httpC, v.MasterLogger().PackageLogger("embedded_route_setup:disc"))
+
+	// Resolve discovery URL: prefer HTTP, fall back to dmsghttp.
+	discURL := v.conf.Dmsg.Discovery
+	if discURL == "" && v.conf.Dmsg.DiscoveryDmsg != "" {
+		discURL = v.conf.Dmsg.DiscoveryDmsg
+	}
+	httpC, err := getHTTPClient(ctx, v, discURL)
+	if err != nil {
+		return fmt.Errorf("embedded route setup-node: %w", err)
+	}
+	routeSetupDisc := dmsgdisc.NewHTTP(discURL, httpC, v.MasterLogger().PackageLogger("embedded_route_setup:disc"))
 	routeSetupDmsgC := dmsg.NewClient(routeSetupPK, *routeSetupSK, routeSetupDisc, dmsgConf)
 	routeSetupDmsgC.SetLogger(v.MasterLogger().PackageLogger("embedded_route_setup:dmsg"))
 
