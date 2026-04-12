@@ -89,26 +89,26 @@ func runSelfProbes(ctx context.Context, v *Visor, dmsgC *dmsg.Client, log *loggi
 	// The visor's router.serveSetup accepts the stream, checks
 	// SetupIsTrusted (our own PK won't be in the setup-nodes list),
 	// closes for untrusted — but the dial success confirms reachability.
-	results[skyenv.DmsgAwaitSetupPort] = probeRawDial(ctx, dmsgC, myPK, skyenv.DmsgAwaitSetupPort, log)
+	results[skyenv.DmsgAwaitSetupPort] = probeRawDial(ctx, dmsgC, myPK, skyenv.DmsgAwaitSetupPort)
 
 	// Probe port 80 (dmsghttp log server) — HTTP GET /ping over dmsg.
 	// Uses the visor's own dmsg client to make an HTTP request through
 	// the server bridge back to itself. The /ping endpoint returns 200
 	// with no body — minimal overhead.
-	results[visorconfig.DmsgHTTPPort] = probeDmsgHTTP(ctx, v, dmsgC, myPK, log)
+	results[visorconfig.DmsgHTTPPort] = probeDmsgHTTP(ctx, dmsgC, myPK, log)
 
 	return results
 }
 
 // probeRawDial does a bare DialStream + Close to confirm the listener is alive.
-func probeRawDial(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey, port uint16, log *logging.Logger) bool {
+func probeRawDial(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey, port uint16) bool {
 	probeCtx, cancel := context.WithTimeout(ctx, selfProbeTimeout)
 	defer cancel()
 	return dmsgC.Probe(probeCtx, pk, port)
 }
 
 // probeDmsgHTTP does an HTTP GET /ping over dmsg to the visor's own log server.
-func probeDmsgHTTP(ctx context.Context, v *Visor, dmsgC *dmsg.Client, myPK cipher.PubKey, log *logging.Logger) bool {
+func probeDmsgHTTP(ctx context.Context, dmsgC *dmsg.Client, myPK cipher.PubKey, log *logging.Logger) bool {
 	probeCtx, cancel := context.WithTimeout(ctx, selfProbeTimeout)
 	defer cancel()
 
@@ -127,7 +127,7 @@ func probeDmsgHTTP(ctx context.Context, v *Visor, dmsgC *dmsg.Client, myPK ciphe
 		log.WithError(err).Debug("Self-probe HTTP: request failed")
 		return false
 	}
-	io.Copy(io.Discard, resp.Body) //nolint:errcheck
-	resp.Body.Close()              //nolint:errcheck
+	_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck,gosec
+	_ = resp.Body.Close()                 //nolint:errcheck,gosec
 	return resp.StatusCode == http.StatusOK
 }
