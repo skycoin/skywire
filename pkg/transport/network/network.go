@@ -14,6 +14,11 @@ import (
 // Dialer is an entity that can be dialed and asked for its type.
 type Dialer interface {
 	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error)
+	// Probe checks whether a remote visor is reachable on the given port
+	// by performing a lightweight dial and immediately closing. Returns
+	// true if the dial handshake succeeded. Implementations that don't
+	// support probing should return true (optimistic).
+	Probe(ctx context.Context, remote cipher.PubKey, port uint16) bool
 	Type() string
 }
 

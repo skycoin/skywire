@@ -152,8 +152,7 @@ func (ce *Client) getClientEntryCached(ctx context.Context, clientPK cipher.PubK
 	return entry, nil
 }
 
-// sequentialPhaseDial iterates sessions in order, skipping any
-// (dst, server) pair in the negative route cache. The parent ctx is
+// sequentialPhaseDial iterates sessions in order. The parent ctx is
 // passed straight through to each session.DialStream — the session
 // bounds the handshake itself via HandshakeTimeout (5s, set via
 // SetDeadline on the underlying stream). Do NOT derive a shorter
@@ -169,10 +168,8 @@ func (ce *Client) getClientEntryCached(ctx context.Context, clientPK cipher.PubK
 // TestConcurrentStreams under -race; see the commit that added
 // this comment for the full bisect.
 //
-// On success it updates the route cache and clears negative entries
-// for dst; on failure it marks the attempted pair as a negative
-// route. Returns (stream, true) on success, (nil, false) if every
-// attempt failed or the pool was empty / fully negative-cached.
+// On success it updates the route cache. Returns (stream, true) on
+// success, (nil, false) if every attempt failed or the pool was empty.
 //
 // Sequential rather than parallel because parallel racing opens N
 // yamux streams on the destination simultaneously and leaves N-1
@@ -188,21 +185,14 @@ func (ce *Client) sequentialPhaseDial(ctx context.Context, addr Addr, sessions [
 		if ctx.Err() != nil {
 			return nil, false
 		}
-		if ce.isNegativeRoute(addr.PK, s.RemotePK()) {
-			ce.log.WithField("server", s.RemotePK()).
-				Debug("DialStream skipping session: negative cache hit")
-			continue
-		}
 		tried++
 
 		stream, err := s.DialStream(ctx, addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", s.RemotePK()).
 				Debug("DialStream failed, trying next session")
-			ce.markNegativeRoute(addr.PK, s.RemotePK())
 			continue
 		}
-		ce.clearNegativeRoute(addr.PK)
 		ce.setCachedRoute(addr.PK, s.RemotePK())
 		return stream, true
 	}
