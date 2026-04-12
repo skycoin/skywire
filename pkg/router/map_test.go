@@ -160,6 +160,10 @@ func (d *testDialer) Dial(_ context.Context, remote cipher.PubKey, _ uint16) (ne
 	return net.Dial("tcp", d.m[remote])
 }
 
+func (testDialer) Probe(_ context.Context, _ cipher.PubKey, _ uint16) bool {
+	return true
+}
+
 func (testDialer) Type() string {
 	return string(types.DMSG)
 }
