@@ -91,6 +91,13 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 		api.health(c)
 	})
 
+	// Lightweight liveness endpoint for self-probe. Returns 200 with
+	// no body — confirms the dmsg listener + HTTP server are alive
+	// without touching disk, auth, or any heavy API logic.
+	r.GET("/ping", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
 	// Transport log files (auth'd)
 	authRoute.GET("/transport_logs/:file", func(c *gin.Context) {
 		if filepath.Ext(c.Param("file")) == ".csv" {
