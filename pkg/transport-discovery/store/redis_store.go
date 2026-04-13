@@ -647,6 +647,20 @@ func uptimeOnlineKey(date string) string {
 	return fmt.Sprintf("%s:uptime:online:%s", serviceName, date)
 }
 
+// uptimeTimelineKey returns the Redis key for a visor's timeline bitmap on a given date.
+// The bitmap has 288 bits — one per 5-minute slot in the day.
+func uptimeTimelineKey(pk string, date string) string {
+	return fmt.Sprintf("%s:uptime:%s:%s:timeline", serviceName, pk, date)
+}
+
+// timelineSlots is the number of 5-minute slots in a day (288).
+const timelineSlots = 24 * 60 / 5
+
+// currentTimelineSlot returns the 0-based slot index for the given time (0–287).
+func currentTimelineSlot(t time.Time) int64 {
+	return int64(t.Hour()*12 + t.Minute()/5)
+}
+
 // onlineThreshold is the maximum time between heartbeats for a visor to be
 // considered online.
 const onlineThreshold = 6 * time.Minute
@@ -683,6 +697,11 @@ func (s *redisStore) RecordHeartbeat(ctx context.Context, pk cipher.PubKey, vers
 	pipe.SAdd(ctx, uptimeOnlineKey(date), pkHex)
 	pipe.Expire(ctx, uptimeOnlineKey(date), 8*24*time.Hour)
 
+	// Set the current 5-minute slot in the timeline bitmap.
+	tlKey := uptimeTimelineKey(pkHex, date)
+	pipe.SetBit(ctx, tlKey, currentTimelineSlot(now), 1)
+	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
+
 	_, err := pipe.Exec(ctx)
 	return err
 }
@@ -692,7 +711,7 @@ func (s *redisStore) RecordHeartbeat(ctx context.Context, pk cipher.PubKey, vers
 // genuinely participating in the network with proven peer-to-peer reachability.
 const minP2PTransportsOnline = 2
 
-func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool) ([]VisorSummary, error) {
+func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool, timeline bool) ([]VisorSummary, error) {
 	now := time.Now().UTC()
 	today := now.Format("2006-01-02")
 
@@ -747,9 +766,14 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool) ([]Visor
 			Version: version,
 		}
 
-		// Add daily history for v2
-		if v2 {
+		// Add daily history for v2+
+		if v2 || timeline {
 			summary.Daily = s.getDailyUptime(ctx, pkHex, now)
+		}
+
+		// Add timeline bitmaps for v3
+		if timeline {
+			summary.Timeline = s.GetDailyTimeline(ctx, pkHex, now)
 		}
 
 		result = append(result, summary)
@@ -783,6 +807,48 @@ func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.
 	}
 
 	return daily
+}
+
+// getDailyTimeline reads the timeline bitmap for each of the last 7 days and
+// converts it to a 288-char string per day. '.' = heartbeat received in that
+// 5-minute slot, ' ' = missed.
+func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string {
+	timelines := make(map[string]string)
+
+	for i := 0; i < uptimeHistoryDays; i++ {
+		date := now.AddDate(0, 0, -i).Format("2006-01-02")
+		tlKey := uptimeTimelineKey(pkHex, date)
+
+		// Read all 288 bits. Redis GETBIT returns 0 for unset bits
+		// and for keys that don't exist, so this is safe.
+		var buf [timelineSlots]byte
+		pipe := s.client.Pipeline()
+		cmds := make([]*redis.IntCmd, timelineSlots)
+		for slot := 0; slot < timelineSlots; slot++ {
+			cmds[slot] = pipe.GetBit(ctx, tlKey, int64(slot))
+		}
+		_, err := pipe.Exec(ctx)
+		if err != nil {
+			continue
+		}
+
+		hasAny := false
+		for slot := 0; slot < timelineSlots; slot++ {
+			if cmds[slot].Val() == 1 {
+				buf[slot] = '.'
+				hasAny = true
+			} else {
+				buf[slot] = ' '
+			}
+		}
+
+		// Only include days that have at least one heartbeat.
+		if hasAny {
+			timelines[date] = string(buf[:])
+		}
+	}
+
+	return timelines
 }
 
 // getP2PTransportCounts returns a map of visor PK hex → count of p2p transports
