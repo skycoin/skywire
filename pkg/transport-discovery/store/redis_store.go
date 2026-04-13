@@ -654,9 +654,12 @@ const onlineThreshold = 6 * time.Minute
 // uptimeHistoryDays is the number of days of daily uptime to include in v2 responses.
 const uptimeHistoryDays = 7
 
-// expectedHeartbeatsPerDay is the number of heartbeats expected in a full day
-// (one heartbeat every 5 minutes = 288 per day).
-const expectedHeartbeatsPerDay = float64(24*60) / float64(5) // 288
+// expectedHeartbeatsPerDay is the number of heartbeats expected in a full day.
+// Visors heartbeat via transport re-registration every 90 seconds (960/day),
+// AND via the explicit /v4/update endpoint every 5 minutes (288/day).
+// Use the 90s interval as the baseline since transport registration is the
+// primary heartbeat source.
+const expectedHeartbeatsPerDay = float64(24*60*60) / float64(90) // 960
 
 // RecordHeartbeat records a visor heartbeat for uptime tracking.
 // Each heartbeat increments the daily counter and updates the version/last_seen.
