@@ -236,12 +236,12 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 
 // refreshUptimesCache fetches visor data from the store and caches both v1 and v2 formats.
 func (api *API) refreshUptimesCache(ctx context.Context, logger logrus.FieldLogger) {
-	uptimes, err := api.store.GetAllVisorSummaries(ctx, false)
+	uptimes, err := api.store.GetAllVisorSummaries(ctx, false, false)
 	if err != nil {
 		logger.WithError(err).Error("failed to refresh uptimes cache")
 		return
 	}
-	uptimesV2, err := api.store.GetAllVisorSummaries(ctx, true)
+	uptimesV2, err := api.store.GetAllVisorSummaries(ctx, true, false)
 	if err != nil {
 		logger.WithError(err).Error("failed to refresh uptimes v2 cache")
 		uptimesV2 = uptimes // fall back to v1
