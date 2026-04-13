@@ -238,6 +238,18 @@ func (s *memoryStore) RecordHeartbeat(context.Context, cipher.PubKey, string) er
 func (s *memoryStore) GetDailyTimeline(context.Context, string, time.Time) map[string]string {
 	return nil
 }
+func (s *memoryStore) RecordTransportHeartbeat(context.Context, uuid.UUID, string) error {
+	return nil
+}
+func (s *memoryStore) GetTransportUptimeSummaries(context.Context, []uuid.UUID, bool, bool) ([]store.TransportUptimeSummary, error) {
+	return nil, nil
+}
+func (s *memoryStore) GetTransportUptimeByVisor(context.Context, cipher.PubKey, bool, bool) ([]store.TransportUptimeSummary, error) {
+	return nil, nil
+}
+func (s *memoryStore) GetTransportDailyTimeline(context.Context, string, time.Time) map[string]string {
+	return nil
+}
 func (s *memoryStore) BackupAndCleanOldBandwidth(context.Context, string) error { return nil }
 func (s *memoryStore) GetNetworkMetrics(context.Context, store.MetricsQuery) (*store.NetworkMetricResponse, error) {
 	return nil, nil

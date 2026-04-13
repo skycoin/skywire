@@ -181,6 +181,22 @@ func (s *memoryStore) GetDailyTimeline(_ context.Context, _ string, _ time.Time)
 	return nil
 }
 
+func (s *memoryStore) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
+
+func (s *memoryStore) GetTransportUptimeSummaries(_ context.Context, _ []uuid.UUID, _ bool, _ bool) ([]TransportUptimeSummary, error) {
+	return []TransportUptimeSummary{}, nil
+}
+
+func (s *memoryStore) GetTransportUptimeByVisor(_ context.Context, _ cipher.PubKey, _ bool, _ bool) ([]TransportUptimeSummary, error) {
+	return []TransportUptimeSummary{}, nil
+}
+
+func (s *memoryStore) GetTransportDailyTimeline(_ context.Context, _ string, _ time.Time) map[string]string {
+	return nil
+}
+
 // BackupAndCleanOldBandwidth is a no-op for memory store.
 func (s *memoryStore) BackupAndCleanOldBandwidth(_ context.Context, _ string) error {
 	return nil
