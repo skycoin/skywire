@@ -10,11 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
-
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
 )
 
 // entryCacheEntry holds a cached discovery entry with a timestamp.
@@ -134,24 +133,31 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 
 	// Init callback: on set session.
 	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
-		c.sessionsMx.Lock()
-		err := c.EntityCommon.updateClientEntry(ctx, c.done, c.conf.ClientType)
-		c.sessionsMx.Unlock()
-		if err != nil {
-			return err
+		// The first session must update discovery immediately so the
+		// client becomes "ready" (other modules wait on c.ready).
+		// Subsequent sessions use the debounced nudge path.
+		select {
+		case <-c.ready:
+			// Already ready — nudge the update loop.
+			c.nudgeEntryUpdate()
+			return nil
+		default:
+			// First session — update immediately.
+			c.sessionsMx.Lock()
+			err := c.EntityCommon.updateClientEntry(ctx, c.done, c.conf.ClientType)
+			c.sessionsMx.Unlock()
+			if err != nil {
+				return err
+			}
+			c.readyOnce.Do(func() { close(c.ready) })
+			return nil
 		}
-		// Client is 'ready' once we have successfully updated the discovery entry
-		// with at least one delegated server.
-		c.readyOnce.Do(func() { close(c.ready) })
-		return nil
 	}
 
 	// Init callback: on delete session.
 	c.EntityCommon.delSessionCallback = func(ctx context.Context) error {
-		c.sessionsMx.Lock()
-		err := c.EntityCommon.updateClientEntry(ctx, c.done, c.conf.ClientType)
-		c.sessionsMx.Unlock()
-		return err
+		c.nudgeEntryUpdate()
+		return nil
 	}
 
 	return c

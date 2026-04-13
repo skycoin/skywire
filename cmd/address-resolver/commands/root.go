@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 	"github.com/xtaci/kcp-go"
@@ -20,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/address-resolver/api"
 	armetrics "github.com/skycoin/skywire/pkg/address-resolver/metrics"
 	"github.com/skycoin/skywire/pkg/address-resolver/store"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"

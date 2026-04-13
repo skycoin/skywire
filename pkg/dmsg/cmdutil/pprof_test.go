@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 func getFreePort(t *testing.T) string {

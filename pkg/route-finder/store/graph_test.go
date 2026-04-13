@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -61,11 +62,31 @@ func (m *mockStore) GetVisorBandwidth(_ context.Context, _ cipher.PubKey, _ stri
 	return []tpdstore.BandwidthAggregation{}, nil
 }
 
-func (m *mockStore) GetAllVisorSummaries(_ context.Context, _ bool) ([]tpdstore.VisorSummary, error) {
+func (m *mockStore) GetAllVisorSummaries(_ context.Context, _ bool, _ bool) ([]tpdstore.VisorSummary, error) {
 	return []tpdstore.VisorSummary{}, nil
 }
 
 func (m *mockStore) RecordHeartbeat(_ context.Context, _ cipher.PubKey, _ string) error {
+	return nil
+}
+
+func (m *mockStore) GetDailyTimeline(_ context.Context, _ string, _ time.Time) map[string]string {
+	return nil
+}
+
+func (m *mockStore) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
+
+func (m *mockStore) GetTransportUptimeSummaries(_ context.Context, _ []uuid.UUID, _ bool, _ bool) ([]tpdstore.TransportUptimeSummary, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetTransportUptimeByVisor(_ context.Context, _ cipher.PubKey, _ bool, _ bool) ([]tpdstore.TransportUptimeSummary, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetTransportDailyTimeline(_ context.Context, _ string, _ time.Time) map[string]string {
 	return nil
 }
 

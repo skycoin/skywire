@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -34,6 +35,8 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Extract version from the first entry (all entries in a batch share the same visor version).
+	var entryVersion string
 	for _, entry := range entries {
 		if err := api.store.RegisterTransport(r.Context(), entry); err != nil {
 			api.writeError(w, r, err)
@@ -41,6 +44,23 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		}
 		// Publish to CXO subscribers
 		api.publishTransportToCXO(entry.Entry)
+		if entryVersion == "" && entry.Version != "" {
+			entryVersion = entry.Version
+		}
+		// Record transport uptime heartbeat (stcpr/sudph only).
+		if err := api.store.RecordTransportHeartbeat(r.Context(), entry.Entry.ID, string(entry.Entry.Type)); err != nil {
+			api.log(r).WithError(err).Debug("Failed to record transport heartbeat")
+		}
+	}
+
+	// Record a heartbeat for the registering visor. This piggybacks on
+	// the 90s transport re-registration cycle so the TPD's /uptimes
+	// endpoint has the same version + daily data as the uptime tracker
+	// without requiring a separate heartbeat call from the visor.
+	if pk, ok := r.Context().Value(httpauth.ContextAuthKey).(cipher.PubKey); ok {
+		if err := api.store.RecordHeartbeat(r.Context(), pk, entryVersion); err != nil {
+			api.log(r).WithError(err).Debug("Failed to record heartbeat from transport registration")
+		}
 	}
 
 	// Check if sync=true query param is set - return all transports for local route calculation
@@ -465,13 +485,28 @@ func (api *API) getVisorBandwidth(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /uptimes
-// Query params: v=v2 for extended format with version and daily uptime percentages
+// Query params:
+//
+//	v=v2   — extended format with version and daily uptime percentages
+//	v=v3   — v2 + per-day timeline bitmaps (288 chars per day, '.'=up ' '=down)
+//	visors — semicolon-separated PK hex list to filter (required for v3, optional for v1/v2)
 func (api *API) getUptimes(w http.ResponseWriter, r *http.Request) {
-	v2 := r.URL.Query().Get("v") == "v2"
-	if v2 {
+	version := r.URL.Query().Get("v")
+	visorsParam := r.URL.Query().Get("visors")
+
+	// v3 is computed on-demand (timeline bitmaps are expensive for all visors).
+	if version == "v3" {
+		api.getUptimesV3(w, r, visorsParam)
+		return
+	}
+
+	if version == "v2" {
 		uptimes := api.getUptimesV2FromCache()
 		if uptimes == nil {
 			uptimes = []store.VisorSummary{}
+		}
+		if visorsParam != "" {
+			uptimes = filterByPKs(uptimes, visorsParam)
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, uptimes)
 		return
@@ -480,7 +515,56 @@ func (api *API) getUptimes(w http.ResponseWriter, r *http.Request) {
 	if uptimes == nil {
 		uptimes = []store.VisorSummary{}
 	}
+	if visorsParam != "" {
+		uptimes = filterByPKs(uptimes, visorsParam)
+	}
 	httputil.WriteJSON(w, r, http.StatusOK, uptimes)
+}
+
+// getUptimesV3 computes v3 responses on-demand for specific PKs.
+func (api *API) getUptimesV3(w http.ResponseWriter, r *http.Request, visorsParam string) {
+	// Get the full v2 cache to start from (has daily + version + online).
+	all := api.getUptimesV2FromCache()
+	if all == nil {
+		all = []store.VisorSummary{}
+	}
+
+	// Filter to requested PKs.
+	filtered := all
+	if visorsParam != "" {
+		filtered = filterByPKs(all, visorsParam)
+	}
+
+	// Enrich with timeline data.
+	now := time.Now().UTC()
+	for i := range filtered {
+		pkHex := filtered[i].PK.Hex()
+		filtered[i].Timeline = api.store.GetDailyTimeline(r.Context(), pkHex, now)
+	}
+
+	httputil.WriteJSON(w, r, http.StatusOK, filtered)
+}
+
+// filterByPKs filters a VisorSummary slice to only include entries whose
+// PK hex matches one of the semicolon-separated PKs.
+func filterByPKs(summaries []store.VisorSummary, pksParam string) []store.VisorSummary {
+	want := make(map[string]struct{})
+	for _, pk := range strings.Split(pksParam, ";") {
+		pk = strings.TrimSpace(pk)
+		if pk != "" {
+			want[pk] = struct{}{}
+		}
+	}
+	var result []store.VisorSummary
+	for _, s := range summaries {
+		if _, ok := want[s.PK.Hex()]; ok {
+			result = append(result, s)
+		}
+	}
+	if result == nil {
+		result = []store.VisorSummary{}
+	}
+	return result
 }
 
 // GET /v4/update - visor heartbeat for uptime tracking
@@ -686,4 +770,216 @@ func splitPKs(pks string) []string {
 		}
 	}
 	return result
+}
+
+/*
+	<<< TRANSPORT UPTIME ENDPOINTS >>>
+*/
+
+// GET /uptimes/transports
+// Lightweight transport uptime list.
+// Query params:
+//
+//	v=v2       — include type + daily percentages
+//	v=v3       — v2 + timeline bitmaps
+//	visors     — semicolon-separated PK hex list (transports involving these visors)
+//	tp         — semicolon-separated transport ID list
+//	type       — filter by transport type (stcpr, sudph)
+//	edges=true — include edge_a and edge_b in response
+func (api *API) getTransportUptimes(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	version := query.Get("v")
+	visorsParam := query.Get("visors")
+	tpParam := query.Get("tp")
+	tpType := query.Get("type")
+	includeEdges := query.Get("edges") == "true"
+	v2 := version == "v2" || version == "v3"
+	timeline := version == "v3"
+
+	var summaries []store.TransportUptimeSummary
+	var err error
+
+	if tpParam != "" {
+		// Filter by specific transport IDs.
+		ids := parseTpIDs(tpParam)
+		summaries, err = api.store.GetTransportUptimeSummaries(r.Context(), ids, v2, timeline)
+	} else if visorsParam != "" {
+		// Filter by visor PKs — get all transports for those visors.
+		for _, pkHex := range strings.Split(visorsParam, ";") {
+			pkHex = strings.TrimSpace(pkHex)
+			if pkHex == "" {
+				continue
+			}
+			var pk cipher.PubKey
+			if perr := pk.UnmarshalText([]byte(pkHex)); perr != nil {
+				continue
+			}
+			visorSummaries, verr := api.store.GetTransportUptimeByVisor(r.Context(), pk, v2, timeline)
+			if verr == nil {
+				summaries = append(summaries, visorSummaries...)
+			}
+		}
+	} else {
+		// All transports seen today — use the online set.
+		summaries, err = api.store.GetTransportUptimeSummaries(r.Context(), nil, v2, timeline)
+	}
+
+	if err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	// Filter by type if specified.
+	if tpType != "" {
+		filtered := make([]store.TransportUptimeSummary, 0, len(summaries))
+		for _, s := range summaries {
+			if s.Type == tpType {
+				filtered = append(filtered, s)
+			}
+		}
+		summaries = filtered
+	}
+
+	// Strip edges unless requested.
+	if !includeEdges {
+		for i := range summaries {
+			summaries[i].EdgeA = ""
+			summaries[i].EdgeB = ""
+		}
+	}
+
+	if summaries == nil {
+		summaries = []store.TransportUptimeSummary{}
+	}
+	httputil.WriteJSON(w, r, http.StatusOK, summaries)
+}
+
+// GET /metrics/uptime
+// Network-wide transport uptime aggregate.
+func (api *API) getNetworkTransportUptime(w http.ResponseWriter, r *http.Request) {
+	// Get all transport summaries (no filter = all seen today).
+	summaries, err := api.store.GetTransportUptimeSummaries(r.Context(), nil, false, false)
+	if err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	total := len(summaries)
+	online := 0
+	byType := make(map[string]struct{ Total, Online int })
+
+	for _, s := range summaries {
+		if s.Online {
+			online++
+		}
+		entry := byType[s.Type]
+		entry.Total++
+		if s.Online {
+			entry.Online++
+		}
+		byType[s.Type] = entry
+	}
+
+	type typeStats struct {
+		Total  int `json:"total"`
+		Online int `json:"online"`
+	}
+	resp := struct {
+		Total  int                  `json:"total_transports"`
+		Online int                  `json:"online"`
+		ByType map[string]typeStats `json:"by_type"`
+	}{
+		Total:  total,
+		Online: online,
+		ByType: make(map[string]typeStats),
+	}
+	for t, s := range byType {
+		resp.ByType[t] = typeStats{Total: s.Total, Online: s.Online}
+	}
+
+	httputil.WriteJSON(w, r, http.StatusOK, resp)
+}
+
+// GET /metrics/uptime/{ids}
+// Transport uptime for specific transport IDs (comma-separated).
+func (api *API) getTransportUptimeByIDs(w http.ResponseWriter, r *http.Request) {
+	idsParam := chi.URLParam(r, "ids")
+	ids, err := parseIDs(idsParam)
+	if err != nil || len(ids) == 0 {
+		api.writeError(w, r, ErrInvalidTransportID)
+		return
+	}
+
+	query := r.URL.Query()
+	version := query.Get("v")
+	v2 := version == "v2" || version == "v3"
+	timeline := version == "v3"
+	includeEdges := query.Get("edges") == "true"
+
+	summaries, err := api.store.GetTransportUptimeSummaries(r.Context(), ids, v2, timeline)
+	if err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	if !includeEdges {
+		for i := range summaries {
+			summaries[i].EdgeA = ""
+			summaries[i].EdgeB = ""
+		}
+	}
+
+	httputil.WriteJSON(w, r, http.StatusOK, summaries)
+}
+
+// GET /metrics/uptime/visor/{pks}
+// Transport uptime for transports of specific visors (comma-separated PKs).
+func (api *API) getTransportUptimeByVisors(w http.ResponseWriter, r *http.Request) {
+	pksParam := chi.URLParam(r, "pks")
+	pks, err := parsePKs(pksParam)
+	if err != nil || len(pks) == 0 {
+		api.writeError(w, r, ErrInvalidPubKey)
+		return
+	}
+
+	query := r.URL.Query()
+	version := query.Get("v")
+	v2 := version == "v2" || version == "v3"
+	timeline := version == "v3"
+	includeEdges := query.Get("edges") == "true"
+
+	var summaries []store.TransportUptimeSummary
+	for _, pk := range pks {
+		visorSummaries, verr := api.store.GetTransportUptimeByVisor(r.Context(), pk, v2, timeline)
+		if verr == nil {
+			summaries = append(summaries, visorSummaries...)
+		}
+	}
+
+	if !includeEdges {
+		for i := range summaries {
+			summaries[i].EdgeA = ""
+			summaries[i].EdgeB = ""
+		}
+	}
+
+	if summaries == nil {
+		summaries = []store.TransportUptimeSummary{}
+	}
+	httputil.WriteJSON(w, r, http.StatusOK, summaries)
+}
+
+// parseTpIDs parses semicolon-separated transport UUIDs.
+func parseTpIDs(param string) []uuid.UUID {
+	var ids []uuid.UUID
+	for _, s := range strings.Split(param, ";") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if id, err := uuid.Parse(s); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }

@@ -18,13 +18,13 @@ import (
 	"fyne.io/systray"
 	"github.com/gen2brain/dlgs"
 	"github.com/sirupsen/logrus"
+	"github.com/toqueteos/webbrowser"
+
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
-	"github.com/toqueteos/webbrowser"
-
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"

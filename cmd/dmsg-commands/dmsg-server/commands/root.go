@@ -2,12 +2,12 @@
 package commands
 
 import (
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/dmsg-commands/dmsg-server/commands/config"
 	"github.com/skycoin/skywire/cmd/dmsg-commands/dmsg-server/commands/start"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 )
 
 func init() {

@@ -56,16 +56,23 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 	type svcDef struct {
 		name, url string
 	}
+	// Prefer dmsg URL when configured; fall back to HTTP.
+	preferDmsg := func(httpURL, dmsgURL string) string {
+		if dmsgURL != "" {
+			return dmsgURL
+		}
+		return httpURL
+	}
 	httpServices := []svcDef{
 		{"Config Service", deployment.ProdConf.Conf},
-		{"Transport Discovery", v.conf.Transport.Discovery},
-		{"DMSG Discovery", v.conf.Dmsg.Discovery},
-		{"Address Resolver", v.conf.Transport.AddressResolver},
-		{"Route Finder", v.conf.Routing.RouteFinder},
-		{"Service Discovery", v.conf.Launcher.ServiceDisc},
+		{"Transport Discovery", preferDmsg(v.conf.Transport.Discovery, v.conf.Transport.DiscoveryDmsg)},
+		{"DMSG Discovery", preferDmsg(v.conf.Dmsg.Discovery, v.conf.Dmsg.DiscoveryDmsg)},
+		{"Address Resolver", preferDmsg(v.conf.Transport.AddressResolver, v.conf.Transport.AddressResolverDmsg)},
+		{"Route Finder", preferDmsg(v.conf.Routing.RouteFinder, v.conf.Routing.RouteFinderDmsg)},
+		{"Service Discovery", preferDmsg(v.conf.Launcher.ServiceDisc, v.conf.Launcher.ServiceDiscDmsg)},
 	}
 	if v.conf.UptimeTracker != nil {
-		httpServices = append(httpServices, svcDef{"Uptime Tracker", v.conf.UptimeTracker.Addr})
+		httpServices = append(httpServices, svcDef{"Uptime Tracker", preferDmsg(v.conf.UptimeTracker.Addr, v.conf.UptimeTracker.AddrDmsg)})
 	}
 
 	// One client for plain http/https, one for dmsg:// URLs. The dmsg
