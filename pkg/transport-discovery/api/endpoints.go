@@ -34,6 +34,8 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Extract version from the first entry (all entries in a batch share the same visor version).
+	var entryVersion string
 	for _, entry := range entries {
 		if err := api.store.RegisterTransport(r.Context(), entry); err != nil {
 			api.writeError(w, r, err)
@@ -41,6 +43,19 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		}
 		// Publish to CXO subscribers
 		api.publishTransportToCXO(entry.Entry)
+		if entryVersion == "" && entry.Version != "" {
+			entryVersion = entry.Version
+		}
+	}
+
+	// Record a heartbeat for the registering visor. This piggybacks on
+	// the 90s transport re-registration cycle so the TPD's /uptimes
+	// endpoint has the same version + daily data as the uptime tracker
+	// without requiring a separate heartbeat call from the visor.
+	if pk, ok := r.Context().Value(httpauth.ContextAuthKey).(cipher.PubKey); ok {
+		if err := api.store.RecordHeartbeat(r.Context(), pk, entryVersion); err != nil {
+			api.log(r).WithError(err).Debug("Failed to record heartbeat from transport registration")
+		}
 	}
 
 	// Check if sync=true query param is set - return all transports for local route calculation
