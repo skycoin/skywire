@@ -687,6 +687,11 @@ func (s *redisStore) RecordHeartbeat(ctx context.Context, pk cipher.PubKey, vers
 	return err
 }
 
+// minP2PTransportsOnline is the minimum number of p2p transports (stcpr, sudph)
+// a visor must have to be considered online. A visor with 2+ p2p transports is
+// genuinely participating in the network with proven peer-to-peer reachability.
+const minP2PTransportsOnline = 2
+
 func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool) ([]VisorSummary, error) {
 	now := time.Now().UTC()
 	today := now.Format("2006-01-02")
@@ -697,15 +702,15 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool) ([]Visor
 		heartbeatVisors = nil
 	}
 
-	// Also get visors with active transports (for backward compat)
-	transportVisors := s.getOnlineVisorsFromTransports(ctx)
+	// Count p2p transports per visor for online determination.
+	p2pCounts := s.getP2PTransportCounts(ctx)
 
-	// Merge both sets
+	// Merge heartbeat visors and visors with p2p transports.
 	allVisors := make(map[string]struct{})
 	for _, pk := range heartbeatVisors {
 		allVisors[pk] = struct{}{}
 	}
-	for pk := range transportVisors {
+	for pk := range p2pCounts {
 		allVisors[pk] = struct{}{}
 	}
 
@@ -721,28 +726,18 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool) ([]Visor
 			continue
 		}
 
-		// Check online status from heartbeat (within threshold)
-		online := false
+		// Online = has 2+ p2p transports (stcpr/sudph).
+		// This indicates genuine peer-to-peer network participation,
+		// not just dmsg infrastructure connectivity.
+		online := p2pCounts[pkHex] >= minP2PTransportsOnline
+
+		// Get version from heartbeat data.
 		version := ""
 		key := uptimeKey(pkHex, today)
-		vals, err := s.client.HMGet(ctx, key, "last_seen", "version").Result()
-		if err == nil && len(vals) >= 2 {
-			if lastSeenStr, ok := vals[0].(string); ok {
-				if lastSeen, err := strconv.ParseInt(lastSeenStr, 10, 64); err == nil {
-					if now.Sub(time.Unix(lastSeen, 0)) < onlineThreshold {
-						online = true
-					}
-				}
-			}
-			if v, ok := vals[1].(string); ok {
+		vals, err := s.client.HMGet(ctx, key, "version").Result()
+		if err == nil && len(vals) >= 1 {
+			if v, ok := vals[0].(string); ok {
 				version = v
-			}
-		}
-
-		// Fall back to transport-based online if no heartbeat
-		if !online {
-			if _, hasTransport := transportVisors[pkHex]; hasTransport {
-				online = true
 			}
 		}
 
@@ -790,8 +785,11 @@ func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.
 	return daily
 }
 
-// getOnlineVisorsFromTransports returns visors with active transports (legacy method).
-func (s *redisStore) getOnlineVisorsFromTransports(ctx context.Context) map[string]struct{} {
+// getP2PTransportCounts returns a map of visor PK hex → count of p2p transports
+// (stcpr, sudph). A visor is considered online when it has 2+ p2p transports,
+// indicating genuine peer-to-peer network participation (not just dmsg
+// infrastructure connectivity).
+func (s *redisStore) getP2PTransportCounts(ctx context.Context) map[string]int {
 	pattern := fmt.Sprintf("%s:tp:*", serviceName)
 	var keys []string
 	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
@@ -802,7 +800,7 @@ func (s *redisStore) getOnlineVisorsFromTransports(ctx context.Context) map[stri
 		return nil
 	}
 
-	onlineVisors := make(map[string]struct{})
+	counts := make(map[string]int)
 
 	const mgetBatch = 10000
 	for i := 0; i < len(keys); i += mgetBatch {
@@ -823,14 +821,17 @@ func (s *redisStore) getOnlineVisorsFromTransports(ctx context.Context) map[stri
 			if err := json.Unmarshal([]byte(raw), &data); err != nil {
 				continue
 			}
-			onlineVisors[data.EdgeA] = struct{}{}
-			if data.EdgeA != data.EdgeB {
-				onlineVisors[data.EdgeB] = struct{}{}
+			// Only count p2p transport types (stcpr, sudph), not dmsg.
+			if data.Type == "stcpr" || data.Type == "sudph" {
+				counts[data.EdgeA]++
+				if data.EdgeA != data.EdgeB {
+					counts[data.EdgeB]++
+				}
 			}
 		}
 	}
 
-	return onlineVisors
+	return counts
 }
 
 func (s *redisStore) getBandwidthFromHash(ctx context.Context, key, transportID, period, periodKey string) (BandwidthAggregation, error) {
