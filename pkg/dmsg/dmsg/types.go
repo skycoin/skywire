@@ -10,8 +10,9 @@ import (
 	"time"
 
 	"github.com/hashicorp/yamux"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/xtaci/smux"
+
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 const (

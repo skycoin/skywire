@@ -8,12 +8,13 @@ import (
 
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
+
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
@@ -191,7 +192,29 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return latencyMs
 	})
 
+	// Set up route checker so that transport re-creation is blocked when the
+	// existing transport is actively referenced by routing rules. This prevents
+	// a remote visor (or TPS) from breaking an in-flight route by forcing a
+	// transport teardown/recreation under our feet.
+	v.tpM.SetRouteChecker(func(tpID uuid.UUID) bool {
+		return r.Rules() != nil && routeTableHasTransport(r, tpID)
+	})
+
 	return nil
+}
+
+// routeTableHasTransport returns true if the router's routing table has any
+// active (non-timed-out) Forward or Intermediary rule referencing tpID.
+func routeTableHasTransport(r router.Router, tpID uuid.UUID) bool {
+	for _, rule := range r.Rules() {
+		t := rule.Type()
+		if t == routing.RuleForward || t == routing.RuleIntermediary {
+			if rule.NextTransportID() == tpID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func initEmbeddedRouteSetup(ctx context.Context, v *Visor, log *logging.Logger) error {

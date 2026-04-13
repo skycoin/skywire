@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/skycoin/noise"
+
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 

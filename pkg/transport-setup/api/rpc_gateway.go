@@ -8,8 +8,8 @@ import (
 	"net/rpc"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
