@@ -15,6 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/sirupsen/logrus"
+
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )

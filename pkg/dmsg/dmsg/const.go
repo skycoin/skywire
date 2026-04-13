@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/deployment"
-
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 )
 
