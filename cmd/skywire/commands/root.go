@@ -10,7 +10,6 @@ import (
 	"github.com/bitfield/script"
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
-	dmsg "github.com/skycoin/skywire/cmd/dmsg-commands/dmsg/commands"
 	"github.com/spf13/cobra"
 
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
@@ -21,6 +20,7 @@ import (
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
 	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
 	cxo "github.com/skycoin/skywire/cmd/cxo/commands"
+	dmsg "github.com/skycoin/skywire/cmd/dmsg-commands/dmsg/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	cliutil "github.com/skycoin/skywire/cmd/skywire-cli/commands/util"
 	services "github.com/skycoin/skywire/cmd/skywire-services/commands"

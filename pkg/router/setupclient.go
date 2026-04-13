@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"

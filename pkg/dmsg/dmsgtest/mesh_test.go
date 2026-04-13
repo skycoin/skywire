@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // TestServerMesh_CrossServerDial verifies that a client connected to server A

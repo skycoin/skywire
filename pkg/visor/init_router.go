@@ -8,9 +8,9 @@ import (
 
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
+
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"

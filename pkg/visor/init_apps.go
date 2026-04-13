@@ -11,13 +11,13 @@ import (
 	"sync"
 	"time"
 
-	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
