@@ -269,6 +269,12 @@ Example:
 		}
 		defer h.Close()
 
+		// Expose the dmsg client to the API for visor reachability probes.
+		if h.DmsgClient != nil {
+			sdAPI.DmsgClient = h.DmsgClient
+			log.Info("DMSG client available for visor reachability probes")
+		}
+
 		select {
 		case <-ctx.Done():
 		case err := <-h.Errors():
