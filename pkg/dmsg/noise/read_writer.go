@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/chen3feng/safecast"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 
 	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // MaxWriteSize is the largest amount for a single write.

@@ -17,7 +17,17 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/spf13/cobra"
+
 	"github.com/skycoin/skywire/deployment"
+	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
+	"github.com/skycoin/skywire/pkg/dmsg/direct"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgserver"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -27,16 +37,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
-	"github.com/spf13/cobra"
-
-	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/direct"
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgserver"
 )
 
 var (
