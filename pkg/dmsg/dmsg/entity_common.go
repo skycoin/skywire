@@ -51,6 +51,13 @@ type EntityCommon struct {
 	// pushedSrvPKsMx.
 	lastPushedSrvPKs []cipher.PubKey
 	pushedSrvPKsMx   sync.Mutex
+
+	// entryNudge signals that a session was added or removed and the
+	// discovery entry should be updated. The update loop debounces
+	// rapid signals (e.g., connecting to 6 servers at startup) into
+	// a single batched update, matching the transport manager's
+	// re-registration debounce pattern.
+	entryNudge chan struct{}
 }
 
 func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, log logrus.FieldLogger, updateInterval time.Duration) {
@@ -63,6 +70,7 @@ func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClien
 	c.sessions = make(map[cipher.PubKey]*SessionCommon)
 	c.sessionsMx = new(sync.Mutex)
 	c.updateInterval = updateInterval
+	c.entryNudge = make(chan struct{}, 1)
 	c.log = log
 }
 
@@ -252,10 +260,33 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, m
 			c.sessionsMx.Unlock()
 
 			if err != nil {
-				c.log.WithError(err).Warn("Failed to update discovery entry.\n")
+				c.log.WithError(err).Warn("Failed to update discovery entry.")
 			}
 
-			// Ensure we trigger another update within given 'updateInterval'.
+			t.Reset(c.updateInterval)
+
+		case <-c.entryNudge:
+			// Client connected/disconnected — debounce to batch rapid changes.
+			select {
+			case <-time.After(entryUpdateDebounce):
+			case <-ctx.Done():
+				return
+			}
+			// Drain additional nudges.
+			for {
+				select {
+				case <-c.entryNudge:
+				default:
+					goto serverUpdate
+				}
+			}
+		serverUpdate:
+			c.sessionsMx.Lock()
+			err := c.updateServerEntry(ctx, addr, maxSessions, authPassphrase)
+			c.sessionsMx.Unlock()
+			if err != nil {
+				c.log.WithError(err).Warn("Failed to update discovery entry (nudge).")
+			}
 			t.Reset(c.updateInterval)
 		}
 	}
@@ -364,6 +395,12 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 	return c.dc.PutEntry(ctx, c.sk, entry)
 }
 
+// entryUpdateDebounce is how long to wait after a nudge before updating
+// the discovery entry. This batches rapid session changes (e.g., connecting
+// to 6 servers at startup) into a single update, matching the transport
+// manager's 5-second debounce pattern.
+const entryUpdateDebounce = 5 * time.Second
+
 func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan struct{}, clientType string) {
 	t := time.NewTimer(c.updateInterval)
 	defer t.Stop()
@@ -384,10 +421,33 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 			c.sessionsMx.Unlock()
 
 			if err != nil {
-				c.log.WithError(err).Warn("Failed to update discovery entry.\n")
+				c.log.WithError(err).Warn("Failed to update discovery entry.")
 			}
 
-			// Ensure we trigger another update within given 'updateInterval'.
+			t.Reset(c.updateInterval)
+
+		case <-c.entryNudge:
+			// Session added/removed — debounce to batch rapid changes.
+			select {
+			case <-time.After(entryUpdateDebounce):
+			case <-ctx.Done():
+				return
+			}
+			// Drain any additional nudges that arrived during debounce.
+			for {
+				select {
+				case <-c.entryNudge:
+				default:
+					goto clientUpdate
+				}
+			}
+		clientUpdate:
+			c.sessionsMx.Lock()
+			err := c.updateClientEntry(ctx, done, clientType)
+			c.sessionsMx.Unlock()
+			if err != nil {
+				c.log.WithError(err).Warn("Failed to update discovery entry (nudge).")
+			}
 			t.Reset(c.updateInterval)
 		}
 	}
@@ -454,6 +514,16 @@ func (c *EntityCommon) updateIsDue() (lastUpdate time.Time, isDue bool) {
 	lastUpdate = time.Unix(0, atomic.LoadInt64(&c.lastUpdate))
 	isDue = time.Since(lastUpdate) >= c.updateInterval
 	return lastUpdate, isDue
+}
+
+// nudgeEntryUpdate signals the update loop that a session changed and
+// the discovery entry should be refreshed. Non-blocking — if a nudge
+// is already pending, the loop will pick it up.
+func (c *EntityCommon) nudgeEntryUpdate() {
+	select {
+	case c.entryNudge <- struct{}{}:
+	default:
+	}
 }
 
 func (c *EntityCommon) recordUpdate() {
