@@ -52,7 +52,7 @@ var (
 )
 
 const (
-	httpTimeout      = 30 * time.Second
+	httpTimeout       = 30 * time.Second
 	uptimesCacheDelay = 5 * time.Minute
 )
 

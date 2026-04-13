@@ -286,10 +286,10 @@ func (s *redisStore) Close() (err error) {
 // ---- Uptime tracking ----
 
 const (
-	sdServiceName           = "sd"
-	uptimeHistoryDays       = 7
+	sdServiceName            = "sd"
+	uptimeHistoryDays        = 7
 	expectedHeartbeatsPerDay = float64(24*60*60) / float64(90) // 960
-	timelineSlots           = 24 * 60 / 5                      // 288
+	timelineSlots            = 24 * 60 / 5                     // 288
 )
 
 // sdUptimeKey returns the Redis key for a visor's heartbeat hash on a given date.

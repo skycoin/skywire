@@ -22,8 +22,8 @@ import (
 	dpc "github.com/skycoin/skywire/cmd/dmsg-commands/dmsgpty-cli/commands"
 	dph "github.com/skycoin/skywire/cmd/dmsg-commands/dmsgpty-host/commands"
 	dpu "github.com/skycoin/skywire/cmd/dmsg-commands/dmsgpty-ui/commands"
-	dsp "github.com/skycoin/skywire/cmd/dmsg-commands/self-ping/commands"
 	dw "github.com/skycoin/skywire/cmd/dmsg-commands/dmsgweb/commands"
+	dsp "github.com/skycoin/skywire/cmd/dmsg-commands/self-ping/commands"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 )
 
