@@ -256,3 +256,15 @@ func (ms *MockStore) AllClientEntries(_ context.Context) ([]*disc.Entry, error) 
 	}
 	return entries, nil
 }
+
+func (ms *MockStore) RecordHeartbeat(_ context.Context, _ cipher.PubKey, _ string) error {
+	return nil
+}
+
+func (ms *MockStore) GetAllVisorSummaries(_ context.Context, _ bool, _ bool) ([]VisorSummary, error) {
+	return []VisorSummary{}, nil
+}
+
+func (ms *MockStore) GetDailyTimeline(_ context.Context, _ string, _ time.Time) map[string]string {
+	return nil
+}
