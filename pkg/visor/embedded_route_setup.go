@@ -124,6 +124,10 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 
 		go func() {
 			defer func() { <-sem }()
+			// Set a hard deadline on the inbound connection as a backstop.
+			// If CreateRouteGroup hangs (stuck outbound dials), the deadline
+			// fires and ServeConn returns, freeing the semaphore slot.
+			conn.SetDeadline(time.Now().Add(timeout + 10*time.Second)) //nolint:errcheck,gosec
 			rpcS.ServeConn(conn)
 		}()
 	}
