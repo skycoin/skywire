@@ -155,6 +155,10 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		r.Get("/metrics/visor/{pks}", api.getTransportMetricsByVisors)
 
 		r.Get("/uptimes", api.getUptimes)
+		r.Get("/uptimes/transports", api.getTransportUptimes)
+		r.Get("/metrics/uptime", api.getNetworkTransportUptime)
+		r.Get("/metrics/uptime/{ids}", api.getTransportUptimeByIDs)
+		r.Get("/metrics/uptime/visor/{pks}", api.getTransportUptimeByVisors)
 		r.Get("/version", api.getVersionStats)
 		r.Get("/versions", api.getVersions)
 		r.Get("/versions/{pks}", api.getVersionsByPKs)
