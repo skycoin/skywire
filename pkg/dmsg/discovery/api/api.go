@@ -700,7 +700,7 @@ func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 
-	_, err = w.Write(jsonObject)
+	_, err = w.Write(jsonObject) //nolint:gosec // G705: jsonObject is marshaled, not raw user input
 	if err != nil {
 		a.log(r).Warnf("Failed to write response: %s", err)
 	}
