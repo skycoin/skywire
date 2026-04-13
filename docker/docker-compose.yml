@@ -386,6 +386,15 @@ services:
       - visor-b
     restart: always
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
+    healthcheck:
+      test: [
+        "CMD-SHELL",
+        "/release/skywire cli --rpc localhost:3435 dmsg sessions --json | grep -v '\"count\": 0' | grep -q '\"count\"'"
+      ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
 
   visor-b:
     privileged: true
@@ -435,6 +444,15 @@ services:
         condition: service_started
     restart: always
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
+    healthcheck:
+      test: [
+        "CMD-SHELL",
+        "/release/skywire cli --rpc localhost:3435 dmsg sessions --json | grep -v '\"count\": 0' | grep -q '\"count\"'"
+      ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
 
   visor-c:
     privileged: true
@@ -469,6 +487,15 @@ services:
       - visor-a
     restart: always
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
+    healthcheck:
+      test: [
+        "CMD-SHELL",
+        "/release/skywire cli --rpc localhost:3435 dmsg sessions --json | grep -v '\"count\": 0' | grep -q '\"count\"'"
+      ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
 
   # visor-a-internal:
   #   privileged: true
@@ -595,9 +622,12 @@ services:
       - CGO_ENABLED=0
       - SKYDEPLOY=/workspace/docker/integration/services-config.json
     depends_on:
-      - visor-a
-      - visor-b
-      - visor-c
+      visor-a:
+        condition: service_healthy
+      visor-b:
+        condition: service_healthy
+      visor-c:
+        condition: service_healthy
     profiles:
       - test
 
