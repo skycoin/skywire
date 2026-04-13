@@ -24,7 +24,7 @@ var serverAddr string
 
 func init() {
 	RootCmd.Flags().StringVar(&serverAddr, "server", "", "dmsg server to connect through: `pk@ip:port`")
-	_ = RootCmd.MarkFlagRequired("server")
+	RootCmd.MarkFlagRequired("server") //nolint:errcheck
 }
 
 // RootCmd is the self-ping command.
