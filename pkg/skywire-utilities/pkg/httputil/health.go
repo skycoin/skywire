@@ -17,7 +17,9 @@ type HealthCheckResponse struct {
 	BuildInfo         *buildinfo.Info `json:"build_info,omitempty"`
 	StartedAt         time.Time       `json:"started_at"`
 	DmsgAddr          string          `json:"dmsg_address,omitempty"`
+	DmsgDiscovery     string          `json:"dmsg_discovery,omitempty"`
 	DmsgServers       []string        `json:"dmsg_servers,omitempty"`
+	PeerServers       []string        `json:"peer_servers,omitempty"`
 	PublicAutoconnect bool            `json:"public_autoconnect,omitempty"`
 	StcprCount        int             `json:"stcpr_count,omitempty"`
 	SudphCount        int             `json:"sudph_count,omitempty"`
