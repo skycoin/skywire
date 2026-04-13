@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
-
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 

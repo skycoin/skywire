@@ -6,10 +6,9 @@ import (
 	"errors"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
 )
 
 var log = logging.MustGetLogger("store")
@@ -56,12 +55,30 @@ type EntryEnumerator interface {
 	AllClientEntries(ctx context.Context) ([]*disc.Entry, error)
 }
 
+// UptimeTracker provides integrated uptime tracking for dmsg entries.
+type UptimeTracker interface {
+	RecordHeartbeat(ctx context.Context, pk cipher.PubKey, version string) error
+	GetAllVisorSummaries(ctx context.Context, v2 bool, timeline bool) ([]VisorSummary, error)
+	GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string
+}
+
+// VisorSummary holds a visor's uptime data.
+// Format matches the TPD and uptime tracker response.
+type VisorSummary struct {
+	PK       cipher.PubKey     `json:"pk"`
+	Online   bool              `json:"on"`
+	Version  string            `json:"version,omitempty"`
+	Daily    map[string]string `json:"daily,omitempty"`
+	Timeline map[string]string `json:"timeline,omitempty"`
+}
+
 // Storer is an interface which allows to implement different kinds of stores
 // and choose which one to use in the server
 type Storer interface {
 	EntryStore
 	ServerLister
 	EntryEnumerator
+	UptimeTracker
 
 	// RemoveOldServerEntries check and remove old server entries that left on redis because of unexpected server shutdown
 	RemoveOldServerEntries(ctx context.Context) error

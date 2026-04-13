@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/service-discovery/api"
 	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
@@ -268,6 +268,12 @@ Example:
 			log.WithError(err).Fatal("failed to start listeners")
 		}
 		defer h.Close()
+
+		// Expose the dmsg client to the API for visor reachability probes.
+		if h.DmsgClient != nil {
+			sdAPI.DmsgClient = h.DmsgClient
+			log.Info("DMSG client available for visor reachability probes")
+		}
 
 		select {
 		case <-ctx.Done():

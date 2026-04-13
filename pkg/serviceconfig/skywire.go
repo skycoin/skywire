@@ -2,7 +2,6 @@ package config
 
 import (
 	msg "github.com/skycoin/skywire/pkg/dmsg/dmsgserver"
-
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
