@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
@@ -279,4 +281,202 @@ func (s *redisStore) Close() (err error) {
 		close(s.done)
 	})
 	return s.client.Close()
+}
+
+// ---- Uptime tracking ----
+
+const (
+	sdServiceName            = "sd"
+	uptimeHistoryDays        = 7
+	expectedHeartbeatsPerDay = float64(24*60*60) / float64(90) // 960
+	timelineSlots            = 24 * 60 / 5                     // 288
+)
+
+// sdUptimeKey returns the Redis key for a visor's heartbeat hash on a given date.
+// Format: "sd:uptime:{pk}:{date}"
+func sdUptimeKey(pk, date string) string {
+	return fmt.Sprintf("%s:uptime:%s:%s", sdServiceName, pk, date)
+}
+
+// sdUptimeOnlineKey returns the Redis key for the daily set of seen visors.
+// Format: "sd:uptime:online:{date}"
+func sdUptimeOnlineKey(date string) string {
+	return fmt.Sprintf("%s:uptime:online:%s", sdServiceName, date)
+}
+
+// sdUptimeTimelineKey returns the Redis key for a visor's 288-bit timeline bitmap.
+// Format: "sd:uptime:{pk}:{date}:timeline"
+func sdUptimeTimelineKey(pk, date string) string {
+	return fmt.Sprintf("%s:uptime:%s:%s:timeline", sdServiceName, pk, date)
+}
+
+// currentTimelineSlot returns the 0-based 5-minute slot index for the given UTC time (0–287).
+func currentTimelineSlot(t time.Time) int64 {
+	return int64(t.Hour()*12 + t.Minute()/5)
+}
+
+// RecordHeartbeat records a visor heartbeat for uptime tracking.
+// Each call increments the daily counter, updates the version/last_seen hash
+// fields, adds the PK to today's online set, and sets the current 5-min
+// timeline slot.
+func (s *redisStore) RecordHeartbeat(ctx context.Context, pk cipher.PubKey, version string) error {
+	now := time.Now().UTC()
+	date := now.Format("2006-01-02")
+	pkHex := pk.Hex()
+	key := sdUptimeKey(pkHex, date)
+
+	pipe := s.client.Pipeline()
+
+	pipe.HIncrBy(ctx, key, "count", 1)
+	pipe.HSet(ctx, key, "version", version)
+	pipe.HSet(ctx, key, "last_seen", now.Unix())
+	pipe.Expire(ctx, key, 8*24*time.Hour)
+
+	onlineKey := sdUptimeOnlineKey(date)
+	pipe.SAdd(ctx, onlineKey, pkHex)
+	pipe.Expire(ctx, onlineKey, 8*24*time.Hour)
+
+	tlKey := sdUptimeTimelineKey(pkHex, date)
+	pipe.SetBit(ctx, tlKey, currentTimelineSlot(now), 1)
+	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
+
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+// GetAllVisorSummaries returns uptime summaries for all visors seen today via
+// heartbeats.  Online status = UpdateService succeeded (service entry exists).
+// v2 adds version + daily uptime percentages; timeline (v3) is added by the
+// API layer on-demand via GetDailyTimeline.
+func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool, timeline bool) ([]VisorSummary, error) {
+	now := time.Now().UTC()
+	today := now.Format("2006-01-02")
+
+	// All visors seen via heartbeats today.
+	pkHexes, err := s.client.SMembers(ctx, sdUptimeOnlineKey(today)).Result()
+	if err != nil {
+		pkHexes = nil
+	}
+
+	if len(pkHexes) == 0 {
+		return []VisorSummary{}, nil
+	}
+
+	result := make([]VisorSummary, 0, len(pkHexes))
+
+	for _, pkHex := range pkHexes {
+		var pk cipher.PubKey
+		if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
+			continue
+		}
+
+		// Online = service entry currently exists in Redis (UpdateService sets it
+		// with a TTL; it expires when the visor stops sending heartbeats).
+		// We check for any service type that uses this PK by searching for any
+		// service key pattern.
+		online := s.isServiceOnline(ctx, pkHex)
+
+		// Fetch version from today's heartbeat hash.
+		version := ""
+		key := sdUptimeKey(pkHex, today)
+		if vals, err := s.client.HMGet(ctx, key, "version").Result(); err == nil && len(vals) >= 1 {
+			if v, ok := vals[0].(string); ok {
+				version = v
+			}
+		}
+
+		summary := VisorSummary{
+			PK:      pk,
+			Online:  online,
+			Version: version,
+		}
+
+		if v2 || timeline {
+			summary.Daily = s.getDailyUptime(ctx, pkHex, now)
+		}
+
+		if timeline {
+			summary.Timeline = s.GetDailyTimeline(ctx, pkHex, now)
+		}
+
+		result = append(result, summary)
+	}
+
+	return result, nil
+}
+
+// isServiceOnline checks whether any live service entry exists for the given PK hex.
+// A service entry exists when the visor has recently called UpdateService (within TTL).
+func (s *redisStore) isServiceOnline(ctx context.Context, pkHex string) bool {
+	pattern := fmt.Sprintf("%s*:%s", serviceKeyPrefix, pkHex)
+	iter := s.client.Scan(ctx, 0, pattern, 10).Iterator()
+	for iter.Next(ctx) {
+		return true
+	}
+	return false
+}
+
+// getDailyUptime returns the last 7 days of uptime percentages for a visor.
+func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.Time) map[string]string {
+	daily := make(map[string]string)
+
+	for i := 0; i < uptimeHistoryDays; i++ {
+		date := now.AddDate(0, 0, -i).Format("2006-01-02")
+		key := sdUptimeKey(pkHex, date)
+
+		countStr, err := s.client.HGet(ctx, key, "count").Result()
+		if err != nil {
+			continue
+		}
+		count, err := strconv.ParseFloat(countStr, 64)
+		if err != nil {
+			continue
+		}
+
+		pct := (count / expectedHeartbeatsPerDay) * 100
+		if pct > 100 {
+			pct = 100
+		}
+		daily[date] = fmt.Sprintf("%.2f", pct)
+	}
+
+	return daily
+}
+
+// GetDailyTimeline reads the 288-bit timeline bitmap for each of the last 7 days.
+// '.' = heartbeat received in that 5-minute slot, ' ' = missed.
+// Only days with at least one heartbeat are included.
+func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string {
+	timelines := make(map[string]string)
+
+	for i := 0; i < uptimeHistoryDays; i++ {
+		date := now.AddDate(0, 0, -i).Format("2006-01-02")
+		tlKey := sdUptimeTimelineKey(pkHex, date)
+
+		var buf [timelineSlots]byte
+		pipe := s.client.Pipeline()
+		cmds := make([]*redis.IntCmd, timelineSlots)
+		for slot := 0; slot < timelineSlots; slot++ {
+			cmds[slot] = pipe.GetBit(ctx, tlKey, int64(slot))
+		}
+		if _, err := pipe.Exec(ctx); err != nil {
+			continue
+		}
+
+		hasAny := false
+		for slot := 0; slot < timelineSlots; slot++ {
+			if cmds[slot].Val() == 1 {
+				buf[slot] = '.'
+				hasAny = true
+			} else {
+				buf[slot] = ' '
+			}
+		}
+
+		if hasAny {
+			timelines[date] = string(buf[:])
+		}
+	}
+
+	return timelines
 }

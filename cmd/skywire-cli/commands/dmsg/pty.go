@@ -9,12 +9,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/toqueteos/webbrowser"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor"

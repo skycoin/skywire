@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
@@ -38,6 +40,11 @@ type Table interface {
 
 	// AllRules returns all non timed out rules.
 	AllRules() []Rule
+
+	// HasTransport returns true if any active (non-timed-out) routing rule
+	// references the given transport ID. Used to protect transports that are
+	// actively carrying route traffic from being torn down.
+	HasTransport(id uuid.UUID) bool
 
 	// DelRules removes RoutingRules with a given a RouteIDs.
 	DelRules([]RouteID)
@@ -181,6 +188,26 @@ func (mt *memTable) AllRules() []Rule {
 	}
 
 	return rules
+}
+
+// HasTransport returns true if any active (non-timed-out) routing rule
+// references the given transport ID.
+func (mt *memTable) HasTransport(id uuid.UUID) bool {
+	mt.RLock()
+	defer mt.RUnlock()
+
+	for routeID, rule := range mt.rules {
+		if mt.ruleIsTimedOut(routeID, rule) {
+			continue
+		}
+		t := rule.Type()
+		if t == RuleForward || t == RuleIntermediary {
+			if rule.NextTransportID() == id {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (mt *memTable) DelRules(keys []RouteID) {

@@ -7,7 +7,6 @@ import (
 	"net"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )

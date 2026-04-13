@@ -10,6 +10,8 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,9 +19,11 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/geo"
@@ -47,7 +51,8 @@ var (
 )
 
 const (
-	httpTimeout = 30 * time.Second
+	httpTimeout       = 30 * time.Second
+	uptimesCacheDelay = 5 * time.Minute
 )
 
 // HealthCheckResponse is struct of /health endpoint
@@ -74,6 +79,19 @@ type API struct {
 	startedAt                   time.Time
 	dmsgAddr                    string
 	DmsgServers                 []string
+	DmsgClient                  *dmsg.Client // set after svcmode.Start; used for visor dmsg reachability probes
+
+	// probeCache caches recent successful dmsg probes so that multiple
+	// service registrations from the same visor within a short window
+	// don't each trigger a separate probe. Key: PK hex, Value: time of
+	// last successful probe.
+	probeCacheMu sync.Mutex
+	probeCache   map[string]time.Time
+
+	// uptimes caches are refreshed every uptimesCacheDelay.
+	uptimesCache   []store.VisorSummary
+	uptimesV2Cache []store.VisorSummary
+	uptimesMu      sync.RWMutex
 }
 
 // New creates an API.
@@ -90,6 +108,7 @@ func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore,
 		startedAt:                   time.Now(),
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
+		probeCache:                  make(map[string]time.Time),
 	}
 	return api
 }
@@ -128,6 +147,7 @@ func (a *API) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.Delete("/services/deregister/{type}", a.deregisterEntry)
 	})
 
+	r.Get("/uptimes", a.getUptimes)
 	r.Get("/health", a.health)
 
 	if a.nonceDB != nil {
@@ -140,17 +160,55 @@ func (a *API) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 // RunBackgroundTasks is goroutine which runs in background periodic tasks of skycoin-service-discovery.
 func (a *API) RunBackgroundTasks(ctx context.Context, log logrus.FieldLogger) {
-	ticker := time.NewTicker(time.Second * 10)
-	defer ticker.Stop()
+	stateTicker := time.NewTicker(time.Second * 10)
+	defer stateTicker.Stop()
+
+	uptimesTicker := time.NewTicker(uptimesCacheDelay)
+	defer uptimesTicker.Stop()
+
 	a.updateInternalState(ctx, log)
+	a.refreshUptimesCache(ctx, log)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-stateTicker.C:
 			a.updateInternalState(ctx, log)
+		case <-uptimesTicker.C:
+			a.refreshUptimesCache(ctx, log)
 		}
 	}
+}
+
+// refreshUptimesCache fetches visor summaries and caches v1 and v2 formats.
+func (a *API) refreshUptimesCache(ctx context.Context, logger logrus.FieldLogger) {
+	uptimes, err := a.db.GetAllVisorSummaries(ctx, false, false)
+	if err != nil {
+		logger.WithError(err).Error("failed to refresh uptimes cache")
+		return
+	}
+	uptimesV2, err := a.db.GetAllVisorSummaries(ctx, true, false)
+	if err != nil {
+		logger.WithError(err).Error("failed to refresh uptimes v2 cache")
+		uptimesV2 = uptimes
+	}
+	a.uptimesMu.Lock()
+	a.uptimesCache = uptimes
+	a.uptimesV2Cache = uptimesV2
+	a.uptimesMu.Unlock()
+}
+
+func (a *API) getUptimesFromCache() []store.VisorSummary {
+	a.uptimesMu.RLock()
+	defer a.uptimesMu.RUnlock()
+	return a.uptimesCache
+}
+
+func (a *API) getUptimesV2FromCache() []store.VisorSummary {
+	a.uptimesMu.RLock()
+	defer a.uptimesMu.RUnlock()
+	return a.uptimesV2Cache
 }
 
 func (a *API) updateInternalState(ctx context.Context, logger logrus.FieldLogger) {
@@ -301,12 +359,48 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 			a.writeError(w, r, http.StatusForbidden, servicedisc.ErrVisorUnreachable.Error())
 			return
 		}
+
+		// Probe the visor on dmsg port 136 to confirm it's reachable
+		// for route setup. If the probe fails, the visor is running but
+		// unroutable — don't list it as a public visor.
+		// Cache successful probes for 5 minutes so the 90s heartbeat
+		// doesn't re-probe every time.
+		if a.DmsgClient != nil {
+			pkHex := se.Addr.PubKey().Hex()
+			needsProbe := true
+
+			a.probeCacheMu.Lock()
+			if last, ok := a.probeCache[pkHex]; ok && time.Since(last) < 5*time.Minute {
+				needsProbe = false
+			}
+			a.probeCacheMu.Unlock()
+
+			if needsProbe {
+				probeCtx, probeCancel := context.WithTimeout(r.Context(), 3*time.Second)
+				reachable := a.DmsgClient.Probe(probeCtx, se.Addr.PubKey(), skyenv.DmsgAwaitSetupPort)
+				probeCancel()
+				if !reachable {
+					a.log.WithField("pk", se.Addr.PubKey()).Warn("Public visor registration rejected: not reachable on dmsg port 136")
+					a.writeError(w, r, http.StatusForbidden, "visor not reachable on dmsg for route setup")
+					return
+				}
+				a.probeCacheMu.Lock()
+				a.probeCache[pkHex] = time.Now()
+				a.probeCacheMu.Unlock()
+			}
+		}
 	}
 
 	if sErr := a.db.UpdateService(r.Context(), &se); sErr != nil {
 		sErr.Log(a.log)
 		a.writeError(w, r, sErr.HTTPStatus, sErr.Err)
 		return
+	}
+
+	// Record heartbeat for uptime tracking — piggybacks on the 90s
+	// service re-registration cycle so no extra client call is needed.
+	if err := a.db.RecordHeartbeat(r.Context(), se.Addr.PubKey(), se.Version); err != nil {
+		a.log.WithError(err).Debug("Failed to record heartbeat from service registration")
 	}
 
 	httputil.WriteJSON(w, r, http.StatusOK, &se)
@@ -426,6 +520,91 @@ func (a *API) writeError(w http.ResponseWriter, r *http.Request, status int, err
 		Err:        err,
 	}
 	httputil.WriteJSON(w, r, status, tes)
+}
+
+/*
+	<<< UPTIMES ENDPOINT >>>
+*/
+
+// GET /uptimes
+// Query params:
+//
+//	v=v2  — extended format with version and daily uptime percentages
+//	v=v3  — v2 + per-day timeline bitmaps (288 chars per day, '.'=up ' '=down)
+//	visors — semicolon-separated PK hex list to filter (required for v3, optional for v1/v2)
+func (a *API) getUptimes(w http.ResponseWriter, r *http.Request) {
+	version := r.URL.Query().Get("v")
+	visorsParam := r.URL.Query().Get("visors")
+
+	// v3 is computed on-demand (timeline bitmaps are expensive for all visors).
+	if version == "v3" {
+		a.getUptimesV3(w, r, visorsParam)
+		return
+	}
+
+	if version == "v2" {
+		uptimes := a.getUptimesV2FromCache()
+		if uptimes == nil {
+			uptimes = []store.VisorSummary{}
+		}
+		if visorsParam != "" {
+			uptimes = filterByPKs(uptimes, visorsParam)
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, uptimes)
+		return
+	}
+
+	uptimes := a.getUptimesFromCache()
+	if uptimes == nil {
+		uptimes = []store.VisorSummary{}
+	}
+	if visorsParam != "" {
+		uptimes = filterByPKs(uptimes, visorsParam)
+	}
+	httputil.WriteJSON(w, r, http.StatusOK, uptimes)
+}
+
+// getUptimesV3 computes v3 responses on-demand for specific PKs.
+func (a *API) getUptimesV3(w http.ResponseWriter, r *http.Request, visorsParam string) {
+	all := a.getUptimesV2FromCache()
+	if all == nil {
+		all = []store.VisorSummary{}
+	}
+
+	filtered := all
+	if visorsParam != "" {
+		filtered = filterByPKs(all, visorsParam)
+	}
+
+	now := time.Now().UTC()
+	for i := range filtered {
+		pkHex := filtered[i].PK.Hex()
+		filtered[i].Timeline = a.db.GetDailyTimeline(r.Context(), pkHex, now)
+	}
+
+	httputil.WriteJSON(w, r, http.StatusOK, filtered)
+}
+
+// filterByPKs filters a VisorSummary slice to only include entries whose
+// PK hex matches one of the semicolon-separated PKs.
+func filterByPKs(summaries []store.VisorSummary, pksParam string) []store.VisorSummary {
+	want := make(map[string]struct{})
+	for _, pk := range strings.Split(pksParam, ";") {
+		pk = strings.TrimSpace(pk)
+		if pk != "" {
+			want[pk] = struct{}{}
+		}
+	}
+	var result []store.VisorSummary
+	for _, s := range summaries {
+		if _, ok := want[s.PK.Hex()]; ok {
+			result = append(result, s)
+		}
+	}
+	if result == nil {
+		result = []store.VisorSummary{}
+	}
+	return result
 }
 
 /*
