@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 func TestBidirectionalStreams(t *testing.T) {

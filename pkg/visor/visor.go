@@ -15,8 +15,6 @@ import (
 
 	"github.com/orandin/lumberjackrus"
 	"github.com/sirupsen/logrus"
-	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -24,6 +22,8 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"

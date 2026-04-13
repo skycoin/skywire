@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/swarm"
-	skyvisor "github.com/skycoin/skywire/pkg/visor"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+	skyvisor "github.com/skycoin/skywire/pkg/visor"
 )
 
 // The e2e environment currently requires `make e2e-run` (docker-compose) before tests.

@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/disc/metrics"
 	store2 "github.com/skycoin/skywire/pkg/dmsg/discovery/store"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 func TestEntriesEndpoint(t *testing.T) {

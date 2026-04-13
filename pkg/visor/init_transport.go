@@ -11,13 +11,13 @@ import (
 
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
-	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/cxo/subscriber"
+	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"

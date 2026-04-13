@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 	"gorm.io/gorm"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/pg"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"

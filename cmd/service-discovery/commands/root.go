@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/service-discovery/api"
 	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/yamux"
+
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 )

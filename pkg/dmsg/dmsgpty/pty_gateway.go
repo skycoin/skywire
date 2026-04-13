@@ -1,7 +1,9 @@
 // Package dmsgpty pkg/dmsgpty/pty_gateway.go
 package dmsgpty
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // WinSize wraps around pty.Winsize and *windows.Coord
 type WinSize struct {

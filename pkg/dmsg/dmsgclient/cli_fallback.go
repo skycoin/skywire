@@ -9,13 +9,12 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 // StartDmsgWithSyntheticDiscovery starts dmsg with a synthetic discovery entry for the discovery server itself

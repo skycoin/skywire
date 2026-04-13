@@ -8,11 +8,11 @@ import (
 	"net"
 
 	"github.com/hashicorp/yamux"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/xtaci/smux"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // EnsureAndObtainSession attempts to obtain a session.
