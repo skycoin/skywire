@@ -1875,25 +1875,65 @@ func truncateID(id string) string {
 	return id[:8] + "..."
 }
 
-// WaitForVisorReady waits until a visor's RPC is responsive by polling VisorPK.
-// This ensures the visor has fully initialized its transport manager and app launcher.
-// Provides detailed logging for CI diagnostics.
+// WaitForVisorReady waits until a visor's RPC is responsive AND it has at
+// least 1 dmsg session. Previously this only checked RPC reachability, which
+// passes as soon as the visor process starts — but dmsg session establishment
+// is asynchronous and may not be complete. This was the root cause of the
+// persistent E2E flake: "dmsg error 202 - cannot connect to delegated server"
+// on the first transport-add tests.
 func (env *TestEnv) WaitForVisorReady(visor string, timeout time.Duration) error {
 	start := time.Now()
 	deadline := start.Add(timeout)
 	pollInterval := 5 * time.Second
 	attempt := 0
+	rpcReady := false
 
 	env.logger.Infof("WaitForVisorReady: waiting for %s (timeout: %v)", visor, timeout)
 
 	var lastErr string
 	for time.Now().Before(deadline) {
 		attempt++
-		_, err := env.VisorPK(visor)
-		if err == nil {
-			env.logger.Infof("WaitForVisorReady: %s RPC reachable after %v (%d attempts)",
+
+		// Phase 1: wait for RPC to be reachable.
+		if !rpcReady {
+			_, err := env.VisorPK(visor)
+			if err != nil {
+				errStr := err.Error()
+				if errStr != lastErr {
+					env.logger.Infof("WaitForVisorReady: %s attempt %d (RPC): %s", visor, attempt, errStr)
+					lastErr = errStr
+				}
+				time.Sleep(pollInterval)
+				continue
+			}
+			rpcReady = true
+			env.logger.Infof("WaitForVisorReady: %s RPC reachable after %v", visor, time.Since(start).Round(time.Second))
+		}
+
+		// Phase 2: wait for at least 1 dmsg session.
+		out, err := env.VisorExec(visor, "/release/skywire cli --rpc "+visor+":3435 dmsg sessions --json")
+		if err == nil && strings.Contains(out, `"count"`) {
+			// Parse to check count > 0.
+			if strings.Contains(out, `"count": 0`) || strings.Contains(out, `"count":0`) {
+				env.logger.Infof("WaitForVisorReady: %s dmsg sessions count=0, waiting...", visor)
+				time.Sleep(pollInterval)
+				continue
+			}
+			env.logger.Infof("WaitForVisorReady: %s RPC + dmsg ready after %v (%d attempts)",
 				visor, time.Since(start).Round(time.Second), attempt)
 			return nil
+		}
+
+		// dmsg sessions command failed or returned unexpected output — RPC is
+		// up but dmsg module may not have initialized yet.
+		if err != nil {
+			errStr := err.Error()
+			if errStr != lastErr {
+				env.logger.Infof("WaitForVisorReady: %s attempt %d (dmsg): %s", visor, attempt, errStr)
+				lastErr = errStr
+			}
+		} else {
+			env.logger.Infof("WaitForVisorReady: %s attempt %d (dmsg): unexpected output", visor, attempt)
 		}
 
 		errStr := err.Error()
