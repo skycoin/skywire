@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/VictoriaMetrics/metrics"
+
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 )
 

@@ -155,6 +155,10 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		r.Get("/metrics/visor/{pks}", api.getTransportMetricsByVisors)
 
 		r.Get("/uptimes", api.getUptimes)
+		r.Get("/uptimes/transports", api.getTransportUptimes)
+		r.Get("/metrics/uptime", api.getNetworkTransportUptime)
+		r.Get("/metrics/uptime/{ids}", api.getTransportUptimeByIDs)
+		r.Get("/metrics/uptime/visor/{pks}", api.getTransportUptimeByVisors)
 		r.Get("/version", api.getVersionStats)
 		r.Get("/versions", api.getVersions)
 		r.Get("/versions/{pks}", api.getVersionsByPKs)
@@ -236,12 +240,12 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 
 // refreshUptimesCache fetches visor data from the store and caches both v1 and v2 formats.
 func (api *API) refreshUptimesCache(ctx context.Context, logger logrus.FieldLogger) {
-	uptimes, err := api.store.GetAllVisorSummaries(ctx, false)
+	uptimes, err := api.store.GetAllVisorSummaries(ctx, false, false)
 	if err != nil {
 		logger.WithError(err).Error("failed to refresh uptimes cache")
 		return
 	}
-	uptimesV2, err := api.store.GetAllVisorSummaries(ctx, true)
+	uptimesV2, err := api.store.GetAllVisorSummaries(ctx, true, false)
 	if err != nil {
 		logger.WithError(err).Error("failed to refresh uptimes v2 cache")
 		uptimesV2 = uptimes // fall back to v1

@@ -9,10 +9,9 @@ import (
 	"net/http/pprof"
 	"time"
 
+	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-
-	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
 
 // DefaultDebugPort is the dmsg port used for serving debug/pprof endpoints.

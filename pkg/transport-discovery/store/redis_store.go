@@ -647,16 +647,29 @@ func uptimeOnlineKey(date string) string {
 	return fmt.Sprintf("%s:uptime:online:%s", serviceName, date)
 }
 
-// onlineThreshold is the maximum time between heartbeats for a visor to be
-// considered online.
-const onlineThreshold = 6 * time.Minute
+// uptimeTimelineKey returns the Redis key for a visor's timeline bitmap on a given date.
+// The bitmap has 288 bits — one per 5-minute slot in the day.
+func uptimeTimelineKey(pk string, date string) string {
+	return fmt.Sprintf("%s:uptime:%s:%s:timeline", serviceName, pk, date)
+}
+
+// timelineSlots is the number of 5-minute slots in a day (288).
+const timelineSlots = 24 * 60 / 5
+
+// currentTimelineSlot returns the 0-based slot index for the given time (0–287).
+func currentTimelineSlot(t time.Time) int64 {
+	return int64(t.Hour()*12 + t.Minute()/5)
+}
 
 // uptimeHistoryDays is the number of days of daily uptime to include in v2 responses.
 const uptimeHistoryDays = 7
 
-// expectedHeartbeatsPerDay is the number of heartbeats expected in a full day
-// (one heartbeat every 5 minutes = 288 per day).
-const expectedHeartbeatsPerDay = float64(24*60) / float64(5) // 288
+// expectedHeartbeatsPerDay is the number of heartbeats expected in a full day.
+// Visors heartbeat via transport re-registration every 90 seconds (960/day),
+// AND via the explicit /v4/update endpoint every 5 minutes (288/day).
+// Use the 90s interval as the baseline since transport registration is the
+// primary heartbeat source.
+const expectedHeartbeatsPerDay = float64(24*60*60) / float64(90) // 960
 
 // RecordHeartbeat records a visor heartbeat for uptime tracking.
 // Each heartbeat increments the daily counter and updates the version/last_seen.
@@ -680,11 +693,21 @@ func (s *redisStore) RecordHeartbeat(ctx context.Context, pk cipher.PubKey, vers
 	pipe.SAdd(ctx, uptimeOnlineKey(date), pkHex)
 	pipe.Expire(ctx, uptimeOnlineKey(date), 8*24*time.Hour)
 
+	// Set the current 5-minute slot in the timeline bitmap.
+	tlKey := uptimeTimelineKey(pkHex, date)
+	pipe.SetBit(ctx, tlKey, currentTimelineSlot(now), 1)
+	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
+
 	_, err := pipe.Exec(ctx)
 	return err
 }
 
-func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool) ([]VisorSummary, error) {
+// minP2PTransportsOnline is the minimum number of p2p transports (stcpr, sudph)
+// a visor must have to be considered online. A visor with 2+ p2p transports is
+// genuinely participating in the network with proven peer-to-peer reachability.
+const minP2PTransportsOnline = 2
+
+func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool, timeline bool) ([]VisorSummary, error) {
 	now := time.Now().UTC()
 	today := now.Format("2006-01-02")
 
@@ -694,15 +717,15 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool) ([]Visor
 		heartbeatVisors = nil
 	}
 
-	// Also get visors with active transports (for backward compat)
-	transportVisors := s.getOnlineVisorsFromTransports(ctx)
+	// Count p2p transports per visor for online determination.
+	p2pCounts := s.getP2PTransportCounts(ctx)
 
-	// Merge both sets
+	// Merge heartbeat visors and visors with p2p transports.
 	allVisors := make(map[string]struct{})
 	for _, pk := range heartbeatVisors {
 		allVisors[pk] = struct{}{}
 	}
-	for pk := range transportVisors {
+	for pk := range p2pCounts {
 		allVisors[pk] = struct{}{}
 	}
 
@@ -718,28 +741,18 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool) ([]Visor
 			continue
 		}
 
-		// Check online status from heartbeat (within threshold)
-		online := false
+		// Online = has 2+ p2p transports (stcpr/sudph).
+		// This indicates genuine peer-to-peer network participation,
+		// not just dmsg infrastructure connectivity.
+		online := p2pCounts[pkHex] >= minP2PTransportsOnline
+
+		// Get version from heartbeat data.
 		version := ""
 		key := uptimeKey(pkHex, today)
-		vals, err := s.client.HMGet(ctx, key, "last_seen", "version").Result()
-		if err == nil && len(vals) >= 2 {
-			if lastSeenStr, ok := vals[0].(string); ok {
-				if lastSeen, err := strconv.ParseInt(lastSeenStr, 10, 64); err == nil {
-					if now.Sub(time.Unix(lastSeen, 0)) < onlineThreshold {
-						online = true
-					}
-				}
-			}
-			if v, ok := vals[1].(string); ok {
+		vals, err := s.client.HMGet(ctx, key, "version").Result()
+		if err == nil && len(vals) >= 1 {
+			if v, ok := vals[0].(string); ok {
 				version = v
-			}
-		}
-
-		// Fall back to transport-based online if no heartbeat
-		if !online {
-			if _, hasTransport := transportVisors[pkHex]; hasTransport {
-				online = true
 			}
 		}
 
@@ -749,9 +762,14 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool) ([]Visor
 			Version: version,
 		}
 
-		// Add daily history for v2
-		if v2 {
+		// Add daily history for v2+
+		if v2 || timeline {
 			summary.Daily = s.getDailyUptime(ctx, pkHex, now)
+		}
+
+		// Add timeline bitmaps for v3
+		if timeline {
+			summary.Timeline = s.GetDailyTimeline(ctx, pkHex, now)
 		}
 
 		result = append(result, summary)
@@ -787,8 +805,231 @@ func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.
 	return daily
 }
 
-// getOnlineVisorsFromTransports returns visors with active transports (legacy method).
-func (s *redisStore) getOnlineVisorsFromTransports(ctx context.Context) map[string]struct{} {
+// getDailyTimeline reads the timeline bitmap for each of the last 7 days and
+// converts it to a 288-char string per day. '.' = heartbeat received in that
+// 5-minute slot, ' ' = missed.
+func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string {
+	timelines := make(map[string]string)
+
+	for i := 0; i < uptimeHistoryDays; i++ {
+		date := now.AddDate(0, 0, -i).Format("2006-01-02")
+		tlKey := uptimeTimelineKey(pkHex, date)
+
+		// Read all 288 bits. Redis GETBIT returns 0 for unset bits
+		// and for keys that don't exist, so this is safe.
+		var buf [timelineSlots]byte
+		pipe := s.client.Pipeline()
+		cmds := make([]*redis.IntCmd, timelineSlots)
+		for slot := 0; slot < timelineSlots; slot++ {
+			cmds[slot] = pipe.GetBit(ctx, tlKey, int64(slot))
+		}
+		_, err := pipe.Exec(ctx)
+		if err != nil {
+			continue
+		}
+
+		hasAny := false
+		for slot := 0; slot < timelineSlots; slot++ {
+			if cmds[slot].Val() == 1 {
+				buf[slot] = '.'
+				hasAny = true
+			} else {
+				buf[slot] = ' '
+			}
+		}
+
+		// Only include days that have at least one heartbeat.
+		if hasAny {
+			timelines[date] = string(buf[:])
+		}
+	}
+
+	return timelines
+}
+
+/*
+	<<< Transport uptime tracking (stcpr/sudph only) >>>
+*/
+
+func tpUptimeKey(tpID string, date string) string {
+	return fmt.Sprintf("%s:tp-uptime:%s:%s", serviceName, tpID, date)
+}
+
+func tpUptimeOnlineKey(date string) string {
+	return fmt.Sprintf("%s:tp-uptime:online:%s", serviceName, date)
+}
+
+func tpUptimeTimelineKey(tpID string, date string) string {
+	return fmt.Sprintf("%s:tp-uptime:%s:%s:timeline", serviceName, tpID, date)
+}
+
+func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string) error {
+	// Only track p2p transport types.
+	if tpType != "stcpr" && tpType != "sudph" {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	date := now.Format("2006-01-02")
+	idStr := tpID.String()
+	key := tpUptimeKey(idStr, date)
+
+	pipe := s.client.Pipeline()
+
+	pipe.HIncrBy(ctx, key, "count", 1)
+	pipe.HSet(ctx, key, "type", tpType)
+	pipe.HSet(ctx, key, "last_seen", now.Unix())
+	pipe.Expire(ctx, key, 8*24*time.Hour)
+
+	pipe.SAdd(ctx, tpUptimeOnlineKey(date), idStr)
+	pipe.Expire(ctx, tpUptimeOnlineKey(date), 8*24*time.Hour)
+
+	tlKey := tpUptimeTimelineKey(idStr, date)
+	pipe.SetBit(ctx, tlKey, currentTimelineSlot(now), 1)
+	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
+
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+func (s *redisStore) GetTransportUptimeSummaries(ctx context.Context, tpIDs []uuid.UUID, v2 bool, timeline bool) ([]TransportUptimeSummary, error) {
+	now := time.Now().UTC()
+	today := now.Format("2006-01-02")
+
+	// If no specific IDs requested, get all seen today.
+	if len(tpIDs) == 0 {
+		members, err := s.client.SMembers(ctx, tpUptimeOnlineKey(today)).Result()
+		if err != nil {
+			return []TransportUptimeSummary{}, nil
+		}
+		for _, m := range members {
+			if id, perr := uuid.Parse(m); perr == nil {
+				tpIDs = append(tpIDs, id)
+			}
+		}
+	}
+
+	result := make([]TransportUptimeSummary, 0, len(tpIDs))
+	for _, id := range tpIDs {
+		idStr := id.String()
+		key := tpUptimeKey(idStr, today)
+
+		// Check online: has a heartbeat today and the transport entry still exists.
+		online := false
+		tpType := ""
+		vals, err := s.client.HMGet(ctx, key, "last_seen", "type").Result()
+		if err == nil && len(vals) >= 2 {
+			if lastStr, ok := vals[0].(string); ok {
+				if lastSeen, perr := strconv.ParseInt(lastStr, 10, 64); perr == nil {
+					if now.Sub(time.Unix(lastSeen, 0)) < onlineThresholdTP {
+						online = true
+					}
+				}
+			}
+			if t, ok := vals[1].(string); ok {
+				tpType = t
+			}
+		}
+
+		summary := TransportUptimeSummary{
+			ID:     id,
+			Online: online,
+			Type:   tpType,
+		}
+
+		if v2 || timeline {
+			summary.Daily = s.getTransportDailyUptime(ctx, idStr, now)
+		}
+		if timeline {
+			summary.Timeline = s.GetTransportDailyTimeline(ctx, idStr, now)
+		}
+
+		result = append(result, summary)
+	}
+
+	return result, nil
+}
+
+// onlineThresholdTP is how long since last heartbeat a transport is still considered online.
+// ~3 missed 90s re-registrations.
+const onlineThresholdTP = 5 * time.Minute
+
+func (s *redisStore) GetTransportUptimeByVisor(ctx context.Context, pk cipher.PubKey, v2 bool, timeline bool) ([]TransportUptimeSummary, error) {
+	// Get all transport IDs for this visor from the edge index.
+	entries, err := s.GetTransportsByEdge(ctx, pk)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]uuid.UUID, 0, len(entries))
+	for _, e := range entries {
+		if e.Type == "stcpr" || e.Type == "sudph" {
+			ids = append(ids, e.ID)
+		}
+	}
+
+	return s.GetTransportUptimeSummaries(ctx, ids, v2, timeline)
+}
+
+func (s *redisStore) getTransportDailyUptime(ctx context.Context, tpID string, now time.Time) map[string]string {
+	daily := make(map[string]string)
+	for i := 0; i < uptimeHistoryDays; i++ {
+		date := now.AddDate(0, 0, -i).Format("2006-01-02")
+		countStr, err := s.client.HGet(ctx, tpUptimeKey(tpID, date), "count").Result()
+		if err != nil {
+			continue
+		}
+		count, err := strconv.ParseFloat(countStr, 64)
+		if err != nil {
+			continue
+		}
+		pct := (count / expectedHeartbeatsPerDay) * 100
+		if pct > 100 {
+			pct = 100
+		}
+		daily[date] = fmt.Sprintf("%.2f", pct)
+	}
+	return daily
+}
+
+func (s *redisStore) GetTransportDailyTimeline(ctx context.Context, tpID string, now time.Time) map[string]string {
+	timelines := make(map[string]string)
+	for i := 0; i < uptimeHistoryDays; i++ {
+		date := now.AddDate(0, 0, -i).Format("2006-01-02")
+		tlKey := tpUptimeTimelineKey(tpID, date)
+
+		pipe := s.client.Pipeline()
+		cmds := make([]*redis.IntCmd, timelineSlots)
+		for slot := 0; slot < timelineSlots; slot++ {
+			cmds[slot] = pipe.GetBit(ctx, tlKey, int64(slot))
+		}
+		_, err := pipe.Exec(ctx)
+		if err != nil {
+			continue
+		}
+
+		var buf [timelineSlots]byte
+		hasAny := false
+		for slot := 0; slot < timelineSlots; slot++ {
+			if cmds[slot].Val() == 1 {
+				buf[slot] = '.'
+				hasAny = true
+			} else {
+				buf[slot] = ' '
+			}
+		}
+		if hasAny {
+			timelines[date] = string(buf[:])
+		}
+	}
+	return timelines
+}
+
+// getP2PTransportCounts returns a map of visor PK hex → count of p2p transports
+// (stcpr, sudph). A visor is considered online when it has 2+ p2p transports,
+// indicating genuine peer-to-peer network participation (not just dmsg
+// infrastructure connectivity).
+func (s *redisStore) getP2PTransportCounts(ctx context.Context) map[string]int {
 	pattern := fmt.Sprintf("%s:tp:*", serviceName)
 	var keys []string
 	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
@@ -799,7 +1040,7 @@ func (s *redisStore) getOnlineVisorsFromTransports(ctx context.Context) map[stri
 		return nil
 	}
 
-	onlineVisors := make(map[string]struct{})
+	counts := make(map[string]int)
 
 	const mgetBatch = 10000
 	for i := 0; i < len(keys); i += mgetBatch {
@@ -820,14 +1061,17 @@ func (s *redisStore) getOnlineVisorsFromTransports(ctx context.Context) map[stri
 			if err := json.Unmarshal([]byte(raw), &data); err != nil {
 				continue
 			}
-			onlineVisors[data.EdgeA] = struct{}{}
-			if data.EdgeA != data.EdgeB {
-				onlineVisors[data.EdgeB] = struct{}{}
+			// Only count p2p transport types (stcpr, sudph), not dmsg.
+			if data.Type == "stcpr" || data.Type == "sudph" {
+				counts[data.EdgeA]++
+				if data.EdgeA != data.EdgeB {
+					counts[data.EdgeB]++
+				}
 			}
 		}
 	}
 
-	return onlineVisors
+	return counts
 }
 
 func (s *redisStore) getBandwidthFromHash(ctx context.Context, key, transportID, period, periodKey string) (BandwidthAggregation, error) {

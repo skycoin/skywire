@@ -2,9 +2,8 @@
 package main
 
 import (
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/flags"
-
 	"github.com/skycoin/skywire/cmd/dmsg-commands/dmsgweb/commands"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/flags"
 )
 
 func init() {

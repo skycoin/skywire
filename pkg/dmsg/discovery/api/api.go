@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,17 +14,17 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
+
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/disc/metrics"
+	"github.com/skycoin/skywire/pkg/dmsg/discovery/store"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/networkmonitor"
-
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/disc/metrics"
-	"github.com/skycoin/skywire/pkg/dmsg/discovery/store"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
 
 var log = logging.MustGetLogger("dmsg-discovery")
@@ -139,6 +140,7 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	r.Get("/dmsg-discovery/all_servers", api.getAllServers())
 	r.Get("/dmsg-discovery/servers/clients", api.allClientsByServer())
 	r.Get("/dmsg-discovery/server/{pk}/clients", api.clientsByServer())
+	r.Get("/uptimes", api.getUptimes)
 	r.Get("/health", api.serviceHealth)
 
 	return api
@@ -375,6 +377,11 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			// Record heartbeat for uptime tracking on new client entries.
+			if entry.Client != nil {
+				_ = a.db.RecordHeartbeat(r.Context(), entry.Static, entry.ClientType) //nolint:errcheck
+			}
+
 			a.writeJSON(w, r, http.StatusOK, disc.MsgEntrySet)
 
 			return
@@ -393,6 +400,11 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 		if err := a.db.SetEntry(r.Context(), entry, entryTimeout); err != nil {
 			a.handleError(w, r, err)
 			return
+		}
+
+		// Record heartbeat for uptime tracking on client entry updates.
+		if entry.Client != nil {
+			_ = a.db.RecordHeartbeat(r.Context(), entry.Static, entry.ClientType) //nolint:errcheck
 		}
 
 		a.writeJSON(w, r, http.StatusOK, disc.MsgEntryUpdated)
@@ -613,6 +625,43 @@ func (a *API) clientsByServer() http.HandlerFunc {
 	}
 }
 
+// GET /uptimes — visor uptime summaries.
+// Query params: v=v2 (daily percentages), v=v3 (+ timeline), visors=pk1;pk2 (filter).
+func (a *API) getUptimes(w http.ResponseWriter, r *http.Request) {
+	version := r.URL.Query().Get("v")
+	visorsParam := r.URL.Query().Get("visors")
+	v2 := version == "v2" || version == "v3"
+	timeline := version == "v3"
+
+	summaries, err := a.db.GetAllVisorSummaries(r.Context(), v2, timeline)
+	if err != nil {
+		a.handleError(w, r, err)
+		return
+	}
+
+	if visorsParam != "" {
+		want := make(map[string]struct{})
+		for _, pk := range strings.Split(visorsParam, ";") {
+			pk = strings.TrimSpace(pk)
+			if pk != "" {
+				want[pk] = struct{}{}
+			}
+		}
+		filtered := make([]store.VisorSummary, 0)
+		for _, s := range summaries {
+			if _, ok := want[s.PK.Hex()]; ok {
+				filtered = append(filtered, s)
+			}
+		}
+		summaries = filtered
+	}
+
+	if summaries == nil {
+		summaries = []store.VisorSummary{}
+	}
+	a.writeJSON(w, r, http.StatusOK, summaries)
+}
+
 func (a *API) serviceHealth(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	a.writeJSON(w, r, http.StatusOK, httputil.HealthCheckResponse{
@@ -651,7 +700,7 @@ func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 
-	_, err = w.Write(jsonObject)
+	_, err = w.Write(jsonObject) //nolint:gosec // G705: jsonObject is marshaled, not raw user input
 	if err != nil {
 		a.log(r).Warnf("Failed to write response: %s", err)
 	}

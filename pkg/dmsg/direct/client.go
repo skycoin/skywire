@@ -5,10 +5,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
 )
 
 // directClient represents a client that doesnot communicates with a dmsg-discovery,

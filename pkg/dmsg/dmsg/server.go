@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/hashicorp/yamux"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/xtaci/smux"
 
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 )
 
 // ErrClosed is returned when an operation is attempted on a closed server.
@@ -89,15 +89,13 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 	s.done = make(chan struct{})
 	s.addrDone = make(chan struct{})
 	s.maxSessions = conf.MaxSessions
-	s.setSessionCallback = func(ctx context.Context) error {
-		s.sessionsMx.Lock()
-		defer s.sessionsMx.Unlock()
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions, conf.AuthPassphrase)
+	s.setSessionCallback = func(_ context.Context) error {
+		s.nudgeEntryUpdate()
+		return nil
 	}
-	s.delSessionCallback = func(ctx context.Context) error {
-		s.sessionsMx.Lock()
-		defer s.sessionsMx.Unlock()
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions, conf.AuthPassphrase)
+	s.delSessionCallback = func(_ context.Context) error {
+		s.nudgeEntryUpdate()
+		return nil
 	}
 	s.authPassphrase = conf.AuthPassphrase
 

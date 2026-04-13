@@ -1243,27 +1243,60 @@ func (env *TestEnv) ContainerRestart(serviceName ...string) error {
 		}
 	}
 
-	// Poll restarted containers until their Docker state is "running"
-	env.logger.Info("Waiting for restarted containers to reach running state...")
-	deadline := time.Now().Add(RestartDelay)
-	for time.Now().Before(deadline) {
-		allRunning := true
-		for _, svcName := range serviceName {
-			inspect, inspErr := env.cli.ContainerInspect(env.ctx, env.containers[svcName].ID)
-			if inspErr != nil || !inspect.State.Running {
-				allRunning = false
-				break
-			}
+	// Wait for restarted containers to become healthy (or running if no healthcheck).
+	env.logger.Info("Waiting for restarted containers to become healthy...")
+	for _, svcName := range serviceName {
+		if err := env.WaitForContainerHealthy(svcName, RestartDelay); err != nil {
+			env.logger.Warnf("ContainerRestart: %s did not become healthy: %v", svcName, err)
 		}
-		if allRunning {
-			env.logger.Info("All restarted containers are running")
+	}
+	return nil
+}
+
+// WaitForContainerHealthy waits for a container to reach "healthy" status if it has a
+// healthcheck configured, or "running" state otherwise. It uses docker inspect so it
+// does not rely on polling application-level RPC endpoints.
+func (env *TestEnv) WaitForContainerHealthy(containerName string, timeout time.Duration) error {
+	svc, ok := env.containers[containerName]
+	if !ok {
+		return fmt.Errorf("WaitForContainerHealthy: container %s not found in env", containerName)
+	}
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		inspect, err := env.cli.ContainerInspect(env.ctx, svc.ID)
+		if err != nil {
+			env.logger.Debugf("WaitForContainerHealthy: inspect %s: %v", containerName, err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		// If the container has a healthcheck, wait for "healthy".
+		if inspect.State.Health != nil {
+			status := inspect.State.Health.Status
+			if status == "healthy" {
+				env.logger.Infof("WaitForContainerHealthy: %s is healthy", containerName)
+				return nil
+			}
+			if status == "unhealthy" {
+				env.logger.Warnf("WaitForContainerHealthy: %s is unhealthy, continuing to wait", containerName)
+			} else {
+				env.logger.Debugf("WaitForContainerHealthy: %s health=%s, waiting...", containerName, status)
+			}
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		// No healthcheck — fall back to running state.
+		if inspect.State.Running {
+			env.logger.Infof("WaitForContainerHealthy: %s is running (no healthcheck)", containerName)
 			return nil
 		}
+		env.logger.Debugf("WaitForContainerHealthy: %s not running yet (state=%s)", containerName, inspect.State.Status)
 		time.Sleep(2 * time.Second)
 	}
 
-	env.logger.Warn("Restart wait timed out; containers may not be fully ready")
-	return nil
+	return fmt.Errorf("WaitForContainerHealthy: %s did not become healthy within %v", containerName, timeout)
 }
 
 // WaitForVisorDmsgReady waits for a visor to have at least one connected DMSG server.
@@ -1875,31 +1908,97 @@ func truncateID(id string) string {
 	return id[:8] + "..."
 }
 
-// WaitForVisorReady waits until a visor's RPC is responsive by polling VisorPK.
-// This ensures the visor has fully initialized its transport manager and app launcher.
-// Provides detailed logging for CI diagnostics.
+// WaitForVisorReady waits until a visor is ready to serve requests. It checks
+// Docker health status first: if the container has a healthcheck (visor-a/b/c do),
+// it waits for the "healthy" status which already verifies both RPC readiness and
+// a dmsg session count > 0. Only when Docker health is not available does it fall
+// back to manual polling of the RPC endpoint and dmsg sessions command.
 func (env *TestEnv) WaitForVisorReady(visor string, timeout time.Duration) error {
 	start := time.Now()
-	deadline := start.Add(timeout)
-	pollInterval := 5 * time.Second
-	attempt := 0
 
 	env.logger.Infof("WaitForVisorReady: waiting for %s (timeout: %v)", visor, timeout)
 
+	// Phase 0: check Docker health status if the container has a healthcheck.
+	// The visor healthcheck already verifies RPC + dmsg sessions > 0, so if the
+	// container reaches "healthy" we can return immediately.
+	if svc, ok := env.containers[visor]; ok {
+		inspect, inspErr := env.cli.ContainerInspect(env.ctx, svc.ID)
+		if inspErr == nil && inspect.State.Health != nil {
+			env.logger.Infof("WaitForVisorReady: %s has Docker healthcheck, waiting for 'healthy' status", visor)
+			deadline := start.Add(timeout)
+			for time.Now().Before(deadline) {
+				insp, err := env.cli.ContainerInspect(env.ctx, svc.ID)
+				if err == nil && insp.State.Health != nil {
+					switch insp.State.Health.Status {
+					case "healthy":
+						env.logger.Infof("WaitForVisorReady: %s became healthy via Docker healthcheck after %v",
+							visor, time.Since(start).Round(time.Second))
+						return nil
+					case "unhealthy":
+						env.logger.Warnf("WaitForVisorReady: %s is unhealthy, still waiting", visor)
+					default:
+						env.logger.Debugf("WaitForVisorReady: %s health=%s", visor, insp.State.Health.Status)
+					}
+				}
+				time.Sleep(2 * time.Second)
+			}
+			// Timed out waiting for Docker health — fall through to manual polling
+			// for improved diagnostics, but log the failure.
+			env.logger.Warnf("WaitForVisorReady: %s Docker healthcheck did not reach 'healthy' within %v; falling back to RPC poll",
+				visor, timeout)
+		}
+	}
+
+	// Phase 1 & 2 (fallback): manual polling of RPC + dmsg sessions.
+	deadline := start.Add(timeout)
+	pollInterval := 5 * time.Second
+	attempt := 0
+	rpcReady := false
 	var lastErr string
+
 	for time.Now().Before(deadline) {
 		attempt++
-		_, err := env.VisorPK(visor)
-		if err == nil {
-			env.logger.Infof("WaitForVisorReady: %s RPC reachable after %v (%d attempts)",
+
+		// Phase 1: wait for RPC to be reachable.
+		if !rpcReady {
+			_, err := env.VisorPK(visor)
+			if err != nil {
+				errStr := err.Error()
+				if errStr != lastErr {
+					env.logger.Infof("WaitForVisorReady: %s attempt %d (RPC): %s", visor, attempt, errStr)
+					lastErr = errStr
+				}
+				time.Sleep(pollInterval)
+				continue
+			}
+			rpcReady = true
+			env.logger.Infof("WaitForVisorReady: %s RPC reachable after %v", visor, time.Since(start).Round(time.Second))
+		}
+
+		// Phase 2: wait for at least 1 dmsg session.
+		out, err := env.VisorExec(visor, "/release/skywire cli --rpc "+visor+":3435 dmsg sessions --json")
+		if err == nil && strings.Contains(out, `"count"`) {
+			// Parse to check count > 0.
+			if strings.Contains(out, `"count": 0`) || strings.Contains(out, `"count":0`) {
+				env.logger.Infof("WaitForVisorReady: %s dmsg sessions count=0, waiting...", visor)
+				time.Sleep(pollInterval)
+				continue
+			}
+			env.logger.Infof("WaitForVisorReady: %s RPC + dmsg ready after %v (%d attempts)",
 				visor, time.Since(start).Round(time.Second), attempt)
 			return nil
 		}
 
-		errStr := err.Error()
-		if errStr != lastErr {
-			env.logger.Infof("WaitForVisorReady: %s attempt %d: %s", visor, attempt, errStr)
-			lastErr = errStr
+		// dmsg sessions command failed or returned unexpected output — RPC is
+		// up but dmsg module may not have initialized yet.
+		if err != nil {
+			errStr := err.Error()
+			if errStr != lastErr {
+				env.logger.Infof("WaitForVisorReady: %s attempt %d (dmsg): %s", visor, attempt, errStr)
+				lastErr = errStr
+			}
+		} else {
+			env.logger.Infof("WaitForVisorReady: %s attempt %d (dmsg): unexpected output: %s", visor, attempt, out)
 		}
 
 		// Diagnostics every ~30 seconds

@@ -143,11 +143,26 @@ type VisorMetricResponse struct {
 
 // VisorSummary holds a visor's uptime data.
 // This format matches the Uptime Tracker's response format.
+// v3 adds Timeline — a per-day string of 288 chars (one per 5-minute slot)
+// where '.' = heartbeat received and ' ' = missed.
 type VisorSummary struct {
-	PK      cipher.PubKey     `json:"pk"`
-	Online  bool              `json:"on"`
-	Version string            `json:"version,omitempty"`
-	Daily   map[string]string `json:"daily,omitempty"`
+	PK       cipher.PubKey     `json:"pk"`
+	Online   bool              `json:"on"`
+	Version  string            `json:"version,omitempty"`
+	Daily    map[string]string `json:"daily,omitempty"`
+	Timeline map[string]string `json:"timeline,omitempty"`
+}
+
+// TransportUptimeSummary holds uptime data for a single transport.
+// Edges are omitted by default — include via ?edges=true query param.
+type TransportUptimeSummary struct {
+	ID       uuid.UUID         `json:"id"`
+	Online   bool              `json:"on"`
+	Type     string            `json:"type,omitempty"`
+	EdgeA    string            `json:"edge_a,omitempty"`
+	EdgeB    string            `json:"edge_b,omitempty"`
+	Daily    map[string]string `json:"daily,omitempty"`
+	Timeline map[string]string `json:"timeline,omitempty"`
 }
 
 // Store stores Transport metadata and generated nonce values.
@@ -166,8 +181,14 @@ type TransportStore interface {
 	// Bandwidth query methods (legacy)
 	GetTransportBandwidth(ctx context.Context, tpID uuid.UUID, period string, limit int) ([]BandwidthAggregation, error)
 	GetVisorBandwidth(ctx context.Context, pk cipher.PubKey, period string, limit int) ([]BandwidthAggregation, error)
-	GetAllVisorSummaries(ctx context.Context, v2 bool) ([]VisorSummary, error)
+	GetAllVisorSummaries(ctx context.Context, v2 bool, timeline bool) ([]VisorSummary, error)
 	RecordHeartbeat(ctx context.Context, pk cipher.PubKey, version string) error
+	GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string
+	// Transport uptime tracking (stcpr/sudph only).
+	RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string) error
+	GetTransportUptimeSummaries(ctx context.Context, tpIDs []uuid.UUID, v2 bool, timeline bool) ([]TransportUptimeSummary, error)
+	GetTransportUptimeByVisor(ctx context.Context, pk cipher.PubKey, v2 bool, timeline bool) ([]TransportUptimeSummary, error)
+	GetTransportDailyTimeline(ctx context.Context, tpID string, now time.Time) map[string]string
 	BackupAndCleanOldBandwidth(ctx context.Context, backupPath string) error
 	// New metrics methods
 	GetNetworkMetrics(ctx context.Context, query MetricsQuery) (*NetworkMetricResponse, error)
