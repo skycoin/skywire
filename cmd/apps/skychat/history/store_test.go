@@ -205,16 +205,16 @@ func TestBoltStore_EmptyPeerRejected(t *testing.T) {
 
 func TestBoltStore_TTLSweep(t *testing.T) {
 	lim := Limits{
-		TTL: 100 * time.Millisecond,
+		TTL: 10 * time.Second,
 	}
 	s := newTestStore(t, lim)
 
 	now := time.Now().UTC()
-	// Old message
+	// Old message — well beyond TTL
 	if err := s.Append(Message{Peer: "p", Text: "old", Timestamp: now.Add(-time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
-	// New message
+	// New message — well within TTL (won't expire during test)
 	if err := s.Append(Message{Peer: "p", Text: "new", Timestamp: now}); err != nil {
 		t.Fatal(err)
 	}
