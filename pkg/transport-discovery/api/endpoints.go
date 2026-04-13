@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -480,13 +481,28 @@ func (api *API) getVisorBandwidth(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /uptimes
-// Query params: v=v2 for extended format with version and daily uptime percentages
+// Query params:
+//
+//	v=v2   — extended format with version and daily uptime percentages
+//	v=v3   — v2 + per-day timeline bitmaps (288 chars per day, '.'=up ' '=down)
+//	visors — semicolon-separated PK hex list to filter (required for v3, optional for v1/v2)
 func (api *API) getUptimes(w http.ResponseWriter, r *http.Request) {
-	v2 := r.URL.Query().Get("v") == "v2"
-	if v2 {
+	version := r.URL.Query().Get("v")
+	visorsParam := r.URL.Query().Get("visors")
+
+	// v3 is computed on-demand (timeline bitmaps are expensive for all visors).
+	if version == "v3" {
+		api.getUptimesV3(w, r, visorsParam)
+		return
+	}
+
+	if version == "v2" {
 		uptimes := api.getUptimesV2FromCache()
 		if uptimes == nil {
 			uptimes = []store.VisorSummary{}
+		}
+		if visorsParam != "" {
+			uptimes = filterByPKs(uptimes, visorsParam)
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, uptimes)
 		return
@@ -495,7 +511,56 @@ func (api *API) getUptimes(w http.ResponseWriter, r *http.Request) {
 	if uptimes == nil {
 		uptimes = []store.VisorSummary{}
 	}
+	if visorsParam != "" {
+		uptimes = filterByPKs(uptimes, visorsParam)
+	}
 	httputil.WriteJSON(w, r, http.StatusOK, uptimes)
+}
+
+// getUptimesV3 computes v3 responses on-demand for specific PKs.
+func (api *API) getUptimesV3(w http.ResponseWriter, r *http.Request, visorsParam string) {
+	// Get the full v2 cache to start from (has daily + version + online).
+	all := api.getUptimesV2FromCache()
+	if all == nil {
+		all = []store.VisorSummary{}
+	}
+
+	// Filter to requested PKs.
+	filtered := all
+	if visorsParam != "" {
+		filtered = filterByPKs(all, visorsParam)
+	}
+
+	// Enrich with timeline data.
+	now := time.Now().UTC()
+	for i := range filtered {
+		pkHex := filtered[i].PK.Hex()
+		filtered[i].Timeline = api.store.GetDailyTimeline(r.Context(), pkHex, now)
+	}
+
+	httputil.WriteJSON(w, r, http.StatusOK, filtered)
+}
+
+// filterByPKs filters a VisorSummary slice to only include entries whose
+// PK hex matches one of the semicolon-separated PKs.
+func filterByPKs(summaries []store.VisorSummary, pksParam string) []store.VisorSummary {
+	want := make(map[string]struct{})
+	for _, pk := range strings.Split(pksParam, ";") {
+		pk = strings.TrimSpace(pk)
+		if pk != "" {
+			want[pk] = struct{}{}
+		}
+	}
+	var result []store.VisorSummary
+	for _, s := range summaries {
+		if _, ok := want[s.PK.Hex()]; ok {
+			result = append(result, s)
+		}
+	}
+	if result == nil {
+		result = []store.VisorSummary{}
+	}
+	return result
 }
 
 // GET /v4/update - visor heartbeat for uptime tracking
