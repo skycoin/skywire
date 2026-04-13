@@ -17,6 +17,9 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/skyenv"
+
 	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -74,6 +77,7 @@ type API struct {
 	startedAt                   time.Time
 	dmsgAddr                    string
 	DmsgServers                 []string
+	DmsgClient                  *dmsg.Client // set after svcmode.Start; used for visor dmsg reachability probes
 }
 
 // New creates an API.
@@ -300,6 +304,20 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 			a.log.Error(servicedisc.ErrVisorUnreachable.Error())
 			a.writeError(w, r, http.StatusForbidden, servicedisc.ErrVisorUnreachable.Error())
 			return
+		}
+
+		// Probe the visor on dmsg port 136 to confirm it's reachable
+		// for route setup. If the probe fails, the visor is running but
+		// unroutable — don't list it as a public visor.
+		if a.DmsgClient != nil {
+			probeCtx, probeCancel := context.WithTimeout(r.Context(), 3*time.Second)
+			reachable := a.DmsgClient.Probe(probeCtx, se.Addr.PubKey(), skyenv.DmsgAwaitSetupPort)
+			probeCancel()
+			if !reachable {
+				a.log.WithField("pk", se.Addr.PubKey()).Warn("Public visor registration rejected: not reachable on dmsg port 136")
+				a.writeError(w, r, http.StatusForbidden, "visor not reachable on dmsg for route setup")
+				return
+			}
 		}
 	}
 
