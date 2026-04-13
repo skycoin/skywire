@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 func init() {

@@ -8,10 +8,9 @@ import (
 	"sort"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
-
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
 )
 
 // Listen listens on a given dmsg port.

@@ -9,10 +9,10 @@ import (
 
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/xtaci/smux"
 
 	"github.com/skycoin/skywire/pkg/dmsg/noise"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // Stream represents a dmsg connection between two dmsg clients.
