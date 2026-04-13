@@ -3,7 +3,9 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -285,4 +287,164 @@ func (r *redisStore) AllClientEntries(ctx context.Context) ([]*disc.Entry, error
 	}
 
 	return entries, nil
+}
+
+/*
+	<<< Integrated uptime tracking >>>
+*/
+
+const (
+	uptimeHistoryDays        = 7
+	expectedHeartbeatsPerDay = float64(24*60) / float64(5) // 288 (5-min client update interval)
+	timelineSlots            = 24 * 60 / 5                 // 288
+)
+
+func uptimeKey(pk string, date string) string {
+	return "dmsgd:uptime:" + pk + ":" + date
+}
+
+func uptimeOnlineKey(date string) string {
+	return "dmsgd:uptime:online:" + date
+}
+
+func uptimeTimelineKey(pk string, date string) string {
+	return "dmsgd:uptime:" + pk + ":" + date + ":timeline"
+}
+
+func currentTimelineSlot(t time.Time) int64 {
+	return int64(t.Hour()*12 + t.Minute()/5)
+}
+
+func (r *redisStore) RecordHeartbeat(ctx context.Context, pk cipher.PubKey, version string) error {
+	now := time.Now().UTC()
+	date := now.Format("2006-01-02")
+	pkHex := pk.Hex()
+	key := uptimeKey(pkHex, date)
+
+	pipe := r.client.Pipeline()
+
+	pipe.HIncrBy(ctx, key, "count", 1)
+	pipe.HSet(ctx, key, "version", version)
+	pipe.HSet(ctx, key, "last_seen", now.Unix())
+	pipe.Expire(ctx, key, 8*24*time.Hour)
+
+	pipe.SAdd(ctx, uptimeOnlineKey(date), pkHex)
+	pipe.Expire(ctx, uptimeOnlineKey(date), 8*24*time.Hour)
+
+	tlKey := uptimeTimelineKey(pkHex, date)
+	pipe.SetBit(ctx, tlKey, currentTimelineSlot(now), 1)
+	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
+
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+func (r *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool, timeline bool) ([]VisorSummary, error) {
+	now := time.Now().UTC()
+	today := now.Format("2006-01-02")
+
+	heartbeatVisors, err := r.client.SMembers(ctx, uptimeOnlineKey(today)).Result()
+	if err != nil {
+		heartbeatVisors = nil
+	}
+
+	if len(heartbeatVisors) == 0 {
+		return []VisorSummary{}, nil
+	}
+
+	result := make([]VisorSummary, 0, len(heartbeatVisors))
+
+	for _, pkHex := range heartbeatVisors {
+		var pk cipher.PubKey
+		if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
+			continue
+		}
+
+		// Online = has 1+ delegated servers in current dmsg discovery entry.
+		online := false
+		entry, err := r.Entry(ctx, pk)
+		if err == nil && entry.Client != nil && len(entry.Client.DelegatedServers) > 0 {
+			online = true
+		}
+
+		version := ""
+		key := uptimeKey(pkHex, today)
+		vals, err := r.client.HMGet(ctx, key, "version").Result()
+		if err == nil && len(vals) >= 1 {
+			if v, ok := vals[0].(string); ok {
+				version = v
+			}
+		}
+
+		summary := VisorSummary{
+			PK:      pk,
+			Online:  online,
+			Version: version,
+		}
+
+		if v2 || timeline {
+			summary.Daily = r.getDailyUptime(ctx, pkHex, now)
+		}
+		if timeline {
+			summary.Timeline = r.GetDailyTimeline(ctx, pkHex, now)
+		}
+
+		result = append(result, summary)
+	}
+
+	return result, nil
+}
+
+func (r *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.Time) map[string]string {
+	daily := make(map[string]string)
+	for i := 0; i < uptimeHistoryDays; i++ {
+		date := now.AddDate(0, 0, -i).Format("2006-01-02")
+		countStr, err := r.client.HGet(ctx, uptimeKey(pkHex, date), "count").Result()
+		if err != nil {
+			continue
+		}
+		count, err := strconv.ParseFloat(countStr, 64)
+		if err != nil {
+			continue
+		}
+		pct := (count / expectedHeartbeatsPerDay) * 100
+		if pct > 100 {
+			pct = 100
+		}
+		daily[date] = fmt.Sprintf("%.2f", pct)
+	}
+	return daily
+}
+
+func (r *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string {
+	timelines := make(map[string]string)
+	for i := 0; i < uptimeHistoryDays; i++ {
+		date := now.AddDate(0, 0, -i).Format("2006-01-02")
+		tlKey := uptimeTimelineKey(pkHex, date)
+
+		pipe := r.client.Pipeline()
+		cmds := make([]*redis.IntCmd, timelineSlots)
+		for slot := 0; slot < timelineSlots; slot++ {
+			cmds[slot] = pipe.GetBit(ctx, tlKey, int64(slot))
+		}
+		_, err := pipe.Exec(ctx)
+		if err != nil {
+			continue
+		}
+
+		var buf [timelineSlots]byte
+		hasAny := false
+		for slot := 0; slot < timelineSlots; slot++ {
+			if cmds[slot].Val() == 1 {
+				buf[slot] = '.'
+				hasAny = true
+			} else {
+				buf[slot] = ' '
+			}
+		}
+		if hasAny {
+			timelines[date] = string(buf[:])
+		}
+	}
+	return timelines
 }
