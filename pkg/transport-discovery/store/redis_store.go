@@ -661,10 +661,6 @@ func currentTimelineSlot(t time.Time) int64 {
 	return int64(t.Hour()*12 + t.Minute()/5)
 }
 
-// onlineThreshold is the maximum time between heartbeats for a visor to be
-// considered online.
-const onlineThreshold = 6 * time.Minute
-
 // uptimeHistoryDays is the number of days of daily uptime to include in v2 responses.
 const uptimeHistoryDays = 7
 
