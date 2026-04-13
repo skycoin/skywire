@@ -89,7 +89,7 @@ The --server flag is required and must be in the format pk@ip:port, e.g.:
 				acceptErrCh <- aerr
 				return
 			}
-			stream.Close() //nolint:errcheck
+			stream.Close() //nolint:errcheck,gosec
 			acceptErrCh <- nil
 		}()
 
@@ -100,7 +100,7 @@ The --server flag is required and must be in the format pk@ip:port, e.g.:
 			return fmt.Errorf("self-dial failed via server %s: %w", srvEntry.Server.Address, err)
 		}
 		latency := time.Since(start)
-		dialStream.Close() //nolint:errcheck
+		dialStream.Close() //nolint:errcheck,gosec
 
 		// Wait for the accept side to finish.
 		if aerr := <-acceptErrCh; aerr != nil {
