@@ -8,10 +8,21 @@ import (
 	"github.com/go-redis/redis/v8"
 
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 //go:generate mockery --name Store --case underscore --inpackage
+
+// VisorSummary holds a visor's uptime data for the SD /uptimes endpoint.
+// v1: pk + online. v2 adds version + daily percentages. v3 adds timeline bitmaps.
+type VisorSummary struct {
+	PK       cipher.PubKey     `json:"pk"`
+	Online   bool              `json:"on"`
+	Version  string            `json:"version,omitempty"`
+	Daily    map[string]string `json:"daily,omitempty"`
+	Timeline map[string]string `json:"timeline,omitempty"`
+}
 
 // Store represents a DB implementation.
 type Store interface {
@@ -22,6 +33,9 @@ type Store interface {
 	DeleteService(ctx context.Context, sType string, addr servicedisc.SWAddr) *servicedisc.HTTPError
 	CountServiceTypes(ctx context.Context) (uint64, error)
 	CountServices(ctx context.Context, serviceType string) (uint64, error)
+	RecordHeartbeat(ctx context.Context, pk cipher.PubKey, version string) error
+	GetAllVisorSummaries(ctx context.Context, v2 bool, timeline bool) ([]VisorSummary, error)
+	GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string
 }
 
 // NewStore creates a new Redis store with TTL for service entries.
