@@ -17,11 +17,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -84,6 +84,29 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 		return nil
 	}
 
+	// Also create a heartbeat client for the TPD so visors without
+	// transports still report uptime. The TPD's /v4/update endpoint
+	// uses the same auth + protocol as the uptime tracker.
+	var tpdUT utclient.APIClient
+	tpdURL := v.conf.Transport.Discovery
+	if tpdURL == "" && v.conf.Transport.DiscoveryDmsg != "" {
+		tpdURL = v.conf.Transport.DiscoveryDmsg
+	}
+	if tpdURL != "" {
+		tpdHTTP, err := getHTTPClient(ctx, v, tpdURL)
+		if err != nil {
+			log.WithError(err).Warn("Failed to create TPD heartbeat client")
+		} else {
+			tpdPIP, _ := getPublicIP(v, tpdURL) //nolint:errcheck
+			tpdClient, err := utclient.NewHTTP(tpdURL, v.conf.PK, v.conf.SK, tpdHTTP, tpdPIP, v.MasterLogger())
+			if err != nil {
+				log.WithError(err).Warn("Failed to connect to TPD for heartbeat")
+			} else {
+				tpdUT = tpdClient
+			}
+		}
+	}
+
 	ticker := time.NewTicker(tickDuration)
 
 	go func() { //nolint:gosec
@@ -96,6 +119,14 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 			} else {
 				v.isServicesHealthy.set()
 				v.isUptimeTrackerHealthy.set()
+			}
+			// Heartbeat to TPD for integrated uptime tracking.
+			// Errors are non-fatal — transport re-registration also
+			// records heartbeats, so this is a backup for transportless visors.
+			if tpdUT != nil {
+				if err := tpdUT.UpdateVisorUptime(c, v.conf.Version); err != nil {
+					log.WithError(err).Debug("Failed to send TPD heartbeat")
+				}
 			}
 		}
 	}()

@@ -7,8 +7,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/spf13/cobra"
 
 	df "github.com/skycoin/skywire/cmd/dmsg-commands/conf/commands"
@@ -23,7 +21,10 @@ import (
 	dph "github.com/skycoin/skywire/cmd/dmsg-commands/dmsgpty-host/commands"
 	dpu "github.com/skycoin/skywire/cmd/dmsg-commands/dmsgpty-ui/commands"
 	dw "github.com/skycoin/skywire/cmd/dmsg-commands/dmsgweb/commands"
+	dsp "github.com/skycoin/skywire/cmd/dmsg-commands/self-ping/commands"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 )
 
 var (
@@ -52,6 +53,7 @@ func init() {
 		dw.RootCmd,
 		ds5.RootCmd,
 		di.RootCmd,
+		dsp.RootCmd,
 	)
 	dd.RootCmd.Use = "disc"
 	ds.RootCmd.Use = "server"
@@ -65,6 +67,7 @@ func init() {
 	dph.RootCmd.Use = "host"
 	dpu.RootCmd.Use = "ui"
 	di.RootCmd.Use = "ip"
+	dsp.RootCmd.Use = "self-ping"
 
 	modifySubcommands(RootCmd)
 	RootCmd.PersistentFlags().BoolVar(&withKill, "with-kill", true, "force exit after 3 interrupt signals")

@@ -47,8 +47,10 @@ func NewClient(ctx context.Context, dialer network.Dialer, rPK cipher.PubKey) (*
 	// Set a deadline on the underlying connection to prevent stale DMSG streams
 	// from accumulating when the remote visor is dead. Without this, RPC calls
 	// over dead streams block forever, leaking goroutines and ephemeral ports.
+	// Keep this short — stuck RPC calls hold ephemeral ports until the deadline
+	// fires. 30s is enough for any valid RPC exchange.
 	if conn, ok := s.(interface{ SetDeadline(time.Time) error }); ok {
-		conn.SetDeadline(time.Now().Add(2 * time.Minute)) //nolint:errcheck,gosec
+		conn.SetDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 	}
 
 	return NewClientFromRaw(s, rPK), nil
