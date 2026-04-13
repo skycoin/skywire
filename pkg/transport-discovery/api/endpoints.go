@@ -47,6 +47,10 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		if entryVersion == "" && entry.Version != "" {
 			entryVersion = entry.Version
 		}
+		// Record transport uptime heartbeat (stcpr/sudph only).
+		if err := api.store.RecordTransportHeartbeat(r.Context(), entry.Entry.ID, string(entry.Entry.Type)); err != nil {
+			api.log(r).WithError(err).Debug("Failed to record transport heartbeat")
+		}
 	}
 
 	// Record a heartbeat for the registering visor. This piggybacks on
@@ -766,4 +770,216 @@ func splitPKs(pks string) []string {
 		}
 	}
 	return result
+}
+
+/*
+	<<< TRANSPORT UPTIME ENDPOINTS >>>
+*/
+
+// GET /uptimes/transports
+// Lightweight transport uptime list.
+// Query params:
+//
+//	v=v2       — include type + daily percentages
+//	v=v3       — v2 + timeline bitmaps
+//	visors     — semicolon-separated PK hex list (transports involving these visors)
+//	tp         — semicolon-separated transport ID list
+//	type       — filter by transport type (stcpr, sudph)
+//	edges=true — include edge_a and edge_b in response
+func (api *API) getTransportUptimes(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	version := query.Get("v")
+	visorsParam := query.Get("visors")
+	tpParam := query.Get("tp")
+	tpType := query.Get("type")
+	includeEdges := query.Get("edges") == "true"
+	v2 := version == "v2" || version == "v3"
+	timeline := version == "v3"
+
+	var summaries []store.TransportUptimeSummary
+	var err error
+
+	if tpParam != "" {
+		// Filter by specific transport IDs.
+		ids := parseTpIDs(tpParam)
+		summaries, err = api.store.GetTransportUptimeSummaries(r.Context(), ids, v2, timeline)
+	} else if visorsParam != "" {
+		// Filter by visor PKs — get all transports for those visors.
+		for _, pkHex := range strings.Split(visorsParam, ";") {
+			pkHex = strings.TrimSpace(pkHex)
+			if pkHex == "" {
+				continue
+			}
+			var pk cipher.PubKey
+			if perr := pk.UnmarshalText([]byte(pkHex)); perr != nil {
+				continue
+			}
+			visorSummaries, verr := api.store.GetTransportUptimeByVisor(r.Context(), pk, v2, timeline)
+			if verr == nil {
+				summaries = append(summaries, visorSummaries...)
+			}
+		}
+	} else {
+		// All transports seen today — use the online set.
+		summaries, err = api.store.GetTransportUptimeSummaries(r.Context(), nil, v2, timeline)
+	}
+
+	if err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	// Filter by type if specified.
+	if tpType != "" {
+		filtered := make([]store.TransportUptimeSummary, 0, len(summaries))
+		for _, s := range summaries {
+			if s.Type == tpType {
+				filtered = append(filtered, s)
+			}
+		}
+		summaries = filtered
+	}
+
+	// Strip edges unless requested.
+	if !includeEdges {
+		for i := range summaries {
+			summaries[i].EdgeA = ""
+			summaries[i].EdgeB = ""
+		}
+	}
+
+	if summaries == nil {
+		summaries = []store.TransportUptimeSummary{}
+	}
+	httputil.WriteJSON(w, r, http.StatusOK, summaries)
+}
+
+// GET /metrics/uptime
+// Network-wide transport uptime aggregate.
+func (api *API) getNetworkTransportUptime(w http.ResponseWriter, r *http.Request) {
+	// Get all transport summaries (no filter = all seen today).
+	summaries, err := api.store.GetTransportUptimeSummaries(r.Context(), nil, false, false)
+	if err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	total := len(summaries)
+	online := 0
+	byType := make(map[string]struct{ Total, Online int })
+
+	for _, s := range summaries {
+		if s.Online {
+			online++
+		}
+		entry := byType[s.Type]
+		entry.Total++
+		if s.Online {
+			entry.Online++
+		}
+		byType[s.Type] = entry
+	}
+
+	type typeStats struct {
+		Total  int `json:"total"`
+		Online int `json:"online"`
+	}
+	resp := struct {
+		Total  int                  `json:"total_transports"`
+		Online int                  `json:"online"`
+		ByType map[string]typeStats `json:"by_type"`
+	}{
+		Total:  total,
+		Online: online,
+		ByType: make(map[string]typeStats),
+	}
+	for t, s := range byType {
+		resp.ByType[t] = typeStats{Total: s.Total, Online: s.Online}
+	}
+
+	httputil.WriteJSON(w, r, http.StatusOK, resp)
+}
+
+// GET /metrics/uptime/{ids}
+// Transport uptime for specific transport IDs (comma-separated).
+func (api *API) getTransportUptimeByIDs(w http.ResponseWriter, r *http.Request) {
+	idsParam := chi.URLParam(r, "ids")
+	ids, err := parseIDs(idsParam)
+	if err != nil || len(ids) == 0 {
+		api.writeError(w, r, ErrInvalidTransportID)
+		return
+	}
+
+	query := r.URL.Query()
+	version := query.Get("v")
+	v2 := version == "v2" || version == "v3"
+	timeline := version == "v3"
+	includeEdges := query.Get("edges") == "true"
+
+	summaries, err := api.store.GetTransportUptimeSummaries(r.Context(), ids, v2, timeline)
+	if err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	if !includeEdges {
+		for i := range summaries {
+			summaries[i].EdgeA = ""
+			summaries[i].EdgeB = ""
+		}
+	}
+
+	httputil.WriteJSON(w, r, http.StatusOK, summaries)
+}
+
+// GET /metrics/uptime/visor/{pks}
+// Transport uptime for transports of specific visors (comma-separated PKs).
+func (api *API) getTransportUptimeByVisors(w http.ResponseWriter, r *http.Request) {
+	pksParam := chi.URLParam(r, "pks")
+	pks, err := parsePKs(pksParam)
+	if err != nil || len(pks) == 0 {
+		api.writeError(w, r, ErrInvalidPubKey)
+		return
+	}
+
+	query := r.URL.Query()
+	version := query.Get("v")
+	v2 := version == "v2" || version == "v3"
+	timeline := version == "v3"
+	includeEdges := query.Get("edges") == "true"
+
+	var summaries []store.TransportUptimeSummary
+	for _, pk := range pks {
+		visorSummaries, verr := api.store.GetTransportUptimeByVisor(r.Context(), pk, v2, timeline)
+		if verr == nil {
+			summaries = append(summaries, visorSummaries...)
+		}
+	}
+
+	if !includeEdges {
+		for i := range summaries {
+			summaries[i].EdgeA = ""
+			summaries[i].EdgeB = ""
+		}
+	}
+
+	if summaries == nil {
+		summaries = []store.TransportUptimeSummary{}
+	}
+	httputil.WriteJSON(w, r, http.StatusOK, summaries)
+}
+
+// parseTpIDs parses semicolon-separated transport UUIDs.
+func parseTpIDs(param string) []uuid.UUID {
+	var ids []uuid.UUID
+	for _, s := range strings.Split(param, ";") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if id, err := uuid.Parse(s); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
