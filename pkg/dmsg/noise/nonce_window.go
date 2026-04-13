@@ -1,7 +1,9 @@
 // Package noise pkg/noise/nonce_window.go
 package noise
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // NonceWindowSize is the number of recent nonces tracked for replay prevention.
 // Must be a multiple of 64 for the bitmap implementation.

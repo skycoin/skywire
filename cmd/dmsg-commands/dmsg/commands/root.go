@@ -7,8 +7,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/spf13/cobra"
 
 	df "github.com/skycoin/skywire/cmd/dmsg-commands/conf/commands"
@@ -25,6 +23,8 @@ import (
 	dw "github.com/skycoin/skywire/cmd/dmsg-commands/dmsgweb/commands"
 	dsp "github.com/skycoin/skywire/cmd/dmsg-commands/self-ping/commands"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 )
 
 var (

@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"

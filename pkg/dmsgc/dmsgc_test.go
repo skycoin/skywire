@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 

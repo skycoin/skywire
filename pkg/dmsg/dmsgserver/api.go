@@ -14,13 +14,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/pires/go-proxyproto"
 	"github.com/sirupsen/logrus"
+
+	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-
-	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
 )
 
 // ServerAPI main object of the server
