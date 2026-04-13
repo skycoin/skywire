@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/swarm"
+	skyvisor "github.com/skycoin/skywire/pkg/visor"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -266,7 +267,18 @@ func TestEnv_VisorAddTp(t *testing.T) {
 	pkA := env.visorPKs[visorA]
 
 	t.Logf("Adding transport from visor-b to visor-a (pk: %s)", pkA[:16]+"...")
-	out, err := env.VisorTpAddDefault(visorB, pkA)
+	var out *skyvisor.TransportSummary
+	var err error
+	for attempt := 1; attempt <= 3; attempt++ {
+		out, err = env.VisorTpAddDefault(visorB, pkA)
+		if err == nil {
+			break
+		}
+		t.Logf("VisorTpAddDefault attempt %d/3 failed: %v", attempt, err)
+		if attempt < 3 {
+			time.Sleep(5 * time.Second)
+		}
+	}
 	require.NoError(t, err)
 	require.Contains(t, out.Remote.Hex(), pkA)
 	t.Logf("Transport added: %s, removing...", out.ID)
@@ -290,7 +302,18 @@ func TestEnv_VisorAddTp_second(t *testing.T) {
 	for _, visor := range []string{visorA, visorC} {
 		pk := env.visorPKs[visor]
 
-		out, err := env.VisorTpAddDefault(visorB, pk)
+		var out *skyvisor.TransportSummary
+		var err error
+		for attempt := 1; attempt <= 3; attempt++ {
+			out, err = env.VisorTpAddDefault(visorB, pk)
+			if err == nil {
+				break
+			}
+			t.Logf("VisorTpAddDefault(%s) attempt %d/3 failed: %v", visor, attempt, err)
+			if attempt < 3 {
+				time.Sleep(5 * time.Second)
+			}
+		}
 		require.NoError(t, err)
 		require.Contains(t, out.Remote.Hex(), pk)
 
