@@ -177,11 +177,20 @@ var RootCmd = &cobra.Command{
 			healthMux := http.NewServeMux()
 			healthMux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+
+				// Collect peer server PKs for the health response.
+				var peerPKs []string
+				for _, p := range conf.Peers {
+					peerPKs = append(peerPKs, p.PubKey.Hex())
+				}
+
 				resp := httputil.HealthCheckResponse{
-					ServiceName: "dmsg-server",
-					BuildInfo:   buildinfo.Get(),
-					StartedAt:   startedAt,
-					DmsgAddr:    dmsgAddr,
+					ServiceName:   "dmsg-server",
+					BuildInfo:     buildinfo.Get(),
+					StartedAt:     startedAt,
+					DmsgAddr:      dmsgAddr,
+					DmsgDiscovery: conf.Discovery,
+					PeerServers:   peerPKs,
 				}
 				json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 			})
