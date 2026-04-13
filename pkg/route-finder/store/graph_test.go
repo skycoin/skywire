@@ -74,6 +74,22 @@ func (m *mockStore) GetDailyTimeline(_ context.Context, _ string, _ time.Time) m
 	return nil
 }
 
+func (m *mockStore) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
+
+func (m *mockStore) GetTransportUptimeSummaries(_ context.Context, _ []uuid.UUID, _ bool, _ bool) ([]tpdstore.TransportUptimeSummary, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetTransportUptimeByVisor(_ context.Context, _ cipher.PubKey, _ bool, _ bool) ([]tpdstore.TransportUptimeSummary, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetTransportDailyTimeline(_ context.Context, _ string, _ time.Time) map[string]string {
+	return nil
+}
+
 func (m *mockStore) BackupAndCleanOldBandwidth(_ context.Context, _ string) error {
 	return nil
 }
