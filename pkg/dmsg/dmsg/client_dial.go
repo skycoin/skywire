@@ -40,8 +40,13 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		// Only attempt if context has enough remaining time to avoid races.
 		if ctx.Err() == nil && ce.hasEnoughTimeForFallback(ctx) {
 			ce.log.WithError(discErr).Debug("Discovery lookup failed, trying connected servers")
-			// Use a separate context for fallback to avoid racing with parent cancel.
-			fallbackCtx, fallbackCancel := context.WithTimeout(context.Background(), HandshakeTimeout)
+			// Use a separate context with enough budget for multiple servers.
+			// Each server attempt takes up to HandshakeTimeout (5s), so budget
+			// for all connected sessions (typically 6) plus a small margin.
+			// The old code used a single HandshakeTimeout which only allowed
+			// trying the first (lowest latency) server — if the destination's
+			// direct client was on a different server, it was never reached.
+			fallbackCtx, fallbackCancel := context.WithTimeout(context.Background(), 6*HandshakeTimeout)
 			defer fallbackCancel()
 			stream, err := ce.dialViaConnectedServers(fallbackCtx, addr)
 			if err == nil {
@@ -255,9 +260,22 @@ func (ce *Client) hasEnoughTimeForFallback(ctx context.Context) bool {
 
 // dialViaConnectedServers tries all connected server sessions as forwarders.
 // Used when the destination PK is not registered in discovery (e.g. direct clients).
+// If the destination PK matches a connected server, that server is tried FIRST —
+// its direct client is connected to itself, so forwarding is guaranteed to work
+// if the direct client is running.
 func (ce *Client) dialViaConnectedServers(ctx context.Context, addr Addr) (*Stream, error) {
 	sessions := ce.allClientSessions(ce.porter)
 	sortSessionsByLatency(sessions)
+
+	// Prioritize the session to the destination PK itself — if the visor
+	// is connected to the server whose services it wants to reach, that
+	// server can forward to its own direct client immediately.
+	for i, ses := range sessions {
+		if ses.RemotePK() == addr.PK && i > 0 {
+			sessions[0], sessions[i] = sessions[i], sessions[0]
+			break
+		}
+	}
 
 	for _, ses := range sessions {
 		if ctx.Err() != nil {
