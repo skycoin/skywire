@@ -49,6 +49,11 @@ type ManagerConfig struct {
 // If latency > 0, it will be set on the transport.
 type TransportCreatedCallback func(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (latencyMs float64)
 
+// RouteChecker is called before tearing down an existing transport for re-creation.
+// It returns true if any active routing rule references the given transport ID,
+// meaning the transport is actively carrying route traffic and must not be torn down.
+type RouteChecker func(tpID uuid.UUID) bool
+
 // Manager manages Transports.
 type Manager struct {
 	Logger   *logging.Logger
@@ -72,6 +77,11 @@ type Manager struct {
 	// Used by the visor to measure transport latency via the router.
 	onTransportCreated   TransportCreatedCallback
 	onTransportCreatedMu sync.RWMutex
+
+	// routeChecker is called before tearing down an existing transport for re-creation.
+	// If it returns true, the transport has active routes and must not be torn down.
+	routeChecker   RouteChecker
+	routeCheckerMu sync.RWMutex
 
 	// syncTPDData enables syncing all TPD data on transport re-registration
 	syncTPDData   bool
@@ -358,6 +368,27 @@ func (tm *Manager) SetOnTransportCreated(cb TransportCreatedCallback) {
 	tm.onTransportCreated = cb
 }
 
+// SetRouteChecker sets the callback used to determine if a transport has active routes.
+// When set, transport re-creation is blocked for transports that are currently
+// referenced by routing rules, protecting in-flight route traffic.
+func (tm *Manager) SetRouteChecker(rc RouteChecker) {
+	tm.routeCheckerMu.Lock()
+	defer tm.routeCheckerMu.Unlock()
+	tm.routeChecker = rc
+}
+
+// hasActiveRoutes calls the registered RouteChecker to test if tpID is in use.
+// Returns false (safe to tear down) when no checker is registered.
+func (tm *Manager) hasActiveRoutes(tpID uuid.UUID) bool {
+	tm.routeCheckerMu.RLock()
+	rc := tm.routeChecker
+	tm.routeCheckerMu.RUnlock()
+	if rc == nil {
+		return false
+	}
+	return rc(tpID)
+}
+
 // SetSyncTPDData enables or disables syncing TPD data on transport re-registration.
 func (tm *Manager) SetSyncTPDData(enabled bool) {
 	tm.syncTPDDataMu.Lock()
@@ -628,6 +659,19 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 
 		tm.tps[tpID] = mTp
 	} else {
+		// Transport already exists. Before allowing Accept() to tear down the
+		// underlying connection (via setTransport), check whether any routing
+		// rule currently references this transport ID. If yes, tearing it down
+		// would break active routes, so we return the existing transport instead.
+		if tm.hasActiveRoutes(tpID) {
+			tm.Logger.WithField("tp_id", tpID).
+				WithField("remote_pk", transport.RemotePK()).
+				Warn("Rejecting transport re-creation: existing transport has active routes")
+			if err := transport.Close(); err != nil {
+				tm.Logger.WithError(err).Warn("Failed to close incoming transport rejected due to active routes")
+			}
+			return nil
+		}
 		tm.Logger.Debugln("TP found, accepting...")
 	}
 
