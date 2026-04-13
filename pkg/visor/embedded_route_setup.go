@@ -59,13 +59,16 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 		metrics = ers.stats
 	}
 
-	// Limit concurrent route setup requests. Each request dials 2 visors
-	// and holds ports for up to HandshakeTimeout (5s). With the circuit
-	// breaker fast-failing known-bad destinations (0ms) and sequential
-	// phase dial bounded by HandshakeTimeout, most slots free quickly.
-	// 128 allows burst absorption while staying well within the porter's
-	// 16K ephemeral port range (128 × 2 × 6 = 1536 ports worst case).
-	const maxConcurrent = 128
+	// Limit concurrent route setup requests. Each request dials remote
+	// visors via dmsg, reserving ephemeral ports for up to
+	// HandshakeTimeout (5s) per dial attempt. With sequential phase
+	// dial trying up to 6 servers per destination, a single request
+	// can hold ~12 ports at peak. The circuit breaker fast-fails
+	// known-bad destinations (0ms), but new/unknown destinations
+	// still burn ports until they time out. 32 concurrent × 12 ports
+	// = 384 ports worst case — well within the 16K porter range
+	// while leaving headroom for the visor's own dmsg operations.
+	const maxConcurrent = 32
 	sem := make(chan struct{}, maxConcurrent)
 
 	for {
