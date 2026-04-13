@@ -229,10 +229,13 @@ func (s *memoryStore) GetTransportBandwidth(context.Context, uuid.UUID, string, 
 func (s *memoryStore) GetVisorBandwidth(context.Context, cipher.PubKey, string, int) ([]store.BandwidthAggregation, error) {
 	return nil, nil
 }
-func (s *memoryStore) GetAllVisorSummaries(context.Context, bool) ([]store.VisorSummary, error) {
+func (s *memoryStore) GetAllVisorSummaries(context.Context, bool, bool) ([]store.VisorSummary, error) {
 	return nil, nil
 }
 func (s *memoryStore) RecordHeartbeat(context.Context, cipher.PubKey, string) error {
+	return nil
+}
+func (s *memoryStore) GetDailyTimeline(context.Context, string, time.Time) map[string]string {
 	return nil
 }
 func (s *memoryStore) BackupAndCleanOldBandwidth(context.Context, string) error { return nil }

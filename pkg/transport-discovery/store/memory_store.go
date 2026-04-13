@@ -148,7 +148,7 @@ func (s *memoryStore) GetVisorBandwidth(_ context.Context, _ cipher.PubKey, _ st
 // GetAllVisorSummaries groups in-memory transports by visor PK, returns uptime summaries.
 // Online status is determined by having active transports.
 // Version and Daily fields require uptime tracker integration.
-func (s *memoryStore) GetAllVisorSummaries(_ context.Context, _ bool) ([]VisorSummary, error) {
+func (s *memoryStore) GetAllVisorSummaries(_ context.Context, _ bool, _ bool) ([]VisorSummary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -173,6 +173,11 @@ func (s *memoryStore) GetAllVisorSummaries(_ context.Context, _ bool) ([]VisorSu
 
 // RecordHeartbeat is a no-op for memory store.
 func (s *memoryStore) RecordHeartbeat(_ context.Context, _ cipher.PubKey, _ string) error {
+	return nil
+}
+
+// GetDailyTimeline is a no-op for memory store.
+func (s *memoryStore) GetDailyTimeline(_ context.Context, _ string, _ time.Time) map[string]string {
 	return nil
 }
 
