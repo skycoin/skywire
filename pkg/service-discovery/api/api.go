@@ -360,13 +360,22 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Best-effort probe: try to reach the visor on dmsg port 136
-		// to check route-setup reachability. Log the result but do NOT
-		// reject the registration on failure — the SD's direct dmsg
-		// client may not have sessions to all servers the visor uses,
-		// and a 3s probe timeout is not sufficient to confirm
-		// unreachability with certainty. The probe result is recorded
-		// for diagnostic purposes (future: expose in /uptimes).
+		// Probe the visor on dmsg port 136 to confirm it's reachable
+		// for route setup. The noise handshake completing confirms the
+		// visor is alive and routable — the visor's router will close
+		// the stream immediately (SD PK is not a whitelisted setup
+		// node) but the handshake success is all we need.
+		//
+		// The SD's direct client doesn't have visor entries in its
+		// local discovery, so every probe falls back to
+		// dialViaConnectedServers which tries servers sequentially.
+		// Budget 15s: enough for 2-3 server attempts at 5s each.
+		// The SD connects to all 6 servers, so there is guaranteed
+		// to be a shared server with any visor on the network.
+		//
+		// Cache successful probes for 5 minutes so the 90s heartbeat
+		// doesn't re-probe every time. Failed probes are cached for
+		// 30s to allow quick retry.
 		if a.DmsgClient != nil {
 			pkHex := se.Addr.PubKey().Hex()
 			needsProbe := true
@@ -378,16 +387,17 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 			a.probeCacheMu.Unlock()
 
 			if needsProbe {
-				probeCtx, probeCancel := context.WithTimeout(r.Context(), 3*time.Second)
+				probeCtx, probeCancel := context.WithTimeout(context.Background(), 15*time.Second)
 				reachable := a.DmsgClient.Probe(probeCtx, se.Addr.PubKey(), skyenv.DmsgAwaitSetupPort)
 				probeCancel()
-				if reachable {
-					a.probeCacheMu.Lock()
-					a.probeCache[pkHex] = time.Now()
-					a.probeCacheMu.Unlock()
-				} else {
-					a.log.WithField("pk", se.Addr.PubKey()).Debug("Public visor dmsg probe failed (registration allowed)")
+				if !reachable {
+					a.log.WithField("pk", se.Addr.PubKey()).Warn("Public visor registration rejected: not reachable on dmsg port 136")
+					a.writeError(w, r, http.StatusForbidden, "visor not reachable on dmsg for route setup")
+					return
 				}
+				a.probeCacheMu.Lock()
+				a.probeCache[pkHex] = time.Now()
+				a.probeCacheMu.Unlock()
 			}
 		}
 	}
