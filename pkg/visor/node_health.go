@@ -180,6 +180,14 @@ func (nht *NodeHealthTracker) checkTPSHealth(ctx context.Context, pk cipher.PubK
 
 // doTPSHealthCheck performs the actual TPS health check via dmsg.
 func (nht *NodeHealthTracker) doTPSHealthCheck(ctx context.Context, pk cipher.PubKey) error {
+	// Quick discovery lookup before dialing — if the PK isn't registered
+	// as a client in dmsg-discovery, there's no point dialing (it would
+	// fall back to dialViaConnectedServers and burn port reservations
+	// for 15s across all 6 servers for nothing).
+	if _, err := nht.dmsgC.DiscEntry(ctx, pk); err != nil {
+		return fmt.Errorf("not in dmsg discovery: %w", err)
+	}
+
 	checkCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -235,6 +243,10 @@ func (nht *NodeHealthTracker) checkRSNHealth(ctx context.Context, pk cipher.PubK
 
 // doRSNHealthCheck performs the actual RSN health check via dmsg.
 func (nht *NodeHealthTracker) doRSNHealthCheck(ctx context.Context, pk cipher.PubKey) error {
+	if _, err := nht.dmsgC.DiscEntry(ctx, pk); err != nil {
+		return fmt.Errorf("not in dmsg discovery: %w", err)
+	}
+
 	checkCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
