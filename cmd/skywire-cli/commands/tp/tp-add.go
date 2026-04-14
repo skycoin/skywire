@@ -36,12 +36,11 @@ var (
 	timeout          time.Duration
 	rpk              string
 	cacheFilesAge    int
-	retries int
-	userLabel        bool
-	noRegister       bool
-	remoteVisorPKs   []string
-
-// queryHealth	bool
+	retries  int
+	userLabel    bool
+	noRegister   bool
+	noProbe      bool
+	remoteVisorPKs []string
 )
 
 func init() {
@@ -52,6 +51,7 @@ func init() {
 	addTpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	addTpCmd.Flags().BoolVarP(&userLabel, "user", "u", false, "set transport label to 'user' (default is 'skycoin')")
 	addTpCmd.Flags().BoolVar(&noRegister, "no-register", false, "skip transport discovery registration (implies --user)")
+	addTpCmd.Flags().BoolVar(&noProbe, "no-probe", false, "skip dmsg port 136 reachability probe before adding transport")
 	addTpCmd.Flags().StringSliceVar(&remoteVisorPKs, "remote", nil, "request transport via TPS on remote visor(s) (comma-separated PKs)")
 	addTpCmd.Flags().StringVar(&stcpAddr, "addr", "", "remote address (ip:port) for stcp transport")
 	clirpc.RegisterFetchFlags(addTpCmd)
@@ -268,6 +268,22 @@ var addTpCmd = &cobra.Command{
 		for i, pk := range pks {
 			if len(pks) > 1 && !isJSON {
 				fmt.Printf("[%d/%d] Adding transport to %s...\n", i+1, len(pks), pk.String()[:16]+"...")
+			}
+
+			// Probe dmsg port 136 to check if route setup can reach the
+			// destination. If unreachable, the transport will establish
+			// (p2p) but latency measurement will fail because the RSN
+			// can't set up a route to it.
+			if !noProbe {
+				reachable, probeErr := rpcClient.DmsgProbe(pk, 136)
+				if probeErr == nil && !reachable {
+					if !isJSON {
+						logger.Warnf("Skipping %s: not reachable on dmsg port 136 (route setup will fail)", pk.String()[:16])
+					}
+					failCount++
+					continue
+				}
+				// If probe itself errors (e.g., no dmsg client), proceed anyway
 			}
 
 			var tp *visor.TransportSummary

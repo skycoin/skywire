@@ -680,6 +680,18 @@ func dmsgClientServerPKs(c *dmsg.Client) []cipher.PubKey {
 	return out
 }
 
+// DmsgProbe checks whether a remote PK is reachable on a given dmsg port
+// by performing a DialStream + immediate Close. The noise handshake completing
+// confirms end-to-end reachability. Returns true if reachable.
+func (v *Visor) DmsgProbe(pk cipher.PubKey, port uint16) (bool, error) {
+	if err := v.mustWaitDmsgReady(); err != nil {
+		return false, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return v.dmsgC.Probe(ctx, pk, port), nil
+}
+
 // DmsgHTTP implements API. Performs an HTTP request over dmsg using the visor's dmsg client.
 func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	if err := v.mustWaitDmsgReady(); err != nil {

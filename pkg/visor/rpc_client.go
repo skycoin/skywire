@@ -986,6 +986,13 @@ func (rc *rpcClient) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	return &resp, err
 }
 
+// DmsgProbe checks dmsg reachability of a remote PK on a given port.
+func (rc *rpcClient) DmsgProbe(pk cipher.PubKey, port uint16) (bool, error) {
+	var reachable bool
+	err := rc.Call("DmsgProbe", &DmsgProbeRequest{PK: pk, Port: port}, &reachable)
+	return reachable, err
+}
+
 // DmsgConnectAll triggers a one-shot connect-to-all-dmsg-servers action.
 func (rc *rpcClient) DmsgConnectAll() (*DmsgConnectAllResult, error) {
 	var resp DmsgConnectAllResult

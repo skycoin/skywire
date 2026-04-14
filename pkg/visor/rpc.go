@@ -1247,6 +1247,24 @@ func (r *RPC) UIServerStatus(_ *struct{}, out *UIServerStatus) (err error) {
 }
 
 // DmsgHTTP performs an HTTP request over dmsg using the visor's dmsg client.
+// DmsgProbeRequest is the RPC argument for DmsgProbe.
+type DmsgProbeRequest struct {
+	PK   cipher.PubKey
+	Port uint16
+}
+
+// DmsgProbe checks dmsg reachability of a remote PK on a given port.
+func (r *RPC) DmsgProbe(req *DmsgProbeRequest, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgProbe", req)(out, &err)
+
+	reachable, err := r.visor.DmsgProbe(req.PK, req.Port)
+	if err != nil {
+		return err
+	}
+	*out = reachable
+	return nil
+}
+
 func (r *RPC) DmsgHTTP(req *DmsgHTTPRequest, out *DmsgHTTPResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgHTTP", req)(out, &err)
 

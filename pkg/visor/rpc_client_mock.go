@@ -1037,6 +1037,11 @@ func (mc *mockRPCClient) DmsgHTTP(_ DmsgHTTPRequest) (*DmsgHTTPResponse, error) 
 	return &DmsgHTTPResponse{StatusCode: 200, Status: "OK"}, nil
 }
 
+// DmsgProbe implements API.
+func (mc *mockRPCClient) DmsgProbe(_ cipher.PubKey, _ uint16) (bool, error) {
+	return true, nil
+}
+
 // DmsgConnectAll implements API.
 func (mc *mockRPCClient) DmsgConnectAll() (*DmsgConnectAllResult, error) {
 	return &DmsgConnectAllResult{}, nil

@@ -181,6 +181,7 @@ type API interface {
 	UIServerStatus() (*UIServerStatus, error)
 
 	//dmsg utilities
+	DmsgProbe(pk cipher.PubKey, port uint16) (bool, error)
 	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
 	DmsgConnectAll() (*DmsgConnectAllResult, error)
 	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
