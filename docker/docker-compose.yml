@@ -109,6 +109,7 @@ services:
       intra:
         ipv4_address: 174.0.0.248
     environment:
+      - GODEBUG=madvdontneed=1
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=postgres
@@ -138,6 +139,8 @@ services:
     depends_on:
       tpd-redis:
         condition: service_healthy
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: "/release/skywire svc tpd --addr :9094 --pprof :6094 --redis redis://tpd-redis:6379 --entry-timeout 2m --sk 85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8 --dmsg-disc http://dmsg-discovery:9090"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:6094/debug/service"]
@@ -164,6 +167,8 @@ services:
         condition: service_healthy
       tpd-redis:
         condition: service_healthy
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: "/release/skywire svc rf --addr :9092 --pprof :6092 --redis redis://tpd-redis:6379 --sk 640905f9fd60d6bf1ee88519f61035765d65319d9f3bac6c5f2fc14ea5cf15ca --dmsg-disc http://dmsg-discovery:9090"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:6092/debug/service"]
@@ -189,6 +194,8 @@ services:
         condition: service_healthy
       transport-discovery:
         condition: service_healthy
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: "/release/skywire dmsg disc --addr :9090 --redis redis://dmsgd-redis:6379 --sk b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714 -t"
     healthcheck:
       test: ["CMD", "/release/skywire", "util", "got", "head", "http://127.0.0.1:9090/dmsg-discovery/available_servers"]
@@ -212,6 +219,8 @@ services:
       dmsg-discovery:
         condition: service_healthy
     restart: always
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: "/release/skywire dmsg server start /release/dmsg-server.json"
     volumes:
       - type: bind
@@ -234,6 +243,8 @@ services:
     depends_on:
       - dmsg-server
     restart: always
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: /release/skywire svc sn -q http -r :6070 /release/setup-node.json
     volumes:
       - type: bind
@@ -259,6 +270,8 @@ services:
         condition: service_healthy
       sd-redis:
         condition: service_healthy
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: "/release/skywire svc sd --addr :9091 --pprof :6091 --redis redis://sd-redis:6379 --entry-timeout 2m --sk ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f --dmsg-disc http://dmsg-discovery:9090"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:6091/debug/service"]
@@ -286,9 +299,12 @@ services:
       postgres-db:
         condition: service_healthy
     environment:
+      - GODEBUG=madvdontneed=1
       - PG_USER=postgres
       - PG_PASSWORD=postgres
       - PG_DATABASE=postgres
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: "/release/skywire svc ut --addr :9095 --pprof :6095 --pg-host postgres-db --pg-port 5432 --redis redis://ut-redis:6379 --sk e20681b4fd1eb1904ebfbf8fba79a138bbac481e1c3f77bcfab3a877525fda32 --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t
@@ -307,6 +323,8 @@ services:
       ar-redis:
         condition: service_healthy
     restart: always
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: "/release/skywire svc ar --addr :9093 --udp-addr :9093 --pprof :6093 --redis redis://ar-redis:6379 --entry-timeout 2m --sk 1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a --dmsg-disc http://dmsg-discovery:9090"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:6093/debug/service"]
@@ -327,6 +345,8 @@ services:
       intra:
         ipv4_address: 174.0.0.17
     restart: always
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: "/release/skywire svc stun --primary-ip 173.0.0.17 --secondary-ip 174.0.0.17 --port 3478 --alt-port 3479"
 
   transport-setup:
@@ -342,6 +362,8 @@ services:
     depends_on:
       - dmsg-server
     restart: always
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: /release/skywire svc tps -c /release/transport-setup.json
     volumes:
       - type: bind
@@ -385,6 +407,8 @@ services:
     depends_on:
       - visor-b
     restart: always
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
     healthcheck:
       test: [
@@ -443,6 +467,8 @@ services:
       dmsg-server:
         condition: service_started
     restart: always
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
     healthcheck:
       test: [
@@ -486,6 +512,8 @@ services:
     depends_on:
       - visor-a
     restart: always
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
     healthcheck:
       test: [
@@ -582,6 +610,8 @@ services:
         ipv4_address: 175.0.0.30  
       intra:
         ipv4_address: 174.0.0.30
+    environment:
+      - GODEBUG=madvdontneed=1
     entrypoint: "/release/skywire svc nm --addr :9080 --pprof :6080 --ut-url http://uptime-tracker:9095 --tpd-url http://transport-discovery:9094 --sd-url http://service-discovery:9091 --dmsgd-url http://dmsg-discovery:9090 --ar-url http://address-resolver:9093"
     depends_on:
       - visor-c
@@ -619,6 +649,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Add Docker socket
     working_dir: /workspace
     environment:
+      - GODEBUG=madvdontneed=1
       - CGO_ENABLED=0
       - SKYDEPLOY=/workspace/docker/integration/services-config.json
     depends_on:
