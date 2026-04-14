@@ -220,7 +220,12 @@ func (a *API) allEntries() func(w http.ResponseWriter, r *http.Request) {
 func (a *API) batchEntries() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var pks []string
-		if err := json.Unmarshal(func() []byte { b, _ := io.ReadAll(r.Body); return b }(), &pks); err != nil {
+		body, readErr := io.ReadAll(r.Body)
+		if readErr != nil {
+			a.handleError(w, r, disc.ErrBadInput)
+			return
+		}
+		if err := json.Unmarshal(body, &pks); err != nil {
 			a.handleError(w, r, disc.ErrBadInput)
 			return
 		}

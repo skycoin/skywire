@@ -22,7 +22,7 @@ var (
 	rootnode         cipher.PubKey
 	lastnode         cipher.PubKey
 	cacheFileTPD     string
-	cacheFileUT string
+	cacheFileUT      string
 	cacheFileSDProxy string
 	cacheFileSDVPN   string
 	cacheFileSDVisor string
@@ -36,11 +36,11 @@ var (
 	timeout          time.Duration
 	rpk              string
 	cacheFilesAge    int
-	retries  int
-	userLabel    bool
-	noRegister   bool
-	noProbe      bool
-	remoteVisorPKs []string
+	retries          int
+	userLabel        bool
+	noRegister       bool
+	noProbe          bool
+	remoteVisorPKs   []string
 )
 
 func init() {
