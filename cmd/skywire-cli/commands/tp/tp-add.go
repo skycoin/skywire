@@ -4,9 +4,9 @@ package clitp
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
-	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -270,21 +270,18 @@ var addTpCmd = &cobra.Command{
 			return
 		}
 
-		// Fetch dmsg discovery data once (for all PKs) - only used for dmsg transport checks
-		var dmsgkeys []string
+		// Check dmsg discovery for target PKs — only fetch entries for
+		// the specific PKs we're about to dial, not the entire discovery.
+		dmsgAvailable := make(map[string]bool)
 		if !forceAttempt && (transportType == "" || transportType == "dmsg") {
-			dmsgEntries := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileDmsgD, dmsgdURL+"/dmsg-discovery/entries", cacheFilesAge)
-			dmsgkeys, _ = script.Echo(dmsgEntries).JQ(".[]").Replace(`"`, "").Slice() //nolint:errcheck
-		}
-
-		// Helper to check if pk is in slice
-		contains := func(slice []string, s string) bool {
-			for _, item := range slice {
-				if item == s {
-					return true
+			for _, pk := range pks {
+				pkStr := pk.String()
+				entryJSON := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileDmsgD, dmsgdURL+"/dmsg-discovery/entry/"+pkStr, cacheFilesAge)
+				// If the entry exists and has client data with delegated servers, it's available
+				if entryJSON != "" && !strings.Contains(entryJSON, "error") && strings.Contains(entryJSON, "delegated_servers") {
+					dmsgAvailable[pkStr] = true
 				}
 			}
-			return false
 		}
 
 		// Process each public key
@@ -299,7 +296,7 @@ var addTpCmd = &cobra.Command{
 			}
 
 			// Check dmsg availability if dmsg is explicitly requested
-			if !forceAttempt && transportType == "dmsg" && !contains(dmsgkeys, pk.String()) {
+			if !forceAttempt && transportType == "dmsg" && !dmsgAvailable[pk.String()] {
 				if !isJSON {
 					logger.Warnf("Skipping %s: not found in dmsg discovery", pk.String()[:16])
 				}
@@ -339,7 +336,7 @@ var addTpCmd = &cobra.Command{
 					types.SUDPH,
 				}
 				// Only include dmsg if found in dmsg discovery (or force is set)
-				if forceAttempt || contains(dmsgkeys, pk.String()) {
+				if forceAttempt || dmsgAvailable[pk.String()] {
 					transportTypes = append(transportTypes, types.DMSG)
 				}
 
