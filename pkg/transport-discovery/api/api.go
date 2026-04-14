@@ -137,6 +137,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Group(func(r chi.Router) {
 		r.Use(api.rateLimiter.Middleware())
 
+		r.Post("/transports/edges", api.getTransportsByEdges)
 		r.Get("/all-transports", api.getAllTransports)
 		r.Get("/all-transports/stats", api.getAllTransportsStats)
 		r.Get("/all-transports/per-key-stats", api.getAllTransportsPerKeyStats)

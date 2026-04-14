@@ -97,6 +97,42 @@ func (api *API) getTransportByID(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, r, http.StatusOK, entry)
 }
 
+// POST /transports/edges
+// Accepts a JSON array of PK hex strings and returns all transports
+// involving any of those PKs. More efficient than calling
+// GET /transports/edge:{edge} multiple times or fetching /all-transports.
+func (api *API) getTransportsByEdges(w http.ResponseWriter, r *http.Request) {
+	var pks []string
+	if err := json.NewDecoder(r.Body).Decode(&pks); err != nil {
+		api.writeError(w, r, ErrInvalidPubKey)
+		return
+	}
+
+	seen := make(map[uuid.UUID]bool)
+	var result []*transport.Entry
+	for _, pkStr := range pks {
+		pk := cipher.PubKey{}
+		if err := pk.UnmarshalText([]byte(strings.TrimSpace(pkStr))); err != nil {
+			continue
+		}
+		entries, err := api.store.GetTransportsByEdge(r.Context(), pk)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !seen[e.ID] {
+				seen[e.ID] = true
+				result = append(result, e)
+			}
+		}
+	}
+
+	if result == nil {
+		result = []*transport.Entry{}
+	}
+	httputil.WriteJSON(w, r, http.StatusOK, result)
+}
+
 func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 	edgeParam := chi.URLParam(r, "edge")
 

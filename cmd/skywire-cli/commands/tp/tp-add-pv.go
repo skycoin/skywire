@@ -68,7 +68,7 @@ func init() {
 	addPvCmd.Flags().StringVarP(&pvTransportType, "type", "t", "", "transport type (stcpr, sudph, dmsg)")
 	addPvCmd.Flags().DurationVarP(&pvTimeout, "timeout", "o", 0, "operation timeout")
 	addPvCmd.Flags().StringVarP(&pvSDURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
-	addPvCmd.Flags().StringVarP(&pvUTURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
+	addPvCmd.Flags().StringVarP(&pvUTURL, "uturl", "w", deployment.Prod.TransportDiscovery, "uptime tracker url (TPD integrated)")
 	addPvCmd.Flags().StringVarP(&pvTPDURL, "tpdurl", "d", deployment.Prod.TransportDiscovery, "transport discovery url")
 	addPvCmd.Flags().StringVar(&pvDmsgURL, "dmsg", deployment.Prod.DmsgDiscovery, "dmsg discovery url")
 	addPvCmd.Flags().StringVar(&pvCacheFileSD, "cfs", os.TempDir()+"/visorsd.json", "SD cache file location")
