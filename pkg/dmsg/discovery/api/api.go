@@ -134,6 +134,7 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	r.Post("/dmsg-discovery/entry/{pk}", api.setEntry())
 	r.Delete("/dmsg-discovery/entry", api.delEntry())
 	r.Get("/dmsg-discovery/entries", api.allEntries())
+	r.Post("/dmsg-discovery/entries/batch", api.batchEntries())
 	r.Get("/dmsg-discovery/visorEntries", api.allVisorEntries())
 	r.Delete("/dmsg-discovery/deregister", api.deregisterEntry())
 	r.Get("/dmsg-discovery/available_servers", api.getAvailableServers())
@@ -209,6 +210,35 @@ func (a *API) allEntries() func(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.writeJSON(w, r, http.StatusOK, entries)
+	}
+}
+
+// batchEntries returns entries for a list of specific PKs.
+// URI: /dmsg-discovery/entries/batch
+// Method: POST
+// Body: JSON array of PK hex strings
+func (a *API) batchEntries() func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var pks []string
+		if err := json.Unmarshal(func() []byte { b, _ := io.ReadAll(r.Body); return b }(), &pks); err != nil {
+			a.handleError(w, r, disc.ErrBadInput)
+			return
+		}
+
+		result := make(map[string]*disc.Entry)
+		for _, pkStr := range pks {
+			pk := cipher.PubKey{}
+			if err := pk.UnmarshalText([]byte(strings.TrimSpace(pkStr))); err != nil {
+				continue
+			}
+			entry, err := a.db.Entry(r.Context(), pk)
+			if err != nil {
+				continue
+			}
+			result[pkStr] = entry
+		}
+
+		a.writeJSON(w, r, http.StatusOK, result)
 	}
 }
 
