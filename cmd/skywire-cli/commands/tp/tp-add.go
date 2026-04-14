@@ -4,14 +4,12 @@ package clitp
 import (
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -24,8 +22,7 @@ var (
 	rootnode         cipher.PubKey
 	lastnode         cipher.PubKey
 	cacheFileTPD     string
-	cacheFileDmsgD   string
-	cacheFileUT      string
+	cacheFileUT string
 	cacheFileSDProxy string
 	cacheFileSDVPN   string
 	cacheFileSDVisor string
@@ -39,9 +36,7 @@ var (
 	timeout          time.Duration
 	rpk              string
 	cacheFilesAge    int
-	forceAttempt     bool
-	dmsgdURL         string
-	retries          int
+	retries int
 	userLabel        bool
 	noRegister       bool
 	remoteVisorPKs   []string
@@ -53,12 +48,6 @@ func init() {
 	addTpCmd.Flags().StringVarP(&rpk, "rpk", "r", "", "remote public key.")
 	addTpCmd.Flags().StringVarP(&transportType, "type", "t", "", "type of transport to add.")
 	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "o", 0, "if specified, sets an operation timeout")
-	addTpCmd.Flags().StringVarP(&dmsgdURL, "dmsg", "d", deployment.Prod.DmsgDiscovery, "dmsg discovery URL")
-	//TODO
-	//	listCmd.Flags().BoolVarP(&queryHealth, "health", "q", false, "check /health of remote visor over dmsg before creating transport")
-	addTpCmd.Flags().BoolVarP(&forceAttempt, "force", "f", false, "attempt dmsg transport creation without checking dmsg discovery")
-	addTpCmd.Flags().StringVar(&cacheFileDmsgD, "cfdd", os.TempDir()+"/dmsgd.json", "Dmsg Discovery cache file location")
-	addTpCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	addTpCmd.Flags().IntVarP(&retries, "retries", "n", 1, "number of times to retry per transport type")
 	addTpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	addTpCmd.Flags().BoolVarP(&userLabel, "user", "u", false, "set transport label to 'user' (default is 'skycoin')")
@@ -270,20 +259,6 @@ var addTpCmd = &cobra.Command{
 			return
 		}
 
-		// Check dmsg discovery for target PKs — only fetch entries for
-		// the specific PKs we're about to dial, not the entire discovery.
-		dmsgAvailable := make(map[string]bool)
-		if !forceAttempt && (transportType == "" || transportType == "dmsg") {
-			for _, pk := range pks {
-				pkStr := pk.String()
-				entryJSON := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileDmsgD, dmsgdURL+"/dmsg-discovery/entry/"+pkStr, cacheFilesAge)
-				// If the entry exists and has client data with delegated servers, it's available
-				if entryJSON != "" && !strings.Contains(entryJSON, "error") && strings.Contains(entryJSON, "delegated_servers") {
-					dmsgAvailable[pkStr] = true
-				}
-			}
-		}
-
 		// Process each public key
 		var results []*visor.TransportSummary
 		var lastErr error
@@ -293,15 +268,6 @@ var addTpCmd = &cobra.Command{
 		for i, pk := range pks {
 			if len(pks) > 1 && !isJSON {
 				fmt.Printf("[%d/%d] Adding transport to %s...\n", i+1, len(pks), pk.String()[:16]+"...")
-			}
-
-			// Check dmsg availability if dmsg is explicitly requested
-			if !forceAttempt && transportType == "dmsg" && !dmsgAvailable[pk.String()] {
-				if !isJSON {
-					logger.Warnf("Skipping %s: not found in dmsg discovery", pk.String()[:16])
-				}
-				failCount++
-				continue
 			}
 
 			var tp *visor.TransportSummary
@@ -330,14 +296,13 @@ var addTpCmd = &cobra.Command{
 					continue
 				}
 			} else {
-				// No transport type specified - try stcpr, sudph, dmsg in order
+				// No transport type specified - try stcpr, sudph, dmsg in order.
+				// The visor will return "entry not found in discovery" for dmsg
+				// if the PK is not registered — no need to pre-check.
 				transportTypes := []types.Type{
 					types.STCPR,
 					types.SUDPH,
-				}
-				// Only include dmsg if found in dmsg discovery (or force is set)
-				if forceAttempt || dmsgAvailable[pk.String()] {
-					transportTypes = append(transportTypes, types.DMSG)
+					types.DMSG,
 				}
 
 			typeLoop:
