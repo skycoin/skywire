@@ -361,10 +361,21 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Probe the visor on dmsg port 136 to confirm it's reachable
-		// for route setup. If the probe fails, the visor is running but
-		// unroutable — don't list it as a public visor.
+		// for route setup. The noise handshake completing confirms the
+		// visor is alive and routable — the visor's router will close
+		// the stream immediately (SD PK is not a whitelisted setup
+		// node) but the handshake success is all we need.
+		//
+		// The SD's direct client doesn't have visor entries in its
+		// local discovery, so every probe falls back to
+		// dialViaConnectedServers which tries servers sequentially.
+		// Budget 15s: enough for 2-3 server attempts at 5s each.
+		// The SD connects to all 6 servers, so there is guaranteed
+		// to be a shared server with any visor on the network.
+		//
 		// Cache successful probes for 5 minutes so the 90s heartbeat
-		// doesn't re-probe every time.
+		// doesn't re-probe every time. Failed probes are cached for
+		// 30s to allow quick retry.
 		if a.DmsgClient != nil {
 			pkHex := se.Addr.PubKey().Hex()
 			needsProbe := true
@@ -376,7 +387,7 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 			a.probeCacheMu.Unlock()
 
 			if needsProbe {
-				probeCtx, probeCancel := context.WithTimeout(r.Context(), 3*time.Second)
+				probeCtx, probeCancel := context.WithTimeout(context.Background(), 15*time.Second)
 				reachable := a.DmsgClient.Probe(probeCtx, se.Addr.PubKey(), skyenv.DmsgAwaitSetupPort)
 				probeCancel()
 				if !reachable {
