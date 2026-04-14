@@ -540,6 +540,15 @@ func (ce *Client) setCachedEntry(pk cipher.PubKey, entry *disc.Entry) {
 	ce.entryCacheMx.Unlock()
 }
 
+// DiscEntry looks up a PK in dmsg-discovery and returns the entry if it
+// exists as a client with at least one delegated server. Returns an error
+// if the PK is not found, is a server entry, or has no delegated servers.
+// This is a lightweight check that does NOT dial — useful to pre-filter
+// before expensive dial attempts.
+func (ce *Client) DiscEntry(ctx context.Context, pk cipher.PubKey) (*disc.Entry, error) {
+	return getClientEntry(ctx, ce.dc, pk)
+}
+
 // Probe checks whether a remote dmsg client is reachable by performing a
 // lightweight DialStream to the specified port and immediately closing.
 // On the remote side, the stream is accepted and the noise handshake
