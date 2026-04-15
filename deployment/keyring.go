@@ -75,9 +75,9 @@ type Keyring struct {
 
 // NamedKeyPair is a KeyPair with a human-readable name.
 type NamedKeyPair struct {
-	Name string         `json:"name"`
-	PK   cipher.PubKey  `json:"pk"`
-	SK   cipher.SecKey  `json:"sk"`
+	Name string        `json:"name"`
+	PK   cipher.PubKey `json:"pk"`
+	SK   cipher.SecKey `json:"sk"`
 }
 
 // LoadKeyring reads a keyring from a JSON file.
