@@ -60,8 +60,8 @@ type Keyring struct {
 	// Transport setup nodes (multiple — includes embedded TPS keys)
 	TransportSetupNodes []NamedKeyPair `json:"transport_setup_nodes,omitempty"`
 
-	// Survey whitelist (PK-only, no SK needed — these are visors)
-	SurveyWhitelist []cipher.PubKey `json:"survey_whitelist,omitempty"`
+	// Survey whitelist
+	SurveyWhitelist []NamedKeyPair `json:"survey_whitelist,omitempty"`
 
 	// Network monitor keys (multiple — for deregistration authorization)
 	NetworkMonitorKeys []NamedKeyPair `json:"network_monitor_keys,omitempty"`
@@ -166,6 +166,13 @@ func (kr *Keyring) ExportKeyfiles(dir string) error {
 			}
 		}
 	}
+	for _, nkp := range kr.SurveyWhitelist {
+		if !nkp.SK.Null() {
+			if err := writeKey("survey_wl_"+nkp.Name, nkp.SK); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -203,8 +210,8 @@ func (kr *Keyring) PublicKeys() map[string]string {
 	for _, nkp := range kr.NetworkMonitorKeys {
 		pks["nm_"+nkp.Name] = nkp.PK.Hex()
 	}
-	for i, pk := range kr.SurveyWhitelist {
-		pks[fmt.Sprintf("survey_whitelist_%d", i)] = pk.Hex()
+	for _, nkp := range kr.SurveyWhitelist {
+		pks["survey_wl_"+nkp.Name] = nkp.PK.Hex()
 	}
 
 	return pks
