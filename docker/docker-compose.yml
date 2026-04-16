@@ -303,8 +303,6 @@ services:
       - PG_USER=postgres
       - PG_PASSWORD=postgres
       - PG_DATABASE=postgres
-    environment:
-      - GODEBUG=madvdontneed=1
     entrypoint: "/release/skywire svc ut --addr :9095 --pprof :6095 --pg-host postgres-db --pg-port 5432 --redis redis://ut-redis:6379 --sk e20681b4fd1eb1904ebfbf8fba79a138bbac481e1c3f77bcfab3a877525fda32 --dmsg-disc http://dmsg-discovery:9090"
     stdin_open: true # docker run -i
     tty: true        # docker run -t

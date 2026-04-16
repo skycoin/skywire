@@ -75,6 +75,7 @@ var mLog = initLogger()
 type Visor struct {
 	closeStack []closer
 
+	ctx      context.Context // stored so RPC handlers can derive child contexts
 	conf     *visorconfig.V1
 	log      *logging.Logger
 	logstore logstore.Store
@@ -146,6 +147,14 @@ type Visor struct {
 
 	// Embedded Route Setup Node (nil if route_setup_sk not configured)
 	embeddedRouteSetup *EmbeddedRouteSetup
+
+	// Embedded DMSG Web resolver (nil if dmsg_web.enable is false).
+	// Provides a localhost SOCKS5 proxy that resolves .dmsg hosts.
+	embeddedDmsgWeb *EmbeddedDmsgWeb
+
+	// Embedded Skynet Web resolver (nil if skynet_web.enable is false).
+	// Like embeddedDmsgWeb but for .skynet hosts, dialed via the visor's router.
+	embeddedSkynetWeb *EmbeddedSkynetWeb
 
 	// Hypervisor instance (nil if never initialized; may be enabled/disabled at runtime)
 	hvInstance *Hypervisor
@@ -420,6 +429,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		v.conf.MasterLogger().SetLevel(logLvl)
 	}
 
+	v.ctx = ctx
 	v.startedAt = time.Now()
 	v.startupComplete = make(chan struct{})
 

@@ -32,7 +32,8 @@ type FailureReason string
 const (
 	ReasonInvalidRoute      FailureReason = "invalid_route"      // BidirectionalRoute.Check failed
 	ReasonRuleGeneration    FailureReason = "rule_generation"    // GenerateRules returned ErrNoKey etc.
-	ReasonIDReservation     FailureReason = "id_reservation"     // ReserveRouteIDs failed (could not dial a hop, or a hop refused)
+	ReasonIDReservation     FailureReason = "id_reservation"     // ReserveRouteIDs failed dialing the destination / an intermediary
+	ReasonSourceUnreachable FailureReason = "source_unreachable" // ReserveRouteIDs could not reach the SOURCE visor (not the dst's fault)
 	ReasonIntermediaryRules FailureReason = "intermediary_rules" // BroadcastIntermediaryRules failed
 	ReasonDestinationRules  FailureReason = "destination_rules"  // AddEdgeRules on destination router failed
 	ReasonContextDeadline   FailureReason = "context_deadline"   // overall request timed out
@@ -363,16 +364,54 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 	c.lastFailureAt = time.Now()
 	if destStat != nil {
 		destStat.Total++
-		destStat.Failed++
+		// destStat.Failed is incremented below, but only when the
+		// failure is actually attributable to the destination —
+		// see the switch on failedPK.
 	}
 
 	// Update the circuit breaker for this destination. Only id_reservation
 	// failures (dial-path failures) drive the breaker — other failure
 	// modes like rule_generation reflect local config problems that
 	// won't self-heal by waiting, so they shouldn't trip the breaker.
+	//
+	// Critically: id_reservation can fail because the SOURCE visor is
+	// unreachable (MakeMap dials every hop — src, dst, intermediaries).
+	// A flaky source visor would otherwise poison the destination's
+	// breaker, blocking all requests to a healthy destination just
+	// because a few source visors were unreachable. We extract the PK
+	// that actually failed to dial (from router.DialError) and only
+	// trip the destination's breaker when it matches the destination.
+	// Source-side failures are reclassified as source_unreachable so
+	// the ring buffer and reason counts tell the real story, and the
+	// destination's Failed counter is NOT incremented for them so the
+	// Top-Failed-Destinations table stops fingering innocent dsts.
 	reason := classifyError(ctx, err)
+	blameDst := true
 	if reason == ReasonIDReservation {
-		c.recordCircuitFailureLocked(dstStr)
+		failedPK, ok := failedDialPK(err)
+		switch {
+		case !ok:
+			// Failed PK not identifiable (pre-DialError wrapping or a
+			// non-dial id_reservation failure such as the RPC call
+			// itself returning an error). Fall back to the legacy
+			// behavior of blaming the destination.
+			c.recordCircuitFailureLocked(dstStr)
+		case failedPK == dstPK:
+			// Destination was the dial target that failed — legit.
+			c.recordCircuitFailureLocked(dstStr)
+		case failedPK == srcPK:
+			// Source visor was unreachable. Do NOT blame the dst.
+			reason = ReasonSourceUnreachable
+			blameDst = false
+		default:
+			// Intermediary hop failed; treat it like a dst failure for
+			// breaker purposes — the destination can't be reached via
+			// this intermediary regardless.
+			c.recordCircuitFailureLocked(dstStr)
+		}
+	}
+	if blameDst && destStat != nil {
+		destStat.Failed++
 	}
 	c.failsByReason[reason]++
 
@@ -480,6 +519,24 @@ func (c *Collector) recordCircuitSuccessLocked(pk string) {
 			d.Circuit = string(CircuitClosed)
 		}
 	}
+}
+
+// failedDialPK walks the error chain looking for a router.DialError
+// (matched via an anonymous interface to avoid importing router here,
+// which would create an import cycle). Returns the PK that could not
+// be dialed, or the zero value + false if no such error is in the
+// chain. See the comment in finish() for why the caller cares.
+func failedDialPK(err error) (cipher.PubKey, bool) {
+	type dialFailed interface {
+		DialFailedPK() cipher.PubKey
+	}
+	for err != nil {
+		if d, ok := err.(dialFailed); ok {
+			return d.DialFailedPK(), true
+		}
+		err = errors.Unwrap(err)
+	}
+	return cipher.PubKey{}, false
 }
 
 // classifyError maps an error into one of the well-known FailureReason

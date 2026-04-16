@@ -581,6 +581,132 @@ func (api *API) getUptimesV3(w http.ResponseWriter, r *http.Request, visorsParam
 	httputil.WriteJSON(w, r, http.StatusOK, filtered)
 }
 
+// bulkUptimesRequest is the JSON body for POST /uptimes. Accepts a
+// list of visor PKs and an optional version ("v2"/"v3"). This avoids
+// URL-length limits that hit when filtering hundreds of PKs via the
+// query-string ?visors= parameter on the GET path.
+type bulkUptimesRequest struct {
+	PKs     []string `json:"pks"`
+	Version string   `json:"v,omitempty"` // "v2" or "v3"; empty = v1
+}
+
+// POST /uptimes — bulk visor uptime query.
+// Body: {"pks": ["pk1","pk2",...], "v": "v2"}
+// Response: same shape as GET /uptimes?v=<v>&visors=<pks>.
+func (api *API) postUptimes(w http.ResponseWriter, r *http.Request) {
+	var req bulkUptimesRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+		httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	visorsParam := strings.Join(req.PKs, ";")
+	// Reuse the GET handler logic by injecting the parsed params.
+	switch req.Version {
+	case "v3":
+		api.getUptimesV3(w, r, visorsParam)
+	case "v2", "":
+		ver := req.Version
+		if ver == "" {
+			ver = "v1"
+		}
+		var uptimes []store.VisorSummary
+		if ver == "v2" {
+			uptimes = api.getUptimesV2FromCache()
+		} else {
+			uptimes = api.getUptimesFromCache()
+		}
+		if uptimes == nil {
+			uptimes = []store.VisorSummary{}
+		}
+		if visorsParam != "" {
+			uptimes = filterByPKs(uptimes, visorsParam)
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, uptimes)
+	default:
+		httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "unknown version: " + req.Version})
+	}
+}
+
+// bulkTransportUptimesRequest is the JSON body for POST /uptimes/transports.
+type bulkTransportUptimesRequest struct {
+	PKs   []string `json:"pks,omitempty"`   // visor PKs — returns transports touching these
+	IDs   []string `json:"ids,omitempty"`   // transport UUIDs — returns these specific transports
+	Type  string   `json:"type,omitempty"`  // filter by transport type
+	Edges bool     `json:"edges,omitempty"` // include edge_a / edge_b
+	V     string   `json:"v,omitempty"`     // response version
+}
+
+// POST /uptimes/transports — bulk transport uptime query.
+// Body: {"pks": [...]} or {"ids": [...]} with optional "v", "type", "edges".
+// Response: same shape as GET /uptimes/transports with equivalent filters.
+func (api *API) postTransportUptimes(w http.ResponseWriter, r *http.Request) {
+	var req bulkTransportUptimesRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+		httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	v2 := req.V == "v2" || req.V == "v3"
+	timeline := req.V == "v3"
+
+	var summaries []store.TransportUptimeSummary
+	var err error
+
+	switch {
+	case len(req.IDs) > 0:
+		ids := make([]uuid.UUID, 0, len(req.IDs))
+		for _, s := range req.IDs {
+			id, perr := uuid.Parse(strings.TrimSpace(s))
+			if perr != nil {
+				continue
+			}
+			ids = append(ids, id)
+		}
+		summaries, err = api.store.GetTransportUptimeSummaries(r.Context(), ids, v2, timeline)
+	case len(req.PKs) > 0:
+		for _, pkHex := range req.PKs {
+			pkHex = strings.TrimSpace(pkHex)
+			if pkHex == "" {
+				continue
+			}
+			var pk cipher.PubKey
+			if perr := pk.UnmarshalText([]byte(pkHex)); perr != nil {
+				continue
+			}
+			vs, verr := api.store.GetTransportUptimeByVisor(r.Context(), pk, v2, timeline)
+			if verr == nil {
+				summaries = append(summaries, vs...)
+			}
+		}
+	default:
+		summaries, err = api.store.GetTransportUptimeSummaries(r.Context(), nil, v2, timeline)
+	}
+
+	if err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	if req.Type != "" {
+		filtered := make([]store.TransportUptimeSummary, 0, len(summaries))
+		for _, s := range summaries {
+			if s.Type == req.Type {
+				filtered = append(filtered, s)
+			}
+		}
+		summaries = filtered
+	}
+	if !req.Edges {
+		for i := range summaries {
+			summaries[i].EdgeA = ""
+			summaries[i].EdgeB = ""
+		}
+	}
+	if summaries == nil {
+		summaries = []store.TransportUptimeSummary{}
+	}
+	httputil.WriteJSON(w, r, http.StatusOK, summaries)
+}
+
 // filterByPKs filters a VisorSummary slice to only include entries whose
 // PK hex matches one of the semicolon-separated PKs.
 func filterByPKs(summaries []store.VisorSummary, pksParam string) []store.VisorSummary {

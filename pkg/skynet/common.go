@@ -16,16 +16,27 @@ const MaxRequestSize = 10 * 1024 * 1024 // 10 MB
 // MaxResponseSize limits response buffering for HTTP forwarding.
 const MaxResponseSize = 10 * 1024 * 1024 // 10 MB
 
-// clientMsg is the initial request from client to server.
-type clientMsg struct {
+// ClientMsg is the initial JSON request from client to server. Exported so
+// in-process consumers (e.g. pkg/skynetweb) can speak the same protocol
+// without redefining the wire format.
+type ClientMsg struct {
 	Port   int  `json:"port"`
 	RawTCP bool `json:"raw_tcp,omitempty"`
 }
 
-// serverReply is the server's response to a client connection request.
-type serverReply struct {
+// ServerReply is the server's JSON response to ClientMsg.
+type ServerReply struct {
 	Error *string `json:"error,omitempty"`
 }
+
+// Exported aliases keep the existing internal call sites working.
+// The lower-case types used to be private; changing them to aliases
+// preserves every field access without touching server.go / client.go
+// callers and lets pkg/skynetweb import the canonical shape.
+type (
+	clientMsg   = ClientMsg
+	serverReply = ServerReply
+)
 
 func timeoutAfter(d time.Duration) time.Time {
 	return time.Now().Add(d)

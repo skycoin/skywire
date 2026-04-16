@@ -111,6 +111,10 @@ var (
 	embTPS vinit.Module
 	// Embedded Route Setup Node (separate dmsg client with route setup identity)
 	embRouteSetup vinit.Module
+	// Embedded dmsgweb resolver (localhost SOCKS5 for .dmsg browsing)
+	embDmsgWeb vinit.Module
+	// Embedded skynetweb resolver (localhost SOCKS5 for .skynet browsing)
+	embSkynetWeb vinit.Module
 	// UI server module (serves tp-viz)
 	uiServer vinit.Module
 	// Node health tracking for TPS and RSN
@@ -150,7 +154,10 @@ func registerModules(logger *logging.MasterLogger) {
 
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
 	embRouteSetup = maker("embedded_route_setup", initEmbeddedRouteSetup, &dmsgC)
+	embDmsgWeb = maker("embedded_dmsgweb", initEmbeddedDmsgWeb, &dmsgC)
 	rt = maker("router", initRouter, &tr, &dmsgC, &dmsgHTTP, &embRouteSetup)
+	// skynetweb depends on the router being up, unlike dmsgweb.
+	embSkynetWeb = maker("embedded_skynetweb", initEmbeddedSkynetWeb, &rt)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
@@ -171,7 +178,7 @@ func registerModules(logger *logging.MasterLogger) {
 	nodeHealth = maker("node_health", initNodeHealth, &dmsgC)
 	selfProbe = maker("self_probe", initSelfProbe, &dmsgC, &dmsgHTTPLogServer, &rt)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &uiServer, &nodeHealth, &selfProbe)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &uiServer, &nodeHealth, &selfProbe)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.

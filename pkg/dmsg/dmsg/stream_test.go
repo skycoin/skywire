@@ -297,6 +297,10 @@ func TestLookupIP(t *testing.T) {
 			require.Equal(t, net.ParseIP("::1"), ip)
 		}
 
+		// Stop server B to trigger session cleanup on the client side.
+		require.NoError(t, srvB.Close())
+		require.NoError(t, <-chSrvB)
+
 		// Wait for server B session to be cleaned up from the client.
 		require.Eventually(t, func() bool {
 			pks := dmsgC.ConnectedServersPK()
