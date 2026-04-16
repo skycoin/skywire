@@ -176,7 +176,7 @@ func tpUptimeCacheFile(key string, filterArgs interface{}) string {
 	}
 	name := key
 	if filterArgs != nil {
-		h := sha1.New() //nolint:gosec
+		h := sha1.New()                     //nolint:gosec
 		data, _ := json.Marshal(filterArgs) //nolint:errcheck
 		h.Write(data)                       //nolint:errcheck
 		name += "-" + hex.EncodeToString(h.Sum(nil))[:12]
