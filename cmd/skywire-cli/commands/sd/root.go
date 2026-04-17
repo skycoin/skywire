@@ -120,6 +120,12 @@ func init() {
 	RootCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
 	RootCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	clirpc.RegisterFetchFlags(RootCmd)
+
+	// SD's integrated /uptimes endpoint is consumed via
+	// `skywire cli ut sd` — see cmd/skywire-cli/commands/ut/sd.go.
+	// Putting it there groups every uptime source (sd / mdisc / tpd /
+	// ut-service) under the same parent so operators can tab-complete
+	// between them without remembering which discovery hosts what.
 }
 
 // RootCmd contains commands that interact with service discovery

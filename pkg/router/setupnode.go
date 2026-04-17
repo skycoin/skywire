@@ -70,6 +70,18 @@ func (sn *Node) Close() error {
 	return sn.dmsgC.Close()
 }
 
+// maxConcurrentHandlers bounds how many route setup requests the
+// setup-node processes simultaneously. Each handler dials ~2-6 remote
+// visors, and each dial reserves one ephemeral porter port (16 384
+// ports total). Without a cap, a burst of requests (e.g. after a
+// network restart when all visors reconnect at once) can exhaust the
+// ephemeral port space, causing a death spiral: new dials fail
+// immediately with "ephemeral port space exhausted", but in-flight
+// handlers hold their ports for up to handlerTimeout (70 s), so the
+// port space stays full. 512 concurrent handlers × ~6 ports ≈ 3 072
+// ports at peak, leaving ample headroom.
+const maxConcurrentHandlers = 512
+
 // Serve starts transport listening loop.
 func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 	ctx, cancel := context.WithCancel(ctx)
@@ -98,7 +110,12 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 	// forcibly closed.
 	const handlerTimeout = 2*timeout + 10*time.Second // 70s
 
-	log.WithField("dmsg_port", dmsgPort).Info("Accepting dmsg streams.")
+	// Semaphore to limit concurrent handler goroutines.
+	sem := make(chan struct{}, maxConcurrentHandlers)
+
+	log.WithField("dmsg_port", dmsgPort).
+		WithField("max_concurrent", maxConcurrentHandlers).
+		Info("Accepting dmsg streams.")
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
@@ -107,6 +124,17 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 			}
 			log.WithError(err).Warn("Failed to accept dmsg stream, continuing...")
 			continue
+		}
+
+		// Acquire a handler slot. If all slots are busy, block until one
+		// frees up or the context is canceled. This back-pressures the
+		// accept loop, which is safe — the DMSG listener buffers pending
+		// streams, and visors retry on timeout.
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			conn.Close() //nolint:errcheck,gosec
+			return nil
 		}
 
 		// Derive a per-handler context so that if the handler takes too long,
@@ -126,6 +154,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 			log.WithError(err).Error("Failed to register RPC gateway")
 			conn.Close()    //nolint:errcheck,gosec
 			handlerCancel() //nolint:gosec
+			<-sem           // release the slot
 			continue
 		}
 		go func() {
@@ -135,6 +164,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 				}
 				handlerCancel()
 				conn.Close() //nolint:errcheck,gosec
+				<-sem        // release the handler slot
 			}()
 			// Set a hard deadline on the connection itself as a backstop.
 			// If context cancellation fails to propagate (e.g., ServeConn blocks

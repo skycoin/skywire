@@ -73,7 +73,11 @@ func NewIDReserver(ctx context.Context, dialer network.Dialer, paths [][]routing
 	}
 	clients, err := MakeMap(ctx, dialer, pks)
 	if err != nil {
-		return nil, fmt.Errorf("a dial attempt failed with: %v", err)
+		// %w (not %v) preserves the underlying *router.DialError in the
+		// chain so the setupmetrics collector can identify which hop
+		// actually failed and avoid penalizing the destination for a
+		// source-side unreachability.
+		return nil, fmt.Errorf("a dial attempt failed with: %w", err)
 	}
 
 	// Return result.

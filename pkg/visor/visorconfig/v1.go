@@ -25,6 +25,8 @@ type V1 struct {
 	Dmsgpty       *Dmsgpty            `json:"dmsgpty,omitempty"`
 	UIServer      *UIServer           `json:"ui_server,omitempty"`
 	LogServer     *LogServer          `json:"log_server,omitempty"`
+	DmsgWeb       *DmsgWebConfig      `json:"dmsg_web,omitempty"`
+	SkynetWeb     *SkynetWebConfig    `json:"skynet_web,omitempty"`
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *Transport          `json:"transport"`
 	Routing       *Routing            `json:"routing"`
@@ -75,6 +77,54 @@ type LogServer struct {
 	// LocalAddr enables serving on localhost (e.g., "localhost:8002" or "127.0.0.1:8002").
 	// If empty, localhost serving is disabled (dmsg-only mode).
 	LocalAddr string `json:"local_addr"`
+}
+
+// DmsgWebConfig enables the embedded `.dmsg` resolving proxy hosted by
+// the visor. When Enable is true, the visor serves a SOCKS5 proxy on
+// ProxyPort plus an HTTP bridge on WebPort; browsers pointed at the
+// SOCKS5 proxy can load http://somekey.dmsg URLs directly. Reuses the
+// visor's own dmsg client for the outbound fetches, so no extra dmsg
+// identity or session load is incurred.
+//
+// This is the in-process version of the `skywire dmsg web` CLI, so
+// the same domain-suffix resolving behavior is available without
+// running a separate utility alongside the visor.
+type DmsgWebConfig struct {
+	// Enable must be true for the resolver to start.
+	Enable bool `json:"enable"`
+	// ProxyPort is the local SOCKS5 listener. Default 4445.
+	ProxyPort uint `json:"proxy_port,omitempty"`
+	// WebPort is the local HTTP bridge the SOCKS5 proxy rewrites
+	// matched hosts to. Default 8080.
+	WebPort uint `json:"web_port,omitempty"`
+	// DomainSuffix is the TLD treated as DMSG addresses. Default ".dmsg".
+	DomainSuffix string `json:"domain_suffix,omitempty"`
+	// UpstreamSOCKS, if set, forwards non-matching CONNECTs to this
+	// upstream SOCKS5 server (e.g. "127.0.0.1:1080" for a chained
+	// skysocks-client). Empty = direct connect.
+	UpstreamSOCKS string `json:"upstream_socks,omitempty"`
+}
+
+// SkynetWebConfig enables the embedded `.skynet` resolving proxy — the
+// skywire-routing counterpart to DmsgWebConfig. Browsers pointed at
+// the SOCKS5 listener can load http://<pk>.skynet[:<port>] URLs,
+// which the visor serves by dialing a route to the remote visor's
+// skynet server and piping bytes through. Reuses the visor's own
+// router, so no additional routing setup is needed.
+//
+// Ports default to non-conflicting values with DmsgWebConfig so both
+// resolvers can run simultaneously on a single visor.
+type SkynetWebConfig struct {
+	// Enable must be true for the resolver to start.
+	Enable bool `json:"enable"`
+	// ProxyPort is the local SOCKS5 listener. Default 4446.
+	ProxyPort uint `json:"proxy_port,omitempty"`
+	// WebPort is the local HTTP bridge port. Default 8081.
+	WebPort uint `json:"web_port,omitempty"`
+	// DomainSuffix is the TLD treated as skynet addresses. Default ".skynet".
+	DomainSuffix string `json:"domain_suffix,omitempty"`
+	// UpstreamSOCKS forwards non-matching CONNECTs to this upstream.
+	UpstreamSOCKS string `json:"upstream_socks,omitempty"`
 }
 
 // Transport defines a transport config.

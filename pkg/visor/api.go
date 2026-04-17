@@ -181,6 +181,7 @@ type API interface {
 	UIServerStatus() (*UIServerStatus, error)
 
 	//dmsg utilities
+	DmsgProbe(pk cipher.PubKey, port uint16) (bool, error)
 	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
 	DmsgConnectAll() (*DmsgConnectAllResult, error)
 	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
@@ -201,6 +202,19 @@ type API interface {
 
 	// Embedded Route Setup Node (RSN) stats
 	RouteSetupStats() (*setupmetrics.StatsSnapshot, error)
+
+	// EmbeddedProxies reports the runtime state of the in-process
+	// .dmsg / .skynet resolving proxies. Hypervisor UI consumes this
+	// to render the "browser proxy" widget — listener addresses,
+	// domain suffix, running state.
+	EmbeddedProxies() (*EmbeddedProxiesStatus, error)
+
+	// SetEmbeddedProxyEnabled flips a resolver on or off at runtime.
+	// `kind` is "dmsg" or "skynet"; `enable` true starts the
+	// resolver, false stops it. Idempotent. Only affects the live
+	// runtime — the on-disk config is unchanged, so a visor restart
+	// reverts to the config's Enable flag.
+	SetEmbeddedProxyEnabled(kind string, enable bool) error
 	ResetRouteSetupStats() error
 
 	TPSExternalHealthCheck(tpsPK cipher.PubKey) error
@@ -216,6 +230,57 @@ type UIServerStatus struct {
 	Running   bool   `json:"running"`
 	LocalAddr string `json:"local_addr,omitempty"`
 	DmsgPort  uint16 `json:"dmsg_port,omitempty"`
+}
+
+// EmbeddedProxyInfo describes the state of one in-process resolving
+// proxy (dmsgweb or skynetweb). The hypervisor UI renders this so
+// users can copy the SOCKS5 address into their browser without
+// poking at the visor config directly.
+type EmbeddedProxyInfo struct {
+	// Enabled is the config flag value, reflecting the intended
+	// state. Running is the observed state; mismatches happen
+	// briefly during Start/Stop or when a dependency is still
+	// bootstrapping.
+	Enabled bool `json:"enabled"`
+	// Running is true once the resolver goroutine has been spawned.
+	Running bool `json:"running"`
+	// DomainSuffix is the TLD matched by the resolver (e.g. ".dmsg").
+	DomainSuffix string `json:"domain_suffix,omitempty"`
+	// SocksAddr is the localhost SOCKS5 listener (e.g. "127.0.0.1:4445").
+	// Empty when disabled or when Config.ProxyPort is 0.
+	SocksAddr string `json:"socks_addr,omitempty"`
+	// WebAddr is the localhost HTTP bridge listener.
+	WebAddr string `json:"web_addr,omitempty"`
+	// UpstreamSOCKS is the configured fallthrough, empty for direct.
+	UpstreamSOCKS string `json:"upstream_socks,omitempty"`
+	// Stats is the cumulative request counter snapshot. Zero-valued
+	// when the resolver has never been constructed.
+	Stats *EmbeddedProxyStats `json:"stats,omitempty"`
+}
+
+// EmbeddedProxyStats is a JSON-friendly stats snapshot common to
+// dmsgweb and skynetweb. Mirrors pkg/dmsgweb.StatsSnapshot /
+// pkg/skynetweb.StatsSnapshot shapes — duplicated here so the RPC
+// surface stays decoupled from the internal stats types.
+type EmbeddedProxyStats struct {
+	StartedAt     time.Time  `json:"started_at,omitempty"`
+	UptimeSec     int64      `json:"uptime_sec,omitempty"`
+	TotalRequests uint64     `json:"total_requests"`
+	Successful    uint64     `json:"successful"`
+	Failed        uint64     `json:"failed"`
+	Active        int64      `json:"active"`
+	LastRequestAt *time.Time `json:"last_request_at,omitempty"`
+	LastSuccessAt *time.Time `json:"last_success_at,omitempty"`
+	LastFailureAt *time.Time `json:"last_failure_at,omitempty"`
+	LastError     string     `json:"last_error,omitempty"`
+}
+
+// EmbeddedProxiesStatus bundles the state of every in-process
+// resolving proxy. Separate fields (not a map) so the UI can treat
+// each proxy's presence/absence as a hard-coded toggle.
+type EmbeddedProxiesStatus struct {
+	DmsgWeb   *EmbeddedProxyInfo `json:"dmsg_web,omitempty"`
+	SkynetWeb *EmbeddedProxyInfo `json:"skynet_web,omitempty"`
 }
 
 // TPSStatus contains the status of the embedded Transport Setup Node.
