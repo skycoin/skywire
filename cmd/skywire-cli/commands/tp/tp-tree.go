@@ -45,7 +45,7 @@ func init() {
 	treeCmd.Flags().StringVarP(&rootNode, "source", "k", "", "root node ; defaults to visor with most transports")
 	treeCmd.Flags().StringVarP(&lastNode, "dest", "d", "", "map route between source and dest")
 	treeCmd.Flags().StringVarP(&tpdURL, "tpdurl", "a", deployment.Prod.TransportDiscovery, "transport discovery url")
-	treeCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
+	treeCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.TransportDiscovery, "uptime tracker url (TPD integrated)")
 	treeCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw json data")
 	treeCmd.Flags().BoolVarP(&refinedData, "pretty", "p", false, "print pretty json data")
 	treeCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")

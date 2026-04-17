@@ -105,6 +105,9 @@ func init() {
 	RootCmd.AddCommand(
 		entryCmd,
 		availableServersCmd,
+		// The DMSG-Discovery /uptimes endpoint is consumed via
+		// `skywire cli ut mdisc` for consistency with the other
+		// uptime-data sources. See cmd/skywire-cli/commands/ut/mdisc.go.
 	)
 	RootCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	RootCmd.Flags().StringVar(&cacheDirDMSGD, "cdd", cacheDirPath(dep.DmsgDiscovery), "DMSG cache dir (\"\" to disable)")

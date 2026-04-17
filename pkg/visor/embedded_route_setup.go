@@ -64,10 +64,17 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 	// dial trying up to 6 servers per destination, a single request
 	// can hold ~12 ports at peak. The circuit breaker fast-fails
 	// known-bad destinations (0ms), but new/unknown destinations
-	// still burn ports until they time out. 32 concurrent × 12 ports
-	// = 384 ports worst case — well within the 16K porter range
-	// while leaving headroom for the visor's own dmsg operations.
-	const maxConcurrent = 32
+	// still burn ports until they time out.
+	//
+	// 128 concurrent × 12 ports = 1536 ports worst case — well within
+	// the 16K porter range while leaving headroom for the visor's own
+	// dmsg operations. Production observations on a busy embedded RSN
+	// showed ~13% concurrency_drops at the old cap of 32; raising the
+	// cap after fixing the circuit-breaker source-vs-dest bug (where
+	// unreachable source visors were poisoning dst breakers and
+	// causing a false 100%-circuit_open rate) lets the extra legitimate
+	// traffic through without the drops.
+	const maxConcurrent = 128
 	sem := make(chan struct{}, maxConcurrent)
 
 	for {

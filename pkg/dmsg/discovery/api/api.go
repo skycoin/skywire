@@ -134,6 +134,7 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	r.Post("/dmsg-discovery/entry/{pk}", api.setEntry())
 	r.Delete("/dmsg-discovery/entry", api.delEntry())
 	r.Get("/dmsg-discovery/entries", api.allEntries())
+	r.Post("/dmsg-discovery/entries/batch", api.batchEntries())
 	r.Get("/dmsg-discovery/visorEntries", api.allVisorEntries())
 	r.Delete("/dmsg-discovery/deregister", api.deregisterEntry())
 	r.Get("/dmsg-discovery/available_servers", api.getAvailableServers())
@@ -141,6 +142,7 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	r.Get("/dmsg-discovery/servers/clients", api.allClientsByServer())
 	r.Get("/dmsg-discovery/server/{pk}/clients", api.clientsByServer())
 	r.Get("/uptimes", api.getUptimes)
+	r.Post("/uptimes", api.postUptimes)
 	r.Get("/health", api.serviceHealth)
 
 	return api
@@ -209,6 +211,40 @@ func (a *API) allEntries() func(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.writeJSON(w, r, http.StatusOK, entries)
+	}
+}
+
+// batchEntries returns entries for a list of specific PKs.
+// URI: /dmsg-discovery/entries/batch
+// Method: POST
+// Body: JSON array of PK hex strings
+func (a *API) batchEntries() func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var pks []string
+		body, readErr := io.ReadAll(r.Body)
+		if readErr != nil {
+			a.handleError(w, r, disc.ErrBadInput)
+			return
+		}
+		if err := json.Unmarshal(body, &pks); err != nil {
+			a.handleError(w, r, disc.ErrBadInput)
+			return
+		}
+
+		result := make(map[string]*disc.Entry)
+		for _, pkStr := range pks {
+			pk := cipher.PubKey{}
+			if err := pk.UnmarshalText([]byte(strings.TrimSpace(pkStr))); err != nil {
+				continue
+			}
+			entry, err := a.db.Entry(r.Context(), pk)
+			if err != nil {
+				continue
+			}
+			result[pkStr] = entry
+		}
+
+		a.writeJSON(w, r, http.StatusOK, result)
 	}
 }
 
@@ -642,6 +678,51 @@ func (a *API) getUptimes(w http.ResponseWriter, r *http.Request) {
 	if visorsParam != "" {
 		want := make(map[string]struct{})
 		for _, pk := range strings.Split(visorsParam, ";") {
+			pk = strings.TrimSpace(pk)
+			if pk != "" {
+				want[pk] = struct{}{}
+			}
+		}
+		filtered := make([]store.VisorSummary, 0)
+		for _, s := range summaries {
+			if _, ok := want[s.PK.Hex()]; ok {
+				filtered = append(filtered, s)
+			}
+		}
+		summaries = filtered
+	}
+
+	if summaries == nil {
+		summaries = []store.VisorSummary{}
+	}
+	a.writeJSON(w, r, http.StatusOK, summaries)
+}
+
+// bulkUptimesRequest is the JSON body for POST /uptimes.
+type bulkUptimesRequest struct {
+	PKs     []string `json:"pks"`
+	Version string   `json:"v,omitempty"`
+}
+
+// POST /uptimes — bulk visor uptime query. Body: {"pks": [...], "v": "v2"}
+func (a *API) postUptimes(w http.ResponseWriter, r *http.Request) {
+	var req bulkUptimesRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+		a.writeJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	v2 := req.Version == "v2" || req.Version == "v3"
+	timeline := req.Version == "v3"
+
+	summaries, err := a.db.GetAllVisorSummaries(r.Context(), v2, timeline)
+	if err != nil {
+		a.handleError(w, r, err)
+		return
+	}
+
+	if len(req.PKs) > 0 {
+		want := make(map[string]struct{}, len(req.PKs))
+		for _, pk := range req.PKs {
 			pk = strings.TrimSpace(pk)
 			if pk != "" {
 				want[pk] = struct{}{}
