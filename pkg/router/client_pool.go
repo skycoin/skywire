@@ -83,7 +83,7 @@ func (p *ClientPool) Put(client *Client) {
 
 	pk := client.rPK
 	if old, ok := p.clients[pk]; ok {
-		old.client.Close() //nolint:errcheck
+		old.client.Close() //nolint:errcheck,gosec
 	}
 	p.clients[pk] = &poolEntry{
 		client:   client,
@@ -95,7 +95,7 @@ func (p *ClientPool) Put(client *Client) {
 // when the connection is known to be broken (RPC error, context cancel).
 func (p *ClientPool) Discard(client *Client) {
 	if client != nil {
-		client.Close() //nolint:errcheck
+		client.Close() //nolint:errcheck,gosec
 	}
 }
 
@@ -111,7 +111,7 @@ func (p *ClientPool) Close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for pk, entry := range p.clients {
-		entry.client.Close() //nolint:errcheck
+		entry.client.Close() //nolint:errcheck,gosec
 		delete(p.clients, pk)
 	}
 }
@@ -130,7 +130,7 @@ func (p *ClientPool) evict() {
 	now := time.Now()
 	for pk, entry := range p.clients {
 		if now.Sub(entry.lastUsed) > p.ttl {
-			entry.client.Close() //nolint:errcheck
+			entry.client.Close() //nolint:errcheck,gosec
 			delete(p.clients, pk)
 		}
 	}

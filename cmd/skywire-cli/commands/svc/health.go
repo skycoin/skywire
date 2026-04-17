@@ -48,7 +48,7 @@ var healthCmd = &cobra.Command{
 			if err == nil {
 				results, err = rpcClient.ServiceHealth()
 				if err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "(visor RPC ServiceHealth failed: %v)\n", err)
+					fmt.Fprintf(cmd.ErrOrStderr(), "(visor RPC ServiceHealth failed: %v)\n", err) //nolint:errcheck
 				} else if len(results) > 0 {
 					printHealthResults(cmd, results)
 					return
