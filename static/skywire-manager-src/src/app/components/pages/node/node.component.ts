@@ -192,6 +192,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl && (this.lastUrl.includes('/info') ||
       this.lastUrl.includes('/routing') ||
       this.lastUrl.includes('/rewards') ||
+      this.lastUrl.includes('/skynet') ||
       (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')))) {
 
       this.titleParts = ['nodes.title', 'node.title'];

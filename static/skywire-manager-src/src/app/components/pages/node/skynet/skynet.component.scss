@@ -1,10 +1,10 @@
 .skynet-container {
   padding: 20px;
-  max-width: 800px;
+  max-width: 900px;
 }
 
 .section {
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .section-title {
@@ -26,7 +26,7 @@
   }
 }
 
-.port-table {
+.data-table {
   width: 100%;
   border-collapse: collapse;
   margin-bottom: 16px;
@@ -43,19 +43,14 @@
     font-size: 13px;
   }
 
-  .port-col {
+  .mono {
     font-family: monospace;
-    font-size: 15px;
-    font-weight: 500;
-    width: 80px;
   }
 
-  .url-col {
-    code {
-      font-size: 12px;
-      color: rgba(255, 255, 255, 0.7);
-      word-break: break-all;
-    }
+  .small {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    word-break: break-all;
   }
 
   .action-col {
@@ -70,12 +65,38 @@
   margin-bottom: 16px;
 }
 
-.add-row {
+.inline-form, .connect-form {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 
-  .port-field {
-    width: 120px;
+.field-sm {
+  width: 120px;
+}
+
+.field-pk {
+  width: 100%;
+  max-width: 580px;
+}
+
+// Input styling for dark background
+:host ::ng-deep {
+  .mat-mdc-text-field-wrapper {
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+  .mdc-text-field--outlined .mdc-notched-outline__leading,
+  .mdc-text-field--outlined .mdc-notched-outline__notch,
+  .mdc-text-field--outlined .mdc-notched-outline__trailing {
+    border-color: rgba(255, 255, 255, 0.3) !important;
+  }
+  .mat-mdc-input-element,
+  .mdc-text-field__input {
+    color: white !important;
+    caret-color: white !important;
+  }
+  .mdc-floating-label {
+    color: rgba(255, 255, 255, 0.6) !important;
   }
 }
