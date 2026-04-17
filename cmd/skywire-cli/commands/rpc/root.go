@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -294,8 +295,14 @@ func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, c
 	}
 
 	// Write-through to cache for next call. Non-fatal on error.
+	// Use world-readable permissions so multiple users (visor service,
+	// CLI user) can share the same /tmp cache directory.
 	if cachefile != "" {
-		if werr := os.WriteFile(cachefile, body, 0o600); werr != nil {
+		dir := filepath.Dir(cachefile)
+		if err := os.MkdirAll(dir, 0o777); err != nil { //nolint:gosec
+			logger.Debugf("FetchCachedServiceURL: cache mkdir failed for %s: %v", dir, err)
+		}
+		if werr := os.WriteFile(cachefile, body, 0o666); werr != nil { //nolint:gosec
 			logger.Debugf("FetchCachedServiceURL: cache write failed for %s: %v", cachefile, werr)
 		}
 	}

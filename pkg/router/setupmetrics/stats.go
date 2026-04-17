@@ -101,6 +101,12 @@ const (
 	// circuitOpenDuration is how long the breaker stays OPEN before
 	// transitioning to HALF_OPEN to allow a probe setup.
 	circuitOpenDuration = 60 * time.Second
+	// circuitMaxOpenDuration is the maximum time a breaker can stay
+	// in the open/half_open cycle before being force-reset to closed.
+	// This prevents permanent lockout when the RSN's own DMSG sessions
+	// are stale but the destination is actually alive — fresh traffic
+	// will establish new DMSG paths.
+	circuitMaxOpenDuration = 10 * time.Minute
 	// circuitFailureWindow bounds how long consecutive failures must
 	// occur within to count toward the threshold. Failures older than
 	// this window are considered stale and the consecutive counter is
@@ -115,7 +121,8 @@ type circuitBreaker struct {
 	consecutiveFails int
 	firstFailAt      time.Time
 	state            CircuitState
-	openedAt         time.Time
+	openedAt         time.Time // last open/re-open time (reset on each half_open→open transition)
+	firstOpenedAt    time.Time // first time the breaker tripped; used for circuitMaxOpenDuration
 }
 
 // StatsSnapshot is the public, JSON-friendly view exposed over RPC/CLI.
@@ -262,9 +269,23 @@ func (c *Collector) AllowDestination(dstPK cipher.PubKey) (bool, string) {
 	if !ok || br.state == CircuitClosed {
 		return true, ""
 	}
+	// Force-reset after circuitMaxOpenDuration — the destination may
+	// be alive but the RSN's own DMSG sessions are stale. Letting
+	// fresh traffic through will establish new DMSG paths.
+	if !br.firstOpenedAt.IsZero() && time.Since(br.firstOpenedAt) >= circuitMaxOpenDuration {
+		br.state = CircuitClosed
+		br.openedAt = time.Time{}
+		br.firstOpenedAt = time.Time{}
+		br.consecutiveFails = 0
+		br.firstFailAt = time.Time{}
+		if d, ok := c.dests[pk]; ok {
+			d.Circuit = string(CircuitClosed)
+		}
+		return true, ""
+	}
 	if br.state == CircuitOpen {
 		if time.Since(br.openedAt) < circuitOpenDuration {
-			return false, "circuit open: " + pk[:16] + " unreachable"
+			return false, "circuit open: " + pk + " unreachable"
 		}
 		// Time's up — transition to half-open for a probe attempt.
 		br.state = CircuitHalfOpen
@@ -481,7 +502,9 @@ func (c *Collector) recordCircuitFailureLocked(pk string) {
 	}
 	br.consecutiveFails++
 
-	// Half-open → failure re-opens the breaker and resets the timer.
+	// Half-open → failure re-opens the breaker and resets the per-cycle timer.
+	// firstOpenedAt is NOT reset — it tracks the total time since the
+	// breaker first tripped so circuitMaxOpenDuration can force-close it.
 	if br.state == CircuitHalfOpen {
 		br.state = CircuitOpen
 		br.openedAt = now
@@ -494,6 +517,7 @@ func (c *Collector) recordCircuitFailureLocked(pk string) {
 	if br.state == CircuitClosed && br.consecutiveFails >= circuitFailureThreshold {
 		br.state = CircuitOpen
 		br.openedAt = now
+		br.firstOpenedAt = now
 		if d, ok := c.dests[pk]; ok {
 			d.Circuit = string(CircuitOpen)
 		}
@@ -515,6 +539,7 @@ func (c *Collector) recordCircuitSuccessLocked(pk string) {
 	if br.state != CircuitClosed {
 		br.state = CircuitClosed
 		br.openedAt = time.Time{}
+		br.firstOpenedAt = time.Time{}
 		if d, ok := c.dests[pk]; ok {
 			d.Circuit = string(CircuitClosed)
 		}
