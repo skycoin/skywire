@@ -39,12 +39,17 @@ func initSkynetForwardPorts(_ context.Context, v *Visor, log *logging.Logger) er
 	// (label, addr-string) where addr-string may be "host:port",
 	// ":port", or "port". We extract the port number and skip if
 	// it's empty or zero.
+	// RPC (cli_addr) and hypervisor (http_addr) are NOT registered
+	// here — they must not be reachable over dmsg or skynet at all.
+	// Exposing them would allow noise-handshake spamming attacks
+	// and unauthed RPC access. They stay localhost-only.
+	//
+	// Only register ports for public-facing services that are safe
+	// to serve to any PK-authenticated peer.
 	candidates := []struct {
 		label string
 		addr  string
-	}{
-		{"cli_rpc", v.conf.CLIAddr},
-	}
+	}{}
 	if ls := v.conf.LogServer; ls != nil {
 		candidates = append(candidates, struct {
 			label string
@@ -56,12 +61,6 @@ func initSkynetForwardPorts(_ context.Context, v *Visor, log *logging.Logger) er
 			label string
 			addr  string
 		}{"ui_server", ui.LocalAddr})
-	}
-	if hv := v.conf.Hypervisor; hv != nil {
-		candidates = append(candidates, struct {
-			label string
-			addr  string
-		}{"hypervisor", hv.HTTPAddr})
 	}
 	// Skychat, skysocks, and other apps bind their own localhost
 	// ports dynamically. Those are registered separately by the app

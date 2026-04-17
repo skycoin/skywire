@@ -252,8 +252,12 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// TCP bounce). Uses the SAME handler (lsAPI) as the DMSG HTTP
 	// server — a request arriving via skynet is served identically
 	// to one arriving via DMSG.
-	v.services.Register(uint16(visorconfig.DmsgHTTPPort), "log_server", HTTPHandler(lsAPI))
+	v.services.Register(visorconfig.DmsgHTTPPort, "log_server", HTTPHandler(lsAPI))
 	logger.WithField("port", visorconfig.DmsgHTTPPort).Info("Registered log server in service registry")
+
+	// Wire the service catalog so /services on the log server shows
+	// what ports are available for skynet forwarding.
+	lsAPI.SetServiceLister(v.services)
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {

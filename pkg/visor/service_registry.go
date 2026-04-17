@@ -19,6 +19,8 @@ import (
 	"net/http"
 	"sort"
 	"sync"
+
+	"github.com/skycoin/skywire/pkg/visor/logserver"
 )
 
 // ConnHandler serves a single connection. The handler owns conn for
@@ -36,6 +38,7 @@ type ServiceRegistry struct {
 type registeredService struct {
 	label   string // human-readable name for logging / CLI
 	handler ConnHandler
+	hidden  bool // hidden from the /services catalog (still forwarded)
 }
 
 // NewServiceRegistry returns a ready-to-use registry.
@@ -51,6 +54,15 @@ func NewServiceRegistry() *ServiceRegistry {
 func (r *ServiceRegistry) Register(port uint16, label string, handler ConnHandler) {
 	r.mu.Lock()
 	r.handlers[port] = registeredService{label: label, handler: handler}
+	r.mu.Unlock()
+}
+
+// RegisterHidden adds a handler that is forwarded but NOT shown in
+// the /services catalog. Use for services that should be accessible
+// to PK-authenticated peers but not advertised publicly.
+func (r *ServiceRegistry) RegisterHidden(port uint16, label string, handler ConnHandler) {
+	r.mu.Lock()
+	r.handlers[port] = registeredService{label: label, handler: handler, hidden: true}
 	r.mu.Unlock()
 }
 
@@ -102,6 +114,22 @@ func (r *ServiceRegistry) List() []ServiceInfo {
 	return out
 }
 
+// ListPublic returns non-hidden services. Satisfies the
+// logserver.ServiceLister interface for the /services catalog.
+func (r *ServiceRegistry) ListPublic() []logserver.ServiceEntry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]logserver.ServiceEntry, 0, len(r.handlers))
+	for p, svc := range r.handlers {
+		if svc.hidden {
+			continue
+		}
+		out = append(out, logserver.ServiceEntry{Port: p, Label: svc.label})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	return out
+}
+
 // HTTPHandler returns a ConnHandler that serves an http.Handler on
 // the connection. Each call handles exactly one HTTP connection
 // (which may carry multiple requests via keep-alive). This is the
@@ -109,7 +137,7 @@ func (r *ServiceRegistry) List() []ServiceInfo {
 // port 81 debug) to register in the handler registry.
 func HTTPHandler(h http.Handler) ConnHandler {
 	return func(conn net.Conn) {
-		defer conn.Close() //nolint:errcheck,gosec
+		defer conn.Close()             //nolint:errcheck,gosec
 		srv := http.Server{Handler: h} //nolint:gosec
 		// Serve on a single-connection listener that yields conn
 		// exactly once then blocks forever (the server closes when

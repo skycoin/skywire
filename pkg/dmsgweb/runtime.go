@@ -207,27 +207,6 @@ func (c *tcpAddrConn) LocalAddr() net.Addr {
 	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}
 }
 
-// statsConn wraps a net.Conn and calls the stats completion function
-// when the connection is closed. This ensures per-request stats are
-// recorded even though there's no HTTP handler in the direct-tunnel
-// path — the SOCKS5 library closes the connection when the browser
-// disconnects, triggering the stats callback.
-type statsConn struct {
-	net.Conn
-	done func(error)
-	err  *error
-	once sync.Once
-}
-
-func (c *statsConn) Close() error {
-	c.once.Do(func() {
-		if c.done != nil {
-			c.done(*c.err)
-		}
-	})
-	return c.Conn.Close()
-}
-
 func normalize(cfg Config) Config {
 	if cfg.DomainSuffix == "" {
 		cfg.DomainSuffix = DefaultDomainSuffix
@@ -242,80 +221,7 @@ func normalize(cfg Config) Config {
 	return cfg
 }
 
-func validate(cfg Config) error {
-	if len(cfg.WebPorts) == 0 {
-		return errors.New("dmsgweb: at least one WebPort is required")
-	}
-	if len(cfg.ResolveAddr) > 0 && len(cfg.WebPorts) != len(cfg.ResolveAddr) {
-		return fmt.Errorf("dmsgweb: WebPorts (%d) must equal ResolveAddr (%d) length in fixed mode",
-			len(cfg.WebPorts), len(cfg.ResolveAddr))
-	}
-	if len(cfg.ResolveAddr) == 0 && len(cfg.WebPorts) > 1 {
-		return errors.New("dmsgweb: multiple WebPorts require ResolveAddr in fixed mode")
-	}
-	seenWeb := make(map[uint]bool)
-	for _, p := range cfg.WebPorts {
-		if seenWeb[p] {
-			return fmt.Errorf("dmsgweb: duplicate WebPort %d", p)
-		}
-		seenWeb[p] = true
-	}
-	return nil
-}
-
 // --- SOCKS5 ---
-
-func serveSOCKS5(ctx context.Context, log *logging.Logger, cfg Config) error {
-	conf := &socks5.Config{
-		Resolver: &dmsgResolver{cfg: cfg},
-		Dial: func(dialCtx context.Context, network, addr string) (net.Conn, error) {
-			// After the resolver runs, addr is "127.0.0.1:<origPort>".
-			// Check the context key to decide routing.
-			if port, ok := dialCtx.Value(dmsgResolverPortKey).(string); ok && port != "" {
-				addr = "localhost:" + port
-				log.WithField("addr", addr).Debug("SOCKS5 dial (resolved .dmsg)")
-				return net.Dial(network, addr)
-			}
-			// Not .dmsg — forward to upstream with original hostname.
-			if cfg.UpstreamSOCKS != "" {
-				origHost, _ := dialCtx.Value(dmsgOrigHostKey).(string)
-				if origHost != "" {
-					_, origPort, _ := net.SplitHostPort(addr)
-					if origPort == "" {
-						origPort = "80"
-					}
-					addr = net.JoinHostPort(origHost, origPort)
-				}
-				log.WithField("addr", addr).Debug("SOCKS5 dial (upstream)")
-				upstream, err := proxy.SOCKS5("tcp", cfg.UpstreamSOCKS, nil, proxy.Direct)
-				if err != nil {
-					return nil, err
-				}
-				return upstream.Dial(network, addr)
-			}
-			log.WithField("addr", addr).Debug("SOCKS5 dial (direct)")
-			return net.Dial(network, addr)
-		},
-	}
-	srv, err := socks5.New(conf)
-	if err != nil {
-		return fmt.Errorf("create SOCKS5 server: %w", err)
-	}
-	addr := fmt.Sprintf("127.0.0.1:%d", cfg.ProxyPort)
-	log.WithField("addr", addr).Debug("Serving SOCKS5 proxy")
-
-	go func() {
-		<-ctx.Done()
-		srv.Close() //nolint:gosec
-	}()
-
-	err = srv.ListenAndServe("tcp", addr)
-	if err != nil && !errors.Is(err, net.ErrClosed) {
-		return fmt.Errorf("SOCKS5 listen: %w", err)
-	}
-	log.WithField("addr", addr).Debug("Stopped SOCKS5 proxy")
-	return nil
-}
 
 // serveSOCKS5Direct returns DMSG streams directly as the SOCKS5
 // tunnel — no intermediate HTTP bridge. The go-socks5 library
@@ -334,8 +240,8 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 			}()
 
 			origHost, _ := dialCtx.Value(dmsgOrigHostKey).(string)
-			_, origPort, _ := net.SplitHostPort(addr)
-			if origPort == "" {
+			_, origPort, err := net.SplitHostPort(addr) //nolint:errcheck
+			if err != nil || origPort == "" {
 				origPort = "80"
 			}
 
