@@ -82,6 +82,10 @@ type Storer interface {
 
 	// RemoveOldServerEntries check and remove old server entries that left on redis because of unexpected server shutdown
 	RemoveOldServerEntries(ctx context.Context) error
+
+	// RemoveStaleClientEntries removes client entries with expired keys from the
+	// "clients" set and applies defaultTTL to legacy entries that have no expiration.
+	RemoveStaleClientEntries(ctx context.Context, defaultTTL time.Duration) (removed, ttlSet int, err error)
 }
 
 // Config configures the Store object.

@@ -224,6 +224,7 @@ func (api *API) serveDmsgHealth(ctx context.Context, log *logging.Logger) {
 			BuildInfo:   buildinfo.Get(),
 			StartedAt:   startedAt,
 			DmsgAddr:    dmsgAddr,
+			DmsgServers: api.dmsgC.ConnectedServersPK(),
 		})
 	})
 

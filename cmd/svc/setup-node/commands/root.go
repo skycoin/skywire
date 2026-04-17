@@ -170,6 +170,7 @@ Usage:
 					BuildInfo:   buildinfo.Get(),
 					StartedAt:   startedAt,
 					DmsgAddr:    dmsgAddr,
+					DmsgServers: sn.DmsgClient().ConnectedServersPK(),
 				}
 				json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 			})
