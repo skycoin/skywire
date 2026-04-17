@@ -220,6 +220,76 @@ func TestCollector_CircuitBreaker(t *testing.T) {
 	}
 }
 
+// dialErrStub is a test double that mimics router.DialError's
+// DialFailedPK() interface without importing router (which would be a
+// cycle). The collector matches DialError via an anonymous interface,
+// so anything implementing that interface is treated the same way.
+type dialErrStub struct {
+	pk  cipher.PubKey
+	msg string
+}
+
+func (d *dialErrStub) Error() string               { return d.msg }
+func (d *dialErrStub) DialFailedPK() cipher.PubKey { return d.pk }
+func (d *dialErrStub) Unwrap() error               { return nil }
+
+// TestCollector_CircuitBreaker_SourceUnreachable verifies that when
+// the id_reservation failure was caused by the SOURCE visor being
+// unreachable (not the destination), the destination's circuit
+// breaker is NOT tripped and the failure is reclassified as
+// source_unreachable. Regression test for the production pathology
+// where popular public visors were blocked for hours because flaky
+// source visors kept tripping their circuit breaker.
+func TestCollector_CircuitBreaker_SourceUnreachable(t *testing.T) {
+	c := NewCollector(CollectorConfig{})
+	srcPK, _ := cipher.GenerateKeyPair()
+	dstPK, _ := cipher.GenerateKeyPair()
+
+	// Fail circuitFailureThreshold+2 times, each time with the SOURCE
+	// as the failed dial target.
+	for i := 0; i < circuitFailureThreshold+2; i++ {
+		e := fmt.Errorf("failed to instantiate route id reserver: a dial attempt failed with: %w",
+			&dialErrStub{pk: srcPK, msg: "dial " + srcPK.String() + "@136: dmsg error 202"})
+		c.RecordRouteContext(context.Background(), srcPK, dstPK, 1)(&e)
+	}
+
+	if ok, reason := c.AllowDestination(dstPK); !ok {
+		t.Fatalf("source-side failures should NOT trip dst breaker, got denied: %q", reason)
+	}
+
+	snap := c.Snapshot()
+	if got := snap.FailuresByReason[ReasonSourceUnreachable]; got != circuitFailureThreshold+2 {
+		t.Errorf("source_unreachable count=%d, want %d", got, circuitFailureThreshold+2)
+	}
+	if got := snap.FailuresByReason[ReasonIDReservation]; got != 0 {
+		t.Errorf("id_reservation count=%d, want 0 (all should reclass to source_unreachable)", got)
+	}
+}
+
+// TestCollector_CircuitBreaker_DestinationUnreachable verifies the
+// opposite: when the failed dial PK matches the destination, the
+// breaker DOES trip.
+func TestCollector_CircuitBreaker_DestinationUnreachable(t *testing.T) {
+	c := NewCollector(CollectorConfig{})
+	srcPK, _ := cipher.GenerateKeyPair()
+	dstPK, _ := cipher.GenerateKeyPair()
+
+	for i := 0; i < circuitFailureThreshold; i++ {
+		e := fmt.Errorf("failed to instantiate route id reserver: a dial attempt failed with: %w",
+			&dialErrStub{pk: dstPK, msg: "dial " + dstPK.String() + "@136: dmsg error 202"})
+		c.RecordRouteContext(context.Background(), srcPK, dstPK, 1)(&e)
+	}
+
+	if ok, _ := c.AllowDestination(dstPK); ok {
+		t.Fatal("destination-side failures should trip the dst breaker")
+	}
+
+	snap := c.Snapshot()
+	if got := snap.FailuresByReason[ReasonIDReservation]; got != circuitFailureThreshold {
+		t.Errorf("id_reservation count=%d, want %d", got, circuitFailureThreshold)
+	}
+}
+
 // TestCollector_CircuitBreakerOnlyIDReservation verifies that other
 // failure reasons do not trip the breaker — only dial-path failures
 // should, because the others are local config / rule problems that

@@ -48,8 +48,11 @@ func (cs *ClientSession) Close() error {
 			return true
 		})
 		for _, s := range toFree {
-			if s.close != nil {
-				s.close()
+			s.closeMu.Lock()
+			closeFn := s.close
+			s.closeMu.Unlock()
+			if closeFn != nil {
+				closeFn()
 			}
 		}
 	}

@@ -17,7 +17,6 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -68,7 +67,7 @@ func init() {
 	addPvCmd.Flags().StringVarP(&pvTransportType, "type", "t", "", "transport type (stcpr, sudph, dmsg)")
 	addPvCmd.Flags().DurationVarP(&pvTimeout, "timeout", "o", 0, "operation timeout")
 	addPvCmd.Flags().StringVarP(&pvSDURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
-	addPvCmd.Flags().StringVarP(&pvUTURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
+	addPvCmd.Flags().StringVarP(&pvUTURL, "uturl", "w", deployment.Prod.TransportDiscovery, "uptime tracker url (TPD integrated)")
 	addPvCmd.Flags().StringVarP(&pvTPDURL, "tpdurl", "d", deployment.Prod.TransportDiscovery, "transport discovery url")
 	addPvCmd.Flags().StringVar(&pvDmsgURL, "dmsg", deployment.Prod.DmsgDiscovery, "dmsg discovery url")
 	addPvCmd.Flags().StringVar(&pvCacheFileSD, "cfs", os.TempDir()+"/visorsd.json", "SD cache file location")
@@ -136,21 +135,17 @@ var addPvCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("no public visors found"))
 		}
 
-		// Fetch transport counts from TPD
-		tpd := clirpc.FetchCachedServiceURL(cmd.Flags(), pvCacheFileTPD, pvTPDURL+"/all-transports", pvCacheFilesAge)
-		var entries []*transport.Entry
-		if err := json.Unmarshal([]byte(tpd), &entries); err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse TPD data: %w", err))
+		// Fetch per-key transport counts from TPD (lightweight, no full entries)
+		tpd := clirpc.FetchCachedServiceURL(cmd.Flags(), pvCacheFileTPD, pvTPDURL+"/all-transports/per-key-stats", pvCacheFilesAge)
+		var perKeyStats map[string]map[string]int
+		if err := json.Unmarshal([]byte(tpd), &perKeyStats); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse TPD per-key-stats: %w", err))
 		}
 
-		// Count transports per PK
+		// Extract total transport count per PK
 		tpCount := make(map[string]int)
-		for _, entry := range entries {
-			if entry.Edges[0] == entry.Edges[1] {
-				continue
-			}
-			tpCount[entry.Edges[0].String()]++
-			tpCount[entry.Edges[1].String()]++
+		for pk, stats := range perKeyStats {
+			tpCount[pk] = stats["total"]
 		}
 
 		// Build sorted list of public visors by transport count

@@ -24,6 +24,18 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
+// ServiceEntry describes a port-forwarded service for the /services catalog.
+type ServiceEntry struct {
+	Port  uint16 `json:"port"`
+	Label string `json:"label"`
+}
+
+// ServiceLister provides the service catalog for the /services endpoint.
+// Implemented by visor's ServiceRegistry.
+type ServiceLister interface {
+	ListPublic() []ServiceEntry
+}
+
 // HealthStatsProvider provides transport statistics for the /health endpoint.
 type HealthStatsProvider interface {
 	// IsPublicAutoconnectRunning returns true if the public autoconnect module is running.
@@ -42,6 +54,7 @@ type API struct {
 	logger              *logging.Logger
 	startedAt           time.Time
 	healthStatsProvider HealthStatsProvider
+	serviceLister       ServiceLister
 }
 
 // New creates a new API.
@@ -96,6 +109,18 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 	// without touching disk, auth, or any heavy API logic.
 	r.GET("/ping", func(c *gin.Context) {
 		c.Status(http.StatusOK)
+	})
+
+	// Service catalog — lists ports available for .skynet / skynet
+	// forwarding. Public services are visible; hidden services are
+	// omitted. Browsers visiting http://pk.dmsg/services see what
+	// the visor exposes.
+	r.GET("/services", func(c *gin.Context) {
+		if api.serviceLister == nil {
+			c.JSON(http.StatusOK, []ServiceEntry{})
+			return
+		}
+		c.JSON(http.StatusOK, api.serviceLister.ListPublic())
 	})
 
 	// Transport log files (auth'd)
@@ -210,6 +235,12 @@ func (api *API) health(c *gin.Context) {
 // SetHealthStatsProvider sets the health stats provider after initialization.
 func (api *API) SetHealthStatsProvider(provider HealthStatsProvider) {
 	api.healthStatsProvider = provider
+}
+
+// SetServiceLister sets the service catalog provider. Called from
+// visor init after the ServiceRegistry is populated.
+func (api *API) SetServiceLister(lister ServiceLister) {
+	api.serviceLister = lister
 }
 
 func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {

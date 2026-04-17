@@ -333,6 +333,29 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	}
 	log.Debugf("Received: %v", cMsg)
 
+	// First check the service registry — this is the preferred path
+	// that dispatches directly to the handler without a localhost
+	// TCP bounce. Falls back to the legacy localhost-dial path for
+	// ports registered via RegisterHTTPPort (backward compat for
+	// user-managed forwarded ports).
+	if cMsg.Port > 0 && cMsg.Port <= 65535 {
+		if handler, ok := v.services.Get(uint16(cMsg.Port)); ok { //nolint:gosec
+			log.Debugf("Dispatching port %v via service registry (raw_tcp=%v)", cMsg.Port, cMsg.RawTCP)
+			sendError(log, remoteConn, nil)
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Errorf("Panic in service handler: %v", r)
+					}
+				}()
+				handler(remoteConn)
+			}()
+			return
+		}
+	}
+
+	// Legacy path: check if port is registered for localhost TCP
+	// forwarding (user-managed ports via RegisterHTTPPort / CLI).
 	lHost := fmt.Sprintf("localhost:%v", cMsg.Port)
 	ok := isPortRegistered(cMsg.Port, v)
 	if !ok {
@@ -348,7 +371,7 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 		return
 	}
 
-	log.Debugf("Forwarding %s (raw_tcp=%v)", lHost, cMsg.RawTCP)
+	log.Debugf("Forwarding %s via localhost TCP (raw_tcp=%v)", lHost, cMsg.RawTCP)
 
 	// send nil error to indicate to the remote connection that everything is ok
 	sendError(log, remoteConn, nil)

@@ -1,0 +1,41 @@
+# Skywire Deployment: DMSG Servers
+#
+# This compose file runs dmsg server instances on a separate host
+# from the main deployment services. Pair with compose.yaml on the
+# primary host.
+#
+# Usage:
+#   docker compose -f compose-dmsg-servers.yaml up -d
+
+services:
+  dmsg-server-2:
+    container_name: dmsg-server-2
+    image: "skycoin/skywire:test"
+    restart: always
+    environment:
+      - GODEBUG=madvdontneed=1
+    command:
+      - dmsg
+      - server
+      - start
+      - /etc/skywire/dmsg-server/config.json
+    volumes:
+      - ./dmsg-server/dmsg-server-2/:/etc/skywire/dmsg-server
+    ports:
+      - "30082:8080"
+
+  dmsg-server-3:
+    container_name: dmsg-server-3
+    image: "skycoin/skywire:test"
+    restart: always
+    environment:
+      - GODEBUG=madvdontneed=1
+    command:
+      - dmsg
+      - server
+      - start
+      - /etc/skywire/dmsg-server/config.json
+    volumes:
+      - ./dmsg-server/dmsg-server-3/:/etc/skywire/dmsg-server
+    ports:
+      - "30083:8080"

@@ -6,12 +6,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -24,7 +22,6 @@ var (
 	rootnode         cipher.PubKey
 	lastnode         cipher.PubKey
 	cacheFileTPD     string
-	cacheFileDmsgD   string
 	cacheFileUT      string
 	cacheFileSDProxy string
 	cacheFileSDVPN   string
@@ -39,30 +36,22 @@ var (
 	timeout          time.Duration
 	rpk              string
 	cacheFilesAge    int
-	forceAttempt     bool
-	dmsgdURL         string
 	retries          int
 	userLabel        bool
 	noRegister       bool
+	noProbe          bool
 	remoteVisorPKs   []string
-
-// queryHealth	bool
 )
 
 func init() {
 	addTpCmd.Flags().StringVarP(&rpk, "rpk", "r", "", "remote public key.")
 	addTpCmd.Flags().StringVarP(&transportType, "type", "t", "", "type of transport to add.")
 	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "o", 0, "if specified, sets an operation timeout")
-	addTpCmd.Flags().StringVarP(&dmsgdURL, "dmsg", "d", deployment.Prod.DmsgDiscovery, "dmsg discovery URL")
-	//TODO
-	//	listCmd.Flags().BoolVarP(&queryHealth, "health", "q", false, "check /health of remote visor over dmsg before creating transport")
-	addTpCmd.Flags().BoolVarP(&forceAttempt, "force", "f", false, "attempt dmsg transport creation without checking dmsg discovery")
-	addTpCmd.Flags().StringVar(&cacheFileDmsgD, "cfdd", os.TempDir()+"/dmsgd.json", "Dmsg Discovery cache file location")
-	addTpCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	addTpCmd.Flags().IntVarP(&retries, "retries", "n", 1, "number of times to retry per transport type")
 	addTpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	addTpCmd.Flags().BoolVarP(&userLabel, "user", "u", false, "set transport label to 'user' (default is 'skycoin')")
 	addTpCmd.Flags().BoolVar(&noRegister, "no-register", false, "skip transport discovery registration (implies --user)")
+	addTpCmd.Flags().BoolVar(&noProbe, "no-probe", false, "skip dmsg port 136 reachability probe before adding transport")
 	addTpCmd.Flags().StringSliceVar(&remoteVisorPKs, "remote", nil, "request transport via TPS on remote visor(s) (comma-separated PKs)")
 	addTpCmd.Flags().StringVar(&stcpAddr, "addr", "", "remote address (ip:port) for stcp transport")
 	clirpc.RegisterFetchFlags(addTpCmd)
@@ -270,23 +259,6 @@ var addTpCmd = &cobra.Command{
 			return
 		}
 
-		// Fetch dmsg discovery data once (for all PKs) - only used for dmsg transport checks
-		var dmsgkeys []string
-		if !forceAttempt && (transportType == "" || transportType == "dmsg") {
-			dmsgEntries := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileDmsgD, dmsgdURL+"/dmsg-discovery/entries", cacheFilesAge)
-			dmsgkeys, _ = script.Echo(dmsgEntries).JQ(".[]").Replace(`"`, "").Slice() //nolint:errcheck
-		}
-
-		// Helper to check if pk is in slice
-		contains := func(slice []string, s string) bool {
-			for _, item := range slice {
-				if item == s {
-					return true
-				}
-			}
-			return false
-		}
-
 		// Process each public key
 		var results []*visor.TransportSummary
 		var lastErr error
@@ -298,13 +270,20 @@ var addTpCmd = &cobra.Command{
 				fmt.Printf("[%d/%d] Adding transport to %s...\n", i+1, len(pks), pk.String()[:16]+"...")
 			}
 
-			// Check dmsg availability if dmsg is explicitly requested
-			if !forceAttempt && transportType == "dmsg" && !contains(dmsgkeys, pk.String()) {
-				if !isJSON {
-					logger.Warnf("Skipping %s: not found in dmsg discovery", pk.String()[:16])
+			// Probe dmsg port 136 to check if route setup can reach the
+			// destination. If unreachable, the transport will establish
+			// (p2p) but latency measurement will fail because the RSN
+			// can't set up a route to it.
+			if !noProbe {
+				reachable, probeErr := rpcClient.DmsgProbe(pk, 136)
+				if probeErr == nil && !reachable {
+					if !isJSON {
+						logger.Warnf("Skipping %s: not reachable on dmsg port 136 (route setup will fail)", pk.String()[:16])
+					}
+					failCount++
+					continue
 				}
-				failCount++
-				continue
+				// If probe itself errors (e.g., no dmsg client), proceed anyway
 			}
 
 			var tp *visor.TransportSummary
@@ -333,14 +312,13 @@ var addTpCmd = &cobra.Command{
 					continue
 				}
 			} else {
-				// No transport type specified - try stcpr, sudph, dmsg in order
+				// No transport type specified - try stcpr, sudph, dmsg in order.
+				// The visor will return "entry not found in discovery" for dmsg
+				// if the PK is not registered — no need to pre-check.
 				transportTypes := []types.Type{
 					types.STCPR,
 					types.SUDPH,
-				}
-				// Only include dmsg if found in dmsg discovery (or force is set)
-				if forceAttempt || contains(dmsgkeys, pk.String()) {
-					transportTypes = append(transportTypes, types.DMSG)
+					types.DMSG,
 				}
 
 			typeLoop:

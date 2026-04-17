@@ -18,8 +18,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
-	geoipcmd "github.com/skycoin/skywire/cmd/geoip/commands"
 	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
+	geoipcmd "github.com/skycoin/skywire/cmd/svc/geoip/commands"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
