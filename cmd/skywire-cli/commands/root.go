@@ -8,9 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/bitfield/script"
-	"github.com/pterm/pterm"
-	"github.com/pterm/pterm/putils"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -40,9 +37,71 @@ import (
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/flags"
+)
+
+// Command groups for the root help output. Each GroupID must match
+// the string assigned to a subcommand's GroupID below. Cobra sorts
+// commands alphabetically within each group automatically.
+const (
+	groupConfig    = "config"
+	groupVisor     = "visor"
+	groupApps      = "apps"
+	groupNet       = "net"
+	groupDiscovery = "discovery"
+	groupRewards   = "rewards"
+	groupUtil      = "util"
 )
 
 func init() {
+	RootCmd.AddGroup(
+		&cobra.Group{ID: groupConfig, Title: "Configuration:"},
+		&cobra.Group{ID: groupVisor, Title: "Visor:"},
+		&cobra.Group{ID: groupApps, Title: "Apps:"},
+		&cobra.Group{ID: groupNet, Title: "Networking:"},
+		&cobra.Group{ID: groupDiscovery, Title: "Discovery & lookups:"},
+		&cobra.Group{ID: groupRewards, Title: "Rewards:"},
+		&cobra.Group{ID: groupUtil, Title: "Utilities:"},
+	)
+
+	// Assign each subcommand to its group. Keeping this as an explicit
+	// table rather than editing every subpackage's RootCmd keeps the
+	// group taxonomy in one place and makes it trivial to re-shuffle.
+	cliconfig.RootCmd.GroupID = groupConfig
+
+	clivisor.RootCmd.GroupID = groupVisor
+	cligotop.RootCmd.GroupID = groupVisor
+
+	clivpn.RootCmd.GroupID = groupApps
+	cliskysocksc.RootCmd.GroupID = groupApps
+	cliskychat.RootCmd.GroupID = groupApps
+	cliskynet.RootCmd.GroupID = groupApps
+
+	clitp.RootCmd.GroupID = groupNet
+	clitps.RootCmd.GroupID = groupNet
+	cliroute.RootCmd.GroupID = groupNet
+	clirg.RootCmd.GroupID = groupNet
+	clidmsg.RootCmd.GroupID = groupNet
+
+	clisd.RootCmd.GroupID = groupDiscovery
+	climdisc.RootCmd.GroupID = groupDiscovery
+	cliut.RootCmd.GroupID = groupDiscovery
+	clipv.RootCmd.GroupID = groupDiscovery
+	clisvc.RootCmd.GroupID = groupDiscovery
+
+	clireward.RootCmd.GroupID = groupRewards
+	clirewards.RootCmd.GroupID = groupRewards
+	clilog.RootCmd.GroupID = groupRewards
+	clisurvey.RootCmd.GroupID = groupRewards
+
+	cliutil.RootCmd.GroupID = groupUtil
+
+	// Install flag-aware `help` command (supports -r/-t/-d). Covers
+	// the case where `skywire cli` is invoked as a subcommand of the
+	// combined `skywire` binary; the standalone `skywire-cli` binary
+	// installs it separately via its own main.InitFlags call.
+	flags.InstallHelp(RootCmd)
+
 	RootCmd.AddCommand(
 		cliconfig.RootCmd,
 		clidmsg.RootCmd,
@@ -67,8 +126,6 @@ func init() {
 		clipv.RootCmd,
 		clisvc.RootCmd,
 		cliutil.RootCmd,
-		treeCmd,
-		docCmd,
 	)
 	var jsonOutput bool
 	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
@@ -89,137 +146,6 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-}
-
-var treeCmd = &cobra.Command{
-	Use:                   "tree",
-	Short:                 "subcommand tree",
-	Long:                  `subcommand tree`,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
-	Run: func(_ *cobra.Command, _ []string) {
-		leveledList := pterm.LeveledList{}
-		leveledList = append(leveledList, pterm.LeveledListItem{Level: 0, Text: RootCmd.Use})
-		for _, j := range RootCmd.Commands() {
-			use := strings.Split(j.Use, " ")
-			leveledList = append(leveledList, pterm.LeveledListItem{Level: 1, Text: use[0]})
-			for _, k := range j.Commands() {
-				use := strings.Split(k.Use, " ")
-				leveledList = append(leveledList, pterm.LeveledListItem{Level: 2, Text: use[0]})
-				for _, l := range k.Commands() {
-					use := strings.Split(l.Use, " ")
-					leveledList = append(leveledList, pterm.LeveledListItem{Level: 3, Text: use[0]})
-					for _, m := range l.Commands() {
-						use := strings.Split(m.Use, " ")
-						leveledList = append(leveledList, pterm.LeveledListItem{Level: 4, Text: use[0]})
-						for _, n := range m.Commands() {
-							use := strings.Split(n.Use, " ")
-							leveledList = append(leveledList, pterm.LeveledListItem{Level: 5, Text: use[0]})
-							for _, o := range n.Commands() {
-								use := strings.Split(o.Use, " ")
-								leveledList = append(leveledList, pterm.LeveledListItem{Level: 6, Text: use[0]})
-							}
-						}
-					}
-				}
-			}
-		}
-		// Generate tree from LeveledList.
-		r := putils.TreeFromLeveledList(leveledList)
-
-		// Render TreePrinter
-		err := pterm.DefaultTree.WithRoot(r).Render()
-		if err != nil {
-			log.Fatal("render subcommand tree: ", err)
-		}
-	},
-}
-
-// for toc generation use: https://github.com/ekalinin/github-markdown-toc.go
-var docCmd = &cobra.Command{
-	Use:   "doc",
-	Short: "generate markdown docs",
-	Long: `generate markdown docs
-
-	UNHIDEFLAGS=1 go run cmd/skywire-cli/skywire-cli.go doc
-
-	UNHIDEFLAGS=1 go run cmd/skywire-cli/skywire-cli.go doc > cmd/skywire-cli/README1.md
-
-	generate toc:
-
-	cat cmd/skywire-cli/README1.md | gh-md-toc`,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
-	Run: func(_ *cobra.Command, _ []string) {
-		fmt.Printf("\n# %s\n", "skywire-cli documentation")
-		fmt.Printf("\n%s\n", "skywire command line interface")
-
-		fmt.Printf("\n## %s\n", RootCmd.Use)
-		fmt.Printf("\n```\n")
-		RootCmd.Help() //nolint:errcheck,gosec
-		fmt.Printf("\n```\n")
-		fmt.Printf("\n## %s\n", "global flags")
-		fmt.Printf("\n%s\n", "The skywire-cli interacts with the running visor via rpc calls. By default the rpc server is available on localhost:3435. The rpc address and port the visor is using may be changed in the config file, once generated.")
-
-		fmt.Printf("\n%s\n", "It is not recommended to expose the rpc server on the local network. Exposing the rpc allows unsecured access to the machine over the local network")
-		fmt.Printf("\n```\n")
-		fmt.Printf("\n%s\n", "Global Flags:")
-		fmt.Printf("\n%s\n", "			--rpc string   RPC server address (default \"localhost:3435\")")
-		fmt.Printf("\n%s\n", "			--json bool   print output as json")
-		fmt.Printf("\n```\n")
-
-		fmt.Printf("\n## %s\n", "subcommand tree")
-		fmt.Printf("\n%s\n", "A tree representation of the skywire-cli subcommands")
-		fmt.Printf("\n```\n")
-		_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go tree`).Stdout() //nolint:errcheck
-		fmt.Printf("\n```\n")
-
-		var use string
-		for _, j := range RootCmd.Commands() {
-			use = strings.Split(j.Use, " ")[0]
-			fmt.Printf("\n### %s\n", use)
-			fmt.Printf("\n```\n")
-			j.Help() //nolint:errcheck,gosec
-			fmt.Printf("\n```\n")
-			if j.Name() == "survey" {
-				fmt.Printf("\n```\n")
-				_, _ = script.Exec(`sudo go run cmd/skywire-cli/skywire-cli.go survey`).Stdout() //nolint:errcheck
-				fmt.Printf("\n```\n")
-			}
-			for _, k := range j.Commands() {
-				use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0]
-				fmt.Printf("\n#### %s\n", use)
-				fmt.Printf("\n```\n")
-				k.Help() //nolint:errcheck,gosec
-				fmt.Printf("\n```\n")
-				if k.Name() == "gen" {
-					fmt.Printf("\n##### Example for package / msi\n")
-					fmt.Printf("\n```\n")
-					fmt.Printf("$ skywire-cli config gen -bpirxn --version 1.3.0\n")
-					_, _ = script.Exec(`go run cmd/skywire-cli/skywire-cli.go config gen -n`).Stdout() //nolint:errcheck
-					fmt.Printf("\n```\n")
-				}
-				for _, l := range k.Commands() {
-					use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0] + " " + strings.Split(l.Use, " ")[0]
-					fmt.Printf("\n##### %s\n", use)
-					fmt.Printf("\n```\n")
-					l.Help() //nolint:errcheck,gosec
-					fmt.Printf("\n```\n")
-					for _, m := range l.Commands() {
-						use = strings.Split(j.Use, " ")[0] + " " + strings.Split(k.Use, " ")[0] + " " + strings.Split(l.Use, " ")[0] + " " + strings.Split(m.Use, " ")[0]
-						fmt.Printf("\n###### %s\n", use)
-						fmt.Printf("\n```\n")
-						m.Help() //nolint:errcheck,gosec
-						fmt.Printf("\n```\n")
-					}
-				}
-			}
-		}
-	},
 }
 
 // Execute executes root CLI command.

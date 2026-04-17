@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 
@@ -101,7 +102,33 @@ func verifyAuth(store NonceStore, r *http.Request, auth *Auth) error {
 
 	r.Body = io.NopCloser(&buf)
 
+	// Optimization: skip the expensive secp256k1 signature
+	// verification for DMSG connections. The DMSG noise handshake
+	// (KK pattern) already authenticated the remote PK at the
+	// transport layer — verifying the HTTP-layer signature is
+	// redundant. The nonce check above still runs for replay /
+	// ordering protection.
+	//
+	// Detection: DMSG HTTP transport sets RemoteAddr to the PK hex
+	// (not an IP:port). If it parses as a valid PK, we know the
+	// connection arrived via an authenticated DMSG stream.
+	if isDmsgConnection(r) {
+		return nil
+	}
+
 	return auth.Verify(payload)
+}
+
+// isDmsgConnection checks whether the request arrived over a DMSG
+// connection by inspecting RemoteAddr. DMSG HTTP transport uses the
+// remote PK as the address; regular HTTP connections use IP:port.
+func isDmsgConnection(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	var pk cipher.PubKey
+	return pk.Set(host) == nil
 }
 
 // PayloadWithNonce returns the concatenation of payload and nonce.

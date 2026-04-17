@@ -1032,9 +1032,24 @@ func (mc *mockRPCClient) UIServerStatus() (*UIServerStatus, error) {
 	return &UIServerStatus{}, nil
 }
 
+// EmbeddedProxies implements API.
+func (mc *mockRPCClient) EmbeddedProxies() (*EmbeddedProxiesStatus, error) {
+	return &EmbeddedProxiesStatus{}, nil
+}
+
+// SetEmbeddedProxyEnabled implements API.
+func (mc *mockRPCClient) SetEmbeddedProxyEnabled(_ string, _ bool) error {
+	return nil
+}
+
 // DmsgHTTP implements API.
 func (mc *mockRPCClient) DmsgHTTP(_ DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	return &DmsgHTTPResponse{StatusCode: 200, Status: "OK"}, nil
+}
+
+// DmsgProbe implements API.
+func (mc *mockRPCClient) DmsgProbe(_ cipher.PubKey, _ uint16) (bool, error) {
+	return true, nil
 }
 
 // DmsgConnectAll implements API.

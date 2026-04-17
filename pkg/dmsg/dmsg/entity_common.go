@@ -396,10 +396,20 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 }
 
 // entryUpdateDebounce is how long to wait after a nudge before updating
-// the discovery entry. This batches rapid session changes (e.g., connecting
-// to 6 servers at startup) into a single update, matching the transport
-// manager's 5-second debounce pattern.
-const entryUpdateDebounce = 5 * time.Second
+// the discovery entry. This batches rapid session changes (e.g.,
+// connecting to 6 servers at startup) into a single update.
+//
+// Reduced from 5 s to 1 s because the old value created a 5-second
+// window in which the discovery entry still listed a dead server as a
+// delegated server. Remote dials to this visor during that window
+// would pick the dead server, fail with "cannot connect to delegated
+// server" (dmsg error 202), and blow through the RSN's circuit
+// breaker budget — see the production pathology where popular public
+// visors accumulated open circuits because of this race. 1 s is still
+// enough to coalesce the startup burst (typically 6 sessions
+// establishing within <200 ms of each other) into a single update
+// while shrinking the stale-entry window by 80 %.
+const entryUpdateDebounce = 1 * time.Second
 
 func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan struct{}, clientType string) {
 	t := time.NewTimer(c.updateInterval)

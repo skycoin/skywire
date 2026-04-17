@@ -1246,7 +1246,54 @@ func (r *RPC) UIServerStatus(_ *struct{}, out *UIServerStatus) (err error) {
 	return nil
 }
 
+// EmbeddedProxies returns the runtime state of the in-process
+// resolving proxies. See Visor.EmbeddedProxies for semantics.
+func (r *RPC) EmbeddedProxies(_ *struct{}, out *EmbeddedProxiesStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "EmbeddedProxies", nil)(out, &err)
+
+	status, err := r.visor.EmbeddedProxies()
+	if err != nil {
+		return err
+	}
+	*out = *status
+	return nil
+}
+
+// SetEmbeddedProxyEnabledRequest is the RPC argument for SetEmbeddedProxyEnabled.
+type SetEmbeddedProxyEnabledRequest struct {
+	Kind   string
+	Enable bool
+}
+
+// SetEmbeddedProxyEnabled toggles a resolver (dmsg/skynet) on or off
+// at runtime without editing the config file.
+func (r *RPC) SetEmbeddedProxyEnabled(req *SetEmbeddedProxyEnabledRequest, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetEmbeddedProxyEnabled", req)(nil, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.SetEmbeddedProxyEnabled(req.Kind, req.Enable)
+}
+
 // DmsgHTTP performs an HTTP request over dmsg using the visor's dmsg client.
+// DmsgProbeRequest is the RPC argument for DmsgProbe.
+type DmsgProbeRequest struct {
+	PK   cipher.PubKey
+	Port uint16
+}
+
+// DmsgProbe checks dmsg reachability of a remote PK on a given port.
+func (r *RPC) DmsgProbe(req *DmsgProbeRequest, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgProbe", req)(out, &err)
+
+	reachable, err := r.visor.DmsgProbe(req.PK, req.Port)
+	if err != nil {
+		return err
+	}
+	*out = reachable
+	return nil
+}
+
 func (r *RPC) DmsgHTTP(req *DmsgHTTPRequest, out *DmsgHTTPResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgHTTP", req)(out, &err)
 
