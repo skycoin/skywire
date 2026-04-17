@@ -246,7 +246,7 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 		if err != nil {
 			// On failure, discard connections (they may be broken).
 			log.Debug("Discarding route id reserver connections (error path).")
-			rtIDR.Close() //nolint:errcheck
+			rtIDR.Close() //nolint:errcheck,gosec
 		} else if pool != nil {
 			// On success, return connections to pool for reuse.
 			log.Debug("Returning route id reserver connections to pool.")

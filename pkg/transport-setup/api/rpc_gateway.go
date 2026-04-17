@@ -212,7 +212,7 @@ func (api *API) serveDmsgHealth(ctx context.Context, log *logging.Logger) {
 	}
 	go func() {
 		<-ctx.Done()
-		lis.Close() //nolint:errcheck
+		lis.Close() //nolint:errcheck,gosec
 	}()
 
 	mux := http.NewServeMux()

@@ -121,8 +121,8 @@ type circuitBreaker struct {
 	consecutiveFails int
 	firstFailAt      time.Time
 	state            CircuitState
-	openedAt         time.Time   // last open/re-open time (reset on each half_open→open transition)
-	firstOpenedAt    time.Time   // first time the breaker tripped; used for circuitMaxOpenDuration
+	openedAt         time.Time // last open/re-open time (reset on each half_open→open transition)
+	firstOpenedAt    time.Time // first time the breaker tripped; used for circuitMaxOpenDuration
 }
 
 // StatsSnapshot is the public, JSON-friendly view exposed over RPC/CLI.
