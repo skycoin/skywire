@@ -278,18 +278,8 @@ func TestLookupIP(t *testing.T) {
 
 		// Explicitly connect the client to server B (the client's
 		// background discovery loop won't re-poll for minutes).
-		_, err = dmsgC.ConnectToAllServers(context.Background())
+		_, err = dmsgC.EnsureAndObtainSession(context.Background(), pkSrvB)
 		require.NoError(t, err)
-
-		// Verify the client actually has a session to server B.
-		require.Eventually(t, func() bool {
-			for _, pk := range dmsgC.ConnectedServersPK() {
-				if pk == pkSrvB.String() {
-					return true
-				}
-			}
-			return false
-		}, 10*time.Second, 200*time.Millisecond, "client did not connect to server B")
 
 		srvs := []cipher.PubKey{pkSrvB}
 		ip, err := dmsgC.LookupIP(context.Background(), srvs)

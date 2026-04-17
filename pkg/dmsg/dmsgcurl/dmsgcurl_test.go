@@ -143,8 +143,9 @@ func runHTTPSrv(t *testing.T, dc disc.APIClient, fName string) string {
 	<-dmsgC.Ready()
 
 	// Ensure the client has sessions with all servers before listening.
-	_, err := dmsgC.ConnectToAllServers(context.Background())
+	res, err := dmsgC.ConnectToAllServers(context.Background())
 	require.NoError(t, err)
+	require.Empty(t, res.Failed, "ConnectToAllServers had failures: %v", res.Failed)
 
 	r := chi.NewRouter()
 	r.HandleFunc("/"+httpPath, func(w http.ResponseWriter, r *http.Request) {
@@ -184,8 +185,9 @@ func newHTTPClient(t *testing.T, dc disc.APIClient) *http.Client {
 	<-dmsgC.Ready()
 
 	// Ensure sessions are established with all servers.
-	_, err := dmsgC.ConnectToAllServers(context.Background())
+	res, err := dmsgC.ConnectToAllServers(context.Background())
 	require.NoError(t, err)
+	require.Empty(t, res.Failed, "ConnectToAllServers had failures: %v", res.Failed)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
