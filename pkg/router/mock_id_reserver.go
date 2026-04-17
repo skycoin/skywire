@@ -137,6 +137,11 @@ func (_m *MockIDReserver) TotalIDs() int {
 	return r0
 }
 
+// ReturnToPool provides a mock function for returning connections to a pool.
+func (_m *MockIDReserver) ReturnToPool(_ *ClientPool) {
+	_m.Called()
+}
+
 // NewMockIDReserver creates a new instance of MockIDReserver. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockIDReserver(t interface {

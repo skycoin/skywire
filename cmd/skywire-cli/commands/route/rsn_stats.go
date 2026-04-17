@@ -148,7 +148,7 @@ func formatRSNStats(s *setupmetrics.StatsSnapshot) string {
 		tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(tw, "  pk\ttotal\tfailed\tcircuit") //nolint:errcheck,gosec
 		for _, d := range s.TopDestinations {
-			fmt.Fprintf(tw, "  %s\t%d\t%d\t%s\n", truncatePK(d.PK), d.Total, d.Failed, circuitOrDash(d.Circuit)) //nolint:errcheck,gosec
+			fmt.Fprintf(tw, "  %s\t%d\t%d\t%s\n", d.PK, d.Total, d.Failed, circuitOrDash(d.Circuit)) //nolint:errcheck,gosec
 		}
 		tw.Flush() //nolint:errcheck,gosec
 		b.WriteString("\n")
@@ -158,7 +158,7 @@ func formatRSNStats(s *setupmetrics.StatsSnapshot) string {
 		tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(tw, "  pk\tfailed\ttotal\tcircuit") //nolint:errcheck,gosec
 		for _, d := range s.TopFailedDestinations {
-			fmt.Fprintf(tw, "  %s\t%d\t%d\t%s\n", truncatePK(d.PK), d.Failed, d.Total, circuitOrDash(d.Circuit)) //nolint:errcheck,gosec
+			fmt.Fprintf(tw, "  %s\t%d\t%d\t%s\n", d.PK, d.Failed, d.Total, circuitOrDash(d.Circuit)) //nolint:errcheck,gosec
 		}
 		tw.Flush() //nolint:errcheck,gosec
 		b.WriteString("\n")
@@ -172,22 +172,13 @@ func formatRSNStats(s *setupmetrics.StatsSnapshot) string {
 				i+1, f.Timestamp.Format("15:04:05"), f.Reason, f.DurationMs)
 			if f.SrcPK != "" || f.DstPK != "" {
 				fmt.Fprintf(&b, "      src=%s  dst=%s  hops=%d\n",
-					truncatePK(f.SrcPK), truncatePK(f.DstPK), f.HopCount)
+					f.SrcPK, f.DstPK, f.HopCount)
 			}
 			fmt.Fprintf(&b, "      error: %s\n", f.Error)
 		}
 	}
 
 	return b.String()
-}
-
-// truncatePK shortens a public key for table display without hiding
-// the identifying prefix.
-func truncatePK(pk string) string {
-	if len(pk) <= 16 {
-		return pk
-	}
-	return pk[:16] + "…"
 }
 
 // circuitOrDash renders the per-destination circuit state for the

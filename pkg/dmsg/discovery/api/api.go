@@ -793,6 +793,19 @@ func (a *API) updateInternalState(ctx context.Context, logger logrus.FieldLogger
 		logger.WithError(err).Errorf("failed to check and remove servers entries")
 		return
 	}
+
+	// Clean up stale client entries: remove "clients" set members whose
+	// Redis keys have expired, and apply the configured TTL to legacy
+	// entries that were written before the TTL feature was deployed.
+	if a.clientEntryTTL > 0 {
+		removed, ttlSet, err := a.db.RemoveStaleClientEntries(ctx, a.clientEntryTTL)
+		if err != nil {
+			logger.WithError(err).Warn("failed to clean stale client entries")
+		} else if removed > 0 || ttlSet > 0 {
+			logger.Infof("Client entry cleanup: removed %d stale set members, applied TTL to %d legacy entries", removed, ttlSet)
+		}
+	}
+
 	serversCount, clientsCount, err := a.db.CountEntries(ctx)
 	if err != nil {
 		logger.WithError(err).Errorf("failed to get clients and servers count")

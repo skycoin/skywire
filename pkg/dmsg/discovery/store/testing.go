@@ -105,6 +105,11 @@ func (ms *MockStore) RemoveOldServerEntries(_ context.Context) error {
 	return nil
 }
 
+// RemoveStaleClientEntries implements Storer for MockStore (no-op).
+func (ms *MockStore) RemoveStaleClientEntries(_ context.Context, _ time.Duration) (int, int, error) {
+	return 0, 0, nil
+}
+
 // Clear its a mock-only method to clear the mock store data
 func (ms *MockStore) Clear() {
 	ms.m = map[string][]byte{}
