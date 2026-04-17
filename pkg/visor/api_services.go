@@ -17,7 +17,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/deployment"
-	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -64,7 +63,7 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 		return httpURL
 	}
 	httpServices := []svcDef{
-		{"Config Service", deployment.ProdConf.Conf},
+		{"Config Service", preferDmsg(v.confServiceHTTP(), v.conf.ConfServiceDmsg)},
 		{"Transport Discovery", preferDmsg(v.conf.Transport.Discovery, v.conf.Transport.DiscoveryDmsg)},
 		{"DMSG Discovery", preferDmsg(v.conf.Dmsg.Discovery, v.conf.Dmsg.DiscoveryDmsg)},
 		{"Address Resolver", preferDmsg(v.conf.Transport.AddressResolver, v.conf.Transport.AddressResolverDmsg)},
@@ -77,12 +76,16 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 
 	// One client for plain http/https, one for dmsg:// URLs. The dmsg
 	// client is only built if the visor has an active DMSG client.
+	// The DMSG timeout must be generous: deployment services run direct
+	// clients (no discovery entry), so DialStream falls back to trying
+	// all connected servers (~5s per server × 6 servers). A 10s timeout
+	// leaves no room for this fallback after the discovery lookup.
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	var dmsgClient *http.Client
 	if v.dmsgC != nil {
 		dmsgClient = &http.Client{
 			Transport: dmsghttp.MakeHTTPTransport(context.Background(), v.dmsgC),
-			Timeout:   10 * time.Second,
+			Timeout:   45 * time.Second,
 		}
 	}
 
@@ -110,23 +113,16 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 
 	// ---------- DMSG servers (currently connected) ----------
 	if v.dmsgC != nil {
-		results = append(results, v.dmsgServerHealth()...)
+		results = append(results, v.dmsgServerHealth(dmsgClient)...)
 	}
 
 	// ---------- Route Setup Nodes & Transport Setup Nodes ----------
+	// Probe /health over DMSG port 80, same pattern as other services.
 	rsnPKs := v.conf.EffectiveRouteSetupNodes()
 	tpsPKs := v.conf.EffectiveTransportSetupPKs()
-	if len(rsnPKs) > 0 || len(tpsPKs) > 0 {
-		// The dmsg discovery client needs a plain http.Client; it will
-		// use whichever scheme the DmsgDiscovery URL carries. If the
-		// discovery is itself dmsg://, we need the dmsg transport.
-		discHTTPC := httpClient
-		if dmsgClient != nil && strings.HasPrefix(v.conf.Dmsg.Discovery, "dmsg://") {
-			discHTTPC = dmsgClient
-		}
-		discClient := dmsgdisc.NewHTTP(v.conf.Dmsg.Discovery, discHTTPC, v.log)
-		results = append(results, dmsgDiscoveryHealth(discClient, "Route Setup Node", rsnPKs)...)
-		results = append(results, dmsgDiscoveryHealth(discClient, "Transport Setup Node", tpsPKs)...)
+	if dmsgClient != nil {
+		results = append(results, probePKHealth(dmsgClient, "Route Setup Node", rsnPKs)...)
+		results = append(results, probePKHealth(dmsgClient, "Transport Setup Node", tpsPKs)...)
 	}
 
 	return results, nil
@@ -145,12 +141,14 @@ func probeServiceHealth(httpClient, dmsgClient *http.Client, name, baseURL strin
 		return entry
 	}
 	client := httpClient
+	entry.Transport = "http"
 	if u.Scheme == "dmsg" {
 		if dmsgClient == nil {
 			entry.Status = "N/A" // visor has no active DMSG client
 			return entry
 		}
 		client = dmsgClient
+		entry.Transport = "dmsg"
 	}
 
 	reqURL := strings.TrimSuffix(baseURL, "/") + "/health"
@@ -160,6 +158,7 @@ func probeServiceHealth(httpClient, dmsgClient *http.Client, name, baseURL strin
 
 	if err != nil {
 		entry.Status = "DOWN"
+		entry.Error = err.Error()
 		return entry
 	}
 	body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
@@ -187,12 +186,21 @@ func probeServiceHealth(httpClient, dmsgClient *http.Client, name, baseURL strin
 	return entry
 }
 
+// confServiceHTTP returns the conf service HTTP URL from config, falling
+// back to the embedded deployment default.
+func (v *Visor) confServiceHTTP() string {
+	if v.conf.ConfService != "" {
+		return v.conf.ConfService
+	}
+	return deployment.ProdConf.Conf
+}
+
 // dmsgServerHealth returns one ServiceHealthEntry per DMSG server the
 // visor currently holds an active session with. Latency is the last
 // measured ping RTT (0 if unmeasured). Entries are sorted by PK so the
 // UI order remains stable across polls (DMSGServers() sorts by latency
 // which flips between samples and causes visible reordering).
-func (v *Visor) dmsgServerHealth() []ServiceHealthEntry {
+func (v *Visor) dmsgServerHealth(dmsgClient *http.Client) []ServiceHealthEntry {
 	servers, err := v.DMSGServers()
 	if err != nil || len(servers) == 0 {
 		return nil
@@ -200,16 +208,24 @@ func (v *Visor) dmsgServerHealth() []ServiceHealthEntry {
 	sort.Slice(servers, func(i, j int) bool {
 		return servers[i].PK.String() < servers[j].PK.String()
 	})
-	out := make([]ServiceHealthEntry, 0, len(servers))
-	for _, s := range servers {
-		entry := ServiceHealthEntry{
-			Name:      "DMSG Server " + s.PK.String()[:8],
-			URL:       "dmsg://" + s.PK.String(),
-			Status:    "OK", // active session means it's healthy for us
-			LatencyMs: s.Latency.Milliseconds(),
-		}
-		out = append(out, entry)
+	out := make([]ServiceHealthEntry, len(servers))
+	var wg sync.WaitGroup
+	for i, s := range servers {
+		wg.Add(1)
+		go func(i int, pk string, sessionLatency time.Duration) {
+			defer wg.Done()
+			entry := probeServiceHealth(nil, dmsgClient, "DMSG Server", "dmsg://"+pk+":80")
+			if entry.Status != "OK" {
+				// /health probe failed — still report OK (active session).
+				entry.Status = "OK"
+				entry.Error = ""
+			}
+			// Use session ping RTT, not the /health round-trip.
+			entry.LatencyMs = sessionLatency.Milliseconds()
+			out[i] = entry
+		}(i, s.PK.String(), s.Latency)
 	}
+	wg.Wait()
 	return out
 }
 
@@ -217,11 +233,12 @@ func (v *Visor) dmsgServerHealth() []ServiceHealthEntry {
 // for each PK's entry. An entry with a non-empty DelegatedServers list is
 // considered reachable; anything else is DOWN. Results are ordered by PK
 // so the UI order is stable.
-func dmsgDiscoveryHealth(discClient dmsgdisc.APIClient, label string, pks []cipher.PubKey) []ServiceHealthEntry {
+// probePKHealth probes /health over DMSG port 80 for a list of PKs.
+// Used for RSN and TSN nodes that serve HTTP on their DMSG listener.
+func probePKHealth(dmsgClient *http.Client, label string, pks []cipher.PubKey) []ServiceHealthEntry {
 	if len(pks) == 0 {
 		return nil
 	}
-	// Sort PKs for stable output ordering.
 	sorted := make([]cipher.PubKey, len(pks))
 	copy(sorted, pks)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].String() < sorted[j].String() })
@@ -232,21 +249,7 @@ func dmsgDiscoveryHealth(discClient dmsgdisc.APIClient, label string, pks []ciph
 		wg.Add(1)
 		go func(i int, pk cipher.PubKey) {
 			defer wg.Done()
-			entry := ServiceHealthEntry{
-				Name: label + " " + pk.String()[:8],
-				URL:  "dmsg://" + pk.String(),
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-			defer cancel()
-			start := time.Now()
-			dEntry, err := discClient.Entry(ctx, pk)
-			entry.LatencyMs = time.Since(start).Milliseconds()
-			if err != nil || dEntry == nil || dEntry.Client == nil || len(dEntry.Client.DelegatedServers) == 0 {
-				entry.Status = "DOWN"
-			} else {
-				entry.Status = "OK"
-			}
-			results[i] = entry
+			results[i] = probeServiceHealth(nil, dmsgClient, label, "dmsg://"+pk.String()+":80")
 		}(i, pk)
 	}
 	wg.Wait()

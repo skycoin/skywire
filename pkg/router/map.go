@@ -126,6 +126,94 @@ func (cm Map) CloseAll() (errs []error) {
 	return errs
 }
 
+// MakePooledMap is like MakeMap but borrows connections from a ClientPool
+// instead of dialing fresh ones. Clients that were successfully used should
+// be returned to the pool via ReturnToPool; broken ones via DiscardFromPool.
+func MakePooledMap(ctx context.Context, pool *ClientPool, pks []cipher.PubKey) (Map, error) {
+	if len(pks) == 0 {
+		return make(Map), nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, MakeMapTimeout)
+	defer cancel()
+
+	results := make(chan dialResult, len(pks))
+
+	for _, pk := range pks {
+		go func(pk cipher.PubKey) {
+			client, err := pool.Get(ctx, pk)
+			results <- dialResult{client: client, err: err}
+		}(pk)
+	}
+
+	rcM := make(Map, len(pks))
+	var firstErr error
+	received := 0
+	for received < len(pks) {
+		select {
+		case res := <-results:
+			received++
+			if res.err != nil {
+				if firstErr == nil {
+					firstErr = res.err
+				}
+				cancel()
+				continue
+			}
+			if isDone(ctx) {
+				if res.client != nil {
+					pool.Discard(res.client)
+				}
+				continue
+			}
+			rcM[res.client.rPK] = res.client
+
+		case <-ctx.Done():
+			if firstErr == nil {
+				firstErr = ctx.Err()
+			}
+			// Discard what we have — don't return broken clients to pool.
+			for _, c := range rcM {
+				pool.Discard(c)
+			}
+			remaining := len(pks) - received
+			go func() {
+				for i := 0; i < remaining; i++ {
+					res := <-results
+					if res.client != nil {
+						pool.Discard(res.client)
+					}
+				}
+			}()
+			return make(Map), firstErr
+		}
+	}
+
+	if firstErr != nil {
+		for _, c := range rcM {
+			pool.Discard(c)
+		}
+		return make(Map), firstErr
+	}
+	return rcM, nil
+}
+
+// ReturnToPool returns all clients in the Map to the given pool for reuse.
+func (cm Map) ReturnToPool(pool *ClientPool) {
+	for k, c := range cm {
+		pool.Put(c)
+		delete(cm, k)
+	}
+}
+
+// DiscardFromPool closes all clients without pooling them.
+func (cm Map) DiscardFromPool(pool *ClientPool) {
+	for k, c := range cm {
+		pool.Discard(c)
+		delete(cm, k)
+	}
+}
+
 func isDone(ctx context.Context) bool {
 	select {
 	case <-ctx.Done():

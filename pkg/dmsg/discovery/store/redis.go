@@ -236,6 +236,35 @@ func (r *redisStore) RemoveOldServerEntries(ctx context.Context) error {
 	return nil
 }
 
+// RemoveStaleClientEntries scans the "clients" set and:
+// - removes members whose Redis key no longer exists (expired via TTL)
+// - applies defaultTTL to keys that have no expiration (pre-TTL legacy data)
+// This is called periodically from RunBackgroundTasks to clean up entries
+// that were written before the TTL feature was deployed.
+func (r *redisStore) RemoveStaleClientEntries(ctx context.Context, defaultTTL time.Duration) (removed, ttlSet int, err error) {
+	clients, err := r.client.SMembers(ctx, "clients").Result()
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, pk := range clients {
+		ttl, err := r.client.TTL(ctx, pk).Result()
+		if err != nil {
+			continue
+		}
+		switch {
+		case ttl == -2:
+			// Key does not exist — remove from set.
+			r.client.SRem(ctx, "clients", pk) //nolint:errcheck
+			removed++
+		case ttl == -1 && defaultTTL > 0:
+			// Key exists but has no expiration — set one.
+			r.client.Expire(ctx, pk, defaultTTL) //nolint:errcheck
+			ttlSet++
+		}
+	}
+	return removed, ttlSet, nil
+}
+
 func (r *redisStore) AllEntries(ctx context.Context) ([]string, error) {
 	clients, err := r.client.SMembers(ctx, "clients").Result()
 	if err != nil {

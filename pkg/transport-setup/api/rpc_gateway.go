@@ -5,13 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/rpc"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/setup"
 	types "github.com/skycoin/skywire/pkg/transport/types"
@@ -148,6 +152,9 @@ func (api *API) ServeDmsg(ctx context.Context) error {
 	case <-api.dmsgC.Ready():
 	}
 
+	// Serve /health on DMSG port 80 so svc health can probe us.
+	go api.serveDmsgHealth(ctx, log)
+
 	port := skyenv.DmsgTransportSetupServicePort
 	log.WithField("dmsg_port", port).Info("Starting dmsg listener for transport setup requests")
 
@@ -192,5 +199,38 @@ func (api *API) ServeDmsg(ctx context.Context) error {
 		}
 
 		go rpcS.ServeConn(conn)
+	}
+}
+
+// serveDmsgHealth serves /health on DMSG port 80 so the visor's
+// svc health command can probe the transport setup node.
+func (api *API) serveDmsgHealth(ctx context.Context, log *logging.Logger) {
+	lis, err := api.dmsgC.Listen(uint16(80))
+	if err != nil {
+		log.WithError(err).Warn("Failed to listen on DMSG port 80 for health")
+		return
+	}
+	go func() {
+		<-ctx.Done()
+		lis.Close() //nolint:errcheck,gosec
+	}()
+
+	mux := http.NewServeMux()
+	startedAt := time.Now()
+	dmsgAddr := api.dmsgC.LocalPK().String() + ":80"
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		httputil.WriteJSON(w, r, http.StatusOK, httputil.HealthCheckResponse{
+			ServiceName: "transport-setup",
+			BuildInfo:   buildinfo.Get(),
+			StartedAt:   startedAt,
+			DmsgAddr:    dmsgAddr,
+			DmsgServers: api.dmsgC.ConnectedServersPK(),
+		})
+	})
+
+	srv := &http.Server{Handler: mux} //nolint:gosec
+	log.Info("Serving /health on DMSG port 80")
+	if err := srv.Serve(lis); err != nil && ctx.Err() == nil {
+		log.WithError(err).Warn("DMSG health server stopped")
 	}
 }

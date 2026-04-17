@@ -38,6 +38,9 @@ type IDReserver interface {
 
 	// Client returns a router client of given public key.
 	Client(pk cipher.PubKey) *Client
+
+	// ReturnToPool returns connections to a pool instead of closing them.
+	ReturnToPool(pool *ClientPool)
 }
 
 type idReserver struct {
@@ -50,7 +53,8 @@ type idReserver struct {
 
 // NewIDReserver creates a new route ID reserver from a dialer and a slice of paths.
 // The exact number of route IDs to reserve from each router is determined from the slice of paths.
-func NewIDReserver(ctx context.Context, dialer network.Dialer, paths [][]routing.Hop) (IDReserver, error) {
+// If pool is non-nil, connections are borrowed from the pool instead of dialed fresh.
+func NewIDReserver(ctx context.Context, dialer network.Dialer, pool *ClientPool, paths [][]routing.Hop) (IDReserver, error) {
 	var total int // the total number of route IDs we reserve from the routers
 
 	// Prepare 'rec': A map representing the number of expected rules per visor PK.
@@ -71,7 +75,13 @@ func NewIDReserver(ctx context.Context, dialer network.Dialer, paths [][]routing
 	for pk := range rec {
 		pks = append(pks, pk)
 	}
-	clients, err := MakeMap(ctx, dialer, pks)
+	var clients Map
+	var err error
+	if pool != nil {
+		clients, err = MakePooledMap(ctx, pool, pks)
+	} else {
+		clients, err = MakeMap(ctx, dialer, pks)
+	}
 	if err != nil {
 		// %w (not %v) preserves the underlying *router.DialError in the
 		// chain so the setupmetrics collector can identify which hop
@@ -154,6 +164,11 @@ func (idr *idReserver) Close() error {
 		return fmt.Errorf("router client map closed with errors: %v", errs)
 	}
 	return nil
+}
+
+// ReturnToPool returns all connections to the pool for reuse instead of closing them.
+func (idr *idReserver) ReturnToPool(pool *ClientPool) {
+	idr.rcM.ReturnToPool(pool)
 }
 
 func firstError(n int, errCh <-chan error) error {
