@@ -58,7 +58,7 @@ func TestNewIDReserver(t *testing.T) {
 			dialer := newMockDialer(t, nil)
 
 			// act
-			rtIDR, err := NewIDReserver(context.TODO(), dialer, tc.paths)
+			rtIDR, err := NewIDReserver(context.TODO(), dialer, nil, tc.paths)
 			require.NoError(t, err)
 			t.Cleanup(func() { assert.NoError(t, rtIDR.Close()) })
 
@@ -91,7 +91,7 @@ func TestIdReserver_ReserveIDs(t *testing.T) {
 			// arrange
 			dialer := newMockDialer(t, tc.routers)
 
-			rtIDR, err := NewIDReserver(context.TODO(), dialer, tc.paths)
+			rtIDR, err := NewIDReserver(context.TODO(), dialer, nil, tc.paths)
 			require.NoError(t, err)
 			t.Cleanup(func() { assert.NoError(t, rtIDR.Close()) })
 

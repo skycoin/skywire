@@ -26,6 +26,7 @@ var log = logging.MustGetLogger("setup_node")
 // Node performs routes setup operations over messaging channel.
 type Node struct {
 	dmsgC *dmsg.Client
+	pool  *ClientPool // reusable RPC connections to remote visors
 }
 
 // DmsgClient returns the setup node's DMSG client.
@@ -56,16 +57,26 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	<-dmsgC.Ready()
 	log.Info("Connected!")
 
+	dialer := WrapDmsgClient(dmsgC)
 	node := &Node{
 		dmsgC: dmsgC,
+		pool:  NewClientPool(dialer, DefaultPoolTTL),
 	}
 	return node, nil
 }
 
-// Close closes underlying dmsg client.
+// Pool returns the setup node's connection pool.
+func (sn *Node) Pool() *ClientPool {
+	return sn.pool
+}
+
+// Close closes the connection pool and underlying dmsg client.
 func (sn *Node) Close() error {
 	if sn == nil {
 		return nil
+	}
+	if sn.pool != nil {
+		sn.pool.Close()
 	}
 	return sn.dmsgC.Close()
 }
@@ -147,6 +158,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 			Conn:    conn,
 			ReqPK:   conn.RemoteAddr().(dmsg.Addr).PK,
 			Dialer:  WrapDmsgClient(sn.dmsgC),
+			Pool:    sn.pool,
 			Timeout: timeout,
 		}
 		rpcS := rpc.NewServer()
@@ -190,7 +202,7 @@ var ErrCircuitOpen = fmt.Errorf("route setup: destination circuit breaker open")
 // * Intermediary rules are broadcasted to the intermediary routers.
 // * Edge rules are broadcasted to the responding router.
 // * Edge rules is returned (to the initiating router).
-func CreateRouteGroup(ctx context.Context, dialer network.Dialer, biRt routing.BidirectionalRoute, metrics setupmetrics.Metrics) (resp routing.EdgeRules, err error) {
+func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPool, biRt routing.BidirectionalRoute, metrics setupmetrics.Metrics) (resp routing.EdgeRules, err error) {
 	log := logging.MustGetLogger(fmt.Sprintf("request:%s->%s", biRt.Desc.SrcPK(), biRt.Desc.DstPK()))
 	log.Info("Processing request.")
 	// If the metrics implementation is a Collector, use the richer
@@ -226,11 +238,23 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, biRt routing.B
 	}
 
 	// Reserve route IDs from remote routers.
-	rtIDR, err := ReserveRouteIDs(ctx, log, dialer, biRt)
+	rtIDR, err := ReserveRouteIDs(ctx, log, dialer, pool, biRt)
 	if err != nil {
 		return routing.EdgeRules{}, err
 	}
-	defer func() { log.WithError(rtIDR.Close()).Debug("Closing route id reserver.") }()
+	defer func() {
+		if err != nil {
+			// On failure, discard connections (they may be broken).
+			log.Debug("Discarding route id reserver connections (error path).")
+			rtIDR.Close() //nolint:errcheck,gosec
+		} else if pool != nil {
+			// On success, return connections to pool for reuse.
+			log.Debug("Returning route id reserver connections to pool.")
+			rtIDR.ReturnToPool(pool)
+		} else {
+			log.WithError(rtIDR.Close()).Debug("Closing route id reserver.")
+		}
+	}()
 
 	// Generate forward and reverse routes.
 	fwdRt, revRt := biRt.ForwardAndReverse()
@@ -267,7 +291,7 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, biRt routing.B
 
 // ReserveRouteIDs dials to all routers and reserves required route IDs from them.
 // The number of route IDs to be reserved per router, is extrapolated from the 'route' input.
-func ReserveRouteIDs(ctx context.Context, log logrus.FieldLogger, dialer network.Dialer, route routing.BidirectionalRoute) (idR IDReserver, err error) {
+func ReserveRouteIDs(ctx context.Context, log logrus.FieldLogger, dialer network.Dialer, pool *ClientPool, route routing.BidirectionalRoute) (idR IDReserver, err error) {
 	log.Debug("Reserving route IDs...")
 	defer func() {
 		if err != nil {
@@ -275,7 +299,7 @@ func ReserveRouteIDs(ctx context.Context, log logrus.FieldLogger, dialer network
 		}
 	}()
 
-	idR, err = NewIDReserver(ctx, dialer, [][]routing.Hop{route.Forward, route.Reverse})
+	idR, err = NewIDReserver(ctx, dialer, pool, [][]routing.Hop{route.Forward, route.Reverse})
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate route id reserver: %w", err)
 	}
