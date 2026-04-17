@@ -215,6 +215,7 @@ type API interface {
 	// runtime — the on-disk config is unchanged, so a visor restart
 	// reverts to the config's Enable flag.
 	SetEmbeddedProxyEnabled(kind string, enable bool) error
+	SetEmbeddedProxyUpstream(kind, addr string) error
 	ResetRouteSetupStats() error
 
 	TPSExternalHealthCheck(tpsPK cipher.PubKey) error

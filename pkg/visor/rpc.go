@@ -1275,6 +1275,21 @@ func (r *RPC) SetEmbeddedProxyEnabled(req *SetEmbeddedProxyEnabledRequest, _ *st
 	return r.visor.SetEmbeddedProxyEnabled(req.Kind, req.Enable)
 }
 
+// SetEmbeddedProxyUpstreamRequest is the RPC argument for SetEmbeddedProxyUpstream.
+type SetEmbeddedProxyUpstreamRequest struct {
+	Kind string
+	Addr string // upstream SOCKS5 address, "" to clear
+}
+
+// SetEmbeddedProxyUpstream changes the upstream SOCKS5 address for a resolver.
+func (r *RPC) SetEmbeddedProxyUpstream(req *SetEmbeddedProxyUpstreamRequest, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetEmbeddedProxyUpstream", req)(nil, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.SetEmbeddedProxyUpstream(req.Kind, req.Addr)
+}
+
 // DmsgHTTP performs an HTTP request over dmsg using the visor's dmsg client.
 // DmsgProbeRequest is the RPC argument for DmsgProbe.
 type DmsgProbeRequest struct {

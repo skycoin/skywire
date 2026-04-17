@@ -132,6 +132,32 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 	}
 }
 
+// SetEmbeddedProxyUpstream changes the upstream SOCKS5 address for a
+// resolving proxy at runtime. The resolver is restarted to apply the
+// change. Pass "" to clear the upstream.
+func (v *Visor) SetEmbeddedProxyUpstream(kind, addr string) error {
+	switch kind {
+	case "dmsg", "dmsgweb", "dmsg_web":
+		v.initLock.Lock()
+		runtime := v.embeddedDmsgWeb
+		v.initLock.Unlock()
+		if runtime == nil {
+			return fmt.Errorf("dmsgweb resolver not initialized")
+		}
+		return runtime.SetUpstream(addr)
+	case "skynet", "skynetweb", "skynet_web":
+		v.initLock.Lock()
+		runtime := v.embeddedSkynetWeb
+		v.initLock.Unlock()
+		if runtime == nil {
+			return fmt.Errorf("skynetweb resolver not initialized")
+		}
+		return runtime.SetUpstream(addr)
+	default:
+		return fmt.Errorf("unknown proxy kind %q (want \"dmsg\" or \"skynet\")", kind)
+	}
+}
+
 func dmsgProxyInfo(cfg *visorconfig.DmsgWebConfig, runtime *EmbeddedDmsgWeb) *EmbeddedProxyInfo {
 	info := &EmbeddedProxyInfo{
 		Enabled:       cfg.Enable,
@@ -143,6 +169,9 @@ func dmsgProxyInfo(cfg *visorconfig.DmsgWebConfig, runtime *EmbeddedDmsgWeb) *Em
 	if runtime != nil {
 		info.Running = runtime.IsRunning()
 		info.Stats = dmsgStatsToAPI(runtime.Stats())
+		if u := runtime.Upstream(); u != "" {
+			info.UpstreamSOCKS = u
+		}
 	}
 	return info
 }
@@ -158,6 +187,9 @@ func skynetProxyInfo(cfg *visorconfig.SkynetWebConfig, runtime *EmbeddedSkynetWe
 	if runtime != nil {
 		info.Running = runtime.IsRunning()
 		info.Stats = skynetStatsToAPI(runtime.Stats())
+		if u := runtime.Upstream(); u != "" {
+			info.UpstreamSOCKS = u
+		}
 	}
 	return info
 }

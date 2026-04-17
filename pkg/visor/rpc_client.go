@@ -996,6 +996,13 @@ func (rc *rpcClient) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 		&struct{}{})
 }
 
+// SetEmbeddedProxyUpstream changes the upstream SOCKS5 address at runtime.
+func (rc *rpcClient) SetEmbeddedProxyUpstream(kind, addr string) error {
+	return rc.Call("SetEmbeddedProxyUpstream",
+		&SetEmbeddedProxyUpstreamRequest{Kind: kind, Addr: addr},
+		&struct{}{})
+}
+
 // DmsgHTTP performs an HTTP request over dmsg using the visor's dmsg client.
 func (rc *rpcClient) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	var resp DmsgHTTPResponse
