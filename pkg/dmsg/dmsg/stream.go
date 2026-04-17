@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/yamux"
@@ -21,12 +22,13 @@ type Stream struct {
 	yStr *yamux.Stream
 	sStr *smux.Stream
 	// The following fields are to be filled after handshake.
-	lAddr  Addr
-	rAddr  Addr
-	ns     *noise.Noise
-	nsConn *noise.ReadWriter
-	close  func() // to be called when closing
-	log    logrus.FieldLogger
+	lAddr   Addr
+	rAddr   Addr
+	ns      *noise.Noise
+	nsConn  *noise.ReadWriter
+	closeMu sync.Mutex
+	close   func() // to be called when closing
+	log     logrus.FieldLogger
 }
 
 func newInitiatingStream(cSes *ClientSession) (*Stream, error) {
@@ -65,8 +67,11 @@ func (s *Stream) Close() error {
 	if s == nil {
 		return nil
 	}
-	if s.close != nil {
-		s.close()
+	s.closeMu.Lock()
+	closeFn := s.close
+	s.closeMu.Unlock()
+	if closeFn != nil {
+		closeFn()
 	}
 	if s.sStr != nil {
 		return s.sStr.Close()
@@ -85,9 +90,13 @@ func (s *Stream) Logger() logrus.FieldLogger {
 func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 	// Reserve stream in porter.
 	var lPort uint16
-	if lPort, s.close, err = s.ses.porter.ReserveEphemeral(context.Background(), s); err != nil {
+	var closeFn func()
+	if lPort, closeFn, err = s.ses.porter.ReserveEphemeral(context.Background(), s); err != nil {
 		return req, err
 	}
+	s.closeMu.Lock()
+	s.close = closeFn
+	s.closeMu.Unlock()
 
 	// Prepare fields.
 	if err = s.prepareFields(true, Addr{PK: s.ses.LocalPK(), Port: lPort}, rAddr); err != nil {
@@ -122,9 +131,13 @@ func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 func (s *Stream) writeIPRequest(rAddr Addr) (req StreamRequest, err error) {
 	// Reserve stream in porter.
 	var lPort uint16
-	if lPort, s.close, err = s.ses.porter.ReserveEphemeral(context.Background(), s); err != nil {
+	var closeFn func()
+	if lPort, closeFn, err = s.ses.porter.ReserveEphemeral(context.Background(), s); err != nil {
 		return req, err
 	}
+	s.closeMu.Lock()
+	s.close = closeFn
+	s.closeMu.Unlock()
 
 	// Prepare fields.
 	if err = s.prepareFields(true, Addr{PK: s.ses.LocalPK(), Port: lPort}, rAddr); err != nil {
@@ -351,10 +364,15 @@ func (s *Stream) Read(b []byte) (int, error) {
 		// Reset the read deadline on successful read to keep the stream alive.
 		s.SetReadDeadline(time.Now().Add(StreamIdleTimeout)) //nolint:errcheck,gosec
 	}
-	if err != nil && s != nil && s.close != nil {
+	if err != nil && s != nil {
 		// Terminal read error — release the porter reservation so we don't
 		// rely on an explicit Close() from the caller's code path.
-		s.close()
+		s.closeMu.Lock()
+		closeFn := s.close
+		s.closeMu.Unlock()
+		if closeFn != nil {
+			closeFn()
+		}
 	}
 	return n, err
 }
@@ -365,8 +383,13 @@ func (s *Stream) Read(b []byte) (int, error) {
 // the caller doesn't follow up with Close().
 func (s *Stream) Write(b []byte) (int, error) {
 	n, err := s.nsConn.Write(b)
-	if err != nil && s != nil && s.close != nil {
-		s.close()
+	if err != nil && s != nil {
+		s.closeMu.Lock()
+		closeFn := s.close
+		s.closeMu.Unlock()
+		if closeFn != nil {
+			closeFn()
+		}
 	}
 	return n, err
 }

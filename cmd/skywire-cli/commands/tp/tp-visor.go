@@ -38,7 +38,7 @@ var (
 
 func init() {
 	visorListCmd.Flags().StringVarP(&vSDURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
-	visorListCmd.Flags().StringVarP(&vUTURL, "uturl", "w", deployment.Prod.UptimeTracker, "uptime tracker url")
+	visorListCmd.Flags().StringVarP(&vUTURL, "uturl", "w", deployment.Prod.TransportDiscovery, "uptime tracker url (TPD integrated)")
 	visorListCmd.Flags().BoolVarP(&vRawData, "raw", "r", false, "print raw json data")
 	visorListCmd.Flags().BoolVarP(&vNoFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	visorListCmd.Flags().StringVar(&vCacheFileSD, "cfs", os.TempDir()+"/visorsd.json", "SD cache file location")

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
@@ -246,6 +247,18 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	v.logServer.api = lsAPI
 	v.initLock.Unlock()
 
+	// Register the log server handler so the sky-forwarding server
+	// can dispatch skynet connections to it directly (no localhost
+	// TCP bounce). Uses the SAME handler (lsAPI) as the DMSG HTTP
+	// server — a request arriving via skynet is served identically
+	// to one arriving via DMSG.
+	v.services.Register(visorconfig.DmsgHTTPPort, "log_server", HTTPHandler(lsAPI))
+	logger.WithField("port", visorconfig.DmsgHTTPPort).Info("Registered log server in service registry")
+
+	// Wire the service catalog so /services on the log server shows
+	// what ports are available for skynet forwarding.
+	lsAPI.SetServiceLister(v.services)
+
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
 		return err
@@ -296,9 +309,18 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		return nil
 	})
 
-	// Optionally serve on localhost as well (no whitelist authentication)
+	// Also serve on localhost so the skynet forwarding server can
+	// reach /health and other endpoints. When LogServer.LocalAddr
+	// is configured, use that; otherwise auto-bind on :0 (OS-
+	// assigned port) so every visor gets a localhost listener for
+	// skynet forwarding without manual config.
+	localAddr := ""
 	if v.conf.LogServer != nil && v.conf.LogServer.LocalAddr != "" {
-		localAddr := v.conf.LogServer.LocalAddr
+		localAddr = v.conf.LogServer.LocalAddr
+	} else {
+		localAddr = "localhost:0" // auto-assign
+	}
+	if localAddr != "" {
 		logger.WithField("local_addr", localAddr).Info("Starting localhost log server")
 
 		// Create a separate API without whitelist authentication for localhost
@@ -314,6 +336,22 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		if err != nil {
 			logger.WithError(err).WithField("local_addr", localAddr).Warn("Failed to start localhost log server")
 		} else {
+			// Capture the actual bound address (important when
+			// localAddr was ":0" for auto-assignment).
+			boundAddr := localLis.Addr().String()
+			logger.WithField("bound_addr", boundAddr).Info("Localhost log server bound")
+
+			// Register the port for skynet forwarding so
+			// .skynet URLs can reach /health, /ping, etc.
+			if _, portStr, splitErr := net.SplitHostPort(boundAddr); splitErr == nil {
+				if port, convErr := strconv.Atoi(portStr); convErr == nil && port > 0 {
+					v.allowed.mu.Lock()
+					v.allowed.ports[port] = true
+					v.allowed.mu.Unlock()
+					logger.WithField("port", port).Info("Log server port registered for skynet forwarding")
+				}
+			}
+
 			localSrv := &http.Server{
 				ReadTimeout:       5 * time.Second,
 				WriteTimeout:      30 * time.Second,

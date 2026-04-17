@@ -148,6 +148,7 @@ func (a *API) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	})
 
 	r.Get("/uptimes", a.getUptimes)
+	r.Post("/uptimes", a.postUptimes)
 	r.Get("/health", a.health)
 
 	if a.nonceDB != nil {
@@ -594,6 +595,43 @@ func (a *API) getUptimesV3(w http.ResponseWriter, r *http.Request, visorsParam s
 	}
 
 	httputil.WriteJSON(w, r, http.StatusOK, filtered)
+}
+
+// bulkUptimesRequest is the JSON body for POST /uptimes. Accepts a
+// list of visor PKs and an optional version. Avoids URL-length limits
+// when querying hundreds of PKs.
+type bulkUptimesRequest struct {
+	PKs     []string `json:"pks"`
+	Version string   `json:"v,omitempty"`
+}
+
+// POST /uptimes — bulk visor uptime query.
+// Body: {"pks": ["pk1","pk2",...], "v": "v2"}
+func (a *API) postUptimes(w http.ResponseWriter, r *http.Request) {
+	var req bulkUptimesRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+		httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	visorsParam := strings.Join(req.PKs, ";")
+	switch req.Version {
+	case "v3":
+		a.getUptimesV3(w, r, visorsParam)
+	default:
+		var uptimes []store.VisorSummary
+		if req.Version == "v2" {
+			uptimes = a.getUptimesV2FromCache()
+		} else {
+			uptimes = a.getUptimesFromCache()
+		}
+		if uptimes == nil {
+			uptimes = []store.VisorSummary{}
+		}
+		if visorsParam != "" {
+			uptimes = filterByPKs(uptimes, visorsParam)
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, uptimes)
+	}
 }
 
 // filterByPKs filters a VisorSummary slice to only include entries whose

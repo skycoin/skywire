@@ -410,6 +410,33 @@ func (ce *Client) AllSessions() []ClientSession {
 	return ce.allClientSessions(ce.porter)
 }
 
+// ForceReconnect closes every active server session. The reconnect loop
+// (15 s cadence) and delSession → nudgeEntryUpdate path together will
+// re-dial fresh sessions and refresh the discovery entry's
+// delegated_servers list.
+//
+// This exists as a recovery hook for the visor's self-probe: when a
+// visor's own listeners become unreachable through its existing
+// sessions (typically a one-sided view — server has the session, we
+// don't, or vice versa), nothing in steady-state detects it because
+// our side thinks the session is fine. Closing and re-dialing clears
+// the staleness.
+//
+// Returns the number of sessions that were torn down. Safe to call
+// concurrently with normal operation; in-flight streams on the closed
+// sessions will fail and the caller is expected to retry on a fresh
+// session.
+func (ce *Client) ForceReconnect() int {
+	sessions := ce.allClientSessions(ce.porter)
+	for _, ses := range sessions {
+		_ = ses.Close() //nolint:errcheck,gosec
+	}
+	// Nudge an immediate discovery entry refresh so clients dialing
+	// us stop seeing the now-closed sessions in our delegated list.
+	ce.nudgeEntryUpdate()
+	return len(sessions)
+}
+
 // ConnectToAllServersResult summarizes the result of a ConnectToAllServers call.
 type ConnectToAllServersResult struct {
 	Total            int                      // total servers found in discovery
@@ -619,16 +646,33 @@ func (ce *Client) reconnectMissing(ctx context.Context) {
 	}
 }
 
-// pingSessionsLoop periodically pings all sessions to measure latency.
-// The interval is 1 hour — this is for server selection, not keepalive
-// (yamux handles its own keepalives). 30s was excessive and generated
-// noisy DEBUG logs (N_clients × N_servers pings every 30s).
+// pingSessionsLoop periodically pings all sessions. Serves two jobs:
+//
+//  1. Latency measurement for server-selection in DialStream's
+//     sortedDelegatedSessions / sortedMeshSessions.
+//  2. Dead-session detection: yamux's own keepalive covers TCP-level
+//     liveness but does NOT detect the case where our side of the
+//     session is healthy but the dmsg server has torn down its view
+//     (e.g. after a server restart or a forwarding-table hiccup).
+//     An application-level ping round-trips through the session and
+//     exposes this mismatch; 2 consecutive failures close the session
+//     so the reconnect loop picks a fresh server and delSession's
+//     nudge refreshes the discovery entry.
+//
+// Cadence: 60 s (down from 1 h, which was latency-only and useless
+// for deadness detection). With ~6 sessions per visor the traffic is
+// 6 round-trips/min — negligible.
 func (ce *Client) pingSessionsLoop(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Hour)
+	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
+	// Per-session consecutive-failure counter. Keyed on the session's
+	// SessionCommon pointer so reconnects (which create a fresh
+	// SessionCommon) reset it naturally.
+	fails := make(map[*SessionCommon]int)
+
 	// Do an initial ping immediately.
-	ce.pingSessions()
+	ce.pingSessions(ctx, fails)
 
 	for {
 		select {
@@ -637,23 +681,51 @@ func (ce *Client) pingSessionsLoop(ctx context.Context) {
 		case <-ce.done:
 			return
 		case <-ticker.C:
-			ce.pingSessions()
+			ce.pingSessions(ctx, fails)
 		}
 	}
 }
 
-func (ce *Client) pingSessions() {
+// pingDeadThreshold is the consecutive-ping-failure count at which we
+// give up on a session and close it. Set to 2 so a single transient
+// hiccup (packet loss, brief server blip) does not kill the session.
+const pingDeadThreshold = 2
+
+func (ce *Client) pingSessions(_ context.Context, fails map[*SessionCommon]int) {
 	sessions := ce.allClientSessions(ce.porter)
+	// Track which sessions are currently alive so we can prune the
+	// fails map and avoid a slow leak as sessions churn.
+	alive := make(map[*SessionCommon]struct{}, len(sessions))
 	for _, ses := range sessions {
+		key := ses.SessionCommon
+		alive[key] = struct{}{}
 		rtt, err := ses.Ping()
 		if err != nil {
-			ce.log.WithError(err).WithField("server", ses.RemotePK()).
-				Trace("Ping failed, keeping previous latency measurement")
+			fails[key]++
+			ce.log.WithError(err).
+				WithField("server", ses.RemotePK()).
+				WithField("consecutive_fails", fails[key]).
+				Debug("Session ping failed")
+			if fails[key] >= pingDeadThreshold {
+				ce.log.WithField("server", ses.RemotePK()).
+					WithField("consecutive_fails", fails[key]).
+					Warn("Closing dead session (ping threshold exceeded); reconnect loop will re-dial")
+				_ = ses.Close() //nolint:errcheck,gosec
+				delete(fails, key)
+			}
 			continue
 		}
+		fails[key] = 0
 		ses.SetLastPing(rtt)
 		ce.log.WithField("server", ses.RemotePK()).WithField("rtt", rtt).
 			Trace("Session ping measured")
+	}
+	// Prune fails entries for sessions that no longer exist (closed
+	// and not yet re-added). Bounds the map at len(alive).
+	for key := range fails {
+		if _, ok := alive[key]; !ok {
+			delete(fails, key)
+		}
 	}
 }
 

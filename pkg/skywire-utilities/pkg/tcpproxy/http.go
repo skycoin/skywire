@@ -11,7 +11,14 @@ import (
 
 // ListenAndServe starts http server with tcp proxy support
 func ListenAndServe(addr string, handler http.Handler) error {
-	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 	if addr == "" {
 		addr = ":http"
 	}

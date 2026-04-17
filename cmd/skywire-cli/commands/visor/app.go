@@ -26,7 +26,14 @@ var useInternal bool
 var useExternal bool
 
 func init() {
-	cobra.EnableCommandSorting = false
+	// cobra.EnableCommandSorting used to be set to false here, which
+	// globally disabled alphabetical sorting for every command in the
+	// process. That prevented the root `skywire cli` help from
+	// rendering its command groups in a predictable order (commands
+	// showed up in insertion order instead). The workflow-ordered
+	// subcommands this flag protected (ls/start/stop/…) are still
+	// readable when sorted alphabetically, so the global flag is left
+	// at its default (true) and groups render alphabetically.
 	RootCmd.AddCommand(appCmd)
 	appCmd.AddCommand(
 		lsAppsCmd,

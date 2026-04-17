@@ -5,6 +5,7 @@ services:
     restart: always
     ports:
       - ${AR_PORT}:${AR_PORT}
+#      - 30178:${AR_PORT}/udp
       - 30178:30178/udp
       - 127.0.0.1:${AR_PPROF}:${AR_PPROF}
     command:
@@ -12,8 +13,8 @@ services:
       - ar
       - --addr
       - :${AR_PORT}
-      - --keyfile
-      - /etc/skywire/keys/ar.key
+      - --sk
+      - ${AR_SECKEY}
       - --dmsg-disc
       - http://${DMSGDISC_HOST}:${DMSGDISC_PORT}
       - --redis
@@ -27,10 +28,7 @@ services:
       - --entry-timeout
       - 2m
     environment:
-      - GODEBUG=madvdontneed=1
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-    volumes:
-      - ./keys:/etc/skywire/keys
     depends_on:
       - redis
       - dmsg-discovery
@@ -48,8 +46,8 @@ services:
       - :${CONF_PPROF}
       - -c
       - /etc/skywire/config.json
-    environment:
-      - GODEBUG=madvdontneed=1
+      - --sk
+      - ${CONF_SECKEY}
     volumes:
       - ./config-bootstrapper:/etc/skywire
   dmsg-discovery:
@@ -66,19 +64,18 @@ services:
       - redis://${REDIS_HOST}:${REDIS_PORT}
       - --addr
       - :${DMSGDISC_PORT}
-      - --pprof
+      - --pprofmode
+      - http
+      - --pprofaddr
       - :${DMSGDISC_PPROF}
-      - --keyfile
-      - /etc/skywire/keys/dmsgdisc.key
+      - --sk
+      - ${DMSGDISC_SECKEY}
       - --official-servers
       - ${DMSGDISC_OFFICIAL_SERVERS}
       - --whitelist-keys
       - ${NETWORK_MONITOR_PUBKEY},${NETWORK_MONITOR_PUBKEY_MOSES}
     environment:
-      - GODEBUG=madvdontneed=1
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-    volumes:
-      - ./keys:/etc/skywire/keys
     depends_on:
       - redis
   dmsg-server-1:
@@ -90,10 +87,10 @@ services:
       - server
       - start
       - /etc/skywire/dmsg-server/config.json
-      - --pprof
+      - --pprofmode
+      - http
+      - --pprofaddr
       - :${DMSGSERVER_1_PPROF}
-    environment:
-      - GODEBUG=madvdontneed=1
     volumes:
       - ./dmsg-server/dmsg-server-1/:/etc/skywire/dmsg-server
     ports:
@@ -108,10 +105,10 @@ services:
       - server
       - start
       - /etc/skywire/dmsg-server/config.json
-      - --pprof
+      - --pprofmode
+      - http
+      - --pprofaddr
       - :${DMSGSERVER_6_PPROF}
-    environment:
-      - GODEBUG=madvdontneed=1
     volumes:
       - ./dmsg-server/dmsg-server-6/:/etc/skywire/dmsg-server
     ports:
@@ -126,10 +123,10 @@ services:
       - server
       - start
       - /etc/skywire/dmsg-server/config.json
-      - --pprof
+      - --pprofmode
+      - http
+      - --pprofaddr
       - :${DMSGSERVER_7_PPROF}
-    environment:
-      - GODEBUG=madvdontneed=1
     volumes:
       - ./dmsg-server/dmsg-server-7/:/etc/skywire/dmsg-server
     ports:
@@ -162,8 +159,6 @@ services:
       - http://${UTTRACKER_HOST}:${UTTRACKER_PORT}
       - --cleaning-delay
       - "180"
-    environment:
-      - GODEBUG=madvdontneed=1
     depends_on:
       - uptime-tracker
       - route-finder
@@ -189,18 +184,15 @@ services:
       - :${RF_PPROF}
       - -l
       - debug
-      - --keyfile
-      - /etc/skywire/keys/rf.key
+      - --sk
+      - ${RF_SECKEY}
       - --dmsg-disc
       - http://${DMSGDISC_HOST}:${DMSGDISC_PORT}
       - --redis
       - redis://${REDIS_HOST}:${REDIS_PORT}
     environment:
-      - GODEBUG=madvdontneed=1
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_ADDR=${REDIS_HOST}:${REDIS_PORT}
-    volumes:
-      - ./keys:/etc/skywire/keys
     depends_on:
       - redis
       - dmsg-discovery
@@ -219,8 +211,8 @@ services:
       - :${SD_PORT}
       - --pprof
       - :${SD_PPROF}
-      - --keyfile
-      - /etc/skywire/keys/sd.key
+      - --sk
+      - ${SD_SECKEY}
       - --redis
       - redis://${REDIS_HOST}:${REDIS_PORT}
       - --dmsg-disc
@@ -230,10 +222,7 @@ services:
       - --entry-timeout
       - 2m
     environment:
-      - GODEBUG=madvdontneed=1
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-    volumes:
-      - ./keys:/etc/skywire/keys
     depends_on:
       - redis
       - dmsg-discovery
@@ -245,11 +234,11 @@ services:
     command:
       - svc
       - sn
-      - --pprof
+      - --pprofmode
+      - http
+      - --pprofaddr
       - :${SN_PPROF}
       - /etc/skywire/setup-node/config.json
-    environment:
-      - GODEBUG=madvdontneed=1
     volumes:
       - ./setup-node:/etc/skywire/setup-node
     depends_on:
@@ -262,8 +251,6 @@ services:
       - visor
       - -c
       - /etc/skywire/skywire-visor/skywire.json
-    environment:
-      - GODEBUG=madvdontneed=1
     volumes:
       - ./visors-config:/etc/skywire/skywire-visor
     depends_on:
@@ -288,8 +275,8 @@ services:
       - :${TPDISC_PPROF}
       - --redis
       - redis://${REDIS_HOST}:${REDIS_PORT}
-      - --keyfile
-      - /etc/skywire/keys/tpd.key
+      - --sk
+      - ${TPDISC_SECKEY}
       - --dmsg-disc
       - http://${DMSGDISC_HOST}:${DMSGDISC_PORT}
       - --whitelist-keys
@@ -297,10 +284,7 @@ services:
       - --entry-timeout
       - 2m
     environment:
-      - GODEBUG=madvdontneed=1
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-    volumes:
-      - ./keys:/etc/skywire/keys
     depends_on:
       - redis
       - dmsg-discovery
@@ -312,8 +296,6 @@ services:
       - tps
       - -c
       - /etc/transport-setup/tps.json
-    environment:
-      - GODEBUG=madvdontneed=1
     volumes:
       - ./visors-config:/etc/transport-setup
   uptime-tracker:
@@ -321,6 +303,7 @@ services:
     image: "skycoin/skywire:test"
     restart: always
     ports:
+      - 127.0.0.1:${UTTRACKER_PPROF}:${UTTRACKER_PPROF}
       - ${UTTRACKER_PORT}:${UTTRACKER_PORT}
     command:
       - svc
@@ -331,22 +314,19 @@ services:
       - :${UTTRACKER_PPROF}
       - --redis
       - redis://${REDIS_HOST}:${REDIS_PORT}
-      - --keyfile
-      - /etc/skywire/keys/ut.key
+      - --sk
+      - ${UTTRACKER_SECKEY}
       - --dmsg-disc
       - http://${DMSGDISC_HOST}:${DMSGDISC_PORT}
       - --pg-host
       - ${POSTGRES_HOST}
     environment:
-      - GODEBUG=madvdontneed=1
       - REDIS_ADDR=${REDIS_HOST}:${REDIS_PORT}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - API_KEY=${UTTRACKER_API_KEY}
       - PG_PASSWORD=${POSTGRES_PASSWORD}
       - PG_USER=${POSTGRES_USER}
       - PG_DATABASE=uptime_tracker
-    volumes:
-      - ./keys:/etc/skywire/keys
     depends_on:
       - postgres
       - redis
@@ -391,8 +371,6 @@ services:
       - "3478"
       - --alt-port
       - "3479"
-    environment:
-      - GODEBUG=madvdontneed=1
   geoip:
     container_name: geoip
     image: "skycoin/skywire:test"
@@ -408,5 +386,3 @@ services:
       - :${GEOIP_PORT}
       - --pprof
       - :${GEOIP_PPROF}
-    environment:
-      - GODEBUG=madvdontneed=1

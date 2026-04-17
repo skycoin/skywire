@@ -979,11 +979,33 @@ func (rc *rpcClient) UIServerStatus() (*UIServerStatus, error) {
 	return &status, err
 }
 
+// EmbeddedProxies fetches the runtime state of the in-process
+// resolving proxies (dmsgweb / skynetweb).
+func (rc *rpcClient) EmbeddedProxies() (*EmbeddedProxiesStatus, error) {
+	var status EmbeddedProxiesStatus
+	err := rc.Call("EmbeddedProxies", &struct{}{}, &status)
+	return &status, err
+}
+
+// SetEmbeddedProxyEnabled toggles a resolver on/off at runtime.
+func (rc *rpcClient) SetEmbeddedProxyEnabled(kind string, enable bool) error {
+	return rc.Call("SetEmbeddedProxyEnabled",
+		&SetEmbeddedProxyEnabledRequest{Kind: kind, Enable: enable},
+		&struct{}{})
+}
+
 // DmsgHTTP performs an HTTP request over dmsg using the visor's dmsg client.
 func (rc *rpcClient) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	var resp DmsgHTTPResponse
 	err := rc.Call("DmsgHTTP", &req, &resp)
 	return &resp, err
+}
+
+// DmsgProbe checks dmsg reachability of a remote PK on a given port.
+func (rc *rpcClient) DmsgProbe(pk cipher.PubKey, port uint16) (bool, error) {
+	var reachable bool
+	err := rc.Call("DmsgProbe", &DmsgProbeRequest{PK: pk, Port: port}, &reachable)
+	return reachable, err
 }
 
 // DmsgConnectAll triggers a one-shot connect-to-all-dmsg-servers action.
