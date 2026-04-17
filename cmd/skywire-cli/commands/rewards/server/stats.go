@@ -19,7 +19,7 @@ import (
 	"github.com/bitfield/script"
 	"github.com/oschwald/geoip2-golang/v2"
 
-	geoipcmd "github.com/skycoin/skywire/cmd/geoip/commands"
+	geoipcmd "github.com/skycoin/skywire/cmd/svc/geoip/commands"
 	"github.com/skycoin/skywire/deployment"
 )
 

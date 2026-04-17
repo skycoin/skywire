@@ -34,6 +34,32 @@ type Client struct {
 // Keep this short to free ephemeral ports quickly under load.
 const DialTimeout = 10 * time.Second
 
+// DialError identifies which remote PK failed to dial during route setup.
+// The setup-node metrics layer inspects this to avoid tripping the circuit
+// breaker on the destination when the failure was actually on the source
+// side: id_reservation calls MakeMap which dials every hop (source, dest,
+// intermediaries), and a flaky source visor would otherwise poison the
+// destination's breaker, blocking all requests to a healthy destination.
+type DialError struct {
+	PK  cipher.PubKey
+	Err error
+}
+
+// Error returns the formatted dial error, preserving the legacy message
+// format ("dial <pk>@<port>: <inner>") so anything that still greps logs
+// keeps working.
+func (e *DialError) Error() string {
+	return fmt.Sprintf("dial %v@%v: %v", e.PK, skyenv.DmsgAwaitSetupPort, e.Err)
+}
+
+// Unwrap exposes the inner error for errors.Is / errors.As.
+func (e *DialError) Unwrap() error { return e.Err }
+
+// DialFailedPK reports the remote PK that could not be dialed. The
+// setupmetrics collector probes for this via an anonymous interface to
+// stay free of a router import cycle.
+func (e *DialError) DialFailedPK() cipher.PubKey { return e.PK }
+
 // NewClient creates a new Client.
 func NewClient(ctx context.Context, dialer network.Dialer, rPK cipher.PubKey) (*Client, error) {
 	dialCtx, dialCancel := context.WithTimeout(ctx, DialTimeout)
@@ -41,7 +67,7 @@ func NewClient(ctx context.Context, dialer network.Dialer, rPK cipher.PubKey) (*
 
 	s, err := dialer.Dial(dialCtx, rPK, skyenv.DmsgAwaitSetupPort)
 	if err != nil {
-		return nil, fmt.Errorf("dial %v@%v: %w", rPK, skyenv.DmsgAwaitSetupPort, err)
+		return nil, &DialError{PK: rPK, Err: err}
 	}
 
 	// Set a deadline on the underlying connection to prevent stale DMSG streams
