@@ -28,6 +28,7 @@ export class LoginComponent extends PageBaseComponent implements OnInit, OnDestr
   loading = false;
   isForVpn = false;
   vpnKey = '';
+  userExists = true; // hide configure button by default until we check
 
   private verificationSubscription: Subscription;
   private loginSubscription: Subscription;
@@ -69,6 +70,13 @@ export class LoginComponent extends PageBaseComponent implements OnInit, OnDestr
     this.form = new UntypedFormGroup({
       password: new UntypedFormControl('', Validators.required),
     });
+
+    // Check if a user account has been created to show/hide the
+    // "Configure initial launch" button.
+    this.authService.userExists().subscribe(
+      exists => this.userExists = exists,
+      () => this.userExists = true // on error, hide the button (safe default)
+    );
 
     return super.ngOnInit();
   }

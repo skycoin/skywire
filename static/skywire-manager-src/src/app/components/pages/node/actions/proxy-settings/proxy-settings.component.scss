@@ -1,0 +1,50 @@
+.help-text {
+  color: rgba(0, 0, 0, 0.7);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.status-table {
+  width: 100%;
+  margin-bottom: 16px;
+  border-collapse: collapse;
+
+  th, td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    font-size: 13px;
+  }
+
+  th {
+    color: rgba(0, 0, 0, 0.5);
+    font-weight: 500;
+  }
+
+  td {
+    color: rgba(0, 0, 0, 0.87);
+  }
+}
+
+.no-proxy {
+  color: rgba(0, 0, 0, 0.5);
+  font-style: italic;
+}
+
+.proxy-form {
+  margin-top: 16px;
+}
+
+.form-row {
+  margin-bottom: 16px;
+}
+
+.upstream-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .upstream-field {
+    flex: 1;
+  }
+}

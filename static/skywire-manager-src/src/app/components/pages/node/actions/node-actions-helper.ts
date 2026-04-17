@@ -4,6 +4,7 @@ import { Subscription } from 'rxjs';
 import { Injector } from '@angular/core';
 
 import { BasicTerminalComponent } from './basic-terminal/basic-terminal.component';
+import { ProxySettingsComponent } from './proxy-settings/proxy-settings.component';
 import { SnackbarService } from '../../../../services/snackbar.service';
 import { Node } from '../../../../app.datatypes';
 import GeneralUtils from 'src/app/utils/generalUtils';
@@ -78,6 +79,12 @@ export class NodeActionsHelper {
     });
 
     this.options.push({
+      name: 'actions.menu.proxy',
+      actionName: 'proxy',
+      icon: 'vpn_lock'
+    });
+
+    this.options.push({
       name: 'actions.menu.turn-off',
       actionName: 'shutdown',
       icon: 'power_settings_new'
@@ -131,6 +138,8 @@ export class NodeActionsHelper {
       this.update();
     } else if (actionName === 'logs') {
       this.runtimeLogs();
+    } else if (actionName === 'proxy') {
+      this.openProxySettings();
     } else if (actionName === 'shutdown') {
       this.shutdown();
     } else if (actionName === null) {
@@ -223,6 +232,16 @@ export class NodeActionsHelper {
    */
   runtimeLogs() {
     NodeLogsComponent.openDialog(this.dialog);
+  }
+
+  /**
+   * Opens the proxy settings dialog.
+   */
+  openProxySettings() {
+    this.dialog.open(ProxySettingsComponent, {
+      width: '550px',
+      data: { nodeKey: this.currentNodeKey },
+    });
   }
 
   back() {

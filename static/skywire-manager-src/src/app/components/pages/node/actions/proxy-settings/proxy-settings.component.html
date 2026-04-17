@@ -1,0 +1,69 @@
+<div class="generic-dialog-container">
+  <h2 mat-dialog-title>Resolving Proxy</h2>
+
+  <mat-dialog-content>
+    <div *ngIf="loading" class="text-center py-3">
+      <mat-spinner diameter="30" class="mx-auto"></mat-spinner>
+    </div>
+
+    <div *ngIf="!loading">
+      <p class="help-text">
+        Enable the resolving proxy to browse <strong>.skynet</strong> and <strong>.dmsg</strong>
+        domains through your visor. Set an upstream SOCKS5 proxy (e.g. skysocks on 127.0.0.1:1080)
+        to route all other traffic through it.
+      </p>
+
+      <div class="proxy-status" *ngIf="proxyStatus">
+        <table class="status-table" *ngIf="proxyStatus.dmsg_web || proxyStatus.skynet_web">
+          <tr>
+            <th>Resolver</th>
+            <th>Running</th>
+            <th>SOCKS</th>
+            <th>Upstream</th>
+          </tr>
+          <tr *ngIf="proxyStatus.dmsg_web">
+            <td>.dmsg</td>
+            <td>{{ proxyStatus.dmsg_web.running ? 'Yes' : 'No' }}</td>
+            <td>{{ proxyStatus.dmsg_web.socks_addr || '-' }}</td>
+            <td>{{ proxyStatus.dmsg_web.upstream_socks || 'direct' }}</td>
+          </tr>
+          <tr *ngIf="proxyStatus.skynet_web">
+            <td>.skynet</td>
+            <td>{{ proxyStatus.skynet_web.running ? 'Yes' : 'No' }}</td>
+            <td>{{ proxyStatus.skynet_web.socks_addr || '-' }}</td>
+            <td>{{ proxyStatus.skynet_web.upstream_socks || 'direct' }}</td>
+          </tr>
+        </table>
+        <p *ngIf="!proxyStatus.dmsg_web && !proxyStatus.skynet_web" class="no-proxy">
+          No resolving proxies configured.
+        </p>
+      </div>
+
+      <div class="proxy-form">
+        <div class="form-row toggle-row">
+          <mat-checkbox [checked]="form.get('skynetEnabled').value"
+                        (change)="form.get('skynetEnabled').setValue($event.checked); toggleProxy()"
+                        [disabled]="loading">
+            Enable resolving proxy (.skynet + .dmsg)
+          </mat-checkbox>
+        </div>
+
+        <form [formGroup]="form">
+          <div class="form-row upstream-row">
+            <mat-form-field appearance="outline" class="upstream-field">
+              <mat-label>Upstream SOCKS5 (e.g. 127.0.0.1:1080)</mat-label>
+              <input matInput formControlName="upstream" placeholder="127.0.0.1:1080">
+            </mat-form-field>
+            <button mat-raised-button color="primary" (click)="setUpstream()" [disabled]="loading">
+              Set
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="close()">Close</button>
+  </mat-dialog-actions>
+</div>

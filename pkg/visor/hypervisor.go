@@ -423,6 +423,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 			r.Get("/csrf", hv.getCsrf())
 
+			r.Get("/user-exists", hv.users.UserExists())
+
 			if hv.c.EnableAuth {
 				r.Group(func(r chi.Router) {
 					r.Post("/create-account", hv.users.CreateAccount())
@@ -486,6 +488,11 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/public", hv.getIsPublic())
 				r.Get("/visors/{pk}/runtime-config", hv.getRuntimeConfig())
 				r.Get("/visors/{pk}/ports", hv.getPorts())
+
+				// Resolving proxy controls
+				r.Get("/visors/{pk}/proxies", hv.getProxies())
+				r.Post("/visors/{pk}/proxies/set", hv.postProxyEnabled())
+				r.Post("/visors/{pk}/proxies/upstream", hv.postProxyUpstream())
 			})
 		})
 
@@ -1856,6 +1863,59 @@ func (hv *Hypervisor) getPorts() http.HandlerFunc {
 	})
 }
 
+func (hv *Hypervisor) getProxies() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		status, err := ctx.API.EmbeddedProxies()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, status)
+	})
+}
+
+func (hv *Hypervisor) postProxyEnabled() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			Kind   string `json:"kind"`
+			Enable bool   `json:"enable"`
+		}
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postProxyEnabled request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if err := ctx.API.SetEmbeddedProxyEnabled(reqBody.Kind, reqBody.Enable); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) postProxyUpstream() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			Kind string `json:"kind"`
+			Addr string `json:"addr"`
+		}
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postProxyUpstream request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if err := ctx.API.SetEmbeddedProxyUpstream(reqBody.Kind, reqBody.Addr); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
 /*
 	<<< Helper functions >>>
 */
@@ -1935,7 +1995,10 @@ func (hv *Hypervisor) withCtx(vFunc valuesFunc, hFunc handlerFunc) http.HandlerF
 		// For remote visors, enforce a timeout so slow/dead visors don't hang the UI.
 		// Uses a buffered response writer so the handler goroutine writes to a buffer,
 		// and only the winner (handler or timeout) writes to the real ResponseWriter.
-		if rv.isRemote {
+		// Skip the timeout wrapper for WebSocket upgrades — the buffered writer
+		// doesn't implement http.Hijacker, which websocket.Accept requires.
+		isWebSocket := r.Header.Get("Upgrade") == "websocket"
+		if rv.isRemote && !isWebSocket {
 			tw := newTimeoutResponseWriter()
 			done := make(chan struct{})
 			go func() {

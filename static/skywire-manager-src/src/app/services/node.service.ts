@@ -459,6 +459,27 @@ return {
   }
 
   /**
+   * Gets the resolving proxy status for a visor.
+   */
+  getProxies(nodeKey: string): Observable<any> {
+    return this.apiService.get(`visors/${nodeKey}/proxies`);
+  }
+
+  /**
+   * Enables or disables a resolving proxy.
+   */
+  setProxyEnabled(nodeKey: string, kind: string, enable: boolean): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/proxies/set`, { kind, enable });
+  }
+
+  /**
+   * Sets the upstream SOCKS5 address for a resolving proxy.
+   */
+  setProxyUpstream(nodeKey: string, kind: string, addr: string): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/proxies/upstream`, { kind, addr });
+  }
+
+  /**
    * Turns off a node.
    */
   shutdown(nodeKey: string): Observable<any> {

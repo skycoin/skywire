@@ -417,6 +417,7 @@
       "terminal": "Terminal",
       "config": "Configuration",
       "update": "Update",
+      "proxy": "Resolving Proxy",
       "turn-off": "Turn off",
       "logs": "View logs"
     },
