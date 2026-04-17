@@ -214,7 +214,8 @@
       "info": "Info",
       "apps": "Apps",
       "routing": "Routing",
-      "rewards": "Rewards"
+      "rewards": "Rewards",
+      "skynet": "Skynet"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },

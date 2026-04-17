@@ -1,0 +1,48 @@
+<div class="container-elevated-translucid mt-4.5 skynet-container">
+  <div class="section">
+    <h4 class="section-title">Forwarded Ports</h4>
+    <p class="section-desc">
+      Local TCP ports forwarded over skynet. Accessible at
+      <code>http://&lt;pk&gt;.skynet:&lt;port&gt;/</code>
+    </p>
+
+    <div *ngIf="loading" class="text-center py-3">
+      <mat-spinner diameter="24" class="mx-auto"></mat-spinner>
+    </div>
+
+    <div *ngIf="!loading">
+      <table class="port-table" *ngIf="ports.length > 0">
+        <tr>
+          <th>Port</th>
+          <th>URL</th>
+          <th></th>
+        </tr>
+        <tr *ngFor="let port of ports">
+          <td class="port-col">{{ port }}</td>
+          <td class="url-col">
+            <code>{{ nodeKey }}.skynet:{{ port }}</code>
+          </td>
+          <td class="action-col">
+            <button mat-icon-button color="warn" (click)="removePort(port)" matTooltip="Remove">
+              <mat-icon>close</mat-icon>
+            </button>
+          </td>
+        </tr>
+      </table>
+
+      <p *ngIf="ports.length === 0" class="empty-msg">No ports forwarded.</p>
+
+      <div class="add-row">
+        <mat-form-field appearance="outline" class="port-field">
+          <mat-label>Port</mat-label>
+          <input matInput [(ngModel)]="newPort" placeholder="8080" type="number"
+                 (keydown.enter)="addPort()">
+        </mat-form-field>
+        <button mat-raised-button color="primary" (click)="addPort()">
+          <mat-icon>add</mat-icon>
+          Forward
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -16,6 +16,7 @@ import { ServicesHealthComponent } from './components/pages/services-health/serv
 import { DmsgSettingsComponent } from './components/pages/dmsg-settings/dmsg-settings.component';
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
+import { SkynetComponent } from './components/pages/node/skynet/skynet.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
 import { VpnServerListComponent } from './components/vpn/pages/vpn-server-list/vpn-server-list.component';
 import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
@@ -119,6 +120,10 @@ const routes: Routes = [
           {
             path: 'rewards',
             component: NodeRewardsComponent
+          },
+          {
+            path: 'skynet',
+            component: SkynetComponent
           },
           {
             path: 'apps-list/:showOfficialApps/:page',

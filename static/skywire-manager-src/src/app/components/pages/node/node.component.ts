@@ -218,6 +218,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           icon: 'monetization_on',
           label: 'node.tabs.rewards',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'rewards'] : null,
+        },
+        {
+          icon: 'public',
+          label: 'node.tabs.skynet',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'skynet'] : null,
         }
       ];
 
@@ -233,6 +238,9 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       }
       if (this.lastUrl.includes('/rewards')) {
         this.selectedTabIndex = 3;
+      }
+      if (this.lastUrl.includes('/skynet')) {
+        this.selectedTabIndex = 4;
       }
 
       // Inform that the current subpage is not for showing a full list.
