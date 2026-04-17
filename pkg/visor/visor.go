@@ -124,8 +124,12 @@ type Visor struct {
 	remoteVisors              map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors      map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
 
-	// Allowed ports for app connections
+	// Allowed ports for app connections (legacy — being replaced by services registry)
 	allowed allowedPortsState
+
+	// Service handler registry — maps ports to connection handlers
+	// so the sky-forwarding server can dispatch without localhost TCP.
+	services *ServiceRegistry
 
 	// Skywire ping state
 	ping pingState
@@ -430,6 +434,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	}
 
 	v.ctx = ctx
+	v.services = NewServiceRegistry()
 	v.startedAt = time.Now()
 	v.startupComplete = make(chan struct{})
 

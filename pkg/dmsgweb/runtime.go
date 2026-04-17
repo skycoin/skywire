@@ -135,14 +135,11 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 		log = logging.MustGetLogger("dmsgweb")
 	}
 	cfg = normalize(cfg)
-	if err := validate(cfg); err != nil {
-		return err
-	}
-
-	httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, 1+len(cfg.ResolveAddr))
+
+	httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 
 	// --- SOCKS5 resolver mode ---
 	if len(cfg.ResolveAddr) == 0 && cfg.ProxyPort != 0 {
@@ -155,8 +152,8 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 		}()
 	}
 
-	// --- HTTP bridge(s) ---
-	if len(cfg.ResolveAddr) == 0 {
+	// --- HTTP bridge (SOCKS5 redirects matching hosts here) ---
+	if len(cfg.ResolveAddr) == 0 && len(cfg.WebPorts) > 0 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -164,7 +161,10 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 				errCh <- err
 			}
 		}()
-	} else {
+	}
+
+	// --- Fixed-mapping mode (--resolve) ---
+	if len(cfg.ResolveAddr) > 0 {
 		for i := range cfg.ResolveAddr {
 			wg.Add(1)
 			i := i
@@ -183,7 +183,6 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 		}
 	}
 
-	// Wait for either ctx cancellation or a fatal error.
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -198,6 +197,27 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 	case <-done:
 		return nil
 	}
+}
+
+// statsConn wraps a net.Conn and calls the stats completion function
+// when the connection is closed. This ensures per-request stats are
+// recorded even though there's no HTTP handler in the direct-tunnel
+// path — the SOCKS5 library closes the connection when the browser
+// disconnects, triggering the stats callback.
+type statsConn struct {
+	net.Conn
+	done func(error)
+	err  *error
+	once sync.Once
+}
+
+func (c *statsConn) Close() error {
+	c.once.Do(func() {
+		if c.done != nil {
+			c.done(*c.err)
+		}
+	})
+	return c.Conn.Close()
 }
 
 func normalize(cfg Config) Config {
@@ -240,28 +260,32 @@ func validate(cfg Config) error {
 func serveSOCKS5(ctx context.Context, log *logging.Logger, cfg Config) error {
 	conf := &socks5.Config{
 		Resolver: &dmsgResolver{cfg: cfg},
-		Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			host, _, err := net.SplitHostPort(addr)
-			if err != nil {
-				return nil, err
-			}
-			pattern := `\` + cfg.DomainSuffix + `(:[0-9]+)?$`
-			match, _ := regexp.MatchString(pattern, host) //nolint:errcheck
-			if match {
-				// The resolver annotated the ctx with the port.
-				port, _ := ctx.Value(dmsgResolverPortKey).(string)
-				if port == "" {
-					port = fmt.Sprintf("%d", cfg.WebPorts[0])
-				}
+		Dial: func(dialCtx context.Context, network, addr string) (net.Conn, error) {
+			// After the resolver runs, addr is "127.0.0.1:<origPort>".
+			// Check the context key to decide routing.
+			if port, ok := dialCtx.Value(dmsgResolverPortKey).(string); ok && port != "" {
 				addr = "localhost:" + port
-			} else if cfg.UpstreamSOCKS != "" {
+				log.WithField("addr", addr).Debug("SOCKS5 dial (resolved .dmsg)")
+				return net.Dial(network, addr)
+			}
+			// Not .dmsg — forward to upstream with original hostname.
+			if cfg.UpstreamSOCKS != "" {
+				origHost, _ := dialCtx.Value(dmsgOrigHostKey).(string)
+				if origHost != "" {
+					_, origPort, _ := net.SplitHostPort(addr)
+					if origPort == "" {
+						origPort = "80"
+					}
+					addr = net.JoinHostPort(origHost, origPort)
+				}
+				log.WithField("addr", addr).Debug("SOCKS5 dial (upstream)")
 				upstream, err := proxy.SOCKS5("tcp", cfg.UpstreamSOCKS, nil, proxy.Direct)
 				if err != nil {
 					return nil, err
 				}
 				return upstream.Dial(network, addr)
 			}
-			log.WithField("addr", addr).Debug("SOCKS5 dial")
+			log.WithField("addr", addr).Debug("SOCKS5 dial (direct)")
 			return net.Dial(network, addr)
 		},
 	}
@@ -285,25 +309,40 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, cfg Config) error {
 	return nil
 }
 
-// dmsgResolverPortKey is the context key used by the SOCKS5 resolver
-// to hand the matching web port to the Dial callback. Private key
-// type avoids collision with unrelated context values.
-type dmsgResolverPortKey_t struct{}
+// Context keys used by the SOCKS5 resolver ↔ Dial callback handshake.
+type (
+	dmsgResolverPortKey_t struct{} // set when .dmsg matched → value is the bridge port string
+	dmsgOrigHostKey_t     struct{} // always set → original hostname before resolution
+)
 
-var dmsgResolverPortKey = dmsgResolverPortKey_t{}
+var (
+	dmsgResolverPortKey = dmsgResolverPortKey_t{}
+	dmsgOrigHostKey     = dmsgOrigHostKey_t{}
+)
 
 // dmsgResolver implements socks5.NameResolver. Hostnames matching the
-// configured domain suffix resolve to 127.0.0.1; other names return
-// nil to let the library fall through to its default resolver.
+// configured domain suffix resolve to 127.0.0.1 with the bridge port
+// annotated in context. Non-matching hostnames ALSO resolve to
+// 127.0.0.1 (to prevent the library from doing a real DNS lookup on
+// fantasy TLDs like .skynet), but the port key is NOT set — the Dial
+// callback uses this absence to know "forward to upstream instead".
+// The original hostname is always stored in context so the Dial
+// callback can pass it through to an upstream SOCKS5 verbatim.
 type dmsgResolver struct{ cfg Config }
 
 func (r *dmsgResolver) Resolve(ctx context.Context, name string) (context.Context, net.IP, error) {
+	// Always store the original hostname so the Dial callback can
+	// forward it to an upstream SOCKS5 if this resolver doesn't
+	// handle the TLD.
+	ctx = context.WithValue(ctx, dmsgOrigHostKey, name)
+
 	pattern := `\` + r.cfg.DomainSuffix + `(:[0-9]+)?$`
 	match, _ := regexp.MatchString(pattern, name) //nolint:errcheck
-	if !match {
-		return ctx, nil, nil
+	if match {
+		ctx = context.WithValue(ctx, dmsgResolverPortKey, fmt.Sprintf("%d", r.cfg.WebPorts[0]))
 	}
-	ctx = context.WithValue(ctx, dmsgResolverPortKey, fmt.Sprintf("%d", r.cfg.WebPorts[0]))
+	// Always return 127.0.0.1 — prevents the library from doing a
+	// DNS lookup that would fail for .dmsg / .skynet / any custom TLD.
 	return ctx, net.ParseIP("127.0.0.1"), nil
 }
 

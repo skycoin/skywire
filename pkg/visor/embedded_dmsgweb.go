@@ -178,12 +178,23 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 		return ctx.Err()
 	}
 
-	runtime := newEmbeddedDmsgWeb(ctx, v.dmsgC, v.conf.DmsgWeb, log)
+	// Auto-chain: if the config doesn't explicitly set an upstream
+	// and skynet_web is also configured, wire dmsgweb → skynetweb so
+	// one browser proxy entry covers both .dmsg and .skynet.
+	cfg := v.conf.DmsgWeb
+	if cfg.UpstreamSOCKS == "" && v.conf.SkynetWeb != nil {
+		cfg.UpstreamSOCKS = fmt.Sprintf("127.0.0.1:%d",
+			uintOrDefault(v.conf.SkynetWeb.ProxyPort, defaultSkynetWebProxyPort))
+		log.WithField("upstream", cfg.UpstreamSOCKS).
+			Info("Auto-chaining dmsgweb → skynetweb for unified proxy")
+	}
+
+	runtime := newEmbeddedDmsgWeb(ctx, v.dmsgC, cfg, log)
 	v.initLock.Lock()
 	v.embeddedDmsgWeb = runtime
 	v.initLock.Unlock()
 
-	if v.conf.DmsgWeb.Enable {
+	if cfg.Enable {
 		if err := runtime.Start(); err != nil {
 			log.WithError(err).Warn("failed to auto-start dmsgweb")
 		}

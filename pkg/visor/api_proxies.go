@@ -37,35 +37,20 @@ func (v *Visor) EmbeddedProxies() (*EmbeddedProxiesStatus, error) {
 	skynetRuntime := v.embeddedSkynetWeb
 	v.initLock.RUnlock()
 
+	// Report from config when available, but ALSO from the runtime
+	// when the resolver was constructed on-the-fly via RPC (no config
+	// section). This ensures `proxies set dmsg on` → `proxies` shows
+	// the running state even without a config entry.
 	if cfg := v.conf.DmsgWeb; cfg != nil {
-		info := &EmbeddedProxyInfo{
-			Enabled:       cfg.Enable,
-			DomainSuffix:  stringOrDefault(cfg.DomainSuffix, dmsgweb.DefaultDomainSuffix),
-			SocksAddr:     localSocksAddr(cfg.Enable, uintOrDefault(cfg.ProxyPort, defaultDmsgWebProxyPort)),
-			WebAddr:       localWebAddr(cfg.Enable, uintOrDefault(cfg.WebPort, defaultDmsgWebPort)),
-			UpstreamSOCKS: cfg.UpstreamSOCKS,
-		}
-		if dmsgRuntime != nil {
-			info.Running = dmsgRuntime.IsRunning()
-			stats := dmsgRuntime.Stats()
-			info.Stats = dmsgStatsToAPI(stats)
-		}
-		out.DmsgWeb = info
+		out.DmsgWeb = dmsgProxyInfo(cfg, dmsgRuntime)
+	} else if dmsgRuntime != nil {
+		// Runtime exists but config is nil — constructed on-the-fly.
+		out.DmsgWeb = dmsgProxyInfo(&visorconfig.DmsgWebConfig{Enable: true}, dmsgRuntime)
 	}
 	if cfg := v.conf.SkynetWeb; cfg != nil {
-		info := &EmbeddedProxyInfo{
-			Enabled:       cfg.Enable,
-			DomainSuffix:  stringOrDefault(cfg.DomainSuffix, skynetweb.DefaultDomainSuffix),
-			SocksAddr:     localSocksAddr(cfg.Enable, uintOrDefault(cfg.ProxyPort, defaultSkynetWebProxyPort)),
-			WebAddr:       localWebAddr(cfg.Enable, uintOrDefault(cfg.WebPort, defaultSkynetWebPort)),
-			UpstreamSOCKS: cfg.UpstreamSOCKS,
-		}
-		if skynetRuntime != nil {
-			info.Running = skynetRuntime.IsRunning()
-			stats := skynetRuntime.Stats()
-			info.Stats = skynetStatsToAPI(stats)
-		}
-		out.SkynetWeb = info
+		out.SkynetWeb = skynetProxyInfo(cfg, skynetRuntime)
+	} else if skynetRuntime != nil {
+		out.SkynetWeb = skynetProxyInfo(&visorconfig.SkynetWebConfig{Enable: true}, skynetRuntime)
 	}
 	return out, nil
 }
@@ -84,14 +69,18 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 		v.initLock.Lock()
 		runtime := v.embeddedDmsgWeb
 		if runtime == nil && enable {
-			// Construct with defaults — same as if config had
-			// {"dmsg_web": {"enable": true}} but without requiring
-			// the user to edit the JSON.
 			if v.dmsgC == nil {
 				v.initLock.Unlock()
 				return fmt.Errorf("dmsg client not available; cannot start dmsgweb resolver")
 			}
 			cfg := &visorconfig.DmsgWebConfig{Enable: true}
+			// Auto-chain: set dmsgweb's upstream to skynetweb's
+			// SOCKS5 port so the browser only needs one proxy
+			// entry (localhost:4445) for both .dmsg and .skynet.
+			// If skynetweb isn't running yet, the upstream
+			// connection simply refuses non-.dmsg requests until
+			// it starts — no data loss, just "not available yet".
+			cfg.UpstreamSOCKS = fmt.Sprintf("127.0.0.1:%d", defaultSkynetWebProxyPort)
 			log := logging.MustGetLogger("embedded_dmsgweb")
 			runtime = newEmbeddedDmsgWeb(v.ctx, v.dmsgC, cfg, log)
 			v.embeddedDmsgWeb = runtime
@@ -99,12 +88,19 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 		v.initLock.Unlock()
 		if runtime == nil {
 			if !enable {
-				return nil // already stopped / never started — no-op
+				return nil
 			}
 			return fmt.Errorf("embedded dmsgweb could not be constructed")
 		}
 		if enable {
-			return runtime.Start()
+			if err := runtime.Start(); err != nil {
+				return err
+			}
+			// If skynetweb isn't running yet, start it too so the
+			// auto-chain works immediately. Ignore errors — skynet
+			// is optional.
+			v.autoStartSkynetWeb()
+			return nil
 		}
 		return runtime.Stop()
 	case "skynet", "skynetweb", "skynet_web":
@@ -133,6 +129,61 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 		return runtime.Stop()
 	default:
 		return fmt.Errorf("unknown proxy kind %q (want \"dmsg\" or \"skynet\")", kind)
+	}
+}
+
+func dmsgProxyInfo(cfg *visorconfig.DmsgWebConfig, runtime *EmbeddedDmsgWeb) *EmbeddedProxyInfo {
+	info := &EmbeddedProxyInfo{
+		Enabled:       cfg.Enable,
+		DomainSuffix:  stringOrDefault(cfg.DomainSuffix, dmsgweb.DefaultDomainSuffix),
+		SocksAddr:     localSocksAddr(true, uintOrDefault(cfg.ProxyPort, defaultDmsgWebProxyPort)),
+		WebAddr:       localWebAddr(true, uintOrDefault(cfg.WebPort, defaultDmsgWebPort)),
+		UpstreamSOCKS: cfg.UpstreamSOCKS,
+	}
+	if runtime != nil {
+		info.Running = runtime.IsRunning()
+		info.Stats = dmsgStatsToAPI(runtime.Stats())
+	}
+	return info
+}
+
+func skynetProxyInfo(cfg *visorconfig.SkynetWebConfig, runtime *EmbeddedSkynetWeb) *EmbeddedProxyInfo {
+	info := &EmbeddedProxyInfo{
+		Enabled:       cfg.Enable,
+		DomainSuffix:  stringOrDefault(cfg.DomainSuffix, skynetweb.DefaultDomainSuffix),
+		SocksAddr:     localSocksAddr(true, uintOrDefault(cfg.ProxyPort, defaultSkynetWebProxyPort)),
+		WebAddr:       localWebAddr(true, uintOrDefault(cfg.WebPort, defaultSkynetWebPort)),
+		UpstreamSOCKS: cfg.UpstreamSOCKS,
+	}
+	if runtime != nil {
+		info.Running = runtime.IsRunning()
+		info.Stats = skynetStatsToAPI(runtime.Stats())
+	}
+	return info
+}
+
+// autoStartSkynetWeb is a best-effort helper called after dmsgweb
+// starts. It ensures skynetweb is also running so the auto-chain
+// (dmsgweb upstream → skynetweb) works out of the box. If skynetweb
+// can't be constructed (no router, etc.) the error is silently
+// swallowed — .dmsg still works, just .skynet won't resolve until
+// the router is available and `proxies set skynet on` is called.
+func (v *Visor) autoStartSkynetWeb() {
+	v.initLock.Lock()
+	runtime := v.embeddedSkynetWeb
+	if runtime == nil {
+		if v.router == nil {
+			v.initLock.Unlock()
+			return
+		}
+		cfg := &visorconfig.SkynetWebConfig{Enable: true}
+		log := logging.MustGetLogger("embedded_skynetweb")
+		runtime = newEmbeddedSkynetWeb(v.ctx, v.router, cfg, log)
+		v.embeddedSkynetWeb = runtime
+	}
+	v.initLock.Unlock()
+	if !runtime.IsRunning() {
+		_ = runtime.Start() //nolint:errcheck
 	}
 }
 

@@ -13,6 +13,7 @@
 package skynetweb
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -194,26 +195,22 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, cfg Config) error {
 	conf := &socks5.Config{
 		Resolver: &skynetResolver{cfg: cfg},
 		Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			host, _, err := net.SplitHostPort(addr)
-			if err != nil {
-				return nil, err
-			}
-			pattern := `\` + cfg.DomainSuffix + `(:[0-9]+)?$`
-			match, _ := regexp.MatchString(pattern, host) //nolint:errcheck
-			if match {
-				port, _ := ctx.Value(resolverPortKey{}).(string)
-				if port == "" {
-					port = fmt.Sprintf("%d", cfg.WebPort)
-				}
+			// Same pattern as dmsgweb: after resolution the addr is
+			// "127.0.0.1:<origPort>", not the original hostname.
+			// Check the context key the resolver set instead.
+			if port, ok := ctx.Value(resolverPortKey{}).(string); ok && port != "" {
 				addr = "localhost:" + port
-			} else if cfg.UpstreamSOCKS != "" {
+				log.WithField("addr", addr).Debug("SOCKS5 dial (resolved .skynet)")
+				return net.Dial(network, addr)
+			}
+			if cfg.UpstreamSOCKS != "" {
 				up, err := proxy.SOCKS5("tcp", cfg.UpstreamSOCKS, nil, proxy.Direct)
 				if err != nil {
 					return nil, err
 				}
 				return up.Dial(network, addr)
 			}
-			log.WithField("addr", addr).Debug("SOCKS5 dial")
+			log.WithField("addr", addr).Debug("SOCKS5 dial (direct)")
 			return net.Dial(network, addr)
 		},
 	}
@@ -294,11 +291,29 @@ func serveHTTP(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cf
 			return
 		}
 
-		c.Writer.WriteHeaderNow()
-		if _, err := io.Copy(c.Writer, conn); err != nil {
-			// Mid-stream copy errors are usually client disconnects;
-			// don't flag the request as failed.
-			log.WithError(err).Debug("response copy ended")
+		// The tunnel carries a raw HTTP response (status line +
+		// headers + body) from the forwarded localhost server. Parse
+		// it with http.ReadResponse so we can copy the actual status
+		// code + headers into gin's writer instead of double-
+		// framing (gin writing its own 200 OK before the tunnel's
+		// response bytes — which curl sees as an empty body).
+		resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+		if err != nil {
+			reqErr = err
+			c.String(http.StatusBadGateway, "response read failed: %v", err)
+			log.WithError(err).Debug("response read failed")
+			return
+		}
+		defer resp.Body.Close() //nolint:errcheck,gosec
+
+		for h, vs := range resp.Header {
+			for _, v := range vs {
+				c.Writer.Header().Add(h, v)
+			}
+		}
+		c.Status(resp.StatusCode)
+		if _, err := io.Copy(c.Writer, resp.Body); err != nil {
+			log.WithError(err).Debug("response body copy ended")
 		}
 	})
 

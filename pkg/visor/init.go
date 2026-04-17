@@ -119,6 +119,8 @@ var (
 	uiServer vinit.Module
 	// Node health tracking for TPS and RSN
 	nodeHealth vinit.Module
+	// Auto-register localhost ports for skynet forwarding
+	skynetPorts vinit.Module
 	// Self-probe: periodic dmsg listener reachability check
 	selfProbe vinit.Module
 	// visor that groups all modules together
@@ -177,8 +179,12 @@ func registerModules(logger *logging.MasterLogger) {
 	uiServer = maker("ui_server", initUIServer, &dmsgC, &tr, &embTPS)
 	nodeHealth = maker("node_health", initNodeHealth, &dmsgC)
 	selfProbe = maker("self_probe", initSelfProbe, &dmsgC, &dmsgHTTPLogServer, &rt)
+	// Register localhost ports for skynet forwarding AFTER all
+	// services are up (cli, ui, logserver) so the ports are
+	// actually listening when we probe them.
+	skynetPorts = maker("skynet_ports", initSkynetForwardPorts, &cli, &dmsgHTTPLogServer, &uiServer, &skyFwd)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &uiServer, &nodeHealth, &selfProbe)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &uiServer, &nodeHealth, &selfProbe, &skynetPorts)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
