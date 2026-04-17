@@ -1006,6 +1006,12 @@ func configureLauncher(log *logging.Logger) {
 		conf.GeoIP = deployment.Prod.GeoIP
 	}
 	conf.MemoryLimit = "auto"
+	// Config bootstrap service
+	conf.ConfService = serviceConfURL
+	conf.ConfServiceDmsg = services.ConfDmsg
+	if conf.ConfServiceDmsg == "" {
+		conf.ConfServiceDmsg = deployment.Prod.ConfDmsg
+	}
 	// Reward system endpoints
 	conf.RewardSystem = services.RewardSystem
 	conf.RewardSystemDmsg = services.RewardSystemDmsg
@@ -1072,7 +1078,11 @@ func configureLauncher(log *logging.Logger) {
 				conf.Dmsg.DiscoveryDmsg = services.DmsgDiscoveryDmsg
 				conf.Transport.AddressResolverDmsg = services.AddressResolverDmsg
 				conf.Transport.DiscoveryDmsg = services.TransportDiscoveryDmsg
+				conf.Routing.RouteFinderDmsg = services.RouteFinderDmsg
 				conf.Launcher.ServiceDiscDmsg = services.ServiceDiscoveryDmsg
+				if conf.UptimeTracker != nil && services.UptimeTrackerDmsg != "" {
+					conf.UptimeTracker.AddrDmsg = services.UptimeTrackerDmsg
+				}
 			}
 		} else if dmsgHTTPServersList != nil {
 			// Legacy fallback: separate dmsghttp-config.json
@@ -1095,7 +1105,11 @@ func configureLauncher(log *logging.Logger) {
 					conf.Dmsg.DiscoveryDmsg = dmsgConf.DMSGDiscovery
 					conf.Transport.AddressResolverDmsg = dmsgConf.AddressResolver
 					conf.Transport.DiscoveryDmsg = dmsgConf.TransportDiscovery
+					conf.Routing.RouteFinderDmsg = dmsgConf.RouteFinder
 					conf.Launcher.ServiceDiscDmsg = dmsgConf.ServiceDiscovery
+					if conf.UptimeTracker != nil && dmsgConf.UptimeTracker != "" {
+						conf.UptimeTracker.AddrDmsg = dmsgConf.UptimeTracker
+					}
 				}
 			}
 		}

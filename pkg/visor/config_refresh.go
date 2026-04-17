@@ -90,8 +90,15 @@ func (v *Visor) refreshKeySets(ctx context.Context, log *logging.Logger) {
 }
 
 func (v *Visor) fetchServicesConfig(ctx context.Context, log *logging.Logger) *visorconfig.Services {
-	confDmsg := deployment.Prod.ConfDmsg
-	confHTTP := deployment.ProdConf.Conf
+	// Prefer URLs from visor config; fall back to embedded deployment defaults.
+	confDmsg := v.conf.ConfServiceDmsg
+	if confDmsg == "" {
+		confDmsg = deployment.Prod.ConfDmsg
+	}
+	confHTTP := v.conf.ConfService
+	if confHTTP == "" {
+		confHTTP = deployment.ProdConf.Conf
+	}
 
 	// Try DMSG first
 	if confDmsg != "" && v.dmsgC != nil {

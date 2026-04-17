@@ -133,10 +133,12 @@ func (a *autoconnector) connectToVisors(
 
 		logger := a.log.WithField("pk", pk).WithField("type", string(tpType))
 
-		// Probe the candidate on dmsg port 136 (route-setup port) before
-		// attempting the expensive transport handshake. If the visor is not
-		// reachable on dmsg, establishing a transport to it would also fail.
-		if a.dmsgC != nil {
+		// Probe the candidate on dmsg port 136 before attempting SUDPH
+		// transports (which need DMSG for signaling). Skip the probe for
+		// STCPR — it uses direct TCP and doesn't depend on DMSG. The old
+		// blanket probe was filtering out visors reachable via STCPR but
+		// with broken DMSG paths, reducing public visor transport counts.
+		if tpType != tptypes.STCPR && a.dmsgC != nil {
 			probeCtx, probeCancel := context.WithTimeout(ctx, dmsg.HandshakeTimeout)
 			reachable := a.dmsgC.Probe(probeCtx, pk, skyenv.DmsgAwaitSetupPort)
 			probeCancel()
