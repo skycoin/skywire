@@ -480,6 +480,27 @@ return {
   }
 
   /**
+   * Gets the list of skynet-forwarded ports.
+   */
+  getSkynetPorts(nodeKey: string): Observable<number[]> {
+    return this.apiService.get(`visors/${nodeKey}/skynet-ports`);
+  }
+
+  /**
+   * Registers a local port for skynet forwarding.
+   */
+  registerSkynetPort(nodeKey: string, port: number): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/skynet-ports/register`, { port });
+  }
+
+  /**
+   * Deregisters a local port from skynet forwarding.
+   */
+  deregisterSkynetPort(nodeKey: string, port: number): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/skynet-ports/deregister`, { port });
+  }
+
+  /**
    * Turns off a node.
    */
   shutdown(nodeKey: string): Observable<any> {

@@ -139,9 +139,9 @@ type API interface {
 	SetSyncTPDData(enabled bool) error
 	GetSyncTPDData() (bool, error)
 
-	RegisterHTTPPort(localPort int) error
-	DeregisterHTTPPort(localPort int) error
-	ListHTTPPorts() ([]int, error)
+	RegisterTCPPort(localPort int) error
+	DeregisterTCPPort(localPort int) error
+	ListTCPPorts() ([]int, error)
 	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	Disconnect(id uuid.UUID) error

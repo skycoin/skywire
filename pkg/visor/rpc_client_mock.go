@@ -907,18 +907,18 @@ func (mc *mockRPCClient) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, 
 	return nil, nil
 }
 
-// RegisterHTTPPort implements API.
-func (mc *mockRPCClient) RegisterHTTPPort(_ int) error {
+// RegisterTCPPort implements API.
+func (mc *mockRPCClient) RegisterTCPPort(_ int) error {
 	return nil
 }
 
-// DeregisterHTTPPort implements API.
-func (mc *mockRPCClient) DeregisterHTTPPort(_ int) error {
+// DeregisterTCPPort implements API.
+func (mc *mockRPCClient) DeregisterTCPPort(_ int) error {
 	return nil
 }
 
-// ListHTTPPorts implements API.
-func (mc *mockRPCClient) ListHTTPPorts() ([]int, error) {
+// ListTCPPorts implements API.
+func (mc *mockRPCClient) ListTCPPorts() ([]int, error) {
 	return nil, nil
 }
 

@@ -827,21 +827,21 @@ func (rc *rpcClient) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, erro
 	return out, err
 }
 
-// RegisterHTTPPort calls RegisterHTTPPort.
-func (rc *rpcClient) RegisterHTTPPort(localPort int) error {
-	return rc.Call("RegisterHTTPPort", &localPort, &struct{}{})
+// RegisterTCPPort calls RegisterTCPPort.
+func (rc *rpcClient) RegisterTCPPort(localPort int) error {
+	return rc.Call("RegisterTCPPort", &localPort, &struct{}{})
 }
 
-// DeregisterHTTPPort calls DeregisterHTTPPort.
-func (rc *rpcClient) DeregisterHTTPPort(localPort int) error {
-	err := rc.Call("DeregisterHTTPPort", &localPort, &struct{}{})
+// DeregisterTCPPort calls DeregisterTCPPort.
+func (rc *rpcClient) DeregisterTCPPort(localPort int) error {
+	err := rc.Call("DeregisterTCPPort", &localPort, &struct{}{})
 	return err
 }
 
-// ListHTTPPorts calls ListHTTPPorts.
-func (rc *rpcClient) ListHTTPPorts() ([]int, error) {
+// ListTCPPorts calls ListTCPPorts.
+func (rc *rpcClient) ListTCPPorts() ([]int, error) {
 	var out []int
-	err := rc.Call("ListHTTPPorts", &struct{}{}, &out)
+	err := rc.Call("ListTCPPorts", &struct{}{}, &out)
 	return out, err
 }
 

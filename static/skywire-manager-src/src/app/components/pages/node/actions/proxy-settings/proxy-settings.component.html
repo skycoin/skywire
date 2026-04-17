@@ -1,5 +1,5 @@
 <div class="generic-dialog-container">
-  <h2 mat-dialog-title>Resolving Proxy</h2>
+  <h2 mat-dialog-title>Skynet Settings</h2>
 
   <mat-dialog-content>
     <div *ngIf="loading" class="text-center py-3">
@@ -7,10 +7,11 @@
     </div>
 
     <div *ngIf="!loading">
+      <!-- Resolving Proxy Section -->
+      <h3 class="section-title">Resolving Proxy</h3>
       <p class="help-text">
-        Enable the resolving proxy to browse <strong>.skynet</strong> and <strong>.dmsg</strong>
-        domains through your visor. Set an upstream SOCKS5 proxy (e.g. skysocks on 127.0.0.1:1080)
-        to route all other traffic through it.
+        Browse <strong>.skynet</strong> and <strong>.dmsg</strong> domains.
+        Set an upstream SOCKS5 proxy to route all other traffic through skysocks.
       </p>
 
       <div class="proxy-status" *ngIf="proxyStatus">
@@ -23,20 +24,21 @@
           </tr>
           <tr *ngIf="proxyStatus.dmsg_web">
             <td>.dmsg</td>
-            <td>{{ proxyStatus.dmsg_web.running ? 'Yes' : 'No' }}</td>
+            <td [class]="proxyStatus.dmsg_web.running ? 'status-ok' : 'status-off'">
+              {{ proxyStatus.dmsg_web.running ? 'Yes' : 'No' }}
+            </td>
             <td>{{ proxyStatus.dmsg_web.socks_addr || '-' }}</td>
             <td>{{ proxyStatus.dmsg_web.upstream_socks || 'direct' }}</td>
           </tr>
           <tr *ngIf="proxyStatus.skynet_web">
             <td>.skynet</td>
-            <td>{{ proxyStatus.skynet_web.running ? 'Yes' : 'No' }}</td>
+            <td [class]="proxyStatus.skynet_web.running ? 'status-ok' : 'status-off'">
+              {{ proxyStatus.skynet_web.running ? 'Yes' : 'No' }}
+            </td>
             <td>{{ proxyStatus.skynet_web.socks_addr || '-' }}</td>
             <td>{{ proxyStatus.skynet_web.upstream_socks || 'direct' }}</td>
           </tr>
         </table>
-        <p *ngIf="!proxyStatus.dmsg_web && !proxyStatus.skynet_web" class="no-proxy">
-          No resolving proxies configured.
-        </p>
       </div>
 
       <div class="proxy-form">
@@ -59,6 +61,34 @@
             </button>
           </div>
         </form>
+      </div>
+
+      <!-- Port Forwarding Section -->
+      <h3 class="section-title">Port Forwarding</h3>
+      <p class="help-text">
+        Forward local TCP ports over skynet. Forwarded ports are accessible
+        at <code>http://&lt;pk&gt;.skynet:&lt;port&gt;/</code>
+      </p>
+
+      <div class="port-list" *ngIf="skynetPorts.length > 0">
+        <div class="port-item" *ngFor="let port of skynetPorts">
+          <span class="port-number">{{ port }}</span>
+          <button mat-icon-button color="warn" (click)="removePort(port)" matTooltip="Remove">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+      </div>
+      <p *ngIf="skynetPorts.length === 0" class="no-ports">No ports forwarded.</p>
+
+      <div class="add-port-row">
+        <mat-form-field appearance="outline" class="port-field">
+          <mat-label>Port</mat-label>
+          <input matInput [(ngModel)]="newPort" placeholder="8080"
+                 (keydown.enter)="addPort()" type="number">
+        </mat-form-field>
+        <button mat-raised-button color="primary" (click)="addPort()">
+          Forward
+        </button>
       </div>
     </div>
   </mat-dialog-content>

@@ -15,6 +15,8 @@ export class ProxySettingsComponent {
   form: UntypedFormGroup;
   loading = false;
   proxyStatus: any = null;
+  skynetPorts: number[] = [];
+  newPort = '';
 
   constructor(
     private dialogRef: MatDialogRef<ProxySettingsComponent>,
@@ -27,6 +29,7 @@ export class ProxySettingsComponent {
       upstream: new UntypedFormControl(''),
     });
     this.loadStatus();
+    this.loadPorts();
   }
 
   loadStatus() {
@@ -35,24 +38,27 @@ export class ProxySettingsComponent {
       (status: any) => {
         this.proxyStatus = status;
         this.loading = false;
-        // Set form values from current state
         const skynetRunning = status?.skynet_web?.running || false;
         const upstream = status?.skynet_web?.upstream_socks || '';
         this.form.get('skynetEnabled').setValue(skynetRunning);
         this.form.get('upstream').setValue(upstream);
       },
-      () => {
-        this.loading = false;
-        this.snackbarService.showError('Failed to load proxy status');
-      }
+      () => { this.loading = false; }
+    );
+  }
+
+  loadPorts() {
+    this.nodeService.getSkynetPorts(this.data.nodeKey).subscribe(
+      (ports: number[]) => {
+        this.skynetPorts = (ports || []).sort((a, b) => a - b);
+      },
+      () => {}
     );
   }
 
   toggleProxy() {
     const enable = this.form.get('skynetEnabled').value;
     this.loading = true;
-
-    // Enable skynet first, then dmsg (dmsg chains through skynet)
     this.nodeService.setProxyEnabled(this.data.nodeKey, 'skynet', enable).subscribe(
       () => {
         this.nodeService.setProxyEnabled(this.data.nodeKey, 'dmsg', enable).subscribe(
@@ -61,16 +67,10 @@ export class ProxySettingsComponent {
             this.snackbarService.showDone(enable ? 'Resolving proxy enabled' : 'Resolving proxy disabled');
             this.loadStatus();
           },
-          () => {
-            this.loading = false;
-            this.snackbarService.showError('Failed to toggle DMSG proxy');
-          }
+          () => { this.loading = false; }
         );
       },
-      () => {
-        this.loading = false;
-        this.snackbarService.showError('Failed to toggle Skynet proxy');
-      }
+      () => { this.loading = false; this.snackbarService.showError('Failed to toggle proxy'); }
     );
   }
 
@@ -83,10 +83,35 @@ export class ProxySettingsComponent {
         this.snackbarService.showDone(addr ? `Upstream set to ${addr}` : 'Upstream cleared');
         this.loadStatus();
       },
+      () => { this.loading = false; this.snackbarService.showError('Failed to set upstream'); }
+    );
+  }
+
+  addPort() {
+    const port = parseInt(this.newPort, 10);
+    if (isNaN(port) || port < 1 || port > 65535) {
+      this.snackbarService.showError('Invalid port number');
+      return;
+    }
+    this.nodeService.registerSkynetPort(this.data.nodeKey, port).subscribe(
       () => {
-        this.loading = false;
-        this.snackbarService.showError('Failed to set upstream');
+        this.newPort = '';
+        this.snackbarService.showDone(`Port ${port} forwarded`);
+        this.loadPorts();
+      },
+      (err) => {
+        this.snackbarService.showError(err?.error?.error || 'Failed to register port');
       }
+    );
+  }
+
+  removePort(port: number) {
+    this.nodeService.deregisterSkynetPort(this.data.nodeKey, port).subscribe(
+      () => {
+        this.snackbarService.showDone(`Port ${port} removed`);
+        this.loadPorts();
+      },
+      () => { this.snackbarService.showError('Failed to deregister port'); }
     );
   }
 

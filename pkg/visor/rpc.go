@@ -989,22 +989,22 @@ func (r *RPC) DMSGServers(_ *struct{}, out *[]DMSGServerInfo) (err error) {
 	return err
 }
 
-// RegisterHTTPPort registers the local port to be accessed by remote visors
-func (r *RPC) RegisterHTTPPort(port *int, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "RegisterHTTPPort", port)(nil, &err)
-	return r.visor.RegisterHTTPPort(*port)
+// RegisterTCPPort registers the local port to be accessed by remote visors
+func (r *RPC) RegisterTCPPort(port *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RegisterTCPPort", port)(nil, &err)
+	return r.visor.RegisterTCPPort(*port)
 }
 
-// DeregisterHTTPPort deregisters the local port that can be accessed by remote visors
-func (r *RPC) DeregisterHTTPPort(port *int, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "DeregisterHTTPPort", port)(nil, &err)
-	return r.visor.DeregisterHTTPPort(*port)
+// DeregisterTCPPort deregisters the local port that can be accessed by remote visors
+func (r *RPC) DeregisterTCPPort(port *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DeregisterTCPPort", port)(nil, &err)
+	return r.visor.DeregisterTCPPort(*port)
 }
 
-// ListHTTPPorts lists all the local por that can be accessed by remote visors
-func (r *RPC) ListHTTPPorts(_ *struct{}, out *[]int) (err error) {
-	defer rpcutil.LogCall(r.log, "ListHTTPPorts", nil)(out, &err)
-	ports, err := r.visor.ListHTTPPorts()
+// ListTCPPorts lists all the local por that can be accessed by remote visors
+func (r *RPC) ListTCPPorts(_ *struct{}, out *[]int) (err error) {
+	defer rpcutil.LogCall(r.log, "ListTCPPorts", nil)(out, &err)
+	ports, err := r.visor.ListTCPPorts()
 	*out = ports
 	return err
 }

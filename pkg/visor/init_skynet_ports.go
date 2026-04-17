@@ -2,7 +2,7 @@
 //
 // Auto-registers the visor's localhost service ports for skynet
 // forwarding so they're accessible via .skynet URLs (or any skynet
-// client) without manual RegisterHTTPPort calls.
+// client) without manual RegisterTCPPort calls.
 //
 // Which ports: everything that already listens on localhost and
 // would be useful to reach remotely. The sky-forwarding server
@@ -68,7 +68,7 @@ func initSkynetForwardPorts(_ context.Context, v *Visor, log *logging.Logger) er
 	// We only handle visor-level services here.
 
 	// Register directly into the allowed-ports map instead of going
-	// through RegisterHTTPPort, which dials the port to check if
+	// through RegisterTCPPort, which dials the port to check if
 	// something is listening. At init time some services (hypervisor)
 	// may not be up yet — but the sky-forwarding handler re-checks
 	// availability at connection time, so pre-registering is safe.

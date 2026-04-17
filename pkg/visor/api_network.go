@@ -163,8 +163,8 @@ func (v *Visor) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error) {
 	return appnet.GetAllRawTCPForwardConns(), nil
 }
 
-// RegisterHTTPPort implements API.
-func (v *Visor) RegisterHTTPPort(localPort int) error {
+// RegisterTCPPort implements API.
+func (v *Visor) RegisterTCPPort(localPort int) error {
 	v.allowed.mu.Lock()
 	defer v.allowed.mu.Unlock()
 	ok := isPortAvailable(v.log, localPort)
@@ -178,8 +178,8 @@ func (v *Visor) RegisterHTTPPort(localPort int) error {
 	return nil
 }
 
-// DeregisterHTTPPort implements API.
-func (v *Visor) DeregisterHTTPPort(localPort int) error {
+// DeregisterTCPPort implements API.
+func (v *Visor) DeregisterTCPPort(localPort int) error {
 	v.allowed.mu.Lock()
 	defer v.allowed.mu.Unlock()
 	if !v.allowed.ports[localPort] {
@@ -189,8 +189,8 @@ func (v *Visor) DeregisterHTTPPort(localPort int) error {
 	return nil
 }
 
-// ListHTTPPorts implements API.
-func (v *Visor) ListHTTPPorts() ([]int, error) {
+// ListTCPPorts implements API.
+func (v *Visor) ListTCPPorts() ([]int, error) {
 	v.allowed.mu.Lock()
 	defer v.allowed.mu.Unlock()
 	keys := make([]int, 0, len(v.allowed.ports))
@@ -214,7 +214,7 @@ func isPortAvailable(log *logging.Logger, port int) bool {
 }
 
 func isPortRegistered(port int, v *Visor) bool {
-	ports, err := v.ListHTTPPorts()
+	ports, err := v.ListTCPPorts()
 	if err != nil {
 		return false
 	}

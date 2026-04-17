@@ -493,6 +493,11 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/proxies", hv.getProxies())
 				r.Post("/visors/{pk}/proxies/set", hv.postProxyEnabled())
 				r.Post("/visors/{pk}/proxies/upstream", hv.postProxyUpstream())
+
+				// Skynet port forwarding
+				r.Get("/visors/{pk}/skynet-ports", hv.getSkynetPorts())
+				r.Post("/visors/{pk}/skynet-ports/register", hv.postRegisterSkynetPort())
+				r.Post("/visors/{pk}/skynet-ports/deregister", hv.postDeregisterSkynetPort())
 			})
 		})
 
@@ -1860,6 +1865,57 @@ func (hv *Hypervisor) getPorts() http.HandlerFunc {
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, ports)
+	})
+}
+
+func (hv *Hypervisor) getSkynetPorts() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		ports, err := ctx.API.ListTCPPorts()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, ports)
+	})
+}
+
+func (hv *Hypervisor) postRegisterSkynetPort() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			Port int `json:"port"`
+		}
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postRegisterSkynetPort request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if err := ctx.API.RegisterTCPPort(reqBody.Port); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) postDeregisterSkynetPort() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			Port int `json:"port"`
+		}
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postDeregisterSkynetPort request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if err := ctx.API.DeregisterTCPPort(reqBody.Port); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
 	})
 }
 
