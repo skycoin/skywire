@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -46,7 +47,9 @@ var healthCmd = &cobra.Command{
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err == nil {
 				results, err = rpcClient.ServiceHealth()
-				if err == nil && len(results) > 0 {
+				if err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "(visor RPC ServiceHealth failed: %v)\n", err)
+				} else if len(results) > 0 {
 					printHealthResults(cmd, results)
 					return
 				}
@@ -61,14 +64,51 @@ var healthCmd = &cobra.Command{
 	},
 }
 
-func printHealthResults(cmd *cobra.Command, results []skyvisor.ServiceHealthEntry) {
-	for _, r := range results {
-		ver := ""
-		if r.Version != "" {
-			ver = " (" + r.Version + ")"
+// extractPK pulls the public key from a dmsg:// or http:// URL.
+// For dmsg:// URLs the host is the PK (optionally with :port).
+// For http:// URLs there's no PK to extract, so returns "".
+func extractPK(rawURL string) string {
+	if strings.HasPrefix(rawURL, "dmsg://") {
+		host := strings.TrimPrefix(rawURL, "dmsg://")
+		// Strip path
+		if i := strings.Index(host, "/"); i >= 0 {
+			host = host[:i]
 		}
-		fmt.Printf("%-22s %-6s %dms%s\n", r.Name, r.Status, r.LatencyMs, ver)
+		// Strip port
+		if i := strings.LastIndex(host, ":"); i >= 0 {
+			host = host[:i]
+		}
+		if len(host) == 66 { // hex-encoded PK length
+			return host
+		}
 	}
+	return ""
+}
+
+func printHealthResults(cmd *cobra.Command, results []skyvisor.ServiceHealthEntry) {
+	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "SERVICE\tSTATUS\tLATENCY\tTRANSPORT\tVERSION\tPK") //nolint:errcheck,gosec
+	for _, r := range results {
+		transport := r.Transport
+		if transport == "" {
+			transport = "-"
+		}
+		ver := r.Version
+		if ver == "" {
+			ver = "-"
+		}
+		pk := extractPK(r.URL)
+		if pk == "" {
+			pk = "-"
+		}
+		status := r.Status
+		latency := fmt.Sprintf("%dms", r.LatencyMs)
+		if r.Status != "OK" {
+			latency = "-"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", r.Name, status, latency, transport, ver, pk) //nolint:errcheck,gosec
+	}
+	tw.Flush() //nolint:errcheck,gosec
 	internal.PrintOutput(cmd.Flags(), results, "")
 }
 
