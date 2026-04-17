@@ -139,25 +139,15 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 	var wg sync.WaitGroup
 	errCh := make(chan error, 1+len(cfg.ResolveAddr))
 
-	httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
-
-	// --- SOCKS5 resolver mode ---
+	// --- SOCKS5 resolver mode (no fixed-mapping) ---
+	// The Dial callback returns DMSG streams directly as the
+	// SOCKS5 tunnel — no intermediate HTTP bridge. Browser HTTP
+	// bytes flow straight through the DMSG stream.
 	if len(cfg.ResolveAddr) == 0 && cfg.ProxyPort != 0 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := serveSOCKS5(ctx, log, cfg); err != nil && !errors.Is(err, context.Canceled) {
-				errCh <- err
-			}
-		}()
-	}
-
-	// --- HTTP bridge (SOCKS5 redirects matching hosts here) ---
-	if len(cfg.ResolveAddr) == 0 && len(cfg.WebPorts) > 0 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := serveHTTP(ctx, log, &httpC, cfg, -1); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := serveSOCKS5Direct(ctx, log, dmsgC, cfg); err != nil && !errors.Is(err, context.Canceled) {
 				errCh <- err
 			}
 		}()
@@ -165,6 +155,7 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 
 	// --- Fixed-mapping mode (--resolve) ---
 	if len(cfg.ResolveAddr) > 0 {
+		httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 		for i := range cfg.ResolveAddr {
 			wg.Add(1)
 			i := i
@@ -197,6 +188,23 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 	case <-done:
 		return nil
 	}
+}
+
+// tcpAddrConn wraps a net.Conn to return *net.TCPAddr from LocalAddr
+// and RemoteAddr. The go-socks5 library does an unchecked type
+// assertion to *net.TCPAddr on the connection returned by the Dial
+// callback; DMSG streams return dmsg.Addr which panics. This shim
+// satisfies the assertion with a dummy loopback address.
+type tcpAddrConn struct {
+	net.Conn
+}
+
+func (c *tcpAddrConn) RemoteAddr() net.Addr {
+	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}
+}
+
+func (c *tcpAddrConn) LocalAddr() net.Addr {
+	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}
 }
 
 // statsConn wraps a net.Conn and calls the stats completion function
@@ -306,6 +314,77 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, cfg Config) error {
 		return fmt.Errorf("SOCKS5 listen: %w", err)
 	}
 	log.WithField("addr", addr).Debug("Stopped SOCKS5 proxy")
+	return nil
+}
+
+// serveSOCKS5Direct returns DMSG streams directly as the SOCKS5
+// tunnel — no intermediate HTTP bridge. The go-socks5 library
+// panics if RemoteAddr() doesn't return *net.TCPAddr, so DMSG
+// streams are wrapped in tcpAddrConn.
+func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Config) error {
+	conf := &socks5.Config{
+		Resolver: &dmsgResolver{cfg: cfg},
+		Dial: func(dialCtx context.Context, network, addr string) (conn net.Conn, dialErr error) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Errorf("PANIC in SOCKS5 dial: %v", r)
+					dialErr = fmt.Errorf("internal error: %v", r)
+					conn = nil
+				}
+			}()
+
+			origHost, _ := dialCtx.Value(dmsgOrigHostKey).(string)
+			_, origPort, _ := net.SplitHostPort(addr)
+			if origPort == "" {
+				origPort = "80"
+			}
+
+			if _, ok := dialCtx.Value(dmsgResolverPortKey).(string); ok {
+				pkHex := strings.TrimSuffix(origHost, cfg.DomainSuffix)
+				var pk cipher.PubKey
+				if err := pk.Set(pkHex); err != nil {
+					return nil, fmt.Errorf("invalid PK in hostname %q: %w", origHost, err)
+				}
+				port, err := strconv.ParseUint(origPort, 10, 16)
+				if err != nil {
+					return nil, fmt.Errorf("invalid port: %w", err)
+				}
+				log.WithField("port", port).Debug("SOCKS5 → DMSG direct")
+				stream, err := dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: uint16(port)})
+				if err != nil {
+					return nil, err
+				}
+				return &tcpAddrConn{Conn: stream}, nil
+			}
+
+			// Not .dmsg — forward to upstream or direct.
+			if cfg.UpstreamSOCKS != "" {
+				if origHost != "" {
+					addr = net.JoinHostPort(origHost, origPort)
+				}
+				upstream, err := proxy.SOCKS5("tcp", cfg.UpstreamSOCKS, nil, proxy.Direct)
+				if err != nil {
+					return nil, err
+				}
+				return upstream.Dial(network, addr)
+			}
+			return net.Dial(network, addr)
+		},
+	}
+	srv, err := socks5.New(conf)
+	if err != nil {
+		return fmt.Errorf("create SOCKS5 server: %w", err)
+	}
+	lisAddr := fmt.Sprintf("127.0.0.1:%d", cfg.ProxyPort)
+	log.WithField("addr", lisAddr).Debug("Serving SOCKS5 direct proxy")
+	go func() {
+		<-ctx.Done()
+		srv.Close() //nolint:gosec
+	}()
+	err = srv.ListenAndServe("tcp", lisAddr)
+	if err != nil && !errors.Is(err, net.ErrClosed) {
+		return fmt.Errorf("SOCKS5 listen: %w", err)
+	}
 	return nil
 }
 
