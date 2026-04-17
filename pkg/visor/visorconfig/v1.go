@@ -46,6 +46,8 @@ type V1 struct {
 	PublicVisorConfig    *PublicVisorConfig               `json:"public_visor,omitempty"`
 	GeoIP                string                           `json:"geoip"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
+	ConfService          string                           `json:"conf_service,omitempty"`      // HTTP URL for config bootstrap service
+	ConfServiceDmsg      string                           `json:"conf_service_dmsg,omitempty"` // DMSG URL for config bootstrap service
 	RewardAddress        string                           `json:"reward_address,omitempty"`
 	RewardSystem         string                           `json:"reward_system,omitempty"`
 	RewardSystemDmsg     string                           `json:"reward_system_dmsg,omitempty"`

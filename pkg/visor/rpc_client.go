@@ -83,6 +83,8 @@ func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 		timeout = skyenv.TransportRPCTimeout
 	case "Update":
 		timeout = skyenv.UpdateRPCTimeout
+	case "ServiceHealth":
+		timeout = 2 * time.Minute
 	}
 
 	if timeout != 0 {

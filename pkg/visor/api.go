@@ -467,7 +467,9 @@ type ServiceHealthEntry struct {
 	URL       string `json:"url"`
 	Status    string `json:"status"`
 	Version   string `json:"version,omitempty"`
+	Error     string `json:"error,omitempty"`
 	LatencyMs int64  `json:"latency_ms"`
+	Transport string `json:"transport,omitempty"` // "dmsg" or "http"
 }
 
 // PortDetail type of port details
