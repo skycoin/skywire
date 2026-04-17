@@ -130,9 +130,6 @@ func startDmsgEnv(t *testing.T, nSrvs, maxSessions int) disc.APIClient {
 		})
 	}
 
-	// Allow noise handshakes to stabilize — macOS CI runners are slow
-	time.Sleep(2 * time.Second)
-
 	return dc
 }
 
@@ -144,6 +141,10 @@ func runHTTPSrv(t *testing.T, dc disc.APIClient, fName string) string {
 	go dmsgC.Serve(context.Background())
 	t.Cleanup(func() { assert.NoError(t, dmsgC.Close()) })
 	<-dmsgC.Ready()
+
+	// Ensure the client has sessions with all servers before listening.
+	_, err := dmsgC.ConnectToAllServers(context.Background())
+	require.NoError(t, err)
 
 	r := chi.NewRouter()
 	r.HandleFunc("/"+httpPath, func(w http.ResponseWriter, r *http.Request) {
@@ -182,8 +183,9 @@ func newHTTPClient(t *testing.T, dc disc.APIClient) *http.Client {
 	t.Cleanup(func() { assert.NoError(t, dmsgC.Close()) })
 	<-dmsgC.Ready()
 
-	// Allow session stabilization
-	time.Sleep(time.Second)
+	// Ensure sessions are established with all servers.
+	_, err := dmsgC.ConnectToAllServers(context.Background())
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

@@ -276,19 +276,23 @@ func TestLookupIP(t *testing.T) {
 		go func() { chSrvB <- srvB.Serve(lisSrvB, "") }() //nolint:errcheck
 		<-srvB.Ready()
 
-		// Allow discovery registration and client session stabilization.
-		time.Sleep(time.Second * 3)
+		// Explicitly connect the client to server B (the client's
+		// background discovery loop won't re-poll for minutes).
+		_, err = dmsgC.ConnectToAllServers(context.Background())
+		require.NoError(t, err)
+
+		// Verify the client actually has a session to server B.
+		require.Eventually(t, func() bool {
+			for _, pk := range dmsgC.ConnectedServersPK() {
+				if pk == pkSrvB.String() {
+					return true
+				}
+			}
+			return false
+		}, 10*time.Second, 200*time.Millisecond, "client did not connect to server B")
 
 		srvs := []cipher.PubKey{pkSrvB}
-		var ip net.IP
-		for attempt := 0; attempt < 3; attempt++ {
-			ip, err = dmsgC.LookupIP(context.Background(), srvs)
-			if err == nil {
-				break
-			}
-			t.Logf("LookupIP attempt %d failed: %v", attempt+1, err)
-			time.Sleep(2 * time.Second)
-		}
+		ip, err := dmsgC.LookupIP(context.Background(), srvs)
 		require.NoError(t, err)
 
 		if runtime.GOOS == "windows" {
