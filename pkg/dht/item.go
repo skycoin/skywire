@@ -36,7 +36,7 @@ type MutableItem struct {
 // Target returns the DHT key where this item should be stored:
 // SHA256(pubkey || salt). This determines which nodes are responsible
 // for the item via XOR distance.
-func (item *MutableItem) Target() NodeID {
+func (item MutableItem) Target() NodeID {
 	h := sha256.New()
 	h.Write(item.K[:])
 	h.Write(item.Salt)

@@ -101,6 +101,10 @@ type DHTConfig struct {
 	BootstrapPKs []cipher.PubKey `json:"bootstrap_pks,omitempty"`
 	// FullNode stores all DHT items regardless of XOR distance (few needed).
 	FullNode bool `json:"full_node,omitempty"`
+	// WhitelistedPKs are publisher keys whose data is always replicated and never evicted.
+	WhitelistedPKs []cipher.PubKey `json:"whitelisted_pks,omitempty"`
+	// TrustedPKs are publisher keys that get full replication unless abuse is detected.
+	TrustedPKs []cipher.PubKey `json:"trusted_pks,omitempty"`
 }
 
 // DmsgWebConfig enables the embedded `.dmsg` resolving proxy hosted by

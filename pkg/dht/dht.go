@@ -35,12 +35,15 @@ type Node struct {
 func New(cfg Config, pk cipher.PubKey, sk cipher.SecKey, tp Transport, log *logging.Logger) *Node {
 	cfg.SetDefaults()
 	id := NodeIDFromPubKey(pk)
+	store := NewStore(cfg.MaxItems, cfg.ItemTTL)
+	trust := NewTrustPolicy(cfg.WhitelistedPKs, cfg.TrustedPKs)
+	store.SetTrustPolicy(trust, cfg.PublicPoolSize, cfg.RateLimitPerPK)
 	return &Node{
 		pk:    pk,
 		sk:    sk,
 		id:    id,
 		rt:    NewRoutingTable(id),
-		store: NewStore(cfg.MaxItems, cfg.ItemTTL),
+		store: store,
 		tp:    tp,
 		log:   log,
 		cfg:   cfg,

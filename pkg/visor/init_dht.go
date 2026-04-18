@@ -26,8 +26,10 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	dhtCfg := dht.Config{
-		BootstrapPKs: conf.BootstrapPKs,
-		FullNode:     conf.FullNode,
+		BootstrapPKs:   conf.BootstrapPKs,
+		FullNode:       conf.FullNode,
+		WhitelistedPKs: conf.WhitelistedPKs,
+		TrustedPKs:     conf.TrustedPKs,
 	}
 
 	tp := dht.NewDMSGTransport(v.dmsgC)

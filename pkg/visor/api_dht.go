@@ -9,11 +9,14 @@ import (
 
 // DHTStatus contains status information about the DHT node.
 type DHTStatus struct {
-	Running       bool   `json:"running"`
-	NodeID        string `json:"node_id"`
-	RoutingPeers  int    `json:"routing_peers"`
-	StoredItems   int    `json:"stored_items"`
-	FullNode      bool   `json:"full_node"`
+	Running            bool   `json:"running"`
+	NodeID             string `json:"node_id"`
+	RoutingPeers       int    `json:"routing_peers"`
+	StoredItems        int    `json:"stored_items"`
+	WhitelistedItems   int    `json:"whitelisted_items"`
+	TrustedItems       int    `json:"trusted_items"`
+	PublicItems        int    `json:"public_items"`
+	FullNode           bool   `json:"full_node"`
 }
 
 // DHTStatus returns the current status of the DHT node.
@@ -21,12 +24,16 @@ func (v *Visor) DHTStatus() (*DHTStatus, error) {
 	if v.dhtNode == nil {
 		return &DHTStatus{Running: false}, nil
 	}
+	wl, tr, pub := v.dhtNode.Store().CountByTier()
 	return &DHTStatus{
-		Running:      true,
-		NodeID:       v.dhtNode.ID().String(),
-		RoutingPeers: v.dhtNode.RoutingTable().Size(),
-		StoredItems:  v.dhtNode.Store().Len(),
-		FullNode:     v.conf.DHT != nil && v.conf.DHT.FullNode,
+		Running:          true,
+		NodeID:           v.dhtNode.ID().String(),
+		RoutingPeers:     v.dhtNode.RoutingTable().Size(),
+		StoredItems:      v.dhtNode.Store().Len(),
+		WhitelistedItems: wl,
+		TrustedItems:     tr,
+		PublicItems:      pub,
+		FullNode:         v.conf.DHT != nil && v.conf.DHT.FullNode,
 	}, nil
 }
 
