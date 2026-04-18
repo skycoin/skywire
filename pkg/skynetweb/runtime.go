@@ -270,15 +270,16 @@ func serveHTTP(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cf
 		Director: func(req *http.Request) {
 			target, err := parseHostHeader(req.Host, cfg.DomainSuffix)
 			if err != nil {
-				log.WithError(err).Debug("reverse proxy: bad host")
+				log.WithError(err).WithField("host", req.Host).Warn("reverse proxy: bad host")
 				return
 			}
 			req.URL.Scheme = "http"
 			req.URL.Host = fmt.Sprintf("%s:%d", target.pk.Hex(), target.port)
+			log.WithField("url", req.URL.String()).WithField("method", req.Method).Debug("reverse proxy: directing request")
 		},
 		Transport: transport,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			log.WithError(err).WithField("host", r.Host).Debug("skynet reverse proxy error")
+			log.WithError(err).WithField("host", r.Host).WithField("url", r.URL.String()).Warn("skynet reverse proxy error")
 			http.Error(w, fmt.Sprintf("skynet dial failed: %v", err), http.StatusBadGateway)
 		},
 	}
