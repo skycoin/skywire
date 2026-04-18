@@ -27,8 +27,7 @@ type V1 struct {
 	LogServer     *LogServer          `json:"log_server,omitempty"`
 	DmsgWeb       *DmsgWebConfig      `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig    `json:"skynet_web,omitempty"`
-	Website       *WebsiteConfig      `json:"website,omitempty"`
-	Rewards       *RewardsConfig      `json:"rewards,omitempty"`
+	Rewards *RewardsConfig `json:"rewards,omitempty"`
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *Transport          `json:"transport"`
 	Routing       *Routing            `json:"routing"`
@@ -83,19 +82,6 @@ type LogServer struct {
 	LocalAddr string `json:"local_addr"`
 }
 
-// WebsiteConfig configures a custom website served on the visor's
-// DMSG/skynet port 80. Visor system endpoints (/health, /node-info,
-// /services, etc.) always take priority over the website's routes.
-type WebsiteConfig struct {
-	// Enable must be true to serve the website.
-	Enable bool `json:"enable"`
-	// StaticDir is the path to a directory of static files to serve.
-	// Mutually exclusive with ProxyAddr.
-	StaticDir string `json:"static_dir,omitempty"`
-	// ProxyAddr is a localhost address (e.g., "127.0.0.1:3000") to
-	// reverse proxy to. Mutually exclusive with StaticDir.
-	ProxyAddr string `json:"proxy_addr,omitempty"`
-}
 
 // RewardsConfig configures the reward system UI when hosted by the visor.
 type RewardsConfig struct {

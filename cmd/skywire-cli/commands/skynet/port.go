@@ -19,6 +19,8 @@ var (
 	portSkynet      bool
 	portDmsg        bool
 	portShowLanding bool
+	portProxyAddr   string
+	portStaticDir   string
 )
 
 func init() {
@@ -27,6 +29,8 @@ func init() {
 	portAddCmd.Flags().BoolVar(&portSkynet, "skynet", true, "forward over skynet")
 	portAddCmd.Flags().BoolVar(&portDmsg, "dmsg", true, "forward over DMSG")
 	portAddCmd.Flags().BoolVar(&portShowLanding, "landing", true, "show link on visor landing page")
+	portAddCmd.Flags().StringVar(&portProxyAddr, "proxy-addr", "", "reverse proxy to local address (e.g. 127.0.0.1:3000)")
+	portAddCmd.Flags().StringVar(&portStaticDir, "static-dir", "", "serve static files from directory")
 
 	portCmd.AddCommand(portAddCmd)
 	portCmd.AddCommand(portRmCmd)
@@ -97,6 +101,8 @@ Examples:
 			Skynet:        portSkynet,
 			DMSG:          portDmsg,
 			ShowOnLanding: portShowLanding,
+			ProxyAddr:     portProxyAddr,
+			StaticDir:     portStaticDir,
 		}
 		if err := rpcClient.RegisterForwardedPort(fp); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)

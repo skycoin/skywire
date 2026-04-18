@@ -26,6 +26,14 @@ type ForwardedPort struct {
 	Whitelist     []cipher.PubKey `json:"whitelist,omitempty"` // empty = accessible to all authenticated peers
 	Skynet        bool            `json:"skynet"`              // forward over skynet (sky-forwarding server)
 	DMSG          bool            `json:"dmsg"`                // forward over DMSG (service registry)
+	// ProxyAddr is an optional local address (e.g., "127.0.0.1:3000")
+	// to reverse-proxy to. For port 80, this replaces the visor's
+	// default landing page with content from the local service.
+	ProxyAddr string `json:"proxy_addr,omitempty"`
+	// StaticDir is an optional path to a directory of static files
+	// to serve. For port 80, this replaces the default landing page.
+	// Mutually exclusive with ProxyAddr.
+	StaticDir string `json:"static_dir,omitempty"`
 }
 
 // ForwardedPorts is a thread-safe collection of forwarded port definitions.

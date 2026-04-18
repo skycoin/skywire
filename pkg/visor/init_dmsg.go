@@ -266,7 +266,6 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	lsAPI.SetForwardedPortLister(v.forwardedPorts)
 
 	// Mount reward system UI on port 80 if configured.
-	// This takes priority over a generic website.
 	if rw := v.conf.Rewards; rw != nil && rw.Enable {
 		logger.Info("Mounting reward system UI on port 80")
 		rewardHandler := clirewardsserver.ConfigureAndBuild(clirewardsserver.RewardConfig{
@@ -278,16 +277,18 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 			DisableTpVizAPI: true, // prevent tp-viz from shadowing hypervisor API
 		})
 		lsAPI.SetWebsiteHandler(rewardHandler)
-	} else if ws := v.conf.Website; ws != nil && ws.Enable {
-		// Mount custom website on port 80 if configured.
-		if ws.StaticDir != "" {
-			logger.WithField("dir", ws.StaticDir).Info("Serving custom website from static directory")
-			lsAPI.SetWebsiteHandler(http.FileServer(http.Dir(ws.StaticDir)))
-		} else if ws.ProxyAddr != "" {
-			logger.WithField("addr", ws.ProxyAddr).Info("Reverse-proxying custom website")
-			target, err := url.Parse("http://" + ws.ProxyAddr)
+	} else if fp := v.forwardedPorts.Get(int(visorconfig.DmsgHTTPPort)); fp != nil {
+		// If port 80 has a forwarded port entry with a static dir or
+		// proxy addr, use it as the catch-all handler on port 80.
+		// This replaces the default landing page with custom content.
+		if fp.StaticDir != "" {
+			logger.WithField("dir", fp.StaticDir).Info("Serving custom website from static directory (port forwarding)")
+			lsAPI.SetWebsiteHandler(http.FileServer(http.Dir(fp.StaticDir)))
+		} else if fp.ProxyAddr != "" {
+			logger.WithField("addr", fp.ProxyAddr).Info("Reverse-proxying custom website (port forwarding)")
+			target, err := url.Parse("http://" + fp.ProxyAddr)
 			if err != nil {
-				logger.WithError(err).Warn("Invalid website proxy_addr")
+				logger.WithError(err).Warn("Invalid forwarded port proxy_addr")
 			} else {
 				lsAPI.SetWebsiteHandler(httputil.NewSingleHostReverseProxy(target))
 			}
