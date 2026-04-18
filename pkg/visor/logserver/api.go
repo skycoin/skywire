@@ -68,6 +68,7 @@ type API struct {
 	healthStatsProvider    HealthStatsProvider
 	serviceLister          ServiceLister
 	forwardedPortLister    ForwardedPortLister
+	websiteHandler         http.Handler // optional: serves unmatched routes (custom website)
 }
 
 // New creates a new API.
@@ -238,8 +239,31 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 			`</head><body><h2>Skywire Visor</h2><pre>%s</pre></body></html>`, strings.Join(links, "\n"))
 	})
 
+	// Catch-all: if a custom website handler is set, serve unmatched
+	// routes through it. Visor endpoints always take priority since
+	// they're registered as explicit routes above.
+	r.NoRoute(func(c *gin.Context) {
+		if api.websiteHandler != nil {
+			api.websiteHandler.ServeHTTP(c.Writer, c.Request)
+			return
+		}
+		c.String(http.StatusNotFound, "404 not found")
+	})
+
 	api.Handler = r
 	return api
+}
+
+// SetWebsiteHandler sets a custom HTTP handler for serving unmatched
+// routes on the visor's DMSG/skynet port 80. Visor system endpoints
+// (/health, /node-info, /services, etc.) always take priority.
+//
+// Use cases:
+// - Static file server: http.FileServer(http.Dir("/path/to/site"))
+// - Reverse proxy to a local web app: httputil.ReverseProxy
+// - The reward system UI gin handler
+func (api *API) SetWebsiteHandler(h http.Handler) {
+	api.websiteHandler = h
 }
 
 func (api *API) health(c *gin.Context) {

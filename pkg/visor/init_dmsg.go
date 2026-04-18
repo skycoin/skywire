@@ -11,6 +11,8 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -261,6 +263,22 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// what ports are available for skynet forwarding.
 	lsAPI.SetServiceLister(v.services)
 	lsAPI.SetForwardedPortLister(v.forwardedPorts)
+
+	// Mount custom website on port 80 if configured.
+	if ws := v.conf.Website; ws != nil && ws.Enable {
+		if ws.StaticDir != "" {
+			logger.WithField("dir", ws.StaticDir).Info("Serving custom website from static directory")
+			lsAPI.SetWebsiteHandler(http.FileServer(http.Dir(ws.StaticDir)))
+		} else if ws.ProxyAddr != "" {
+			logger.WithField("addr", ws.ProxyAddr).Info("Reverse-proxying custom website")
+			target, err := url.Parse("http://" + ws.ProxyAddr)
+			if err != nil {
+				logger.WithError(err).Warn("Invalid website proxy_addr")
+			} else {
+				lsAPI.SetWebsiteHandler(httputil.NewSingleHostReverseProxy(target))
+			}
+		}
+	}
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
