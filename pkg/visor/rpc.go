@@ -583,7 +583,7 @@ type AddTransportIn struct {
 	Timeout          time.Duration
 	Label            string // "user" or "skycoin" (default: "skycoin")
 	NoRegister       bool   // skip transport discovery registration (only valid for "user" label)
-	SkipLatencyProbe bool   // skip latency probe after transport creation
+	SkipLatencyProbe bool   // deprecated: latency is now measured at the transport level
 }
 
 // AddTransport creates a transport for the visor.
@@ -989,22 +989,42 @@ func (r *RPC) DMSGServers(_ *struct{}, out *[]DMSGServerInfo) (err error) {
 	return err
 }
 
-// RegisterHTTPPort registers the local port to be accessed by remote visors
-func (r *RPC) RegisterHTTPPort(port *int, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "RegisterHTTPPort", port)(nil, &err)
-	return r.visor.RegisterHTTPPort(*port)
+// RegisterTCPPort registers the local port to be accessed by remote visors
+func (r *RPC) RegisterTCPPort(port *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RegisterTCPPort", port)(nil, &err)
+	return r.visor.RegisterTCPPort(*port)
 }
 
-// DeregisterHTTPPort deregisters the local port that can be accessed by remote visors
-func (r *RPC) DeregisterHTTPPort(port *int, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "DeregisterHTTPPort", port)(nil, &err)
-	return r.visor.DeregisterHTTPPort(*port)
+// DeregisterTCPPort deregisters the local port that can be accessed by remote visors
+func (r *RPC) DeregisterTCPPort(port *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DeregisterTCPPort", port)(nil, &err)
+	return r.visor.DeregisterTCPPort(*port)
 }
 
-// ListHTTPPorts lists all the local por that can be accessed by remote visors
-func (r *RPC) ListHTTPPorts(_ *struct{}, out *[]int) (err error) {
-	defer rpcutil.LogCall(r.log, "ListHTTPPorts", nil)(out, &err)
-	ports, err := r.visor.ListHTTPPorts()
+// ListTCPPorts lists all the local por that can be accessed by remote visors
+func (r *RPC) ListTCPPorts(_ *struct{}, out *[]int) (err error) {
+	defer rpcutil.LogCall(r.log, "ListTCPPorts", nil)(out, &err)
+	ports, err := r.visor.ListTCPPorts()
+	*out = ports
+	return err
+}
+
+// RegisterForwardedPort registers a port with full metadata.
+func (r *RPC) RegisterForwardedPort(p *ForwardedPort, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RegisterForwardedPort", p)(nil, &err)
+	return r.visor.RegisterForwardedPort(*p)
+}
+
+// UpdateForwardedPort updates metadata for an existing forwarded port.
+func (r *RPC) UpdateForwardedPort(p *ForwardedPort, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "UpdateForwardedPort", p)(nil, &err)
+	return r.visor.UpdateForwardedPort(*p)
+}
+
+// ListForwardedPorts returns all forwarded ports with metadata.
+func (r *RPC) ListForwardedPorts(_ *struct{}, out *[]ForwardedPort) (err error) {
+	defer rpcutil.LogCall(r.log, "ListForwardedPorts", nil)(out, &err)
+	ports, err := r.visor.ListForwardedPorts()
 	*out = ports
 	return err
 }
@@ -1275,6 +1295,21 @@ func (r *RPC) SetEmbeddedProxyEnabled(req *SetEmbeddedProxyEnabledRequest, _ *st
 	return r.visor.SetEmbeddedProxyEnabled(req.Kind, req.Enable)
 }
 
+// SetEmbeddedProxyUpstreamRequest is the RPC argument for SetEmbeddedProxyUpstream.
+type SetEmbeddedProxyUpstreamRequest struct {
+	Kind string
+	Addr string // upstream SOCKS5 address, "" to clear
+}
+
+// SetEmbeddedProxyUpstream changes the upstream SOCKS5 address for a resolver.
+func (r *RPC) SetEmbeddedProxyUpstream(req *SetEmbeddedProxyUpstreamRequest, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetEmbeddedProxyUpstream", req)(nil, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.SetEmbeddedProxyUpstream(req.Kind, req.Addr)
+}
+
 // DmsgHTTP performs an HTTP request over dmsg using the visor's dmsg client.
 // DmsgProbeRequest is the RPC argument for DmsgProbe.
 type DmsgProbeRequest struct {
@@ -1298,6 +1333,18 @@ func (r *RPC) DmsgHTTP(req *DmsgHTTPRequest, out *DmsgHTTPResponse) (err error) 
 	defer rpcutil.LogCall(r.log, "DmsgHTTP", req)(out, &err)
 
 	resp, err := r.visor.DmsgHTTP(*req)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
+// SkynetHTTP performs an HTTP request over skynet using the visor's router.
+func (r *RPC) SkynetHTTP(req *SkynetHTTPRequest, out *SkynetHTTPResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "SkynetHTTP", req)(out, &err)
+
+	resp, err := r.visor.SkynetHTTP(*req)
 	if err != nil {
 		return err
 	}

@@ -36,25 +36,18 @@ import (
 // nolint: gocyclo
 //
 //gocyclo:ignore
-func server() {
-
-	log := logging.MustGetLogger("dmsghttp")
-	if dmsgDisc == "" {
-		log.Fatal("Dmsg Discovery URL not specified")
+func buildRouter() *gin.Engine {
+	// Derive PK from SK for health endpoint display.
+	pk, err := sk.PubKey()
+	if err != nil {
+		pk, sk = cipher.GenerateKeyPair()
 	}
-
 	// Set RPC_ADDR so skywire skycoin cli targets the explicit Skycoin mainnet node
 	if skycoinNode != "" {
 		os.Setenv("RPC_ADDR", skycoinNode) //nolint:errcheck,gosec // G104
 		fmt.Printf("Skycoin mainnet node: %s\n", skycoinNode)
 	}
 
-	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	defer cancel()
-	pk, err := sk.PubKey()
-	if err != nil {
-		pk, sk = cipher.GenerateKeyPair()
-	}
 	if wl != "" {
 		wlk := strings.Split(wl, ",")
 		for _, key := range wlk {
@@ -72,35 +65,6 @@ func server() {
 			log.Info(fmt.Sprintf("%d keys whitelisted", len(wlkeys)))
 		}
 	}
-	dconf := dmsg.DefaultConfig()
-	dconf.MinSessions = dmsgSess
-	dmsgclient := dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, log), dconf)
-	defer func() {
-		if err := dmsgclient.Close(); err != nil {
-			log.WithError(err).Error("Failed to close DMSG client")
-		}
-	}()
-
-	go dmsgclient.Serve(context.Background())
-
-	select {
-	case <-ctx.Done():
-		log.WithError(ctx.Err()).Warn("Context canceled while waiting for DMSG client")
-		return
-
-	case <-dmsgclient.Ready():
-	}
-
-	lis, err := dmsgclient.Listen(dmsgPort) //nolint: gosec
-	if err != nil {
-		log.WithError(err).Fatal("Failed to listen on DMSG port")
-	}
-	go func() {
-		<-ctx.Done()
-		if err := lis.Close(); err != nil {
-			log.WithError(err).Error("Failed to close DMSG listener")
-		}
-	}()
 
 	htmlPageTemplateData = htmlTemplateData{
 		Title:       "Skycoin Rewards",
@@ -122,7 +86,11 @@ func server() {
 	r1.Use(gin.Recovery())
 	r1.Use(loggingMiddleware())
 
-	r1.GET("/health", func(c *gin.Context) {
+	// When hosted by the visor, the visor's /health takes priority
+	// (it's an explicit route on the visor's gin router). Register
+	// at both paths so standalone mode gets /health and visor mode
+	// gets /health/health.
+	healthHandler := func(c *gin.Context) {
 		// Standard health response matching other skywire services
 		resp := httputil.HealthCheckResponse{
 			ServiceName: "rewards",
@@ -146,7 +114,9 @@ func server() {
 			"reward_system_prev_run_duration": strings.TrimRight(prevDuration, "\n"),
 			"whitelisted_keys":                wlkeys,
 		})
-	})
+	}
+	r1.GET("/health", healthHandler)
+	r1.GET("/health/health", healthHandler) // accessible when visor's /health takes priority
 	if !healthOnly {
 		// endpoint for testing minimum response time of curl via socks5 proxy / stand-in for latency test
 		// https://dev.to/tigt/making-the-worlds-fastest-website-and-other-mistakes-56na
@@ -265,18 +235,20 @@ func server() {
 		tpvizServer.Start() // Initialize cache and start auto-refresh
 
 		// Delegate /api/* to tpviz server (uses file caching to avoid rate limits)
-		// Note: /health is already registered above with system health info
-		// /api/health provides tpviz cache info for auto-refresh
-		tpvizHandler := tpvizServer.Handler()
-		r1.GET("/api/transports", gin.WrapH(tpvizHandler))
-		r1.GET("/api/uptimes", gin.WrapH(tpvizHandler))
-		r1.GET("/api/services", gin.WrapH(tpvizHandler))
-		r1.GET("/api/health", gin.WrapH(tpvizHandler))
-		r1.GET("/api/ip-groups", gin.WrapH(tpvizHandler))
-		r1.GET("/api/dmsg/servers", gin.WrapH(tpvizHandler))
-		r1.GET("/api/dmsg/entries", gin.WrapH(tpvizHandler))
-		r1.GET("/api/dmsg/health", gin.WrapH(tpvizHandler))
-		r1.GET("/bundle.js", gin.WrapH(tpvizHandler))
+		// When hosted by the visor, /api/* routes are disabled to prevent
+		// tp-viz from shadowing the hypervisor API.
+		if !disableTpVizAPI {
+			tpvizHandler := tpvizServer.Handler()
+			r1.GET("/api/transports", gin.WrapH(tpvizHandler))
+			r1.GET("/api/uptimes", gin.WrapH(tpvizHandler))
+			r1.GET("/api/services", gin.WrapH(tpvizHandler))
+			r1.GET("/api/health", gin.WrapH(tpvizHandler))
+			r1.GET("/api/ip-groups", gin.WrapH(tpvizHandler))
+			r1.GET("/api/dmsg/servers", gin.WrapH(tpvizHandler))
+			r1.GET("/api/dmsg/entries", gin.WrapH(tpvizHandler))
+			r1.GET("/api/dmsg/health", gin.WrapH(tpvizHandler))
+			r1.GET("/bundle.js", gin.WrapH(tpvizHandler))
+		}
 
 		r1.GET("/transport-graph", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")
@@ -1611,6 +1583,60 @@ func server() {
 
 		// Start the server using the custom Gin handler
 	}
+
+	return r1
+}
+
+// BuildHandler builds and returns the reward system's HTTP handler
+// without starting any servers. The visor can mount this handler on
+// its own port 80 gin router for integrated DMSG/skynet access.
+//
+// Call SetConfig before BuildHandler to configure the reward system.
+func BuildHandler() http.Handler {
+	return buildRouter()
+}
+
+// serveStandalone starts HTTP and DMSG listeners. Called by the CLI command.
+func serveStandalone(r1 *gin.Engine) {
+	log := logging.MustGetLogger("dmsghttp")
+	if dmsgDisc == "" {
+		log.Fatal("Dmsg Discovery URL not specified")
+	}
+
+	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	defer cancel()
+	pk, err := sk.PubKey()
+	if err != nil {
+		pk, sk = cipher.GenerateKeyPair()
+	}
+	dconf := dmsg.DefaultConfig()
+	dconf.MinSessions = dmsgSess
+	dmsgclient := dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, log), dconf)
+	defer func() {
+		if err := dmsgclient.Close(); err != nil {
+			log.WithError(err).Error("Failed to close DMSG client")
+		}
+	}()
+
+	go dmsgclient.Serve(context.Background())
+
+	select {
+	case <-ctx.Done():
+		log.WithError(ctx.Err()).Warn("Context canceled while waiting for DMSG client")
+		return
+	case <-dmsgclient.Ready():
+	}
+
+	lis, err := dmsgclient.Listen(dmsgPort) //nolint: gosec
+	if err != nil {
+		log.WithError(err).Fatal("Failed to listen on DMSG port")
+	}
+	go func() {
+		<-ctx.Done()
+		if err := lis.Close(); err != nil {
+			log.WithError(err).Error("Failed to close DMSG listener")
+		}
+	}()
 
 	// Increased timeouts for dmsg latency characteristics
 	// DMSG has higher latency than direct TCP due to multi-hop routing

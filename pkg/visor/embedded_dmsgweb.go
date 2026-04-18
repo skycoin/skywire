@@ -123,6 +123,30 @@ func (e *EmbeddedDmsgWeb) Stats() dmsgweb.StatsSnapshot {
 	return e.stats.Snapshot()
 }
 
+// SetUpstream changes the upstream SOCKS5 address and restarts the
+// resolver so the new upstream takes effect immediately.
+func (e *EmbeddedDmsgWeb) SetUpstream(addr string) error {
+	e.mu.Lock()
+	e.cfg.UpstreamSOCKS = addr
+	wasRunning := e.running
+	e.mu.Unlock()
+
+	if wasRunning {
+		if err := e.Stop(); err != nil {
+			return fmt.Errorf("stop before upstream change: %w", err)
+		}
+		return e.Start()
+	}
+	return nil
+}
+
+// Upstream returns the current upstream SOCKS5 address.
+func (e *EmbeddedDmsgWeb) Upstream() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.cfg.UpstreamSOCKS
+}
+
 func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 	cfg := dmsgweb.Config{
 		DomainSuffix:  stringOrDefault(e.cfg.DomainSuffix, dmsgweb.DefaultDomainSuffix),

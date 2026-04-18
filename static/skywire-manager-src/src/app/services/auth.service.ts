@@ -136,4 +136,15 @@ export class AuthService {
         return throwError(err);
       }));
   }
+
+  /**
+   * Checks if an account has been created (public endpoint, no auth).
+   */
+  userExists(): Observable<boolean> {
+    return this.apiService.get('user-exists', new RequestOptions({ ignoreAuth: true }))
+      .pipe(
+        map((response: any) => response.exists === true),
+        catchError(() => of(true)) // on error, assume user exists (safe default)
+      );
+  }
 }

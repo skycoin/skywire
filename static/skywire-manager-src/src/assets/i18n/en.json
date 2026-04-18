@@ -214,7 +214,8 @@
       "info": "Info",
       "apps": "Apps",
       "routing": "Routing",
-      "rewards": "Rewards"
+      "rewards": "Rewards",
+      "skynet": "Skynet"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },
@@ -417,6 +418,7 @@
       "terminal": "Terminal",
       "config": "Configuration",
       "update": "Update",
+      "proxy": "Resolving Proxy",
       "turn-off": "Turn off",
       "logs": "View logs"
     },

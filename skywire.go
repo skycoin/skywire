@@ -8,6 +8,7 @@ import (
 	skycoin "github.com/skycoin/skycoin/cmd/skycoin-wallet/commands"
 
 	"github.com/skycoin/skywire/cmd/skywire/commands"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/flags"
 )
 
@@ -18,6 +19,9 @@ func init() {
 	)
 	skycoin.RootCmd.Use = "skycoin"
 	skycoin.RootCmd.Short = "skycoin daemon & cli"
+	if v := buildinfo.DepVersion("github.com/skycoin/skycoin"); v != "" {
+		skycoin.RootCmd.Version = v
+	}
 }
 
 func main() {

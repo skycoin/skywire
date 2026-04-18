@@ -145,7 +145,7 @@ func (v *Visor) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements API.
-func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, skipLatencyProbe bool) (*TransportSummary, error) {
+func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.Duration, label string, noRegister bool, _ bool) (*TransportSummary, error) {
 	if v.tpM == nil {
 		return nil, ErrTrpMangerNotAvailable
 	}
@@ -169,11 +169,10 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.D
 		return nil, fmt.Errorf("--no-register flag is only valid for user-labeled transports")
 	}
 
-	v.log.Debugf("Saving transport to %v via %v with label %s (skipLatencyProbe=%v)", remote, tpType, tpLabel, skipLatencyProbe)
+	v.log.Debugf("Saving transport to %v via %v with label %s", remote, tpType, tpLabel)
 
 	opts := transport.SaveTransportOptions{
-		NoRegister:       noRegister,
-		SkipLatencyProbe: skipLatencyProbe,
+		NoRegister: noRegister,
 	}
 
 	tp, err := v.tpM.SaveTransportWithOptions(ctx, remote, types.Type(tpType), tpLabel, opts)

@@ -827,21 +827,38 @@ func (rc *rpcClient) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, erro
 	return out, err
 }
 
-// RegisterHTTPPort calls RegisterHTTPPort.
-func (rc *rpcClient) RegisterHTTPPort(localPort int) error {
-	return rc.Call("RegisterHTTPPort", &localPort, &struct{}{})
+// RegisterTCPPort calls RegisterTCPPort.
+func (rc *rpcClient) RegisterTCPPort(localPort int) error {
+	return rc.Call("RegisterTCPPort", &localPort, &struct{}{})
 }
 
-// DeregisterHTTPPort calls DeregisterHTTPPort.
-func (rc *rpcClient) DeregisterHTTPPort(localPort int) error {
-	err := rc.Call("DeregisterHTTPPort", &localPort, &struct{}{})
+// DeregisterTCPPort calls DeregisterTCPPort.
+func (rc *rpcClient) DeregisterTCPPort(localPort int) error {
+	err := rc.Call("DeregisterTCPPort", &localPort, &struct{}{})
 	return err
 }
 
-// ListHTTPPorts calls ListHTTPPorts.
-func (rc *rpcClient) ListHTTPPorts() ([]int, error) {
+// ListTCPPorts calls ListTCPPorts.
+func (rc *rpcClient) ListTCPPorts() ([]int, error) {
 	var out []int
-	err := rc.Call("ListHTTPPorts", &struct{}{}, &out)
+	err := rc.Call("ListTCPPorts", &struct{}{}, &out)
+	return out, err
+}
+
+// RegisterForwardedPort calls RegisterForwardedPort.
+func (rc *rpcClient) RegisterForwardedPort(p ForwardedPort) error {
+	return rc.Call("RegisterForwardedPort", &p, &struct{}{})
+}
+
+// UpdateForwardedPort calls UpdateForwardedPort.
+func (rc *rpcClient) UpdateForwardedPort(p ForwardedPort) error {
+	return rc.Call("UpdateForwardedPort", &p, &struct{}{})
+}
+
+// ListForwardedPorts calls ListForwardedPorts.
+func (rc *rpcClient) ListForwardedPorts() ([]ForwardedPort, error) {
+	var out []ForwardedPort
+	err := rc.Call("ListForwardedPorts", &struct{}{}, &out)
 	return out, err
 }
 
@@ -996,10 +1013,24 @@ func (rc *rpcClient) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 		&struct{}{})
 }
 
+// SetEmbeddedProxyUpstream changes the upstream SOCKS5 address at runtime.
+func (rc *rpcClient) SetEmbeddedProxyUpstream(kind, addr string) error {
+	return rc.Call("SetEmbeddedProxyUpstream",
+		&SetEmbeddedProxyUpstreamRequest{Kind: kind, Addr: addr},
+		&struct{}{})
+}
+
 // DmsgHTTP performs an HTTP request over dmsg using the visor's dmsg client.
 func (rc *rpcClient) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	var resp DmsgHTTPResponse
 	err := rc.Call("DmsgHTTP", &req, &resp)
+	return &resp, err
+}
+
+// SkynetHTTP performs an HTTP request over skynet using the visor's router.
+func (rc *rpcClient) SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error) {
+	var resp SkynetHTTPResponse
+	err := rc.Call("SkynetHTTP", &req, &resp)
 	return &resp, err
 }
 

@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -124,8 +125,11 @@ type Visor struct {
 	remoteVisors              map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors      map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
 
-	// Allowed ports for app connections (legacy — being replaced by services registry)
+	// Allowed ports for app connections (legacy — being replaced by forwardedPorts)
 	allowed allowedPortsState
+
+	// Rich port forwarding with metadata, whitelist, landing page integration
+	forwardedPorts *ForwardedPorts
 
 	// Service handler registry — maps ports to connection handlers
 	// so the sky-forwarding server can dispatch without localhost TCP.
@@ -397,6 +401,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 			ports: make(map[int]bool),
 			mu:    new(sync.RWMutex),
 		},
+		forwardedPorts: NewForwardedPorts(filepath.Join(conf.LocalPath, "forwarded_ports.json")),
 		dmsgTracker: dtmState{
 			ready: make(chan struct{}),
 		},

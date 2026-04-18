@@ -53,6 +53,10 @@ func (t PacketType) String() string {
 		return "Error"
 	case SACKPacket:
 		return "SACK"
+	case TransportPingPacket:
+		return "TransportPing"
+	case TransportPongPacket:
+		return "TransportPong"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -75,6 +79,8 @@ const (
 	PongPacket
 	ErrorPacket
 	SACKPacket
+	TransportPingPacket // transport-level ping (route ID = 0), payload: timestamp (8 bytes, unix nano)
+	TransportPongPacket // transport-level pong (route ID = 0), payload: timestamp (8 bytes, echoed)
 )
 
 // Capability bitmap flags for extended handshake negotiation.
@@ -289,6 +295,30 @@ func (p Packet) SACKLastContiguousSeq() uint32 {
 // SACKBitmap extracts the 64-bit bitmap from a SACK packet.
 func (p Packet) SACKBitmap() uint64 {
 	return binary.BigEndian.Uint64(p[PacketPayloadOffset+4:])
+}
+
+// TransportPingPayloadSize is the size of a transport ping/pong payload (8 bytes for unix nano timestamp).
+const TransportPingPayloadSize = 8
+
+// MakeTransportPingPacket constructs a transport-level ping packet.
+// Route ID is 0 (no route); payload is an 8-byte unix nano timestamp.
+func MakeTransportPingPacket(timestamp int64) Packet {
+	packet := make([]byte, PacketHeaderSize+TransportPingPayloadSize)
+	packet[PacketTypeOffset] = byte(TransportPingPacket)
+	// route ID = 0 (bytes 1-4 already zero)
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], TransportPingPayloadSize)
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp)) //nolint:gosec
+	return packet
+}
+
+// MakeTransportPongPacket constructs a transport-level pong packet.
+// Echoes the timestamp from the ping.
+func MakeTransportPongPacket(timestamp int64) Packet {
+	packet := make([]byte, PacketHeaderSize+TransportPingPayloadSize)
+	packet[PacketTypeOffset] = byte(TransportPongPacket)
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], TransportPingPayloadSize)
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp)) //nolint:gosec
+	return packet
 }
 
 // Type returns Packet's type.

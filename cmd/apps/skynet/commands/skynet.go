@@ -120,11 +120,11 @@ func RunSkynet(ctx context.Context, args []string) error {
 	// Register all ports with the visor
 	registeredPorts := []int{}
 	for _, port := range ports {
-		if err := rpcClient.RegisterHTTPPort(port); err != nil {
+		if err := rpcClient.RegisterTCPPort(port); err != nil {
 			appCl.Log().Errorf("Failed to register port %d: %v", port, err)
 			// Deregister any ports we already registered
 			for _, p := range registeredPorts {
-				_ = rpcClient.DeregisterHTTPPort(p) //nolint:errcheck
+				_ = rpcClient.DeregisterTCPPort(p) //nolint:errcheck
 			}
 			setAppError(appCl, fmt.Errorf("failed to register port %d: %w", port, err))
 			return fmt.Errorf("failed to register port %d: %w", port, err)
@@ -160,7 +160,7 @@ func RunSkynet(ctx context.Context, args []string) error {
 
 	// Deregister all ports
 	for _, port := range registeredPorts {
-		if err := rpcClient.DeregisterHTTPPort(port); err != nil {
+		if err := rpcClient.DeregisterTCPPort(port); err != nil {
 			appCl.Log().Errorf("Failed to deregister port %d: %v", port, err)
 		} else {
 			appCl.Log().Infof("Deregistered port %d", port)
