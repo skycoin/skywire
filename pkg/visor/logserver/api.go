@@ -204,8 +204,20 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 				}
 			}
 		}
-		// Add forwarded ports visible on the landing page
+		// Add forwarded ports visible on the landing page.
+		// Use the request Host to construct proper URLs that work
+		// in the browser (e.g. http://pk.skynet:8000/).
 		if api.forwardedPortLister != nil {
+			host := c.Request.Host
+			// Strip existing port from host if present
+			if h, _, err := net.SplitHostPort(host); err == nil {
+				host = h
+			}
+			// If host is a bare PK (66 hex chars), append .skynet
+			// so generated URLs route through the SOCKS5 proxy.
+			if len(host) == 66 && !strings.Contains(host, ".") {
+				host += ".skynet"
+			}
 			for _, fp := range api.forwardedPortLister.LandingPageEntries() {
 				label := fp.Label
 				if label == "" {
@@ -215,7 +227,8 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 				if fp.Description != "" {
 					desc = " - " + fp.Description
 				}
-				links = append(links, fmt.Sprintf(`<a href=":%d/">%s</a>%s`, fp.Port, label, desc))
+				url := fmt.Sprintf("http://%s:%d/", host, fp.Port)
+				links = append(links, fmt.Sprintf(`<a href="%s">%s</a>%s`, url, label, desc))
 			}
 		}
 
