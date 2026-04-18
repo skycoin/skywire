@@ -27,6 +27,7 @@ type V1 struct {
 	LogServer     *LogServer          `json:"log_server,omitempty"`
 	DmsgWeb       *DmsgWebConfig      `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig    `json:"skynet_web,omitempty"`
+	Rewards       *RewardsConfig      `json:"rewards,omitempty"`
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *Transport          `json:"transport"`
 	Routing       *Routing            `json:"routing"`
@@ -79,6 +80,16 @@ type LogServer struct {
 	// LocalAddr enables serving on localhost (e.g., "localhost:8002" or "127.0.0.1:8002").
 	// If empty, localhost serving is disabled (dmsg-only mode).
 	LocalAddr string `json:"local_addr"`
+}
+
+// RewardsConfig configures the reward system UI when hosted by the visor.
+type RewardsConfig struct {
+	Enable          bool            `json:"enable"`
+	WorkDir         string          `json:"work_dir"`
+	Whitelist       []cipher.PubKey `json:"whitelist,omitempty"`
+	CanonicalDomain string          `json:"canonical_domain,omitempty"`
+	SkycoinNode     string          `json:"skycoin_node,omitempty"`
+	LoginNode       string          `json:"login_node,omitempty"`
 }
 
 // DmsgWebConfig enables the embedded `.dmsg` resolving proxy hosted by

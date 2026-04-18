@@ -1,0 +1,101 @@
+.section-title {
+  font-size: 15px;
+  font-weight: 500;
+  margin: 16px 0 4px 0;
+  color: rgba(0, 0, 0, 0.87);
+
+  &:first-of-type {
+    margin-top: 0;
+  }
+}
+
+.help-text {
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 13px;
+  margin-bottom: 12px;
+
+  code {
+    background: rgba(0, 0, 0, 0.06);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+}
+
+.status-table {
+  width: 100%;
+  margin-bottom: 12px;
+  border-collapse: collapse;
+
+  th, td {
+    padding: 5px 8px;
+    text-align: left;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    font-size: 13px;
+  }
+
+  th {
+    color: rgba(0, 0, 0, 0.5);
+    font-weight: 500;
+  }
+
+  td {
+    color: rgba(0, 0, 0, 0.87);
+  }
+
+  .status-ok { color: #4caf50; font-weight: 500; }
+  .status-off { color: rgba(0, 0, 0, 0.38); }
+}
+
+.proxy-form {
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.form-row {
+  margin-bottom: 12px;
+}
+
+.upstream-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .upstream-field {
+    flex: 1;
+  }
+}
+
+.no-ports {
+  color: rgba(0, 0, 0, 0.38);
+  font-style: italic;
+  font-size: 13px;
+}
+
+.port-list {
+  margin-bottom: 8px;
+}
+
+.port-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+
+  .port-number {
+    font-family: monospace;
+    font-size: 14px;
+    font-weight: 500;
+  }
+}
+
+.add-port-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .port-field {
+    width: 120px;
+  }
+}

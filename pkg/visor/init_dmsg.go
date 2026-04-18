@@ -11,6 +11,8 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,6 +22,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	clirewardsserver "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/server"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -224,7 +227,9 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	}
 
 	//whitelist access to the surveys for the hypervisor, dmsggpty whitelist, and for the surveywhitelist of keys which is fetched from the conf service
-	var whitelistedPKs []cipher.PubKey
+	// The visor's own PK is always whitelisted — it should have full
+	// access to its own log server, surveys, and pprof.
+	whitelistedPKs := []cipher.PubKey{v.conf.PK}
 	if sw := v.conf.EffectiveSurveyWhitelist(); sw != nil {
 		whitelistedPKs = append(whitelistedPKs, sw...)
 	}
@@ -258,6 +263,32 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// Wire the service catalog so /services on the log server shows
 	// what ports are available for skynet forwarding.
 	lsAPI.SetServiceLister(v.services)
+	lsAPI.SetForwardedPortLister(v.forwardedPorts)
+
+	// Mount reward system UI on port 80 if configured.
+	if rw := v.conf.Rewards; rw != nil && rw.Enable {
+		logger.Info("Mounting reward system UI on port 80")
+		rewardHandler := clirewardsserver.ConfigureAndBuild(clirewardsserver.RewardConfig{
+			WorkDir:         rw.WorkDir,
+			WhitelistPKs:    rw.Whitelist,
+			CanonicalDomain: rw.CanonicalDomain,
+			SkycoinNode:     rw.SkycoinNode,
+			LoginNode:       rw.LoginNode,
+			DisableTpVizAPI: true, // prevent tp-viz from shadowing hypervisor API
+		})
+		lsAPI.SetWebsiteHandler(rewardHandler)
+	} else if fp := v.forwardedPorts.Get(int(visorconfig.DmsgHTTPPort)); fp != nil && fp.ProxyAddr != "" {
+		// If port 80 has a forwarded port entry with a proxy addr,
+		// reverse-proxy unmatched routes to the local service.
+		// This replaces the default landing page with custom content.
+		logger.WithField("addr", fp.ProxyAddr).Info("Reverse-proxying custom website (port forwarding)")
+		target, err := url.Parse("http://" + fp.ProxyAddr)
+		if err != nil {
+			logger.WithError(err).Warn("Invalid forwarded port proxy_addr")
+		} else {
+			lsAPI.SetWebsiteHandler(httputil.NewSingleHostReverseProxy(target))
+		}
+	}
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {

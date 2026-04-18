@@ -459,6 +459,92 @@ return {
   }
 
   /**
+   * Gets the resolving proxy status for a visor.
+   */
+  getProxies(nodeKey: string): Observable<any> {
+    return this.apiService.get(`visors/${nodeKey}/proxies`);
+  }
+
+  /**
+   * Enables or disables a resolving proxy.
+   */
+  setProxyEnabled(nodeKey: string, kind: string, enable: boolean): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/proxies/set`, { kind, enable });
+  }
+
+  /**
+   * Sets the upstream SOCKS5 address for a resolving proxy.
+   */
+  setProxyUpstream(nodeKey: string, kind: string, addr: string): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/proxies/upstream`, { kind, addr });
+  }
+
+  /**
+   * Gets the list of skynet-forwarded ports.
+   */
+  getSkynetPorts(nodeKey: string): Observable<number[]> {
+    return this.apiService.get(`visors/${nodeKey}/skynet-ports`);
+  }
+
+  /**
+   * Registers a local port for skynet forwarding.
+   */
+  registerSkynetPort(nodeKey: string, port: number): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/skynet-ports/register`, { port });
+  }
+
+  /**
+   * Deregisters a local port from skynet forwarding.
+   */
+  deregisterSkynetPort(nodeKey: string, port: number): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/skynet-ports/deregister`, { port });
+  }
+
+  /**
+   * Gets all forwarded ports with rich metadata.
+   */
+  getForwardedPorts(nodeKey: string): Observable<any[]> {
+    return this.apiService.get(`visors/${nodeKey}/forwarded-ports`);
+  }
+
+  /**
+   * Registers a forwarded port with metadata (label, description, skynet/dmsg, whitelist).
+   */
+  registerForwardedPort(nodeKey: string, port: any): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/forwarded-ports/register`, port);
+  }
+
+  /**
+   * Updates a forwarded port's metadata.
+   */
+  updateForwardedPort(nodeKey: string, port: any): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/forwarded-ports/update`, port);
+  }
+
+  /**
+   * Gets active skynet forward connections (reverse proxies).
+   */
+  getSkynetForwards(nodeKey: string): Observable<any> {
+    return this.apiService.get(`visors/${nodeKey}/skynet-forwards`);
+  }
+
+  /**
+   * Creates a skynet forward: maps remote_pk:remote_port to localhost:local_port.
+   */
+  skynetConnect(nodeKey: string, remotePK: string, remotePort: number, localPort: number): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/skynet-forwards/connect`, {
+      remote_pk: remotePK, remote_port: remotePort, local_port: localPort
+    });
+  }
+
+  /**
+   * Disconnects a skynet forward by UUID.
+   */
+  skynetDisconnect(nodeKey: string, id: string): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/skynet-forwards/disconnect`, { id });
+  }
+
+  /**
    * Turns off a node.
    */
   shutdown(nodeKey: string): Observable<any> {

@@ -23,9 +23,10 @@ const RPCName = "RPCGateway"
 
 // Client is used to interact with the router's API remotely. The setup node uses this.
 type Client struct {
-	rpc *rpc.Client
-	rPK cipher.PubKey // public key of remote router
-	log logrus.FieldLogger
+	rpc  *rpc.Client
+	conn io.ReadWriteCloser // raw DMSG stream, kept for deadline management
+	rPK  cipher.PubKey      // public key of remote router
+	log  logrus.FieldLogger
 }
 
 // DialTimeout is the maximum time allowed for a single dial attempt to a remote visor.
@@ -70,24 +71,16 @@ func NewClient(ctx context.Context, dialer network.Dialer, rPK cipher.PubKey) (*
 		return nil, &DialError{PK: rPK, Err: err}
 	}
 
-	// Set a deadline on the underlying connection to prevent stale DMSG streams
-	// from accumulating when the remote visor is dead. Without this, RPC calls
-	// over dead streams block forever, leaking goroutines and ephemeral ports.
-	// Keep this short — stuck RPC calls hold ephemeral ports until the deadline
-	// fires. 30s is enough for any valid RPC exchange.
-	if conn, ok := s.(interface{ SetDeadline(time.Time) error }); ok {
-		conn.SetDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
-	}
-
 	return NewClientFromRaw(s, rPK), nil
 }
 
 // NewClientFromRaw creates a new client from a raw connection.
 func NewClientFromRaw(conn io.ReadWriteCloser, rPK cipher.PubKey) *Client {
 	return &Client{
-		rpc: rpc.NewClient(conn),
-		rPK: rPK,
-		log: logging.MustGetLogger(fmt.Sprintf("router_client:%s", rPK.String())),
+		rpc:  rpc.NewClient(conn),
+		conn: conn,
+		rPK:  rPK,
+		log:  logging.MustGetLogger(fmt.Sprintf("router_client:%s", rPK.String())),
 	}
 }
 
@@ -126,10 +119,22 @@ func (c *Client) ReserveIDs(ctx context.Context, n uint8) (rtIDs []routing.Route
 	return rtIDs, err
 }
 
+// rpcDeadline is the per-call deadline set on the underlying connection.
+// This prevents stuck RPC calls from holding ephemeral ports indefinitely.
+// It is reset before each call (not at creation time) so pooled connections
+// remain usable across their full idle TTL.
+const rpcDeadline = 30 * time.Second
+
 func (c *Client) call(ctx context.Context, method string, args interface{}, reply interface{}) error {
 	if c == nil || c.rpc == nil {
 		return errors.New("router client not initialized")
 	}
+
+	// Set a fresh deadline for this RPC call.
+	if conn, ok := c.conn.(interface{ SetDeadline(time.Time) error }); ok {
+		conn.SetDeadline(time.Now().Add(rpcDeadline)) //nolint:errcheck,gosec
+	}
+
 	call := c.rpc.Go(RPCName+"."+method, args, reply, nil)
 	select {
 	case <-ctx.Done():
@@ -139,6 +144,10 @@ func (c *Client) call(ctx context.Context, method string, args interface{}, repl
 		c.rpc.Close() //nolint:errcheck,gosec
 		return ctx.Err()
 	case <-call.Done:
+		// Clear the deadline so the connection can idle in the pool.
+		if conn, ok := c.conn.(interface{ SetDeadline(time.Time) error }); ok {
+			conn.SetDeadline(time.Time{}) //nolint:errcheck,gosec
+		}
 		return call.Error
 	}
 }

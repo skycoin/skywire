@@ -139,9 +139,12 @@ type API interface {
 	SetSyncTPDData(enabled bool) error
 	GetSyncTPDData() (bool, error)
 
-	RegisterHTTPPort(localPort int) error
-	DeregisterHTTPPort(localPort int) error
-	ListHTTPPorts() ([]int, error)
+	RegisterTCPPort(localPort int) error
+	DeregisterTCPPort(localPort int) error
+	ListTCPPorts() ([]int, error)
+	RegisterForwardedPort(p ForwardedPort) error
+	UpdateForwardedPort(p ForwardedPort) error
+	ListForwardedPorts() ([]ForwardedPort, error)
 	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	Disconnect(id uuid.UUID) error
@@ -183,6 +186,7 @@ type API interface {
 	//dmsg utilities
 	DmsgProbe(pk cipher.PubKey, port uint16) (bool, error)
 	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
+	SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error)
 	DmsgConnectAll() (*DmsgConnectAllResult, error)
 	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
 	DmsgSessions() (*DmsgClientSessions, error)
@@ -215,6 +219,7 @@ type API interface {
 	// runtime — the on-disk config is unchanged, so a visor restart
 	// reverts to the config's Enable flag.
 	SetEmbeddedProxyEnabled(kind string, enable bool) error
+	SetEmbeddedProxyUpstream(kind, addr string) error
 	ResetRouteSetupStats() error
 
 	TPSExternalHealthCheck(tpsPK cipher.PubKey) error
@@ -515,6 +520,24 @@ type DmsgHTTPRequest struct {
 
 // DmsgHTTPResponse represents an HTTP response received over dmsg
 type DmsgHTTPResponse struct {
+	StatusCode int               `json:"status_code"`
+	Status     string            `json:"status"`
+	Header     map[string]string `json:"header,omitempty"`
+	Body       []byte            `json:"body,omitempty"`
+}
+
+// SkynetHTTPRequest represents an HTTP request to make over skynet.
+type SkynetHTTPRequest struct {
+	PK     cipher.PubKey     `json:"pk"`
+	Port   uint16            `json:"port"`
+	Path   string            `json:"path"`
+	Method string            `json:"method"`
+	Header map[string]string `json:"header,omitempty"`
+	Body   []byte            `json:"body,omitempty"`
+}
+
+// SkynetHTTPResponse represents an HTTP response received over skynet.
+type SkynetHTTPResponse struct {
 	StatusCode int               `json:"status_code"`
 	Status     string            `json:"status"`
 	Header     map[string]string `json:"header,omitempty"`

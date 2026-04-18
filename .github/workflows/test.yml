@@ -23,6 +23,8 @@ jobs:
           cache-dependency-path: go.sum
 
       - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.11.4
 
       - name: Install Dependencies
         shell: bash
@@ -63,6 +65,8 @@ jobs:
           cache-dependency-path: go.sum
 
       - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.11.4
 
       - name: Checking Format and Testing
         run: |
@@ -84,6 +88,8 @@ jobs:
           cache-dependency-path: go.sum
 
       - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.11.4
 
       - name: Install Requirements
         shell: pwsh

@@ -13,14 +13,13 @@
 package skynetweb
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"regexp"
 	"strconv"
 	"strings"
@@ -28,7 +27,6 @@ import (
 	"time"
 
 	"github.com/confiant-inc/go-socks5"
-	"github.com/gin-gonic/gin"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/skynet"
@@ -242,84 +240,60 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, cfg Config) error {
 // need to terminate TLS inside the tunnel, which isn't how skynet
 // servers are configured today).
 func serveHTTP(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cfg Config) error {
-	gin.SetMode(gin.ReleaseMode)
-	r := gin.New()
-	r.Use(gin.Recovery())
+	// Use a custom http.Transport that dials skynet connections.
+	// This gives us connection pooling and keep-alive for free —
+	// multiple concurrent HTTP requests to the same (pk, port)
+	// reuse a single skynet route instead of each request trying
+	// to establish its own route (which fails with "already being
+	// initialized").
+	transport := &http.Transport{
+		DialContext: func(dialCtx context.Context, network, addr string) (net.Conn, error) {
+			// addr is "host:port" where host is the target key from
+			// the reverse proxy's Director.
+			target, err := parseHostHeader(addr, "")
+			if err != nil {
+				return nil, fmt.Errorf("skynet transport dial: %w", err)
+			}
+			conn, err := dialer.DialSkynet(dialCtx, target.pk, target.port)
+			if err != nil {
+				return nil, fmt.Errorf("skynet dial: %w", err)
+			}
+			return conn, nil
+		},
+		MaxIdleConns:        10,
+		MaxConnsPerHost:     1,
+		MaxIdleConnsPerHost: 1,
+		IdleConnTimeout:     0, // never close idle connections — routes are expensive to re-establish
+	}
 
-	r.Any("/*path", func(c *gin.Context) {
-		var reqErr error
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			target, err := parseHostHeader(req.Host, cfg.DomainSuffix)
+			if err != nil {
+				log.WithError(err).WithField("host", req.Host).Warn("reverse proxy: bad host")
+				return
+			}
+			req.URL.Scheme = "http"
+			req.URL.Host = fmt.Sprintf("%s:%d", target.pk.Hex(), target.port)
+			log.WithField("url", req.URL.String()).WithField("method", req.Method).Debug("reverse proxy: directing request")
+		},
+		Transport: transport,
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			log.WithError(err).WithField("host", r.Host).WithField("url", r.URL.String()).Warn("skynet reverse proxy error")
+			http.Error(w, fmt.Sprintf("skynet dial failed: %v", err), http.StatusBadGateway)
+		},
+	}
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		done := cfg.Stats.RecordRequest()
+		var reqErr error
 		defer func() { done(reqErr) }()
-
-		target, err := parseHostHeader(c.Request.Host, cfg.DomainSuffix)
-		if err != nil {
-			reqErr = err
-			c.String(http.StatusBadRequest, "invalid skynet host: %v", err)
-			return
-		}
-
-		// Dial the skynet server + handshake.
-		dialCtx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
-		defer cancel()
-		conn, err := dialer.DialSkynet(dialCtx, target.pk, target.port)
-		if err != nil {
-			reqErr = err
-			c.String(http.StatusBadGateway, "skynet dial failed: %v", err)
-			log.WithError(err).WithField("pk", target.pk).Debug("skynet dial failed")
-			return
-		}
-		defer conn.Close() //nolint:errcheck,gosec
-
-		req, err := http.NewRequestWithContext(c.Request.Context(), c.Request.Method,
-			c.Request.URL.RequestURI(), c.Request.Body)
-		if err != nil {
-			reqErr = err
-			c.String(http.StatusInternalServerError, "request build failed: %v", err)
-			return
-		}
-		req.Host = fmt.Sprintf("%s:%d", target.pk.Hex(), target.port)
-		for h, vs := range c.Request.Header {
-			for _, v := range vs {
-				req.Header.Add(h, v)
-			}
-		}
-
-		if err := req.Write(conn); err != nil {
-			reqErr = err
-			c.String(http.StatusBadGateway, "send failed: %v", err)
-			log.WithError(err).Debug("request write failed")
-			return
-		}
-
-		// The tunnel carries a raw HTTP response (status line +
-		// headers + body) from the forwarded localhost server. Parse
-		// it with http.ReadResponse so we can copy the actual status
-		// code + headers into gin's writer instead of double-
-		// framing (gin writing its own 200 OK before the tunnel's
-		// response bytes — which curl sees as an empty body).
-		resp, err := http.ReadResponse(bufio.NewReader(conn), req)
-		if err != nil {
-			reqErr = err
-			c.String(http.StatusBadGateway, "response read failed: %v", err)
-			log.WithError(err).Debug("response read failed")
-			return
-		}
-		defer resp.Body.Close() //nolint:errcheck,gosec
-
-		for h, vs := range resp.Header {
-			for _, v := range vs {
-				c.Writer.Header().Add(h, v)
-			}
-		}
-		c.Status(resp.StatusCode)
-		if _, err := io.Copy(c.Writer, resp.Body); err != nil {
-			log.WithError(err).Debug("response body copy ended")
-		}
+		proxy.ServeHTTP(w, r)
 	})
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.WebPort),
-		Handler:           r,
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	log.WithField("port", cfg.WebPort).Debug("Serving skynetweb HTTP bridge")

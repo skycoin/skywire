@@ -61,7 +61,7 @@ func main() {
 		fmt.Printf("error serving: %v\n", err)
 	}
 
-	err = rpcClient.RegisterHTTPPort(port)
+	err = rpcClient.RegisterTCPPort(port)
 	if err != nil {
 		log.Errorf("error closing server: %v", err)
 	}
@@ -71,7 +71,7 @@ func main() {
 	if err != nil {
 		log.Errorf("error closing server: %v", err)
 	}
-	err = rpcClient.DeregisterHTTPPort(port)
+	err = rpcClient.DeregisterTCPPort(port)
 	if err != nil {
 		log.Errorf("error closing server: %v", err)
 	}
