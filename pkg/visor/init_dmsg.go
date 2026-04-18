@@ -277,21 +277,16 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 			DisableTpVizAPI: true, // prevent tp-viz from shadowing hypervisor API
 		})
 		lsAPI.SetWebsiteHandler(rewardHandler)
-	} else if fp := v.forwardedPorts.Get(int(visorconfig.DmsgHTTPPort)); fp != nil {
-		// If port 80 has a forwarded port entry with a static dir or
-		// proxy addr, use it as the catch-all handler on port 80.
+	} else if fp := v.forwardedPorts.Get(int(visorconfig.DmsgHTTPPort)); fp != nil && fp.ProxyAddr != "" {
+		// If port 80 has a forwarded port entry with a proxy addr,
+		// reverse-proxy unmatched routes to the local service.
 		// This replaces the default landing page with custom content.
-		if fp.StaticDir != "" {
-			logger.WithField("dir", fp.StaticDir).Info("Serving custom website from static directory (port forwarding)")
-			lsAPI.SetWebsiteHandler(http.FileServer(http.Dir(fp.StaticDir)))
-		} else if fp.ProxyAddr != "" {
-			logger.WithField("addr", fp.ProxyAddr).Info("Reverse-proxying custom website (port forwarding)")
-			target, err := url.Parse("http://" + fp.ProxyAddr)
-			if err != nil {
-				logger.WithError(err).Warn("Invalid forwarded port proxy_addr")
-			} else {
-				lsAPI.SetWebsiteHandler(httputil.NewSingleHostReverseProxy(target))
-			}
+		logger.WithField("addr", fp.ProxyAddr).Info("Reverse-proxying custom website (port forwarding)")
+		target, err := url.Parse("http://" + fp.ProxyAddr)
+		if err != nil {
+			logger.WithError(err).Warn("Invalid forwarded port proxy_addr")
+		} else {
+			lsAPI.SetWebsiteHandler(httputil.NewSingleHostReverseProxy(target))
 		}
 	}
 

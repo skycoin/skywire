@@ -30,10 +30,6 @@ type ForwardedPort struct {
 	// to reverse-proxy to. For port 80, this replaces the visor's
 	// default landing page with content from the local service.
 	ProxyAddr string `json:"proxy_addr,omitempty"`
-	// StaticDir is an optional path to a directory of static files
-	// to serve. For port 80, this replaces the default landing page.
-	// Mutually exclusive with ProxyAddr.
-	StaticDir string `json:"static_dir,omitempty"`
 }
 
 // ForwardedPorts is a thread-safe collection of forwarded port definitions.
