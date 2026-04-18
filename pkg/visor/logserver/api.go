@@ -122,13 +122,6 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 		api.health(c)
 	})
 
-	// Lightweight liveness endpoint for self-probe. Returns 200 with
-	// no body — confirms the dmsg listener + HTTP server are alive
-	// without touching disk, auth, or any heavy API logic.
-	r.GET("/ping", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-
 	// Service catalog — lists ports available for .skynet / skynet
 	// forwarding. Public services are visible; hidden services are
 	// omitted. Browsers visiting http://pk.dmsg/services see what
