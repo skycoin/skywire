@@ -18,6 +18,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/toqueteos/webbrowser"
 
+	"github.com/skycoin/skywire/pkg/dht"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -155,6 +156,9 @@ type Visor struct {
 
 	// Embedded Route Setup Node (nil if route_setup_sk not configured)
 	embeddedRouteSetup *EmbeddedRouteSetup
+
+	// DHT node (nil if dht.enable is false)
+	dhtNode *dht.Node
 
 	// Embedded DMSG Web resolver (nil if dmsg_web.enable is false).
 	// Provides a localhost SOCKS5 proxy that resolves .dmsg hosts.

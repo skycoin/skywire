@@ -28,6 +28,7 @@ type V1 struct {
 	DmsgWeb       *DmsgWebConfig      `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig    `json:"skynet_web,omitempty"`
 	Rewards       *RewardsConfig      `json:"rewards,omitempty"`
+	DHT           *DHTConfig          `json:"dht,omitempty"`
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *Transport          `json:"transport"`
 	Routing       *Routing            `json:"routing"`
@@ -90,6 +91,16 @@ type RewardsConfig struct {
 	CanonicalDomain string          `json:"canonical_domain,omitempty"`
 	SkycoinNode     string          `json:"skycoin_node,omitempty"`
 	LoginNode       string          `json:"login_node,omitempty"`
+}
+
+// DHTConfig configures the Kademlia DHT subsystem.
+type DHTConfig struct {
+	// Enable activates the DHT node on this visor.
+	Enable bool `json:"enable"`
+	// BootstrapPKs are public keys of seed DHT nodes to contact on startup.
+	BootstrapPKs []cipher.PubKey `json:"bootstrap_pks,omitempty"`
+	// FullNode stores all DHT items regardless of XOR distance (few needed).
+	FullNode bool `json:"full_node,omitempty"`
 }
 
 // DmsgWebConfig enables the embedded `.dmsg` resolving proxy hosted by
