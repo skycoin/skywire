@@ -13,8 +13,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-
-	clirewardsserver "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/server"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,6 +22,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	clirewardsserver "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/server"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"

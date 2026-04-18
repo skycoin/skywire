@@ -43,7 +43,7 @@ func NewForwardedPorts(filePath string) *ForwardedPorts {
 		filePath: filePath,
 	}
 	if filePath != "" {
-		fp.load() //nolint:errcheck
+		fp.load() //nolint:errcheck,gosec
 	}
 	return fp
 }
@@ -186,7 +186,7 @@ func (fp *ForwardedPorts) save() error {
 		return err
 	}
 	dir := filepath.Dir(fp.filePath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil { //nolint:gosec
 		return err
 	}
 	return os.WriteFile(fp.filePath, data, 0o600)

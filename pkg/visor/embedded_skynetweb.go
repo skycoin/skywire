@@ -39,8 +39,8 @@ type EmbeddedSkynetWeb struct {
 	router  router.Router
 	localPK cipher.PubKey
 	cfg     *visorconfig.SkynetWebConfig
-	log    *logging.Logger
-	stats  *skynetweb.Stats
+	log     *logging.Logger
+	stats   *skynetweb.Stats
 
 	mu        sync.Mutex
 	running   bool

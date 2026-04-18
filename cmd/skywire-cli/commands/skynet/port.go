@@ -57,9 +57,9 @@ var portLsCmd = &cobra.Command{
 			return
 		}
 		tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "PORT\tLABEL\tSKYNET\tDMSG\tLANDING\tDESCRIPTION")  //nolint:errcheck
+		fmt.Fprintln(tw, "PORT\tLABEL\tSKYNET\tDMSG\tLANDING\tDESCRIPTION") //nolint:errcheck
 		for _, p := range ports {
-			fmt.Fprintf(tw, "%d\t%s\t%v\t%v\t%v\t%s\n",  //nolint:errcheck
+			fmt.Fprintf(tw, "%d\t%s\t%v\t%v\t%v\t%s\n", //nolint:errcheck
 				p.Port,
 				dashIfEmpty(p.Label),
 				p.Skynet,
@@ -67,7 +67,7 @@ var portLsCmd = &cobra.Command{
 				p.ShowOnLanding,
 				dashIfEmpty(p.Description))
 		}
-		tw.Flush()  //nolint:errcheck
+		tw.Flush() //nolint:errcheck,gosec
 	},
 }
 

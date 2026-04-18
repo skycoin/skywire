@@ -9,13 +9,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
-// Server is the reward system UI HTTP handler. It wraps a gin.Engine
-// with all reward routes registered on it.
-type Server struct {
-	handler http.Handler
-	cfg     *Config
-}
-
 // WhitelistAuth returns a gin middleware that checks if the remote PK
 // (from DMSG/skynet RemoteAddr) is in the whitelist. Exported so the
 // visor can use the same auth pattern.

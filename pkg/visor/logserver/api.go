@@ -65,10 +65,10 @@ type API struct {
 
 	logger              *logging.Logger
 	startedAt           time.Time
-	healthStatsProvider    HealthStatsProvider
-	serviceLister          ServiceLister
-	forwardedPortLister    ForwardedPortLister
-	websiteHandler         http.Handler // optional: serves unmatched routes (custom website)
+	healthStatsProvider HealthStatsProvider
+	serviceLister       ServiceLister
+	forwardedPortLister ForwardedPortLister
+	websiteHandler      http.Handler // optional: serves unmatched routes (custom website)
 }
 
 // New creates a new API.
