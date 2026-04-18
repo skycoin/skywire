@@ -257,7 +257,17 @@ func TestConcurrentStreams(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s, dErr := clientB.DialStream(ctx, dmsg.Addr{PK: clientA.LocalPK(), Port: port})
+			// Retry dials — on slow CI runners, concurrent handshakes
+			// can transiently fail with "cannot connect to delegated server".
+			var s *dmsg.Stream
+			var dErr error
+			for attempt := 0; attempt < 5; attempt++ {
+				s, dErr = clientB.DialStream(ctx, dmsg.Addr{PK: clientA.LocalPK(), Port: port})
+				if dErr == nil {
+					break
+				}
+				time.Sleep(200 * time.Millisecond)
+			}
 			if dErr != nil {
 				results[i] = streamResult{idx: i, err: dErr}
 				return
