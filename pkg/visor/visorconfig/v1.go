@@ -28,6 +28,7 @@ type V1 struct {
 	DmsgWeb       *DmsgWebConfig      `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig    `json:"skynet_web,omitempty"`
 	Website       *WebsiteConfig      `json:"website,omitempty"`
+	Rewards       *RewardsConfig      `json:"rewards,omitempty"`
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *Transport          `json:"transport"`
 	Routing       *Routing            `json:"routing"`
@@ -94,6 +95,16 @@ type WebsiteConfig struct {
 	// ProxyAddr is a localhost address (e.g., "127.0.0.1:3000") to
 	// reverse proxy to. Mutually exclusive with StaticDir.
 	ProxyAddr string `json:"proxy_addr,omitempty"`
+}
+
+// RewardsConfig configures the reward system UI when hosted by the visor.
+type RewardsConfig struct {
+	Enable          bool            `json:"enable"`
+	WorkDir         string          `json:"work_dir"`
+	Whitelist       []cipher.PubKey `json:"whitelist,omitempty"`
+	CanonicalDomain string          `json:"canonical_domain,omitempty"`
+	SkycoinNode     string          `json:"skycoin_node,omitempty"`
+	LoginNode       string          `json:"login_node,omitempty"`
 }
 
 // DmsgWebConfig enables the embedded `.dmsg` resolving proxy hosted by

@@ -3,6 +3,7 @@ package clirewardsserver
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"runtime"
 	"strconv"
@@ -38,6 +39,11 @@ var (
 	healthOnly          bool
 	canonicalDomain     string
 	log                 = logging.MustGetLogger("rewards")
+
+	// disableTpVizAPI prevents tp-viz from mounting /api/* routes that
+	// could conflict with the visor's hypervisor API when the reward
+	// system is hosted by the visor.
+	disableTpVizAPI bool
 )
 
 var skyenvfile = os.Getenv("SKYENV")
@@ -93,6 +99,45 @@ SKYENV=/path/to/fiber.conf fiber run`
 		r := buildRouter()
 		serveStandalone(r)
 	},
+}
+
+// RewardConfig holds configuration for the reward system when hosted
+// by the visor. The visor constructs this from its config and calls
+// ConfigureAndBuild to get the HTTP handler.
+type RewardConfig struct {
+	WorkDir         string
+	WhitelistPKs    []cipher.PubKey
+	CanonicalDomain string
+	SkycoinNode     string
+	LoginNode       string
+	HealthOnly      bool
+	DisableTpVizAPI bool // prevent tp-viz from mounting /api/* routes
+}
+
+// ConfigureAndBuild sets the reward system's internal state from the
+// given config and builds the HTTP handler. This is the entry point
+// for visor integration — the visor calls this instead of running
+// the CLI command.
+func ConfigureAndBuild(cfg RewardConfig) http.Handler {
+	if cfg.WorkDir != "" {
+		wd = cfg.WorkDir
+	}
+	if len(cfg.WhitelistPKs) > 0 {
+		wlkeys = cfg.WhitelistPKs
+	}
+	if cfg.CanonicalDomain != "" {
+		canonicalDomain = cfg.CanonicalDomain
+	}
+	if cfg.SkycoinNode != "" {
+		skycoinNode = cfg.SkycoinNode
+	}
+	if cfg.LoginNode != "" {
+		loginNode = cfg.LoginNode
+	}
+	healthOnly = cfg.HealthOnly
+	disableTpVizAPI = cfg.DisableTpVizAPI
+	startTime = time.Now()
+	return buildRouter()
 }
 
 func scriptExecString(s string) string {

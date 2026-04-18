@@ -86,7 +86,11 @@ func buildRouter() *gin.Engine {
 	r1.Use(gin.Recovery())
 	r1.Use(loggingMiddleware())
 
-	r1.GET("/health", func(c *gin.Context) {
+	// When hosted by the visor, the visor's /health takes priority
+	// (it's an explicit route on the visor's gin router). Register
+	// at both paths so standalone mode gets /health and visor mode
+	// gets /health/health.
+	healthHandler := func(c *gin.Context) {
 		// Standard health response matching other skywire services
 		resp := httputil.HealthCheckResponse{
 			ServiceName: "rewards",
@@ -110,7 +114,9 @@ func buildRouter() *gin.Engine {
 			"reward_system_prev_run_duration": strings.TrimRight(prevDuration, "\n"),
 			"whitelisted_keys":                wlkeys,
 		})
-	})
+	}
+	r1.GET("/health", healthHandler)
+	r1.GET("/health/health", healthHandler) // accessible when visor's /health takes priority
 	if !healthOnly {
 		// endpoint for testing minimum response time of curl via socks5 proxy / stand-in for latency test
 		// https://dev.to/tigt/making-the-worlds-fastest-website-and-other-mistakes-56na
@@ -229,18 +235,20 @@ func buildRouter() *gin.Engine {
 		tpvizServer.Start() // Initialize cache and start auto-refresh
 
 		// Delegate /api/* to tpviz server (uses file caching to avoid rate limits)
-		// Note: /health is already registered above with system health info
-		// /api/health provides tpviz cache info for auto-refresh
-		tpvizHandler := tpvizServer.Handler()
-		r1.GET("/api/transports", gin.WrapH(tpvizHandler))
-		r1.GET("/api/uptimes", gin.WrapH(tpvizHandler))
-		r1.GET("/api/services", gin.WrapH(tpvizHandler))
-		r1.GET("/api/health", gin.WrapH(tpvizHandler))
-		r1.GET("/api/ip-groups", gin.WrapH(tpvizHandler))
-		r1.GET("/api/dmsg/servers", gin.WrapH(tpvizHandler))
-		r1.GET("/api/dmsg/entries", gin.WrapH(tpvizHandler))
-		r1.GET("/api/dmsg/health", gin.WrapH(tpvizHandler))
-		r1.GET("/bundle.js", gin.WrapH(tpvizHandler))
+		// When hosted by the visor, /api/* routes are disabled to prevent
+		// tp-viz from shadowing the hypervisor API.
+		if !disableTpVizAPI {
+			tpvizHandler := tpvizServer.Handler()
+			r1.GET("/api/transports", gin.WrapH(tpvizHandler))
+			r1.GET("/api/uptimes", gin.WrapH(tpvizHandler))
+			r1.GET("/api/services", gin.WrapH(tpvizHandler))
+			r1.GET("/api/health", gin.WrapH(tpvizHandler))
+			r1.GET("/api/ip-groups", gin.WrapH(tpvizHandler))
+			r1.GET("/api/dmsg/servers", gin.WrapH(tpvizHandler))
+			r1.GET("/api/dmsg/entries", gin.WrapH(tpvizHandler))
+			r1.GET("/api/dmsg/health", gin.WrapH(tpvizHandler))
+			r1.GET("/bundle.js", gin.WrapH(tpvizHandler))
+		}
 
 		r1.GET("/transport-graph", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")

@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+
+	clirewardsserver "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/server"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -264,8 +266,21 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	lsAPI.SetServiceLister(v.services)
 	lsAPI.SetForwardedPortLister(v.forwardedPorts)
 
-	// Mount custom website on port 80 if configured.
-	if ws := v.conf.Website; ws != nil && ws.Enable {
+	// Mount reward system UI on port 80 if configured.
+	// This takes priority over a generic website.
+	if rw := v.conf.Rewards; rw != nil && rw.Enable {
+		logger.Info("Mounting reward system UI on port 80")
+		rewardHandler := clirewardsserver.ConfigureAndBuild(clirewardsserver.RewardConfig{
+			WorkDir:         rw.WorkDir,
+			WhitelistPKs:    rw.Whitelist,
+			CanonicalDomain: rw.CanonicalDomain,
+			SkycoinNode:     rw.SkycoinNode,
+			LoginNode:       rw.LoginNode,
+			DisableTpVizAPI: true, // prevent tp-viz from shadowing hypervisor API
+		})
+		lsAPI.SetWebsiteHandler(rewardHandler)
+	} else if ws := v.conf.Website; ws != nil && ws.Enable {
+		// Mount custom website on port 80 if configured.
 		if ws.StaticDir != "" {
 			logger.WithField("dir", ws.StaticDir).Info("Serving custom website from static directory")
 			lsAPI.SetWebsiteHandler(http.FileServer(http.Dir(ws.StaticDir)))
