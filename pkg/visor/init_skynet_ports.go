@@ -46,16 +46,14 @@ func initSkynetForwardPorts(_ context.Context, v *Visor, log *logging.Logger) er
 	//
 	// Only register ports for public-facing services that are safe
 	// to serve to any PK-authenticated peer.
+	// The log server is already served on DMSG/skynet port 80 via
+	// the service registry — no need to also forward its localhost
+	// TCP port. Only register ports that aren't already served
+	// directly on DMSG.
 	candidates := []struct {
 		label string
 		addr  string
 	}{}
-	if ls := v.conf.LogServer; ls != nil {
-		candidates = append(candidates, struct {
-			label string
-			addr  string
-		}{"log_server", ls.LocalAddr})
-	}
 	if ui := v.conf.UIServer; ui != nil && ui.Enable {
 		candidates = append(candidates, struct {
 			label string

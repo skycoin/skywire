@@ -65,15 +65,28 @@
   margin-bottom: 16px;
 }
 
-.inline-form, .connect-form {
+.add-form {
+  margin-top: 8px;
+}
+
+.add-row {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  margin-bottom: 8px;
 }
 
 .field-sm {
   width: 120px;
+}
+
+.field-md {
+  width: 200px;
+}
+
+.field-lg {
+  width: 300px;
 }
 
 .field-pk {

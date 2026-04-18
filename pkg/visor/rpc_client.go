@@ -845,6 +845,23 @@ func (rc *rpcClient) ListTCPPorts() ([]int, error) {
 	return out, err
 }
 
+// RegisterForwardedPort calls RegisterForwardedPort.
+func (rc *rpcClient) RegisterForwardedPort(p ForwardedPort) error {
+	return rc.Call("RegisterForwardedPort", &p, &struct{}{})
+}
+
+// UpdateForwardedPort calls UpdateForwardedPort.
+func (rc *rpcClient) UpdateForwardedPort(p ForwardedPort) error {
+	return rc.Call("UpdateForwardedPort", &p, &struct{}{})
+}
+
+// ListForwardedPorts calls ListForwardedPorts.
+func (rc *rpcClient) ListForwardedPorts() ([]ForwardedPort, error) {
+	var out []ForwardedPort
+	err := rc.Call("ListForwardedPorts", &struct{}{}, &out)
+	return out, err
+}
+
 // DialPing calls DialPing.
 func (rc *rpcClient) DialPing(conf PingConfig) error {
 	return rc.Call("DialPing", &conf, &struct{}{})

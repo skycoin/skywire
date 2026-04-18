@@ -142,6 +142,9 @@ type API interface {
 	RegisterTCPPort(localPort int) error
 	DeregisterTCPPort(localPort int) error
 	ListTCPPorts() ([]int, error)
+	RegisterForwardedPort(p ForwardedPort) error
+	UpdateForwardedPort(p ForwardedPort) error
+	ListForwardedPorts() ([]ForwardedPort, error)
 	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	Disconnect(id uuid.UUID) error

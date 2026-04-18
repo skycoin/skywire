@@ -494,10 +494,15 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Post("/visors/{pk}/proxies/set", hv.postProxyEnabled())
 				r.Post("/visors/{pk}/proxies/upstream", hv.postProxyUpstream())
 
-				// Skynet port forwarding
+				// Skynet port forwarding (legacy simple)
 				r.Get("/visors/{pk}/skynet-ports", hv.getSkynetPorts())
 				r.Post("/visors/{pk}/skynet-ports/register", hv.postRegisterSkynetPort())
 				r.Post("/visors/{pk}/skynet-ports/deregister", hv.postDeregisterSkynetPort())
+
+				// Rich port forwarding with metadata
+				r.Get("/visors/{pk}/forwarded-ports", hv.getForwardedPorts())
+				r.Post("/visors/{pk}/forwarded-ports/register", hv.postRegisterForwardedPort())
+				r.Post("/visors/{pk}/forwarded-ports/update", hv.postUpdateForwardedPort())
 
 				// Skynet reverse proxy (connect remote port to local)
 				r.Get("/visors/{pk}/skynet-forwards", hv.getSkynetForwards())
@@ -1917,6 +1922,53 @@ func (hv *Hypervisor) postDeregisterSkynetPort() http.HandlerFunc {
 			return
 		}
 		if err := ctx.API.DeregisterTCPPort(reqBody.Port); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) getForwardedPorts() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		ports, err := ctx.API.ListForwardedPorts()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, ports)
+	})
+}
+
+func (hv *Hypervisor) postRegisterForwardedPort() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var p ForwardedPort
+		if err := httputil.ReadJSON(r, &p); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postRegisterForwardedPort: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if err := ctx.API.RegisterForwardedPort(p); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) postUpdateForwardedPort() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var p ForwardedPort
+		if err := httputil.ReadJSON(r, &p); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postUpdateForwardedPort: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if err := ctx.API.UpdateForwardedPort(p); err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}

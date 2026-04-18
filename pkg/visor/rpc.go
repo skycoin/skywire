@@ -1009,6 +1009,26 @@ func (r *RPC) ListTCPPorts(_ *struct{}, out *[]int) (err error) {
 	return err
 }
 
+// RegisterForwardedPort registers a port with full metadata.
+func (r *RPC) RegisterForwardedPort(p *ForwardedPort, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RegisterForwardedPort", p)(nil, &err)
+	return r.visor.RegisterForwardedPort(*p)
+}
+
+// UpdateForwardedPort updates metadata for an existing forwarded port.
+func (r *RPC) UpdateForwardedPort(p *ForwardedPort, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "UpdateForwardedPort", p)(nil, &err)
+	return r.visor.UpdateForwardedPort(*p)
+}
+
+// ListForwardedPorts returns all forwarded ports with metadata.
+func (r *RPC) ListForwardedPorts(_ *struct{}, out *[]ForwardedPort) (err error) {
+	defer rpcutil.LogCall(r.log, "ListForwardedPorts", nil)(out, &err)
+	ports, err := r.visor.ListForwardedPorts()
+	*out = ports
+	return err
+}
+
 // ConnectIn is input for Connect.
 type ConnectIn struct {
 	RemotePK   cipher.PubKey

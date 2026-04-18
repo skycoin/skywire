@@ -1,11 +1,10 @@
 <div class="container-elevated-translucid mt-4.5 skynet-container">
 
-  <!-- Port Forwarding Section -->
+  <!-- Forwarded Ports -->
   <div class="section">
     <h4 class="section-title">Forwarded Ports</h4>
     <p class="section-desc">
-      Expose local TCP ports over skynet at
-      <code>&lt;pk&gt;.skynet:&lt;port&gt;</code>
+      Expose local TCP ports over skynet and/or DMSG.
     </p>
 
     <div *ngIf="portsLoading" class="text-center py-2">
@@ -16,14 +15,26 @@
       <table class="data-table" *ngIf="ports.length > 0">
         <tr>
           <th>Port</th>
-          <th>Skynet URL</th>
+          <th>Label</th>
+          <th>Skynet</th>
+          <th>DMSG</th>
+          <th>Landing</th>
           <th></th>
         </tr>
-        <tr *ngFor="let port of ports">
-          <td class="mono">{{ port }}</td>
-          <td class="mono small">{{ nodeKey }}.skynet:{{ port }}</td>
+        <tr *ngFor="let fp of ports">
+          <td class="mono">{{ fp.port }}</td>
+          <td>{{ fp.label || '-' }}</td>
+          <td>
+            <mat-checkbox [checked]="fp.skynet" (change)="toggleSkynet(fp)" color="primary"></mat-checkbox>
+          </td>
+          <td>
+            <mat-checkbox [checked]="fp.dmsg" (change)="toggleDmsg(fp)" color="primary"></mat-checkbox>
+          </td>
+          <td>
+            <mat-checkbox [checked]="fp.show_on_landing" (change)="toggleLanding(fp)" color="primary"></mat-checkbox>
+          </td>
           <td class="action-col">
-            <button mat-icon-button color="warn" (click)="removePort(port)" matTooltip="Remove">
+            <button mat-icon-button color="warn" (click)="removePort(fp.port)" matTooltip="Remove">
               <mat-icon>close</mat-icon>
             </button>
           </td>
@@ -31,25 +42,39 @@
       </table>
       <p *ngIf="ports.length === 0" class="empty-msg">No ports forwarded.</p>
 
-      <div class="inline-form">
-        <mat-form-field appearance="outline" class="field-sm">
-          <mat-label>Port</mat-label>
-          <input matInput [(ngModel)]="newPort" placeholder="8080" type="number"
-                 (keydown.enter)="addPort()">
-        </mat-form-field>
-        <button mat-raised-button color="primary" (click)="addPort()">
-          <mat-icon>add</mat-icon> Forward
-        </button>
+      <!-- Add port form -->
+      <div class="add-form">
+        <div class="add-row">
+          <mat-form-field appearance="outline" class="field-sm">
+            <mat-label>Port</mat-label>
+            <input matInput [(ngModel)]="newPort" placeholder="8080" type="number">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="field-md">
+            <mat-label>Label</mat-label>
+            <input matInput [(ngModel)]="newLabel" placeholder="My Service">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="field-lg">
+            <mat-label>Description</mat-label>
+            <input matInput [(ngModel)]="newDesc" placeholder="Optional description">
+          </mat-form-field>
+        </div>
+        <div class="add-row">
+          <mat-checkbox [(ngModel)]="newSkynet" color="primary">Skynet</mat-checkbox>
+          <mat-checkbox [(ngModel)]="newDmsg" color="primary">DMSG</mat-checkbox>
+          <mat-checkbox [(ngModel)]="newShowLanding" color="primary">Show on landing page</mat-checkbox>
+          <button mat-raised-button color="primary" (click)="addPort()">
+            <mat-icon>add</mat-icon> Forward
+          </button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Reverse Proxy Section -->
+  <!-- Reverse Proxy -->
   <div class="section">
     <h4 class="section-title">Reverse Proxy</h4>
     <p class="section-desc">
       Map a remote visor's skynet port to a local port.
-      Access at <code>localhost:&lt;local-port&gt;</code>
     </p>
 
     <div *ngIf="forwardsLoading" class="text-center py-2">
@@ -77,11 +102,13 @@
       </table>
       <p *ngIf="forwards.length === 0" class="empty-msg">No active reverse proxies.</p>
 
-      <div class="connect-form">
+      <div class="add-row">
         <mat-form-field appearance="outline" class="field-pk">
           <mat-label>Remote Public Key</mat-label>
           <input matInput [(ngModel)]="connectPK" placeholder="02abc...">
         </mat-form-field>
+      </div>
+      <div class="add-row">
         <mat-form-field appearance="outline" class="field-sm">
           <mat-label>Remote Port</mat-label>
           <input matInput [(ngModel)]="connectRemotePort" placeholder="80" type="number">

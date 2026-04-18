@@ -6,6 +6,16 @@ import { NodeComponent } from '../node.component';
 import { SnackbarService } from '../../../../services/snackbar.service';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 
+interface ForwardedPort {
+  port: number;
+  label: string;
+  description: string;
+  show_on_landing: boolean;
+  skynet: boolean;
+  dmsg: boolean;
+  whitelist: string[];
+}
+
 interface ForwardEntry {
   id: string;
   remotePK: string;
@@ -20,12 +30,18 @@ interface ForwardEntry {
   standalone: false
 })
 export class SkynetComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  // Port forwarding (expose local ports)
-  ports: number[] = [];
-  newPort = '';
+  ports: ForwardedPort[] = [];
   portsLoading = true;
 
-  // Reverse proxy (map remote ports to local)
+  // New port form
+  newPort = '';
+  newLabel = '';
+  newDesc = '';
+  newSkynet = true;
+  newDmsg = true;
+  newShowLanding = true;
+
+  // Reverse proxy
   forwards: ForwardEntry[] = [];
   forwardsLoading = true;
   connectPK = '';
@@ -56,13 +72,11 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     if (this.fwdsSub) this.fwdsSub.unsubscribe();
   }
 
-  // --- Port Forwarding ---
-
   loadPorts() {
     this.portsLoading = true;
-    this.portsSub = this.nodeService.getSkynetPorts(this.nodeKey).subscribe(
-      (ports: number[]) => {
-        this.ports = (ports || []).sort((a, b) => a - b);
+    this.portsSub = this.nodeService.getForwardedPorts(this.nodeKey).subscribe(
+      (ports: any[]) => {
+        this.ports = (ports || []).sort((a: any, b: any) => a.port - b.port);
         this.portsLoading = false;
       },
       () => { this.ports = []; this.portsLoading = false; }
@@ -72,16 +86,26 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
   addPort() {
     const port = parseInt(this.newPort, 10);
     if (isNaN(port) || port < 1 || port > 65535) {
-      this.snackbarService.showError('Enter a valid port number (1-65535)');
+      this.snackbarService.showError('Enter a valid port (1-65535)');
       return;
     }
-    this.nodeService.registerSkynetPort(this.nodeKey, port).subscribe(
+    const fp: any = {
+      port,
+      label: this.newLabel,
+      description: this.newDesc,
+      show_on_landing: this.newShowLanding,
+      skynet: this.newSkynet,
+      dmsg: this.newDmsg,
+    };
+    this.nodeService.registerForwardedPort(this.nodeKey, fp).subscribe(
       () => {
         this.newPort = '';
+        this.newLabel = '';
+        this.newDesc = '';
         this.snackbarService.showDone(`Port ${port} forwarded`);
         this.loadPorts();
       },
-      (err) => { this.snackbarService.showError(err?.error?.error || 'Failed to forward port'); }
+      (err: any) => { this.snackbarService.showError(err?.error?.error || 'Failed'); }
     );
   }
 
@@ -92,7 +116,29 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     );
   }
 
-  // --- Reverse Proxy ---
+  toggleLanding(fp: ForwardedPort) {
+    fp.show_on_landing = !fp.show_on_landing;
+    this.nodeService.updateForwardedPort(this.nodeKey, fp).subscribe(
+      () => {},
+      () => { this.snackbarService.showError('Failed to update'); this.loadPorts(); }
+    );
+  }
+
+  toggleSkynet(fp: ForwardedPort) {
+    fp.skynet = !fp.skynet;
+    this.nodeService.updateForwardedPort(this.nodeKey, fp).subscribe(
+      () => {},
+      () => { this.snackbarService.showError('Failed to update'); this.loadPorts(); }
+    );
+  }
+
+  toggleDmsg(fp: ForwardedPort) {
+    fp.dmsg = !fp.dmsg;
+    this.nodeService.updateForwardedPort(this.nodeKey, fp).subscribe(
+      () => {},
+      () => { this.snackbarService.showError('Failed to update'); this.loadPorts(); }
+    );
+  }
 
   loadForwards() {
     this.forwardsLoading = true;
@@ -102,10 +148,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         if (data) {
           for (const [id, fwd] of Object.entries(data as Record<string, any>)) {
             this.forwards.push({
-              id,
-              remotePK: fwd.remote_pk || '',
-              remotePort: fwd.remote_port || 0,
-              localPort: fwd.local_port || 0,
+              id, remotePK: fwd.remote_pk || '', remotePort: fwd.remote_port || 0, localPort: fwd.local_port || 0,
             });
           }
         }
@@ -118,34 +161,23 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
   connect() {
     const rPort = parseInt(this.connectRemotePort, 10);
     const lPort = parseInt(this.connectLocalPort, 10);
-    if (!this.connectPK || this.connectPK.length !== 66) {
-      this.snackbarService.showError('Enter a valid public key (66 hex chars)');
-      return;
-    }
-    if (isNaN(rPort) || rPort < 1 || rPort > 65535) {
-      this.snackbarService.showError('Enter a valid remote port');
-      return;
-    }
-    if (isNaN(lPort) || lPort < 1 || lPort > 65535) {
-      this.snackbarService.showError('Enter a valid local port');
-      return;
-    }
+    if (!this.connectPK || this.connectPK.length !== 66) { this.snackbarService.showError('Enter a valid public key'); return; }
+    if (isNaN(rPort) || rPort < 1) { this.snackbarService.showError('Enter a valid remote port'); return; }
+    if (isNaN(lPort) || lPort < 1) { this.snackbarService.showError('Enter a valid local port'); return; }
     this.nodeService.skynetConnect(this.nodeKey, this.connectPK, rPort, lPort).subscribe(
       () => {
-        this.connectPK = '';
-        this.connectRemotePort = '';
-        this.connectLocalPort = '';
+        this.connectPK = ''; this.connectRemotePort = ''; this.connectLocalPort = '';
         this.snackbarService.showDone(`Connected: remote ${rPort} → localhost:${lPort}`);
         this.loadForwards();
       },
-      (err) => { this.snackbarService.showError(err?.error?.error || 'Failed to connect'); }
+      (err: any) => { this.snackbarService.showError(err?.error?.error || 'Failed'); }
     );
   }
 
   disconnect(id: string) {
     this.nodeService.skynetDisconnect(this.nodeKey, id).subscribe(
       () => { this.snackbarService.showDone('Disconnected'); this.loadForwards(); },
-      () => { this.snackbarService.showError('Failed to disconnect'); }
+      () => { this.snackbarService.showError('Failed'); }
     );
   }
 }

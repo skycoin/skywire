@@ -260,6 +260,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// Wire the service catalog so /services on the log server shows
 	// what ports are available for skynet forwarding.
 	lsAPI.SetServiceLister(v.services)
+	lsAPI.SetForwardedPortLister(v.forwardedPorts)
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {

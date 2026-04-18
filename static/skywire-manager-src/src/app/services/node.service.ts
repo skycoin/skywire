@@ -501,6 +501,27 @@ return {
   }
 
   /**
+   * Gets all forwarded ports with rich metadata.
+   */
+  getForwardedPorts(nodeKey: string): Observable<any[]> {
+    return this.apiService.get(`visors/${nodeKey}/forwarded-ports`);
+  }
+
+  /**
+   * Registers a forwarded port with metadata (label, description, skynet/dmsg, whitelist).
+   */
+  registerForwardedPort(nodeKey: string, port: any): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/forwarded-ports/register`, port);
+  }
+
+  /**
+   * Updates a forwarded port's metadata.
+   */
+  updateForwardedPort(nodeKey: string, port: any): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/forwarded-ports/update`, port);
+  }
+
+  /**
    * Gets active skynet forward connections (reverse proxies).
    */
   getSkynetForwards(nodeKey: string): Observable<any> {

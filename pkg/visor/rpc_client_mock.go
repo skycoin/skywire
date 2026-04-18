@@ -922,6 +922,21 @@ func (mc *mockRPCClient) ListTCPPorts() ([]int, error) {
 	return nil, nil
 }
 
+// RegisterForwardedPort implements API.
+func (mc *mockRPCClient) RegisterForwardedPort(_ ForwardedPort) error {
+	return nil
+}
+
+// UpdateForwardedPort implements API.
+func (mc *mockRPCClient) UpdateForwardedPort(_ ForwardedPort) error {
+	return nil
+}
+
+// ListForwardedPorts implements API.
+func (mc *mockRPCClient) ListForwardedPorts() ([]ForwardedPort, error) {
+	return nil, nil
+}
+
 // DialPing implements API.
 func (mc *mockRPCClient) DialPing(_ PingConfig) error {
 	return nil

@@ -36,6 +36,18 @@ type ServiceLister interface {
 	ListPublic() []ServiceEntry
 }
 
+// ForwardedPortEntry describes a user-forwarded port for the landing page.
+type ForwardedPortEntry struct {
+	Port        int    `json:"port"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+// ForwardedPortLister provides forwarded ports for the landing page.
+type ForwardedPortLister interface {
+	LandingPageEntries() []ForwardedPortEntry
+}
+
 // HealthStatsProvider provides transport statistics for the /health endpoint.
 type HealthStatsProvider interface {
 	// IsPublicAutoconnectRunning returns true if the public autoconnect module is running.
@@ -53,8 +65,9 @@ type API struct {
 
 	logger              *logging.Logger
 	startedAt           time.Time
-	healthStatsProvider HealthStatsProvider
-	serviceLister       ServiceLister
+	healthStatsProvider    HealthStatsProvider
+	serviceLister          ServiceLister
+	forwardedPortLister    ForwardedPortLister
 }
 
 // New creates a new API.
@@ -191,6 +204,21 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 				}
 			}
 		}
+		// Add forwarded ports visible on the landing page
+		if api.forwardedPortLister != nil {
+			for _, fp := range api.forwardedPortLister.LandingPageEntries() {
+				label := fp.Label
+				if label == "" {
+					label = fmt.Sprintf("port %d", fp.Port)
+				}
+				desc := ""
+				if fp.Description != "" {
+					desc = " - " + fp.Description
+				}
+				links = append(links, fmt.Sprintf(`<a href=":%d/">%s</a>%s`, fp.Port, label, desc))
+			}
+		}
+
 		c.Writer.WriteHeader(http.StatusOK)
 		fmt.Fprintf(c.Writer, `<!doctype html><html><head><title>Skywire Visor</title>`+ //nolint:errcheck,gosec
 			`<style>body{background:#000;color:#fff;font-family:monospace;padding:20px}a{color:#3399FF}a:visited{color:#FF00FF}</style>`+
@@ -241,6 +269,11 @@ func (api *API) SetHealthStatsProvider(provider HealthStatsProvider) {
 // visor init after the ServiceRegistry is populated.
 func (api *API) SetServiceLister(lister ServiceLister) {
 	api.serviceLister = lister
+}
+
+// SetForwardedPortLister sets the forwarded port provider for the landing page.
+func (api *API) SetForwardedPortLister(lister ForwardedPortLister) {
+	api.forwardedPortLister = lister
 }
 
 func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
