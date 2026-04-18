@@ -1340,6 +1340,18 @@ func (r *RPC) DmsgHTTP(req *DmsgHTTPRequest, out *DmsgHTTPResponse) (err error) 
 	return nil
 }
 
+// SkynetHTTP performs an HTTP request over skynet using the visor's router.
+func (r *RPC) SkynetHTTP(req *SkynetHTTPRequest, out *SkynetHTTPResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "SkynetHTTP", req)(out, &err)
+
+	resp, err := r.visor.SkynetHTTP(*req)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
 // DmsgConnectAll reaches every dmsg server in discovery and ensures a session to each.
 func (r *RPC) DmsgConnectAll(_ *struct{}, out *DmsgConnectAllResult) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgConnectAll", nil)(out, &err)

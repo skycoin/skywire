@@ -1027,6 +1027,13 @@ func (rc *rpcClient) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	return &resp, err
 }
 
+// SkynetHTTP performs an HTTP request over skynet using the visor's router.
+func (rc *rpcClient) SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error) {
+	var resp SkynetHTTPResponse
+	err := rc.Call("SkynetHTTP", &req, &resp)
+	return &resp, err
+}
+
 // DmsgProbe checks dmsg reachability of a remote PK on a given port.
 func (rc *rpcClient) DmsgProbe(pk cipher.PubKey, port uint16) (bool, error) {
 	var reachable bool

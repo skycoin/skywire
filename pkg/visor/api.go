@@ -186,6 +186,7 @@ type API interface {
 	//dmsg utilities
 	DmsgProbe(pk cipher.PubKey, port uint16) (bool, error)
 	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
+	SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error)
 	DmsgConnectAll() (*DmsgConnectAllResult, error)
 	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
 	DmsgSessions() (*DmsgClientSessions, error)
@@ -519,6 +520,24 @@ type DmsgHTTPRequest struct {
 
 // DmsgHTTPResponse represents an HTTP response received over dmsg
 type DmsgHTTPResponse struct {
+	StatusCode int               `json:"status_code"`
+	Status     string            `json:"status"`
+	Header     map[string]string `json:"header,omitempty"`
+	Body       []byte            `json:"body,omitempty"`
+}
+
+// SkynetHTTPRequest represents an HTTP request to make over skynet.
+type SkynetHTTPRequest struct {
+	PK     cipher.PubKey     `json:"pk"`
+	Port   uint16            `json:"port"`
+	Path   string            `json:"path"`
+	Method string            `json:"method"`
+	Header map[string]string `json:"header,omitempty"`
+	Body   []byte            `json:"body,omitempty"`
+}
+
+// SkynetHTTPResponse represents an HTTP response received over skynet.
+type SkynetHTTPResponse struct {
 	StatusCode int               `json:"status_code"`
 	Status     string            `json:"status"`
 	Header     map[string]string `json:"header,omitempty"`

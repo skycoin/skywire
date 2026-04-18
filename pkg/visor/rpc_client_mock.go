@@ -1062,6 +1062,11 @@ func (mc *mockRPCClient) SetEmbeddedProxyUpstream(_, _ string) error {
 	return nil
 }
 
+// SkynetHTTP implements API.
+func (mc *mockRPCClient) SkynetHTTP(_ SkynetHTTPRequest) (*SkynetHTTPResponse, error) {
+	return &SkynetHTTPResponse{StatusCode: 200, Status: "OK"}, nil
+}
+
 // DmsgHTTP implements API.
 func (mc *mockRPCClient) DmsgHTTP(_ DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	return &DmsgHTTPResponse{StatusCode: 200, Status: "OK"}, nil
