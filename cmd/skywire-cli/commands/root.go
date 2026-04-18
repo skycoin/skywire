@@ -132,7 +132,16 @@ func init() {
 	RootCmd.PersistentFlags().MarkHidden(internal.JSONString) //nolint:errcheck,gosec
 	RootCmd.PersistentFlags().IntVar(&clirpc.Timeout, "timeout", 30, "RPC timeout in seconds (0 = unlimited)")
 	RootCmd.PersistentFlags().MarkHidden("timeout") //nolint:errcheck,gosec
+
+	// --all reveals hidden flags and subcommands
+	RootCmd.Flags().BoolVar(&cliShowAll, "all", false, "show all flags and subcommands (including hidden)")
+	RootCmd.Flags().MarkHidden("all") //nolint:errcheck,gosec
 }
+
+var cliShowAll bool
+
+// cliHiddenFlags are persistent flags hidden by default, revealed by --all.
+var cliHiddenFlags = []string{internal.JSONString, "timeout"}
 
 // RootCmd is the root command for skywire-cli
 var RootCmd = &cobra.Command{
@@ -146,6 +155,21 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
+	PreRun: func(cmd *cobra.Command, _ []string) {
+		if cliShowAll {
+			for _, name := range cliHiddenFlags {
+				if f := cmd.Root().PersistentFlags().Lookup(name); f != nil {
+					f.Hidden = false
+				}
+			}
+			for _, sub := range cmd.Root().Commands() {
+				sub.Hidden = false
+			}
+			cmd.Flags().MarkHidden("help") //nolint:errcheck,gosec
+			cmd.Help()                     //nolint:errcheck,gosec
+			os.Exit(0)
+		}
+	},
 }
 
 // Execute executes root CLI command.
