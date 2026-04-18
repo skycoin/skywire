@@ -36,25 +36,18 @@ import (
 // nolint: gocyclo
 //
 //gocyclo:ignore
-func server() {
-
-	log := logging.MustGetLogger("dmsghttp")
-	if dmsgDisc == "" {
-		log.Fatal("Dmsg Discovery URL not specified")
+func buildRouter() *gin.Engine {
+	// Derive PK from SK for health endpoint display.
+	pk, err := sk.PubKey()
+	if err != nil {
+		pk, sk = cipher.GenerateKeyPair()
 	}
-
 	// Set RPC_ADDR so skywire skycoin cli targets the explicit Skycoin mainnet node
 	if skycoinNode != "" {
 		os.Setenv("RPC_ADDR", skycoinNode) //nolint:errcheck,gosec // G104
 		fmt.Printf("Skycoin mainnet node: %s\n", skycoinNode)
 	}
 
-	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	defer cancel()
-	pk, err := sk.PubKey()
-	if err != nil {
-		pk, sk = cipher.GenerateKeyPair()
-	}
 	if wl != "" {
 		wlk := strings.Split(wl, ",")
 		for _, key := range wlk {
@@ -72,35 +65,6 @@ func server() {
 			log.Info(fmt.Sprintf("%d keys whitelisted", len(wlkeys)))
 		}
 	}
-	dconf := dmsg.DefaultConfig()
-	dconf.MinSessions = dmsgSess
-	dmsgclient := dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, log), dconf)
-	defer func() {
-		if err := dmsgclient.Close(); err != nil {
-			log.WithError(err).Error("Failed to close DMSG client")
-		}
-	}()
-
-	go dmsgclient.Serve(context.Background())
-
-	select {
-	case <-ctx.Done():
-		log.WithError(ctx.Err()).Warn("Context canceled while waiting for DMSG client")
-		return
-
-	case <-dmsgclient.Ready():
-	}
-
-	lis, err := dmsgclient.Listen(dmsgPort) //nolint: gosec
-	if err != nil {
-		log.WithError(err).Fatal("Failed to listen on DMSG port")
-	}
-	go func() {
-		<-ctx.Done()
-		if err := lis.Close(); err != nil {
-			log.WithError(err).Error("Failed to close DMSG listener")
-		}
-	}()
 
 	htmlPageTemplateData = htmlTemplateData{
 		Title:       "Skycoin Rewards",
@@ -1611,6 +1575,60 @@ func server() {
 
 		// Start the server using the custom Gin handler
 	}
+
+	return r1
+}
+
+// BuildHandler builds and returns the reward system's HTTP handler
+// without starting any servers. The visor can mount this handler on
+// its own port 80 gin router for integrated DMSG/skynet access.
+//
+// Call SetConfig before BuildHandler to configure the reward system.
+func BuildHandler() http.Handler {
+	return buildRouter()
+}
+
+// serveStandalone starts HTTP and DMSG listeners. Called by the CLI command.
+func serveStandalone(r1 *gin.Engine) {
+	log := logging.MustGetLogger("dmsghttp")
+	if dmsgDisc == "" {
+		log.Fatal("Dmsg Discovery URL not specified")
+	}
+
+	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	defer cancel()
+	pk, err := sk.PubKey()
+	if err != nil {
+		pk, sk = cipher.GenerateKeyPair()
+	}
+	dconf := dmsg.DefaultConfig()
+	dconf.MinSessions = dmsgSess
+	dmsgclient := dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, log), dconf)
+	defer func() {
+		if err := dmsgclient.Close(); err != nil {
+			log.WithError(err).Error("Failed to close DMSG client")
+		}
+	}()
+
+	go dmsgclient.Serve(context.Background())
+
+	select {
+	case <-ctx.Done():
+		log.WithError(ctx.Err()).Warn("Context canceled while waiting for DMSG client")
+		return
+	case <-dmsgclient.Ready():
+	}
+
+	lis, err := dmsgclient.Listen(dmsgPort) //nolint: gosec
+	if err != nil {
+		log.WithError(err).Fatal("Failed to listen on DMSG port")
+	}
+	go func() {
+		<-ctx.Done()
+		if err := lis.Close(); err != nil {
+			log.WithError(err).Error("Failed to close DMSG listener")
+		}
+	}()
 
 	// Increased timeouts for dmsg latency characteristics
 	// DMSG has higher latency than direct TCP due to multi-hop routing
