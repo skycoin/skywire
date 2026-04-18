@@ -164,9 +164,8 @@ type Router interface {
 	SaveRule(routing.Rule) error
 	DelRules([]routing.RouteID)
 
-	// MeasureTransportLatency measures the latency of a specific transport by
-	// creating a temporary direct route over that transport, sending a ping,
-	// and measuring the round-trip time. Returns latency in milliseconds.
+	// MeasureTransportLatency measures latency via RSN route setup.
+	// Used as fallback when the remote visor doesn't support transport-level ping.
 	MeasureTransportLatency(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (float64, error)
 }
 

@@ -583,7 +583,7 @@ type AddTransportIn struct {
 	Timeout          time.Duration
 	Label            string // "user" or "skycoin" (default: "skycoin")
 	NoRegister       bool   // skip transport discovery registration (only valid for "user" label)
-	SkipLatencyProbe bool   // skip latency probe after transport creation
+	SkipLatencyProbe bool   // deprecated: latency is now measured at the transport level
 }
 
 // AddTransport creates a transport for the visor.
