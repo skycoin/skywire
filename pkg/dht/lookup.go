@@ -79,6 +79,10 @@ func (n *Node) iterativeLookup(ctx context.Context, target NodeID, wantValue boo
 			case res := <-results:
 				mu.Lock()
 				for _, p := range res.peers {
+					// Verify ID/PK consistency to prevent routing table poisoning.
+					if p.ID != NodeIDFromPubKey(p.PK) {
+						continue
+					}
 					if p.ID != n.id && !containsPeer(shortlist, p.ID) {
 						shortlist = append(shortlist, p)
 					}
@@ -104,10 +108,8 @@ func (n *Node) iterativeLookup(ctx context.Context, target NodeID, wantValue boo
 		}
 		mu.Unlock()
 
-		// If we found a value, we can stop early.
-		if wantValue && bestItem != nil {
-			break
-		}
+		// Don't break early on value found — continue until all K
+		// closest are queried to find the highest sequence number.
 	}
 
 	return shortlist, bestItem, nil

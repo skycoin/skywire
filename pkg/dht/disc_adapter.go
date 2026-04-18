@@ -142,9 +142,11 @@ func (d *DiscAdapter) SeedServers(ctx context.Context, pks []cipher.PubKey) {
 	}
 }
 
-// StartReannounce begins a background goroutine that re-publishes
-// the given entry to the DHT every interval to prevent TTL expiry.
+// StartReannounce begins a background goroutine that refreshes the
+// local item's TTL and re-pushes it to the K closest nodes every
+// interval to prevent TTL expiry on remote stores.
 func (d *DiscAdapter) StartReannounce(ctx context.Context, entry *disc.Entry, interval time.Duration) {
+	target := (&MutableItem{K: d.node.pk, Salt: dmsgSalt}).Target()
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -153,8 +155,19 @@ func (d *DiscAdapter) StartReannounce(ctx context.Context, entry *disc.Entry, in
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := d.putEntry(ctx, entry); err != nil {
-					d.log.WithError(err).Debug("DHT re-announce failed")
+				// Refresh local TTL.
+				d.node.store.Refresh(target)
+
+				// Re-push to remote peers. Get the item from local store
+				// and push it directly (bypasses Put's seq check since we
+				// push to remotes only, not to our own store again).
+				item := d.node.store.Get(target)
+				if item == nil {
+					continue
+				}
+				closest, _, _ := d.node.iterativeLookup(ctx, target, false) //nolint:errcheck
+				for _, p := range closest {
+					_ = d.node.rpcPutValue(ctx, p, *item) //nolint:errcheck
 				}
 			}
 		}

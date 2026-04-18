@@ -112,7 +112,7 @@ func readMsg(r io.Reader) (method uint8, data []byte, err error) {
 		return 0, nil, err
 	}
 	length := binary.BigEndian.Uint32(header[:4])
-	if length < 1 || length > 1<<20 { // sanity: max 1MB
+	if length < 1 || length > 65536 { // sanity: max 64KB
 		return 0, nil, fmt.Errorf("dht rpc: invalid message length %d", length)
 	}
 	method = header[4]

@@ -45,13 +45,18 @@ func (item MutableItem) Target() NodeID {
 	return id
 }
 
-// signPayload returns the bytes that are signed/verified:
-// seq (8 bytes big-endian) || v || salt
+// signPayload returns the canonical bytes that are signed/verified:
+// seq (8 bytes BE) || len(V) (4 bytes BE) || V || len(Salt) (4 bytes BE) || Salt
+// Length prefixes prevent ambiguity between different V/Salt splits
+// that would otherwise produce identical payloads.
 func (item *MutableItem) signPayload() []byte {
-	buf := make([]byte, 8+len(item.V)+len(item.Salt))
+	buf := make([]byte, 8+4+len(item.V)+4+len(item.Salt))
 	binary.BigEndian.PutUint64(buf[:8], item.Seq)
-	copy(buf[8:], item.V)
-	copy(buf[8+len(item.V):], item.Salt)
+	binary.BigEndian.PutUint32(buf[8:12], uint32(len(item.V)))   //nolint:gosec
+	copy(buf[12:], item.V)
+	off := 12 + len(item.V)
+	binary.BigEndian.PutUint32(buf[off:off+4], uint32(len(item.Salt))) //nolint:gosec
+	copy(buf[off+4:], item.Salt)
 	return buf
 }
 

@@ -72,7 +72,6 @@ type Store struct {
 
 type storedItem struct {
 	item     MutableItem
-	tier     TrustTier
 	storedAt time.Time
 }
 
@@ -112,10 +111,11 @@ func (s *Store) Put(item MutableItem) error {
 	}
 
 	target := item.Target()
-	tier := s.trust.Classify(item.K)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	tier := s.trust.Classify(item.K)
 
 	// Enforce monotonic sequence.
 	if existing, ok := s.items[target]; ok {
@@ -140,7 +140,6 @@ func (s *Store) Put(item MutableItem) error {
 
 	s.items[target] = &storedItem{
 		item:     item,
-		tier:     tier,
 		storedAt: time.Now(),
 	}
 
@@ -167,8 +166,9 @@ func (s *Store) Get(target NodeID) *MutableItem {
 	if !ok {
 		return nil
 	}
-	// Whitelisted and trusted items don't expire.
-	if si.tier == TierPublic && time.Since(si.storedAt) > s.ttl {
+	// Classify dynamically so trust policy changes take effect immediately.
+	tier := s.trust.Classify(si.item.K)
+	if tier == TierPublic && time.Since(si.storedAt) > s.ttl {
 		return nil
 	}
 	item := si.item // copy
@@ -191,12 +191,16 @@ func (s *Store) Len() int {
 	return len(s.items)
 }
 
-// CountByTier returns item counts per trust tier.
+// CountByTier returns non-expired item counts per trust tier.
 func (s *Store) CountByTier() (whitelisted, trusted, public int) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, si := range s.items {
-		switch si.tier {
+		tier := s.trust.Classify(si.item.K)
+		if tier == TierPublic && time.Since(si.storedAt) > s.ttl {
+			continue // expired
+		}
+		switch tier {
 		case TierWhitelisted:
 			whitelisted++
 		case TierTrusted:
@@ -215,7 +219,8 @@ func (s *Store) ExpireSweep() int {
 	defer s.mu.Unlock()
 	removed := 0
 	for k, si := range s.items {
-		if si.tier == TierPublic && time.Since(si.storedAt) > s.ttl {
+		tier := s.trust.Classify(si.item.K)
+		if tier == TierPublic && time.Since(si.storedAt) > s.ttl {
 			delete(s.items, k)
 			removed++
 		}
@@ -223,12 +228,12 @@ func (s *Store) ExpireSweep() int {
 	return removed
 }
 
-// evictPublicPool removes the oldest public item if the public pool
+// evictPublicPool removes the oldest public items if the public pool
 // exceeds capacity. Caller must hold mu.
 func (s *Store) evictPublicPool() {
 	publicCount := 0
 	for _, si := range s.items {
-		if si.tier == TierPublic {
+		if s.trust.Classify(si.item.K) == TierPublic {
 			publicCount++
 		}
 	}
@@ -245,7 +250,7 @@ func (s *Store) evictOldestPublic() {
 	var oldestTime time.Time
 	found := false
 	for k, si := range s.items {
-		if si.tier != TierPublic {
+		if s.trust.Classify(si.item.K) != TierPublic {
 			continue // never evict whitelisted or trusted
 		}
 		if !found || si.storedAt.Before(oldestTime) {

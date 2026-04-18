@@ -85,9 +85,14 @@ func (n *Node) Start(ctx context.Context) error {
 		n.maintenanceLoop()
 	}()
 
-	// Bootstrap.
+	// Bootstrap asynchronously so Start returns immediately even if
+	// bootstrap peers are unreachable.
 	if len(n.cfg.BootstrapPKs) > 0 {
-		n.bootstrap()
+		n.wg.Add(1)
+		go func() {
+			defer n.wg.Done()
+			n.bootstrap()
+		}()
 	}
 
 	return nil
@@ -139,7 +144,9 @@ func (n *Node) Put(ctx context.Context, value []byte, seq uint64, salt []byte) e
 		}
 	}
 
-	if putErrors == len(closest) && len(closest) > 0 {
+	if len(closest) == 0 {
+		n.log.Debug("Put stored locally only (no remote peers found)")
+	} else if putErrors == len(closest) {
 		return fmt.Errorf("dht: put failed on all %d peers", len(closest))
 	}
 
@@ -175,7 +182,15 @@ func (n *Node) Get(ctx context.Context, pk cipher.PubKey, salt []byte) (*Mutable
 
 // --- RPC client methods ---
 
+// rpcCtx wraps a context with the per-RPC timeout.
+func rpcCtx(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, rpcTimeout)
+}
+
 func (n *Node) rpcFindNode(ctx context.Context, p Peer, target NodeID) (*FindNodeResponse, error) {
+	ctx, cancel := rpcCtx(ctx)
+	defer cancel()
+
 	conn, err := n.tp.Dial(ctx, p.PK)
 	if err != nil {
 		return nil, err
@@ -195,6 +210,9 @@ func (n *Node) rpcFindNode(ctx context.Context, p Peer, target NodeID) (*FindNod
 }
 
 func (n *Node) rpcGetValue(ctx context.Context, p Peer, target NodeID) (*GetValueResponse, error) {
+	ctx, cancel := rpcCtx(ctx)
+	defer cancel()
+
 	conn, err := n.tp.Dial(ctx, p.PK)
 	if err != nil {
 		return nil, err
@@ -212,6 +230,9 @@ func (n *Node) rpcGetValue(ctx context.Context, p Peer, target NodeID) (*GetValu
 }
 
 func (n *Node) rpcPutValue(ctx context.Context, p Peer, item MutableItem) error {
+	ctx, cancel := rpcCtx(ctx)
+	defer cancel()
+
 	conn, err := n.tp.Dial(ctx, p.PK)
 	if err != nil {
 		return err
@@ -232,6 +253,9 @@ func (n *Node) rpcPutValue(ctx context.Context, p Peer, item MutableItem) error 
 }
 
 func (n *Node) rpcPing(ctx context.Context, p Peer) error {
+	ctx, cancel := rpcCtx(ctx)
+	defer cancel()
+
 	conn, err := n.tp.Dial(ctx, p.PK)
 	if err != nil {
 		return err
@@ -245,18 +269,28 @@ func (n *Node) rpcPing(ctx context.Context, p Peer) error {
 
 // --- Server ---
 
+// maxConcurrentDHTHandlers limits in-flight RPC handlers.
+const maxConcurrentDHTHandlers = 128
+
 func (n *Node) serve(lis Listener) {
 	// Close the listener when context is canceled so Accept unblocks.
 	go func() {
 		<-n.ctx.Done()
 		lis.Close() //nolint:errcheck,gosec
 	}()
+	sem := make(chan struct{}, maxConcurrentDHTHandlers)
 	for {
 		conn, remotePK, err := lis.Accept()
 		if err != nil {
 			return // listener closed or context canceled
 		}
-		go n.handleConn(conn, remotePK)
+		sem <- struct{}{}
+		n.wg.Add(1)
+		go func() {
+			defer n.wg.Done()
+			defer func() { <-sem }()
+			n.handleConn(conn, remotePK)
+		}()
 	}
 }
 
