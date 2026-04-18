@@ -78,6 +78,10 @@ func init() {
 	sn.RootCmd.Use = "skynet-srv"
 	snc.RootCmd.Use = "skynet-client"
 
+	// --all reveals hidden subcommands (e.g., autoconfig)
+	RootCmd.Flags().BoolVar(&skyShowAll, "all", false, "show all subcommands (including hidden)")
+	RootCmd.Flags().MarkHidden("all") //nolint:errcheck,gosec
+
 	modifySubcommands(RootCmd)
 	if fmt.Sprintf("%v", buildinfo.DebugBuildInfo()) != "" {
 		RootCmd.Flags().BoolVarP(&di, "info", "d", false, "print runtime/debug.BuildInfo")
@@ -97,6 +101,8 @@ func modifySubcommands(cmd *cobra.Command) {
 		modifySubcommands(cmd.Commands()[i]) // recursion
 	}
 }
+
+var skyShowAll bool
 
 // RootCmd contains literally every 'command' from four repos here
 var RootCmd = &cobra.Command{
@@ -122,6 +128,14 @@ var RootCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 	Run: func(cmd *cobra.Command, _ []string) {
+		if skyShowAll {
+			for _, sub := range cmd.Commands() {
+				sub.Hidden = false
+			}
+			cmd.Flags().MarkHidden("help") //nolint:errcheck,gosec
+			cmd.Help()                     //nolint:errcheck,gosec
+			return
+		}
 		if di {
 			fmt.Printf("%v\n", buildinfo.DebugBuildInfo())
 			return

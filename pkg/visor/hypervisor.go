@@ -423,6 +423,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 			r.Get("/csrf", hv.getCsrf())
 
+			r.Get("/user-exists", hv.users.UserExists())
+
 			if hv.c.EnableAuth {
 				r.Group(func(r chi.Router) {
 					r.Post("/create-account", hv.users.CreateAccount())
@@ -486,6 +488,26 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/public", hv.getIsPublic())
 				r.Get("/visors/{pk}/runtime-config", hv.getRuntimeConfig())
 				r.Get("/visors/{pk}/ports", hv.getPorts())
+
+				// Resolving proxy controls
+				r.Get("/visors/{pk}/proxies", hv.getProxies())
+				r.Post("/visors/{pk}/proxies/set", hv.postProxyEnabled())
+				r.Post("/visors/{pk}/proxies/upstream", hv.postProxyUpstream())
+
+				// Skynet port forwarding (legacy simple)
+				r.Get("/visors/{pk}/skynet-ports", hv.getSkynetPorts())
+				r.Post("/visors/{pk}/skynet-ports/register", hv.postRegisterSkynetPort())
+				r.Post("/visors/{pk}/skynet-ports/deregister", hv.postDeregisterSkynetPort())
+
+				// Rich port forwarding with metadata
+				r.Get("/visors/{pk}/forwarded-ports", hv.getForwardedPorts())
+				r.Post("/visors/{pk}/forwarded-ports/register", hv.postRegisterForwardedPort())
+				r.Post("/visors/{pk}/forwarded-ports/update", hv.postUpdateForwardedPort())
+
+				// Skynet reverse proxy (connect remote port to local)
+				r.Get("/visors/{pk}/skynet-forwards", hv.getSkynetForwards())
+				r.Post("/visors/{pk}/skynet-forwards/connect", hv.postSkynetConnect())
+				r.Post("/visors/{pk}/skynet-forwards/disconnect", hv.postSkynetDisconnect())
 			})
 		})
 
@@ -1856,6 +1878,218 @@ func (hv *Hypervisor) getPorts() http.HandlerFunc {
 	})
 }
 
+func (hv *Hypervisor) getSkynetPorts() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		ports, err := ctx.API.ListTCPPorts()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, ports)
+	})
+}
+
+func (hv *Hypervisor) postRegisterSkynetPort() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			Port int `json:"port"`
+		}
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postRegisterSkynetPort request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if err := ctx.API.RegisterTCPPort(reqBody.Port); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) postDeregisterSkynetPort() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			Port int `json:"port"`
+		}
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postDeregisterSkynetPort request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if err := ctx.API.DeregisterTCPPort(reqBody.Port); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) getForwardedPorts() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		ports, err := ctx.API.ListForwardedPorts()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, ports)
+	})
+}
+
+func (hv *Hypervisor) postRegisterForwardedPort() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var p ForwardedPort
+		if err := httputil.ReadJSON(r, &p); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postRegisterForwardedPort: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if err := ctx.API.RegisterForwardedPort(p); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) postUpdateForwardedPort() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var p ForwardedPort
+		if err := httputil.ReadJSON(r, &p); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postUpdateForwardedPort: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if err := ctx.API.UpdateForwardedPort(p); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) getSkynetForwards() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		fwds, err := ctx.API.List()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, fwds)
+	})
+}
+
+func (hv *Hypervisor) postSkynetConnect() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			RemotePK   cipher.PubKey `json:"remote_pk"`
+			RemotePort int           `json:"remote_port"`
+			LocalPort  int           `json:"local_port"`
+		}
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postSkynetConnect request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		id, err := ctx.API.Connect(reqBody.RemotePK, reqBody.RemotePort, reqBody.LocalPort)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct {
+			ID string `json:"id"`
+		}{ID: id.String()})
+	})
+}
+
+func (hv *Hypervisor) postSkynetDisconnect() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			ID string `json:"id"`
+		}
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postSkynetDisconnect request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		uid, err := uuid.Parse(reqBody.ID)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, fmt.Errorf("invalid UUID: %w", err))
+			return
+		}
+		if err := ctx.API.Disconnect(uid); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) getProxies() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		status, err := ctx.API.EmbeddedProxies()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, status)
+	})
+}
+
+func (hv *Hypervisor) postProxyEnabled() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			Kind   string `json:"kind"`
+			Enable bool   `json:"enable"`
+		}
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postProxyEnabled request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if err := ctx.API.SetEmbeddedProxyEnabled(reqBody.Kind, reqBody.Enable); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) postProxyUpstream() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			Kind string `json:"kind"`
+			Addr string `json:"addr"`
+		}
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postProxyUpstream request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if err := ctx.API.SetEmbeddedProxyUpstream(reqBody.Kind, reqBody.Addr); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
 /*
 	<<< Helper functions >>>
 */
@@ -1935,7 +2169,10 @@ func (hv *Hypervisor) withCtx(vFunc valuesFunc, hFunc handlerFunc) http.HandlerF
 		// For remote visors, enforce a timeout so slow/dead visors don't hang the UI.
 		// Uses a buffered response writer so the handler goroutine writes to a buffer,
 		// and only the winner (handler or timeout) writes to the real ResponseWriter.
-		if rv.isRemote {
+		// Skip the timeout wrapper for WebSocket upgrades — the buffered writer
+		// doesn't implement http.Hijacker, which websocket.Accept requires.
+		isWebSocket := r.Header.Get("Upgrade") == "websocket"
+		if rv.isRemote && !isWebSocket {
 			tw := newTimeoutResponseWriter()
 			done := make(chan struct{})
 			go func() {

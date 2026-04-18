@@ -574,6 +574,14 @@ func (rg *RouteGroup) sendPong(timestamp int64) error {
 }
 
 func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f sendServicePacketFn) {
+	if interval <= 0 {
+		// No keep-alive — routes persist indefinitely. Just wait for close.
+		select {
+		case <-rg.remoteClosed:
+		case <-rg.closed:
+		}
+		return
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 

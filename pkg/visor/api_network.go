@@ -163,41 +163,84 @@ func (v *Visor) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error) {
 	return appnet.GetAllRawTCPForwardConns(), nil
 }
 
-// RegisterHTTPPort implements API.
-func (v *Visor) RegisterHTTPPort(localPort int) error {
-	v.allowed.mu.Lock()
-	defer v.allowed.mu.Unlock()
-	ok := isPortAvailable(v.log, localPort)
-	if ok {
-		return fmt.Errorf("no connection on local port :%v", localPort)
-	}
-	if v.allowed.ports[localPort] {
-		return fmt.Errorf("port :%v already registered", localPort)
-	}
-	v.allowed.ports[localPort] = true
-	return nil
+// RegisterTCPPort implements API (legacy — wraps RegisterForwardedPort with skynet-only defaults).
+func (v *Visor) RegisterTCPPort(localPort int) error {
+	return v.RegisterForwardedPort(ForwardedPort{
+		Port:          localPort,
+		Skynet:        true,
+		ShowOnLanding: true,
+	})
 }
 
-// DeregisterHTTPPort implements API.
-func (v *Visor) DeregisterHTTPPort(localPort int) error {
-	v.allowed.mu.Lock()
-	defer v.allowed.mu.Unlock()
-	if !v.allowed.ports[localPort] {
+// DeregisterTCPPort implements API.
+func (v *Visor) DeregisterTCPPort(localPort int) error {
+	if v.forwardedPorts.Get(localPort) == nil {
 		return fmt.Errorf("port :%v not registered", localPort)
 	}
+	// Remove from both the rich store and legacy allowed map.
+	v.allowed.mu.Lock()
 	delete(v.allowed.ports, localPort)
+	v.allowed.mu.Unlock()
+	return v.forwardedPorts.Deregister(localPort)
+}
+
+// ListTCPPorts implements API (legacy — returns port numbers only).
+func (v *Visor) ListTCPPorts() ([]int, error) {
+	ports := v.forwardedPorts.AllSkynetPorts()
+	// Also include legacy allowed ports not yet in forwardedPorts
+	v.allowed.mu.RLock()
+	for p := range v.allowed.ports {
+		found := false
+		for _, fp := range ports {
+			if fp == p {
+				found = true
+				break
+			}
+		}
+		if !found {
+			ports = append(ports, p)
+		}
+	}
+	v.allowed.mu.RUnlock()
+	return ports, nil
+}
+
+// RegisterForwardedPort registers a port with full metadata.
+func (v *Visor) RegisterForwardedPort(p ForwardedPort) error {
+	if err := v.forwardedPorts.Register(p); err != nil {
+		return err
+	}
+	// Keep legacy allowed map in sync for sky-forwarding server.
+	if p.Skynet {
+		v.allowed.mu.Lock()
+		v.allowed.ports[p.Port] = true
+		v.allowed.mu.Unlock()
+	}
 	return nil
 }
 
-// ListHTTPPorts implements API.
-func (v *Visor) ListHTTPPorts() ([]int, error) {
-	v.allowed.mu.Lock()
-	defer v.allowed.mu.Unlock()
-	keys := make([]int, 0, len(v.allowed.ports))
-	for k := range v.allowed.ports {
-		keys = append(keys, k)
+// UpdateForwardedPort updates metadata for an existing forwarded port.
+func (v *Visor) UpdateForwardedPort(p ForwardedPort) error {
+	if v.forwardedPorts.Get(p.Port) == nil {
+		return fmt.Errorf("port %d not registered", p.Port)
 	}
-	return keys, nil
+	if err := v.forwardedPorts.Register(p); err != nil {
+		return err
+	}
+	// Sync legacy allowed map.
+	v.allowed.mu.Lock()
+	if p.Skynet {
+		v.allowed.ports[p.Port] = true
+	} else {
+		delete(v.allowed.ports, p.Port)
+	}
+	v.allowed.mu.Unlock()
+	return nil
+}
+
+// ListForwardedPorts returns all forwarded ports with metadata.
+func (v *Visor) ListForwardedPorts() ([]ForwardedPort, error) {
+	return v.forwardedPorts.List(), nil
 }
 
 func isPortAvailable(log *logging.Logger, port int) bool {
@@ -214,7 +257,7 @@ func isPortAvailable(log *logging.Logger, port int) bool {
 }
 
 func isPortRegistered(port int, v *Visor) bool {
-	ports, err := v.ListHTTPPorts()
+	ports, err := v.ListTCPPorts()
 	if err != nil {
 		return false
 	}
