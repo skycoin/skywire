@@ -27,7 +27,7 @@ type V1 struct {
 	LogServer     *LogServer          `json:"log_server,omitempty"`
 	DmsgWeb       *DmsgWebConfig      `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig    `json:"skynet_web,omitempty"`
-	Rewards *RewardsConfig `json:"rewards,omitempty"`
+	Rewards       *RewardsConfig      `json:"rewards,omitempty"`
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *Transport          `json:"transport"`
 	Routing       *Routing            `json:"routing"`
@@ -81,7 +81,6 @@ type LogServer struct {
 	// If empty, localhost serving is disabled (dmsg-only mode).
 	LocalAddr string `json:"local_addr"`
 }
-
 
 // RewardsConfig configures the reward system UI when hosted by the visor.
 type RewardsConfig struct {

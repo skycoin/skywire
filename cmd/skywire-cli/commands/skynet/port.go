@@ -19,7 +19,7 @@ var (
 	portSkynet      bool
 	portDmsg        bool
 	portShowLanding bool
-	portProxyAddr string
+	portProxyAddr   string
 )
 
 func init() {
@@ -99,7 +99,7 @@ Examples:
 			Skynet:        portSkynet,
 			DMSG:          portDmsg,
 			ShowOnLanding: portShowLanding,
-			ProxyAddr: portProxyAddr,
+			ProxyAddr:     portProxyAddr,
 		}
 		if err := rpcClient.RegisterForwardedPort(fp); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
