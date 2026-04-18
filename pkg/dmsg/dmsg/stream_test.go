@@ -276,10 +276,14 @@ func TestLookupIP(t *testing.T) {
 		go func() { chSrvB <- srvB.Serve(lisSrvB, "") }() //nolint:errcheck
 		<-srvB.Ready()
 
-		// Explicitly connect the client to server B (the client's
-		// background discovery loop won't re-poll for minutes).
-		_, err = dmsgC.EnsureAndObtainSession(context.Background(), pkSrvB)
-		require.NoError(t, err)
+		// Explicitly connect the client to server B. Retry because the
+		// server's discovery entry may not be posted yet even though
+		// Ready() has fired (Ready = accepting connections, not
+		// registered in discovery).
+		require.Eventually(t, func() bool {
+			_, err = dmsgC.EnsureAndObtainSession(context.Background(), pkSrvB)
+			return err == nil
+		}, 10*time.Second, 200*time.Millisecond, "failed to connect to server B: %v", err)
 
 		srvs := []cipher.PubKey{pkSrvB}
 		ip, err := dmsgC.LookupIP(context.Background(), srvs)

@@ -153,21 +153,16 @@ func (p *Porter) RangePortValuesAndChildren(fn func(port uint16, v PorterValue) 
 	}
 }
 
-// This returns a function that frees a given port (if there are no children).
+// This returns a function that frees a given port.
 // It is ensured that the function's action is only performed once.
+// The port entry is always deleted — any remaining children are orphaned
+// because the parent stream they belonged to is gone.
 func (p *Porter) makePortFreer(port uint16) func() {
 	once := new(sync.Once)
 
 	action := func() {
 		p.Lock()
 		defer p.Unlock()
-
-		// If port still has children, only clear the port value.
-		if v, ok := p.ports[port]; ok && len(v.Children) > 0 {
-			v.Value = nil
-			p.ports[port] = v
-			return
-		}
 
 		delete(p.ports, port)
 	}

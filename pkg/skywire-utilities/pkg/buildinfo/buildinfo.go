@@ -42,6 +42,11 @@ var commitRegex = regexp.MustCompile(`[a-f0-9]{12,}$`) // <-- match commit from 
 var dateRegex = regexp.MustCompile(`\d{14}`)           // <-- match date anywhere
 
 func init() {
+	// Always read build info — needed for DepVersion even when version
+	// is provided via ldflags.
+	var ok bool
+	bi, ok = debug.ReadBuildInfo()
+
 	// Use ldflags-provided `golist` info if available
 	if golist != "" {
 		var mInfo ModuleInfo
@@ -57,8 +62,6 @@ func init() {
 
 	// If version is still unknown, try reading from runtime build info
 	if version == unknown || version == "" {
-		var ok bool
-		bi, ok = debug.ReadBuildInfo()
 		if ok {
 			if bi.Main.Version != "" {
 				parseVersionInfo(bi.Main.Version)

@@ -25,8 +25,10 @@ import (
 //go:generate mockery --name Router --case underscore --inpackage
 
 const (
-	// DefaultRouteKeepAlive is the default expiration interval for routes
-	DefaultRouteKeepAlive = 2 * time.Minute
+	// DefaultRouteKeepAlive is the default expiration interval for routes.
+	// Routes are refreshed on every data transfer. This timeout only
+	// fires when no data has been sent for this long.
+	DefaultRouteKeepAlive = 24 * time.Hour
 	// DefaultRulesGCInterval is the default duration for garbage collection of routing rules.
 	DefaultRulesGCInterval = 10 * time.Second
 	acceptSize             = 1024
@@ -162,9 +164,8 @@ type Router interface {
 	SaveRule(routing.Rule) error
 	DelRules([]routing.RouteID)
 
-	// MeasureTransportLatency measures the latency of a specific transport by
-	// creating a temporary direct route over that transport, sending a ping,
-	// and measuring the round-trip time. Returns latency in milliseconds.
+	// MeasureTransportLatency measures latency via RSN route setup.
+	// Used as fallback when the remote visor doesn't support transport-level ping.
 	MeasureTransportLatency(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (float64, error)
 }
 

@@ -44,10 +44,10 @@ type ManagerConfig struct {
 	Version                   string // Visor version for reporting to TPD
 }
 
-// TransportCreatedCallback is called after a transport is successfully created.
-// It receives the remote public key and transport ID, and can return a latency measurement.
-// If latency > 0, it will be set on the transport.
-type TransportCreatedCallback func(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (latencyMs float64)
+// LatencyFallbackCallback is called when transport-level ping fails to produce
+// latency data (remote visor doesn't support transport ping frames).
+// It falls back to measuring latency via RSN route setup.
+type LatencyFallbackCallback func(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (latencyMs float64)
 
 // RouteChecker is called before tearing down an existing transport for re-creation.
 // It returns true if any active routing rule references the given transport ID,
@@ -73,10 +73,11 @@ type Manager struct {
 	factory    network.ClientFactory
 	netClients map[types.Type]network.Client
 
-	// onTransportCreated is called after a transport is successfully established.
-	// Used by the visor to measure transport latency via the router.
-	onTransportCreated   TransportCreatedCallback
-	onTransportCreatedMu sync.RWMutex
+	// latencyFallback is called when transport-level ping doesn't produce
+	// latency data after a grace period (old visor that doesn't support
+	// transport ping frames). Falls back to RSN-based route measurement.
+	latencyFallback   LatencyFallbackCallback
+	latencyFallbackMu sync.RWMutex
 
 	// routeChecker is called before tearing down an existing transport for re-creation.
 	// If it returns true, the transport has active routes and must not be torn down.
@@ -360,15 +361,40 @@ func (tm *Manager) SetPTpsCache(pTps []PersistentTransports) {
 	tm.Conf.PersistentTransportsCache = pTps
 }
 
-// SetOnTransportCreated sets the callback that's invoked after a transport is created.
-// The callback can measure latency and return it; if > 0, it's set on the transport.
-func (tm *Manager) SetOnTransportCreated(cb TransportCreatedCallback) {
-	tm.onTransportCreatedMu.Lock()
-	defer tm.onTransportCreatedMu.Unlock()
-	tm.onTransportCreated = cb
+// SetRouteChecker sets the callback used to determine if a transport has active routes.
+// SetLatencyFallback sets the callback used when transport-level ping fails
+// to produce latency data (remote visor doesn't support transport ping frames).
+func (tm *Manager) SetLatencyFallback(cb LatencyFallbackCallback) {
+	tm.latencyFallbackMu.Lock()
+	defer tm.latencyFallbackMu.Unlock()
+	tm.latencyFallback = cb
 }
 
-// SetRouteChecker sets the callback used to determine if a transport has active routes.
+// invokeLatencyFallback is called by the managed transport's pingLoop when
+// transport-level pings produce no response after a grace period. It falls
+// back to the RSN-based route measurement for backward compatibility with
+// old visors that don't support transport ping frames.
+func (tm *Manager) invokeLatencyFallback(remote cipher.PubKey, tp *ManagedTransport) {
+	tm.latencyFallbackMu.RLock()
+	cb := tm.latencyFallback
+	tm.latencyFallbackMu.RUnlock()
+
+	if cb == nil {
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+
+		latencyMs := cb(ctx, remote, tp.Entry.ID)
+		if latencyMs > 0 {
+			tp.SetLatency(latencyMs)
+			tm.Logger.Debugf("Transport %s latency (RSN fallback): %.2f ms", tp.Entry.ID, latencyMs)
+		}
+	}()
+}
+
 // When set, transport re-creation is blocked for transports that are currently
 // referenced by routing rules, protecting in-flight route traffic.
 func (tm *Manager) SetRouteChecker(rc RouteChecker) {
@@ -417,62 +443,6 @@ func (tm *Manager) GetTPDCache() []*Entry {
 	tm.tpdCacheMu.RLock()
 	defer tm.tpdCacheMu.RUnlock()
 	return tm.tpdCache
-}
-
-// invokeTransportCreatedCallback calls the registered callback after transport creation.
-// It runs asynchronously to not block transport setup.
-// Skips latency measurement for user-created transports.
-func (tm *Manager) invokeTransportCreatedCallback(remote cipher.PubKey, tp *ManagedTransport) {
-	// Skip latency measurement for user-created transports
-	if tp.Entry.Label == LabelUser {
-		return
-	}
-
-	tm.onTransportCreatedMu.RLock()
-	cb := tm.onTransportCreated
-	tm.onTransportCreatedMu.RUnlock()
-
-	if cb == nil {
-		return
-	}
-
-	// Run callback asynchronously with retry on failure
-	go func() {
-		backoff := 30 * time.Second
-		const maxBackoff = 5 * time.Minute
-
-		for {
-			if tp.IsClosed() {
-				return
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-			latencyMs := cb(ctx, remote, tp.Entry.ID)
-			cancel()
-
-			if latencyMs > 0 {
-				tp.SetLatency(latencyMs)
-				tm.Logger.Debugf("Transport %s latency set to %.2f ms", tp.Entry.ID, latencyMs)
-
-				// Log latency to file if latency log store is configured
-				if tm.Conf.LatencyLogStore != nil {
-					stats := tp.GetLatencyStats()
-					if err := tm.Conf.LatencyLogStore.Record(tp.Entry.ID, stats.Min, stats.Max, stats.Avg); err != nil {
-						tm.Logger.WithError(err).Warn("Failed to log latency")
-					}
-				}
-				return
-			}
-
-			// Wait before retrying, exit if transport closes
-			tm.Logger.Debugf("Transport %s latency probe failed, retrying in %v", tp.Entry.ID, backoff)
-			time.Sleep(backoff)
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
-		}
-	}()
 }
 
 // InitClient initilizes a network client
@@ -648,6 +618,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			mlog:           tm.factory.MLogger,
 			QueueDeletion:  tm.queueDeletion,
 		})
+		mTp.manager = tm
 
 		go func() {
 			mTp.Serve(tm.readCh)
@@ -777,8 +748,7 @@ func (tm *Manager) ARClient() addrresolver.APIClient {
 
 // SaveTransportOptions contains options for transport creation.
 type SaveTransportOptions struct {
-	NoRegister       bool // skip transport discovery registration
-	SkipLatencyProbe bool // skip latency probe after transport creation
+	NoRegister bool // skip transport discovery registration
 }
 
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
@@ -853,6 +823,7 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		mlog:           tm.factory.MLogger,
 		QueueDeletion:  tm.queueDeletion,
 	})
+	mTp.manager = tm
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
 	errCh := make(chan error)
@@ -871,12 +842,8 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.mx.Unlock()
 	tm.Logger.Debugf("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
 
-	// Invoke callback to measure latency (runs asynchronously)
-	// Skip for self-transports as they can't be used for routing
-	// Skip if SkipLatencyProbe is set (e.g., for transport setup-node)
-	if remote != client.PK() && !opts.SkipLatencyProbe {
-		tm.invokeTransportCreatedCallback(remote, mTp)
-	}
+	// Latency is now measured at the transport level via transport-level
+	// ping/pong frames in the managed transport's pingLoop, so no callback needed.
 
 	return mTp, nil
 }
