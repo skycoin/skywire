@@ -1,0 +1,72 @@
+<div class="generic-dialog-container">
+  <h2 mat-dialog-title>Skynet Settings</h2>
+
+  <mat-dialog-content>
+    <div *ngIf="loading" class="text-center py-3">
+      <mat-spinner diameter="30" class="mx-auto"></mat-spinner>
+    </div>
+
+    <div *ngIf="!loading">
+      <!-- Resolving Proxy Section -->
+      <h3 class="section-title">Resolving Proxy</h3>
+      <p class="help-text">
+        Browse <strong>.skynet</strong> and <strong>.dmsg</strong> domains.
+        Set an upstream SOCKS5 proxy to route all other traffic through skysocks.
+      </p>
+
+      <div class="proxy-status" *ngIf="proxyStatus">
+        <table class="status-table" *ngIf="proxyStatus.dmsg_web || proxyStatus.skynet_web">
+          <tr>
+            <th>Resolver</th>
+            <th>Running</th>
+            <th>SOCKS</th>
+            <th>Upstream</th>
+          </tr>
+          <tr *ngIf="proxyStatus.dmsg_web">
+            <td>.dmsg</td>
+            <td [class]="proxyStatus.dmsg_web.running ? 'status-ok' : 'status-off'">
+              {{ proxyStatus.dmsg_web.running ? 'Yes' : 'No' }}
+            </td>
+            <td>{{ proxyStatus.dmsg_web.socks_addr || '-' }}</td>
+            <td>{{ proxyStatus.dmsg_web.upstream_socks || 'direct' }}</td>
+          </tr>
+          <tr *ngIf="proxyStatus.skynet_web">
+            <td>.skynet</td>
+            <td [class]="proxyStatus.skynet_web.running ? 'status-ok' : 'status-off'">
+              {{ proxyStatus.skynet_web.running ? 'Yes' : 'No' }}
+            </td>
+            <td>{{ proxyStatus.skynet_web.socks_addr || '-' }}</td>
+            <td>{{ proxyStatus.skynet_web.upstream_socks || 'direct' }}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="proxy-form">
+        <div class="form-row toggle-row">
+          <mat-checkbox [checked]="form.get('skynetEnabled').value"
+                        (change)="form.get('skynetEnabled').setValue($event.checked); toggleProxy()"
+                        [disabled]="loading">
+            Enable resolving proxy (.skynet + .dmsg)
+          </mat-checkbox>
+        </div>
+
+        <form [formGroup]="form">
+          <div class="form-row upstream-row">
+            <mat-form-field appearance="outline" class="upstream-field">
+              <mat-label>Upstream SOCKS5 (e.g. 127.0.0.1:1080)</mat-label>
+              <input matInput formControlName="upstream" placeholder="127.0.0.1:1080">
+            </mat-form-field>
+            <button mat-raised-button color="primary" (click)="setUpstream()" [disabled]="loading">
+              Set
+            </button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="close()">Close</button>
+  </mat-dialog-actions>
+</div>

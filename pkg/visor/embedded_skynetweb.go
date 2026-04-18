@@ -36,10 +36,11 @@ const (
 // EmbeddedSkynetWeb holds the runtime state for the visor-hosted
 // skynetweb resolver.
 type EmbeddedSkynetWeb struct {
-	router router.Router
-	cfg    *visorconfig.SkynetWebConfig
-	log    *logging.Logger
-	stats  *skynetweb.Stats
+	router  router.Router
+	localPK cipher.PubKey
+	cfg     *visorconfig.SkynetWebConfig
+	log     *logging.Logger
+	stats   *skynetweb.Stats
 
 	mu        sync.Mutex
 	running   bool
@@ -48,9 +49,10 @@ type EmbeddedSkynetWeb struct {
 	parentCtx context.Context
 }
 
-func newEmbeddedSkynetWeb(parentCtx context.Context, r router.Router, cfg *visorconfig.SkynetWebConfig, log *logging.Logger) *EmbeddedSkynetWeb {
+func newEmbeddedSkynetWeb(parentCtx context.Context, r router.Router, localPK cipher.PubKey, cfg *visorconfig.SkynetWebConfig, log *logging.Logger) *EmbeddedSkynetWeb {
 	return &EmbeddedSkynetWeb{
 		router:    r,
+		localPK:   localPK,
 		cfg:       cfg,
 		log:       log,
 		stats:     skynetweb.NewStats(),
@@ -113,6 +115,31 @@ func (e *EmbeddedSkynetWeb) Stats() skynetweb.StatsSnapshot {
 	return e.stats.Snapshot()
 }
 
+// SetUpstream changes the upstream SOCKS5 address and restarts the
+// resolver so the new upstream takes effect immediately.
+// Pass "" to clear the upstream (non-.skynet traffic connects direct).
+func (e *EmbeddedSkynetWeb) SetUpstream(addr string) error {
+	e.mu.Lock()
+	e.cfg.UpstreamSOCKS = addr
+	wasRunning := e.running
+	e.mu.Unlock()
+
+	if wasRunning {
+		if err := e.Stop(); err != nil {
+			return fmt.Errorf("stop before upstream change: %w", err)
+		}
+		return e.Start()
+	}
+	return nil
+}
+
+// Upstream returns the current upstream SOCKS5 address.
+func (e *EmbeddedSkynetWeb) Upstream() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.cfg.UpstreamSOCKS
+}
+
 func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 	cfg := skynetweb.Config{
 		DomainSuffix:  stringOrDefault(e.cfg.DomainSuffix, skynetweb.DefaultDomainSuffix),
@@ -126,7 +153,7 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		WithField("domain", cfg.DomainSuffix).
 		Info("Serving skynetweb resolver")
 
-	dialer := &routerSkynetDialer{router: e.router, log: e.log}
+	dialer := &routerSkynetDialer{router: e.router, localPK: e.localPK, log: e.log}
 	if err := skynetweb.Run(ctx, e.log, dialer, cfg); err != nil && err != context.Canceled {
 		e.log.WithError(err).Warn("skynetweb runtime stopped")
 	}
@@ -135,11 +162,22 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 // routerSkynetDialer adapts router.Router to skynetweb.SkynetDialer.
 // See skynetweb.SkynetDialer for the contract.
 type routerSkynetDialer struct {
-	router router.Router
-	log    *logging.Logger
+	router  router.Router
+	localPK cipher.PubKey
+	log     *logging.Logger
 }
 
 func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
+	// Self-dial shortcut: if the destination is the local visor,
+	// connect directly to localhost instead of going through the
+	// routing mesh. This avoids route group descriptor conflicts
+	// when multiple skynet ports are accessed on the same visor.
+	if remote == d.localPK {
+		addr := fmt.Sprintf("localhost:%d", port)
+		d.log.WithField("addr", addr).Debug("Self-dial: connecting to localhost directly")
+		return net.Dial("tcp", addr)
+	}
+
 	conn, err := d.router.DialRoutes(ctx, remote, 0, routing.Port(skyenv.SkyForwardingServerPort), nil)
 	if err != nil {
 		return nil, err
@@ -160,7 +198,7 @@ func initEmbeddedSkynetWeb(ctx context.Context, v *Visor, log *logging.Logger) e
 		log.Warn("skynet_web configured but router not available; skipping")
 		return nil
 	}
-	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.conf.SkynetWeb, log)
+	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.conf.PK, v.conf.SkynetWeb, log)
 	v.initLock.Lock()
 	v.embeddedSkynetWeb = runtime
 	v.initLock.Unlock()

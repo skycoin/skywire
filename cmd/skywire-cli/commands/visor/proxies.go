@@ -29,6 +29,7 @@ var proxiesJSON bool
 func init() {
 	proxiesCmd.Flags().BoolVar(&proxiesJSON, "json", false, "emit raw JSON")
 	proxiesCmd.AddCommand(proxiesSetCmd)
+	proxiesCmd.AddCommand(proxiesUpstreamCmd)
 	RootCmd.AddCommand(proxiesCmd)
 }
 
@@ -92,6 +93,40 @@ reverts to the config's 'enable' flag. Use this to experiment with
 			state = "enabled"
 		}
 		fmt.Printf("%s resolver %s\n", kind, state)
+	},
+}
+
+var proxiesUpstreamCmd = &cobra.Command{
+	Use:   "upstream <dmsg|skynet> <socks5-addr|clear>",
+	Short: "Set the upstream SOCKS5 proxy for a resolver",
+	Long: `Change the upstream SOCKS5 address at runtime. Non-matching
+domains are forwarded to this upstream instead of connecting direct.
+
+Use "clear" or "" to remove the upstream (direct connect).
+
+Example chain: browser → dmsgweb (.dmsg) → skynetweb (.skynet) → skysocks (everything else)
+
+  skywire cli visor proxies upstream skynet 127.0.0.1:1080
+  skywire cli visor proxies upstream dmsg 127.0.0.1:4446`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		kind := args[0]
+		addr := args[1]
+		if addr == "clear" || addr == "none" || addr == "direct" {
+			addr = ""
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if err := rpcClient.SetEmbeddedProxyUpstream(kind, addr); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetEmbeddedProxyUpstream failed: %w", err))
+		}
+		if addr == "" {
+			fmt.Printf("%s resolver upstream cleared (direct connect)\n", kind)
+		} else {
+			fmt.Printf("%s resolver upstream set to %s\n", kind, addr)
+		}
 	},
 }
 

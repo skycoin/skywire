@@ -71,6 +71,19 @@ func NewUserManager(mLog *logging.MasterLogger, users UserStore, config visorcon
 	}
 }
 
+// UserExists returns a HandlerFunc that reports whether an account has been
+// created. This endpoint is public (no auth required) so the login page can
+// decide whether to show "Create account" or "Log in".
+func (s *UserManager) UserExists() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, err := s.db.User("admin")
+		exists := err == nil && user != nil
+		httputil.WriteJSON(w, r, http.StatusOK, struct {
+			Exists bool `json:"exists"`
+		}{Exists: exists})
+	}
+}
+
 // Login returns a HandlerFunc for login operations.
 func (s *UserManager) Login() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

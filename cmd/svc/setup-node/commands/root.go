@@ -149,7 +149,7 @@ Usage:
 			log.Fatal("Failed to create a setup node: ", err)
 		}
 
-		m := prepareMetrics(log)
+		collector := prepareMetrics(log)
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
@@ -175,6 +175,26 @@ Usage:
 				json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 			})
 
+			// Public stats endpoint — aggregate counters, latency percentiles,
+			// failure breakdown. Recent failures are sanitized (no src/dst PKs).
+			healthMux.HandleFunc("/stats", func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				snap := collector.Snapshot()
+				// Sanitize: strip src/dst PKs from recent failures and top destinations
+				// to avoid leaking which visors are communicating with each other.
+				for i := range snap.RecentFailures {
+					snap.RecentFailures[i].SrcPK = ""
+					snap.RecentFailures[i].DstPK = ""
+				}
+				for i := range snap.TopDestinations {
+					snap.TopDestinations[i].PK = ""
+				}
+				for i := range snap.TopFailedDestinations {
+					snap.TopFailedDestinations[i].PK = ""
+				}
+				json.NewEncoder(w).Encode(snap) //nolint:errcheck,gosec
+			})
+
 			// Use the setup-node's own DMSG client for health/debug endpoints
 			snClient := sn.DmsgClient()
 			go func() {
@@ -191,22 +211,20 @@ Usage:
 			log.Infof("DMSG HTTP health endpoint available at %s", dmsgAddr)
 		}
 
-		log.Fatal(sn.Serve(ctx, m))
+		log.Fatal(sn.Serve(ctx, collector))
 	},
 }
 
-func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
-	if metricsAddr == "" {
-		return setupmetrics.NewEmpty()
+func prepareMetrics(log logrus.FieldLogger) *setupmetrics.Collector {
+	collector := setupmetrics.NewCollector(setupmetrics.CollectorConfig{})
+
+	if metricsAddr != "" {
+		// Victoria Metrics publishes Prometheus gauges alongside the Collector.
+		_ = setupmetrics.NewVictoriaMetrics()
+		metricsutil.ServeHTTPMetrics(log, metricsAddr)
 	}
 
-	m := setupmetrics.NewVictoriaMetrics()
-
-	metricsutil.ServeHTTPMetrics(log, metricsAddr)
-
-	// Process and Go runtime metrics are available via Victoria Metrics' built-in /metrics endpoint.
-
-	return m
+	return collector
 }
 
 // checkHealthCmd does health check on running route setup node
