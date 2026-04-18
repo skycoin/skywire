@@ -43,9 +43,13 @@ type ForwardedPortEntry struct {
 	Description string `json:"description"`
 }
 
-// ForwardedPortLister provides forwarded ports for the landing page.
+// ForwardedPortLister provides forwarded ports for the landing page
+// and per-port whitelist for access control.
 type ForwardedPortLister interface {
 	LandingPageEntries() []ForwardedPortEntry
+	// PortWhitelist returns the PK whitelist for a given port.
+	// An empty slice means the port is accessible to everyone.
+	PortWhitelist(port int) []cipher.PubKey
 }
 
 // HealthStatsProvider provides transport statistics for the /health endpoint.
@@ -242,8 +246,34 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 	// Catch-all: if a custom website handler is set, serve unmatched
 	// routes through it. Visor endpoints always take priority since
 	// they're registered as explicit routes above.
+	//
+	// Access control tiers on port 80:
+	//   /health, /ping, /services — open to everyone
+	//   /node-info, /visor.log, /debug/pprof — survey whitelist
+	//   everything else (website) — forwarded port whitelist (if set)
 	r.NoRoute(func(c *gin.Context) {
 		if api.websiteHandler != nil {
+			// Enforce the forwarded port's PK whitelist on the website.
+			if api.forwardedPortLister != nil {
+				if wl := api.forwardedPortLister.PortWhitelist(80); len(wl) > 0 {
+					remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+					if err != nil {
+						c.AbortWithStatus(http.StatusForbidden)
+						return
+					}
+					allowed := false
+					for _, pk := range wl {
+						if remotePK == pk.String() {
+							allowed = true
+							break
+						}
+					}
+					if !allowed {
+						c.AbortWithStatus(http.StatusForbidden)
+						return
+					}
+				}
+			}
 			api.websiteHandler.ServeHTTP(c.Writer, c.Request)
 			return
 		}

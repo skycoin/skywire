@@ -183,6 +183,19 @@ func (fp *ForwardedPorts) LandingPageEntries() []logserver.ForwardedPortEntry {
 	return out
 }
 
+// PortWhitelist returns the PK whitelist for a given port.
+// An empty slice means the port is accessible to everyone.
+// Satisfies logserver.ForwardedPortLister.
+func (fp *ForwardedPorts) PortWhitelist(port int) []cipher.PubKey {
+	fp.mu.RLock()
+	defer fp.mu.RUnlock()
+	p, ok := fp.ports[port]
+	if !ok {
+		return nil
+	}
+	return p.Whitelist
+}
+
 func (fp *ForwardedPorts) save() error {
 	if fp.filePath == "" {
 		return nil
