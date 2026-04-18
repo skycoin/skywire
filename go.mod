@@ -6,7 +6,7 @@ require (
 	fyne.io/systray v1.12.0
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/MichaelMure/go-term-markdown v0.1.4
-	github.com/VictoriaMetrics/metrics v1.43.1
+	github.com/VictoriaMetrics/metrics v1.43.2
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/bitfield/script v0.24.1
 	github.com/blang/semver/v4 v4.0.0
@@ -36,7 +36,7 @@ require (
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/orandin/lumberjackrus v1.0.1
 	github.com/oschwald/geoip2-golang/v2 v2.1.0
-	github.com/pires/go-proxyproto v0.11.0
+	github.com/pires/go-proxyproto v0.12.0
 	github.com/pterm/pterm v0.12.83
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
@@ -89,7 +89,7 @@ require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
-	github.com/charmbracelet/x/ansi v0.11.6 // indirect
+	github.com/charmbracelet/x/ansi v0.11.7 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
@@ -106,7 +106,7 @@ require (
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/zyedidia/micro v1.4.1 // indirect
-	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
+	go.mongodb.org/mongo-driver/v2 v2.5.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.43.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.43.0 // indirect
@@ -164,7 +164,7 @@ require (
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
-	github.com/gomarkdown/markdown v0.0.0-20260411013819-759bbc3e3207 // indirect
+	github.com/gomarkdown/markdown v0.0.0-20260417124207-7d523f7318df // indirect
 	github.com/gookit/color v1.6.0 // indirect
 	github.com/gopherjs/gopherjs v1.20.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -241,7 +241,7 @@ require (
 	golang.org/x/text v0.36.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260406210006-6f92a3bedf2d // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect

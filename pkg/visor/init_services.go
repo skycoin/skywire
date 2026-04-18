@@ -336,7 +336,7 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	// First check the service registry — this is the preferred path
 	// that dispatches directly to the handler without a localhost
 	// TCP bounce. Falls back to the legacy localhost-dial path for
-	// ports registered via RegisterHTTPPort (backward compat for
+	// ports registered via RegisterTCPPort (backward compat for
 	// user-managed forwarded ports).
 	if cMsg.Port > 0 && cMsg.Port <= 65535 {
 		if handler, ok := v.services.Get(uint16(cMsg.Port)); ok { //nolint:gosec
@@ -355,7 +355,7 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	}
 
 	// Legacy path: check if port is registered for localhost TCP
-	// forwarding (user-managed ports via RegisterHTTPPort / CLI).
+	// forwarding (user-managed ports via RegisterTCPPort / CLI).
 	lHost := fmt.Sprintf("localhost:%v", cMsg.Port)
 	ok := isPortRegistered(cMsg.Port, v)
 	if !ok {

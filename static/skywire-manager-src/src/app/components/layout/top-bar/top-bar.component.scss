@@ -59,10 +59,6 @@ $top-bar-height: 56px;
   .lower-container {
     display: flex;
 
-    .blank-space {
-      flex-grow: 1;
-    }
-
     .tab-button {
       color: $white;
       border-radius: $mat-dialog-radius;
@@ -108,6 +104,7 @@ $top-bar-height: 56px;
     .right-container {
       display: flex;
       align-items: center;
+      margin-left: auto;
 
       app-refresh-button {
         align-self: flex-end;

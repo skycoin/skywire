@@ -315,66 +315,46 @@ func (r *router) PingRoute(
 }
 
 // MeasureTransportLatency measures the latency of a specific transport by creating
-// a temporary direct route over that transport, performing multiple ping/pong measurements,
-// and returning latency statistics (min/max/avg). The route is closed after measurement.
+// a temporary direct route over that transport, performing ping/pong measurements,
+// and returning average latency. Used as a fallback when the remote visor doesn't
+// support transport-level ping frames.
 func (r *router) MeasureTransportLatency(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (float64, error) {
-	r.logger.Debugf("Measuring latency for transport %s to %s", tpID, remote)
+	r.logger.Debugf("Measuring latency (RSN fallback) for transport %s to %s", tpID, remote)
 
-	// Create ping route using the specific transport (skips route finder)
-	opts := &DialOptions{
-		TransportID: tpID,
-	}
-
-	// Use ephemeral ports for the ping route
+	opts := &DialOptions{TransportID: tpID}
 	lPort := routing.Port(skyenv.LatencyProbePort)
 	rPort := routing.Port(skyenv.LatencyProbePort)
 
 	conn, err := r.PingRoute(ctx, remote, lPort, rPort, opts)
 	if err != nil {
-		r.logger.WithError(err).Debugf("Failed to establish ping route for latency measurement on transport %s", tpID)
 		return 0, fmt.Errorf("failed to establish ping route: %w", err)
 	}
+	defer conn.Close() //nolint:errcheck,gosec
 
-	// Ensure we close the route when done
-	defer func() {
-		if err := conn.Close(); err != nil {
-			r.logger.WithError(err).Debug("Failed to close ping route after latency measurement")
-		}
-	}()
-
-	// Get the RouteGroup to perform actual ping/pong measurements
+	// Extract the RouteGroup for ping measurement.
 	rg, ok := conn.(*RouteGroup)
 	if !ok {
-		// Try NoiseRouteGroup
 		if nrg, ok := conn.(*NoiseRouteGroup); ok {
 			rg = nrg.rg
 		} else {
-			return 0, errors.New("unexpected connection type, cannot measure latency")
+			return 0, errors.New("unexpected connection type")
 		}
 	}
 
-	// Perform multiple ping measurements (5 pings for good statistics)
 	const pingCount = 5
 	min, max, avg, err := rg.MeasureLatency(ctx, pingCount)
 	if err != nil {
-		r.logger.WithError(err).Debugf("Failed to measure latency for transport %s", tpID)
 		return 0, fmt.Errorf("failed to measure latency: %w", err)
 	}
 
-	r.logger.Debugf("Transport %s latency: min=%.2f ms, max=%.2f ms, avg=%.2f ms", tpID, min, max, avg)
+	r.logger.Debugf("Transport %s latency (RSN): min=%.2f max=%.2f avg=%.2f ms", tpID, min, max, avg)
 
-	// Set full stats on the transport if accessible
 	r.mx.Lock()
 	if tp := r.tm.Transport(tpID); tp != nil {
-		tp.SetLatencyStats(transport.LatencyStats{
-			Min: min,
-			Max: max,
-			Avg: avg,
-		})
+		tp.SetLatencyStats(transport.LatencyStats{Min: min, Max: max, Avg: avg})
 	}
 	r.mx.Unlock()
 
-	// Return average for backwards compatibility
 	return avg, nil
 }
 

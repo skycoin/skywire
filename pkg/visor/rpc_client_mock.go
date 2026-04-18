@@ -907,18 +907,33 @@ func (mc *mockRPCClient) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, 
 	return nil, nil
 }
 
-// RegisterHTTPPort implements API.
-func (mc *mockRPCClient) RegisterHTTPPort(_ int) error {
+// RegisterTCPPort implements API.
+func (mc *mockRPCClient) RegisterTCPPort(_ int) error {
 	return nil
 }
 
-// DeregisterHTTPPort implements API.
-func (mc *mockRPCClient) DeregisterHTTPPort(_ int) error {
+// DeregisterTCPPort implements API.
+func (mc *mockRPCClient) DeregisterTCPPort(_ int) error {
 	return nil
 }
 
-// ListHTTPPorts implements API.
-func (mc *mockRPCClient) ListHTTPPorts() ([]int, error) {
+// ListTCPPorts implements API.
+func (mc *mockRPCClient) ListTCPPorts() ([]int, error) {
+	return nil, nil
+}
+
+// RegisterForwardedPort implements API.
+func (mc *mockRPCClient) RegisterForwardedPort(_ ForwardedPort) error {
+	return nil
+}
+
+// UpdateForwardedPort implements API.
+func (mc *mockRPCClient) UpdateForwardedPort(_ ForwardedPort) error {
+	return nil
+}
+
+// ListForwardedPorts implements API.
+func (mc *mockRPCClient) ListForwardedPorts() ([]ForwardedPort, error) {
 	return nil, nil
 }
 
@@ -1040,6 +1055,16 @@ func (mc *mockRPCClient) EmbeddedProxies() (*EmbeddedProxiesStatus, error) {
 // SetEmbeddedProxyEnabled implements API.
 func (mc *mockRPCClient) SetEmbeddedProxyEnabled(_ string, _ bool) error {
 	return nil
+}
+
+// SetEmbeddedProxyUpstream implements API.
+func (mc *mockRPCClient) SetEmbeddedProxyUpstream(_, _ string) error {
+	return nil
+}
+
+// SkynetHTTP implements API.
+func (mc *mockRPCClient) SkynetHTTP(_ SkynetHTTPRequest) (*SkynetHTTPResponse, error) {
+	return &SkynetHTTPResponse{StatusCode: 200, Status: "OK"}, nil
 }
 
 // DmsgHTTP implements API.

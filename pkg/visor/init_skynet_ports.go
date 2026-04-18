@@ -2,7 +2,7 @@
 //
 // Auto-registers the visor's localhost service ports for skynet
 // forwarding so they're accessible via .skynet URLs (or any skynet
-// client) without manual RegisterHTTPPort calls.
+// client) without manual RegisterTCPPort calls.
 //
 // Which ports: everything that already listens on localhost and
 // would be useful to reach remotely. The sky-forwarding server
@@ -46,16 +46,14 @@ func initSkynetForwardPorts(_ context.Context, v *Visor, log *logging.Logger) er
 	//
 	// Only register ports for public-facing services that are safe
 	// to serve to any PK-authenticated peer.
+	// The log server is already served on DMSG/skynet port 80 via
+	// the service registry — no need to also forward its localhost
+	// TCP port. Only register ports that aren't already served
+	// directly on DMSG.
 	candidates := []struct {
 		label string
 		addr  string
 	}{}
-	if ls := v.conf.LogServer; ls != nil {
-		candidates = append(candidates, struct {
-			label string
-			addr  string
-		}{"log_server", ls.LocalAddr})
-	}
 	if ui := v.conf.UIServer; ui != nil && ui.Enable {
 		candidates = append(candidates, struct {
 			label string
@@ -68,7 +66,7 @@ func initSkynetForwardPorts(_ context.Context, v *Visor, log *logging.Logger) er
 	// We only handle visor-level services here.
 
 	// Register directly into the allowed-ports map instead of going
-	// through RegisterHTTPPort, which dials the port to check if
+	// through RegisterTCPPort, which dials the port to check if
 	// something is listening. At init time some services (hypervisor)
 	// may not be up yet — but the sky-forwarding handler re-checks
 	// availability at connection time, so pre-registering is safe.

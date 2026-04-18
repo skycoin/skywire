@@ -389,11 +389,9 @@ func (_m *MockRouter) GetLastRouteCalcTime() time.Duration {
 // MeasureTransportLatency provides a mock function with given fields: ctx, remote, tpID
 func (_m *MockRouter) MeasureTransportLatency(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (float64, error) {
 	ret := _m.Called(ctx, remote, tpID)
-
 	if len(ret) == 0 {
 		panic("no return value specified for MeasureTransportLatency")
 	}
-
 	var r0 float64
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, cipher.PubKey, uuid.UUID) (float64, error)); ok {
@@ -402,7 +400,6 @@ func (_m *MockRouter) MeasureTransportLatency(ctx context.Context, remote cipher
 		r0 = ret.Get(0).(float64)
 		r1 = ret.Error(1)
 	}
-
 	return r0, r1
 }
 

@@ -3,6 +3,7 @@ package transport
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -81,6 +82,10 @@ type ManagedTransport struct {
 
 	latencyStats LatencyStats
 	latencyMx    sync.RWMutex
+
+	// manager back-reference for latency fallback (RSN-based measurement
+	// when remote visor doesn't support transport-level ping).
+	manager *Manager
 }
 
 // LatencyStats holds latency measurement statistics for a transport.
@@ -164,9 +169,13 @@ func (mt *ManagedTransport) GetBandwidth() *BandwidthData {
 	}
 }
 
+// transportPingInterval is how often a transport-level ping is sent.
+// 30 seconds balances latency freshness against overhead (15 bytes per ping/pong).
+const transportPingInterval = 30 * time.Second
+
 // Serve serves and manages the transport.
 func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
-	mt.wg.Add(3)
+	mt.wg.Add(4)
 	log := mt.log.
 		WithField("tp_id", mt.Entry.ID).
 		WithField("remote_pk", mt.rPK).
@@ -181,6 +190,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	}()
 
 	go mt.readLoop(readCh)
+	go mt.pingLoop()
 	mt.logLoop()
 }
 
@@ -206,6 +216,17 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			}
 			mt.close()
 			return
+		}
+		// Intercept transport-level ping/pong before forwarding to router.
+		if p.RouteID() == 0 {
+			switch p.Type() {
+			case routing.TransportPingPacket:
+				mt.handleTransportPing(p)
+				continue
+			case routing.TransportPongPacket:
+				mt.handleTransportPong(p)
+				continue
+			}
 		}
 		select {
 		case <-mt.done:
@@ -237,6 +258,107 @@ func (mt *ManagedTransport) logLoop() {
 			mt.recordLog()
 		}
 	}
+}
+
+// transportPingGracePeriod is how long we wait for a transport-level pong
+// before falling back to RSN-based latency measurement. This covers the
+// case where the remote visor is running old code that doesn't support
+// transport ping frames.
+const transportPingGracePeriod = 90 * time.Second
+
+// pingLoop periodically sends transport-level pings to measure latency.
+// The first ping is sent as soon as the transport is ready. If no pong
+// is received within the grace period, falls back to RSN-based measurement
+// for backward compatibility with old visors.
+func (mt *ManagedTransport) pingLoop() {
+	defer mt.wg.Done()
+
+	// Wait for the transport to be ready.
+	select {
+	case <-mt.done:
+		return
+	case <-mt.transportCh:
+		if mt.getTransport() == nil {
+			return
+		}
+	}
+
+	// Send the first ping immediately.
+	mt.sendTransportPing()
+
+	// After a grace period, check if transport-level ping produced latency.
+	// If not, the remote doesn't support it — fall back to RSN measurement.
+	fallbackTimer := time.NewTimer(transportPingGracePeriod)
+	defer fallbackTimer.Stop()
+	fallbackFired := false
+
+	ticker := time.NewTicker(transportPingInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-mt.done:
+			return
+		case <-ticker.C:
+			mt.sendTransportPing()
+		case <-fallbackTimer.C:
+			if !fallbackFired && mt.GetLatency() == 0 && mt.manager != nil {
+				mt.log.Debug("No transport pong received, falling back to RSN latency measurement")
+				mt.manager.invokeLatencyFallback(mt.rPK, mt)
+				fallbackFired = true
+			}
+		}
+	}
+}
+
+// sendTransportPing writes a transport-level ping packet.
+func (mt *ManagedTransport) sendTransportPing() {
+	mt.transportMx.Lock()
+	tp := mt.transport
+	mt.transportMx.Unlock()
+	if tp == nil {
+		return
+	}
+
+	p := routing.MakeTransportPingPacket(time.Now().UnixNano())
+	if _, err := tp.Write(p); err != nil {
+		mt.log.WithError(err).Debug("Failed to send transport ping")
+	}
+}
+
+// handleTransportPing responds to a transport-level ping with a pong.
+func (mt *ManagedTransport) handleTransportPing(p routing.Packet) {
+	payload := p.Payload()
+	if len(payload) < routing.TransportPingPayloadSize {
+		return
+	}
+	timestamp := int64(binary.BigEndian.Uint64(payload[:8])) //nolint:gosec
+
+	mt.transportMx.Lock()
+	tp := mt.transport
+	mt.transportMx.Unlock()
+	if tp == nil {
+		return
+	}
+
+	pong := routing.MakeTransportPongPacket(timestamp)
+	if _, err := tp.Write(pong); err != nil {
+		mt.log.WithError(err).Debug("Failed to send transport pong")
+	}
+}
+
+// handleTransportPong processes a transport-level pong and updates latency.
+func (mt *ManagedTransport) handleTransportPong(p routing.Packet) {
+	payload := p.Payload()
+	if len(payload) < routing.TransportPingPayloadSize {
+		return
+	}
+	sentAt := int64(binary.BigEndian.Uint64(payload[:8])) //nolint:gosec
+	rttMs := float64(time.Now().UnixNano()-sentAt) / 1e6
+	if rttMs < 0 {
+		return // clock skew or corrupted timestamp
+	}
+	mt.SetLatency(rttMs)
+	mt.log.WithField("rtt_ms", fmt.Sprintf("%.2f", rttMs)).Trace("Transport ping RTT")
 }
 
 func (mt *ManagedTransport) isServing() bool {

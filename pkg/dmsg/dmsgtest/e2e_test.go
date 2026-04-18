@@ -383,12 +383,15 @@ func TestSessionReconnect(t *testing.T) {
 	err = servers[0].Close()
 	require.NoError(t, err)
 
-	// Wait a moment for the client to handle the disconnection.
-	time.Sleep(time.Second * 2)
-
-	// Verify streams still work via the second server.
-	stream2, err := clientA.DialStream(ctx, dmsg.Addr{PK: clientB.LocalPK(), Port: port})
-	require.NoError(t, err)
+	// Wait for both clients to detect the dead session and reconnect
+	// via the remaining server. On slow CI runners the 2-second sleep
+	// was insufficient; polling for actual readiness is robust.
+	var stream2 *dmsg.Stream
+	require.Eventually(t, func() bool {
+		var dialErr error
+		stream2, dialErr = clientA.DialStream(ctx, dmsg.Addr{PK: clientB.LocalPK(), Port: port})
+		return dialErr == nil
+	}, 15*time.Second, 500*time.Millisecond, "failed to dial after server closure")
 	t.Cleanup(func() { _ = stream2.Close() })
 
 	conn2, err := lisB.AcceptStream()

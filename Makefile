@@ -454,7 +454,17 @@ e2e-dock: ## E2E. Build dockers and containers for e2e-tests
 	./docker/docker_build.sh e2e "" $(BUILD_ARCH)
 
 e2e-run: ## E2E. Start e2e environment and wait for all health checks to pass
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait"
+	@# Start services in stages to avoid overwhelming the CI runner.
+	@# On a dual-core GitHub Actions runner, starting everything at once
+	@# causes healthcheck timeouts because Go services are too slow to
+	@# initialize when competing for CPU.
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait dmsgd-redis ar-redis sd-redis tpd-redis ut-redis postgres-db stun-server"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait transport-discovery address-resolver uptime-tracker"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait dmsg-discovery route-finder service-discovery"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait dmsg-server"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait setup-node transport-setup"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-b"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-a visor-c"
 	bash -c "DOCKER_TAG=e2e docker compose ps"
 
 e2e-logs:

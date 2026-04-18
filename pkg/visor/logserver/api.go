@@ -36,6 +36,22 @@ type ServiceLister interface {
 	ListPublic() []ServiceEntry
 }
 
+// ForwardedPortEntry describes a user-forwarded port for the landing page.
+type ForwardedPortEntry struct {
+	Port        int    `json:"port"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+// ForwardedPortLister provides forwarded ports for the landing page
+// and per-port whitelist for access control.
+type ForwardedPortLister interface {
+	LandingPageEntries() []ForwardedPortEntry
+	// PortWhitelist returns the PK whitelist for a given port.
+	// An empty slice means the port is accessible to everyone.
+	PortWhitelist(port int) []cipher.PubKey
+}
+
 // HealthStatsProvider provides transport statistics for the /health endpoint.
 type HealthStatsProvider interface {
 	// IsPublicAutoconnectRunning returns true if the public autoconnect module is running.
@@ -55,6 +71,8 @@ type API struct {
 	startedAt           time.Time
 	healthStatsProvider HealthStatsProvider
 	serviceLister       ServiceLister
+	forwardedPortLister ForwardedPortLister
+	websiteHandler      http.Handler // optional: serves unmatched routes (custom website)
 }
 
 // New creates a new API.
@@ -102,13 +120,6 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 
 	r.GET("/health", func(c *gin.Context) {
 		api.health(c)
-	})
-
-	// Lightweight liveness endpoint for self-probe. Returns 200 with
-	// no body — confirms the dmsg listener + HTTP server are alive
-	// without touching disk, auth, or any heavy API logic.
-	r.GET("/ping", func(c *gin.Context) {
-		c.Status(http.StatusOK)
 	})
 
 	// Service catalog — lists ports available for .skynet / skynet
@@ -191,14 +202,91 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 				}
 			}
 		}
+		// Add forwarded ports visible on the landing page.
+		// Use the request Host to construct proper URLs that work
+		// in the browser (e.g. http://pk.skynet:8000/).
+		if api.forwardedPortLister != nil {
+			host := c.Request.Host
+			// Strip existing port from host if present
+			if h, _, err := net.SplitHostPort(host); err == nil {
+				host = h
+			}
+			// If host is a bare PK (66 hex chars), append .skynet
+			// so generated URLs route through the SOCKS5 proxy.
+			if len(host) == 66 && !strings.Contains(host, ".") {
+				host += ".skynet"
+			}
+			for _, fp := range api.forwardedPortLister.LandingPageEntries() {
+				label := fp.Label
+				if label == "" {
+					label = fmt.Sprintf("port %d", fp.Port)
+				}
+				desc := ""
+				if fp.Description != "" {
+					desc = " - " + fp.Description
+				}
+				url := fmt.Sprintf("http://%s:%d/", host, fp.Port)
+				links = append(links, fmt.Sprintf(`<a href="%s">%s</a>%s`, url, label, desc))
+			}
+		}
+
 		c.Writer.WriteHeader(http.StatusOK)
 		fmt.Fprintf(c.Writer, `<!doctype html><html><head><title>Skywire Visor</title>`+ //nolint:errcheck,gosec
 			`<style>body{background:#000;color:#fff;font-family:monospace;padding:20px}a{color:#3399FF}a:visited{color:#FF00FF}</style>`+
 			`</head><body><h2>Skywire Visor</h2><pre>%s</pre></body></html>`, strings.Join(links, "\n"))
 	})
 
+	// Catch-all: if a custom website handler is set, serve unmatched
+	// routes through it. Visor endpoints always take priority since
+	// they're registered as explicit routes above.
+	//
+	// Access control tiers on port 80:
+	//   /health, /ping, /services — open to everyone
+	//   /node-info, /visor.log, /debug/pprof — survey whitelist
+	//   everything else (website) — forwarded port whitelist (if set)
+	r.NoRoute(func(c *gin.Context) {
+		if api.websiteHandler != nil {
+			// Enforce the forwarded port's PK whitelist on the website.
+			if api.forwardedPortLister != nil {
+				if wl := api.forwardedPortLister.PortWhitelist(80); len(wl) > 0 {
+					remotePK, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+					if err != nil {
+						c.AbortWithStatus(http.StatusForbidden)
+						return
+					}
+					allowed := false
+					for _, pk := range wl {
+						if remotePK == pk.String() {
+							allowed = true
+							break
+						}
+					}
+					if !allowed {
+						c.AbortWithStatus(http.StatusForbidden)
+						return
+					}
+				}
+			}
+			api.websiteHandler.ServeHTTP(c.Writer, c.Request)
+			return
+		}
+		c.String(http.StatusNotFound, "404 not found")
+	})
+
 	api.Handler = r
 	return api
+}
+
+// SetWebsiteHandler sets a custom HTTP handler for serving unmatched
+// routes on the visor's DMSG/skynet port 80. Visor system endpoints
+// (/health, /node-info, /services, etc.) always take priority.
+//
+// Use cases:
+// - Static file server: http.FileServer(http.Dir("/path/to/site"))
+// - Reverse proxy to a local web app: httputil.ReverseProxy
+// - The reward system UI gin handler
+func (api *API) SetWebsiteHandler(h http.Handler) {
+	api.websiteHandler = h
 }
 
 func (api *API) health(c *gin.Context) {
@@ -241,6 +329,11 @@ func (api *API) SetHealthStatsProvider(provider HealthStatsProvider) {
 // visor init after the ServiceRegistry is populated.
 func (api *API) SetServiceLister(lister ServiceLister) {
 	api.serviceLister = lister
+}
+
+// SetForwardedPortLister sets the forwarded port provider for the landing page.
+func (api *API) SetForwardedPortLister(lister ForwardedPortLister) {
+	api.forwardedPortLister = lister
 }
 
 func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {

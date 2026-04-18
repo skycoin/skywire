@@ -7,6 +7,7 @@ import (
 	cliedit "github.com/skycoin/skywire/cmd/skywire-cli/commands/edit"
 	cligot "github.com/skycoin/skywire/cmd/skywire-cli/commands/got"
 	clijq "github.com/skycoin/skywire/cmd/skywire-cli/commands/jq"
+	cliserve "github.com/skycoin/skywire/cmd/skywire-cli/commands/serve"
 )
 
 func init() {
@@ -18,6 +19,7 @@ func init() {
 		clijq.RootCmd,
 		cliedit.RootCmd,
 		cligot.RootCmd,
+		cliserve.RootCmd,
 	)
 }
 
