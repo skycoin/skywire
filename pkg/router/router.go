@@ -25,8 +25,10 @@ import (
 //go:generate mockery --name Router --case underscore --inpackage
 
 const (
-	// DefaultRouteKeepAlive is the default expiration interval for routes
-	DefaultRouteKeepAlive = 2 * time.Minute
+	// DefaultRouteKeepAlive is the default expiration interval for routes.
+	// Set high enough that browsing sessions don't time out between
+	// page loads. The route is refreshed on every data transfer.
+	DefaultRouteKeepAlive = 30 * time.Minute
 	// DefaultRulesGCInterval is the default duration for garbage collection of routing rules.
 	DefaultRulesGCInterval = 10 * time.Second
 	acceptSize             = 1024
