@@ -261,8 +261,9 @@ func serveHTTP(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cf
 			return conn, nil
 		},
 		MaxIdleConns:        10,
-		MaxIdleConnsPerHost: 2,
-		IdleConnTimeout:     120 * time.Second,
+		MaxConnsPerHost:     1,
+		MaxIdleConnsPerHost: 1,
+		IdleConnTimeout:     300 * time.Second,
 	}
 
 	proxy := &httputil.ReverseProxy{
