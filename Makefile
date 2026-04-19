@@ -467,6 +467,7 @@ e2e-run: ## E2E. Start e2e environment and wait for all health checks to pass
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait setup-node transport-setup"
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-b"
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-a visor-c"
+	bash -c "DOCKER_TAG=e2e docker compose up -d network-monitor"
 	bash -c "DOCKER_TAG=e2e docker compose ps"
 
 e2e-logs:
