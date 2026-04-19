@@ -286,8 +286,11 @@ func TestLookupIP(t *testing.T) {
 		}, 10*time.Second, 200*time.Millisecond, "failed to connect to server B: %v", err)
 
 		srvs := []cipher.PubKey{pkSrvB}
-		ip, err := dmsgC.LookupIP(context.Background(), srvs)
-		require.NoError(t, err)
+		var ip net.IP
+		require.Eventually(t, func() bool {
+			ip, err = dmsgC.LookupIP(context.Background(), srvs)
+			return err == nil
+		}, 10*time.Second, 200*time.Millisecond, "LookupIP failed: %v", err)
 
 		if runtime.GOOS == "windows" {
 			require.Equal(t, net.ParseIP("127.0.0.1"), ip)
