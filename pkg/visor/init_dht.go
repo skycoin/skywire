@@ -3,19 +3,23 @@ package visor
 import (
 	"context"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/dht"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.DHT
-	if conf == nil || !conf.Enable {
+
+	// DHT is enabled by default when DMSG is available.
+	// Set dht.enable=false to explicitly disable.
+	if conf != nil && !conf.Enable {
 		return nil
 	}
 
 	if v.dmsgC == nil {
-		log.Warn("DHT requires DMSG client, skipping")
-		return nil
+		return nil // no DMSG client, skip silently
 	}
 
 	// Wait for DMSG to be ready before starting DHT.
@@ -25,11 +29,26 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 	case <-v.dmsgC.Ready():
 	}
 
+	// Use deployment service PKs as bootstrap peers if none configured.
+	var bootstrapPKs []cipher.PubKey
+	var fullNode bool
+	var whitelistedPKs, trustedPKs []cipher.PubKey
+
+	if conf != nil {
+		bootstrapPKs = conf.BootstrapPKs
+		fullNode = conf.FullNode
+		whitelistedPKs = conf.WhitelistedPKs
+		trustedPKs = conf.TrustedPKs
+	}
+	if len(bootstrapPKs) == 0 {
+		bootstrapPKs = deployment.Prod.DHTBootstrapPKs()
+	}
+
 	dhtCfg := dht.Config{
-		BootstrapPKs:   conf.BootstrapPKs,
-		FullNode:       conf.FullNode,
-		WhitelistedPKs: conf.WhitelistedPKs,
-		TrustedPKs:     conf.TrustedPKs,
+		BootstrapPKs:   bootstrapPKs,
+		FullNode:       fullNode,
+		WhitelistedPKs: whitelistedPKs,
+		TrustedPKs:     trustedPKs,
 	}
 
 	tp := dht.NewDMSGTransport(v.dmsgC)
