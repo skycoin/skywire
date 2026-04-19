@@ -92,7 +92,6 @@ type API struct {
 	uptimesCache   []store.VisorSummary
 	uptimesV2Cache []store.VisorSummary
 	uptimesMu      sync.RWMutex
-
 }
 
 // New creates an API.

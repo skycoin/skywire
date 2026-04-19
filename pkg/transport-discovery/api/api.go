@@ -72,7 +72,6 @@ type API struct {
 	// cxoPublisher is an optional CXO publisher for distributing transport data.
 	// When set, transport register/deregister operations publish to CXO subscribers.
 	cxoPublisher CXOPublisher
-
 }
 
 // CXOPublisher is the interface for publishing transport data to CXO.
