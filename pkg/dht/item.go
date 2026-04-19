@@ -9,8 +9,12 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
-// MaxValueSize is the maximum size of a mutable item value (BEP44 limit).
-const MaxValueSize = 1000
+// MaxValueSize is the maximum size of a mutable item value.
+// BEP44 uses 1000 bytes (for UDP fragmentation), but our DHT runs
+// over DMSG streams (TCP-based) with no fragmentation concern.
+// 16KB accommodates transport lists for visors with many transports
+// (~100 bytes per compact entry, ~160 entries max).
+const MaxValueSize = 16384
 
 // MaxSaltSize is the maximum size of a salt for namespacing.
 const MaxSaltSize = 200
