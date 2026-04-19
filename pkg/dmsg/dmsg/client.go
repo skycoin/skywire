@@ -410,6 +410,21 @@ func (ce *Client) AllSessions() []ClientSession {
 	return ce.allClientSessions(ce.porter)
 }
 
+// SetMinSessions updates the minimum session count at runtime.
+// The reconnect loop will use the new value on its next iteration.
+func (ce *Client) SetMinSessions(n int) {
+	ce.sesMx.Lock()
+	defer ce.sesMx.Unlock()
+	ce.conf.MinSessions = n
+}
+
+// MinSessions returns the current minimum session count.
+func (ce *Client) MinSessions() int {
+	ce.sesMx.Lock()
+	defer ce.sesMx.Unlock()
+	return ce.conf.MinSessions
+}
+
 // PorterCount returns the number of reserved ephemeral ports.
 func (ce *Client) PorterCount() int {
 	return ce.porter.Count()

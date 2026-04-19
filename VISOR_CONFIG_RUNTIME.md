@@ -5,6 +5,28 @@ via CLI/RPC. Changes take effect immediately without restarting.
 
 For config file generation, see [VISOR_CONFIG_GEN.md](VISOR_CONFIG_GEN.md).
 
+## Important Notes
+
+### Config Persistence
+
+**Runtime changes may be lost on package install/update.** The
+`skywire autoconfig` command runs automatically on package
+installation and regenerates the config file. Any configuration you
+want to persist must go in the SKYENV config file
+(`/etc/skywire.conf`). See [VISOR_CONFIG_GEN.md](VISOR_CONFIG_GEN.md#skyenv-config-file).
+
+To disable automatic config regeneration on package install:
+```bash
+echo "NOAUTOCONFIG=true" >> /etc/skywire.conf
+```
+
+**Warning:** If you disable autoconfig, you must manually update your
+config when new versions are released. The reward system and uptime
+tracker check the **config version** (not the binary version) — a
+visor running a new binary with an old config may lose reward
+eligibility. Run `skywire cli config gen -r` to regenerate while
+preserving keys.
+
 ## Inspecting the Current Config
 
 ```bash
@@ -34,13 +56,16 @@ The filter argument uses [jq syntax](https://jqlang.github.io/jq/manual/).
 
 ## DMSG (`dmsg`)
 
-| Config field | Runtime command |
-|---|---|
-| `dmsg.sessions_count` | `skywire cli dmsg set-sessions <n>` |
-| — (connect to all) | `skywire cli dmsg connect-all` |
-| — (force reconnect) | `skywire cli dmsg diag reconnect` |
-| — (reset port space) | `skywire cli dmsg diag porter-reset` |
-| — (check port usage) | `skywire cli dmsg diag porter` |
+| Config field | Runtime command | Notes |
+|---|---|---|
+| `dmsg.sessions_count` | `skywire cli dmsg set-sessions <n>` | Updates live client + persists to config + connect-all |
+| — (connect to all) | `skywire cli dmsg connect-all` | One-shot: connects to all available servers now |
+| — (force reconnect) | `skywire cli dmsg diag reconnect` | Closes all sessions; reconnect loop re-dials within 15s |
+| — (reset port space) | `skywire cli dmsg diag porter-reset` | Recovers from ephemeral port exhaustion |
+| — (check port usage) | `skywire cli dmsg diag porter` | Shows reserved port count (main + RSN clients) |
+| `dmsg.discovery` | — | **Not configurable at runtime.** Config gen only. |
+| `dmsg.servers` | — | **Not configurable at runtime.** Config gen only. |
+| `dmsg.protocol` | — | **Not configurable at runtime.** Config gen only. |
 
 Config gen: [`MINDMSGSESS`](VISOR_CONFIG_GEN.md#deployment)
 

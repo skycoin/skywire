@@ -1634,6 +1634,12 @@ func (r *RPC) DmsgPorterReset(_ *struct{}, out *DmsgPorterStatus) (err error) {
 	return nil
 }
 
+// DmsgSetMinSessions updates the minimum DMSG session count.
+func (r *RPC) DmsgSetMinSessions(in *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgSetMinSessions", in)(nil, &err)
+	return r.visor.DmsgSetMinSessions(*in)
+}
+
 // DmsgReconnect forces DMSG session reconnection.
 func (r *RPC) DmsgReconnect(_ *struct{}, out *int) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgReconnect", nil)(out, &err)

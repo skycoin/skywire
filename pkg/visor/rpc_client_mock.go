@@ -1172,6 +1172,11 @@ func (mc *mockRPCClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
 	return &DmsgPorterStatus{}, nil
 }
 
+// DmsgSetMinSessions implements API.
+func (mc *mockRPCClient) DmsgSetMinSessions(_ int) error {
+	return nil
+}
+
 // DmsgReconnect implements API.
 func (mc *mockRPCClient) DmsgReconnect() (int, error) {
 	return 0, nil

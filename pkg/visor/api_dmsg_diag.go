@@ -38,6 +38,15 @@ func (v *Visor) DmsgPorterReset() (*DmsgPorterStatus, error) {
 	return s, nil
 }
 
+// DmsgSetMinSessions updates the minimum DMSG session count at runtime.
+func (v *Visor) DmsgSetMinSessions(n int) error {
+	if v.dmsgC == nil {
+		return fmt.Errorf("DMSG client not running")
+	}
+	v.dmsgC.SetMinSessions(n)
+	return nil
+}
+
 // DmsgReconnect forces all DMSG sessions to close and reconnect.
 func (v *Visor) DmsgReconnect() (int, error) {
 	if v.dmsgC == nil {

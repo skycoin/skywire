@@ -236,6 +236,7 @@ type API interface {
 	DmsgPorterStats() (*DmsgPorterStatus, error)
 	DmsgPorterReset() (*DmsgPorterStatus, error)
 	DmsgReconnect() (int, error)
+	DmsgSetMinSessions(n int) error
 
 	// Close closes the API connection (for RPC clients)
 	Close() error
