@@ -185,7 +185,7 @@ func registerModules(logger *logging.MasterLogger) {
 	// services are up (cli, ui, logserver) so the ports are
 	// actually listening when we probe them.
 	skynetPorts = maker("skynet_ports", initSkynetForwardPorts, &cli, &dmsgHTTPLogServer, &uiServer, &skyFwd)
-	dhtMod = maker("dht", initDHT, &dmsgC)
+	dhtMod = maker("dht", initDHT, &dmsgC, &tr)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &dhtMod)
 

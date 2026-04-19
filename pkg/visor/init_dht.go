@@ -71,8 +71,22 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 		WithField("full_node", fullNode).
 		Info("DHT node started")
 
-	// Start background dual-write: publish visor's DMSG entry and
-	// transport list to the DHT alongside the normal HTTP updates.
+	// Wrap discovery clients with DHT hybrid clients so reads try
+	// DHT first, fall back to HTTP. Writes go to both.
+	discAdapter := dht.NewDiscAdapter(node, log)
+	v.initLock.Lock()
+	if v.dClient != nil {
+		v.dClient = dht.NewHybridDiscClient(discAdapter, v.dClient, log)
+		log.Info("DMSG discovery: DHT-first reads enabled (HTTP fallback)")
+	}
+	if v.tpM != nil {
+		tpdAdapter := dht.NewTPDAdapter(node, log)
+		v.tpM.Conf.DiscoveryClient = dht.NewHybridTPDClient(tpdAdapter, v.tpM.Conf.DiscoveryClient, log)
+		log.Info("Transport discovery: DHT-first reads enabled (HTTP fallback)")
+	}
+	v.initLock.Unlock()
+
+	// Start background publish: mirror visor's entries to the DHT.
 	go dhtPublishLoop(ctx, v, node, log)
 
 	return nil
