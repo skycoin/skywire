@@ -88,6 +88,23 @@ func (p *Porter) Count() int {
 	return len(p.ports) - 1
 }
 
+// ResetEphemeral removes all ephemeral port reservations (ports >= minEph),
+// freeing the port space. Well-known ports (listeners) are preserved.
+// Use this to recover from ephemeral port exhaustion without restarting.
+func (p *Porter) ResetEphemeral() int {
+	p.Lock()
+	defer p.Unlock()
+	freed := 0
+	for port := range p.ports {
+		if port >= p.minEph {
+			delete(p.ports, port)
+			freed++
+		}
+	}
+	p.eph = p.minEph
+	return freed
+}
+
 // ReserveEphemeral reserves a new ephemeral port.
 // It returns the reserved ephemeral port, a function to clear the reservation and an error (if any).
 // Returns ErrEphemeralPortSpace if all ephemeral ports (minEph through 65535) are occupied.

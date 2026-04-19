@@ -231,6 +231,11 @@ type API interface {
 	DHTGet(pk string, salt string) ([]byte, error)
 	DHTPut(value []byte, seq uint64, salt string) error
 
+	// DMSG diagnostics
+	DmsgPorterStats() (*DmsgPorterStatus, error)
+	DmsgPorterReset() (*DmsgPorterStatus, error)
+	DmsgReconnect() (int, error)
+
 	// Close closes the API connection (for RPC clients)
 	Close() error
 }

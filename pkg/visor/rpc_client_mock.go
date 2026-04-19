@@ -1162,6 +1162,21 @@ func (mc *mockRPCClient) TPSExternalGetTransports(_, _ cipher.PubKey) ([]TPSTran
 	return nil, fmt.Errorf("external TPS not available in mock")
 }
 
+// DmsgPorterStats implements API.
+func (mc *mockRPCClient) DmsgPorterStats() (*DmsgPorterStatus, error) {
+	return &DmsgPorterStatus{}, nil
+}
+
+// DmsgPorterReset implements API.
+func (mc *mockRPCClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
+	return &DmsgPorterStatus{}, nil
+}
+
+// DmsgReconnect implements API.
+func (mc *mockRPCClient) DmsgReconnect() (int, error) {
+	return 0, nil
+}
+
 // DHTStatus implements API.
 func (mc *mockRPCClient) DHTStatus() (*DHTStatus, error) {
 	return &DHTStatus{Running: false}, nil

@@ -410,6 +410,18 @@ func (ce *Client) AllSessions() []ClientSession {
 	return ce.allClientSessions(ce.porter)
 }
 
+// PorterCount returns the number of reserved ephemeral ports.
+func (ce *Client) PorterCount() int {
+	return ce.porter.Count()
+}
+
+// ResetPorter frees all ephemeral port reservations, recovering from
+// port exhaustion. Well-known ports (listeners) are preserved.
+// Returns the number of ports freed.
+func (ce *Client) ResetPorter() int {
+	return ce.porter.ResetEphemeral()
+}
+
 // ForceReconnect closes every active server session. The reconnect loop
 // (15 s cadence) and delSession → nudgeEntryUpdate path together will
 // re-dial fresh sessions and refresh the discovery entry's

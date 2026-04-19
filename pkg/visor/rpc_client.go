@@ -1198,3 +1198,28 @@ func (rc *rpcClient) DHTGet(pk string, salt string) ([]byte, error) {
 func (rc *rpcClient) DHTPut(value []byte, seq uint64, salt string) error {
 	return rc.Call("DHTPut", &DHTPutIn{Value: value, Seq: seq, Salt: salt}, &struct{}{})
 }
+
+// DmsgPorterStats returns ephemeral port reservation counts.
+func (rc *rpcClient) DmsgPorterStats() (*DmsgPorterStatus, error) {
+	var resp DmsgPorterStatus
+	if err := rc.Call("DmsgPorterStats", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DmsgPorterReset frees all ephemeral port reservations.
+func (rc *rpcClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
+	var resp DmsgPorterStatus
+	if err := rc.Call("DmsgPorterReset", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DmsgReconnect forces DMSG session reconnection.
+func (rc *rpcClient) DmsgReconnect() (int, error) {
+	var resp int
+	err := rc.Call("DmsgReconnect", &struct{}{}, &resp)
+	return resp, err
+}

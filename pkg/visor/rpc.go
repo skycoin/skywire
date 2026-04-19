@@ -1605,3 +1605,36 @@ func (r *RPC) DHTPut(in *DHTPutIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DHTPut", in)(nil, &err)
 	return r.visor.DHTPut(in.Value, in.Seq, in.Salt)
 }
+
+// DmsgPorterStats returns ephemeral port reservation counts.
+func (r *RPC) DmsgPorterStats(_ *struct{}, out *DmsgPorterStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgPorterStats", nil)(out, &err)
+	s, err := r.visor.DmsgPorterStats()
+	if err != nil {
+		return err
+	}
+	*out = *s
+	return nil
+}
+
+// DmsgPorterReset frees all ephemeral port reservations.
+func (r *RPC) DmsgPorterReset(_ *struct{}, out *DmsgPorterStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgPorterReset", nil)(out, &err)
+	s, err := r.visor.DmsgPorterReset()
+	if err != nil {
+		return err
+	}
+	*out = *s
+	return nil
+}
+
+// DmsgReconnect forces DMSG session reconnection.
+func (r *RPC) DmsgReconnect(_ *struct{}, out *int) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgReconnect", nil)(out, &err)
+	n, err := r.visor.DmsgReconnect()
+	if err != nil {
+		return err
+	}
+	*out = n
+	return nil
+}
