@@ -5,6 +5,33 @@ via CLI/RPC. Changes take effect immediately without restarting.
 
 For config file generation, see [VISOR_CONFIG_GEN.md](VISOR_CONFIG_GEN.md).
 
+## Inspecting the Current Config
+
+```bash
+# Show the full running config
+skywire cli config show
+
+# Show a specific section
+skywire cli config show .dmsg
+skywire cli config show .routing
+skywire cli config show .transport
+
+# Show a specific field
+skywire cli config show .dmsg.sessions_count
+skywire cli config show .transport.public_autoconnect
+skywire cli config show .log_level
+
+# Query nested structures
+skywire cli config show '.launcher.apps[] | .name'
+skywire cli config show '.launcher.apps[] | select(.auto_start == true) | .name'
+skywire cli config show .routing.route_setup_nodes
+
+# Show config file path
+skywire cli config show --path
+```
+
+The filter argument uses [jq syntax](https://jqlang.github.io/jq/manual/).
+
 ## DMSG (`dmsg`)
 
 | Config field | Runtime command |
