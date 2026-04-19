@@ -15,12 +15,6 @@ import (
 func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.DHT
 
-	// DHT is enabled by default when DMSG is available.
-	// Set dht.enable=false to explicitly disable.
-	if conf != nil && !conf.Enable {
-		return nil
-	}
-
 	if v.dmsgC == nil {
 		return nil
 	}

@@ -94,10 +94,11 @@ type RewardsConfig struct {
 }
 
 // DHTConfig configures the Kademlia DHT subsystem.
+// DHT is always enabled when DMSG is available — this config only
+// controls optional parameters like full node mode and trust tiers.
 type DHTConfig struct {
-	// Enable activates the DHT node on this visor.
-	Enable bool `json:"enable"`
 	// BootstrapPKs are public keys of seed DHT nodes to contact on startup.
+	// If empty, deployment service PKs are used automatically.
 	BootstrapPKs []cipher.PubKey `json:"bootstrap_pks,omitempty"`
 	// FullNode stores all DHT items regardless of XOR distance (few needed).
 	FullNode bool `json:"full_node,omitempty"`
