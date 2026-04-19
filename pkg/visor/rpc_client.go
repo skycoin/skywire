@@ -1238,3 +1238,10 @@ func (rc *rpcClient) DmsgReconnect() (int, error) {
 	err := rc.Call("DmsgReconnect", &struct{}{}, &resp)
 	return resp, err
 }
+
+// CheckAREntry checks if a PK is registered in the address resolver.
+func (rc *rpcClient) CheckAREntry(pk string) ([]string, error) {
+	var resp []string
+	err := rc.Call("CheckAREntry", &pk, &resp)
+	return resp, err
+}

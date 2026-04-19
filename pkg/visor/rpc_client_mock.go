@@ -1187,6 +1187,11 @@ func (mc *mockRPCClient) DmsgReconnect() (int, error) {
 	return 0, nil
 }
 
+// CheckAREntry implements API.
+func (mc *mockRPCClient) CheckAREntry(_ string) ([]string, error) {
+	return nil, nil
+}
+
 // DHTStatus implements API.
 func (mc *mockRPCClient) DHTStatus() (*DHTStatus, error) {
 	return &DHTStatus{Running: false}, nil

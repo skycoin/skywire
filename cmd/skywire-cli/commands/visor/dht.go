@@ -42,8 +42,8 @@ var dhtStatusCmd = &cobra.Command{
 			return
 		}
 		fmt.Printf("DHT Node Status\n")
-		fmt.Printf("  Node ID:      %s\n", status.NodeID)
-		fmt.Printf("  Routing Peers: %d\n", status.RoutingPeers)
+		fmt.Printf("  Node ID:       %s\n", status.NodeID)
+		fmt.Printf("  Network Size:  %d known peers\n", status.RoutingPeers)
 		fmt.Printf("  Stored Items:  %d (whitelisted: %d, trusted: %d, public: %d)\n",
 			status.StoredItems, status.WhitelistedItems, status.TrustedItems, status.PublicItems)
 		fmt.Printf("  Full Node:     %v\n", status.FullNode)

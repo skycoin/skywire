@@ -238,6 +238,7 @@ type API interface {
 	DmsgReconnect() (int, error)
 	DmsgSetMinSessions(n int) error
 	AddHypervisor(pk cipher.PubKey) error
+	CheckAREntry(pk string) ([]string, error)
 
 	// Close closes the API connection (for RPC clients)
 	Close() error

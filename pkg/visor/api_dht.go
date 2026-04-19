@@ -37,6 +37,15 @@ func (v *Visor) DHTStatus() (*DHTStatus, error) {
 	}, nil
 }
 
+// DHTNetworkSize returns an estimate of the DHT network size based
+// on the local routing table's peer distribution.
+func (v *Visor) DHTNetworkSize() (int, error) {
+	if v.dhtNode == nil {
+		return 0, fmt.Errorf("DHT node not running")
+	}
+	return v.dhtNode.RoutingTable().Size(), nil
+}
+
 // DHTSetFullNode enables or disables full node mode at runtime.
 func (v *Visor) DHTSetFullNode(full bool) error {
 	if v.dhtNode == nil {

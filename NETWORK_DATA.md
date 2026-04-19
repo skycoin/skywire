@@ -381,11 +381,29 @@ Retrieve a value from the DHT via visor RPC. Salt selects the data type:
 
 ---
 
-## Gaps
+## Address Resolver
 
-| Data | Endpoint exists | CLI gap |
+### `skywire cli svc ar check <pk>`
+
+Check if a public key is registered in the address resolver without
+revealing its IP address. Returns transport types the visor is
+registered for (stcpr, sudph) or "not found".
+
+```
+skywire cli svc ar check 03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c
+03d1d78e...: registered for [stcpr sudph]
+```
+
+**Data source:** `/resolve/<type>/<pk>`
+- `dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80/resolve/stcpr/<pk>`
+
+Note: the full resolve response (with IP address) is not exposed via
+CLI for privacy reasons. Only the existence of the entry is returned.
+
+---
+
+## Remaining Gaps
+
+| Data | Endpoint | Status |
 |---|---|---|
-| Address resolver entries for a PK | [http://ar.skywire.skycoin.com/transports](http://ar.skywire.skycoin.com/transports) | `svc ar` exists but limited |
-| DMSG server pprof/load | pprof port (SSH tunnel required) | No CLI — needs `dmsg diag` equivalent for servers |
-| Standalone RSN stats | `dmsg://<rsn-pk>:80/stats` | `rsn-stats` only queries embedded RSN |
-| DHT network size estimate | DHT routing table | `dht status` shows local peers only |
+| Standalone RSN stats | `dmsg://0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557:80/stats` | Use `skywire dmsg curl` directly; no dedicated CLI yet |
