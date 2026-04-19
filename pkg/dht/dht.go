@@ -126,8 +126,8 @@ func (n *Node) Put(ctx context.Context, value []byte, seq uint64, salt []byte) e
 		return err
 	}
 
-	// Store locally.
-	_ = n.store.Put(item)
+	// Store locally (may return ErrSeqNotMonotonic on re-publish, which is fine).
+	_ = n.store.Put(item) //nolint:errcheck
 
 	// Find K closest nodes to the target and push the item.
 	target := item.Target()
@@ -175,7 +175,7 @@ func (n *Node) Get(ctx context.Context, pk cipher.PubKey, salt []byte) (*Mutable
 	if err := item.Verify(); err != nil {
 		return nil, err
 	}
-	_ = n.store.Put(*item)
+	_ = n.store.Put(*item) //nolint:errcheck
 
 	return item, nil
 }

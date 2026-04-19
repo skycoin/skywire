@@ -52,7 +52,7 @@ func (item MutableItem) Target() NodeID {
 func (item *MutableItem) signPayload() []byte {
 	buf := make([]byte, 8+4+len(item.V)+4+len(item.Salt))
 	binary.BigEndian.PutUint64(buf[:8], item.Seq)
-	binary.BigEndian.PutUint32(buf[8:12], uint32(len(item.V)))   //nolint:gosec
+	binary.BigEndian.PutUint32(buf[8:12], uint32(len(item.V))) //nolint:gosec
 	copy(buf[12:], item.V)
 	off := 12 + len(item.V)
 	binary.BigEndian.PutUint32(buf[off:off+4], uint32(len(item.Salt))) //nolint:gosec

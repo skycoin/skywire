@@ -129,7 +129,7 @@ func TestStoreEvictionNeverTouchesWhitelisted(t *testing.T) {
 	// Fill beyond capacity with public items.
 	for i := 0; i < 5; i++ {
 		pk, sk := cipher.GenerateKeyPair()
-		_ = store.Put(signedItem(t, pk, sk, 1, "pub", "s"))
+		_ = store.Put(signedItem(t, pk, sk, 1, "pub", "s")) //nolint:errcheck
 	}
 
 	// Whitelisted item should survive.

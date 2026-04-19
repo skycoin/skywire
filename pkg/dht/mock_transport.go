@@ -50,8 +50,8 @@ func (t *mockTransport) Dial(ctx context.Context, pk cipher.PubKey) (io.ReadWrit
 	case lis.incoming <- mockConn{conn: serverConn, remotePK: t.pk}:
 		return clientConn, nil
 	case <-ctx.Done():
-		clientConn.Close()  //nolint:errcheck,gosec
-		serverConn.Close()  //nolint:errcheck,gosec
+		clientConn.Close() //nolint:errcheck,gosec
+		serverConn.Close() //nolint:errcheck,gosec
 		return nil, ctx.Err()
 	}
 }

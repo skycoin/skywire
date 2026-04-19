@@ -9,14 +9,14 @@ import (
 
 // DHTStatus contains status information about the DHT node.
 type DHTStatus struct {
-	Running            bool   `json:"running"`
-	NodeID             string `json:"node_id"`
-	RoutingPeers       int    `json:"routing_peers"`
-	StoredItems        int    `json:"stored_items"`
-	WhitelistedItems   int    `json:"whitelisted_items"`
-	TrustedItems       int    `json:"trusted_items"`
-	PublicItems        int    `json:"public_items"`
-	FullNode           bool   `json:"full_node"`
+	Running          bool   `json:"running"`
+	NodeID           string `json:"node_id"`
+	RoutingPeers     int    `json:"routing_peers"`
+	StoredItems      int    `json:"stored_items"`
+	WhitelistedItems int    `json:"whitelisted_items"`
+	TrustedItems     int    `json:"trusted_items"`
+	PublicItems      int    `json:"public_items"`
+	FullNode         bool   `json:"full_node"`
 }
 
 // DHTStatus returns the current status of the DHT node.

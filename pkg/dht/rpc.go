@@ -96,7 +96,7 @@ func writeMsg(w io.Writer, method uint8, payload interface{}) error {
 	}
 	// [4-byte length][1-byte method][payload]
 	header := make([]byte, 5)
-	binary.BigEndian.PutUint32(header[:4], uint32(1+len(data)))
+	binary.BigEndian.PutUint32(header[:4], uint32(1+len(data))) //nolint:gosec
 	header[4] = method
 	if _, err := w.Write(header); err != nil {
 		return err

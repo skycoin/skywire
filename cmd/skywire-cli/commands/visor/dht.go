@@ -67,7 +67,7 @@ var dhtGetCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		os.Stdout.Write(data)    //nolint:errcheck,gosec
+		os.Stdout.Write(data) //nolint:errcheck,gosec
 		fmt.Fprintln(os.Stderr)
 	},
 }
