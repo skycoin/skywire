@@ -62,11 +62,11 @@ visor's config.`,
 
 		// Try to pretty-print JSON
 		var v interface{}
-		if err := json.Unmarshal([]byte(body), &v); err == nil {
+		if err := json.Unmarshal(body, &v); err == nil {
 			pretty, _ := json.MarshalIndent(v, "", "  ") //nolint:errcheck
 			fmt.Println(string(pretty))
 		} else {
-			fmt.Println(body)
+			fmt.Println(string(body))
 		}
 	},
 }
