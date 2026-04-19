@@ -1177,3 +1177,24 @@ func (rc *rpcClient) TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]
 	}, &resp)
 	return resp, err
 }
+
+// DHTStatus returns the DHT node's status.
+func (rc *rpcClient) DHTStatus() (*DHTStatus, error) {
+	var resp DHTStatus
+	if err := rc.Call("DHTStatus", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DHTGet retrieves a value from the DHT.
+func (rc *rpcClient) DHTGet(pk string, salt string) ([]byte, error) {
+	var resp []byte
+	err := rc.Call("DHTGet", &DHTGetIn{PK: pk, Salt: salt}, &resp)
+	return resp, err
+}
+
+// DHTPut publishes a value to the DHT.
+func (rc *rpcClient) DHTPut(value []byte, seq uint64, salt string) error {
+	return rc.Call("DHTPut", &DHTPutIn{Value: value, Seq: seq, Salt: salt}, &struct{}{})
+}

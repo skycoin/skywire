@@ -1564,3 +1564,44 @@ func (r *RPC) TPSExternalGetTransports(in *TPSExternalGetTransportsIn, out *[]TP
 	*out = resp
 	return nil
 }
+
+// DHTStatus returns the DHT node's status.
+func (r *RPC) DHTStatus(_ *struct{}, out *DHTStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTStatus", nil)(out, &err)
+	status, err := r.visor.DHTStatus()
+	if err != nil {
+		return err
+	}
+	*out = *status
+	return nil
+}
+
+// DHTGetIn is the input for DHTGet.
+type DHTGetIn struct {
+	PK   string `json:"pk"`
+	Salt string `json:"salt"`
+}
+
+// DHTGet retrieves a value from the DHT.
+func (r *RPC) DHTGet(in *DHTGetIn, out *[]byte) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTGet", in)(out, &err)
+	data, err := r.visor.DHTGet(in.PK, in.Salt)
+	if err != nil {
+		return err
+	}
+	*out = data
+	return nil
+}
+
+// DHTPutIn is the input for DHTPut.
+type DHTPutIn struct {
+	Value []byte `json:"value"`
+	Seq   uint64 `json:"seq"`
+	Salt  string `json:"salt"`
+}
+
+// DHTPut publishes a value to the DHT.
+func (r *RPC) DHTPut(in *DHTPutIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTPut", in)(nil, &err)
+	return r.visor.DHTPut(in.Value, in.Seq, in.Salt)
+}

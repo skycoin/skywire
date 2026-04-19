@@ -1162,6 +1162,21 @@ func (mc *mockRPCClient) TPSExternalGetTransports(_, _ cipher.PubKey) ([]TPSTran
 	return nil, fmt.Errorf("external TPS not available in mock")
 }
 
+// DHTStatus implements API.
+func (mc *mockRPCClient) DHTStatus() (*DHTStatus, error) {
+	return &DHTStatus{Running: false}, nil
+}
+
+// DHTGet implements API.
+func (mc *mockRPCClient) DHTGet(_, _ string) ([]byte, error) {
+	return nil, fmt.Errorf("DHT not available in mock")
+}
+
+// DHTPut implements API.
+func (mc *mockRPCClient) DHTPut(_ []byte, _ uint64, _ string) error {
+	return fmt.Errorf("DHT not available in mock")
+}
+
 // Close implements API.
 func (mc *mockRPCClient) Close() error {
 	return nil

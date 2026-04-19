@@ -38,15 +38,15 @@ func (v *Visor) DHTStatus() (*DHTStatus, error) {
 }
 
 // DHTPut publishes a value to the DHT under the visor's own key.
-func (v *Visor) DHTPut(value []byte, seq uint64, salt []byte) error {
+func (v *Visor) DHTPut(value []byte, seq uint64, salt string) error {
 	if v.dhtNode == nil {
 		return fmt.Errorf("DHT node not running")
 	}
-	return v.dhtNode.Put(context.Background(), value, seq, salt)
+	return v.dhtNode.Put(context.Background(), value, seq, []byte(salt))
 }
 
 // DHTGet retrieves a value from the DHT by publisher public key and salt.
-func (v *Visor) DHTGet(pk string, salt []byte) ([]byte, error) {
+func (v *Visor) DHTGet(pk string, salt string) ([]byte, error) {
 	if v.dhtNode == nil {
 		return nil, fmt.Errorf("DHT node not running")
 	}
@@ -56,7 +56,7 @@ func (v *Visor) DHTGet(pk string, salt []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid public key: %w", err)
 	}
 
-	item, err := v.dhtNode.Get(context.Background(), pubKey, salt)
+	item, err := v.dhtNode.Get(context.Background(), pubKey, []byte(salt))
 	if err != nil {
 		return nil, err
 	}

@@ -226,6 +226,11 @@ type API interface {
 	TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error)
 	TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]TPSTransportResponse, error)
 
+	// DHT operations
+	DHTStatus() (*DHTStatus, error)
+	DHTGet(pk string, salt string) ([]byte, error)
+	DHTPut(value []byte, seq uint64, salt string) error
+
 	// Close closes the API connection (for RPC clients)
 	Close() error
 }
