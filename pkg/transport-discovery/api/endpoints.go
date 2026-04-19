@@ -44,6 +44,10 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		}
 		// Publish to CXO subscribers
 		api.publishTransportToCXO(entry.Entry)
+		// Mirror to DHT for decentralized lookup
+		if api.dhtMirror != nil && entry.Entry != nil {
+			api.dhtMirror.Mirror(entry, entry.Entry.Bandwidth)
+		}
 		if entryVersion == "" && entry.Version != "" {
 			entryVersion = entry.Version
 		}
