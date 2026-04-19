@@ -24,6 +24,7 @@ type EmbeddedRouteSetup struct {
 	dmsgC *dmsg.Client
 	pk    cipher.PubKey
 	log   *logging.Logger
+	pool  *router.ClientPool // reuse DMSG connections across route setup requests
 
 	// stats aggregates per-request success/failure metadata for the
 	// RouteSetupStats RPC and `skywire-cli route rsn-stats` CLI.
@@ -34,6 +35,10 @@ type EmbeddedRouteSetup struct {
 // This allows other visors to connect and request route setup.
 func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 	const timeout = 2 * time.Minute
+
+	// Initialize connection pool for reusing DMSG connections.
+	dialer := router.WrapDmsgClient(ers.dmsgC)
+	ers.pool = router.NewClientPool(dialer, router.DefaultPoolTTL)
 
 	ers.log.WithField("dmsg_port", skyenv.DmsgSetupPort).Info("Starting embedded route setup-node listener")
 	lis, err := ers.dmsgC.Listen(skyenv.DmsgSetupPort)
@@ -98,6 +103,7 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 			Conn:    conn,
 			ReqPK:   reqPK,
 			Dialer:  router.WrapDmsgClient(ers.dmsgC),
+			Pool:    ers.pool,
 			Timeout: timeout,
 		}
 
