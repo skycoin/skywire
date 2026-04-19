@@ -458,7 +458,8 @@ e2e-run: ## E2E. Start e2e environment and wait for all health checks to pass
 	@# On a dual-core GitHub Actions runner, starting everything at once
 	@# causes healthcheck timeouts because Go services are too slow to
 	@# initialize when competing for CPU.
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait dmsgd-redis ar-redis sd-redis tpd-redis ut-redis postgres-db stun-server"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait dmsgd-redis ar-redis sd-redis tpd-redis ut-redis postgres-db"
+	bash -c "DOCKER_TAG=e2e docker compose up -d stun-server"
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait transport-discovery address-resolver uptime-tracker"
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait dmsg-discovery"
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait route-finder service-discovery"
