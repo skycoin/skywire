@@ -38,7 +38,6 @@ var dhtStatusCmd = &cobra.Command{
 		}
 		if !status.Running {
 			fmt.Println("DHT node is not running.")
-			fmt.Println("Enable with: \"dht\": {\"enable\": true} in visor config.")
 			return
 		}
 		fmt.Printf("DHT Node Status\n")
