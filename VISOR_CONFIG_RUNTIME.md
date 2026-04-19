@@ -1,21 +1,25 @@
 # Visor Configuration — Runtime Changes
 
 This document covers changing visor configuration on a running visor
-via CLI/RPC. Changes take effect immediately without restarting.
+via CLI/RPC. These commands interact with the running visor process
+and take effect immediately without restarting.
 
-For config file generation, see [VISOR_CONFIG_GEN.md](VISOR_CONFIG_GEN.md).
+For config file changes (config gen, config update, SKYENV), see
+[VISOR_CONFIG_GEN.md](VISOR_CONFIG_GEN.md).
 
 ## Important Notes
 
 ### Config Persistence
 
-**Runtime changes may be lost on package install/update.** The
-`skywire autoconfig` command runs automatically on package
-installation and regenerates the config file. Any configuration you
-want to persist must go in the SKYENV config file
-(`/etc/skywire.conf`). See [VISOR_CONFIG_GEN.md](VISOR_CONFIG_GEN.md#skyenv-config-file).
+**Runtime changes are not written to the config file.** They affect
+the running visor only and are lost on restart. To make changes
+permanent, set the corresponding SKYENV variable in
+`/etc/skywire.conf` and regenerate the config. See
+[VISOR_CONFIG_GEN.md](VISOR_CONFIG_GEN.md#skyenv-config-file).
 
-To disable automatic config regeneration on package install:
+**Package install/update runs `skywire autoconfig`** which
+regenerates the config file. Any customization that isn't in the
+SKYENV file will be overwritten. To disable:
 ```bash
 echo "NOAUTOCONFIG=true" >> /etc/skywire.conf
 ```
@@ -56,16 +60,16 @@ The filter argument uses [jq syntax](https://jqlang.github.io/jq/manual/).
 
 ## DMSG (`dmsg`)
 
-| Config field | Runtime command | Notes |
-|---|---|---|
-| `dmsg.sessions_count` | `skywire cli dmsg set-sessions <n>` | Updates live client + persists to config + connect-all |
-| — (connect to all) | `skywire cli dmsg connect-all` | One-shot: connects to all available servers now |
-| — (force reconnect) | `skywire cli dmsg diag reconnect` | Closes all sessions; reconnect loop re-dials within 15s |
-| — (reset port space) | `skywire cli dmsg diag porter-reset` | Recovers from ephemeral port exhaustion |
-| — (check port usage) | `skywire cli dmsg diag porter` | Shows reserved port count (main + RSN clients) |
-| `dmsg.discovery` | — | **Not configurable at runtime.** Config gen only. |
-| `dmsg.servers` | — | **Not configurable at runtime.** Config gen only. |
-| `dmsg.protocol` | — | **Not configurable at runtime.** Config gen only. |
+| Config field | Runtime command |
+|---|---|
+| `dmsg.sessions_count` | `skywire cli dmsg set-sessions <n>` |
+| — (connect to all) | `skywire cli dmsg connect-all` |
+| — (force reconnect) | `skywire cli dmsg diag reconnect` |
+| — (reset port space) | `skywire cli dmsg diag porter-reset` |
+| — (check port usage) | `skywire cli dmsg diag porter` |
+| `dmsg.discovery` | Not changeable at runtime |
+| `dmsg.servers` | Not changeable at runtime |
+| `dmsg.protocol` | Not changeable at runtime |
 
 Config gen: [`MINDMSGSESS`](VISOR_CONFIG_GEN.md#deployment)
 
@@ -73,101 +77,91 @@ Config gen: [`MINDMSGSESS`](VISOR_CONFIG_GEN.md#deployment)
 
 | Config field | Runtime command |
 |---|---|
-| `transport.public_autoconnect` | `skywire cli config update --public-autoconn true\|false` (persistent) |
-| `transport.stcpr_port` | Config gen only: [`STCPRPORT`](VISOR_CONFIG_GEN.md#transports) |
-| `transport.sudph_port` | Config gen only: [`SUDPHPORT`](VISOR_CONFIG_GEN.md#transports) |
 | — (add transport) | `skywire cli tp add <pk> [--type stcpr\|sudph\|dmsg]` |
 | — (remove transport) | `skywire cli tp rm -i <id>` or `skywire cli tp rm -a` |
+| `transport.public_autoconnect` | Not changeable at runtime |
+| `transport.stcpr_port` | Not changeable at runtime |
+| `transport.sudph_port` | Not changeable at runtime |
 
-Config gen: [`VISORISPUBLIC`](VISOR_CONFIG_GEN.md#transports), [`DISABLEPUBLICAUTOCONN`](VISOR_CONFIG_GEN.md#transports)
+Config gen: [`VISORISPUBLIC`](VISOR_CONFIG_GEN.md#transports), [`STCPRPORT`](VISOR_CONFIG_GEN.md#transports)
 
 ## Routing (`routing`)
 
 | Config field | Runtime command |
 |---|---|
-| `routing.min_hops` | `skywire cli config update --set-minhop <n>` (persistent) |
-| `routing.route_setup_nodes` | Config gen only: [`ROUTESETUPPKS`](VISOR_CONFIG_GEN.md#routing) |
 | — (view rules) | `skywire cli route` |
 | — (add rule) | `skywire cli route add a <pk> <port>` |
 | — (remove rule) | `skywire cli route rm <id>` |
 | — (RSN stats) | `skywire cli route rsn-stats [--reset]` |
+| `routing.min_hops` | Not changeable at runtime |
+| `routing.route_setup_nodes` | Not changeable at runtime |
 
-Config gen: [`CALCULATEROUTES`](VISOR_CONFIG_GEN.md#routing)
+Config gen: [`ROUTESETUPPKS`](VISOR_CONFIG_GEN.md#routing), [`CALCULATEROUTES`](VISOR_CONFIG_GEN.md#routing)
 
-## Launcher / Apps (`launcher`)
+## Apps (`launcher`)
 
 | Config field | Runtime command |
 |---|---|
-| `launcher.apps[].auto_start` | `skywire cli visor app arg autostart <name> true\|false` |
+| — (list apps) | `skywire cli visor app ls` |
 | — (start app) | `skywire cli visor app start <name>` |
 | — (stop app) | `skywire cli visor app stop <name>` |
-| — (list apps) | `skywire cli visor app ls` |
+| `launcher.apps[].auto_start` | `skywire cli visor app arg autostart <name> true\|false` |
+| app killswitch | `skywire cli visor app arg killswitch <name> true\|false` |
+| app secure mode | `skywire cli visor app arg secure <name> true\|false` |
+| app network interface | `skywire cli visor app arg netifc <name> <iface\|remove>` |
+| app passcode | `skywire cli visor app arg passcode <name> <code>` |
 
-### VPN Server
+### VPN
 
-| Config field | Runtime command |
+| Action | Runtime command |
 |---|---|
-| VPN server autostart | `skywire cli config update vpns --autostart true\|false` (persistent) |
-| VPN server whitelist | `skywire cli config update vpns --whitelist <pk1>,<pk2>` (persistent) |
-| VPN server interface | `skywire cli config update vpns --netifc <iface>` (persistent) |
-| VPN server secure | `skywire cli visor app arg secure vpn-server true\|false` |
-| — (start/stop) | `skywire cli vpn server start\|stop\|status` |
+| Start VPN client | `skywire cli vpn start` |
+| Stop VPN client | `skywire cli vpn stop` |
+| VPN client status | `skywire cli vpn status` |
+| Start VPN server | `skywire cli vpn server start` |
+| Stop VPN server | `skywire cli vpn server stop` |
+| VPN server status | `skywire cli vpn server status` |
 
-Config gen: [`VPNSERVER`](VISOR_CONFIG_GEN.md#apps), [`VPNSERVERWL`](VISOR_CONFIG_GEN.md#apps)
+Config gen: [`VPNSERVER`](VISOR_CONFIG_GEN.md#apps), [`ADDVPNPK`](VISOR_CONFIG_GEN.md#apps), [`VPNKS`](VISOR_CONFIG_GEN.md#apps)
 
-### VPN Client
+### Proxy (Skysocks)
 
-| Config field | Runtime command |
+| Action | Runtime command |
 |---|---|
-| VPN client server | `skywire cli config update vpnc --add-server <pk>` (persistent) |
-| VPN client killswitch | `skywire cli config update vpnc --killsw true\|false` (persistent) |
-| VPN client killswitch | `skywire cli visor app arg killswitch vpn-client true\|false` |
-| — (start/stop) | `skywire cli vpn start\|stop\|status` |
+| Start proxy server | `skywire cli proxy server start` |
+| Stop proxy server | `skywire cli proxy server stop` |
+| Start proxy client | `skywire cli proxy start` |
+| Stop proxy client | `skywire cli proxy stop` |
+| Proxy status | `skywire cli proxy status` |
 
-Config gen: [`ADDVPNPK`](VISOR_CONFIG_GEN.md#apps), [`VPNKS`](VISOR_CONFIG_GEN.md#apps)
-
-### Proxy Server (Skysocks)
-
-| Config field | Runtime command |
-|---|---|
-| Proxy server whitelist | `skywire cli config update ss --whitelist <pk1>,<pk2>` (persistent) |
-| Proxy server autostart | `skywire cli config update ss --autostart true\|false` (persistent) |
-| — (start/stop) | `skywire cli proxy server start\|stop\|status` |
-
-Config gen: [`PROXYSERVER`](VISOR_CONFIG_GEN.md#apps), [`PROXYSERVERWL`](VISOR_CONFIG_GEN.md#apps)
-
-### Proxy Client (Skysocks Client)
-
-| Config field | Runtime command |
-|---|---|
-| Proxy client server | `skywire cli config update sc --add-server <pk>` (persistent) |
-| — (start/stop) | `skywire cli proxy start\|stop\|status` |
-
-Config gen: [`PROXYCLIENTPK`](VISOR_CONFIG_GEN.md#apps), [`STARTPROXYCLIENT`](VISOR_CONFIG_GEN.md#apps)
+Config gen: [`PROXYSERVER`](VISOR_CONFIG_GEN.md#apps), [`PROXYCLIENTPK`](VISOR_CONFIG_GEN.md#apps)
 
 ## Hypervisor (`hypervisor`)
 
 | Config field | Runtime command |
 |---|---|
 | `hypervisor.enable` | `skywire cli visor hv enable\|disable` |
-| `hypervisors` (remote HV PKs) | `skywire cli config update hv --add-pks <pk>` (persistent) |
-| `hypervisors` (reset) | `skywire cli config update hv -r` (persistent) |
+| — (status) | `skywire cli visor hv status` |
+| — (open UI) | `skywire cli visor hv ui` |
+| `hypervisors` | Not changeable at runtime |
 
 Config gen: [`ISHYPERVISOR`](VISOR_CONFIG_GEN.md#hypervisor), [`HYPERVISORPKS`](VISOR_CONFIG_GEN.md#remote-access)
-
-## Survey Whitelist (`survey_whitelist`)
-
-| Config field | Runtime command |
-|---|---|
-| `survey_whitelist` | Config gen only: [`SURVEYPKS`](VISOR_CONFIG_GEN.md#remote-access) |
 
 ## Log Level (`log_level`)
 
 | Config field | Runtime command |
 |---|---|
-| `log_level` | `skywire cli config update --log-level debug\|info\|warn\|error` (persistent) |
+| `log_level` | Not changeable at runtime |
 
 Config gen: [`LOGLVL`](VISOR_CONFIG_GEN.md#advanced-tuning)
+
+## Survey Whitelist (`survey_whitelist`)
+
+| Config field | Runtime command |
+|---|---|
+| `survey_whitelist` | Not changeable at runtime |
+
+Config gen: [`SURVEYPKS`](VISOR_CONFIG_GEN.md#remote-access)
 
 ## Reward Address
 
@@ -185,15 +179,20 @@ Config gen: [`REWARDSKYADDR`](VISOR_CONFIG_GEN.md#rewards)
 |---|---|
 | `dht.full_node` | `skywire cli visor dht full-node on\|off` |
 | — (status) | `skywire cli visor dht status` |
+| — (get value) | `skywire cli visor dht get <pk> [salt]` |
+| — (put value) | `skywire cli visor dht put <value> [salt]` |
+| `dht.bootstrap_pks` | Not changeable at runtime |
+| `dht.whitelisted_pks` | Not changeable at runtime |
+| `dht.trusted_pks` | Not changeable at runtime |
 
 Config gen: [DHT configuration](VISOR_CONFIG_GEN.md#dht-configuration-optional)
 
 ## Skynet Port Forwarding
 
 Port forwarding is stored in `local/forwarded_ports.json`, not in
-the visor config. All changes are runtime and persistent.
+the visor config. Changes are both immediate and persistent.
 
-| Setting | Runtime command |
+| Action | Runtime command |
 |---|---|
 | Forward a port | `skywire cli skynet port add <port> [--local-port <n>] [--label <s>]` |
 | Remove a port | `skywire cli skynet port rm <port>` |
@@ -201,16 +200,3 @@ the visor config. All changes are runtime and persistent.
 | Website on port 80 | `skywire cli skynet port add 80 --proxy-addr 127.0.0.1:<port>` |
 
 See also: [Skynet forwarding guide](docs/skywire_forwarding.md)
-
-## Persistent vs Immediate
-
-| Marker | Meaning |
-|---|---|
-| (no marker) | Takes effect immediately via RPC, not written to config file |
-| (persistent) | Written to config file, applies on visor restart |
-| Config gen only | Can only be set during `skywire cli config gen`, not at runtime |
-
-Some commands marked (persistent) write to the config file using
-`skywire cli config update`. The running visor does NOT pick up these
-changes until restarted. To apply changes immediately AND persistently,
-use both the runtime RPC command and the config update command.
