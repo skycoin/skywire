@@ -34,8 +34,8 @@ pk                                                                         count
 ```
 
 **Data sources:**
-- [http://sd.skycoin.com/api/services](http://sd.skycoin.com/api/services)
-- [http://tpd.skywire.skycoin.com/all-transports](http://tpd.skywire.skycoin.com/all-transports)
+- `/api/services` — [http://sd.skycoin.com/api/services](http://sd.skycoin.com/api/services) — `dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/api/services`
+- `/all-transports` — [http://tpd.skywire.skycoin.com/all-transports](http://tpd.skywire.skycoin.com/all-transports) — `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/all-transports`
 
 **DHT equivalent:** `skywire cli visor dht get <pk> tp`
 
@@ -58,13 +58,16 @@ DMSG Server           OK      548ms    dmsg       -                       0281a1
 Route Setup Node      OK      557ms    dmsg       v1.3.46-0               032457...
 ```
 
-**Data sources:** `/health` endpoint on each service:
-- [http://dmsgd.skywire.skycoin.com/health](http://dmsgd.skywire.skycoin.com/health) or `skywire dmsg curl dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/health`
-- [http://tpd.skywire.skycoin.com/health](http://tpd.skywire.skycoin.com/health) or `skywire dmsg curl dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/health`
-- [http://ar.skywire.skycoin.com/health](http://ar.skywire.skycoin.com/health) or `skywire dmsg curl dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80/health`
-- [http://rf.skywire.skycoin.com/health](http://rf.skywire.skycoin.com/health) or `skywire dmsg curl dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80/health`
-- [http://sd.skycoin.com/health](http://sd.skycoin.com/health) or `skywire dmsg curl dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/health`
-- [http://ut.skywire.skycoin.com/health](http://ut.skywire.skycoin.com/health) or `skywire dmsg curl dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80/health`
+**Data source:** `/health` endpoint on each service:
+
+| Service | HTTP | DMSG |
+|---|---|---|
+| DMSG Discovery | [http://dmsgd.skywire.skycoin.com/health](http://dmsgd.skywire.skycoin.com/health) | `dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/health` |
+| Transport Discovery | [http://tpd.skywire.skycoin.com/health](http://tpd.skywire.skycoin.com/health) | `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/health` |
+| Address Resolver | [http://ar.skywire.skycoin.com/health](http://ar.skywire.skycoin.com/health) | `dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80/health` |
+| Route Finder | [http://rf.skywire.skycoin.com/health](http://rf.skywire.skycoin.com/health) | `dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80/health` |
+| Service Discovery | [http://sd.skycoin.com/health](http://sd.skycoin.com/health) | `dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/health` |
+| Uptime Tracker | [http://ut.skywire.skycoin.com/health](http://ut.skywire.skycoin.com/health) | `dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80/health` |
 
 ---
 
@@ -84,8 +87,9 @@ By Type:
   DMSG: 7
 ```
 
-**Data source:** [http://tpd.skywire.skycoin.com/all-transports/stats](http://tpd.skywire.skycoin.com/all-transports/stats)
-`skywire dmsg curl dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/all-transports/stats`
+**Data source:** `/all-transports/stats`
+- [http://tpd.skywire.skycoin.com/all-transports/stats](http://tpd.skywire.skycoin.com/all-transports/stats)
+- `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/all-transports/stats`
 
 ### `skywire cli tp tpd-stats`
 
@@ -108,8 +112,9 @@ skywire cli tp tpd-stats --top 5
 skywire cli tp tpd-stats --type stcpr --min 100
 ```
 
-**Data source:** [http://tpd.skywire.skycoin.com/all-transports/per-key-stats](http://tpd.skywire.skycoin.com/all-transports/per-key-stats)
-`skywire dmsg curl dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/all-transports/per-key-stats`
+**Data source:** `/all-transports/per-key-stats`
+- [http://tpd.skywire.skycoin.com/all-transports/per-key-stats](http://tpd.skywire.skycoin.com/all-transports/per-key-stats)
+- `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/all-transports/per-key-stats`
 
 ### `skywire cli tp metrics`
 
@@ -147,10 +152,11 @@ transport_id                           type    sent       recv       bandwidth  
 6c2c997e-968c-0c8a-b7bc-b3827d382a2e   stcpr   260.35KB   260.35KB   520.71KB    -
 ```
 
-**Data source:** [http://tpd.skywire.skycoin.com/metrics?days=1&bandwidth=true&latency=true&edges=true](http://tpd.skywire.skycoin.com/metrics?days=1&bandwidth=true&latency=true&edges=true)
-`skywire dmsg curl dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/metrics?days=1&bandwidth=true&latency=true&edges=true`
-
-With flags: `?days=7`, `?pk=03d1d78e...`
+**Data source:** `/metrics?days=<n>&bandwidth=true&latency=true&edges=true`
+- [http://tpd.skywire.skycoin.com/metrics?days=1&bandwidth=true&latency=true&edges=true](http://tpd.skywire.skycoin.com/metrics?days=1&bandwidth=true&latency=true&edges=true)
+- `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/metrics?days=1&bandwidth=true&latency=true&edges=true`
+- 7-day: [http://tpd.skywire.skycoin.com/metrics?days=7&bandwidth=true&latency=true&edges=true](http://tpd.skywire.skycoin.com/metrics?days=7&bandwidth=true&latency=true&edges=true)
+- Per-visor: `?pk=03d1d78e...`
 
 ### `skywire cli svc tpd bandwidth`
 
@@ -173,8 +179,10 @@ Per-visor:
 skywire cli svc tpd bandwidth --pk 03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c
 ```
 
-**Data source:** [http://tpd.skywire.skycoin.com/bandwidth](http://tpd.skywire.skycoin.com/bandwidth)
-Per-visor: [http://tpd.skywire.skycoin.com/bandwidth/visor/03d1d78e...](http://tpd.skywire.skycoin.com/bandwidth/visor/03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c)
+**Data source:** `/bandwidth`
+- [http://tpd.skywire.skycoin.com/bandwidth](http://tpd.skywire.skycoin.com/bandwidth)
+- `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/bandwidth`
+- Per-visor: `/bandwidth/visor/<pk>` — [http://tpd.skywire.skycoin.com/bandwidth/visor/03d1d78e...](http://tpd.skywire.skycoin.com/bandwidth/visor/03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c)
 
 ### `skywire cli svc tpd versions`
 
@@ -190,7 +198,9 @@ Version distribution across the network.
 }
 ```
 
-**Data source:** [http://tpd.skywire.skycoin.com/versions](http://tpd.skywire.skycoin.com/versions)
+**Data source:** `/versions`
+- [http://tpd.skywire.skycoin.com/versions](http://tpd.skywire.skycoin.com/versions)
+- `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/versions`
 
 ### `skywire cli tp tree`
 
@@ -210,16 +220,19 @@ Top visors by transport count:
   2: 02e26350... (count=332, version=v1.3.45)
 ```
 
-**Data source:** [http://tpd.skywire.skycoin.com/all-transports](http://tpd.skywire.skycoin.com/all-transports)
+**Data source:** `/all-transports`
+- [http://tpd.skywire.skycoin.com/all-transports](http://tpd.skywire.skycoin.com/all-transports)
+- `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/all-transports`
 
 ### `skywire cli tp uptime`
 
 Transport-level uptime with daily percentages.
 
-**Data source:** [http://tpd.skywire.skycoin.com/uptimes/transports?v=v2](http://tpd.skywire.skycoin.com/uptimes/transports?v=v2)
-
-Filtered by transport IDs: `?ids=<id1>,<id2>`
-Filtered by visor PKs: [http://tpd.skywire.skycoin.com/metrics/uptime/visor/<pk>](http://tpd.skywire.skycoin.com/metrics/uptime/visor/03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c)
+**Data source:** `/uptimes/transports?v=v2`
+- [http://tpd.skywire.skycoin.com/uptimes/transports?v=v2](http://tpd.skywire.skycoin.com/uptimes/transports?v=v2)
+- `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/uptimes/transports?v=v2`
+- By transport IDs: `/metrics/uptime/<id1>,<id2>`
+- By visor PK: `/metrics/uptime/visor/<pk>` — [http://tpd.skywire.skycoin.com/metrics/uptime/visor/03d1d78e...](http://tpd.skywire.skycoin.com/metrics/uptime/visor/03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c)
 
 ---
 
@@ -235,8 +248,9 @@ version     registered              public-key                           address
 0.0.1       1776634424773073516     0371ab4bcff7b121...                  139.162.160.227:30087     1713
 ```
 
-**Data source:** [http://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers](http://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers)
-`skywire dmsg curl dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/available_servers`
+**Data source:** `/dmsg-discovery/available_servers`
+- [http://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers](http://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers)
+- `dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/available_servers`
 
 **DHT equivalent:** `skywire cli visor dht get <server-pk> dmsg`
 
@@ -244,7 +258,9 @@ version     registered              public-key                           address
 
 Fetch a visor's DMSG discovery entry (delegated servers, client type).
 
-**Data source:** [http://dmsgd.skywire.skycoin.com/dmsg-discovery/entry/03d1d78e...](http://dmsgd.skywire.skycoin.com/dmsg-discovery/entry/03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c)
+**Data source:** `/dmsg-discovery/entry/<pk>`
+- [http://dmsgd.skywire.skycoin.com/dmsg-discovery/entry/03d1d78e...](http://dmsgd.skywire.skycoin.com/dmsg-discovery/entry/03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c)
+- `dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/entry/<pk>`
 
 **DHT equivalent:** `skywire cli visor dht get <pk> dmsg`
 
@@ -256,13 +272,17 @@ Same data as `mdisc servers`.
 
 List clients connected to a specific DMSG server.
 
-**Data source:** [http://dmsgd.skywire.skycoin.com/dmsg-discovery/entry/0281a102.../clients](http://dmsgd.skywire.skycoin.com/dmsg-discovery/visor_entries/0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb)
+**Data source:** `/dmsg-discovery/visor_entries/<server-pk>`
+- [http://dmsgd.skywire.skycoin.com/dmsg-discovery/visor_entries/0281a102...](http://dmsgd.skywire.skycoin.com/dmsg-discovery/visor_entries/0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb)
+- `dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/visor_entries/<server-pk>`
 
 ### `skywire cli svc dmsgd server-clients`
 
 All clients grouped by server.
 
-**Data source:** [http://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers_clients](http://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers_clients)
+**Data source:** `/dmsg-discovery/all_servers_clients`
+- [http://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers_clients](http://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers_clients)
+- `dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/all_servers_clients`
 
 ---
 
@@ -272,9 +292,10 @@ All clients grouped by server.
 
 List public visors from service discovery.
 
-**Data source:** [http://sd.skycoin.com/api/services?type=visor](http://sd.skycoin.com/api/services?type=visor)
-
-With country filter: [http://sd.skycoin.com/api/services?type=visor&country=US](http://sd.skycoin.com/api/services?type=visor&country=US)
+**Data source:** `/api/services?type=visor`
+- [http://sd.skycoin.com/api/services?type=visor](http://sd.skycoin.com/api/services?type=visor)
+- `dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/api/services?type=visor`
+- With country: `/api/services?type=visor&country=US` — [http://sd.skycoin.com/api/services?type=visor&country=US](http://sd.skycoin.com/api/services?type=visor&country=US)
 
 ---
 
@@ -284,25 +305,33 @@ With country filter: [http://sd.skycoin.com/api/services?type=visor&country=US](
 
 Standalone uptime tracker data.
 
-**Data source:** [http://ut.skywire.skycoin.com/uptimes?v=v2](http://ut.skywire.skycoin.com/uptimes?v=v2)
+**Data source:** `/uptimes?v=v2`
+- [http://ut.skywire.skycoin.com/uptimes?v=v2](http://ut.skywire.skycoin.com/uptimes?v=v2)
+- `dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80/uptimes?v=v2`
 
 ### `skywire cli ut tpd`
 
 TPD-integrated uptime. Considers a visor online when it has 2+ transports.
 
-**Data source:** [http://tpd.skywire.skycoin.com/uptimes?v=v2](http://tpd.skywire.skycoin.com/uptimes?v=v2)
+**Data source:** `/uptimes?v=v2`
+- [http://tpd.skywire.skycoin.com/uptimes?v=v2](http://tpd.skywire.skycoin.com/uptimes?v=v2)
+- `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/uptimes?v=v2`
 
 ### `skywire cli ut mdisc`
 
 DMSG discovery integrated uptime.
 
-**Data source:** [http://dmsgd.skywire.skycoin.com/uptimes?v=v2](http://dmsgd.skywire.skycoin.com/uptimes?v=v2)
+**Data source:** `/uptimes?v=v2`
+- [http://dmsgd.skywire.skycoin.com/uptimes?v=v2](http://dmsgd.skywire.skycoin.com/uptimes?v=v2)
+- `dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/uptimes?v=v2`
 
 ### `skywire cli ut sd`
 
 Service discovery integrated uptime.
 
-**Data source:** [http://sd.skycoin.com/uptimes?v=v2](http://sd.skycoin.com/uptimes?v=v2)
+**Data source:** `/uptimes?v=v2`
+- [http://sd.skycoin.com/uptimes?v=v2](http://sd.skycoin.com/uptimes?v=v2)
+- `dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/uptimes?v=v2`
 
 ---
 
