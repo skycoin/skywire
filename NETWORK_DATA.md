@@ -359,7 +359,56 @@ Failures by reason:
 
 **Data source:** Visor RPC → embedded RSN `Collector.Snapshot()`
 
-Standalone RSN stats (deployment server): `skywire dmsg curl dmsg://0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557:80/stats`
+### `skywire cli route rsn-remote-stats`
+
+Query a standalone RSN's `/stats` endpoint over DMSG. Uses the
+visor's DMSG connection (RPC → DMSG HTTP). Defaults to the first
+RSN PK from the visor's config.
+
+```bash
+skywire cli route rsn-remote-stats
+skywire cli route rsn-remote-stats --pk 0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557
+```
+
+**Data source:** `/stats`
+- `dmsg://0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557:80/stats`
+
+The standalone RSN has no HTTP interface — DMSG is the only path.
+
+---
+
+## Transport Setup Node Data
+
+### `skywire cli tp --remote <pk>`
+
+Query a remote visor's transports via the Transport Setup Node (TPS).
+Returns transports with labels `skycoin` and `automatic` only —
+user-labeled transports are not exposed by the TPS.
+
+```
+skywire cli tp --remote 03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c
+
+[1/1] 03d1d78e... (277 transports)
+  type    id                                     local              remote
+  stcpr   a2bfdcc8-09ba-093a-bacd-aef5b8005c62   03d1d78e...        03b8a672...
+```
+
+**Data source:** TPS DMSG RPC on port 47 (`DmsgTransportSetupPort`)
+
+**TPS constraints:**
+- **GetTransports:** returns `skycoin` + `automatic` labels only (not `user`)
+- **AddTransport:** creates with label `skycoin`
+- **RemoveTransport:** only `skycoin` + `automatic` labels, and only if no active route uses the transport
+
+### `skywire cli tps`
+
+Manage transports via the Transport Setup Node.
+
+```bash
+skywire cli tps list --pk <visor-pk>   # list remote visor's transports
+skywire cli tps add --pk <visor-pk> --remote <remote-pk> --type stcpr
+skywire cli tps rm --pk <visor-pk> --id <transport-id>
+```
 
 ---
 
@@ -402,8 +451,3 @@ CLI for privacy reasons. Only the existence of the entry is returned.
 
 ---
 
-## Remaining Gaps
-
-| Data | Endpoint | Status |
-|---|---|---|
-| Standalone RSN stats | `dmsg://0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557:80/stats` | Use `skywire dmsg curl` directly; no dedicated CLI yet |
