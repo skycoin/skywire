@@ -21,7 +21,7 @@ func TestDHT_Status(t *testing.T) {
 		result, err := env.execResult(cmd)
 		require.NoError(t, err, "exec failed on %s", visor)
 
-		out := strings.TrimSpace(result.StdOut)
+		out := strings.TrimSpace(result.Stdout())
 		require.Contains(t, out, "Node ID", "DHT should be running on %s, got: %s", visor, out)
 		require.Contains(t, out, "Routing Peers", "DHT status output malformed on %s", visor)
 		t.Logf("DHT on %s: %s", visor, strings.ReplaceAll(out, "\n", " | "))
@@ -42,12 +42,12 @@ func TestDHT_TransportDiscovery(t *testing.T) {
 	// Get PKs for visor-a and visor-b.
 	pkResultA, err := env.execResult("/release/skywire cli --rpc " + visorA + ":3435 visor pk")
 	require.NoError(t, err)
-	visorAPK := strings.TrimSpace(pkResultA.StdOut)
+	visorAPK := strings.TrimSpace(pkResultA.Stdout())
 	require.Len(t, visorAPK, 66, "visor-a PK should be 66 hex chars, got: %s", visorAPK)
 
 	pkResultB, err := env.execResult("/release/skywire cli --rpc " + visorB + ":3435 visor pk")
 	require.NoError(t, err)
-	visorBPK := strings.TrimSpace(pkResultB.StdOut)
+	visorBPK := strings.TrimSpace(pkResultB.Stdout())
 	require.Len(t, visorBPK, 66, "visor-b PK should be 66 hex chars, got: %s", visorBPK)
 
 	t.Logf("visor-a PK: %s", visorAPK)
@@ -58,8 +58,8 @@ func TestDHT_TransportDiscovery(t *testing.T) {
 	// dual-writes to both HTTP TPD and DHT via HybridTPDClient.
 	addCmd := "/release/skywire cli --rpc " + visorB + ":3435 tp add " + visorAPK + " --type dmsg"
 	addResult, err := env.execResult(addCmd)
-	require.NoError(t, err, "tp add failed: stdout=%s stderr=%s", addResult.StdOut, addResult.StdErr)
-	t.Logf("Transport created: %s", strings.TrimSpace(addResult.StdOut))
+	require.NoError(t, err, "tp add failed: stdout=%s stderr=%s", addResult.Stdout(), addResult.Stderr())
+	t.Logf("Transport created: %s", strings.TrimSpace(addResult.Stdout()))
 
 	// Wait for the DHT publish loop to fire. The visor publishes its
 	// transport list to the DHT every 60s, with the first publish 15s
@@ -73,9 +73,9 @@ func TestDHT_TransportDiscovery(t *testing.T) {
 	// visor's PK. The compact format includes the remote PK.
 	getCmd := "/release/skywire cli --rpc " + visorC + ":3435 visor dht get " + visorBPK + " tp"
 	getResult, err := env.execResult(getCmd)
-	require.NoError(t, err, "DHT get failed: stdout=%s stderr=%s", getResult.StdOut, getResult.StdErr)
+	require.NoError(t, err, "DHT get failed: stdout=%s stderr=%s", getResult.Stdout(), getResult.Stderr())
 
-	got := strings.TrimSpace(getResult.StdOut)
+	got := strings.TrimSpace(getResult.Stdout())
 	t.Logf("DHT transport list for visor-b: %s", got)
 
 	// The transport list should contain visor-a's PK (the remote end
