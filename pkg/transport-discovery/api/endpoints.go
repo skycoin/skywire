@@ -63,20 +63,6 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Mirror the full batch to the DHT. The entire SignedEntry array
-	// (including bandwidth and latency) is published as one DHT item
-	// per registering visor, keyed by the auth PK + salt "tp".
-	if api.dhtMirror != nil && len(entries) > 0 {
-		// Use total bandwidth across all entries as a monotonic seq proxy.
-		var totalBW uint64
-		for _, e := range entries {
-			if e.Bandwidth != nil {
-				totalBW += e.Bandwidth.SentBytes + e.Bandwidth.RecvBytes
-			}
-		}
-		api.dhtMirror.Mirror(entries, totalBW)
-	}
-
 	// Check if sync=true query param is set - return all transports for local route calculation
 	syncParam := r.URL.Query().Get("sync")
 	if syncParam == "true" {

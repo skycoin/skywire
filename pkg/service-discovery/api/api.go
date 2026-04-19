@@ -93,13 +93,6 @@ type API struct {
 	uptimesV2Cache []store.VisorSummary
 	uptimesMu      sync.RWMutex
 
-	// dhtMirror publishes service entries to the DHT on registration.
-	dhtMirror interface{ Mirror(entry interface{}, seq uint64) }
-}
-
-// SetDHTMirror sets a mirror that publishes service entries to the DHT.
-func (a *API) SetDHTMirror(m interface{ Mirror(entry interface{}, seq uint64) }) {
-	a.dhtMirror = m
 }
 
 // New creates an API.
@@ -415,11 +408,6 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 		sErr.Log(a.log)
 		a.writeError(w, r, sErr.HTTPStatus, sErr.Err)
 		return
-	}
-
-	// Mirror to DHT for decentralized service lookup.
-	if a.dhtMirror != nil {
-		a.dhtMirror.Mirror(&se, uint64(se.ID))
 	}
 
 	// Record heartbeat for uptime tracking — piggybacks on the 90s

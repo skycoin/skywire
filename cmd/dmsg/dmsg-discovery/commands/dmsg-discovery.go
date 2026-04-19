@@ -243,7 +243,10 @@ Example:
 				}
 			}()
 
-			// Start DHT full node and mirror entries to it.
+			// Start DHT full node. The discovery server participates
+			// as a DHT bootstrap peer (every visor knows its PK).
+			// Entries are NOT mirrored server-side — only the owning
+			// visor can publish to the DHT (owner-only updates).
 			dhtTP := dht.NewDMSGTransport(dmsgDC)
 			dhtCfg := dht.Config{
 				BootstrapPKs: deployment.Prod.DHTBootstrapPKs(),
@@ -254,9 +257,7 @@ Example:
 				log.WithError(dhtErr).Warn("DHT node failed to start")
 			} else {
 				defer dhtNode.Stop() //nolint:errcheck
-				mirror := dht.NewEntryMirror(dhtNode, "dmsg", logging.MustGetLogger("dht:mirror"))
-				a.SetDHTMirror(mirror)
-				log.WithField("id", dhtNode.ID().String()[:16]).Info("DHT full node + entry mirror active")
+				log.WithField("id", dhtNode.ID().String()[:16]).Info("DHT full node active (bootstrap peer)")
 			}
 		}
 

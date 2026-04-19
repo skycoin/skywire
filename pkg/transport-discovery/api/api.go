@@ -73,9 +73,6 @@ type API struct {
 	// When set, transport register/deregister operations publish to CXO subscribers.
 	cxoPublisher CXOPublisher
 
-	// dhtMirror, if non-nil, asynchronously publishes transport entries
-	// to the DHT on every successful registration.
-	dhtMirror interface{ Mirror(entry interface{}, seq uint64) }
 }
 
 // CXOPublisher is the interface for publishing transport data to CXO.
@@ -187,12 +184,6 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 
 // SetCXOPublisher enables CXO distribution of transport data.
 // When set, register/deregister operations publish changes to CXO subscribers.
-// SetDHTMirror sets a mirror that publishes transport entries to the DHT
-// on every successful registration.
-func (api *API) SetDHTMirror(m interface{ Mirror(entry interface{}, seq uint64) }) {
-	api.dhtMirror = m
-}
-
 func (api *API) SetCXOPublisher(p CXOPublisher) {
 	api.cxoPublisher = p
 }
