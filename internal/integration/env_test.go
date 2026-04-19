@@ -71,7 +71,7 @@ func NewEnv() *TestEnv {
 			"/transport-discovery",
 			"/address-resolver",
 			"/service-discovery",
-			"/network-monitor",
+			// "/network-monitor", // intentionally disabled in production deployment
 			"/uptime-tracker",
 		},
 		visorNames: []string{
