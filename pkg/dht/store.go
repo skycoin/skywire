@@ -103,6 +103,30 @@ func (s *Store) SetTrustPolicy(trust *TrustPolicy, publicPoolSize, rateLimitPerP
 	}
 }
 
+// PutMirror stores an item under an explicit target key, bypassing
+// the normal target derivation (SHA256(item.K || salt)). Used by
+// deployment services to mirror entries: the item is signed by the
+// service's key but stored under the visor's target so lookups by
+// visor PK find it. The item's signature is still verified.
+func (s *Store) PutMirror(target NodeID, item MutableItem) {
+	if err := item.Verify(); err != nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Accept if newer than existing, or if no existing item.
+	if existing, ok := s.items[target]; ok {
+		if item.Seq <= existing.item.Seq {
+			return
+		}
+	}
+	s.items[target] = &storedItem{
+		item:     item,
+		storedAt: time.Now(),
+	}
+}
+
 // Put stores an item, enforcing monotonic sequence numbers, trust
 // tier eviction rules, and per-PK rate limits for public items.
 func (s *Store) Put(item MutableItem) error {

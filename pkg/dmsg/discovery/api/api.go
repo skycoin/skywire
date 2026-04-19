@@ -50,6 +50,13 @@ type API struct {
 	authPassphrase              string
 	OfficialServers             map[string]bool
 
+	// dhtMirror mirrors entries to the DHT under the visor's PK-derived
+	// target. The mirror signs with its own key but stores under the
+	// visor's target so DHT lookups by visor PK find the entry.
+	dhtMirror interface {
+		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+	}
+
 	// clientEntryTTL is the Redis expiration applied to client entries
 	// on POST /dmsg-discovery/entry. Clients refresh their entry every
 	// DefaultUpdateInterval*5 (5 minutes), so a TTL of 60 minutes
@@ -146,6 +153,12 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	r.Get("/health", api.serviceHealth)
 
 	return api
+}
+
+// SetDHTMirror sets a mirror that publishes entries to the DHT on every
+// successful SetEntry.
+func (a *API) SetDHTMirror(m interface{ Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64) }) {
+	a.dhtMirror = m
 }
 
 func (a *API) log(r *http.Request) logrus.FieldLogger {
@@ -413,6 +426,11 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			// Mirror to DHT under the visor's PK.
+			if a.dhtMirror != nil {
+				a.dhtMirror.Mirror(entry.Static, entry, entry.Sequence)
+			}
+
 			// Record heartbeat for uptime tracking on new client entries.
 			if entry.Client != nil {
 				_ = a.db.RecordHeartbeat(r.Context(), entry.Static, entry.ClientType) //nolint:errcheck
@@ -436,6 +454,11 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 		if err := a.db.SetEntry(r.Context(), entry, entryTimeout); err != nil {
 			a.handleError(w, r, err)
 			return
+		}
+
+		// Mirror to DHT under the visor's PK.
+		if a.dhtMirror != nil {
+			a.dhtMirror.Mirror(entry.Static, entry, entry.Sequence)
 		}
 
 		// Record heartbeat for uptime tracking on client entry updates.

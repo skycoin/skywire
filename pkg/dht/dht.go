@@ -153,6 +153,43 @@ func (n *Node) Put(ctx context.Context, value []byte, seq uint64, salt []byte) e
 	return nil
 }
 
+// PutSigned publishes a pre-signed mutable item to the DHT on behalf of
+// another publisher. The item must already have K (publisher PK), Seq,
+// Sig, V, and Salt set. The signature is verified against K — the caller
+// does NOT need the publisher's secret key.
+//
+// Use case: deployment services mirroring entries from old visors that
+// don't dual-write to the DHT. The entry's own signature (created by
+// the visor) proves authenticity; the DHT node just distributes it.
+func (n *Node) PutSigned(ctx context.Context, item MutableItem) error {
+	if err := item.Verify(); err != nil {
+		return fmt.Errorf("dht: invalid pre-signed item: %w", err)
+	}
+
+	// Store locally.
+	_ = n.store.Put(item) //nolint:errcheck
+
+	// Find K closest nodes to the target and push the item.
+	target := item.Target()
+	closest, _, err := n.iterativeLookup(ctx, target, false)
+	if err != nil {
+		return fmt.Errorf("dht: put-signed lookup: %w", err)
+	}
+
+	var putErrors int
+	for _, p := range closest {
+		if err := n.rpcPutValue(ctx, p, item); err != nil {
+			putErrors++
+		}
+	}
+
+	if len(closest) > 0 && putErrors == len(closest) {
+		return fmt.Errorf("dht: put-signed failed on all %d peers", len(closest))
+	}
+
+	return nil
+}
+
 // Get retrieves a mutable item from the DHT by publisher pubkey and salt.
 func (n *Node) Get(ctx context.Context, pk cipher.PubKey, salt []byte) (*MutableItem, error) {
 	target := (&MutableItem{K: pk, Salt: salt}).Target()
@@ -252,6 +289,24 @@ func (n *Node) rpcPutValue(ctx context.Context, p Peer, item MutableItem) error 
 	return nil
 }
 
+func (n *Node) rpcPutMirror(ctx context.Context, p Peer, item MutableItem, target NodeID) error {
+	ctx, cancel := rpcCtx(ctx)
+	defer cancel()
+
+	conn, err := n.tp.Dial(ctx, p.PK)
+	if err != nil {
+		return err
+	}
+	defer conn.Close() //nolint:errcheck,gosec
+
+	req := PutValueRequest{SenderID: n.id, SenderPK: n.pk, Item: item, MirrorTarget: target}
+	var resp PutValueResponse
+	if err := rpcCall(ctx, conn, methodPutValue, req, &resp); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (n *Node) rpcPing(ctx context.Context, p Peer) error {
 	ctx, cancel := rpcCtx(ctx)
 	defer cancel()
@@ -335,10 +390,16 @@ func (n *Node) handleConn(conn io.ReadWriteCloser, remotePK cipher.PubKey) {
 		if json.Unmarshal(data, &req) != nil {
 			return
 		}
-		err := n.store.Put(req.Item)
-		resp := PutValueResponse{Stored: err == nil}
-		if err != nil {
-			resp.Error = err.Error()
+		var putErr error
+		if !req.MirrorTarget.IsZero() {
+			// Mirrored entry: store under the explicit target.
+			n.store.PutMirror(req.MirrorTarget, req.Item)
+		} else {
+			putErr = n.store.Put(req.Item)
+		}
+		resp := PutValueResponse{Stored: putErr == nil}
+		if putErr != nil {
+			resp.Error = putErr.Error()
 		}
 		writeMsg(conn, methodPutValue, resp) //nolint:errcheck,gosec
 	}

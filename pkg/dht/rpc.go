@@ -64,6 +64,10 @@ type PutValueRequest struct {
 	SenderID NodeID        `json:"sender_id"`
 	SenderPK cipher.PubKey `json:"sender_pk"`
 	Item     MutableItem   `json:"item"`
+	// MirrorTarget, if non-zero, overrides the item's natural target.
+	// Used by deployment services to mirror entries under a visor's
+	// PK-derived target even though the item is signed by the service.
+	MirrorTarget NodeID `json:"mirror_target,omitempty"`
 }
 
 // PutValueResponse indicates whether the item was stored.

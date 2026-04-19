@@ -257,7 +257,9 @@ Example:
 				log.WithError(dhtErr).Warn("DHT node failed to start")
 			} else {
 				defer dhtNode.Stop() //nolint:errcheck
-				log.WithField("id", dhtNode.ID().String()[:16]).Info("DHT full node active (bootstrap peer)")
+				mirror := dht.NewEntryMirror(dhtNode, "dmsg", logging.MustGetLogger("dht:mirror"))
+				a.SetDHTMirror(mirror)
+				log.WithField("id", dhtNode.ID().String()[:16]).Info("DHT full node + entry mirror active")
 			}
 		}
 
