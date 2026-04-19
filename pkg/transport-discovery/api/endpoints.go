@@ -44,10 +44,6 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		}
 		// Publish to CXO subscribers
 		api.publishTransportToCXO(entry.Entry)
-		// Mirror to DHT for decentralized lookup
-		if api.dhtMirror != nil && entry.Entry != nil {
-			api.dhtMirror.Mirror(entry, entry.Entry.Bandwidth)
-		}
 		if entryVersion == "" && entry.Version != "" {
 			entryVersion = entry.Version
 		}
@@ -65,6 +61,20 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		if err := api.store.RecordHeartbeat(r.Context(), pk, entryVersion); err != nil {
 			api.log(r).WithError(err).Debug("Failed to record heartbeat from transport registration")
 		}
+	}
+
+	// Mirror the full batch to the DHT. The entire SignedEntry array
+	// (including bandwidth and latency) is published as one DHT item
+	// per registering visor, keyed by the auth PK + salt "tp".
+	if api.dhtMirror != nil && len(entries) > 0 {
+		// Use total bandwidth across all entries as a monotonic seq proxy.
+		var totalBW uint64
+		for _, e := range entries {
+			if e.Bandwidth != nil {
+				totalBW += e.Bandwidth.SentBytes + e.Bandwidth.RecvBytes
+			}
+		}
+		api.dhtMirror.Mirror(entries, totalBW)
 	}
 
 	// Check if sync=true query param is set - return all transports for local route calculation
