@@ -1222,6 +1222,11 @@ func (rc *rpcClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
 	return &resp, nil
 }
 
+// AddHypervisor connects to a remote hypervisor at runtime.
+func (rc *rpcClient) AddHypervisor(pk cipher.PubKey) error {
+	return rc.Call("AddHypervisor", &pk, &struct{}{})
+}
+
 // DmsgSetMinSessions updates the minimum DMSG session count.
 func (rc *rpcClient) DmsgSetMinSessions(n int) error {
 	return rc.Call("DmsgSetMinSessions", &n, &struct{}{})

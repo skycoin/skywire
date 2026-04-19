@@ -63,10 +63,6 @@ The filter argument uses [jq syntax](https://jqlang.github.io/jq/manual/).
 | Config field | Runtime command |
 |---|---|
 | `dmsg.sessions_count` | `skywire cli dmsg set-sessions <n>` |
-| — (connect to all) | `skywire cli dmsg connect-all` |
-| — (force reconnect) | `skywire cli dmsg diag reconnect` |
-| — (reset port space) | `skywire cli dmsg diag porter-reset` |
-| — (check port usage) | `skywire cli dmsg diag porter` |
 | `dmsg.discovery` | Not changeable at runtime |
 | `dmsg.servers` | Not changeable at runtime |
 | `dmsg.protocol` | Not changeable at runtime |
@@ -78,27 +74,17 @@ Config gen: [`MINDMSGSESS`](VISOR_CONFIG_GEN.md#deployment)
 | Config field | Runtime command |
 |---|---|
 | `transport.public_autoconnect` | `skywire cli tp auto on\|off` |
-| — (status) | `skywire cli tp auto` |
-| — (add transport) | `skywire cli tp add <pk> [--type stcpr\|sudph\|dmsg]` |
-| — (remove transport) | `skywire cli tp rm -i <id>` or `skywire cli tp rm -a` |
 | `transport.stcpr_port` | Not changeable at runtime |
 | `transport.sudph_port` | Not changeable at runtime |
 
-Config gen: [`VISORISPUBLIC`](VISOR_CONFIG_GEN.md#transports), [`DISABLEPUBLICAUTOCONN`](VISOR_CONFIG_GEN.md#transports)
+Config gen: [`VISORISPUBLIC`](VISOR_CONFIG_GEN.md#transports), [`STCPRPORT`](VISOR_CONFIG_GEN.md#transports)
 
 ## Routing (`routing`)
 
 | Config field | Runtime command |
 |---|---|
-| `routing.min_hops` | `skywire cli route calc --min <n>` (per-query) |
-| — (set min hops globally) | Via RPC: `SetMinHops` |
-| — (enable local routes) | `skywire cli route calc --enable` |
-| — (disable local routes) | `skywire cli route calc --disable` |
-| — (view rules) | `skywire cli route` |
-| — (add rule) | `skywire cli route add a <pk> <port>` |
-| — (remove rule) | `skywire cli route rm <id>` |
-| — (list route groups) | `skywire cli route groups` |
-| — (RSN stats) | `skywire cli route rsn-stats [--reset]` |
+| `routing.min_hops` | `skywire cli route minhops <n>` |
+| `routing.calculate_routes` | `skywire cli route calc --enable\|--disable` |
 | `routing.route_setup_nodes` | Not changeable at runtime |
 
 Config gen: [`ROUTESETUPPKS`](VISOR_CONFIG_GEN.md#routing), [`CALCULATEROUTES`](VISOR_CONFIG_GEN.md#routing)
@@ -107,58 +93,28 @@ Config gen: [`ROUTESETUPPKS`](VISOR_CONFIG_GEN.md#routing), [`CALCULATEROUTES`](
 
 | Config field | Runtime command |
 |---|---|
-| — (list apps) | `skywire cli visor app ls` |
-| — (start app) | `skywire cli visor app start <name>` |
-| — (stop app) | `skywire cli visor app stop <name>` |
 | `launcher.apps[].auto_start` | `skywire cli visor app arg autostart <name> true\|false` |
 | app killswitch | `skywire cli visor app arg killswitch <name> true\|false` |
 | app secure mode | `skywire cli visor app arg secure <name> true\|false` |
 | app network interface | `skywire cli visor app arg netifc <name> <iface\|remove>` |
 | app passcode | `skywire cli visor app arg passcode <name> <code>` |
 
-### VPN
+### Resolving Proxies (`dmsg_web` / `skynet_web`)
 
-| Action | Runtime command |
+| Config field | Runtime command |
 |---|---|
-| Start VPN client | `skywire cli vpn start` |
-| Stop VPN client | `skywire cli vpn stop` |
-| VPN client status | `skywire cli vpn status` |
-| Start VPN server | `skywire cli vpn server start` |
-| Stop VPN server | `skywire cli vpn server stop` |
-| VPN server status | `skywire cli vpn server status` |
+| `dmsg_web.enable` | `skywire cli visor proxies set dmsg on\|off` |
+| `skynet_web.enable` | `skywire cli visor proxies set skynet on\|off` |
+| upstream SOCKS5 | `skywire cli visor proxies upstream <dmsg\|skynet> <addr>` |
 
-Config gen: [`VPNSERVER`](VISOR_CONFIG_GEN.md#apps), [`ADDVPNPK`](VISOR_CONFIG_GEN.md#apps), [`VPNKS`](VISOR_CONFIG_GEN.md#apps)
-
-### Proxy (Skysocks)
-
-| Action | Runtime command |
-|---|---|
-| Start proxy server | `skywire cli proxy server start` |
-| Stop proxy server | `skywire cli proxy server stop` |
-| Start proxy client | `skywire cli proxy start` |
-| Stop proxy client | `skywire cli proxy stop` |
-| Proxy status | `skywire cli proxy status` |
-
-Config gen: [`PROXYSERVER`](VISOR_CONFIG_GEN.md#apps), [`PROXYCLIENTPK`](VISOR_CONFIG_GEN.md#apps)
-
-### Resolving Proxies (dmsgweb / skynetweb)
-
-| Action | Runtime command |
-|---|---|
-| Show proxy status | `skywire cli visor proxies` |
-| Enable/disable | `skywire cli visor proxies set <dmsg\|skynet> <on\|off>` |
-| Set upstream SOCKS5 | `skywire cli visor proxies upstream <dmsg\|skynet> <addr>` |
+Config gen: [`VPNSERVER`](VISOR_CONFIG_GEN.md#apps), [`PROXYSERVER`](VISOR_CONFIG_GEN.md#apps)
 
 ## Hypervisor (`hypervisor`)
 
 | Config field | Runtime command |
 |---|---|
 | `hypervisor.enable` | `skywire cli visor hv enable\|disable` |
-| — (status) | `skywire cli visor hv status` |
-| — (open UI) | `skywire cli visor hv ui` |
-| — (hypervisor PK) | `skywire cli visor hv pk` |
-| — (connected HV PKs) | `skywire cli visor hv cpk` |
-| `hypervisors` (remote HV PKs) | Not changeable at runtime |
+| `hypervisors` (add remote HV) | `skywire cli visor hv add <pk>` |
 
 Config gen: [`ISHYPERVISOR`](VISOR_CONFIG_GEN.md#hypervisor), [`HYPERVISORPKS`](VISOR_CONFIG_GEN.md#remote-access)
 
@@ -183,8 +139,6 @@ Config gen: [`SURVEYPKS`](VISOR_CONFIG_GEN.md#remote-access)
 | Config field | Runtime command |
 |---|---|
 | `reward_address` | `skywire cli reward <address>` |
-| — (read) | `skywire cli reward -r` |
-| — (delete) | `skywire cli reward -d` |
 
 Config gen: [`REWARDSKYADDR`](VISOR_CONFIG_GEN.md#rewards)
 
@@ -193,9 +147,6 @@ Config gen: [`REWARDSKYADDR`](VISOR_CONFIG_GEN.md#rewards)
 | Config field | Runtime command |
 |---|---|
 | `dht.full_node` | `skywire cli visor dht full-node on\|off` |
-| — (status) | `skywire cli visor dht status` |
-| — (get value) | `skywire cli visor dht get <pk> [salt]` |
-| — (put value) | `skywire cli visor dht put <value> [salt]` |
 | `dht.bootstrap_pks` | Not changeable at runtime |
 | `dht.whitelisted_pks` | Not changeable at runtime |
 | `dht.trusted_pks` | Not changeable at runtime |
@@ -207,11 +158,8 @@ Config gen: [DHT configuration](VISOR_CONFIG_GEN.md#dht-configuration-optional)
 Port forwarding is stored in `local/forwarded_ports.json`, not in
 the visor config. Changes are both immediate and persistent.
 
-| Action | Runtime command |
+| Config field | Runtime command |
 |---|---|
-| Forward a port | `skywire cli skynet port add <port> [--local-port <n>] [--label <s>]` |
-| Remove a port | `skywire cli skynet port rm <port>` |
-| List ports | `skywire cli skynet port ls` |
-| Website on port 80 | `skywire cli skynet port add 80 --proxy-addr 127.0.0.1:<port>` |
+| forwarded ports | `skywire cli skynet port add\|rm\|ls` |
 
 See also: [Skynet forwarding guide](docs/skywire_forwarding.md)

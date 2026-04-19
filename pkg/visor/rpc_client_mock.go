@@ -1172,6 +1172,11 @@ func (mc *mockRPCClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
 	return &DmsgPorterStatus{}, nil
 }
 
+// AddHypervisor implements API.
+func (mc *mockRPCClient) AddHypervisor(_ cipher.PubKey) error {
+	return nil
+}
+
 // DmsgSetMinSessions implements API.
 func (mc *mockRPCClient) DmsgSetMinSessions(_ int) error {
 	return nil

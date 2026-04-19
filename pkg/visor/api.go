@@ -237,6 +237,7 @@ type API interface {
 	DmsgPorterReset() (*DmsgPorterStatus, error)
 	DmsgReconnect() (int, error)
 	DmsgSetMinSessions(n int) error
+	AddHypervisor(pk cipher.PubKey) error
 
 	// Close closes the API connection (for RPC clients)
 	Close() error

@@ -1640,6 +1640,12 @@ func (r *RPC) DmsgSetMinSessions(in *int, _ *struct{}) (err error) {
 	return r.visor.DmsgSetMinSessions(*in)
 }
 
+// AddHypervisor connects to a remote hypervisor at runtime.
+func (r *RPC) AddHypervisor(in *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "AddHypervisor", in)(nil, &err)
+	return r.visor.AddHypervisor(*in)
+}
+
 // DmsgReconnect forces DMSG session reconnection.
 func (r *RPC) DmsgReconnect(_ *struct{}, out *int) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgReconnect", nil)(out, &err)
