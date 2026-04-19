@@ -77,23 +77,28 @@ Config gen: [`MINDMSGSESS`](VISOR_CONFIG_GEN.md#deployment)
 
 | Config field | Runtime command |
 |---|---|
+| `transport.public_autoconnect` | `skywire cli tp auto on\|off` |
+| — (status) | `skywire cli tp auto` |
 | — (add transport) | `skywire cli tp add <pk> [--type stcpr\|sudph\|dmsg]` |
 | — (remove transport) | `skywire cli tp rm -i <id>` or `skywire cli tp rm -a` |
-| `transport.public_autoconnect` | Not changeable at runtime |
 | `transport.stcpr_port` | Not changeable at runtime |
 | `transport.sudph_port` | Not changeable at runtime |
 
-Config gen: [`VISORISPUBLIC`](VISOR_CONFIG_GEN.md#transports), [`STCPRPORT`](VISOR_CONFIG_GEN.md#transports)
+Config gen: [`VISORISPUBLIC`](VISOR_CONFIG_GEN.md#transports), [`DISABLEPUBLICAUTOCONN`](VISOR_CONFIG_GEN.md#transports)
 
 ## Routing (`routing`)
 
 | Config field | Runtime command |
 |---|---|
+| `routing.min_hops` | `skywire cli route calc --min <n>` (per-query) |
+| — (set min hops globally) | Via RPC: `SetMinHops` |
+| — (enable local routes) | `skywire cli route calc --enable` |
+| — (disable local routes) | `skywire cli route calc --disable` |
 | — (view rules) | `skywire cli route` |
 | — (add rule) | `skywire cli route add a <pk> <port>` |
 | — (remove rule) | `skywire cli route rm <id>` |
+| — (list route groups) | `skywire cli route groups` |
 | — (RSN stats) | `skywire cli route rsn-stats [--reset]` |
-| `routing.min_hops` | Not changeable at runtime |
 | `routing.route_setup_nodes` | Not changeable at runtime |
 
 Config gen: [`ROUTESETUPPKS`](VISOR_CONFIG_GEN.md#routing), [`CALCULATEROUTES`](VISOR_CONFIG_GEN.md#routing)
@@ -136,6 +141,14 @@ Config gen: [`VPNSERVER`](VISOR_CONFIG_GEN.md#apps), [`ADDVPNPK`](VISOR_CONFIG_G
 
 Config gen: [`PROXYSERVER`](VISOR_CONFIG_GEN.md#apps), [`PROXYCLIENTPK`](VISOR_CONFIG_GEN.md#apps)
 
+### Resolving Proxies (dmsgweb / skynetweb)
+
+| Action | Runtime command |
+|---|---|
+| Show proxy status | `skywire cli visor proxies` |
+| Enable/disable | `skywire cli visor proxies set <dmsg\|skynet> <on\|off>` |
+| Set upstream SOCKS5 | `skywire cli visor proxies upstream <dmsg\|skynet> <addr>` |
+
 ## Hypervisor (`hypervisor`)
 
 | Config field | Runtime command |
@@ -143,7 +156,9 @@ Config gen: [`PROXYSERVER`](VISOR_CONFIG_GEN.md#apps), [`PROXYCLIENTPK`](VISOR_C
 | `hypervisor.enable` | `skywire cli visor hv enable\|disable` |
 | — (status) | `skywire cli visor hv status` |
 | — (open UI) | `skywire cli visor hv ui` |
-| `hypervisors` | Not changeable at runtime |
+| — (hypervisor PK) | `skywire cli visor hv pk` |
+| — (connected HV PKs) | `skywire cli visor hv cpk` |
+| `hypervisors` (remote HV PKs) | Not changeable at runtime |
 
 Config gen: [`ISHYPERVISOR`](VISOR_CONFIG_GEN.md#hypervisor), [`HYPERVISORPKS`](VISOR_CONFIG_GEN.md#remote-access)
 
