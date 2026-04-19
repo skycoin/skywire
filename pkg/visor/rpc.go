@@ -1606,6 +1606,12 @@ func (r *RPC) DHTPut(in *DHTPutIn, _ *struct{}) (err error) {
 	return r.visor.DHTPut(in.Value, in.Seq, in.Salt)
 }
 
+// DHTSetFullNode enables or disables full node mode.
+func (r *RPC) DHTSetFullNode(in *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTSetFullNode", in)(nil, &err)
+	return r.visor.DHTSetFullNode(*in)
+}
+
 // DmsgPorterStats returns ephemeral port reservation counts.
 func (r *RPC) DmsgPorterStats(_ *struct{}, out *DmsgPorterStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgPorterStats", nil)(out, &err)

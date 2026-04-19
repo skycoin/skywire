@@ -1199,6 +1199,11 @@ func (rc *rpcClient) DHTPut(value []byte, seq uint64, salt string) error {
 	return rc.Call("DHTPut", &DHTPutIn{Value: value, Seq: seq, Salt: salt}, &struct{}{})
 }
 
+// DHTSetFullNode enables or disables full node mode.
+func (rc *rpcClient) DHTSetFullNode(full bool) error {
+	return rc.Call("DHTSetFullNode", &full, &struct{}{})
+}
+
 // DmsgPorterStats returns ephemeral port reservation counts.
 func (rc *rpcClient) DmsgPorterStats() (*DmsgPorterStatus, error) {
 	var resp DmsgPorterStatus

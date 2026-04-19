@@ -1192,6 +1192,11 @@ func (mc *mockRPCClient) DHTPut(_ []byte, _ uint64, _ string) error {
 	return fmt.Errorf("DHT not available in mock")
 }
 
+// DHTSetFullNode implements API.
+func (mc *mockRPCClient) DHTSetFullNode(_ bool) error {
+	return fmt.Errorf("DHT not available in mock")
+}
+
 // Close implements API.
 func (mc *mockRPCClient) Close() error {
 	return nil

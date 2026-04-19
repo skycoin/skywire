@@ -230,6 +230,7 @@ type API interface {
 	DHTStatus() (*DHTStatus, error)
 	DHTGet(pk string, salt string) ([]byte, error)
 	DHTPut(value []byte, seq uint64, salt string) error
+	DHTSetFullNode(full bool) error
 
 	// DMSG diagnostics
 	DmsgPorterStats() (*DmsgPorterStatus, error)

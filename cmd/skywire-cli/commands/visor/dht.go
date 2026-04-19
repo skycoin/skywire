@@ -15,6 +15,7 @@ func init() {
 	dhtCmd.AddCommand(dhtStatusCmd)
 	dhtCmd.AddCommand(dhtGetCmd)
 	dhtCmd.AddCommand(dhtPutCmd)
+	dhtCmd.AddCommand(dhtFullNodeCmd)
 	RootCmd.AddCommand(dhtCmd)
 }
 
@@ -94,5 +95,39 @@ var dhtPutCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		fmt.Println("Published to DHT.")
+	},
+}
+
+var dhtFullNodeCmd = &cobra.Command{
+	Use:   "full-node <on|off>",
+	Short: "Enable or disable DHT full node mode at runtime",
+	Long: `Full node mode stores all DHT items regardless of XOR distance.
+Normal nodes only store items close to their own ID.
+
+  on  — store everything (deployment servers, bootstrap peers)
+  off — store only nearby items (default for regular visors)`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var full bool
+		switch args[0] {
+		case "on", "true", "1":
+			full = true
+		case "off", "false", "0":
+			full = false
+		default:
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("expected on/off, got %q", args[0]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if err := rpcClient.DHTSetFullNode(full); err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if full {
+			fmt.Println("DHT full node mode enabled (storing all items).")
+		} else {
+			fmt.Println("DHT full node mode disabled (storing nearby items only).")
+		}
 	},
 }

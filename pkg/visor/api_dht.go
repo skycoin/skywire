@@ -37,6 +37,15 @@ func (v *Visor) DHTStatus() (*DHTStatus, error) {
 	}, nil
 }
 
+// DHTSetFullNode enables or disables full node mode at runtime.
+func (v *Visor) DHTSetFullNode(full bool) error {
+	if v.dhtNode == nil {
+		return fmt.Errorf("DHT node not running")
+	}
+	v.dhtNode.Store().SetFullNode(full)
+	return nil
+}
+
 // DHTPut publishes a value to the DHT under the visor's own key.
 func (v *Visor) DHTPut(value []byte, seq uint64, salt string) error {
 	if v.dhtNode == nil {

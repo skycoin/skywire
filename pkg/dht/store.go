@@ -90,6 +90,24 @@ func NewStore(maxItems int, ttl time.Duration) *Store {
 	}
 }
 
+// SetFullNode enables or disables full node mode (store all items).
+func (s *Store) SetFullNode(full bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if full {
+		s.maxItems = 0 // unlimited
+	} else if s.maxItems == 0 {
+		s.maxItems = 10000 // restore default
+	}
+}
+
+// IsFullNode returns true if the store has no item capacity limit.
+func (s *Store) IsFullNode() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.maxItems == 0
+}
+
 // SetTrustPolicy updates the trust policy and pool limits.
 func (s *Store) SetTrustPolicy(trust *TrustPolicy, publicPoolSize, rateLimitPerPK int) {
 	s.mu.Lock()
