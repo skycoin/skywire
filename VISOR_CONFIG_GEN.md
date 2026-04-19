@@ -2,7 +2,7 @@
 
 This document covers generating and customizing the visor config file with `skywire cli config gen`.
 
-For runtime configuration (changing a running visor without editing config), see [VISOR_RUNTIME.md](VISOR_RUNTIME.md).
+For runtime configuration (changing a running visor without editing config), see [VISOR_CONFIG_RUNTIME.md](VISOR_CONFIG_RUNTIME.md).
 
 ## Quick Start
 
@@ -213,14 +213,14 @@ The generated `skywire-config.json` contains these top-level sections:
 
 | Section | Description | Runtime equivalent |
 |---------|-------------|--------------------|
-| `dmsg` | DMSG client configuration | [DMSG management](VISOR_RUNTIME.md#dmsg-management) |
+| `dmsg` | DMSG client configuration | [DMSG management](VISOR_CONFIG_RUNTIME.md#dmsg-management) |
 | `dmsgpty` | Pseudoterminal access | — |
-| `transport` | Transport layer config | [Transport management](VISOR_RUNTIME.md#transport-management) |
-| `routing` | Route setup nodes, route finder | [Route management](VISOR_RUNTIME.md#route-management) |
-| `launcher` | App launcher, service discovery | [App management](VISOR_RUNTIME.md#app-management) |
-| `dht` | Kademlia DHT (optional) | [DHT management](VISOR_RUNTIME.md#dht) |
+| `transport` | Transport layer config | [Transport management](VISOR_CONFIG_RUNTIME.md#transport-management) |
+| `routing` | Route setup nodes, route finder | [Route management](VISOR_CONFIG_RUNTIME.md#route-management) |
+| `launcher` | App launcher, service discovery | [App management](VISOR_CONFIG_RUNTIME.md#app-management) |
+| `dht` | Kademlia DHT (optional) | [DHT management](VISOR_CONFIG_RUNTIME.md#dht) |
 | `rewards` | Reward system UI config | — |
-| `hypervisor` | Hypervisor web UI | [Hypervisor](VISOR_RUNTIME.md#hypervisor) |
+| `hypervisor` | Hypervisor web UI | [Hypervisor](VISOR_CONFIG_RUNTIME.md#hypervisor) |
 
 ### DHT Configuration (optional)
 
@@ -262,4 +262,4 @@ skywire cli config update --set-minhop 1              # minimum route hops
 ```
 
 For runtime changes that take effect immediately (without restart),
-see [VISOR_RUNTIME.md](VISOR_RUNTIME.md).
+see [VISOR_CONFIG_RUNTIME.md](VISOR_CONFIG_RUNTIME.md).
