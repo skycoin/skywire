@@ -85,6 +85,56 @@ type Services struct {
 	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
 }
 
+// DHTBootstrapPKs returns the public keys of deployment services that
+// serve as DHT bootstrap peers. These are the same services already
+// known to every visor — DMSG discovery, transport discovery, etc.
+func (s *Services) DHTBootstrapPKs() []cipher.PubKey {
+	var pks []cipher.PubKey
+	// Extract PKs from DMSG URLs (dmsg://<pk>:<port>)
+	for _, url := range []string{
+		s.DmsgDiscoveryDmsg,
+		s.TransportDiscoveryDmsg,
+		s.AddressResolverDmsg,
+		s.RouteFinderDmsg,
+		s.UptimeTrackerDmsg,
+		s.ServiceDiscoveryDmsg,
+	} {
+		if pk := pkFromDmsgURL(url); !pk.Null() {
+			pks = append(pks, pk)
+		}
+	}
+	// DMSG servers are also good bootstrap peers
+	for _, srv := range s.DmsgServers {
+		var pk cipher.PubKey
+		if err := pk.Set(srv.Static); err == nil {
+			pks = append(pks, pk)
+		}
+	}
+	return pks
+}
+
+// pkFromDmsgURL extracts a PubKey from a "dmsg://<pk>:<port>" URL.
+func pkFromDmsgURL(url string) cipher.PubKey {
+	// Strip "dmsg://" prefix
+	const prefix = "dmsg://"
+	if len(url) < len(prefix) {
+		return cipher.PubKey{}
+	}
+	s := url[len(prefix):]
+	// Strip ":<port>" suffix
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == ':' {
+			s = s[:i]
+			break
+		}
+	}
+	var pk cipher.PubKey
+	if err := pk.Set(s); err != nil {
+		return cipher.PubKey{}
+	}
+	return pk
+}
+
 // Conf is the configuration URL for the deployment which may be fetched on `skywire cli config gen`
 type Conf struct {
 	Conf string `json:"conf,omitempty"`

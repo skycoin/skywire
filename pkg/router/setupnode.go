@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -25,8 +26,9 @@ var log = logging.MustGetLogger("setup_node")
 
 // Node performs routes setup operations over messaging channel.
 type Node struct {
-	dmsgC *dmsg.Client
-	pool  *ClientPool // reusable RPC connections to remote visors
+	dmsgC   *dmsg.Client
+	pool    *ClientPool     // reusable RPC connections to remote visors
+	cascade *CascadeBuilder // nil = cascade disabled (DMSG-only mode)
 }
 
 // DmsgClient returns the setup node's DMSG client.
@@ -62,7 +64,49 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 		dmsgC: dmsgC,
 		pool:  NewClientPool(dialer, DefaultPoolTTL),
 	}
+
+	// Initialize cascade builder if cascade config is present.
+	// The transport manager for the RSN is initialized separately
+	// by the caller (cmd/setup-node) since it requires network
+	// factory configuration that depends on the deployment environment.
+	if conf.Cascade != nil {
+		conf.Cascade.SetCascadeDefaults()
+		log.Info("Cascade route setup enabled")
+	}
+
 	return node, nil
+}
+
+// InitCascade initializes the cascade builder with a transport manager.
+// Must be called after the RSN's transport manager is set up by the caller.
+// This separation exists because the transport manager requires deployment-
+// specific configuration (STCPR listen address, AR client, etc.) that the
+// RSN's core doesn't control.
+func (sn *Node) InitCascade(conf *SetupConfig, tm *transport.Manager) {
+	if conf.Cascade == nil || tm == nil {
+		return
+	}
+	cb := NewCascadeBuilder(log, conf.PK, conf.SK, tm)
+	cb.SetTimeouts(conf.Cascade.ReserveTimeout, conf.Cascade.InstallTimeout)
+
+	// Register the cascade ACK handler on the transport manager so
+	// the builder can receive ACKs from cascade messages it sends.
+	tm.SetCascadeHandler(func(p routing.Packet, mt *transport.ManagedTransport) {
+		if p.Type() == routing.CascadeAckPacket {
+			cb.HandleAck(p, mt)
+		}
+		// CascadeSetupPacket on RSN transports would be unexpected
+		// (RSN doesn't process setup messages from others), but log
+		// for debugging.
+		if p.Type() == routing.CascadeSetupPacket {
+			log.Warn("Received unexpected CascadeSetupPacket on RSN transport")
+		}
+	})
+
+	sn.cascade = cb
+	log.WithField("reserve_timeout", conf.Cascade.ReserveTimeout).
+		WithField("install_timeout", conf.Cascade.InstallTimeout).
+		Info("Cascade builder initialized")
 }
 
 // Pool returns the setup node's connection pool.
@@ -124,6 +168,64 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 	// Semaphore to limit concurrent handler goroutines.
 	sem := make(chan struct{}, maxConcurrentHandlers)
 
+	// Start transport-level RPC accept loop if cascade is enabled.
+	// Visors that have a direct "setup" transport (or relay through a neighbor)
+	// send SetupRPCPacket virtual streams instead of DMSG.
+	if sn.cascade != nil && sn.cascade.tm != nil {
+		setupMux := transport.NewVStreamMux(sn.cascade.tm, routing.SetupRPCPacket, log)
+		sn.cascade.tm.SetSetupRPCHandler(setupMux.HandlePacket)
+
+		go func() {
+			defer setupMux.Close() //nolint:errcheck,gosec
+			for {
+				stream, err := setupMux.Accept()
+				if err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					log.WithError(err).Warn("SetupRPC vstream accept failed")
+					return
+				}
+
+				select {
+				case sem <- struct{}{}:
+				case <-ctx.Done():
+					stream.Close() //nolint:errcheck,gosec
+					return
+				}
+
+				handlerCtx, handlerCancel := context.WithTimeout(ctx, handlerTimeout)
+				gw := &SetupRPCGateway{
+					Metrics: m,
+					Ctx:     handlerCtx,
+					Conn:    nil, // no raw conn for vstream handlers
+					ReqPK:   stream.RemotePK(),
+					Dialer:  WrapDmsgClient(sn.dmsgC),
+					Pool:    sn.pool,
+					Cascade: sn.cascade,
+					Timeout: timeout,
+				}
+				rpcS := rpc.NewServer()
+				if err := rpcS.Register(gw); err != nil {
+					log.WithError(err).Error("Failed to register vstream RPC gateway")
+					stream.Close()  //nolint:errcheck,gosec
+					handlerCancel() //nolint:gosec
+					<-sem
+					continue
+				}
+				go func() {
+					defer func() {
+						handlerCancel()
+						stream.Close() //nolint:errcheck,gosec
+						<-sem
+					}()
+					rpcS.ServeConn(stream)
+				}()
+			}
+		}()
+		log.Info("SetupRPC virtual stream accept loop started (transport-level)")
+	}
+
 	log.WithField("dmsg_port", dmsgPort).
 		WithField("max_concurrent", maxConcurrentHandlers).
 		Info("Accepting dmsg streams.")
@@ -144,7 +246,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
-			conn.Close() //nolint:errcheck,gosec
+			conn.Close() //nolint:errcheck,gosec,gosec
 			return nil
 		}
 
@@ -159,12 +261,13 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 			ReqPK:   conn.RemoteAddr().(dmsg.Addr).PK,
 			Dialer:  WrapDmsgClient(sn.dmsgC),
 			Pool:    sn.pool,
+			Cascade: sn.cascade,
 			Timeout: timeout,
 		}
 		rpcS := rpc.NewServer()
 		if err := rpcS.Register(gw); err != nil {
 			log.WithError(err).Error("Failed to register RPC gateway")
-			conn.Close()    //nolint:errcheck,gosec
+			conn.Close()    //nolint:errcheck,gosec,gosec
 			handlerCancel() //nolint:gosec
 			<-sem           // release the slot
 			continue
@@ -175,13 +278,13 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 					log.Errorf("Panic in setup RPC handler: %v", r)
 				}
 				handlerCancel()
-				conn.Close() //nolint:errcheck,gosec
+				conn.Close() //nolint:errcheck,gosec,gosec
 				<-sem        // release the handler slot
 			}()
 			// Set a hard deadline on the connection itself as a backstop.
 			// If context cancellation fails to propagate (e.g., ServeConn blocks
 			// on a read), the OS will close the connection after this deadline.
-			conn.SetDeadline(time.Now().Add(handlerTimeout)) //nolint:errcheck,gosec
+			conn.SetDeadline(time.Now().Add(handlerTimeout)) //nolint:errcheck,gosec,gosec
 			rpcS.ServeConn(conn)
 		}()
 	}
@@ -202,7 +305,7 @@ var ErrCircuitOpen = fmt.Errorf("route setup: destination circuit breaker open")
 // * Intermediary rules are broadcasted to the intermediary routers.
 // * Edge rules are broadcasted to the responding router.
 // * Edge rules is returned (to the initiating router).
-func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPool, biRt routing.BidirectionalRoute, metrics setupmetrics.Metrics) (resp routing.EdgeRules, err error) {
+func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPool, cascade *CascadeBuilder, biRt routing.BidirectionalRoute, metrics setupmetrics.Metrics) (resp routing.EdgeRules, err error) {
 	log := logging.MustGetLogger(fmt.Sprintf("request:%s->%s", biRt.Desc.SrcPK(), biRt.Desc.DstPK()))
 	log.Info("Processing request.")
 	// If the metrics implementation is a Collector, use the richer
@@ -237,6 +340,16 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 		return routing.EdgeRules{}, err
 	}
 
+	// Try cascade path if a CascadeBuilder is available.
+	if cascade != nil {
+		cascadeResp, cascadeErr := createRouteGroupCascade(ctx, log, cascade, biRt)
+		if cascadeErr == nil {
+			return cascadeResp, nil
+		}
+		log.WithError(cascadeErr).Warn("Cascade route setup failed, falling back to DMSG")
+	}
+
+	// DMSG-based path (existing protocol).
 	// Reserve route IDs from remote routers.
 	rtIDR, err := ReserveRouteIDs(ctx, log, dialer, pool, biRt)
 	if err != nil {
@@ -246,7 +359,7 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 		if err != nil {
 			// On failure, discard connections (they may be broken).
 			log.Debug("Discarding route id reserver connections (error path).")
-			rtIDR.Close() //nolint:errcheck,gosec
+			rtIDR.Close() //nolint:errcheck,gosec,gosec
 		} else if pool != nil {
 			// On success, return connections to pool for reuse.
 			log.Debug("Returning route id reserver connections to pool.")

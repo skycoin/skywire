@@ -87,7 +87,7 @@ func extractPK(rawURL string) string {
 
 func printHealthResults(cmd *cobra.Command, results []skyvisor.ServiceHealthEntry) {
 	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "SERVICE\tSTATUS\tLATENCY\tTRANSPORT\tVERSION\tPK") //nolint:errcheck,gosec
+	fmt.Fprintln(tw, "SERVICE\tSTATUS\tLATENCY\tPROTOCOL\tVERSION\tPK") //nolint:errcheck,gosec
 	for _, r := range results {
 		transport := r.Transport
 		if transport == "" {

@@ -11,6 +11,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/noise"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
@@ -69,6 +70,16 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 // Serve starts transport listening loop.
 func (r *router) Serve(ctx context.Context) error {
 	r.logger.Debug("Starting router")
+
+	// Initialize cascade handler so visors can process cascade route
+	// setup messages arriving on route ID 0 of any transport.
+	trustedPKs := make([]cipher.PubKey, 0, len(r.trustedVisors))
+	for pk := range r.trustedVisors {
+		trustedPKs = append(trustedPKs, pk)
+	}
+	ch := NewCascadeHandler(r.logger, r.conf.PubKey, trustedPKs, r.rt, r.tm)
+	r.tm.SetCascadeHandler(ch.HandlePacket)
+	r.logger.WithField("trusted_rsns", len(trustedPKs)).Debug("Cascade handler registered")
 
 	go r.serveTransportManager(ctx)
 

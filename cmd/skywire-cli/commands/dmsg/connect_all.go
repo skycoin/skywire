@@ -62,17 +62,11 @@ waiting on phase-3 new-session dials during route setup.`,
 var setSessionsCmd = &cobra.Command{
 	Use:   "set-sessions",
 	Short: "Persist dmsg.sessions_count and connect-all immediately",
-	Long: `Updates the dmsg.sessions_count setting in the visor's config
-file (so it survives restart) and immediately triggers a connect-all
-action so the running dmsg client reaches the new session target
-without needing a restart.
+	Long: `Updates the dmsg.sessions_count at runtime and in the config file.
 
-Note: the live dmsg client's internal MinSessions is not currently
-mutated at runtime — the persisted value takes full effect only on
-the next visor restart. The connect-all one-shot supplements this by
-opening any sessions that are currently missing. Once the visor
-restarts, the reconnect loop will maintain the persisted count on an
-ongoing basis.
+The live DMSG client's MinSessions is updated immediately, the config
+file is persisted (survives restart), and a connect-all is triggered
+to reach the new target right away.
 
 A value of 0 means "connect to all available servers and keep
 reconnecting to any that drop" — recommended for RSN / TPS visors.`,
@@ -84,11 +78,16 @@ reconnecting to any that drop" — recommended for RSN / TPS visors.`,
 		if setSessionsCount < 0 {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("count must be >= 0"))
 		}
+		// Update the live DMSG client's MinSessions at runtime.
+		if err := rpcClient.DmsgSetMinSessions(setSessionsCount); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set runtime MinSessions: %w", err))
+		}
+		// Persist to config and trigger connect-all.
 		result, err := rpcClient.SetDmsgSessionsCount(setSessionsCount)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("Updated dmsg.sessions_count = %d (persisted to config)\n\n", setSessionsCount)
+		fmt.Printf("Updated dmsg.sessions_count = %d (runtime + persisted)\n\n", setSessionsCount)
 		printConnectAllResult(cmd, result)
 	},
 }

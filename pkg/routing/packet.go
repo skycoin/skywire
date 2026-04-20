@@ -57,6 +57,14 @@ func (t PacketType) String() string {
 		return "TransportPing"
 	case TransportPongPacket:
 		return "TransportPong"
+	case CascadeSetupPacket:
+		return "CascadeSetup"
+	case CascadeAckPacket:
+		return "CascadeAck"
+	case DHTPacket:
+		return "DHT"
+	case SetupRPCPacket:
+		return "SetupRPC"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -81,13 +89,18 @@ const (
 	SACKPacket
 	TransportPingPacket // transport-level ping (route ID = 0), payload: timestamp (8 bytes, unix nano)
 	TransportPongPacket // transport-level pong (route ID = 0), payload: timestamp (8 bytes, echoed)
+	CascadeSetupPacket  // cascade route setup (route ID = 0), payload: serialized CascadeSetup
+	CascadeAckPacket    // cascade acknowledgment (route ID = 0), payload: serialized CascadeAck
+	DHTPacket           // DHT RPC over transport (route ID = 0), payload: DHT message
+	SetupRPCPacket      // RSN RPC relay over transport (route ID = 0), payload: virtual stream data
 )
 
 // Capability bitmap flags for extended handshake negotiation.
 // Transmitted as a little-endian uint16 at HandshakePacket payload bytes 1-2.
 const (
-	CapMux  uint16 = 1 << 0 // Supports route multiplexing (sequenced DataPackets)
-	CapSACK uint16 = 1 << 1 // Supports SACK retransmission
+	CapMux     uint16 = 1 << 0 // Supports route multiplexing (sequenced DataPackets)
+	CapSACK    uint16 = 1 << 1 // Supports SACK retransmission
+	CapCascade uint16 = 1 << 2 // Supports cascade route setup protocol
 )
 
 // SeqSize is the byte size of the sequence number prepended to DataPacket
@@ -319,6 +332,30 @@ func MakeTransportPongPacket(timestamp int64) Packet {
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], TransportPingPayloadSize)
 	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp)) //nolint:gosec
 	return packet
+}
+
+// MakeCascadeSetupPacket constructs a cascade setup packet (route ID = 0).
+func MakeCascadeSetupPacket(payload []byte) (Packet, error) {
+	if len(payload) > math.MaxUint16 {
+		return nil, ErrPayloadTooBig
+	}
+	packet := make([]byte, PacketHeaderSize+len(payload))
+	packet[PacketTypeOffset] = byte(CascadeSetupPacket)
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(payload))) //nolint:gosec
+	copy(packet[PacketPayloadOffset:], payload)
+	return packet, nil
+}
+
+// MakeCascadeAckPacket constructs a cascade ACK packet (route ID = 0).
+func MakeCascadeAckPacket(payload []byte) (Packet, error) {
+	if len(payload) > math.MaxUint16 {
+		return nil, ErrPayloadTooBig
+	}
+	packet := make([]byte, PacketHeaderSize+len(payload))
+	packet[PacketTypeOffset] = byte(CascadeAckPacket)
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(payload))) //nolint:gosec
+	copy(packet[PacketPayloadOffset:], payload)
+	return packet, nil
 }
 
 // Type returns Packet's type.
