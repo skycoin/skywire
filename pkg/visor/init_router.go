@@ -134,14 +134,16 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	rfClient := rfclient.NewHTTP(rfURL, time.Duration(conf.RouteFinderTimeout), httpC, v.MasterLogger())
 	logger := v.MasterLogger().PackageLogger("router")
 
-	// Use embedded route setup-node if available, otherwise use remote setup-nodes
-	var rgDialer router.RouteGroupDialer
+	// Set up route group dialer with all available capabilities:
+	// embedded RSN, transport relay, and DMSG fallback.
+	var embeddedRSN router.EmbeddedSetupNode
 	if v.embeddedRouteSetup != nil {
 		log.WithField("route_setup_pk", v.embeddedRouteSetup.PK()).Info("Using embedded route setup-node for routing")
-		rgDialer = router.NewSetupNodeDialerWithEmbedded(v.embeddedRouteSetup)
-	} else {
-		rgDialer = router.NewSetupNodeDialer()
+		embeddedRSN = v.embeddedRouteSetup
 	}
+
+	relayCache := router.NewRSNRelayCache(logger)
+	rgDialer := router.NewSetupNodeDialerFull(embeddedRSN, relayCache, v.tpM)
 
 	rConf := router.Config{
 		Logger:           logger,
