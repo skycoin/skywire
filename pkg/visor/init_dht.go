@@ -101,8 +101,6 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 		WithField("full_node", fullNode).
 		Info("DHT node started")
 
-
-
 	// Wrap discovery clients with DHT hybrid clients so reads try
 	// DHT first, fall back to HTTP. Writes go to both.
 	discAdapter := dht.NewDiscAdapter(node, log)
