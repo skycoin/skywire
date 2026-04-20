@@ -3,12 +3,10 @@ package visor
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"time"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/dht"
-	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -103,12 +101,6 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 		WithField("full_node", fullNode).
 		Info("DHT node started")
 
-	// Register full DHT nodes in service discovery so other visors
-	// can discover them as additional bootstrap peers.
-	if fullNode {
-		go dhtRegisterFullNode(ctx, v, log) //nolint:gosec
-	}
-
 	// Wrap discovery clients with DHT hybrid clients so reads try
 	// DHT first, fall back to HTTP. Writes go to both.
 	discAdapter := dht.NewDiscAdapter(node, log)
@@ -152,50 +144,6 @@ func dhtPublishLoop(ctx context.Context, v *Visor, node *dht.Node, log *logging.
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-		}
-	}
-}
-
-// dhtRegisterFullNode registers this visor as a DHT full node in
-// service discovery so other visors can discover it as a bootstrap peer.
-func dhtRegisterFullNode(ctx context.Context, v *Visor, log *logging.Logger) {
-	sdAddr := ""
-	if v.conf.Launcher != nil && v.conf.Launcher.ServiceDisc != "" {
-		sdAddr = v.conf.Launcher.ServiceDisc
-	}
-	if sdAddr == "" {
-		log.Warn("DHT full node: no service discovery address; skipping registration")
-		return
-	}
-
-	sdConf := servicedisc.Config{
-		Type:     servicedisc.ServiceTypeDHTNode,
-		PK:       v.conf.PK,
-		SK:       v.conf.SK,
-		Port:     100, // DHT DMSG port
-		DiscAddr: sdAddr,
-	}
-	sdClient := servicedisc.NewClient(log, logging.NewMasterLogger(), sdConf, &http.Client{}, "")
-
-	// Initial registration.
-	if err := sdClient.Register(ctx); err != nil {
-		log.WithError(err).Warn("DHT full node: initial SD registration failed")
-	} else {
-		log.Info("DHT full node registered in service discovery")
-	}
-
-	// Periodic heartbeat (same interval as other services: 90s).
-	ticker := time.NewTicker(90 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			sdClient.DeleteEntry(context.Background()) //nolint:errcheck,gosec
-			return
-		case <-ticker.C:
-			if err := sdClient.Register(ctx); err != nil {
-				log.WithError(err).Trace("DHT full node: SD heartbeat failed")
-			}
 		}
 	}
 }
