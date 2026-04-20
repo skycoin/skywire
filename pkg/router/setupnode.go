@@ -25,8 +25,9 @@ var log = logging.MustGetLogger("setup_node")
 
 // Node performs routes setup operations over messaging channel.
 type Node struct {
-	dmsgC *dmsg.Client
-	pool  *ClientPool // reusable RPC connections to remote visors
+	dmsgC   *dmsg.Client
+	pool    *ClientPool     // reusable RPC connections to remote visors
+	cascade *CascadeBuilder // nil = cascade disabled (DMSG-only mode)
 }
 
 // DmsgClient returns the setup node's DMSG client.
@@ -159,6 +160,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 			ReqPK:   conn.RemoteAddr().(dmsg.Addr).PK,
 			Dialer:  WrapDmsgClient(sn.dmsgC),
 			Pool:    sn.pool,
+			Cascade: sn.cascade,
 			Timeout: timeout,
 		}
 		rpcS := rpc.NewServer()
@@ -202,7 +204,7 @@ var ErrCircuitOpen = fmt.Errorf("route setup: destination circuit breaker open")
 // * Intermediary rules are broadcasted to the intermediary routers.
 // * Edge rules are broadcasted to the responding router.
 // * Edge rules is returned (to the initiating router).
-func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPool, biRt routing.BidirectionalRoute, metrics setupmetrics.Metrics) (resp routing.EdgeRules, err error) {
+func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPool, cascade *CascadeBuilder, biRt routing.BidirectionalRoute, metrics setupmetrics.Metrics) (resp routing.EdgeRules, err error) {
 	log := logging.MustGetLogger(fmt.Sprintf("request:%s->%s", biRt.Desc.SrcPK(), biRt.Desc.DstPK()))
 	log.Info("Processing request.")
 	// If the metrics implementation is a Collector, use the richer
@@ -237,6 +239,16 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 		return routing.EdgeRules{}, err
 	}
 
+	// Try cascade path if a CascadeBuilder is available.
+	if cascade != nil {
+		cascadeResp, cascadeErr := createRouteGroupCascade(ctx, log, cascade, biRt)
+		if cascadeErr == nil {
+			return cascadeResp, nil
+		}
+		log.WithError(cascadeErr).Warn("Cascade route setup failed, falling back to DMSG")
+	}
+
+	// DMSG-based path (existing protocol).
 	// Reserve route IDs from remote routers.
 	rtIDR, err := ReserveRouteIDs(ctx, log, dialer, pool, biRt)
 	if err != nil {

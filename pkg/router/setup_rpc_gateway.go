@@ -21,7 +21,8 @@ type SetupRPCGateway struct {
 	Conn    net.Conn
 	ReqPK   cipher.PubKey
 	Dialer  network.Dialer
-	Pool    *ClientPool // optional: reuse connections across requests
+	Pool    *ClientPool     // optional: reuse connections across requests
+	Cascade *CascadeBuilder // optional: cascade route setup
 	Timeout time.Duration
 }
 
@@ -39,7 +40,7 @@ func (g *SetupRPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules
 	// subsequent route setups fail with "read/write on closed pipe".
 	// Context cancellation will propagate naturally through CreateRouteGroup.
 
-	initRules, err := CreateRouteGroup(ctx, g.Dialer, g.Pool, route, g.Metrics)
+	initRules, err := CreateRouteGroup(ctx, g.Dialer, g.Pool, g.Cascade, route, g.Metrics)
 	if err != nil {
 		log.WithError(err).Warn("CreateRouteGroup failed")
 		return err

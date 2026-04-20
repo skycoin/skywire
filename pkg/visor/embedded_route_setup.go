@@ -195,7 +195,7 @@ func (ers *EmbeddedRouteSetup) CreateRouteGroup(ctx context.Context, biRt routin
 		metrics = ers.stats
 	}
 
-	return router.CreateRouteGroup(ctx, dialer, nil, biRt, metrics)
+	return router.CreateRouteGroup(ctx, dialer, nil, nil, biRt, metrics)
 }
 
 // Stats returns the current collector snapshot. Returns a zero-value
