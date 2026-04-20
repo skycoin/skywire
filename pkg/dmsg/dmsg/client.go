@@ -410,6 +410,47 @@ func (ce *Client) AllSessions() []ClientSession {
 	return ce.allClientSessions(ce.porter)
 }
 
+// SetMinSessions updates the minimum session count at runtime.
+// The reconnect loop will use the new value on its next iteration.
+func (ce *Client) SetMinSessions(n int) {
+	ce.sesMx.Lock()
+	defer ce.sesMx.Unlock()
+	ce.conf.MinSessions = n
+}
+
+// MinSessions returns the current minimum session count.
+func (ce *Client) MinSessions() int {
+	ce.sesMx.Lock()
+	defer ce.sesMx.Unlock()
+	return ce.conf.MinSessions
+}
+
+// PorterCount returns the number of reserved ephemeral ports.
+func (ce *Client) PorterCount() int {
+	return ce.porter.Count()
+}
+
+// ResetPorter frees all ephemeral port reservations, recovering from
+// port exhaustion. Well-known ports (listeners) are preserved.
+// Returns the number of ports freed.
+func (ce *Client) ResetPorter() int {
+	return ce.porter.ResetEphemeral()
+}
+
+// PorterDiag returns detailed diagnostic information about ephemeral
+// port reservations. This helps identify what is holding ports when
+// the porter approaches exhaustion.
+func (ce *Client) PorterDiag() netutil.EphemeralDiagResult {
+	return ce.porter.EphemeralDiag()
+}
+
+// SweepStalePorterEntries closes and frees ephemeral port entries older
+// than maxAge. Returns the number of entries swept. This is a safety net
+// for streams that leak through the normal cleanup paths.
+func (ce *Client) SweepStalePorterEntries(maxAge time.Duration) int {
+	return ce.porter.SweepStaleEphemeral(maxAge)
+}
+
 // ForceReconnect closes every active server session. The reconnect loop
 // (15 s cadence) and delSession → nudgeEntryUpdate path together will
 // re-dial fresh sessions and refresh the discovery entry's

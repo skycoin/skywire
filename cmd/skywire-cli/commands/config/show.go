@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/itchyny/gojq"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -22,12 +23,21 @@ func init() {
 }
 
 var showCmd = &cobra.Command{
-	Use:   "show",
+	Use:   "show [jq-filter]",
 	Short: "Show the running visor's config",
 	Long: `Print the configuration currently in use by the running visor.
-Use --path to print just the config file path.
-Use --json for machine-readable output.`,
-	Run: func(cmd *cobra.Command, _ []string) {
+
+An optional jq filter can be provided to extract specific fields:
+
+  skywire cli config show .dmsg
+  skywire cli config show .transport.public_autoconnect
+  skywire cli config show '.launcher.apps[] | .name'
+  skywire cli config show .dht
+  skywire cli config show .routing.route_setup_nodes
+
+Use --path to print just the config file path.`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
 		if showPath {
 			// Try RPC first to get the actual path the visor is using
 			rpcClient, err := clirpc.Client(cmd.Flags())
@@ -47,36 +57,55 @@ Use --json for machine-readable output.`,
 			return
 		}
 
+		// Get the config JSON — try RPC first, then file fallback.
+		var configData []byte
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			// Fallback: try to read the config file directly
 			configPath := visorconfig.SkywireConfig()
 			data, readErr := os.ReadFile(configPath) //nolint:gosec
 			if readErr != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("visor not running and config not found at %s: %v", configPath, readErr))
 			}
-			// Pretty-print
-			var v interface{}
-			if err := json.Unmarshal(data, &v); err == nil {
-				pretty, _ := json.MarshalIndent(v, "", "  ") //nolint:errcheck
-				internal.PrintOutput(cmd.Flags(), v, string(pretty)+"\n")
-			} else {
-				fmt.Println(string(data))
+			configData = data
+		} else {
+			configData, err = rpcClient.GetRuntimeConfig()
+			if err != nil {
+				internal.PrintFatalRPCError(cmd.Flags(), err)
+			}
+		}
+
+		var v interface{}
+		if err := json.Unmarshal(configData, &v); err != nil {
+			fmt.Println(string(configData))
+			return
+		}
+
+		// Apply jq filter if provided.
+		if len(args) > 0 && args[0] != "" {
+			query, err := gojq.Parse(args[0])
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid filter %q: %w", args[0], err))
+			}
+			code, err := gojq.Compile(query)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("compile filter: %w", err))
+			}
+			iter := code.Run(v)
+			for {
+				result, ok := iter.Next()
+				if !ok {
+					break
+				}
+				if err, isErr := result.(error); isErr {
+					internal.PrintFatalError(cmd.Flags(), err)
+				}
+				out, _ := json.MarshalIndent(result, "", "  ") //nolint:errcheck
+				fmt.Println(string(out))
 			}
 			return
 		}
 
-		configJSON, err := rpcClient.GetRuntimeConfig()
-		if err != nil {
-			internal.PrintFatalRPCError(cmd.Flags(), err)
-		}
-
-		var v interface{}
-		if err := json.Unmarshal(configJSON, &v); err == nil {
-			pretty, _ := json.MarshalIndent(v, "", "  ") //nolint:errcheck
-			internal.PrintOutput(cmd.Flags(), v, string(pretty)+"\n")
-		} else {
-			fmt.Println(string(configJSON))
-		}
+		pretty, _ := json.MarshalIndent(v, "", "  ") //nolint:errcheck
+		internal.PrintOutput(cmd.Flags(), v, string(pretty)+"\n")
 	},
 }

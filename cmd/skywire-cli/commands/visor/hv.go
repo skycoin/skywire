@@ -31,6 +31,7 @@ func init() {
 	hvCmd.AddCommand(hvDisableCmd)
 	hvDisableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
 	hvCmd.AddCommand(hvStatusCmd)
+	hvCmd.AddCommand(hvAddCmd)
 }
 
 var hvCmd = &cobra.Command{
@@ -163,5 +164,28 @@ var hvStatusCmd = &cobra.Command{
 		} else {
 			internal.PrintOutput(cmd.Flags(), "disabled\n", "disabled\n")
 		}
+	},
+}
+
+var hvAddCmd = &cobra.Command{
+	Use:   "add <public-key>",
+	Short: "Connect to a remote hypervisor at runtime",
+	Long: `Add a remote hypervisor connection at runtime without editing
+the config file. The visor connects to the hypervisor immediately
+via DMSG. Not persisted — use SKYENV HYPERVISORPKS for persistence.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var pk cipher.PubKey
+		if err := pk.Set(args[0]); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid public key: %w", err))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if err := rpcClient.AddHypervisor(pk); err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		fmt.Printf("Connected to hypervisor %s\n", pk)
 	},
 }

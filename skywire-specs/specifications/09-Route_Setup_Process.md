@@ -1,9 +1,48 @@
 # Route Setup Process
 
-1. Route paths are uni-directional. So, the whole route between 2 visors consists of forward and reverse paths. *Setup node* receives both of these paths in the routes setup request. 
-2. For each node along both paths *Setup node* calculates how many rules are to be applied.
-3. *Setup node* connects to all the node along both paths and sends `ReserveIDs` request to reserve available rule IDs needed to setup the route.
-4. *Setup node* creates rules the following way. Let's consider visor A setting up route to visor B. This way we have forward path `A->B` and reverse path `B->A`. For forward path we create `Forward` rule for visor `A`, `IntermediaryForward` rules for each node between `A` and `B`, and `Consume` rule for `B`. For reverse path we create `Forward` rule for visor `B`, `IntermediaryForward` rules for each visor between `B` and `A`, and `Consume` rule for `A`.
-5. *Setup node* sends all the created `IntermediaryForward` rules to corresponding visors to be applied.
-6. *Setup node* sends `Consume` and `Forward` rules to visor `B` (remote in our case).
-7. *Setup node* sends `Forward` and `Consume` rules to visor `A` in response to the route setup request.
+Route setup is coordinated by a trusted Route Setup Node (RSN). The process establishes a bidirectional route between two visors (source and destination) across one or more intermediate hops.
+
+## Protocol
+
+1. The source visor sends a `DialRouteGroup` RPC to the RSN with a `BidirectionalRoute` containing the forward path (source → destination) and reverse path (destination → source). Each path is a sequence of hops, where each hop references a transport ID.
+
+2. The RSN checks the per-destination circuit breaker. If the destination has too many recent failures, the request is fast-failed with `ErrCircuitOpen`.
+
+3. The RSN connects to every visor along both paths via DMSG port 136 (`DmsgAwaitSetupPort`). Connections are reused from the `ClientPool` when available; fresh dials use a 10-second timeout.
+
+4. The RSN sends `ReserveIDs` to each visor to reserve the required number of route IDs. The number of IDs per visor is determined by how many rules that visor will receive.
+
+5. The RSN generates routing rules:
+   - For the forward path `A → X → Y → B`:
+     - Visor A: `ForwardRule(routeID_A, routeID_X, transportID_AX, srcPK=A, dstPK=B, srcPort, dstPort)`
+     - Visor X: `IntermediaryForwardRule(routeID_X, routeID_Y, transportID_XY)`
+     - Visor Y: `IntermediaryForwardRule(routeID_Y, routeID_B, transportID_YB)`
+     - Visor B: `ConsumeRule(routeID_B, srcPK=A, dstPK=B, srcPort, dstPort)`
+   - For the reverse path `B → Y → X → A`: same pattern in reverse.
+
+6. The RSN broadcasts `IntermediaryForward` rules to intermediary visors (X, Y) concurrently.
+
+7. The RSN sends the responding edge rules (Forward + Consume) to visor B via `AddEdgeRules`.
+
+8. The RSN returns the initiating edge rules (Forward + Consume) to visor A as the RPC response.
+
+## Post-Setup Handshake
+
+After the RSN distributes the rules, the two edge visors (A and B) perform a Noise protocol handshake over the newly established route:
+
+1. The initiator (A) sends a `HandshakePacket` with encryption flag and capability bitmap.
+2. The responder (B) receives the handshake, negotiates capabilities, and sends its own `HandshakePacket`.
+3. Both sides wrap the route group in a Noise-encrypted `NoiseRouteGroup`.
+
+The handshake has a timeout (`handshakeAwaitTimeout`). If the remote visor is old (doesn't support encryption), the timeout expires and the route proceeds unencrypted.
+
+## Failure Handling
+
+- If any `ReserveIDs` call fails, the entire setup fails. Connections used in the attempt are discarded from the pool.
+- If `AddEdgeRules` on the destination fails, the setup fails and reserved IDs on other visors expire via their routing rule TTL.
+- On success, connections are returned to the pool for reuse.
+- The circuit breaker tracks consecutive failures per destination PK and opens after the threshold is reached, preventing further dial attempts for a cooldown period.
+
+## Route Keepalive
+
+Routes have a `KeepAlive` duration (default 24 hours). The `servicePacketLoop` on each route group sends periodic `KeepAlivePacket` frames at the configured interval. Rules that are not refreshed within their keepalive window are garbage-collected by the routing table's expiry sweep.

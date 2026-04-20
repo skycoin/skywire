@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -225,6 +226,21 @@ type API interface {
 	TPSExternalHealthCheck(tpsPK cipher.PubKey) error
 	TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error)
 	TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]TPSTransportResponse, error)
+
+	// DHT operations
+	DHTStatus() (*DHTStatus, error)
+	DHTGet(pk string, salt string) ([]byte, error)
+	DHTPut(value []byte, seq uint64, salt string) error
+	DHTSetFullNode(full bool) error
+
+	// DMSG diagnostics
+	DmsgPorterStats() (*DmsgPorterStatus, error)
+	DmsgPorterReset() (*DmsgPorterStatus, error)
+	DmsgPorterDiag() (*netutil.EphemeralDiagResult, error)
+	DmsgReconnect() (int, error)
+	DmsgSetMinSessions(n int) error
+	AddHypervisor(pk cipher.PubKey) error
+	CheckAREntry(pk string) ([]string, error)
 
 	// Close closes the API connection (for RPC clients)
 	Close() error
