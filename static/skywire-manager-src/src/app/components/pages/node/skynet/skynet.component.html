@@ -15,6 +15,7 @@
       <table class="data-table" *ngIf="ports.length > 0">
         <tr>
           <th>Port</th>
+          <th>Local</th>
           <th>Label</th>
           <th>Skynet</th>
           <th>DMSG</th>
@@ -23,6 +24,7 @@
         </tr>
         <tr *ngFor="let fp of ports">
           <td class="mono">{{ fp.port }}</td>
+          <td class="mono">{{ fp.local_port || fp.port }}</td>
           <td>{{ fp.label || '-' }}</td>
           <td>
             <mat-checkbox [checked]="fp.skynet" (change)="toggleSkynet(fp)" color="primary"></mat-checkbox>
@@ -46,8 +48,12 @@
       <div class="add-form">
         <div class="add-row">
           <mat-form-field appearance="outline" class="field-sm">
-            <mat-label>Port</mat-label>
-            <input matInput [(ngModel)]="newPort" placeholder="8080" type="number">
+            <mat-label>Skynet Port</mat-label>
+            <input matInput [(ngModel)]="newPort" placeholder="80" type="number">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="field-sm">
+            <mat-label>Local Port</mat-label>
+            <input matInput [(ngModel)]="newLocalPort" placeholder="3000" type="number">
           </mat-form-field>
           <mat-form-field appearance="outline" class="field-md">
             <mat-label>Label</mat-label>

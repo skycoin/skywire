@@ -1,113 +1,79 @@
 # Transport Management
 
-For all Skywire Node types, we need a universal way for managing and logging Transports. The structure that is responsible for this is the `TransportManager` (which should be within the `/pkg/node` package of the `skywire` package).
+The *Transport Manager* (`pkg/transport/manager.go`) is responsible for creating, accepting, managing, and logging all transports for a visor.
 
-As the `TransportManager` needs to interact with the *Transport Discovery* and other Skywire Nodes, it should have access to the local node's public and private key identity.
+## Responsibilities
 
-The following is a proposed implementation of `TransportManager`;
+1. **Network client initialization** — creates transport-type-specific network clients (STCPR, SUDPH, STCP, DMSG) based on the visor's configuration
+2. **Transport lifecycle** — dial outbound transports, accept inbound transports, serve read loops, close and deregister on shutdown
+3. **Transport Discovery registration** — registers transports with the TPD on creation and re-registers every 90 seconds with updated bandwidth/latency data
+4. **Bandwidth and latency tracking** — each managed transport tracks cumulative bytes sent/received and RTT via transport-level ping
+5. **Label management** — assigns transport labels (`skycoin`, `automatic`, `user`) and propagates the initiator's label to the responder during settlement
 
-```golang
-package node
+## Transport Creation
 
-// Transport wraps a 'transport.Transport' implementation and contains 
-// associated/useful for the 'transport.Transport' implementation.
-type Transport struct {
-    transport.Transport
-    ID          uuid.UUID
-    // more fields ...
-}
+### `SaveTransport(ctx, remotePK, netType, label)`
 
-// TransportManagerConfig configures a TransportManager.
-type TransportManagerConfig struct {
-	PubKey          cipher.PubKey     // Local PubKey
-	SecKey          cipher.SecKey     // Local SecKey
-	DiscoveryClient client.Client     // Transport discovery client
-	LogStore        TransportLogStore // Store for transport's transfer rates
-}
+Creates a transport to a remote visor:
 
-// TransportManager manages Transports.
-type TransportManager struct {
-    // Members...
-}
+1. Checks if a transport to the remote PK of the same type already exists
+2. If an existing transport exists and has active routes (checked via `RouteChecker`), the creation is rejected to protect in-flight traffic
+3. Dials the remote visor using the type-specific network client
+4. Performs the settlement handshake (exchange Entry data, agree on Transport ID)
+5. Starts the managed transport's `Serve` loop (readLoop, logLoop, pingLoop)
+6. Registers the `SignedEntry` with the Transport Discovery
 
-// NewTransportManager creates a TransportManager with the provided configuration and transport factories.
-// 'factories' should be ordered by preference.
-func NewTransportManager(config *TransportManagerConfig, factories ...transport.Factory) (*TransportManager, error) { /* ... */ }
+### Transport Acceptance
 
-// Start starts the transport manager.
-// - 'ctx' can end the transport listening operation.
-func (tm *TransportManager) Serve(ctx context.Context) error { /* ... */ }
+The manager runs accept loops for each initialized network client. When a remote visor initiates a transport:
 
-// Observe returns channel for notifications about new Transport
-// registration. Only single observer can listen for on a channel.
-func (tm *TransportManager) Observe() <-chan *Transport { /* ... */ }
+1. The accept loop receives the incoming connection
+2. Performs the settlement handshake
+3. Adopts the initiator's transport label
+4. Starts the managed transport's `Serve` loop
 
-// Factories returns all the factory types contained within the TransportManager.
-func (tm *TransportManager) Factories() []string { /* ... */ }
+## Re-Registration
 
-// Transport obtains a Transport via a given Transport ID.
-func (tm *TransportManager) Transport(id uuid.UUID) (*Transport, bool) { /* ... */ }
+Every 90 seconds (`transportReRegisterInterval`), the manager re-registers all active transports with the Transport Discovery:
 
-// RangeTransports ranges all Transports.
-// Should return when 'action' returns a non-nil error.
-func (tm *TransportManager) RangeAllTransports(action TransportAction) error { /* ... */ }
+1. Collects `SignedEntry` for each non-closed transport, including:
+   - Current latency stats (from transport-level ping)
+   - Cumulative bandwidth (sent + received bytes)
+   - Visor version string
+2. Calls `DiscoveryClient.RegisterTransports(entries...)`
+3. Optionally syncs all TPD data back for local route calculation (`sync_tpd_data` config)
+4. Records a heartbeat for integrated uptime tracking
 
-// CreateTransport begins to attempt to establish transports to the given 'remote' node.
-// This should be a non-blocking operation and any failures or future Transport disconnections
-// should be dealt with with retries (under a given time interval).
-// - 'remote' specifies the remote node to attempt to establish the Transports with.
-// - 'tpType' is the transport type that is to be created.
-// - 'public' determines whether the Transports established should be advertised to Transport Discovery.
-// If a transport is not to be public, a random transport ID is assigned.
-func (tm *TransportManager) CreateTransport(ctx context.Context, remote cipher.PubKey, tpType string, public bool) (*Transport, error) { /* ... */ }
+## Batch Deregistration
 
-// DeleteTransport disconnects and removes the Transport of Transport ID.
-func (tm *TransportManager) DeleteTransport(id uuid.UUID) error { /* ... */ }
-```
+When transports close, their IDs are queued for deferred batch deletion from the TPD instead of making individual HTTP calls. The batch deletion loop runs periodically and sends a single `DeleteTransports` request.
 
-## Transport Manager Procedures
+## Configuration
 
-The transport manager is responsible for keeping track of established transports (via the `transport.Entry` and the `transport.Status` structures). The `transport.Entry` structure describes and identifies transports, while `transport.Status` keeps track of whether the transport is up or down (based on the perspective of the local node).
-
-If the *Transport Manager* wishes to confirm transport information, it can query the *Transport Discovery* via the `GET /transports/edge:<public-key>` endpoint. Note that it is expected of the *Transport Manager* to call this endpoint on startup.
-
-When a transport is "closed" it is only considered "down", not "destroyed".
-
-The following highlights detailed startup and shutdown procedures of a *Transport Manager*;
-
-**Startup:**
-
-On startup, the `TransportManager` should call the *Transport Discovery* to ensure that it is up to date. Then it needs to attempt to establish (or re-establish) transports to the relevant remote nodes.
-
-When re-establishing a Transport, the `transport.Entry` used should be that also previously stored in the *Transport Discovery*.
-
-Once connected, the `TransportManager` should update it's *Status* of the given Transport and set `is_up` to `true`.
-
-The startup logic is triggered when `Start` is called.
-
-**Shutdown:**
-
-On shutdown, the first step is to update the *Transport Statuses* to "down" via the *Transport Discovery*. Then Transports to remote nodes is to be closed (with a timeout, in which after, the transport in question is forcefully closed).
-
-## Logging
-
-A *Transport Manager* is responsible for logging incoming and outgoing communication for each transport. Initially, only the total incoming and outgoing bandwidth (in bytes) is to be logged per transport.
-
-```golang
-// TransportLogEntry represents a logging entry for a given Transport.
-// The entry is updated every time a packet is received or sent.
-type TransportLogEntry struct {
-    ReceivedBytes big.Int      // Total received bytes.
-    SentBytes     big.Int      // Total sent bytes.
+```json
+{
+  "transport": {
+    "discovery": "http://tpd.skywire.skycoin.com",
+    "discovery_dmsg": "dmsg://<pk>:80",
+    "address_resolver": "http://ar.skywire.skycoin.com",
+    "address_resolver_dmsg": "dmsg://<pk>:80",
+    "public_autoconnect": true,
+    "transport_setup": ["<tps-pk-1>", "<tps-pk-2>"],
+    "stcpr_port": 0,
+    "sudph_port": 0,
+    "log_store": {
+      "type": "file",
+      "location": "./local/transport_logs",
+      "rotation_interval": "168h0m0s"
+    }
+  }
 }
 ```
 
-Logs for each transport is to be stored using `TransportLogStore`. `TransportLogStore` is to be specified within `TransportManagerConfig`.
+## Log Store
 
-```golang
-// TransportLogStore stores transport log entries.
-type TransportLogStore interface {
-	Entry(id uuid.UUID) (*TransportLogEntry, error)
-	Record(id uuid.UUID, entry *TransportLogEntry) error
-}
-```
+Transport bandwidth logs are persisted to CSV files:
+- Format: `transport_id, recv_bytes, sent_bytes, timestamp`
+- Files named by date: `YYYY-MM-DD.csv`
+- Auto-rotated daily
+- Retention configurable via `rotation_interval`

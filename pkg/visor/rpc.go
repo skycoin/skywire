@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
@@ -1562,5 +1563,119 @@ func (r *RPC) TPSExternalGetTransports(in *TPSExternalGetTransportsIn, out *[]TP
 		return err
 	}
 	*out = resp
+	return nil
+}
+
+// DHTStatus returns the DHT node's status.
+func (r *RPC) DHTStatus(_ *struct{}, out *DHTStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTStatus", nil)(out, &err)
+	status, err := r.visor.DHTStatus()
+	if err != nil {
+		return err
+	}
+	*out = *status
+	return nil
+}
+
+// DHTGetIn is the input for DHTGet.
+type DHTGetIn struct {
+	PK   string `json:"pk"`
+	Salt string `json:"salt"`
+}
+
+// DHTGet retrieves a value from the DHT.
+func (r *RPC) DHTGet(in *DHTGetIn, out *[]byte) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTGet", in)(out, &err)
+	data, err := r.visor.DHTGet(in.PK, in.Salt)
+	if err != nil {
+		return err
+	}
+	*out = data
+	return nil
+}
+
+// DHTPutIn is the input for DHTPut.
+type DHTPutIn struct {
+	Value []byte `json:"value"`
+	Seq   uint64 `json:"seq"`
+	Salt  string `json:"salt"`
+}
+
+// DHTPut publishes a value to the DHT.
+func (r *RPC) DHTPut(in *DHTPutIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTPut", in)(nil, &err)
+	return r.visor.DHTPut(in.Value, in.Seq, in.Salt)
+}
+
+// DHTSetFullNode enables or disables full node mode.
+func (r *RPC) DHTSetFullNode(in *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTSetFullNode", in)(nil, &err)
+	return r.visor.DHTSetFullNode(*in)
+}
+
+// DmsgPorterStats returns ephemeral port reservation counts.
+func (r *RPC) DmsgPorterStats(_ *struct{}, out *DmsgPorterStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgPorterStats", nil)(out, &err)
+	s, err := r.visor.DmsgPorterStats()
+	if err != nil {
+		return err
+	}
+	*out = *s
+	return nil
+}
+
+// DmsgPorterReset frees all ephemeral port reservations.
+func (r *RPC) DmsgPorterReset(_ *struct{}, out *DmsgPorterStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgPorterReset", nil)(out, &err)
+	s, err := r.visor.DmsgPorterReset()
+	if err != nil {
+		return err
+	}
+	*out = *s
+	return nil
+}
+
+// DmsgSetMinSessions updates the minimum DMSG session count.
+func (r *RPC) DmsgSetMinSessions(in *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgSetMinSessions", in)(nil, &err)
+	return r.visor.DmsgSetMinSessions(*in)
+}
+
+// AddHypervisor connects to a remote hypervisor at runtime.
+func (r *RPC) AddHypervisor(in *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "AddHypervisor", in)(nil, &err)
+	return r.visor.AddHypervisor(*in)
+}
+
+// DmsgReconnect forces DMSG session reconnection.
+func (r *RPC) DmsgReconnect(_ *struct{}, out *int) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgReconnect", nil)(out, &err)
+	n, err := r.visor.DmsgReconnect()
+	if err != nil {
+		return err
+	}
+	*out = n
+	return nil
+}
+
+// DmsgPorterDiag returns detailed diagnostics of the RSN's ephemeral port entries.
+func (r *RPC) DmsgPorterDiag(_ *struct{}, out *netutil.EphemeralDiagResult) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgPorterDiag", nil)(out, &err)
+	diag, err := r.visor.DmsgPorterDiag()
+	if err != nil {
+		return err
+	}
+	*out = *diag
+	return nil
+}
+
+// CheckAREntry checks if a PK is registered in the address resolver.
+func (r *RPC) CheckAREntry(pk *string, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "CheckAREntry", pk)(out, &err)
+	result, err := r.visor.CheckAREntry(*pk)
+	if err != nil {
+		return err
+	}
+	*out = result
 	return nil
 }

@@ -65,7 +65,7 @@ func TestCreateRouteGroup(t *testing.T) {
 			biRt := biRouteFromKeys(tc.fwdPKs, tc.revPKs, tc.SrcPort, tc.DstPort)
 
 			// act
-			resp, err := CreateRouteGroup(context.TODO(), dialer, nil, biRt, metrics)
+			resp, err := CreateRouteGroup(context.TODO(), dialer, nil, nil, biRt, metrics)
 			if err == nil {
 				// if successful, inject response (response edge rules) to responding router
 				var ok bool

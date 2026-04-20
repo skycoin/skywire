@@ -86,10 +86,14 @@ func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.
 		return fmt.Errorf("failed to find route via transport: %w", err)
 	}
 
+	keepAlive := DefaultRouteKeepAlive
+	if opts != nil && opts.KeepAlive > 0 {
+		keepAlive = opts.KeepAlive
+	}
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, desc.DstPort(), desc.SrcPort())
 	req := routing.BidirectionalRoute{
 		Desc:      forwardDesc,
-		KeepAlive: DefaultRouteKeepAlive,
+		KeepAlive: keepAlive,
 		Forward:   fwd,
 		Reverse:   rev,
 	}

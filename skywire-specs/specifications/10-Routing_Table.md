@@ -1,63 +1,67 @@
 # Routing Table
 
-A *Routing Table* (located within the `skywire/pkg/node` module) is unique for a given Node's public key. It is basically a key-value store in which the key is the *Route ID* and the value is the *Routing Rule* for the given *Route ID*.
+The *Routing Table* (`pkg/routing/table.go`) is a per-visor key-value store mapping *Route IDs* to *Routing Rules*. It is used by the router to determine how incoming packets should be handled.
 
-Initially, there will be two types of Routing Rules: *App* and *Forward*.
+## Route IDs
 
-- *App* rules are identified by their unique `<r-type>` value of `0x00`. A packet which contains a *Route ID* that associates with a *App* rule is to be sent to a local App.
-- *Forward* rules are identified by their unique `<r-type>` value of `0x01`. A packet which contains a *Route ID* that associates with a *Forward* rule is to be forwarded.
+A *Route ID* is a `uint32` value that uniquely identifies a routing rule within a single visor's table. Route IDs are allocated by the visor itself when the Route Setup Node calls `ReserveIDs`. Route ID 0 is reserved (invalid).
 
-| Action | Key (Route ID) | Value (Routing Rule) |
-| ------ | -------------- | -------------------- |
-| *App* | `<rid>`<br>*4 bytes* | `<expiry><r-type><resp-rid><loop-data>`<br>*48 bytes* |
-| *Forward* | `<rid>`<br>*4 bytes* | `<expiry><r-type><next-rid><next-tid>`<br>*29 bytes* |
+## Routing Rules
 
-- `<rid>` is the *Route ID* `uint32` key (represented by 4 bytes) that is used to obtain the routing rules for the Packet.
-- `<expiry>` contains the epoch time (8 bytes) of when the rule is to be discarded (or becomes invalid).
-- `<r-type>` specifies the type of Routing Rule (1 byte). Currently there are two possible routing rule types; *App* (`0x00`) and *Forward* (`0x01`).
-- `<resp-rid>` is the *Route ID* (4 bytes) that is the Route ID key for the reserve Route of the loop.
-- `<loop-data>` identifies and classifies the loop. It contains the following sub-fields; `<remote-pk><remote-port><local-port>`.
-    - `<remote-pk>` is the remote edge public key in which this route/loop is associated with. It is represented by 33 bytes.
-    - `<remote-port>` is the remote port in which this route/loop is associated with. It is represented by 2 bytes.
-    - `<local-port>` is the local port in which this route/loop is associated with. It is represented by 2 bytes.
-- `<next-rid>` is the *Route ID* that is to replace the `<rid>` before the Packet is to be forwarded.
-- `<next-tid>` represents the transport which the packet is to be forwarded to. A Transport ID is 16 bytes long.
+A routing rule is a variable-length byte slice with a fixed header:
 
-Every time a Skywire Node receives a packet, it performs the following steps:
+| Field | Size | Description |
+|---|---|---|
+| KeepAlive | 8 bytes | Duration before the rule expires (nanoseconds) |
+| RuleType | 1 byte | 0=Consume, 1=Forward, 2=IntermediaryForward |
+| KeyRouteID | 4 bytes | The route ID this rule is associated with |
 
-1. Obtain the `<rid>` from the Packet, and uses this value to obtain a routing rule entry from the routing table. If no routing rule is found, or the routing rule has already expired (via checking the `<expiry>` field), the Packet is then discarded.
-2. Obtains the `<r-type>` value to determine how the packet is to be dealt with. If the `<r-type>` value is `0x00`, the packet is then to be sent to the local *App Server* with the Routing Rule. If the `<r-type>` value is `0x01`, the packet is to be forwarded; continue on to step 3.
-3. Obtain the `<next-rid>` from the *Routing Rule* and replace the `<rid>` from the *Route ID* field of the Packet.
-4. Forward the Packet to the referenced transport specified within `<next-tid>`.
+### Consume Rule
 
-The routing table is to be an interface.
+Delivers the packet to a local application. Additional fields:
 
-```golang
-package node
+| Field | Size | Description |
+|---|---|---|
+| SrcPK | 33 bytes | Source visor public key |
+| DstPK | 33 bytes | Destination visor public key |
+| SrcPort | 2 bytes | Source routing port |
+| DstPort | 2 bytes | Destination routing port |
 
-// RangeFunc is used by RangeRules to iterate over rules.
-type RangeFunc func(routeID transport.RouteID, rule RoutingRule) (next bool)
+### Forward Rule
 
-// RoutingTable represents a routing table implementation.
-type RoutingTable interface {
-	// AddRule adds a new RoutingRules to the table and returns assigned RouteID.
-	AddRule(rule RoutingRule) (routeID transport.RouteID, err error)
+Forwards the packet to the next hop. Additional fields:
 
-	// SetRule sets RoutingRule for a given RouteID.
-	SetRule(routeID transport.RouteID, rule RoutingRule) error
+| Field | Size | Description |
+|---|---|---|
+| NextRouteID | 4 bytes | Route ID on the next hop |
+| NextTransportID | 16 bytes | UUID of the transport to use |
+| SrcPK | 33 bytes | Source visor public key |
+| DstPK | 33 bytes | Destination visor public key |
+| SrcPort | 2 bytes | Source routing port |
+| DstPort | 2 bytes | Destination routing port |
 
-	// Rule returns RoutingRule with a given RouteID.
-	Rule(routeID transport.RouteID) (RoutingRule, error)
+### IntermediaryForward Rule
 
-	// DeleteRules removes RoutingRules with a given a RouteIDs.
-	DeleteRules(routeIDs ...transport.RouteID) error
+Forwards the packet through an intermediary visor. Additional fields:
 
-	// RangeRules iterates over all rules and yields values to the rangeFunc until `next` is false.
-	RangeRules(rangeFunc RangeFunc) error
+| Field | Size | Description |
+|---|---|---|
+| NextRouteID | 4 bytes | Route ID on the next hop |
+| NextTransportID | 16 bytes | UUID of the transport to use |
 
-	// Count returns the number of RoutingRule entries stored.
-	Count() int
-}
-```
+Intermediary rules do not contain source/destination PKs or ports — the intermediary visor only knows the previous and next hop.
 
-Potential improvement we could consider is to move ports from the rules into the data packet header, aligning this with `tcp`. By doing so we will be able to re-use intermediate forward rules across multiple loops which can drastically improve loop establishment time for complex loops.
+## Rule Expiry
+
+Each rule has a `KeepAlive` duration (default 24 hours). The routing table periodically sweeps for expired rules and removes them. Route groups send periodic `KeepAlivePacket` frames to refresh the rules at each hop.
+
+## Rule Operations
+
+| Operation | Description |
+|---|---|
+| `ReserveIDs(n)` | Allocates n unused route IDs (called by RSN during route setup) |
+| `SaveRule(rule)` | Stores a routing rule at its key route ID |
+| `Rule(id)` | Retrieves the rule for a given route ID |
+| `DelRules(ids)` | Removes rules by route ID |
+| `AllRules()` | Returns all rules (for debugging / status display) |
+| `Count()` | Returns the number of active rules |

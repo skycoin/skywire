@@ -41,6 +41,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/dht"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
@@ -189,6 +191,10 @@ type Config struct {
 	// OnDmsgServersUpdated is called. Defaults to 1 second if zero
 	// (matching the existing per-service polling loops).
 	DmsgServerPollInterval time.Duration
+
+	// DisableDHT prevents the automatic DHT full node from starting.
+	// By default, every service with a DMSG client runs a DHT node.
+	DisableDHT bool
 }
 
 // Handle owns the listeners and the bootstrap dmsg client. Callers
@@ -198,6 +204,9 @@ type Handle struct {
 	// ModeHTTP. Services that need raw dmsg access (e.g. to spawn
 	// a CXO publisher or TPS listener) can use it directly.
 	DmsgClient *dmsg.Client
+
+	// DHTNode is the DHT full node, or nil when EnableDHT is false.
+	DHTNode *dht.Node
 
 	// Mode is the resolved listener mode.
 	Mode Mode
@@ -339,6 +348,29 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 				}
 			}
 		}()
+	}
+
+	// Start DHT full node when the service has a DMSG client.
+	// Deployment services are natural DHT bootstrap peers since every
+	// visor already knows their PKs. Enabled by default unless
+	// explicitly disabled via EnableDHT=false.
+	if !cfg.DisableDHT && h.DmsgClient != nil {
+		dhtLog := cfg.Log.WithField("subsystem", "dht")
+		bootstrapPKs := deployment.Prod.DHTBootstrapPKs()
+		dhtCfg := dht.Config{
+			BootstrapPKs: bootstrapPKs,
+			FullNode:     true,
+		}
+		tp := dht.NewDMSGTransport(h.DmsgClient)
+		dhtNode := dht.New(dhtCfg, cfg.PK, cfg.SK, tp, logging.MustGetLogger("dht"))
+		if err := dhtNode.Start(ctx); err != nil {
+			dhtLog.WithError(err).Warn("DHT node failed to start")
+		} else {
+			h.DHTNode = dhtNode
+			dhtLog.WithField("id", dhtNode.ID().String()[:16]).
+				WithField("bootstrap_peers", len(bootstrapPKs)).
+				Info("DHT full node started")
+		}
 	}
 
 	return h, nil

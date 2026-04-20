@@ -25,6 +25,9 @@ const (
 	ServiceTypeVPN = "vpn"
 	// ServiceTypeVisor stands for visor.
 	ServiceTypeVisor = "visor"
+	// ServiceTypeDHTNode stands for a DHT full node — stores all DHT items
+	// regardless of XOR distance, providing redundancy and fast lookups.
+	ServiceTypeDHTNode = "dht"
 )
 
 // Errors associated with service discovery types.

@@ -39,6 +39,9 @@ const (
 	// DmsgGRPCPort is the DMSG port for gRPC services (remote gotop, stats, etc.)
 	DmsgGRPCPort uint16 = 49
 
+	// DmsgDHTPort Listening port for the Kademlia DHT protocol.
+	DmsgDHTPort uint16 = 100
+
 	// DmsgAwaitSetupPort Listening port of a visor for setup operations.
 	DmsgAwaitSetupPort uint16 = 136
 

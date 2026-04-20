@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
@@ -1160,6 +1161,61 @@ func (mc *mockRPCClient) TPSExternalAddTransport(_, _, _ cipher.PubKey, _ string
 // TPSExternalGetTransports implements API.
 func (mc *mockRPCClient) TPSExternalGetTransports(_, _ cipher.PubKey) ([]TPSTransportResponse, error) {
 	return nil, fmt.Errorf("external TPS not available in mock")
+}
+
+// DmsgPorterStats implements API.
+func (mc *mockRPCClient) DmsgPorterStats() (*DmsgPorterStatus, error) {
+	return &DmsgPorterStatus{}, nil
+}
+
+// DmsgPorterReset implements API.
+func (mc *mockRPCClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
+	return &DmsgPorterStatus{}, nil
+}
+
+// DmsgPorterDiag implements API.
+func (mc *mockRPCClient) DmsgPorterDiag() (*netutil.EphemeralDiagResult, error) {
+	return &netutil.EphemeralDiagResult{TypeCount: map[string]int{}}, nil
+}
+
+// AddHypervisor implements API.
+func (mc *mockRPCClient) AddHypervisor(_ cipher.PubKey) error {
+	return nil
+}
+
+// DmsgSetMinSessions implements API.
+func (mc *mockRPCClient) DmsgSetMinSessions(_ int) error {
+	return nil
+}
+
+// DmsgReconnect implements API.
+func (mc *mockRPCClient) DmsgReconnect() (int, error) {
+	return 0, nil
+}
+
+// CheckAREntry implements API.
+func (mc *mockRPCClient) CheckAREntry(_ string) ([]string, error) {
+	return nil, nil
+}
+
+// DHTStatus implements API.
+func (mc *mockRPCClient) DHTStatus() (*DHTStatus, error) {
+	return &DHTStatus{Running: false}, nil
+}
+
+// DHTGet implements API.
+func (mc *mockRPCClient) DHTGet(_, _ string) ([]byte, error) {
+	return nil, fmt.Errorf("DHT not available in mock")
+}
+
+// DHTPut implements API.
+func (mc *mockRPCClient) DHTPut(_ []byte, _ uint64, _ string) error {
+	return fmt.Errorf("DHT not available in mock")
+}
+
+// DHTSetFullNode implements API.
+func (mc *mockRPCClient) DHTSetFullNode(_ bool) error {
+	return fmt.Errorf("DHT not available in mock")
 }
 
 // Close implements API.

@@ -28,6 +28,7 @@ type V1 struct {
 	DmsgWeb       *DmsgWebConfig      `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig    `json:"skynet_web,omitempty"`
 	Rewards       *RewardsConfig      `json:"rewards,omitempty"`
+	DHT           *DHTConfig          `json:"dht,omitempty"`
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *Transport          `json:"transport"`
 	Routing       *Routing            `json:"routing"`
@@ -92,6 +93,31 @@ type RewardsConfig struct {
 	LoginNode       string          `json:"login_node,omitempty"`
 }
 
+// DHTConfig configures the Kademlia DHT subsystem.
+// DHT is always enabled when DMSG is available — this config only
+// controls optional parameters like full node mode and trust tiers.
+type DHTConfig struct {
+	// BootstrapPKs are public keys of seed DHT nodes to contact on startup.
+	// If empty, deployment service PKs are used automatically.
+	BootstrapPKs []cipher.PubKey `json:"bootstrap_pks,omitempty"`
+	// FullNode stores all DHT items regardless of XOR distance (few needed).
+	FullNode bool `json:"full_node,omitempty"`
+	// WhitelistedPKs are publisher keys whose data is always replicated and never evicted.
+	WhitelistedPKs []cipher.PubKey `json:"whitelisted_pks,omitempty"`
+	// TrustedPKs are publisher keys that get full replication unless abuse is detected.
+	TrustedPKs []cipher.PubKey `json:"trusted_pks,omitempty"`
+	// PersistPath is the bbolt file for local persistence. Empty = in-memory only.
+	// Default: "<local_path>/dht.db" (set automatically if omitted).
+	PersistPath string `json:"persist_path,omitempty"`
+	// RedisAddr enables Redis persistence (deployment services only).
+	// Format: "host:port". Empty = no Redis.
+	RedisAddr string `json:"redis_addr,omitempty"`
+	// RedisPassword for authenticated Redis connections.
+	RedisPassword string `json:"redis_password,omitempty"`
+	// RedisDB is the Redis database number.
+	RedisDB int `json:"redis_db,omitempty"`
+}
+
 // DmsgWebConfig enables the embedded `.dmsg` resolving proxy hosted by
 // the visor. When Enable is true, the visor serves a SOCKS5 proxy on
 // ProxyPort plus an HTTP bridge on WebPort; browsers pointed at the
@@ -138,6 +164,11 @@ type SkynetWebConfig struct {
 	DomainSuffix string `json:"domain_suffix,omitempty"`
 	// UpstreamSOCKS forwards non-matching CONNECTs to this upstream.
 	UpstreamSOCKS string `json:"upstream_socks,omitempty"`
+	// RouteTimeout is the keepalive duration for routes created by the
+	// resolving proxy. Routes idle longer than this are expired by GC.
+	// Zero means use DefaultRouteKeepAlive (10 min). A very large value
+	// (e.g. "8760h") effectively keeps routes alive until the visor stops.
+	RouteTimeout Duration `json:"route_timeout,omitempty"`
 }
 
 // Transport defines a transport config.
@@ -162,6 +193,13 @@ type Transport struct {
 	// When set and DMSG is available, the visor subscribes to the feed for
 	// push-based transport updates instead of HTTP polling.
 	CXOFeedPK string `json:"cxo_feed_pk,omitempty"`
+	// ARTransportLimit controls address resolver registration for privacy:
+	//   0 (default): stay registered indefinitely
+	//   N > 0: deregister from AR after N transports are established
+	//   N < 0: never register with AR at all
+	// When deregistered, the visor cannot receive new inbound transports
+	// but can still initiate outbound connections.
+	ARTransportLimit int `json:"ar_transport_limit,omitempty"`
 }
 
 // TPSDmsgConfig configures the embedded Transport Setup Node's dmsg client.
