@@ -92,6 +92,19 @@ type API struct {
 	uptimesCache   []store.VisorSummary
 	uptimesV2Cache []store.VisorSummary
 	uptimesMu      sync.RWMutex
+
+	// dhtMirror mirrors service entries to the DHT under each visor's PK.
+	dhtMirror interface {
+		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+	}
+}
+
+// SetDHTMirror sets a mirror that publishes service entries to the DHT
+// on every successful service registration.
+func (a *API) SetDHTMirror(m interface {
+	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+}) {
+	a.dhtMirror = m
 }
 
 // New creates an API.
@@ -407,6 +420,11 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 		sErr.Log(a.log)
 		a.writeError(w, r, sErr.HTTPStatus, sErr.Err)
 		return
+	}
+
+	// Mirror service entry to DHT.
+	if a.dhtMirror != nil {
+		a.dhtMirror.Mirror(se.Addr.PubKey(), &se, uint64(time.Now().UnixNano())) //nolint:gosec
 	}
 
 	// Record heartbeat for uptime tracking — piggybacks on the 90s
