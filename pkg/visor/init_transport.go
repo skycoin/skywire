@@ -111,6 +111,14 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		v.geo.mu.Unlock()
 	}
 
+	// Check AR transport limit — if negative, never register with AR.
+	if v.conf.Transport != nil && v.conf.Transport.ARTransportLimit < 0 {
+		log.Info("AR registration disabled (ar_transport_limit < 0)")
+		if v.conf.Transport.PublicAutoconnect {
+			log.Warn("ar_transport_limit < 0 conflicts with public_autoconnect — public visors must be discoverable")
+		}
+	}
+
 	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
 	if err != nil {
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
@@ -279,6 +287,10 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
+	var arLimit int
+	if v.conf.Transport != nil {
+		arLimit = v.conf.Transport.ARTransportLimit
+	}
 	tpMConf := transport.ManagerConfig{
 		PubKey:                    v.conf.PK,
 		SecKey:                    v.conf.SK,
@@ -287,6 +299,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		LatencyLogStore:           latencyLogS,
 		PersistentTransportsCache: pTps,
 		Version:                   buildinfo.Version(),
+		ARTransportLimit:          arLimit,
 	}
 
 	// todo: pass down configuration?

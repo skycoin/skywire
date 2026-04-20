@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -153,7 +154,12 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		WithField("domain", cfg.DomainSuffix).
 		Info("Serving skynetweb resolver")
 
-	dialer := &routerSkynetDialer{router: e.router, localPK: e.localPK, log: e.log}
+	dialer := &routerSkynetDialer{
+		router:       e.router,
+		localPK:      e.localPK,
+		log:          e.log,
+		routeTimeout: time.Duration(e.cfg.RouteTimeout),
+	}
 	if err := skynetweb.Run(ctx, e.log, dialer, cfg); err != nil && err != context.Canceled {
 		e.log.WithError(err).Warn("skynetweb runtime stopped")
 	}
@@ -162,9 +168,10 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 // routerSkynetDialer adapts router.Router to skynetweb.SkynetDialer.
 // See skynetweb.SkynetDialer for the contract.
 type routerSkynetDialer struct {
-	router  router.Router
-	localPK cipher.PubKey
-	log     *logging.Logger
+	router       router.Router
+	localPK      cipher.PubKey
+	log          *logging.Logger
+	routeTimeout time.Duration // 0 = use DefaultRouteKeepAlive
 }
 
 func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
@@ -178,7 +185,12 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 		return net.Dial("tcp", addr)
 	}
 
-	conn, err := d.router.DialRoutes(ctx, remote, 0, routing.Port(skyenv.SkyForwardingServerPort), nil)
+	var opts *router.DialOptions
+	if d.routeTimeout > 0 {
+		opts = router.DefaultDialOptions()
+		opts.KeepAlive = d.routeTimeout
+	}
+	conn, err := d.router.DialRoutes(ctx, remote, 0, routing.Port(skyenv.SkyForwardingServerPort), opts)
 	if err != nil {
 		return nil, err
 	}

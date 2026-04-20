@@ -35,6 +35,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
 
   // New port form
   newPort = '';
+  newLocalPort = '';
   newLabel = '';
   newDesc = '';
   newSkynet = true;
@@ -89,8 +90,10 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
       this.snackbarService.showError('Enter a valid port (1-65535)');
       return;
     }
+    const localPort = this.newLocalPort ? parseInt(this.newLocalPort, 10) : 0;
     const fp: any = {
       port,
+      local_port: localPort || undefined,
       label: this.newLabel,
       description: this.newDesc,
       show_on_landing: this.newShowLanding,
@@ -100,6 +103,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     this.nodeService.registerForwardedPort(this.nodeKey, fp).subscribe(
       () => {
         this.newPort = '';
+        this.newLocalPort = '';
         this.newLabel = '';
         this.newDesc = '';
         this.snackbarService.showDone(`Port ${port} forwarded`);

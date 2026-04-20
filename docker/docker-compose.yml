@@ -198,11 +198,11 @@ services:
       - GODEBUG=madvdontneed=1
     entrypoint: "/release/skywire dmsg disc --addr :9090 --redis redis://dmsgd-redis:6379 --sk b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714 -t"
     healthcheck:
-      test: ["CMD", "/release/skywire", "util", "got", "head", "http://127.0.0.1:9090/dmsg-discovery/available_servers"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 10s
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:9090/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 

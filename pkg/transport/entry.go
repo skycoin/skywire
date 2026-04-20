@@ -27,6 +27,10 @@ const (
 	LabelAutomatic Label = "automatic"
 	// LabelSkycoin are transports created by skycoin system to improve network resiliency
 	LabelSkycoin Label = "skycoin"
+	// LabelSetup signifies a transport to a Route Setup Node.
+	// These transports carry only control-plane traffic and are excluded
+	// from data route path calculations by the route finder.
+	LabelSetup Label = "setup"
 )
 
 // Entry is the unsigned representation of a Transport.

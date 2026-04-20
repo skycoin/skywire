@@ -1,124 +1,144 @@
 # Transport
 
-A *Transport* represents a bidirectional line of communication between two *Skywire Nodes* (or *Transport Edges*).
+A *Transport* represents a bidirectional, encrypted line of communication between two *Visors* (called *Transport Edges*).
 
-Each *Transport* is represented as a unique 16 byte (128 bit) UUID value called the *Transport ID* and has a *Transport Type* that identifies a specific implementation of the *Transport*.
+Each transport is identified by a unique *Transport ID* (UUID) and has a *Transport Type* that identifies the underlying protocol implementation.
 
-A *Transport* has the following information associated with it;
+## Transport Entry
 
-- **Transport ID:** A `uuid.UUID` value that uniquely identifies the Transport.
-- **Edges:** The public keys of the Transport's edge nodes (should only have 2 edges and the initiating edge should come first).
-- **Type:** A `string` value that specifies the particular implementation of the *Transport*.
-- **Public:** A `bool` that specifies whether the *Transport* is to be registered in the *Transport Discovery* or not. Only public transports are registered.
-- **Registered:** A `int64` value that is the epoch time of when the *Transport* is registered in *Transport Discovery*. A value of `0` represents the state where the *Transport* is not (or not yet) registered in the *Transport Discovery*.
+A transport is represented in the Transport Discovery by an `Entry`:
 
-This is a JSON representation of a *Transport Entry*;
-
-```json
-{
-    "t_id": "e1808c316b23d1d6119cad1795238ff0",
-    "edges": ["031d796272349d597d6d3130497ccd11cf8af12c7d186b1726358abfb49edad0c1", "03bd9724f335c5eb5a1011e7862d4af28488102c8edffc84585cf0826ac4864b38"],
-    "type": "messaging",
-    "public": true
+```go
+// Entry is the unsigned representation of a Transport.
+type Entry struct {
+    ID        uuid.UUID      `json:"t_id"`
+    Edges     [2]cipher.PubKey `json:"edges"`
+    Type      types.Type     `json:"type"`
+    Label     Label          `json:"label"`
+    Latency   float64        `json:"latency_ms,omitempty"`
+    Bandwidth uint64         `json:"bandwidth,omitempty"`
 }
 ```
 
-## Transport Module
+JSON representation:
 
-In code, `Transport` is an interface, and can have many implementations.
-
-The interface used to generate *Transports* of a certain *Transport Type* is named *Transport Factory* (represented by a `transport.Factory` interface in code).
-
-The representation of a *Transport* in *Transport Discovery* is of the type `transport.Entry`.
-
-A `transport.Status` type contains the status of a given *Transport*. Each *Transport Edge* provides such status, and the *Transport Discovery* compares the two statuses to derive the final status.
-
-```golang
-package transport
-
-// Transport represents communication between two nodes via a single hop.
-type Transport interface {
-
-    // Read implements io.Reader
-    Read(p []byte) (n int, err error)
-
-    // Write implements io.Writer
-    Write(p []byte) (n int, err error)
-
-    // Close implements io.Closer
-    Close() error
-
-    // Local returns the local transport edge's public key.
-    Local() cipher.PubKey
-
-    // Remote returns the remote transport edge's public key.
-    Remote() cipher.PubKey
-
-    // Type returns the string representation of the transport type.
-    Type() string
-
-    // SetDeadline functions the same as that from net.Conn
-    // With a Transport, we don't have a distinction between write and read timeouts.
-    SetDeadline(t time.Time) error
+```json
+{
+    "t_id": "e1808c31-6b23-d1d6-119c-ad1795238ff0",
+    "edges": [
+        "031d796272349d597d6d3130497ccd11cf8af12c7d186b1726358abfb49edad0c1",
+        "03bd9724f335c5eb5a1011e7862d4af28488102c8edffc84585cf0826ac4864b38"
+    ],
+    "type": "stcpr",
+    "label": "automatic",
+    "latency_ms": 12.5,
+    "bandwidth": 1234567
 }
+```
 
-// Factory generates Transports of a certain type.
-type Factory interface {
+### Transport ID
 
-    // Accept accepts a remotely-initiated Transport.
-    Accept(ctx context.Context) (Transport, error)
+The Transport ID is derived deterministically from the two edge public keys and the transport type. The edges are sorted in ascending order to ensure both sides compute the same ID.
 
-    // Dial initiates a Transport with a remote node.
-    Dial(ctx context.Context, remote cipher.PubKey) (Transport, error)
+### Transport Types
 
-    // Close implements io.Closer
-    Close() error
+| Type | Protocol | Address Resolution | NAT Traversal |
+|---|---|---|---|
+| `stcpr` | TCP | Address Resolver service | No (requires public IP or port forwarding) |
+| `sudph` | UDP | Address Resolver service | Yes (UDP hole-punching) |
+| `stcp` | TCP | Local PK-to-IP table | No |
+| `dmsg` | DMSG relay | DMSG Discovery | Yes (relayed through DMSG server) |
 
-    // Local returns the local public key.
-    Local() cipher.PubKey
+### Transport Labels
 
-    // Type returns the Transport type.
-    Type() string
-}
+Labels identify the origin of a transport and control access via the Transport Setup Node:
 
-// Entry is the unsigned representation of a Transport.
-type Entry struct {
+| Label | Created by | TPS can list | TPS can remove |
+|---|---|---|---|
+| `skycoin` | Transport Setup Node | Yes | Yes (if no active route) |
+| `automatic` | Public autoconnect | Yes | Yes (if no active route) |
+| `user` | Manual CLI / hypervisor UI | No | No |
 
-    // ID is the Transport ID that uniquely identifies the Transport.
-    ID uuid.UUID `json:"tid"`
+## Signed Entry
 
-    // Edges contains the public keys of the Transport's edge nodes (the public key of the node that initiated the transport should be on index 0).
-    Edges [2]string `json:"edges"`
+Transports are registered in the Transport Discovery as `SignedEntry`:
 
-    // Type represents the transport type.
-    Type string `json:"type"`
-
-    // Public determines whether the transport is to be exposed to other nodes or not.
-    // Public transports are to be registered in the Transport Discovery.
-    Public bool `json:"public"`
-}
-
-// SignedEntry holds an Entry and it's associated signatures.
-// The signatures should be ordered as the contained 'Entry.Edges'.
+```go
 type SignedEntry struct {
-    Entry      *Entry    `json:"entry"`
-    Signatures [2]string `json:"signatures"`
-    Registered int64     `json:"registered,omitempty"`
+    Entry      *Entry         `json:"entry"`
+    Signatures [2]cipher.Sig  `json:"signatures"`
+    Registered int64          `json:"registered,omitempty"`
+    Latency    *LatencyData   `json:"latency,omitempty"`
+    Bandwidth  *BandwidthData `json:"bandwidth,omitempty"`
+    Version    string         `json:"version,omitempty"`
 }
 
-// Status represents the current state of a Transport from the perspective
-// from a Transport's single edge. Each Transport will have two perspectives;
-// one from each of it's edges.
-type Status struct {
+type LatencyData struct {
+    Min int64 `json:"min"` // microseconds
+    Max int64 `json:"max"`
+    Avg int64 `json:"avg"`
+}
 
-    // ID is the Transport ID that identifies the Transport that this status is regarding.
-    ID uuid.UUID `json:"tid"`
+type BandwidthData struct {
+    SentBytes uint64 `json:"sent_bytes"`
+    RecvBytes uint64 `json:"recv_bytes"`
+}
+```
 
-    // IsUp represents whether the Transport is up.
-    // A Transport that is down will fail to forward Packets.
-    IsUp bool `json:"is_up"`
+The `Latency` and `Bandwidth` fields are updated on each transport re-registration (every 90 seconds). Latency is measured by transport-level ping; bandwidth is tracked per-packet by the managed transport.
 
-    // Updated is the epoch timestamp of when the status is last updated.
-    Updated int64 `json:"updated,omitempty"`
+## Settlement Handshake
+
+When a transport is established between two visors, a settlement handshake occurs:
+
+1. The initiator dials the remote visor using the transport-type-specific mechanism (TCP connect, UDP hole-punch, or DMSG relay)
+2. Both sides exchange signed `Entry` data including the agreed transport ID, type, and edges
+3. The responder adopts the initiator's label so both ends agree on the transport's origin
+4. The initiator registers the `SignedEntry` with the Transport Discovery
+
+## Managed Transport
+
+In the visor, each transport is wrapped in a `ManagedTransport` (`pkg/transport/managed_transport.go`) which provides:
+
+- **Read loop** — reads packets from the underlying connection, intercepts transport-level ping/pong (route ID 0), forwards routing packets to the router
+- **Log loop** — tracks sent/received bytes per packet, persists to CSV every 3 seconds
+- **Ping loop** — sends transport-level ping every 30 seconds, measures RTT
+- **Latency stats** — min/max/avg latency in milliseconds
+- **Bandwidth stats** — cumulative sent/received bytes
+
+The managed transport's lifecycle:
+
+1. `Serve(readCh)` starts 4 goroutines: readLoop, logLoop, pingLoop, and the main serve loop
+2. Packets from readLoop are sent to the router via `readCh`
+3. On close, the transport is deregistered from the Transport Discovery
+
+## Transport Interface
+
+```go
+// Transport is the underlying network connection.
+type Transport interface {
+    Read(p []byte) (n int, err error)
+    Write(p []byte) (n int, err error)
+    Close() error
+    LocalPK() cipher.PubKey
+    RemotePK() cipher.PubKey
+    Type() types.Type
+    SetDeadline(t time.Time) error
+    SetReadDeadline(t time.Time) error
+    SetWriteDeadline(t time.Time) error
+}
+```
+
+## Network Client
+
+Each transport type has a `network.Client` implementation that handles dialing and accepting connections:
+
+```go
+type Client interface {
+    Dial(ctx context.Context, remote cipher.PubKey, port uint16) (Transport, error)
+    Listen(port uint16) (Listener, error)
+    PK() cipher.PubKey
+    Type() types.Type
+    Close() error
 }
 ```

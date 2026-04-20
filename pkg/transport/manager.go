@@ -42,6 +42,11 @@ type ManagerConfig struct {
 	PersistentTransportsCache []PersistentTransports
 	PTpsCacheMu               sync.RWMutex
 	Version                   string // Visor version for reporting to TPD
+	// ARTransportLimit controls AR registration:
+	//   0 = stay registered (default)
+	//   N > 0 = deregister after N transports
+	//   N < 0 = never register
+	ARTransportLimit int
 }
 
 // LatencyFallbackCallback is called when transport-level ping fails to produce
@@ -101,6 +106,24 @@ type Manager struct {
 	delQueue   []uuid.UUID
 	delQueueMu sync.Mutex
 	delNudge   chan struct{}
+
+	// arDeregistered tracks whether the visor has deregistered from AR
+	// due to ar_transport_limit being reached. Once true, it stays true
+	// until the visor restarts.
+	arDeregistered   bool
+	arDeregisteredMu sync.Mutex
+
+	// cascadeHandler handles cascade protocol packets (route ID 0) on any transport.
+	cascadeHandler   func(p routing.Packet, mt *ManagedTransport)
+	cascadeHandlerMu sync.RWMutex
+
+	// dhtHandler handles DHT protocol packets (route ID 0) on any transport.
+	dhtHandler   func(p routing.Packet, mt *ManagedTransport)
+	dhtHandlerMu sync.RWMutex
+
+	// setupRPCHandler handles RSN RPC relay packets (route ID 0) on any transport.
+	setupRPCHandler   func(p routing.Packet, mt *ManagedTransport)
+	setupRPCHandlerMu sync.RWMutex
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -361,6 +384,81 @@ func (tm *Manager) SetPTpsCache(pTps []PersistentTransports) {
 	tm.Conf.PersistentTransportsCache = pTps
 }
 
+// SetCascadeHandler sets the handler for cascade protocol packets (route ID 0).
+// Called by the router to register its cascade handler.
+func (tm *Manager) SetCascadeHandler(h func(p routing.Packet, mt *ManagedTransport)) {
+	tm.cascadeHandlerMu.Lock()
+	defer tm.cascadeHandlerMu.Unlock()
+	tm.cascadeHandler = h
+	// Propagate to existing transports.
+	tm.mx.RLock()
+	for _, mt := range tm.tps {
+		mt.cascadeHandler = h
+	}
+	tm.mx.RUnlock()
+}
+
+// checkARLimit checks if the transport count has reached the AR transport limit.
+// If so, deregisters from the address resolver. This is a one-way action —
+// the visor stays deregistered until restart.
+func (tm *Manager) checkARLimit() {
+	limit := tm.Conf.ARTransportLimit
+	if limit <= 0 {
+		return // 0 = no limit, negative = never registered
+	}
+
+	tm.arDeregisteredMu.Lock()
+	if tm.arDeregistered {
+		tm.arDeregisteredMu.Unlock()
+		return
+	}
+
+	count := tm.TransportCount()
+	if count >= limit {
+		tm.arDeregistered = true
+		tm.arDeregisteredMu.Unlock()
+		tm.Logger.WithField("count", count).WithField("limit", limit).
+			Info("AR transport limit reached — deregistering from address resolver")
+		if tm.arClient != nil {
+			if err := tm.arClient.Close(); err != nil {
+				tm.Logger.WithError(err).Warn("Failed to close AR client during deregistration")
+			}
+		}
+	} else {
+		tm.arDeregisteredMu.Unlock()
+	}
+}
+
+// ShouldRegisterAR returns false if the AR transport limit is negative
+// (never register). Callers should check this during visor initialization.
+func (tm *Manager) ShouldRegisterAR() bool {
+	return tm.Conf.ARTransportLimit >= 0
+}
+
+// SetDHTHandler sets the handler for DHT protocol packets (route ID 0).
+func (tm *Manager) SetDHTHandler(h func(p routing.Packet, mt *ManagedTransport)) {
+	tm.dhtHandlerMu.Lock()
+	defer tm.dhtHandlerMu.Unlock()
+	tm.dhtHandler = h
+	tm.mx.RLock()
+	for _, mt := range tm.tps {
+		mt.dhtHandler = h
+	}
+	tm.mx.RUnlock()
+}
+
+// SetSetupRPCHandler sets the handler for RSN RPC relay packets (route ID 0).
+func (tm *Manager) SetSetupRPCHandler(h func(p routing.Packet, mt *ManagedTransport)) {
+	tm.setupRPCHandlerMu.Lock()
+	defer tm.setupRPCHandlerMu.Unlock()
+	tm.setupRPCHandler = h
+	tm.mx.RLock()
+	for _, mt := range tm.tps {
+		mt.setupRPCHandler = h
+	}
+	tm.mx.RUnlock()
+}
+
 // SetRouteChecker sets the callback used to determine if a transport has active routes.
 // SetLatencyFallback sets the callback used when transport-level ping fails
 // to produce latency data (remote visor doesn't support transport ping frames).
@@ -619,6 +717,15 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			QueueDeletion:  tm.queueDeletion,
 		})
 		mTp.manager = tm
+		tm.cascadeHandlerMu.RLock()
+		mTp.cascadeHandler = tm.cascadeHandler
+		tm.cascadeHandlerMu.RUnlock()
+		tm.dhtHandlerMu.RLock()
+		mTp.dhtHandler = tm.dhtHandler
+		tm.dhtHandlerMu.RUnlock()
+		tm.setupRPCHandlerMu.RLock()
+		mTp.setupRPCHandler = tm.setupRPCHandler
+		tm.setupRPCHandlerMu.RUnlock()
 
 		go func() {
 			mTp.Serve(tm.readCh)
@@ -629,6 +736,9 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		}()
 
 		tm.tps[tpID] = mTp
+
+		// Check AR transport limit after accepting a new transport.
+		go tm.checkARLimit()
 	} else {
 		// Transport already exists. Before allowing Accept() to tear down the
 		// underlying connection (via setTransport), check whether any routing
@@ -824,6 +934,15 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		QueueDeletion:  tm.queueDeletion,
 	})
 	mTp.manager = tm
+	tm.cascadeHandlerMu.RLock()
+	mTp.cascadeHandler = tm.cascadeHandler
+	tm.cascadeHandlerMu.RUnlock()
+	tm.dhtHandlerMu.RLock()
+	mTp.dhtHandler = tm.dhtHandler
+	tm.dhtHandlerMu.RUnlock()
+	tm.setupRPCHandlerMu.RLock()
+	mTp.setupRPCHandler = tm.setupRPCHandler
+	tm.setupRPCHandlerMu.RUnlock()
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
 	errCh := make(chan error)
@@ -840,6 +959,9 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.mx.Lock()
 	tm.tps[tpID] = mTp
 	tm.mx.Unlock()
+
+	// Check AR transport limit after dialing a new transport.
+	go tm.checkARLimit()
 	tm.Logger.Debugf("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
 
 	// Latency is now measured at the transport level via transport-level

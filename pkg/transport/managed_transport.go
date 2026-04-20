@@ -86,6 +86,17 @@ type ManagedTransport struct {
 	// manager back-reference for latency fallback (RSN-based measurement
 	// when remote visor doesn't support transport-level ping).
 	manager *Manager
+
+	// cascadeHandler handles cascade protocol packets (route ID 0).
+	// Set by the transport manager from the router's CascadeHandler.
+	cascadeHandler func(p routing.Packet, mt *ManagedTransport)
+
+	// dhtHandler handles DHT protocol packets (route ID 0).
+	// Set by the transport manager from the DHT's TransportLayerDHT.
+	dhtHandler func(p routing.Packet, mt *ManagedTransport)
+
+	// setupRPCHandler handles RSN RPC relay packets (route ID 0).
+	setupRPCHandler func(p routing.Packet, mt *ManagedTransport)
 }
 
 // LatencyStats holds latency measurement statistics for a transport.
@@ -225,6 +236,21 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 				continue
 			case routing.TransportPongPacket:
 				mt.handleTransportPong(p)
+				continue
+			case routing.CascadeSetupPacket, routing.CascadeAckPacket:
+				if mt.cascadeHandler != nil {
+					mt.cascadeHandler(p, mt)
+				}
+				continue
+			case routing.DHTPacket:
+				if mt.dhtHandler != nil {
+					mt.dhtHandler(p, mt)
+				}
+				continue
+			case routing.SetupRPCPacket:
+				if mt.setupRPCHandler != nil {
+					mt.setupRPCHandler(p, mt)
+				}
 				continue
 			}
 		}
@@ -629,6 +655,22 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 		mt.transportMx.Unlock()
 		return nil
 	}
+}
+
+// WriteRawPacket writes a pre-constructed packet to the transport.
+// Used by the cascade handler to send ACKs and relay messages on route ID 0.
+func (mt *ManagedTransport) WriteRawPacket(packet routing.Packet) error {
+	mt.transportMx.Lock()
+	if mt.transport == nil {
+		mt.transportMx.Unlock()
+		return fmt.Errorf("write raw packet: transport not set up")
+	}
+	_, err := mt.transport.Write(packet)
+	mt.transportMx.Unlock()
+	if err != nil {
+		mt.close()
+	}
+	return err
 }
 
 // WARNING: Not thread safe.
