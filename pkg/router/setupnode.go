@@ -208,8 +208,8 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 				rpcS := rpc.NewServer()
 				if err := rpcS.Register(gw); err != nil {
 					log.WithError(err).Error("Failed to register vstream RPC gateway")
-					stream.Close()    //nolint:errcheck
-					handlerCancel()   //nolint:gosec
+					stream.Close()  //nolint:errcheck
+					handlerCancel() //nolint:gosec
 					<-sem
 					continue
 				}

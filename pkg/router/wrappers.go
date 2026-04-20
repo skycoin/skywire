@@ -41,8 +41,8 @@ type EmbeddedSetupNode interface {
 
 type setupNodeDialer struct {
 	embeddedSetup EmbeddedSetupNode
-	relayCache    *RSNRelayCache       // cached RSN relay peers (may be nil)
-	tm            *transport.Manager   // for finding relay transports (may be nil)
+	relayCache    *RSNRelayCache        // cached RSN relay peers (may be nil)
+	tm            *transport.Manager    // for finding relay transports (may be nil)
 	setupRPCMux   *transport.VStreamMux // virtual stream mux for RSN RPC (may be nil)
 }
 

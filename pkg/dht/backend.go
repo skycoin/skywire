@@ -28,7 +28,7 @@ type Backend interface {
 // memBackend is a no-op backend used when no persistence is configured.
 type memBackend struct{}
 
-func (memBackend) Save(_ NodeID, _ MutableItem) error        { return nil }
-func (memBackend) Delete(_ NodeID) error                     { return nil }
-func (memBackend) Load() (map[NodeID]MutableItem, error)     { return nil, nil }
-func (memBackend) Close() error                              { return nil }
+func (memBackend) Save(_ NodeID, _ MutableItem) error    { return nil }
+func (memBackend) Delete(_ NodeID) error                 { return nil }
+func (memBackend) Load() (map[NodeID]MutableItem, error) { return nil, nil }
+func (memBackend) Close() error                          { return nil }

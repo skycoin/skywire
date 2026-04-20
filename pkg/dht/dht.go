@@ -18,11 +18,11 @@ var ErrNotFound = errors.New("dht: item not found")
 
 // Node is a Kademlia DHT node.
 type Node struct {
-	pk     cipher.PubKey
-	sk     cipher.SecKey
-	id     NodeID
-	rt     *RoutingTable
-	store  *Store
+	pk              cipher.PubKey
+	sk              cipher.SecKey
+	id              NodeID
+	rt              *RoutingTable
+	store           *Store
 	tp              Transport
 	extraTransports []Transport // additional transports (e.g., transport-layer DHT)
 	log             *logging.Logger

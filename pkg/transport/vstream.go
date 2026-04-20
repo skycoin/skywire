@@ -35,8 +35,8 @@ const (
 // Multiple instances can coexist (one per packet type, e.g., DHTPacket
 // for DHT, CascadeSetupPacket for RSN relay).
 type VStreamMux struct {
-	log       *logging.Logger
-	tm        *Manager
+	log        *logging.Logger
+	tm         *Manager
 	packetType routing.PacketType // which route-ID-0 packet type to use
 
 	streams   map[uint64]*VStream
