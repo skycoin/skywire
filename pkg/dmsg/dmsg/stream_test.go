@@ -53,8 +53,10 @@ func TestStream(t *testing.T) {
 	clientB.SetLogger(logging.MustGetLogger("client_B"))
 	go clientB.Serve(context.Background())
 
-	// Ensure all entities are registered in discovery before continuing.
-	time.Sleep(time.Second * 2)
+	// Wait for both clients to be ready (connected to DMSG server).
+	require.Eventually(t, func() bool {
+		return clientA.SessionCount() > 0 && clientB.SessionCount() > 0
+	}, 10*time.Second, 200*time.Millisecond, "clients failed to connect to DMSG server")
 
 	// Helper functions.
 	makePiper := func(dialer, listener *Client, port uint16) (net.Listener, nettest.MakePipe) {

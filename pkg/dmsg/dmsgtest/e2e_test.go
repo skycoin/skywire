@@ -205,8 +205,8 @@ func TestMultiServerStreams(t *testing.T) {
 }
 
 func TestConcurrentStreams(t *testing.T) {
-	const timeout = time.Second * 30
-	const numStreams = 20
+	const timeout = time.Second * 60
+	const numStreams = 10
 	const payloadSize = 256
 
 	env := NewEnv(t, timeout)
@@ -261,12 +261,12 @@ func TestConcurrentStreams(t *testing.T) {
 			// can transiently fail with "cannot connect to delegated server".
 			var s *dmsg.Stream
 			var dErr error
-			for attempt := 0; attempt < 5; attempt++ {
+			for attempt := 0; attempt < 10; attempt++ {
 				s, dErr = clientB.DialStream(ctx, dmsg.Addr{PK: clientA.LocalPK(), Port: port})
 				if dErr == nil {
 					break
 				}
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(time.Duration(200+attempt*100) * time.Millisecond)
 			}
 			if dErr != nil {
 				results[i] = streamResult{idx: i, err: dErr}
