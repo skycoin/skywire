@@ -101,6 +101,10 @@ type Manager struct {
 	delQueue   []uuid.UUID
 	delQueueMu sync.Mutex
 	delNudge   chan struct{}
+
+	// cascadeHandler handles cascade protocol packets (route ID 0) on any transport.
+	cascadeHandler   func(p routing.Packet, mt *ManagedTransport)
+	cascadeHandlerMu sync.RWMutex
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -361,6 +365,20 @@ func (tm *Manager) SetPTpsCache(pTps []PersistentTransports) {
 	tm.Conf.PersistentTransportsCache = pTps
 }
 
+// SetCascadeHandler sets the handler for cascade protocol packets (route ID 0).
+// Called by the router to register its cascade handler.
+func (tm *Manager) SetCascadeHandler(h func(p routing.Packet, mt *ManagedTransport)) {
+	tm.cascadeHandlerMu.Lock()
+	defer tm.cascadeHandlerMu.Unlock()
+	tm.cascadeHandler = h
+	// Propagate to existing transports.
+	tm.mx.RLock()
+	for _, mt := range tm.tps {
+		mt.cascadeHandler = h
+	}
+	tm.mx.RUnlock()
+}
+
 // SetRouteChecker sets the callback used to determine if a transport has active routes.
 // SetLatencyFallback sets the callback used when transport-level ping fails
 // to produce latency data (remote visor doesn't support transport ping frames).
@@ -619,6 +637,9 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			QueueDeletion:  tm.queueDeletion,
 		})
 		mTp.manager = tm
+		tm.cascadeHandlerMu.RLock()
+		mTp.cascadeHandler = tm.cascadeHandler
+		tm.cascadeHandlerMu.RUnlock()
 
 		go func() {
 			mTp.Serve(tm.readCh)
@@ -824,6 +845,9 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		QueueDeletion:  tm.queueDeletion,
 	})
 	mTp.manager = tm
+	tm.cascadeHandlerMu.RLock()
+	mTp.cascadeHandler = tm.cascadeHandler
+	tm.cascadeHandlerMu.RUnlock()
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
 	errCh := make(chan error)
