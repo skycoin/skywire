@@ -3,10 +3,12 @@ package visor
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"time"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/dht"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -45,8 +47,32 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 		TrustedPKs:     trustedPKs,
 	}
 
+	// Persistence config.
+	if conf != nil {
+		dhtCfg.PersistPath = conf.PersistPath
+		dhtCfg.RedisAddr = conf.RedisAddr
+		dhtCfg.RedisPassword = conf.RedisPassword
+		dhtCfg.RedisDB = conf.RedisDB
+	}
+	// Default bbolt path if no explicit persistence configured.
+	if dhtCfg.PersistPath == "" && dhtCfg.RedisAddr == "" && v.conf.LocalPath != "" {
+		dhtCfg.PersistPath = v.conf.LocalPath + "/dht.db"
+	}
+
 	tp := dht.NewDMSGTransport(v.dmsgC)
 	node := dht.New(dhtCfg, v.conf.PK, v.conf.SK, tp, log)
+
+	// Set up persistence backend.
+	backend, err := dht.NewBackendFromConfig(&dhtCfg)
+	if err != nil {
+		log.WithError(err).Warn("DHT persistence backend failed — running in-memory only")
+	} else {
+		if err := node.Store().SetBackend(backend); err != nil {
+			log.WithError(err).Warn("DHT backend rehydration failed")
+		} else {
+			log.WithField("items_loaded", node.Store().Len()).Info("DHT store rehydrated from backend")
+		}
+	}
 
 	if err := node.Start(ctx); err != nil {
 		return err
@@ -64,6 +90,12 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 		WithField("bootstrap_peers", len(bootstrapPKs)).
 		WithField("full_node", fullNode).
 		Info("DHT node started")
+
+	// Register full DHT nodes in service discovery so other visors
+	// can discover them as additional bootstrap peers.
+	if fullNode {
+		go dhtRegisterFullNode(ctx, v, log)
+	}
 
 	// Wrap discovery clients with DHT hybrid clients so reads try
 	// DHT first, fall back to HTTP. Writes go to both.
@@ -108,6 +140,50 @@ func dhtPublishLoop(ctx context.Context, v *Visor, node *dht.Node, log *logging.
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+		}
+	}
+}
+
+// dhtRegisterFullNode registers this visor as a DHT full node in
+// service discovery so other visors can discover it as a bootstrap peer.
+func dhtRegisterFullNode(ctx context.Context, v *Visor, log *logging.Logger) {
+	sdAddr := ""
+	if v.conf.Launcher != nil && v.conf.Launcher.ServiceDisc != "" {
+		sdAddr = v.conf.Launcher.ServiceDisc
+	}
+	if sdAddr == "" {
+		log.Warn("DHT full node: no service discovery address; skipping registration")
+		return
+	}
+
+	sdConf := servicedisc.Config{
+		Type:     servicedisc.ServiceTypeDHTNode,
+		PK:       v.conf.PK,
+		SK:       v.conf.SK,
+		Port:     100, // DHT DMSG port
+		DiscAddr: sdAddr,
+	}
+	sdClient := servicedisc.NewClient(log, logging.NewMasterLogger(), sdConf, &http.Client{}, "")
+
+	// Initial registration.
+	if err := sdClient.Register(ctx); err != nil {
+		log.WithError(err).Warn("DHT full node: initial SD registration failed")
+	} else {
+		log.Info("DHT full node registered in service discovery")
+	}
+
+	// Periodic heartbeat (same interval as other services: 90s).
+	ticker := time.NewTicker(90 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			sdClient.DeleteEntry(context.Background()) //nolint:errcheck
+			return
+		case <-ticker.C:
+			if err := sdClient.Register(ctx); err != nil {
+				log.WithError(err).Trace("DHT full node: SD heartbeat failed")
+			}
 		}
 	}
 }

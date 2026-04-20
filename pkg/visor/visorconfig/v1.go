@@ -106,6 +106,16 @@ type DHTConfig struct {
 	WhitelistedPKs []cipher.PubKey `json:"whitelisted_pks,omitempty"`
 	// TrustedPKs are publisher keys that get full replication unless abuse is detected.
 	TrustedPKs []cipher.PubKey `json:"trusted_pks,omitempty"`
+	// PersistPath is the bbolt file for local persistence. Empty = in-memory only.
+	// Default: "<local_path>/dht.db" (set automatically if omitted).
+	PersistPath string `json:"persist_path,omitempty"`
+	// RedisAddr enables Redis persistence (deployment services only).
+	// Format: "host:port". Empty = no Redis.
+	RedisAddr string `json:"redis_addr,omitempty"`
+	// RedisPassword for authenticated Redis connections.
+	RedisPassword string `json:"redis_password,omitempty"`
+	// RedisDB is the Redis database number.
+	RedisDB int `json:"redis_db,omitempty"`
 }
 
 // DmsgWebConfig enables the embedded `.dmsg` resolving proxy hosted by

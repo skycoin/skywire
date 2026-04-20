@@ -41,6 +41,30 @@ type Config struct {
 	// can store. Prevents a single key from flooding the store.
 	// 0 = unlimited. Defaults to 50.
 	RateLimitPerPK int `json:"rate_limit_per_pk,omitempty"`
+
+	// PersistPath is the file path for bbolt persistence (visors).
+	// Empty = in-memory only (data lost on restart).
+	PersistPath string `json:"persist_path,omitempty"`
+
+	// RedisAddr enables Redis persistence (deployment services).
+	// Format: "host:port". Empty = no Redis.
+	RedisAddr string `json:"redis_addr,omitempty"`
+	// RedisPassword for authenticated Redis connections.
+	RedisPassword string `json:"redis_password,omitempty"`
+	// RedisDB is the Redis database number for DHT data.
+	RedisDB int `json:"redis_db,omitempty"`
+}
+
+// NewBackendFromConfig creates the appropriate Backend from config.
+// Returns memBackend{} if no persistence is configured.
+func NewBackendFromConfig(cfg *Config) (Backend, error) {
+	if cfg.RedisAddr != "" {
+		return NewRedisBackend(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB, 0)
+	}
+	if cfg.PersistPath != "" {
+		return NewBoltBackend(cfg.PersistPath)
+	}
+	return memBackend{}, nil
 }
 
 // SetDefaults fills in zero values with sensible defaults.

@@ -68,6 +68,7 @@ type Store struct {
 	rateLimitPerPK int // max items per public PK
 	ttl            time.Duration
 	trust          *TrustPolicy
+	backend        Backend
 }
 
 type storedItem struct {
@@ -76,6 +77,7 @@ type storedItem struct {
 }
 
 // NewStore creates a new item store with trust policy.
+// An optional Backend can be set with SetBackend after construction.
 func NewStore(maxItems int, ttl time.Duration) *Store {
 	if ttl <= 0 {
 		ttl = DefaultItemTTL
@@ -87,7 +89,25 @@ func NewStore(maxItems int, ttl time.Duration) *Store {
 		rateLimitPerPK: 50,
 		ttl:            ttl,
 		trust:          NewTrustPolicy(nil, nil),
+		backend:        memBackend{},
 	}
+}
+
+// SetBackend configures a persistence backend and rehydrates the store
+// from it. Must be called before Start (or at least before any Put).
+func (s *Store) SetBackend(b Backend) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.backend = b
+
+	items, err := b.Load()
+	if err != nil {
+		return err
+	}
+	for target, item := range items {
+		s.items[target] = &storedItem{item: item, storedAt: time.Now()}
+	}
+	return nil
 }
 
 // SetFullNode enables or disables full node mode (store all items).
@@ -143,6 +163,7 @@ func (s *Store) PutMirror(target NodeID, item MutableItem) {
 		item:     item,
 		storedAt: time.Now(),
 	}
+	s.backend.Save(target, item) //nolint:errcheck
 }
 
 // Put stores an item, enforcing monotonic sequence numbers, trust
@@ -184,6 +205,7 @@ func (s *Store) Put(item MutableItem) error {
 		item:     item,
 		storedAt: time.Now(),
 	}
+	s.backend.Save(target, item) //nolint:errcheck
 
 	// Evict public items if the public pool is over capacity.
 	if tier == TierPublic {
@@ -264,6 +286,7 @@ func (s *Store) ExpireSweep() int {
 		tier := s.trust.Classify(si.item.K)
 		if tier == TierPublic && time.Since(si.storedAt) > s.ttl {
 			delete(s.items, k)
+			s.backend.Delete(k) //nolint:errcheck
 			removed++
 		}
 	}
@@ -303,5 +326,16 @@ func (s *Store) evictOldestPublic() {
 	}
 	if found {
 		delete(s.items, oldestKey)
+		s.backend.Delete(oldestKey) //nolint:errcheck
 	}
+}
+
+// Close closes the backend (if any). Should be called on shutdown.
+func (s *Store) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.backend != nil {
+		return s.backend.Close()
+	}
+	return nil
 }
