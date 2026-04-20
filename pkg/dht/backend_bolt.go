@@ -29,7 +29,7 @@ func NewBoltBackend(path string) (*BoltBackend, error) {
 		_, err := tx.CreateBucketIfNotExists(boltBucket)
 		return err
 	}); err != nil {
-		db.Close() //nolint:errcheck
+		db.Close() //nolint:errcheck,gosec
 		return nil, fmt.Errorf("dht bolt: create bucket: %w", err)
 	}
 	return &BoltBackend{db: db}, nil

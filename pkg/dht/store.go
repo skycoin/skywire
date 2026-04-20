@@ -163,7 +163,7 @@ func (s *Store) PutMirror(target NodeID, item MutableItem) {
 		item:     item,
 		storedAt: time.Now(),
 	}
-	s.backend.Save(target, item) //nolint:errcheck
+	s.backend.Save(target, item) //nolint:errcheck,gosec,gosec
 }
 
 // Put stores an item, enforcing monotonic sequence numbers, trust
@@ -205,7 +205,7 @@ func (s *Store) Put(item MutableItem) error {
 		item:     item,
 		storedAt: time.Now(),
 	}
-	s.backend.Save(target, item) //nolint:errcheck
+	s.backend.Save(target, item) //nolint:errcheck,gosec
 
 	// Evict public items if the public pool is over capacity.
 	if tier == TierPublic {
@@ -286,7 +286,7 @@ func (s *Store) ExpireSweep() int {
 		tier := s.trust.Classify(si.item.K)
 		if tier == TierPublic && time.Since(si.storedAt) > s.ttl {
 			delete(s.items, k)
-			s.backend.Delete(k) //nolint:errcheck
+			s.backend.Delete(k) //nolint:errcheck,gosec
 			removed++
 		}
 	}
@@ -326,7 +326,7 @@ func (s *Store) evictOldestPublic() {
 	}
 	if found {
 		delete(s.items, oldestKey)
-		s.backend.Delete(oldestKey) //nolint:errcheck
+		s.backend.Delete(oldestKey) //nolint:errcheck,gosec
 	}
 }
 

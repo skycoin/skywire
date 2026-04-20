@@ -185,7 +185,7 @@ func (d *setupNodeDialer) dialViaTransport(
 
 	select {
 	case <-ctx.Done():
-		rpcC.Close() //nolint:errcheck
+		rpcC.Close() //nolint:errcheck,gosec
 		return routing.EdgeRules{}, ctx.Err()
 	case <-call.Done:
 		if call.Error != nil {

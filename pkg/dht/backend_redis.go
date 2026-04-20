@@ -92,7 +92,7 @@ func (r *RedisBackend) Load() (map[NodeID]MutableItem, error) {
 			var id NodeID
 			if len(hexStr) == len(id)*2 {
 				for i := 0; i < len(id); i++ {
-					fmt.Sscanf(hexStr[i*2:i*2+2], "%02x", &id[i]) //nolint:errcheck
+					fmt.Sscanf(hexStr[i*2:i*2+2], "%02x", &id[i]) //nolint:errcheck,gosec
 				}
 			}
 			items[id] = item

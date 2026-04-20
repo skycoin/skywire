@@ -297,19 +297,19 @@ func collectRulesPerPK(fwdRules, revRules, interRules RulesMap, initEdge, respEd
 
 	// Add intermediary rules.
 	for addr, rules := range interRules {
-		pk := pkFromAddr(addr)
+		pk := cascadePKFromAddr(addr)
 		result[pk] = append(result[pk], rules...)
 	}
 
 	// Also add forward/reverse rules for non-edge hops (they get forward rules too).
 	for addr, rules := range fwdRules {
-		pk := pkFromAddr(addr)
+		pk := cascadePKFromAddr(addr)
 		if pk != srcPK && pk != dstPK {
 			result[pk] = append(result[pk], rules...)
 		}
 	}
 	for addr, rules := range revRules {
-		pk := pkFromAddr(addr)
+		pk := cascadePKFromAddr(addr)
 		if pk != srcPK && pk != dstPK {
 			result[pk] = append(result[pk], rules...)
 		}
@@ -318,8 +318,8 @@ func collectRulesPerPK(fwdRules, revRules, interRules RulesMap, initEdge, respEd
 	return result
 }
 
-// pkFromAddr extracts the PK from a "pk:port" address string.
-func pkFromAddr(addr string) cipher.PubKey {
+// cascadePKFromAddr extracts the PK from a "pk:port" address string.
+func cascadePKFromAddr(addr string) cipher.PubKey {
 	pkStr := addr
 	if idx := strings.Index(addr, ":"); idx >= 0 {
 		pkStr = addr[:idx]

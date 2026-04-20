@@ -174,7 +174,7 @@ func (tl *TransportLayerDHT) Dial(ctx context.Context, pk cipher.PubKey) (io.Rea
 
 	pkt := makeDHTPacket(payload)
 	if err := targetTp.WriteRawPacket(pkt); err != nil {
-		stream.Close() //nolint:errcheck
+		stream.Close() //nolint:errcheck,gosec
 		return nil, fmt.Errorf("dht transport: send SYN: %w", err)
 	}
 
@@ -218,7 +218,7 @@ func (tl *TransportLayerDHT) HandleDHTPacket(p routing.Packet, mt *tp.ManagedTra
 		case tl.incoming <- stream:
 		default:
 			tl.log.Warn("DHT transport: incoming stream dropped (buffer full)")
-			stream.Close() //nolint:errcheck
+			stream.Close() //nolint:errcheck,gosec
 		}
 
 	case dhtFlagData:
@@ -246,7 +246,7 @@ func (tl *TransportLayerDHT) HandleDHTPacket(p routing.Packet, mt *tp.ManagedTra
 		}
 		tl.streamsMu.Unlock()
 		if ok {
-			stream.Close() //nolint:errcheck
+			stream.Close() //nolint:errcheck,gosec
 		}
 	}
 }
@@ -257,7 +257,7 @@ func (tl *TransportLayerDHT) Close() error {
 		close(tl.done)
 		tl.streamsMu.Lock()
 		for _, s := range tl.streams {
-			s.Close() //nolint:errcheck
+			s.Close() //nolint:errcheck,gosec
 		}
 		tl.streamsMu.Unlock()
 	})

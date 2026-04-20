@@ -106,7 +106,7 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Register full DHT nodes in service discovery so other visors
 	// can discover them as additional bootstrap peers.
 	if fullNode {
-		go dhtRegisterFullNode(ctx, v, log)
+		go dhtRegisterFullNode(ctx, v, log) //nolint:gosec
 	}
 
 	// Wrap discovery clients with DHT hybrid clients so reads try
@@ -190,7 +190,7 @@ func dhtRegisterFullNode(ctx context.Context, v *Visor, log *logging.Logger) {
 	for {
 		select {
 		case <-ctx.Done():
-			sdClient.DeleteEntry(context.Background()) //nolint:errcheck
+			sdClient.DeleteEntry(context.Background()) //nolint:errcheck,gosec
 			return
 		case <-ticker.C:
 			if err := sdClient.Register(ctx); err != nil {

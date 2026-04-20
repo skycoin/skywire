@@ -104,7 +104,7 @@ func (m *VStreamMux) DialOnTransport(tp *ManagedTransport) (*VStream, error) {
 
 	// Send SYN.
 	if err := stream.sendFlag(VStreamFlagSyn, nil); err != nil {
-		stream.Close() //nolint:errcheck
+		stream.Close() //nolint:errcheck,gosec
 		return nil, fmt.Errorf("vstream: send SYN: %w", err)
 	}
 
@@ -142,7 +142,7 @@ func (m *VStreamMux) HandlePacket(p routing.Packet, mt *ManagedTransport) {
 		case m.incoming <- stream:
 		default:
 			m.log.Warn("vstream: incoming stream dropped (buffer full)")
-			stream.Close() //nolint:errcheck
+			stream.Close() //nolint:errcheck,gosec
 		}
 
 	case VStreamFlagData:
@@ -169,7 +169,7 @@ func (m *VStreamMux) HandlePacket(p routing.Packet, mt *ManagedTransport) {
 		}
 		m.streamsMu.Unlock()
 		if ok {
-			stream.Close() //nolint:errcheck
+			stream.Close() //nolint:errcheck,gosec
 		}
 	}
 }
@@ -190,7 +190,7 @@ func (m *VStreamMux) Close() error {
 		close(m.done)
 		m.streamsMu.Lock()
 		for _, s := range m.streams {
-			s.Close() //nolint:errcheck
+			s.Close() //nolint:errcheck,gosec
 		}
 		m.streamsMu.Unlock()
 	})
@@ -246,7 +246,7 @@ func (s *VStream) Close() error {
 		delete(s.mux.streams, s.id)
 		s.mux.streamsMu.Unlock()
 		// Best-effort FIN — don't block if transport is dead.
-		s.sendFlag(VStreamFlagFin, nil) //nolint:errcheck
+		s.sendFlag(VStreamFlagFin, nil) //nolint:errcheck,gosec
 	})
 	return nil
 }

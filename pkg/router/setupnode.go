@@ -176,7 +176,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 		sn.cascade.tm.SetSetupRPCHandler(setupMux.HandlePacket)
 
 		go func() {
-			defer setupMux.Close() //nolint:errcheck
+			defer setupMux.Close() //nolint:errcheck,gosec
 			for {
 				stream, err := setupMux.Accept()
 				if err != nil {
@@ -190,7 +190,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 				select {
 				case sem <- struct{}{}:
 				case <-ctx.Done():
-					stream.Close() //nolint:errcheck
+					stream.Close() //nolint:errcheck,gosec
 					return
 				}
 
@@ -208,7 +208,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 				rpcS := rpc.NewServer()
 				if err := rpcS.Register(gw); err != nil {
 					log.WithError(err).Error("Failed to register vstream RPC gateway")
-					stream.Close()  //nolint:errcheck
+					stream.Close()  //nolint:errcheck,gosec
 					handlerCancel() //nolint:gosec
 					<-sem
 					continue
@@ -216,7 +216,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 				go func() {
 					defer func() {
 						handlerCancel()
-						stream.Close() //nolint:errcheck
+						stream.Close() //nolint:errcheck,gosec
 						<-sem
 					}()
 					rpcS.ServeConn(stream)
@@ -246,7 +246,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
-			conn.Close() //nolint:errcheck,gosec
+			conn.Close() //nolint:errcheck,gosec,gosec
 			return nil
 		}
 
@@ -267,7 +267,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 		rpcS := rpc.NewServer()
 		if err := rpcS.Register(gw); err != nil {
 			log.WithError(err).Error("Failed to register RPC gateway")
-			conn.Close()    //nolint:errcheck,gosec
+			conn.Close()    //nolint:errcheck,gosec,gosec
 			handlerCancel() //nolint:gosec
 			<-sem           // release the slot
 			continue
@@ -278,13 +278,13 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 					log.Errorf("Panic in setup RPC handler: %v", r)
 				}
 				handlerCancel()
-				conn.Close() //nolint:errcheck,gosec
+				conn.Close() //nolint:errcheck,gosec,gosec
 				<-sem        // release the handler slot
 			}()
 			// Set a hard deadline on the connection itself as a backstop.
 			// If context cancellation fails to propagate (e.g., ServeConn blocks
 			// on a read), the OS will close the connection after this deadline.
-			conn.SetDeadline(time.Now().Add(handlerTimeout)) //nolint:errcheck,gosec
+			conn.SetDeadline(time.Now().Add(handlerTimeout)) //nolint:errcheck,gosec,gosec
 			rpcS.ServeConn(conn)
 		}()
 	}
@@ -359,7 +359,7 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 		if err != nil {
 			// On failure, discard connections (they may be broken).
 			log.Debug("Discarding route id reserver connections (error path).")
-			rtIDR.Close() //nolint:errcheck,gosec
+			rtIDR.Close() //nolint:errcheck,gosec,gosec
 		} else if pool != nil {
 			// On success, return connections to pool for reuse.
 			log.Debug("Returning route id reserver connections to pool.")
