@@ -1,19 +1,112 @@
 # Overview
 
-Skywire is an decentralized network that attempts to replace the current internet. The *Skywire Network* is made up of physical *Skywire Nodes* which run the *Skywire-Visor*. There are currently two types of *Skywire Nodes*; *Skywire Visor* and *Setup Node*.
+Skywire is a decentralized, privacy-focused mesh network. The network is composed of *Visors* — processes identified by secp256k1 public keys that communicate over encrypted channels.
 
-Each *Skywire Visor* is represented by a unique public key. A direct line of communication between two *Skywire Visors* is called a *Transport*. Each *Transport* is represented by a unique *Transport ID* which is of a *Transport Type*, and the two *Skywire Visors* that are connected via the *Transport* are named the *Transport Edges*.
+## Node Types
 
-A *Route* is unidirectional and delivers data units called *Packets*. It is made up of multiple hops where each hop is a *Transport*. Two *Routes* of opposite directions make a *Loop* when associated with the given *Ports* at each *Loop Edge*. *Loops* handle the communication between two *Skywire Apps* and are represented via the *Loop's* source and destination visor's public keys and the source and destination ports (similar to how TCP/UDP handles ports).
+- **Visor** — the primary network participant. Runs applications, establishes transports, and routes packets. Each visor has a unique public key. A visor may optionally run an embedded *Route Setup Node* and/or *Transport Setup Node*.
 
-A *Packet* is prefixed with a *Route ID* which helps *Skywire Visors* identify how the *Packet* is to be handled (either to be forward to a remote node, or to be consumed internally). Every *Skywire Visor* has a *Routing Table* that has the *Routing Rules* for that particular *Skywire Visor*.
+- **Route Setup Node (RSN)** — coordinates the establishment of multi-hop routes between visors. The RSN connects to each visor along a route path via DMSG port 136, reserves route IDs, generates routing rules, and distributes them. RSNs can run as standalone deployment services or embedded within a visor.
 
-In summary,
+- **Transport Setup Node (TPS)** — remotely manages transports on visors. Can create, list, and remove transports on behalf of network operators. Connects to visors via DMSG port 47.
 
-- *Transports* are responsible for single-hop communication between two *Skywire Visors* and are bidirectional.
-- *Routes* are responsible for multi-hop communication between two *Skywire Visors* and are unidirectional.
-- *Loops* are responsible for communication between two *Skywire Apps* and are bidirectional.
+- **DMSG Server** — relay server in the Distributed Messaging System. Bridges DMSG client sessions for visors that cannot communicate directly. Identified by public key and TCP address.
 
-There are many ways in which we can implement a *Transport*. Each unique method is called a *Transport Type*.
+## Core Concepts
 
-Initially, we need to implement a MVP in which we assume that there are no malicious nodes in the network and discovery of routes, transports and nodes are to be done in a centralized manner.
+### Transports
+
+A *Transport* is a bidirectional, encrypted line of communication between two visors (called *Transport Edges*). Each transport has a unique *Transport ID* (UUID) and a *Transport Type* that identifies the underlying protocol.
+
+Transport types:
+- **STCPR** — TCP with address resolution via the Address Resolver service
+- **SUDPH** — UDP with NAT hole-punching via the Address Resolver service
+- **STCP** — TCP with locally configured PK-to-IP mapping (no external service)
+- **DMSG** — communication relayed through DMSG servers
+
+Transports carry *Transport Labels* (`skycoin`, `automatic`, `user`) that identify their origin and control access via the Transport Setup Node.
+
+### Routes
+
+A *Route* is a unidirectional path through one or more transports. Each hop in a route is governed by a *Routing Rule* stored in the visor's *Routing Table*. A bidirectional connection between two visors consists of a forward route and a reverse route, forming a *Route Group*.
+
+Routing rule types:
+- **Forward** — the initiating edge's rule; specifies the next route ID and transport
+- **Consume** — the responding edge's rule; delivers the packet to the local application
+- **IntermediaryForward** — an intermediary visor's rule; forwards the packet to the next hop
+
+### Packets
+
+Packets are the data units transmitted over routes. Each packet has a 7-byte header:
+
+```
+| type (1 byte) | route ID (4 bytes) | payload size (2 bytes) | payload |
+```
+
+Packet types:
+- `DataPacket` (0) — application data
+- `ClosePacket` (1) — connection close
+- `KeepAlivePacket` (2) — route keepalive
+- `HandshakePacket` (3) — Noise protocol handshake + capability negotiation
+- `PingPacket` (4) — route-level latency measurement
+- `PongPacket` (5) — route-level pong response
+- `ErrorPacket` (6) — error notification
+- `SACKPacket` (7) — selective acknowledgment (for route multiplexing)
+- `TransportPingPacket` (8) — transport-level latency measurement (no route required)
+- `TransportPongPacket` (9) — transport-level pong response
+
+### Route Groups and Noise Encryption
+
+A *Route Group* wraps the forward and reverse routes into a bidirectional connection. After routing rules are established, the two edge visors perform a Noise protocol handshake (ChaCha20-Poly1305) over the route. Intermediary visors see only encrypted payload — they know only the previous and next hop, not the source or destination.
+
+Route groups support capability negotiation via the handshake:
+- **CapMux** — route multiplexing with sequenced DataPackets
+- **CapSACK** — selective acknowledgment retransmission
+
+### Kademlia DHT
+
+Every visor runs a Kademlia DHT node over DMSG (port 100). The DHT provides decentralized key-value storage for discovery data:
+
+- Node IDs are derived from `SHA256(secp256k1_pubkey)` (256-bit address space)
+- Items are mutable, signed records with monotonic sequence numbers (BEP44 semantics adapted for secp256k1)
+- K-buckets with k=20, iterative lookup with alpha=3 concurrency
+- Items stored under `SHA256(publisher_pk || salt)` with salt-based namespacing (`dmsg`, `tp`, `svc`, `addr`)
+- Three-tier trust: whitelisted (never evicted), trusted (full replication), public (pool + LRU eviction)
+
+The DHT supplements centralized HTTP discovery services. Reads try DHT first, fall back to HTTP. Writes go to both (dual-write).
+
+## Deployment Services
+
+Centralized services that bootstrap and support the network:
+
+| Service | Purpose | HTTP Endpoint | DMSG Port |
+|---|---|---|---|
+| DMSG Discovery | Maps visor PKs to DMSG server sessions | dmsgd.skywire.skycoin.com | 80 |
+| Transport Discovery | Registers and queries transports | tpd.skywire.skycoin.com | 80 |
+| Address Resolver | Maps visor PKs to IP addresses for direct transports | ar.skywire.skycoin.com | 80 |
+| Route Finder | Computes multi-hop route paths from the transport graph | rf.skywire.skycoin.com | 80 |
+| Service Discovery | Registers VPN, proxy, and other application services | sd.skycoin.com | 80 |
+| Uptime Tracker | Tracks visor online status for reward eligibility | ut.skywire.skycoin.com | 80 |
+| Config Bootstrapper | Provides initial visor configuration | conf.skywire.skycoin.com | — |
+
+All deployment services also run as DHT full nodes (bootstrap peers).
+
+## DMSG Port Assignments
+
+| Port | Service |
+|---|---|
+| 7 | DMSG Ctrl (echo protocol) |
+| 8 | DMSG Ping |
+| 22 | DMSG Pty (pseudoterminal) |
+| 36 | Route Setup Node (standalone RSN listener) |
+| 46 | Hypervisor RPC |
+| 47 | Transport Setup RPC |
+| 48 | Transport Setup Service |
+| 49 | gRPC (remote monitoring) |
+| 80 | DMSG HTTP (health, log server, services) |
+| 100 | Kademlia DHT |
+| 136 | Route Setup Await (visor listener for RSN connections) |
+
+## Transport-Level Latency Measurement
+
+Transports measure their own latency using `TransportPingPacket` (type 8) and `TransportPongPacket` (type 9) with route ID 0. These frames are intercepted at the transport layer before reaching the router, requiring no route setup or RSN involvement. Pings are sent every 30 seconds; the first ping fires immediately when the transport is established.

@@ -20,6 +20,7 @@ var (
 	portDmsg        bool
 	portShowLanding bool
 	portProxyAddr   string
+	portLocalPort   int
 )
 
 func init() {
@@ -29,6 +30,7 @@ func init() {
 	portAddCmd.Flags().BoolVar(&portDmsg, "dmsg", true, "forward over DMSG")
 	portAddCmd.Flags().BoolVar(&portShowLanding, "landing", true, "show link on visor landing page")
 	portAddCmd.Flags().StringVar(&portProxyAddr, "proxy-addr", "", "reverse proxy to local address (e.g. 127.0.0.1:3000); for port 80 this replaces the landing page")
+	portAddCmd.Flags().IntVar(&portLocalPort, "local-port", 0, "local TCP port to forward (default: same as skynet/dmsg port)")
 
 	portCmd.AddCommand(portAddCmd)
 	portCmd.AddCommand(portRmCmd)
@@ -59,10 +61,11 @@ var portLsCmd = &cobra.Command{
 			return
 		}
 		tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "PORT\tLABEL\tSKYNET\tDMSG\tLANDING\tDESCRIPTION") //nolint:errcheck
+		fmt.Fprintln(tw, "PORT\tLOCAL\tLABEL\tSKYNET\tDMSG\tLANDING\tDESCRIPTION") //nolint:errcheck
 		for _, p := range ports {
-			fmt.Fprintf(tw, "%d\t%s\t%v\t%v\t%v\t%s\n", //nolint:errcheck
+			fmt.Fprintf(tw, "%d\t%d\t%s\t%v\t%v\t%v\t%s\n", //nolint:errcheck
 				p.Port,
+				p.EffectiveLocalPort(),
 				dashIfEmpty(p.Label),
 				p.Skynet,
 				p.DMSG,
@@ -94,6 +97,7 @@ Examples:
 		}
 		fp := visor.ForwardedPort{
 			Port:          port,
+			LocalPort:     portLocalPort,
 			Label:         portLabel,
 			Description:   portDesc,
 			Skynet:        portSkynet,
@@ -104,7 +108,11 @@ Examples:
 		if err := rpcClient.RegisterForwardedPort(fp); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
+		localP := fp.EffectiveLocalPort()
 		fmt.Printf("Port %d forwarded", port)
+		if localP != port {
+			fmt.Printf(" (local TCP %d)", localP)
+		}
 		if portLabel != "" {
 			fmt.Printf(" (%s)", portLabel)
 		}

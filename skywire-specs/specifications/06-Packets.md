@@ -1,212 +1,72 @@
 # Packets
 
-The *Node Module* handles data encapsulated within data units called *Packets*. *Packets* can be grouped within the following categories based on their use-case;
+Packets are the data units transmitted over Skywire transports and routes. Every packet has a fixed 7-byte header followed by a variable-length payload.
 
-- ***Settlement Packets*** are used by the *Transport Manager* to "settle" Transports. Settlement, allows the two nodes that are the edges of the transport to decide on the *Transport ID* to be used, and whether the Transport is to be public. Only after a *Transport* is settled, can the *Router* have access to the Transport.
-
-    *Settlement Packets* contain `json` encoded payload.
-
-- ***Foundational Packets*** are used by a *Router* to communicate with a remote *Setup Node* and is used for setting up, establishing and destroying routes.
-
-    *Foundational Packets* are prefixed by 3 bytes: the packet size (2 bytes) and a Type (1 byte) that contains the foundational packet type.
-
-- ***Data Packets*** are Packets that are actually used to encapsulate data delivered between two Apps.
-
-    *Data Packets* are prefixed by 6 bytes; including the packet size (2 bytes) and the Route ID (4 bytes) which can have any value other than `0x00` or `0x01`.
-    
-- ***Loopback Packets*** are packets that are consumed locally by the node.
-
-    *Loopback Packets* are structurally similar to data packets but their Route ID links to a rule that specifies which app to forward the packet to.
-
-## Settlement Packets
-
-After a Transport is established between two nodes, the nodes needs to decide on the *Transport ID* that describes the Transport and whether the Transport is to be public or private (public Transports are to be registered in the *Transport Discovery*). This process is called the *Settlement Handshake*.
-
-The Packets of this handshake contain `json` encoded messages.
-
-*Settlement Handshake* packets do not need a field for Packet-type are they are expected in a specific order.
-
-- Request to settle transport is sent by the *Transport Initiator* to the *Transport Responder* after a *Transport* connection is established.
-
-    JSON Body: Contains a `transport.SignedEntry` structure with the *Transport Initiator*'s signature.
-
-- *Transport Responder* should validate submitted `transport.SignedEntry`, and if entry is valid it should add sign it and perform transport registration in transport discovery. If registration was successful responder should send updated `transport.SignedEntry` back to initiator. 
-
-    JSON Body: Contains a `transport.SignedEntry` structure with signatures from both the *Transport Initiator* and the *Transport Responder*. If the transport is registered in *Transport Discovery*, the `SignedTransport.Registered` should contain the epoch time of registration.
-
-If transport will fail at any step participants can chose to stop handshake procedures and close corresponding transport. Transport disconnect during the handshake should be handled appropriately by participants. Optional handshake timeout should also be supported.
-
-## Foundational Packets
-
-Foundational packets are used for the communication between *App Nodes* and *Setup Nodes*.
-
-The *Setup Node* is responsible for fulfilling Route initiating and destroying requests by communicating with the initiating, responding and intermediate nodes of the proposed route.
-
-The following is the expected format of a Foundational Packet;
+## Packet Format
 
 ```
-| Packet Len | Type   | JSON Body |
-| 2 bytes    | 1 byte | ~         |
+| type (1 byte) | route ID (4 bytes BE) | payload size (2 bytes BE) | payload |
+| offset 0      | offset 1              | offset 5                  | offset 7 |
 ```
 
-- ***Packet Len*** specifies the total packet length in bytes (exclusive of the *Packet Len* field).
-- ***Type*** specifies the *Foundational Packet Type*.
-- ***JSON Body*** is the packet body (in JSON format) that is unique depending on the packet type.
+- `PacketHeaderSize` = 7 bytes
+- Maximum payload size: 65535 bytes (uint16 max)
+- Route ID 0 is reserved for transport-level frames (not routed)
 
-**Foundational Packet Types Summary:**
+## Packet Types
 
-| Type | Name |
-| ---- | ---- |
-| 0x00 | `AddRules` |
-| 0x01 | `RemoveRules` |
-| 0x02 | `CreateLoop` |
-| 0x03 | `ConfirmLoop` |
-| 0x04 | `CloseLoop` |
-| 0x05 | `LoopClosed` |
-| 0xfe | `ResponseFailure` |
-| 0xff | `ResponseSuccess` |
+| Type | Value | Payload | Description |
+|---|---|---|---|
+| `DataPacket` | 0 | Application data | Carries route group payload. When CapMux is active, a 4-byte sequence number is prepended. |
+| `ClosePacket` | 1 | CloseCode (1 byte) | Closes the route group. CloseCode 0 = `CloseRequested`. |
+| `KeepAlivePacket` | 2 | Empty | Refreshes routing rule TTL at each hop. Intermediary nodes forward it; edge nodes consume it. |
+| `HandshakePacket` | 3 | Encryption flag (1 byte) + capabilities (2 bytes LE) | Initiates Noise protocol handshake and negotiates capabilities. |
+| `PingPacket` | 4 | Timestamp (8 bytes BE) + throughput (8 bytes BE) | Route-level latency measurement. Requires an established route. |
+| `PongPacket` | 5 | Timestamp (8 bytes BE) | Route-level pong response. Echoes the timestamp from PingPacket. |
+| `ErrorPacket` | 6 | Error message (variable) | Error notification to the route group. |
+| `SACKPacket` | 7 | Last contiguous seq (4 bytes BE) + bitmap (8 bytes BE) | Selective acknowledgment for CapSACK retransmission. |
+| `TransportPingPacket` | 8 | Timestamp (8 bytes BE, unix nano) | Transport-level latency measurement. Route ID = 0. Intercepted before routing. |
+| `TransportPongPacket` | 9 | Timestamp (8 bytes BE, echoed) | Transport-level pong response. Route ID = 0. Intercepted before routing. |
 
-### `0x00 AddRules`
+## Handshake Capabilities
 
-Sent by the *Setup Node* to all *Nodes* of the route. This packet informs nodes what rules are to be added to their internal routing table.
+The `HandshakePacket` payload byte 0 is the encryption flag (1 = encrypt, 0 = plaintext). Bytes 1-2 are a little-endian capability bitmap:
 
-**JSON Body:**
+| Bit | Flag | Description |
+|---|---|---|
+| 0 | `CapMux` | Route multiplexing — DataPackets carry a 4-byte sequence number prefix |
+| 1 | `CapSACK` | Selective acknowledgment — enables SACKPacket retransmission |
 
-```json
-[<rule-1>, <rule-2>]
-```
+Capabilities are negotiated: a feature is enabled only when both peers advertise it.
 
-Response:
-- `ResponseFailure` with `error`.
-- `ResponseSuccess` with
-    ```json
-    [<rid-1>, <rid-2>]
-    ```
-    
-### `0x01 RemoveRules`
+## Packet Flow
 
-Sent by the *Setup Node* to *Node* of the route.
+### Edge Visor (Source)
 
-**JSON Body:**
+1. Application writes data to the route group
+2. If CapMux: prepend 4-byte sequence number
+3. Construct `DataPacket` with the forward route ID from the ForwardRule
+4. Write packet to the transport specified in the ForwardRule
 
-```json
-["<rid-1>", "rid-2"]
-```
+### Intermediary Visor
 
-Response:
-- `ResponseFailure` with `error`.
-- `ResponseSuccess` with
-    ```json
-    [<rid-1>, <rid-2>]
-    ```
+1. Read packet from incoming transport
+2. Look up route ID in routing table → get IntermediaryForwardRule
+3. Reconstruct packet with the next-hop route ID
+4. Write to the next transport
 
-### `0x02 CreateLoop`
+The intermediary never decrypts the payload (Noise encryption is end-to-end between edges).
 
-Sent by the *Route Initiator* to a *Setup Node* to have a *Loop* created.
+### Edge Visor (Destination)
 
-**JSON Body:**
+1. Read packet from transport
+2. Look up route ID → get ConsumeRule
+3. Deliver packet to the local route group
+4. Route group decrypts via Noise and delivers to the application
 
-```json
-{
-    "local-port": <local-port>,
-    "remote-port": <remote-port>,
-    "forward": [
-        {
-            "from": "<pk-1>",
-            "to": "<pk-2>",
-            "tid": "<tid-1>"
-        },
-        {
-            "from": "<pk-2>",
-            "to": "<pk-3>",
-            "tid": "<tid-2>"
-        }
-    ],
-    "reverse": [
-        {
-            "from": "<pk-3>",
-            "to": "<pk-2>",
-            "tid": "<tid-2>"
-        },
-        {
-            "from": "<pk-2>",
-            "to": "<pk-1>",
-            "tid": "<tid-1>"
-        }
-    ],
-    "expiry": "<expiry>"
-}
-```
+## Transport-Level vs Route-Level Frames
 
-Response:
-- `ResponseFailure` with `error`.
-- `ResponseSuccess` with empty payload.
-    
-### `0x3 ConfirmLoop`
-
-Sent by the *Setup Node* to Responder and Initiator *Node* to confirm notify about route in opposite direction.
-
-**JSON Body:**
-
-```json
-{
-    "remote-pk": "<pk>",
-    "remote-port": <remote-port>,
-    "local-port": <local-port>,
-    "resp-rid": <resp-rid>
-}
-```
-
-Response:
-- `ResponseFailure` with `error`.
-- `ResponseSuccess` with empty payload.
-
-### `0x4 CloseLoop`
-
-Sent by a Responder or Initiator *Node* to a *Setup Node* to notify about closing a loop locally.
-
-**JSON Body:**
-
-```json
-{
-    "port": "<local-port>",
-    "remote": {
-        "port": <remote-port>,
-        "pk": <remote-pk>
-    }
-}
-```
-
-Response:
-- `ResponseFailure` with `error`.
-- `ResponseSuccess` with empty payload.
-
-### `0x5 LoopClosed`
-
-Sent by a *Setup Node* to a Responder or Initiator to notify about closed loop on the opposite end.
-
-**JSON Body:**
-
-```json
-{
-    "port": "<local-port>",
-    "remote": {
-        "port": <remote-port>,
-        "pk": <remote-pk>
-    }
-}
-```
-
-Response:
-- `ResponseFailure` with `error`.
-- `ResponseSuccess` with empty payload.
-
-
-## Data Packets
-
-The follow is the structure of a *Data Packet*.
-
-```
-| Packet Len | Route ID | Payload |
-| 2 bytes    | 4 bytes  | ~       |
-```
+Packets with route ID = 0 are transport-level frames:
+- `TransportPingPacket` and `TransportPongPacket` are intercepted by `ManagedTransport.readLoop()` before reaching the router
+- They measure transport latency without requiring route setup
+- All other packet types require a valid route ID > 0 and are dispatched by the router

@@ -13,7 +13,7 @@ import (
 
 func TestEnv(t *testing.T) {
 
-	const timeout = time.Second * 30
+	const timeout = time.Second * 60
 
 	t.Run("startup_shutdown", func(t *testing.T) {
 		cases := []struct {

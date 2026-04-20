@@ -71,7 +71,7 @@ func NewEnv() *TestEnv {
 			"/transport-discovery",
 			"/address-resolver",
 			"/service-discovery",
-			"/network-monitor",
+			// "/network-monitor", // intentionally disabled in production deployment
 			"/uptime-tracker",
 		},
 		visorNames: []string{
@@ -520,7 +520,7 @@ func (env *TestEnv) VisorTpID(visor string, tpID uuid.UUID) (*skyvisor.Transport
 }
 
 func (env *TestEnv) VisorTpAddDefault(visor string, pk string) (*skyvisor.TransportSummary, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp add %v -f --json", visor, pk)
+	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp add %v --json", visor, pk)
 	output, err := env.visorTpExec(cmd)
 	if err != nil {
 		return nil, err
@@ -529,7 +529,7 @@ func (env *TestEnv) VisorTpAddDefault(visor string, pk string) (*skyvisor.Transp
 }
 
 func (env *TestEnv) VisorTpAdd(visor, pk string, tpType tptypes.Type) (*skyvisor.TransportSummary, error) {
-	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp add %s --type %s --force --json", visor, pk, tpType)
+	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp add %s --type %s --json", visor, pk, tpType)
 	output, err := env.visorTpExec(cmd)
 	if err != nil {
 		return nil, err

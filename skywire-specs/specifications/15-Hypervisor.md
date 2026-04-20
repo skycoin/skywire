@@ -1,18 +1,66 @@
 # Hypervisor
 
-The *Hypervisor* is responsible for managing *Visors* and is identified via it's public key and TCP address.
+The *Hypervisor* is a web-based management interface for remotely managing one or more visors. It is identified by its public key and serves an HTTP UI over DMSG.
 
-The *Visor* is responsible for including a trusted *Hypervisor* in it's configuration file, and attempt to connect to it on startup. The connection is authenticated and encrypted via the Noise protocol where the `XK` handshake pattern is used with the *Visor* being the initiator.
+## Architecture
 
-After the connection is successfully established between an *Visor* and a *Hypervisor*, the *Visor* acts as the RPC server while the *Hypervisor* is the RPC client. In this way, the *Hypervisor* can execute commands on the *Visor*.
+The hypervisor runs within a visor process when `hypervisor.enable` is true in the visor config. It serves a web UI on the configured HTTP address (default `:8000`) and listens on DMSG port 46 (`DmsgHypervisorPort`) for incoming RPC connections from remote visors.
 
-The *Hypervisor* serves a REST API which the end user can interact with. To access the API, the user is required to log in via a username and password.
+Remote visors connect to the hypervisor by including its public key in their `hypervisors` config field. On startup, each remote visor dials the hypervisor on DMSG port 46 and serves an RPC interface, allowing the hypervisor to manage it.
 
-The *Hypervisor* should be implemented in `/pkg/hypervisor`.
+## Authentication
 
-## Hypervisor REST API (and User Interface)
+- The DMSG connection between visor and hypervisor is authenticated and encrypted via the Noise protocol (XK handshake pattern) with the visor as initiator.
+- The web UI supports optional password authentication (`hypervisor.enable_auth`). Passwords are stored as bcrypt hashes in a local database (`hypervisor.db_path`).
+- CSRF token protection is enabled by default for sensitive API endpoints.
 
-- Login/logout.
-- Change password.
-- List connected *Visor*, each Visor should contain the following summary; Public key, local address, number of transports established, number of apps running, Uptime.
-- The user can click into a listed *Visor* and perform node-specific actions; specifically, the [RPC commands as specified above.](#visor-rpc-interface)
+## Web UI Features
+
+The hypervisor web UI provides:
+
+- **Node overview** — list of connected visors with status, PK, version, uptime
+- **Transport management** — view, add, remove transports on any connected visor
+- **App management** — start, stop, configure applications
+- **Route management** — view routing rules, route groups
+- **Skynet tab** — forwarded ports, reverse proxy connections
+- **Proxy settings** — resolving proxy enable/disable, upstream configuration
+- **Log viewer** — visor runtime logs
+- **Terminal** — dmsgpty pseudoterminal access to remote visors
+
+## Configuration
+
+```json
+{
+  "hypervisor": {
+    "enable": true,
+    "db_path": "/path/to/users.db",
+    "enable_auth": true,
+    "dmsg_port": 46,
+    "http_addr": ":8000",
+    "enable_tls": false,
+    "tls_cert_file": "./ssl/cert.pem",
+    "tls_key_file": "./ssl/key.pem"
+  },
+  "hypervisors": ["<remote-hypervisor-pk>"]
+}
+```
+
+| Field | Description |
+|---|---|
+| `hypervisor.enable` | Enable the hypervisor web UI on this visor |
+| `hypervisor.db_path` | Path to the user/password database |
+| `hypervisor.enable_auth` | Require password login for the web UI |
+| `hypervisor.dmsg_port` | DMSG port for remote visor RPC connections (default 46) |
+| `hypervisor.http_addr` | HTTP listen address for the web UI (default `:8000`) |
+| `hypervisors` | List of remote hypervisor PKs this visor connects to |
+
+## Runtime Management
+
+| Action | CLI command |
+|---|---|
+| Enable hypervisor | `skywire cli visor hv enable` |
+| Disable hypervisor | `skywire cli visor hv disable` |
+| Check status | `skywire cli visor hv status` |
+| Add remote hypervisor at runtime | `skywire cli visor hv add <pk>` |
+| View connected hypervisor PKs | `skywire cli visor hv cpk` |
+| Open UI in browser | `skywire cli visor hv ui` |
