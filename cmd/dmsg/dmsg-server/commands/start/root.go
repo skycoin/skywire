@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/dht"
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -267,6 +268,59 @@ var RootCmd = &cobra.Command{
 				}()
 			} else {
 				log.Info("Route setup-node disabled (enable with enable_route_setup in config)")
+			}
+
+			// DHT full node on port 100 (optional, enabled via config)
+			if conf.EnableDHT {
+				go func() {
+					dhtLog := logging.MustGetLogger("dmsg-server:dht")
+					dhtLog.Info("Starting DHT full node")
+
+					// Collect other DMSG server PKs as bootstrap peers.
+					var bootstrapPKs []cipher.PubKey
+					for _, p := range conf.Peers {
+						bootstrapPKs = append(bootstrapPKs, p.PubKey)
+					}
+					// Also include deployment service PKs.
+					bootstrapPKs = append(bootstrapPKs, deployment.Prod.DHTBootstrapPKs()...)
+
+					dhtCfg := dht.Config{
+						BootstrapPKs: bootstrapPKs,
+						FullNode:     true,
+					}
+					dhtCfg.SetDefaults()
+
+					dhtTP := dht.NewDMSGTransport(dmsgC)
+					dhtNode := dht.New(dhtCfg, conf.PubKey, conf.SecKey, dhtTP, dhtLog)
+
+					// Set up persistence backend.
+					if conf.RedisAddr != "" {
+						dhtCfg.RedisAddr = conf.RedisAddr
+					}
+					backend, backendErr := dht.NewBackendFromConfig(&dhtCfg)
+					if backendErr != nil {
+						dhtLog.WithError(backendErr).Warn("DHT persistence failed — running in-memory")
+					} else {
+						if setErr := dhtNode.Store().SetBackend(backend); setErr != nil {
+							dhtLog.WithError(setErr).Warn("DHT backend rehydration failed")
+						} else {
+							dhtLog.WithField("items", dhtNode.Store().Len()).Info("DHT store rehydrated")
+						}
+					}
+
+					if startErr := dhtNode.Start(ctx); startErr != nil {
+						dhtLog.WithError(startErr).Error("Failed to start DHT node")
+						return
+					}
+					dhtLog.WithField("id", dhtNode.ID().String()[:16]).
+						WithField("bootstrap_peers", len(bootstrapPKs)).
+						Info("DHT full node started on port 100")
+
+					<-ctx.Done()
+					dhtNode.Stop() //nolint:errcheck,gosec
+				}()
+			} else {
+				log.Info("DHT disabled (enable with enable_dht in config)")
 			}
 
 			<-ctx.Done()

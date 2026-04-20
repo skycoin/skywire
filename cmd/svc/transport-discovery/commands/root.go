@@ -16,6 +16,7 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cxo/publisher"
+	"github.com/skycoin/skywire/pkg/dht"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
@@ -357,6 +358,14 @@ Example:
 			}
 		} else if enableCXO {
 			logger.Warn("CXO requested but dmsg is not enabled (--mode=http); CXO disabled")
+		}
+
+		// Wire DHT entry mirroring: every transport registration is
+		// also published to the DHT under each edge visor's PK.
+		if h.DHTNode != nil {
+			mirror := dht.NewEntryMirror(h.DHTNode, "tp", logging.MustGetLogger("dht:tp-mirror"))
+			tpdAPI.SetDHTMirror(mirror)
+			logger.Info("DHT transport mirroring enabled")
 		}
 
 		select {

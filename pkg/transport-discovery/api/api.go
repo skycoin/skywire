@@ -14,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
@@ -72,6 +73,11 @@ type API struct {
 	// cxoPublisher is an optional CXO publisher for distributing transport data.
 	// When set, transport register/deregister operations publish to CXO subscribers.
 	cxoPublisher CXOPublisher
+
+	// dhtMirror mirrors transport entries to the DHT under each edge visor's PK.
+	dhtMirror interface {
+		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+	}
 }
 
 // CXOPublisher is the interface for publishing transport data to CXO.
@@ -179,6 +185,14 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	api.Handler = r
 
 	return api
+}
+
+// SetDHTMirror sets a mirror that publishes transport entries to the DHT
+// on every successful RegisterTransport call.
+func (api *API) SetDHTMirror(m interface {
+	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+}) {
+	api.dhtMirror = m
 }
 
 // SetCXOPublisher enables CXO distribution of transport data.
