@@ -489,6 +489,11 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 		if tp == nil {
 			return true
 		}
+		// Exclude "setup" labeled transports — those are for RSN control-plane
+		// traffic only and must not be used as hops in data routes.
+		if tp.Entry.Label == transport.LabelSetup {
+			return true
+		}
 		localTps = append(localTps, localTp{
 			id:       tp.Entry.ID,
 			remotePK: tp.Entry.RemoteEdge(src),
@@ -540,10 +545,14 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 		return nil, nil, fmt.Errorf("failed to fetch transport discovery data: %w", err)
 	}
 
-	// Build lookup map: pubkey -> transports involving that pubkey
+	// Build lookup map: pubkey -> transports involving that pubkey.
+	// Exclude "setup" labeled transports (RSN control-plane only).
 	transportsByEdge := make(map[cipher.PubKey][]*transport.Entry)
 	for _, entry := range allEntries {
 		if entry == nil {
+			continue
+		}
+		if entry.Label == transport.LabelSetup {
 			continue
 		}
 		for _, edge := range entry.Edges {

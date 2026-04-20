@@ -149,6 +149,15 @@ Usage:
 			log.Fatal("Failed to create a setup node: ", err)
 		}
 
+		// TODO: When the RSN gains its own transport manager (STCPR
+		// autoconnect with label "setup"), initialize it here and call:
+		//   sn.InitCascade(conf, transportManager)
+		// This enables cascade route setup over transports alongside DMSG.
+		// Until then, the RSN operates in DMSG-only mode.
+		if conf.Cascade != nil {
+			log.Info("Cascade config present — will be activated when transport manager is available")
+		}
+
 		collector := prepareMetrics(log)
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)

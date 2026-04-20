@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -63,7 +64,49 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 		dmsgC: dmsgC,
 		pool:  NewClientPool(dialer, DefaultPoolTTL),
 	}
+
+	// Initialize cascade builder if cascade config is present.
+	// The transport manager for the RSN is initialized separately
+	// by the caller (cmd/setup-node) since it requires network
+	// factory configuration that depends on the deployment environment.
+	if conf.Cascade != nil {
+		conf.Cascade.SetCascadeDefaults()
+		log.Info("Cascade route setup enabled")
+	}
+
 	return node, nil
+}
+
+// InitCascade initializes the cascade builder with a transport manager.
+// Must be called after the RSN's transport manager is set up by the caller.
+// This separation exists because the transport manager requires deployment-
+// specific configuration (STCPR listen address, AR client, etc.) that the
+// RSN's core doesn't control.
+func (sn *Node) InitCascade(conf *SetupConfig, tm *transport.Manager) {
+	if conf.Cascade == nil || tm == nil {
+		return
+	}
+	cb := NewCascadeBuilder(log, conf.PK, conf.SK, tm)
+	cb.SetTimeouts(conf.Cascade.ReserveTimeout, conf.Cascade.InstallTimeout)
+
+	// Register the cascade ACK handler on the transport manager so
+	// the builder can receive ACKs from cascade messages it sends.
+	tm.SetCascadeHandler(func(p routing.Packet, mt *transport.ManagedTransport) {
+		if p.Type() == routing.CascadeAckPacket {
+			cb.HandleAck(p, mt)
+		}
+		// CascadeSetupPacket on RSN transports would be unexpected
+		// (RSN doesn't process setup messages from others), but log
+		// for debugging.
+		if p.Type() == routing.CascadeSetupPacket {
+			log.Warn("Received unexpected CascadeSetupPacket on RSN transport")
+		}
+	})
+
+	sn.cascade = cb
+	log.WithField("reserve_timeout", conf.Cascade.ReserveTimeout).
+		WithField("install_timeout", conf.Cascade.InstallTimeout).
+		Info("Cascade builder initialized")
 }
 
 // Pool returns the setup node's connection pool.
