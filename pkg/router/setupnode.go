@@ -168,6 +168,64 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 	// Semaphore to limit concurrent handler goroutines.
 	sem := make(chan struct{}, maxConcurrentHandlers)
 
+	// Start transport-level RPC accept loop if cascade is enabled.
+	// Visors that have a direct "setup" transport (or relay through a neighbor)
+	// send SetupRPCPacket virtual streams instead of DMSG.
+	if sn.cascade != nil && sn.cascade.tm != nil {
+		setupMux := transport.NewVStreamMux(sn.cascade.tm, routing.SetupRPCPacket, log)
+		sn.cascade.tm.SetSetupRPCHandler(setupMux.HandlePacket)
+
+		go func() {
+			defer setupMux.Close() //nolint:errcheck
+			for {
+				stream, err := setupMux.Accept()
+				if err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					log.WithError(err).Warn("SetupRPC vstream accept failed")
+					return
+				}
+
+				select {
+				case sem <- struct{}{}:
+				case <-ctx.Done():
+					stream.Close() //nolint:errcheck
+					return
+				}
+
+				handlerCtx, handlerCancel := context.WithTimeout(ctx, handlerTimeout)
+				gw := &SetupRPCGateway{
+					Metrics: m,
+					Ctx:     handlerCtx,
+					Conn:    nil, // no raw conn for vstream handlers
+					ReqPK:   stream.RemotePK(),
+					Dialer:  WrapDmsgClient(sn.dmsgC),
+					Pool:    sn.pool,
+					Cascade: sn.cascade,
+					Timeout: timeout,
+				}
+				rpcS := rpc.NewServer()
+				if err := rpcS.Register(gw); err != nil {
+					log.WithError(err).Error("Failed to register vstream RPC gateway")
+					stream.Close()    //nolint:errcheck
+					handlerCancel()   //nolint:gosec
+					<-sem
+					continue
+				}
+				go func() {
+					defer func() {
+						handlerCancel()
+						stream.Close() //nolint:errcheck
+						<-sem
+					}()
+					rpcS.ServeConn(stream)
+				}()
+			}
+		}()
+		log.Info("SetupRPC virtual stream accept loop started (transport-level)")
+	}
+
 	log.WithField("dmsg_port", dmsgPort).
 		WithField("max_concurrent", maxConcurrentHandlers).
 		Info("Accepting dmsg streams.")

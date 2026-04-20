@@ -34,7 +34,8 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 	case routing.SACKPacket:
 		return r.handleSACKRouterPacket(ctx, packet)
 	case routing.TransportPingPacket, routing.TransportPongPacket,
-		routing.CascadeSetupPacket, routing.CascadeAckPacket, routing.DHTPacket:
+		routing.CascadeSetupPacket, routing.CascadeAckPacket, routing.DHTPacket,
+		routing.SetupRPCPacket:
 		// These should be intercepted at the transport layer (ManagedTransport.readLoop).
 		// If they reach the router, something is wrong — drop silently.
 		r.logger.Warn("Control-plane packet reached router (should be handled at transport layer)")

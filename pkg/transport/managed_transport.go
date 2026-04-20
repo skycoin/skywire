@@ -94,6 +94,9 @@ type ManagedTransport struct {
 	// dhtHandler handles DHT protocol packets (route ID 0).
 	// Set by the transport manager from the DHT's TransportLayerDHT.
 	dhtHandler func(p routing.Packet, mt *ManagedTransport)
+
+	// setupRPCHandler handles RSN RPC relay packets (route ID 0).
+	setupRPCHandler func(p routing.Packet, mt *ManagedTransport)
 }
 
 // LatencyStats holds latency measurement statistics for a transport.
@@ -242,6 +245,11 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			case routing.DHTPacket:
 				if mt.dhtHandler != nil {
 					mt.dhtHandler(p, mt)
+				}
+				continue
+			case routing.SetupRPCPacket:
+				if mt.setupRPCHandler != nil {
+					mt.setupRPCHandler(p, mt)
 				}
 				continue
 			}

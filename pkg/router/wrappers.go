@@ -10,7 +10,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -42,8 +41,9 @@ type EmbeddedSetupNode interface {
 
 type setupNodeDialer struct {
 	embeddedSetup EmbeddedSetupNode
-	relayCache    *RSNRelayCache     // cached RSN relay peers (may be nil)
-	tm            *transport.Manager // for finding relay transports (may be nil)
+	relayCache    *RSNRelayCache       // cached RSN relay peers (may be nil)
+	tm            *transport.Manager   // for finding relay transports (may be nil)
+	setupRPCMux   *transport.VStreamMux // virtual stream mux for RSN RPC (may be nil)
 }
 
 // NewSetupNodeDialer returns a wrapper for (*Client).DialRouteGroup.
@@ -60,10 +60,17 @@ func NewSetupNodeDialerWithEmbedded(embedded EmbeddedSetupNode) RouteGroupDialer
 // NewSetupNodeDialerFull returns a dialer with all capabilities:
 // embedded RSN, transport relay, and DMSG fallback.
 func NewSetupNodeDialerFull(embedded EmbeddedSetupNode, relayCache *RSNRelayCache, tm *transport.Manager) RouteGroupDialer {
+	var mux *transport.VStreamMux
+	if tm != nil {
+		log := logging.MustGetLogger("setup_rpc_mux")
+		mux = transport.NewVStreamMux(tm, routing.SetupRPCPacket, log)
+		tm.SetSetupRPCHandler(mux.HandlePacket)
+	}
 	return &setupNodeDialer{
 		embeddedSetup: embedded,
 		relayCache:    relayCache,
 		tm:            tm,
+		setupRPCMux:   mux,
 	}
 }
 
@@ -150,24 +157,27 @@ func (d *setupNodeDialer) Dial(
 	return resp, connectedNode, nil
 }
 
-// dialViaTransport sends a route setup RPC directly over a transport
-// connection (either a direct "setup" transport or a relay through a neighbor).
+// dialViaTransport sends a route setup RPC over a virtual stream on a transport.
+// Uses SetupRPCPacket (route ID 0) to carry the RPC bidirectionally.
 func (d *setupNodeDialer) dialViaTransport(
 	ctx context.Context,
 	log *logging.Logger,
 	tp *transport.ManagedTransport,
 	req routing.BidirectionalRoute,
 ) (routing.EdgeRules, error) {
-	// Open a raw connection over the transport for RPC.
-	// This uses the same RPC protocol as DMSG (SetupRPCGateway.DialRouteGroup).
-	addr := fmt.Sprintf("%s:%d", tp.Remote().String(), skyenv.DmsgSetupPort)
-	log.WithField("addr", addr).Debug("Dialing RSN via transport")
+	if d.setupRPCMux == nil {
+		return routing.EdgeRules{}, fmt.Errorf("setup RPC mux not initialized")
+	}
 
-	// Write the route setup request as RPC over the transport.
-	// For now, this uses the same RPC call as DMSG.
-	// The transport's raw connection carries the RPC messages.
-	conn := transportRPCConn{tp: tp}
-	rpcC := rpc.NewClient(&conn)
+	log.WithField("remote", tp.Remote().String()[:8]).Debug("Dialing RSN via transport virtual stream")
+
+	stream, err := d.setupRPCMux.DialOnTransport(tp)
+	if err != nil {
+		return routing.EdgeRules{}, fmt.Errorf("vstream dial: %w", err)
+	}
+	defer stream.Close() //nolint:errcheck
+
+	rpcC := rpc.NewClient(stream)
 	defer rpcC.Close() //nolint:errcheck
 
 	var rules routing.EdgeRules
@@ -183,29 +193,4 @@ func (d *setupNodeDialer) dialViaTransport(
 		}
 		return rules, nil
 	}
-}
-
-// transportRPCConn adapts a ManagedTransport to io.ReadWriteCloser
-// for use with net/rpc. Uses WriteRawPacket for writes (route ID 0 data packets).
-type transportRPCConn struct {
-	tp     *transport.ManagedTransport
-	readBuf []byte
-}
-
-func (c *transportRPCConn) Read(p []byte) (int, error) {
-	// TODO: implement transport-level RPC read.
-	// This requires a mechanism to receive RPC response data from
-	// the RSN over the transport's route ID 0 channel.
-	// For now, this is a placeholder — the full implementation needs
-	// a virtual stream (similar to DHT's TransportLayerDHT).
-	return 0, fmt.Errorf("transport RPC read: not yet implemented")
-}
-
-func (c *transportRPCConn) Write(p []byte) (int, error) {
-	// TODO: implement transport-level RPC write.
-	return 0, fmt.Errorf("transport RPC write: not yet implemented")
-}
-
-func (c *transportRPCConn) Close() error {
-	return nil // transport lifecycle managed externally
 }

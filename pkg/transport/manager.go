@@ -120,6 +120,10 @@ type Manager struct {
 	// dhtHandler handles DHT protocol packets (route ID 0) on any transport.
 	dhtHandler   func(p routing.Packet, mt *ManagedTransport)
 	dhtHandlerMu sync.RWMutex
+
+	// setupRPCHandler handles RSN RPC relay packets (route ID 0) on any transport.
+	setupRPCHandler   func(p routing.Packet, mt *ManagedTransport)
+	setupRPCHandlerMu sync.RWMutex
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -443,6 +447,18 @@ func (tm *Manager) SetDHTHandler(h func(p routing.Packet, mt *ManagedTransport))
 	tm.mx.RUnlock()
 }
 
+// SetSetupRPCHandler sets the handler for RSN RPC relay packets (route ID 0).
+func (tm *Manager) SetSetupRPCHandler(h func(p routing.Packet, mt *ManagedTransport)) {
+	tm.setupRPCHandlerMu.Lock()
+	defer tm.setupRPCHandlerMu.Unlock()
+	tm.setupRPCHandler = h
+	tm.mx.RLock()
+	for _, mt := range tm.tps {
+		mt.setupRPCHandler = h
+	}
+	tm.mx.RUnlock()
+}
+
 // SetRouteChecker sets the callback used to determine if a transport has active routes.
 // SetLatencyFallback sets the callback used when transport-level ping fails
 // to produce latency data (remote visor doesn't support transport ping frames).
@@ -707,6 +723,9 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		tm.dhtHandlerMu.RLock()
 		mTp.dhtHandler = tm.dhtHandler
 		tm.dhtHandlerMu.RUnlock()
+		tm.setupRPCHandlerMu.RLock()
+		mTp.setupRPCHandler = tm.setupRPCHandler
+		tm.setupRPCHandlerMu.RUnlock()
 
 		go func() {
 			mTp.Serve(tm.readCh)
@@ -921,6 +940,9 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.dhtHandlerMu.RLock()
 	mTp.dhtHandler = tm.dhtHandler
 	tm.dhtHandlerMu.RUnlock()
+	tm.setupRPCHandlerMu.RLock()
+	mTp.setupRPCHandler = tm.setupRPCHandler
+	tm.setupRPCHandlerMu.RUnlock()
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
 	errCh := make(chan error)
