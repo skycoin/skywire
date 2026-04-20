@@ -124,6 +124,17 @@ func (c *SetupClient) Close() error {
 	return c.conn.Close()
 }
 
+// FetchRelayPeers queries the RSN for its transport peers.
+// The visor caches these to enable relay-based route setup without DMSG.
+func (c *SetupClient) FetchRelayPeers(ctx context.Context) ([]cipher.PubKey, error) {
+	var resp RelayPeersReply
+	err := c.call(ctx, rpcName+".RelayPeers", &RelayPeersArgs{}, &resp)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Peers, nil
+}
+
 // DialRouteGroup generates rules for routes from a visor and sends them to visors.
 func (c *SetupClient) DialRouteGroup(ctx context.Context, req routing.BidirectionalRoute) (routing.EdgeRules, error) {
 	var resp routing.EdgeRules

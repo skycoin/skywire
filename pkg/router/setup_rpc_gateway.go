@@ -11,6 +11,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -48,6 +49,35 @@ func (g *SetupRPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules
 
 	// Confirm routes with initiating visor.
 	*rules = initRules
+	return nil
+}
+
+// RelayPeersArgs is the request for the RelayPeers RPC.
+type RelayPeersArgs struct{}
+
+// RelayPeersReply contains the RSN's transport peer PKs so visors
+// can cache them for future relay-based route setup without DMSG.
+type RelayPeersReply struct {
+	Peers []cipher.PubKey `json:"peers"`
+}
+
+// RelayPeers returns the PKs of visors that have direct transports
+// to this RSN. Visors call this to populate their relay cache so
+// subsequent route setup requests can be relayed through these peers
+// instead of using DMSG.
+func (g *SetupRPCGateway) RelayPeers(_ *RelayPeersArgs, reply *RelayPeersReply) error {
+	if g.Cascade == nil || g.Cascade.tm == nil {
+		reply.Peers = nil
+		return nil
+	}
+	var peers []cipher.PubKey
+	g.Cascade.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if !tp.IsClosed() {
+			peers = append(peers, tp.Remote())
+		}
+		return true
+	})
+	reply.Peers = peers
 	return nil
 }
 

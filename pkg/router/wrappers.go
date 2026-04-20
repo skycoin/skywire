@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/rpc"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 //go:generate mockery --name RouteGroupDialer --case underscore --inpackage
@@ -39,6 +42,8 @@ type EmbeddedSetupNode interface {
 
 type setupNodeDialer struct {
 	embeddedSetup EmbeddedSetupNode
+	relayCache    *RSNRelayCache     // cached RSN relay peers (may be nil)
+	tm            *transport.Manager // for finding relay transports (may be nil)
 }
 
 // NewSetupNodeDialer returns a wrapper for (*Client).DialRouteGroup.
@@ -50,6 +55,16 @@ func NewSetupNodeDialer() RouteGroupDialer {
 // when available, falling back to remote setup-nodes.
 func NewSetupNodeDialerWithEmbedded(embedded EmbeddedSetupNode) RouteGroupDialer {
 	return &setupNodeDialer{embeddedSetup: embedded}
+}
+
+// NewSetupNodeDialerFull returns a dialer with all capabilities:
+// embedded RSN, transport relay, and DMSG fallback.
+func NewSetupNodeDialerFull(embedded EmbeddedSetupNode, relayCache *RSNRelayCache, tm *transport.Manager) RouteGroupDialer {
+	return &setupNodeDialer{
+		embeddedSetup: embedded,
+		relayCache:    relayCache,
+		tm:            tm,
+	}
 }
 
 // Dial dials RouteGroup and returns the connected setup node's public key.
@@ -72,7 +87,36 @@ func (d *setupNodeDialer) Dial(
 		}
 	}
 
-	// Fall back to remote setup-nodes
+	// Try transport-based relay to RSN (avoids DMSG dependency).
+	// Check for a direct "setup" transport or a relay through a neighbor.
+	if d.tm != nil && d.relayCache != nil {
+		for _, sPK := range setupNodes {
+			// Try direct "setup" transport first.
+			if tp := FindDirectRSNTransport(sPK, d.tm); tp != nil {
+				log.WithField("rsn", sPK.String()[:8]).Debug("Using direct setup transport to RSN")
+				rules, relayErr := d.dialViaTransport(ctx, log, tp, req)
+				if relayErr == nil {
+					return rules, sPK, nil
+				}
+				log.WithError(relayErr).Debug("Direct setup transport to RSN failed")
+			}
+
+			// Try relay through a neighbor.
+			tp, relayPK, relayErr := d.relayCache.FindRelayTransport(ctx, sPK, d.tm)
+			if relayErr == nil {
+				log.WithField("rsn", sPK.String()[:8]).
+					WithField("relay", relayPK.String()[:8]).
+					Debug("Trying relay to RSN via neighbor")
+				rules, relayErr := d.dialViaTransport(ctx, log, tp, req)
+				if relayErr == nil {
+					return rules, sPK, nil
+				}
+				log.WithError(relayErr).Debug("Relay to RSN via neighbor failed")
+			}
+		}
+	}
+
+	// Fall back to remote setup-nodes via DMSG.
 	client, err := NewSetupClient(ctx, log, dmsgC, setupNodes)
 	if err != nil {
 		return routing.EdgeRules{}, cipher.PubKey{}, err
@@ -89,10 +133,79 @@ func (d *setupNodeDialer) Dial(
 		}
 	}()
 
+	// While connected via DMSG, fetch and cache the RSN's relay peers
+	// so future requests can use transport relay instead of DMSG.
+	if d.relayCache != nil {
+		peers, relayErr := client.FetchRelayPeers(ctx)
+		if relayErr == nil && len(peers) > 0 {
+			d.relayCache.Update(connectedNode, peers)
+		}
+	}
+
 	resp, err := client.DialRouteGroup(ctx, req)
 	if err != nil {
 		return routing.EdgeRules{}, cipher.PubKey{}, fmt.Errorf("route setup: %w", err)
 	}
 
 	return resp, connectedNode, nil
+}
+
+// dialViaTransport sends a route setup RPC directly over a transport
+// connection (either a direct "setup" transport or a relay through a neighbor).
+func (d *setupNodeDialer) dialViaTransport(
+	ctx context.Context,
+	log *logging.Logger,
+	tp *transport.ManagedTransport,
+	req routing.BidirectionalRoute,
+) (routing.EdgeRules, error) {
+	// Open a raw connection over the transport for RPC.
+	// This uses the same RPC protocol as DMSG (SetupRPCGateway.DialRouteGroup).
+	addr := fmt.Sprintf("%s:%d", tp.Remote().String(), skyenv.DmsgSetupPort)
+	log.WithField("addr", addr).Debug("Dialing RSN via transport")
+
+	// Write the route setup request as RPC over the transport.
+	// For now, this uses the same RPC call as DMSG.
+	// The transport's raw connection carries the RPC messages.
+	conn := transportRPCConn{tp: tp}
+	rpcC := rpc.NewClient(&conn)
+	defer rpcC.Close() //nolint:errcheck
+
+	var rules routing.EdgeRules
+	call := rpcC.Go("SetupRPCGateway.DialRouteGroup", req, &rules, nil)
+
+	select {
+	case <-ctx.Done():
+		rpcC.Close() //nolint:errcheck
+		return routing.EdgeRules{}, ctx.Err()
+	case <-call.Done:
+		if call.Error != nil {
+			return routing.EdgeRules{}, call.Error
+		}
+		return rules, nil
+	}
+}
+
+// transportRPCConn adapts a ManagedTransport to io.ReadWriteCloser
+// for use with net/rpc. Uses WriteRawPacket for writes (route ID 0 data packets).
+type transportRPCConn struct {
+	tp     *transport.ManagedTransport
+	readBuf []byte
+}
+
+func (c *transportRPCConn) Read(p []byte) (int, error) {
+	// TODO: implement transport-level RPC read.
+	// This requires a mechanism to receive RPC response data from
+	// the RSN over the transport's route ID 0 channel.
+	// For now, this is a placeholder — the full implementation needs
+	// a virtual stream (similar to DHT's TransportLayerDHT).
+	return 0, fmt.Errorf("transport RPC read: not yet implemented")
+}
+
+func (c *transportRPCConn) Write(p []byte) (int, error) {
+	// TODO: implement transport-level RPC write.
+	return 0, fmt.Errorf("transport RPC write: not yet implemented")
+}
+
+func (c *transportRPCConn) Close() error {
+	return nil // transport lifecycle managed externally
 }
