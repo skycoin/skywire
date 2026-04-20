@@ -193,6 +193,13 @@ type Transport struct {
 	// When set and DMSG is available, the visor subscribes to the feed for
 	// push-based transport updates instead of HTTP polling.
 	CXOFeedPK string `json:"cxo_feed_pk,omitempty"`
+	// ARTransportLimit controls address resolver registration for privacy:
+	//   0 (default): stay registered indefinitely
+	//   N > 0: deregister from AR after N transports are established
+	//   N < 0: never register with AR at all
+	// When deregistered, the visor cannot receive new inbound transports
+	// but can still initiate outbound connections.
+	ARTransportLimit int `json:"ar_transport_limit,omitempty"`
 }
 
 // TPSDmsgConfig configures the embedded Transport Setup Node's dmsg client.

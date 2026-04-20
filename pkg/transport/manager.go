@@ -42,6 +42,11 @@ type ManagerConfig struct {
 	PersistentTransportsCache []PersistentTransports
 	PTpsCacheMu               sync.RWMutex
 	Version                   string // Visor version for reporting to TPD
+	// ARTransportLimit controls AR registration:
+	//   0 = stay registered (default)
+	//   N > 0 = deregister after N transports
+	//   N < 0 = never register
+	ARTransportLimit int
 }
 
 // LatencyFallbackCallback is called when transport-level ping fails to produce
@@ -101,6 +106,12 @@ type Manager struct {
 	delQueue   []uuid.UUID
 	delQueueMu sync.Mutex
 	delNudge   chan struct{}
+
+	// arDeregistered tracks whether the visor has deregistered from AR
+	// due to ar_transport_limit being reached. Once true, it stays true
+	// until the visor restarts.
+	arDeregistered   bool
+	arDeregisteredMu sync.Mutex
 
 	// cascadeHandler handles cascade protocol packets (route ID 0) on any transport.
 	cascadeHandler   func(p routing.Packet, mt *ManagedTransport)
@@ -381,6 +392,43 @@ func (tm *Manager) SetCascadeHandler(h func(p routing.Packet, mt *ManagedTranspo
 		mt.cascadeHandler = h
 	}
 	tm.mx.RUnlock()
+}
+
+// checkARLimit checks if the transport count has reached the AR transport limit.
+// If so, deregisters from the address resolver. This is a one-way action —
+// the visor stays deregistered until restart.
+func (tm *Manager) checkARLimit() {
+	limit := tm.Conf.ARTransportLimit
+	if limit <= 0 {
+		return // 0 = no limit, negative = never registered
+	}
+
+	tm.arDeregisteredMu.Lock()
+	if tm.arDeregistered {
+		tm.arDeregisteredMu.Unlock()
+		return
+	}
+
+	count := tm.TransportCount()
+	if count >= limit {
+		tm.arDeregistered = true
+		tm.arDeregisteredMu.Unlock()
+		tm.Logger.WithField("count", count).WithField("limit", limit).
+			Info("AR transport limit reached — deregistering from address resolver")
+		if tm.arClient != nil {
+			if err := tm.arClient.Close(); err != nil {
+				tm.Logger.WithError(err).Warn("Failed to close AR client during deregistration")
+			}
+		}
+	} else {
+		tm.arDeregisteredMu.Unlock()
+	}
+}
+
+// ShouldRegisterAR returns false if the AR transport limit is negative
+// (never register). Callers should check this during visor initialization.
+func (tm *Manager) ShouldRegisterAR() bool {
+	return tm.Conf.ARTransportLimit >= 0
 }
 
 // SetDHTHandler sets the handler for DHT protocol packets (route ID 0).
@@ -669,6 +717,9 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		}()
 
 		tm.tps[tpID] = mTp
+
+		// Check AR transport limit after accepting a new transport.
+		go tm.checkARLimit()
 	} else {
 		// Transport already exists. Before allowing Accept() to tear down the
 		// underlying connection (via setTransport), check whether any routing
@@ -886,6 +937,9 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.mx.Lock()
 	tm.tps[tpID] = mTp
 	tm.mx.Unlock()
+
+	// Check AR transport limit after dialing a new transport.
+	go tm.checkARLimit()
 	tm.Logger.Debugf("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
 
 	// Latency is now measured at the transport level via transport-level
