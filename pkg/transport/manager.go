@@ -105,6 +105,10 @@ type Manager struct {
 	// cascadeHandler handles cascade protocol packets (route ID 0) on any transport.
 	cascadeHandler   func(p routing.Packet, mt *ManagedTransport)
 	cascadeHandlerMu sync.RWMutex
+
+	// dhtHandler handles DHT protocol packets (route ID 0) on any transport.
+	dhtHandler   func(p routing.Packet, mt *ManagedTransport)
+	dhtHandlerMu sync.RWMutex
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -379,6 +383,18 @@ func (tm *Manager) SetCascadeHandler(h func(p routing.Packet, mt *ManagedTranspo
 	tm.mx.RUnlock()
 }
 
+// SetDHTHandler sets the handler for DHT protocol packets (route ID 0).
+func (tm *Manager) SetDHTHandler(h func(p routing.Packet, mt *ManagedTransport)) {
+	tm.dhtHandlerMu.Lock()
+	defer tm.dhtHandlerMu.Unlock()
+	tm.dhtHandler = h
+	tm.mx.RLock()
+	for _, mt := range tm.tps {
+		mt.dhtHandler = h
+	}
+	tm.mx.RUnlock()
+}
+
 // SetRouteChecker sets the callback used to determine if a transport has active routes.
 // SetLatencyFallback sets the callback used when transport-level ping fails
 // to produce latency data (remote visor doesn't support transport ping frames).
@@ -640,6 +656,9 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		tm.cascadeHandlerMu.RLock()
 		mTp.cascadeHandler = tm.cascadeHandler
 		tm.cascadeHandlerMu.RUnlock()
+		tm.dhtHandlerMu.RLock()
+		mTp.dhtHandler = tm.dhtHandler
+		tm.dhtHandlerMu.RUnlock()
 
 		go func() {
 			mTp.Serve(tm.readCh)
@@ -848,6 +867,9 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.cascadeHandlerMu.RLock()
 	mTp.cascadeHandler = tm.cascadeHandler
 	tm.cascadeHandlerMu.RUnlock()
+	tm.dhtHandlerMu.RLock()
+	mTp.dhtHandler = tm.dhtHandler
+	tm.dhtHandlerMu.RUnlock()
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
 	errCh := make(chan error)

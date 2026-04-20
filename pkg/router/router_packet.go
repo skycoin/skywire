@@ -33,10 +33,11 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		return r.dispatchToRouteGroup(ctx, packet)
 	case routing.SACKPacket:
 		return r.handleSACKRouterPacket(ctx, packet)
-	case routing.TransportPingPacket, routing.TransportPongPacket:
+	case routing.TransportPingPacket, routing.TransportPongPacket,
+		routing.CascadeSetupPacket, routing.CascadeAckPacket, routing.DHTPacket:
 		// These should be intercepted at the transport layer (ManagedTransport.readLoop).
 		// If they reach the router, something is wrong — drop silently.
-		r.logger.Warn("Transport-level ping/pong reached router (should be handled at transport layer)")
+		r.logger.Warn("Control-plane packet reached router (should be handled at transport layer)")
 		return nil
 	default:
 		return ErrUnknownPacketType

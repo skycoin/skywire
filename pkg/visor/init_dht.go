@@ -59,8 +59,8 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 		dhtCfg.PersistPath = v.conf.LocalPath + "/dht.db"
 	}
 
-	tp := dht.NewDMSGTransport(v.dmsgC)
-	node := dht.New(dhtCfg, v.conf.PK, v.conf.SK, tp, log)
+	dmsgTP := dht.NewDMSGTransport(v.dmsgC)
+	node := dht.New(dhtCfg, v.conf.PK, v.conf.SK, dmsgTP, log)
 
 	// Set up persistence backend.
 	backend, err := dht.NewBackendFromConfig(&dhtCfg)
@@ -85,6 +85,18 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.pushCloseStack("dht", func() error {
 		return node.Stop()
 	})
+
+	// Register transport-layer DHT handler so DHT messages can flow
+	// over skywire transports (route ID 0) without DMSG.
+	if v.tpM != nil {
+		tlDHT := dht.NewTransportLayerDHT(v.tpM, log)
+		v.tpM.SetDHTHandler(tlDHT.HandleDHTPacket)
+		// Add transport peers to the DHT routing table as they become
+		// reachable — this happens naturally via the DHT's own Ping RPC
+		// when the transport-layer transport is used for lookups.
+		node.AddTransport(tlDHT)
+		log.Info("DHT: transport-layer sync enabled (route ID 0)")
+	}
 
 	log.WithField("id", node.ID().String()[:16]).
 		WithField("bootstrap_peers", len(bootstrapPKs)).

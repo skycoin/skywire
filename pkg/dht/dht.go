@@ -23,12 +23,13 @@ type Node struct {
 	id     NodeID
 	rt     *RoutingTable
 	store  *Store
-	tp     Transport
-	log    *logging.Logger
-	cfg    Config
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	tp              Transport
+	extraTransports []Transport // additional transports (e.g., transport-layer DHT)
+	log             *logging.Logger
+	cfg             Config
+	ctx             context.Context
+	cancel          context.CancelFunc
+	wg              sync.WaitGroup
 }
 
 // New creates a new DHT node. Call Start to begin serving.
@@ -61,6 +62,25 @@ func (n *Node) RoutingTable() *RoutingTable { return n.rt }
 
 // Store returns the node's item store (for inspection/testing).
 func (n *Node) Store() *Store { return n.store }
+
+// AddTransport adds a secondary transport for DHT communication.
+// The node will listen on it and use it for dialing alongside the primary transport.
+// Must be called after Start.
+func (n *Node) AddTransport(tp Transport) {
+	n.extraTransports = append(n.extraTransports, tp)
+	// Start serving on the new transport.
+	lis, err := tp.Listen()
+	if err != nil {
+		n.log.WithError(err).Warn("DHT: failed to listen on extra transport")
+		return
+	}
+	n.wg.Add(1)
+	go func() {
+		defer n.wg.Done()
+		n.serve(lis)
+	}()
+	n.log.Info("DHT: extra transport listener started")
+}
 
 // Start begins listening for RPC requests and bootstraps the routing table.
 func (n *Node) Start(ctx context.Context) error {
@@ -224,11 +244,26 @@ func rpcCtx(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, rpcTimeout)
 }
 
+// dial tries the primary transport, then extra transports.
+func (n *Node) dial(ctx context.Context, pk cipher.PubKey) (io.ReadWriteCloser, error) {
+	conn, err := n.tp.Dial(ctx, pk)
+	if err == nil {
+		return conn, nil
+	}
+	for _, tp := range n.extraTransports {
+		conn, err2 := tp.Dial(ctx, pk)
+		if err2 == nil {
+			return conn, nil
+		}
+	}
+	return nil, err // return original error
+}
+
 func (n *Node) rpcFindNode(ctx context.Context, p Peer, target NodeID) (*FindNodeResponse, error) {
 	ctx, cancel := rpcCtx(ctx)
 	defer cancel()
 
-	conn, err := n.tp.Dial(ctx, p.PK)
+	conn, err := n.dial(ctx, p.PK)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +285,7 @@ func (n *Node) rpcGetValue(ctx context.Context, p Peer, target NodeID) (*GetValu
 	ctx, cancel := rpcCtx(ctx)
 	defer cancel()
 
-	conn, err := n.tp.Dial(ctx, p.PK)
+	conn, err := n.dial(ctx, p.PK)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +305,7 @@ func (n *Node) rpcPutValue(ctx context.Context, p Peer, item MutableItem) error 
 	ctx, cancel := rpcCtx(ctx)
 	defer cancel()
 
-	conn, err := n.tp.Dial(ctx, p.PK)
+	conn, err := n.dial(ctx, p.PK)
 	if err != nil {
 		return err
 	}
@@ -293,7 +328,7 @@ func (n *Node) rpcPutMirror(ctx context.Context, p Peer, item MutableItem, targe
 	ctx, cancel := rpcCtx(ctx)
 	defer cancel()
 
-	conn, err := n.tp.Dial(ctx, p.PK)
+	conn, err := n.dial(ctx, p.PK)
 	if err != nil {
 		return err
 	}
@@ -311,7 +346,7 @@ func (n *Node) rpcPing(ctx context.Context, p Peer) error {
 	ctx, cancel := rpcCtx(ctx)
 	defer cancel()
 
-	conn, err := n.tp.Dial(ctx, p.PK)
+	conn, err := n.dial(ctx, p.PK)
 	if err != nil {
 		return err
 	}

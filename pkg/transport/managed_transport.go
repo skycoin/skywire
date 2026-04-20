@@ -90,6 +90,10 @@ type ManagedTransport struct {
 	// cascadeHandler handles cascade protocol packets (route ID 0).
 	// Set by the transport manager from the router's CascadeHandler.
 	cascadeHandler func(p routing.Packet, mt *ManagedTransport)
+
+	// dhtHandler handles DHT protocol packets (route ID 0).
+	// Set by the transport manager from the DHT's TransportLayerDHT.
+	dhtHandler func(p routing.Packet, mt *ManagedTransport)
 }
 
 // LatencyStats holds latency measurement statistics for a transport.
@@ -233,6 +237,11 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			case routing.CascadeSetupPacket, routing.CascadeAckPacket:
 				if mt.cascadeHandler != nil {
 					mt.cascadeHandler(p, mt)
+				}
+				continue
+			case routing.DHTPacket:
+				if mt.dhtHandler != nil {
+					mt.dhtHandler(p, mt)
 				}
 				continue
 			}
