@@ -27,8 +27,11 @@ import (
 const (
 	// DefaultRouteKeepAlive is the default expiration interval for routes.
 	// Routes are refreshed on every data transfer. This timeout only
-	// fires when no data has been sent for this long.
-	DefaultRouteKeepAlive = 24 * time.Hour
+	// fires when no data has been sent for this long. Previously 24h,
+	// reduced to 10 minutes so idle routes (e.g. from the resolving
+	// proxy's one-shot HTTP requests) are cleaned up promptly instead
+	// of consuming routing table entries for a full day.
+	DefaultRouteKeepAlive = 10 * time.Minute
 	// DefaultRulesGCInterval is the default duration for garbage collection of routing rules.
 	DefaultRulesGCInterval = 10 * time.Second
 	acceptSize             = 1024
