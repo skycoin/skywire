@@ -6,8 +6,8 @@ Cascading Route Setup eliminates the Route Setup Node's (RSN) dependency on DMSG
 
 This specification also covers:
 - DHT synchronization over transports (same route ID 0 mechanism)
-- Address resolver privacy controls for visors
 - RSN standalone visor configuration with transport manager
+- Transport label "setup" for RSN transports
 
 ## Motivation
 
@@ -16,7 +16,7 @@ Currently, route setup requires DMSG connectivity between the RSN and every viso
 The cascade protocol moves route setup to the transport layer:
 - The RSN is reachable via transport-level relay (route ID 0)
 - Routing rules are installed hop-by-hop over the route's own transports
-- DMSG becomes a fallback for initial RSN contact, not a hard requirement
+- DMSG becomes a fallback, not a hard requirement
 - The same route ID 0 mechanism extends to DHT synchronization
 
 ## Design Principles
@@ -33,39 +33,30 @@ The cascade protocol moves route setup to the transport layer:
 
 The RSN is its own visor with:
 - Its own PK/SK identity
-- A transport manager (accepts STCPR connections)
-- DMSG connectivity (as any visor, for bootstrapping)
+- A transport manager (initiates STCPR/SUDPH transports outward)
+- Autoconnect enabled (to build its transport connectivity)
+- DMSG connectivity (as any visor, for bootstrapping and fallback)
 - No hosted applications
-- No autoconnect
+- No registration in the address resolver (does not accept inbound transports — only initiates outward)
 - No participation as an intermediary hop in any data route
 
-The RSN's transports are registered in transport discovery (TD) so the network topology is visible and continuous. However, the route finder and local route calculation **exclude RSN PKs from intermediary positions** in data routes, using the visor's configured `route_setup_nodes` list as the filter. RSN PKs may appear as source or destination (for control traffic) but never as a relay hop.
+### Transport Label "setup"
+
+The RSN creates all its transports with the label `"setup"`. The responder adopts this label via the settlement handshake (existing label propagation mechanism). Both ends of an RSN transport carry the "setup" label.
+
+Since visors periodically re-register their transports with transport discovery (TD), RSN transports will appear in TD with this label. The route finder and local route calculation **exclude transports with label "setup"** from data route path calculations. This is simpler and more reliable than matching against RSN public keys.
+
+The "setup" label means: this transport exists for control-plane communication with the RSN. It is visible in TD (the mesh is continuous), but it is never used as a hop in a data route.
 
 ### Transport Capacity Management
 
-The RSN accepts a configurable maximum number of direct transports (`max_transports`). Once the threshold is reached, the RSN deregisters from the address resolver to stop accepting new incoming transports. Existing transports are maintained.
+The RSN initiates transports to other visors via autoconnect. It does NOT register with the address resolver, so it never receives unsolicited inbound transports. The RSN controls its own connectivity by choosing which visors to transport.
 
-Visors that cannot directly transport the RSN reach it via relay through a peer that can (see "Relay to RSN" below).
-
-### Address Resolver Privacy Controls (Visors)
-
-Visors gain an optional `ar_transport_limit` configuration field that controls address resolver registration:
-
-| Value | Behavior |
-|-------|----------|
-| `0` (default) | Normal behavior — stay registered indefinitely |
-| `N > 0` | Deregister from AR after `N` transports are established |
-| `N < 0` | Never register with AR at all |
-
-When a visor deregisters (or never registers), it cannot receive new incoming transport connections via AR. Existing transports remain functional. The visor is still reachable via DMSG and through already-established transports.
-
-**Interaction with public visor mode:** A visor configured as a public visor (`public_autoconnect: true`) MUST register with AR (otherwise no one can find it). If `ar_transport_limit < 0` conflicts with public visor mode, the visor logs a warning and ignores the limit.
-
-**Interaction with autoconnect:** A visor that has deregistered from AR can still INITIATE outbound transports to public visors and other peers. It only stops accepting unsolicited inbound connections.
+A configurable `max_transports` limits how many transports the RSN maintains. The autoconnect logic stops initiating new transports once the limit is reached.
 
 ## Packet Types
 
-Two new packet types are added to the transport frame format, both using route ID 0:
+New packet types are added to the transport frame format, all using route ID 0:
 
 | Type | Value | Description |
 |------|-------|-------------|
@@ -83,7 +74,7 @@ A new capability flag is added to the transport handshake:
 CapCascade = 1 << 2
 ```
 
-Visors that support the cascade protocol advertise this during the transport handshake. The RSN checks this flag before attempting cascade setup; if any hop lacks the capability, the RSN falls back to DMSG-based setup for the entire route.
+Visors that support the cascade protocol advertise this during the transport handshake. The RSN checks this flag to determine which hops support cascade.
 
 ## Cascade Message Format
 
@@ -136,6 +127,8 @@ This ensures:
 The RSN builds a nested reserve message from last hop to first:
 
 ```
+Route: A --tp1--> C --tp2--> D --tp3--> B
+
 RSN constructs:
   For B (terminal):  {Phase:Reserve, ReserveN:2, RelayTpID:0,   Payload:nil}
   For D:             {Phase:Reserve, ReserveN:2, RelayTpID:tp3, Payload:serialize(B's msg)}
@@ -151,7 +144,7 @@ Each hop:
 5. Prepends its own reserved route IDs to the ACK
 6. Relays the combined ACK back to the previous hop
 
-The ACK cascades back: `B → D → C → A → RSN`. The RSN now has all reserved route IDs from every hop.
+The ACK cascades back: `B -> D -> C -> A -> RSN`. The RSN now has all reserved route IDs from every hop.
 
 ### Phase 2: Install Rules
 
@@ -187,7 +180,7 @@ Well within the 10-minute route keepalive and the RSN's per-request timeout.
 
 ### Direct Transport
 
-If a visor has a direct transport to the RSN, it sends the setup request directly over that transport as an RPC call (same as today over DMSG, but over the transport's raw connection).
+If a visor has a direct transport to the RSN (labeled "setup"), it sends the setup request directly over that transport as an RPC call (same as today over DMSG, but over the transport's raw connection).
 
 ### Relay Through a Neighbor
 
@@ -199,10 +192,10 @@ If a visor does not directly transport the RSN:
 4. The visor caches this list locally
 5. On subsequent requests, the visor checks: "do I transport any of these relay peers?"
 6. If yes: sends the request to that peer on route ID 0 with destination = RSN PK
-7. The peer forwards to the RSN over its direct transport
+7. The peer forwards to the RSN over its direct "setup" transport
 8. Response returns via the same path
 
-If the cached relay peer list is stale (relay peer no longer transports RSN), the request times out and the visor falls back to DMSG, receiving a fresh peer list.
+If the cached relay peer list is stale, the request times out and the visor falls back to DMSG, receiving a fresh peer list.
 
 ### Multi-Hop Relay
 
@@ -210,16 +203,28 @@ If the visor doesn't transport any relay peer directly, but transports a visor t
 
 ## Failure Handling
 
+### Cascade Failures
+
 | Failure | Behavior |
 |---------|----------|
-| Transport to next hop is dead | Cascade fails at that hop. CascadeAck with error propagates back. Route setup fails. Visor retries with a different path. |
-| Intermediate hop doesn't support cascade | RSN detects via capability flag before starting. Uses DMSG-based setup for the entire route. |
-| RSN signature verification fails | Hop rejects the message. Does not install rules. Does not relay. Returns error ACK. |
-| Reserve phase timeout | Session expires. Any partially-reserved IDs expire via normal GC. |
-| Install phase timeout | Session expires. Partially-installed rules expire via normal GC (DefaultRouteKeepAlive). |
+| Transport to next hop is dead | Cascade fails at that hop. Error ACK propagates back to RSN. Route setup fails — the broken transport means the route is unusable anyway. |
+| RSN signature verification fails | Hop rejects the message. Does not install rules or relay. Returns error ACK. |
+| Reserve phase timeout | Session expires. Partially-reserved IDs expire via normal GC. |
+| Install phase timeout | Session expires. Partially-installed rules expire via DefaultRouteKeepAlive GC. |
 | RSN unreachable via relay | Fall back to DMSG. |
 
-**No DMSG fallback for individual hops in the cascade.** If a transport in the route can't carry the cascade message, that transport is broken and the route would be unusable anyway. Fail fast, let the visor retry with a different path.
+### Mixed-Version Fallback
+
+When the route contains a mix of new visors (cascade-capable) and old visors (not cascade-capable):
+
+1. The RSN knows each hop's capabilities (from `CapCascade` flag in the transport handshake data, or from attempting the cascade).
+2. The cascade proceeds along cascade-capable hops from the source toward the destination.
+3. When the cascade reaches a hop that cannot relay to the next hop (because the next hop is an old visor that drops `CascadeSetupPacket`), the cascade times out at that hop.
+4. The timeout error propagates back to the RSN, identifying the break point.
+5. The RSN falls back to DMSG for the failing hop and all subsequent hops in the route.
+6. Hops before the break point already have their rules installed via cascade. Those rules remain valid.
+
+This means: cascade what you can from the source, DMSG the rest from the break point onward. As the network updates, the break point moves further along the route until eventually the entire cascade completes without DMSG.
 
 ## DHT Over Transports
 
@@ -248,10 +253,12 @@ This means the DHT can bootstrap and sync purely over transports when DMSG is un
     "sessions_count": 6
   },
   "transport": {
-    "stcpr_addr": ":7780",
-    "address_resolver": "http://ar.skywire.skycoin.com",
+    "discovery": "http://tpd.skywire.skycoin.com",
+    "address_resolver": "",
+    "label": "setup",
     "max_transports": 20,
-    "deregister_threshold": 20
+    "autoconnect": true,
+    "public_autoconnect": false
   },
   "cascade": {
     "reserve_timeout": "10s",
@@ -265,62 +272,44 @@ This means the DHT can bootstrap and sync purely over transports when DMSG is un
 
 | Field | Description |
 |-------|-------------|
-| `transport.stcpr_addr` | STCPR listen address for direct transport connections |
-| `transport.address_resolver` | AR address for transport registration |
-| `transport.max_transports` | Maximum direct transport peers to accept |
-| `transport.deregister_threshold` | Deregister from AR after this many transports (0 = never) |
+| `transport.discovery` | Transport discovery URL (transports are registered here with label "setup") |
+| `transport.address_resolver` | Empty — RSN does not register with AR (no inbound transports) |
+| `transport.label` | Default label for transports created by this visor ("setup") |
+| `transport.max_transports` | Maximum transports to maintain |
+| `transport.autoconnect` | Enable autoconnect to build connectivity outward |
+| `transport.public_autoconnect` | Disabled — RSN does not advertise as a public visor |
 | `cascade.reserve_timeout` | Per-hop timeout for the reserve phase |
 | `cascade.install_timeout` | Per-hop timeout for the install phase |
 | `cascade.session_ttl` | How long to keep session state between phases |
 | `relay_peer_announce` | Include transport peer list in setup responses |
 
-## Visor Configuration Changes
+## Route Finder Exclusion
 
-### Address Resolver Privacy
+The route finder and local route calculation exclude transports with label `"setup"` from data route path calculations. This prevents the RSN from being included as an intermediary hop without requiring PK-based matching.
 
-New field in visor config (`transport` section):
-
-```json
-{
-  "transport": {
-    "ar_transport_limit": 0
-  }
-}
-```
-
-| Value | Behavior |
-|-------|----------|
-| `0` | Normal — stay registered with AR indefinitely (default) |
-| `N > 0` | Deregister from AR after `N` transports are established |
-| `N < 0` | Never register with AR |
-
-**Conflict resolution with public visor mode:**
-- If `public_autoconnect: true` and `ar_transport_limit < 0`: log warning, ignore limit (public visors must be discoverable)
-- If `public_autoconnect: true` and `ar_transport_limit > 0`: allowed (accept N transports then go dark — useful for bandwidth-limited public visors)
-
-### Route Finder Exclusion
-
-No new configuration needed. The visor's existing `route_setup_nodes` list is used to exclude RSN PKs from intermediary positions in route calculations. Both the route finder service and local route calculation apply this filter.
+Additionally, the RSN itself rejects any `AddIntermediaryRules` request — it never accepts forwarding rules. This is a hard enforcement backstop even if a route were somehow calculated through it.
 
 ## Backward Compatibility
 
 - Old visors drop unknown packet types on route ID 0 (existing behavior)
-- The RSN checks `CapCascade` on all hops before attempting cascade
-- If any hop lacks cascade support, the RSN uses DMSG-based setup (current protocol)
-- The cascade and DMSG protocols coexist — the RSN selects per-request based on path capabilities
+- The RSN checks `CapCascade` on hops before attempting cascade
+- Mixed-version routes: cascade up to the first old hop, DMSG the rest
+- The cascade and DMSG protocols coexist — the RSN selects per-hop based on capabilities
 - The embedded RSN continues working over DMSG as today (no cascade support needed)
-- Gradual rollout: as visors update, more routes use cascade, less DMSG load
+- Gradual rollout: as visors update, more hops support cascade, less DMSG load
 
 ## Implementation Phases
 
 ### Phase 1: Core Protocol
+- Transport label "setup" (add to `pkg/transport/entry.go`)
 - New packet types (`CascadeSetupPacket`, `CascadeAckPacket`)
 - Cascade message format and serialization (`pkg/routing/cascade.go`)
 - Transport-layer interception in `managed_transport.go`
 - Cascade handler on visor side (`pkg/router/cascade_handler.go`)
 - Cascade builder on RSN side (`pkg/router/cascade_builder.go`)
 - Capability negotiation (`CapCascade`)
-- RSN transport manager and config
+- RSN standalone visor with transport manager
+- Route finder exclusion of "setup" labeled transports
 
 ### Phase 2: Relay and Discovery
 - Route ID 0 relay mechanism for reaching the RSN
@@ -335,7 +324,4 @@ No new configuration needed. The visor's existing `route_setup_nodes` list is us
 - Transport peer integration into DHT routing table
 
 ### Phase 4: Privacy and Cleanup
-- `ar_transport_limit` visor config
-- AR deregistration logic
-- Route finder RSN exclusion
 - Deprecate embedded RSN (optional, once standalone cascade is proven)
