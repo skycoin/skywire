@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -1175,5 +1176,82 @@ func (rc *rpcClient) TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]
 		TPSPK:    tpsPK,
 		TargetPK: targetPK,
 	}, &resp)
+	return resp, err
+}
+
+// DHTStatus returns the DHT node's status.
+func (rc *rpcClient) DHTStatus() (*DHTStatus, error) {
+	var resp DHTStatus
+	if err := rc.Call("DHTStatus", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DHTGet retrieves a value from the DHT.
+func (rc *rpcClient) DHTGet(pk string, salt string) ([]byte, error) {
+	var resp []byte
+	err := rc.Call("DHTGet", &DHTGetIn{PK: pk, Salt: salt}, &resp)
+	return resp, err
+}
+
+// DHTPut publishes a value to the DHT.
+func (rc *rpcClient) DHTPut(value []byte, seq uint64, salt string) error {
+	return rc.Call("DHTPut", &DHTPutIn{Value: value, Seq: seq, Salt: salt}, &struct{}{})
+}
+
+// DHTSetFullNode enables or disables full node mode.
+func (rc *rpcClient) DHTSetFullNode(full bool) error {
+	return rc.Call("DHTSetFullNode", &full, &struct{}{})
+}
+
+// DmsgPorterStats returns ephemeral port reservation counts.
+func (rc *rpcClient) DmsgPorterStats() (*DmsgPorterStatus, error) {
+	var resp DmsgPorterStatus
+	if err := rc.Call("DmsgPorterStats", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DmsgPorterReset frees all ephemeral port reservations.
+func (rc *rpcClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
+	var resp DmsgPorterStatus
+	if err := rc.Call("DmsgPorterReset", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DmsgPorterDiag returns detailed ephemeral port diagnostics for the RSN porter.
+func (rc *rpcClient) DmsgPorterDiag() (*netutil.EphemeralDiagResult, error) {
+	var resp netutil.EphemeralDiagResult
+	if err := rc.Call("DmsgPorterDiag", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// AddHypervisor connects to a remote hypervisor at runtime.
+func (rc *rpcClient) AddHypervisor(pk cipher.PubKey) error {
+	return rc.Call("AddHypervisor", &pk, &struct{}{})
+}
+
+// DmsgSetMinSessions updates the minimum DMSG session count.
+func (rc *rpcClient) DmsgSetMinSessions(n int) error {
+	return rc.Call("DmsgSetMinSessions", &n, &struct{}{})
+}
+
+// DmsgReconnect forces DMSG session reconnection.
+func (rc *rpcClient) DmsgReconnect() (int, error) {
+	var resp int
+	err := rc.Call("DmsgReconnect", &struct{}{}, &resp)
+	return resp, err
+}
+
+// CheckAREntry checks if a PK is registered in the address resolver.
+func (rc *rpcClient) CheckAREntry(pk string) ([]string, error) {
+	var resp []string
+	err := rc.Call("CheckAREntry", &pk, &resp)
 	return resp, err
 }

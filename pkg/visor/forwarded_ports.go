@@ -19,7 +19,11 @@ import (
 
 // ForwardedPort describes a single forwarded port with its metadata.
 type ForwardedPort struct {
-	Port          int             `json:"port"`
+	// Port is the DMSG/skynet port exposed to the network.
+	Port int `json:"port"`
+	// LocalPort is the TCP port on localhost to forward to. If zero,
+	// defaults to Port (same port number locally and remotely).
+	LocalPort     int             `json:"local_port,omitempty"`
 	Label         string          `json:"label,omitempty"`
 	Description   string          `json:"description,omitempty"`
 	ShowOnLanding bool            `json:"show_on_landing"`
@@ -30,6 +34,15 @@ type ForwardedPort struct {
 	// to reverse-proxy to. For port 80, this replaces the visor's
 	// default landing page with content from the local service.
 	ProxyAddr string `json:"proxy_addr,omitempty"`
+}
+
+// EffectiveLocalPort returns the local TCP port to forward to.
+// Returns LocalPort if set, otherwise Port.
+func (fp *ForwardedPort) EffectiveLocalPort() int {
+	if fp.LocalPort > 0 {
+		return fp.LocalPort
+	}
+	return fp.Port
 }
 
 // ForwardedPorts is a thread-safe collection of forwarded port definitions.

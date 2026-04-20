@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/dht"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
@@ -155,6 +156,9 @@ type Visor struct {
 
 	// Embedded Route Setup Node (nil if route_setup_sk not configured)
 	embeddedRouteSetup *EmbeddedRouteSetup
+
+	// DHT node (nil if dht.enable is false)
+	dhtNode *dht.Node
 
 	// Embedded DMSG Web resolver (nil if dmsg_web.enable is false).
 	// Provides a localhost SOCKS5 proxy that resolves .dmsg hosts.

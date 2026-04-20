@@ -20,6 +20,7 @@ import (
 	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
@@ -34,6 +35,11 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
+	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/transport/tpdclient"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 var (
@@ -153,6 +159,75 @@ Usage:
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
+
+		// Initialize transport manager for cascade route setup.
+		// The RSN uses STCPR transports with label "setup" to reach
+		// visors directly, enabling route setup without DMSG.
+		if conf.Transport != nil && conf.Cascade != nil {
+			tpLabel := transport.LabelSetup
+			if conf.Transport.DefaultLabel != "" {
+				tpLabel = transport.Label(conf.Transport.DefaultLabel)
+			}
+
+			var tpdC transport.DiscoveryClient
+			if conf.TransportDiscovery != "" {
+				var tpdErr error
+				tpdC, tpdErr = tpdclient.NewHTTP(
+					conf.TransportDiscovery,
+					conf.PK, conf.SK,
+					&http.Client{}, "",
+					mLog,
+				)
+				if tpdErr != nil {
+					log.WithError(tpdErr).Warn("Failed to create TPD client — using mock")
+					tpdC = transport.NewDiscoveryMock()
+				}
+			} else {
+				tpdC = transport.NewDiscoveryMock()
+			}
+
+			logS := transport.InMemoryTransportLogStore()
+			tpMConf := transport.ManagerConfig{
+				PubKey:           conf.PK,
+				SecKey:           conf.SK,
+				DiscoveryClient:  tpdC,
+				LogStore:         logS,
+				Version:          buildinfo.Version(),
+				ARTransportLimit: -1, // RSN never registers with AR
+			}
+
+			var arC addrresolver.APIClient
+			if conf.Transport.AddressResolver != "" {
+				arC, _ = addrresolver.NewHTTP( //nolint:errcheck
+					conf.Transport.AddressResolver,
+					conf.PK, conf.SK,
+					&http.Client{}, "",
+					log, mLog,
+				)
+			}
+
+			factory := network.ClientFactory{
+				PK:         conf.PK,
+				SK:         conf.SK,
+				ListenAddr: conf.Transport.STCPRAddr,
+				ARClient:   arC,
+				EB:         appevent.NewBroadcaster(log, 0),
+				MLogger:    mLog,
+			}
+
+			tpM, tpErr := transport.NewManager(log, arC, factory.EB, &tpMConf, factory)
+			if tpErr != nil {
+				log.WithError(tpErr).Warn("Failed to create transport manager — cascade disabled")
+			} else {
+				tpM.InitClient(ctx, types.STCPR, 0)
+				log.WithField("stcpr_addr", conf.Transport.STCPRAddr).
+					WithField("label", tpLabel).
+					Info("RSN transport manager started (STCPR)")
+
+				sn.InitCascade(conf, tpM)
+				_ = tpLabel // label is set per-transport at dial time
+			}
+		}
 
 		// Start DMSG HTTP health server using the setup-node's own DMSG client.
 		// This avoids creating a second DMSG client with the same PK, which

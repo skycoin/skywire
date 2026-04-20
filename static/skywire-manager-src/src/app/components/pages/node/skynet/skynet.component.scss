@@ -112,4 +112,10 @@
   .mdc-floating-label {
     color: rgba(255, 255, 255, 0.6) !important;
   }
+  // Checkbox label text on dark background
+  .mdc-label,
+  .mdc-form-field > label,
+  .mat-mdc-checkbox label {
+    color: rgba(255, 255, 255, 0.87) !important;
+  }
 }
