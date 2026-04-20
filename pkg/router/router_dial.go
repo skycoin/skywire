@@ -91,9 +91,13 @@ func (r *router) DialRoutes(
 			return nil, fmt.Errorf("route finder: %w", err)
 		}
 
+		keepAlive := DefaultRouteKeepAlive
+		if opts != nil && opts.KeepAlive > 0 {
+			keepAlive = opts.KeepAlive
+		}
 		req := routing.BidirectionalRoute{
 			Desc:      forwardDesc,
-			KeepAlive: DefaultRouteKeepAlive,
+			KeepAlive: keepAlive,
 			Forward:   forwardPath,
 			Reverse:   reversePath,
 		}
@@ -176,11 +180,15 @@ func (r *router) setupPingRoute(
 	forwardDesc routing.RouteDescriptor,
 	forwardPath, reversePath []routing.Hop,
 	rPK cipher.PubKey,
-	_ *DialOptions,
+	opts *DialOptions,
 ) (net.Conn, error) {
+	keepAlive := DefaultRouteKeepAlive
+	if opts != nil && opts.KeepAlive > 0 {
+		keepAlive = opts.KeepAlive
+	}
 	req := routing.BidirectionalRoute{
 		Desc:      forwardDesc,
-		KeepAlive: DefaultRouteKeepAlive,
+		KeepAlive: keepAlive,
 		Forward:   forwardPath,
 		Reverse:   reversePath,
 	}
@@ -658,9 +666,13 @@ func (r *router) establishMuxRoutes(
 			break
 		}
 
+		muxKeepAlive := DefaultRouteKeepAlive
+		if opts != nil && opts.KeepAlive > 0 {
+			muxKeepAlive = opts.KeepAlive
+		}
 		muxReq := routing.BidirectionalRoute{
 			Desc:      forwardDesc,
-			KeepAlive: DefaultRouteKeepAlive,
+			KeepAlive: muxKeepAlive,
 			Forward:   muxFwd,
 			Reverse:   muxRev,
 		}

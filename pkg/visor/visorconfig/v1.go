@@ -154,6 +154,11 @@ type SkynetWebConfig struct {
 	DomainSuffix string `json:"domain_suffix,omitempty"`
 	// UpstreamSOCKS forwards non-matching CONNECTs to this upstream.
 	UpstreamSOCKS string `json:"upstream_socks,omitempty"`
+	// RouteTimeout is the keepalive duration for routes created by the
+	// resolving proxy. Routes idle longer than this are expired by GC.
+	// Zero means use DefaultRouteKeepAlive (10 min). A very large value
+	// (e.g. "8760h") effectively keeps routes alive until the visor stops.
+	RouteTimeout Duration `json:"route_timeout,omitempty"`
 }
 
 // Transport defines a transport config.

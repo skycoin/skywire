@@ -109,6 +109,7 @@ type DialOptions struct {
 	MuxRoutes           int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
 	ExcludeTransportIDs []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
 	ExcludeDMSG         bool          // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
+	KeepAlive           time.Duration // Route keepalive (0 = DefaultRouteKeepAlive). Routes idle longer expire.
 }
 
 // DefaultDialOptions returns default dial options.
