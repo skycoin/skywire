@@ -44,6 +44,13 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		}
 		// Publish to CXO subscribers
 		api.publishTransportToCXO(entry.Entry)
+		// Mirror transport to DHT under each edge visor's PK.
+		if api.dhtMirror != nil {
+			seq := uint64(time.Now().UnixNano()) //nolint:gosec
+			for _, edgePK := range entry.Entry.Edges {
+				api.dhtMirror.Mirror(edgePK, entry.Entry, seq)
+			}
+		}
 		if entryVersion == "" && entry.Version != "" {
 			entryVersion = entry.Version
 		}

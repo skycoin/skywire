@@ -47,6 +47,12 @@ type Config struct {
 	MaxSessions      int           `json:"max_sessions"`
 	Peers            []PeerConfig  `json:"peers,omitempty"`
 	EnableRouteSetup bool          `json:"enable_route_setup,omitempty"`
+	// EnableDHT runs a Kademlia DHT full node on this DMSG server.
+	// Every visor uses DMSG server PKs as DHT bootstrap peers, so
+	// enabling this makes the DHT network functional without any
+	// additional infrastructure.
+	EnableDHT bool   `json:"enable_dht,omitempty"`
+	RedisAddr string `json:"redis_addr,omitempty"` // Redis for DHT persistence (optional)
 }
 
 // GenerateDefaultConfig generate default config for dmsg-server

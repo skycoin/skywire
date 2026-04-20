@@ -15,6 +15,7 @@ import (
 	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/dht"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/service-discovery/api"
 	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
@@ -273,6 +274,14 @@ Example:
 		if h.DmsgClient != nil {
 			sdAPI.DmsgClient = h.DmsgClient
 			log.Info("DMSG client available for visor reachability probes")
+		}
+
+		// Wire DHT entry mirroring: every service registration is
+		// also published to the DHT under the visor's PK.
+		if h.DHTNode != nil {
+			mirror := dht.NewEntryMirror(h.DHTNode, "svc", logging.MustGetLogger("dht:svc-mirror"))
+			sdAPI.SetDHTMirror(mirror)
+			log.Info("DHT service mirroring enabled")
 		}
 
 		select {
