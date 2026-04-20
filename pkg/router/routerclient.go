@@ -125,14 +125,27 @@ func (c *Client) ReserveIDs(ctx context.Context, n uint8) (rtIDs []routing.Route
 // remain usable across their full idle TTL.
 const rpcDeadline = 30 * time.Second
 
+// streamIdleTimeoutForPool is the read deadline set on the underlying
+// DMSG stream after an RPC call completes and the connection returns to
+// the pool. This must match dmsg.StreamIdleTimeout (2 min) so that the
+// rpc.Client.input() goroutine's Read eventually times out, triggering
+// Stream.Read()'s auto-release of the ephemeral porter port.
+//
+// Without this, call() was clearing BOTH deadlines via SetDeadline(zero),
+// leaving the stream with no read deadline — the input() goroutine would
+// block in Read forever, and the ephemeral port was never freed. Over ~4
+// hours of operation, this leaked all 16,384 ephemeral ports.
+const streamIdleTimeoutForPool = 2 * time.Minute
+
 func (c *Client) call(ctx context.Context, method string, args interface{}, reply interface{}) error {
 	if c == nil || c.rpc == nil {
 		return errors.New("router client not initialized")
 	}
 
-	// Set a fresh deadline for this RPC call.
+	// Set a fresh deadline for this RPC call on both read and write.
+	deadline := time.Now().Add(rpcDeadline)
 	if conn, ok := c.conn.(interface{ SetDeadline(time.Time) error }); ok {
-		conn.SetDeadline(time.Now().Add(rpcDeadline)) //nolint:errcheck,gosec
+		conn.SetDeadline(deadline) //nolint:errcheck,gosec
 	}
 
 	call := c.rpc.Go(RPCName+"."+method, args, reply, nil)
@@ -144,9 +157,21 @@ func (c *Client) call(ctx context.Context, method string, args interface{}, repl
 		c.rpc.Close() //nolint:errcheck,gosec
 		return ctx.Err()
 	case <-call.Done:
-		// Clear the deadline so the connection can idle in the pool.
-		if conn, ok := c.conn.(interface{ SetDeadline(time.Time) error }); ok {
-			conn.SetDeadline(time.Time{}) //nolint:errcheck,gosec
+		// Clear the write deadline so the connection can idle in the pool.
+		// IMPORTANT: Restore the read deadline (StreamIdleTimeout = 2min)
+		// so the rpc.Client.input() goroutine's blocked Read will
+		// eventually time out and trigger Stream.Read()'s auto-release
+		// of the ephemeral porter port. Without this, the read blocks
+		// forever and the port is never freed — the root cause of
+		// ephemeral port exhaustion after ~4 hours of operation.
+		if c.conn != nil {
+			if conn, ok := c.conn.(interface {
+				SetReadDeadline(time.Time) error
+				SetWriteDeadline(time.Time) error
+			}); ok {
+				conn.SetWriteDeadline(time.Time{})                             //nolint:errcheck,gosec
+				conn.SetReadDeadline(time.Now().Add(streamIdleTimeoutForPool)) //nolint:errcheck,gosec
+			}
 		}
 		return call.Error
 	}

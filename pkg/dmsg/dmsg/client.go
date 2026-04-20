@@ -437,6 +437,20 @@ func (ce *Client) ResetPorter() int {
 	return ce.porter.ResetEphemeral()
 }
 
+// PorterDiag returns detailed diagnostic information about ephemeral
+// port reservations. This helps identify what is holding ports when
+// the porter approaches exhaustion.
+func (ce *Client) PorterDiag() netutil.EphemeralDiagResult {
+	return ce.porter.EphemeralDiag()
+}
+
+// SweepStalePorterEntries closes and frees ephemeral port entries older
+// than maxAge. Returns the number of entries swept. This is a safety net
+// for streams that leak through the normal cleanup paths.
+func (ce *Client) SweepStalePorterEntries(maxAge time.Duration) int {
+	return ce.porter.SweepStaleEphemeral(maxAge)
+}
+
 // ForceReconnect closes every active server session. The reconnect loop
 // (15 s cadence) and delSession → nudgeEntryUpdate path together will
 // re-dial fresh sessions and refresh the discovery entry's

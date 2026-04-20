@@ -157,7 +157,9 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 
 // SetDHTMirror sets a mirror that publishes entries to the DHT on every
 // successful SetEntry.
-func (a *API) SetDHTMirror(m interface{ Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64) }) {
+func (a *API) SetDHTMirror(m interface {
+	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+}) {
 	a.dhtMirror = m
 }
 

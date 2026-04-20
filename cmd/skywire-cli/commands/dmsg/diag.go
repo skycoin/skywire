@@ -2,6 +2,7 @@
 package clidmsg
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -13,6 +14,7 @@ import (
 func init() {
 	diagCmd.AddCommand(porterStatsCmd)
 	diagCmd.AddCommand(porterResetCmd)
+	diagCmd.AddCommand(porterDiagCmd)
 	diagCmd.AddCommand(reconnectCmd)
 	RootCmd.AddCommand(diagCmd)
 }
@@ -65,6 +67,28 @@ Well-known ports (listeners) are preserved.`,
 		if s.RSNFreed > 0 || s.RSNPorts > 0 {
 			fmt.Printf("  RSN:  freed %d ports (%d remaining)\n", s.RSNFreed, s.RSNPorts)
 		}
+	},
+}
+
+var porterDiagCmd = &cobra.Command{
+	Use:   "porter-diag",
+	Short: "Detailed diagnostic of RSN ephemeral port entries",
+	Long: `Analyze what is holding ephemeral ports in the embedded RSN's
+DMSG porter. Shows port count breakdown by value type (e.g. *dmsg.Stream),
+how many have nil values, and a sample of entries for inspection.
+
+Use this to investigate ephemeral port exhaustion root causes.`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		diag, err := rpcClient.DmsgPorterDiag()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		pretty, _ := json.MarshalIndent(diag, "", "  ") //nolint:errcheck
+		fmt.Println(string(pretty))
 	},
 }
 

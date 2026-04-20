@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
@@ -1654,6 +1655,17 @@ func (r *RPC) DmsgReconnect(_ *struct{}, out *int) (err error) {
 		return err
 	}
 	*out = n
+	return nil
+}
+
+// DmsgPorterDiag returns detailed diagnostics of the RSN's ephemeral port entries.
+func (r *RPC) DmsgPorterDiag(_ *struct{}, out *netutil.EphemeralDiagResult) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgPorterDiag", nil)(out, &err)
+	diag, err := r.visor.DmsgPorterDiag()
+	if err != nil {
+		return err
+	}
+	*out = *diag
 	return nil
 }
 

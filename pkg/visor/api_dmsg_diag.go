@@ -1,13 +1,17 @@
 package visor
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+)
 
 // DmsgPorterStatus contains DMSG porter diagnostics.
 type DmsgPorterStatus struct {
-	MainPorts     int `json:"main_ports"`
-	RSNPorts      int `json:"rsn_ports,omitempty"`
-	MainFreed     int `json:"main_freed,omitempty"`
-	RSNFreed      int `json:"rsn_freed,omitempty"`
+	MainPorts int `json:"main_ports"`
+	RSNPorts  int `json:"rsn_ports,omitempty"`
+	MainFreed int `json:"main_freed,omitempty"`
+	RSNFreed  int `json:"rsn_freed,omitempty"`
 }
 
 // DmsgPorterStats returns the current ephemeral port reservation
@@ -53,4 +57,14 @@ func (v *Visor) DmsgReconnect() (int, error) {
 		return 0, fmt.Errorf("DMSG client not running")
 	}
 	return v.dmsgC.ForceReconnect(), nil
+}
+
+// DmsgPorterDiag returns detailed diagnostic information about ephemeral
+// port reservations in the embedded RSN's DMSG client porter.
+func (v *Visor) DmsgPorterDiag() (*netutil.EphemeralDiagResult, error) {
+	if v.embeddedRouteSetup == nil || v.embeddedRouteSetup.DmsgClient() == nil {
+		return nil, fmt.Errorf("embedded RSN not running")
+	}
+	diag := v.embeddedRouteSetup.DmsgClient().PorterDiag()
+	return &diag, nil
 }

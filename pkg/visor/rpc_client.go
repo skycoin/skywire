@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -1217,6 +1218,15 @@ func (rc *rpcClient) DmsgPorterStats() (*DmsgPorterStatus, error) {
 func (rc *rpcClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
 	var resp DmsgPorterStatus
 	if err := rc.Call("DmsgPorterReset", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DmsgPorterDiag returns detailed ephemeral port diagnostics for the RSN porter.
+func (rc *rpcClient) DmsgPorterDiag() (*netutil.EphemeralDiagResult, error) {
+	var resp netutil.EphemeralDiagResult
+	if err := rc.Call("DmsgPorterDiag", &struct{}{}, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

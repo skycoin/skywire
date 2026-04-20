@@ -4,9 +4,12 @@ package netutil
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -25,9 +28,13 @@ type PorterValue struct {
 // Porter reserves ports.
 type Porter struct {
 	sync.RWMutex
-	eph    uint16 // current ephemeral value
-	minEph uint16 // minimal ephemeral port value
-	ports  map[uint16]PorterValue
+	eph        uint16 // current ephemeral value
+	minEph     uint16 // minimal ephemeral port value
+	ports      map[uint16]PorterValue
+	reservedAt map[uint16]time.Time // tracks when each ephemeral port was reserved
+	reservedBy map[uint16]string    // tracks caller of ReserveEphemeral (file:line)
+	reserved   uint64               // total reservations (monotonic)
+	freed      uint64               // total frees (monotonic)
 }
 
 // NewPorter creates a new Porter with a given minimum ephemeral port value.
@@ -36,9 +43,11 @@ func NewPorter(minEph uint16) *Porter {
 	ports[0] = PorterValue{} // port 0 is invalid
 
 	return &Porter{
-		eph:    minEph,
-		minEph: minEph,
-		ports:  ports,
+		eph:        minEph,
+		minEph:     minEph,
+		ports:      ports,
+		reservedAt: make(map[uint16]time.Time),
+		reservedBy: make(map[uint16]string),
 	}
 }
 
@@ -98,6 +107,8 @@ func (p *Porter) ResetEphemeral() int {
 	for port := range p.ports {
 		if port >= p.minEph {
 			delete(p.ports, port)
+			delete(p.reservedAt, port)
+			delete(p.reservedBy, port)
 			freed++
 		}
 	}
@@ -131,6 +142,23 @@ func (p *Porter) ReserveEphemeral(ctx context.Context, v interface{}) (uint16, f
 			continue
 		}
 		p.ports[p.eph] = PorterValue{Value: v}
+		p.reservedAt[p.eph] = time.Now()
+		// Capture caller chain for leak diagnostics.
+		// Build a short stack: skip frames to get meaningful callers.
+		var callers []string
+		for skip := 2; skip <= 5; skip++ {
+			if _, file, line, ok := runtime.Caller(skip); ok {
+				short := file
+				if idx := len(file) - 40; idx > 0 {
+					short = "..." + file[idx:]
+				}
+				callers = append(callers, fmt.Sprintf("%s:%d", short, line))
+			}
+		}
+		if len(callers) > 0 {
+			p.reservedBy[p.eph] = callers[len(callers)-1] // deepest meaningful caller
+		}
+		p.reserved++
 		return p.eph, p.makePortFreer(p.eph), nil
 	}
 
@@ -182,6 +210,9 @@ func (p *Porter) makePortFreer(port uint16) func() {
 		defer p.Unlock()
 
 		delete(p.ports, port)
+		delete(p.reservedAt, port)
+		delete(p.reservedBy, port)
+		p.freed++
 	}
 
 	return func() { once.Do(action) }
@@ -205,6 +236,162 @@ func (p *Porter) makeChildFreer(port, subPort uint16) func() {
 	}
 
 	return func() { once.Do(action) }
+}
+
+// EphemeralDiag returns diagnostic information about ephemeral port reservations.
+// For each ephemeral port, it reports whether the stored value is nil, its type,
+// and (for Stringer values) a short string representation. This helps identify
+// what is holding ephemeral ports when the porter approaches exhaustion.
+type EphemeralDiagEntry struct {
+	Port      uint16 `json:"port"`
+	ValueType string `json:"value_type"` // e.g. "*dmsg.Stream", "<nil>"
+	ValueInfo string `json:"value_info,omitempty"`
+	Children  int    `json:"children,omitempty"`
+}
+
+type EphemeralDiagResult struct {
+	Total         int                  `json:"total"`
+	Ephemeral     int                  `json:"ephemeral"`
+	Listeners     int                  `json:"listeners"`
+	NilValues     int                  `json:"nil_values"`
+	TotalReserved uint64               `json:"total_reserved"` // monotonic counter
+	TotalFreed    uint64               `json:"total_freed"`    // monotonic counter
+	LeakRate      string               `json:"leak_rate"`      // current - freed as percentage
+	TypeCount     map[string]int       `json:"type_count"`
+	AgeBucket     map[string]int       `json:"age_bucket"`             // "0-30s", "30s-2m", "2m-5m", "5m-30m", "30m+"
+	CallerCount   map[string]int       `json:"caller_count,omitempty"` // caller file:line → count (for entries >2min)
+	Sample        []EphemeralDiagEntry `json:"sample,omitempty"`       // first 20 entries
+}
+
+func (p *Porter) EphemeralDiag() EphemeralDiagResult {
+	p.RLock()
+	defer p.RUnlock()
+
+	now := time.Now()
+	r := EphemeralDiagResult{
+		Total:         len(p.ports),
+		TotalReserved: p.reserved,
+		TotalFreed:    p.freed,
+		TypeCount:     make(map[string]int),
+		AgeBucket: map[string]int{
+			"0-30s":  0,
+			"30s-2m": 0,
+			"2m-5m":  0,
+			"5m-30m": 0,
+			"30m+":   0,
+		},
+	}
+	for port, pv := range p.ports {
+		if port < p.minEph {
+			r.Listeners++
+			continue
+		}
+		r.Ephemeral++
+		typeName := "<nil>"
+		if pv.Value != nil {
+			typeName = fmt.Sprintf("%T", pv.Value)
+		} else {
+			r.NilValues++
+		}
+		r.TypeCount[typeName]++
+
+		// Age bucket + caller tracking for old entries
+		if t, ok := p.reservedAt[port]; ok {
+			age := now.Sub(t)
+			switch {
+			case age < 30*time.Second:
+				r.AgeBucket["0-30s"]++
+			case age < 2*time.Minute:
+				r.AgeBucket["30s-2m"]++
+			case age < 5*time.Minute:
+				r.AgeBucket["2m-5m"]++
+				// Track callers for entries that should have been freed
+				if caller, ok := p.reservedBy[port]; ok {
+					if r.CallerCount == nil {
+						r.CallerCount = make(map[string]int)
+					}
+					r.CallerCount[caller]++
+				}
+			case age < 30*time.Minute:
+				r.AgeBucket["5m-30m"]++
+				if caller, ok := p.reservedBy[port]; ok {
+					if r.CallerCount == nil {
+						r.CallerCount = make(map[string]int)
+					}
+					r.CallerCount[caller]++
+				}
+			default:
+				r.AgeBucket["30m+"]++
+			}
+		}
+
+		if len(r.Sample) < 20 {
+			entry := EphemeralDiagEntry{
+				Port:      port,
+				ValueType: typeName,
+				Children:  len(pv.Children),
+			}
+			if s, ok := pv.Value.(fmt.Stringer); ok {
+				entry.ValueInfo = s.String()
+			}
+			r.Sample = append(r.Sample, entry)
+		}
+	}
+	if r.TotalReserved > 0 {
+		leaked := r.TotalReserved - r.TotalFreed
+		pct := float64(leaked) / float64(r.TotalReserved) * 100
+		r.LeakRate = fmt.Sprintf("%d/%d (%.1f%%)", leaked, r.TotalReserved, pct)
+	}
+	return r
+}
+
+// SweepStaleEphemeral closes and frees ephemeral port entries older than maxAge.
+// It calls Close() on entries whose Value implements io.Closer, then deletes
+// the porter entry. Returns the number of entries swept.
+//
+// This is a safety net for the DMSG stream lifecycle: if the normal cleanup
+// paths (Stream.Read auto-release, explicit Close, session reaping) miss an
+// entry, the sweeper catches it before the 16K port space is exhausted.
+func (p *Porter) SweepStaleEphemeral(maxAge time.Duration) int {
+	// Phase 1: identify stale ports and delete them from the map.
+	// Do NOT call Close() while holding the lock — Stream.Close()
+	// calls closeFn() which also acquires the porter lock → deadlock.
+	p.Lock()
+	now := time.Now()
+	type sweepEntry struct {
+		port  uint16
+		value interface{}
+	}
+	var toSweep []sweepEntry
+	for port, t := range p.reservedAt {
+		if port >= p.minEph && now.Sub(t) > maxAge {
+			pv := p.ports[port]
+			toSweep = append(toSweep, sweepEntry{port: port, value: pv.Value})
+			delete(p.ports, port)
+			delete(p.reservedAt, port)
+			delete(p.reservedBy, port)
+			p.freed++
+		}
+	}
+	p.Unlock()
+
+	// Phase 2: close the values outside the lock with a timeout.
+	// Stream.Close() can block indefinitely if the yamux TCP connection
+	// is hung, so we give each Close 5 seconds before abandoning it.
+	for _, e := range toSweep {
+		if c, ok := e.value.(io.Closer); ok {
+			done := make(chan struct{})
+			go func() {
+				c.Close() //nolint:errcheck,gosec
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+			}
+		}
+	}
+	return len(toSweep)
 }
 
 // CloseAll closes all contained variables that implement io.Closer

@@ -54,6 +54,36 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 		}
 	}()
 
+	// Start porter watchdog: periodically log the RSN's ephemeral port
+	// usage and sweep stale entries as a safety net for any leak paths
+	// that escape the normal cleanup (auto-release, pool eviction,
+	// session reaping). The 5-minute max age matches the pool TTL —
+	// any entry older than this should have been freed already.
+	const porterMaxAge = 5 * time.Minute
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		var lastCount int
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				swept := ers.dmsgC.SweepStalePorterEntries(porterMaxAge)
+				diag := ers.dmsgC.PorterDiag()
+				delta := diag.Ephemeral - lastCount
+				if diag.Ephemeral > 100 || delta > 0 || swept > 0 {
+					ers.log.WithField("ephemeral", diag.Ephemeral).
+						WithField("delta_60s", delta).
+						WithField("swept", swept).
+						WithField("pool_size", ers.pool.Size()).
+						Warn("RSN porter watchdog")
+				}
+				lastCount = diag.Ephemeral
+			}
+		}
+	}()
+
 	ers.log.WithField("dmsg_port", skyenv.DmsgSetupPort).Info("Accepting route setup requests")
 	// Use the pre-wired Collector (falling back to Empty if the struct
 	// was constructed without one) so its snapshots include every

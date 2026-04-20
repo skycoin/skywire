@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
@@ -1170,6 +1171,11 @@ func (mc *mockRPCClient) DmsgPorterStats() (*DmsgPorterStatus, error) {
 // DmsgPorterReset implements API.
 func (mc *mockRPCClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
 	return &DmsgPorterStatus{}, nil
+}
+
+// DmsgPorterDiag implements API.
+func (mc *mockRPCClient) DmsgPorterDiag() (*netutil.EphemeralDiagResult, error) {
+	return &netutil.EphemeralDiagResult{TypeCount: map[string]int{}}, nil
 }
 
 // AddHypervisor implements API.

@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -235,6 +236,7 @@ type API interface {
 	// DMSG diagnostics
 	DmsgPorterStats() (*DmsgPorterStatus, error)
 	DmsgPorterReset() (*DmsgPorterStatus, error)
+	DmsgPorterDiag() (*netutil.EphemeralDiagResult, error)
 	DmsgReconnect() (int, error)
 	DmsgSetMinSessions(n int) error
 	AddHypervisor(pk cipher.PubKey) error
