@@ -176,6 +176,10 @@ type Server struct {
 
 	// ServerType of DMSG Server, be `official` of `community`
 	ServerType string `json:"serverType,omitempty"`
+
+	// DHTBootstrap indicates this server runs a DHT full node on port 100
+	// and can be used as a Kademlia bootstrap peer by visors.
+	DHTBootstrap bool `json:"dht_bootstrap,omitempty"`
 }
 
 // String implements stringer

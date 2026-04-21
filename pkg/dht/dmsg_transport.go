@@ -26,12 +26,28 @@ func NewDMSGTransport(client *dmsg.Client) *DMSGTransport {
 }
 
 // Dial opens a DMSG stream to the remote peer's DHT port.
+// If the standard DialStream fails (e.g., the target is a DMSG server
+// with a server-type discovery entry), it falls back to dialing through
+// an existing session — this handles DMSG servers that run DHT nodes
+// via the direct package, which don't have client discovery entries.
 func (t *DMSGTransport) Dial(ctx context.Context, pk cipher.PubKey) (io.ReadWriteCloser, error) {
-	stream, err := t.client.DialStream(ctx, dmsg.Addr{PK: pk, Port: t.port})
-	if err != nil {
-		return nil, fmt.Errorf("dht dmsg dial %s: %w", pk.String()[:8], err)
+	addr := dmsg.Addr{PK: pk, Port: t.port}
+	stream, err := t.client.DialStream(ctx, addr)
+	if err == nil {
+		return stream, nil
 	}
-	return stream, nil
+
+	// DialStream failed — try dialing through existing sessions.
+	// If we already have a session to this PK (it's a DMSG server we're
+	// connected to), open a stream directly on that session.
+	if ses, ok := t.client.Session(pk); ok {
+		directStream, dErr := ses.DialStream(ctx, addr)
+		if dErr == nil {
+			return directStream, nil
+		}
+	}
+
+	return nil, fmt.Errorf("dht dmsg dial %s: %w", pk.String()[:8], err)
 }
 
 // Listen starts accepting incoming DMSG streams on the DHT port.
