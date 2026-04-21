@@ -65,6 +65,8 @@ func (t PacketType) String() string {
 		return "DHT"
 	case SetupRPCPacket:
 		return "SetupRPC"
+	case VisorRPCPacket:
+		return "VisorRPC"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -93,6 +95,7 @@ const (
 	CascadeAckPacket    // cascade acknowledgment (route ID = 0), payload: serialized CascadeAck
 	DHTPacket           // DHT RPC over transport (route ID = 0), payload: DHT message
 	SetupRPCPacket      // RSN RPC relay over transport (route ID = 0), payload: virtual stream data
+	VisorRPCPacket      // visor RPC over transport (route ID = 0), payload: virtual stream data
 )
 
 // Capability bitmap flags for extended handshake negotiation.

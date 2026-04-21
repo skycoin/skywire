@@ -391,6 +391,31 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 
+	// Serve visor RPC over transports (route ID 0, VisorRPCPacket).
+	// Uses the same whitelist as DMSG gRPC: hypervisor PKs + dmsgpty whitelist.
+	if v.tpM != nil {
+		var whitelistPKs []cipher.PubKey
+		for _, pk := range v.conf.Hypervisors {
+			whitelistPKs = append(whitelistPKs, pk)
+		}
+		if v.conf.Dmsgpty != nil {
+			whitelistPKs = append(whitelistPKs, v.conf.Dmsgpty.Whitelist...)
+		}
+		if len(whitelistPKs) > 0 {
+			tpRPCLog := v.MasterLogger().PackageLogger("transport_rpc")
+			tpRPCS, tpRPCErr := newRPCServer(v, "TransportRPC")
+			if tpRPCErr != nil {
+				log.WithError(tpRPCErr).Warn("Failed to create transport RPC server")
+			} else {
+				tpRPCSrv := NewTransportRPCServer(tpRPCLog, tpRPCS, whitelistPKs, v.tpM)
+				v.pushCloseStack("transport_rpc", tpRPCSrv.Close)
+				go tpRPCSrv.Serve()
+				tpRPCLog.WithField("whitelist_pks", len(whitelistPKs)).
+					Info("Transport RPC server started (VisorRPCPacket on route ID 0)")
+			}
+		}
+	}
+
 	// Use cmux to multiplex gRPC and standard RPC on same port
 	mux := cmux.New(cliL)
 	grpcL := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
