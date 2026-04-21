@@ -394,10 +394,7 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 	// Serve visor RPC over transports (route ID 0, VisorRPCPacket).
 	// Uses the same whitelist as DMSG gRPC: hypervisor PKs + dmsgpty whitelist.
 	if v.tpM != nil {
-		var whitelistPKs []cipher.PubKey
-		for _, pk := range v.conf.Hypervisors {
-			whitelistPKs = append(whitelistPKs, pk)
-		}
+		whitelistPKs := append([]cipher.PubKey{}, v.conf.Hypervisors...)
 		if v.conf.Dmsgpty != nil {
 			whitelistPKs = append(whitelistPKs, v.conf.Dmsgpty.Whitelist...)
 		}

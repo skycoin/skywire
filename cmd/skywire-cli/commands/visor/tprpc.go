@@ -50,7 +50,7 @@ Examples:
 		}
 
 		pretty, _ := json.MarshalIndent(result, "", "  ") //nolint:errcheck
-		fmt.Fprintln(os.Stdout, string(pretty))
+		fmt.Fprintln(os.Stdout, string(pretty))           //nolint:errcheck
 	},
 }
 
