@@ -223,6 +223,51 @@ func (s *redisStore) UpdateService(ctx context.Context, se *servicedisc.Service)
 	return nil
 }
 
+// UpdateServiceAndHeartbeat combines UpdateService + RecordHeartbeat into
+// a single Redis pipeline. This halves the Redis round-trips per service
+// registration (from 2 pipelines to 1).
+func (s *redisStore) UpdateServiceAndHeartbeat(ctx context.Context, se *servicedisc.Service, version string) *servicedisc.HTTPError {
+	key := s.serviceKey(se.Type, se.Addr)
+	setKey := s.serviceTypeSetKey(se.Type)
+
+	data, err := json.Marshal(se)
+	if err != nil {
+		return s.processErr(err, http.StatusInternalServerError)
+	}
+
+	now := time.Now().UTC()
+	date := now.Format("2006-01-02")
+	pkHex := se.Addr.PubKey().Hex()
+
+	pipe := s.client.Pipeline()
+
+	// Service update (3 commands)
+	pipe.Set(ctx, key, data, s.ttl)
+	pipe.SAdd(ctx, setKey, se.Addr.PubKey().String())
+	pipe.SAdd(ctx, serviceTypesSetKey, se.Type)
+
+	// Heartbeat (8 commands)
+	uptimeKey := sdUptimeKey(pkHex, date)
+	pipe.HIncrBy(ctx, uptimeKey, "count", 1)
+	pipe.HSet(ctx, uptimeKey, "version", version)
+	pipe.HSet(ctx, uptimeKey, "last_seen", now.Unix())
+	pipe.Expire(ctx, uptimeKey, 8*24*time.Hour)
+
+	onlineKey := sdUptimeOnlineKey(date)
+	pipe.SAdd(ctx, onlineKey, pkHex)
+	pipe.Expire(ctx, onlineKey, 8*24*time.Hour)
+
+	tlKey := sdUptimeTimelineKey(pkHex, date)
+	pipe.SetBit(ctx, tlKey, currentTimelineSlot(now), 1)
+	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
+
+	if _, err := pipe.Exec(ctx); err != nil {
+		return s.processErr(err, http.StatusInternalServerError)
+	}
+
+	return nil
+}
+
 func (s *redisStore) DeleteService(ctx context.Context, sType string, addr servicedisc.SWAddr) *servicedisc.HTTPError {
 	key := s.serviceKey(sType, addr)
 	setKey := s.serviceTypeSetKey(sType)
