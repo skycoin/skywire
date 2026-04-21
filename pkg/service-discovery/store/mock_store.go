@@ -180,6 +180,21 @@ func (_m *MockStore) UpdateService(ctx context.Context, se *servicedisc.Service)
 	return r0
 }
 
+func (_m *MockStore) UpdateServiceAndHeartbeat(ctx context.Context, se *servicedisc.Service, version string) *servicedisc.HTTPError {
+	ret := _m.Called(ctx, se, version)
+
+	var r0 *servicedisc.HTTPError
+	if rf, ok := ret.Get(0).(func(context.Context, *servicedisc.Service, string) *servicedisc.HTTPError); ok {
+		r0 = rf(ctx, se, version)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*servicedisc.HTTPError)
+		}
+	}
+
+	return r0
+}
+
 // RecordHeartbeat provides a mock function with given fields: ctx, pk, version
 func (_m *MockStore) RecordHeartbeat(ctx context.Context, pk cipher.PubKey, version string) error {
 	ret := _m.Called(ctx, pk, version)
