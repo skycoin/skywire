@@ -17,6 +17,7 @@ const (
 	methodFindNode uint8 = 2
 	methodGetValue uint8 = 3
 	methodPutValue uint8 = 4
+	methodGetItems uint8 = 5
 )
 
 // rpcTimeout is the deadline for a single RPC round-trip.
@@ -74,6 +75,28 @@ type PutValueRequest struct {
 type PutValueResponse struct {
 	Stored bool   `json:"stored"`
 	Error  string `json:"error,omitempty"`
+}
+
+// GetItemsRequest asks a full node for a batch of stored items.
+// Used for bulk sync: "give me items I don't have."
+type GetItemsRequest struct {
+	SenderID NodeID        `json:"sender_id"`
+	SenderPK cipher.PubKey `json:"sender_pk"`
+	// Salt filters items by namespace (e.g., "dmsg", "tp", "svc").
+	// Empty means all items.
+	Salt string `json:"salt,omitempty"`
+	// SinceSeq returns only items with Seq > SinceSeq.
+	// 0 means return all items.
+	SinceSeq uint64 `json:"since_seq,omitempty"`
+	// Limit caps the number of items returned (0 = default 1000).
+	Limit int `json:"limit,omitempty"`
+}
+
+// GetItemsResponse returns a batch of stored items.
+type GetItemsResponse struct {
+	Items []MutableItem `json:"items"`
+	// HasMore indicates there are more items available beyond this batch.
+	HasMore bool `json:"has_more,omitempty"`
 }
 
 // Transport is the interface for sending/receiving DHT RPC messages.

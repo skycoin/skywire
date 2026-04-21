@@ -343,6 +343,32 @@ func (n *Node) rpcPutMirror(ctx context.Context, p Peer, item MutableItem, targe
 	return nil
 }
 
+// GetItemsFrom fetches a batch of items from a specific peer.
+// Used for bulk sync from a full node.
+func (n *Node) GetItemsFrom(ctx context.Context, pk cipher.PubKey, salt string, sinceSeq uint64, limit int) (*GetItemsResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second) // longer timeout for bulk data
+	defer cancel()
+
+	conn, err := n.dial(ctx, pk)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close() //nolint:errcheck,gosec
+
+	req := GetItemsRequest{
+		SenderID: n.id,
+		SenderPK: n.pk,
+		Salt:     salt,
+		SinceSeq: sinceSeq,
+		Limit:    limit,
+	}
+	var resp GetItemsResponse
+	if err := rpcCall(ctx, conn, methodGetItems, req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 func (n *Node) rpcPing(ctx context.Context, p Peer) error {
 	ctx, cancel := rpcCtx(ctx)
 	defer cancel()
@@ -438,6 +464,16 @@ func (n *Node) handleConn(conn io.ReadWriteCloser, remotePK cipher.PubKey) {
 			resp.Error = putErr.Error()
 		}
 		writeMsg(conn, methodPutValue, resp) //nolint:errcheck,gosec
+
+	case methodGetItems:
+		var req GetItemsRequest
+		if json.Unmarshal(data, &req) != nil {
+			return
+		}
+		n.rt.Update(Peer{ID: req.SenderID, PK: req.SenderPK})
+		items, hasMore := n.store.GetItems(req.Salt, req.SinceSeq, req.Limit)
+		resp := GetItemsResponse{Items: items, HasMore: hasMore}
+		writeMsg(conn, methodGetItems, resp) //nolint:errcheck,gosec
 	}
 }
 

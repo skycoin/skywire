@@ -16,6 +16,7 @@ func init() {
 	dhtCmd.AddCommand(dhtGetCmd)
 	dhtCmd.AddCommand(dhtPutCmd)
 	dhtCmd.AddCommand(dhtFullNodeCmd)
+	dhtCmd.AddCommand(dhtSyncCmd)
 	RootCmd.AddCommand(dhtCmd)
 }
 
@@ -129,5 +130,39 @@ Normal nodes only store items close to their own ID.
 		} else {
 			fmt.Println("DHT full node mode disabled (storing nearby items only).")
 		}
+	},
+}
+
+var dhtSyncSalt string
+
+func init() {
+	dhtSyncCmd.Flags().StringVar(&dhtSyncSalt, "salt", "", "filter by namespace (dmsg, tp, svc); empty = all")
+}
+
+var dhtSyncCmd = &cobra.Command{
+	Use:   "sync [full-node-pk]",
+	Short: "Bulk sync items from a DHT full node",
+	Long: `Fetch all items from a DHT full node and store them locally.
+If no PK is specified, syncs from the first available bootstrap peer.
+
+Examples:
+  skywire cli visor dht sync
+  skywire cli visor dht sync --salt dmsg
+  skywire cli visor dht sync <pk> --salt tp`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		pk := ""
+		if len(args) > 0 {
+			pk = args[0]
+		}
+		result, err := rpcClient.DHTSync(pk, dhtSyncSalt)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		fmt.Printf("Synced %d items from DHT full node.\n", result)
 	},
 }
