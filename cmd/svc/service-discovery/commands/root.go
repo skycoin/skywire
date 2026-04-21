@@ -261,6 +261,7 @@ Example:
 			EmbeddedDmsgServers: dmsg.Prod.DmsgServers,
 			SurveyWhitelist:     deployment.Prod.SurveyWhitelist,
 			Log:                 log,
+			DisableDHT:          true,
 			OnDmsgServersUpdated: func(s []string) {
 				sdAPI.DmsgServers = s
 			},
