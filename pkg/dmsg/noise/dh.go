@@ -7,24 +7,36 @@ import (
 
 	"github.com/skycoin/noise"
 	"github.com/skycoin/skycoin/src/cipher"
+	secp256k1 "github.com/skycoin/skycoin/src/cipher/secp256k1-go"
 )
 
-const keypairPoolSize = 64
+const keypairPoolSize = 512
 
 // keypairPool holds pre-generated ephemeral keypairs for noise handshakes.
 // secp256k1 key generation is expensive (EC multiply + validation), so we
 // generate them in the background and serve them from a buffered channel.
+//
+// We use secp256k1.GenerateKeyPair() directly instead of cipher.GenerateKeyPair()
+// to skip the DebugLevel1 validation (CheckSecKey + MustPubKeyFromSecKey) which
+// doubles the cost by doing an extra EC recovery. The raw secp256k1 generator
+// already validates internally.
+//
+// Multiple generator goroutines fill the pool in parallel to keep up with
+// burst demand (thundering herd after deployment restart).
 var keypairPool = func() chan noise.DHKey {
 	ch := make(chan noise.DHKey, keypairPoolSize)
-	go func() {
-		for {
-			pk, sk := cipher.GenerateKeyPair()
-			ch <- noise.DHKey{
-				Private: sk[:],
-				Public:  pk[:],
+	numGenerators := 4
+	for i := 0; i < numGenerators; i++ {
+		go func() {
+			for {
+				pub, sec := secp256k1.GenerateKeyPair()
+				ch <- noise.DHKey{
+					Private: sec,
+					Public:  pub,
+				}
 			}
-		}
-	}()
+		}()
+	}
 	return ch
 }()
 
