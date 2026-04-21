@@ -31,6 +31,15 @@ func (s *memoryStore) SetError(err error) {
 	s.err = err
 }
 
+func (s *memoryStore) RegisterTransportsBatch(ctx context.Context, entries []*transport.SignedEntry) error {
+	for _, entry := range entries {
+		if err := s.RegisterTransport(ctx, entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *memoryStore) RegisterTransport(_ context.Context, entry *transport.SignedEntry) error {
 	if s.err != nil {
 		return s.err

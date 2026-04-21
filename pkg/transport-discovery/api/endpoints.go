@@ -35,16 +35,17 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract version from the first entry (all entries in a batch share the same visor version).
+	// Register all transports in a single Redis pipeline (batch).
+	// This reduces N separate pipelines to 1, cutting Redis round-trips.
+	if err := api.store.RegisterTransportsBatch(r.Context(), entries); err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	// Post-registration: CXO publish, DHT mirror, heartbeats.
 	var entryVersion string
 	for _, entry := range entries {
-		if err := api.store.RegisterTransport(r.Context(), entry); err != nil {
-			api.writeError(w, r, err)
-			return
-		}
-		// Publish to CXO subscribers
 		api.publishTransportToCXO(entry.Entry)
-		// Mirror transport to DHT under each edge visor's PK.
 		if api.dhtMirror != nil {
 			seq := uint64(time.Now().UnixNano()) //nolint:gosec
 			for _, edgePK := range entry.Entry.Edges {
@@ -54,7 +55,6 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		if entryVersion == "" && entry.Version != "" {
 			entryVersion = entry.Version
 		}
-		// Record transport uptime heartbeat (stcpr/sudph only).
 		if err := api.store.RecordTransportHeartbeat(r.Context(), entry.Entry.ID, string(entry.Entry.Type)); err != nil {
 			api.log(r).WithError(err).Debug("Failed to record transport heartbeat")
 		}

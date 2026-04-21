@@ -173,6 +173,7 @@ type Store interface {
 // TransportStore stores Transport metadata.
 type TransportStore interface {
 	RegisterTransport(context.Context, *transport.SignedEntry) error
+	RegisterTransportsBatch(context.Context, []*transport.SignedEntry) error
 	DeregisterTransport(context.Context, uuid.UUID) error
 	GetTransportByID(context.Context, uuid.UUID) (*transport.Entry, error)
 	GetTransportsByEdge(context.Context, cipher.PubKey) ([]*transport.Entry, error)
