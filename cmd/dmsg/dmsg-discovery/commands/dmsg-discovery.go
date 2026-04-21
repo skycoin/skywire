@@ -243,23 +243,20 @@ Example:
 				}
 			}()
 
-			// Start DHT full node. The discovery server participates
-			// as a DHT bootstrap peer (every visor knows its PK).
-			// Entries are NOT mirrored server-side — only the owning
-			// visor can publish to the DHT (owner-only updates).
-			dhtTP := dht.NewDMSGTransport(dmsgDC)
-			dhtCfg := dht.Config{
-				BootstrapPKs: deployment.Prod.DHTBootstrapPKs(),
-				FullNode:     true,
-			}
-			dhtNode := dht.New(dhtCfg, pk, sk, dhtTP, logging.MustGetLogger("dht"))
-			if dhtErr := dhtNode.Start(ctx); dhtErr != nil {
-				log.WithError(dhtErr).Warn("DHT node failed to start")
+			// Mirror DMSG entries to Redis in DHT format. The DMSG servers'
+			// DHT nodes read from the same Redis and serve the data via
+			// Kademlia. This replaces the previous EntryMirror which ran
+			// a local DHT node and did expensive Kademlia PutSigned on
+			// every SetEntry — at ~30 req/sec that consumed 60%+ CPU on
+			// secp256k1 noise handshakes for each DHT dial.
+			redisHost := strings.TrimPrefix(redisURL, "redis://")
+			redisPassword := os.Getenv(redisPasswordEnvName)
+			redisMirror, mirrorErr := dht.NewRedisMirror(redisHost, redisPassword, 0, "dmsg", pk, sk, logging.MustGetLogger("dht:redis-mirror"))
+			if mirrorErr != nil {
+				log.WithError(mirrorErr).Warn("DHT Redis mirror failed — entries won't be in DHT")
 			} else {
-				defer dhtNode.Stop() //nolint:errcheck
-				mirror := dht.NewEntryMirror(dhtNode, "dmsg", logging.MustGetLogger("dht:mirror"))
-				a.SetDHTMirror(mirror)
-				log.WithField("id", dhtNode.ID().String()[:16]).Info("DHT full node + entry mirror active")
+				a.SetDHTMirror(redisMirror)
+				log.Info("DHT entry mirroring enabled (via Redis)")
 			}
 		}
 
