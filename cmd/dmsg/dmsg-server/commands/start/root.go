@@ -128,6 +128,7 @@ var RootCmd = &cobra.Command{
 		}
 		srv := dmsg.NewServer(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.Discovery, &http.Client{}, log), &srvConf, m)
 		srv.SetLogger(log)
+		srv.SetDHTBootstrap(conf.EnableDHT)
 
 		srvAPI.SetDmsgServer(srv)
 		defer func() { log.WithError(srvAPI.Close()).Info("Closed server.") }()
@@ -192,6 +193,7 @@ var RootCmd = &cobra.Command{
 					DmsgAddr:      dmsgAddr,
 					DmsgDiscovery: conf.Discovery,
 					PeerServers:   peerPKs,
+					DHTBootstrap:  conf.EnableDHT,
 				}
 				json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 			})

@@ -193,7 +193,8 @@ type Config struct {
 	DmsgServerPollInterval time.Duration
 
 	// DisableDHT prevents the automatic DHT full node from starting.
-	// By default, every service with a DMSG client runs a DHT node.
+	// Disabled by default — DMSG servers handle DHT, not deployment
+	// services. Set to false explicitly to enable on a service.
 	DisableDHT bool
 }
 
@@ -350,10 +351,10 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 		}()
 	}
 
-	// Start DHT full node when the service has a DMSG client.
-	// Deployment services are natural DHT bootstrap peers since every
-	// visor already knows their PKs. Enabled by default unless
-	// explicitly disabled via EnableDHT=false.
+	// Start DHT full node when the service has a DMSG client and
+	// DHT is explicitly enabled. Disabled by default for deployment
+	// services — DMSG servers handle DHT networking. Services that
+	// need DHT should set DisableDHT=false in their svcmode.Config.
 	if !cfg.DisableDHT && h.DmsgClient != nil {
 		dhtLog := cfg.Log.WithField("subsystem", "dht")
 		bootstrapPKs := deployment.Prod.DHTBootstrapPKs()

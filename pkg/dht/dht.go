@@ -105,13 +105,14 @@ func (n *Node) Start(ctx context.Context) error {
 		n.maintenanceLoop()
 	}()
 
-	// Bootstrap asynchronously so Start returns immediately even if
-	// bootstrap peers are unreachable.
+	// Bootstrap asynchronously with periodic retry. The first attempt
+	// runs immediately; if no peers are found, it retries every 30 seconds
+	// until at least one peer is in the routing table.
 	if len(n.cfg.BootstrapPKs) > 0 {
 		n.wg.Add(1)
 		go func() {
 			defer n.wg.Done()
-			n.bootstrap()
+			n.bootstrapLoop()
 		}()
 	}
 
@@ -442,7 +443,43 @@ func (n *Node) handleConn(conn io.ReadWriteCloser, remotePK cipher.PubKey) {
 
 // --- Bootstrap & Maintenance ---
 
-func (n *Node) bootstrap() {
+// bootstrapLoop tries to connect to bootstrap peers. Retries every 30 seconds
+// until at least one peer is found, then retries every 5 minutes to maintain
+// connectivity. This handles the case where bootstrap peers are temporarily
+// unreachable (e.g., deployment restart, DMSG server not ready yet).
+func (n *Node) bootstrapLoop() {
+	const retryFast = 30 * time.Second
+	const retrySlow = 5 * time.Minute
+
+	for {
+		found := n.bootstrapOnce()
+
+		if found > 0 {
+			n.log.WithField("peers", found).Info("DHT bootstrap succeeded")
+			// Do a self-lookup to populate nearby buckets.
+			if _, _, err := n.iterativeLookup(n.ctx, n.id, false); err != nil {
+				n.log.WithError(err).Debug("Bootstrap self-lookup failed")
+			}
+		}
+
+		// Choose retry interval: fast if no peers, slow if we have some.
+		interval := retryFast
+		if n.rt.Size() > 0 {
+			interval = retrySlow
+		}
+
+		select {
+		case <-n.ctx.Done():
+			return
+		case <-time.After(interval):
+		}
+	}
+}
+
+// bootstrapOnce attempts to ping each bootstrap peer once. Returns the
+// number of peers successfully added to the routing table.
+func (n *Node) bootstrapOnce() int {
+	found := 0
 	for _, pk := range n.cfg.BootstrapPKs {
 		if pk == n.pk {
 			continue
@@ -453,12 +490,9 @@ func (n *Node) bootstrap() {
 			continue
 		}
 		n.rt.Update(p)
+		found++
 	}
-
-	// Do a self-lookup to populate nearby buckets.
-	if _, _, err := n.iterativeLookup(n.ctx, n.id, false); err != nil {
-		n.log.WithError(err).Debug("Bootstrap self-lookup failed")
-	}
+	return found
 }
 
 func (n *Node) maintenanceLoop() {
