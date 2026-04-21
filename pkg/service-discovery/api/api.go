@@ -416,7 +416,9 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if sErr := a.db.UpdateService(r.Context(), &se); sErr != nil {
+	// Combined service update + heartbeat in a single Redis pipeline.
+	// Halves Redis round-trips (11 commands in 1 pipeline instead of 2).
+	if sErr := a.db.UpdateServiceAndHeartbeat(r.Context(), &se, se.Version); sErr != nil {
 		sErr.Log(a.log)
 		a.writeError(w, r, sErr.HTTPStatus, sErr.Err)
 		return
@@ -425,12 +427,6 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 	// Mirror service entry to DHT.
 	if a.dhtMirror != nil {
 		a.dhtMirror.Mirror(se.Addr.PubKey(), &se, uint64(time.Now().UnixNano())) //nolint:gosec
-	}
-
-	// Record heartbeat for uptime tracking — piggybacks on the 90s
-	// service re-registration cycle so no extra client call is needed.
-	if err := a.db.RecordHeartbeat(r.Context(), se.Addr.PubKey(), se.Version); err != nil {
-		a.log.WithError(err).Debug("Failed to record heartbeat from service registration")
 	}
 
 	httputil.WriteJSON(w, r, http.StatusOK, &se)
