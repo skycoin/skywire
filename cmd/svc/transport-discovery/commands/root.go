@@ -366,7 +366,18 @@ Example:
 		if h.DHTNode != nil {
 			mirror := dht.NewEntryMirror(h.DHTNode, "tp", logging.MustGetLogger("dht:tp-mirror"))
 			tpdAPI.SetDHTMirror(mirror)
-			logger.Info("DHT transport mirroring enabled")
+			logger.Info("DHT transport mirroring enabled (via local DHT node)")
+		} else if redisURL != "" {
+			// No local DHT node — write directly to Redis so DMSG servers'
+			// DHT nodes can serve the data to the Kademlia network.
+			redisHost := strings.TrimPrefix(redisURL, redisScheme)
+			redisMirror, mErr := dht.NewRedisMirror(redisHost, "", 0, "tp", pk, sk, logging.MustGetLogger("dht:tp-redis-mirror"))
+			if mErr != nil {
+				logger.WithError(mErr).Warn("DHT Redis mirror failed — transport data won't be in DHT")
+			} else {
+				tpdAPI.SetDHTMirror(redisMirror)
+				logger.Info("DHT transport mirroring enabled (via Redis)")
+			}
 		}
 
 		select {

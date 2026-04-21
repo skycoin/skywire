@@ -282,7 +282,17 @@ Example:
 		if h.DHTNode != nil {
 			mirror := dht.NewEntryMirror(h.DHTNode, "svc", logging.MustGetLogger("dht:svc-mirror"))
 			sdAPI.SetDHTMirror(mirror)
-			log.Info("DHT service mirroring enabled")
+			log.Info("DHT service mirroring enabled (via local DHT node)")
+		} else if redisURL != "" {
+			redisHost := strings.TrimPrefix(redisURL, "redis://")
+			redisPassword := storeconfig.RedisPassword()
+			redisMirror, mErr := dht.NewRedisMirror(redisHost, redisPassword, 0, "svc", pk, sk, logging.MustGetLogger("dht:svc-redis-mirror"))
+			if mErr != nil {
+				log.WithError(mErr).Warn("DHT Redis mirror failed — service data won't be in DHT")
+			} else {
+				sdAPI.SetDHTMirror(redisMirror)
+				log.Info("DHT service mirroring enabled (via Redis)")
+			}
 		}
 
 		select {
