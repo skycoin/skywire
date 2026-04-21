@@ -175,6 +175,17 @@ func (v *Visor) Summary() (*Summary, error) {
 		v.log.Warn(err)
 	}
 
+	// DHT status
+	var dhtStatus *DHTStatusSummary
+	if v.dhtNode != nil {
+		dhtStatus = &DHTStatusSummary{
+			Running:     true,
+			FullNode:    v.dhtNode.Store().IsFullNode(),
+			Peers:       v.dhtNode.RoutingTable().Size(),
+			StoredItems: v.dhtNode.Store().Len(),
+		}
+	}
+
 	summary := &Summary{
 		Overview:             overview,
 		Health:               health,
@@ -190,6 +201,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		DmsgStats:            dmsgStatValue,
 		ConnectedDmsgServers: connectedDmsgServers,
 		DMSGServers:          dmsgServers,
+		DHTStatus:            dhtStatus,
 	}
 
 	return summary, nil

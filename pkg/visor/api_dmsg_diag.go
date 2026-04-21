@@ -1,8 +1,13 @@
 package visor
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
+	"github.com/skycoin/skywire/pkg/dht"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 )
 
@@ -57,6 +62,68 @@ func (v *Visor) DmsgReconnect() (int, error) {
 		return 0, fmt.Errorf("DMSG client not running")
 	}
 	return v.dmsgC.ForceReconnect(), nil
+}
+
+// DHTSync fetches items from a DHT full node and stores them locally.
+// If remotePK is empty, uses the first available bootstrap peer.
+func (v *Visor) DHTSync(remotePK string, salt string) (int, error) {
+	if v.dhtNode == nil {
+		return 0, fmt.Errorf("DHT node not running")
+	}
+
+	var targetPK cipher.PubKey
+	if remotePK != "" {
+		if err := targetPK.Set(remotePK); err != nil {
+			return 0, fmt.Errorf("invalid PK: %w", err)
+		}
+	} else {
+		// Use first available bootstrap peer.
+		fullNodes := dht.FindFullNodes(context.Background(), v.dhtNode)
+		if len(fullNodes) == 0 {
+			return 0, fmt.Errorf("no full nodes available")
+		}
+		targetPK = fullNodes[0]
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := v.dhtNode.GetItemsFrom(ctx, targetPK, salt, 0, 0)
+	if err != nil {
+		return 0, fmt.Errorf("sync from %s: %w", targetPK.String()[:8], err)
+	}
+
+	stored := 0
+	for _, item := range resp.Items {
+		if putErr := v.dhtNode.Store().Put(item); putErr == nil {
+			stored++
+		}
+	}
+
+	return stored, nil
+}
+
+// DHTGetAll returns all DHT items matching the given salt as a JSON string.
+// Requires the visor to have a DHT node (full or regular).
+func (v *Visor) DHTGetAll(salt string) (string, error) {
+	if v.dhtNode == nil {
+		return "", fmt.Errorf("DHT node not running")
+	}
+	items, _ := v.dhtNode.Store().GetItems(salt, 0, 0)
+	if len(items) == 0 {
+		return "[]", nil
+	}
+
+	// Decode each item's value and collect into an array.
+	var results []json.RawMessage
+	for _, item := range items {
+		results = append(results, json.RawMessage(item.V))
+	}
+	data, err := json.MarshalIndent(results, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal DHT items: %w", err)
+	}
+	return string(data), nil
 }
 
 // DmsgPorterDiag returns detailed diagnostic information about ephemeral

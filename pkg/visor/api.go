@@ -243,6 +243,8 @@ type API interface {
 	AddHypervisor(pk cipher.PubKey) error
 	CheckAREntry(pk string) ([]string, error)
 	TransportRPCCall(remotePK cipher.PubKey, method string) (json.RawMessage, error)
+	DHTSync(remotePK string, salt string) (int, error)
+	DHTGetAll(salt string) (string, error)
 
 	// Close closes the API connection (for RPC clients)
 	Close() error
@@ -366,6 +368,15 @@ type Summary struct {
 	ConfigVersion        string                           `json:"config_version"`
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 	IsPublic             bool                             `json:"is_public"`
+	DHTStatus            *DHTStatusSummary                `json:"dht_status,omitempty"`
+}
+
+// DHTStatusSummary is a compact DHT status for visor info/summary.
+type DHTStatusSummary struct {
+	Running     bool `json:"running"`
+	FullNode    bool `json:"full_node"`
+	Peers       int  `json:"peers"`
+	StoredItems int  `json:"stored_items"`
 }
 
 // HealthInfo carries information about visor's services health.

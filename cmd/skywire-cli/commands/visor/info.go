@@ -139,6 +139,17 @@ var summaryCmd = &cobra.Command{
 		}
 		msg += fmt.Sprintf("Transports: %s\n", tpStr)
 
+		// DHT status
+		if summary.DHTStatus != nil && summary.DHTStatus.Running {
+			dhtMode := "regular"
+			if summary.DHTStatus.FullNode {
+				dhtMode = "full node"
+			}
+			msg += fmt.Sprintf("DHT: %s (%d peers, %d items)\n", dhtMode, summary.DHTStatus.Peers, summary.DHTStatus.StoredItems)
+		} else {
+			msg += "DHT: not running\n"
+		}
+
 		msg += fmt.Sprintf("Visor Version: %s\nConfig Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
 			summary.Overview.BuildInfo.Version, summary.ConfigVersion, summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
 
