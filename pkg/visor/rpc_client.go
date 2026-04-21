@@ -3,6 +3,7 @@ package visor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -1247,6 +1248,16 @@ func (rc *rpcClient) DmsgReconnect() (int, error) {
 	var resp int
 	err := rc.Call("DmsgReconnect", &struct{}{}, &resp)
 	return resp, err
+}
+
+// TransportRPCCall proxies an RPC call to a remote visor over a transport.
+func (rc *rpcClient) TransportRPCCall(remotePK cipher.PubKey, method string) (json.RawMessage, error) {
+	req := TransportRPCCallRequest{RemotePK: remotePK, Method: method}
+	var resp json.RawMessage
+	if err := rc.Call("TransportRPCCall", &req, &resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // CheckAREntry checks if a PK is registered in the address resolver.

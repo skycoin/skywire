@@ -41,9 +41,15 @@ type MutableItem struct {
 // SHA256(pubkey || salt). This determines which nodes are responsible
 // for the item via XOR distance.
 func (item MutableItem) Target() NodeID {
+	return MutableItemTarget(item.K, item.Salt)
+}
+
+// MutableItemTarget computes the DHT target key for a given PK and salt.
+// This is SHA256(pk || salt), the same computation as MutableItem.Target().
+func MutableItemTarget(pk cipher.PubKey, salt []byte) NodeID {
 	h := sha256.New()
-	h.Write(item.K[:])
-	h.Write(item.Salt)
+	h.Write(pk[:])
+	h.Write(salt)
 	var id NodeID
 	copy(id[:], h.Sum(nil))
 	return id
