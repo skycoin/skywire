@@ -1174,6 +1174,11 @@ func (mc *mockRPCClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
 	return &DmsgPorterStatus{}, nil
 }
 
+// DHTGetAll implements API.
+func (mc *mockRPCClient) DHTGetAll(_ string) (string, error) {
+	return "[]", nil
+}
+
 // DHTSync implements API.
 func (mc *mockRPCClient) DHTSync(_ string, _ string) (int, error) {
 	return 0, fmt.Errorf("not supported in mock")

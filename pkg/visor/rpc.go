@@ -1682,6 +1682,17 @@ func (r *RPC) CheckAREntry(pk *string, out *[]string) (err error) {
 	return nil
 }
 
+// DHTGetAll returns all DHT items matching a salt as JSON.
+func (r *RPC) DHTGetAll(salt *string, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTGetAll", salt)(out, &err)
+	result, err := r.visor.DHTGetAll(*salt)
+	if err != nil {
+		return err
+	}
+	*out = result
+	return nil
+}
+
 // DHTSyncRequest is the request for DHTSync.
 type DHTSyncRequest struct {
 	RemotePK string `json:"remote_pk"`

@@ -2,6 +2,7 @@ package visor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -100,6 +101,29 @@ func (v *Visor) DHTSync(remotePK string, salt string) (int, error) {
 	}
 
 	return stored, nil
+}
+
+// DHTGetAll returns all DHT items matching the given salt as a JSON string.
+// Requires the visor to have a DHT node (full or regular).
+func (v *Visor) DHTGetAll(salt string) (string, error) {
+	if v.dhtNode == nil {
+		return "", fmt.Errorf("DHT node not running")
+	}
+	items, _ := v.dhtNode.Store().GetItems(salt, 0, 0)
+	if len(items) == 0 {
+		return "[]", nil
+	}
+
+	// Decode each item's value and collect into an array.
+	var results []json.RawMessage
+	for _, item := range items {
+		results = append(results, json.RawMessage(item.V))
+	}
+	data, err := json.MarshalIndent(results, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal DHT items: %w", err)
+	}
+	return string(data), nil
 }
 
 // DmsgPorterDiag returns detailed diagnostic information about ephemeral
