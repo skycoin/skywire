@@ -243,6 +243,7 @@ type API interface {
 	AddHypervisor(pk cipher.PubKey) error
 	CheckAREntry(pk string) ([]string, error)
 	TransportRPCCall(remotePK cipher.PubKey, method string) (json.RawMessage, error)
+	DHTSync(remotePK string, salt string) (int, error)
 
 	// Close closes the API connection (for RPC clients)
 	Close() error

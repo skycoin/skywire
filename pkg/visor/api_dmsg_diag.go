@@ -1,8 +1,12 @@
 package visor
 
 import (
+	"context"
 	"fmt"
+	"time"
 
+	"github.com/skycoin/skywire/pkg/dht"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 )
 
@@ -57,6 +61,45 @@ func (v *Visor) DmsgReconnect() (int, error) {
 		return 0, fmt.Errorf("DMSG client not running")
 	}
 	return v.dmsgC.ForceReconnect(), nil
+}
+
+// DHTSync fetches items from a DHT full node and stores them locally.
+// If remotePK is empty, uses the first available bootstrap peer.
+func (v *Visor) DHTSync(remotePK string, salt string) (int, error) {
+	if v.dhtNode == nil {
+		return 0, fmt.Errorf("DHT node not running")
+	}
+
+	var targetPK cipher.PubKey
+	if remotePK != "" {
+		if err := targetPK.Set(remotePK); err != nil {
+			return 0, fmt.Errorf("invalid PK: %w", err)
+		}
+	} else {
+		// Use first available bootstrap peer.
+		fullNodes := dht.FindFullNodes(context.Background(), v.dhtNode)
+		if len(fullNodes) == 0 {
+			return 0, fmt.Errorf("no full nodes available")
+		}
+		targetPK = fullNodes[0]
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := v.dhtNode.GetItemsFrom(ctx, targetPK, salt, 0, 0)
+	if err != nil {
+		return 0, fmt.Errorf("sync from %s: %w", targetPK.String()[:8], err)
+	}
+
+	stored := 0
+	for _, item := range resp.Items {
+		if putErr := v.dhtNode.Store().Put(item); putErr == nil {
+			stored++
+		}
+	}
+
+	return stored, nil
 }
 
 // DmsgPorterDiag returns detailed diagnostic information about ephemeral

@@ -1682,6 +1682,23 @@ func (r *RPC) CheckAREntry(pk *string, out *[]string) (err error) {
 	return nil
 }
 
+// DHTSyncRequest is the request for DHTSync.
+type DHTSyncRequest struct {
+	RemotePK string `json:"remote_pk"`
+	Salt     string `json:"salt"`
+}
+
+// DHTSync syncs items from a DHT full node.
+func (r *RPC) DHTSync(req *DHTSyncRequest, out *int) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTSync", req)(out, &err)
+	n, err := r.visor.DHTSync(req.RemotePK, req.Salt)
+	if err != nil {
+		return err
+	}
+	*out = n
+	return nil
+}
+
 // TransportRPCCallRequest is the request for TransportRPCCall.
 type TransportRPCCallRequest struct {
 	RemotePK cipher.PubKey `json:"remote_pk"`
