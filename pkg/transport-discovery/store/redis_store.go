@@ -158,6 +158,74 @@ func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.Si
 	return nil
 }
 
+// RegisterTransportsBatch registers multiple transports in a single Redis
+// pipeline. This reduces TCP round-trips from N pipelines (one per transport)
+// to 1 pipeline for the entire batch. At ~50 registrations/sec × 8 commands
+// each, this cuts Redis syscall overhead significantly.
+func (s *redisStore) RegisterTransportsBatch(ctx context.Context, entries []*transport.SignedEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	pipe := s.client.Pipeline()
+	now := time.Now()
+
+	for _, sEntry := range entries {
+		entry := sEntry.Entry
+		if entry == nil {
+			continue
+		}
+		sEntry.Registered = now.UnixNano()
+
+		data := TransportData{
+			ID:         entry.ID.String(),
+			EdgeA:      entry.Edges[0].Hex(),
+			EdgeB:      entry.Edges[1].Hex(),
+			Type:       string(entry.Type),
+			Label:      string(entry.Label),
+			LastUpdate: now.Unix(),
+		}
+		if sEntry.Latency != nil {
+			data.LatencyMin = sEntry.Latency.Min
+			data.LatencyMax = sEntry.Latency.Max
+			data.LatencyAvg = sEntry.Latency.Avg
+		}
+		if sEntry.Bandwidth != nil {
+			data.Bandwidth = sEntry.Bandwidth.SentBytes + sEntry.Bandwidth.RecvBytes
+		}
+
+		raw, err := json.Marshal(data)
+		if err != nil {
+			continue
+		}
+
+		tpKey := s.transportKey(entry.ID)
+		edgeAKey := s.edgeKey(entry.Edges[0])
+
+		pipe.Set(ctx, tpKey, string(raw), s.ttl)
+		pipe.SAdd(ctx, edgeAKey, entry.ID.String())
+		if s.ttl > 0 {
+			pipe.Expire(ctx, edgeAKey, s.ttl)
+		}
+		if entry.Edges[0] != entry.Edges[1] {
+			edgeBKey := s.edgeKey(entry.Edges[1])
+			pipe.SAdd(ctx, edgeBKey, entry.ID.String())
+			if s.ttl > 0 {
+				pipe.Expire(ctx, edgeBKey, s.ttl)
+			}
+		}
+		pipe.SAdd(ctx, s.visorAllKey(), entry.Edges[0].Hex())
+		if entry.Edges[0] != entry.Edges[1] {
+			pipe.SAdd(ctx, s.visorAllKey(), entry.Edges[1].Hex())
+		}
+	}
+
+	pipe.Expire(ctx, s.visorAllKey(), 400*24*time.Hour)
+
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
 func (s *redisStore) DeregisterTransport(ctx context.Context, id uuid.UUID) error {
 	// First get the transport to know the edges
 	entry, err := s.GetTransportByID(ctx, id)
