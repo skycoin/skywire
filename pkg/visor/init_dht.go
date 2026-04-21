@@ -101,6 +101,11 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 		WithField("full_node", fullNode).
 		Info("DHT node started")
 
+	// Advertise this node as a full node so other visors can discover it.
+	if fullNode {
+		go dht.AdvertiseFullNode(ctx, node, log)
+	}
+
 	// Wrap discovery clients with DHT hybrid clients so reads try
 	// DHT first, fall back to HTTP. Writes go to both.
 	discAdapter := dht.NewDiscAdapter(node, log)
@@ -117,7 +122,27 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.initLock.Unlock()
 
 	// Start background publish: mirror visor's entries to the DHT.
-	go dhtPublishLoop(ctx, v, node, log)
+	// Once the DHT has peers, tell the transport manager to skip
+	// HTTP re-registration — the DHT handles transport discovery.
+	go func() {
+		dhtPublishLoop(ctx, v, node, log)
+	}()
+	go func() {
+		// Wait for DHT to bootstrap before switching off HTTP registration.
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if node.RoutingTable().Size() > 0 && v.tpM != nil {
+					v.tpM.SetDHTHandlesRegistration(true)
+					return
+				}
+			}
+		}
+	}()
 
 	return nil
 }

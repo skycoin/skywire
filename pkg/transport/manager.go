@@ -107,6 +107,10 @@ type Manager struct {
 	delQueueMu sync.Mutex
 	delNudge   chan struct{}
 
+	// dhtHandlesRegistration, when true, skips HTTP TPD re-registration
+	// because the DHT publish loop handles transport data distribution.
+	dhtHandlesRegistration bool
+
 	// arDeregistered tracks whether the visor has deregistered from AR
 	// due to ar_transport_limit being reached. Once true, it stays true
 	// until the visor restarts.
@@ -319,7 +323,27 @@ func (tm *Manager) flushDeletionQueue() {
 	}
 }
 
+// SetDHTHandlesRegistration tells the transport manager that the DHT is
+// handling transport publication. When true, HTTP re-registration with
+// the transport discovery is skipped, reducing load on the deployment server.
+func (tm *Manager) SetDHTHandlesRegistration(enabled bool) {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
+	tm.dhtHandlesRegistration = enabled
+	if enabled {
+		tm.Logger.Info("Transport registration via DHT — skipping TPD HTTP re-registration")
+	}
+}
+
 func (tm *Manager) reRegisterTransports(ctx context.Context) {
+	// Skip HTTP re-registration when DHT handles transport publishing.
+	tm.mx.RLock()
+	skip := tm.dhtHandlesRegistration
+	tm.mx.RUnlock()
+	if skip {
+		return
+	}
+
 	tm.mx.RLock()
 	entries := make([]*SignedEntry, 0, len(tm.tps))
 	for _, tp := range tm.tps {

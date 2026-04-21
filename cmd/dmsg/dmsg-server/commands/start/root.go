@@ -318,6 +318,35 @@ var RootCmd = &cobra.Command{
 						WithField("bootstrap_peers", len(bootstrapPKs)).
 						Info("DHT full node started on port 100")
 
+					// Publish this server's entry to the DHT so visors can
+					// discover DMSG servers without the DMSG discovery HTTP API.
+					go func() {
+						seq := uint64(1)
+						ticker := time.NewTicker(5 * time.Minute)
+						defer ticker.Stop()
+						for {
+							serverEntry := map[string]interface{}{
+								"pk":            conf.PubKey.Hex(),
+								"address":       conf.PublicAddress,
+								"max_sessions":  conf.MaxSessions,
+								"server_type":   conf.Peers, // peer list for reference
+								"dht_bootstrap": true,
+							}
+							data, jErr := json.Marshal(serverEntry)
+							if jErr == nil {
+								if putErr := dhtNode.Put(ctx, data, seq, []byte("dmsg-server")); putErr != nil {
+									dhtLog.WithError(putErr).Trace("Failed to publish server entry to DHT")
+								}
+								seq++
+							}
+							select {
+							case <-ctx.Done():
+								return
+							case <-ticker.C:
+							}
+						}
+					}()
+
 					<-ctx.Done()
 					dhtNode.Stop() //nolint:errcheck,gosec
 				}()

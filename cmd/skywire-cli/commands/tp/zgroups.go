@@ -20,7 +20,8 @@ const (
 var commandGroup = map[string]string{
 	"add":        groupLocal,
 	"rm":         groupLocal,
-	"disc":       groupLocal,
+	"disc":       groupNetwork,
+	"all":        groupNetwork,
 	"tree":       groupNetwork,
 	"v":          groupNetwork,
 	"net-stats":  groupNetwork,
