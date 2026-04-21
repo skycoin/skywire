@@ -97,6 +97,9 @@ type ManagedTransport struct {
 
 	// setupRPCHandler handles RSN RPC relay packets (route ID 0).
 	setupRPCHandler func(p routing.Packet, mt *ManagedTransport)
+
+	// visorRPCHandler handles visor RPC packets (route ID 0).
+	visorRPCHandler func(p routing.Packet, mt *ManagedTransport)
 }
 
 // LatencyStats holds latency measurement statistics for a transport.
@@ -250,6 +253,11 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			case routing.SetupRPCPacket:
 				if mt.setupRPCHandler != nil {
 					mt.setupRPCHandler(p, mt)
+				}
+				continue
+			case routing.VisorRPCPacket:
+				if mt.visorRPCHandler != nil {
+					mt.visorRPCHandler(p, mt)
 				}
 				continue
 			}

@@ -52,6 +52,12 @@ type EntityCommon struct {
 	lastPushedSrvPKs []cipher.PubKey
 	pushedSrvPKsMx   sync.Mutex
 
+	// dhtBootstrap indicates this entity runs a DHT full node.
+	// Set by the DMSG server when enable_dht is true. Propagated
+	// to the discovery entry so visors know which servers to use
+	// for DHT bootstrap.
+	dhtBootstrap bool
+
 	// entryNudge signals that a session was added or removed and the
 	// discovery entry should be updated. The update loop debounces
 	// rapid signals (e.g., connecting to 6 servers at startup) into
@@ -86,6 +92,11 @@ func (c *EntityCommon) Logger() logrus.FieldLogger { return c.log }
 // SetLogger sets the internal logger.
 // This should be called before we serve.
 func (c *EntityCommon) SetLogger(log logrus.FieldLogger) { c.log = log }
+
+// SetDHTBootstrap marks this entity as a DHT bootstrap node.
+// When set, the server's discovery entry includes dht_bootstrap=true
+// so visors know to use this server for DHT bootstrapping.
+func (c *EntityCommon) SetDHTBootstrap(enabled bool) { c.dhtBootstrap = enabled }
 
 // MasterLogger obtains the master logger.
 func (c *EntityCommon) MasterLogger() *logging.MasterLogger { return c.mlog }
@@ -204,6 +215,7 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSe
 	entry, err := c.dc.Entry(ctx, c.pk)
 	if err != nil {
 		entry = disc.NewServerEntry(c.pk, 0, addr, availableSessions)
+		entry.Server.DHTBootstrap = c.dhtBootstrap
 		if err := entry.Sign(c.sk); err != nil {
 			return err
 		}
@@ -235,6 +247,8 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSe
 		entry.Server.Address = addr
 		log = log.WithField("addr", entry.Server.Address)
 	}
+	// Propagate DHT bootstrap status to discovery entry.
+	entry.Server.DHTBootstrap = c.dhtBootstrap
 	log.Debug("Updating entry.\n")
 
 	return c.dc.PutEntry(ctx, c.sk, entry)
