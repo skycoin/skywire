@@ -13,10 +13,7 @@ import (
 	"github.com/skycoin/skywire/deployment"
 )
 
-var allFromDHT bool
-
 func init() {
-	tpAllCmd.Flags().BoolVar(&allFromDHT, "dht", false, "fetch from local DHT full node instead of transport discovery")
 	RootCmd.AddCommand(tpAllCmd)
 }
 
@@ -25,39 +22,34 @@ var tpAllCmd = &cobra.Command{
 	Short: "List all transports on the network",
 	Long: `Display all transports registered in the network.
 
-By default, fetches from the transport discovery HTTP API.
-With --dht, fetches from the local visor's DHT store (requires full node).
-
-Examples:
-  skywire cli tp all              # from transport discovery
-  skywire cli tp all --dht        # from local DHT full node`,
+If the visor is running a DHT full node, data is served from the
+local store (instant, no network). Otherwise falls back to the
+transport discovery HTTP API.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		if allFromDHT {
-			// Fetch from local DHT full node
-			rpcClient, err := clirpc.Client(cmd.Flags())
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), err)
-			}
-			result, err := rpcClient.DHTGetAll("tp")
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("DHT fetch failed: %w", err))
-			}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+
+		// Try local DHT full node first.
+		result, err := rpcClient.DHTGetAll("tp")
+		if err == nil && result != "[]" && result != "" {
 			fmt.Fprintln(os.Stdout, result) //nolint:errcheck
+			return
+		}
+
+		// Fall back to transport discovery HTTP.
+		tpdURL := deployment.Prod.TransportDiscovery + "/all-transports"
+		body, fetchErr := clirpc.FetchServiceURL(cmd.Flags(), tpdURL)
+		if fetchErr != nil {
+			internal.PrintFatalError(cmd.Flags(), fetchErr)
+		}
+		var v interface{}
+		if json.Unmarshal(body, &v) == nil {
+			pretty, _ := json.MarshalIndent(v, "", "  ") //nolint:errcheck
+			fmt.Fprintln(os.Stdout, string(pretty))      //nolint:errcheck
 		} else {
-			// Fetch from transport discovery HTTP
-			tpdURL := deployment.Prod.TransportDiscovery + "/all-transports"
-			body, err := clirpc.FetchServiceURL(cmd.Flags(), tpdURL)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), err)
-			}
-			// Pretty print
-			var v interface{}
-			if json.Unmarshal(body, &v) == nil {
-				pretty, _ := json.MarshalIndent(v, "", "  ") //nolint:errcheck
-				fmt.Fprintln(os.Stdout, string(pretty))      //nolint:errcheck
-			} else {
-				fmt.Fprintln(os.Stdout, string(body)) //nolint:errcheck
-			}
+			fmt.Fprintln(os.Stdout, string(body)) //nolint:errcheck
 		}
 	},
 }
