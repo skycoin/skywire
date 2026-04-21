@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -53,11 +54,24 @@ func getDefaultRPCAddr() string {
 	return skyenv.RPCAddr
 }
 
-// Client is used by other skywire-cli commands to query the visor rpc
+// Client is used by other skywire-cli commands to query the visor rpc.
+// Supported address schemes:
+//   - "localhost:3435" (default) — direct TCP to local visor
+//   - "tp://<pk>" via --rpc flag — proxy through local visor's transport to remote visor
+//   - VisorPK via --visor flag — connect over DMSG
 func Client(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	// If VisorPK is provided, use dmsg connection
 	if VisorPK != "" {
 		return DmsgClient(cmdFlags)
+	}
+
+	// Check for tp:// scheme — transport proxy through local visor
+	if strings.HasPrefix(Addr, "tp://") {
+		internal.PrintError(cmdFlags, fmt.Errorf(
+			"tp:// scheme detected. Use 'skywire cli visor tp-rpc %s <method>' instead.\n"+
+				"Example: skywire cli visor tp-rpc %s Overview",
+			Addr[5:], Addr[5:]))
+		return nil, fmt.Errorf("tp:// not supported as --rpc address; use 'visor tp-rpc' command")
 	}
 
 	// Default: TCP connection to local RPC

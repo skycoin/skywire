@@ -24,6 +24,7 @@ type HealthCheckResponse struct {
 	StcprCount        int             `json:"stcpr_count,omitempty"`
 	SudphCount        int             `json:"sudph_count,omitempty"`
 	NetworkTypes      []string        `json:"network_types,omitempty"`
+	DHTBootstrap      bool            `json:"dht_bootstrap,omitempty"`
 }
 
 // GetServiceHealth gets the response from the given service url
