@@ -1250,6 +1250,25 @@ func (rc *rpcClient) DmsgReconnect() (int, error) {
 	return resp, err
 }
 
+// DHTGetAll returns all DHT items matching a salt as JSON.
+func (rc *rpcClient) DHTGetAll(salt string) (string, error) {
+	var resp string
+	if err := rc.Call("DHTGetAll", &salt, &resp); err != nil {
+		return "", err
+	}
+	return resp, nil
+}
+
+// DHTSync syncs items from a DHT full node.
+func (rc *rpcClient) DHTSync(remotePK string, salt string) (int, error) {
+	req := DHTSyncRequest{RemotePK: remotePK, Salt: salt}
+	var resp int
+	if err := rc.Call("DHTSync", &req, &resp); err != nil {
+		return 0, err
+	}
+	return resp, nil
+}
+
 // TransportRPCCall proxies an RPC call to a remote visor over a transport.
 func (rc *rpcClient) TransportRPCCall(remotePK cipher.PubKey, method string) (json.RawMessage, error) {
 	req := TransportRPCCallRequest{RemotePK: remotePK, Method: method}
