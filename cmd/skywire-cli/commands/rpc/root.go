@@ -88,7 +88,6 @@ func Client(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	return visor.NewRPCClient(rpcLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
 }
 
-
 // DmsgClient creates an RPC client over dmsg
 func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	// Parse visor public key

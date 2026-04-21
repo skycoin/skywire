@@ -8,7 +8,8 @@
 // via the hypervisor/dmsgpty whitelist).
 //
 // Usage from CLI:
-//   skywire cli --rpc localhost:3435 visor tp-rpc <remote-pk> <method> [args]
+//
+//	skywire cli --rpc localhost:3435 visor tp-rpc <remote-pk> <method> [args]
 //
 // The local visor must:
 // 1. Have a transport to the remote visor
@@ -30,7 +31,7 @@ import (
 type TransportRPCProxyRequest struct {
 	RemotePK cipher.PubKey `json:"remote_pk"`
 	Method   string        `json:"method"`
-	Args     []byte        `json:"args"`   // JSON-encoded RPC args
+	Args     []byte        `json:"args"` // JSON-encoded RPC args
 }
 
 // TransportRPCProxyReply is the response from the TransportRPCProxy RPC method.
