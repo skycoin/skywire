@@ -4,6 +4,7 @@ package visor
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
@@ -1171,6 +1172,11 @@ func (mc *mockRPCClient) DmsgPorterStats() (*DmsgPorterStatus, error) {
 // DmsgPorterReset implements API.
 func (mc *mockRPCClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
 	return &DmsgPorterStatus{}, nil
+}
+
+// TransportRPCCall implements API.
+func (mc *mockRPCClient) TransportRPCCall(_ cipher.PubKey, _ string) (json.RawMessage, error) {
+	return nil, fmt.Errorf("not supported in mock")
 }
 
 // DmsgPorterDiag implements API.

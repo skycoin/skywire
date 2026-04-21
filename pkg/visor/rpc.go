@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/rpc"
@@ -18,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
@@ -1675,6 +1677,40 @@ func (r *RPC) CheckAREntry(pk *string, out *[]string) (err error) {
 	result, err := r.visor.CheckAREntry(*pk)
 	if err != nil {
 		return err
+	}
+	*out = result
+	return nil
+}
+
+// TransportRPCCallRequest is the request for TransportRPCCall.
+type TransportRPCCallRequest struct {
+	RemotePK cipher.PubKey `json:"remote_pk"`
+	Method   string        `json:"method"`
+}
+
+// TransportRPCCall dials a remote visor's transport RPC and calls the
+// specified method. The local visor acts as a proxy — it opens a VStream
+// over an existing transport to the remote visor and forwards the RPC.
+// The remote visor must have this visor's PK in its hypervisor/dmsgpty whitelist.
+func (r *RPC) TransportRPCCall(req *TransportRPCCallRequest, out *json.RawMessage) (err error) {
+	defer rpcutil.LogCall(r.log, "TransportRPCCall", req)(out, &err)
+
+	v, ok := r.visor.(*Visor)
+	if !ok || v.tpM == nil {
+		return fmt.Errorf("transport manager not available")
+	}
+
+	log := logging.MustGetLogger("transport_rpc_proxy")
+	rpcC, dialErr := DialTransportRPC(req.RemotePK, v.tpM, log)
+	if dialErr != nil {
+		return dialErr
+	}
+	defer rpcC.Close() //nolint:errcheck,gosec
+
+	// Call the remote method with empty args, get raw JSON result.
+	var result json.RawMessage
+	if callErr := rpcC.Call(req.Method, &struct{}{}, &result); callErr != nil {
+		return fmt.Errorf("remote RPC %s: %w", req.Method, callErr)
 	}
 	*out = result
 	return nil

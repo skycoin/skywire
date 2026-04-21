@@ -3,6 +3,7 @@ package visor
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"sync/atomic"
 	"time"
@@ -241,6 +242,7 @@ type API interface {
 	DmsgSetMinSessions(n int) error
 	AddHypervisor(pk cipher.PubKey) error
 	CheckAREntry(pk string) ([]string, error)
+	TransportRPCCall(remotePK cipher.PubKey, method string) (json.RawMessage, error)
 
 	// Close closes the API connection (for RPC clients)
 	Close() error
