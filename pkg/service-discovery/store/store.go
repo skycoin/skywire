@@ -30,6 +30,7 @@ type Store interface {
 	Service(ctx context.Context, sType string, addr servicedisc.SWAddr) (*servicedisc.Service, *servicedisc.HTTPError)
 	Services(ctx context.Context, sType, version, country string) ([]servicedisc.Service, *servicedisc.HTTPError)
 	UpdateService(ctx context.Context, se *servicedisc.Service) *servicedisc.HTTPError
+	UpdateServiceAndHeartbeat(ctx context.Context, se *servicedisc.Service, version string) *servicedisc.HTTPError
 	DeleteService(ctx context.Context, sType string, addr servicedisc.SWAddr) *servicedisc.HTTPError
 	CountServiceTypes(ctx context.Context) (uint64, error)
 	CountServices(ctx context.Context, serviceType string) (uint64, error)
