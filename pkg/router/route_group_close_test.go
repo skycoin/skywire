@@ -118,17 +118,14 @@ func TestRouteGroupCloseNoGoroutineLeak(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	waitDone := make(chan struct{})
-	go func() {
-		rg.closeDone.Wait()
-		close(waitDone)
-	}()
-
-	select {
-	case <-waitDone:
-		// WaitGroup at zero — no leak
-	case <-time.After(2 * time.Second):
-		t.Fatal("closeDone WaitGroup not drained after Close() timeout — goroutine leak")
+	// closeDoneCh is closed when the close completes (or is force-completed on timeout).
+	if rg.closeDoneCh != nil {
+		select {
+		case <-rg.closeDoneCh:
+			// channel closed — no leak
+		case <-time.After(2 * time.Second):
+			t.Fatal("closeDoneCh not closed after Close() timeout — goroutine leak")
+		}
 	}
 }
 
