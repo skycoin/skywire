@@ -371,7 +371,8 @@ Example:
 			// No local DHT node — write directly to Redis so DMSG servers'
 			// DHT nodes can serve the data to the Kademlia network.
 			redisHost := strings.TrimPrefix(redisURL, redisScheme)
-			redisMirror, mErr := dht.NewRedisMirror(redisHost, "", 0, "tp", pk, sk, logging.MustGetLogger("dht:tp-redis-mirror"))
+			redisPassword := os.Getenv("REDIS_PASSWORD")
+			redisMirror, mErr := dht.NewRedisMirror(redisHost, redisPassword, 0, "tp", pk, sk, logging.MustGetLogger("dht:tp-redis-mirror"))
 			if mErr != nil {
 				logger.WithError(mErr).Warn("DHT Redis mirror failed — transport data won't be in DHT")
 			} else {
