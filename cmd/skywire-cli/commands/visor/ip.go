@@ -72,9 +72,6 @@ func getStunServers(cmdFlags *pflag.FlagSet) ([]string, error) {
 	var info stunInfo
 
 	confURL := deployment.ProdConf.Conf
-	if confURL == "" {
-		confURL = "http://conf.skywire.skycoin.com"
-	}
 	body, err := clirpc.FetchServiceURL(cmdFlags, confURL+"/")
 	if err != nil {
 		return info.Stun, err

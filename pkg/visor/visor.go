@@ -132,6 +132,11 @@ type Visor struct {
 	// Rich port forwarding with metadata, whitelist, landing page integration
 	forwardedPorts *ForwardedPorts
 
+	// DMSG listeners for forwarded ports (dmsg=true). Each entry is a
+	// cancel function that stops the listener goroutine.
+	dmsgFwdMu        sync.Mutex
+	dmsgFwdListeners map[int]context.CancelFunc
+
 	// Service handler registry — maps ports to connection handlers
 	// so the sky-forwarding server can dispatch without localhost TCP.
 	services *ServiceRegistry
@@ -405,7 +410,8 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 			ports: make(map[int]bool),
 			mu:    new(sync.RWMutex),
 		},
-		forwardedPorts: NewForwardedPorts(filepath.Join(conf.LocalPath, "forwarded_ports.json")),
+		forwardedPorts:   NewForwardedPorts(filepath.Join(conf.LocalPath, "forwarded_ports.json")),
+		dmsgFwdListeners: make(map[int]context.CancelFunc),
 		dmsgTracker: dtmState{
 			ready: make(chan struct{}),
 		},
