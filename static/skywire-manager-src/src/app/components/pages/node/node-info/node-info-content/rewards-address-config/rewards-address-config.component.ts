@@ -66,7 +66,7 @@ export class RewardsAddressComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      address: [this.data.currentAddress, Validators.compose([Validators.minLength(20), Validators.maxLength(40)])],
+      address: [this.data.currentAddress, Validators.compose([Validators.minLength(20), Validators.maxLength(112)])],
     });
 
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
