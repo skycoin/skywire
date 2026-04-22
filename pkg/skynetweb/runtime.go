@@ -164,8 +164,8 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 			return &tcpAddrConn{Conn: conn}, nil
 		},
 		MaxIdleConns:        10,
-		MaxConnsPerHost:     1,
-		MaxIdleConnsPerHost: 1,
+		MaxConnsPerHost:     0, // unlimited — WebSocket upgrades hold a conn
+		MaxIdleConnsPerHost: 2,
 		IdleConnTimeout:     0, // keep routes alive
 	}
 
