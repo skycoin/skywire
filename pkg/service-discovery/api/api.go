@@ -107,6 +107,30 @@ func (a *API) SetDHTMirror(m interface {
 	a.dhtMirror = m
 }
 
+// BackfillDHTMirror iterates all existing services and mirrors them
+// to the DHT so the full dataset is available immediately on startup.
+func (a *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
+	if a.dhtMirror == nil {
+		return
+	}
+	// Fetch all service types.
+	for _, sType := range []string{"vpn", "visor", "skysocks"} {
+		services, sErr := a.db.Services(ctx, sType, "", "")
+		if sErr != nil {
+			log.WithError(sErr).WithField("type", sType).Warn("DHT backfill: failed to list services")
+			continue
+		}
+		for i := range services {
+			if ctx.Err() != nil {
+				return
+			}
+			a.dhtMirror.Mirror(services[i].Addr.PubKey(), &services[i], uint64(time.Now().UnixNano())) //nolint:gosec
+		}
+		log.WithField("type", sType).WithField("count", len(services)).Debug("DHT backfill: mirrored services")
+	}
+	log.Info("DHT backfill complete")
+}
+
 // New creates an API.
 func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore,
 	enableMetrics bool, m sdmetrics.Metrics, dmsgAddr, geoipURL string) *API {
