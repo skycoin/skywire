@@ -402,7 +402,7 @@ func (v *Visor) startDmsgForwarder(port, localPort int) {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel stored in dmsgFwdListeners
 	v.dmsgFwdListeners[port] = cancel
 
 	go func() {
