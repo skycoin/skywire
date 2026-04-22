@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/router"
@@ -170,6 +171,8 @@ type routerSkynetDialer struct {
 	localPK      cipher.PubKey
 	log          *logging.Logger
 	routeTimeout time.Duration // 0 = use DefaultRouteKeepAlive
+	// Ephemeral port counter for unique route descriptors.
+	nextPort uint32
 }
 
 func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
@@ -178,7 +181,11 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 		opts = router.DefaultDialOptions()
 		opts.KeepAlive = d.routeTimeout
 	}
-	conn, err := d.router.DialRoutes(ctx, remote, 0, routing.Port(skyenv.SkyForwardingServerPort), opts)
+	// Use a unique ephemeral lPort for each dial so route descriptors
+	// never collide. The skynet forwarding server only cares about the
+	// port in the ClientMsg handshake, not the route descriptor's lPort.
+	lPort := routing.Port(atomic.AddUint32(&d.nextPort, 1)) //nolint:gosec // overflow wraps intentionally
+	conn, err := d.router.DialRoutes(ctx, remote, lPort, routing.Port(skyenv.SkyForwardingServerPort), opts)
 	if err != nil {
 		return nil, err
 	}

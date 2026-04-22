@@ -21,12 +21,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
-	"net/http/httputil"
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/confiant-inc/go-socks5"
 	"golang.org/x/net/proxy"
@@ -148,31 +145,6 @@ func (r *skynetResolver) Resolve(ctx context.Context, name string) (context.Cont
 }
 
 func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cfg Config) error {
-	// Skynet transport for HTTP: pools connections per (PK, port) so
-	// multiple browser requests reuse one skynet route instead of each
-	// trying DialRoutes (which fails with "already being initialized").
-	skynetTransport := &http.Transport{
-		DialContext: func(dialCtx context.Context, network, addr string) (net.Conn, error) {
-			t, err := parseHostHeader(addr, "")
-			if err != nil {
-				return nil, fmt.Errorf("skynet transport dial: %w", err)
-			}
-			log.WithField("pk", t.pk.Hex()[:16]+"...").
-				WithField("port", t.port).
-				WithField("addr", addr).
-				Debug("skynet transport: dialing")
-			conn, err := dialer.DialSkynet(dialCtx, t.pk, t.port)
-			if err != nil {
-				return nil, fmt.Errorf("skynet dial: %w", err)
-			}
-			return &tcpAddrConn{Conn: conn}, nil
-		},
-		MaxIdleConns:        10,
-		MaxConnsPerHost:     0, // unlimited — WebSocket upgrades hold a conn
-		MaxIdleConnsPerHost: 2,
-		IdleConnTimeout:     0, // keep routes alive
-	}
-
 	conf := &socks5.Config{
 		Resolver: &skynetResolver{cfg: cfg},
 		Dial: func(dialCtx context.Context, network, addr string) (net.Conn, error) {
@@ -188,34 +160,15 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				done := cfg.Stats.RecordRequest()
 				log.WithField("pk", target.pk.Hex()[:16]+"...").
 					WithField("port", target.port).
-					Debug("SOCKS5 → skynet")
+					Debug("SOCKS5 → skynet direct")
 
-				// Use an in-process HTTP reverse proxy that reuses
-				// skynet connections via the pooling transport.
-				// The SOCKS5 CONNECT model (one conn per request)
-				// conflicts with skynet routing (one route per dest),
-				// so we pipe the browser's TCP through a local
-				// net.Pipe and let the reverse proxy handle it.
-				clientConn, serverConn := net.Pipe()
-				go func() {
-					defer serverConn.Close() //nolint:errcheck
-					proxyTarget := fmt.Sprintf("%s:%d", target.pk.Hex(), target.port)
-					rp := &httputil.ReverseProxy{
-						Director: func(req *http.Request) {
-							req.URL.Scheme = "http"
-							req.URL.Host = proxyTarget
-						},
-						Transport: skynetTransport,
-						ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-							log.WithError(err).Warn("skynet reverse proxy error")
-							http.Error(w, fmt.Sprintf("skynet: %v", err), http.StatusBadGateway)
-						},
-					}
-					srv := &http.Server{Handler: rp}                     //nolint:gosec
-					_ = srv.Serve(&singleConnListener{conn: serverConn}) //nolint:errcheck
-					done(nil)
-				}()
-				return &tcpAddrConn{Conn: clientConn}, nil
+				conn, err := dialer.DialSkynet(dialCtx, target.pk, target.port)
+				if err != nil {
+					done(err)
+					return nil, fmt.Errorf("skynet dial: %w", err)
+				}
+				done(nil)
+				return &tcpAddrConn{Conn: conn}, nil
 			}
 
 			// Not .skynet — forward to upstream or direct.
@@ -267,39 +220,6 @@ func (c *tcpAddrConn) RemoteAddr() net.Addr {
 }
 
 func (c *tcpAddrConn) LocalAddr() net.Addr {
-	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
-}
-
-// singleConnListener yields exactly one connection then blocks until Close.
-type singleConnListener struct {
-	conn net.Conn
-	once sync.Once
-	ch   chan struct{}
-}
-
-func (l *singleConnListener) Accept() (net.Conn, error) {
-	var conn net.Conn
-	l.once.Do(func() {
-		conn = l.conn
-		l.ch = make(chan struct{})
-	})
-	if conn != nil {
-		return conn, nil
-	}
-	<-l.ch
-	return nil, net.ErrClosed
-}
-func (l *singleConnListener) Close() error {
-	if l.ch != nil {
-		select {
-		case <-l.ch:
-		default:
-			close(l.ch)
-		}
-	}
-	return nil
-}
-func (l *singleConnListener) Addr() net.Addr {
 	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
 }
 
