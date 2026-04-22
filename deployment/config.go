@@ -101,28 +101,6 @@ func (s *Services) DHTBootstrapPKs() []cipher.PubKey {
 	return pks
 }
 
-// pkFromDmsgURL extracts a PubKey from a "dmsg://<pk>:<port>" URL.
-func pkFromDmsgURL(url string) cipher.PubKey {
-	// Strip "dmsg://" prefix
-	const prefix = "dmsg://"
-	if len(url) < len(prefix) {
-		return cipher.PubKey{}
-	}
-	s := url[len(prefix):]
-	// Strip ":<port>" suffix
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == ':' {
-			s = s[:i]
-			break
-		}
-	}
-	var pk cipher.PubKey
-	if err := pk.Set(s); err != nil {
-		return cipher.PubKey{}
-	}
-	return pk
-}
-
 // Conf is the configuration URL for the deployment which may be fetched on `skywire cli config gen`
 type Conf struct {
 	Conf string `json:"conf,omitempty"`

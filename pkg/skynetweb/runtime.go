@@ -223,8 +223,6 @@ func (c *tcpAddrConn) LocalAddr() net.Addr {
 	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
 }
 
-
-
 func isSkynetHost(host, suffix string) bool {
 	pattern := `\` + suffix + `(:[0-9]+)?$`
 	match, _ := regexp.MatchString(pattern, host) //nolint:errcheck

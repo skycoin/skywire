@@ -184,7 +184,7 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 	// Use a unique ephemeral lPort for each dial so route descriptors
 	// never collide. The skynet forwarding server only cares about the
 	// port in the ClientMsg handshake, not the route descriptor's lPort.
-	lPort := routing.Port(atomic.AddUint32(&d.nextPort, 1))
+	lPort := routing.Port(atomic.AddUint32(&d.nextPort, 1)) //nolint:gosec // overflow wraps intentionally
 	conn, err := d.router.DialRoutes(ctx, remote, lPort, routing.Port(skyenv.SkyForwardingServerPort), opts)
 	if err != nil {
 		return nil, err
