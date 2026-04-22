@@ -251,7 +251,8 @@ func (s *Store) Refresh(target NodeID) {
 // GetItems returns items matching the given salt filter and sequence threshold.
 // If salt is empty, all items are returned. Only items with Seq > sinceSeq
 // are included. Results are capped at limit (default 1000).
-func (s *Store) GetItems(salt string, sinceSeq uint64, limit int) ([]MutableItem, bool) {
+// Returns items, their storage target keys, and whether more items exist.
+func (s *Store) GetItems(salt string, sinceSeq uint64, limit int) ([]MutableItem, []NodeID, bool) {
 	if limit <= 0 {
 		limit = 1000
 	}
@@ -259,7 +260,8 @@ func (s *Store) GetItems(salt string, sinceSeq uint64, limit int) ([]MutableItem
 	defer s.mu.RUnlock()
 
 	var items []MutableItem
-	for _, si := range s.items {
+	var targets []NodeID
+	for target, si := range s.items {
 		if salt != "" && string(si.item.Salt) != salt {
 			continue
 		}
@@ -267,11 +269,12 @@ func (s *Store) GetItems(salt string, sinceSeq uint64, limit int) ([]MutableItem
 			continue
 		}
 		items = append(items, si.item)
+		targets = append(targets, target)
 		if len(items) >= limit+1 {
-			return items[:limit], true // hasMore
+			return items[:limit], targets[:limit], true // hasMore
 		}
 	}
-	return items, false
+	return items, targets, false
 }
 
 // Len returns the number of stored items.
