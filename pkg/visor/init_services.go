@@ -331,7 +331,7 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 		sendError(log, remoteConn, err)
 		return
 	}
-	log.Debugf("Received: %v", cMsg)
+	log.Debugf("Received ClientMsg: port=%d raw_tcp=%v (raw JSON: %s)", cMsg.Port, cMsg.RawTCP, string(buf[:n]))
 
 	// First check the service registry — this is the preferred path
 	// that dispatches directly to the handler without a localhost

@@ -163,6 +163,37 @@ func (a *API) SetDHTMirror(m interface {
 	a.dhtMirror = m
 }
 
+// BackfillDHTMirror iterates all existing entries in the store and
+// mirrors them to the DHT. This ensures the DHT has the full dataset
+// on startup, not just entries updated since the last restart.
+func (a *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
+	if a.dhtMirror == nil {
+		return
+	}
+	pks, err := a.db.AllEntries(ctx)
+	if err != nil {
+		log.WithError(err).Warn("DHT backfill: failed to list entries")
+		return
+	}
+	mirrored := 0
+	for _, pkHex := range pks {
+		if ctx.Err() != nil {
+			break
+		}
+		var pk cipher.PubKey
+		if err := pk.Set(pkHex); err != nil {
+			continue
+		}
+		entry, err := a.db.Entry(ctx, pk)
+		if err != nil || entry == nil {
+			continue
+		}
+		a.dhtMirror.Mirror(entry.Static, entry, entry.Sequence)
+		mirrored++
+	}
+	log.WithField("count", mirrored).Info("DHT backfill complete")
+}
+
 func (a *API) log(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
 }

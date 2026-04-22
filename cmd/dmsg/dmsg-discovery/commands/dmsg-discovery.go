@@ -257,6 +257,9 @@ Example:
 			} else {
 				a.SetDHTMirror(redisMirror)
 				log.Info("DHT entry mirroring enabled (via Redis)")
+				// Backfill: mirror all existing entries so the DHT has the
+				// full dataset, not just entries updated since this restart.
+				go a.BackfillDHTMirror(ctx, log)
 			}
 		}
 
