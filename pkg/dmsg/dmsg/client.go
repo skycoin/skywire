@@ -97,6 +97,13 @@ type Client struct {
 	entryCache   map[cipher.PubKey]entryCacheEntry
 	entryCacheMx sync.RWMutex
 
+	// DHTLookup, when set, is called by DialStream before the HTTP
+	// discovery lookup. If it returns a valid entry, the HTTP discovery
+	// is skipped entirely. This lets the visor resolve DMSG client
+	// entries from the local DHT store (instant, no network) for PKs
+	// that have published their entries to the DHT.
+	DHTLookup func(pk cipher.PubKey) (*disc.Entry, error)
+
 	errCh chan error
 	done  chan struct{}
 	once  sync.Once
@@ -606,6 +613,13 @@ func (ce *Client) setCachedEntry(pk cipher.PubKey, entry *disc.Entry) {
 	ce.entryCacheMx.Lock()
 	ce.entryCache[pk] = entryCacheEntry{entry: entry, fetchedAt: time.Now()}
 	ce.entryCacheMx.Unlock()
+}
+
+// SetDHTLookup sets a callback for DHT-based client entry resolution.
+// DialStream calls this before the HTTP discovery, avoiding network
+// round-trips for PKs that have published to the DHT.
+func (ce *Client) SetDHTLookup(fn func(pk cipher.PubKey) (*disc.Entry, error)) {
+	ce.DHTLookup = fn
 }
 
 // SeedEntryCache injects a client entry into the discovery cache so that

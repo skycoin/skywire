@@ -90,6 +90,15 @@ func initSkynetForwardPorts(_ context.Context, v *Visor, log *logging.Logger) er
 		log.WithField("count", registered).
 			Info("Skynet-forwardable ports registered; accessible via .skynet URLs")
 	}
+
+	// Restore DMSG listeners for persisted forwarded ports.
+	// RegisterForwardedPort creates listeners at runtime, but ports
+	// loaded from forwarded_ports.json on startup need them too.
+	for _, fp := range v.forwardedPorts.List() {
+		if fp.DMSG && fp.Port != 80 { // port 80 already has the log server listener
+			v.startDmsgForwarder(fp.Port, fp.LocalPort)
+		}
+	}
 	return nil
 }
 
