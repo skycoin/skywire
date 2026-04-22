@@ -95,6 +95,10 @@ type GetItemsRequest struct {
 // GetItemsResponse returns a batch of stored items.
 type GetItemsResponse struct {
 	Items []MutableItem `json:"items"`
+	// Targets holds the storage target key for each item (same order as Items).
+	// Required because mirrored items have item.K set to the mirror's PK,
+	// not the subject PK, so item.Target() returns the wrong key.
+	Targets []NodeID `json:"targets,omitempty"`
 	// HasMore indicates there are more items available beyond this batch.
 	HasMore bool `json:"has_more,omitempty"`
 }
