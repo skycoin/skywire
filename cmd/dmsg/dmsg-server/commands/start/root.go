@@ -298,6 +298,7 @@ var RootCmd = &cobra.Command{
 					// Set up persistence backend.
 					if conf.RedisAddr != "" {
 						dhtCfg.RedisAddr = conf.RedisAddr
+						dhtCfg.RedisPassword = os.Getenv("REDIS_PASSWORD")
 					}
 					backend, backendErr := dht.NewBackendFromConfig(&dhtCfg)
 					if backendErr != nil {
