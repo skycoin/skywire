@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/router"
@@ -170,43 +171,21 @@ type routerSkynetDialer struct {
 	localPK      cipher.PubKey
 	log          *logging.Logger
 	routeTimeout time.Duration // 0 = use DefaultRouteKeepAlive
-	// Per-destination mutex to serialize DialRoutes calls.
-	// Concurrent dials to the same PK race the noise handshake and
-	// fail with "already being initialized".
-	dialMu  sync.Mutex
-	dialing map[cipher.PubKey]*sync.Mutex
-}
-
-func (d *routerSkynetDialer) dialMutex(pk cipher.PubKey) *sync.Mutex {
-	d.dialMu.Lock()
-	defer d.dialMu.Unlock()
-	if d.dialing == nil {
-		d.dialing = make(map[cipher.PubKey]*sync.Mutex)
-	}
-	mu, ok := d.dialing[pk]
-	if !ok {
-		mu = &sync.Mutex{}
-		d.dialing[pk] = mu
-	}
-	return mu
+	// Ephemeral port counter for unique route descriptors.
+	nextPort uint32
 }
 
 func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
-	// Serialize per destination to avoid "already being initialized" races.
-	mu := d.dialMutex(remote)
-	mu.Lock()
-	defer mu.Unlock()
-
 	var opts *router.DialOptions
 	if d.routeTimeout > 0 {
 		opts = router.DefaultDialOptions()
 		opts.KeepAlive = d.routeTimeout
 	}
-	// Use the target skynet port as lPort so each (PK, port) pair gets a
-	// unique route descriptor. All skynet dials go to rPort 57 (forwarding
-	// server), so without distinct lPorts a second dial to the same PK
-	// conflicts with "already being initialized".
-	conn, err := d.router.DialRoutes(ctx, remote, routing.Port(port), routing.Port(skyenv.SkyForwardingServerPort), opts)
+	// Use a unique ephemeral lPort for each dial so route descriptors
+	// never collide. The skynet forwarding server only cares about the
+	// port in the ClientMsg handshake, not the route descriptor's lPort.
+	lPort := routing.Port(atomic.AddUint32(&d.nextPort, 1))
+	conn, err := d.router.DialRoutes(ctx, remote, lPort, routing.Port(skyenv.SkyForwardingServerPort), opts)
 	if err != nil {
 		return nil, err
 	}
