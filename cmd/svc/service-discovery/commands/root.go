@@ -292,6 +292,7 @@ Example:
 			} else {
 				sdAPI.SetDHTMirror(redisMirror)
 				log.Info("DHT service mirroring enabled (via Redis)")
+				go sdAPI.BackfillDHTMirror(ctx, log)
 			}
 		}
 
