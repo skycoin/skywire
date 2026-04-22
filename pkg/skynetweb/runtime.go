@@ -24,9 +24,9 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"regexp"
-	"sync"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/confiant-inc/go-socks5"
 	"golang.org/x/net/proxy"
@@ -207,8 +207,8 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 							http.Error(w, fmt.Sprintf("skynet: %v", err), http.StatusBadGateway)
 						},
 					}
-					srv := &http.Server{Handler: rp} //nolint:gosec
-					_ = srv.Serve(&singleConnListener{conn: serverConn})
+					srv := &http.Server{Handler: rp}                     //nolint:gosec
+					_ = srv.Serve(&singleConnListener{conn: serverConn}) //nolint:errcheck
 					done(nil)
 				}()
 				return &tcpAddrConn{Conn: clientConn}, nil
