@@ -144,13 +144,11 @@ func (e *EmbeddedSkynetWeb) Upstream() string {
 func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 	cfg := skynetweb.Config{
 		DomainSuffix:  stringOrDefault(e.cfg.DomainSuffix, skynetweb.DefaultDomainSuffix),
-		WebPort:       uintOrDefault(e.cfg.WebPort, defaultSkynetWebPort),
 		ProxyPort:     uintOrDefault(e.cfg.ProxyPort, defaultSkynetWebProxyPort),
 		UpstreamSOCKS: e.cfg.UpstreamSOCKS,
 		Stats:         e.stats,
 	}
 	e.log.WithField("socks_port", cfg.ProxyPort).
-		WithField("web_port", cfg.WebPort).
 		WithField("domain", cfg.DomainSuffix).
 		Info("Serving skynetweb resolver")
 
