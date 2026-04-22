@@ -32,6 +32,9 @@ func newMockStore() *mockStore {
 func (m *mockStore) RegisterTransport(context.Context, *transport.SignedEntry) error {
 	return nil
 }
+func (m *mockStore) RegisterTransportsBatch(context.Context, []*transport.SignedEntry) error {
+	return nil
+}
 func (m *mockStore) DeregisterTransport(context.Context, uuid.UUID) error {
 	return nil
 }

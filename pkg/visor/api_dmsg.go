@@ -694,22 +694,20 @@ func (v *Visor) DmsgProbe(pk cipher.PubKey, port uint16) (bool, error) {
 
 // DmsgHTTP implements API. Performs an HTTP request over dmsg using the visor's dmsg client.
 func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
+	// Use the visor's main DMSG client (v.dmsgC) for HTTP-over-DMSG.
+	// Deployment services are registered in the DMSG discovery, so
+	// DialStream resolves them via normal lookup + delegated-server phases.
+	//
+	// Note: v.dmsgHTTP uses a SEPARATE dmsg.Client (dmsgDC) sharing the
+	// same PK, which causes session conflicts on DMSG servers. v.dmsgC
+	// is the authoritative client with stable sessions.
 	if err := v.mustWaitDmsgReady(); err != nil {
-		return nil, err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	// Create HTTP transport using visor's dmsg client
-	transport := dmsgHTTPTransport{
-		ctx:   ctx,
-		dmsgC: v.dmsgC,
+		return nil, fmt.Errorf("DMSG client not ready: %w", err)
 	}
 
 	httpClient := &http.Client{
-		Transport: &transport,
-		Timeout:   55 * time.Second,
+		Transport: &dmsgHTTPTransport{ctx: context.Background(), dmsgC: v.dmsgC},
+		Timeout:   15 * time.Second,
 	}
 
 	// Build HTTP request
@@ -717,6 +715,9 @@ func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	if len(req.Body) > 0 {
 		bodyReader = bytes.NewReader(req.Body)
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, req.URL, bodyReader)
 	if err != nil {
@@ -773,7 +774,18 @@ func (t *dmsgHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		hostAddr.Port = 80
 	}
 
-	stream, err := t.dmsgC.DialStream(req.Context(), hostAddr)
+	// Dial the service. DialStream does discovery lookup → connected
+	// server fallback. For deployment services (which have server entries,
+	// not client entries), the discovery lookup fails and the fallback
+	// kicks in. The fallback tries all connected DMSG servers as forwarders.
+	// This is the correct path — the service IS connected to one of our
+	// servers, and the server forwards the stream.
+	//
+	// We use a shorter timeout here since the CLI is waiting interactively.
+	dialCtx, dialCancel := context.WithTimeout(req.Context(), 10*time.Second)
+	defer dialCancel()
+
+	stream, err := t.dmsgC.DialStream(dialCtx, hostAddr)
 	if err != nil {
 		return nil, err
 	}

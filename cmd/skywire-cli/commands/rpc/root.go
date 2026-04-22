@@ -374,8 +374,12 @@ func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 		logger.Debugf("Skipping RPC step: no DMSG mapping for %s", url)
 	}
 
-	// Step 2: Direct DMSG HTTP (ephemeral client)
-	if !NoDmsg {
+	// Step 2: Direct DMSG HTTP (ephemeral client).
+	// Only used when visor RPC is explicitly disabled (--no-rpc).
+	// Step 1 (visor RPC) already handles DMSG access through the visor's
+	// existing sessions. Step 2 creates an ephemeral DMSG client which
+	// does discovery lookups that hang for services with server entries.
+	if !NoDmsg && NoRPC {
 		dmsgURL := dmsgURLForHTTP(url)
 		if dmsgURL != "" {
 			logger.Debugf("Trying direct DMSG fetch: %s", dmsgURL)

@@ -121,9 +121,12 @@ type RouteGroup struct {
 	remoteClosedOnce sync.Once
 	remoteClosed     chan struct{}
 	closed           chan struct{}
-	// used to wait for all the `Close` packets to run through the loop and come back
-	closeDone sync.WaitGroup
-	once      sync.Once
+	// used to wait for all the `Close` packets to run through the loop and come back.
+	// Atomic counter + channel instead of sync.WaitGroup to avoid
+	// "WaitGroup reused before previous Wait returned" panics.
+	closeDonePending int32         // atomic counter of outstanding close acks
+	closeDoneCh      chan struct{} // closed when closeDonePending reaches 0
+	once             sync.Once
 
 	errorMu    sync.RWMutex
 	closeError error
@@ -793,7 +796,8 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 
 	if closeInitiator {
 		// will wait for close response from all the transports
-		rg.closeDone.Add(len(rg.tps))
+		atomic.StoreInt32(&rg.closeDonePending, int32(len(rg.tps))) //nolint:gosec
+		rg.closeDoneCh = make(chan struct{})
 	}
 
 	rg.broadcastClosePackets(code)
@@ -1011,7 +1015,13 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 		// this route group initiated close loop and got response
 		rg.logger.Debugf("Handling response close packet with code %d", code)
 
-		rg.closeDone.Done()
+		if atomic.AddInt32(&rg.closeDonePending, -1) <= 0 {
+			select {
+			case <-rg.closeDoneCh:
+			default:
+				close(rg.closeDoneCh)
+			}
+		}
 		return nil
 	}
 
@@ -1164,38 +1174,18 @@ func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
 }
 
 func (rg *RouteGroup) waitForCloseRouteGroup(waitTimeout time.Duration) error {
-	closeDoneCh := make(chan struct{})
-	go func() {
-		rg.closeDone.Wait()
-		close(closeDoneCh)
-	}()
-
 	select {
+	case <-rg.closeDoneCh:
+		return nil
 	case <-time.After(waitTimeout):
-		// Force-complete outstanding WaitGroup entries so the goroutine above
-		// can exit. Without this, each timed-out close leaks a goroutine
-		// permanently blocked on closeDone.Wait().
-		rg.forceCompleteCloseDone()
-		// Wait briefly for the goroutine to notice and exit
+		// Force-complete: zero the counter and signal the channel.
+		atomic.StoreInt32(&rg.closeDonePending, 0)
 		select {
-		case <-closeDoneCh:
-		case <-time.After(100 * time.Millisecond):
+		case <-rg.closeDoneCh:
+		default:
+			close(rg.closeDoneCh)
 		}
 		return fmt.Errorf("close route group timed out after %v", waitTimeout)
-	case <-closeDoneCh:
-		return nil
-	}
-}
-
-// forceCompleteCloseDone drains the closeDone WaitGroup by calling Done()
-// for each outstanding entry. Uses recover to catch panics from calling
-// Done() more times than Add() (in case some responses arrived).
-func (rg *RouteGroup) forceCompleteCloseDone() {
-	for i := 0; i < len(rg.tps); i++ {
-		func() {
-			defer func() { recover() }() //nolint:errcheck
-			rg.closeDone.Done()
-		}()
 	}
 }
 

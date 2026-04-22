@@ -70,21 +70,32 @@ func AdvertiseFullNode(ctx context.Context, node *Node, log *logging.Logger) {
 
 // FindFullNodes queries bootstrap peers for full node advertisements.
 // Returns a list of PKs that are running DHT full nodes.
+// Prioritizes peers actually in the routing table (confirmed reachable)
+// over the raw bootstrap list (which includes non-DHT services).
 func FindFullNodes(ctx context.Context, node *Node) []cipher.PubKey {
-	// Full nodes are the bootstrap peers (DMSG servers) plus any
-	// visors advertising via the "fullnode" salt. Query bootstrap
-	// peers since they're always full nodes.
+	// First: peers in the routing table (confirmed DHT-reachable).
 	var fullNodes []cipher.PubKey
+	seen := make(map[cipher.PubKey]struct{})
+
+	closest := node.rt.FindClosest(node.id, 20)
+	for _, p := range closest {
+		if p.PK == node.pk {
+			continue
+		}
+		fullNodes = append(fullNodes, p.PK)
+		seen[p.PK] = struct{}{}
+	}
+
+	// Then: bootstrap peers not already in the list (fallback).
 	for _, bp := range node.cfg.BootstrapPKs {
 		if bp == node.pk {
 			continue
 		}
+		if _, ok := seen[bp]; ok {
+			continue
+		}
 		fullNodes = append(fullNodes, bp)
 	}
-
-	// Also check the routing table for peers that responded to our
-	// queries — they might be full nodes too.
-	// (In practice, the bootstrap peers are sufficient for now.)
 
 	return fullNodes
 }
