@@ -149,20 +149,24 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 //  3. HTTP discovery (network round-trip)
 func (ce *Client) getClientEntryCached(ctx context.Context, clientPK cipher.PubKey) (*disc.Entry, error) {
 	if entry, ok := ce.getCachedEntry(clientPK); ok {
+		ce.LookupCacheHits.Add(1)
 		return entry, nil
 	}
 	// Try DHT before HTTP discovery — avoids network round-trip for
 	// PKs that have published their DMSG entry to the DHT.
 	if ce.DHTLookup != nil {
 		if entry, err := ce.DHTLookup(clientPK); err == nil && entry != nil && entry.Client != nil {
+			ce.LookupDHTHits.Add(1)
 			ce.setCachedEntry(clientPK, entry)
 			return entry, nil
 		}
 	}
 	entry, err := getClientEntry(ctx, ce.dc, clientPK)
 	if err != nil {
+		ce.LookupHTTPMisses.Add(1)
 		return nil, err
 	}
+	ce.LookupHTTPHits.Add(1)
 	ce.setCachedEntry(clientPK, entry)
 	return entry, nil
 }
