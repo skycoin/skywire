@@ -157,6 +157,10 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 			if err != nil {
 				return nil, fmt.Errorf("skynet transport dial: %w", err)
 			}
+			log.WithField("pk", t.pk.Hex()[:16]+"...").
+				WithField("port", t.port).
+				WithField("addr", addr).
+				Debug("skynet transport: dialing")
 			conn, err := dialer.DialSkynet(dialCtx, t.pk, t.port)
 			if err != nil {
 				return nil, fmt.Errorf("skynet dial: %w", err)
