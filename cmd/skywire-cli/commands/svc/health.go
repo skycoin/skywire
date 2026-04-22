@@ -122,40 +122,55 @@ func queryServicesDirect(cmdFlags *pflag.FlagSet) []skyvisor.ServiceHealthEntry 
 		"Service Discovery":   deployment.Prod.ServiceDiscovery,
 	}
 
-	var results []skyvisor.ServiceHealthEntry
+	// Query all services in parallel via visor RPC (DMSG).
+	// This reduces total time from sum(per-service) to max(per-service).
+	type result struct {
+		entry skyvisor.ServiceHealthEntry
+	}
+	ch := make(chan result, len(services))
+	expected := 0
 
 	for name, baseURL := range services {
 		if baseURL == "" {
 			continue
 		}
-		url := strings.TrimSuffix(baseURL, "/") + "/health"
-		entry := skyvisor.ServiceHealthEntry{Name: name, URL: baseURL}
+		expected++
+		go func(name, baseURL string) {
+			url := strings.TrimSuffix(baseURL, "/") + "/health"
+			entry := skyvisor.ServiceHealthEntry{Name: name, URL: baseURL}
 
-		start := time.Now()
-		body, err := clirpc.FetchServiceURL(cmdFlags, url)
-		entry.LatencyMs = time.Since(start).Milliseconds()
+			start := time.Now()
+			body, err := clirpc.FetchServiceURL(cmdFlags, url)
+			entry.LatencyMs = time.Since(start).Milliseconds()
 
-		if err != nil {
-			entry.Status = "DOWN"
-			results = append(results, entry)
-			continue
-		}
+			if err != nil {
+				entry.Status = "DOWN"
+				ch <- result{entry: entry}
+				return
+			}
 
-		var health map[string]interface{}
-		if json.Unmarshal(body, &health) == nil {
-			if bi, ok := health["build_info"].(map[string]interface{}); ok {
-				if v, ok := bi["version"].(string); ok {
-					entry.Version = v
+			var health map[string]interface{}
+			if json.Unmarshal(body, &health) == nil {
+				if bi, ok := health["build_info"].(map[string]interface{}); ok {
+					if v, ok := bi["version"].(string); ok {
+						entry.Version = v
+					}
+				}
+				if entry.Version == "" {
+					if v, ok := health["version"].(string); ok {
+						entry.Version = v
+					}
 				}
 			}
-			if entry.Version == "" {
-				if v, ok := health["version"].(string); ok {
-					entry.Version = v
-				}
-			}
-		}
-		entry.Status = "OK"
-		results = append(results, entry)
+			entry.Status = "OK"
+			ch <- result{entry: entry}
+		}(name, baseURL)
+	}
+
+	var results []skyvisor.ServiceHealthEntry
+	for i := 0; i < expected; i++ {
+		r := <-ch
+		results = append(results, r.entry)
 	}
 
 	return results
