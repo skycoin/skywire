@@ -94,11 +94,25 @@ func (v *Visor) DHTSync(remotePK string, salt string) (int, error) {
 	}
 
 	stored := 0
-	for _, item := range resp.Items {
-		if putErr := v.dhtNode.Store().Put(item); putErr == nil {
+	for i, item := range resp.Items {
+		// Use PutMirror with the explicit target key from the response.
+		// Mirrored items have item.K set to the mirror's PK (not the
+		// subject PK), so item.Target() returns the wrong key.
+		if i < len(resp.Targets) {
+			v.dhtNode.Store().PutMirror(resp.Targets[i], item)
 			stored++
+		} else {
+			// Fallback for old servers that don't send targets.
+			if putErr := v.dhtNode.Store().Put(item); putErr == nil {
+				stored++
+			}
 		}
 	}
+
+	v.log.WithField("received", len(resp.Items)).
+		WithField("stored", stored).
+		WithField("hasMore", resp.HasMore).
+		Info("DHT sync result")
 
 	return stored, nil
 }
@@ -109,7 +123,7 @@ func (v *Visor) DHTGetAll(salt string) (string, error) {
 	if v.dhtNode == nil {
 		return "", fmt.Errorf("DHT node not running")
 	}
-	items, _ := v.dhtNode.Store().GetItems(salt, 0, 0)
+	items, _, _ := v.dhtNode.Store().GetItems(salt, 0, 0)
 	if len(items) == 0 {
 		return "[]", nil
 	}
