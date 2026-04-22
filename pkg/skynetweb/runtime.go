@@ -136,7 +136,11 @@ type skynetResolver struct {
 func (r *skynetResolver) Resolve(ctx context.Context, name string) (context.Context, net.IP, error) {
 	// Always store the original hostname for the Dial callback.
 	ctx = context.WithValue(ctx, skynetOrigHostKey{}, name)
-	// Return 127.0.0.1 to prevent real DNS lookup on fantasy TLDs.
+
+	// Return 127.0.0.1 for all hostnames to prevent the library from
+	// doing a real DNS lookup (which fails for fantasy TLDs like .skynet).
+	// The Dial callback uses the original hostname from context to either
+	// dial skynet (for .skynet) or forward to the upstream SOCKS5.
 	return ctx, net.ParseIP("127.0.0.1"), nil
 }
 
@@ -169,9 +173,16 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 
 			// Not .skynet — forward to upstream or direct.
 			if cfg.UpstreamSOCKS != "" {
+				// Reconstruct host:port using the original hostname
+				// (the resolved addr has 127.0.0.1 instead of the hostname).
 				if origHost != "" {
-					addr = origHost
+					_, port, _ := net.SplitHostPort(addr)
+					if port == "" {
+						port = "443"
+					}
+					addr = net.JoinHostPort(origHost, port)
 				}
+				log.WithField("addr", addr).Debug("SOCKS5 → upstream")
 				up, err := proxy.SOCKS5("tcp", cfg.UpstreamSOCKS, nil, proxy.Direct)
 				if err != nil {
 					return nil, err
