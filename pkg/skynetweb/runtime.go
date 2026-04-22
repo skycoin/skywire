@@ -168,7 +168,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					return nil, fmt.Errorf("skynet dial: %w", err)
 				}
 				done(nil)
-				return conn, nil
+				return &tcpAddrConn{Conn: conn}, nil
 			}
 
 			// Not .skynet — forward to upstream or direct.
@@ -205,6 +205,22 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 	}()
 
 	return srv.ListenAndServe("tcp", lisAddr)
+}
+
+// tcpAddrConn wraps a net.Conn so that LocalAddr/RemoteAddr return
+// *net.TCPAddr. The go-socks5 library does a type assertion to
+// *net.TCPAddr in handleConnect; skynet connections return routing.Addr
+// which causes a panic without this wrapper.
+type tcpAddrConn struct {
+	net.Conn
+}
+
+func (c *tcpAddrConn) RemoteAddr() net.Addr {
+	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
+}
+
+func (c *tcpAddrConn) LocalAddr() net.Addr {
+	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
 }
 
 func isSkynetHost(host, suffix string) bool {
