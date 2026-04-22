@@ -121,9 +121,24 @@ func Run(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cfg Conf
 		log = logging.MustGetLogger("skynetweb")
 	}
 	cfg = normalize(cfg)
-	if cfg.WebPort == 0 {
-		return errors.New("skynetweb: WebPort is required")
+
+	// Bind the HTTP bridge first so we know which port it actually got.
+	// If the configured port is occupied, fall back to :0 (OS-assigned).
+	bridgeLis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.WebPort))
+	if err != nil {
+		log.WithError(err).WithField("port", cfg.WebPort).
+			Warn("HTTP bridge port busy, using OS-assigned port")
+		bridgeLis, err = net.Listen("tcp", ":0")
+		if err != nil {
+			return fmt.Errorf("skynetweb: bind HTTP bridge: %w", err)
+		}
 	}
+	// Update cfg.WebPort so the SOCKS5 resolver routes to the real port.
+	_, portStr, _ := net.SplitHostPort(bridgeLis.Addr().String())
+	if p, convErr := strconv.ParseUint(portStr, 10, 32); convErr == nil {
+		cfg.WebPort = uint(p) //nolint:gosec
+	}
+	log.WithField("port", cfg.WebPort).Debug("HTTP bridge bound")
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, 2)
@@ -141,7 +156,7 @@ func Run(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cfg Conf
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := serveHTTP(ctx, log, dialer, cfg); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := serveHTTPOnListener(ctx, log, dialer, cfg, bridgeLis); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
 	}()
@@ -239,7 +254,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, cfg Config) error {
 // HTTPS-terminated-at-origin sites are out of scope (the remote would
 // need to terminate TLS inside the tunnel, which isn't how skynet
 // servers are configured today).
-func serveHTTP(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cfg Config) error {
+func serveHTTPOnListener(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cfg Config, lis net.Listener) error {
 	// Use a custom http.Transport that dials skynet connections.
 	// This gives us connection pooling and keep-alive for free —
 	// multiple concurrent HTTP requests to the same (pk, port)
@@ -292,11 +307,10 @@ func serveHTTP(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cf
 	})
 
 	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.WebPort),
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	log.WithField("port", cfg.WebPort).Debug("Serving skynetweb HTTP bridge")
+	log.WithField("addr", lis.Addr()).Debug("Serving skynetweb HTTP bridge")
 
 	go func() { //nolint:gosec // G118: shutdown must outlive parent ctx
 		<-ctx.Done()
@@ -306,7 +320,7 @@ func serveHTTP(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cf
 			log.WithError(err).Debug("HTTP shutdown error")
 		}
 	}()
-	return srv.ListenAndServe()
+	return srv.Serve(lis)
 }
 
 type target struct {

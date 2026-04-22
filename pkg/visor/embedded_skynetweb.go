@@ -175,16 +175,6 @@ type routerSkynetDialer struct {
 }
 
 func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
-	// Self-dial shortcut: if the destination is the local visor,
-	// connect directly to localhost instead of going through the
-	// routing mesh. This avoids route group descriptor conflicts
-	// when multiple skynet ports are accessed on the same visor.
-	if remote == d.localPK {
-		addr := fmt.Sprintf("localhost:%d", port)
-		d.log.WithField("addr", addr).Debug("Self-dial: connecting to localhost directly")
-		return net.Dial("tcp", addr)
-	}
-
 	var opts *router.DialOptions
 	if d.routeTimeout > 0 {
 		opts = router.DefaultDialOptions()
