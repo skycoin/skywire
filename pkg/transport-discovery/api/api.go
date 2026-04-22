@@ -195,6 +195,34 @@ func (api *API) SetDHTMirror(m interface {
 	api.dhtMirror = m
 }
 
+// BackfillDHTMirror iterates all existing transports and mirrors them
+// to the DHT so the full dataset is available immediately on startup.
+func (api *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
+	if api.dhtMirror == nil {
+		return
+	}
+	entries, err := api.store.GetAllTransports(ctx, false)
+	if err != nil {
+		log.WithError(err).Warn("DHT backfill: failed to list transports")
+		return
+	}
+	mirrored := 0
+	for _, entry := range entries {
+		if ctx.Err() != nil {
+			break
+		}
+		if entry == nil {
+			continue
+		}
+		seq := uint64(time.Now().UnixNano()) //nolint:gosec
+		for _, edgePK := range entry.Edges {
+			api.dhtMirror.Mirror(edgePK, entry, seq)
+		}
+		mirrored++
+	}
+	log.WithField("count", mirrored).Info("DHT backfill complete")
+}
+
 // SetCXOPublisher enables CXO distribution of transport data.
 // When set, register/deregister operations publish changes to CXO subscribers.
 func (api *API) SetCXOPublisher(p CXOPublisher) {
