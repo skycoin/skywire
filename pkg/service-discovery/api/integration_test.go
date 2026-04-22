@@ -13,6 +13,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/deployment"
 	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -68,7 +69,7 @@ func serveAPI(t *testing.T) *httptest.Server {
 	require.NoError(t, err)
 
 	m := sdmetrics.NewEmpty()
-	api := New(logging.MustGetLogger("server"), discDB, nonceDB, false, m, "", "http://ip.skycoin.com")
+	api := New(logging.MustGetLogger("server"), discDB, nonceDB, false, m, "", deployment.Prod.GeoIP)
 	return httptest.NewServer(api)
 }
 

@@ -159,6 +159,12 @@ var autoconfigCmd = &cobra.Command{
 			msg2(fmt.Sprintf("Remote Hypervisor Public Key:\n%s%s%s", colorPurple, strings.TrimSpace(hvPKs), colorReset))
 		}
 
+		// Always show reward address if set
+		rewardOut, err := exec.Command("skywire", "cli", "reward", "-r").Output() //nolint:gosec
+		if err == nil && len(rewardOut) > 0 {
+			msg2(fmt.Sprintf("skycoin reward address:\n%s%s%s", colorGreen, strings.TrimSpace(string(rewardOut)), colorReset))
+		}
+
 		// Welcome message (only with --verbose)
 		if autoconfigVerbose {
 			printWelcome(pubkey, isHypervisor)

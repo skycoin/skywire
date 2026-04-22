@@ -81,7 +81,7 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
     private dialog: MatDialog,
   ) {
     this.form = formBuilder.group({
-      address: ['', Validators.compose([Validators.minLength(20), Validators.maxLength(40)])],
+      address: ['', Validators.compose([Validators.minLength(20), Validators.maxLength(112)])],
       nodes: formBuilder.array([]),
     });
 
