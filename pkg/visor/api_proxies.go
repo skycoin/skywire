@@ -181,7 +181,6 @@ func skynetProxyInfo(cfg *visorconfig.SkynetWebConfig, runtime *EmbeddedSkynetWe
 		Enabled:       cfg.Enable,
 		DomainSuffix:  stringOrDefault(cfg.DomainSuffix, skynetweb.DefaultDomainSuffix),
 		SocksAddr:     localSocksAddr(true, uintOrDefault(cfg.ProxyPort, defaultSkynetWebProxyPort)),
-		WebAddr:       localWebAddr(true, uintOrDefault(cfg.WebPort, defaultSkynetWebPort)),
 		UpstreamSOCKS: cfg.UpstreamSOCKS,
 	}
 	if runtime != nil {
