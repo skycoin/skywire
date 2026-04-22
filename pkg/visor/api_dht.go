@@ -33,7 +33,7 @@ func (v *Visor) DHTStatus() (*DHTStatus, error) {
 		WhitelistedItems: wl,
 		TrustedItems:     tr,
 		PublicItems:      pub,
-		FullNode:         v.conf.DHT != nil && v.conf.DHT.FullNode,
+		FullNode:         v.dhtNode.Store().IsFullNode(),
 	}, nil
 }
 

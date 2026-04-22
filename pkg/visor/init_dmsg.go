@@ -23,6 +23,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	clirewardsserver "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/server"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -49,6 +50,11 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 
 	log := v.MasterLogger().PackageLogger("dmsg_http")
 	keys = append(keys, v.conf.PK)
+	// Add deployment service PKs so the direct client can look them up
+	// without querying the HTTP discovery (services run as direct clients
+	// and don't register in discovery). GetAllEntries creates a synthetic
+	// client entry for each PK with all servers as delegated servers.
+	keys = append(keys, v.dmsgServicePKs()...)
 	entries := direct.GetAllEntries(keys, servers)
 	dClient := direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
@@ -176,10 +182,83 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return ctx.Err()
 	}
 
+	// Seed the DMSG client's entry cache with deployment service PKs.
+	// These services run as "direct" DMSG clients and don't register
+	// in the HTTP discovery, so DialStream's discovery lookup fails.
+	// Pre-seeding lets DialStream find them via the normal delegated-
+	// server path instead of the slower connected-server fallback.
+	v.seedDmsgServiceEntries(dmsgC, log)
+
 	// Start periodic config refresh for dynamic key sets
 	go v.startConfigRefresh(ctx) //nolint:errcheck,gosec
 
 	return nil
+}
+
+// dmsgServicePKs extracts public keys from dmsg:// URLs in the visor config.
+// Falls back to embedded deployment defaults for missing fields.
+func (v *Visor) dmsgServicePKs() cipher.PubKeys {
+	pick := func(a, b string) string {
+		if a != "" {
+			return a
+		}
+		return b
+	}
+	dmsgURLs := []string{
+		v.conf.Dmsg.DiscoveryDmsg,
+		v.conf.Transport.DiscoveryDmsg,
+		v.conf.Transport.AddressResolverDmsg,
+		v.conf.Routing.RouteFinderDmsg,
+		v.conf.Launcher.ServiceDiscDmsg,
+		pick(v.conf.ConfServiceDmsg, deployment.Prod.ConfDmsg),
+	}
+	if v.conf.UptimeTracker != nil {
+		dmsgURLs = append(dmsgURLs, v.conf.UptimeTracker.AddrDmsg)
+	}
+	var pks cipher.PubKeys
+	for _, rawURL := range dmsgURLs {
+		if rawURL == "" {
+			continue
+		}
+		var addr dmsg.Addr
+		trimmed := rawURL
+		if len(trimmed) > 7 && trimmed[:7] == "dmsg://" {
+			trimmed = trimmed[7:]
+		}
+		if err := addr.Set(trimmed); err != nil {
+			continue
+		}
+		pks = append(pks, addr.PK)
+	}
+	return pks
+}
+
+// seedDmsgServiceEntries injects synthetic client entries for deployment
+// services into v.dmsgC's entry cache. These services run as direct DMSG
+// clients (they don't register in the HTTP discovery), so without seeding
+// the cache DialStream's discovery lookup fails with "entry not found".
+//
+// The synthetic entries list ALL known DMSG server PKs as delegated servers.
+// This lets DialStream try each server the visor is connected to — one of
+// them will be able to forward the stream to the service.
+func (v *Visor) seedDmsgServiceEntries(dmsgC *dmsg.Client, log *logging.Logger) {
+	var serverPKs []cipher.PubKey
+	for _, srv := range v.conf.Dmsg.Servers {
+		serverPKs = append(serverPKs, srv.Static)
+	}
+	if len(serverPKs) == 0 {
+		return
+	}
+	pks := v.dmsgServicePKs()
+	for _, pk := range pks {
+		dmsgC.SeedEntryCache(pk, &dmsgdisc.Entry{
+			Static: pk,
+			Client: &dmsgdisc.Client{DelegatedServers: serverPKs},
+		})
+	}
+	if len(pks) > 0 {
+		log.WithField("count", len(pks)).Info("Seeded DMSG entry cache with deployment service PKs")
+	}
 }
 
 func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {

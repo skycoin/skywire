@@ -608,6 +608,23 @@ func (ce *Client) setCachedEntry(pk cipher.PubKey, entry *disc.Entry) {
 	ce.entryCacheMx.Unlock()
 }
 
+// SeedEntryCache injects a client entry into the discovery cache so that
+// DialStream can find the destination without querying the HTTP discovery.
+// This is used for deployment services that run as direct DMSG clients
+// (they don't register in the public discovery). The caller should set
+// entry.Client.DelegatedServers to all known DMSG server PKs so that
+// DialStream can try each connected server.
+//
+// Seeded entries never expire (timestamp set far in the future).
+func (ce *Client) SeedEntryCache(pk cipher.PubKey, entry *disc.Entry) {
+	ce.entryCacheMx.Lock()
+	ce.entryCache[pk] = entryCacheEntry{
+		entry:     entry,
+		fetchedAt: time.Now().Add(100 * 365 * 24 * time.Hour), // effectively permanent
+	}
+	ce.entryCacheMx.Unlock()
+}
+
 // DiscEntry looks up a PK in dmsg-discovery and returns the entry if it
 // exists as a client with at least one delegated server. Returns an error
 // if the PK is not found, is a server entry, or has no delegated servers.
