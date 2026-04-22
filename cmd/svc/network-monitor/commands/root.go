@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/network-monitor/api"
 	"github.com/skycoin/skywire/pkg/network-monitor/store"
 	nm "github.com/skycoin/skywire/pkg/network-monitor/types"
@@ -112,11 +113,11 @@ GET /status - nm.Status
 func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9080", "address to bind to\n\r")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
-	RootCmd.Flags().StringVar(&sdURL, "sd-url", "http://sd.skycoin.com", "url to service discovery\n\r")
-	RootCmd.Flags().StringVar(&arURL, "ar-url", "http://ar.skywire.skycoin.com", "url to address resolver\n\r")
-	RootCmd.Flags().StringVar(&utURL, "ut-url", "http://ut.skywire.skycoin.com", "url to uptime tracker visor data\n\r")
-	RootCmd.Flags().StringVar(&tpdURL, "tpd-url", "http://tpd.skywire.skycoin.com", "url to transport discovery\n\r")
-	RootCmd.Flags().StringVar(&dmsgdURL, "dmsgd-url", "http://dmsgd.skywire.skycoin.com", "url to dmsg discovery\n\r")
+	RootCmd.Flags().StringVar(&sdURL, "sd-url", deployment.Prod.ServiceDiscovery, "url to service discovery\n\r")
+	RootCmd.Flags().StringVar(&arURL, "ar-url", deployment.Prod.AddressResolver, "url to address resolver\n\r")
+	RootCmd.Flags().StringVar(&utURL, "ut-url", deployment.Prod.UptimeTracker, "url to uptime tracker visor data\n\r")
+	RootCmd.Flags().StringVar(&tpdURL, "tpd-url", deployment.Prod.TransportDiscovery, "url to transport discovery\n\r")
+	RootCmd.Flags().StringVar(&dmsgdURL, "dmsgd-url", deployment.Prod.DmsgDiscovery, "url to dmsg discovery\n\r")
 	RootCmd.Flags().IntVarP(&cleaningDelay, "cleaning-delay", "d", 75, "time for delay between each service cleaning routine\n\r")
 	RootCmd.Flags().StringVar(&pk, "pk", "", "pk of network monitor")
 	RootCmd.Flags().StringVar(&sk, "sk", "", "sk of network monitor")
