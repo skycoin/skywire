@@ -319,6 +319,22 @@ var RootCmd = &cobra.Command{
 						WithField("bootstrap_peers", len(bootstrapPKs)).
 						Info("DHT full node started on port 100")
 
+					// Mirror DHT writes back to HTTP discoveries so they
+					// stay in sync when visors publish directly to the DHT.
+					discEndpoints := map[string]string{
+						"dmsg": conf.Discovery,
+					}
+					// TPD and SD URLs from environment (same as other services)
+					if tpdURL := os.Getenv("TPD_URL"); tpdURL != "" {
+						discEndpoints["tp"] = tpdURL
+					}
+					if sdURL := os.Getenv("SD_URL"); sdURL != "" {
+						discEndpoints["svc"] = sdURL
+					}
+					pusher := dht.NewDiscoveryPusher(discEndpoints, logging.MustGetLogger("dht:disc-pusher"))
+					dhtNode.Store().SetOnPut(pusher.OnPut)
+					dhtLog.Info("DHT→discovery pusher enabled")
+
 					// Publish this server's entry to the DHT so visors can
 					// discover DMSG servers without the DMSG discovery HTTP API.
 					go func() {
