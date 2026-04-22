@@ -176,7 +176,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				// Reconstruct host:port using the original hostname
 				// (the resolved addr has 127.0.0.1 instead of the hostname).
 				if origHost != "" {
-					_, port, _ := net.SplitHostPort(addr)
+					_, port, _ := net.SplitHostPort(addr) //nolint:errcheck
 					if port == "" {
 						port = "443"
 					}

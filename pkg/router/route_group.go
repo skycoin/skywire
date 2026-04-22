@@ -126,7 +126,7 @@ type RouteGroup struct {
 	// "WaitGroup reused before previous Wait returned" panics.
 	closeDonePending int32         // atomic counter of outstanding close acks
 	closeDoneCh      chan struct{} // closed when closeDonePending reaches 0
-	once      sync.Once
+	once             sync.Once
 
 	errorMu    sync.RWMutex
 	closeError error
