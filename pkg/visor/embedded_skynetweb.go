@@ -170,9 +170,33 @@ type routerSkynetDialer struct {
 	localPK      cipher.PubKey
 	log          *logging.Logger
 	routeTimeout time.Duration // 0 = use DefaultRouteKeepAlive
+	// Per-destination mutex to serialize DialRoutes calls.
+	// Concurrent dials to the same PK race the noise handshake and
+	// fail with "already being initialized".
+	dialMu sync.Mutex
+	dialing map[cipher.PubKey]*sync.Mutex
+}
+
+func (d *routerSkynetDialer) dialMutex(pk cipher.PubKey) *sync.Mutex {
+	d.dialMu.Lock()
+	defer d.dialMu.Unlock()
+	if d.dialing == nil {
+		d.dialing = make(map[cipher.PubKey]*sync.Mutex)
+	}
+	mu, ok := d.dialing[pk]
+	if !ok {
+		mu = &sync.Mutex{}
+		d.dialing[pk] = mu
+	}
+	return mu
 }
 
 func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
+	// Serialize per destination to avoid "already being initialized" races.
+	mu := d.dialMutex(remote)
+	mu.Lock()
+	defer mu.Unlock()
+
 	var opts *router.DialOptions
 	if d.routeTimeout > 0 {
 		opts = router.DefaultDialOptions()
