@@ -48,11 +48,7 @@ Examples:
   skywire cli tp tpd-stats --type stcpr --min 5
   skywire cli tp tpd-stats --json`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		tpdURL := deployment.Prod.TransportDiscovery
-		if tpdURL == "" {
-			tpdURL = "http://tpd.skywire.skycoin.com"
-		}
-		statsURL := strings.TrimRight(tpdURL, "/") + "/all-transports/per-key-stats"
+		statsURL := strings.TrimRight(deployment.Prod.TransportDiscovery, "/") + "/all-transports/per-key-stats"
 
 		body, err := clirpc.FetchServiceURL(cmd.Flags(), statsURL)
 		if err != nil {

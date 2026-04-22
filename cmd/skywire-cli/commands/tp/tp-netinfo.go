@@ -23,11 +23,7 @@ func init() {
 }
 
 func tpdBaseURL() string {
-	base := deployment.Prod.TransportDiscovery
-	if base == "" {
-		base = "http://tpd.skywire.skycoin.com"
-	}
-	return strings.TrimRight(base, "/")
+	return strings.TrimRight(deployment.Prod.TransportDiscovery, "/")
 }
 
 var tpdHealthCmd = &cobra.Command{
