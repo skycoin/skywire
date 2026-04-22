@@ -143,10 +143,21 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	return nil, ErrCannotConnectToDelegated
 }
 
-// getClientEntryCached returns a client entry, using the entry cache when possible.
+// getClientEntryCached returns a client entry. Resolution order:
+//  1. Entry cache (instant, in-memory)
+//  2. DHT lookup (instant if entry is in local store, no network)
+//  3. HTTP discovery (network round-trip)
 func (ce *Client) getClientEntryCached(ctx context.Context, clientPK cipher.PubKey) (*disc.Entry, error) {
 	if entry, ok := ce.getCachedEntry(clientPK); ok {
 		return entry, nil
+	}
+	// Try DHT before HTTP discovery — avoids network round-trip for
+	// PKs that have published their DMSG entry to the DHT.
+	if ce.DHTLookup != nil {
+		if entry, err := ce.DHTLookup(clientPK); err == nil && entry != nil && entry.Client != nil {
+			ce.setCachedEntry(clientPK, entry)
+			return entry, nil
+		}
 	}
 	entry, err := getClientEntry(ctx, ce.dc, clientPK)
 	if err != nil {

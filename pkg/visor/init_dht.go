@@ -3,10 +3,12 @@ package visor
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/dht"
+	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -83,6 +85,26 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.pushCloseStack("dht", func() error {
 		return node.Stop()
 	})
+
+	// Wire DHT lookup into the DMSG client so DialStream checks the
+	// local DHT store before falling back to the HTTP discovery.
+	// This resolves PKs that publish their DMSG entry to the DHT
+	// without any network round-trip.
+	if v.dmsgC != nil {
+		v.dmsgC.SetDHTLookup(func(pk cipher.PubKey) (*dmsgdisc.Entry, error) {
+			target := dht.MutableItemTarget(pk, []byte("dmsg"))
+			item := node.Store().Get(target)
+			if item == nil {
+				return nil, fmt.Errorf("not in DHT")
+			}
+			var entry dmsgdisc.Entry
+			if err := json.Unmarshal(item.V, &entry); err != nil {
+				return nil, err
+			}
+			return &entry, nil
+		})
+		log.Info("DHT: wired DMSG client lookup to local DHT store")
+	}
 
 	// Register transport-layer DHT handler so DHT messages can flow
 	// over skywire transports (route ID 0) without DMSG.
