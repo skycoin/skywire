@@ -68,38 +68,56 @@ func (r *RedisBackend) Delete(target NodeID) error {
 
 // Load returns all persisted items by scanning the dht: key prefix.
 func (r *RedisBackend) Load() (map[NodeID]MutableItem, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	items := make(map[NodeID]MutableItem)
+	// Collect all keys first, then fetch values in pipeline batches.
+	var allKeys []string
 	var cursor uint64
 	for {
 		keys, nextCursor, err := r.client.Scan(ctx, cursor, redisKeyPrefix+"*", 1000).Result()
 		if err != nil {
-			return items, fmt.Errorf("dht redis: scan: %w", err)
+			return nil, fmt.Errorf("dht redis: scan: %w", err)
 		}
-		for _, key := range keys {
-			data, err := r.client.Get(ctx, key).Bytes()
-			if err != nil {
-				continue // key expired or deleted between scan and get
-			}
-			var item MutableItem
-			if err := json.Unmarshal(data, &item); err != nil {
-				continue // skip corrupt entries
-			}
-			// Extract NodeID from key (after "dht:" prefix, 64 hex chars = 32 bytes)
-			hexStr := key[len(redisKeyPrefix):]
-			var id NodeID
-			if len(hexStr) == len(id)*2 {
-				for i := 0; i < len(id); i++ {
-					fmt.Sscanf(hexStr[i*2:i*2+2], "%02x", &id[i]) //nolint:errcheck,gosec
-				}
-			}
-			items[id] = item
-		}
+		allKeys = append(allKeys, keys...)
 		cursor = nextCursor
 		if cursor == 0 {
 			break
+		}
+	}
+
+	items := make(map[NodeID]MutableItem, len(allKeys))
+	// Pipeline in batches of 500 to avoid memory spikes.
+	const batchSize = 500
+	for i := 0; i < len(allKeys); i += batchSize {
+		end := i + batchSize
+		if end > len(allKeys) {
+			end = len(allKeys)
+		}
+		batch := allKeys[i:end]
+		pipe := r.client.Pipeline()
+		cmds := make([]*redis.StringCmd, len(batch))
+		for j, key := range batch {
+			cmds[j] = pipe.Get(ctx, key)
+		}
+		_, _ = pipe.Exec(ctx) //nolint:errcheck
+		for j, cmd := range cmds {
+			data, err := cmd.Bytes()
+			if err != nil {
+				continue
+			}
+			var item MutableItem
+			if err := json.Unmarshal(data, &item); err != nil {
+				continue
+			}
+			hexStr := batch[j][len(redisKeyPrefix):]
+			var id NodeID
+			if len(hexStr) == len(id)*2 {
+				for k := 0; k < len(id); k++ {
+					fmt.Sscanf(hexStr[k*2:k*2+2], "%02x", &id[k]) //nolint:errcheck,gosec
+				}
+			}
+			items[id] = item
 		}
 	}
 	return items, nil
