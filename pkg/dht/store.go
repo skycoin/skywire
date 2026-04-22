@@ -69,6 +69,9 @@ type Store struct {
 	ttl            time.Duration
 	trust          *TrustPolicy
 	backend        Backend
+	// onPut is called (outside the lock) after a new/updated item is stored.
+	// Used by DMSG servers to mirror DHT writes back to HTTP discoveries.
+	onPut func(target NodeID, item MutableItem)
 }
 
 type storedItem struct {
@@ -91,6 +94,14 @@ func NewStore(maxItems int, ttl time.Duration) *Store {
 		trust:          NewTrustPolicy(nil, nil),
 		backend:        memBackend{},
 	}
+}
+
+// SetOnPut registers a callback that fires after each successful Put/PutMirror.
+// The callback receives the storage target and item. Called outside the store lock.
+func (s *Store) SetOnPut(fn func(target NodeID, item MutableItem)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onPut = fn
 }
 
 // SetBackend configures a persistence backend and rehydrates the store
@@ -151,11 +162,11 @@ func (s *Store) PutMirror(target NodeID, item MutableItem) {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	// Accept if newer than existing, or if no existing item.
 	if existing, ok := s.items[target]; ok {
 		if item.Seq <= existing.item.Seq {
+			s.mu.Unlock()
 			return
 		}
 	}
@@ -163,7 +174,13 @@ func (s *Store) PutMirror(target NodeID, item MutableItem) {
 		item:     item,
 		storedAt: time.Now(),
 	}
-	s.backend.Save(target, item) //nolint:errcheck,gosec,gosec
+	s.backend.Save(target, item) //nolint:errcheck,gosec
+
+	cb := s.onPut
+	s.mu.Unlock()
+	if cb != nil {
+		cb(target, item)
+	}
 }
 
 // Put stores an item, enforcing monotonic sequence numbers, trust
@@ -176,13 +193,13 @@ func (s *Store) Put(item MutableItem) error {
 	target := item.Target()
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	tier := s.trust.Classify(item.K)
 
 	// Enforce monotonic sequence.
 	if existing, ok := s.items[target]; ok {
 		if item.Seq <= existing.item.Seq {
+			s.mu.Unlock()
 			return ErrSeqNotMonotonic
 		}
 	}
@@ -195,8 +212,8 @@ func (s *Store) Put(item MutableItem) error {
 				count++
 			}
 		}
-		// Allow update of existing item (same target) without counting.
 		if _, isUpdate := s.items[target]; !isUpdate && count >= s.rateLimitPerPK {
+			s.mu.Unlock()
 			return ErrRateLimited
 		}
 	}
@@ -207,16 +224,18 @@ func (s *Store) Put(item MutableItem) error {
 	}
 	s.backend.Save(target, item) //nolint:errcheck,gosec
 
-	// Evict public items if the public pool is over capacity.
 	if tier == TierPublic {
 		s.evictPublicPool()
 	}
-
-	// Global capacity check.
 	if s.maxItems > 0 && len(s.items) > s.maxItems {
 		s.evictOldestPublic()
 	}
 
+	cb := s.onPut
+	s.mu.Unlock()
+	if cb != nil {
+		cb(target, item)
+	}
 	return nil
 }
 
