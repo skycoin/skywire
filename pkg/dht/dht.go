@@ -471,8 +471,8 @@ func (n *Node) handleConn(conn io.ReadWriteCloser, remotePK cipher.PubKey) {
 			return
 		}
 		n.rt.Update(Peer{ID: req.SenderID, PK: req.SenderPK})
-		items, hasMore := n.store.GetItems(req.Salt, req.SinceSeq, req.Limit)
-		resp := GetItemsResponse{Items: items, HasMore: hasMore}
+		items, targets, hasMore := n.store.GetItems(req.Salt, req.SinceSeq, req.Limit)
+		resp := GetItemsResponse{Items: items, Targets: targets, HasMore: hasMore}
 		writeMsg(conn, methodGetItems, resp) //nolint:errcheck,gosec
 	}
 }
