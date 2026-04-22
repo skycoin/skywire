@@ -378,6 +378,7 @@ Example:
 			} else {
 				tpdAPI.SetDHTMirror(redisMirror)
 				logger.Info("DHT transport mirroring enabled (via Redis)")
+				go tpdAPI.BackfillDHTMirror(ctx, logger)
 			}
 		}
 
