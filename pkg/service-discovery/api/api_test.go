@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/deployment"
 	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -128,7 +129,7 @@ func TestAPI_GetServices(t *testing.T) {
 			db := &store.MockStore{}
 			db.On("Services", mock.Anything, tc.sType).Return(tc.servicesRes, uint64(0), tc.servicesErr)
 			m := sdmetrics.NewEmpty()
-			api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", "http://ip.skycoin.com")
+			api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", deployment.Prod.GeoIP)
 
 			rr := httptest.NewRecorder()
 
@@ -268,7 +269,7 @@ func TestAPI_GetService(t *testing.T) {
 			db := &store.MockStore{}
 			db.On("Service", mock.Anything, tc.sType, tc.serviceAddr).Return(tc.serviceRes, tc.serviceErr)
 			m := sdmetrics.NewEmpty()
-			api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", "http://ip.skycoin.com")
+			api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", deployment.Prod.GeoIP)
 
 			rr := httptest.NewRecorder()
 
@@ -383,7 +384,7 @@ func TestAPI_UpdateService(t *testing.T) {
 			db := &store.MockStore{}
 			db.On("UpdateServiceAndHeartbeat", mock.Anything, &tc.service, mock.Anything).Return(tc.updateServiceErr)
 			m := sdmetrics.NewEmpty()
-			api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", "http://ip.skycoin.com")
+			api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", deployment.Prod.GeoIP)
 
 			rr := httptest.NewRecorder()
 
@@ -501,7 +502,7 @@ func TestAPI_DelService(t *testing.T) {
 			db := &store.MockStore{}
 			db.On("DeleteService", mock.Anything, tc.sType, tc.serviceAddr).Return(tc.deleteServiceErr)
 			m := sdmetrics.NewEmpty()
-			api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", "http://ip.skycoin.com")
+			api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", deployment.Prod.GeoIP)
 
 			rr := httptest.NewRecorder()
 
@@ -533,7 +534,7 @@ func TestAPI_AddVPNFromOldVisor(t *testing.T) {
 	db := &store.MockStore{}
 	// db.On("UpdateService", mock.Anything, &tc.service).Return(nil)
 	m := sdmetrics.NewEmpty()
-	api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", "http://ip.skycoin.com")
+	api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", deployment.Prod.GeoIP)
 
 	rr := httptest.NewRecorder()
 
@@ -570,7 +571,7 @@ func TestAPI_AddVPNFromCurrentVisor(t *testing.T) {
 	db.On("UpdateServiceAndHeartbeat", mock.Anything, &service, mock.Anything).Return(nil)
 
 	m := sdmetrics.NewEmpty()
-	api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", "http://ip.skycoin.com")
+	api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", deployment.Prod.GeoIP)
 
 	rr := httptest.NewRecorder()
 
