@@ -177,6 +177,8 @@ func (v *Visor) DeregisterTCPPort(localPort int) error {
 	if v.forwardedPorts.Get(localPort) == nil {
 		return fmt.Errorf("port :%v not registered", localPort)
 	}
+	// Stop DMSG listener if running.
+	v.stopDmsgForwarder(localPort)
 	// Remove from both the rich store and legacy allowed map.
 	v.allowed.mu.Lock()
 	delete(v.allowed.ports, localPort)
@@ -215,6 +217,10 @@ func (v *Visor) RegisterForwardedPort(p ForwardedPort) error {
 		v.allowed.mu.Lock()
 		v.allowed.ports[p.Port] = true
 		v.allowed.mu.Unlock()
+	}
+	// Create a DMSG listener for this port so .dmsg:<port> works.
+	if p.DMSG {
+		v.startDmsgForwarder(p.Port, p.LocalPort)
 	}
 	return nil
 }
@@ -369,4 +375,91 @@ func shutdownDmsgDependentComponents(v *Visor, log *logging.Logger) error {
 		return fmt.Errorf("encountered %d errors during shutdown", len(errs))
 	}
 	return nil
+}
+
+// startDmsgForwarder creates a DMSG listener on the given port and
+// forwards accepted connections to localhost:localPort. This enables
+// .dmsg:<port> access to forwarded ports.
+func (v *Visor) startDmsgForwarder(port, localPort int) {
+	if v.dmsgC == nil {
+		return
+	}
+	if localPort == 0 {
+		localPort = port
+	}
+
+	v.dmsgFwdMu.Lock()
+	defer v.dmsgFwdMu.Unlock()
+
+	// Already running for this port.
+	if _, ok := v.dmsgFwdListeners[port]; ok {
+		return
+	}
+
+	lis, err := v.dmsgC.Listen(uint16(port)) //nolint:gosec
+	if err != nil {
+		v.log.WithError(err).WithField("port", port).Warn("Failed to create DMSG listener for forwarded port")
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	v.dmsgFwdListeners[port] = cancel
+
+	go func() {
+		defer lis.Close() //nolint:errcheck
+		log := v.log.WithField("dmsg_fwd", port)
+		log.WithField("local", localPort).Info("DMSG forwarder started")
+		for {
+			conn, err := lis.Accept()
+			if err != nil {
+				select {
+				case <-ctx.Done():
+					log.Debug("DMSG forwarder stopped")
+					return
+				default:
+				}
+				log.WithError(err).Debug("DMSG forwarder accept error")
+				return
+			}
+			go func() {
+				defer conn.Close() //nolint:errcheck
+				local, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", localPort))
+				if err != nil {
+					log.WithError(err).Debug("Failed to dial local port")
+					return
+				}
+				defer local.Close() //nolint:errcheck
+				// Bidirectional pipe.
+				done := make(chan struct{}, 2)
+				pipe := func(dst, src net.Conn) {
+					buf := make([]byte, 32*1024)
+					for {
+						n, rErr := src.Read(buf)
+						if n > 0 {
+							if _, wErr := dst.Write(buf[:n]); wErr != nil {
+								break
+							}
+						}
+						if rErr != nil {
+							break
+						}
+					}
+					done <- struct{}{}
+				}
+				go pipe(local, conn)
+				go pipe(conn, local)
+				<-done
+			}()
+		}
+	}()
+}
+
+// stopDmsgForwarder cancels the DMSG listener goroutine for the given port.
+func (v *Visor) stopDmsgForwarder(port int) {
+	v.dmsgFwdMu.Lock()
+	defer v.dmsgFwdMu.Unlock()
+	if cancel, ok := v.dmsgFwdListeners[port]; ok {
+		cancel()
+		delete(v.dmsgFwdListeners, port)
+	}
 }
