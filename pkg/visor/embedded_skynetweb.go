@@ -173,7 +173,7 @@ type routerSkynetDialer struct {
 	// Per-destination mutex to serialize DialRoutes calls.
 	// Concurrent dials to the same PK race the noise handshake and
 	// fail with "already being initialized".
-	dialMu sync.Mutex
+	dialMu  sync.Mutex
 	dialing map[cipher.PubKey]*sync.Mutex
 }
 

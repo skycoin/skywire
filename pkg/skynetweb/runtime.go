@@ -24,7 +24,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/confiant-inc/go-socks5"
 	"golang.org/x/net/proxy"
@@ -224,38 +223,7 @@ func (c *tcpAddrConn) LocalAddr() net.Addr {
 	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
 }
 
-// singleConnListener yields exactly one connection then blocks until Close.
-type singleConnListener struct {
-	conn net.Conn
-	once sync.Once
-	ch   chan struct{}
-}
 
-func (l *singleConnListener) Accept() (net.Conn, error) {
-	var conn net.Conn
-	l.once.Do(func() {
-		conn = l.conn
-		l.ch = make(chan struct{})
-	})
-	if conn != nil {
-		return conn, nil
-	}
-	<-l.ch
-	return nil, net.ErrClosed
-}
-func (l *singleConnListener) Close() error {
-	if l.ch != nil {
-		select {
-		case <-l.ch:
-		default:
-			close(l.ch)
-		}
-	}
-	return nil
-}
-func (l *singleConnListener) Addr() net.Addr {
-	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
-}
 
 func isSkynetHost(host, suffix string) bool {
 	pattern := `\` + suffix + `(:[0-9]+)?$`
