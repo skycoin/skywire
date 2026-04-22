@@ -381,11 +381,7 @@ func TestAPI_UpdateService(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			db := &store.MockStore{}
-			db.On("UpdateService", mock.Anything, &tc.service).Return(tc.updateServiceErr)
-			// RecordHeartbeat is called only when UpdateService succeeds.
-			if tc.updateServiceErr == nil {
-				db.On("RecordHeartbeat", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-			}
+			db.On("UpdateServiceAndHeartbeat", mock.Anything, &tc.service, mock.Anything).Return(tc.updateServiceErr)
 			m := sdmetrics.NewEmpty()
 			api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", "http://ip.skycoin.com")
 
@@ -571,8 +567,7 @@ func TestAPI_AddVPNFromCurrentVisor(t *testing.T) {
 	require.NoError(t, err)
 
 	db := &store.MockStore{}
-	db.On("UpdateService", mock.Anything, &service).Return(nil)
-	db.On("RecordHeartbeat", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	db.On("UpdateServiceAndHeartbeat", mock.Anything, &service, mock.Anything).Return(nil)
 
 	m := sdmetrics.NewEmpty()
 	api := New(logging.MustGetLogger("test_service-discovery"), db, nil, false, m, "", "http://ip.skycoin.com")
