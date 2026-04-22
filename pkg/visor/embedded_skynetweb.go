@@ -202,7 +202,11 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 		opts = router.DefaultDialOptions()
 		opts.KeepAlive = d.routeTimeout
 	}
-	conn, err := d.router.DialRoutes(ctx, remote, 0, routing.Port(skyenv.SkyForwardingServerPort), opts)
+	// Use the target skynet port as lPort so each (PK, port) pair gets a
+	// unique route descriptor. All skynet dials go to rPort 57 (forwarding
+	// server), so without distinct lPorts a second dial to the same PK
+	// conflicts with "already being initialized".
+	conn, err := d.router.DialRoutes(ctx, remote, routing.Port(port), routing.Port(skyenv.SkyForwardingServerPort), opts)
 	if err != nil {
 		return nil, err
 	}
