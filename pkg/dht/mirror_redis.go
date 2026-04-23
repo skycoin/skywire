@@ -49,6 +49,19 @@ func NewRedisMirror(redisAddr, redisPassword string, redisDB int, salt string, p
 // This is the same interface as EntryMirror.Mirror so it can be used as
 // a drop-in replacement for SetDHTMirror on deployment service APIs.
 func (m *RedisMirror) Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64) {
+	m.MirrorMany([]cipher.PubKey{subjectPK}, entry, seq)
+}
+
+// MirrorMany publishes an entry to Redis under multiple subject PKs' DHT
+// target keys. The signed payload is identical regardless of target key
+// (it depends only on seq, value, and salt), so we sign once and save
+// under each target. For a 2-edge transport this cuts the per-register
+// secp256k1 cost in half; on TPD under production load the single-sign
+// path accounts for the majority of the service's CPU.
+func (m *RedisMirror) MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, seq uint64) {
+	if len(subjectPKs) == 0 {
+		return
+	}
 	data, err := json.Marshal(entry)
 	if err != nil {
 		m.log.WithError(err).Warn("Redis mirror: marshal failed")
@@ -66,9 +79,12 @@ func (m *RedisMirror) Mirror(subjectPK cipher.PubKey, entry interface{}, seq uin
 		return
 	}
 
-	target := MutableItemTarget(subjectPK, []byte(m.salt))
-	if err := m.backend.Save(target, item); err != nil {
-		m.log.WithError(err).Warn("Redis mirror: save failed")
+	salt := []byte(m.salt)
+	for _, pk := range subjectPKs {
+		target := MutableItemTarget(pk, salt)
+		if err := m.backend.Save(target, item); err != nil {
+			m.log.WithError(err).Warn("Redis mirror: save failed")
+		}
 	}
 }
 
