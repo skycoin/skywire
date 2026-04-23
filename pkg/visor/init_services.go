@@ -310,6 +310,7 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 	if v.tpM != nil {
 		skynetMux := transport.NewVStreamMux(v.tpM, routing.SkynetForwardPacket, log)
 		v.tpM.SetSkynetForwardHandler(skynetMux.HandlePacket)
+		v.skynetFwdMux = skynetMux
 		go func() {
 			for {
 				stream, err := skynetMux.Accept()
@@ -324,7 +325,10 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 							log.Errorf("Panic in direct skynet handler: %v", r)
 						}
 					}()
-					handleServerConn(log, &vstreamConn{VStream: stream}, v)
+					conn := &vstreamConn{VStream: stream}
+					log.Debug("Direct skynet: calling handleServerConn")
+					handleServerConn(log, conn, v)
+					log.Debug("Direct skynet: handleServerConn returned")
 				}()
 			}
 		}()

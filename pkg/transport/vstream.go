@@ -70,10 +70,11 @@ func (m *VStreamMux) localPK() cipher.PubKey {
 
 // Dial opens a virtual stream to a remote PK over an existing transport.
 func (m *VStreamMux) Dial(remotePK cipher.PubKey) (*VStream, error) {
-	// Find a transport to this peer.
+	// Find a non-DMSG transport to this peer. DMSG transports use their
+	// own stream multiplexing and don't support route ID 0 packets.
 	var targetTp *ManagedTransport
 	m.tm.WalkTransports(func(tp *ManagedTransport) bool {
-		if tp.Remote() == remotePK && !tp.IsClosed() {
+		if tp.Remote() == remotePK && !tp.IsClosed() && tp.Type() != "dmsg" {
 			targetTp = tp
 			return false
 		}
