@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -195,18 +197,57 @@ func (v *Visor) dmsgServerHealth(_ *http.Client) []ServiceHealthEntry {
 	sort.Slice(servers, func(i, j int) bool {
 		return servers[i].PK.String() < servers[j].PK.String()
 	})
-	// Report from session data — no HTTP probe needed.
-	// An active session implies the server is reachable.
+
 	out := make([]ServiceHealthEntry, len(servers))
+	var wg sync.WaitGroup
 	for i, s := range servers {
+		latStr := s.Latency.Milliseconds()
 		out[i] = ServiceHealthEntry{
 			Name:      "DMSG Server",
 			URL:       "dmsg://" + s.PK.String() + ":80",
 			Status:    "OK",
 			Transport: "dmsg",
-			LatencyMs: s.Latency.Milliseconds(),
+			LatencyMs: latStr,
+		}
+		// Probe /health via the existing session to get the version.
+		if v.dmsgC != nil {
+			wg.Add(1)
+			go func(idx int, serverPK cipher.PubKey) {
+				defer wg.Done()
+				ses, ok := v.dmsgC.Session(serverPK)
+				if !ok {
+					return
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				stream, err := ses.DialStream(ctx, dmsg.Addr{PK: serverPK, Port: 80})
+				if err != nil {
+					return
+				}
+				defer stream.Close() //nolint:errcheck
+				// Send HTTP request on the stream.
+				req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+serverPK.String()+":80/health", nil) //nolint:errcheck
+				if err := req.Write(stream); err != nil {
+					return
+				}
+				resp, err := http.ReadResponse(bufio.NewReader(stream), req)
+				if err != nil {
+					return
+				}
+				body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+				resp.Body.Close()                //nolint:errcheck
+				var health map[string]interface{}
+				if json.Unmarshal(body, &health) == nil {
+					if bi, ok := health["build_info"].(map[string]interface{}); ok {
+						if ver, ok := bi["version"].(string); ok {
+							out[idx].Version = ver
+						}
+					}
+				}
+			}(i, s.PK)
 		}
 	}
+	wg.Wait()
 	return out
 }
 
