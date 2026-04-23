@@ -172,6 +172,9 @@ type Visor struct {
 	// Embedded Skynet Web resolver (nil if skynet_web.enable is false).
 	// Like embeddedDmsgWeb but for .skynet hosts, dialed via the visor's router.
 	embeddedSkynetWeb *EmbeddedSkynetWeb
+	// Shared VStreamMux for skynet forwarding (route ID 0).
+	// Used by both the forwarding server (Accept) and the skynetweb dialer (Dial).
+	skynetFwdMux *transport.VStreamMux
 
 	// Hypervisor instance (nil if never initialized; may be enabled/disabled at runtime)
 	hvInstance *Hypervisor
