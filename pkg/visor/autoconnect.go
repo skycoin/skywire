@@ -4,6 +4,7 @@ package visor
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"math/big"
 	"net"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/dht"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -43,6 +45,7 @@ type autoconnector struct {
 	log            *logging.Logger
 	tm             *transport.Manager
 	dmsgC          *dmsg.Client // for reachability probes
+	dhtNode        *dht.Node    // for DHT-first service lookups
 	visorIsPublic  bool
 	clientPublicIP string
 
@@ -52,7 +55,7 @@ type autoconnector struct {
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
 // services
-func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager, dmsgC *dmsg.Client, httpC *http.Client, clientPublicIP string,
+func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager, dmsgC *dmsg.Client, dhtNode *dht.Node, httpC *http.Client, clientPublicIP string,
 	log *logging.Logger, mLog *logging.MasterLogger) Autoconnector {
 	// Extract just the IP from clientPublicIP (may include port)
 	publicIP := clientPublicIP
@@ -66,6 +69,7 @@ func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager,
 	connector.log = log
 	connector.tm = tm
 	connector.dmsgC = dmsgC
+	connector.dhtNode = dhtNode
 	connector.clientPublicIP = publicIP
 	return connector
 }
@@ -413,18 +417,32 @@ func (a *autoconnector) tryEstablishTransport(ctx context.Context, pk cipher.Pub
 }
 
 func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey, error) {
-	retrier := netutil.NewDefaultRetrier(a.log)
 	var services []servicedisc.Service
-	fetch := func() (err error) {
-		// "return" services up from the closure
-		services, err = a.client.Services(ctx, a.maxConns, "", "")
-		if err != nil {
+
+	// Try DHT first — avoids HTTP round-trip to service discovery.
+	if a.dhtNode != nil {
+		items, _, _ := a.dhtNode.Store().GetItems("svc", 0, 0)
+		for _, item := range items {
+			var svc servicedisc.Service
+			if json.Unmarshal(item.V, &svc) == nil && svc.Type == servicedisc.ServiceTypeVisor {
+				services = append(services, svc)
+			}
+		}
+		if len(services) > 0 {
+			a.log.WithField("count", len(services)).Debug("Autoconnect: resolved public visors from DHT")
+		}
+	}
+
+	// Fall back to HTTP if DHT had no results.
+	if len(services) == 0 {
+		retrier := netutil.NewDefaultRetrier(a.log)
+		fetch := func() (err error) {
+			services, err = a.client.Services(ctx, a.maxConns, "", "")
 			return err
 		}
-		return nil
-	}
-	if err := retrier.Do(ctx, fetch); err != nil {
-		return nil, err
+		if err := retrier.Do(ctx, fetch); err != nil {
+			return nil, err
+		}
 	}
 	pks := make([]cipher.PubKey, len(services))
 	for i, service := range services {

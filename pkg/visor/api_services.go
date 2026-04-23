@@ -255,67 +255,73 @@ func (v *Visor) FetchServiceData(service, path string) ([]byte, error) {
 	return body, nil
 }
 
-// VPNServers gets available public VPN server from service discovery URL
+// dhtServices queries the local DHT store for service entries matching
+// the given type. Returns nil if the DHT has no data (caller should
+// fall back to HTTP). Filters by version and country if non-empty.
+func (v *Visor) dhtServices(serviceType, version, country string) []servicedisc.Service {
+	if v.dhtNode == nil {
+		return nil
+	}
+	items, _, _ := v.dhtNode.Store().GetItems("svc", 0, 0)
+	if len(items) == 0 {
+		return nil
+	}
+	var services []servicedisc.Service
+	for _, item := range items {
+		var svc servicedisc.Service
+		if json.Unmarshal(item.V, &svc) != nil {
+			continue
+		}
+		if svc.Type != serviceType {
+			continue
+		}
+		if version != "" && svc.Version != version {
+			continue
+		}
+		if country != "" {
+			if svc.Geo == nil || !strings.EqualFold(svc.Geo.Country, country) {
+				continue
+			}
+		}
+		services = append(services, svc)
+	}
+	return services
+}
+
+// servicesFromDHTOrHTTP tries the DHT first for service listings,
+// falls back to HTTP service discovery if the DHT has no data.
+func (v *Visor) servicesFromDHTOrHTTP(serviceType, version, country string) ([]servicedisc.Service, error) {
+	// Try DHT first.
+	if services := v.dhtServices(serviceType, version, country); len(services) > 0 {
+		return services, nil
+	}
+	// Fall back to HTTP.
+	log := logging.MustGetLogger("servicedisc")
+	vLog := logging.NewMasterLogger()
+	vLog.SetLevel(logrus.InfoLevel)
+	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
+		Type:          serviceType,
+		PK:            v.conf.PK,
+		SK:            v.conf.SK,
+		DiscAddr:      v.conf.Launcher.ServiceDisc,
+		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
+	}, &http.Client{Timeout: 20 * time.Second}, "")
+	return sdClient.Services(context.Background(), 0, version, country)
+}
+
+// VPNServers gets available public VPN servers. DHT first, HTTP fallback.
 func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, error) {
-	log := logging.MustGetLogger("vpnservers")
-	vLog := logging.NewMasterLogger()
-	vLog.SetLevel(logrus.InfoLevel)
-
-	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
-		Type:          servicedisc.ServiceTypeVPN,
-		PK:            v.conf.PK,
-		SK:            v.conf.SK,
-		DiscAddr:      v.conf.Launcher.ServiceDisc,
-		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
-	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
-	vpnServers, err := sdClient.Services(context.Background(), 0, version, country)
-	if err != nil {
-		v.log.Error("Error getting public vpn servers: ", err)
-		return nil, err
-	}
-	return vpnServers, nil
+	return v.servicesFromDHTOrHTTP(servicedisc.ServiceTypeVPN, version, country)
 }
 
-// ProxyServers gets available public VPN server from service discovery URL
+// ProxyServers gets available proxy servers. DHT first, HTTP fallback.
 func (v *Visor) ProxyServers(version, country string) ([]servicedisc.Service, error) {
-	log := logging.MustGetLogger("proxyservers")
-	vLog := logging.NewMasterLogger()
-	vLog.SetLevel(logrus.InfoLevel)
-
-	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
-		Type:          servicedisc.ServiceTypeProxy,
-		PK:            v.conf.PK,
-		SK:            v.conf.SK,
-		DiscAddr:      v.conf.Launcher.ServiceDisc,
-		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
-	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
-	proxyServers, err := sdClient.Services(context.Background(), 0, version, country)
-	if err != nil {
-		v.log.Error("Error getting public vpn servers: ", err)
-		return nil, err
-	}
-	return proxyServers, nil
+	return v.servicesFromDHTOrHTTP(servicedisc.ServiceTypeProxy, version, country)
 }
 
-// PublicVisors gets available public public visors from service discovery URL
+// PublicVisors gets available public visors. DHT first, HTTP fallback.
 func (v *Visor) PublicVisors(version, country string) ([]servicedisc.Service, error) {
-	log := logging.MustGetLogger("public_visors")
-	vLog := logging.NewMasterLogger()
-	vLog.SetLevel(logrus.InfoLevel)
-
-	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
-		Type:          servicedisc.ServiceTypeVisor,
-		PK:            v.conf.PK,
-		SK:            v.conf.SK,
-		DiscAddr:      v.conf.Launcher.ServiceDisc,
-		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
-	}, &http.Client{Timeout: time.Duration(20) * time.Second}, "")
-	publicVisors, err := sdClient.Services(context.Background(), 0, version, country)
-	if err != nil {
-		v.log.Error("Error getting public vpn servers: ", err)
-		return nil, err
-	}
-	return publicVisors, nil
+	return v.servicesFromDHTOrHTTP(servicedisc.ServiceTypeVisor, version, country)
 }
 
 // DeregisterService deregisters the specified public keys from service discovery.

@@ -96,6 +96,7 @@ const (
 	DHTPacket           // DHT RPC over transport (route ID = 0), payload: DHT message
 	SetupRPCPacket      // RSN RPC relay over transport (route ID = 0), payload: virtual stream data
 	VisorRPCPacket      // visor RPC over transport (route ID = 0), payload: virtual stream data
+	SkynetForwardPacket // skynet port forwarding over direct transport (route ID = 0), virtual stream
 )
 
 // Capability bitmap flags for extended handshake negotiation.

@@ -83,8 +83,8 @@ func (p *DiscoveryPusher) OnPut(target NodeID, item MutableItem) {
 			p.log.WithError(err).WithField("salt", salt).Debug("DHT→discovery: request failed")
 			return
 		}
-		io.Copy(io.Discard, resp.Body) //nolint:errcheck
-		resp.Body.Close()              //nolint:errcheck
+		io.Copy(io.Discard, resp.Body) //nolint:errcheck,gosec
+		resp.Body.Close()              //nolint:errcheck,gosec
 
 		if resp.StatusCode >= 300 {
 			p.log.WithField("salt", salt).
