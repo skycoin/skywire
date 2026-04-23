@@ -235,7 +235,7 @@ func (v *Visor) dmsgServerHealth(_ *http.Client) []ServiceHealthEntry {
 					return
 				}
 				body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-				resp.Body.Close()                //nolint:errcheck
+				resp.Body.Close()                //nolint:errcheck,gosec
 				var health map[string]interface{}
 				if json.Unmarshal(body, &health) == nil {
 					if bi, ok := health["build_info"].(map[string]interface{}); ok {
