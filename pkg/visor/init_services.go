@@ -307,6 +307,7 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 
 	// Also accept direct transport connections via VStreamMux (route ID 0).
 	// This allows peers with a direct transport to skip route setup entirely.
+	log.WithField("tpM_nil", v.tpM == nil).Debug("Checking transport manager for VStreamMux")
 	if v.tpM != nil {
 		skynetMux := transport.NewVStreamMux(v.tpM, routing.SkynetForwardPacket, log)
 		v.tpM.SetSkynetForwardHandler(skynetMux.HandlePacket)
