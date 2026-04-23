@@ -307,9 +307,11 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 
 	// Also accept direct transport connections via VStreamMux (route ID 0).
 	// This allows peers with a direct transport to skip route setup entirely.
+	log.WithField("tpM_nil", v.tpM == nil).Debug("Checking transport manager for VStreamMux")
 	if v.tpM != nil {
 		skynetMux := transport.NewVStreamMux(v.tpM, routing.SkynetForwardPacket, log)
 		v.tpM.SetSkynetForwardHandler(skynetMux.HandlePacket)
+		v.skynetFwdMux = skynetMux
 		go func() {
 			for {
 				stream, err := skynetMux.Accept()
@@ -324,7 +326,10 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 							log.Errorf("Panic in direct skynet handler: %v", r)
 						}
 					}()
-					handleServerConn(log, &vstreamConn{VStream: stream}, v)
+					conn := &vstreamConn{VStream: stream}
+					log.Debug("Direct skynet: calling handleServerConn")
+					handleServerConn(log, conn, v)
+					log.Debug("Direct skynet: handleServerConn returned")
 				}()
 			}
 		}()
@@ -446,24 +451,21 @@ func forwardRawTCP(log *logging.Logger, remoteConn net.Conn, lHost string) {
 		closeConn(log, remoteConn)
 		return
 	}
+	log.WithField("local", lHost).Debug("forwardRawTCP: connected to local server")
 
 	done := make(chan struct{}, 2)
 
 	// remote -> local
 	go func() {
-		_, err := io.Copy(localConn, remoteConn)
-		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-			log.WithError(err).Debug("remote->local copy ended")
-		}
+		n, err := io.Copy(localConn, remoteConn)
+		log.WithField("bytes", n).WithError(err).Debug("forwardRawTCP: remote->local ended")
 		done <- struct{}{}
 	}()
 
 	// local -> remote
 	go func() {
-		_, err := io.Copy(remoteConn, localConn)
-		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-			log.WithError(err).Debug("local->remote copy ended")
-		}
+		n, err := io.Copy(remoteConn, localConn)
+		log.WithField("bytes", n).WithError(err).Debug("forwardRawTCP: local->remote ended")
 		done <- struct{}{}
 	}()
 
