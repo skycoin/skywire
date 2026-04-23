@@ -153,11 +153,8 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 var entryCmd = &cobra.Command{
 	Use:   "entry <visor-public-key>",
 	Short: "Fetch an entry",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) == 0 {
-			internal.Catch(cmd.Flags(), cmd.Help())
-			return
-		}
 		pk := internal.ParsePK(cmd.Flags(), "visor-public-key", args[0])
 		masterLogger.SetLevel(logrus.InfoLevel)
 
