@@ -251,12 +251,6 @@ func rpcCtx(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, rpcTimeout)
 }
 
-// dialPrimary dials using only the primary transport (DMSG).
-// Used for bootstrap peers (DMSG servers) where p2p transports will never exist.
-func (n *Node) dialPrimary(ctx context.Context, pk cipher.PubKey) (io.ReadWriteCloser, error) {
-	return n.tp.Dial(ctx, pk)
-}
-
 // dial tries p2p transports first, then falls back to DMSG.
 // Skips peers in the negative cache (failed DHT dial recently).
 func (n *Node) dial(ctx context.Context, pk cipher.PubKey) (io.ReadWriteCloser, error) {

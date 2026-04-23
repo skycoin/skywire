@@ -38,7 +38,7 @@ var (
 
 func init() {
 	surveyCmd.Flags().SortFlags = false
-	surveyCmd.Flags().StringVarP(&confPath, "config", "c", "", "optionl config file to use (i.e.: "+skyenv.ConfigName+")")
+	surveyCmd.Flags().StringVarP(&confPath, "config", "c", "", "optional config file to use (i.e.: "+skyenv.ConfigName+")")
 	surveyCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDiscURL, "value of dmsg discovery")
 	//	surveyCmd.Flags().StringVarP(&confArg, "confarg", "C", "", "supply config as argument")
 	//	surveyCmd.Flags().BoolVarP(&stdin, "stdin", "n", false, "read config from stdin")
