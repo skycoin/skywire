@@ -144,6 +144,14 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		r.Delete("/transports/id:{id}", api.deleteTransport)
 		r.Post("/transports/delete-batch", api.deleteTransportsBatch)
 		r.Get("/v4/update", api.visorHeartbeat)
+
+		// v3: DHT-aligned registration. Accepts []*transport.Entry (bare
+		// entries — no per-entry signatures, since the request is already
+		// authenticated via SW-Sig). Matches the shape stored in the DHT
+		// under SHA256(visorPK || "tp") and returned by GET /v3/transports
+		// below. Reverse-compatible: /transports/ (v2) still works for
+		// older visors.
+		r.Post("/v3/transports/", api.registerTransportV3)
 	})
 
 	// Public data endpoints (rate limited, no auth)
@@ -152,6 +160,12 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 
 		r.Post("/transports/edges", api.getTransportsByEdges)
 		r.Get("/all-transports", api.getAllTransports)
+
+		// v3: DHT-aligned read. Returns []*transport.Entry for the given
+		// edge PK — identical shape to the DHT value under
+		// SHA256(edgePK || "tp") so a visor with a full DHT node can
+		// consume either source interchangeably.
+		r.Get("/v3/transports/edge:{edge}", api.getTransportsByEdgeV3)
 		r.Get("/all-transports/stats", api.getAllTransportsStats)
 		r.Get("/all-transports/per-key-stats", api.getAllTransportsPerKeyStats)
 		r.Get("/transports/stats/{edge}", api.getTransportStats)

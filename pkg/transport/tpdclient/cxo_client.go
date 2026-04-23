@@ -95,6 +95,10 @@ func (c *CXOClient) RegisterTransports(ctx context.Context, entries ...*transpor
 	return c.http.RegisterTransports(ctx, entries...)
 }
 
+func (c *CXOClient) RegisterTransportsV3(ctx context.Context, version string, entries ...*transport.Entry) error {
+	return c.http.RegisterTransportsV3(ctx, version, entries...)
+}
+
 func (c *CXOClient) RegisterTransportsWithSync(ctx context.Context, entries ...*transport.SignedEntry) ([]*transport.Entry, error) {
 	return c.http.RegisterTransportsWithSync(ctx, entries...)
 }
