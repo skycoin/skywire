@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -103,6 +104,12 @@ type Client struct {
 	// entries from the local DHT store (instant, no network) for PKs
 	// that have published their entries to the DHT.
 	DHTLookup func(pk cipher.PubKey) (*disc.Entry, error)
+
+	// Lookup counters for diagnostics.
+	LookupCacheHits  atomic.Int64 // resolved from entry cache
+	LookupDHTHits    atomic.Int64 // resolved from DHT (DHTLookup callback)
+	LookupHTTPHits   atomic.Int64 // resolved from HTTP discovery
+	LookupHTTPMisses atomic.Int64 // HTTP discovery returned not found
 
 	errCh chan error
 	done  chan struct{}

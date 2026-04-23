@@ -37,6 +37,23 @@ func NewDiscAdapter(node *Node, log *logging.Logger) *DiscAdapter {
 	}
 }
 
+// PopulateServerCache scans the local DHT store for DMSG server entries
+// and populates the cache so AvailableServers() works without prior lookups.
+func (d *DiscAdapter) PopulateServerCache() {
+	items, _, _ := d.node.Store().GetItems("dmsg", 0, 0)
+	d.serverMu.Lock()
+	defer d.serverMu.Unlock()
+	for _, item := range items {
+		var entry disc.Entry
+		if json.Unmarshal(item.V, &entry) != nil {
+			continue
+		}
+		if entry.Server != nil && !entry.Static.Null() {
+			d.serverCache[entry.Static] = &entry
+		}
+	}
+}
+
 // Entry retrieves a DMSG discovery entry by public key from the DHT.
 func (d *DiscAdapter) Entry(ctx context.Context, pk cipher.PubKey) (*disc.Entry, error) {
 	item, err := d.node.Get(ctx, pk, dmsgSalt)

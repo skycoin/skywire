@@ -48,6 +48,11 @@ var dhtStatusCmd = &cobra.Command{
 		fmt.Printf("  Stored Items:  %d (whitelisted: %d, trusted: %d, public: %d)\n",
 			status.StoredItems, status.WhitelistedItems, status.TrustedItems, status.PublicItems)
 		fmt.Printf("  Full Node:     %v\n", status.FullNode)
+		total := status.LookupCacheHits + status.LookupDHTHits + status.LookupHTTPHits + status.LookupHTTPMisses
+		if total > 0 {
+			fmt.Printf("  Lookups:       %d total (cache: %d, DHT: %d, HTTP: %d, miss: %d)\n",
+				total, status.LookupCacheHits, status.LookupDHTHits, status.LookupHTTPHits, status.LookupHTTPMisses)
+		}
 	},
 }
 

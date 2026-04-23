@@ -131,6 +131,7 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Wrap discovery clients with DHT hybrid clients so reads try
 	// DHT first, fall back to HTTP. Writes go to both.
 	discAdapter := dht.NewDiscAdapter(node, log)
+	discAdapter.PopulateServerCache()
 	v.initLock.Lock()
 	if v.dClient != nil {
 		v.dClient = dht.NewHybridDiscClient(discAdapter, v.dClient, log)

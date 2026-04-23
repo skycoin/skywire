@@ -17,6 +17,11 @@ type DHTStatus struct {
 	TrustedItems     int    `json:"trusted_items"`
 	PublicItems      int    `json:"public_items"`
 	FullNode         bool   `json:"full_node"`
+	// Lookup counters for DMSG client entry resolution.
+	LookupCacheHits  int64 `json:"lookup_cache_hits"`
+	LookupDHTHits    int64 `json:"lookup_dht_hits"`
+	LookupHTTPHits   int64 `json:"lookup_http_hits"`
+	LookupHTTPMisses int64 `json:"lookup_http_misses"`
 }
 
 // DHTStatus returns the current status of the DHT node.
@@ -25,7 +30,7 @@ func (v *Visor) DHTStatus() (*DHTStatus, error) {
 		return &DHTStatus{Running: false}, nil
 	}
 	wl, tr, pub := v.dhtNode.Store().CountByTier()
-	return &DHTStatus{
+	status := &DHTStatus{
 		Running:          true,
 		NodeID:           v.dhtNode.ID().String(),
 		RoutingPeers:     v.dhtNode.RoutingTable().Size(),
@@ -34,7 +39,14 @@ func (v *Visor) DHTStatus() (*DHTStatus, error) {
 		TrustedItems:     tr,
 		PublicItems:      pub,
 		FullNode:         v.dhtNode.Store().IsFullNode(),
-	}, nil
+	}
+	if v.dmsgC != nil {
+		status.LookupCacheHits = v.dmsgC.LookupCacheHits.Load()
+		status.LookupDHTHits = v.dmsgC.LookupDHTHits.Load()
+		status.LookupHTTPHits = v.dmsgC.LookupHTTPHits.Load()
+		status.LookupHTTPMisses = v.dmsgC.LookupHTTPMisses.Load()
+	}
+	return status, nil
 }
 
 // DHTNetworkSize returns an estimate of the DHT network size based
