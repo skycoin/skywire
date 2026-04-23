@@ -38,6 +38,19 @@ func NewEntryMirror(node *Node, salt string, log *logging.Logger) *EntryMirror {
 // subjectPK is the visor whose entry this is (determines the DHT
 // target for lookups).
 func (m *EntryMirror) Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64) {
+	m.MirrorMany([]cipher.PubKey{subjectPK}, entry, seq)
+}
+
+// MirrorMany publishes a discovery entry to the DHT under multiple
+// subject PKs' targets. The signed payload depends only on seq, value,
+// and salt — not the target — so we sign once and push under each
+// target. Useful for transports which have multiple edges.
+func (m *EntryMirror) MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, seq uint64) {
+	if len(subjectPKs) == 0 {
+		return
+	}
+	pks := make([]cipher.PubKey, len(subjectPKs))
+	copy(pks, subjectPKs)
 	go func() {
 		data, err := json.Marshal(entry)
 		if err != nil || len(data) > MaxValueSize {
@@ -45,7 +58,7 @@ func (m *EntryMirror) Mirror(subjectPK cipher.PubKey, entry interface{}, seq uin
 		}
 
 		// Build item signed by the mirror node, but with a target
-		// derived from the subject PK (not the mirror's PK).
+		// derived from each subject PK (not the mirror's PK).
 		item := MutableItem{
 			K:    m.node.pk, // signed by mirror node
 			Seq:  seq,
@@ -56,19 +69,20 @@ func (m *EntryMirror) Mirror(subjectPK cipher.PubKey, entry interface{}, seq uin
 			return
 		}
 
-		// Override the target to be based on the subject PK.
-		target := mirrorTarget(subjectPK, m.salt)
-
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
 
-		// Store locally under the subject's target.
-		m.node.store.PutMirror(target, item)
+		for _, pk := range pks {
+			target := mirrorTarget(pk, m.salt)
 
-		// Push to K closest nodes for the subject's target.
-		closest, _, _ := m.node.iterativeLookup(ctx, target, false) //nolint:errcheck
-		for _, p := range closest {
-			_ = m.node.rpcPutMirror(ctx, p, item, target) //nolint:errcheck
+			// Store locally under the subject's target.
+			m.node.store.PutMirror(target, item)
+
+			// Push to K closest nodes for the subject's target.
+			closest, _, _ := m.node.iterativeLookup(ctx, target, false) //nolint:errcheck
+			for _, p := range closest {
+				_ = m.node.rpcPutMirror(ctx, p, item, target) //nolint:errcheck
+			}
 		}
 	}()
 }
