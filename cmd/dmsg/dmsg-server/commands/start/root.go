@@ -235,7 +235,7 @@ var RootCmd = &cobra.Command{
 					return
 				}
 				w.Header().Set("Content-Type", "application/json")
-				w.Write(item.V) //nolint:errcheck
+				w.Write(item.V) //nolint:errcheck,gosec
 			})
 
 			// DHT entries listing: GET /dht/entries?salt=dmsg

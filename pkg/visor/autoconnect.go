@@ -45,7 +45,7 @@ type autoconnector struct {
 	log            *logging.Logger
 	tm             *transport.Manager
 	dmsgC          *dmsg.Client // for reachability probes
-	dhtNode        *dht.Node   // for DHT-first service lookups
+	dhtNode        *dht.Node    // for DHT-first service lookups
 	visorIsPublic  bool
 	clientPublicIP string
 
