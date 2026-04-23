@@ -30,7 +30,13 @@ type Node struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	wg              sync.WaitGroup
+	// noDHT caches peers that failed DHT dial (port 100 not listening).
+	// Skips them for dhtNegCacheTTL to avoid wasting DialStream attempts.
+	noDHTMu sync.RWMutex
+	noDHT   map[cipher.PubKey]time.Time
 }
+
+const dhtNegCacheTTL = 10 * time.Minute
 
 // New creates a new DHT node. Call Start to begin serving.
 func New(cfg Config, pk cipher.PubKey, sk cipher.SecKey, tp Transport, log *logging.Logger) *Node {
@@ -246,7 +252,16 @@ func rpcCtx(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 // dial tries the primary transport, then extra transports.
+// Skips peers in the negative cache (failed DHT dial recently).
 func (n *Node) dial(ctx context.Context, pk cipher.PubKey) (io.ReadWriteCloser, error) {
+	// Check negative cache.
+	n.noDHTMu.RLock()
+	if t, ok := n.noDHT[pk]; ok && time.Since(t) < dhtNegCacheTTL {
+		n.noDHTMu.RUnlock()
+		return nil, fmt.Errorf("dht: peer %s cached as non-DHT", pk.String()[:8])
+	}
+	n.noDHTMu.RUnlock()
+
 	conn, err := n.tp.Dial(ctx, pk)
 	if err == nil {
 		return conn, nil
@@ -257,7 +272,16 @@ func (n *Node) dial(ctx context.Context, pk cipher.PubKey) (io.ReadWriteCloser, 
 			return conn, nil
 		}
 	}
-	return nil, err // return original error
+
+	// All transports failed — cache as non-DHT peer.
+	n.noDHTMu.Lock()
+	if n.noDHT == nil {
+		n.noDHT = make(map[cipher.PubKey]time.Time)
+	}
+	n.noDHT[pk] = time.Now()
+	n.noDHTMu.Unlock()
+
+	return nil, err
 }
 
 func (n *Node) rpcFindNode(ctx context.Context, p Peer, target NodeID) (*FindNodeResponse, error) {
