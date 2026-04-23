@@ -172,7 +172,14 @@ func dhtPublishLoop(ctx context.Context, v *Visor, node *dht.Node, log *logging.
 	case <-time.After(15 * time.Second):
 	}
 
+	// Start seq from the existing entry's seq + 1 so we always
+	// overtake what's in the DHT (even after restart).
 	seq := uint64(1)
+	target := dht.MutableItemTarget(v.conf.PK, []byte("dmsg"))
+	if existing := node.Store().Get(target); existing != nil {
+		seq = existing.Seq + 1
+	}
+
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
