@@ -19,33 +19,34 @@ import (
 // times per minute — caching saves ~20% CPU.
 var (
 	verifyCacheMu   sync.RWMutex
-	verifyCacheMap  = make(map[[98]byte]struct{}, 1024) // key: PK(33) + Sig(65) = 98 bytes
+	verifyCacheMap  = make(map[[130]byte]struct{}, 1024) // key: PK(33) + Sig(65) + Hash(32) = 130 bytes
 	verifyCacheSize int
 )
 
 const maxVerifyCacheSize = 4096
 
-func verifyCacheKey(pk cipher.PubKey, sig cipher.Sig) [98]byte {
-	var key [98]byte
+func verifyCacheKey(pk cipher.PubKey, sig cipher.Sig, hash cipher.SHA256) [130]byte {
+	var key [130]byte
 	copy(key[:33], pk[:])
-	copy(key[33:], sig[:])
+	copy(key[33:98], sig[:])
+	copy(key[98:], hash[:])
 	return key
 }
 
-func verifyCacheCheck(pk cipher.PubKey, sig cipher.Sig) bool {
-	key := verifyCacheKey(pk, sig)
+func verifyCacheCheck(pk cipher.PubKey, sig cipher.Sig, hash cipher.SHA256) bool {
+	key := verifyCacheKey(pk, sig, hash)
 	verifyCacheMu.RLock()
 	_, ok := verifyCacheMap[key]
 	verifyCacheMu.RUnlock()
 	return ok
 }
 
-func verifyCacheStore(pk cipher.PubKey, sig cipher.Sig) {
-	key := verifyCacheKey(pk, sig)
+func verifyCacheStore(pk cipher.PubKey, sig cipher.Sig, hash cipher.SHA256) {
+	key := verifyCacheKey(pk, sig, hash)
 	verifyCacheMu.Lock()
 	if verifyCacheSize >= maxVerifyCacheSize {
 		// Simple eviction: clear entire cache.
-		verifyCacheMap = make(map[[98]byte]struct{}, 1024)
+		verifyCacheMap = make(map[[130]byte]struct{}, 1024)
 		verifyCacheSize = 0
 	}
 	verifyCacheMap[key] = struct{}{}
@@ -312,7 +313,7 @@ func SumSHA256(b []byte) SHA256 {
 func VerifyPubKeySignedHashLight(pubkey cipher.PubKey, sig cipher.Sig, hash cipher.SHA256) error {
 	// Check cache first — avoids expensive secp256k1 operations for
 	// recently verified (PK, sig) pairs.
-	if verifyCacheCheck(pubkey, sig) {
+	if verifyCacheCheck(pubkey, sig, hash) {
 		return nil
 	}
 
@@ -331,6 +332,6 @@ func VerifyPubKeySignedHashLight(pubkey cipher.PubKey, sig cipher.Sig, hash ciph
 		return cipher.ErrInvalidSigForMessage
 	}
 
-	verifyCacheStore(pubkey, sig)
+	verifyCacheStore(pubkey, sig, hash)
 	return nil
 }

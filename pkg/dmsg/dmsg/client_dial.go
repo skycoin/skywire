@@ -45,7 +45,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 			// The old code used a single HandshakeTimeout which only allowed
 			// trying the first (lowest latency) server — if the destination's
 			// direct client was on a different server, it was never reached.
-			fallbackCtx, fallbackCancel := context.WithTimeout(context.Background(), 6*HandshakeTimeout)
+			fallbackCtx, fallbackCancel := context.WithTimeout(ctx, 6*HandshakeTimeout)
 			defer fallbackCancel()
 			stream, err := ce.dialViaConnectedServers(fallbackCtx, addr)
 			if err == nil {
