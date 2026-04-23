@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	chi "github.com/go-chi/chi/v5"
@@ -173,7 +175,12 @@ var RootCmd = &cobra.Command{
 			}
 			defer closeDebug()
 
-			// Health endpoint on port 80
+			// Shared DHT node reference — set by the DHT goroutine,
+			// read by the HTTP handler. Access is safe because the
+			// handler only reads after the pointer is set (atomic).
+			var dhtNodeRef atomic.Pointer[dht.Node]
+
+			// Health + DHT query endpoints on port 80
 			startedAt := time.Now()
 			dmsgAddr := fmt.Sprintf("%s:%d", conf.PubKey.Hex(), dmsg.DefaultDmsgHTTPPort)
 			healthMux := http.NewServeMux()
@@ -197,6 +204,53 @@ var RootCmd = &cobra.Command{
 				}
 				json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 			})
+			// DHT entry lookup: GET /dht/entry/<pk>?salt=dmsg
+			// Allows any connected client (including ephemeral ones like
+			// dmsgcurl) to resolve a PK from the server's local DHT store
+			// without needing a DHT node of their own.
+			healthMux.HandleFunc("/dht/entry/", func(w http.ResponseWriter, r *http.Request) {
+				node := dhtNodeRef.Load()
+				if node == nil {
+					http.Error(w, "DHT not available", http.StatusServiceUnavailable)
+					return
+				}
+				pkHex := strings.TrimPrefix(r.URL.Path, "/dht/entry/")
+				if pkHex == "" {
+					http.Error(w, "missing pk", http.StatusBadRequest)
+					return
+				}
+				var pk cipher.PubKey
+				if err := pk.Set(pkHex); err != nil {
+					http.Error(w, "invalid pk", http.StatusBadRequest)
+					return
+				}
+				salt := r.URL.Query().Get("salt")
+				if salt == "" {
+					salt = "dmsg"
+				}
+				target := dht.MutableItemTarget(pk, []byte(salt))
+				item := node.Store().Get(target)
+				if item == nil {
+					http.Error(w, "not found", http.StatusNotFound)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.Write(item.V) //nolint:errcheck,gosec
+			})
+
+			// DHT entries listing: GET /dht/entries?salt=dmsg
+			healthMux.HandleFunc("/dht/entries", func(w http.ResponseWriter, r *http.Request) {
+				node := dhtNodeRef.Load()
+				if node == nil {
+					http.Error(w, "DHT not available", http.StatusServiceUnavailable)
+					return
+				}
+				salt := r.URL.Query().Get("salt")
+				items, _, _ := node.Store().GetItems(salt, 0, 0)
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprintf(w, `{"count":%d}`, len(items)) //nolint:errcheck
+			})
+
 			go func() {
 				if err := dmsghttp.ListenAndServe(ctx, conf.SecKey, healthMux, dClient,
 					dmsg.DefaultDmsgHTTPPort, dmsgC, log); err != nil {
@@ -315,6 +369,7 @@ var RootCmd = &cobra.Command{
 						dhtLog.WithError(startErr).Error("Failed to start DHT node")
 						return
 					}
+					dhtNodeRef.Store(dhtNode)
 					dhtLog.WithField("id", dhtNode.ID().String()[:16]).
 						WithField("bootstrap_peers", len(bootstrapPKs)).
 						Info("DHT full node started on port 100")

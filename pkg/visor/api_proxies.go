@@ -113,7 +113,7 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 			}
 			cfg := &visorconfig.SkynetWebConfig{Enable: true}
 			log := logging.MustGetLogger("embedded_skynetweb")
-			runtime = newEmbeddedSkynetWeb(v.ctx, v.router, v.conf.PK, cfg, log)
+			runtime = newEmbeddedSkynetWeb(v.ctx, v.router, v.tpM, v.conf.PK, cfg, log)
 			v.embeddedSkynetWeb = runtime
 		}
 		v.initLock.Unlock()
@@ -209,7 +209,7 @@ func (v *Visor) autoStartSkynetWeb() {
 		}
 		cfg := &visorconfig.SkynetWebConfig{Enable: true}
 		log := logging.MustGetLogger("embedded_skynetweb")
-		runtime = newEmbeddedSkynetWeb(v.ctx, v.router, v.conf.PK, cfg, log)
+		runtime = newEmbeddedSkynetWeb(v.ctx, v.router, v.tpM, v.conf.PK, cfg, log)
 		v.embeddedSkynetWeb = runtime
 	}
 	v.initLock.Unlock()
