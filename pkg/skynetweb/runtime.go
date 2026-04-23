@@ -152,7 +152,15 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 
 			// Check if hostname matches .skynet suffix.
 			if origHost != "" && isSkynetHost(origHost, cfg.DomainSuffix) {
-				target, err := parseHostHeader(origHost, cfg.DomainSuffix)
+				// The SOCKS5 library strips the port from the hostname
+				// before passing to the resolver. Reconstruct it from
+				// addr (which has the resolved IP + original port).
+				_, addrPort, _ := net.SplitHostPort(addr) //nolint:errcheck
+				hostWithPort := origHost
+				if addrPort != "" && addrPort != "80" {
+					hostWithPort = origHost + ":" + addrPort
+				}
+				target, err := parseHostHeader(hostWithPort, cfg.DomainSuffix)
 				if err != nil {
 					return nil, fmt.Errorf("skynet dial: %w", err)
 				}
