@@ -152,19 +152,11 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}()
 	go func() {
 		// Wait for DHT to bootstrap before switching off HTTP registration.
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if node.RoutingTable().Size() > 0 && v.tpM != nil {
-					v.tpM.SetDHTHandlesRegistration(true)
-					return
-				}
-			}
-		}
+		// TODO: Re-enable once DiscoveryPusher (DHT → TPD) is verified
+		// working reliably. Currently premature — skipping TPD registration
+		// causes transports to disappear from the HTTP API even though
+		// they exist on the visor and in the DHT.
+		_ = node
 	}()
 
 	return nil
