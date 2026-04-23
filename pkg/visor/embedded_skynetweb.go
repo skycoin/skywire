@@ -39,13 +39,13 @@ const (
 // EmbeddedSkynetWeb holds the runtime state for the visor-hosted
 // skynetweb resolver.
 type EmbeddedSkynetWeb struct {
-	router     router.Router
-	tpM        *transport.Manager
-	skynetMux  **transport.VStreamMux // pointer to visor's mux pointer (late-bound)
-	localPK    cipher.PubKey
-	cfg     *visorconfig.SkynetWebConfig
-	log     *logging.Logger
-	stats   *skynetweb.Stats
+	router    router.Router
+	tpM       *transport.Manager
+	skynetMux **transport.VStreamMux // pointer to visor's mux pointer (late-bound)
+	localPK   cipher.PubKey
+	cfg       *visorconfig.SkynetWebConfig
+	log       *logging.Logger
+	stats     *skynetweb.Stats
 
 	mu        sync.Mutex
 	running   bool
