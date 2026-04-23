@@ -74,13 +74,16 @@ type API struct {
 	// When set, transport register/deregister operations publish to CXO subscribers.
 	cxoPublisher CXOPublisher
 
-	// dhtMirror mirrors transport entries to the DHT under each edge visor's PK.
-	// MirrorMany is used on the hot path so the entry is signed once per
-	// transport and saved under every edge target, rather than signed once
-	// per edge.
+	// dhtMirror mirrors transport lists to the DHT under each edge visor's PK.
+	// The value written is the FULL list of transports an edge is part of
+	// (matching GET /transports/edge:{pk} semantics), so the DHT is a
+	// consistent view of discovery rather than the most-recently-written
+	// single transport. Delete is called when an edge no longer has any
+	// transports to drop the stale target.
 	dhtMirror interface {
 		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
 		MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, seq uint64)
+		Delete(subjectPK cipher.PubKey)
 	}
 }
 
@@ -191,17 +194,46 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	return api
 }
 
-// SetDHTMirror sets a mirror that publishes transport entries to the DHT
-// on every successful RegisterTransport call.
+// SetDHTMirror sets a mirror that publishes transport lists to the DHT.
 func (api *API) SetDHTMirror(m interface {
 	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
 	MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, seq uint64)
+	Delete(subjectPK cipher.PubKey)
 }) {
 	api.dhtMirror = m
 }
 
-// BackfillDHTMirror iterates all existing transports and mirrors them
-// to the DHT so the full dataset is available immediately on startup.
+// mirrorEdges re-publishes the full transport list (as stored in the
+// discovery) for each edge PK in the given set. Call this after any
+// store mutation (register, deregister, delete-batch) so the DHT view
+// stays consistent with HTTP discovery. Edges with no remaining
+// transports have their DHT target deleted.
+//
+// Fetching per-edge lists from the store on every mutation costs an
+// extra Redis round-trip per touched edge but is necessary: the DHT
+// item's value is the complete list, and the batch we're processing
+// may not contain all of an edge's transports (the other edge, or
+// prior state, can carry more).
+func (api *API) mirrorEdges(ctx context.Context, edges map[cipher.PubKey]struct{}) {
+	if api.dhtMirror == nil || len(edges) == 0 {
+		return
+	}
+	seq := uint64(time.Now().UnixNano()) //nolint:gosec
+	for edge := range edges {
+		entries, err := api.store.GetTransportsByEdge(ctx, edge)
+		if err != nil || len(entries) == 0 {
+			api.dhtMirror.Delete(edge)
+			continue
+		}
+		api.dhtMirror.Mirror(edge, entries, seq)
+	}
+}
+
+// BackfillDHTMirror mirrors the full transport list for every edge PK
+// seen in the discovery on startup. Producing one DHT item per edge
+// (value = all that edge's transports) matches the semantics of
+// GET /transports/edge:{pk} and avoids the pre-#2333 data loss where
+// per-transport mirroring overwrote each other's target.
 func (api *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
 	if api.dhtMirror == nil {
 		return
@@ -211,19 +243,25 @@ func (api *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
 		log.WithError(err).Warn("DHT backfill: failed to list transports")
 		return
 	}
-	mirrored := 0
+	byEdge := make(map[cipher.PubKey][]*transport.Entry)
 	for _, entry := range entries {
-		if ctx.Err() != nil {
-			break
-		}
 		if entry == nil {
 			continue
 		}
+		for _, edge := range entry.Edges {
+			byEdge[edge] = append(byEdge[edge], entry)
+		}
+	}
+	mirrored := 0
+	for edge, list := range byEdge {
+		if ctx.Err() != nil {
+			break
+		}
 		seq := uint64(time.Now().UnixNano()) //nolint:gosec
-		api.dhtMirror.MirrorMany(entry.Edges[:], entry, seq)
+		api.dhtMirror.Mirror(edge, list, seq)
 		mirrored++
 	}
-	log.WithField("count", mirrored).Info("DHT backfill complete")
+	log.WithField("edges", mirrored).WithField("transports", len(entries)).Info("DHT backfill complete")
 }
 
 // SetCXOPublisher enables CXO distribution of transport data.

@@ -43,12 +43,18 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Post-registration: CXO publish, DHT mirror, heartbeats.
+	// For DHT mirror we collect the distinct edge PKs touched by the batch
+	// and remirror each edge's full transport list once below — a single
+	// Mirror per edge rather than per-entry-per-edge (which would just
+	// overwrite the same target repeatedly and lose all but the last).
 	var entryVersion string
+	touchedEdges := make(map[cipher.PubKey]struct{})
 	for _, entry := range entries {
 		api.publishTransportToCXO(entry.Entry)
 		if api.dhtMirror != nil {
-			seq := uint64(time.Now().UnixNano()) //nolint:gosec
-			api.dhtMirror.MirrorMany(entry.Entry.Edges[:], entry.Entry, seq)
+			for _, edgePK := range entry.Entry.Edges {
+				touchedEdges[edgePK] = struct{}{}
+			}
 		}
 		if entryVersion == "" && entry.Version != "" {
 			entryVersion = entry.Version
@@ -57,6 +63,7 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 			api.log(r).WithError(err).Debug("Failed to record transport heartbeat")
 		}
 	}
+	api.mirrorEdges(r.Context(), touchedEdges)
 
 	// Record a heartbeat for the registering visor. This piggybacks on
 	// the 90s transport re-registration cycle so the TPD's /uptimes
@@ -323,6 +330,12 @@ func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Capture edges before the delete so we can remirror their lists.
+	touchedEdges := make(map[cipher.PubKey]struct{}, len(entry.Edges))
+	for _, edgePK := range entry.Edges {
+		touchedEdges[edgePK] = struct{}{}
+	}
+
 	err = api.store.DeregisterTransport(r.Context(), id)
 	if err != nil {
 		api.writeError(w, r, err)
@@ -331,6 +344,7 @@ func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
 
 	// Remove from CXO feed
 	api.unpublishTransportFromCXO(id.String())
+	api.mirrorEdges(r.Context(), touchedEdges)
 
 	w.WriteHeader(http.StatusOK)
 	if _, err = w.Write([]byte("transport deleted")); err != nil {
@@ -361,6 +375,7 @@ func (api *API) deleteTransportsBatch(w http.ResponseWriter, r *http.Request) {
 
 	deleted := 0
 	skipped := 0
+	touchedEdges := make(map[cipher.PubKey]struct{})
 	for _, idParam := range ids {
 		id, err := uuid.Parse(idParam)
 		if err != nil {
@@ -384,9 +399,13 @@ func (api *API) deleteTransportsBatch(w http.ResponseWriter, r *http.Request) {
 			skipped++
 			continue
 		}
+		for _, edgePK := range entry.Edges {
+			touchedEdges[edgePK] = struct{}{}
+		}
 		api.unpublishTransportFromCXO(id.String())
 		deleted++
 	}
+	api.mirrorEdges(r.Context(), touchedEdges)
 
 	httputil.WriteJSON(w, r, http.StatusOK, map[string]int{"deleted": deleted, "skipped": skipped})
 }
@@ -434,11 +453,19 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	touchedEdges := make(map[cipher.PubKey]struct{})
 	for _, idParam := range tps {
 		id, err := uuid.Parse(idParam)
 		if err != nil {
 			api.writeError(w, r, ErrInvalidTransportID)
 			continue
+		}
+		// Fetch edges before deleting so we can remirror the affected edges.
+		entry, err := api.store.GetTransportByID(r.Context(), id)
+		if err == nil && entry != nil {
+			for _, edgePK := range entry.Edges {
+				touchedEdges[edgePK] = struct{}{}
+			}
 		}
 		err = api.store.DeregisterTransport(r.Context(), id)
 		if err != nil {
@@ -447,6 +474,7 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 		}
 		api.unpublishTransportFromCXO(id.String())
 	}
+	api.mirrorEdges(r.Context(), touchedEdges)
 
 	api.log(r).WithFields(logrus.Fields{"Number of Transports": len(tps), "Transports": tps}).Info("Deregistration process completed.")
 	httputil.WriteJSON(w, r, http.StatusOK, nil)
