@@ -75,8 +75,12 @@ type API struct {
 	cxoPublisher CXOPublisher
 
 	// dhtMirror mirrors transport entries to the DHT under each edge visor's PK.
+	// MirrorMany is used on the hot path so the entry is signed once per
+	// transport and saved under every edge target, rather than signed once
+	// per edge.
 	dhtMirror interface {
 		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+		MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, seq uint64)
 	}
 }
 
@@ -191,6 +195,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 // on every successful RegisterTransport call.
 func (api *API) SetDHTMirror(m interface {
 	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+	MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, seq uint64)
 }) {
 	api.dhtMirror = m
 }
@@ -215,9 +220,7 @@ func (api *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
 			continue
 		}
 		seq := uint64(time.Now().UnixNano()) //nolint:gosec
-		for _, edgePK := range entry.Edges {
-			api.dhtMirror.Mirror(edgePK, entry, seq)
-		}
+		api.dhtMirror.MirrorMany(entry.Edges[:], entry, seq)
 		mirrored++
 	}
 	log.WithField("count", mirrored).Info("DHT backfill complete")

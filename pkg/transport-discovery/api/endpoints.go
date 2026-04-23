@@ -48,9 +48,7 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		api.publishTransportToCXO(entry.Entry)
 		if api.dhtMirror != nil {
 			seq := uint64(time.Now().UnixNano()) //nolint:gosec
-			for _, edgePK := range entry.Entry.Edges {
-				api.dhtMirror.Mirror(edgePK, entry.Entry, seq)
-			}
+			api.dhtMirror.MirrorMany(entry.Entry.Edges[:], entry.Entry, seq)
 		}
 		if entryVersion == "" && entry.Version != "" {
 			entryVersion = entry.Version
