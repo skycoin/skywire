@@ -346,8 +346,8 @@ func (c *vstreamConn) RemoteAddr() net.Addr {
 	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
 }
 func (c *vstreamConn) SetDeadline(_ time.Time) error      { return nil }
-func (c *vstreamConn) SetReadDeadline(_ time.Time) error   { return nil }
-func (c *vstreamConn) SetWriteDeadline(_ time.Time) error  { return nil }
+func (c *vstreamConn) SetReadDeadline(_ time.Time) error  { return nil }
+func (c *vstreamConn) SetWriteDeadline(_ time.Time) error { return nil }
 
 func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	// Send ready signal to synchronize with client after noise handshake
