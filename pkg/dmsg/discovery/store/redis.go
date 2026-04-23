@@ -20,9 +20,21 @@ import (
 
 var json = jsoniter.ConfigFastest
 
+// Entry cache bounds. 2048 entries easily covers the hot-key working
+// set (dmsg servers + active visors) at ~200KB. 5s TTL is short enough
+// that changes to a visor's DelegatedServers list propagate promptly
+// yet long enough to absorb the repeated lookups that dominate read
+// traffic. Writes invalidate proactively so TTL is a ceiling on
+// staleness, not the normal case.
+const (
+	entryCacheSize = 2048
+	entryCacheTTL  = 5 * time.Second
+)
+
 type redisStore struct {
 	client  *redis.Client
 	timeout time.Duration
+	cache   *entryCache
 }
 
 func newRedis(ctx context.Context, url, password string, timeout time.Duration, log *logging.Logger) (Storer, error) {
@@ -41,11 +53,19 @@ func newRedis(ctx context.Context, url, password string, timeout time.Duration, 
 	if err != nil {
 		return nil, err
 	}
-	return &redisStore{client: client, timeout: timeout}, nil
+	return &redisStore{
+		client:  client,
+		timeout: timeout,
+		cache:   newEntryCache(entryCacheSize, entryCacheTTL),
+	}, nil
 }
 
 // Entry implements Storer Entry method for redisdb database
 func (r *redisStore) Entry(ctx context.Context, staticPubKey cipher.PubKey) (*disc.Entry, error) {
+	if entry, ok := r.cache.get(staticPubKey); ok {
+		return entry, nil
+	}
+
 	payload, err := r.client.Get(ctx, staticPubKey.Hex()).Bytes()
 	if err != nil {
 		if err == redis.Nil {
@@ -61,6 +81,7 @@ func (r *redisStore) Entry(ctx context.Context, staticPubKey cipher.PubKey) (*di
 		log.WithError(err).Warnf("Failed to unmarshal payload %q", payload)
 	}
 
+	r.cache.set(staticPubKey, entry)
 	return entry, nil
 }
 
@@ -80,6 +101,7 @@ func (r *redisStore) SetEntry(ctx context.Context, entry *disc.Entry, timeout ti
 		log.WithError(err).Errorf("Failed to set entry in redis")
 		return disc.ErrUnexpected
 	}
+	r.cache.invalidate(entry.Static)
 
 	if entry.Server != nil {
 		err = r.client.SAdd(ctx, "servers", entry.Static.Hex()).Err()
@@ -113,6 +135,7 @@ func (r *redisStore) DelEntry(ctx context.Context, staticPubKey cipher.PubKey) e
 		log.WithError(err).WithField("pk", staticPubKey).Errorf("Failed to delete entry from redis")
 		return err
 	}
+	r.cache.invalidate(staticPubKey)
 	// Delete pubkey from servers or clients set stored
 	r.client.SRem(ctx, "servers", staticPubKey.Hex())
 	r.client.SRem(ctx, "clients", staticPubKey.Hex())
