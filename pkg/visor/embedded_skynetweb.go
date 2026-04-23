@@ -21,6 +21,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetweb"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -39,6 +40,7 @@ const (
 // skynetweb resolver.
 type EmbeddedSkynetWeb struct {
 	router  router.Router
+	tpM     *transport.Manager
 	localPK cipher.PubKey
 	cfg     *visorconfig.SkynetWebConfig
 	log     *logging.Logger
@@ -51,9 +53,10 @@ type EmbeddedSkynetWeb struct {
 	parentCtx context.Context
 }
 
-func newEmbeddedSkynetWeb(parentCtx context.Context, r router.Router, localPK cipher.PubKey, cfg *visorconfig.SkynetWebConfig, log *logging.Logger) *EmbeddedSkynetWeb {
+func newEmbeddedSkynetWeb(parentCtx context.Context, r router.Router, tpM *transport.Manager, localPK cipher.PubKey, cfg *visorconfig.SkynetWebConfig, log *logging.Logger) *EmbeddedSkynetWeb {
 	return &EmbeddedSkynetWeb{
 		router:    r,
+		tpM:       tpM,
 		localPK:   localPK,
 		cfg:       cfg,
 		log:       log,
@@ -157,6 +160,7 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		router:       e.router,
 		localPK:      e.localPK,
 		log:          e.log,
+		tpM:          e.tpM,
 		routeTimeout: time.Duration(e.cfg.RouteTimeout),
 	}
 	if err := skynetweb.Run(ctx, e.log, dialer, cfg); err != nil && err != context.Canceled {
@@ -170,20 +174,37 @@ type routerSkynetDialer struct {
 	router       router.Router
 	localPK      cipher.PubKey
 	log          *logging.Logger
-	routeTimeout time.Duration // 0 = use DefaultRouteKeepAlive
+	tpM          *transport.Manager // for direct transport dialing
+	routeTimeout time.Duration      // 0 = use DefaultRouteKeepAlive
 	// Ephemeral port counter for unique route descriptors.
 	nextPort uint32
 }
 
 func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
+	// Try direct transport first — no route setup needed, no RSN dependency.
+	// Uses VStreamMux on route ID 0 with SkynetForwardPacket type.
+	if d.tpM != nil {
+		mux := transport.NewVStreamMux(d.tpM, routing.SkynetForwardPacket, d.log)
+		stream, err := mux.Dial(remote)
+		if err == nil {
+			d.log.WithField("remote", remote.String()[:16]+"...").
+				WithField("port", port).
+				Debug("Skynet: using direct transport (no route)")
+			conn := &vstreamConn{VStream: stream}
+			if err := skynetweb.PerformHandshake(conn, port); err != nil {
+				conn.Close() //nolint:errcheck,gosec
+			} else {
+				return conn, nil
+			}
+		}
+		// No direct transport — fall through to route-based dial.
+	}
+
 	var opts *router.DialOptions
 	if d.routeTimeout > 0 {
 		opts = router.DefaultDialOptions()
 		opts.KeepAlive = d.routeTimeout
 	}
-	// Use a unique ephemeral lPort for each dial so route descriptors
-	// never collide. The skynet forwarding server only cares about the
-	// port in the ClientMsg handshake, not the route descriptor's lPort.
 	lPort := routing.Port(atomic.AddUint32(&d.nextPort, 1)) //nolint:gosec // overflow wraps intentionally
 	conn, err := d.router.DialRoutes(ctx, remote, lPort, routing.Port(skyenv.SkyForwardingServerPort), opts)
 	if err != nil {
@@ -205,7 +226,7 @@ func initEmbeddedSkynetWeb(ctx context.Context, v *Visor, log *logging.Logger) e
 		log.Warn("skynet_web configured but router not available; skipping")
 		return nil
 	}
-	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.conf.PK, v.conf.SkynetWeb, log)
+	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.tpM, v.conf.PK, v.conf.SkynetWeb, log)
 	v.initLock.Lock()
 	v.embeddedSkynetWeb = runtime
 	v.initLock.Unlock()

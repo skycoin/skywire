@@ -132,6 +132,9 @@ type Manager struct {
 	// visorRPCHandler handles visor RPC packets (route ID 0) on any transport.
 	visorRPCHandler   func(p routing.Packet, mt *ManagedTransport)
 	visorRPCHandlerMu sync.RWMutex
+	// skynetFwdHandler handles skynet forward packets (route ID 0).
+	skynetFwdHandler   func(p routing.Packet, mt *ManagedTransport)
+	skynetFwdHandlerMu sync.RWMutex
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -487,6 +490,18 @@ func (tm *Manager) SetVisorRPCHandler(h func(p routing.Packet, mt *ManagedTransp
 	tm.mx.RUnlock()
 }
 
+// SetSkynetForwardHandler sets the handler for skynet forward packets (route ID 0).
+func (tm *Manager) SetSkynetForwardHandler(h func(p routing.Packet, mt *ManagedTransport)) {
+	tm.skynetFwdHandlerMu.Lock()
+	defer tm.skynetFwdHandlerMu.Unlock()
+	tm.skynetFwdHandler = h
+	tm.mx.RLock()
+	for _, mt := range tm.tps {
+		mt.skynetFwdHandler = h
+	}
+	tm.mx.RUnlock()
+}
+
 // SetSetupRPCHandler sets the handler for RSN RPC relay packets (route ID 0).
 func (tm *Manager) SetSetupRPCHandler(h func(p routing.Packet, mt *ManagedTransport)) {
 	tm.setupRPCHandlerMu.Lock()
@@ -769,6 +784,9 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		tm.visorRPCHandlerMu.RLock()
 		mTp.visorRPCHandler = tm.visorRPCHandler
 		tm.visorRPCHandlerMu.RUnlock()
+		tm.skynetFwdHandlerMu.RLock()
+		mTp.skynetFwdHandler = tm.skynetFwdHandler
+		tm.skynetFwdHandlerMu.RUnlock()
 
 		go func() {
 			mTp.Serve(tm.readCh)

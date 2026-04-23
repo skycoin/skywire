@@ -305,8 +305,49 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 		}
 	}()
 
+	// Also accept direct transport connections via VStreamMux (route ID 0).
+	// This allows peers with a direct transport to skip route setup entirely.
+	if v.tpM != nil {
+		skynetMux := transport.NewVStreamMux(v.tpM, routing.SkynetForwardPacket, log)
+		v.tpM.SetSkynetForwardHandler(skynetMux.HandlePacket)
+		go func() {
+			for {
+				stream, err := skynetMux.Accept()
+				if err != nil {
+					return
+				}
+				log.WithField("remote", stream.RemotePK().String()[:16]+"...").
+					Debug("Accepted direct skynet forwarding stream")
+				go func() {
+					defer func() {
+						if r := recover(); r != nil {
+							log.Errorf("Panic in direct skynet handler: %v", r)
+						}
+					}()
+					handleServerConn(log, &vstreamConn{VStream: stream}, v)
+				}()
+			}
+		}()
+		log.Info("Direct skynet forwarding enabled (route ID 0)")
+	}
+
 	return nil
 }
+
+// vstreamConn wraps a VStream to implement net.Conn.
+type vstreamConn struct {
+	*transport.VStream
+}
+
+func (c *vstreamConn) LocalAddr() net.Addr {
+	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
+}
+func (c *vstreamConn) RemoteAddr() net.Addr {
+	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
+}
+func (c *vstreamConn) SetDeadline(_ time.Time) error      { return nil }
+func (c *vstreamConn) SetReadDeadline(_ time.Time) error   { return nil }
+func (c *vstreamConn) SetWriteDeadline(_ time.Time) error  { return nil }
 
 func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	// Send ready signal to synchronize with client after noise handshake
