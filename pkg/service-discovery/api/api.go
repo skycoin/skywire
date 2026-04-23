@@ -93,42 +93,74 @@ type API struct {
 	uptimesV2Cache []store.VisorSummary
 	uptimesMu      sync.RWMutex
 
-	// dhtMirror mirrors service entries to the DHT under each visor's PK.
+	// dhtMirror mirrors the list of services registered by each visor PK
+	// to the DHT under SHA256(pk || "svc"). The value is the full list so
+	// visors with both vpn and skysocks don't overwrite each other's
+	// entry. Delete drops the target when a visor has no services left.
 	dhtMirror interface {
 		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+		Delete(subjectPK cipher.PubKey)
 	}
 }
 
-// SetDHTMirror sets a mirror that publishes service entries to the DHT
-// on every successful service registration.
+// SetDHTMirror sets a mirror that publishes per-visor service lists to
+// the DHT on every registration and clears them on full deregistration.
 func (a *API) SetDHTMirror(m interface {
 	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+	Delete(subjectPK cipher.PubKey)
 }) {
 	a.dhtMirror = m
 }
 
-// BackfillDHTMirror iterates all existing services and mirrors them
-// to the DHT so the full dataset is available immediately on startup.
+// mirrorVisorServices re-publishes the current full list of services
+// for a visor PK. Called after any service registration or deletion
+// so the DHT target holds the same set as HTTP discovery. An empty
+// list triggers Delete so the DHT doesn't hold a stale record past
+// the visor's last active service.
+func (a *API) mirrorVisorServices(ctx context.Context, pk cipher.PubKey) {
+	if a.dhtMirror == nil {
+		return
+	}
+	services, herr := a.db.ServicesByPK(ctx, pk)
+	if herr != nil || len(services) == 0 {
+		a.dhtMirror.Delete(pk)
+		return
+	}
+	a.dhtMirror.Mirror(pk, services, uint64(time.Now().UnixNano())) //nolint:gosec
+}
+
+// BackfillDHTMirror mirrors the full per-visor service list for every
+// visor that currently has at least one service registered. Producing
+// one DHT item per visor (value = all that visor's services) matches
+// HTTP discovery and replaces the pre-#2333 per-service mirror which
+// overwrote the same target for visors offering multiple service types.
 func (a *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
 	if a.dhtMirror == nil {
 		return
 	}
-	// Fetch all service types.
+	byPK := make(map[cipher.PubKey][]servicedisc.Service)
+	var total int
 	for _, sType := range []string{"vpn", "visor", "skysocks"} {
 		services, sErr := a.db.Services(ctx, sType, "", "")
 		if sErr != nil {
 			log.WithError(sErr).WithField("type", sType).Warn("DHT backfill: failed to list services")
 			continue
 		}
+		total += len(services)
 		for i := range services {
-			if ctx.Err() != nil {
-				return
-			}
-			a.dhtMirror.Mirror(services[i].Addr.PubKey(), &services[i], uint64(time.Now().UnixNano())) //nolint:gosec
+			pk := services[i].Addr.PubKey()
+			byPK[pk] = append(byPK[pk], services[i])
 		}
-		log.WithField("type", sType).WithField("count", len(services)).Debug("DHT backfill: mirrored services")
 	}
-	log.Info("DHT backfill complete")
+	mirrored := 0
+	for pk, list := range byPK {
+		if ctx.Err() != nil {
+			break
+		}
+		a.dhtMirror.Mirror(pk, list, uint64(time.Now().UnixNano())) //nolint:gosec
+		mirrored++
+	}
+	log.WithField("visors", mirrored).WithField("services", total).Info("DHT backfill complete")
 }
 
 // New creates an API.
@@ -448,10 +480,9 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Mirror service entry to DHT.
-	if a.dhtMirror != nil {
-		a.dhtMirror.Mirror(se.Addr.PubKey(), &se, uint64(time.Now().UnixNano())) //nolint:gosec
-	}
+	// Mirror the visor's FULL service list (not just this new entry) so
+	// the DHT target holds the same set as HTTP discovery for this PK.
+	a.mirrorVisorServices(r.Context(), se.Addr.PubKey())
 
 	httputil.WriteJSON(w, r, http.StatusOK, &se)
 }
@@ -484,6 +515,7 @@ func (a *API) delEntry(w http.ResponseWriter, r *http.Request) {
 		a.writeError(w, r, sErr.HTTPStatus, sErr.Err)
 		return
 	}
+	a.mirrorVisorServices(r.Context(), serviceAddr.PubKey())
 	httputil.WriteJSON(w, r, http.StatusOK, true)
 }
 
@@ -559,6 +591,7 @@ func (a *API) deregisterEntry(w http.ResponseWriter, r *http.Request) {
 			a.writeError(w, r, sErr.HTTPStatus, sErr.Err)
 			return
 		}
+		a.mirrorVisorServices(r.Context(), key)
 	}
 	a.log.WithFields(logrus.Fields{"Number of Keys": len(keys), "Keys": keys, "Type": sType}).Info("Deregistration process completed.")
 	a.writeJSON(w, r, http.StatusOK, true)

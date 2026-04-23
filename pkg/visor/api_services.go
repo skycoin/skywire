@@ -307,24 +307,37 @@ func (v *Visor) dhtServices(serviceType, version, country string) []servicedisc.
 	if len(items) == 0 {
 		return nil
 	}
-	var services []servicedisc.Service
-	for _, item := range items {
-		var svc servicedisc.Service
-		if json.Unmarshal(item.V, &svc) != nil {
-			continue
-		}
+	matches := func(svc servicedisc.Service) bool {
 		if svc.Type != serviceType {
-			continue
+			return false
 		}
 		if version != "" && svc.Version != version {
-			continue
+			return false
 		}
 		if country != "" {
 			if svc.Geo == nil || !strings.EqualFold(svc.Geo.Country, country) {
-				continue
+				return false
 			}
 		}
-		services = append(services, svc)
+		return true
+	}
+	// Accept both the new per-visor list shape and the legacy single-
+	// service shape so this reader works across an SD/visor rollout.
+	var services []servicedisc.Service
+	for _, item := range items {
+		var list []servicedisc.Service
+		if err := json.Unmarshal(item.V, &list); err == nil {
+			for _, svc := range list {
+				if matches(svc) {
+					services = append(services, svc)
+				}
+			}
+			continue
+		}
+		var svc servicedisc.Service
+		if json.Unmarshal(item.V, &svc) == nil && matches(svc) {
+			services = append(services, svc)
+		}
 	}
 	return services
 }
