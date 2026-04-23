@@ -262,15 +262,25 @@ func (n *Node) dial(ctx context.Context, pk cipher.PubKey) (io.ReadWriteCloser, 
 	}
 	n.noDHTMu.RUnlock()
 
-	conn, err := n.tp.Dial(ctx, pk)
-	if err == nil {
-		return conn, nil
-	}
+	// Prefer p2p transports (STCPR/SUDPH) over DMSG — direct, lower
+	// latency, doesn't burden DMSG servers. Fall back to DMSG only
+	// when no direct transport exists.
+	var err error
 	for _, tp := range n.extraTransports {
 		conn, err2 := tp.Dial(ctx, pk)
 		if err2 == nil {
 			return conn, nil
 		}
+		if err == nil {
+			err = err2
+		}
+	}
+	conn, dmsgErr := n.tp.Dial(ctx, pk)
+	if dmsgErr == nil {
+		return conn, nil
+	}
+	if err == nil {
+		err = dmsgErr
 	}
 
 	// All transports failed — cache as non-DHT peer.
