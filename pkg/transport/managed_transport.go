@@ -100,6 +100,8 @@ type ManagedTransport struct {
 
 	// visorRPCHandler handles visor RPC packets (route ID 0).
 	visorRPCHandler func(p routing.Packet, mt *ManagedTransport)
+	// skynetFwdHandler handles skynet forward packets (route ID 0).
+	skynetFwdHandler func(p routing.Packet, mt *ManagedTransport)
 }
 
 // LatencyStats holds latency measurement statistics for a transport.
@@ -258,6 +260,11 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			case routing.VisorRPCPacket:
 				if mt.visorRPCHandler != nil {
 					mt.visorRPCHandler(p, mt)
+				}
+				continue
+			case routing.SkynetForwardPacket:
+				if mt.skynetFwdHandler != nil {
+					mt.skynetFwdHandler(p, mt)
 				}
 				continue
 			}
