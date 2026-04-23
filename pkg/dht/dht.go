@@ -251,7 +251,7 @@ func rpcCtx(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, rpcTimeout)
 }
 
-// dial tries the primary transport, then extra transports.
+// dial tries p2p transports first, then falls back to DMSG.
 // Skips peers in the negative cache (failed DHT dial recently).
 func (n *Node) dial(ctx context.Context, pk cipher.PubKey) (io.ReadWriteCloser, error) {
 	// Check negative cache.
@@ -262,17 +262,29 @@ func (n *Node) dial(ctx context.Context, pk cipher.PubKey) (io.ReadWriteCloser, 
 	}
 	n.noDHTMu.RUnlock()
 
+	// Skip p2p transports for bootstrap peers (DMSG servers) — there
+	// will never be a direct STCPR/SUDPH transport to them.
+	isBootstrap := false
+	for _, bpk := range n.cfg.BootstrapPKs {
+		if bpk == pk {
+			isBootstrap = true
+			break
+		}
+	}
+
 	// Prefer p2p transports (STCPR/SUDPH) over DMSG — direct, lower
 	// latency, doesn't burden DMSG servers. Fall back to DMSG only
 	// when no direct transport exists.
 	var err error
-	for _, tp := range n.extraTransports {
-		conn, err2 := tp.Dial(ctx, pk)
-		if err2 == nil {
-			return conn, nil
-		}
-		if err == nil {
-			err = err2
+	if !isBootstrap {
+		for _, tp := range n.extraTransports {
+			conn, err2 := tp.Dial(ctx, pk)
+			if err2 == nil {
+				return conn, nil
+			}
+			if err == nil {
+				err = err2
+			}
 		}
 	}
 	conn, dmsgErr := n.tp.Dial(ctx, pk)

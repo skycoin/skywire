@@ -29,6 +29,7 @@ var RootCmd = &cobra.Command{
 func init() {
 	healthCmd.Flags().BoolVar(&directQuery, "direct", false, "query services directly instead of via visor RPC")
 	healthCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	healthCmd.Flags().Bool(internal.JSONString, false, "print output as JSON")
 	RootCmd.AddCommand(healthCmd)
 }
 
@@ -86,6 +87,11 @@ func extractPK(rawURL string) string {
 }
 
 func printHealthResults(cmd *cobra.Command, results []skyvisor.ServiceHealthEntry) {
+	isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+	if isJSON {
+		internal.PrintOutput(cmd.Flags(), results, "")
+		return
+	}
 	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "SERVICE\tSTATUS\tLATENCY\tPROTOCOL\tVERSION\tPK") //nolint:errcheck,gosec
 	for _, r := range results {
@@ -109,7 +115,6 @@ func printHealthResults(cmd *cobra.Command, results []skyvisor.ServiceHealthEntr
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", r.Name, status, latency, transport, ver, pk) //nolint:errcheck,gosec
 	}
 	tw.Flush() //nolint:errcheck,gosec
-	internal.PrintOutput(cmd.Flags(), results, "")
 }
 
 func queryServicesDirect(cmdFlags *pflag.FlagSet) []skyvisor.ServiceHealthEntry {
