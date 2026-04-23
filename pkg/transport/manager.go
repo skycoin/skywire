@@ -1007,6 +1007,9 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.visorRPCHandlerMu.RLock()
 	mTp.visorRPCHandler = tm.visorRPCHandler
 	tm.visorRPCHandlerMu.RUnlock()
+	tm.skynetFwdHandlerMu.RLock()
+	mTp.skynetFwdHandler = tm.skynetFwdHandler
+	tm.skynetFwdHandlerMu.RUnlock()
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
 	errCh := make(chan error)
