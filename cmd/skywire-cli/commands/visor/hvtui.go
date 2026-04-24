@@ -41,7 +41,6 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			SetBorders(false).
 			SetSelectable(true, false).
 			SetFixed(1, 0)
-
 		table.SetBorder(true).
 			SetTitle(" Hypervisor — Connected Visors ").
 			SetTitleAlign(tview.AlignLeft)
@@ -53,22 +52,21 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		detail.SetBorder(true).
 			SetTitle(" Visor Detail ").
 			SetTitleAlign(tview.AlignLeft)
+		detail.SetText("[gray]Select a visor to view details")
 
 		// --- Status bar ---
-		status := tview.NewTextView().
+		statusBar := tview.NewTextView().
 			SetDynamicColors(true).
-			SetTextAlign(tview.AlignLeft)
+			SetTextAlign(tview.AlignLeft).
+			SetText(" [yellow]Loading...[white] | q:quit  r:refresh  enter:detail  esc:back")
 
 		// --- Layout ---
-		// Top: table + detail side by side
-		// Bottom: status bar
 		split := tview.NewFlex().
 			AddItem(table, 0, 3, true).
 			AddItem(detail, 0, 2, false)
-
 		layout := tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(split, 0, 1, true).
-			AddItem(status, 1, 0, false)
+			AddItem(statusBar, 1, 0, false)
 
 		// --- State ---
 		var (
@@ -78,14 +76,13 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 
 		setStatus := func(msg string) {
 			app.QueueUpdateDraw(func() {
-				status.SetText(fmt.Sprintf(" [yellow]%s[white] | r:refresh  q:quit  enter:detail  esc:back", msg))
+				statusBar.SetText(fmt.Sprintf(" [yellow]%s[white] | r:refresh  q:quit  enter:detail  esc:back", msg))
 			})
 		}
 
 		// --- Populate table ---
 		updateTable := func(entries []visor.HVVisorEntry) {
 			table.Clear()
-			// Header
 			headers := []string{"#", "PK", "VERSION", "UPTIME", "TP", "APPS", "IP", "CC", "STATUS"}
 			for i, h := range headers {
 				cell := tview.NewTableCell(h).
@@ -97,27 +94,29 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 				}
 				table.SetCell(0, i, cell)
 			}
-
 			for i, e := range entries {
 				row := i + 1
 				pk := e.PK.String()
 				if len(pk) > 12 {
 					pk = pk[:10] + ".."
 				}
-				statusStr := "[green]ok"
+				st := "ok"
+				stColor := tcell.ColorGreen
 				if e.IsLocal {
-					statusStr = "[cyan]local"
+					st = "local"
+					stColor = tcell.ColorAqua
 				}
 				if e.Error != "" {
-					statusStr = "[red]" + truncate(e.Error, 20)
+					st = truncStr(e.Error, 20)
+					stColor = tcell.ColorRed
 				}
 				ver := e.Version
 				if ver == "" {
 					ver = "-"
 				}
-				uptime := "-"
+				up := "-"
 				if e.Uptime > 0 {
-					uptime = (time.Duration(e.Uptime) * time.Second).Truncate(time.Second).String()
+					up = (time.Duration(e.Uptime) * time.Second).Truncate(time.Second).String()
 				}
 				ip := e.PublicIP
 				if ip == "" {
@@ -127,16 +126,15 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 				if cc == "" {
 					cc = "-"
 				}
-
 				table.SetCell(row, 0, tview.NewTableCell(fmt.Sprintf("%d", row)).SetTextColor(tcell.ColorDarkGray))
 				table.SetCell(row, 1, tview.NewTableCell(pk))
 				table.SetCell(row, 2, tview.NewTableCell(ver))
-				table.SetCell(row, 3, tview.NewTableCell(uptime))
+				table.SetCell(row, 3, tview.NewTableCell(up))
 				table.SetCell(row, 4, tview.NewTableCell(fmt.Sprintf("%d", e.Transports)))
 				table.SetCell(row, 5, tview.NewTableCell(fmt.Sprintf("%d", e.Apps)))
 				table.SetCell(row, 6, tview.NewTableCell(ip))
 				table.SetCell(row, 7, tview.NewTableCell(cc))
-				table.SetCell(row, 8, tview.NewTableCell(statusStr))
+				table.SetCell(row, 8, tview.NewTableCell(st).SetTextColor(stColor))
 			}
 		}
 
@@ -148,7 +146,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			sb.WriteString(fmt.Sprintf("[yellow]Build Tag:[white]  %s\n", e.BuildTag))
 			sb.WriteString(fmt.Sprintf("[yellow]Config:[white]     %s\n", e.ConfigVersion))
 			if e.Uptime > 0 {
-				sb.WriteString(fmt.Sprintf("[yellow]Uptime:[white]     %s\n", (time.Duration(e.Uptime) * time.Second).Truncate(time.Second)))
+				sb.WriteString(fmt.Sprintf("[yellow]Uptime:[white]     %s\n", (time.Duration(e.Uptime)*time.Second).Truncate(time.Second)))
 			}
 			sb.WriteString(fmt.Sprintf("[yellow]Local IP:[white]   %s\n", e.LocalIP))
 			sb.WriteString(fmt.Sprintf("[yellow]Public IP:[white]  %s\n", e.PublicIP))
@@ -170,7 +168,6 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 				sb.WriteString("\n[cyan](this is the local hypervisor visor)[white]\n")
 			}
 
-			// Try to get full summary for transport/app details
 			var remotePK cipher.PubKey
 			if err := remotePK.Set(e.PK.String()); err == nil {
 				summary, err := rpcClient.HVVisorSummary(remotePK)
@@ -203,8 +200,9 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					}
 				}
 			}
-
-			detail.SetText(sb.String())
+			app.QueueUpdateDraw(func() {
+				detail.SetText(sb.String())
+			})
 		}
 
 		// --- Refresh data ---
@@ -221,8 +219,8 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 				mu.Unlock()
 				app.QueueUpdateDraw(func() {
 					updateTable(entries)
-					setStatus(fmt.Sprintf("%d visors | refreshed %s", len(entries), time.Now().Format("15:04:05")))
 				})
+				setStatus(fmt.Sprintf("%d visors | refreshed %s", len(entries), time.Now().Format("15:04:05")))
 			}()
 		}
 
@@ -230,13 +228,14 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		table.SetSelectedFunc(func(row, _ int) {
 			mu.RLock()
 			defer mu.RUnlock()
-			idx := row - 1 // skip header
+			idx := row - 1
 			if idx < 0 || idx >= len(visors) {
 				return
 			}
+			v := visors[idx]
 			go func() {
 				setStatus("Loading detail...")
-				showDetail(visors[idx])
+				showDetail(v)
 				setStatus(fmt.Sprintf("%d visors | detail view", len(visors)))
 				app.QueueUpdateDraw(func() {
 					app.SetFocus(detail)
@@ -263,16 +262,10 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			return event
 		})
 
-		// Show loading state immediately
-		status.SetText(" [yellow]Loading...[white] | q:quit  r:refresh  enter:detail  esc:back")
-		detail.SetText("[gray]Select a visor to view details[white]")
-
 		// Initial load + auto-refresh after app starts
 		go func() {
-			// Small delay to let app.Run() initialize the screen
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			refresh()
-
 			ticker := time.NewTicker(30 * time.Second)
 			defer ticker.Stop()
 			for range ticker.C {
@@ -286,7 +279,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 	},
 }
 
-func truncate(s string, max int) string {
+func truncStr(s string, max int) string {
 	if len(s) > max {
 		return s[:max] + "..."
 	}
