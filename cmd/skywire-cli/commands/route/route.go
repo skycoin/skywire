@@ -517,7 +517,7 @@ var groupsCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get route groups: %w", err))
 		}
 		if len(rgs) == 0 {
-			fmt.Println("No active route groups")
+			internal.PrintOutput(cmd.Flags(), rgs, "No active route groups\n")
 			return
 		}
 
