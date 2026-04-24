@@ -52,9 +52,12 @@ type API struct {
 
 	// dhtMirror mirrors entries to the DHT under the visor's PK-derived
 	// target. The mirror signs with its own key but stores under the
-	// visor's target so DHT lookups by visor PK find the entry.
+	// visor's target so DHT lookups by visor PK find the entry. Delete
+	// propagates DelEntry removals into the DHT so stale targets don't
+	// accumulate past their HTTP-discovery lifetime.
 	dhtMirror interface {
 		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+		Delete(subjectPK cipher.PubKey)
 	}
 
 	// clientEntryTTL is the Redis expiration applied to client entries
@@ -156,9 +159,10 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 }
 
 // SetDHTMirror sets a mirror that publishes entries to the DHT on every
-// successful SetEntry.
+// successful SetEntry and removes them from the DHT on DelEntry.
 func (a *API) SetDHTMirror(m interface {
 	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+	Delete(subjectPK cipher.PubKey)
 }) {
 	a.dhtMirror = m
 }
@@ -543,6 +547,10 @@ func (a *API) delEntry() func(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			a.handleError(w, r, err)
 			return
+		}
+
+		if a.dhtMirror != nil {
+			a.dhtMirror.Delete(entry.Static)
 		}
 
 		a.writeJSON(w, r, http.StatusOK, disc.MsgEntryDeleted)

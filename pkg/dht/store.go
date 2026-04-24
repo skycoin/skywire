@@ -324,6 +324,16 @@ func (s *Store) CountByTier() (whitelisted, trusted, public int) {
 	return
 }
 
+// Delete removes the item at the given target from the in-memory
+// map and the persistent backend. Used by mirror paths that want to
+// propagate a source-of-truth deletion into the DHT.
+func (s *Store) Delete(target NodeID) {
+	s.mu.Lock()
+	delete(s.items, target)
+	s.mu.Unlock()
+	_ = s.backend.Delete(target) //nolint:errcheck
+}
+
 // ExpireSweep removes expired public items. Whitelisted and trusted
 // items are never expired by TTL.
 func (s *Store) ExpireSweep() int {

@@ -29,6 +29,11 @@ type Store interface {
 	io.Closer
 	Service(ctx context.Context, sType string, addr servicedisc.SWAddr) (*servicedisc.Service, *servicedisc.HTTPError)
 	Services(ctx context.Context, sType, version, country string) ([]servicedisc.Service, *servicedisc.HTTPError)
+	// ServicesByPK returns every service registration for a visor PK.
+	// Used by the DHT mirror path so it can publish the visor's FULL
+	// service list (vpn, skysocks, visor) under one DHT target rather
+	// than overwriting the target with whichever type wrote last.
+	ServicesByPK(ctx context.Context, pk cipher.PubKey) ([]servicedisc.Service, *servicedisc.HTTPError)
 	UpdateService(ctx context.Context, se *servicedisc.Service) *servicedisc.HTTPError
 	UpdateServiceAndHeartbeat(ctx context.Context, se *servicedisc.Service, version string) *servicedisc.HTTPError
 	DeleteService(ctx context.Context, sType string, addr servicedisc.SWAddr) *servicedisc.HTTPError

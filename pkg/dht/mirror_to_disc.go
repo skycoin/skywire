@@ -62,11 +62,19 @@ func (p *DiscoveryPusher) OnPut(target NodeID, item MutableItem) {
 			// DMSG discovery: POST /dmsg-discovery/entry/
 			endpoint = baseURL + "/dmsg-discovery/entry/"
 		case "tp":
-			// Transport discovery: POST /transports/
-			endpoint = baseURL + "/transports/"
+			// Transport discovery: POST /transports/ expects a signed
+			// entry array. The DHT value written by TPD's mirror is
+			// now a plain []transport.Entry list (not SignedEntry), so
+			// we intentionally skip the push for "tp" — the source of
+			// truth is the HTTP TPD itself and no reverse-push is
+			// needed in the current architecture. Left as a no-op.
+			return
 		case "svc":
-			// Service discovery: POST /api/services
-			endpoint = baseURL + "/api/services"
+			// Service discovery: POST /api/services expects one
+			// servicedisc.Service. The DHT value is now a per-visor
+			// list, which wouldn't round-trip through the single-
+			// service POST. Skip the reverse push for "svc" too.
+			return
 		default:
 			return
 		}

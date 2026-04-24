@@ -77,10 +77,13 @@ func (gw *TransportGateway) RemoveTransport(req UUIDRequest, res *BoolResponse) 
 	return nil
 }
 
-// GetTransports returns all transports of this node that have been established by
-// the transport setup system or autoconnect (skycoin + automatic labels)
+// GetTransports returns all transports of this node regardless of label
+// (skycoin, automatic, user). User-labeled transports are included so the
+// setup node's view of the visor matches the discovery/DHT view, but
+// RemoveTransport still rejects user-labeled transports so the setup
+// node cannot delete entries a local operator created manually.
 func (gw *TransportGateway) GetTransports(_ struct{}, res *[]TransportResponse) error {
-	tps := gw.tm.GetTransportsByLabels(transport.LabelSkycoin, transport.LabelAutomatic)
+	tps := gw.tm.GetTransportsByLabels(transport.LabelSkycoin, transport.LabelAutomatic, transport.LabelUser)
 	for _, tp := range tps {
 		tResp := TransportResponse{
 			ID:     tp.Entry.ID,

@@ -86,7 +86,11 @@ func (c *apiClient) Delete(ctx context.Context, path string) (*http.Response, er
 	return c.client.Do(req.WithContext(ctx))
 }
 
-// RegisterTransports registers new Transports.
+// RegisterTransports registers new Transports via the v2 endpoint.
+// New callers should prefer RegisterTransportsV3 — it wire-matches the
+// DHT value format (no per-entry sigs) and is substantially smaller
+// on the wire for visors with many transports. This path is kept so
+// older TPDs without /v3/transports/ still receive registrations.
 func (c *apiClient) RegisterTransports(ctx context.Context, entries ...*transport.SignedEntry) error {
 	if len(entries) == 0 {
 		return nil
@@ -103,6 +107,51 @@ func (c *apiClient) RegisterTransports(ctx context.Context, entries ...*transpor
 		}
 	}()
 
+	return httputil.ErrorFromResp(resp)
+}
+
+// RegisterTransportsV3 registers transports using the DHT-aligned wire
+// format: []*transport.Entry (no per-entry signatures) authenticated
+// by the request-level SW-Sig only. Version is sent via the
+// SW-Visor-Version header rather than inside SignedEntry.
+//
+// Falls back to RegisterTransports (v2) if the TPD returns 404 — lets
+// new clients interoperate with TPDs built before the v3 endpoint
+// existed. Non-404 errors propagate unchanged.
+func (c *apiClient) RegisterTransportsV3(ctx context.Context, version string, entries ...*transport.Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(entries); err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPost, c.client.Addr()+"/v3/transports/", body)
+	if err != nil {
+		return err
+	}
+	if version != "" {
+		req.Header.Set("SW-Visor-Version", version)
+	}
+	resp, err := c.client.Do(req.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// TPD is pre-v3; fall back to the legacy signed-entry format.
+		signed := make([]*transport.SignedEntry, 0, len(entries))
+		for _, e := range entries {
+			signed = append(signed, &transport.SignedEntry{Entry: e, Version: version})
+		}
+		return c.RegisterTransports(ctx, signed...)
+	}
 	return httputil.ErrorFromResp(resp)
 }
 
