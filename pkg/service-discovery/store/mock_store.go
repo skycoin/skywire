@@ -139,6 +139,20 @@ func (_m *MockStore) Services(ctx context.Context, sType, version, country strin
 	return r0, r2
 }
 
+// ServicesByPK provides a mock function with given fields: ctx, pk
+func (_m *MockStore) ServicesByPK(ctx context.Context, pk cipher.PubKey) ([]servicedisc.Service, *servicedisc.HTTPError) {
+	ret := _m.Called(ctx, pk)
+	var r0 []servicedisc.Service
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]servicedisc.Service)
+	}
+	var r1 *servicedisc.HTTPError
+	if ret.Get(1) != nil {
+		r1 = ret.Get(1).(*servicedisc.HTTPError)
+	}
+	return r0, r1
+}
+
 // ServicesByGeo provides a mock function with given fields: ctx, sType, q
 func (_m *MockStore) ServicesByCountry(ctx context.Context, sType string, sCountry string) ([]servicedisc.Service, *servicedisc.HTTPError) {
 	ret := _m.Called(ctx, sType, nil)

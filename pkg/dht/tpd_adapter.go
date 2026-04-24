@@ -42,6 +42,21 @@ func (d *TPDAdapter) RegisterTransportsWithSync(ctx context.Context, entries ...
 	return nil, nil
 }
 
+// RegisterTransportsV3 publishes bare-entry transports to the DHT.
+// Since the DHT stores a single list per visor target, both v2 and v3
+// callers end up writing the same shape — we just wrap in SignedEntry
+// internally for the existing putEntries path.
+func (d *TPDAdapter) RegisterTransportsV3(ctx context.Context, version string, entries ...*transport.Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	signed := make([]*transport.SignedEntry, 0, len(entries))
+	for _, e := range entries {
+		signed = append(signed, &transport.SignedEntry{Entry: e, Version: version})
+	}
+	return d.putEntries(ctx, signed)
+}
+
 func (d *TPDAdapter) putEntries(ctx context.Context, entries []*transport.SignedEntry) error {
 	data, err := json.Marshal(entries)
 	if err != nil {
@@ -141,6 +156,14 @@ func (h *HybridTPDClient) RegisterTransports(ctx context.Context, entries ...*tr
 		h.log.WithError(err).Debug("DHT RegisterTransports failed")
 	}
 	return h.http.RegisterTransports(ctx, entries...)
+}
+
+// RegisterTransportsV3 writes bare entries to both DHT and HTTP.
+func (h *HybridTPDClient) RegisterTransportsV3(ctx context.Context, version string, entries ...*transport.Entry) error {
+	if err := h.dht.RegisterTransportsV3(ctx, version, entries...); err != nil {
+		h.log.WithError(err).Debug("DHT RegisterTransportsV3 failed")
+	}
+	return h.http.RegisterTransportsV3(ctx, version, entries...)
 }
 
 // RegisterTransportsWithSync writes to both, returns HTTP sync data.
