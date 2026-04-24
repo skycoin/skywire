@@ -1189,6 +1189,16 @@ func (mc *mockRPCClient) TransportRPCCall(_ cipher.PubKey, _ string, _ json.RawM
 	return nil, fmt.Errorf("not supported in mock")
 }
 
+// HVListVisors implements API.
+func (mc *mockRPCClient) HVListVisors() ([]HVVisorEntry, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVVisorSummary implements API.
+func (mc *mockRPCClient) HVVisorSummary(_ cipher.PubKey) (*Summary, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
 // DmsgPorterDiag implements API.
 func (mc *mockRPCClient) DmsgPorterDiag() (*netutil.EphemeralDiagResult, error) {
 	return &netutil.EphemeralDiagResult{TypeCount: map[string]int{}}, nil

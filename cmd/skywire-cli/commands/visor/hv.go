@@ -2,7 +2,6 @@
 package clivisor
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -197,132 +196,67 @@ via DMSG. Not persisted — use SKYENV HYPERVISORPKS for persistence.`,
 	},
 }
 
-// hvVisorInfo holds summary data for a remote visor connected to this hypervisor.
-type hvVisorInfo struct {
-	PK         string  `json:"pk"`
-	Version    string  `json:"version,omitempty"`
-	Uptime     float64 `json:"uptime_seconds,omitempty"`
-	Transports int     `json:"transports,omitempty"`
-	Apps       int     `json:"apps,omitempty"`
-	Error      string  `json:"error,omitempty"`
-}
-
 var hvLsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List visors connected to this hypervisor",
-	Long: `List remote visors that have this visor configured as their hypervisor.
+	Long: `List all visors connected to this hypervisor with summary info.
 
-Shows the public key of each connected visor. With --detail, queries
-each visor over the transport for version, uptime, and transport count
-(requires the remote visor to support transport RPC).`,
+Queries each remote visor over its DMSG connection for version, uptime,
+transport count, and other details. The local visor is shown first.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 
-		visors, err := rpcClient.RemoteVisors()
+		entries, err := rpcClient.HVListVisors()
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get remote visors: %w", err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to list visors: %w", err))
 		}
 
-		if len(visors) == 0 {
-			internal.PrintOutput(cmd.Flags(), []hvVisorInfo{}, "No remote visors connected.\n")
+		if len(entries) == 0 {
+			internal.PrintOutput(cmd.Flags(), entries, "No visors connected.\n")
 			return
 		}
 
-		if !hvLsDetail {
-			// Simple mode: just list PKs
-			results := make([]hvVisorInfo, 0, len(visors))
-			var buf strings.Builder
-			for i, pk := range visors {
-				results = append(results, hvVisorInfo{PK: pk})
-				fmt.Fprintf(&buf, "%d. %s\n", i+1, pk)
-			}
-			internal.PrintOutput(cmd.Flags(), results, buf.String())
-			return
-		}
-
-		// Detail mode: query each visor via transport RPC
-		results := make([]hvVisorInfo, 0, len(visors))
-		for _, pkStr := range visors {
-			info := hvVisorInfo{PK: pkStr}
-
-			var remotePK cipher.PubKey
-			if err := remotePK.Set(pkStr); err != nil {
-				info.Error = "invalid PK"
-				results = append(results, info)
-				continue
-			}
-
-			result, err := rpcClient.TransportRPCCall(remotePK, "app-visor.Summary", nil)
-			if err != nil {
-				info.Error = err.Error()
-				results = append(results, info)
-				continue
-			}
-
-			// Parse the summary JSON
-			var summary struct {
-				Overview struct {
-					BuildInfo struct {
-						Version string `json:"version"`
-					} `json:"build_info"`
-					Transports []json.RawMessage `json:"transports"`
-				} `json:"overview"`
-				Uptime float64           `json:"uptime"`
-				Apps   []json.RawMessage `json:"apps"`
-			}
-			if err := json.Unmarshal(result, &summary); err != nil {
-				info.Error = "failed to parse summary"
-				results = append(results, info)
-				continue
-			}
-			info.Version = summary.Overview.BuildInfo.Version
-			info.Uptime = summary.Uptime
-			info.Transports = len(summary.Overview.Transports)
-			info.Apps = len(summary.Apps)
-			results = append(results, info)
-		}
-
-		// Build table output
 		var buf strings.Builder
 		tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "PK\tVERSION\tUPTIME\tTRANSPORTS\tAPPS\tSTATUS") //nolint:errcheck
-		for _, info := range results {
-			pk := info.PK
+		fmt.Fprintln(tw, "PK\tVERSION\tUPTIME\tTP\tAPPS\tIP\tCC\tSTATUS") //nolint:errcheck
+		for _, e := range entries {
+			pk := e.PK.String()
 			if len(pk) > 10 {
 				pk = pk[:8] + ".."
 			}
 			status := "ok"
-			ver := info.Version
-			uptime := "-"
-			tps := "-"
-			apps := "-"
-			if info.Error != "" {
-				status = info.Error
-				if len(status) > 30 {
-					status = status[:30] + "..."
-				}
-			} else {
-				if info.Uptime > 0 {
-					uptime = (time.Duration(info.Uptime) * time.Second).Truncate(time.Second).String()
-				}
-				tps = fmt.Sprintf("%d", info.Transports)
-				apps = fmt.Sprintf("%d", info.Apps)
+			if e.IsLocal {
+				status = "local"
 			}
+			if e.Error != "" {
+				status = e.Error
+				if len(status) > 25 {
+					status = status[:25] + "..."
+				}
+			}
+			ver := e.Version
 			if ver == "" {
 				ver = "-"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", pk, ver, uptime, tps, apps, status) //nolint:errcheck
+			uptime := "-"
+			if e.Uptime > 0 {
+				uptime = (time.Duration(e.Uptime) * time.Second).Truncate(time.Second).String()
+			}
+			ip := e.PublicIP
+			if ip == "" {
+				ip = "-"
+			}
+			cc := e.CountryCode
+			if cc == "" {
+				cc = "-"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n", //nolint:errcheck
+				pk, ver, uptime, e.Transports, e.Apps, ip, cc, status)
 		}
 		tw.Flush() //nolint:errcheck,gosec
-		internal.PrintOutput(cmd.Flags(), results, buf.String())
+		internal.PrintOutput(cmd.Flags(), entries, buf.String())
 	},
-}
-
-var hvLsDetail bool
-
-func init() {
-	hvLsCmd.Flags().BoolVarP(&hvLsDetail, "detail", "d", false, "query each visor for version, uptime, and transport count via transport RPC")
 }

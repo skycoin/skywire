@@ -243,6 +243,8 @@ type API interface {
 	AddHypervisor(pk cipher.PubKey) error
 	CheckAREntry(pk string) ([]string, error)
 	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
+	HVListVisors() ([]HVVisorEntry, error)
+	HVVisorSummary(pk cipher.PubKey) (*Summary, error)
 	DHTSync(remotePK string, salt string) (int, error)
 	DHTGetAll(salt string) (string, error)
 

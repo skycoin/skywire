@@ -1280,6 +1280,24 @@ func (rc *rpcClient) TransportRPCCall(remotePK cipher.PubKey, method string, arg
 	return resp, nil
 }
 
+// HVListVisors returns summaries of all visors connected to this hypervisor.
+func (rc *rpcClient) HVListVisors() ([]HVVisorEntry, error) {
+	var out []HVVisorEntry
+	if err := rc.Call("HVListVisors", &struct{}{}, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HVVisorSummary returns a detailed summary of a specific remote visor.
+func (rc *rpcClient) HVVisorSummary(pk cipher.PubKey) (*Summary, error) {
+	var out Summary
+	if err := rc.Call("HVVisorSummary", &pk, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // CheckAREntry checks if a PK is registered in the address resolver.
 func (rc *rpcClient) CheckAREntry(pk string) ([]string, error) {
 	var resp []string

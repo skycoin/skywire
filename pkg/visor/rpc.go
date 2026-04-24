@@ -1748,3 +1748,33 @@ func (r *RPC) TransportRPCCall(req *TransportRPCCallRequest, out *json.RawMessag
 	*out = result
 	return nil
 }
+
+// HVListVisors returns summaries of all visors connected to this hypervisor.
+func (r *RPC) HVListVisors(_ *struct{}, out *[]HVVisorEntry) (err error) {
+	defer rpcutil.LogCall(r.log, "HVListVisors", nil)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	entries, lErr := v.HVListVisors()
+	if lErr != nil {
+		return lErr
+	}
+	*out = entries
+	return nil
+}
+
+// HVVisorSummary returns a detailed summary of a specific remote visor.
+func (r *RPC) HVVisorSummary(pk *cipher.PubKey, out *Summary) (err error) {
+	defer rpcutil.LogCall(r.log, "HVVisorSummary", pk)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	summary, sErr := v.HVVisorSummary(*pk)
+	if sErr != nil {
+		return sErr
+	}
+	*out = *summary
+	return nil
+}
