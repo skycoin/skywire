@@ -263,17 +263,22 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			return event
 		})
 
-		// --- Auto-refresh ---
+		// Show loading state immediately
+		status.SetText(" [yellow]Loading...[white] | q:quit  r:refresh  enter:detail  esc:back")
+		detail.SetText("[gray]Select a visor to view details[white]")
+
+		// Initial load + auto-refresh after app starts
 		go func() {
+			// Small delay to let app.Run() initialize the screen
+			time.Sleep(200 * time.Millisecond)
+			refresh()
+
 			ticker := time.NewTicker(30 * time.Second)
 			defer ticker.Stop()
 			for range ticker.C {
 				refresh()
 			}
 		}()
-
-		// Initial load
-		refresh()
 
 		if err := app.SetRoot(layout, true).EnableMouse(true).Run(); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
