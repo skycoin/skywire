@@ -13,10 +13,20 @@ package dht
 import (
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
+	"sync"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
+
+// contentCacheMaxAge bounds how long we skip re-publishing an unchanged
+// subject. A periodic refresh guards against silent Redis data loss or
+// eviction and lets new DHT full-nodes bootstrap eventually. 1h is a
+// conservative default; TPD heartbeats run at a higher rate, so the
+// vast majority of re-registers still hit the skip path.
+const contentCacheMaxAge = time.Hour
 
 // RedisMirror writes entries to Redis in the same key format as
 // RedisBackend, without requiring a local DHT node.
@@ -26,6 +36,14 @@ type RedisMirror struct {
 	log     *logging.Logger
 	pk      cipher.PubKey
 	sk      cipher.SecKey
+
+	cacheMu sync.RWMutex
+	cache   map[cipher.PubKey]mirroredContent
+}
+
+type mirroredContent struct {
+	hash    uint64
+	savedAt time.Time
 }
 
 // NewRedisMirror creates a mirror that writes directly to Redis.
@@ -42,6 +60,7 @@ func NewRedisMirror(redisAddr, redisPassword string, redisDB int, salt string, p
 		log:     log,
 		pk:      pk,
 		sk:      sk,
+		cache:   make(map[cipher.PubKey]mirroredContent),
 	}, nil
 }
 
@@ -58,6 +77,12 @@ func (m *RedisMirror) Mirror(subjectPK cipher.PubKey, entry interface{}, seq uin
 // under each target. For a 2-edge transport this cuts the per-register
 // secp256k1 cost in half; on TPD under production load the single-sign
 // path accounts for the majority of the service's CPU.
+//
+// Subjects whose last-mirrored payload hash matches the current payload
+// (and whose cache entry is fresher than contentCacheMaxAge) are
+// skipped: no sign, no save. This is the common case for re-register /
+// heartbeat flows where the list of transports for an edge hasn't
+// changed since the last publish.
 func (m *RedisMirror) MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, seq uint64) {
 	if len(subjectPKs) == 0 {
 		return
@@ -65,6 +90,16 @@ func (m *RedisMirror) MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, 
 	data, err := json.Marshal(entry)
 	if err != nil {
 		m.log.WithError(err).Warn("Redis mirror: marshal failed")
+		return
+	}
+
+	h := fnv.New64a()
+	_, _ = h.Write(data)
+	payloadHash := h.Sum64()
+	now := time.Now()
+
+	targets := m.subjectsToPublish(subjectPKs, payloadHash, now)
+	if len(targets) == 0 {
 		return
 	}
 
@@ -80,12 +115,37 @@ func (m *RedisMirror) MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, 
 	}
 
 	salt := []byte(m.salt)
-	for _, pk := range subjectPKs {
+	for _, pk := range targets {
 		target := MutableItemTarget(pk, salt)
 		if err := m.backend.Save(target, item); err != nil {
 			m.log.WithError(err).Warn("Redis mirror: save failed")
+			continue
 		}
+		m.recordPublished(pk, payloadHash, now)
 	}
+}
+
+// subjectsToPublish filters out subjects whose cached content hash matches
+// the current payload and whose cache entry is still fresh. It returns
+// the subset that must actually be signed and written.
+func (m *RedisMirror) subjectsToPublish(subjectPKs []cipher.PubKey, payloadHash uint64, now time.Time) []cipher.PubKey {
+	out := subjectPKs[:0:0]
+	m.cacheMu.RLock()
+	defer m.cacheMu.RUnlock()
+	for _, pk := range subjectPKs {
+		cached, ok := m.cache[pk]
+		if ok && cached.hash == payloadHash && now.Sub(cached.savedAt) < contentCacheMaxAge {
+			continue
+		}
+		out = append(out, pk)
+	}
+	return out
+}
+
+func (m *RedisMirror) recordPublished(pk cipher.PubKey, payloadHash uint64, now time.Time) {
+	m.cacheMu.Lock()
+	m.cache[pk] = mirroredContent{hash: payloadHash, savedAt: now}
+	m.cacheMu.Unlock()
 }
 
 // Delete removes the DHT target for the given subject PK.
@@ -97,6 +157,9 @@ func (m *RedisMirror) Delete(subjectPK cipher.PubKey) {
 	if err := m.backend.Delete(target); err != nil {
 		m.log.WithError(err).Warn("Redis mirror: delete failed")
 	}
+	m.cacheMu.Lock()
+	delete(m.cache, subjectPK)
+	m.cacheMu.Unlock()
 }
 
 // Close closes the Redis connection.
