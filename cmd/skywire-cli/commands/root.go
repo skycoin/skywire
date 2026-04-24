@@ -128,8 +128,7 @@ func init() {
 		cliutil.RootCmd,
 	)
 	var jsonOutput bool
-	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
-	RootCmd.PersistentFlags().MarkHidden(internal.JSONString) //nolint:errcheck,gosec
+	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output as JSON")
 	RootCmd.PersistentFlags().IntVar(&clirpc.Timeout, "timeout", 30, "RPC timeout in seconds (0 = unlimited)")
 	RootCmd.PersistentFlags().MarkHidden("timeout") //nolint:errcheck,gosec
 
@@ -141,7 +140,7 @@ func init() {
 var cliShowAll bool
 
 // cliHiddenFlags are persistent flags hidden by default, revealed by --all.
-var cliHiddenFlags = []string{internal.JSONString, "timeout"}
+var cliHiddenFlags = []string{"timeout"}
 
 // RootCmd is the root command for skywire-cli
 var RootCmd = &cobra.Command{

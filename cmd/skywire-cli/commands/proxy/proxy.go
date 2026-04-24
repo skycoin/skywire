@@ -109,9 +109,13 @@ func init() {
 }
 
 var startCmd = &cobra.Command{
-	Use:   "start",
-	Short: "start the " + serviceType + " client",
+	Use:   "start [pk]",
+	Short: "Start the proxy client",
 	Run: func(cmd *cobra.Command, args []string) {
+		// Accept PK as positional arg or --pk flag
+		if pk == "" && len(args) > 0 {
+			pk = args[0]
+		}
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -283,7 +287,7 @@ var startCmd = &cobra.Command{
 
 var stopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "stop the " + serviceType + " client",
+	Short: "Stop the proxy client",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -308,7 +312,7 @@ var stopCmd = &cobra.Command{
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: serviceType + " client status",
+	Short: "Proxy client status",
 	Run: func(cmd *cobra.Command, _ []string) {
 		//TODO: check status of multiple clients
 		rpcClient, err := clirpc.Client(cmd.Flags())
