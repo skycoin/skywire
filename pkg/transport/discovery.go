@@ -15,6 +15,12 @@ import (
 // DiscoveryClient performs Transport discovery operations.
 type DiscoveryClient interface {
 	RegisterTransports(ctx context.Context, entries ...*SignedEntry) error
+	// RegisterTransportsV3 registers transports using the DHT-aligned wire
+	// format: bare entries with no per-entry signatures (auth is the
+	// outer SW-Sig request signature). Version travels in a header.
+	// Implementations should fall back to RegisterTransports when the
+	// TPD returns 404 so new clients interoperate with older servers.
+	RegisterTransportsV3(ctx context.Context, version string, entries ...*Entry) error
 	// RegisterTransportsWithSync registers transports and returns all TPD entries in the response.
 	// Used when sync_tpd_data is enabled for local route calculation.
 	RegisterTransportsWithSync(ctx context.Context, entries ...*SignedEntry) ([]*Entry, error)
@@ -64,6 +70,15 @@ func (td *mockDiscoveryClient) RegisterTransports(_ context.Context, entries ...
 	}
 	td.Unlock()
 
+	return nil
+}
+
+func (td *mockDiscoveryClient) RegisterTransportsV3(_ context.Context, _ string, entries ...*Entry) error {
+	td.Lock()
+	for _, entry := range entries {
+		td.entries[entry.ID] = *entry
+	}
+	td.Unlock()
 	return nil
 }
 
@@ -219,6 +234,10 @@ func NewNoopDiscoveryClient() DiscoveryClient {
 }
 
 func (nd *noopDiscoveryClient) RegisterTransports(_ context.Context, _ ...*SignedEntry) error {
+	return nil
+}
+
+func (nd *noopDiscoveryClient) RegisterTransportsV3(_ context.Context, _ string, _ ...*Entry) error {
 	return nil
 }
 

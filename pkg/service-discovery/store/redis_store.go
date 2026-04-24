@@ -115,6 +115,14 @@ func (s *redisStore) serviceTypeSetKey(sType string) string {
 	return fmt.Sprintf("%s%s", serviceKeyPrefix, sType)
 }
 
+// visorServicesKey is the per-visor index set of service types the
+// visor currently has registered. Members are plain type strings
+// (e.g. "vpn", "skysocks", "visor"); combined with the PK they rebuild
+// the full serviceKey for MGET.
+func (s *redisStore) visorServicesKey(pkHex string) string {
+	return "sd:visor-svc:" + pkHex
+}
+
 func (s *redisStore) Service(ctx context.Context, sType string, addr servicedisc.SWAddr) (*servicedisc.Service, *servicedisc.HTTPError) {
 	key := s.serviceKey(sType, addr)
 
@@ -211,10 +219,12 @@ func (s *redisStore) UpdateService(ctx context.Context, se *servicedisc.Service)
 	// skyenv.ServiceDiscUpdateInterval), so a TTL >= ~2× refresh
 	// (configured via --entry-timeout, default 5m) gives safe
 	// margin for dropped or slow refreshes.
+	pkHex := se.Addr.PubKey().Hex()
 	pipe := s.client.Pipeline()
 	pipe.Set(ctx, key, data, s.ttl)
 	pipe.SAdd(ctx, setKey, se.Addr.PubKey().String())
 	pipe.SAdd(ctx, serviceTypesSetKey, se.Type)
+	pipe.SAdd(ctx, s.visorServicesKey(pkHex), se.Type)
 
 	if _, err := pipe.Exec(ctx); err != nil {
 		return s.processErr(err, http.StatusInternalServerError)
@@ -241,10 +251,11 @@ func (s *redisStore) UpdateServiceAndHeartbeat(ctx context.Context, se *serviced
 
 	pipe := s.client.Pipeline()
 
-	// Service update (3 commands)
+	// Service update (4 commands — adds per-visor type index)
 	pipe.Set(ctx, key, data, s.ttl)
 	pipe.SAdd(ctx, setKey, se.Addr.PubKey().String())
 	pipe.SAdd(ctx, serviceTypesSetKey, se.Type)
+	pipe.SAdd(ctx, s.visorServicesKey(pkHex), se.Type)
 
 	// Heartbeat (8 commands)
 	uptimeKey := sdUptimeKey(pkHex, date)
@@ -276,12 +287,55 @@ func (s *redisStore) DeleteService(ctx context.Context, sType string, addr servi
 	pipe := s.client.Pipeline()
 	pipe.Del(ctx, key)
 	pipe.SRem(ctx, setKey, pubKey)
+	pipe.SRem(ctx, s.visorServicesKey(addr.PubKey().Hex()), sType)
 
 	if _, err := pipe.Exec(ctx); err != nil {
 		return s.processErr(err, http.StatusInternalServerError)
 	}
 
 	return nil
+}
+
+// ServicesByPK returns every currently-registered service for the given
+// visor PK. Backed by the sd:visor-svc:<pkHex> index set maintained by
+// UpdateService / UpdateServiceAndHeartbeat / DeleteService. Types
+// whose primary service key has expired via TTL are silently skipped;
+// the caller can treat an empty result as "no active services" and
+// should not interpret it as an error.
+func (s *redisStore) ServicesByPK(ctx context.Context, pk cipher.PubKey) ([]servicedisc.Service, *servicedisc.HTTPError) {
+	pkHex := pk.Hex()
+	types, err := s.client.SMembers(ctx, s.visorServicesKey(pkHex)).Result()
+	if err != nil {
+		return nil, s.processErr(err, http.StatusInternalServerError)
+	}
+	if len(types) == 0 {
+		return nil, nil
+	}
+	addr := servicedisc.NewSWAddr(pk, 0)
+	keys := make([]string, 0, len(types))
+	for _, t := range types {
+		keys = append(keys, s.serviceKey(t, addr))
+	}
+	vals, err := s.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, s.processErr(err, http.StatusInternalServerError)
+	}
+	out := make([]servicedisc.Service, 0, len(vals))
+	for i, v := range vals {
+		raw, ok := v.(string)
+		if !ok {
+			// Primary entry expired; evict the stale index member so
+			// the next ServicesByPK doesn't keep reporting it.
+			s.client.SRem(ctx, s.visorServicesKey(pkHex), types[i]) //nolint:errcheck
+			continue
+		}
+		var svc servicedisc.Service
+		if err := json.Unmarshal([]byte(raw), &svc); err != nil {
+			continue
+		}
+		out = append(out, svc)
+	}
+	return out, nil
 }
 
 func (s *redisStore) CountServiceTypes(ctx context.Context) (uint64, error) {

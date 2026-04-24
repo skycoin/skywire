@@ -22,6 +22,129 @@ import (
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
+// swVisorVersionHeader carries the registering visor's version in v3
+// requests (replacing the Version field inside SignedEntry which v3
+// drops along with the per-entry signatures).
+const swVisorVersionHeader = "SW-Visor-Version"
+
+// registerTransportV3 accepts a list of bare transport.Entry from the
+// authenticated visor. Matches the shape stored in the DHT under
+// SHA256(visorPK || "tp"), making HTTP registration wire-compatible
+// with the DHT dataset.
+//
+// Security model: the outer request is authenticated via SW-Sig (the
+// httpauth middleware), so the server knows which PK submitted the
+// list. Per-entry pairwise signatures are not carried — the existing
+// v2 path never stored them anyway (store.RegisterTransportsBatch
+// persists only ID/edges/type/label/timing, not Signatures), so this
+// change only eliminates wire bytes and JSON encoding on both sides.
+//
+// The registering visor must be an edge of every entry in the batch.
+// Entries where the auth PK is not an edge are silently skipped rather
+// than erroring the whole batch — lets a visor that accidentally
+// includes a peer's transport get a successful partial registration
+// rather than retrying the whole set.
+func (api *API) registerTransportV3(w http.ResponseWriter, r *http.Request) {
+	authPK, ok := r.Context().Value(httpauth.ContextAuthKey).(cipher.PubKey)
+	if !ok {
+		api.writeError(w, r, errors.New("invalid auth, no public key provided"))
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	var entries []*transport.Entry
+	if err := json.Unmarshal(body, &entries); err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	version := r.Header.Get(swVisorVersionHeader)
+
+	// Filter to entries where the caller is an edge and wrap in
+	// SignedEntry so the existing store/mirror code paths work
+	// unchanged. Signatures are zero-valued; the store ignores them.
+	signed := make([]*transport.SignedEntry, 0, len(entries))
+	touchedEdges := make(map[cipher.PubKey]struct{})
+	for _, e := range entries {
+		if e == nil || e.EdgeIndex(authPK) < 0 {
+			continue
+		}
+		signed = append(signed, &transport.SignedEntry{Entry: e, Version: version})
+		for _, edgePK := range e.Edges {
+			touchedEdges[edgePK] = struct{}{}
+		}
+	}
+
+	if len(signed) == 0 {
+		httputil.WriteJSON(w, r, http.StatusCreated, []*transport.Entry{})
+		return
+	}
+
+	if err := api.store.RegisterTransportsBatch(r.Context(), signed); err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	for _, sEntry := range signed {
+		api.publishTransportToCXO(sEntry.Entry)
+		if err := api.store.RecordTransportHeartbeat(r.Context(), sEntry.Entry.ID, string(sEntry.Entry.Type)); err != nil {
+			api.log(r).WithError(err).Debug("Failed to record transport heartbeat")
+		}
+	}
+	api.mirrorEdges(r.Context(), touchedEdges)
+
+	if err := api.store.RecordHeartbeat(r.Context(), authPK, version); err != nil {
+		api.log(r).WithError(err).Debug("Failed to record heartbeat from v3 transport registration")
+	}
+
+	if r.URL.Query().Get("sync") == "true" {
+		allEntries, err := api.store.GetAllTransports(r.Context(), false)
+		if err != nil {
+			api.log(r).WithError(err).Error("Error getting all transports for sync")
+			api.writeError(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusCreated, allEntries)
+		return
+	}
+
+	// v3 response is the plain entry list — same shape as /v3/transports/edge:
+	// and the DHT value — rather than the SignedEntry list v2 echoes back.
+	out := make([]*transport.Entry, 0, len(signed))
+	for _, s := range signed {
+		out = append(out, s.Entry)
+	}
+	httputil.WriteJSON(w, r, http.StatusCreated, out)
+}
+
+// getTransportsByEdgeV3 returns []*transport.Entry — identical shape to
+// the DHT value written by the mirror. Internally delegates to the
+// same store.GetTransportsByEdge that v2 uses; it's already the bare
+// Entry list (SignedEntry is not persisted).
+func (api *API) getTransportsByEdgeV3(w http.ResponseWriter, r *http.Request) {
+	edgeParam := chi.URLParam(r, "edge")
+	var edge cipher.PubKey
+	if err := edge.UnmarshalText([]byte(edgeParam)); err != nil {
+		api.writeError(w, r, ErrInvalidPubKey)
+		return
+	}
+	entries, err := api.store.GetTransportsByEdge(r.Context(), edge)
+	if err != nil {
+		if errors.Is(err, store.ErrTransportNotFound) {
+			httputil.WriteJSON(w, r, http.StatusOK, []*transport.Entry{})
+			return
+		}
+		api.writeError(w, r, err)
+		return
+	}
+	httputil.WriteJSON(w, r, http.StatusOK, entries)
+}
+
 func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -43,12 +166,18 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Post-registration: CXO publish, DHT mirror, heartbeats.
+	// For DHT mirror we collect the distinct edge PKs touched by the batch
+	// and remirror each edge's full transport list once below — a single
+	// Mirror per edge rather than per-entry-per-edge (which would just
+	// overwrite the same target repeatedly and lose all but the last).
 	var entryVersion string
+	touchedEdges := make(map[cipher.PubKey]struct{})
 	for _, entry := range entries {
 		api.publishTransportToCXO(entry.Entry)
 		if api.dhtMirror != nil {
-			seq := uint64(time.Now().UnixNano()) //nolint:gosec
-			api.dhtMirror.MirrorMany(entry.Entry.Edges[:], entry.Entry, seq)
+			for _, edgePK := range entry.Entry.Edges {
+				touchedEdges[edgePK] = struct{}{}
+			}
 		}
 		if entryVersion == "" && entry.Version != "" {
 			entryVersion = entry.Version
@@ -57,6 +186,7 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 			api.log(r).WithError(err).Debug("Failed to record transport heartbeat")
 		}
 	}
+	api.mirrorEdges(r.Context(), touchedEdges)
 
 	// Record a heartbeat for the registering visor. This piggybacks on
 	// the 90s transport re-registration cycle so the TPD's /uptimes
@@ -323,6 +453,12 @@ func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Capture edges before the delete so we can remirror their lists.
+	touchedEdges := make(map[cipher.PubKey]struct{}, len(entry.Edges))
+	for _, edgePK := range entry.Edges {
+		touchedEdges[edgePK] = struct{}{}
+	}
+
 	err = api.store.DeregisterTransport(r.Context(), id)
 	if err != nil {
 		api.writeError(w, r, err)
@@ -331,6 +467,7 @@ func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
 
 	// Remove from CXO feed
 	api.unpublishTransportFromCXO(id.String())
+	api.mirrorEdges(r.Context(), touchedEdges)
 
 	w.WriteHeader(http.StatusOK)
 	if _, err = w.Write([]byte("transport deleted")); err != nil {
@@ -361,6 +498,7 @@ func (api *API) deleteTransportsBatch(w http.ResponseWriter, r *http.Request) {
 
 	deleted := 0
 	skipped := 0
+	touchedEdges := make(map[cipher.PubKey]struct{})
 	for _, idParam := range ids {
 		id, err := uuid.Parse(idParam)
 		if err != nil {
@@ -384,9 +522,13 @@ func (api *API) deleteTransportsBatch(w http.ResponseWriter, r *http.Request) {
 			skipped++
 			continue
 		}
+		for _, edgePK := range entry.Edges {
+			touchedEdges[edgePK] = struct{}{}
+		}
 		api.unpublishTransportFromCXO(id.String())
 		deleted++
 	}
+	api.mirrorEdges(r.Context(), touchedEdges)
 
 	httputil.WriteJSON(w, r, http.StatusOK, map[string]int{"deleted": deleted, "skipped": skipped})
 }
@@ -434,11 +576,19 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	touchedEdges := make(map[cipher.PubKey]struct{})
 	for _, idParam := range tps {
 		id, err := uuid.Parse(idParam)
 		if err != nil {
 			api.writeError(w, r, ErrInvalidTransportID)
 			continue
+		}
+		// Fetch edges before deleting so we can remirror the affected edges.
+		entry, err := api.store.GetTransportByID(r.Context(), id)
+		if err == nil && entry != nil {
+			for _, edgePK := range entry.Edges {
+				touchedEdges[edgePK] = struct{}{}
+			}
 		}
 		err = api.store.DeregisterTransport(r.Context(), id)
 		if err != nil {
@@ -447,6 +597,7 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 		}
 		api.unpublishTransportFromCXO(id.String())
 	}
+	api.mirrorEdges(r.Context(), touchedEdges)
 
 	api.log(r).WithFields(logrus.Fields{"Number of Transports": len(tps), "Transports": tps}).Info("Deregistration process completed.")
 	httputil.WriteJSON(w, r, http.StatusOK, nil)
