@@ -40,9 +40,10 @@ type TransportData struct {
 }
 
 type redisStore struct {
-	client *redis.Client
-	ttl    time.Duration
-	log    *logging.Logger
+	client  *redis.Client
+	ttl     time.Duration
+	log     *logging.Logger
+	pkCache *pubKeyCache
 }
 
 func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl time.Duration, logger *logging.Logger) (*redisStore, error) {
@@ -76,7 +77,12 @@ func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl
 		return nil, err
 	}
 
-	return &redisStore{client: redisCl, ttl: ttl, log: logger}, nil
+	return &redisStore{
+		client:  redisCl,
+		ttl:     ttl,
+		log:     logger,
+		pkCache: newPubKeyCache(defaultPubKeyCacheCap),
+	}, nil
 }
 
 func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.SignedEntry) error {
@@ -497,11 +503,12 @@ func (s *redisStore) dataToEntryCore(data TransportData) (*transport.Entry, erro
 		return nil, err
 	}
 
-	var edgeA, edgeB cipher.PubKey
-	if err := edgeA.UnmarshalText([]byte(data.EdgeA)); err != nil {
+	edgeA, err := s.pkCache.Parse(data.EdgeA)
+	if err != nil {
 		return nil, err
 	}
-	if err := edgeB.UnmarshalText([]byte(data.EdgeB)); err != nil {
+	edgeB, err := s.pkCache.Parse(data.EdgeB)
+	if err != nil {
 		return nil, err
 	}
 
