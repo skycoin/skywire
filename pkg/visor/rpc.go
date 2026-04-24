@@ -1712,8 +1712,9 @@ func (r *RPC) DHTSync(req *DHTSyncRequest, out *int) (err error) {
 
 // TransportRPCCallRequest is the request for TransportRPCCall.
 type TransportRPCCallRequest struct {
-	RemotePK cipher.PubKey `json:"remote_pk"`
-	Method   string        `json:"method"`
+	RemotePK cipher.PubKey   `json:"remote_pk"`
+	Method   string          `json:"method"`
+	Args     json.RawMessage `json:"args,omitempty"` // JSON-encoded RPC arguments
 }
 
 // TransportRPCCall dials a remote visor's transport RPC and calls the
@@ -1735,9 +1736,13 @@ func (r *RPC) TransportRPCCall(req *TransportRPCCallRequest, out *json.RawMessag
 	}
 	defer rpcC.Close() //nolint:errcheck,gosec
 
-	// Call the remote method with empty args, get raw JSON result.
+	// Call the remote method, get raw JSON result.
+	var rpcArgs interface{} = &struct{}{}
+	if len(req.Args) > 0 {
+		rpcArgs = &req.Args
+	}
 	var result json.RawMessage
-	if callErr := rpcC.Call(req.Method, &struct{}{}, &result); callErr != nil {
+	if callErr := rpcC.Call(req.Method, rpcArgs, &result); callErr != nil {
 		return fmt.Errorf("remote RPC %s: %w", req.Method, callErr)
 	}
 	*out = result

@@ -1185,7 +1185,7 @@ func (mc *mockRPCClient) DHTSync(_ string, _ string) (int, error) {
 }
 
 // TransportRPCCall implements API.
-func (mc *mockRPCClient) TransportRPCCall(_ cipher.PubKey, _ string) (json.RawMessage, error) {
+func (mc *mockRPCClient) TransportRPCCall(_ cipher.PubKey, _ string, _ json.RawMessage) (json.RawMessage, error) {
 	return nil, fmt.Errorf("not supported in mock")
 }
 

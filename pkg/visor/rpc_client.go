@@ -1270,8 +1270,9 @@ func (rc *rpcClient) DHTSync(remotePK string, salt string) (int, error) {
 }
 
 // TransportRPCCall proxies an RPC call to a remote visor over a transport.
-func (rc *rpcClient) TransportRPCCall(remotePK cipher.PubKey, method string) (json.RawMessage, error) {
-	req := TransportRPCCallRequest{RemotePK: remotePK, Method: method}
+// args is optional JSON-encoded RPC arguments.
+func (rc *rpcClient) TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error) {
+	req := TransportRPCCallRequest{RemotePK: remotePK, Method: method, Args: args}
 	var resp json.RawMessage
 	if err := rc.Call("TransportRPCCall", &req, &resp); err != nil {
 		return nil, err
