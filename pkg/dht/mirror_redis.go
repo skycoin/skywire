@@ -88,6 +88,17 @@ func (m *RedisMirror) MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, 
 	}
 }
 
+// Delete removes the DHT target for the given subject PK.
+// Used when a mirrored entry is deleted from the source-of-truth store
+// (e.g., last transport for an edge was deregistered) so the DHT view
+// doesn't carry a stale record indefinitely.
+func (m *RedisMirror) Delete(subjectPK cipher.PubKey) {
+	target := MutableItemTarget(subjectPK, []byte(m.salt))
+	if err := m.backend.Delete(target); err != nil {
+		m.log.WithError(err).Warn("Redis mirror: delete failed")
+	}
+}
+
 // Close closes the Redis connection.
 func (m *RedisMirror) Close() error {
 	return m.backend.Close()

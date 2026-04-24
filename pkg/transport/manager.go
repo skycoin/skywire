@@ -392,7 +392,16 @@ func (tm *Manager) reRegisterTransports(ctx context.Context) {
 		return
 	}
 
-	err := tm.Conf.DiscoveryClient.RegisterTransports(ctx, entries...)
+	// Prefer v3 (bare entries, no per-entry signatures) since it's
+	// smaller on the wire and the DiscoveryClient will fall back to the
+	// legacy v2 path if the TPD doesn't yet have the v3 endpoint.
+	bareEntries := make([]*Entry, 0, len(entries))
+	for _, se := range entries {
+		if se.Entry != nil {
+			bareEntries = append(bareEntries, se.Entry)
+		}
+	}
+	err := tm.Conf.DiscoveryClient.RegisterTransportsV3(ctx, tm.Conf.Version, bareEntries...)
 	if err != nil {
 		tm.Logger.WithError(err).Warn("Failed to re-register transports with discovery")
 	} else {

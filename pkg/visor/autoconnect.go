@@ -420,9 +420,22 @@ func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey,
 	var services []servicedisc.Service
 
 	// Try DHT first — avoids HTTP round-trip to service discovery.
+	// The SD mirror writes a LIST of services per visor PK under the
+	// "svc" salt, but older SD builds wrote a single service object.
+	// Accept both shapes so this code is forward- and backward-compatible
+	// across an SD/visor rollout window.
 	if a.dhtNode != nil {
 		items, _, _ := a.dhtNode.Store().GetItems("svc", 0, 0)
 		for _, item := range items {
+			var list []servicedisc.Service
+			if err := json.Unmarshal(item.V, &list); err == nil {
+				for _, svc := range list {
+					if svc.Type == servicedisc.ServiceTypeVisor {
+						services = append(services, svc)
+					}
+				}
+				continue
+			}
 			var svc servicedisc.Service
 			if json.Unmarshal(item.V, &svc) == nil && svc.Type == servicedisc.ServiceTypeVisor {
 				services = append(services, svc)

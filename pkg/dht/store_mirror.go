@@ -87,6 +87,18 @@ func (m *EntryMirror) MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, 
 	}()
 }
 
+// Delete removes the DHT target for the given subject PK from the
+// local store. Used when a mirrored entry is deleted from the
+// source-of-truth store so the DHT view doesn't carry a stale record
+// indefinitely. The deletion propagates organically as other full
+// nodes sync and observe the absence.
+func (m *EntryMirror) Delete(subjectPK cipher.PubKey) {
+	go func() {
+		target := mirrorTarget(subjectPK, m.salt)
+		m.node.store.Delete(target)
+	}()
+}
+
 // mirrorTarget computes SHA256(subjectPK || salt) — the same target
 // that the visor itself would use if it published directly.
 func mirrorTarget(pk cipher.PubKey, salt []byte) NodeID {
