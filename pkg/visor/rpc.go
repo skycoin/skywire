@@ -1876,3 +1876,43 @@ func (r *RPC) HVRemoveRoutingRule(in *HVRoutingRuleArgs, _ *struct{}) (err error
 	}
 	return v.HVRemoveRoutingRule(in.PK, in.Key)
 }
+
+// HVAddTransportArgs creates a transport on a remote visor.
+type HVAddTransportArgs struct {
+	PK      cipher.PubKey
+	Remote  cipher.PubKey
+	TpType  string
+	Label   string
+	Timeout time.Duration
+}
+
+// HVAddTransport creates a new transport on a remote visor.
+func (r *RPC) HVAddTransport(in *HVAddTransportArgs, out *TransportSummary) (err error) {
+	defer rpcutil.LogCall(r.log, "HVAddTransport", in)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	res, addErr := v.HVAddTransport(in.PK, in.Remote, in.TpType, in.Label, in.Timeout)
+	if addErr != nil {
+		return addErr
+	}
+	*out = *res
+	return nil
+}
+
+// HVAutoconnectArgs toggles public_autoconnect on a remote visor.
+type HVAutoconnectArgs struct {
+	PK     cipher.PubKey
+	Enable bool
+}
+
+// HVSetPublicAutoconnect toggles public_autoconnect on a remote visor.
+func (r *RPC) HVSetPublicAutoconnect(in *HVAutoconnectArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVSetPublicAutoconnect", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVSetPublicAutoconnect(in.PK, in.Enable)
+}

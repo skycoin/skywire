@@ -64,7 +64,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		statusBar := tview.NewTextView().
 			SetDynamicColors(true).
 			SetTextAlign(tview.AlignLeft).
-			SetText(" [yellow]Loading...[white] | q:quit r:refresh enter:detail esc:back  m:min-hops w:reward s:start-app S:stop-app t:rm-tp x:rm-rule")
+			SetText(" [yellow]Loading...[white] | q:quit r:refresh enter:detail esc:back  m:min-hops w:reward p:autoconn  s:app S:stop  T:add-tp t:rm-tp  x:rm-rule")
 
 		// --- Layout ---
 		split := tview.NewFlex().
@@ -82,7 +82,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 
 		setStatus := func(msg string) {
 			app.QueueUpdateDraw(func() {
-				statusBar.SetText(fmt.Sprintf(" [yellow]%s[white] | q:quit r:refresh enter:detail esc:back  m:min-hops w:reward s:start-app S:stop-app t:rm-tp x:rm-rule", msg))
+				statusBar.SetText(fmt.Sprintf(" [yellow]%s[white] | q:quit r:refresh enter:detail esc:back  m:min-hops w:reward p:autoconn  s:app S:stop  T:add-tp t:rm-tp  x:rm-rule", msg))
 			})
 		}
 
@@ -148,6 +148,33 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		}
 		fetchSummary := func(pk cipher.PubKey) (*visor.Summary, error) {
 			return rpcClient.HVVisorSummary(pk)
+		}
+		showAddTransportModal := func(targetPK cipher.PubKey, onSubmit func(remote cipher.PubKey, tpType, label string)) {
+			form := tview.NewForm()
+			form.AddInputField("remote PK", "", 64, nil, nil).
+				AddDropDown("type", []string{"stcpr", "sudph", "stcp", "dmsg"}, 0, nil).
+				AddInputField("label", "user", 32, nil, nil)
+			form.AddButton("OK", func() {
+				pkStr := strings.TrimSpace(form.GetFormItem(0).(*tview.InputField).GetText())
+				_, tpType := form.GetFormItem(1).(*tview.DropDown).GetCurrentOption()
+				label := strings.TrimSpace(form.GetFormItem(2).(*tview.InputField).GetText())
+				closeModal()
+				if pkStr == "" {
+					setStatus("add transport: remote PK required")
+					return
+				}
+				var rpk cipher.PubKey
+				if err := rpk.Set(pkStr); err != nil {
+					setStatus("add transport: invalid PK: " + err.Error())
+					return
+				}
+				onSubmit(rpk, tpType, label)
+			})
+			form.AddButton("Cancel", closeModal)
+			form.SetBorder(true).
+				SetTitle(" Add transport on " + targetPK.String()[:8] + " ").
+				SetTitleAlign(tview.AlignLeft)
+			showModal(form, 80, 11)
 		}
 
 		// --- Populate table ---
@@ -561,6 +588,55 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 										}()
 									})
 							})
+						})
+					}()
+					return nil
+				case 'T':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					showAddTransportModal(v.PK, func(remote cipher.PubKey, tpType, label string) {
+						go func() {
+							setStatus("Adding transport...")
+							res, err := rpcClient.HVAddTransport(v.PK, remote, tpType, label, 0)
+							if err != nil {
+								setStatus("add transport failed: " + err.Error())
+								return
+							}
+							setStatus(fmt.Sprintf("transport %s.. (%s) added on %s",
+								res.ID.String()[:8], tpType, v.PK.String()[:8]))
+							refresh()
+						}()
+					})
+					return nil
+				case 'p':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					go func() {
+						setStatus("Loading autoconnect status...")
+						sum, err := fetchSummary(v.PK)
+						if err != nil {
+							setStatus("fetch summary failed: " + err.Error())
+							return
+						}
+						current := sum.PublicAutoconnect
+						newVal := !current
+						app.QueueUpdateDraw(func() {
+							showConfirmModal("Toggle public_autoconnect",
+								fmt.Sprintf("Currently %v on %s. Set to %v?", current, v.PK.String()[:8], newVal),
+								func() {
+									go func() {
+										if err := rpcClient.HVSetPublicAutoconnect(v.PK, newVal); err != nil {
+											setStatus("set autoconnect failed: " + err.Error())
+											return
+										}
+										setStatus(fmt.Sprintf("public_autoconnect=%v on %s", newVal, v.PK.String()[:8]))
+										refresh()
+									}()
+								})
 						})
 					}()
 					return nil

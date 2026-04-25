@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // HVVisorEntry is a summary of a remote visor connected to this hypervisor.
@@ -202,4 +203,28 @@ func (v *Visor) HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) error
 		return err
 	}
 	return api.RemoveRoutingRule(key)
+}
+
+// HVAddTransport creates a new transport on the visor identified by pk.
+func (v *Visor) HVAddTransport(pk, remote cipher.PubKey, tpType, label string, timeout time.Duration) (*TransportSummary, error) {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return nil, err
+	}
+	if label == "" {
+		label = string(transport.LabelUser)
+	}
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	return api.AddTransport(remote, tpType, timeout, label, false, false)
+}
+
+// HVSetPublicAutoconnect toggles public_autoconnect on the visor identified by pk.
+func (v *Visor) HVSetPublicAutoconnect(pk cipher.PubKey, enable bool) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.SetPublicAutoconnect(enable)
 }

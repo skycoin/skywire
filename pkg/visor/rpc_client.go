@@ -1332,6 +1332,26 @@ func (rc *rpcClient) HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) 
 	return rc.Call("HVRemoveRoutingRule", &HVRoutingRuleArgs{PK: pk, Key: key}, &struct{}{})
 }
 
+// HVAddTransport creates a transport on a remote visor.
+func (rc *rpcClient) HVAddTransport(pk, remote cipher.PubKey, tpType, label string, timeout time.Duration) (*TransportSummary, error) {
+	var out TransportSummary
+	if err := rc.Call("HVAddTransport", &HVAddTransportArgs{
+		PK:      pk,
+		Remote:  remote,
+		TpType:  tpType,
+		Label:   label,
+		Timeout: timeout,
+	}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// HVSetPublicAutoconnect toggles public_autoconnect on a remote visor.
+func (rc *rpcClient) HVSetPublicAutoconnect(pk cipher.PubKey, enable bool) error {
+	return rc.Call("HVSetPublicAutoconnect", &HVAutoconnectArgs{PK: pk, Enable: enable}, &struct{}{})
+}
+
 // CheckAREntry checks if a PK is registered in the address resolver.
 func (rc *rpcClient) CheckAREntry(pk string) ([]string, error) {
 	var resp []string

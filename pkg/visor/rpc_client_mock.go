@@ -1229,6 +1229,16 @@ func (mc *mockRPCClient) HVRemoveRoutingRule(_ cipher.PubKey, _ routing.RouteID)
 	return fmt.Errorf("not supported in mock")
 }
 
+// HVAddTransport implements API.
+func (mc *mockRPCClient) HVAddTransport(_, _ cipher.PubKey, _, _ string, _ time.Duration) (*TransportSummary, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVSetPublicAutoconnect implements API.
+func (mc *mockRPCClient) HVSetPublicAutoconnect(_ cipher.PubKey, _ bool) error {
+	return fmt.Errorf("not supported in mock")
+}
+
 // DmsgPorterDiag implements API.
 func (mc *mockRPCClient) DmsgPorterDiag() (*netutil.EphemeralDiagResult, error) {
 	return &netutil.EphemeralDiagResult{TypeCount: map[string]int{}}, nil
