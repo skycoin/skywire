@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/google/uuid"
 	"github.com/rivo/tview"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -111,6 +111,43 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			form.AddButton("Cancel", closeModal)
 			form.SetBorder(true).SetTitle(" " + title + " ").SetTitleAlign(tview.AlignLeft)
 			showModal(form, 80, 7)
+		}
+		showConfirmModal := func(title, message string, onConfirm func()) {
+			m := tview.NewModal().
+				SetText(message).
+				AddButtons([]string{"Yes", "No"}).
+				SetDoneFunc(func(_ int, label string) {
+					closeModal()
+					if label == "Yes" {
+						onConfirm()
+					}
+				})
+			m.SetBorder(true).SetTitle(" " + title + " ")
+			app.SetRoot(m, true).SetFocus(m)
+		}
+		showListModal := func(title string, items []string, onSelect func(idx int)) {
+			if len(items) == 0 {
+				showConfirmModal(title, "No items available.", func() {})
+				return
+			}
+			list := tview.NewList().ShowSecondaryText(false)
+			for i, label := range items {
+				idx := i
+				list.AddItem(label, "", 0, func() {
+					closeModal()
+					onSelect(idx)
+				})
+			}
+			list.SetBorder(true).SetTitle(" " + title + " ").SetTitleAlign(tview.AlignLeft)
+			list.SetDoneFunc(closeModal)
+			height := len(items) + 4
+			if height > 24 {
+				height = 24
+			}
+			showModal(list, 80, height)
+		}
+		fetchSummary := func(pk cipher.PubKey) (*visor.Summary, error) {
+			return rpcClient.HVVisorSummary(pk)
 		}
 
 		// --- Populate table ---
@@ -353,86 +390,179 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					if !ok {
 						return nil
 					}
-					showInputModal("Start app on "+v.PK.String()[:8], "app name", "", func(s string) {
-						if s == "" {
+					go func() {
+						setStatus("Loading apps...")
+						sum, err := fetchSummary(v.PK)
+						if err != nil {
+							setStatus("fetch apps failed: " + err.Error())
 							return
 						}
-						go func() {
-							if err := rpcClient.HVStartApp(v.PK, s); err != nil {
-								setStatus("start " + s + " failed: " + err.Error())
-								return
+						apps := sum.Overview.Apps
+						labels := make([]string, len(apps))
+						for i, a := range apps {
+							state := "stopped"
+							if a.Status == 1 {
+								state = "running"
 							}
-							setStatus("started " + s + " on " + v.PK.String()[:8])
-							refresh()
-						}()
-					})
+							labels[i] = fmt.Sprintf("[%-7s] %-22s port:%d", state, a.Name, a.Port)
+						}
+						app.QueueUpdateDraw(func() {
+							showListModal("Toggle app on "+v.PK.String()[:8], labels, func(idx int) {
+								a := apps[idx]
+								go func() {
+									var aerr error
+									if a.Status == 1 {
+										aerr = rpcClient.HVStopApp(v.PK, a.Name)
+									} else {
+										aerr = rpcClient.HVStartApp(v.PK, a.Name)
+									}
+									if aerr != nil {
+										setStatus(a.Name + ": " + aerr.Error())
+										return
+									}
+									setStatus("toggled " + a.Name + " on " + v.PK.String()[:8])
+									refresh()
+								}()
+							})
+						})
+					}()
 					return nil
 				case 'S':
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
 					}
-					showInputModal("Stop app on "+v.PK.String()[:8], "app name", "", func(s string) {
-						if s == "" {
+					go func() {
+						setStatus("Loading apps...")
+						sum, err := fetchSummary(v.PK)
+						if err != nil {
+							setStatus("fetch apps failed: " + err.Error())
 							return
 						}
-						go func() {
-							if err := rpcClient.HVStopApp(v.PK, s); err != nil {
-								setStatus("stop " + s + " failed: " + err.Error())
-								return
+						running := []*appserver.AppState{}
+						for _, a := range sum.Overview.Apps {
+							if a.Status == 1 {
+								running = append(running, a)
 							}
-							setStatus("stopped " + s + " on " + v.PK.String()[:8])
-							refresh()
-						}()
-					})
+						}
+						labels := make([]string, len(running))
+						for i, a := range running {
+							labels[i] = fmt.Sprintf("%-22s port:%d", a.Name, a.Port)
+						}
+						app.QueueUpdateDraw(func() {
+							showListModal("Stop app on "+v.PK.String()[:8], labels, func(idx int) {
+								name := running[idx].Name
+								go func() {
+									if err := rpcClient.HVStopApp(v.PK, name); err != nil {
+										setStatus("stop " + name + " failed: " + err.Error())
+										return
+									}
+									setStatus("stopped " + name + " on " + v.PK.String()[:8])
+									refresh()
+								}()
+							})
+						})
+					}()
 					return nil
 				case 't':
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
 					}
-					showInputModal("Delete transport on "+v.PK.String()[:8], "transport ID (UUID)", "", func(s string) {
-						if s == "" {
-							return
-						}
-						tid, err := uuid.Parse(s)
+					go func() {
+						setStatus("Loading transports...")
+						sum, err := fetchSummary(v.PK)
 						if err != nil {
-							setStatus("rm transport: invalid UUID: " + err.Error())
+							setStatus("fetch transports failed: " + err.Error())
 							return
 						}
-						go func() {
-							if err := rpcClient.HVRemoveTransport(v.PK, tid); err != nil {
-								setStatus("rm transport failed: " + err.Error())
-								return
-							}
-							setStatus("transport " + s[:8] + ".. removed on " + v.PK.String()[:8])
-							refresh()
-						}()
-					})
+						tps := sum.Overview.Transports
+						labels := make([]string, len(tps))
+						for i, tp := range tps {
+							short := tp.ID.String()[:8] + ".."
+							labels[i] = fmt.Sprintf("%s  %-6s  %s..  %s", short, strings.ToUpper(string(tp.Type)), tp.Remote.String()[:8], tp.Label)
+						}
+						app.QueueUpdateDraw(func() {
+							showListModal("Delete transport on "+v.PK.String()[:8], labels, func(idx int) {
+								tp := tps[idx]
+								short := tp.ID.String()[:8] + ".."
+								showConfirmModal("Confirm",
+									fmt.Sprintf("Delete transport %s (%s) ?", short, tp.Type),
+									func() {
+										go func() {
+											if err := rpcClient.HVRemoveTransport(v.PK, tp.ID); err != nil {
+												setStatus("rm transport failed: " + err.Error())
+												return
+											}
+											setStatus("transport " + short + " removed on " + v.PK.String()[:8])
+											refresh()
+										}()
+									})
+							})
+						})
+					}()
 					return nil
 				case 'x':
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
 					}
-					showInputModal("Delete routing rule on "+v.PK.String()[:8], "route ID (number)", "", func(s string) {
-						if s == "" {
-							return
-						}
-						n, err := strconv.ParseUint(s, 10, 32)
+					go func() {
+						setStatus("Loading route groups...")
+						sum, err := fetchSummary(v.PK)
 						if err != nil {
-							setStatus("rm rule: invalid route ID: " + err.Error())
+							setStatus("fetch route groups failed: " + err.Error())
 							return
 						}
-						go func() {
-							if err := rpcClient.HVRemoveRoutingRule(v.PK, routing.RouteID(n)); err != nil {
-								setStatus("rm rule failed: " + err.Error())
-								return
-							}
-							setStatus(fmt.Sprintf("rule %d removed on %s", n, v.PK.String()[:8]))
-							refresh()
-						}()
-					})
+						rgs := sum.RouteGroups
+						if len(rgs) == 0 {
+							app.QueueUpdateDraw(func() {
+								showInputModal("Delete rule by ID on "+v.PK.String()[:8],
+									"route ID", "", func(s string) {
+										n, err := strconv.ParseUint(s, 10, 32)
+										if err != nil {
+											setStatus("rm rule: invalid ID: " + err.Error())
+											return
+										}
+										go func() {
+											if err := rpcClient.HVRemoveRoutingRule(v.PK, routing.RouteID(n)); err != nil {
+												setStatus("rm rule failed: " + err.Error())
+												return
+											}
+											setStatus(fmt.Sprintf("rule %d removed", n))
+											refresh()
+										}()
+									})
+							})
+							return
+						}
+						labels := make([]string, len(rgs))
+						for i, rg := range rgs {
+							labels[i] = fmt.Sprintf("fwd=%d csm=%d  %s..:%d → %s..:%d",
+								rg.FwdRuleID, rg.ConsumeRuleID,
+								rg.Desc.SrcPK.String()[:8], rg.Desc.SrcPort,
+								rg.Desc.DstPK.String()[:8], rg.Desc.DstPort)
+						}
+						app.QueueUpdateDraw(func() {
+							showListModal("Delete route group on "+v.PK.String()[:8], labels, func(idx int) {
+								rg := rgs[idx]
+								showConfirmModal("Confirm",
+									fmt.Sprintf("Delete fwd rule %d and consume rule %d ?", rg.FwdRuleID, rg.ConsumeRuleID),
+									func() {
+										go func() {
+											fwdErr := rpcClient.HVRemoveRoutingRule(v.PK, rg.FwdRuleID)
+											csmErr := rpcClient.HVRemoveRoutingRule(v.PK, rg.ConsumeRuleID)
+											if fwdErr != nil || csmErr != nil {
+												setStatus(fmt.Sprintf("rm rule: fwd=%v csm=%v", fwdErr, csmErr))
+												return
+											}
+											setStatus(fmt.Sprintf("rules %d/%d removed", rg.FwdRuleID, rg.ConsumeRuleID))
+											refresh()
+										}()
+									})
+							})
+						})
+					}()
 					return nil
 				}
 			}
