@@ -64,7 +64,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		statusBar := tview.NewTextView().
 			SetDynamicColors(true).
 			SetTextAlign(tview.AlignLeft).
-			SetText(" [yellow]Loading...[white] | q:quit r:refresh enter:detail esc:back  m:min-hops w:reward p:autoconn  s:app S:stop  T:add-tp t:rm-tp  x:rm-rule")
+			SetText(" [yellow]Loading...[white] | q:quit r:refresh enter:detail esc:back  m:min-hops M:mux c:calc-rt w:reward p:autoconn  s:app S:stop  T:add-tp t:rm-tp  x:rm-rule  R:reload D:shutdown")
 
 		// --- Layout ---
 		split := tview.NewFlex().
@@ -82,7 +82,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 
 		setStatus := func(msg string) {
 			app.QueueUpdateDraw(func() {
-				statusBar.SetText(fmt.Sprintf(" [yellow]%s[white] | q:quit r:refresh enter:detail esc:back  m:min-hops w:reward p:autoconn  s:app S:stop  T:add-tp t:rm-tp  x:rm-rule", msg))
+				statusBar.SetText(fmt.Sprintf(" [yellow]%s[white] | q:quit r:refresh enter:detail esc:back  m:min-hops M:mux c:calc-rt w:reward p:autoconn  s:app S:stop  T:add-tp t:rm-tp  x:rm-rule  R:reload D:shutdown", msg))
 			})
 		}
 
@@ -372,7 +372,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 				case 'q', 'Q':
 					app.Stop()
 					return nil
-				case 'r', 'R':
+				case 'r':
 					refresh()
 					return nil
 				case 'm':
@@ -639,6 +639,89 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 								})
 						})
 					}()
+					return nil
+				case 'M':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					showInputModal("Set mux_routes on "+v.PK.String()[:8], "mux_routes (0 or 1 = single)", "1", func(s string) {
+						n, err := strconv.Atoi(s)
+						if err != nil || n < 0 {
+							setStatus("mux_routes: invalid number")
+							return
+						}
+						go func() {
+							if err := rpcClient.HVSetMuxRoutes(v.PK, n); err != nil {
+								setStatus("set mux_routes failed: " + err.Error())
+								return
+							}
+							setStatus(fmt.Sprintf("mux_routes=%d on %s", n, v.PK.String()[:8]))
+							refresh()
+						}()
+					})
+					return nil
+				case 'c':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					m := tview.NewModal().
+						SetText(fmt.Sprintf("Local route calculation on %s\n(vs route-finder service)", v.PK.String()[:8])).
+						AddButtons([]string{"Enable", "Disable", "Cancel"}).
+						SetDoneFunc(func(_ int, label string) {
+							closeModal()
+							if label == "Cancel" {
+								return
+							}
+							enable := label == "Enable"
+							go func() {
+								if err := rpcClient.HVSetCalculateRoutes(v.PK, enable); err != nil {
+									setStatus("set calculate_routes failed: " + err.Error())
+									return
+								}
+								setStatus(fmt.Sprintf("calculate_routes=%v on %s", enable, v.PK.String()[:8]))
+								refresh()
+							}()
+						})
+					m.SetBorder(true).SetTitle(" calculate_routes ")
+					app.SetRoot(m, true).SetFocus(m)
+					return nil
+				case 'R':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					showConfirmModal("Reload visor",
+						fmt.Sprintf("Reload visor %s without restarting?", v.PK.String()[:8]),
+						func() {
+							go func() {
+								if err := rpcClient.HVReload(v.PK); err != nil {
+									setStatus("reload failed: " + err.Error())
+									return
+								}
+								setStatus("reload triggered on " + v.PK.String()[:8])
+								refresh()
+							}()
+						})
+					return nil
+				case 'D':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					showConfirmModal("Shutdown visor",
+						fmt.Sprintf("SHUTDOWN visor %s? It will stop responding.", v.PK.String()[:8]),
+						func() {
+							go func() {
+								if err := rpcClient.HVShutdown(v.PK); err != nil {
+									setStatus("shutdown failed: " + err.Error())
+									return
+								}
+								setStatus("shutdown sent to " + v.PK.String()[:8])
+								refresh()
+							}()
+						})
 					return nil
 				}
 			}

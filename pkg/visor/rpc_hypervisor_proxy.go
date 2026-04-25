@@ -228,3 +228,39 @@ func (v *Visor) HVSetPublicAutoconnect(pk cipher.PubKey, enable bool) error {
 	}
 	return api.SetPublicAutoconnect(enable)
 }
+
+// HVSetMuxRoutes sets the mux_routes count on the visor identified by pk.
+func (v *Visor) HVSetMuxRoutes(pk cipher.PubKey, n int) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.SetMuxRoutes(n)
+}
+
+// HVSetCalculateRoutes toggles calculate_routes on the visor identified by pk.
+func (v *Visor) HVSetCalculateRoutes(pk cipher.PubKey, enable bool) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.SetCalculateRoutes(enable)
+}
+
+// HVReload reloads the visor identified by pk.
+func (v *Visor) HVReload(pk cipher.PubKey) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.Reload()
+}
+
+// HVShutdown shuts down the visor identified by pk.
+func (v *Visor) HVShutdown(pk cipher.PubKey) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.Shutdown()
+}

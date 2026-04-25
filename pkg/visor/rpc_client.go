@@ -1352,6 +1352,26 @@ func (rc *rpcClient) HVSetPublicAutoconnect(pk cipher.PubKey, enable bool) error
 	return rc.Call("HVSetPublicAutoconnect", &HVAutoconnectArgs{PK: pk, Enable: enable}, &struct{}{})
 }
 
+// HVSetMuxRoutes sets mux_routes on a remote visor.
+func (rc *rpcClient) HVSetMuxRoutes(pk cipher.PubKey, n int) error {
+	return rc.Call("HVSetMuxRoutes", &HVMuxArgs{PK: pk, N: n}, &struct{}{})
+}
+
+// HVSetCalculateRoutes toggles calculate_routes on a remote visor.
+func (rc *rpcClient) HVSetCalculateRoutes(pk cipher.PubKey, enable bool) error {
+	return rc.Call("HVSetCalculateRoutes", &HVCalcRoutesArgs{PK: pk, Enable: enable}, &struct{}{})
+}
+
+// HVReload reloads a remote visor.
+func (rc *rpcClient) HVReload(pk cipher.PubKey) error {
+	return rc.Call("HVReload", &pk, &struct{}{})
+}
+
+// HVShutdown shuts down a remote visor.
+func (rc *rpcClient) HVShutdown(pk cipher.PubKey) error {
+	return rc.Call("HVShutdown", &pk, &struct{}{})
+}
+
 // CheckAREntry checks if a PK is registered in the address resolver.
 func (rc *rpcClient) CheckAREntry(pk string) ([]string, error) {
 	var resp []string

@@ -1239,6 +1239,26 @@ func (mc *mockRPCClient) HVSetPublicAutoconnect(_ cipher.PubKey, _ bool) error {
 	return fmt.Errorf("not supported in mock")
 }
 
+// HVSetMuxRoutes implements API.
+func (mc *mockRPCClient) HVSetMuxRoutes(_ cipher.PubKey, _ int) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVSetCalculateRoutes implements API.
+func (mc *mockRPCClient) HVSetCalculateRoutes(_ cipher.PubKey, _ bool) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVReload implements API.
+func (mc *mockRPCClient) HVReload(_ cipher.PubKey) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVShutdown implements API.
+func (mc *mockRPCClient) HVShutdown(_ cipher.PubKey) error {
+	return fmt.Errorf("not supported in mock")
+}
+
 // DmsgPorterDiag implements API.
 func (mc *mockRPCClient) DmsgPorterDiag() (*netutil.EphemeralDiagResult, error) {
 	return &netutil.EphemeralDiagResult{TypeCount: map[string]int{}}, nil
