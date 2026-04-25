@@ -144,6 +144,7 @@ func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.Si
 	pipe := s.client.Pipeline()
 	pipe.Set(ctx, tpKey, string(raw), s.ttl)
 	pipe.SAdd(ctx, edgeAKey, entry.ID.String())
+	pipe.SAdd(ctx, s.allTpsIndexKey(), entry.ID.String())
 	if s.ttl > 0 {
 		pipe.Expire(ctx, edgeAKey, s.ttl)
 	}
@@ -218,6 +219,7 @@ func (s *redisStore) RegisterTransportsBatch(ctx context.Context, entries []*tra
 
 		pipe.Set(ctx, tpKey, string(raw), s.ttl)
 		pipe.SAdd(ctx, edgeAKey, entry.ID.String())
+		pipe.SAdd(ctx, s.allTpsIndexKey(), entry.ID.String())
 		if s.ttl > 0 {
 			pipe.Expire(ctx, edgeAKey, s.ttl)
 		}
@@ -268,6 +270,7 @@ func (s *redisStore) DeregisterTransport(ctx context.Context, id uuid.UUID) erro
 	pipe := s.client.Pipeline()
 	pipe.Del(ctx, tpKey)
 	pipe.SRem(ctx, edgeAKey, id.String())
+	pipe.SRem(ctx, s.allTpsIndexKey(), id.String())
 	if entry.Edges[0] != entry.Edges[1] {
 		pipe.SRem(ctx, edgeBKey, id.String())
 	}
@@ -386,17 +389,13 @@ func (s *redisStore) GetNumberOfTransports(ctx context.Context) (map[types.Type]
 		types.DMSG:  0,
 	}
 
-	pattern := fmt.Sprintf("%s:tp:*", serviceName)
-	var keys []string
-	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
-	for iter.Next(ctx) {
-		keys = append(keys, iter.Val())
-	}
-	if err := iter.Err(); err != nil {
+	keys, ids, err := s.allTransportKeysFromIndex(ctx)
+	if err != nil {
 		return nil, err
 	}
 
 	const mgetBatch = 10000
+	var stale []interface{}
 	for i := 0; i < len(keys); i += mgetBatch {
 		end := i + mgetBatch
 		if end > len(keys) {
@@ -406,9 +405,10 @@ func (s *redisStore) GetNumberOfTransports(ctx context.Context) (map[types.Type]
 		if err != nil {
 			continue
 		}
-		for _, val := range vals {
+		for j, val := range vals {
 			raw, ok := val.(string)
 			if !ok || raw == "" {
+				stale = append(stale, ids[i+j])
 				continue
 			}
 			var data TransportData
@@ -418,6 +418,7 @@ func (s *redisStore) GetNumberOfTransports(ctx context.Context) (map[types.Type]
 			response[types.Type(data.Type)]++
 		}
 	}
+	s.maybeReapStaleTransports(stale)
 
 	return response, nil
 }
@@ -452,14 +453,12 @@ func (s *redisStore) getAllTransportsWithQoS(ctx context.Context, selfTransports
 }
 
 // scanAllTransports is the shared implementation for GetAllTransports and getAllTransportsWithQoS.
+// Reads the transport-id index set built by RegisterTransport / DeregisterTransport
+// and MGET-fetches the values; lazy-removes stale members whose primary
+// key TTL'd without an explicit deregister.
 func (s *redisStore) scanAllTransports(ctx context.Context, selfTransports, withQoS bool) ([]*transport.Entry, error) {
-	pattern := fmt.Sprintf("%s:tp:*", serviceName)
-	var keys []string
-	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
-	for iter.Next(ctx) {
-		keys = append(keys, iter.Val())
-	}
-	if err := iter.Err(); err != nil {
+	keys, ids, err := s.allTransportKeysFromIndex(ctx)
+	if err != nil {
 		return nil, err
 	}
 	if len(keys) == 0 {
@@ -468,6 +467,7 @@ func (s *redisStore) scanAllTransports(ctx context.Context, selfTransports, with
 
 	const mgetBatch = 10000
 	var entries []*transport.Entry
+	var stale []interface{}
 
 	for i := 0; i < len(keys); i += mgetBatch {
 		end := i + mgetBatch
@@ -480,9 +480,10 @@ func (s *redisStore) scanAllTransports(ctx context.Context, selfTransports, with
 			return nil, err
 		}
 
-		for _, val := range vals {
+		for j, val := range vals {
 			raw, ok := val.(string)
 			if !ok || raw == "" {
+				stale = append(stale, ids[i+j])
 				continue
 			}
 
@@ -508,8 +509,45 @@ func (s *redisStore) scanAllTransports(ctx context.Context, selfTransports, with
 			entries = append(entries, entry)
 		}
 	}
+	s.maybeReapStaleTransports(stale)
 
 	return entries, nil
+}
+
+// allTpsIndexKey is the SET that tracks every live transport ID.
+// Maintained on Register/Deregister; replaces the pre-existing
+// SCAN of the tp:* keyspace used by GetNumberOfTransports,
+// scanAllTransports, and getP2PTransportCounts.
+func (s *redisStore) allTpsIndexKey() string {
+	return fmt.Sprintf("%s:tp:_index", serviceName)
+}
+
+// allTransportKeysFromIndex reads the transport-id index set and returns
+// the corresponding transport keys plus the raw IDs (parallel slices).
+// Use the returned ids slice to SREM stale members on MGet miss.
+func (s *redisStore) allTransportKeysFromIndex(ctx context.Context) (keys, ids []string, err error) {
+	ids, err = s.client.SMembers(ctx, s.allTpsIndexKey()).Result()
+	if err != nil {
+		return nil, nil, err
+	}
+	keys = make([]string, len(ids))
+	for i, id := range ids {
+		keys[i] = fmt.Sprintf("%s:tp:%s", serviceName, id)
+	}
+	return keys, ids, nil
+}
+
+// maybeReapStaleTransports removes index members whose primary key
+// TTL'd without an explicit Deregister. Fire-and-forget so the read
+// path stays fast; index converges over time as readers detect stale
+// members.
+func (s *redisStore) maybeReapStaleTransports(stale []interface{}) {
+	if len(stale) == 0 {
+		return
+	}
+	go func() {
+		s.client.SRem(context.Background(), s.allTpsIndexKey(), stale...) //nolint:errcheck
+	}()
 }
 
 func (s *redisStore) Close() {
@@ -1149,17 +1187,13 @@ func (s *redisStore) GetTransportDailyTimeline(ctx context.Context, tpID string,
 // indicating genuine peer-to-peer network participation (not just dmsg
 // infrastructure connectivity).
 func (s *redisStore) getP2PTransportCounts(ctx context.Context) map[string]int {
-	pattern := fmt.Sprintf("%s:tp:*", serviceName)
-	var keys []string
-	iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
-	for iter.Next(ctx) {
-		keys = append(keys, iter.Val())
-	}
-	if iter.Err() != nil {
+	keys, ids, err := s.allTransportKeysFromIndex(ctx)
+	if err != nil {
 		return nil
 	}
 
 	counts := make(map[string]int)
+	var stale []interface{}
 
 	const mgetBatch = 10000
 	for i := 0; i < len(keys); i += mgetBatch {
@@ -1171,9 +1205,10 @@ func (s *redisStore) getP2PTransportCounts(ctx context.Context) map[string]int {
 		if err != nil {
 			continue
 		}
-		for _, val := range vals {
+		for j, val := range vals {
 			raw, ok := val.(string)
 			if !ok || raw == "" {
+				stale = append(stale, ids[i+j])
 				continue
 			}
 			var data TransportData
@@ -1189,6 +1224,7 @@ func (s *redisStore) getP2PTransportCounts(ctx context.Context) map[string]int {
 			}
 		}
 	}
+	s.maybeReapStaleTransports(stale)
 
 	return counts
 }
