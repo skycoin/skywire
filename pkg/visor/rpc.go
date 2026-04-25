@@ -698,6 +698,9 @@ type RouteGroupInfo struct {
 	FwdRuleID     routing.RouteID               `json:"fwd_rule_id"`
 	Desc          routing.RouteDescriptorFields `json:"desc"`
 	FwdNextTpID   string                        `json:"fwd_next_tp_id,omitempty"`
+	// Hops is the stored forward route path (transport IDs, edges, types)
+	// for this route group, populated when the route group is active.
+	Hops []RouteHopInfo `json:"hops,omitempty"`
 }
 
 // RouteGroups retrieves routegroups via rules of the routing table.
