@@ -260,6 +260,17 @@ type API interface {
 	HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, error)
 	HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error)
 	HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*DmsgConnectAllResult, error)
+	HVLogsSince(pk cipher.PubKey, since time.Time, appName string) ([]string, error)
+	HVSetAutoStart(pk cipher.PubKey, appName string, autostart bool) error
+	HVEmbeddedProxies(pk cipher.PubKey) (*EmbeddedProxiesStatus, error)
+	HVSetEmbeddedProxyEnabled(pk cipher.PubKey, kind string, enable bool) error
+	HVSetEmbeddedProxyUpstream(pk cipher.PubKey, kind, addr string) error
+	HVListTCPPorts(pk cipher.PubKey) ([]int, error)
+	HVRegisterTCPPort(pk cipher.PubKey, port int) error
+	HVDeregisterTCPPort(pk cipher.PubKey, port int) error
+	HVListForwardedPorts(pk cipher.PubKey) ([]ForwardedPort, error)
+	HVRegisterForwardedPort(pk cipher.PubKey, p ForwardedPort) error
+	HVUpdateForwardedPort(pk cipher.PubKey, p ForwardedPort) error
 	DHTSync(remotePK string, salt string) (int, error)
 	DHTGetAll(salt string) (string, error)
 

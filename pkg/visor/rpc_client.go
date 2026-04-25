@@ -1399,6 +1399,77 @@ func (rc *rpcClient) HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*DmsgC
 	return &out, nil
 }
 
+// HVLogsSince fetches recent app logs from a remote visor.
+func (rc *rpcClient) HVLogsSince(pk cipher.PubKey, since time.Time, appName string) ([]string, error) {
+	var out []string
+	if err := rc.Call("HVLogsSince", &HVLogsArgs{PK: pk, Since: since, AppName: appName}, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HVSetAutoStart toggles autostart for an app on a remote visor.
+func (rc *rpcClient) HVSetAutoStart(pk cipher.PubKey, appName string, autostart bool) error {
+	return rc.Call("HVSetAutoStart", &HVAutostartArgs{PK: pk, AppName: appName, Autostart: autostart}, &struct{}{})
+}
+
+// HVEmbeddedProxies returns embedded resolving proxy status from a remote visor.
+func (rc *rpcClient) HVEmbeddedProxies(pk cipher.PubKey) (*EmbeddedProxiesStatus, error) {
+	var out EmbeddedProxiesStatus
+	if err := rc.Call("HVEmbeddedProxies", &pk, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// HVSetEmbeddedProxyEnabled flips a resolver on or off on a remote visor.
+func (rc *rpcClient) HVSetEmbeddedProxyEnabled(pk cipher.PubKey, kind string, enable bool) error {
+	return rc.Call("HVSetEmbeddedProxyEnabled", &HVProxyArgs{PK: pk, Kind: kind, Enable: enable}, &struct{}{})
+}
+
+// HVSetEmbeddedProxyUpstream sets a resolver's SOCKS5 fallthrough on a remote visor.
+func (rc *rpcClient) HVSetEmbeddedProxyUpstream(pk cipher.PubKey, kind, addr string) error {
+	return rc.Call("HVSetEmbeddedProxyUpstream", &HVProxyArgs{PK: pk, Kind: kind, Addr: addr}, &struct{}{})
+}
+
+// HVListTCPPorts returns skynet TCP ports on a remote visor.
+func (rc *rpcClient) HVListTCPPorts(pk cipher.PubKey) ([]int, error) {
+	var out []int
+	if err := rc.Call("HVListTCPPorts", &pk, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HVRegisterTCPPort registers a skynet TCP port on a remote visor.
+func (rc *rpcClient) HVRegisterTCPPort(pk cipher.PubKey, port int) error {
+	return rc.Call("HVRegisterTCPPort", &HVTCPPortArgs{PK: pk, Port: port}, &struct{}{})
+}
+
+// HVDeregisterTCPPort deregisters a skynet TCP port on a remote visor.
+func (rc *rpcClient) HVDeregisterTCPPort(pk cipher.PubKey, port int) error {
+	return rc.Call("HVDeregisterTCPPort", &HVTCPPortArgs{PK: pk, Port: port}, &struct{}{})
+}
+
+// HVListForwardedPorts returns forwarded ports on a remote visor.
+func (rc *rpcClient) HVListForwardedPorts(pk cipher.PubKey) ([]ForwardedPort, error) {
+	var out []ForwardedPort
+	if err := rc.Call("HVListForwardedPorts", &pk, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HVRegisterForwardedPort registers a forwarded port on a remote visor.
+func (rc *rpcClient) HVRegisterForwardedPort(pk cipher.PubKey, p ForwardedPort) error {
+	return rc.Call("HVRegisterForwardedPort", &HVForwardedPortArgs{PK: pk, Port: p}, &struct{}{})
+}
+
+// HVUpdateForwardedPort updates a forwarded port on a remote visor.
+func (rc *rpcClient) HVUpdateForwardedPort(pk cipher.PubKey, p ForwardedPort) error {
+	return rc.Call("HVUpdateForwardedPort", &HVForwardedPortArgs{PK: pk, Port: p}, &struct{}{})
+}
+
 // CheckAREntry checks if a PK is registered in the address resolver.
 func (rc *rpcClient) CheckAREntry(pk string) ([]string, error) {
 	var resp []string

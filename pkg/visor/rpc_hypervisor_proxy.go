@@ -291,3 +291,102 @@ func (v *Visor) HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*DmsgConnec
 	}
 	return api.SetDmsgSessionsCount(count)
 }
+
+// HVLogsSince returns app logs since the given timestamp on the visor identified by pk.
+func (v *Visor) HVLogsSince(pk cipher.PubKey, since time.Time, appName string) ([]string, error) {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return nil, err
+	}
+	return api.LogsSince(since, appName)
+}
+
+// HVSetAutoStart toggles autostart for an app on the visor identified by pk.
+func (v *Visor) HVSetAutoStart(pk cipher.PubKey, appName string, autostart bool) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.SetAutoStart(appName, autostart)
+}
+
+// HVEmbeddedProxies returns embedded resolving proxy status on the visor identified by pk.
+func (v *Visor) HVEmbeddedProxies(pk cipher.PubKey) (*EmbeddedProxiesStatus, error) {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return nil, err
+	}
+	return api.EmbeddedProxies()
+}
+
+// HVSetEmbeddedProxyEnabled enables/disables an embedded proxy ("dmsg" or "skynet") on the visor identified by pk.
+func (v *Visor) HVSetEmbeddedProxyEnabled(pk cipher.PubKey, kind string, enable bool) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.SetEmbeddedProxyEnabled(kind, enable)
+}
+
+// HVSetEmbeddedProxyUpstream sets the SOCKS5 upstream for an embedded proxy on the visor identified by pk.
+func (v *Visor) HVSetEmbeddedProxyUpstream(pk cipher.PubKey, kind, addr string) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.SetEmbeddedProxyUpstream(kind, addr)
+}
+
+// HVListTCPPorts returns the registered skynet TCP ports on the visor identified by pk.
+func (v *Visor) HVListTCPPorts(pk cipher.PubKey) ([]int, error) {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return nil, err
+	}
+	return api.ListTCPPorts()
+}
+
+// HVRegisterTCPPort registers a skynet TCP port on the visor identified by pk.
+func (v *Visor) HVRegisterTCPPort(pk cipher.PubKey, port int) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.RegisterTCPPort(port)
+}
+
+// HVDeregisterTCPPort deregisters a skynet TCP port on the visor identified by pk.
+func (v *Visor) HVDeregisterTCPPort(pk cipher.PubKey, port int) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.DeregisterTCPPort(port)
+}
+
+// HVListForwardedPorts returns the configured forwarded ports on the visor identified by pk.
+func (v *Visor) HVListForwardedPorts(pk cipher.PubKey) ([]ForwardedPort, error) {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return nil, err
+	}
+	return api.ListForwardedPorts()
+}
+
+// HVRegisterForwardedPort registers a forwarded port on the visor identified by pk.
+func (v *Visor) HVRegisterForwardedPort(pk cipher.PubKey, p ForwardedPort) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.RegisterForwardedPort(p)
+}
+
+// HVUpdateForwardedPort updates a forwarded port on the visor identified by pk.
+func (v *Visor) HVUpdateForwardedPort(pk cipher.PubKey, p ForwardedPort) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.UpdateForwardedPort(p)
+}

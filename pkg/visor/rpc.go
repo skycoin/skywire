@@ -2019,3 +2019,167 @@ func (r *RPC) HVSetDmsgSessionsCount(in *HVDmsgSessionsArgs, out *DmsgConnectAll
 	*out = *res
 	return nil
 }
+
+// HVLogsArgs requests app logs from a remote visor.
+type HVLogsArgs struct {
+	PK      cipher.PubKey
+	Since   time.Time
+	AppName string
+}
+
+// HVLogsSince fetches recent app logs from a remote visor.
+func (r *RPC) HVLogsSince(in *HVLogsArgs, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "HVLogsSince", in)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	logs, lErr := v.HVLogsSince(in.PK, in.Since, in.AppName)
+	if lErr != nil {
+		return lErr
+	}
+	*out = logs
+	return nil
+}
+
+// HVAutostartArgs toggles autostart for an app on a remote visor.
+type HVAutostartArgs struct {
+	PK        cipher.PubKey
+	AppName   string
+	Autostart bool
+}
+
+// HVSetAutoStart toggles autostart on a remote visor.
+func (r *RPC) HVSetAutoStart(in *HVAutostartArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVSetAutoStart", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVSetAutoStart(in.PK, in.AppName, in.Autostart)
+}
+
+// HVEmbeddedProxies returns embedded resolving proxy status from a remote visor.
+func (r *RPC) HVEmbeddedProxies(pk *cipher.PubKey, out *EmbeddedProxiesStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "HVEmbeddedProxies", pk)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	res, pErr := v.HVEmbeddedProxies(*pk)
+	if pErr != nil {
+		return pErr
+	}
+	*out = *res
+	return nil
+}
+
+// HVProxyArgs toggles or configures an embedded proxy on a remote visor.
+type HVProxyArgs struct {
+	PK     cipher.PubKey
+	Kind   string // "dmsg" or "skynet"
+	Enable bool
+	Addr   string // SOCKS5 upstream
+}
+
+// HVSetEmbeddedProxyEnabled flips a resolver on or off on a remote visor.
+func (r *RPC) HVSetEmbeddedProxyEnabled(in *HVProxyArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVSetEmbeddedProxyEnabled", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVSetEmbeddedProxyEnabled(in.PK, in.Kind, in.Enable)
+}
+
+// HVSetEmbeddedProxyUpstream sets a resolver's SOCKS5 fallthrough on a remote visor.
+func (r *RPC) HVSetEmbeddedProxyUpstream(in *HVProxyArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVSetEmbeddedProxyUpstream", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVSetEmbeddedProxyUpstream(in.PK, in.Kind, in.Addr)
+}
+
+// HVTCPPortArgs targets a skynet TCP port on a remote visor.
+type HVTCPPortArgs struct {
+	PK   cipher.PubKey
+	Port int
+}
+
+// HVListTCPPorts returns registered skynet TCP ports on a remote visor.
+func (r *RPC) HVListTCPPorts(pk *cipher.PubKey, out *[]int) (err error) {
+	defer rpcutil.LogCall(r.log, "HVListTCPPorts", pk)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	ports, lErr := v.HVListTCPPorts(*pk)
+	if lErr != nil {
+		return lErr
+	}
+	*out = ports
+	return nil
+}
+
+// HVRegisterTCPPort registers a skynet TCP port on a remote visor.
+func (r *RPC) HVRegisterTCPPort(in *HVTCPPortArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVRegisterTCPPort", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVRegisterTCPPort(in.PK, in.Port)
+}
+
+// HVDeregisterTCPPort deregisters a skynet TCP port on a remote visor.
+func (r *RPC) HVDeregisterTCPPort(in *HVTCPPortArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVDeregisterTCPPort", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVDeregisterTCPPort(in.PK, in.Port)
+}
+
+// HVForwardedPortArgs targets a forwarded port on a remote visor.
+type HVForwardedPortArgs struct {
+	PK   cipher.PubKey
+	Port ForwardedPort
+}
+
+// HVListForwardedPorts returns forwarded ports on a remote visor.
+func (r *RPC) HVListForwardedPorts(pk *cipher.PubKey, out *[]ForwardedPort) (err error) {
+	defer rpcutil.LogCall(r.log, "HVListForwardedPorts", pk)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	ports, lErr := v.HVListForwardedPorts(*pk)
+	if lErr != nil {
+		return lErr
+	}
+	*out = ports
+	return nil
+}
+
+// HVRegisterForwardedPort registers a forwarded port on a remote visor.
+func (r *RPC) HVRegisterForwardedPort(in *HVForwardedPortArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVRegisterForwardedPort", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVRegisterForwardedPort(in.PK, in.Port)
+}
+
+// HVUpdateForwardedPort updates a forwarded port on a remote visor.
+func (r *RPC) HVUpdateForwardedPort(in *HVForwardedPortArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVUpdateForwardedPort", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVUpdateForwardedPort(in.PK, in.Port)
+}

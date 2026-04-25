@@ -64,7 +64,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		statusBar := tview.NewTextView().
 			SetDynamicColors(true).
 			SetTextAlign(tview.AlignLeft).
-			SetText(" [yellow]Loading...[white] | q:quit r:refresh enter:detail esc:back  m/M:hops/mux c:calc-rt w:reward p:autoconn  s/S:app/stop  T/t:tp+/-  x:rm-rule  h:health G:dmsg-conn N:dmsg-count  R:reload D:shutdown")
+			SetText(" [yellow]Loading...[white] | q:quit r:refresh enter:detail esc:back  m/M:hops/mux c:calc-rt w:reward p:autoconn  s/S/A/l:app(toggle/stop/autostart/logs)  T/t:tp+/-  x:rm-rule  h:health G:dmsg-conn N:dmsg-count  P:proxies f:ports  R:reload D:shutdown")
 
 		// --- Layout ---
 		split := tview.NewFlex().
@@ -82,9 +82,12 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 
 		setStatus := func(msg string) {
 			app.QueueUpdateDraw(func() {
-				statusBar.SetText(fmt.Sprintf(" [yellow]%s[white] | q:quit r:refresh enter:detail esc:back  m/M:hops/mux c:calc-rt w:reward p:autoconn  s/S:app/stop  T/t:tp+/-  x:rm-rule  h:health G:dmsg-conn N:dmsg-count  R:reload D:shutdown", msg))
+				statusBar.SetText(fmt.Sprintf(" [yellow]%s[white] | q:quit r:refresh enter:detail esc:back  m/M:hops/mux c:calc-rt w:reward p:autoconn  s/S/A/l:app(toggle/stop/autostart/logs)  T/t:tp+/-  x:rm-rule  h:health G:dmsg-conn N:dmsg-count  P:proxies f:ports  R:reload D:shutdown", msg))
 			})
 		}
+
+		// refresh is defined further down but referenced by helpers above; predeclare.
+		var refresh func()
 
 		// --- Modal helpers ---
 		showModal := func(p tview.Primitive, width, height int) {
@@ -148,6 +151,61 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		}
 		fetchSummary := func(pk cipher.PubKey) (*visor.Summary, error) {
 			return rpcClient.HVVisorSummary(pk)
+		}
+		showRegisterForwardedPortModal := func(targetPK cipher.PubKey) {
+			form := tview.NewForm()
+			form.AddInputField("port (remote)", "", 8, nil, nil).
+				AddInputField("local port", "", 8, nil, nil).
+				AddInputField("label", "", 32, nil, nil).
+				AddInputField("description", "", 64, nil, nil).
+				AddCheckbox("skynet", true, nil).
+				AddCheckbox("dmsg", false, nil).
+				AddCheckbox("show on landing", true, nil).
+				AddInputField("proxy_addr (host:port, optional)", "", 32, nil, nil)
+			form.AddButton("OK", func() {
+				port, perr := strconv.Atoi(strings.TrimSpace(form.GetFormItem(0).(*tview.InputField).GetText()))
+				if perr != nil {
+					port = 0
+				}
+				local, lerr := strconv.Atoi(strings.TrimSpace(form.GetFormItem(1).(*tview.InputField).GetText()))
+				if lerr != nil {
+					local = 0
+				}
+				label := strings.TrimSpace(form.GetFormItem(2).(*tview.InputField).GetText())
+				desc := strings.TrimSpace(form.GetFormItem(3).(*tview.InputField).GetText())
+				skynetEn := form.GetFormItem(4).(*tview.Checkbox).IsChecked()
+				dmsgEn := form.GetFormItem(5).(*tview.Checkbox).IsChecked()
+				landing := form.GetFormItem(6).(*tview.Checkbox).IsChecked()
+				proxyAddr := strings.TrimSpace(form.GetFormItem(7).(*tview.InputField).GetText())
+				closeModal()
+				if port <= 0 {
+					setStatus("forwarded port: port required")
+					return
+				}
+				fp := visor.ForwardedPort{
+					Port:          port,
+					LocalPort:     local,
+					Label:         label,
+					Description:   desc,
+					ShowOnLanding: landing,
+					Skynet:        skynetEn,
+					DMSG:          dmsgEn,
+					ProxyAddr:     proxyAddr,
+				}
+				go func() {
+					if err := rpcClient.HVRegisterForwardedPort(targetPK, fp); err != nil {
+						setStatus("register fwd port failed: " + err.Error())
+						return
+					}
+					setStatus(fmt.Sprintf("forwarded port %d registered on %s", port, targetPK.String()[:8]))
+					refresh()
+				}()
+			})
+			form.AddButton("Cancel", closeModal)
+			form.SetBorder(true).
+				SetTitle(" Register forwarded port on " + targetPK.String()[:8] + " ").
+				SetTitleAlign(tview.AlignLeft)
+			showModal(form, 80, 24)
 		}
 		showAddTransportModal := func(targetPK cipher.PubKey, onSubmit func(remote cipher.PubKey, tpType, label string)) {
 			form := tview.NewForm()
@@ -322,7 +380,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		}
 
 		// --- Refresh data ---
-		refresh := func() {
+		refresh = func() {
 			setStatus("Refreshing...")
 			go func() {
 				entries, err := rpcClient.HVListVisors()
@@ -828,6 +886,260 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						}()
 					})
 					return nil
+				case 'l':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					go func() {
+						setStatus("Loading apps...")
+						sum, err := fetchSummary(v.PK)
+						if err != nil {
+							setStatus("fetch apps failed: " + err.Error())
+							return
+						}
+						apps := sum.Overview.Apps
+						labels := make([]string, len(apps))
+						for i, a := range apps {
+							labels[i] = a.Name
+						}
+						app.QueueUpdateDraw(func() {
+							showListModal("App logs on "+v.PK.String()[:8], labels, func(idx int) {
+								name := apps[idx].Name
+								go func() {
+									setStatus("Loading logs for " + name + "...")
+									since := time.Now().Add(-1 * time.Hour)
+									logs, err := rpcClient.HVLogsSince(v.PK, since, name)
+									if err != nil {
+										setStatus("logs failed: " + err.Error())
+										return
+									}
+									text := strings.Join(logs, "\n")
+									if text == "" {
+										text = "(no log entries in the last hour)"
+									}
+									app.QueueUpdateDraw(func() {
+										view := tview.NewTextView().
+											SetDynamicColors(false).
+											SetScrollable(true).
+											SetText(text)
+										view.SetBorder(true).
+											SetTitle(fmt.Sprintf(" %s logs (last 1h) ", name)).
+											SetTitleAlign(tview.AlignLeft)
+										view.SetDoneFunc(func(_ tcell.Key) { closeModal() })
+										view.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+											if ev.Key() == tcell.KeyEscape {
+												closeModal()
+												return nil
+											}
+											return ev
+										})
+										showModal(view, 110, 30)
+									})
+								}()
+							})
+						})
+					}()
+					return nil
+				case 'A':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					go func() {
+						setStatus("Loading apps...")
+						sum, err := fetchSummary(v.PK)
+						if err != nil {
+							setStatus("fetch apps failed: " + err.Error())
+							return
+						}
+						apps := sum.Overview.Apps
+						labels := make([]string, len(apps))
+						for i, a := range apps {
+							as := "off"
+							if a.AutoStart {
+								as = "on"
+							}
+							labels[i] = fmt.Sprintf("[autostart=%-3s] %s", as, a.Name)
+						}
+						app.QueueUpdateDraw(func() {
+							showListModal("Toggle autostart on "+v.PK.String()[:8], labels, func(idx int) {
+								a := apps[idx]
+								newVal := !a.AutoStart
+								go func() {
+									if err := rpcClient.HVSetAutoStart(v.PK, a.Name, newVal); err != nil {
+										setStatus("set autostart failed: " + err.Error())
+										return
+									}
+									setStatus(fmt.Sprintf("%s autostart=%v on %s", a.Name, newVal, v.PK.String()[:8]))
+									refresh()
+								}()
+							})
+						})
+					}()
+					return nil
+				case 'P':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					go func() {
+						setStatus("Loading proxies status...")
+						st, err := rpcClient.HVEmbeddedProxies(v.PK)
+						if err != nil {
+							setStatus("embedded proxies failed: " + err.Error())
+							return
+						}
+						type item struct {
+							kind string
+							info *visor.EmbeddedProxyInfo
+						}
+						items := []item{
+							{"dmsg", st.DmsgWeb},
+							{"skynet", st.SkynetWeb},
+						}
+						labels := make([]string, 0, len(items))
+						active := make([]item, 0, len(items))
+						for _, it := range items {
+							if it.info == nil {
+								continue
+							}
+							active = append(active, it)
+							state := "disabled"
+							if it.info.Enabled {
+								state = "enabled"
+								if !it.info.Running {
+									state = "starting"
+								}
+							}
+							labels = append(labels, fmt.Sprintf("%-7s  %-9s  socks=%-22s  upstream=%s",
+								it.kind, state, defaultStr(it.info.SocksAddr, "-"), defaultStr(it.info.UpstreamSOCKS, "-")))
+						}
+						labels = append(labels, "[set upstream]", "[close]")
+						app.QueueUpdateDraw(func() {
+							showListModal("Resolving proxies on "+v.PK.String()[:8], labels, func(idx int) {
+								if idx >= len(active) {
+									if labels[idx] == "[set upstream]" {
+										app.QueueUpdateDraw(func() {
+											showInputModal("Set upstream for proxy", "kind=dmsg|skynet  addr=host:port  (e.g. 'dmsg 127.0.0.1:9090')", "", func(s string) {
+												parts := strings.Fields(s)
+												if len(parts) != 2 {
+													setStatus("upstream: expected 'kind addr'")
+													return
+												}
+												kind, addr := parts[0], parts[1]
+												go func() {
+													if err := rpcClient.HVSetEmbeddedProxyUpstream(v.PK, kind, addr); err != nil {
+														setStatus("set upstream failed: " + err.Error())
+														return
+													}
+													setStatus(fmt.Sprintf("%s upstream=%s set", kind, addr))
+												}()
+											})
+										})
+									}
+									return
+								}
+								it := active[idx]
+								newVal := !it.info.Enabled
+								go func() {
+									if err := rpcClient.HVSetEmbeddedProxyEnabled(v.PK, it.kind, newVal); err != nil {
+										setStatus("set proxy enabled failed: " + err.Error())
+										return
+									}
+									setStatus(fmt.Sprintf("%s proxy enabled=%v", it.kind, newVal))
+									refresh()
+								}()
+							})
+						})
+					}()
+					return nil
+				case 'f':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					go func() {
+						setStatus("Loading ports...")
+						tcpPorts, tcpErr := rpcClient.HVListTCPPorts(v.PK)
+						fwdPorts, fwdErr := rpcClient.HVListForwardedPorts(v.PK)
+						if tcpErr != nil && fwdErr != nil {
+							setStatus(fmt.Sprintf("ports failed: tcp=%v fwd=%v", tcpErr, fwdErr))
+							return
+						}
+						labels := []string{}
+						for _, p := range tcpPorts {
+							labels = append(labels, fmt.Sprintf("[tcp]  %d", p))
+						}
+						for _, fp := range fwdPorts {
+							marks := ""
+							if fp.Skynet {
+								marks += "S"
+							}
+							if fp.DMSG {
+								marks += "D"
+							}
+							if fp.ShowOnLanding {
+								marks += "L"
+							}
+							if marks == "" {
+								marks = "-"
+							}
+							labels = append(labels, fmt.Sprintf("[fwd:%s]  %-5d → %-5d  %s  %s",
+								marks, fp.Port, fp.EffectiveLocalPort(), fp.Label, fp.Description))
+						}
+						labels = append(labels,
+							"[register skynet TCP port]",
+							"[deregister skynet TCP port]",
+							"[register forwarded port]",
+							"[close]",
+						)
+						app.QueueUpdateDraw(func() {
+							showListModal("Ports on "+v.PK.String()[:8], labels, func(idx int) {
+								n := len(tcpPorts) + len(fwdPorts)
+								if idx < n {
+									return // selecting a row is read-only for now
+								}
+								switch labels[idx] {
+								case "[register skynet TCP port]":
+									showInputModal("Register skynet TCP port", "port number", "", func(s string) {
+										p, err := strconv.Atoi(s)
+										if err != nil || p <= 0 || p > 65535 {
+											setStatus("invalid port")
+											return
+										}
+										go func() {
+											if err := rpcClient.HVRegisterTCPPort(v.PK, p); err != nil {
+												setStatus("register tcp port failed: " + err.Error())
+												return
+											}
+											setStatus(fmt.Sprintf("registered tcp port %d", p))
+											refresh()
+										}()
+									})
+								case "[deregister skynet TCP port]":
+									showInputModal("Deregister skynet TCP port", "port number", "", func(s string) {
+										p, err := strconv.Atoi(s)
+										if err != nil || p <= 0 || p > 65535 {
+											setStatus("invalid port")
+											return
+										}
+										go func() {
+											if err := rpcClient.HVDeregisterTCPPort(v.PK, p); err != nil {
+												setStatus("deregister tcp port failed: " + err.Error())
+												return
+											}
+											setStatus(fmt.Sprintf("deregistered tcp port %d", p))
+											refresh()
+										}()
+									})
+								case "[register forwarded port]":
+									showRegisterForwardedPortModal(v.PK)
+								}
+							})
+						})
+					}()
+					return nil
 				}
 			}
 			return event
@@ -861,6 +1173,13 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 func truncStr(s string, max int) string {
 	if len(s) > max {
 		return s[:max] + "..."
+	}
+	return s
+}
+
+func defaultStr(s, def string) string {
+	if s == "" {
+		return def
 	}
 	return s
 }

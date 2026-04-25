@@ -1274,6 +1274,61 @@ func (mc *mockRPCClient) HVSetDmsgSessionsCount(_ cipher.PubKey, _ int) (*DmsgCo
 	return nil, fmt.Errorf("not supported in mock")
 }
 
+// HVLogsSince implements API.
+func (mc *mockRPCClient) HVLogsSince(_ cipher.PubKey, _ time.Time, _ string) ([]string, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVSetAutoStart implements API.
+func (mc *mockRPCClient) HVSetAutoStart(_ cipher.PubKey, _ string, _ bool) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVEmbeddedProxies implements API.
+func (mc *mockRPCClient) HVEmbeddedProxies(_ cipher.PubKey) (*EmbeddedProxiesStatus, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVSetEmbeddedProxyEnabled implements API.
+func (mc *mockRPCClient) HVSetEmbeddedProxyEnabled(_ cipher.PubKey, _ string, _ bool) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVSetEmbeddedProxyUpstream implements API.
+func (mc *mockRPCClient) HVSetEmbeddedProxyUpstream(_ cipher.PubKey, _, _ string) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVListTCPPorts implements API.
+func (mc *mockRPCClient) HVListTCPPorts(_ cipher.PubKey) ([]int, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVRegisterTCPPort implements API.
+func (mc *mockRPCClient) HVRegisterTCPPort(_ cipher.PubKey, _ int) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVDeregisterTCPPort implements API.
+func (mc *mockRPCClient) HVDeregisterTCPPort(_ cipher.PubKey, _ int) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVListForwardedPorts implements API.
+func (mc *mockRPCClient) HVListForwardedPorts(_ cipher.PubKey) ([]ForwardedPort, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVRegisterForwardedPort implements API.
+func (mc *mockRPCClient) HVRegisterForwardedPort(_ cipher.PubKey, _ ForwardedPort) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVUpdateForwardedPort implements API.
+func (mc *mockRPCClient) HVUpdateForwardedPort(_ cipher.PubKey, _ ForwardedPort) error {
+	return fmt.Errorf("not supported in mock")
+}
+
 // DmsgPorterDiag implements API.
 func (mc *mockRPCClient) DmsgPorterDiag() (*netutil.EphemeralDiagResult, error) {
 	return &netutil.EphemeralDiagResult{TypeCount: map[string]int{}}, nil
