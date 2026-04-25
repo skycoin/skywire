@@ -22,8 +22,9 @@ const (
 )
 
 type redisStore struct {
-	client *redis.Client
-	ttl    time.Duration
+	client      *redis.Client
+	ttl         time.Duration
+	getAllCache *getAllCache
 }
 
 func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl time.Duration, logger *logging.Logger) (*redisStore, error) {
@@ -57,7 +58,11 @@ func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl
 		return nil, err
 	}
 
-	return &redisStore{client: redisCl, ttl: ttl}, nil
+	return &redisStore{
+		client:      redisCl,
+		ttl:         ttl,
+		getAllCache: newGetAllCache(defaultGetAllCacheTTL),
+	}, nil
 }
 
 func (s *redisStore) Bind(ctx context.Context, netType types.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
@@ -93,8 +98,15 @@ func (s *redisStore) Resolve(ctx context.Context, netType types.Type, pk cipher.
 func (s *redisStore) GetAll(ctx context.Context, netType types.Type) ([]string, error) {
 	switch netType {
 	case types.STCPR, types.SUDPH:
-		key := getScanKey(string(netType))
-		return s.getAll(ctx, key)
+		if pks, ok := s.getAllCache.Get(netType); ok {
+			return pks, nil
+		}
+		pks, err := s.getAll(ctx, getScanKey(string(netType)))
+		if err != nil {
+			return pks, err
+		}
+		s.getAllCache.Put(netType, pks)
+		return pks, nil
 	default:
 		return nil, ErrUnknownTransportType
 	}
