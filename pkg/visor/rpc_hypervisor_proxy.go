@@ -10,6 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
@@ -127,4 +130,76 @@ func (v *Visor) HVVisorSummary(pk cipher.PubKey) (*Summary, error) {
 		return nil, fmt.Errorf("visor %s not connected", pk.String()[:8])
 	}
 	return conn.API.Summary()
+}
+
+// hvAPI returns the API for the visor identified by pk. If pk matches the
+// local visor it returns the local API; otherwise it looks up the remote
+// connection through the hypervisor.
+func (v *Visor) hvAPI(pk cipher.PubKey) (API, error) {
+	if v.hvInstance == nil {
+		return nil, fmt.Errorf("hypervisor not running")
+	}
+	if pk == v.conf.PK {
+		return v, nil
+	}
+	conn, ok := v.hvInstance.visorConn(pk)
+	if !ok {
+		return nil, fmt.Errorf("visor %s not connected", pk.String()[:8])
+	}
+	return conn.API, nil
+}
+
+// HVStartApp starts an app on the visor identified by pk.
+func (v *Visor) HVStartApp(pk cipher.PubKey, appName string) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.StartApp(appName)
+}
+
+// HVStopApp stops an app on the visor identified by pk.
+func (v *Visor) HVStopApp(pk cipher.PubKey, appName string) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.StopApp(appName)
+}
+
+// HVSetMinHops sets the routing min_hops on the visor identified by pk.
+func (v *Visor) HVSetMinHops(pk cipher.PubKey, hops uint16) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.SetMinHops(hops)
+}
+
+// HVSetRewardAddress sets the reward address on the visor identified by pk.
+// Returns the resulting config string from the visor.
+func (v *Visor) HVSetRewardAddress(pk cipher.PubKey, addr string) (string, error) {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return "", err
+	}
+	return api.SetRewardAddress(addr)
+}
+
+// HVRemoveTransport deletes a transport on the visor identified by pk.
+func (v *Visor) HVRemoveTransport(pk cipher.PubKey, tid uuid.UUID) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.RemoveTransport(tid)
+}
+
+// HVRemoveRoutingRule deletes a routing rule on the visor identified by pk.
+func (v *Visor) HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) error {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return err
+	}
+	return api.RemoveRoutingRule(key)
 }

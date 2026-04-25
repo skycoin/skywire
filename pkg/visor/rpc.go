@@ -1781,3 +1781,98 @@ func (r *RPC) HVVisorSummary(pk *cipher.PubKey, out *Summary) (err error) {
 	*out = *summary
 	return nil
 }
+
+// HVAppArgs identifies an app on a remote visor.
+type HVAppArgs struct {
+	PK      cipher.PubKey
+	AppName string
+}
+
+// HVMinHopsArgs sets min_hops on a remote visor.
+type HVMinHopsArgs struct {
+	PK   cipher.PubKey
+	Hops uint16
+}
+
+// HVRewardArgs sets the reward address on a remote visor.
+type HVRewardArgs struct {
+	PK   cipher.PubKey
+	Addr string
+}
+
+// HVTransportArgs identifies a transport on a remote visor.
+type HVTransportArgs struct {
+	PK  cipher.PubKey
+	TID uuid.UUID
+}
+
+// HVRoutingRuleArgs identifies a routing rule on a remote visor.
+type HVRoutingRuleArgs struct {
+	PK  cipher.PubKey
+	Key routing.RouteID
+}
+
+// HVStartApp starts an app on a remote visor.
+func (r *RPC) HVStartApp(in *HVAppArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVStartApp", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVStartApp(in.PK, in.AppName)
+}
+
+// HVStopApp stops an app on a remote visor.
+func (r *RPC) HVStopApp(in *HVAppArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVStopApp", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVStopApp(in.PK, in.AppName)
+}
+
+// HVSetMinHops sets min_hops on a remote visor.
+func (r *RPC) HVSetMinHops(in *HVMinHopsArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVSetMinHops", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVSetMinHops(in.PK, in.Hops)
+}
+
+// HVSetRewardAddress sets the reward address on a remote visor.
+func (r *RPC) HVSetRewardAddress(in *HVRewardArgs, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "HVSetRewardAddress", in)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	conf, err := v.HVSetRewardAddress(in.PK, in.Addr)
+	if err != nil {
+		return err
+	}
+	*out = conf
+	return nil
+}
+
+// HVRemoveTransport deletes a transport on a remote visor.
+func (r *RPC) HVRemoveTransport(in *HVTransportArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVRemoveTransport", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVRemoveTransport(in.PK, in.TID)
+}
+
+// HVRemoveRoutingRule deletes a routing rule on a remote visor.
+func (r *RPC) HVRemoveRoutingRule(in *HVRoutingRuleArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVRemoveRoutingRule", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVRemoveRoutingRule(in.PK, in.Key)
+}

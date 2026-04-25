@@ -1199,6 +1199,36 @@ func (mc *mockRPCClient) HVVisorSummary(_ cipher.PubKey) (*Summary, error) {
 	return nil, fmt.Errorf("not supported in mock")
 }
 
+// HVStartApp implements API.
+func (mc *mockRPCClient) HVStartApp(_ cipher.PubKey, _ string) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVStopApp implements API.
+func (mc *mockRPCClient) HVStopApp(_ cipher.PubKey, _ string) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVSetMinHops implements API.
+func (mc *mockRPCClient) HVSetMinHops(_ cipher.PubKey, _ uint16) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVSetRewardAddress implements API.
+func (mc *mockRPCClient) HVSetRewardAddress(_ cipher.PubKey, _ string) (string, error) {
+	return "", fmt.Errorf("not supported in mock")
+}
+
+// HVRemoveTransport implements API.
+func (mc *mockRPCClient) HVRemoveTransport(_ cipher.PubKey, _ uuid.UUID) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVRemoveRoutingRule implements API.
+func (mc *mockRPCClient) HVRemoveRoutingRule(_ cipher.PubKey, _ routing.RouteID) error {
+	return fmt.Errorf("not supported in mock")
+}
+
 // DmsgPorterDiag implements API.
 func (mc *mockRPCClient) DmsgPorterDiag() (*netutil.EphemeralDiagResult, error) {
 	return &netutil.EphemeralDiagResult{TypeCount: map[string]int{}}, nil

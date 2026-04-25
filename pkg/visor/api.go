@@ -245,6 +245,12 @@ type API interface {
 	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
 	HVListVisors() ([]HVVisorEntry, error)
 	HVVisorSummary(pk cipher.PubKey) (*Summary, error)
+	HVStartApp(pk cipher.PubKey, appName string) error
+	HVStopApp(pk cipher.PubKey, appName string) error
+	HVSetMinHops(pk cipher.PubKey, hops uint16) error
+	HVSetRewardAddress(pk cipher.PubKey, addr string) (string, error)
+	HVRemoveTransport(pk cipher.PubKey, tid uuid.UUID) error
+	HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) error
 	DHTSync(remotePK string, salt string) (int, error)
 	DHTGetAll(salt string) (string, error)
 

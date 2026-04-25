@@ -1298,6 +1298,40 @@ func (rc *rpcClient) HVVisorSummary(pk cipher.PubKey) (*Summary, error) {
 	return &out, nil
 }
 
+// HVStartApp starts an app on a remote visor.
+func (rc *rpcClient) HVStartApp(pk cipher.PubKey, appName string) error {
+	return rc.Call("HVStartApp", &HVAppArgs{PK: pk, AppName: appName}, &struct{}{})
+}
+
+// HVStopApp stops an app on a remote visor.
+func (rc *rpcClient) HVStopApp(pk cipher.PubKey, appName string) error {
+	return rc.Call("HVStopApp", &HVAppArgs{PK: pk, AppName: appName}, &struct{}{})
+}
+
+// HVSetMinHops sets min_hops on a remote visor.
+func (rc *rpcClient) HVSetMinHops(pk cipher.PubKey, hops uint16) error {
+	return rc.Call("HVSetMinHops", &HVMinHopsArgs{PK: pk, Hops: hops}, &struct{}{})
+}
+
+// HVSetRewardAddress sets the reward address on a remote visor.
+func (rc *rpcClient) HVSetRewardAddress(pk cipher.PubKey, addr string) (string, error) {
+	var out string
+	if err := rc.Call("HVSetRewardAddress", &HVRewardArgs{PK: pk, Addr: addr}, &out); err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+// HVRemoveTransport deletes a transport on a remote visor.
+func (rc *rpcClient) HVRemoveTransport(pk cipher.PubKey, tid uuid.UUID) error {
+	return rc.Call("HVRemoveTransport", &HVTransportArgs{PK: pk, TID: tid}, &struct{}{})
+}
+
+// HVRemoveRoutingRule deletes a routing rule on a remote visor.
+func (rc *rpcClient) HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) error {
+	return rc.Call("HVRemoveRoutingRule", &HVRoutingRuleArgs{PK: pk, Key: key}, &struct{}{})
+}
+
 // CheckAREntry checks if a PK is registered in the address resolver.
 func (rc *rpcClient) CheckAREntry(pk string) ([]string, error) {
 	var resp []string

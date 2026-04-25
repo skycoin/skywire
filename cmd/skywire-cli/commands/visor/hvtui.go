@@ -5,17 +5,20 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/google/uuid"
 	"github.com/rivo/tview"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -61,7 +64,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		statusBar := tview.NewTextView().
 			SetDynamicColors(true).
 			SetTextAlign(tview.AlignLeft).
-			SetText(" [yellow]Loading...[white] | q:quit  r:refresh  enter:detail  esc:back")
+			SetText(" [yellow]Loading...[white] | q:quit r:refresh enter:detail esc:back  m:min-hops w:reward s:start-app S:stop-app t:rm-tp x:rm-rule")
 
 		// --- Layout ---
 		split := tview.NewFlex().
@@ -79,8 +82,35 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 
 		setStatus := func(msg string) {
 			app.QueueUpdateDraw(func() {
-				statusBar.SetText(fmt.Sprintf(" [yellow]%s[white] | r:refresh  q:quit  enter:detail  esc:back", msg))
+				statusBar.SetText(fmt.Sprintf(" [yellow]%s[white] | q:quit r:refresh enter:detail esc:back  m:min-hops w:reward s:start-app S:stop-app t:rm-tp x:rm-rule", msg))
 			})
+		}
+
+		// --- Modal helpers ---
+		showModal := func(p tview.Primitive, width, height int) {
+			wrap := tview.NewFlex().
+				AddItem(nil, 0, 1, false).
+				AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+					AddItem(nil, 0, 1, false).
+					AddItem(p, height, 1, true).
+					AddItem(nil, 0, 1, false), width, 1, true).
+				AddItem(nil, 0, 1, false)
+			app.SetRoot(wrap, true).SetFocus(p)
+		}
+		closeModal := func() {
+			app.SetRoot(layout, true).SetFocus(table)
+		}
+		showInputModal := func(title, label, defaultValue string, onSubmit func(value string)) {
+			form := tview.NewForm().
+				AddInputField(label, defaultValue, 64, nil, nil)
+			form.AddButton("OK", func() {
+				v := form.GetFormItem(0).(*tview.InputField).GetText()
+				closeModal()
+				onSubmit(strings.TrimSpace(v))
+			})
+			form.AddButton("Cancel", closeModal)
+			form.SetBorder(true).SetTitle(" " + title + " ").SetTitleAlign(tview.AlignLeft)
+			showModal(form, 80, 7)
 		}
 
 		// --- Populate table ---
@@ -255,6 +285,18 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			}()
 		})
 
+		// --- Action helpers ---
+		selectedVisor := func() (visor.HVVisorEntry, bool) {
+			row, _ := table.GetSelection()
+			idx := row - 1
+			mu.RLock()
+			defer mu.RUnlock()
+			if idx < 0 || idx >= len(visors) {
+				return visor.HVVisorEntry{}, false
+			}
+			return visors[idx], true
+		}
+
 		// --- Key handlers ---
 		app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 			switch event.Key() {
@@ -268,6 +310,129 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					return nil
 				case 'r', 'R':
 					refresh()
+					return nil
+				case 'm':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					showInputModal("Set min_hops on "+v.PK.String()[:8], "min_hops", "0", func(s string) {
+						n, err := strconv.ParseUint(s, 10, 16)
+						if err != nil {
+							setStatus(fmt.Sprintf("min_hops: invalid number: %s", err))
+							return
+						}
+						go func() {
+							if err := rpcClient.HVSetMinHops(v.PK, uint16(n)); err != nil {
+								setStatus("set min_hops failed: " + err.Error())
+								return
+							}
+							setStatus(fmt.Sprintf("set min_hops=%d on %s", n, v.PK.String()[:8]))
+							refresh()
+						}()
+					})
+					return nil
+				case 'w':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					showInputModal("Set reward address on "+v.PK.String()[:8], "address", v.RewardAddress, func(s string) {
+						go func() {
+							if _, err := rpcClient.HVSetRewardAddress(v.PK, s); err != nil {
+								setStatus("set reward failed: " + err.Error())
+								return
+							}
+							setStatus("reward address set on " + v.PK.String()[:8])
+							refresh()
+						}()
+					})
+					return nil
+				case 's':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					showInputModal("Start app on "+v.PK.String()[:8], "app name", "", func(s string) {
+						if s == "" {
+							return
+						}
+						go func() {
+							if err := rpcClient.HVStartApp(v.PK, s); err != nil {
+								setStatus("start " + s + " failed: " + err.Error())
+								return
+							}
+							setStatus("started " + s + " on " + v.PK.String()[:8])
+							refresh()
+						}()
+					})
+					return nil
+				case 'S':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					showInputModal("Stop app on "+v.PK.String()[:8], "app name", "", func(s string) {
+						if s == "" {
+							return
+						}
+						go func() {
+							if err := rpcClient.HVStopApp(v.PK, s); err != nil {
+								setStatus("stop " + s + " failed: " + err.Error())
+								return
+							}
+							setStatus("stopped " + s + " on " + v.PK.String()[:8])
+							refresh()
+						}()
+					})
+					return nil
+				case 't':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					showInputModal("Delete transport on "+v.PK.String()[:8], "transport ID (UUID)", "", func(s string) {
+						if s == "" {
+							return
+						}
+						tid, err := uuid.Parse(s)
+						if err != nil {
+							setStatus("rm transport: invalid UUID: " + err.Error())
+							return
+						}
+						go func() {
+							if err := rpcClient.HVRemoveTransport(v.PK, tid); err != nil {
+								setStatus("rm transport failed: " + err.Error())
+								return
+							}
+							setStatus("transport " + s[:8] + ".. removed on " + v.PK.String()[:8])
+							refresh()
+						}()
+					})
+					return nil
+				case 'x':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					showInputModal("Delete routing rule on "+v.PK.String()[:8], "route ID (number)", "", func(s string) {
+						if s == "" {
+							return
+						}
+						n, err := strconv.ParseUint(s, 10, 32)
+						if err != nil {
+							setStatus("rm rule: invalid route ID: " + err.Error())
+							return
+						}
+						go func() {
+							if err := rpcClient.HVRemoveRoutingRule(v.PK, routing.RouteID(n)); err != nil {
+								setStatus("rm rule failed: " + err.Error())
+								return
+							}
+							setStatus(fmt.Sprintf("rule %d removed on %s", n, v.PK.String()[:8]))
+							refresh()
+						}()
+					})
 					return nil
 				}
 			}
