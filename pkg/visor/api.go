@@ -257,6 +257,9 @@ type API interface {
 	HVSetCalculateRoutes(pk cipher.PubKey, enable bool) error
 	HVReload(pk cipher.PubKey) error
 	HVShutdown(pk cipher.PubKey) error
+	HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, error)
+	HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error)
+	HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*DmsgConnectAllResult, error)
 	DHTSync(remotePK string, salt string) (int, error)
 	DHTGetAll(salt string) (string, error)
 

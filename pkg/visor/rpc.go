@@ -1968,3 +1968,54 @@ func (r *RPC) HVShutdown(pk *cipher.PubKey, _ *struct{}) (err error) {
 	}
 	return v.HVShutdown(*pk)
 }
+
+// HVServiceHealth returns deployment service health for a remote visor.
+func (r *RPC) HVServiceHealth(pk *cipher.PubKey, out *[]ServiceHealthEntry) (err error) {
+	defer rpcutil.LogCall(r.log, "HVServiceHealth", pk)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	entries, hErr := v.HVServiceHealth(*pk)
+	if hErr != nil {
+		return hErr
+	}
+	*out = entries
+	return nil
+}
+
+// HVDmsgConnectAll triggers connect-all on a remote visor.
+func (r *RPC) HVDmsgConnectAll(pk *cipher.PubKey, out *DmsgConnectAllResult) (err error) {
+	defer rpcutil.LogCall(r.log, "HVDmsgConnectAll", pk)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	res, dErr := v.HVDmsgConnectAll(*pk)
+	if dErr != nil {
+		return dErr
+	}
+	*out = *res
+	return nil
+}
+
+// HVDmsgSessionsArgs sets dmsg sessions_count on a remote visor.
+type HVDmsgSessionsArgs struct {
+	PK    cipher.PubKey
+	Count int
+}
+
+// HVSetDmsgSessionsCount persists sessions_count and triggers connect-all on a remote visor.
+func (r *RPC) HVSetDmsgSessionsCount(in *HVDmsgSessionsArgs, out *DmsgConnectAllResult) (err error) {
+	defer rpcutil.LogCall(r.log, "HVSetDmsgSessionsCount", in)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	res, dErr := v.HVSetDmsgSessionsCount(in.PK, in.Count)
+	if dErr != nil {
+		return dErr
+	}
+	*out = *res
+	return nil
+}

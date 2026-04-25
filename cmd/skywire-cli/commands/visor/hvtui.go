@@ -64,7 +64,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		statusBar := tview.NewTextView().
 			SetDynamicColors(true).
 			SetTextAlign(tview.AlignLeft).
-			SetText(" [yellow]Loading...[white] | q:quit r:refresh enter:detail esc:back  m:min-hops M:mux c:calc-rt w:reward p:autoconn  s:app S:stop  T:add-tp t:rm-tp  x:rm-rule  R:reload D:shutdown")
+			SetText(" [yellow]Loading...[white] | q:quit r:refresh enter:detail esc:back  m/M:hops/mux c:calc-rt w:reward p:autoconn  s/S:app/stop  T/t:tp+/-  x:rm-rule  h:health G:dmsg-conn N:dmsg-count  R:reload D:shutdown")
 
 		// --- Layout ---
 		split := tview.NewFlex().
@@ -82,7 +82,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 
 		setStatus := func(msg string) {
 			app.QueueUpdateDraw(func() {
-				statusBar.SetText(fmt.Sprintf(" [yellow]%s[white] | q:quit r:refresh enter:detail esc:back  m:min-hops M:mux c:calc-rt w:reward p:autoconn  s:app S:stop  T:add-tp t:rm-tp  x:rm-rule  R:reload D:shutdown", msg))
+				statusBar.SetText(fmt.Sprintf(" [yellow]%s[white] | q:quit r:refresh enter:detail esc:back  m/M:hops/mux c:calc-rt w:reward p:autoconn  s/S:app/stop  T/t:tp+/-  x:rm-rule  h:health G:dmsg-conn N:dmsg-count  R:reload D:shutdown", msg))
 			})
 		}
 
@@ -302,6 +302,16 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 								sb.WriteString(fmt.Sprintf("    [gray]hop %d:[white] %s  %s  %s → %s\n",
 									i+1, tpID, strings.ToUpper(hop.TpType), hop.From, hop.To))
 							}
+						}
+					}
+					if len(summary.DMSGServers) > 0 {
+						sb.WriteString("\n[yellow]── DMSG Servers ──[white]\n")
+						for _, ds := range summary.DMSGServers {
+							lat := "-"
+							if ds.Latency > 0 {
+								lat = ds.Latency.Truncate(time.Millisecond).String()
+							}
+							sb.WriteString(fmt.Sprintf("  %s  lat=%s\n", ds.PK.String(), lat))
 						}
 					}
 				}
@@ -722,6 +732,101 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 								refresh()
 							}()
 						})
+					return nil
+				case 'h':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					go func() {
+						setStatus("Loading service health...")
+						entries, err := rpcClient.HVServiceHealth(v.PK)
+						if err != nil {
+							setStatus("service health failed: " + err.Error())
+							return
+						}
+						var sb strings.Builder
+						sb.WriteString(fmt.Sprintf("[yellow]Service health for %s[white]\n\n", v.PK.String()[:16]))
+						sb.WriteString(fmt.Sprintf("  %-22s %-9s %-7s %-12s %s\n", "SERVICE", "STATUS", "TP", "LATENCY", "VERSION"))
+						sb.WriteString("  ────────────────────────────────────────────────────────────────────────\n")
+						for _, e := range entries {
+							color := "red"
+							if strings.EqualFold(e.Status, "ok") || strings.EqualFold(e.Status, "healthy") {
+								color = "green"
+							}
+							lat := "-"
+							if e.LatencyMs > 0 {
+								lat = fmt.Sprintf("%dms", e.LatencyMs)
+							}
+							sb.WriteString(fmt.Sprintf("  %-22s [%s]%-9s[white] %-7s %-12s %s\n",
+								e.Name, color, e.Status, e.Transport, lat, e.Version))
+							if e.Error != "" {
+								sb.WriteString(fmt.Sprintf("    [red]%s[white]\n", e.Error))
+							}
+						}
+						sb.WriteString("\n[gray]Press Esc to close.[white]")
+						app.QueueUpdateDraw(func() {
+							view := tview.NewTextView().
+								SetDynamicColors(true).
+								SetScrollable(true).
+								SetText(sb.String())
+							view.SetBorder(true).
+								SetTitle(" Services Health ").
+								SetTitleAlign(tview.AlignLeft)
+							view.SetDoneFunc(func(_ tcell.Key) { closeModal() })
+							view.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+								if ev.Key() == tcell.KeyEscape {
+									closeModal()
+									return nil
+								}
+								return ev
+							})
+							showModal(view, 100, len(entries)*2+8)
+						})
+					}()
+					return nil
+				case 'G':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					showConfirmModal("DMSG connect-all",
+						fmt.Sprintf("Trigger DMSG connect-all on %s?", v.PK.String()[:8]),
+						func() {
+							go func() {
+								res, err := rpcClient.HVDmsgConnectAll(v.PK)
+								if err != nil {
+									setStatus("connect-all failed: " + err.Error())
+									return
+								}
+								setStatus(fmt.Sprintf("connect-all on %s: total=%d already=%d new=%d failed=%d",
+									v.PK.String()[:8], res.Total, res.AlreadyConnected, res.NewlyConnected, len(res.Failed)))
+								refresh()
+							}()
+						})
+					return nil
+				case 'N':
+					v, ok := selectedVisor()
+					if !ok {
+						return nil
+					}
+					showInputModal("Set DMSG sessions_count on "+v.PK.String()[:8], "sessions_count (0 = all)", "0", func(s string) {
+						n, err := strconv.Atoi(s)
+						if err != nil || n < 0 {
+							setStatus("sessions_count: invalid number")
+							return
+						}
+						go func() {
+							res, err := rpcClient.HVSetDmsgSessionsCount(v.PK, n)
+							if err != nil {
+								setStatus("set sessions_count failed: " + err.Error())
+								return
+							}
+							setStatus(fmt.Sprintf("sessions_count=%d on %s (total=%d already=%d new=%d fail=%d)",
+								n, v.PK.String()[:8], res.Total, res.AlreadyConnected, res.NewlyConnected, len(res.Failed)))
+							refresh()
+						}()
+					})
 					return nil
 				}
 			}

@@ -1259,6 +1259,21 @@ func (mc *mockRPCClient) HVShutdown(_ cipher.PubKey) error {
 	return fmt.Errorf("not supported in mock")
 }
 
+// HVServiceHealth implements API.
+func (mc *mockRPCClient) HVServiceHealth(_ cipher.PubKey) ([]ServiceHealthEntry, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVDmsgConnectAll implements API.
+func (mc *mockRPCClient) HVDmsgConnectAll(_ cipher.PubKey) (*DmsgConnectAllResult, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVSetDmsgSessionsCount implements API.
+func (mc *mockRPCClient) HVSetDmsgSessionsCount(_ cipher.PubKey, _ int) (*DmsgConnectAllResult, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
 // DmsgPorterDiag implements API.
 func (mc *mockRPCClient) DmsgPorterDiag() (*netutil.EphemeralDiagResult, error) {
 	return &netutil.EphemeralDiagResult{TypeCount: map[string]int{}}, nil

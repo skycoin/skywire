@@ -264,3 +264,30 @@ func (v *Visor) HVShutdown(pk cipher.PubKey) error {
 	}
 	return api.Shutdown()
 }
+
+// HVServiceHealth returns deployment service health entries for the visor identified by pk.
+func (v *Visor) HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, error) {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return nil, err
+	}
+	return api.ServiceHealth()
+}
+
+// HVDmsgConnectAll triggers a one-shot connect-all on the visor identified by pk.
+func (v *Visor) HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error) {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return nil, err
+	}
+	return api.DmsgConnectAll()
+}
+
+// HVSetDmsgSessionsCount persists the dmsg sessions_count and triggers connect-all on the visor identified by pk.
+func (v *Visor) HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*DmsgConnectAllResult, error) {
+	api, err := v.hvAPI(pk)
+	if err != nil {
+		return nil, err
+	}
+	return api.SetDmsgSessionsCount(count)
+}

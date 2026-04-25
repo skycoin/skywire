@@ -1372,6 +1372,33 @@ func (rc *rpcClient) HVShutdown(pk cipher.PubKey) error {
 	return rc.Call("HVShutdown", &pk, &struct{}{})
 }
 
+// HVServiceHealth returns deployment service health for a remote visor.
+func (rc *rpcClient) HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, error) {
+	var out []ServiceHealthEntry
+	if err := rc.Call("HVServiceHealth", &pk, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HVDmsgConnectAll triggers connect-all on a remote visor.
+func (rc *rpcClient) HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error) {
+	var out DmsgConnectAllResult
+	if err := rc.Call("HVDmsgConnectAll", &pk, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// HVSetDmsgSessionsCount persists sessions_count and triggers connect-all on a remote visor.
+func (rc *rpcClient) HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*DmsgConnectAllResult, error) {
+	var out DmsgConnectAllResult
+	if err := rc.Call("HVSetDmsgSessionsCount", &HVDmsgSessionsArgs{PK: pk, Count: count}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // CheckAREntry checks if a PK is registered in the address resolver.
 func (rc *rpcClient) CheckAREntry(pk string) ([]string, error) {
 	var resp []string
