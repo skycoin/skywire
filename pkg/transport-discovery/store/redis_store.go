@@ -40,10 +40,12 @@ type TransportData struct {
 }
 
 type redisStore struct {
-	client  *redis.Client
-	ttl     time.Duration
-	log     *logging.Logger
-	pkCache *pubKeyCache
+	client      *redis.Client
+	ttl         time.Duration
+	log         *logging.Logger
+	pkCache     *pubKeyCache
+	edgeCache   *edgeEntriesCache
+	allTpsCache *allTransportsCache
 }
 
 func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl time.Duration, logger *logging.Logger) (*redisStore, error) {
@@ -78,10 +80,12 @@ func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl
 	}
 
 	return &redisStore{
-		client:  redisCl,
-		ttl:     ttl,
-		log:     logger,
-		pkCache: newPubKeyCache(defaultPubKeyCacheCap),
+		client:      redisCl,
+		ttl:         ttl,
+		log:         logger,
+		pkCache:     newPubKeyCache(defaultPubKeyCacheCap),
+		edgeCache:   newEdgeEntriesCache(defaultEdgeEntriesCacheCap, defaultEdgeEntriesCacheTTL),
+		allTpsCache: newAllTransportsCache(defaultAllTransportsCacheTTL),
 	}, nil
 }
 
@@ -161,6 +165,10 @@ func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.Si
 		return err
 	}
 
+	// Invalidate the per-edge entry cache so mirrorEdges (called by the
+	// API layer right after this returns) re-fetches the post-write list.
+	s.edgeCache.Invalidate(entry.Edges[0], entry.Edges[1])
+
 	return nil
 }
 
@@ -228,8 +236,19 @@ func (s *redisStore) RegisterTransportsBatch(ctx context.Context, entries []*tra
 
 	pipe.Expire(ctx, s.visorAllKey(), 400*24*time.Hour)
 
-	_, err := pipe.Exec(ctx)
-	return err
+	if _, err := pipe.Exec(ctx); err != nil {
+		return err
+	}
+
+	// Invalidate every touched edge so mirrorEdges sees the post-batch
+	// state on the next GetTransportsByEdge call.
+	for _, sEntry := range entries {
+		if sEntry == nil || sEntry.Entry == nil {
+			continue
+		}
+		s.edgeCache.Invalidate(sEntry.Entry.Edges[0], sEntry.Entry.Edges[1])
+	}
+	return nil
 }
 
 func (s *redisStore) DeregisterTransport(ctx context.Context, id uuid.UUID) error {
@@ -257,6 +276,7 @@ func (s *redisStore) DeregisterTransport(ctx context.Context, id uuid.UUID) erro
 		return err
 	}
 
+	s.edgeCache.Invalidate(entry.Edges[0], entry.Edges[1])
 	return nil
 }
 
@@ -280,6 +300,10 @@ func (s *redisStore) GetTransportByID(ctx context.Context, id uuid.UUID) (*trans
 }
 
 func (s *redisStore) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	if entries, ok := s.edgeCache.Get(pk); ok {
+		return entries, nil
+	}
+
 	edgeKey := s.edgeKey(pk)
 
 	ids, err := s.client.SMembers(ctx, edgeKey).Result()
@@ -350,6 +374,7 @@ func (s *redisStore) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) 
 		return nil, ErrTransportNotFound
 	}
 
+	s.edgeCache.Put(pk, entries)
 	return entries, nil
 }
 
@@ -398,7 +423,15 @@ func (s *redisStore) GetNumberOfTransports(ctx context.Context) (map[types.Type]
 }
 
 func (s *redisStore) GetAllTransports(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
-	return s.scanAllTransports(ctx, selfTransports, false)
+	if entries, ok := s.allTpsCache.Get(selfTransports); ok {
+		return entries, nil
+	}
+	entries, err := s.scanAllTransports(ctx, selfTransports, false)
+	if err != nil {
+		return nil, err
+	}
+	s.allTpsCache.Put(selfTransports, entries)
+	return entries, nil
 }
 
 // getAllTransportsWithQoS returns all transports including QoS metrics.
