@@ -3,8 +3,11 @@ package clivisor
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -146,7 +149,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			sb.WriteString(fmt.Sprintf("[yellow]Build Tag:[white]  %s\n", e.BuildTag))
 			sb.WriteString(fmt.Sprintf("[yellow]Config:[white]     %s\n", e.ConfigVersion))
 			if e.Uptime > 0 {
-				sb.WriteString(fmt.Sprintf("[yellow]Uptime:[white]     %s\n", (time.Duration(e.Uptime)*time.Second).Truncate(time.Second)))
+				sb.WriteString(fmt.Sprintf("[yellow]Uptime:[white]     %s\n", (time.Duration(e.Uptime) * time.Second).Truncate(time.Second)))
 			}
 			sb.WriteString(fmt.Sprintf("[yellow]Local IP:[white]   %s\n", e.LocalIP))
 			sb.WriteString(fmt.Sprintf("[yellow]Public IP:[white]  %s\n", e.PublicIP))
@@ -261,6 +264,14 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			}
 			return event
 		})
+
+		// Handle Ctrl+C
+		sigC := make(chan os.Signal, 1)
+		signal.Notify(sigC, syscall.SIGINT, syscall.SIGTERM)
+		go func() {
+			<-sigC
+			app.Stop()
+		}()
 
 		// Initial load + auto-refresh after app starts
 		go func() {
