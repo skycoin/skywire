@@ -40,11 +40,12 @@ type TransportData struct {
 }
 
 type redisStore struct {
-	client    *redis.Client
-	ttl       time.Duration
-	log       *logging.Logger
-	pkCache   *pubKeyCache
-	edgeCache *edgeEntriesCache
+	client       *redis.Client
+	ttl          time.Duration
+	log          *logging.Logger
+	pkCache      *pubKeyCache
+	edgeCache    *edgeEntriesCache
+	allTpsCache  *allTransportsCache
 }
 
 func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl time.Duration, logger *logging.Logger) (*redisStore, error) {
@@ -79,11 +80,12 @@ func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl
 	}
 
 	return &redisStore{
-		client:    redisCl,
-		ttl:       ttl,
-		log:       logger,
-		pkCache:   newPubKeyCache(defaultPubKeyCacheCap),
-		edgeCache: newEdgeEntriesCache(defaultEdgeEntriesCacheCap, defaultEdgeEntriesCacheTTL),
+		client:      redisCl,
+		ttl:         ttl,
+		log:         logger,
+		pkCache:     newPubKeyCache(defaultPubKeyCacheCap),
+		edgeCache:   newEdgeEntriesCache(defaultEdgeEntriesCacheCap, defaultEdgeEntriesCacheTTL),
+		allTpsCache: newAllTransportsCache(defaultAllTransportsCacheTTL),
 	}, nil
 }
 
@@ -421,7 +423,15 @@ func (s *redisStore) GetNumberOfTransports(ctx context.Context) (map[types.Type]
 }
 
 func (s *redisStore) GetAllTransports(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
-	return s.scanAllTransports(ctx, selfTransports, false)
+	if entries, ok := s.allTpsCache.Get(selfTransports); ok {
+		return entries, nil
+	}
+	entries, err := s.scanAllTransports(ctx, selfTransports, false)
+	if err != nil {
+		return nil, err
+	}
+	s.allTpsCache.Put(selfTransports, entries)
+	return entries, nil
 }
 
 // getAllTransportsWithQoS returns all transports including QoS metrics.
