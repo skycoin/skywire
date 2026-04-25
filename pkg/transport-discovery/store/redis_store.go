@@ -423,21 +423,32 @@ func (s *redisStore) GetNumberOfTransports(ctx context.Context) (map[types.Type]
 }
 
 func (s *redisStore) GetAllTransports(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
-	if entries, ok := s.allTpsCache.Get(selfTransports); ok {
+	if entries, ok := s.allTpsCache.Get(selfTransports, false); ok {
 		return entries, nil
 	}
 	entries, err := s.scanAllTransports(ctx, selfTransports, false)
 	if err != nil {
 		return nil, err
 	}
-	s.allTpsCache.Put(selfTransports, entries)
+	s.allTpsCache.Put(selfTransports, false, entries)
 	return entries, nil
 }
 
 // getAllTransportsWithQoS returns all transports including QoS metrics.
 // Used internally by metrics functions that need bandwidth/latency data.
+// Cached with the same TTL+slot scheme as GetAllTransports — metrics
+// scrapers (Prometheus / Victoria Metrics) hit these endpoints on a
+// regular cadence and were paying a full SCAN+MGET each time.
 func (s *redisStore) getAllTransportsWithQoS(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
-	return s.scanAllTransports(ctx, selfTransports, true)
+	if entries, ok := s.allTpsCache.Get(selfTransports, true); ok {
+		return entries, nil
+	}
+	entries, err := s.scanAllTransports(ctx, selfTransports, true)
+	if err != nil {
+		return nil, err
+	}
+	s.allTpsCache.Put(selfTransports, true, entries)
+	return entries, nil
 }
 
 // scanAllTransports is the shared implementation for GetAllTransports and getAllTransportsWithQoS.
