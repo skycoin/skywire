@@ -56,6 +56,22 @@ func verifyCacheStore(pk cipher.PubKey, sig cipher.Sig, hash cipher.SHA256) {
 
 func init() {
 	cipher.DebugLevel2 = false // DebugLevel2 causes ECDH to be really slow
+
+	// DebugLevel1 triggers a paranoid verify-after-sign block in
+	// cipher.SignHash (skycoin crypto.go:381) that recovers the public
+	// key from the signature and re-verifies it — three extra secp256k1
+	// ops on top of every Sign. Skycoin enables it as 10⁻⁴⁰ coin-loss
+	// insurance; in skywire's network-handshake context an invalid sig
+	// would just cause the next handshake to fail and retry, so the
+	// cost-vs-risk math goes the other way.
+	//
+	// Production pprof on address-resolver showed RecoverPubkey at 29 %
+	// cum and VerifyPubKeySignedHash at 14 % cum on top of SignHash
+	// itself — all of which were the post-verify path. Disabling it
+	// halves the per-Sign CPU cost across every signing site (dmsg
+	// noise stream sign/verify, every service's nonce-signed responses,
+	// every visor's stream-request signatures).
+	cipher.DebugLevel1 = false
 }
 
 // GenerateKeyPair creates key pair
