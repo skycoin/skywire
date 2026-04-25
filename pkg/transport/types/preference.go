@@ -1,6 +1,8 @@
 package tptypes
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+)
 
 // defaultPreference is the built-in priority order: STCPR > SUDPH > STCP > DMSG.
 // Direct types are preferred over DMSG because a dmsg server is an opaque
