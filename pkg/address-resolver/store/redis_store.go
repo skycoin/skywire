@@ -213,11 +213,11 @@ func (s *redisStore) getAllFromIndex(ctx context.Context, netType types.Type) ([
 		// Fire-and-forget: stale members will get cleaned on the next
 		// read regardless, but doing it now keeps the index from
 		// growing unbounded under churn. context.Background is
-		// intentional — the request ctx may be cancelled by the time
+		// intentional — the request ctx may be canceled by the time
 		// this runs, and the cleanup is bounded (single SREM with a
 		// small stale slice).
-		go func() {
-			s.client.SRem(context.Background(), idx, stale...) //nolint:errcheck,gosec
+		go func() { //nolint:gosec // intentional bg ctx, see comment above
+			s.client.SRem(context.Background(), idx, stale...) //nolint:errcheck
 		}()
 	}
 
