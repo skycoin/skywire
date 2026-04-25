@@ -100,9 +100,6 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			for i, e := range entries {
 				row := i + 1
 				pk := e.PK.String()
-				if len(pk) > 12 {
-					pk = pk[:10] + ".."
-				}
 				st := "ok"
 				stColor := tcell.ColorGreen
 				if e.IsLocal {
@@ -182,12 +179,8 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							if len(tpID) > 10 {
 								tpID = tpID[:8] + ".."
 							}
-							remote := tp.Remote.String()
-							if len(remote) > 10 {
-								remote = remote[:8] + ".."
-							}
-							sb.WriteString(fmt.Sprintf("  %s  %s  → %s  %s\n",
-								tpID, strings.ToUpper(string(tp.Type)), remote, tp.Label))
+							sb.WriteString(fmt.Sprintf("  %s  %-6s  → %s  %s\n",
+								tpID, strings.ToUpper(string(tp.Type)), tp.Remote.String(), tp.Label))
 						}
 					}
 					if len(summary.Overview.Apps) > 0 {
