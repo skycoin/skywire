@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // DialRoutes dials to a given visor of 'rPK'.
@@ -653,6 +654,20 @@ func (r *router) establishMuxRoutes(
 	if muxCount <= 1 || nrg.rg.mux == nil {
 		return
 	}
+
+	// Don't multiplex when the primary route contains a DMSG transport.
+	// DMSG hops share an unaccountable dmsg server intermediary, so multiplexing
+	// alongside another DMSG-bearing route risks data looping through the same
+	// dmsg server with no way to detect it.
+	nrg.rg.mu.Lock()
+	for _, tp := range nrg.rg.tps {
+		if tp != nil && tp.Entry.Type == tptypes.DMSG {
+			nrg.rg.mu.Unlock()
+			r.logger.Debug("Skipping mux setup: primary route contains a DMSG transport")
+			return
+		}
+	}
+	nrg.rg.mu.Unlock()
 
 	lPK := forwardDesc.SrcPK()
 	rPK := forwardDesc.DstPK()
