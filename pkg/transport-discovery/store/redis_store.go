@@ -40,12 +40,12 @@ type TransportData struct {
 }
 
 type redisStore struct {
-	client       *redis.Client
-	ttl          time.Duration
-	log          *logging.Logger
-	pkCache      *pubKeyCache
-	edgeCache    *edgeEntriesCache
-	allTpsCache  *allTransportsCache
+	client      *redis.Client
+	ttl         time.Duration
+	log         *logging.Logger
+	pkCache     *pubKeyCache
+	edgeCache   *edgeEntriesCache
+	allTpsCache *allTransportsCache
 }
 
 func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl time.Duration, logger *logging.Logger) (*redisStore, error) {
