@@ -10,43 +10,60 @@ import (
 func TestAllTransportsCache_HitMissExpiry(t *testing.T) {
 	c := newAllTransportsCache(50 * time.Millisecond)
 
-	if _, ok := c.Get(true); ok {
-		t.Fatal("expected miss on empty cache (selfTransports=true)")
-	}
-	if _, ok := c.Get(false); ok {
-		t.Fatal("expected miss on empty cache (selfTransports=false)")
+	for _, withQoS := range []bool{false, true} {
+		for _, selfTps := range []bool{false, true} {
+			if _, ok := c.Get(selfTps, withQoS); ok {
+				t.Fatalf("expected miss on empty cache (self=%v qos=%v)", selfTps, withQoS)
+			}
+		}
 	}
 
 	withSelf := []*transport.Entry{{}, {}}
 	withoutSelf := []*transport.Entry{{}}
+	withSelfQoS := []*transport.Entry{{}, {}, {}}
+	withoutSelfQoS := []*transport.Entry{{}, {}, {}, {}}
 
-	c.Put(true, withSelf)
-	c.Put(false, withoutSelf)
+	c.Put(true, false, withSelf)
+	c.Put(false, false, withoutSelf)
+	c.Put(true, true, withSelfQoS)
+	c.Put(false, true, withoutSelfQoS)
 
-	if got, ok := c.Get(true); !ok || len(got) != 2 {
-		t.Fatalf("expected hit with 2 entries for selfTransports=true, got ok=%v len=%d", ok, len(got))
+	cases := []struct {
+		self, qos bool
+		want      int
+	}{
+		{true, false, 2},
+		{false, false, 1},
+		{true, true, 3},
+		{false, true, 4},
 	}
-	if got, ok := c.Get(false); !ok || len(got) != 1 {
-		t.Fatalf("expected hit with 1 entry for selfTransports=false, got ok=%v len=%d", ok, len(got))
+	for _, tc := range cases {
+		got, ok := c.Get(tc.self, tc.qos)
+		if !ok || len(got) != tc.want {
+			t.Fatalf("self=%v qos=%v: expected hit with %d entries, got ok=%v len=%d",
+				tc.self, tc.qos, tc.want, ok, len(got))
+		}
 	}
 
 	time.Sleep(60 * time.Millisecond)
-	if _, ok := c.Get(true); ok {
-		t.Fatal("expected miss after TTL expiry (selfTransports=true)")
-	}
-	if _, ok := c.Get(false); ok {
-		t.Fatal("expected miss after TTL expiry (selfTransports=false)")
+	for _, tc := range cases {
+		if _, ok := c.Get(tc.self, tc.qos); ok {
+			t.Fatalf("self=%v qos=%v: expected miss after TTL expiry", tc.self, tc.qos)
+		}
 	}
 }
 
 func TestAllTransportsCache_SlotsIndependent(t *testing.T) {
 	c := newAllTransportsCache(time.Hour)
-	c.Put(true, []*transport.Entry{{}})
+	c.Put(true, false, []*transport.Entry{{}})
 
-	if _, ok := c.Get(false); ok {
-		t.Fatal("Put(true) must not populate Get(false) slot")
+	if _, ok := c.Get(false, false); ok {
+		t.Fatal("Put(true,false) must not populate Get(false,false)")
 	}
-	if _, ok := c.Get(true); !ok {
-		t.Fatal("Put(true) must populate Get(true) slot")
+	if _, ok := c.Get(true, true); ok {
+		t.Fatal("Put(true,false) must not populate Get(true,true) (different qos)")
+	}
+	if _, ok := c.Get(true, false); !ok {
+		t.Fatal("Put(true,false) must populate Get(true,false)")
 	}
 }
