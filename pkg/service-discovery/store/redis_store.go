@@ -506,13 +506,35 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool, timeline
 
 // isServiceOnline checks whether any live service entry exists for the given PK hex.
 // A service entry exists when the visor has recently called UpdateService (within TTL).
+//
+// The previous implementation walked the entire keyspace via SCAN cursor=0
+// pattern="service:*:<pk>" COUNT=10. With ~150K keys in production, an
+// offline visor's check meant ~15K SCAN round-trips per call — and this is
+// invoked once per visor seen today inside refreshUptimesCache, which fires
+// every 5 minutes for both v1 and v2 caches. Production redis was spending
+// ~33% of its CPU on SCAN alone (~3316 calls/sec).
+//
+// Now: consult the per-visor service-type index that UpdateService /
+// UpdateServiceAndHeartbeat / DeleteService already maintain (see
+// visorServicesKey + ServicesByPK). Build the actual service keys and
+// resolve in a single multi-key EXISTS. The index can lag primary-key
+// TTLs; an existing index member with no live primary just returns false
+// here, and ServicesByPK's lazy SREM cleans it up on the next read.
+// O(1) Redis round-trips per call regardless of keyspace size.
 func (s *redisStore) isServiceOnline(ctx context.Context, pkHex string) bool {
-	pattern := fmt.Sprintf("%s*:%s", serviceKeyPrefix, pkHex)
-	iter := s.client.Scan(ctx, 0, pattern, 10).Iterator()
-	for iter.Next(ctx) {
-		return true
+	types, err := s.client.SMembers(ctx, s.visorServicesKey(pkHex)).Result()
+	if err != nil || len(types) == 0 {
+		return false
 	}
-	return false
+	keys := make([]string, len(types))
+	for i, t := range types {
+		keys[i] = fmt.Sprintf("%s%s:%s", serviceKeyPrefix, t, pkHex)
+	}
+	n, err := s.client.Exists(ctx, keys...).Result()
+	if err != nil {
+		return false
+	}
+	return n > 0
 }
 
 // getDailyUptime returns the last 7 days of uptime percentages for a visor.
