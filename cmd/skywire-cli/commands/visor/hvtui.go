@@ -258,6 +258,10 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					st = "local"
 					stColor = tcell.ColorAqua
 				}
+				if e.ProxiedVia != nil {
+					st = "via " + e.ProxiedVia.String()[:8]
+					stColor = tcell.ColorYellow
+				}
 				if e.Error != "" {
 					st = truncStr(e.Error, 20)
 					stColor = tcell.ColorRed
