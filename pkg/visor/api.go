@@ -357,6 +357,7 @@ type Summary struct {
 	Health               *HealthInfo                      `json:"health"`
 	Uptime               float64                          `json:"uptime"`
 	Routes               []routingRuleResp                `json:"routes"`
+	RouteGroups          []RouteGroupInfo                 `json:"route_groups,omitempty"`
 	IsHypervisor         bool                             `json:"is_hypervisor,omitempty"`
 	DmsgStats            *dmsgtracker.DmsgClientSummary   `json:"dmsg_stats"`
 	ConnectedDmsgServers []string                         `json:"connected_dmsg_servers"` // Deprecated: use DMSGServers instead

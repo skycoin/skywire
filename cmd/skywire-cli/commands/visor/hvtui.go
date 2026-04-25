@@ -194,6 +194,22 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 								statusColor, a.Name, a.Port))
 						}
 					}
+					if len(summary.RouteGroups) > 0 {
+						sb.WriteString("\n[yellow]── Route Groups ──[white]\n")
+						for _, rg := range summary.RouteGroups {
+							sb.WriteString(fmt.Sprintf("  [cyan]%s:%d[white] → [cyan]%s:%d[white]  fwd=%d csm=%d\n",
+								rg.Desc.SrcPK, rg.Desc.SrcPort, rg.Desc.DstPK, rg.Desc.DstPort,
+								rg.FwdRuleID, rg.ConsumeRuleID))
+							for i, hop := range rg.Hops {
+								tpID := hop.TpID
+								if len(tpID) > 10 {
+									tpID = tpID[:8] + ".."
+								}
+								sb.WriteString(fmt.Sprintf("    [gray]hop %d:[white] %s  %s  %s → %s\n",
+									i+1, tpID, strings.ToUpper(hop.TpType), hop.From, hop.To))
+							}
+						}
+					}
 				}
 			}
 			app.QueueUpdateDraw(func() {
