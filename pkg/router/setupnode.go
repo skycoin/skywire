@@ -157,6 +157,38 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 		}
 	}()
 
+	// Porter watchdog: periodically sweep stale ephemeral port reservations
+	// and log usage. The embedded RSN (pkg/visor/embedded_route_setup.go) runs
+	// the same loop; without it here, the standalone setup-node container
+	// leaks reservations until the 16K ephemeral range saturates and every
+	// new dial fails with "ephemeral port space exhausted" (observed: ~13
+	// ports/min in prod, full exhaustion in ~20h). Sweep age matches the
+	// pool TTL — anything older than that should have been freed already.
+	const porterMaxAge = 5 * time.Minute
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		var lastCount int
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				swept := sn.dmsgC.SweepStalePorterEntries(porterMaxAge)
+				diag := sn.dmsgC.PorterDiag()
+				delta := diag.Ephemeral - lastCount
+				if diag.Ephemeral > 100 || delta > 0 || swept > 0 {
+					log.WithField("ephemeral", diag.Ephemeral).
+						WithField("delta_60s", delta).
+						WithField("swept", swept).
+						WithField("pool_size", sn.pool.Size()).
+						Warn("Setup-node porter watchdog")
+				}
+				lastCount = diag.Ephemeral
+			}
+		}
+	}()
+
 	// handlerTimeout is the hard deadline for an entire RPC handler goroutine.
 	// This covers the full lifecycle: dial to remote visors, reserve IDs,
 	// broadcast rules, and return response. It must be longer than the
