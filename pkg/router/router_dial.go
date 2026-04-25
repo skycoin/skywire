@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"time"
 
@@ -507,6 +508,13 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 		return nil, nil, errors.New("no local transports available")
 	}
 
+	// Sort local transports by type preference so direct types (STCPR > SUDPH > STCP)
+	// are tried before DMSG. WalkTransports iteration order is undefined.
+	sort.SliceStable(localTps, func(i, j int) bool {
+		return tptypes.TypePreference(tptypes.Type(localTps[i].tpType)) <
+			tptypes.TypePreference(tptypes.Type(localTps[j].tpType))
+	})
+
 	r.logger.Debugf("Found %d local transports", len(localTps))
 
 	// Check for direct (1-hop) route first
@@ -559,6 +567,15 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 		for _, edge := range entry.Edges {
 			transportsByEdge[edge] = append(transportsByEdge[edge], entry)
 		}
+	}
+	// Sort each edge's transport list by type preference so iteration tries
+	// direct types before DMSG when picking an intermediate-to-dst hop.
+	for edge := range transportsByEdge {
+		entries := transportsByEdge[edge]
+		sort.SliceStable(entries, func(i, j int) bool {
+			return tptypes.TypePreference(entries[i].Type) <
+				tptypes.TypePreference(entries[j].Type)
+		})
 	}
 	r.logger.Debugf("Built transport cache with %d entries covering %d visors", len(allEntries), len(transportsByEdge))
 

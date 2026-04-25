@@ -6,6 +6,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 type vertex struct {
@@ -30,6 +31,12 @@ func newVertex(edgeID cipher.PubKey, transports []*transport.Entry) *vertex {
 			neighbourPk = tr.Edges[1]
 		} else {
 			neighbourPk = tr.Edges[0]
+		}
+		// When multiple transports exist between the same edges, prefer the
+		// one with the lower TypePreference (STCPR > SUDPH > STCP > DMSG).
+		if existing, ok := connections[neighbourPk]; ok &&
+			tptypes.TypePreference(tr.Type) >= tptypes.TypePreference(existing.Type) {
+			continue
 		}
 		connections[neighbourPk] = tr
 	}
