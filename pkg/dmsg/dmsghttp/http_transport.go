@@ -153,7 +153,7 @@ func (t *HTTPTransport) do(ps *pooledStream, req *http.Request) (*http.Response,
 		ps:         ps,
 		t:          t,
 		// HTTP/1.1 servers signal "no keep-alive" via Connection: close;
-		// honour it by not returning the stream to the pool.
+		// honor it by not returning the stream to the pool.
 		keepAlive: !req.Close && !resp.Close && resp.ProtoAtLeast(1, 1),
 	}
 	return resp, nil
@@ -269,7 +269,7 @@ func (b *pooledBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// Close finalises the body. If keep-alive is in effect and the body
+// Close finalizes the body. If keep-alive is in effect and the body
 // was fully drained without I/O error, the underlying stream returns
 // to the idle pool. Otherwise it is closed.
 func (b *pooledBody) Close() error {
