@@ -3,7 +3,6 @@ package commands
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -22,17 +21,16 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
 )
 
-//go:embed GeoLite2-City.mmdb
-var embeddedGeoIP []byte
-
 // EmbeddedGeoIP returns the embedded GeoLite2-City database bytes.
+// Kept for backwards-compat: callers should prefer pkg/geoip.EmbeddedDB.
 func EmbeddedGeoIP() []byte {
-	return embeddedGeoIP
+	return geoip.EmbeddedDB()
 }
 
 // LookupResult holds a GeoIP lookup result.
@@ -159,7 +157,7 @@ Usage Examples:
 		} else {
 			// Use embedded database
 			logger.Info("Using embedded GeoIP database")
-			db, err = geoip2.OpenBytes(embeddedGeoIP)
+			db, err = geoip.OpenEmbedded()
 			if err != nil {
 				logger.Fatalf("failed to load embedded GeoIP database: %v", err)
 			}

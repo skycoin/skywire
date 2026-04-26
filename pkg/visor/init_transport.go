@@ -59,53 +59,30 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	// Get public IP for address resolver binding (needed for NAT setups)
-	// Try multiple methods with fallback chain:
-	// 1. dmsg server (may fail if local dmsg server returns private IP)
-	// 2. GeoIP service
-	// 3. STUN servers
+	// Get public IP for address resolver binding (needed for NAT setups).
+	// Try dmsg first; fall back to STUN. Geolocation comes from the embedded
+	// MaxMind database — no HTTP round-trip to the geoip service.
 	var pIP string
-	var geoData *GeoData
 
-	// Try dmsg LookupIP first (with timeout to avoid blocking init if dmsg isn't ready)
 	lookupCtx, lookupCancel := context.WithTimeout(ctx, 10*time.Second)
 	ipAddr, err := v.dmsgC.LookupIP(lookupCtx, nil)
 	lookupCancel()
 	if err != nil {
-		log.WithError(err).Debug("Failed to get public IP from dmsg server, trying GeoIP")
-
-		// Fall back to GeoIP - also get geolocation data
-		pIP, geoData = GetIPWithGeo(v.conf.GeoIP)
-		if pIP == "" {
-			log.Debug("Failed to get public IP from GeoIP, trying STUN")
-
-			// Fall back to STUN
-			<-v.stun.ready
-			if v.stun.client.PublicIP != nil {
-				pIP = v.stun.client.PublicIP.IP()
-				log.WithField("public_ip", pIP).Debug("Got public IP from STUN")
-			} else {
-				log.Warn("Failed to determine public IP from dmsg, GeoIP, and STUN")
-				pIP = ""
-			}
+		log.WithError(err).Debug("Failed to get public IP from dmsg server, trying STUN")
+		<-v.stun.ready
+		if v.stun.client.PublicIP != nil {
+			pIP = v.stun.client.PublicIP.IP()
+			log.WithField("public_ip", pIP).Debug("Got public IP from STUN")
 		} else {
-			log.WithField("public_ip", pIP).Debug("Got public IP from GeoIP")
-			if geoData != nil {
-				log.WithField("country", geoData.CountryCode).Debug("Got geolocation from GeoIP")
-			}
+			log.Warn("Failed to determine public IP from dmsg and STUN")
 		}
 	} else {
 		pIP = ipAddr.String()
 		log.WithField("public_ip", pIP).Debug("Got public IP from dmsg server")
-		// When we get IP from dmsg, still try to get geo data separately
-		_, geoData = GetIPWithGeo(v.conf.GeoIP)
-		if geoData != nil {
-			log.WithField("country", geoData.CountryCode).Debug("Got geolocation from GeoIP")
-		}
 	}
 
-	// Store geolocation data if we got it
-	if geoData != nil {
+	if geoData := LookupGeo(pIP); geoData != nil {
+		log.WithField("country", geoData.CountryCode).Debug("Got geolocation from embedded GeoIP database")
 		v.geo.mu.Lock()
 		v.geo.data = geoData
 		v.geo.mu.Unlock()
@@ -160,30 +137,21 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		factory.HeartbeatInterval = time.Duration(conf.HeartbeatInterval)
 		factory.Client = httpC
 
-		// Get public IP for service discovery (needed for NAT setups)
-		// Use same fallback chain as address resolver: dmsg -> GeoIP -> STUN
+		// Get public IP for service discovery (needed for NAT setups).
+		// Try dmsg first; fall back to STUN. No HTTP geoip query.
 		logger := factory.Log
 		var pIP string
 		lookupCtx, lookupCancel := context.WithTimeout(ctx, 10*time.Second)
 		ipAddr, err := v.dmsgC.LookupIP(lookupCtx, nil)
 		lookupCancel()
 		if err != nil {
-			logger.WithError(err).Debug("Failed to get public IP from dmsg server, trying GeoIP")
-
-			pIP, err = GetIP(v.conf.GeoIP)
-			if err != nil {
-				logger.WithError(err).Debug("Failed to get public IP from GeoIP, trying STUN")
-
-				<-v.stun.ready
-				if v.stun.client.PublicIP != nil {
-					pIP = v.stun.client.PublicIP.IP()
-					logger.WithField("public_ip", pIP).Debug("Got public IP from STUN for service discovery")
-				} else {
-					logger.Warn("Failed to determine public IP for service discovery from dmsg, GeoIP, and STUN")
-					pIP = ""
-				}
+			logger.WithError(err).Debug("Failed to get public IP from dmsg server, trying STUN")
+			<-v.stun.ready
+			if v.stun.client.PublicIP != nil {
+				pIP = v.stun.client.PublicIP.IP()
+				logger.WithField("public_ip", pIP).Debug("Got public IP from STUN for service discovery")
 			} else {
-				logger.WithField("public_ip", pIP).Debug("Got public IP from GeoIP for service discovery")
+				logger.Warn("Failed to determine public IP for service discovery from dmsg and STUN")
 			}
 		} else {
 			pIP = ipAddr.String()
