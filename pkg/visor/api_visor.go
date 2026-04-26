@@ -145,6 +145,12 @@ func (v *Visor) Summary() (*Summary, error) {
 		})
 	}
 
+	routeGroups, err := v.RouteGroups()
+	if err != nil {
+		v.log.WithError(err).Warn("Failed to get route groups for summary")
+		routeGroups = nil
+	}
+
 	pts, err := v.conf.GetPersistentTransports()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get persistent transports: %w", err)
@@ -191,6 +197,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		Health:               health,
 		Uptime:               uptime,
 		Routes:               extraRoutes,
+		RouteGroups:          routeGroups,
 		MinHops:              v.conf.Routing.MinHops,
 		PersistentTransports: pts,
 		BuildTag:             runtime.GOOS + "_" + runtime.GOARCH,

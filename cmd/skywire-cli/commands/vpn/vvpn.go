@@ -47,21 +47,19 @@ func init() {
 }
 
 var startCmd = &cobra.Command{
-	Use:   "start <public-key>",
-	Short: "start the " + serviceType + " for <public-key>",
-	//	Args:  cobra.MinimumNArgs(1),
+	Use:   "start [pk]",
+	Short: "Start the VPN for a remote server",
 	Run: func(cmd *cobra.Command, args []string) {
-		//check that a valid public key is provided
+		// Accept PK as positional arg or --pk flag
+		if pk == "" && len(args) > 0 {
+			pk = args[0]
+		}
+		if pk == "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("server public key is required (positional arg or --pk flag)"))
+		}
 		err := pubkey.Set(pk)
 		if err != nil {
-			if len(args) > 0 {
-				err := pubkey.Set(args[0])
-				if err != nil {
-					internal.PrintFatalError(cmd.Flags(), err)
-				}
-			} else {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Invalid or missing public key"))
-			}
+			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		//connect to RPC
 		rpcClient, err := clirpc.Client(cmd.Flags())
@@ -148,7 +146,7 @@ var startCmd = &cobra.Command{
 
 var stopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "stop the " + serviceType + "client",
+	Short: "Stop the " + serviceType + " client",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -161,7 +159,7 @@ var stopCmd = &cobra.Command{
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: serviceType + " client status",
+	Short: "VPN client status",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {

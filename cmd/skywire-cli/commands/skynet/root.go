@@ -67,10 +67,15 @@ Server commands (srv) expose local ports over the network.`,
 }
 
 var startCmd = &cobra.Command{
-	Use:   "start",
+	Use:   "start [pk]",
 	Short: "Start skynet client to connect to a remote server",
 	Long:  `Connect to a remote skynet server and forward traffic to a local port.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Accept PK as positional arg or --pk flag
+		if remotePk == "" && len(args) > 0 {
+			remotePk = args[0]
+		}
+
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
@@ -79,7 +84,7 @@ var startCmd = &cobra.Command{
 
 		// Validate required flags
 		if remotePk == "" {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--pk flag (remote server public key) is required"))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("remote server public key is required (positional arg or --pk flag)"))
 		}
 		if remotePort <= 0 || remotePort > 65535 {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--remote flag must be a valid port (1-65535)"))

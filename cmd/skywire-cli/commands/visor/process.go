@@ -36,7 +36,7 @@ func init() {
 // TODO(ersonp): get help from moses for it's usage
 var startCmd = &cobra.Command{
 	Use:   "start",
-	Short: "start visor",
+	Short: "Start visor",
 	Run: func(cmd *cobra.Command, _ []string) {
 		var output string
 		var err error
@@ -96,7 +96,7 @@ func init() {
 var shutdownCmd = &cobra.Command{
 	Use:   "halt",
 	Short: "Stop a running visor",
-	Long:  "\n  Stop a running visor",
+	Long:  "Stop a running visor",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {

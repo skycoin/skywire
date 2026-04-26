@@ -1185,8 +1185,148 @@ func (mc *mockRPCClient) DHTSync(_ string, _ string) (int, error) {
 }
 
 // TransportRPCCall implements API.
-func (mc *mockRPCClient) TransportRPCCall(_ cipher.PubKey, _ string) (json.RawMessage, error) {
+func (mc *mockRPCClient) TransportRPCCall(_ cipher.PubKey, _ string, _ json.RawMessage) (json.RawMessage, error) {
 	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVListVisors implements API.
+func (mc *mockRPCClient) HVListVisors() ([]HVVisorEntry, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVVisorSummary implements API.
+func (mc *mockRPCClient) HVVisorSummary(_ cipher.PubKey) (*Summary, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVStartApp implements API.
+func (mc *mockRPCClient) HVStartApp(_ cipher.PubKey, _ string) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVStopApp implements API.
+func (mc *mockRPCClient) HVStopApp(_ cipher.PubKey, _ string) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVSetMinHops implements API.
+func (mc *mockRPCClient) HVSetMinHops(_ cipher.PubKey, _ uint16) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVSetRewardAddress implements API.
+func (mc *mockRPCClient) HVSetRewardAddress(_ cipher.PubKey, _ string) (string, error) {
+	return "", fmt.Errorf("not supported in mock")
+}
+
+// HVRemoveTransport implements API.
+func (mc *mockRPCClient) HVRemoveTransport(_ cipher.PubKey, _ uuid.UUID) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVRemoveRoutingRule implements API.
+func (mc *mockRPCClient) HVRemoveRoutingRule(_ cipher.PubKey, _ routing.RouteID) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVAddTransport implements API.
+func (mc *mockRPCClient) HVAddTransport(_, _ cipher.PubKey, _, _ string, _ time.Duration) (*TransportSummary, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVSetPublicAutoconnect implements API.
+func (mc *mockRPCClient) HVSetPublicAutoconnect(_ cipher.PubKey, _ bool) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVSetMuxRoutes implements API.
+func (mc *mockRPCClient) HVSetMuxRoutes(_ cipher.PubKey, _ int) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVSetCalculateRoutes implements API.
+func (mc *mockRPCClient) HVSetCalculateRoutes(_ cipher.PubKey, _ bool) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVReload implements API.
+func (mc *mockRPCClient) HVReload(_ cipher.PubKey) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVShutdown implements API.
+func (mc *mockRPCClient) HVShutdown(_ cipher.PubKey) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVServiceHealth implements API.
+func (mc *mockRPCClient) HVServiceHealth(_ cipher.PubKey) ([]ServiceHealthEntry, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVDmsgConnectAll implements API.
+func (mc *mockRPCClient) HVDmsgConnectAll(_ cipher.PubKey) (*DmsgConnectAllResult, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVSetDmsgSessionsCount implements API.
+func (mc *mockRPCClient) HVSetDmsgSessionsCount(_ cipher.PubKey, _ int) (*DmsgConnectAllResult, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVLogsSince implements API.
+func (mc *mockRPCClient) HVLogsSince(_ cipher.PubKey, _ time.Time, _ string) ([]string, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVSetAutoStart implements API.
+func (mc *mockRPCClient) HVSetAutoStart(_ cipher.PubKey, _ string, _ bool) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVEmbeddedProxies implements API.
+func (mc *mockRPCClient) HVEmbeddedProxies(_ cipher.PubKey) (*EmbeddedProxiesStatus, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVSetEmbeddedProxyEnabled implements API.
+func (mc *mockRPCClient) HVSetEmbeddedProxyEnabled(_ cipher.PubKey, _ string, _ bool) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVSetEmbeddedProxyUpstream implements API.
+func (mc *mockRPCClient) HVSetEmbeddedProxyUpstream(_ cipher.PubKey, _, _ string) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVListTCPPorts implements API.
+func (mc *mockRPCClient) HVListTCPPorts(_ cipher.PubKey) ([]int, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVRegisterTCPPort implements API.
+func (mc *mockRPCClient) HVRegisterTCPPort(_ cipher.PubKey, _ int) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVDeregisterTCPPort implements API.
+func (mc *mockRPCClient) HVDeregisterTCPPort(_ cipher.PubKey, _ int) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVListForwardedPorts implements API.
+func (mc *mockRPCClient) HVListForwardedPorts(_ cipher.PubKey) ([]ForwardedPort, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVRegisterForwardedPort implements API.
+func (mc *mockRPCClient) HVRegisterForwardedPort(_ cipher.PubKey, _ ForwardedPort) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVUpdateForwardedPort implements API.
+func (mc *mockRPCClient) HVUpdateForwardedPort(_ cipher.PubKey, _ ForwardedPort) error {
+	return fmt.Errorf("not supported in mock")
 }
 
 // DmsgPorterDiag implements API.

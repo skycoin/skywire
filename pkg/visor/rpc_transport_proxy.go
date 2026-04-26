@@ -40,9 +40,9 @@ type TransportRPCProxyReply struct {
 	Error  string `json:"error,omitempty"`
 }
 
-// TransportRPCCall implements the API interface — proxies an RPC call
-// to a remote visor over a transport VStream.
-func (v *Visor) TransportRPCCall(remotePK cipher.PubKey, method string) (json.RawMessage, error) {
+// TransportRPCCall proxies an RPC call to a remote visor over a transport VStream.
+// args is optional JSON-encoded RPC arguments; nil means no-arg call.
+func (v *Visor) TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error) {
 	if v.tpM == nil {
 		return nil, fmt.Errorf("transport manager not available")
 	}
@@ -53,8 +53,13 @@ func (v *Visor) TransportRPCCall(remotePK cipher.PubKey, method string) (json.Ra
 	}
 	defer rpcC.Close() //nolint:errcheck,gosec
 
+	var rpcArgs interface{} = &struct{}{}
+	if len(args) > 0 {
+		rpcArgs = &args
+	}
+
 	var result json.RawMessage
-	if err := rpcC.Call(method, &struct{}{}, &result); err != nil {
+	if err := rpcC.Call(method, rpcArgs, &result); err != nil {
 		return nil, fmt.Errorf("remote RPC %s: %w", method, err)
 	}
 	return result, nil
