@@ -6,6 +6,60 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.47
+
+### Hypervisor TUI & multi-hypervisor management
+-   New hypervisor terminal UI: `skywire cli visor hv tui` — list connected visors, view detail (transports, apps, route groups with hops, DMSG servers), and execute write actions via hotkeys (set min_hops/mux_routes/calculate_routes, reward address, public_autoconnect, start/stop/autostart apps, app logs, add/delete transports, delete routing rules, embedded resolving proxies, skynet/forwarded ports, services-health, dmsg connect-all/sessions-count, reload/shutdown). [#2337](https://github.com/skycoin/skywire/pull/2337)
+-   Hypervisor-of-hypervisors: when a hypervisor has another hypervisor in its config, the parent transparently sees and manages the child's connected visors. `HVListVisors` merges sub-hypervisor visors (tagged `proxied_via`); all `HV*` write methods recurse one hop through the sub-hypervisor when the target isn't directly connected.
+-   `RouteGroupInfo` now exposes the stored forward route hops (transport IDs, edges, types) — surfaced in TUI and the `/visors/{pk}/routegroups` endpoint.
+-   `Summary` adds `route_groups` and `dmsg_servers` is now rendered in the visor detail panel.
+
+### Routing & transport selection
+-   Route-finder service now filters `LabelSetup` transports out of the graph at build time so RSN control-plane transports never appear in data routes.
+-   DMSG hops constrained to the last hop of any route — multiple DMSG transports per route can silently loop traffic through the same opaque dmsg-server intermediary.
+-   Mux setup and append paths refuse to multiplex routes containing DMSG transports.
+-   Configurable transport-type preference (`routing.transport_preference`): defaults `stcpr > sudph > stcp > dmsg`. Applied in both route-finder graph and local route calc when multiple transports exist between the same edges.
+
+### DHT
+-   fix(dht): raise MaxValueSize 16K → 64K, log size-induced publish drops [#2349](https://github.com/skycoin/skywire/pull/2349)
+-   dht: skip mirror publish when subject payload is unchanged [#2336](https://github.com/skycoin/skywire/pull/2336)
+-   Perf/dht mirror list per subject [#2334](https://github.com/skycoin/skywire/pull/2334)
+-   Perf/tpd dht mirror sign once [#2333](https://github.com/skycoin/skywire/pull/2333)
+-   dht: skip p2p transport for bootstrap peers [#2332](https://github.com/skycoin/skywire/pull/2332)
+-   Feat/dht to discovery — mirror DHT writes to HTTP discoveries [#2328](https://github.com/skycoin/skywire/pull/2328)
+-   add DHT → discovery pusher [#2327](https://github.com/skycoin/skywire/pull/2327)
+
+### Transport discovery (perf)
+-   perf(tpd): replace `tp:*` SCAN with SMEMBERS on a transport-id index set [#2346](https://github.com/skycoin/skywire/pull/2346)
+-   perf(tpd): extend allTransportsCache to cover getAllTransportsWithQoS [#2344](https://github.com/skycoin/skywire/pull/2344)
+-   perf(tpd): short-TTL cache for GetAllTransports to absorb sync=true bursts [#2342](https://github.com/skycoin/skywire/pull/2342)
+-   perf(tpd): per-edge entry cache eliminates repeat fetches in mirrorEdges [#2340](https://github.com/skycoin/skywire/pull/2340)
+-   tpd: cache parsed edge pubkeys in redisStore [#2335](https://github.com/skycoin/skywire/pull/2335)
+
+### Address resolver (perf)
+-   perf(ar): replace GetAll SCAN with SMEMBERS on a per-netType index set [#2345](https://github.com/skycoin/skywire/pull/2345)
+-   perf(ar): short-TTL cache for GetAll to absorb /transports endpoint SCANs [#2343](https://github.com/skycoin/skywire/pull/2343)
+
+### Service discovery & DMSG
+-   perf(sd): replace SCAN-for-existence with per-visor index lookup [#2339](https://github.com/skycoin/skywire/pull/2339)
+-   perf(dmsghttp): per-destination stream pool to skip noise handshake on reuse [#2347](https://github.com/skycoin/skywire/pull/2347)
+-   fix DMSG server DHT Redis auth: read REDIS_PASSWORD from env [#2326](https://github.com/skycoin/skywire/pull/2326)
+-   Fix/dmsg fwd startup [#2325](https://github.com/skycoin/skywire/pull/2325)
+
+### Setup node & cipher
+-   setup-node: add porter watchdog to bound ephemeral port leaks [#2338](https://github.com/skycoin/skywire/pull/2338)
+-   perf(cipher): disable DebugLevel1 to skip post-Sign verify-after-sign [#2341](https://github.com/skycoin/skywire/pull/2341)
+
+### Skynet
+-   Feat/skynet direct transport [#2331](https://github.com/skycoin/skywire/pull/2331)
+-   add debug logging to forwardRawTCP for skynet data flow investigation [#2330](https://github.com/skycoin/skywire/pull/2330)
+-   Feat/skynetweb fixes [#2323](https://github.com/skycoin/skywire/pull/2323)
+
+### Visor & cleanup
+-   visor: require IP in survey, retry dmsg LookupIP indefinitely [#2348](https://github.com/skycoin/skywire/pull/2348)
+-   remove hardcoded service URLs, use deployment.Prod constants [#2324](https://github.com/skycoin/skywire/pull/2324)
+-   Test/cli validation [#2322](https://github.com/skycoin/skywire/pull/2322)
+
 ## 1.3.40
 
 ### Auto-Update System
