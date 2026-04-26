@@ -101,6 +101,7 @@ var (
 	listVersions  bool
 	maxTP         int
 	testEnv       bool
+	dateFilter    string
 )
 
 var minUT int
@@ -124,6 +125,7 @@ func init() {
 	utCmd.Flags().StringVar(&minVersion, "min-version", "", "filter visors with version >= specified (e.g. v1.3.34)")
 	utCmd.Flags().BoolVarP(&listVersions, "list-versions", "l", false, "list PKs with their versions")
 	utCmd.Flags().IntVar(&maxTP, "max-tp", -1, "filter visors with at most N transports (fetches TPD data)")
+	utCmd.Flags().StringVar(&dateFilter, "date", "", "only output uptime for this date (YYYY-MM-DD); reduces 7-day response to a single day")
 	utCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	clirpc.RegisterFetchFlags(utCmd)
 }
@@ -343,6 +345,10 @@ var utCmd = &cobra.Command{
 			return
 		}
 
-		script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[] | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Match(pk).Replace("\"", "").Stdout() //nolint:errcheck,gosec
+		dailyFilter := ""
+		if dateFilter != "" {
+			dailyFilter = " | select(.key == \"" + dateFilter + "\")"
+		}
+		script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[]"+dailyFilter+" | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Match(pk).Replace("\"", "").Stdout() //nolint:errcheck,gosec
 	},
 }
