@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
+	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
@@ -156,23 +157,15 @@ func getPublicIP(v *Visor, service string) (string, error) {
 		return pIP, fmt.Errorf("provided URL is invalid: %w", err)
 	}
 
-	pIP, err = GetIP(v.conf.GeoIP)
-	if err != nil {
-		<-v.stun.ready
-		if v.stun.client.PublicIP != nil {
-			pIP = v.stun.client.PublicIP.IP()
-			return pIP, nil
-		}
-		err = fmt.Errorf("cannot fetch public ip")
+	<-v.stun.ready
+	if v.stun.client.PublicIP != nil {
+		pIP = v.stun.client.PublicIP.IP()
+		return pIP, nil
 	}
-	if err != nil {
-		return pIP, err
-	}
-
-	return pIP, nil
+	return pIP, fmt.Errorf("cannot fetch public ip")
 }
 
-// GeoData holds geolocation information from the geoIP service.
+// GeoData holds geolocation information for the visor.
 type GeoData struct {
 	CountryCode string  `json:"country_code,omitempty"`
 	CountryName string  `json:"country_name,omitempty"`
@@ -183,61 +176,37 @@ type GeoData struct {
 	Longitude   float64 `json:"longitude,omitempty"`
 }
 
-type geoIPResponse struct {
-	IP          string   `json:"ip_address"`
-	CountryCode string   `json:"country_code"`
-	CountryName string   `json:"country_name"`
-	RegionCode  string   `json:"region_code"`
-	RegionName  string   `json:"region_name"`
-	CityName    string   `json:"city_name"`
-	Latitude    *float64 `json:"latitude"`
-	Longitude   *float64 `json:"longitude"`
-}
-
-// GetIP used for getting current IP of visor
-func GetIP(geoipURL string) (string, error) {
-	ip, _ := GetIPWithGeo(geoipURL)
-	return ip, nil
-}
-
-// GetIPWithGeo fetches public IP and geolocation data from the geoIP service.
-func GetIPWithGeo(geoipURL string) (string, *GeoData) {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
+// LookupGeo returns geolocation data for the given IP using the embedded
+// MaxMind GeoLite2-City database. Returns nil if ip is empty or lookup
+// fails. No network round-trip — replaces the previous HTTP call to the
+// configured ip.skycoin.com geoip service.
+func LookupGeo(ip string) *GeoData {
+	if ip == "" {
+		return nil
 	}
-
-	resp, err := client.Get(geoipURL)
+	db, err := geoip.OpenEmbedded()
 	if err != nil {
-		return "", nil
+		return nil
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	body, err := io.ReadAll(resp.Body)
+	defer db.Close() //nolint:errcheck
+	res, err := geoip.Lookup(db, ip)
 	if err != nil {
-		return "", nil
+		return nil
 	}
-
-	var geoResp geoIPResponse
-	err = json.Unmarshal(body, &geoResp)
-	if err != nil {
-		return "", nil
+	g := &GeoData{
+		CountryCode: res.CountryCode,
+		CountryName: res.CountryName,
+		RegionCode:  res.RegionCode,
+		RegionName:  res.RegionName,
+		CityName:    res.CityName,
 	}
-
-	geo := &GeoData{
-		CountryCode: geoResp.CountryCode,
-		CountryName: geoResp.CountryName,
-		RegionCode:  geoResp.RegionCode,
-		RegionName:  geoResp.RegionName,
-		CityName:    geoResp.CityName,
+	if res.Latitude != nil {
+		g.Latitude = *res.Latitude
 	}
-	if geoResp.Latitude != nil {
-		geo.Latitude = *geoResp.Latitude
+	if res.Longitude != nil {
+		g.Longitude = *res.Longitude
 	}
-	if geoResp.Longitude != nil {
-		geo.Longitude = *geoResp.Longitude
-	}
-
-	return geoResp.IP, geo
+	return g
 }
 
 func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) error {

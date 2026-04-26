@@ -47,18 +47,9 @@ func (v *Visor) Overview() (*Overview, error) {
 			isSymmetricNAT = false
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
 			isSymmetricNAT = true
-			// Try to get IP from GeoIP service when STUN doesn't provide it
-			if ip, err := GetIP(v.conf.GeoIP); err == nil && ip != "" {
-				publicIP = ip
-			}
 		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
 			isSymmetricNAT = false
-			// STUN failed, try GeoIP service as fallback
-			if ip, err := GetIP(v.conf.GeoIP); err == nil && ip != "" {
-				publicIP = ip
-			} else {
-				publicIP = v.stun.client.NATType.String()
-			}
+			publicIP = v.stun.client.NATType.String()
 		}
 	}
 

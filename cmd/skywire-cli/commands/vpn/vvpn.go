@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -25,7 +27,6 @@ import (
 	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/visor"
 )
 
 func init() {
@@ -123,7 +124,12 @@ var startCmd = &cobra.Command{
 					if state.Status == appserver.AppStatusRunning {
 						startProcess = false
 						internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintln("\nRunning!"))
-						ip, err := visor.GetIP(geoipURL)
+						// Query the configured geoip URL through the VPN to confirm
+						// the exit IP changed. The visor itself uses an embedded
+						// MaxMind database now; this is one of the few remaining
+						// HTTP queries to the geoip service — appropriate here
+						// because we specifically want to test the VPN exit path.
+						ip, err := fetchGeoIPAddr(geoipURL)
 						out := output{
 							CurrentIP: ip,
 						}
@@ -568,4 +574,26 @@ var listCmd = &cobra.Command{
 
 		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
 	},
+}
+
+// fetchGeoIPAddr does an HTTP GET to the geoip URL and returns the reported
+// public IP. Used by `vpn start` to confirm the VPN actually rerouted traffic.
+func fetchGeoIPAddr(url string) (string, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var r struct {
+		IP string `json:"ip_address"`
+	}
+	if err := json.Unmarshal(body, &r); err != nil {
+		return "", err
+	}
+	return r.IP, nil
 }
