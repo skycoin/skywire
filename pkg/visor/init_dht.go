@@ -172,12 +172,20 @@ func dhtPublishLoop(ctx context.Context, v *Visor, node *dht.Node, log *logging.
 	case <-time.After(15 * time.Second):
 	}
 
-	// Start seq from the existing entry's seq + 1 so we always
-	// overtake what's in the DHT (even after restart).
-	seq := uint64(1)
-	target := dht.MutableItemTarget(v.conf.PK, []byte("dmsg"))
-	if existing := node.Store().Get(target); existing != nil {
-		seq = existing.Seq + 1
+	// Use wall-clock nanoseconds as a monotonic seq generator. This
+	// survives restarts (in-memory store reset) and is essentially
+	// guaranteed to overtake whatever the DHT has cached for our PK
+	// from a previous incarnation. We also cross-check against the
+	// network: if any peer reports a higher seq for our PK, climb
+	// above it (handles backwards clock skew + a peer that was last
+	// to receive our previous publish).
+	seq := uint64(time.Now().UnixNano())
+	for _, salt := range [][]byte{[]byte("dmsg"), []byte("tp")} {
+		queryCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		if got, err := node.Get(queryCtx, v.conf.PK, salt); err == nil && got != nil && got.Seq >= seq {
+			seq = got.Seq + 1
+		}
+		cancel()
 	}
 
 	ticker := time.NewTicker(60 * time.Second)
