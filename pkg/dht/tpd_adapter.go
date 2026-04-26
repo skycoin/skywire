@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -65,13 +66,12 @@ func (d *TPDAdapter) putEntries(ctx context.Context, entries []*transport.Signed
 	if len(data) > MaxValueSize {
 		return fmt.Errorf("dht tpd: transport list too large (%d bytes, max %d)", len(data), MaxValueSize)
 	}
-	// Use a rolling sequence number based on the entry count to ensure monotonic increase.
-	seq := uint64(len(entries))
-	for _, e := range entries {
-		if e.Entry != nil {
-			seq += e.Entry.Bandwidth // use cumulative bandwidth as a proxy for freshness
-		}
-	}
+	// Wall-clock nanoseconds as monotonic seq generator. Survives restarts
+	// (in-memory entry counts and bandwidth totals do not) and is virtually
+	// guaranteed to climb past whatever peers cached for our PK previously.
+	// On clock skew the DHT layer's per-peer rejection still keeps things
+	// safe — we'll catch up next tick.
+	seq := uint64(time.Now().UnixNano())
 	return d.node.Put(ctx, data, seq, tpSalt)
 }
 

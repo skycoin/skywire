@@ -160,10 +160,10 @@ func runSelfProbes(ctx context.Context, _ *Visor, dmsgC *dmsg.Client, log *loggi
 	// closes for untrusted — but the dial success confirms reachability.
 	results[skyenv.DmsgAwaitSetupPort] = probeRawDial(ctx, dmsgC, myPK, skyenv.DmsgAwaitSetupPort)
 
-	// Probe port 80 (dmsghttp log server) — HTTP GET /ping over dmsg.
+	// Probe port 80 (dmsghttp log server) — HTTP GET /health over dmsg.
 	// Uses the visor's own dmsg client to make an HTTP request through
-	// the server bridge back to itself. The /ping endpoint returns 200
-	// with no body — minimal overhead.
+	// the server bridge back to itself. /health is the lightest open
+	// endpoint on the log server (open to everyone, no auth required).
 	results[visorconfig.DmsgHTTPPort] = probeDmsgHTTP(ctx, dmsgC, myPK, log)
 
 	return results
@@ -176,7 +176,7 @@ func probeRawDial(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey, por
 	return dmsgC.Probe(probeCtx, pk, port)
 }
 
-// probeDmsgHTTP does an HTTP GET /ping over dmsg to the visor's own log server.
+// probeDmsgHTTP does an HTTP GET /health over dmsg to the visor's own log server.
 func probeDmsgHTTP(ctx context.Context, dmsgC *dmsg.Client, myPK cipher.PubKey, log *logging.Logger) bool {
 	probeCtx, cancel := context.WithTimeout(ctx, selfProbeTimeout)
 	defer cancel()
@@ -184,7 +184,7 @@ func probeDmsgHTTP(ctx context.Context, dmsgC *dmsg.Client, myPK cipher.PubKey, 
 	tr := dmsghttp.MakeHTTPTransport(probeCtx, dmsgC)
 	client := &http.Client{Transport: tr, Timeout: selfProbeTimeout}
 
-	url := fmt.Sprintf("dmsg://%s:%d/ping", myPK.Hex(), visorconfig.DmsgHTTPPort)
+	url := fmt.Sprintf("dmsg://%s:%d/health", myPK.Hex(), visorconfig.DmsgHTTPPort)
 	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, url, nil)
 	if err != nil {
 		log.WithError(err).Debug("Self-probe HTTP: failed to create request")
