@@ -130,7 +130,7 @@ func init() {
 
 var utCmd = &cobra.Command{
 	Use:   "ut",
-	Short: "query uptime tracker",
+	Short: "Query uptime tracker",
 	Long:  fmt.Sprintf("query uptime tracker\n\n%v/uptimes?v=v2\n\nCheck local visor daily uptime percent with:\n\n$ skywire-cli ut -n0 -k $(skywire-cli visor pk)\n\nSet cache dir to \"\" to avoid using cache files\n\nUse --testenv or SKYWIRETEST=1 to use test deployment services.", getDeployment().UptimeTracker),
 	Run: func(cmd *cobra.Command, _ []string) {
 		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set

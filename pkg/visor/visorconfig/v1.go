@@ -236,6 +236,11 @@ type Routing struct {
 	// MuxRoutes is the number of parallel routes to establish per connection.
 	// 0 or 1 = single route (default), >1 = route multiplexing across transports.
 	MuxRoutes int `json:"mux_routes,omitempty"`
+	// TransportPreference is the priority order applied when multiple transports
+	// exist between the same edges. Earlier entries are preferred. Valid values:
+	// "stcpr", "sudph", "stcp", "dmsg". If empty, the built-in default order
+	// (stcpr > sudph > stcp > dmsg) is used. Types not listed here sort last.
+	TransportPreference []string `json:"transport_preference,omitempty"`
 }
 
 // UptimeTracker configures uptime tracker.

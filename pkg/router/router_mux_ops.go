@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/routing"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // appendRouteToGroup adds an additional transport/rule pair to an existing
@@ -24,6 +25,21 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	if tp == nil {
 		return fmt.Errorf("transport %s not found for additional mux route", nextTpID)
 	}
+
+	// Reject any mux append that would introduce a DMSG transport into the group.
+	// A dmsg server is an opaque intermediary; multiplexing routes that share or
+	// overlap dmsg servers can loop traffic with no way to detect it.
+	if tp.Entry.Type == tptypes.DMSG {
+		return errors.New("refusing to append DMSG transport to mux route group")
+	}
+	nrg.rg.mu.Lock()
+	for _, existing := range nrg.rg.tps {
+		if existing != nil && existing.Entry.Type == tptypes.DMSG {
+			nrg.rg.mu.Unlock()
+			return errors.New("refusing to mux: route group already contains a DMSG transport")
+		}
+	}
+	nrg.rg.mu.Unlock()
 
 	nrg.rg.appendRules(rules.Forward, rules.Reverse, tp)
 
