@@ -12,9 +12,18 @@ import (
 // MaxValueSize is the maximum size of a mutable item value.
 // BEP44 uses 1000 bytes (for UDP fragmentation), but our DHT runs
 // over DMSG streams (TCP-based) with no fragmentation concern.
-// 16KB accommodates transport lists for visors with many transports
-// (~100 bytes per compact entry, ~160 entries max).
-const MaxValueSize = 16384
+//
+// Production observation (2026-04-25): hub edges with hundreds of
+// transports (e.g. 027087fe… at 883, 03d1d78e… at 916) silently
+// failed to publish to DHT because the marshaled list of compact
+// entries (~80 bytes each: remote PK hex + type + optional latency)
+// crossed the previous 16 KB ceiling at ~200 entries. The DHT
+// state for those subjects was frozen at whatever fit last.
+//
+// 64 KB accommodates ~800 compact entries — comfortable headroom
+// for the largest edges currently observed and for the next 5–10×
+// network growth before chunking/compression becomes necessary.
+const MaxValueSize = 65536
 
 // MaxSaltSize is the maximum size of a salt for namespacing.
 const MaxSaltSize = 200
