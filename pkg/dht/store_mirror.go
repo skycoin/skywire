@@ -53,7 +53,23 @@ func (m *EntryMirror) MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, 
 	copy(pks, subjectPKs)
 	go func() {
 		data, err := json.Marshal(entry)
-		if err != nil || len(data) > MaxValueSize {
+		if err != nil {
+			m.log.WithError(err).
+				WithField("salt", string(m.salt)).
+				WithField("subjects", len(pks)).
+				Warn("DHT mirror: marshal failed, dropping publish")
+			return
+		}
+		if len(data) > MaxValueSize {
+			// Silently dropping a publish silently corrupts the DHT
+			// view — log it so size-induced data loss is visible.
+			// (Production hit this with hub-edge transport lists at
+			// ~16 KB before MaxValueSize was raised to 64 KB.)
+			m.log.WithField("salt", string(m.salt)).
+				WithField("subjects", len(pks)).
+				WithField("size", len(data)).
+				WithField("max", MaxValueSize).
+				Warn("DHT mirror: payload exceeds MaxValueSize, dropping publish")
 			return
 		}
 
