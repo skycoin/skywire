@@ -13,7 +13,7 @@ import (
 	"github.com/xtaci/smux"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/netutil"
 )
 
 const (

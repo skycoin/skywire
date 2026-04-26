@@ -6,7 +6,7 @@ import (
 	"flag"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/buildinfo"
 )
 
 // ExecName contains the execution name.

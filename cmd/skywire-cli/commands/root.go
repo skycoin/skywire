@@ -35,9 +35,9 @@ import (
 	cliutil "github.com/skycoin/skywire/cmd/skywire-cli/commands/util"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/flags"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/calvin"
+	"github.com/skycoin/skywire/pkg/flags"
 )
 
 // Command groups for the root help output. Each GroupID must match

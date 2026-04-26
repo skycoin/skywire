@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	nm "github.com/skycoin/skywire/pkg/network-monitor/types"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
+	"github.com/skycoin/skywire/pkg/storeconfig"
 )
 
 // Store stores Transport metadata and generated nonce values.

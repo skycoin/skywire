@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 func TestCollector_RecordSuccess(t *testing.T) {

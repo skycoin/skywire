@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 //go:generate mockery --name Dialer --case underscore --inpackage

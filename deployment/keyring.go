@@ -29,7 +29,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 // KeyPair holds a public and secret key for a deployment identity.

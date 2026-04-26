@@ -6,8 +6,8 @@ import (
 
 	"github.com/skycoin/skywire/cmd/dmsg/dmsg-server/commands/config"
 	"github.com/skycoin/skywire/cmd/dmsg/dmsg-server/commands/start"
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 )
 
 func init() {
