@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 // K is the Kademlia replication parameter — max peers per bucket and

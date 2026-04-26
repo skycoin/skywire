@@ -19,7 +19,7 @@ import (
 	"github.com/gocarina/gocsv"
 	"github.com/google/uuid"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 const dateFormat string = "2006-01-02"

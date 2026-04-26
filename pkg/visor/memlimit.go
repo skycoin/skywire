@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // applyMemoryLimit sets GOMEMLIMIT based on the config value.

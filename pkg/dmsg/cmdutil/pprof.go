@@ -9,7 +9,7 @@ import (
 	rpprof "runtime/pprof"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // InitPProf starts profiling based on the given mode and address.

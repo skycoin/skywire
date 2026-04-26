@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // fakeReconnector records calls so the tests can assert the recovery

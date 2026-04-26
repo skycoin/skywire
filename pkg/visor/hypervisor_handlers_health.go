@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 // getServiceHealth returns the health status of all configured deployment

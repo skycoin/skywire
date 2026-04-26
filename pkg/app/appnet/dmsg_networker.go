@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // DmsgNetworker implements `Networker` for dmsg network.

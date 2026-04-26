@@ -7,8 +7,8 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/node/transport"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // DMSG represents the DMSG transport of a CXO Node.

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 func TestParseMode(t *testing.T) {
