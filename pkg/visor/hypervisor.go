@@ -4,15 +4,12 @@ package visor
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math/rand"
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,8 +18,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
@@ -33,9 +28,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/tpviz"
-	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
-	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -43,21 +35,17 @@ import (
 const (
 	httpTimeout = 30 * time.Second
 )
-
 const (
 	statusStop = iota
 	statusStart
 )
 
-// Conn represents a visor connection.
 type Conn struct {
 	Addr  dmsg.Addr
 	SrvPK cipher.PubKey
 	API   API
 	PtyUI *dmsgPtyUI
 }
-
-// Hypervisor manages visors.
 type Hypervisor struct {
 	c            visorconfig.HypervisorConfig
 	visor        *Visor
@@ -78,7 +66,6 @@ type Hypervisor struct {
 	enableMu  sync.Mutex
 }
 
-// NewHypervisor creates a new Hypervisor.
 func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dmsg.Client) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
 
@@ -128,9 +115,6 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 
 	return hv, nil
 }
-
-// Enable starts the hypervisor HTTP server and DMSG RPC listener.
-// Safe to call multiple times — no-op if already enabled.
 func (hv *Hypervisor) Enable(ctx context.Context) error {
 	hv.enableMu.Lock()
 	defer hv.enableMu.Unlock()
@@ -191,9 +175,6 @@ func (hv *Hypervisor) Enable(ctx context.Context) error {
 	hv.logger.Info("Hypervisor enabled")
 	return nil
 }
-
-// Disable stops the hypervisor HTTP server and DMSG RPC listener.
-// Disconnects all remote visors. Safe to call multiple times.
 func (hv *Hypervisor) Disable() error {
 	hv.enableMu.Lock()
 	defer hv.enableMu.Unlock()
@@ -237,15 +218,11 @@ func (hv *Hypervisor) Disable() error {
 	hv.logger.Info("Hypervisor disabled")
 	return nil
 }
-
-// IsEnabled returns whether the hypervisor is currently serving.
 func (hv *Hypervisor) IsEnabled() bool {
 	hv.enableMu.Lock()
 	defer hv.enableMu.Unlock()
 	return hv.enabled
 }
-
-// ServeRPC serves RPC of a Hypervisor.
 func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 	lis, err := hv.dmsgC.Listen(dmsgPort)
 	if err != nil {
@@ -319,20 +296,17 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 	}
 }
 
-// MockConfig configures how mock data is to be added.
 type MockConfig struct {
 	Visors            int
 	MaxTpsPerVisor    int
 	MaxRoutesPerVisor int
 	EnableAuth        bool
 }
-
 type elementResponse struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error"`
 }
 
-// AddMockData adds mock data to Hypervisor.
 func (hv *Hypervisor) AddMockData(config MockConfig) error {
 	r := rand.New(rand.NewSource(time.Now().UnixNano())) // nolint:gosec
 
@@ -357,25 +331,19 @@ func (hv *Hypervisor) AddMockData(config MockConfig) error {
 
 	return nil
 }
-
-// HTTPHandler returns a http handler.
 func (hv *Hypervisor) HTTPHandler() http.Handler {
 	return hv.makeMux()
 }
 
-// logrusLogFormatter implements chi's middleware.LogFormatter using logrus
 type logrusLogFormatter struct {
 	logger *logging.Logger
 }
-
-// logrusLogEntry implements chi's middleware.LogEntry
 type logrusLogEntry struct {
 	logger *logging.Logger
 	method string
 	path   string
 }
 
-// NewLogEntry creates a new log entry for a request
 func (f *logrusLogFormatter) NewLogEntry(r *http.Request) middleware.LogEntry {
 	return &logrusLogEntry{
 		logger: f.logger,
@@ -383,8 +351,6 @@ func (f *logrusLogFormatter) NewLogEntry(r *http.Request) middleware.LogEntry {
 		path:   r.URL.Path,
 	}
 }
-
-// Write logs the completed request
 func (e *logrusLogEntry) Write(status, bytes int, header http.Header, elapsed time.Duration, extra interface{}) {
 	e.logger.WithFields(logrus.Fields{
 		"method":  e.method,
@@ -394,12 +360,9 @@ func (e *logrusLogEntry) Write(status, bytes int, header http.Header, elapsed ti
 		"elapsed": elapsed.Round(time.Microsecond),
 	}).Debug("HTTP request")
 }
-
-// Panic logs a panic during request handling
 func (e *logrusLogEntry) Panic(v interface{}, stack []byte) {
 	e.logger.WithField("stack", string(stack)).Errorf("HTTP panic: %v", v)
 }
-
 func (hv *Hypervisor) makeMux() chi.Router {
 	r := chi.NewRouter()
 
@@ -552,360 +515,30 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 	return r
 }
-
 func (hv *Hypervisor) log(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
 }
 
-func (hv *Hypervisor) getPong() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if _, err := w.Write([]byte(`"PONG!"`)); err != nil {
-			hv.log(r).WithError(err).Warn("getPong: Failed to send PONG!")
-		}
-	}
-}
-
-// Csrf provides a temporal security token.
 type Csrf struct {
 	Token string `json:"csrf_token"`
 }
-
-func (hv *Hypervisor) getCsrf() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if useCsrf {
-			token, err := newCSRFToken()
-			if err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
-			}
-
-			httputil.WriteJSON(w, r, http.StatusOK, Csrf{
-				Token: token,
-			})
-		} else {
-			httputil.WriteJSON(w, r, http.StatusOK, Csrf{Token: ""})
-		}
-	}
-}
-
-// About provides info about the hypervisor.
 type About struct {
 	PubKey        cipher.PubKey   `json:"public_key"` // The hypervisor's public key.
 	Build         *buildinfo.Info `json:"build"`
 	DmsgConnected bool            `json:"dmsg_connected"` // Whether the DMSG client is connected to servers.
 	DmsgSessions  int             `json:"dmsg_sessions"`  // Number of active DMSG server sessions.
 }
-
-func (hv *Hypervisor) getAbout() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		dmsgConnected := false
-		dmsgSessions := 0
-		if hv.dmsgC != nil {
-			sessions := hv.dmsgC.AllSessions()
-			dmsgSessions = len(sessions)
-			dmsgConnected = dmsgSessions > 0
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, About{
-			PubKey:        hv.c.PK,
-			Build:         buildinfo.Get(),
-			DmsgConnected: dmsgConnected,
-			DmsgSessions:  dmsgSessions,
-		})
-	}
-}
-
-// LANDmsgServerInfo is the API response for the LAN DMSG server endpoint.
 type LANDmsgServerInfo struct {
 	Enabled bool          `json:"enabled"`
 	PK      cipher.PubKey `json:"pk,omitempty"`
 	Address string        `json:"address,omitempty"`
 }
-
-func (hv *Hypervisor) getLANDmsgServer() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if hv.lanDmsg == nil {
-			httputil.WriteJSON(w, r, http.StatusOK, LANDmsgServerInfo{Enabled: false})
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, LANDmsgServerInfo{
-			Enabled: true,
-			PK:      hv.lanDmsg.PK,
-			Address: hv.lanDmsg.Address,
-		})
-	}
-}
-
-func (hv *Hypervisor) getDmsg() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		out := hv.getDmsgSummary()
-		httputil.WriteJSON(w, r, http.StatusOK, out)
-	}
-}
-
-// getServiceHealth returns the health status of all configured deployment
-// services (TPD, DMSG discovery, AR, RF, UT, SD). Each entry has name, URL,
-// status, latency and version. Fetched via the local visor's DMSG/HTTP
-// client so the UI sees the same view the visor does.
-func (hv *Hypervisor) getServiceHealth() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if hv.visor == nil {
-			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, []ServiceHealthEntry{})
-			return
-		}
-		entries, err := hv.visor.ServiceHealth()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, entries)
-	}
-}
-
-// getDmsgSessions returns per-client dmsg session info: main + embedded
-// route setup node + embedded transport setup node. Used by the hypervisor
-// UI's dmsg settings panel so operators can see at a glance which dmsg
-// servers each of the visor's three independent dmsg clients is connected
-// to.
-func (hv *Hypervisor) getDmsgSessions() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if hv.visor == nil {
-			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, &DmsgClientSessions{})
-			return
-		}
-		sessions, err := hv.visor.DmsgSessions()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, sessions)
-	}
-}
-
-// postDmsgConnectAll triggers a one-shot "reach every dmsg server now"
-// action on the main visor dmsg client. Used by the UI's "Connect to all"
-// button for operators running RSN/TPS visors who want to eliminate
-// discovery-stale failure modes on demand.
-func (hv *Hypervisor) postDmsgConnectAll() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if hv.visor == nil {
-			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, map[string]string{"error": "visor not available"})
-			return
-		}
-		result, err := hv.visor.DmsgConnectAll()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, result)
-	}
-}
-
-// dmsgSessionsCountRequest is the body for PUT /dmsg/sessions-count.
 type dmsgSessionsCountRequest struct {
 	Count int `json:"count"`
 }
-
-// putDmsgSessionsCount persists dmsg.sessions_count to the visor config and
-// triggers an immediate connect-all so the change takes effect without a
-// restart. A value of 0 means "connect to every available dmsg server",
-// which is the recommended setting for RSN/TPS visors.
-func (hv *Hypervisor) putDmsgSessionsCount() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if hv.visor == nil {
-			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, map[string]string{"error": "visor not available"})
-			return
-		}
-		var req dmsgSessionsCountRequest
-		if err := httputil.ReadJSON(r, &req); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
-			return
-		}
-		if req.Count < 0 {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "count must be >= 0"})
-			return
-		}
-		result, err := hv.visor.SetDmsgSessionsCount(req.Count)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, result)
-	}
-}
-
-func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
-	hv.mu.RLock()
-	pks := make([]cipher.PubKey, 0, len(hv.remoteVisors)+1)
-	if hv.visor != nil {
-		pks = append(pks, hv.visor.conf.PK)
-	}
-	for pk := range hv.remoteVisors {
-		pks = append(pks, pk)
-	}
-	hv.mu.RUnlock()
-
-	if hv.visor.isDTMReady() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return hv.visor.dmsgTracker.manager.GetBulk(ctx, pks)
-	}
-	return []dmsgtracker.DmsgClientSummary{}
-}
-
-// Health represents a visor's health report attached to hypervisor to visor request status
 type Health struct {
 	Status int `json:"status"`
 	*HealthInfo
-}
-
-// provides summary of health information for every visor
-func (hv *Hypervisor) getHealth() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		vh := &Health{}
-
-		type healthRes struct {
-			h   *HealthInfo
-			err error
-		}
-
-		resCh := make(chan healthRes)
-		tCh := time.After(HealthTimeout)
-
-		go func() {
-			hi, err := ctx.API.Health()
-			resCh <- healthRes{hi, err}
-		}()
-
-		select {
-		case res := <-resCh:
-			if res.err != nil {
-				vh.Status = http.StatusInternalServerError
-			} else {
-				vh.HealthInfo = res.h
-				vh.Status = http.StatusOK
-			}
-
-			httputil.WriteJSON(w, r, http.StatusOK, vh)
-		case <-tCh:
-			httputil.WriteJSON(w, r, http.StatusRequestTimeout, &Health{Status: http.StatusRequestTimeout})
-		}
-	})
-}
-
-// getUptime gets given visor's uptime
-func (hv *Hypervisor) getUptime() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		u, err := ctx.API.Uptime()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, u)
-	})
-}
-
-// provides overview of all visors.
-func (hv *Hypervisor) getVisors() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Snapshot remote visors under lock, then release immediately
-		hv.mu.RLock()
-		type visorEntry struct {
-			pk   cipher.PubKey
-			conn Conn
-		}
-		remotes := make([]visorEntry, 0, len(hv.remoteVisors))
-		for pk, c := range hv.remoteVisors {
-			remotes = append(remotes, visorEntry{pk, c})
-		}
-		hv.mu.RUnlock()
-
-		i := 0
-		if hv.visor != nil {
-			i++
-		}
-		overviews := make([]Overview, len(remotes)+i)
-
-		if hv.visor != nil {
-			overview, err := hv.visor.Overview()
-			if err != nil {
-				hv.logger.WithError(err).Warn("Failed to obtain overview of this visor.")
-				overview = &Overview{PubKey: hv.visor.conf.PK}
-			}
-			overviews[0] = *overview
-		}
-
-		wg := new(sync.WaitGroup)
-		wg.Add(len(remotes))
-		for _, entry := range remotes {
-			go func(pk cipher.PubKey, c Conn, idx int) {
-				defer wg.Done()
-				// Per-visor timeout prevents one dead visor from blocking everything
-				done := make(chan struct{})
-				var overview *Overview
-				go func() {
-					var err error
-					overview, err = c.API.Overview()
-					if err != nil {
-						hv.logger.WithError(err).WithField("pk", pk).Warn("Failed to obtain overview via RPC")
-						overview = &Overview{PubKey: pk}
-					}
-					close(done)
-				}()
-				select {
-				case <-done:
-					overviews[idx] = *overview
-				case <-time.After(5 * time.Second):
-					hv.logger.WithField("pk", pk).Warn("Remote visor RPC timed out (5s)")
-					overviews[idx] = Overview{PubKey: pk}
-				}
-			}(entry.pk, entry.conn, i)
-			i++
-		}
-		wg.Wait()
-
-		httputil.WriteJSON(w, r, http.StatusOK, overviews)
-	}
-}
-
-// provides overview of single visor.
-func (hv *Hypervisor) getVisor() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		overview, err := ctx.API.Overview()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, overview)
-	})
-}
-
-// provides extra summary of single visor.
-func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		summary, err := ctx.API.Summary()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
-		dSummary := hv.getDmsgSummary()
-		for _, stat := range dSummary {
-			dmsgStats[stat.PK.String()] = stat
-		}
-
-		if stat, ok := dmsgStats[summary.Overview.PubKey.String()]; ok {
-			summary.DmsgStats = &stat
-		}
-		// If stats not found, leave DmsgStats as nil (don't create empty struct with 0ms latency)
-
-		// Check if this is the local visor (hypervisor)
-		summary.IsHypervisor = summary.Overview.PubKey == hv.visor.conf.PK
-
-		httputil.WriteJSON(w, r, http.StatusOK, summary)
-	})
 }
 
 func makeSummaryResp(online, hyper bool, sum *Summary) Summary {
@@ -914,478 +547,13 @@ func makeSummaryResp(online, hyper bool, sum *Summary) Summary {
 	return *sum
 }
 
-func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Get DMSG stats first (uses its own lock internally)
-		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
-		for _, stat := range hv.getDmsgSummary() {
-			dmsgStats[stat.PK.String()] = stat
-		}
-
-		// Snapshot remote visors under lock, then release immediately
-		hv.mu.RLock()
-		type visorEntry struct {
-			pk   cipher.PubKey
-			conn Conn
-		}
-		remotes := make([]visorEntry, 0, len(hv.remoteVisors))
-		for pk, c := range hv.remoteVisors {
-			remotes = append(remotes, visorEntry{pk, c})
-		}
-		hv.mu.RUnlock()
-
-		summaries := make([]Summary, 0, len(remotes)+1)
-
-		// Local visor summary
-		summary, err := hv.visor.Summary()
-		if err != nil {
-			hv.logger.WithError(err).Warn("Failed to obtain summary of this visor.")
-			summary = &Summary{
-				Overview: &Overview{PubKey: hv.visor.conf.PK},
-				Health:   &HealthInfo{},
-			}
-		}
-		summaries = append(summaries, makeSummaryResp(err == nil, true, summary))
-
-		// Remote visor summaries with per-visor timeout
-		var deadVisors []cipher.PubKey
-		var mu sync.Mutex
-		wg := new(sync.WaitGroup)
-		wg.Add(len(remotes))
-
-		for _, entry := range remotes {
-			go func(pk cipher.PubKey, c Conn) {
-				defer wg.Done()
-
-				done := make(chan struct{})
-				var sum *Summary
-				var rpcErr error
-				go func() {
-					sum, rpcErr = c.API.Summary()
-					close(done)
-				}()
-
-				select {
-				case <-done:
-					if rpcErr != nil {
-						hv.logger.WithError(rpcErr).WithField("pk", pk).Warn("Failed to obtain summary via RPC")
-						mu.Lock()
-						deadVisors = append(deadVisors, pk)
-						mu.Unlock()
-					} else {
-						resp := makeSummaryResp(true, false, sum)
-						mu.Lock()
-						summaries = append(summaries, resp)
-						mu.Unlock()
-					}
-				case <-time.After(5 * time.Second):
-					hv.logger.WithField("pk", pk).Warn("Remote visor summary RPC timed out (5s)")
-					mu.Lock()
-					deadVisors = append(deadVisors, pk)
-					mu.Unlock()
-				}
-			}(entry.pk, entry.conn)
-		}
-		wg.Wait()
-
-		// Remove dead visors under write lock (safe — no goroutines accessing the map)
-		if len(deadVisors) > 0 {
-			hv.mu.Lock()
-			for _, pk := range deadVisors {
-				delete(hv.remoteVisors, pk)
-			}
-			hv.mu.Unlock()
-		}
-
-		// Attach DMSG stats
-		for i := 0; i < len(summaries); i++ {
-			if stat, ok := dmsgStats[summaries[i].Overview.PubKey.String()]; ok {
-				summaries[i].DmsgStats = &stat
-			}
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, summaries)
-	}
-}
-
-// returns app summaries of a given node of pk
-func (hv *Hypervisor) getApps() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		apps, err := ctx.API.Apps()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, apps)
-	})
-}
-
-// returns an app summary of a given visor's pk and app name
-func (hv *Hypervisor) getApp() http.HandlerFunc {
-	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		httputil.WriteJSON(w, r, http.StatusOK, ctx.App)
-	})
-}
-
-func (hv *Hypervisor) getAppStats() http.HandlerFunc {
-	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		stats, err := ctx.API.GetAppStats(ctx.App.Name)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, &stats)
-	})
-}
-
-// nolint: funlen,gocognit,godox
-// nolint: gocyclo
-//
-//gocyclo:ignore
-func (hv *Hypervisor) putApp() http.HandlerFunc {
-	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		type req struct {
-			AutoStart     *bool          `json:"autostart,omitempty"`
-			Killswitch    *bool          `json:"killswitch,omitempty"`
-			Secure        *bool          `json:"secure,omitempty"`
-			Address       *string        `json:"Address,omitempty"`
-			Status        *int           `json:"status,omitempty"`
-			Passcode      *string        `json:"passcode,omitempty"`
-			NetIfc        *string        `json:"netifc,omitempty"`
-			DNSAddr       *string        `json:"dns,omitempty"`
-			PK            *cipher.PubKey `json:"pk,omitempty"`
-			CustomSetting map[string]any `json:"custom_setting,omitempty"`
-		}
-
-		shouldRestartApp := func(r req) bool {
-			// we restart the app if one of these fields was changed
-			return r.Killswitch != nil || r.Secure != nil || r.Address != nil || r.Passcode != nil ||
-				r.PK != nil || r.NetIfc != nil || r.CustomSetting != nil
-		}
-
-		var reqBody req
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("putApp request: %v", err)
-			}
-
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-
-			return
-		}
-
-		if reqBody.AutoStart != nil {
-			if *reqBody.AutoStart != ctx.App.AutoStart {
-				if err := ctx.API.SetAutoStart(ctx.App.Name, *reqBody.AutoStart); err != nil {
-					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-					return
-				}
-			}
-		}
-
-		if reqBody.Passcode != nil {
-			if err := ctx.API.SetAppPassword(ctx.App.Name, *reqBody.Passcode); err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
-			}
-		}
-
-		if reqBody.PK != nil {
-			if err := ctx.API.SetAppPK(ctx.App.Name, *reqBody.PK); err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
-			}
-		}
-
-		if reqBody.Killswitch != nil {
-			if err := ctx.API.SetAppKillswitch(ctx.App.Name, *reqBody.Killswitch); err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
-			}
-		}
-
-		if reqBody.Secure != nil {
-			if err := ctx.API.SetAppSecure(ctx.App.Name, *reqBody.Secure); err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
-			}
-		}
-
-		if reqBody.Address != nil {
-			if err := ctx.API.SetAppAddress(ctx.App.Name, *reqBody.Address); err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
-			}
-		}
-
-		if reqBody.NetIfc != nil {
-			if err := ctx.API.SetAppNetworkInterface(ctx.App.Name, *reqBody.NetIfc); err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
-			}
-		}
-
-		if reqBody.DNSAddr != nil {
-			if err := ctx.API.SetAppDNS(ctx.App.Name, *reqBody.DNSAddr); err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
-			}
-		}
-
-		if reqBody.CustomSetting != nil {
-			if err := ctx.API.DoCustomSetting(ctx.App.Name, reqBody.CustomSetting); err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
-			}
-		}
-
-		if shouldRestartApp(reqBody) {
-			if err := ctx.API.RestartApp(ctx.App.Name); err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
-			}
-		}
-
-		if reqBody.Status != nil {
-			switch *reqBody.Status {
-			case statusStop:
-				if err := ctx.API.StopApp(ctx.App.Name); err != nil {
-					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-					return
-				}
-			case statusStart:
-				if err := ctx.API.StartApp(ctx.App.Name); err != nil {
-					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-					return
-				}
-				appStatus := appserver.AppDetailedStatusStarting
-				if ctx.App.Name == skyenv.VPNClientName {
-					appStatus = appserver.AppDetailedStatusVPNConnecting
-				}
-				if err := ctx.API.SetAppDetailedStatus(ctx.App.Name, appStatus); err != nil {
-					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-					return
-				}
-			default:
-				errMsg := fmt.Errorf("value of 'status' field is %d when expecting 0 or 1", *reqBody.Status)
-				httputil.WriteJSON(w, r, http.StatusBadRequest, errMsg)
-				return
-			}
-		}
-
-		// get the latest AppState of the app after changes
-		app, err := ctx.API.App(ctx.App.Name)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, app)
-	})
-}
-
-// LogsRes parses logs as json, along with the last obtained timestamp for use on subsequent requests
 type LogsRes struct {
 	LastLogTimestamp string   `json:"last_log_timestamp"`
 	Logs             []string `json:"logs"`
 }
-
-func (hv *Hypervisor) appLogsSince() http.HandlerFunc {
-	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		since := r.URL.Query().Get("since")
-		since = strings.Replace(since, " ", "+", 1) // we need to put '+' again that was replaced in the query string
-
-		// if time is not parsable or empty default to return all logs
-		t, err := time.Parse(time.RFC3339Nano, since)
-		if err != nil {
-			t = time.Unix(0, 0)
-		}
-
-		logs, err := ctx.API.LogsSince(t, ctx.App.Name)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		if len(logs) == 0 {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, fmt.Errorf("no new available logs"))
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, &LogsRes{
-			LastLogTimestamp: appcommon.TimestampFromLog(logs[len(logs)-1]),
-			Logs:             logs,
-		})
-	})
-}
-
-func (hv *Hypervisor) appConnections() http.HandlerFunc {
-	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		cSummary, err := ctx.API.GetAppConnectionsSummary(ctx.App.Name)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, &cSummary)
-	})
-}
-
-func (hv *Hypervisor) getTransportTypes() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		types, err := ctx.API.TransportTypes()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, types)
-	})
-}
-
-func (hv *Hypervisor) getTransports() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		qTypes := strSliceFromQuery(r, "type", nil)
-
-		qPKs, err := pkSliceFromQuery(r, "pk", nil)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-			return
-		}
-
-		qLogs, err := httputil.BoolFromQuery(r, "logs", true)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-			return
-		}
-
-		transports, err := ctx.API.Transports(qTypes, qPKs, qLogs)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, transports)
-	})
-}
-
-func (hv *Hypervisor) postTransport() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
-			TpType     string        `json:"transport_type"`
-			Remote     cipher.PubKey `json:"remote_pk"`
-			Label      string        `json:"label,omitempty"`       // "user" or "skycoin" (default: "skycoin")
-			NoRegister bool          `json:"no_register,omitempty"` // skip transport discovery (only for "user" label)
-		}
-
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("postTransport request: %v", err)
-			}
-
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-
-			return
-		}
-
-		const timeout = 30 * time.Second
-		tSummary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, timeout, reqBody.Label, reqBody.NoRegister, false)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, tSummary)
-	})
-}
-
-func (hv *Hypervisor) getTransport() http.HandlerFunc {
-	return hv.withCtx(hv.tpCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		httputil.WriteJSON(w, r, http.StatusOK, ctx.Tp)
-	})
-}
-
-func (hv *Hypervisor) deleteTransport() http.HandlerFunc {
-	return hv.withCtx(hv.tpCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		if err := ctx.API.RemoveTransport(ctx.Tp.ID); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, true)
-	})
-}
-
-func (hv *Hypervisor) deleteTransports() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var transports []string
-		response := make(map[string]elementResponse)
-		err := json.NewDecoder(r.Body).Decode(&transports)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-			return
-		}
-		for _, transport := range transports {
-			transportBoxed, err := uuid.Parse(transport)
-			if err != nil {
-				response[transport] = elementResponse{
-					Success: false,
-					Error:   err.Error(),
-				}
-				continue
-			}
-			_, err = ctx.API.Transport(transportBoxed)
-			if err != nil {
-				if err.Error() == ErrNotFound.Error() {
-					errMsg := fmt.Errorf("transport of ID %s is not found", transportBoxed)
-					response[transport] = elementResponse{
-						Success: false,
-						Error:   errMsg.Error(),
-					}
-					continue
-				}
-			}
-
-			if err := ctx.API.RemoveTransport(transportBoxed); err != nil {
-				response[transport] = elementResponse{
-					Success: false,
-					Error:   err.Error(),
-				}
-				continue
-			}
-			response[transport] = elementResponse{
-				Success: true,
-			}
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, response)
-	})
-}
-
-func (hv *Hypervisor) putPublicAutoconnect() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody publicAutoconnectReq
-
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("putPublicAutoconnect request: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-
-		if err := ctx.API.SetPublicAutoconnect(reqBody.PublicAutoconnect); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
-	})
-}
-
 type publicAutoconnectReq struct {
 	PublicAutoconnect bool `json:"public_autoconnect"`
 }
-
 type routingRuleResp struct {
 	Key     routing.RouteID      `json:"key"`
 	Rule    string               `json:"rule"`
@@ -1405,168 +573,6 @@ func makeRoutingRuleResp(key routing.RouteID, rule routing.Rule, summary bool) r
 	return resp
 }
 
-func (hv *Hypervisor) getRoutes() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		qSummary, err := httputil.BoolFromQuery(r, "summary", false)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-			return
-		}
-
-		rules, err := ctx.API.RoutingRules()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		resp := make([]routingRuleResp, len(rules))
-		for i, rule := range rules {
-			resp[i] = makeRoutingRuleResp(rule.KeyRouteID(), rule, qSummary)
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, resp)
-	})
-}
-
-func (hv *Hypervisor) postRoute() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var summary routing.RuleSummary
-		if err := httputil.ReadJSON(r, &summary); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("postRoute request: %v", err)
-			}
-
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-
-			return
-		}
-
-		rule, err := summary.ToRule()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-			return
-		}
-
-		if err := ctx.API.SaveRoutingRule(rule); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, makeRoutingRuleResp(rule.KeyRouteID(), rule, true))
-	})
-}
-
-func (hv *Hypervisor) getRoute() http.HandlerFunc {
-	return hv.withCtx(hv.routeCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		qSummary, err := httputil.BoolFromQuery(r, "summary", true)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-			return
-		}
-
-		rule, err := ctx.API.RoutingRule(ctx.RtKey)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusNotFound, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, makeRoutingRuleResp(ctx.RtKey, rule, qSummary))
-	})
-}
-
-func (hv *Hypervisor) putRoute() http.HandlerFunc {
-	return hv.withCtx(hv.routeCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var rSummary routing.RuleSummary
-		if err := httputil.ReadJSON(r, &rSummary); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("putRoute request: %v", err)
-			}
-
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-
-			return
-		}
-
-		rule, err := rSummary.ToRule()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-			return
-		}
-
-		if err := ctx.API.SaveRoutingRule(rule); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, makeRoutingRuleResp(ctx.RtKey, rule, true))
-	})
-}
-
-func (hv *Hypervisor) deleteRoute() http.HandlerFunc {
-	return hv.withCtx(hv.routeCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		if err := ctx.API.RemoveRoutingRule(ctx.RtKey); err != nil {
-			httputil.WriteJSON(w, r, http.StatusNotFound, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, true)
-	})
-}
-
-func (hv *Hypervisor) deleteRoutes() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var rids []string
-		response := make(map[string]elementResponse)
-		err := json.NewDecoder(r.Body).Decode(&rids)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusNotFound, err)
-			return
-		}
-		rules, err := ctx.API.RoutingRules()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusNotFound, err)
-			return
-		}
-		for _, rid := range rids {
-			ridUint64, err := strconv.ParseUint(rid, 10, 32)
-			if err != nil {
-				response[rid] = elementResponse{
-					Success: false,
-					Error:   err.Error(),
-				}
-				continue
-			}
-			routeID := routing.RouteID(ridUint64)
-			contains := false
-			for _, rule := range rules {
-				if rule.KeyRouteID() == routeID {
-					contains = true
-				}
-			}
-			if !contains {
-				errMsg := fmt.Errorf("route of ID %s is not found", rid)
-				response[rid] = elementResponse{
-					Success: false,
-					Error:   errMsg.Error(),
-				}
-				continue
-			}
-
-			if err := ctx.API.RemoveRoutingRule(routeID); err != nil {
-				response[rid] = elementResponse{
-					Success: false,
-					Error:   err.Error(),
-				}
-				continue
-			}
-			response[rid] = elementResponse{
-				Success: true,
-			}
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, response)
-	})
-}
-
 type routeGroupResp struct {
 	ConsumeRuleID routing.RouteID               `json:"consume_rule_id"`
 	FwdRuleID     routing.RouteID               `json:"fwd_rule_id"`
@@ -1579,530 +585,9 @@ func makeRouteGroupResp(info RouteGroupInfo) routeGroupResp {
 	return routeGroupResp(info)
 }
 
-func (hv *Hypervisor) getRouteGroups() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		routegroups, err := ctx.API.RouteGroups()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		resp := make([]routeGroupResp, len(routegroups))
-		for i, l := range routegroups {
-			resp[i] = makeRouteGroupResp(l)
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, resp)
-	})
-}
-
-func (hv *Hypervisor) shutdown() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		if err := ctx.API.Shutdown(); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, true)
-	})
-}
-
-func (hv *Hypervisor) getRuntimeLogs() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		logs, err := ctx.API.RuntimeLogs()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, err = w.Write([]byte(logs))
-		if err != nil {
-			hv.visor.log.Errorf("Cannot write response: %s", err)
-		}
-	})
-}
-
-func (hv *Hypervisor) postMinHops() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
-			MinHops uint16 `json:"min_hops"`
-		}
-
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("postMinHops request: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-
-		if err := ctx.API.SetMinHops(reqBody.MinHops); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
-	})
-}
-
-func (hv *Hypervisor) putPersistentTransports() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody []transport.PersistentTransports
-
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("putPersistentTransports request: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-
-		if err := ctx.API.SetPersistentTransports(reqBody); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
-	})
-}
-
-func (hv *Hypervisor) getPersistentTransports() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		pts, err := ctx.API.GetPersistentTransports()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, pts)
-	})
-}
-
-func (hv *Hypervisor) putLogRotationInterval() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
-			LogRotationInterval visorconfig.Duration `json:"log_rotation_interval"`
-		}
-
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("putLogRotationInterval request: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-
-		if err := ctx.API.SetLogRotationInterval(reqBody.LogRotationInterval); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
-	})
-}
-
-func (hv *Hypervisor) getLogRotationInterval() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		pts, err := ctx.API.GetLogRotationInterval()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, pts)
-	})
-}
-
-func (hv *Hypervisor) getRewardAddress() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		pts, err := ctx.API.GetRewardAddress()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, pts)
-	})
-}
-
-func (hv *Hypervisor) putRewardAddress() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody *rewardconfig.Reward
-
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("putRewardAddress request: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-
-		canonical, _, err := rewardconfig.ValidateRewardAddress(reqBody.RewardAddress)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-			return
-		}
-		pConf, err := ctx.API.SetRewardAddress(canonical)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, pConf)
-	})
-}
-
-func (hv *Hypervisor) deleteRewardAddress() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		err := ctx.API.DeleteRewardAddress()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
-	})
-}
-
-func (hv *Hypervisor) proxyRewardSystem() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		path := chi.URLParam(r, "*")
-		if path == "" {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, "missing reward API path")
-			return
-		}
-
-		// Read from visor config (configurable), fall back to deployment defaults
-		rewardDmsg := ""
-		rewardHTTP := ""
-		if hv.visor != nil && hv.visor.conf != nil {
-			rewardDmsg = hv.visor.conf.RewardSystemDmsg
-			rewardHTTP = hv.visor.conf.RewardSystem
-		}
-		if rewardDmsg == "" {
-			rewardDmsg = deployment.Prod.RewardSystemDmsg
-		}
-		if rewardHTTP == "" {
-			rewardHTTP = deployment.Prod.RewardSystem
-		}
-		log := hv.visor.MasterLogger().PackageLogger("reward_proxy")
-		var fetchErr error
-
-		// Try DMSG first via the visor's DmsgHTTP
-		if rewardDmsg != "" && hv.visor != nil {
-			dmsgURL := rewardDmsg + "/" + path
-			log.Debugf("Fetching reward data via DMSG: %s", dmsgURL)
-			resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
-				URL:    dmsgURL,
-				Method: "GET",
-			})
-			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				log.Debugf("DMSG fetch succeeded: %d bytes, status %d", len(resp.Body), resp.StatusCode)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(resp.StatusCode)
-				w.Write(resp.Body) //nolint:errcheck,gosec
-				return
-			}
-			if err != nil {
-				log.WithError(err).Warn("DMSG fetch failed, falling back to HTTP")
-				fetchErr = err
-			} else {
-				log.Warnf("DMSG fetch returned non-success status: %d", resp.StatusCode)
-			}
-		}
-
-		// Fall back to plain HTTP
-		if rewardHTTP != "" {
-			httpURL := rewardHTTP + "/" + path
-			log.Debugf("Fetching reward data via HTTP: %s", httpURL)
-			client := &http.Client{Timeout: 15 * time.Second}
-			resp, err := client.Get(httpURL) //nolint:gosec
-			if err == nil {
-				defer resp.Body.Close()          //nolint:errcheck
-				body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-				log.Debugf("HTTP fetch succeeded: %d bytes, status %d", len(body), resp.StatusCode)
-				w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-				w.WriteHeader(resp.StatusCode)
-				w.Write(body) //nolint:errcheck,gosec
-				return
-			}
-			log.WithError(err).Warn("HTTP fetch also failed")
-			fetchErr = err
-		}
-
-		if fetchErr != nil {
-			httputil.WriteJSON(w, r, http.StatusBadGateway, fmt.Errorf("reward system unreachable: %w", fetchErr))
-		} else {
-			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, "no reward system URL configured")
-		}
-	}
-}
-
 type isPublicResp struct {
 	IsPublic bool `json:"is_public"`
 }
-
-func (hv *Hypervisor) putIsPublic() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var req isPublicResp
-		if err := httputil.ReadJSON(r, &req); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-			return
-		}
-		if err := ctx.API.SetIsPublic(req.IsPublic); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, req)
-	})
-}
-
-func (hv *Hypervisor) getIsPublic() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		httputil.WriteJSON(w, r, http.StatusOK, isPublicResp{ctx.API.GetIsPublic()})
-	})
-}
-
-func (hv *Hypervisor) getRuntimeConfig() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		configJSON, err := ctx.API.GetRuntimeConfig()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write(configJSON) //nolint:errcheck,gosec
-	})
-}
-
-func (hv *Hypervisor) getPorts() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		ports, err := ctx.API.Ports()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, ports)
-	})
-}
-
-func (hv *Hypervisor) getSkynetPorts() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		ports, err := ctx.API.ListTCPPorts()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, ports)
-	})
-}
-
-func (hv *Hypervisor) postRegisterSkynetPort() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
-			Port int `json:"port"`
-		}
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("postRegisterSkynetPort request: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-		if err := ctx.API.RegisterTCPPort(reqBody.Port); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
-	})
-}
-
-func (hv *Hypervisor) postDeregisterSkynetPort() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
-			Port int `json:"port"`
-		}
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("postDeregisterSkynetPort request: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-		if err := ctx.API.DeregisterTCPPort(reqBody.Port); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
-	})
-}
-
-func (hv *Hypervisor) getForwardedPorts() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		ports, err := ctx.API.ListForwardedPorts()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, ports)
-	})
-}
-
-func (hv *Hypervisor) postRegisterForwardedPort() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var p ForwardedPort
-		if err := httputil.ReadJSON(r, &p); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("postRegisterForwardedPort: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-		if err := ctx.API.RegisterForwardedPort(p); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
-	})
-}
-
-func (hv *Hypervisor) postUpdateForwardedPort() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var p ForwardedPort
-		if err := httputil.ReadJSON(r, &p); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("postUpdateForwardedPort: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-		if err := ctx.API.UpdateForwardedPort(p); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
-	})
-}
-
-func (hv *Hypervisor) getSkynetForwards() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		fwds, err := ctx.API.List()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, fwds)
-	})
-}
-
-func (hv *Hypervisor) postSkynetConnect() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
-			RemotePK   cipher.PubKey `json:"remote_pk"`
-			RemotePort int           `json:"remote_port"`
-			LocalPort  int           `json:"local_port"`
-		}
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("postSkynetConnect request: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-		id, err := ctx.API.Connect(reqBody.RemotePK, reqBody.RemotePort, reqBody.LocalPort)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct {
-			ID string `json:"id"`
-		}{ID: id.String()})
-	})
-}
-
-func (hv *Hypervisor) postSkynetDisconnect() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
-			ID string `json:"id"`
-		}
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("postSkynetDisconnect request: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-		uid, err := uuid.Parse(reqBody.ID)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, fmt.Errorf("invalid UUID: %w", err))
-			return
-		}
-		if err := ctx.API.Disconnect(uid); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
-	})
-}
-
-func (hv *Hypervisor) getProxies() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		status, err := ctx.API.EmbeddedProxies()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, status)
-	})
-}
-
-func (hv *Hypervisor) postProxyEnabled() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
-			Kind   string `json:"kind"`
-			Enable bool   `json:"enable"`
-		}
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("postProxyEnabled request: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-		if err := ctx.API.SetEmbeddedProxyEnabled(reqBody.Kind, reqBody.Enable); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
-	})
-}
-
-func (hv *Hypervisor) postProxyUpstream() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
-			Kind string `json:"kind"`
-			Addr string `json:"addr"`
-		}
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				hv.log(r).Warnf("postProxyUpstream request: %v", err)
-			}
-			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
-			return
-		}
-		if err := ctx.API.SetEmbeddedProxyUpstream(reqBody.Kind, reqBody.Addr); err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
-	})
-}
-
-/*
-	<<< Helper functions >>>
-*/
-
-func (hv *Hypervisor) visorConn(pk cipher.PubKey) (Conn, bool) {
-	hv.mu.RLock()
-	conn, ok := hv.remoteVisors[pk]
-	hv.mu.RUnlock()
-
-	return conn, ok
-}
-
 type httpCtx struct {
 	// Hypervisor
 	Conn
@@ -2119,20 +604,13 @@ type httpCtx struct {
 	// Route
 	RtKey routing.RouteID
 }
-
 type (
 	valuesFunc  func(w http.ResponseWriter, r *http.Request) (*httpCtx, bool)
 	handlerFunc func(w http.ResponseWriter, r *http.Request, ctx *httpCtx)
 )
 
-// remoteVisorTimeout is the maximum time allowed for an HTTP handler that proxies
-// requests to a remote visor via DMSG RPC. Without this, slow or unreachable visors
-// cause the hypervisor HTTP handler to block indefinitely, and the frontend's polling
-// loop creates a pile-up of blocked goroutines.
 const remoteVisorTimeout = 15 * time.Second
 
-// timeoutResponseWriter buffers the response so that a timed-out handler goroutine
-// cannot corrupt the real response after the timeout fires.
 type timeoutResponseWriter struct {
 	header     http.Header
 	body       []byte
@@ -2143,7 +621,6 @@ type timeoutResponseWriter struct {
 func newTimeoutResponseWriter() *timeoutResponseWriter {
 	return &timeoutResponseWriter{header: make(http.Header), statusCode: http.StatusOK}
 }
-
 func (tw *timeoutResponseWriter) Header() http.Header  { return tw.header }
 func (tw *timeoutResponseWriter) WriteHeader(code int) { tw.statusCode = code; tw.written = true }
 func (tw *timeoutResponseWriter) Write(b []byte) (int, error) {
@@ -2151,8 +628,6 @@ func (tw *timeoutResponseWriter) Write(b []byte) (int, error) {
 	tw.written = true
 	return len(b), nil
 }
-
-// copyTo flushes the buffered response to the real ResponseWriter.
 func (tw *timeoutResponseWriter) copyTo(w http.ResponseWriter) {
 	for k, v := range tw.header {
 		w.Header()[k] = v
@@ -2160,162 +635,15 @@ func (tw *timeoutResponseWriter) copyTo(w http.ResponseWriter) {
 	w.WriteHeader(tw.statusCode)
 	w.Write(tw.body) //nolint:errcheck,gosec
 }
-
-func (hv *Hypervisor) withCtx(vFunc valuesFunc, hFunc handlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		rv, ok := vFunc(w, r)
-		if !ok {
-			return
-		}
-		// For remote visors, enforce a timeout so slow/dead visors don't hang the UI.
-		// Uses a buffered response writer so the handler goroutine writes to a buffer,
-		// and only the winner (handler or timeout) writes to the real ResponseWriter.
-		// Skip the timeout wrapper for WebSocket upgrades — the buffered writer
-		// doesn't implement http.Hijacker, which websocket.Accept requires.
-		isWebSocket := r.Header.Get("Upgrade") == "websocket"
-		if rv.isRemote && !isWebSocket {
-			tw := newTimeoutResponseWriter()
-			done := make(chan struct{})
-			go func() {
-				defer close(done)
-				hFunc(tw, r, rv)
-			}()
-			select {
-			case <-done:
-				tw.copyTo(w)
-			case <-time.After(remoteVisorTimeout):
-				httputil.WriteJSON(w, r, http.StatusGatewayTimeout,
-					fmt.Errorf("remote visor %s did not respond within %v", rv.Addr.PK, remoteVisorTimeout))
-			}
-		} else {
-			hFunc(w, r, rv)
-		}
-	}
-}
-
-func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
-	pk, err := pkFromParam(r, "pk")
-	if err != nil {
-		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-		return nil, false
-	}
-
-	if useCsrf && (r.Method == "POST" || r.Method == "PUT" || r.Method == "DELETE") {
-		csrfToken := r.Header.Get(CSRFHeaderName)
-		if csrfToken == "" {
-			errMsg := fmt.Errorf("no csrf token for %s request", r.Method)
-			httputil.WriteJSON(w, r, http.StatusForbidden, errMsg)
-			return nil, false
-		}
-
-		err = verifyCSRFToken(csrfToken)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusForbidden, err)
-			return nil, false
-		}
-	}
-
-	if pk != hv.c.PK {
-		v, ok := hv.visorConn(pk)
-
-		if !ok {
-			httputil.WriteJSON(w, r, http.StatusNotFound, fmt.Errorf("visor of pk '%s' not found", pk))
-			return nil, false
-		}
-
-		return &httpCtx{
-			Conn:     v,
-			isRemote: true,
-		}, true
-	}
-	hv.mu.Lock()
-	conn := hv.selfConn
-	hv.mu.Unlock()
-
-	return &httpCtx{
-		Conn: conn,
-	}, true
-}
-
-func (hv *Hypervisor) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
-	ctx, ok := hv.visorCtx(w, r)
-	if !ok {
-		return nil, false
-	}
-
-	appName := chi.URLParam(r, "app")
-
-	app, err := ctx.API.App(appName)
-	if err != nil {
-		errMsg := fmt.Errorf("can not find app of name %s from visor %s", appName, ctx.Addr.PK)
-		httputil.WriteJSON(w, r, http.StatusNotFound, errMsg)
-		return nil, false
-	}
-
-	ctx.App = app
-
-	return ctx, true
-}
-
-func (hv *Hypervisor) tpCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
-	ctx, ok := hv.visorCtx(w, r)
-	if !ok {
-		return nil, false
-	}
-
-	tid, err := uuidFromParam(r, "tid")
-	if err != nil {
-		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-		return nil, false
-	}
-
-	tp, err := ctx.API.Transport(tid)
-	if err != nil {
-		if err.Error() == ErrNotFound.Error() {
-			errMsg := fmt.Errorf("transport of ID %s is not found", tid)
-			httputil.WriteJSON(w, r, http.StatusNotFound, errMsg)
-
-			return nil, false
-		}
-
-		httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-
-		return nil, false
-	}
-
-	ctx.Tp = tp
-
-	return ctx, true
-}
-
-func (hv *Hypervisor) routeCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
-	ctx, ok := hv.visorCtx(w, r)
-	if !ok {
-		return nil, false
-	}
-
-	rid, err := ridFromParam(r, "rid")
-	if err != nil {
-		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-		return nil, false
-	}
-
-	ctx.RtKey = rid
-
-	return ctx, true
-}
-
 func pkFromParam(r *http.Request, key string) (cipher.PubKey, error) {
 	pk := cipher.PubKey{}
 	err := pk.UnmarshalText([]byte(chi.URLParam(r, key)))
 
 	return pk, err
 }
-
 func uuidFromParam(r *http.Request, key string) (uuid.UUID, error) {
 	return uuid.Parse(chi.URLParam(r, key))
 }
-
 func ridFromParam(r *http.Request, key string) (routing.RouteID, error) {
 	rid, err := strconv.ParseUint(chi.URLParam(r, key), 10, 32)
 	if err != nil {
@@ -2324,7 +652,6 @@ func ridFromParam(r *http.Request, key string) (routing.RouteID, error) {
 
 	return routing.RouteID(rid), nil
 }
-
 func strSliceFromQuery(r *http.Request, key string, defaultVal []string) []string {
 	slice, ok := r.URL.Query()[key]
 	if !ok {
@@ -2333,7 +660,6 @@ func strSliceFromQuery(r *http.Request, key string, defaultVal []string) []strin
 
 	return slice
 }
-
 func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) ([]cipher.PubKey, error) {
 	qPKs, ok := r.URL.Query()[key]
 	if !ok {
@@ -2354,8 +680,6 @@ func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) (
 	return pks, nil
 }
 
-// dmsgPtyUI servers as a wrapper for `*dmsgpty.UI`. this way source file with
-// `*dmsgpty.UI` will be included for Unix systems and excluded for Windows.
 type dmsgPtyUI struct {
 	PtyUI *dmsgpty.UI
 }
@@ -2366,20 +690,9 @@ func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
 		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
 	}
 }
-
-// setupLocalPtyUI creates a PTY UI that connects directly to the local CLI socket,
-// bypassing DMSG for improved performance on local visor connections.
 func setupLocalPtyUI(cliNet, cliAddr string) *dmsgPtyUI {
 	ptyDialer := dmsgpty.NetUIDialer(cliNet, cliAddr)
 	return &dmsgPtyUI{
 		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
 	}
-}
-
-func (hv *Hypervisor) getPty() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		customCommand := make(map[string][]string)
-		customCommand["update"] = visorconfig.UpdateCommand()
-		ctx.PtyUI.PtyUI.Handler(customCommand)(w, r)
-	})
 }
