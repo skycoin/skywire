@@ -61,10 +61,11 @@ var portLsCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		if len(ports) == 0 {
-			fmt.Println("No forwarded ports.")
+			internal.PrintOutput(cmd.Flags(), []visor.ForwardedPort{}, "No forwarded ports.\n")
 			return
 		}
-		tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+		var buf strings.Builder
+		tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(tw, "PORT\tLOCAL\tLABEL\tSKYNET\tDMSG\tLANDING\tDESCRIPTION") //nolint:errcheck
 		for _, p := range ports {
 			fmt.Fprintf(tw, "%d\t%d\t%s\t%v\t%v\t%v\t%s\n", //nolint:errcheck
@@ -77,6 +78,7 @@ var portLsCmd = &cobra.Command{
 				dashIfEmpty(p.Description))
 		}
 		tw.Flush() //nolint:errcheck,gosec
+		internal.PrintOutput(cmd.Flags(), ports, buf.String())
 	},
 }
 
