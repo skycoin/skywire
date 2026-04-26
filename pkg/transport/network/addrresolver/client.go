@@ -18,10 +18,10 @@ import (
 	"github.com/AudriusButkevicius/pfilter"
 	"github.com/xtaci/kcp-go"
 
-	"github.com/skycoin/skywire/pkg/httpauth"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/httpauthclient"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport/network/packetfilter"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -79,7 +79,7 @@ type VisorData struct {
 type httpClient struct {
 	log            *logging.Logger
 	mLog           *logging.MasterLogger
-	httpClient     *httpauth.Client
+	httpClient     *httpauthclient.Client
 	pk             cipher.PubKey
 	sk             cipher.SecKey
 	remoteHTTPAddr string
@@ -130,7 +130,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.
 }
 
 func (c *httpClient) initHTTPClient(httpC *http.Client) {
-	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)
+	httpAuthClient, err := httpauthclient.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)
 	if err != nil {
 		c.log.WithError(err).
 			Warnf("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
@@ -138,7 +138,7 @@ func (c *httpClient) initHTTPClient(httpC *http.Client) {
 		retry := netutil.NewRetrier(c.log, 1*time.Second, 10*time.Second, 0, 1)
 
 		err := retry.Do(context.Background(), func() error {
-			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)
+			httpAuthClient, err = httpauthclient.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)
 			return err
 		})
 
@@ -294,7 +294,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauthclient.ExtractError(resp.Body))
 	}
 
 	return nil
@@ -322,7 +322,7 @@ func (c *httpClient) delBindSTCPR(ctx context.Context) error {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauthclient.ExtractError(resp.Body))
 	}
 
 	log.Debugf("Deleted bind pk: %v from Address resolver successfully", c.pk.String())
@@ -457,7 +457,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 		}
 
 		if status != http.StatusOK {
-			return VisorData{}, fmt.Errorf("status: %d, error: %w", status, httpauth.ExtractError(resp.Body))
+			return VisorData{}, fmt.Errorf("status: %d, error: %w", status, httpauthclient.ExtractError(resp.Body))
 		}
 
 		rawBody, err := io.ReadAll(resp.Body)

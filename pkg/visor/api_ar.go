@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 // CheckAREntry checks if a public key is registered in the address

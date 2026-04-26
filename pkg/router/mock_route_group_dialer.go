@@ -5,11 +5,11 @@ package router
 import (
 	context "context"
 
-	cipher "github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	cipher "github.com/skycoin/skywire/pkg/cipher"
 
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 
-	logging "github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	logging "github.com/skycoin/skywire/pkg/logging"
 
 	mock "github.com/stretchr/testify/mock"
 

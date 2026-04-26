@@ -3,7 +3,7 @@ package clilog
 
 import (
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 var (

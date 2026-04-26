@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var log = logging.MustGetLogger("dmsgctrl")

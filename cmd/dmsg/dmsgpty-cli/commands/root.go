@@ -9,12 +9,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/calvin"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	dmsgcli "github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
 )
 
 var cli = dmsgpty.DefaultCLI()

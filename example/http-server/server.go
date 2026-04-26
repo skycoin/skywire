@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/example/http-server/html"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 

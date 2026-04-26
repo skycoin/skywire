@@ -2,7 +2,7 @@
 package visor
 
 import (
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
 

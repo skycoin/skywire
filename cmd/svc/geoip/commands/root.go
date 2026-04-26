@@ -21,10 +21,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/geoip"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
+	"github.com/skycoin/skywire/pkg/metricsutil"
 )
 
 // EmbeddedGeoIP returns the embedded GeoLite2-City database bytes.

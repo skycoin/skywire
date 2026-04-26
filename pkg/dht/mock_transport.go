@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 // MockNetwork simulates a DHT network for testing. Each node registers

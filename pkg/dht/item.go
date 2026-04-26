@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 // MaxValueSize is the maximum size of a mutable item value.
