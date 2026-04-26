@@ -92,14 +92,23 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 		survey.ServicesURLs.ServiceDiscoveryDmsg = v.conf.Launcher.ServiceDiscDmsg
 		survey.DmsgServers = v.dmsgC.ConnectedServersPK()
 
-		// Get public IP from DMSG server
-		for tries := 8; tries > 0; tries-- {
-			ipAddr, err := v.dmsgC.LookupIP(context.Background(), nil)
-			if err != nil {
-				continue
+		// Get public IP from a DMSG server. The IP is required: a survey without
+		// it cannot satisfy reward eligibility, so we keep retrying indefinitely
+		// rather than producing a survey without an IP address.
+		const (
+			ipLookupAttemptTimeout = 30 * time.Second
+			ipLookupRetryDelay     = 15 * time.Second
+		)
+		for attempt := 1; ; attempt++ {
+			ctx, cancel := context.WithTimeout(context.Background(), ipLookupAttemptTimeout)
+			ipAddr, err := v.dmsgC.LookupIP(ctx, nil)
+			cancel()
+			if err == nil && ipAddr != nil {
+				survey.IPAddr = ipAddr.String()
+				break
 			}
-			survey.IPAddr = ipAddr.String()
-			break
+			log.WithError(err).Warnf("Public IP lookup via dmsg failed (attempt %d) — retrying", attempt)
+			time.Sleep(ipLookupRetryDelay)
 		}
 
 		log.Info("Generating system survey")
