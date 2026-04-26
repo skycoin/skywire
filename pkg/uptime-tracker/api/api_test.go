@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/geo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httpauth"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/storeconfig"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/geo"
+	"github.com/skycoin/skywire/pkg/httpauth"
+	"github.com/skycoin/skywire/pkg/storeconfig"
 	utmetrics "github.com/skycoin/skywire/pkg/uptime-tracker/metrics"
 	"github.com/skycoin/skywire/pkg/uptime-tracker/store"
 )

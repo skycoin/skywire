@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 // ReadKeyfile reads a secret key from a file. The file should contain

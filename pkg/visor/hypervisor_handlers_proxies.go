@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
 )
 
