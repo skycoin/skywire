@@ -4,6 +4,9 @@ package clivisor
 import (
 	"fmt"
 	"os"
+	"strings"
+	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -32,18 +35,21 @@ func init() {
 	hvDisableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
 	hvCmd.AddCommand(hvStatusCmd)
 	hvCmd.AddCommand(hvAddCmd)
+	hvCmd.AddCommand(hvLsCmd)
 }
 
 var hvCmd = &cobra.Command{
 	Use:   "hv",
 	Short: "Hypervisor",
-	Long:  "\n  Hypervisor\n\r\n\r  Access the hypervisor UI\n\r  View remote hypervisor public key",
+	Long: `Hypervisor management commands.
+
+Access the hypervisor UI, view remote hypervisors, and list
+visors connected to this hypervisor.`,
 }
 
 var hvuiCmd = &cobra.Command{
 	Use:   "ui",
-	Short: "open Hypervisor UI in default browser",
-	Long:  "\n  open Hypervisor UI in default browser",
+	Short: "Open Hypervisor UI in default browser",
 	Run: func(cmd *cobra.Command, _ []string) {
 		if err := webbrowser.Open(fmt.Sprintf("http://127.0.0.1%s/", HypervisorPort(cmd.Flags()))); err != nil {
 			logger.Fatal("Failed to open hypervisor UI in browser:", err)
@@ -54,7 +60,7 @@ var hvuiCmd = &cobra.Command{
 var hvpkCmd = &cobra.Command{
 	Use:   "cpk",
 	Short: "Public key of remote hypervisor(s) set in config",
-	Long:  "\n  Public key of remote hypervisor(s) set in config",
+	Long:  "Public key of remote hypervisor(s) set in config",
 	Run: func(cmd *cobra.Command, _ []string) {
 		var hypervisors []cipher.PubKey
 		if pkg {
@@ -114,7 +120,7 @@ func HypervisorPort(cmdFlags *pflag.FlagSet) string {
 var hvEnableCmd = &cobra.Command{
 	Use:   "enable",
 	Short: "Enable hypervisor UI at runtime",
-	Long:  "\n  Enable hypervisor UI at runtime.\n  Use -w to also persist the change to the config file.",
+	Long:  "Enable hypervisor UI at runtime.\nUse -w to also persist the change to the config file.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -134,7 +140,7 @@ var hvEnableCmd = &cobra.Command{
 var hvDisableCmd = &cobra.Command{
 	Use:   "disable",
 	Short: "Disable hypervisor UI at runtime",
-	Long:  "\n  Disable hypervisor UI at runtime.\n  Use -w to also persist the change to the config file.",
+	Long:  "Disable hypervisor UI at runtime.\nUse -w to also persist the change to the config file.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -187,5 +193,70 @@ via DMSG. Not persisted — use SKYENV HYPERVISORPKS for persistence.`,
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		fmt.Printf("Connected to hypervisor %s\n", pk)
+	},
+}
+
+var hvLsCmd = &cobra.Command{
+	Use:   "ls",
+	Short: "List visors connected to this hypervisor",
+	Long: `List all visors connected to this hypervisor with summary info.
+
+Queries each remote visor over its DMSG connection for version, uptime,
+transport count, and other details. The local visor is shown first.`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+
+		entries, err := rpcClient.HVListVisors()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to list visors: %w", err))
+		}
+
+		if len(entries) == 0 {
+			internal.PrintOutput(cmd.Flags(), entries, "No visors connected.\n")
+			return
+		}
+
+		var buf strings.Builder
+		tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "PK\tVERSION\tUPTIME\tTP\tAPPS\tIP\tCC\tSTATUS") //nolint:errcheck
+		for _, e := range entries {
+			pk := e.PK.String()
+			if len(pk) > 10 {
+				pk = pk[:8] + ".."
+			}
+			status := "ok"
+			if e.IsLocal {
+				status = "local"
+			}
+			if e.Error != "" {
+				status = e.Error
+				if len(status) > 25 {
+					status = status[:25] + "..."
+				}
+			}
+			ver := e.Version
+			if ver == "" {
+				ver = "-"
+			}
+			uptime := "-"
+			if e.Uptime > 0 {
+				uptime = (time.Duration(e.Uptime) * time.Second).Truncate(time.Second).String()
+			}
+			ip := e.PublicIP
+			if ip == "" {
+				ip = "-"
+			}
+			cc := e.CountryCode
+			if cc == "" {
+				cc = "-"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n", //nolint:errcheck
+				pk, ver, uptime, e.Transports, e.Apps, ip, cc, status)
+		}
+		tw.Flush() //nolint:errcheck,gosec
+		internal.PrintOutput(cmd.Flags(), entries, buf.String())
 	},
 }

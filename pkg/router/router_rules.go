@@ -58,6 +58,20 @@ func (r *router) noiseRouteGroup(desc routing.RouteDescriptor) (*NoiseRouteGroup
 	return nrg, ok
 }
 
+// RouteGroupHops returns the stored forward hops for the route group keyed
+// by desc. The lookup tries the given descriptor first, then its inversion,
+// since dialer and acceptor sides key the map by mirrored descriptors.
+func (r *router) RouteGroupHops(desc routing.RouteDescriptor) []RouteHopInfo {
+	if nrg, ok := r.noiseRouteGroup(desc); ok && nrg != nil {
+		return nrg.RouteHopDetails()
+	}
+	inv := desc.Invert()
+	if nrg, ok := r.noiseRouteGroup(inv); ok && nrg != nil {
+		return nrg.RouteHopDetails()
+	}
+	return nil
+}
+
 func (r *router) initializingRouteGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()

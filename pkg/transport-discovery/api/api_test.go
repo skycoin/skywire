@@ -125,8 +125,11 @@ func TestRegisterTimeout(t *testing.T) {
 
 	api := New(nil, mock, nonceMock, false, tpdiscmetrics.NewEmpty(), "", "")
 
-	// after this ctx's deadline will be exceeded
-	time.Sleep(timeout * 2)
+	// Wait until the context's cancel goroutine has actually run and ctx.Err()
+	// is set. time.Sleep alone doesn't guarantee this on platforms with coarse
+	// timer resolution (notably Windows), where a 2x-deadline sleep can still
+	// race the WithTimeout cancel.
+	<-ctx.Done()
 
 	mock.(errorSetter).SetError(ctx.Err())
 

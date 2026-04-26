@@ -1270,13 +1270,204 @@ func (rc *rpcClient) DHTSync(remotePK string, salt string) (int, error) {
 }
 
 // TransportRPCCall proxies an RPC call to a remote visor over a transport.
-func (rc *rpcClient) TransportRPCCall(remotePK cipher.PubKey, method string) (json.RawMessage, error) {
-	req := TransportRPCCallRequest{RemotePK: remotePK, Method: method}
+// args is optional JSON-encoded RPC arguments.
+func (rc *rpcClient) TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error) {
+	req := TransportRPCCallRequest{RemotePK: remotePK, Method: method, Args: args}
 	var resp json.RawMessage
 	if err := rc.Call("TransportRPCCall", &req, &resp); err != nil {
 		return nil, err
 	}
 	return resp, nil
+}
+
+// HVListVisors returns summaries of all visors connected to this hypervisor.
+func (rc *rpcClient) HVListVisors() ([]HVVisorEntry, error) {
+	var out []HVVisorEntry
+	if err := rc.Call("HVListVisors", &struct{}{}, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HVVisorSummary returns a detailed summary of a specific remote visor.
+func (rc *rpcClient) HVVisorSummary(pk cipher.PubKey) (*Summary, error) {
+	var out Summary
+	if err := rc.Call("HVVisorSummary", &pk, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// HVStartApp starts an app on a remote visor.
+func (rc *rpcClient) HVStartApp(pk cipher.PubKey, appName string) error {
+	return rc.Call("HVStartApp", &HVAppArgs{PK: pk, AppName: appName}, &struct{}{})
+}
+
+// HVStopApp stops an app on a remote visor.
+func (rc *rpcClient) HVStopApp(pk cipher.PubKey, appName string) error {
+	return rc.Call("HVStopApp", &HVAppArgs{PK: pk, AppName: appName}, &struct{}{})
+}
+
+// HVSetMinHops sets min_hops on a remote visor.
+func (rc *rpcClient) HVSetMinHops(pk cipher.PubKey, hops uint16) error {
+	return rc.Call("HVSetMinHops", &HVMinHopsArgs{PK: pk, Hops: hops}, &struct{}{})
+}
+
+// HVSetRewardAddress sets the reward address on a remote visor.
+func (rc *rpcClient) HVSetRewardAddress(pk cipher.PubKey, addr string) (string, error) {
+	var out string
+	if err := rc.Call("HVSetRewardAddress", &HVRewardArgs{PK: pk, Addr: addr}, &out); err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+// HVRemoveTransport deletes a transport on a remote visor.
+func (rc *rpcClient) HVRemoveTransport(pk cipher.PubKey, tid uuid.UUID) error {
+	return rc.Call("HVRemoveTransport", &HVTransportArgs{PK: pk, TID: tid}, &struct{}{})
+}
+
+// HVRemoveRoutingRule deletes a routing rule on a remote visor.
+func (rc *rpcClient) HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) error {
+	return rc.Call("HVRemoveRoutingRule", &HVRoutingRuleArgs{PK: pk, Key: key}, &struct{}{})
+}
+
+// HVAddTransport creates a transport on a remote visor.
+func (rc *rpcClient) HVAddTransport(pk, remote cipher.PubKey, tpType, label string, timeout time.Duration) (*TransportSummary, error) {
+	var out TransportSummary
+	if err := rc.Call("HVAddTransport", &HVAddTransportArgs{
+		PK:      pk,
+		Remote:  remote,
+		TpType:  tpType,
+		Label:   label,
+		Timeout: timeout,
+	}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// HVSetPublicAutoconnect toggles public_autoconnect on a remote visor.
+func (rc *rpcClient) HVSetPublicAutoconnect(pk cipher.PubKey, enable bool) error {
+	return rc.Call("HVSetPublicAutoconnect", &HVAutoconnectArgs{PK: pk, Enable: enable}, &struct{}{})
+}
+
+// HVSetMuxRoutes sets mux_routes on a remote visor.
+func (rc *rpcClient) HVSetMuxRoutes(pk cipher.PubKey, n int) error {
+	return rc.Call("HVSetMuxRoutes", &HVMuxArgs{PK: pk, N: n}, &struct{}{})
+}
+
+// HVSetCalculateRoutes toggles calculate_routes on a remote visor.
+func (rc *rpcClient) HVSetCalculateRoutes(pk cipher.PubKey, enable bool) error {
+	return rc.Call("HVSetCalculateRoutes", &HVCalcRoutesArgs{PK: pk, Enable: enable}, &struct{}{})
+}
+
+// HVReload reloads a remote visor.
+func (rc *rpcClient) HVReload(pk cipher.PubKey) error {
+	return rc.Call("HVReload", &pk, &struct{}{})
+}
+
+// HVShutdown shuts down a remote visor.
+func (rc *rpcClient) HVShutdown(pk cipher.PubKey) error {
+	return rc.Call("HVShutdown", &pk, &struct{}{})
+}
+
+// HVServiceHealth returns deployment service health for a remote visor.
+func (rc *rpcClient) HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, error) {
+	var out []ServiceHealthEntry
+	if err := rc.Call("HVServiceHealth", &pk, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HVDmsgConnectAll triggers connect-all on a remote visor.
+func (rc *rpcClient) HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error) {
+	var out DmsgConnectAllResult
+	if err := rc.Call("HVDmsgConnectAll", &pk, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// HVSetDmsgSessionsCount persists sessions_count and triggers connect-all on a remote visor.
+func (rc *rpcClient) HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*DmsgConnectAllResult, error) {
+	var out DmsgConnectAllResult
+	if err := rc.Call("HVSetDmsgSessionsCount", &HVDmsgSessionsArgs{PK: pk, Count: count}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// HVLogsSince fetches recent app logs from a remote visor.
+func (rc *rpcClient) HVLogsSince(pk cipher.PubKey, since time.Time, appName string) ([]string, error) {
+	var out []string
+	if err := rc.Call("HVLogsSince", &HVLogsArgs{PK: pk, Since: since, AppName: appName}, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HVSetAutoStart toggles autostart for an app on a remote visor.
+func (rc *rpcClient) HVSetAutoStart(pk cipher.PubKey, appName string, autostart bool) error {
+	return rc.Call("HVSetAutoStart", &HVAutostartArgs{PK: pk, AppName: appName, Autostart: autostart}, &struct{}{})
+}
+
+// HVEmbeddedProxies returns embedded resolving proxy status from a remote visor.
+func (rc *rpcClient) HVEmbeddedProxies(pk cipher.PubKey) (*EmbeddedProxiesStatus, error) {
+	var out EmbeddedProxiesStatus
+	if err := rc.Call("HVEmbeddedProxies", &pk, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// HVSetEmbeddedProxyEnabled flips a resolver on or off on a remote visor.
+func (rc *rpcClient) HVSetEmbeddedProxyEnabled(pk cipher.PubKey, kind string, enable bool) error {
+	return rc.Call("HVSetEmbeddedProxyEnabled", &HVProxyArgs{PK: pk, Kind: kind, Enable: enable}, &struct{}{})
+}
+
+// HVSetEmbeddedProxyUpstream sets a resolver's SOCKS5 fallthrough on a remote visor.
+func (rc *rpcClient) HVSetEmbeddedProxyUpstream(pk cipher.PubKey, kind, addr string) error {
+	return rc.Call("HVSetEmbeddedProxyUpstream", &HVProxyArgs{PK: pk, Kind: kind, Addr: addr}, &struct{}{})
+}
+
+// HVListTCPPorts returns skynet TCP ports on a remote visor.
+func (rc *rpcClient) HVListTCPPorts(pk cipher.PubKey) ([]int, error) {
+	var out []int
+	if err := rc.Call("HVListTCPPorts", &pk, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HVRegisterTCPPort registers a skynet TCP port on a remote visor.
+func (rc *rpcClient) HVRegisterTCPPort(pk cipher.PubKey, port int) error {
+	return rc.Call("HVRegisterTCPPort", &HVTCPPortArgs{PK: pk, Port: port}, &struct{}{})
+}
+
+// HVDeregisterTCPPort deregisters a skynet TCP port on a remote visor.
+func (rc *rpcClient) HVDeregisterTCPPort(pk cipher.PubKey, port int) error {
+	return rc.Call("HVDeregisterTCPPort", &HVTCPPortArgs{PK: pk, Port: port}, &struct{}{})
+}
+
+// HVListForwardedPorts returns forwarded ports on a remote visor.
+func (rc *rpcClient) HVListForwardedPorts(pk cipher.PubKey) ([]ForwardedPort, error) {
+	var out []ForwardedPort
+	if err := rc.Call("HVListForwardedPorts", &pk, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HVRegisterForwardedPort registers a forwarded port on a remote visor.
+func (rc *rpcClient) HVRegisterForwardedPort(pk cipher.PubKey, p ForwardedPort) error {
+	return rc.Call("HVRegisterForwardedPort", &HVForwardedPortArgs{PK: pk, Port: p}, &struct{}{})
+}
+
+// HVUpdateForwardedPort updates a forwarded port on a remote visor.
+func (rc *rpcClient) HVUpdateForwardedPort(pk cipher.PubKey, p ForwardedPort) error {
+	return rc.Call("HVUpdateForwardedPort", &HVForwardedPortArgs{PK: pk, Port: p}, &struct{}{})
 }
 
 // CheckAREntry checks if a PK is registered in the address resolver.
