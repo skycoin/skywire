@@ -172,7 +172,7 @@ $ go run github.com/skycoin/skywire@develop
 ┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 └─┐├┴┐└┬┘││││├┬┘├┤
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
-v1.3.33
+v1.3.47
 built with go1.25.6
 
 Available Commands:
@@ -454,6 +454,25 @@ In order to expose the hypervisor UI, generate a config file with `--is-hypervis
 ```
 
 After starting up the visor, the UI will be exposed by default on `localhost:8000`.
+
+### Hypervisor terminal UI
+
+A terminal-based hypervisor that mirrors the web UI's read and write actions
+without requiring a browser:
+
+```
+skywire cli visor hv tui
+```
+
+Lists all visors connected to the running hypervisor and (when one is selected)
+shows transports, apps, route groups with full multi-hop paths, DMSG servers,
+and a row of hotkey-driven actions: start/stop apps, set min_hops/mux_routes,
+manage transports/routes, toggle resolving proxies, register skynet/forwarded
+ports, run dmsg connect-all, view services-health, reload or shutdown.
+
+When a hypervisor has another hypervisor in its `hypervisors` config, the
+parent hypervisor transparently sees and manages the child's connected visors —
+write actions are routed through the child automatically.
 
 ### Add remote hypervisor
 
