@@ -16,7 +16,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // DiscoveryPusher pushes DHT items to HTTP discovery services based on salt.

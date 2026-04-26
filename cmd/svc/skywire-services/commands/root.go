@@ -23,8 +23,8 @@ import (
 	tpd "github.com/skycoin/skywire/cmd/svc/transport-discovery/commands"
 	tps "github.com/skycoin/skywire/cmd/svc/transport-setup/commands"
 	ut "github.com/skycoin/skywire/cmd/svc/uptime-tracker/commands"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/calvin"
 )
 
 func init() {

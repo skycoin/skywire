@@ -28,9 +28,9 @@ import (
 	"github.com/confiant-inc/go-socks5"
 	"golang.org/x/net/proxy"
 
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skynet"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 )
 
 // DefaultDomainSuffix is the TLD treated as skynet addresses when

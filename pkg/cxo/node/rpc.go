@@ -7,8 +7,8 @@ import (
 
 	"github.com/skycoin/skycoin/src/cipher"
 
+	swcipher "github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
-	swcipher "github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // wrap the RPC

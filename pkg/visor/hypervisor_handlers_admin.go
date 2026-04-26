@@ -10,7 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"

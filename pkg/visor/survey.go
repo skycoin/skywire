@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	visconf "github.com/skycoin/skywire/pkg/visor/visorconfig"

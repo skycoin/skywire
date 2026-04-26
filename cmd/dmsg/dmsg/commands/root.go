@@ -22,9 +22,9 @@ import (
 	dpu "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-ui/commands"
 	dw "github.com/skycoin/skywire/cmd/dmsg/dmsgweb/commands"
 	dsp "github.com/skycoin/skywire/cmd/dmsg/self-ping/commands"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
 )
 
 var (

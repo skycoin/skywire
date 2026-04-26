@@ -4,7 +4,7 @@ package ioutil
 import (
 	"io"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // CloseQuietly closes c, logging any error at debug level.

@@ -17,11 +17,11 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 const dwsenv = "DMSGWEBSRV"

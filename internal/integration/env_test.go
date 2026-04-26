@@ -28,10 +28,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/proxy"
 
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	skyvisor "github.com/skycoin/skywire/pkg/visor"
 )

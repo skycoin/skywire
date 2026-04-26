@@ -3,7 +3,7 @@ package dht
 import (
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 // Config configures a DHT node.

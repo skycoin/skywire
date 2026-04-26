@@ -24,7 +24,7 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // initSkynetForwardPorts registers the visor's localhost service

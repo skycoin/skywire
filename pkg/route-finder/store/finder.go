@@ -6,8 +6,8 @@ import (
 	"errors"
 	"sort"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 

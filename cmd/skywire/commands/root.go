@@ -18,9 +18,9 @@ import (
 	dmsg "github.com/skycoin/skywire/cmd/dmsg/dmsg/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	services "github.com/skycoin/skywire/cmd/svc/skywire-services/commands"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/flags"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/calvin"
+	"github.com/skycoin/skywire/pkg/flags"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 

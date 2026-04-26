@@ -3,7 +3,7 @@ package main
 
 import (
 	"github.com/skycoin/skywire/cmd/dmsg/conf/commands"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/flags"
+	"github.com/skycoin/skywire/pkg/flags"
 )
 
 func init() {

@@ -15,7 +15,7 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	skyvisor "github.com/skycoin/skywire/pkg/visor"
 )

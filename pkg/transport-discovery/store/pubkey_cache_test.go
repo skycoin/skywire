@@ -3,7 +3,7 @@ package store
 import (
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 func TestPubKeyCache_ParseHitsReturnEqualValue(t *testing.T) {

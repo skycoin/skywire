@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/yamux"
 	"github.com/xtaci/smux"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 const (

@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/httpauth"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/httpauthclient"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 )
 
 //go:generate mockery --name APIClient --case underscore --inpackage
@@ -25,7 +25,7 @@ type APIClient interface {
 
 // httpClient implements Client for uptime tracker API.
 type httpClient struct {
-	client *httpauth.Client
+	client *httpauthclient.Client
 	pk     cipher.PubKey
 	sk     cipher.SecKey
 	log    *logging.Logger
@@ -42,14 +42,14 @@ const (
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
 func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, clientPublicIP string, mLogger *logging.MasterLogger) (APIClient, error) {
-	var client *httpauth.Client
+	var client *httpauthclient.Client
 	var err error
 
 	log := mLogger.PackageLogger("utclient")
 
 	retrier := netutil.NewRetrier(log, createRetryDelay, 0, 10, 2)
 	retrierFunc := func() error {
-		client, err = httpauth.NewClient(context.Background(), addr, pk, sk, httpC, clientPublicIP, mLogger)
+		client, err = httpauthclient.NewClient(context.Background(), addr, pk, sk, httpC, clientPublicIP, mLogger)
 		if err != nil {
 			return fmt.Errorf("uptime tracker httpauth: %w", err)
 		}
@@ -94,7 +94,7 @@ func (c *httpClient) UpdateVisorUptime(ctx context.Context, version string) erro
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauth.ExtractError(resp.Body))
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauthclient.ExtractError(resp.Body))
 	}
 
 	return nil

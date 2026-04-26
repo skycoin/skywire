@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 )
 
 // FailureReason is a short stable identifier for why a route setup
