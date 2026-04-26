@@ -161,6 +161,11 @@ type Router interface {
 	AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error
 	RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error
 
+	// RouteGroupHops returns the stored forward route hops for the route group
+	// matching the given descriptor (or its inversion). Returns nil if no
+	// matching route group is found.
+	RouteGroupHops(desc routing.RouteDescriptor) []RouteHopInfo
+
 	// Routing table related methods
 	RoutesCount() int
 	Rules() []routing.Rule

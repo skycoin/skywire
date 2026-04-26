@@ -67,7 +67,7 @@ var argCmd = &cobra.Command{
 var appCmd = &cobra.Command{
 	Use:   "app",
 	Short: "App settings",
-	Long:  "\n  App settings",
+	Long:  "App settings",
 }
 
 var lsAppsCmd = &cobra.Command{

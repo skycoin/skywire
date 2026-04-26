@@ -198,7 +198,9 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 					if err != nil {
 						internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 					}
-					script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
+					internal.PrintOutput(cmd.Flags(), struct {
+						Count int `json:"count"`
+					}{Count: count}, fmt.Sprintf("%v\n", count))
 					return
 				}
 				script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
@@ -235,7 +237,9 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 					if err != nil {
 						internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 					}
-					script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
+					internal.PrintOutput(cmd.Flags(), struct {
+						Count int `json:"count"`
+					}{Count: count}, fmt.Sprintf("%v\n", count))
 					return
 				}
 				script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
@@ -284,7 +288,9 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		})
 
 		if isStats {
-			fmt.Printf("%d\n", len(results))
+			internal.PrintOutput(cmd.Flags(), struct {
+				Count int `json:"count"`
+			}{Count: len(results)}, fmt.Sprintf("%d\n", len(results)))
 			return
 		}
 

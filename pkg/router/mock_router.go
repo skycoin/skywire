@@ -363,6 +363,18 @@ func (_m *MockRouter) RemoveMuxRouteByTransport(_a0 routing.RouteDescriptor, _a1
 	return ret.Error(0)
 }
 
+// RouteGroupHops provides a mock function
+func (_m *MockRouter) RouteGroupHops(_a0 routing.RouteDescriptor) []RouteHopInfo {
+	ret := _m.Called(_a0)
+	var r0 []RouteHopInfo
+	if rf, ok := ret.Get(0).(func(routing.RouteDescriptor) []RouteHopInfo); ok {
+		r0 = rf(_a0)
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]RouteHopInfo)
+	}
+	return r0
+}
+
 // ActiveRouteStatuses provides a mock function with no fields
 func (_m *MockRouter) ActiveRouteStatuses() []RouteStatus {
 	ret := _m.Called()

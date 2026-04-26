@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // DialRoutes dials to a given visor of 'rPK'.
@@ -506,6 +508,13 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 		return nil, nil, errors.New("no local transports available")
 	}
 
+	// Sort local transports by type preference so direct types (STCPR > SUDPH > STCP)
+	// are tried before DMSG. WalkTransports iteration order is undefined.
+	sort.SliceStable(localTps, func(i, j int) bool {
+		return tptypes.TypePreference(tptypes.Type(localTps[i].tpType)) <
+			tptypes.TypePreference(tptypes.Type(localTps[j].tpType))
+	})
+
 	r.logger.Debugf("Found %d local transports", len(localTps))
 
 	// Check for direct (1-hop) route first
@@ -558,6 +567,15 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 		for _, edge := range entry.Edges {
 			transportsByEdge[edge] = append(transportsByEdge[edge], entry)
 		}
+	}
+	// Sort each edge's transport list by type preference so iteration tries
+	// direct types before DMSG when picking an intermediate-to-dst hop.
+	for edge := range transportsByEdge {
+		entries := transportsByEdge[edge]
+		sort.SliceStable(entries, func(i, j int) bool {
+			return tptypes.TypePreference(entries[i].Type) <
+				tptypes.TypePreference(entries[j].Type)
+		})
 	}
 	r.logger.Debugf("Built transport cache with %d entries covering %d visors", len(allEntries), len(transportsByEdge))
 
@@ -653,6 +671,20 @@ func (r *router) establishMuxRoutes(
 	if muxCount <= 1 || nrg.rg.mux == nil {
 		return
 	}
+
+	// Don't multiplex when the primary route contains a DMSG transport.
+	// DMSG hops share an unaccountable dmsg server intermediary, so multiplexing
+	// alongside another DMSG-bearing route risks data looping through the same
+	// dmsg server with no way to detect it.
+	nrg.rg.mu.Lock()
+	for _, tp := range nrg.rg.tps {
+		if tp != nil && tp.Entry.Type == tptypes.DMSG {
+			nrg.rg.mu.Unlock()
+			r.logger.Debug("Skipping mux setup: primary route contains a DMSG transport")
+			return
+		}
+	}
+	nrg.rg.mu.Unlock()
 
 	lPK := forwardDesc.SrcPK()
 	rPK := forwardDesc.DstPK()

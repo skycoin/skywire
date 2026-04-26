@@ -8,6 +8,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 var (
@@ -106,6 +107,16 @@ func (g *Graph) finder(ctx context.Context, source, destination *vertex, minLen,
 			for _, neighbor := range item.current.neighbors {
 				if containsVertex(item.path, neighbor) {
 					continue // Skip to avoid cycles
+				}
+
+				// DMSG transports can only appear as the last hop in a route.
+				// A dmsg transport is brokered by a dmsg server intermediary that
+				// is not visible to the route. Allowing two dmsg hops in one route
+				// risks looping traffic through the same dmsg server, and there is
+				// no way to detect or prevent that at route-build time.
+				if conn, ok := item.current.connections[neighbor.edge]; ok &&
+					conn.Type == tptypes.DMSG && neighbor != destination {
+					continue
 				}
 
 				newPath := make([]*vertex, len(item.path)+1)

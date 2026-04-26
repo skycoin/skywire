@@ -65,7 +65,7 @@ var pkCmd = &cobra.Command{
 var summaryCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Summary of visor info",
-	Long:  "\n  Summary of visor info",
+	Long:  "Summary of visor info",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -191,7 +191,7 @@ var summaryCmd = &cobra.Command{
 var readyCmd = &cobra.Command{
 	Use:   "ready",
 	Short: "Wait for visor startup to complete",
-	Long:  "\n  Polls the visor and exits once startup is complete.\n  Useful in scripts and systemd ExecStartPost.",
+	Long:  "Polls the visor and exits once startup is complete.\nUseful in scripts and systemd ExecStartPost.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		timeout := 3 * time.Minute
 		deadline := time.Now().Add(timeout)
@@ -268,7 +268,7 @@ var portsCmd = &cobra.Command{
 var dmsgServersCmd = &cobra.Command{
 	Use:   "dmsg-servers",
 	Short: "List connected DMSG servers with latencies",
-	Long:  "\n  List of connected DMSG servers sorted by latency (lowest first)",
+	Long:  "List of connected DMSG servers sorted by latency (lowest first)",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -323,7 +323,7 @@ var runtimeLogsCmd = &cobra.Command{
 var runtimeStatsCmd = &cobra.Command{
 	Use:   "go",
 	Short: "Go runtime statistics",
-	Long:  "\n  Returns Go runtime statistics including goroutine count and memory usage",
+	Long:  "Returns Go runtime statistics including goroutine count and memory usage",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {

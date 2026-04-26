@@ -1572,6 +1572,7 @@ type routeGroupResp struct {
 	FwdRuleID     routing.RouteID               `json:"fwd_rule_id"`
 	Desc          routing.RouteDescriptorFields `json:"desc"`
 	FwdNextTpID   string                        `json:"fwd_next_tp_id,omitempty"`
+	Hops          []RouteHopInfo                `json:"hops,omitempty"`
 }
 
 func makeRouteGroupResp(info RouteGroupInfo) routeGroupResp {
