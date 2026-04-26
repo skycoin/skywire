@@ -1,4 +1,4 @@
-// Package buildinfo pkg/skywire-utilities/pkg/buildinfo/buildinfo.go
+// Package buildinfo src/util/buildinfo/buildinfo.go
 package buildinfo
 
 import (
@@ -14,7 +14,7 @@ import (
 const unknown = "unknown"
 
 // Variables set via -ldflags during build
-// $ go build -mod=vendor -ldflags="-X 'github.com/skycoin/skywire/pkg/buildinfo.version=$(git describe)' -X 'github.com/skycoin/skywire/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")' -X 'github.com/skycoin/skywire/pkg/buildinfo.commit=$(git rev-list -1 HEAD)'" .
+// $ go build -mod=vendor -ldflags="-X 'github.com/skycoin/skycoin/src/util/buildinfo.version=$(git describe)' -X 'github.com/skycoin/skycoin/src/util/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")' -X 'github.com/skycoin/skycoin/src/util/buildinfo.commit=$(git rev-list -1 HEAD)'" .
 var (
 	version   = unknown
 	commit    = unknown
@@ -26,7 +26,7 @@ var (
 var bi *debug.BuildInfo
 
 // ldflags-provided module info (`go list -m -json`)
-// $ go build -ldflags="-X 'github.com/skycoin/skywire/pkg/buildinfo.golist=$(go list -m -json -mod=mod github.com/skycoin/<repo>@<branch>)' -X 'github.com/skycoin/skywire/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")'" .
+// $ go build -ldflags="-X 'github.com/skycoin/skycoin/src/util/buildinfo.golist=$(go list -m -json -mod=mod github.com/skycoin/<repo>@<branch>)' -X 'github.com/skycoin/skycoin/src/util/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")'" .
 var golist string
 
 // ModuleInfo represents the JSON structure returned by `go list -m -json`.
